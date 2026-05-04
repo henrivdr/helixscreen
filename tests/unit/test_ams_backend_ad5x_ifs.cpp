@@ -3592,3 +3592,48 @@ TEST_CASE("AD5X IFS #904 user.cfg [zmod_ifs] filament_* parser",
         CHECK(names.empty());
     }
 }
+
+// End-to-end #904 root-cause-#2 fix: TMTYD's slot was PLA+ in zmod, our
+// edit modal showed PLA, save wrote _IFS_VARS types="['PLA',...]"
+// overwriting zmod's truth. The fix loads bambufy_custom_types into the
+// supported-materials list so normalize_material's case-insensitive
+// exact-match passes "PLA+" through unchanged. This test exercises the
+// FULL save path — from save_variables ingestion through set_slot_info to
+// the cached SlotInfo — to prove the round-trip doesn't stomp the user's
+// chosen type.
+TEST_CASE("AD5X IFS #904 PLA+ round-trips through set_slot_info after custom_types load",
+          "[ams][ad5x_ifs][issue_904]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Step 1: ingest TMTYD's bambufy_custom_types from save_variables.
+    json vars = json{
+        {"bambufy_custom_types", json::array({"PLA+", "rPLA", "PETG-Pro", "PLA-CF"})},
+    };
+    Ad5xIfsTestAccess::parse_vars(backend, vars);
+
+    // Step 2: user edits slot 0 to PLA+. set_slot_info runs normalize_material
+    // internally, which (post-fix) sees "PLA+" in the supported list and
+    // returns it unchanged. Pre-fix this returned "PLA" (compat_group fallback)
+    // and silently destroyed the user's choice.
+    SlotInfo edit;
+    edit.color_rgb = 0x000DFF;
+    edit.material = "PLA+";
+    auto err = backend.set_slot_info(0, edit, /*persist=*/false);
+    REQUIRE(err.success());
+
+    // Step 3: read it back and confirm PLA+ survived.
+    auto info = backend.get_slot_info(0);
+    CHECK(info.material == "PLA+");
+    CHECK(info.color_rgb == 0x000DFF);
+
+    // Lowercase input also round-trips (zmod COLOR macro is case-insensitive
+    // when matching user.cfg types; our modal preserves the canonical case
+    // from the supported list).
+    SlotInfo edit_lc;
+    edit_lc.color_rgb = 0xABCDEF;
+    edit_lc.material = "rpla";
+    err = backend.set_slot_info(1, edit_lc, /*persist=*/false);
+    REQUIRE(err.success());
+    auto info1 = backend.get_slot_info(1);
+    CHECK(info1.material == "rPLA");
+}

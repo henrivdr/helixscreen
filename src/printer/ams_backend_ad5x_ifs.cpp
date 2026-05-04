@@ -417,6 +417,13 @@ void AmsBackendAd5xIfs::parse_save_variables(const json& vars) {
         // authoritative. Fall back to the default 1:1 mapping (T0→port1, T1→port2,
         // …) and skip current_tool / external reads too — those came from the same
         // poisoned source.
+        //
+        // Single-prefix-stale-data is NOT handled here — if only bambufy_* exists
+        // (or only less_waste_*) and the plugin has been uninstalled, the
+        // ifs_macro_confirmed_missing_ latch from on_started's gcode_macro
+        // existence check catches it: has_ifs_vars_ stays false and we never
+        // reach this branch. The guard below only matters for the
+        // both-installed-then-deactivated scenario.
         const std::string other_p = (p == "bambufy") ? "less_waste" : "bambufy";
         const bool have_self_tools =
             vars.contains(p + "_tools") && vars[p + "_tools"].is_array();
