@@ -283,6 +283,26 @@ class MoonrakerAPI : public IMoonrakerAPI {
     void restart_klipper(SuccessCallback on_success, ErrorCallback on_error);
 
     /**
+     * @brief Run a Moonraker `[shell_command]` by name.
+     *
+     * Targets the JSON-RPC method `machine.shell_command:<name>` (HTTP equiv:
+     * POST /machine/shell_command/<name>). The command must be defined in
+     * moonraker.conf as a `[shell_command <name>]` block; otherwise Moonraker
+     * returns an error which this method surfaces via `on_error`.
+     *
+     * Used by PrinterRecoveryService for platform-specific deep recovery
+     * (e.g. bouncing the K2's klipper_mcu daemon) — the C++ side stays
+     * platform-blind; the per-platform installer ships the shell_command.
+     *
+     * @param name      shell_command name as declared in moonraker.conf
+     * @param on_success Receives the command's stdout (may be empty)
+     * @param on_error   Fires for unknown command, non-zero exit, or transport errors
+     */
+    void run_shell_command(const std::string& name,
+                           std::function<void(const std::string&)> on_success,
+                           ErrorCallback on_error);
+
+    /**
      * @brief Restart the Moonraker service
      *
      * POST /server/restart - Restarts the Moonraker service itself.

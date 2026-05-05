@@ -98,6 +98,19 @@ class PrinterCapabilitiesState {
     void set_timelapse_available(bool available);
 
     /**
+     * @brief Set Moonraker `shell_command` component availability (async update).
+     *
+     * Used by PrinterRecoveryService to short-circuit deep-recovery dispatch on
+     * hosts where the component is missing (Bambu, RatOS-lite, vendor-locked
+     * builds). Set during discovery from `server.info.components[]`.
+     *
+     * Thread-safe: Uses helix::ui::queue_update() for main-thread execution.
+     *
+     * @param available True if Moonraker reports the component loaded
+     */
+    void set_shell_command_available(bool available);
+
+    /**
      * @brief Set bed moves on Z axis (from kinematics detection)
      *
      * @param bed_moves True if bed moves on Z (corexy), false if gantry moves (cartesian/delta)
@@ -218,6 +231,16 @@ class PrinterCapabilitiesState {
         return const_cast<lv_subject_t*>(&printer_has_timelapse_);
     }
 
+    /// 1 if Moonraker has the `shell_command` component loaded (i.e. helix_recover
+    /// can be invoked for deep recovery)
+    lv_subject_t* get_printer_has_shell_command_subject() const {
+        return const_cast<lv_subject_t*>(&printer_has_shell_command_);
+    }
+    bool is_shell_command_available() const {
+        return lv_subject_get_int(
+                   const_cast<lv_subject_t*>(&printer_has_shell_command_)) != 0;
+    }
+
     /// 1 if printer has purge/priming capability
     lv_subject_t* get_printer_has_purge_line_subject() const {
         return const_cast<lv_subject_t*>(&printer_has_purge_line_);
@@ -333,6 +356,7 @@ class PrinterCapabilitiesState {
     lv_subject_t printer_has_spoolman_{};            // spoolman filament manager
     lv_subject_t printer_has_speaker_{};             // speaker for M300
     lv_subject_t printer_has_timelapse_{};           // moonraker-timelapse plugin
+    lv_subject_t printer_has_shell_command_{};       // Moonraker shell_command component (for helix_recover)
     lv_subject_t printer_has_purge_line_{};          // purge/priming capability
     lv_subject_t printer_has_firmware_retraction_{}; // firmware retraction (G10/G11)
     lv_subject_t printer_bed_moves_{};               // 0=gantry moves on Z, 1=bed moves on Z

@@ -490,6 +490,21 @@ void MoonrakerAPI::restart_firmware(SuccessCallback on_success, ErrorCallback on
         on_error);
 }
 
+void MoonrakerAPI::run_shell_command(const std::string& name,
+                                      std::function<void(const std::string&)> on_success,
+                                      ErrorCallback on_error) {
+    spdlog::info("[Moonraker API] run_shell_command: {}", name);
+
+    client_.send_jsonrpc(
+        "machine.shell_command:" + name, json::object(),
+        [on_success](json reply) {
+            // Moonraker shell_command returns the captured stdout as a string.
+            std::string output = reply.is_string() ? reply.get<std::string>() : reply.dump();
+            on_success(output);
+        },
+        on_error);
+}
+
 void MoonrakerAPI::restart_klipper(SuccessCallback on_success, ErrorCallback on_error) {
     spdlog::info("[Moonraker API] Restarting Klipper");
 

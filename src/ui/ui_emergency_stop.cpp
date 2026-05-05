@@ -12,6 +12,7 @@
 
 #include "abort_manager.h"
 #include "app_globals.h"
+#include "printer_recovery_service.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "static_panel_registry.h"
@@ -462,16 +463,22 @@ void EmergencyStopOverlay::firmware_restart() {
     // Suppress recovery dialog during restart - Klipper briefly enters SHUTDOWN
     restart_in_progress_ = true;
 
-    spdlog::info("[KlipperRecovery] Firmware restarting...");
+    spdlog::info("[KlipperRecovery] Firmware restarting (via recovery service)...");
     ToastManager::instance().show(ToastSeverity::INFO, lv_tr("Firmware restarting..."), 3000);
 
-    api_->restart_firmware(
+    // Route through PrinterRecoveryService so platforms with deeper recovery
+    // requirements (K2's klipper_mcu daemon, AD5M-style RS-485 bridges, etc.)
+    // get the platform-correct restart sequence. Stock Klipper / RatOS Pi
+    // automatically fall back to printer.firmware_restart — same behavior as
+    // before from the user's perspective.
+    helix::PrinterRecoveryService recovery(api_);
+    recovery.recover(
         []() {
-            spdlog::info("[KlipperRecovery] Firmware restart command sent");
+            spdlog::info("[KlipperRecovery] Recovery initiated");
             // Toast will update when klippy_state changes to READY
         },
         [](const MoonrakerError& err) {
-            spdlog::error("[KlipperRecovery] Firmware restart failed: {}", err.message);
+            spdlog::error("[KlipperRecovery] Recovery failed: {}", err.message);
             ToastManager::instance().show(
                 ToastSeverity::ERROR, ("Firmware restart failed: " + err.user_message()).c_str(),
                 5000);

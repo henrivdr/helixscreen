@@ -1365,6 +1365,22 @@ class PrinterState {
     void set_timelapse_available(bool available);
 
     /**
+     * @brief Set Moonraker `shell_command` component availability.
+     *
+     * Used by PrinterRecoveryService to skip the helix_recover RPC when the
+     * component isn't loaded (saves ~3s timeout on Bambu/RatOS-lite/etc.).
+     * Set during discovery from `server.info.components[]`.
+     *
+     * Thread-safe: defers LVGL update to main thread.
+     */
+    void set_shell_command_available(bool available);
+
+    /// True if Moonraker reported the shell_command component loaded
+    bool is_shell_command_available() const {
+        return capabilities_state_.is_shell_command_available();
+    }
+
+    /**
      * @brief Set HelixPrint plugin installation status
      *
      * Called after checking Moonraker for the helix_print plugin.

@@ -663,6 +663,10 @@ void PrinterState::set_timelapse_available(bool available) {
     });
 }
 
+void PrinterState::set_shell_command_available(bool available) {
+    capabilities_state_.set_shell_command_available(available);
+}
+
 void PrinterState::set_helix_plugin_installed(bool installed) {
     // Thread-safe: Use ui_queue_update to update LVGL subject from any thread
     // We handle the async dispatch here because we need to update composite subjects after
