@@ -98,9 +98,20 @@ class FanStackWidget : public PanelWidget {
         lv_obj_t* arc = nullptr;
         lv_obj_t* speed_label = nullptr;
         lv_obj_t* fan_icon = nullptr;
+        std::string object_name;
+        bool is_controllable = false;
+        bool syncing = false;            ///< true while a programmatic arc update is in flight
+        uint32_t last_user_input_ms = 0; ///< lv_tick_get() of the most recent drag/tap
     };
     std::vector<CarouselPage> carousel_pages_;
     std::vector<ObserverGuard> carousel_observers_;
+
+    /// Send a fan speed command (optimistic update + Moonraker call).
+    /// Used by the carousel's in-place arc control path.
+    void send_carousel_fan_speed(const std::string& object_name, int speed_percent);
+
+    /// Static dispatch for arc VALUE_CHANGED events on controllable carousel pages.
+    static void on_carousel_arc_value_changed(lv_event_t* e);
 
     // MUST stay declared LAST: reverse-declaration destruction makes this the
     // first member torn down, invalidating every captured token before any
