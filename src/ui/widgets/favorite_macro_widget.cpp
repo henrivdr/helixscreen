@@ -152,12 +152,20 @@ void run_macro_after_confirm(MacroExecCtx ctx) {
     }
 }
 
+// Ownership: the heap MacroExecCtx is bound to the dialog object's LV_EVENT_DELETE
+// (see ctx_delete_cb), which fires on every dismissal path — button click,
+// backdrop tap, and ESC-key all funnel through Modal::hide → animated exit →
+// object delete. Button callbacks therefore must NOT delete the ctx; doing so
+// would double-free when the DELETE event fires later.
+void ctx_delete_cb(lv_event_t* e) {
+    delete static_cast<MacroExecCtx*>(lv_event_get_user_data(e));
+}
+
 void dangerous_confirm_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroWidget] dangerous_confirm_cb");
     auto* ctx = static_cast<MacroExecCtx*>(lv_event_get_user_data(e));
     Modal::hide(Modal::get_top());
     run_macro_after_confirm(*ctx);
-    delete ctx;
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -166,7 +174,6 @@ void dangerous_cancel_cb(lv_event_t* e) {
     auto* ctx = static_cast<MacroExecCtx*>(lv_event_get_user_data(e));
     Modal::hide(Modal::get_top());
     spdlog::debug("[FavoriteMacroWidget] Dangerous macro cancelled: {}", ctx->macro_name);
-    delete ctx;
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -175,15 +182,13 @@ void run_confirm_cb(lv_event_t* e) {
     auto* ctx = static_cast<MacroExecCtx*>(lv_event_get_user_data(e));
     Modal::hide(Modal::get_top());
     helix::execute_macro_gcode(ctx->api, ctx->macro_name, {}, "[FavoriteMacroWidget]");
-    delete ctx;
     LVGL_SAFE_EVENT_CB_END();
 }
 
 void run_cancel_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroWidget] run_cancel_cb");
-    auto* ctx = static_cast<MacroExecCtx*>(lv_event_get_user_data(e));
+    (void)e;
     Modal::hide(Modal::get_top());
-    delete ctx;
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -394,10 +399,16 @@ void FavoriteMacroWidget::fetch_and_execute() {
         spdlog::warn("[FavoriteMacroWidget] Dangerous macro requested: {}", macro_name_);
         auto* ctx = new MacroExecCtx{macro_name_, api, parent_screen_};
         std::string display = helix::get_display_name(macro_name_, helix::DeviceType::MACRO);
-        std::string msg = display + " may cause unintended changes. Are you sure?";
-        helix::ui::modal_show_confirmation(lv_tr("Run Dangerous Macro?"), msg.c_str(),
-                                           ::ModalSeverity::Warning, lv_tr("Run"),
-                                           dangerous_confirm_cb, dangerous_cancel_cb, ctx);
+        std::string msg =
+            fmt::format(lv_tr("{} may cause unintended changes. Are you sure?"), display);
+        lv_obj_t* dialog = helix::ui::modal_show_confirmation(
+            lv_tr("Run Dangerous Macro?"), msg.c_str(), ::ModalSeverity::Warning, lv_tr("Run"),
+            dangerous_confirm_cb, dangerous_cancel_cb, ctx);
+        if (dialog) {
+            lv_obj_add_event_cb(dialog, ctx_delete_cb, LV_EVENT_DELETE, ctx);
+        } else {
+            delete ctx; // dialog construction failed — clean up to avoid leak
+        }
         return;
     }
 
@@ -411,9 +422,14 @@ void FavoriteMacroWidget::fetch_and_execute() {
         auto* ctx = new MacroExecCtx{macro_name_, api, parent_screen_};
         std::string display = helix::get_display_name(macro_name_, helix::DeviceType::MACRO);
         std::string msg = fmt::format(lv_tr("Run {}?"), display);
-        helix::ui::modal_show_confirmation(lv_tr("Run Macro?"), msg.c_str(),
-                                           ::ModalSeverity::Info, lv_tr("Run"), run_confirm_cb,
-                                           run_cancel_cb, ctx);
+        lv_obj_t* dialog = helix::ui::modal_show_confirmation(
+            lv_tr("Run Macro?"), msg.c_str(), ::ModalSeverity::Info, lv_tr("Run"), run_confirm_cb,
+            run_cancel_cb, ctx);
+        if (dialog) {
+            lv_obj_add_event_cb(dialog, ctx_delete_cb, LV_EVENT_DELETE, ctx);
+        } else {
+            delete ctx;
+        }
         return;
     }
 
