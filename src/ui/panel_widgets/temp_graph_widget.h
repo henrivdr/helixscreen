@@ -16,11 +16,16 @@
 
 namespace helix {
 
+// Test-only access shim (L065 friend pattern). Defined in tests.
+class TempGraphWidgetTestAccess;
+
 /// Dashboard widget displaying a real-time temperature graph.
 /// Sizes adaptively based on grid span, showing more features at larger sizes.
 /// Click opens the full TempGraphOverlay in GraphOnly mode.
 class TempGraphWidget : public PanelWidget {
   public:
+    friend class TempGraphWidgetTestAccess;
+
     explicit TempGraphWidget(const std::string& instance_id);
     ~TempGraphWidget() override;
 
@@ -47,6 +52,11 @@ class TempGraphWidget : public PanelWidget {
     void build_default_config();
     std::vector<TempGraphSeriesSpec> build_series_from_config();
 
+    /// Stable signature of the visibility set most recently applied to the
+    /// controller. Used by on_activate() to detect when the overlay snapshot
+    /// has drifted and a rebuild is needed (follow mode only).
+    std::string current_visibility_signature() const;
+
     std::string instance_id_;
     nlohmann::json config_;
 
@@ -57,6 +67,15 @@ class TempGraphWidget : public PanelWidget {
 
     int current_colspan_ = 2;
     int current_rowspan_ = 2;
+
+    /// When true, the card mirrors whatever curves the user last left visible
+    /// on the full-screen TempGraphOverlay. When false, the card uses the
+    /// per-sensor `enabled` flags from `config_["sensors"]`.
+    bool follow_overlay_ = false;
+
+    /// Signature applied during the most recent attach(); compared in
+    /// on_activate() to decide whether to rebuild.
+    std::string applied_visibility_signature_;
 
     /// Modal for sensor toggle + color picker configuration
     class TempGraphConfigModal : public Modal {
@@ -84,6 +103,7 @@ class TempGraphWidget : public PanelWidget {
             lv_obj_t* sw = nullptr;
         };
 
+        void populate_follow_toggle();
         void populate_sensor_list();
         static std::string sensor_display_name(const std::string& klipper_name);
         static void color_swatch_clicked(lv_event_t* e);
@@ -91,6 +111,7 @@ class TempGraphWidget : public PanelWidget {
         nlohmann::json config_;
         SaveCallback on_save_;
         std::vector<SensorRow> rows_;
+        lv_obj_t* follow_switch_ = nullptr;
     };
 
     std::unique_ptr<TempGraphConfigModal> config_modal_;

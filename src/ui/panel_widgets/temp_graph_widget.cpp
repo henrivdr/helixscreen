@@ -14,6 +14,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 namespace helix {
 
 void register_temp_graph_widget() {
@@ -52,6 +54,7 @@ std::string TempGraphWidget::get_component_name() const {
 
 void TempGraphWidget::set_config(const nlohmann::json& config) {
     config_ = config;
+    follow_overlay_ = config.value("follow_overlay", false);
 }
 
 void TempGraphWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
@@ -72,6 +75,7 @@ void TempGraphWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
     ctrl_config.initial_features = features_for_size(current_colspan_, current_rowspan_);
     // Uses default TempGraphScaleParams (same as mini graph and overlay)
     ctrl_config.series = build_series_from_config();
+    applied_visibility_signature_ = current_visibility_signature();
 
     controller_ = std::make_unique<TempGraphController>(widget_obj_, std::move(ctrl_config));
 
@@ -110,7 +114,23 @@ void TempGraphWidget::on_size_changed(int colspan, int rowspan, int /*width_px*/
     }
 }
 
-void TempGraphWidget::on_activate() {}
+void TempGraphWidget::on_activate() {
+    // In follow-overlay mode, the home panel re-activates whenever the user
+    // navigates back from the full-screen graph. If the overlay's visibility
+    // snapshot has drifted from what we currently render, rebuild the
+    // controller to match.
+    if (!follow_overlay_ || !widget_obj_ || !parent_screen_) {
+        return;
+    }
+    const std::string snapshot_sig = current_visibility_signature();
+    if (snapshot_sig == applied_visibility_signature_) {
+        return;
+    }
+    auto* saved_widget = widget_obj_;
+    auto* saved_parent = parent_screen_;
+    detach();
+    attach(saved_widget, saved_parent);
+}
 
 void TempGraphWidget::on_deactivate() {}
 
@@ -174,13 +194,31 @@ std::vector<TempGraphSeriesSpec> TempGraphWidget::build_series_from_config() {
     if (!config_.contains("sensors"))
         return specs;
 
+    // Resolve membership predicate. In follow mode (with a snapshot present),
+    // the per-sensor `enabled` flag is overridden by the overlay's last
+    // visibility set. Until the overlay is opened the snapshot is empty, so
+    // we fall back to the configured `enabled` flags.
+    const auto& snapshot = get_temp_graph_visibility_snapshot();
+    const bool use_snapshot = follow_overlay_ && snapshot.has_value();
+
     int color_idx = 0;
     for (const auto& entry : config_["sensors"]) {
-        if (!entry.contains("name") || !entry.value("enabled", true))
+        if (!entry.contains("name"))
+            continue;
+
+        const std::string klipper_name = entry["name"].get<std::string>();
+        bool enabled;
+        if (use_snapshot) {
+            enabled = std::find(snapshot->begin(), snapshot->end(), klipper_name) !=
+                      snapshot->end();
+        } else {
+            enabled = entry.value("enabled", true);
+        }
+        if (!enabled)
             continue;
 
         TempGraphSeriesSpec spec;
-        spec.klipper_name = entry["name"].get<std::string>();
+        spec.klipper_name = klipper_name;
         if (entry.contains("color")) {
             spec.color = lv_color_hex(entry["color"].get<uint32_t>());
         } else {
@@ -195,6 +233,30 @@ std::vector<TempGraphSeriesSpec> TempGraphWidget::build_series_from_config() {
         specs.push_back(std::move(spec));
     }
     return specs;
+}
+
+std::string TempGraphWidget::current_visibility_signature() const {
+    // Encode the resolved enabled-set for stable comparison.
+    const auto& snapshot = get_temp_graph_visibility_snapshot();
+    const bool use_snapshot = follow_overlay_ && snapshot.has_value();
+
+    std::vector<std::string> names;
+    if (use_snapshot) {
+        names = *snapshot;
+    } else if (config_.contains("sensors")) {
+        for (const auto& entry : config_["sensors"]) {
+            if (entry.contains("name") && entry.value("enabled", true)) {
+                names.push_back(entry["name"].get<std::string>());
+            }
+        }
+    }
+    std::sort(names.begin(), names.end());
+    std::string sig;
+    for (const auto& n : names) {
+        sig += n;
+        sig += ',';
+    }
+    return sig;
 }
 
 // ============================================================================
@@ -251,6 +313,7 @@ void TempGraphWidget::TempGraphConfigModal::on_show() {
     wire_ok_button("btn_primary");
     wire_cancel_button("btn_secondary");
 
+    populate_follow_toggle();
     populate_sensor_list();
 
     spdlog::debug("[TempGraphConfigModal] Opened with {} sensor rows", rows_.size());
@@ -278,12 +341,15 @@ void TempGraphWidget::TempGraphConfigModal::on_ok() {
 
     nlohmann::json new_config = config_;
     new_config["sensors"] = sensors;
+    new_config["follow_overlay"] =
+        follow_switch_ && lv_obj_has_state(follow_switch_, LV_STATE_CHECKED);
 
     if (on_save_) {
         on_save_(new_config);
     }
 
-    spdlog::info("[TempGraphConfigModal] Saved config with {} sensors", sensors.size());
+    spdlog::info("[TempGraphConfigModal] Saved config with {} sensors (follow={})",
+                 sensors.size(), new_config["follow_overlay"].get<bool>());
     hide();
 }
 
@@ -318,6 +384,51 @@ TempGraphWidget::TempGraphConfigModal::sensor_display_name(const std::string& kl
     }
 
     return display;
+}
+
+void TempGraphWidget::TempGraphConfigModal::populate_follow_toggle() {
+    lv_obj_t* list = find_widget("sensor_list");
+    if (!list) {
+        return;
+    }
+
+    bool follow = config_.value("follow_overlay", false);
+
+    // Build the row at the top of the sensor list: [label] [spacer] [switch]
+    lv_obj_t* row = lv_obj_create(list);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_ver(row, 6, 0);
+    lv_obj_set_style_pad_gap(row, 12, 0);
+
+    // Two-line label: title + helper text
+    lv_obj_t* col = lv_obj_create(row);
+    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_grow(col, 1);
+    lv_obj_set_style_pad_all(col, 0, 0);
+    lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(col, 0, 0);
+    lv_obj_remove_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* title = lv_label_create(col);
+    lv_label_set_text(title, "Follow graph screen");
+    lv_obj_set_style_text_color(title, lv_color_white(), 0);
+
+    lv_obj_t* hint = lv_label_create(col);
+    lv_label_set_text(hint, "Show whatever curves you last had visible on the full graph.");
+    lv_obj_set_style_text_color(hint, theme_manager_get_color("text_muted"), 0);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+
+    // Toggle switch
+    lv_obj_t* sw = lv_switch_create(row);
+    lv_obj_set_size(sw, 44, 24);
+    if (follow) {
+        lv_obj_add_state(sw, LV_STATE_CHECKED);
+    }
+    follow_switch_ = sw;
 }
 
 void TempGraphWidget::TempGraphConfigModal::populate_sensor_list() {

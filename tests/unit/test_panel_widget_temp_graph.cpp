@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../../include/ui_overlay_temp_graph.h"
 #include "../../include/ui_temp_graph.h"
 #include "../../src/ui/panel_widgets/temp_graph_widget.h"
 #include "../ui_test_utils.h"
@@ -9,7 +10,19 @@
 
 #include "../catch_amalgamated.hpp"
 
+#include <algorithm>
+
 using namespace helix;
+
+// L065 friend test access: lets us drive private follow-mode logic without
+// adding test-only methods to TempGraphWidget.
+class helix::TempGraphWidgetTestAccess {
+  public:
+    static void set_follow_overlay(TempGraphWidget& w, bool on) { w.follow_overlay_ = on; }
+    static std::vector<TempGraphSeriesSpec> build_series(TempGraphWidget& w) {
+        return w.build_series_from_config();
+    }
+};
 
 // Reuse the same lightweight fixture as test_temp_graph.cpp
 class TempGraphFeatureFixture {
@@ -423,4 +436,90 @@ TEST_CASE("TempGraphWidget: two instances have independent configs",
     REQUIRE(std::string(w2.id()) == "temp_graph:2");
     REQUIRE(w1.supports_reuse() == true);
     REQUIRE(w2.supports_reuse() == true);
+}
+
+// ============================================================================
+// Follow-overlay mode (#? home graph card "follow my graph selection")
+// ============================================================================
+
+namespace {
+auto names_of = [](const std::vector<TempGraphSeriesSpec>& specs) {
+    std::vector<std::string> out;
+    out.reserve(specs.size());
+    for (const auto& s : specs)
+        out.push_back(s.klipper_name);
+    return out;
+};
+} // namespace
+
+TEST_CASE("TempGraphWidget: follow_overlay off uses configured enabled flags",
+          "[temp_graph][panel_widget][follow]") {
+    helix::test_access::set_temp_graph_visibility_snapshot(
+        std::vector<std::string>{"chamber"}); // overlay snapshot says "only chamber"
+
+    TempGraphWidget w("test_follow_off");
+    nlohmann::json cfg = {
+        {"follow_overlay", false},
+        {"sensors",
+         {
+             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+             {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
+             {{"name", "chamber"}, {"enabled", false}, {"color", 0xA3BE8C}},
+         }}};
+    w.set_config(cfg);
+
+    auto specs = TempGraphWidgetTestAccess::build_series(w);
+    auto names = names_of(specs);
+    // Snapshot ignored — uses config "enabled" flags.
+    REQUIRE(std::find(names.begin(), names.end(), "extruder") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "heater_bed") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "chamber") == names.end());
+
+    helix::test_access::set_temp_graph_visibility_snapshot(std::nullopt);
+}
+
+TEST_CASE("TempGraphWidget: follow_overlay on uses snapshot membership",
+          "[temp_graph][panel_widget][follow]") {
+    helix::test_access::set_temp_graph_visibility_snapshot(
+        std::vector<std::string>{"chamber", "heater_bed"}); // overlay shows bed + chamber only
+
+    TempGraphWidget w("test_follow_on");
+    nlohmann::json cfg = {
+        {"follow_overlay", true},
+        {"sensors",
+         {
+             // config flags would otherwise show extruder + bed only
+             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+             {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
+             {{"name", "chamber"}, {"enabled", false}, {"color", 0xA3BE8C}},
+         }}};
+    w.set_config(cfg);
+
+    auto specs = TempGraphWidgetTestAccess::build_series(w);
+    auto names = names_of(specs);
+    REQUIRE(std::find(names.begin(), names.end(), "extruder") == names.end()); // dropped
+    REQUIRE(std::find(names.begin(), names.end(), "heater_bed") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "chamber") != names.end()); // added
+
+    helix::test_access::set_temp_graph_visibility_snapshot(std::nullopt);
+}
+
+TEST_CASE("TempGraphWidget: follow_overlay on with no snapshot falls back to config flags",
+          "[temp_graph][panel_widget][follow]") {
+    helix::test_access::set_temp_graph_visibility_snapshot(std::nullopt);
+
+    TempGraphWidget w("test_follow_no_snapshot");
+    nlohmann::json cfg = {
+        {"follow_overlay", true},
+        {"sensors",
+         {
+             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+             {{"name", "heater_bed"}, {"enabled", false}, {"color", 0x88C0D0}},
+         }}};
+    w.set_config(cfg);
+
+    auto specs = TempGraphWidgetTestAccess::build_series(w);
+    auto names = names_of(specs);
+    REQUIRE(std::find(names.begin(), names.end(), "extruder") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "heater_bed") == names.end());
 }

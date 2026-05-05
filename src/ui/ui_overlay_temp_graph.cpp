@@ -65,6 +65,22 @@ TempGraphOverlay& get_global_temp_graph_overlay() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Visibility snapshot (consumed by home graph card "follow" mode)
+// ─────────────────────────────────────────────────────────────────────────────
+
+static std::optional<std::vector<std::string>> s_visibility_snapshot;
+
+const std::optional<std::vector<std::string>>& get_temp_graph_visibility_snapshot() {
+    return s_visibility_snapshot;
+}
+
+namespace helix::test_access {
+void set_temp_graph_visibility_snapshot(std::optional<std::vector<std::string>> snapshot) {
+    s_visibility_snapshot = std::move(snapshot);
+}
+} // namespace helix::test_access
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Construction / Destruction
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -348,6 +364,18 @@ void TempGraphOverlay::apply_default_visibility() {
             break;
         }
     }
+    publish_visibility_snapshot();
+}
+
+void TempGraphOverlay::publish_visibility_snapshot() const {
+    std::vector<std::string> visible;
+    visible.reserve(series_.size());
+    for (const auto& s : series_) {
+        if (s.visible) {
+            visible.push_back(s.klipper_name);
+        }
+    }
+    s_visibility_snapshot = std::move(visible);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -451,6 +479,7 @@ void TempGraphOverlay::toggle_series_visibility(size_t series_idx) {
         }
     }
     update_chip_style(series_idx);
+    publish_visibility_snapshot();
 
     spdlog::debug("[TempGraphOverlay] {} series '{}' (idx={})", s.visible ? "Showed" : "Hid",
                   s.display_name, series_idx);

@@ -9,6 +9,7 @@
 #include "ui_temp_graph.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -92,6 +93,10 @@ class TempGraphOverlay : public OverlayBase {
     void apply_default_visibility();
     void create_chips();
 
+    // Publish currently-visible klipper names to the global snapshot consumed
+    // by widgets that opt into "follow my graph selection" mode.
+    void publish_visibility_snapshot() const;
+
     // Chip interaction
     void toggle_series_visibility(size_t series_idx);
     void update_chip_style(size_t series_idx);
@@ -150,3 +155,19 @@ class TempGraphOverlay : public OverlayBase {
  * Creates the overlay on first access and registers cleanup with StaticPanelRegistry.
  */
 TempGraphOverlay& get_global_temp_graph_overlay();
+
+/**
+ * @brief Snapshot of klipper sensor names last visible on the full-screen overlay.
+ *
+ * `nullopt` until the overlay opens once. Updated whenever the overlay applies
+ * default visibility or the user toggles a chip. Consumed by widgets that opt
+ * into "follow the user's graph selection" mode.
+ */
+const std::optional<std::vector<std::string>>& get_temp_graph_visibility_snapshot();
+
+namespace helix::test_access {
+/// Test-only seeder for the visibility snapshot. Production code never calls this;
+/// it exists so widget tests can drive the follow-mode code path without spinning
+/// up a fully-wired overlay.
+void set_temp_graph_visibility_snapshot(std::optional<std::vector<std::string>> snapshot);
+} // namespace helix::test_access
