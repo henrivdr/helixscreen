@@ -405,6 +405,34 @@ std::string annotate_gcode(const std::string& gcode) {
 
 void MoonrakerAPI::execute_gcode(const std::string& gcode, SuccessCallback on_success,
                                  ErrorCallback on_error, uint32_t timeout_ms, bool silent) {
+    // Refuse to ship gcode while Klipper is halted. The user-visible bug this
+    // closes: dragging the fan slider on a K2 with `key298` produced a stream
+    // of M106 commands that Klipper rejected on each tick (see /server/gcode_store
+    // history during the 2026-05-05 K2 incident). Recovery paths use dedicated
+    // RPCs (printer.firmware_restart, printer.emergency_stop, machine.shell_command)
+    // and bypass this gate naturally. STARTUP is allowed through — it's brief
+    // and Klipper queues incoming commands.
+    {
+        auto& ps = get_printer_state();
+        const int klippy = lv_subject_get_int(ps.get_klippy_state_subject());
+        if (klippy == static_cast<int>(helix::KlippyState::SHUTDOWN) ||
+            klippy == static_cast<int>(helix::KlippyState::ERROR)) {
+            if (!silent) {
+                spdlog::warn("[Moonraker API] Refusing G-code while Klipper is halted "
+                             "(state={}): '{}'",
+                             klippy, gcode.substr(0, 60));
+            }
+            if (on_error) {
+                MoonrakerError err;
+                err.type = MoonrakerErrorType::VALIDATION_ERROR;
+                err.method = "printer.gcode.script";
+                err.message = "Klipper is halted — restart firmware to continue";
+                on_error(err);
+            }
+            return;
+        }
+    }
+
     std::string annotated = annotate_gcode(gcode);
     json params = {{"script", annotated}};
 
