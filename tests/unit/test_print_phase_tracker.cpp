@@ -299,6 +299,26 @@ TEST_CASE("PrintPhaseTracker mirror: FILAMENT_LOAD maps to INITIALIZING + label"
     REQUIRE(std::string(msg).find("Loading Filament") != std::string::npos);
 }
 
+TEST_CASE("PrintPhaseTracker mirror: PRINTING hides preparing_overlay (legacy=IDLE)",
+          "[print_phase_tracker][mirror]") {
+    // Regression: mid-print join sees state=printing + duration>0, tracker
+    // jumps IDLE→PRINTING, mirror previously mapped that to COMPLETE which
+    // the panel treats as "still preparing" (phase != 0) and kept the
+    // preparing_overlay visible for the rest of the print. Map to IDLE
+    // instead so the overlay hides immediately on transition to PRINTING.
+    MirrorEnv env;
+    env.mark_printing_active();
+
+    // Drive the tracker straight to PRINTING via on_print_duration.
+    PrintPhaseTrackerTestAccess::simulate_print_duration(env.tracker, 120);
+    flush();
+
+    REQUIRE(PrintPhaseTrackerTestAccess::current_phase(env.tracker) ==
+            PrintPhase::PRINTING);
+    REQUIRE(lv_subject_get_int(env.state.get_print_start_phase_subject()) ==
+            static_cast<int>(PrintStartPhase::IDLE));
+}
+
 TEST_CASE("PrintPhaseTracker mirror: reset returns legacy phase to IDLE",
           "[print_phase_tracker][mirror]") {
     MirrorEnv env;

@@ -15,6 +15,10 @@ class PrintPhaseTrackerTestAccess {
         t.process_gcode_line(line);
     }
 
+    static void simulate_print_duration(PrintPhaseTracker& t, int seconds) {
+        t.on_print_duration(seconds);
+    }
+
     static PrintPhase current_phase(PrintPhaseTracker& t) {
         return t.current_phase_;
     }

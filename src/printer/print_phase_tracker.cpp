@@ -58,6 +58,14 @@ inline bool contains(const std::string& haystack, const char* needle) {
 /// existing `preparing_overlay` UI was built around. FILAMENT_LOAD has no
 /// dedicated legacy enum value — INITIALIZING is the closest non-terminal
 /// neighbor and the message string carries the "Loading Filament" detail.
+///
+/// PRINTING and the terminal states all map to IDLE because the
+/// `preparing_overlay` panel observer treats *any* non-IDLE phase as
+/// "still preparing" and keeps the overlay up. The panel only hides
+/// the overlay on phase==0 (IDLE). PrintStartCollector works around
+/// this by writing COMPLETE and then immediately calling
+/// `reset_print_start_state()` from `stop()` — we don't have an
+/// equivalent kill switch in the tracker, so we go straight to IDLE.
 PrintStartPhase to_legacy_phase(PrintPhase phase) {
     switch (phase) {
         case PrintPhase::IDLE:          return PrintStartPhase::IDLE;
@@ -66,7 +74,7 @@ PrintStartPhase to_legacy_phase(PrintPhase phase) {
         case PrintPhase::HEATING:       return PrintStartPhase::HEATING_NOZZLE;
         case PrintPhase::FILAMENT_LOAD: return PrintStartPhase::INITIALIZING;
         case PrintPhase::PURGE:         return PrintStartPhase::PURGING;
-        case PrintPhase::PRINTING:      return PrintStartPhase::COMPLETE;
+        case PrintPhase::PRINTING:
         case PrintPhase::PAUSED:
         case PrintPhase::COMPLETE:
         case PrintPhase::ERROR:
