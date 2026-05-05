@@ -745,7 +745,6 @@ void FanStackWidget::on_carousel_arc_value_changed(lv_event_t* e) {
     if (cp.syncing)
         return;
 
-    self->record_interaction();
     cp.last_user_input_ms = lv_tick_get();
     int speed = lv_arc_get_value(arc);
 

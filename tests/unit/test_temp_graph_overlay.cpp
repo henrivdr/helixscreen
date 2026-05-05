@@ -131,12 +131,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "TempGraphOverlay: global accessor returns sam
 TEST_CASE_METHOD(LVGLTestFixture,
                  "TempGraphOverlay: visibility snapshot starts unset until overlay opens",
                  "[temp_graph_overlay][snapshot]") {
-    // The accessor returns a reference to a static optional; in test isolation
-    // it may have been populated by a prior overlay activation, so we only
-    // assert the API contract — get returns a stable reference of the right type.
-    const auto& snap = get_temp_graph_visibility_snapshot();
+    // The accessor returns by value and is filtered against the active printer
+    // name, so in test isolation it may carry state from a prior activation.
+    // Assert only the API contract: every entry, if any, is a non-empty
+    // klipper name.
+    auto snap = get_temp_graph_visibility_snapshot();
     if (snap.has_value()) {
-        // If populated, every entry must be a non-empty klipper name.
         for (const auto& name : *snap) {
             REQUIRE_FALSE(name.empty());
         }
