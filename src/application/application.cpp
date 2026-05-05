@@ -49,6 +49,7 @@
 #include "subject_initializer.h"
 #include "temperature_history_manager.h"
 #include "thermal_rate_model.h"
+#include "print_phase_tracker.h"
 #include "timelapse_state.h"
 #include "wizard_config_paths.h"
 
@@ -2988,6 +2989,13 @@ void Application::init_action_prompt() {
             }
         });
 
+    // Pre-print phase tracker — consumes the K2 (and similar) tag stream
+    // (`// [PRTOUCH_MOVE]`, `// [PROBE_STEP_INFO]`, `// [G29_TIME]`,
+    // `// [box] …`, `// num: N, velocity: V, percent: P`) to drive
+    // PrintPhaseTracker phase transitions and progress. Auto-degrades on
+    // printers that don't emit the tags (Bambu, AD5M Forge, stock Klipper).
+    helix::PrintPhaseTracker::instance().attach_to_client(client);
+
     spdlog::debug("[Application] Action prompt system initialized");
 }
 
@@ -3644,6 +3652,9 @@ void Application::tear_down_printer_state() {
         m_moonraker->client()->unregister_method_callback("notify_gcode_response",
                                                           "action_prompt_manager");
     }
+    if (m_moonraker && m_moonraker->client()) {
+        helix::PrintPhaseTracker::instance().detach_from_client(m_moonraker->client());
+    }
     AmsState::instance().set_gcode_response_callback(nullptr);
     m_action_prompt_modal.reset();
     helix::ActionPromptManager::set_instance(nullptr);
@@ -3911,6 +3922,9 @@ void Application::shutdown() {
     if (m_moonraker && m_moonraker->client() && m_action_prompt_manager) {
         m_moonraker->client()->unregister_method_callback("notify_gcode_response",
                                                           "action_prompt_manager");
+    }
+    if (m_moonraker && m_moonraker->client()) {
+        helix::PrintPhaseTracker::instance().detach_from_client(m_moonraker->client());
     }
     // Clear mock gcode injection callback before destroying ActionPromptManager
     // (AmsState singleton outlives Application — callback would dangle)
