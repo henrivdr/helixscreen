@@ -7,8 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.54] - 2026-05-04
+
+The follow-up to last week's hotfix. Headline pieces: the **L081 unwind-safe `lv_event_pop`** fix that landed eleven hours after v0.99.53 tagged (so it missed that release), plus a second layer of defensive guards in `lv_event_mark_deleted` for the **cluster:pstat-async-delete** crash family (#906) that's been the dominant production signature since 4/29. The **pre-print options framework** lands across four phases — a uniform contract for every per-printer pre-print Klipper option (K2 Plus AI detect, K1C/SonicPad bed leveling, etc.) replacing the old ad-hoc per-option JSON. Round it out with **in-place fan-carousel dial drag** (no more popping a separate fan-control overlay), **AD5X-IFS hardening** (stale plugin data, custom materials, lane-data sync on external CHANGE_ZCOLOR), the long-pending **L083 std::thread audit** wrapping every remaining bare detached spawn, and a **memory-leak fix** for AMS detail panel.
+
+### Added
+
+- **In-place fan-speed control** — drag the arc on a fan card in the Controls fan carousel to change the speed directly. No more bouncing into a separate fan-control overlay for the common case.
+- **"Follow my graph selection" toggle on the temperature-graph card** — when on, dragging through the time axis pins the readout to the touched sample instead of always tracking live.
+- **Pre-print options framework (Phases 1-4)** — every per-printer pre-print option (K2 Plus AI detect, bed leveling, calibration prompts, etc.) now flows through a uniform `PrePrintOption` contract. Phase 1 introduced the framework, Phase 2 migrated the JSON DB and all call sites, Phase 3 rebuilt the UI to generate rows dynamically with category subheaders, Phase 4 added K2 Plus `ai_detect` via the `PreStartGcode` strategy.
+- **moonraker-timelapse component detection** (#926) — the Settings row appears for users with a pre-existing moonraker-timelapse install (MainsailOS, manual config), not just those who ran the in-app install wizard.
+- **Favorite-macro home-screen tap honors safety settings** (#925) — dangerous-macro confirmation prompts now fire from the home-screen tap path the same way they do from the macros panel.
+- **Debug bundle now captures platform config files + CFS Klipper objects** — bundles for K2 / Pi printers carry the full Klipper objects payload for CFS units.
+
 ### Fixed
+
+- **LVGL event-dispatch unwind safety (L081 root cause)** — when a C++ exception unwinds through `lv_obj_send_event` or `lv_event_push_and_send`, the explicit `lv_event_pop` was being skipped, leaving `event_head` pointing at a defunct stack frame. The next `lv_event_mark_deleted` walk SIGBUSed reading garbage. Patched both entry points to use GCC `__attribute__((cleanup))` (with `-fexceptions` enabled on LVGL TUs) so pop fires on exception unwinds too. Closes the design gap behind crash families #793/#840/#871/#878/#880 and a substantial fraction of the cluster:pstat-async-delete (#906) hits.
+- **Cluster:pstat-async-delete defensive guards (#906)** — `lv_event_mark_deleted` now layers two additional checks: a dispatch-depth coherence guard (logs `event_head_stale_leak` anomaly if `event_head` is non-NULL with no active send frame) and a stack-bounds check (logs `event_head_stack_oob` if the chain pointer is outside the current thread's stack range). Both reset `event_head` and bail safely. Catches corruption modes the cleanup-attribute path can't address (heap reuse, memory stomp). Plus per-step breadcrumbs in `PrintStatusPanel::on_activate` so the next field crash names which step set up the corruption. Breadcrumb ring expanded 128→256 to keep async_d/sync_d entries from rotating off.
+- **L083 thread spawn audit completes** — every remaining bare `std::thread(...).detach()` site is now wrapped in try/catch surfacing a toast on `std::system_error` from `pthread_create` EAGAIN. Prevents `std::terminate` aborts under thread exhaustion on resource-constrained ARM (AD5M, K1C, MIPS targets).
+- **AD5X-IFS stale plugin data + custom materials** (#904) — Adventurer5M.json reads now guard against stale lessWaste/bambufy `save_variables` rows that persist after plugin uninstall, and user-defined materials in `/mod_data/user.cfg` now surface in the slot picker alongside built-ins.
+- **AD5X-IFS sync on external CHANGE_ZCOLOR** — when the user runs `CHANGE_ZCOLOR` from Mainsail/Fluidd or the AD5X touchscreen, HelixScreen now syncs `lane_data` and `_IFS_VARS` to match instead of drifting out of agreement.
+- **AD5X auto-detect on ZMOD firmware** — was misdetected as AD5M Pro on certain ZMOD revisions.
+- **AMS detail panel destroyed on close** — was holding ~MB of widget state for the lifetime of the app.
+- **AMS bypass spool position** — pinned to the canvas tube line on size-changed events instead of drifting on resize.
+- **AD5X-IFS post-print runout toast suppression** — was firing every print-end since the IFS auto-unloads after the job; now only triggers on real runout.
+- **Thermistor widget rebinds temp observer when sensor name changes** (#916) — the bound subject is dynamic; the widget now uses a paired `SubjectLifetime` member so observer cleanup matches the dynamic-subject pattern.
+- **Fan-carousel arc value-changed no longer records spurious interactions** — the auto-debounce was treating programmatic arc updates as user input.
+- **FilamentConsumptionTracker stopped before `destroy_all` on shutdown** (#927) — closes a use-after-free observed during AD5X tear-down.
+- **Print Select self-heals stuck refresh_in_flight_ flag after 30s** — a never-arriving file-list response could lock out subsequent refreshes; a watchdog now clears the flag.
 - **Splash process orphaned on DRM platforms (Snapmaker U1)** — `helixscreen.init` starts `helix-splash` early before the display backend is selected, but `helix-watchdog`'s "skip external splash on DRM" branch (added because fbdev splash mmap conflicts with DRM) only avoided spawning a *new* splash; the externally-adopted PID was silently dropped, never forwarded to helix-screen via `--splash-pid`, and never reaped. Splash kept running after the UI took over the display, burning ~60% CPU on a single core forever (rockchipdrmfb's fbdev compat layer kept it from failing). Watchdog now reaps the orphan when DRM is selected. Belt-and-suspenders: `cleanup_splash` escalates to SIGKILL after a 600 ms SIGTERM grace, and the splash binary self-exits after 30 s if no signal arrives.
+- **Moonraker component-capability flags cleared on each discovery** — stale capability bits from a prior connection no longer leak into a new printer's profile.
+- **Favorite-macro context leak on backdrop/ESC dismiss + i18n confirm body** (#925) — the ButtonCallbackData was leaking when the picker was dismissed via backdrop tap or ESC.
+- **Macros-panel dangerous-macro confirm body** — i18n keys hooked up and the body text formatted for readability.
+
+### Changed
+
+- **Color swatches and filament-mapping cards driven by subjects** — converted from imperative C++ visibility toggles to declarative XML `bind_flag_if_eq` against a subject. Removes the last `can_show_*` zombie subjects from `printer_state.cpp`.
+- **Debug bundle HTTP fetch + sanitization factored out**; `user.cfg` redaction fixed (was leaking certain custom-material entries verbatim).
+- **AD5X re-reads `Adventurer5M.json` on AMS detail-view entry** — picks up out-of-band edits from the AD5X firmware native UI without requiring a HelixScreen restart.
 
 ## [0.99.53] - 2026-04-28
 
@@ -3443,6 +3479,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.54]: https://github.com/prestonbrown/helixscreen/compare/v0.99.53...v0.99.54
 [0.99.53]: https://github.com/prestonbrown/helixscreen/compare/v0.99.52...v0.99.53
 [0.99.52]: https://github.com/prestonbrown/helixscreen/compare/v0.99.51...v0.99.52
 [0.99.51]: https://github.com/prestonbrown/helixscreen/compare/v0.99.50...v0.99.51
