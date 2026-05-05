@@ -50,16 +50,21 @@ bool logind_call(const char* method) {
 }
 #endif
 
-bool systemctl_fallback(const char* verb) {
-    std::string cmd = "systemctl ";
-    cmd += verb;
-    spdlog::info("[SystemPower] fallback: {}", cmd);
-    const int rc = std::system(cmd.c_str());
+bool exec_fallback(const char* desc, const char* cmd) {
+    spdlog::info("[SystemPower] fallback: {}", desc);
+    const int rc = std::system(cmd);
     if (rc == -1) {
-        spdlog::warn("[SystemPower] fallback fork/exec failed");
+        spdlog::warn("[SystemPower] {} fork/exec failed", desc);
         return false;
     }
     return WIFEXITED(rc) && WEXITSTATUS(rc) == 0;
+}
+
+// Non-systemd hosts (OpenWrt/procd K2, K1C, AD5M, SonicPad…) don't have
+// systemctl. They do have busybox /sbin/reboot and /sbin/poweroff via
+// procd's sysinit hook (`::shutdown:/etc/init.d/rcS K shutdown`).
+bool busybox_fallback(const char* path) {
+    return exec_fallback(path, path);
 }
 
 } // namespace
@@ -69,7 +74,8 @@ bool SystemPower::reboot_local() {
 #ifdef HELIX_HAS_SYSTEMD
     if (logind_call("Reboot")) return true;
 #endif
-    return systemctl_fallback("reboot");
+    if (exec_fallback("systemctl reboot", "systemctl reboot")) return true;
+    return busybox_fallback("/sbin/reboot");
 }
 
 bool SystemPower::shutdown_local() {
@@ -77,7 +83,8 @@ bool SystemPower::shutdown_local() {
 #ifdef HELIX_HAS_SYSTEMD
     if (logind_call("PowerOff")) return true;
 #endif
-    return systemctl_fallback("poweroff");
+    if (exec_fallback("systemctl poweroff", "systemctl poweroff")) return true;
+    return busybox_fallback("/sbin/poweroff");
 }
 
 } // namespace helix
