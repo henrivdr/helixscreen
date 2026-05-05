@@ -286,7 +286,8 @@ void MacrosPanel::fetch_params_and_execute(const std::string& macro_name) {
         // Store pending macro name for the confirmation callback
         pending_dangerous_macro_ = macro_name;
 
-        std::string msg = macro_name + " may cause unintended changes. Are you sure?";
+        std::string msg = fmt::format(lv_tr("{} may cause unintended changes. Are you sure?"),
+                                      prettify_macro_name(macro_name));
         helix::ui::modal_show_confirmation(
             lv_tr("Run Dangerous Macro?"), msg.c_str(), ModalSeverity::Warning, lv_tr("Run"),
             [](lv_event_t* e) {
