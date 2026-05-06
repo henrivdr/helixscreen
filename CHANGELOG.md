@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.55] - 2026-05-06
+
+Hotfix for the v0.99.54 crash loop reported on Nebula Pad (#931). A callback inside `lv_timer_handler()` threw `json::type_error::306` ("cannot use value() with null"), unwound through `Application::main_loop()` into `main()`'s top-level catch, exited 134, and the watchdog interpreted it as a deterministic crash — looping the user back to the splash until they manually reflashed v0.99.53. The 1b643f99c safety net wrapped the initial-subscription dispatch path; this release extends the same contract to the outer main-loop boundary so a single throwing observer/queued/timer callback can no longer brick the device.
+
+### Fixed
+
+- **Crash loop on v0.99.54 startup** (#931) — `Application::main_loop()` now wraps each iteration in `try/catch`. When a callback throws, the type and `what()` are logged, the recent breadcrumb ring is dumped to stderr (so the next user log captures the throw site), telemetry records the event, and the loop continues with a user-facing error toast. A runaway counter (5 catches in 30s) breaks out cleanly to avoid a tight throw-catch loop. Removes the watchdog's "HelixScreen Keeps Crashing" path for any callback throw that previously exited 134.
+- **MoonrakerRequestTracker error-callback path** — symmetrized exception handling: `route_response()` already absorbed throws from success callbacks, but error callbacks were unwrapped. A throwing error_cb now logs and continues (matching the success path).
+
 ## [0.99.54] - 2026-05-04
 
 The follow-up to last week's hotfix. Headline pieces: the **L081 unwind-safe `lv_event_pop`** fix that landed eleven hours after v0.99.53 tagged (so it missed that release), plus a second layer of defensive guards in `lv_event_mark_deleted` for the **cluster:pstat-async-delete** crash family (#906) that's been the dominant production signature since 4/29. The **pre-print options framework** lands across four phases — a uniform contract for every per-printer pre-print Klipper option (K2 Plus AI detect, K1C/SonicPad bed leveling, etc.) replacing the old ad-hoc per-option JSON. Round it out with **in-place fan-carousel dial drag** (no more popping a separate fan-control overlay), **AD5X-IFS hardening** (stale plugin data, custom materials, lane-data sync on external CHANGE_ZCOLOR), the long-pending **L083 std::thread audit** wrapping every remaining bare detached spawn, and a **memory-leak fix** for AMS detail panel.

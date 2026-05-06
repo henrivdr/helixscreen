@@ -190,6 +190,7 @@
 #include <fstream>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <typeinfo>
 #include <unistd.h>
 
 #ifdef __APPLE__
@@ -3081,8 +3082,26 @@ int Application::main_loop() {
     show_screensaver_migration_notice_if_pending();
 #endif
 
+    // Top-level safety net: any std::exception thrown from a callback invoked
+    // inside lv_timer_handler() (observers, queued UpdateQueue items, LVGL
+    // animations, async calls) unwinds the entire stack out of main_loop into
+    // main()'s catch and exits 134 — the watchdog interprets this as a crash
+    // and after CRASH_LOOP_MAX_CRASHES same-signature events triggers the
+    // "HelixScreen Keeps Crashing" recovery dialog (#931, v0.99.54). The
+    // 1b643f99c safety net wraps the initial-subscription dispatch path, but
+    // queued/observer/timer callbacks inside lv_timer_handler are not yet
+    // guarded. Catch + log + dump breadcrumbs + continue: the user gets a
+    // toast and a usable app instead of a crash loop they can only escape
+    // by reflashing the previous version. A streak counter breaks out if the
+    // catch itself is in a tight retry loop.
+    int exception_streak = 0;
+    uint32_t streak_window_start = 0;
+    static constexpr int RUNAWAY_THRESHOLD = 5;
+    static constexpr uint32_t RUNAWAY_WINDOW_MS = 30000;
+
     // Main event loop
     while (lv_display_get_next(nullptr) && !app_quit_requested()) {
+        try {
         uint32_t current_tick = DisplayManager::get_ticks();
         m_loop_handler.on_frame(current_tick);
 
@@ -3220,6 +3239,62 @@ int Application::main_loop() {
             DisplayManager::delay(sleep_ms);
         } else {
             DisplayManager::delay(1);
+        }
+        } catch (const std::exception& e) {
+            // A callback inside this iteration threw and was not caught
+            // closer to the source. Pre-#931, this unwound through main()
+            // and exited 134, triggering a watchdog crash loop. Now: log
+            // type+what, dump the recent breadcrumb ring, record telemetry,
+            // and continue. If catches pile up faster than RUNAWAY_THRESHOLD
+            // / RUNAWAY_WINDOW_MS, exit cleanly so the watchdog sees a
+            // graceful shutdown instead of an infinite throw-catch tight loop.
+            const char* type_name = typeid(e).name();
+            spdlog::error("[Application] Caught exception in main loop: {} ({})",
+                          e.what(), type_name);
+            crash_handler::breadcrumb::note("loop_catch", type_name);
+            // Dump breadcrumbs so the next user log captures which observer/
+            // callback path threw — root cause of #931 needs this trail.
+            crash_handler::breadcrumb::dump_to_fd(STDERR_FILENO);
+            try {
+                TelemetryManager::instance().record_error(
+                    "main_loop", "unhandled_exception", e.what());
+            } catch (...) {
+                // Telemetry must never re-throw out of the catch handler.
+            }
+
+            uint32_t now_tick = DisplayManager::get_ticks();
+            if (exception_streak == 0 ||
+                (now_tick - streak_window_start) > RUNAWAY_WINDOW_MS) {
+                streak_window_start = now_tick;
+                exception_streak = 1;
+            } else {
+                ++exception_streak;
+            }
+            if (exception_streak >= RUNAWAY_THRESHOLD) {
+                spdlog::critical(
+                    "[Application] Runaway exception streak ({} in {}ms) — "
+                    "exiting main loop cleanly to break the throw-catch tight loop",
+                    exception_streak, RUNAWAY_WINDOW_MS);
+                break;
+            }
+
+            // Best-effort recovery toast. Wrap so a throw here doesn't escape.
+            try {
+                ToastManager::instance().show(
+                    ToastSeverity::ERROR,
+                    "An internal error occurred. The app continues running — "
+                    "please send a debug bundle from Settings → About if it repeats.",
+                    8000);
+            } catch (...) {
+                // Toast subsystem itself in trouble — keep running anyway.
+            }
+        } catch (...) {
+            spdlog::critical("[Application] Caught non-std::exception in main loop");
+            crash_handler::breadcrumb::note("loop_catch", "non_std");
+            crash_handler::breadcrumb::dump_to_fd(STDERR_FILENO);
+            // Non-std exceptions are vanishingly rare and usually indicate
+            // ABI breakage — bail cleanly rather than risk corruption.
+            break;
         }
     }
 
