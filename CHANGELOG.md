@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.99.55] - 2026-05-06
 
-Hotfix for the v0.99.54 crash loop reported on Nebula Pad (#931). A callback inside `lv_timer_handler()` threw `json::type_error::306` ("cannot use value() with null"), unwound through `Application::main_loop()` into `main()`'s top-level catch, exited 134, and the watchdog interpreted it as a deterministic crash — looping the user back to the splash until they manually reflashed v0.99.53. The 1b643f99c safety net wrapped the initial-subscription dispatch path; this release extends the same contract to the outer main-loop boundary so a single throwing observer/queued/timer callback can no longer brick the device.
+Two crash hotfixes for v0.99.54. The headline is the **#931 Nebula Pad crash loop** (an unhandled `json::type_error::306` in a callback inside `lv_timer_handler()` exited 134 and trapped users in a watchdog loop); paired with **#929 cluster:pstat-async-delete Mechanism B** — the parallel-render-thread UAF in `argb8888_image_blend` that v0.99.54's instrumentation pinned to a freed `cache_buf_` in `GCodeLayerRenderer`.
 
 ### Fixed
 
 - **Crash loop on v0.99.54 startup** (#931) — `Application::main_loop()` now wraps each iteration in `try/catch`. When a callback throws, the type and `what()` are logged, the recent breadcrumb ring is dumped to stderr (so the next user log captures the throw site), telemetry records the event, and the loop continues with a user-facing error toast. A runaway counter (5 catches in 30s) breaks out cleanly to avoid a tight throw-catch loop. Removes the watchdog's "HelixScreen Keeps Crashing" path for any callback throw that previously exited 134.
 - **MoonrakerRequestTracker error-callback path** — symmetrized exception handling: `route_response()` already absorbed throws from success callbacks, but error callbacks were unwrapped. A throwing error_cb now logs and continues (matching the success path).
+- **Render-thread UAF in argb8888_image_blend** (#929, cluster:pstat-async-delete Mechanism B) — `GCodeLayerRenderer::destroy_cache()` / `destroy_ghost_cache()` / `destroy_ssao_cache()` and `GCodeGLESRenderer::~GCodeGLESRenderer()` (plus the resize-time recreate path) all now call `lv_draw_wait_for_finish()` before `lv_draw_buf_destroy()`. The parallel render thread reads `dsc.src` after `lv_draw_image()` returns; freeing the buffer while a draw task was still in flight unmapped the source page and segfaulted in `argb8888_image_blend`. The wait drains pending tasks before the buffer goes away. Single-threaded builds (`LV_USE_OS == 0`) are unaffected — `lv_draw_wait_for_finish` is a no-op there.
 
 ## [0.99.54] - 2026-05-04
 
