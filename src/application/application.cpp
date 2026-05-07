@@ -1097,13 +1097,16 @@ bool Application::init_display() {
     helix::logging::register_lvgl_log_handler();
 
     // Always set DPI explicitly. LVGL's lv_display_create() initializes dpi to
-    // LV_DPI_DEF (160), but on some kernel/backend combinations that default
-    // doesn't survive into theme init — observed on BTT CB1 / sun4i-drmdrmfb
-    // where the framebuffer reports width_mm=0 and the display's dpi reads back
-    // as 0 by the time lv_theme_default_init() queries it. With dpi=0,
-    // LV_DPX_CALC clamps PAD_SMALL to 1px (its MAX(.., 1) safeguard), making
-    // dropdown / input padding visually disappear. Setting dpi unconditionally
-    // here guarantees a known-good value at theme-init time.
+    // LV_DPI_DEF (160), but the fbdev/DRM drivers will OVERWRITE it from the
+    // kernel's reported physical screen size (FBIOGET_VSCREENINFO width/height
+    // in mm, or DRM connector mmWidth). When the driver reports BOGUS physical
+    // dimensions — observed on BTT CB1 / sun4i-drmdrmfb, which reports the
+    // BTT HDMI5 5" panel (real ≈109mm × 65mm) as 890mm × 500mm (≈35"×20",
+    // off by ~8×) — that computes to dpi≈23, and LV_DPX_CALC(23, 10) clamps
+    // PAD_SMALL to 1px via
+    // its MAX(.., 1) safeguard. Result: dropdown / input padding visually
+    // disappears. Forcing dpi here (after the driver has had its chance) makes
+    // the UI immune to lying kernel drivers.
     int32_t effective_dpi = (m_args.dpi > 0) ? m_args.dpi : LV_DPI_DEF;
     int32_t pre_set_dpi = lv_display_get_dpi(m_display->display());
     lv_display_set_dpi(m_display->display(), effective_dpi);
