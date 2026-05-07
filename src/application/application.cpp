@@ -1096,9 +1096,23 @@ bool Application::init_display() {
     // Must be after lv_init() because it resets global state and clears callbacks
     helix::logging::register_lvgl_log_handler();
 
-    // Apply custom DPI if specified
-    if (m_args.dpi > 0) {
-        lv_display_set_dpi(m_display->display(), m_args.dpi);
+    // Always set DPI explicitly. LVGL's lv_display_create() initializes dpi to
+    // LV_DPI_DEF (160), but on some kernel/backend combinations that default
+    // doesn't survive into theme init — observed on BTT CB1 / sun4i-drmdrmfb
+    // where the framebuffer reports width_mm=0 and the display's dpi reads back
+    // as 0 by the time lv_theme_default_init() queries it. With dpi=0,
+    // LV_DPX_CALC clamps PAD_SMALL to 1px (its MAX(.., 1) safeguard), making
+    // dropdown / input padding visually disappear. Setting dpi unconditionally
+    // here guarantees a known-good value at theme-init time.
+    int32_t effective_dpi = (m_args.dpi > 0) ? m_args.dpi : LV_DPI_DEF;
+    int32_t pre_set_dpi = lv_display_get_dpi(m_display->display());
+    lv_display_set_dpi(m_display->display(), effective_dpi);
+    spdlog::debug("[Application] Display DPI applied: {} (was {} before set)",
+                  effective_dpi, pre_set_dpi);
+    if (pre_set_dpi < 50 && m_args.dpi == 0) {
+        spdlog::warn("[Application] Display reported dpi={} before set — backend lost LV_DPI_DEF "
+                     "between create and theme init. Fix-forward applied (forced to {}).",
+                     pre_set_dpi, effective_dpi);
     }
 
     // Get active screen
