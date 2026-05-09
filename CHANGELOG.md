@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.59] - 2026-05-09
+
+The headline is **diagnostic instrumentation for the post-v0.99.58 cluster:pstat-async-delete recurrence**. Bundle 3XNZQB2R crashed via a corrupted per-widget event-handler callback — a corruption surface distinct from the global event_stack v0.99.55-56 fixed. v0.99.59 adds three runtime detectors that convert the crash into a recoverable anomaly + name the widget, and wraps the five Mechanism C anti-pattern callsites the bg-thread detector found on first AD5M deploy.
+
+### Added
+
+- **Three runtime detectors for cluster:pstat-async-delete (3XNZQB2R)** — (1) LVGL dispatch gate snapshots `dsc->cb` and validates against the binary's text segment, converting a corrupted callback into an `event_dsc_cb_oob` anomaly instead of a crash; (2) widget identity capture writes `event_target_class:` + `event_target_name:` lines in crash dumps so we get "lv_button (recovery_dismiss_btn)" instead of just hex; (3) `LifetimeToken::expired()` fires `bg_tok_expired_check` anomalies when the L081 Mechanism C anti-pattern is hit (alive token + non-main thread), with per-thread first-fire deduplication.
+- **AMS CFS tool remap via `BOX_MODIFY_TN`** — pre-print options can remap a slot's tool number through the CFS endpoint when the user picks a different tool, with a toast on backend rejection.
+- **Friendly hardware label in installer output** — installer prints "Raspberry Pi 4" alongside the `pi` platform tag so users can sanity-check the tarball before flashing.
+
+### Fixed
+
+- **5 background-thread Mechanism C callsites surfaced by the bg-thread detector on first AD5M boot.** `JobQueueState::fetch` was the only outright UAF — its success cb called `on_queue_fetched` which then did `lifetime_.defer()` from the bg thread (#707 race). `MacroModificationManager::check_and_notify` + `analyze_and_launch_wizard` did inline `ToastManager::show()` and member writes on the analyzer's HTTP thread. The other three (`PrintHistoryManager::fetch`, `PrintPreparationManager::analyze_print_start_macro_internal`, `NetworkSettingsOverlay::update_ethernet_status`) already used `tok.defer` for the actual mutation but kept a defensive `tok.expired()` bg-check; simplified to drop the bare check (defer's own guard handles expiry).
+- **Multi-color prints sliced to a non-T0 initial tool no longer render in T0's color** — `GCodeLayerRenderer` indexed the palette by `palette[0]` instead of the slicer-recorded initial tool, so any non-T0 starting filament rendered as the wrong color until the first `T<N>` change. Now indexes by `metadata.initial_tool_index`.
+- **`helixscreen.env` no longer overrides in-app Log Level setting** — the shipped `.env` had `HELIX_LOG_LEVEL=INFO` which silently shadowed the user's choice in Settings → Logging. Env var is now a fallback when the persisted setting is unset.
+- **mdns thread re-assignment crash on rebroadcast (bundle UBZQ94EE)** — reassigned `responder_thread_` without joining; `std::terminate` if the prior responder was still finishing. Now joins first.
+- **bed_mesh renderer mutex (bundle N3JTFPA5)** — pixel-format / size mutations weren't holding `render_mutex_`, racing the render thread reading the same fields → SEGV in `argb8888_image_blend`. Same Mechanism B shape as the v0.99.55 gcode_layer fix, applied here.
+- **`AmsCurrentToolText` observer bound before `AmsState` subjects existed** — initialization ran during static init, leaving the observer pointed at a placeholder. Now invoked after `AmsState::init_subjects()`.
+- **AMS slot color-dot label was empty for `current_tool`-only setups** — `set_current_tool` now mirrors the value to `current_slot` so the color-dot widget renders.
+- **PrintStatusPanel double-attached its collector when reconnecting mid-print** — second collector double-counted filament usage. Now suppressed when the active-job state arrives via reconnect.
+- **Print-start remap restore deferred until after crash-recovery modal closes** — `restore_user_remap()` raced the modal's tear-down. Now hops via `queue_update`.
+- **Installer service `Group=` resolution** — assumed `User==Group`, broke on Armbian configs where the install user is in a different primary group. Now resolves via `id -gn ${INSTALL_USER}`.
+- **KIAUH `get_confirm()` keyword arg** — 6.2.x tightened the signature; positional `default_choice` now `TypeError`s. Pass as keyword.
+
+### Changed
+
+- **Filament-color metadata parsing consolidated** — gcode-thumbnail and gcode-viewer paths both had their own copies of `;filament_colour =` parsing. Single helper in `GCodeMetadata::parse_filament_colors()`. Behavior unchanged.
+
 ## [0.99.58] - 2026-05-08
 
 ### Fixed
@@ -3545,6 +3573,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.59]: https://github.com/prestonbrown/helixscreen/compare/v0.99.58...v0.99.59
 [0.99.58]: https://github.com/prestonbrown/helixscreen/compare/v0.99.57...v0.99.58
 [0.99.57]: https://github.com/prestonbrown/helixscreen/compare/v0.99.56...v0.99.57
 [0.99.56]: https://github.com/prestonbrown/helixscreen/compare/v0.99.55...v0.99.56
