@@ -28,7 +28,7 @@ class HelixscreenExtension(BaseExtension):
             Logger.print_warn(
                 f"HelixScreen appears to be already installed at {install_dir}"
             )
-            if not get_confirm("Reinstall HelixScreen?", default=False):
+            if not get_confirm("Reinstall HelixScreen?", default_choice=False):
                 return
 
         try:
@@ -73,7 +73,7 @@ class HelixscreenExtension(BaseExtension):
         if not get_confirm(
             "This will remove HelixScreen and restore your previous screen UI. "
             "Continue?",
-            default=False,
+            default_choice=False,
         ):
             return
 

@@ -306,6 +306,58 @@ class TestFindInstallDir(unittest.TestCase):
         self.assertEqual(result, expected_path)
 
 
+class TestGetConfirmSignature(unittest.TestCase):
+    """Verify our extension calls get_confirm with kiauh's actual signature.
+
+    Regression: a previous version passed default=False, but kiauh's API is
+    default_choice=True/False. The TypeError surfaced only at runtime in the
+    user-facing remove flow. Here we mock get_confirm with kiauh's real
+    signature so a parameter-name drift fails the test.
+    """
+
+    def setUp(self):
+        self.mocks = _setup_kiauh_mocks()
+
+        # Replace the bare MagicMock with one that enforces kiauh's real signature.
+        def get_confirm(question, default_choice=True, allow_go_back=False):
+            return False
+
+        self.mocks["utils.input_utils"].get_confirm = MagicMock(side_effect=get_confirm)
+
+        self.original_modules = {}
+        for name, mod in self.mocks.items():
+            self.original_modules[name] = sys.modules.get(name)
+            sys.modules[name] = mod
+
+        ext_module_path = EXTENSION_DIR / "helixscreen_extension.py"
+        spec = importlib.util.spec_from_file_location(
+            "extensions.helixscreen.helixscreen_extension", ext_module_path
+        )
+        self.module = importlib.util.module_from_spec(spec)
+        sys.modules["extensions.helixscreen.helixscreen_extension"] = self.module
+        spec.loader.exec_module(self.module)
+
+    def tearDown(self):
+        for name, original in self.original_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+        sys.modules.pop("extensions.helixscreen.helixscreen_extension", None)
+
+    def test_remove_uses_kiauh_compatible_kwargs(self):
+        """remove_extension calls get_confirm with kwargs kiauh accepts."""
+        ext = self.module.HelixscreenExtension()
+        with patch.object(self.module, "_find_install_dir", return_value=Path("/fake/install")):
+            ext.remove_extension()  # mock returns False → returns early, no installer run
+
+    def test_install_reinstall_uses_kiauh_compatible_kwargs(self):
+        """install_extension reinstall prompt calls get_confirm with valid kwargs."""
+        ext = self.module.HelixscreenExtension()
+        with patch.object(self.module, "_find_install_dir", return_value=Path("/fake/install")):
+            ext.install_extension()  # mock returns False → returns early before installer
+
+
 class TestInitNoSideEffects(unittest.TestCase):
     """Test that __init__.py import doesn't cause side effects."""
 
