@@ -133,6 +133,7 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     get_endless_spool_capabilities() const override;
     [[nodiscard]] helix::printer::ToolMappingCapabilities
     get_tool_mapping_capabilities() const override;
+    [[nodiscard]] std::vector<int> get_tool_mapping() const override;
     [[nodiscard]] bool supports_auto_heat_on_load() const override { return true; }
     [[nodiscard]] bool has_environment_sensors() const override { return true; }
     [[nodiscard]] bool tracks_weight_locally() const override { return false; }

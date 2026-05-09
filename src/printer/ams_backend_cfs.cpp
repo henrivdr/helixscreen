@@ -936,8 +936,47 @@ AmsError AmsBackendCfs::set_slot_info(int slot_index, const SlotInfo& info, bool
     return AmsErrorHelper::success();
 }
 
-AmsError AmsBackendCfs::set_tool_mapping(int, int) {
-    return AmsErrorHelper::not_supported("CFS tool mapping via BOX_MODIFY_TN");
+AmsError AmsBackendCfs::set_tool_mapping(int tool_number, int slot_index) {
+    // CFS exposes per-print tool→slot remap via the BOX_MODIFY_TN gcode (format
+    // observed in box_wrapper.cpython-39.so: "BOX_MODIFY_TN %s=%s"). Both sides
+    // use the TNN notation (T1A..T4D) that matches the box.map JSON keys/values
+    // returned by Moonraker.
+    //
+    // Example: set_tool_mapping(0, 5) sends "BOX_MODIFY_TN T1A=T2B" — when the
+    // slicer emits T0/T1A, the CFS routes from physical slot T2B (index 5).
+    constexpr int kCfsMaxSlots = 16; // 4 units × 4 slots
+    if (tool_number < 0 || tool_number >= kCfsMaxSlots) {
+        return AmsError(AmsResult::INVALID_TOOL,
+                        "Tool " + std::to_string(tool_number) + " out of range",
+                        "Invalid tool number", "");
+    }
+    if (slot_index < 0 || slot_index >= kCfsMaxSlots) {
+        return AmsErrorHelper::invalid_slot(slot_index, kCfsMaxSlots - 1);
+    }
+
+    std::string tool_tnn = CfsMaterialDb::slot_to_tnn(tool_number);
+    std::string slot_tnn = CfsMaterialDb::slot_to_tnn(slot_index);
+    if (tool_tnn.empty() || slot_tnn.empty()) {
+        return AmsError(AmsResult::INVALID_TOOL,
+                        "Failed to encode TNN for tool=" + std::to_string(tool_number) +
+                            " slot=" + std::to_string(slot_index),
+                        "Invalid tool/slot", "");
+    }
+
+    // Optimistic local update so get_tool_mapping() reflects the new mapping
+    // immediately for UI/restore-snapshot reads. The next box-status websocket
+    // update will re-confirm (or correct, if Klipper rejected the BOX_MODIFY_TN
+    // for some reason) — firmware remains the source of truth.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (tool_number < static_cast<int>(system_info_.tool_to_slot_map.size())) {
+            system_info_.tool_to_slot_map[tool_number] = slot_index;
+        }
+    }
+
+    std::string cmd = "BOX_MODIFY_TN " + tool_tnn + "=" + slot_tnn;
+    spdlog::info("[AMS CFS] Remapping tool {} -> slot {} ({})", tool_tnn, slot_tnn, cmd);
+    return execute_gcode(cmd);
 }
 
 AmsError AmsBackendCfs::enable_bypass() {
@@ -1090,7 +1129,13 @@ helix::printer::EndlessSpoolCapabilities AmsBackendCfs::get_endless_spool_capabi
 }
 
 helix::printer::ToolMappingCapabilities AmsBackendCfs::get_tool_mapping_capabilities() const {
-    return {.supported = true, .editable = false, .description = ""};
+    return {.supported = true, .editable = true,
+            .description = "Tool reassignment via BOX_MODIFY_TN"}; // i18n: do not translate
+}
+
+std::vector<int> AmsBackendCfs::get_tool_mapping() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return system_info_.tool_to_slot_map;
 }
 
 std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() const {

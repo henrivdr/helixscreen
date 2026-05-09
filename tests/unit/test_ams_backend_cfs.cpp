@@ -594,6 +594,106 @@ TEST_CASE("CFS parse_box_status infers active slot from tool map", "[ams][cfs]")
 }
 
 // =============================================================================
+// CFS BOX_MODIFY_TN tool remap (set_tool_mapping)
+// =============================================================================
+
+namespace {
+class CfsRemapHelper : public AmsBackendCfs {
+  public:
+    CfsRemapHelper() : AmsBackendCfs(nullptr, nullptr) {}
+
+    // Capture gcode instead of dispatching to a real Moonraker connection.
+    AmsError execute_gcode(const std::string& gcode) override {
+        captured.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+
+    std::vector<std::string> captured;
+};
+} // namespace
+
+TEST_CASE("CFS set_tool_mapping emits BOX_MODIFY_TN with TNN keys/values",
+          "[ams][cfs][remap]") {
+    CfsRemapHelper helper;
+
+    SECTION("Identity within unit 1: T1A → T1A") {
+        auto err = helper.set_tool_mapping(0, 0);
+        REQUIRE(err.result == AmsResult::SUCCESS);
+        REQUIRE(helper.captured.size() == 1);
+        REQUIRE(helper.captured[0] == "BOX_MODIFY_TN T1A=T1A");
+    }
+
+    SECTION("Cross-unit remap: tool 0 (T1A) → slot 5 (T2B)") {
+        auto err = helper.set_tool_mapping(0, 5);
+        REQUIRE(err.result == AmsResult::SUCCESS);
+        REQUIRE(helper.captured == std::vector<std::string>{"BOX_MODIFY_TN T1A=T2B"});
+    }
+
+    SECTION("Last slot: tool 15 (T4D) → slot 0 (T1A)") {
+        auto err = helper.set_tool_mapping(15, 0);
+        REQUIRE(err.result == AmsResult::SUCCESS);
+        REQUIRE(helper.captured == std::vector<std::string>{"BOX_MODIFY_TN T4D=T1A"});
+    }
+
+    SECTION("Tool number out of range rejected, no gcode sent") {
+        auto err = helper.set_tool_mapping(16, 0);
+        REQUIRE(err.result == AmsResult::INVALID_TOOL);
+        REQUIRE(helper.captured.empty());
+
+        err = helper.set_tool_mapping(-1, 0);
+        REQUIRE(err.result == AmsResult::INVALID_TOOL);
+        REQUIRE(helper.captured.empty());
+    }
+
+    SECTION("Slot index out of range rejected, no gcode sent") {
+        auto err = helper.set_tool_mapping(0, 16);
+        REQUIRE(err.result != AmsResult::SUCCESS);
+        REQUIRE(helper.captured.empty());
+
+        err = helper.set_tool_mapping(0, -1);
+        REQUIRE(err.result != AmsResult::SUCCESS);
+        REQUIRE(helper.captured.empty());
+    }
+
+    SECTION("Multiple calls send gcode in order") {
+        REQUIRE(helper.set_tool_mapping(0, 1).result == AmsResult::SUCCESS);
+        REQUIRE(helper.set_tool_mapping(2, 7).result == AmsResult::SUCCESS);
+        REQUIRE(helper.captured == std::vector<std::string>{"BOX_MODIFY_TN T1A=T1B",
+                                                              "BOX_MODIFY_TN T1C=T2D"});
+    }
+}
+
+TEST_CASE("CFS set_tool_mapping updates local tool_to_slot_map", "[ams][cfs][remap]") {
+    // PrintStartController::saved_tool_mapping_ snapshots get_tool_mapping()
+    // before sending remaps and replays it on print end to restore the prior
+    // configuration. If get_tool_mapping() returned an empty vector after a
+    // successful set_tool_mapping, the restore path would be a no-op.
+    CfsRemapHelper helper;
+    auto status = make_cfs_status_json();
+    json notification = {{"method", "notify_status_update"},
+                         {"params", json::array({status, 0})}};
+    CfsTestAccess::handle_status(helper, notification);
+
+    auto baseline = helper.get_tool_mapping();
+    REQUIRE_FALSE(baseline.empty()); // box.map populated by handle_status
+
+    REQUIRE(helper.set_tool_mapping(1, 5).result == AmsResult::SUCCESS);
+
+    auto after = helper.get_tool_mapping();
+    REQUIRE(after.size() == baseline.size());
+    REQUIRE(after[1] == 5);
+}
+
+TEST_CASE("CFS get_tool_mapping_capabilities advertises editable", "[ams][cfs][remap]") {
+    CfsRemapHelper helper;
+    auto caps = helper.get_tool_mapping_capabilities();
+    REQUIRE(caps.supported);
+    REQUIRE(caps.editable);
+    // Description is informational; non-empty so UI can show backend-specific copy
+    REQUIRE_FALSE(caps.description.empty());
+}
+
+// =============================================================================
 // CFS filament segment logic
 // =============================================================================
 
