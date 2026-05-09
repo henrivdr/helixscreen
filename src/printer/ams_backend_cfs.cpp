@@ -512,9 +512,12 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
         if (fil_letter.size() == 1 && fil_letter[0] >= 'A' && fil_letter[0] <= 'D') {
             int active_local = fil_letter[0] - 'A';
             info.current_slot = (n - 1) * 4 + active_local;
-            info.current_tool = 0;
-            spdlog::debug("[AMS CFS] Active filament: {} (slot {})", fil_letter,
-                          info.current_slot);
+            // CFS slots map 1:1 to tools (slot.mapped_tool = slot.global_index above);
+            // current_tool must mirror current_slot so the print-status color dot
+            // labels the correct tool index.
+            info.current_tool = info.current_slot;
+            spdlog::debug("[AMS CFS] Active filament: {} (slot {}, tool {})", fil_letter,
+                          info.current_slot, info.current_tool);
         }
 
         info.units.push_back(std::move(unit));

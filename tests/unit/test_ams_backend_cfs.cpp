@@ -574,6 +574,23 @@ TEST_CASE("CFS parse_box_status infers active slot from tool map", "[ams][cfs]")
         REQUIRE(info.tool_to_slot_map[2] == 2);
         REQUIRE(info.tool_to_slot_map[3] == 3);
     }
+
+    SECTION("active slot B → current_slot=1 and current_tool mirrors current_slot") {
+        // CFS slots map 1:1 to tools; the print-status color dot reads
+        // current_tool to label "T<n>". A hardcoded current_tool=0 would
+        // mislabel the loaded slot.
+        status["box"]["T1"]["filament"] = "B";
+        auto info = AmsBackendCfs::parse_box_status(status["box"]);
+        REQUIRE(info.current_slot == 1);
+        REQUIRE(info.current_tool == info.current_slot);
+    }
+
+    SECTION("active slot D → current_tool follows current_slot (slot 3)") {
+        status["box"]["T1"]["filament"] = "D";
+        auto info = AmsBackendCfs::parse_box_status(status["box"]);
+        REQUIRE(info.current_slot == 3);
+        REQUIRE(info.current_tool == 3);
+    }
 }
 
 // =============================================================================
