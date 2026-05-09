@@ -1099,15 +1099,34 @@ void PrintStartController::recover_pending_remap() {
             return;
         }
 
-        // Load saved state and attempt restore
+        // Load saved state and decide between immediate vs deferred restore.
         saved_tool_mapping_ = std::move(mapping);
         saved_backend_index_ = backend_idx;
 
-        spdlog::info("[PrintStartController] Crash recovery: found pending remap "
-                     "({} tools, backend {}) — restoring",
-                     saved_tool_mapping_.size(), saved_backend_index_);
+        // If a print is still active, the user's remap is still LOAD-BEARING —
+        // reverting now would silently swap filament routing under a running
+        // print. Defer the restore until the print reaches a terminal state.
+        // observe_print_state_for_restore registers an observer that fires
+        // restore_filament_mapping on COMPLETE/CANCELLED/ERROR; the immediate-
+        // fire on the current PRINTING/PAUSED value is a no-op there.
+        auto current_state = static_cast<PrintJobState>(
+            lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
+        bool print_active = (current_state == PrintJobState::PRINTING ||
+                             current_state == PrintJobState::PAUSED);
 
-        restore_filament_mapping();
+        if (print_active) {
+            spdlog::info("[PrintStartController] Crash recovery: found pending remap "
+                         "({} tools, backend {}) — print still active (state={}), "
+                         "deferring restore until print ends",
+                         saved_tool_mapping_.size(), saved_backend_index_,
+                         static_cast<int>(current_state));
+            observe_print_state_for_restore();
+        } else {
+            spdlog::info("[PrintStartController] Crash recovery: found pending remap "
+                         "({} tools, backend {}) — restoring",
+                         saved_tool_mapping_.size(), saved_backend_index_);
+            restore_filament_mapping();
+        }
     } catch (const std::exception& e) {
         spdlog::warn("[PrintStartController] Failed to load pending remap: {}", e.what());
         clear_persisted_remap_state();
