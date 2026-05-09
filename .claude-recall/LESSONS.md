@@ -8,8 +8,8 @@
 
 ## Active Lessons
 
-### [L008] [***--|****-] Design tokens and semantic widgets
-- **Uses**: 27 | **Velocity**: 3.5 | **Learned**: 2025-12-14 | **Last**: 2026-05-06 | **Category**: pattern | **Type**: informational
+### [L008] [***--|*****] Design tokens and semantic widgets
+- **Uses**: 28 | **Velocity**: 4.5 | **Learned**: 2025-12-14 | **Last**: 2026-05-09 | **Category**: pattern | **Type**: informational
 > No hardcoded colors/spacing. Use semantic widgets (ui_card, ui_button, text_*, divider_*) — they apply tokens. Don't restate built-in defaults (style_radius on ui_card, button_height on ui_button). Defaults: docs/LVGL9_XML_GUIDE.md § "Custom Semantic Widgets".
 
 ### [L009] [***--|***--] Icon font sync workflow
@@ -102,7 +102,7 @@
 > NEVER `lv_async_call(..., lv_obj_delete)` — uncancellable. NEVER `safe_delete()` inside `queue_update`/`async_call` lambdas — multiple sync deletes in one batch corrupt LVGL's event list (#356). ALWAYS cancel anims first ([L068]).
 
 ### [L060] [*****|*****] Interactive UI testing requires user
-- **Uses**: 100 | **Velocity**: 13.875625 | **Learned**: 2026-02-01 | **Last**: 2026-05-06 | **Category**: correction | **Type**: constraint
+- **Uses**: 100 | **Velocity**: 14.875625 | **Learned**: 2026-02-01 | **Last**: 2026-05-09 | **Category**: correction | **Type**: constraint
 > Don't fake automation with timed delays. Pattern:
 > 1. `Bash` with `run_in_background: true`: `./build/bin/helix-screen --test -vv -p panel_name 2>&1 | tee /tmp/test.log` — NOT shell `&` or `timeout`.
 > 2. Tell user exactly what to click.
@@ -114,8 +114,8 @@
 - **Uses**: 5 | **Velocity**: 0.5625 | **Learned**: 2026-02-07 | **Last**: 2026-04-20 | **Category**: system
 > AD5M (192.168.1.67, root@). armv7l Linux 5.4.61 (BusyBox). Gotchas: (1) wget no HTTPS, no curl. (2) No sftp-server — `scp -O`. (3) Logs go to BOTH `/tmp/helixscreen.log` AND syslog (`/var/log/messages`); syslog is current session, file may be stale. Default level WARN. (4) `/etc/ssl/certs/` empty — breaks all outbound HTTPS (libhv, wget); ship `ca-certificates.crt`. (5) No `openssl` CLI. (6) No inotify. (7) No WiFi (wpa_supplicant present, no interfaces — but see project_ad5m_wifi_actually_works.md). (8) OpenSSL 1.1 at `/usr/lib/libssl.so.1.1`. (9) Binary at `/opt/helixscreen/`, config `/opt/helixscreen/config/helixconfig.json`. (10) `ldd` may return empty for static ARM binaries.
 
-### [L062] [***--|***--] AD5M build and deploy targets
-- **Uses**: 10 | **Velocity**: 1.6875 | **Learned**: 2026-02-07 | **Last**: 2026-04-29 | **Category**: build
+### [L062] [***--|****-] AD5M build and deploy targets
+- **Uses**: 11 | **Velocity**: 2.6875 | **Learned**: 2026-02-07 | **Last**: 2026-05-09 | **Category**: build
 > AD5M build: `make ad5m-docker` (Docker ARM cross), NOT `make pi-test` (Pi). Deploy: `AD5M_HOST=192.168.1.67 make ad5m-deploy`.
 
 ### [L064] [***--|****-] Commit generated translation artifacts
@@ -183,7 +183,7 @@
 > LVGL 9.5: `DRAW_TASK_ADDED` cbs fire AFTER `DRAW_MAIN_END/DRAW_POST` — `lv_draw_rect/_triangle/_fill` from there draws nothing. Broke chart gradient fills that worked in 9.4-pre. Fix: do custom fills in `DRAW_MAIN_END`, compute positions via `lv_chart_get_y_array()` + `lv_map()`. Gotcha: `lv_draw_fill` VER gradient `frac=0` is BOTTOM, `frac=255` is TOP. Use `lv_draw_fill` (not `lv_draw_rect`) for gradient-only fills to avoid bg_color bleed.
 
 ### [L080] [***--|*****] Verify deployment chain before user interaction
-- **Uses**: 12 | **Velocity**: 4 | **Learned**: 2026-04-16 | **Last**: 2026-05-07 | **Category**: gotcha
+- **Uses**: 13 | **Velocity**: 5 | **Learned**: 2026-04-16 | **Last**: 2026-05-09 | **Category**: gotcha
 > Before asking user to interact on-device, verify in one pass: (1) NEW binary running (PID start time / version in log), (2) logs land where you expect (journalctl/file/console), (3) required state on (telemetry, debug level in helixscreen.env), (4) logs reachable via SSH. Each failed round-trip burns user patience. Pi: systemctl → journalctl; `deploy-pi-fg` uses `ssh -t` (console only); nohup drops output. Production log capture: systemd + journalctl.
 
 ### [L081] [***--|*****] lifetime_.defer does NOT escape UpdateQueue batch
