@@ -193,6 +193,30 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
     if (status.contains("print_stats")) {
         const auto& stats = status["print_stats"];
 
+        // Seed print_duration_ BEFORE updating print_state_enum_. The state-change
+        // observer in MoonrakerManager fires synchronously when print_state_enum_
+        // changes and uses print_duration as a mid-print-attach signal: at a normal
+        // print start print_duration is 0; when helix-screen connects to a printer
+        // already mid-print, the initial subscription payload carries
+        // print_duration > 0. Without this pre-pass, print_duration_ would still
+        // read 0 at the moment of the state transition, the collector would
+        // wrongly start, and the lifecycle would park in Preparing — leaving
+        // "Starting Print..." stuck and dropping print_elapsed updates.
+        if (auto pd_it = stats.find("print_duration");
+            pd_it != stats.end() && pd_it->is_number()) {
+            int print_seconds = static_cast<int>(pd_it->get<double>());
+            if (lv_subject_get_int(&print_duration_) != print_seconds) {
+                lv_subject_set_int(&print_duration_, print_seconds);
+            }
+        }
+        if (auto td_it = stats.find("total_duration");
+            td_it != stats.end() && td_it->is_number()) {
+            int total_elapsed = static_cast<int>(td_it->get<double>());
+            if (lv_subject_get_int(&print_elapsed_) != total_elapsed) {
+                lv_subject_set_int(&print_elapsed_, total_elapsed);
+            }
+        }
+
         if (auto state_it = stats.find("state"); state_it != stats.end() && state_it->is_string()) {
             std::string state_str = state_it->get<std::string>();
             PrintJobState new_state = parse_print_job_state(state_str.c_str());

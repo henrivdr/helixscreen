@@ -493,9 +493,15 @@ void MoonrakerManager::init_print_start_collector() {
     spdlog::debug("[MoonrakerManager] PRINT_START collector observer registered (initial state={})",
                   static_cast<int>(s_prev_print_state));
 
-    // Capture print progress subject for mid-print detection
+    // Capture print progress + duration subjects for mid-print detection.
+    // Progress alone is unreliable on initial-state attach because the state
+    // observer fires synchronously before virtual_sdcard / display_status are
+    // processed in the same tick. print_duration is the load-bearing signal —
+    // 0 at normal print start, >0 when joining a print already in progress.
     static lv_subject_t* s_progress_subject = nullptr;
+    static lv_subject_t* s_print_duration_subject = nullptr;
     s_progress_subject = get_printer_state().get_print_progress_subject();
+    s_print_duration_subject = get_printer_state().get_print_duration_subject();
 
     // Observer to start/stop collector based on print state
     m_print_start_observer = ObserverGuard(
@@ -507,10 +513,13 @@ void MoonrakerManager::init_print_start_collector() {
 
             auto new_state = static_cast<PrintJobState>(lv_subject_get_int(subject));
             int current_progress = s_progress_subject ? lv_subject_get_int(s_progress_subject) : 0;
+            int current_print_duration =
+                s_print_duration_subject ? lv_subject_get_int(s_print_duration_subject) : 0;
 
             // Use helper function for testable decision logic
             if (should_start_print_collector(s_prev_print_state, new_state, current_progress,
-                                             s_is_initial_transition)) {
+                                             s_is_initial_transition,
+                                             current_print_duration)) {
                 if (!collector->is_active()) {
                     collector->reset();
                     collector->start();

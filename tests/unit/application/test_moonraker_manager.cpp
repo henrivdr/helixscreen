@@ -173,6 +173,45 @@ TEST_CASE("should_start_print_collector - non-printing transitions", "[applicati
                                                                  PrintJobState::CANCELLED, 50, false));
 }
 
+TEST_CASE("should_start_print_collector - mid-print attach via print_duration",
+          "[application][print_start]") {
+    // The state-change observer fires synchronously while print_progress is still
+    // 0 (virtual_sdcard / display_status haven't updated in the same tick).
+    // print_duration is the load-bearing mid-print signal: 0 at fresh start,
+    // >0 when joining a print already in progress. This case caused
+    // "Starting Print..." to stick mid-print and dropped print_elapsed updates.
+    SECTION("Initial transition with progress=0 but print_duration>0 → suppress") {
+        REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/true,
+            /*current_print_duration=*/10645));
+    }
+    SECTION("Initial transition with both signals zero → fresh start") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/true,
+            /*current_print_duration=*/0));
+    }
+    SECTION("Initial transition with print_duration=1s → still mid-print") {
+        REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/true,
+            /*current_print_duration=*/1));
+    }
+    SECTION("Non-initial transition ignores print_duration (stale from prior print)") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/false,
+            /*current_print_duration=*/9999));
+    }
+    SECTION("Default duration arg preserves backward compat") {
+        // Existing 4-arg call sites must still compile and behave identically
+        // when print_duration was never plumbed through.
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING, 0, true));
+    }
+}
+
 // ============================================================================
 // Shutdown Observer Release Contract (generalized; original: issue #888)
 // ============================================================================

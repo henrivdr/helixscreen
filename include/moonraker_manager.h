@@ -147,12 +147,16 @@ class MoonrakerManager {
      * @param prev_state Previous print job state
      * @param new_state New print job state
      * @param current_progress Current print progress percentage (0-100)
+     * @param is_initial_transition Whether this is the first state transition after app boot
+     * @param current_print_duration Current Klipper print_duration in seconds (0 at start of a
+     *                               normal print; >0 when joining a print already in progress)
      * @return true if collector should start, false otherwise
      */
     static inline bool should_start_print_collector(helix::PrintJobState prev_state,
                                                     helix::PrintJobState new_state,
                                                     int current_progress,
-                                                    bool is_initial_transition) {
+                                                    bool is_initial_transition,
+                                                    int current_print_duration = 0) {
         // Only start on TRANSITION to PRINTING from non-printing state
         bool was_not_printing = (prev_state != helix::PrintJobState::PRINTING &&
                                  prev_state != helix::PrintJobState::PAUSED);
@@ -163,11 +167,19 @@ class MoonrakerManager {
         }
 
         // Mid-print detection: only applies on the FIRST transition after app boot.
-        // If the app starts while a print is already running (STANDBY → PRINTING
-        // with progress > 0), skip the collector — we joined mid-print.
-        // For all subsequent transitions (after cancel/complete/error), the user
-        // explicitly started a new print and progress is stale from the old one.
-        if (is_initial_transition && current_progress > 0) {
+        // If the app starts while a print is already running, skip the collector —
+        // we joined mid-print. For all subsequent transitions (after
+        // cancel/complete/error), the user explicitly started a new print.
+        //
+        // Two independent signals — either is sufficient:
+        //   1. progress > 0 — slicer M73 / virtual_sdcard already past 0%
+        //   2. print_duration > 0 — Klipper has been extruding for a while
+        // print_duration is the more reliable signal: at a normal print start it
+        // is exactly 0, but when joining mid-print it carries the real elapsed
+        // print time from the initial subscription payload. Progress alone is
+        // insufficient because the print_state_enum_ observer fires synchronously
+        // before virtual_sdcard / display_status update progress in the same tick.
+        if (is_initial_transition && (current_progress > 0 || current_print_duration > 0)) {
             return false; // App joined mid-print, skip collector
         }
         return true;
