@@ -86,7 +86,13 @@ bool has_positive_extrusion(const char* line, size_t len) {
 //   ; extruder_colour = #26A69A
 //   ; filament_colour = "#FF0000"
 //   ;extruder_color = #00FF00
-bool extract_filament_color(const char* line, size_t len, std::string& out_color) {
+//   ; extruder_colour = #000000;#F3FDFD     (multi-filament, semicolon-separated)
+//
+// Extracts ALL semicolon-separated colors into out_palette. For backward
+// compatibility, out_color is set to the first entry. Multi-color slicing
+// (OrcaSlicer) emits one entry per filament, indexed by tool number.
+bool extract_filament_color(const char* line, size_t len, std::string& out_color,
+                            std::vector<std::string>& out_palette) {
     // Only check comment lines
     if (len < 10 || line[0] != ';') {
         return false;
@@ -112,36 +118,43 @@ bool extract_filament_color(const char* line, size_t len, std::string& out_color
         return false;
     }
 
-    // Find the hex color after '='
-    ++color_pos; // Skip '='
-    while (*color_pos && (*color_pos == ' ' || *color_pos == '"' || *color_pos == '\'')) {
-        ++color_pos;
+    // Skip past '=' and whitespace/quotes to start of value
+    ++color_pos;
+
+    // Walk the rest of the line collecting every #RRGGBB[AA] token. The slicer
+    // separates entries with ';' (e.g. "#000000;#F3FDFD"); we just scan for hashes.
+    const char* end = line + len;
+    std::vector<std::string> palette;
+    const char* p = color_pos;
+    while (p < end) {
+        const char* hash = static_cast<const char*>(std::memchr(p, '#', end - p));
+        if (!hash) {
+            break;
+        }
+        std::string color = "#";
+        const char* q = hash + 1;
+        while (q < end &&
+               ((*q >= '0' && *q <= '9') || (*q >= 'A' && *q <= 'F') ||
+                (*q >= 'a' && *q <= 'f'))) {
+            color += *q;
+            ++q;
+            if (color.length() >= 9) { // #RRGGBBAA max
+                break;
+            }
+        }
+        if (color.length() >= 7) { // At least #RRGGBB
+            palette.push_back(std::move(color));
+        }
+        p = q;
     }
 
-    // Look for '#' followed by hex digits
-    const char* hash = std::strchr(color_pos, '#');
-    if (!hash) {
+    if (palette.empty()) {
         return false;
     }
 
-    // Extract 6 or 8 hex digits after #
-    std::string color = "#";
-    const char* p = hash + 1;
-    while (*p &&
-           ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))) {
-        color += *p;
-        ++p;
-        if (color.length() >= 9) { // #RRGGBBAA max
-            break;
-        }
-    }
-
-    if (color.length() >= 7) { // At least #RRGGBB
-        out_color = color;
-        return true;
-    }
-
-    return false;
+    out_palette = std::move(palette);
+    out_color = out_palette.front();
+    return true;
 }
 
 // Check if line is a layer change marker
@@ -233,9 +246,12 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
         // Only check comment lines in the header (first ~1000 lines)
         if (stats_.filament_color.empty() && stats_.total_lines < 1000) {
             std::string color;
-            if (extract_filament_color(line.c_str(), line_len, color)) {
+            std::vector<std::string> palette;
+            if (extract_filament_color(line.c_str(), line_len, color, palette)) {
                 stats_.filament_color = color;
-                spdlog::debug("[LayerIndex] Found filament color: {}", color);
+                stats_.filament_palette = std::move(palette);
+                spdlog::debug("[LayerIndex] Found filament palette ({} entries, first={})",
+                              stats_.filament_palette.size(), color);
             }
         }
 
@@ -341,9 +357,12 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
 
         while (std::getline(file, line)) {
             std::string color;
-            if (extract_filament_color(line.c_str(), line.length(), color)) {
+            std::vector<std::string> palette;
+            if (extract_filament_color(line.c_str(), line.length(), color, palette)) {
                 stats_.filament_color = color;
-                spdlog::debug("[LayerIndex] Found filament color in footer: {}", color);
+                stats_.filament_palette = std::move(palette);
+                spdlog::debug("[LayerIndex] Found filament palette in footer ({} entries, first={})",
+                              stats_.filament_palette.size(), color);
                 break;
             }
         }

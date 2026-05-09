@@ -1344,12 +1344,25 @@ static void ui_gcode_viewer_load_file_async(lv_obj_t* obj, const char* file_path
                         spdlog::info("[GCode Viewer] Streaming 2D using external color override");
                     } else {
                         const auto& stats = st->streaming_controller_->get_index_stats();
-                        if (!stats.filament_color.empty()) {
+                        // Prefer palette[initial_tool_index] when the slicer emitted a multi-color
+                        // metadata line and the gcode actually starts on a non-T0 tool. Falls back
+                        // to filament_color (palette[0]) for single-color prints or when the palette
+                        // doesn't cover the active tool.
+                        std::string chosen = stats.filament_color;
+                        if (stats.initial_tool_index >= 0 &&
+                            stats.initial_tool_index <
+                                static_cast<int>(stats.filament_palette.size()) &&
+                            !stats.filament_palette[stats.initial_tool_index].empty()) {
+                            chosen = stats.filament_palette[stats.initial_tool_index];
+                        }
+                        if (!chosen.empty()) {
                             lv_color_t color = lv_color_hex(
-                                std::strtol(stats.filament_color.c_str() + 1, nullptr, 16));
+                                std::strtol(chosen.c_str() + 1, nullptr, 16));
                             st->layer_renderer_2d_->set_extrusion_color(color);
-                            spdlog::info("[GCode Viewer] Using filament color from metadata: {}",
-                                         stats.filament_color);
+                            spdlog::info("[GCode Viewer] Using filament color from metadata: {} "
+                                         "(tool={}, palette={})",
+                                         chosen, stats.initial_tool_index,
+                                         stats.filament_palette.size());
                         }
                     }
 

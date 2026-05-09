@@ -229,3 +229,56 @@ TEST_CASE("GCodeLayerIndex - Invalid file", "[gcode][layer_index]") {
         REQUIRE(!index.is_valid());
     }
 }
+
+TEST_CASE("GCodeLayerIndex - Filament color metadata", "[gcode][layer_index]") {
+    SECTION("Single-color filament_colour parses to single-entry palette") {
+        std::string gcode = R"(; filament_colour = #26A69A
+G1 Z0.2 F1000
+G1 X10 Y10 E1
+)";
+        TempGCodeFile file(gcode);
+        GCodeLayerIndex index;
+        REQUIRE(index.build_from_file(file.path()));
+        const auto& s = index.get_stats();
+        REQUIRE(s.filament_color == "#26A69A");
+        REQUIRE(s.filament_palette.size() == 1);
+        REQUIRE(s.filament_palette[0] == "#26A69A");
+    }
+
+    SECTION("Semicolon-separated extruder_colour parses full palette") {
+        // Slicer multi-color metadata: palette[0]=black, palette[1]=off-white.
+        // Without palette parsing, the renderer fell back to palette[0] for
+        // every print regardless of which tool the gcode actually used.
+        std::string gcode = R"(; extruder_colour = #000000;#F3FDFD
+T1
+G1 Z0.2 F1000
+G1 X10 Y10 E1
+)";
+        TempGCodeFile file(gcode);
+        GCodeLayerIndex index;
+        REQUIRE(index.build_from_file(file.path()));
+        const auto& s = index.get_stats();
+        REQUIRE(s.filament_palette.size() == 2);
+        REQUIRE(s.filament_palette[0] == "#000000");
+        REQUIRE(s.filament_palette[1] == "#F3FDFD");
+        REQUIRE(s.initial_tool_index == 1);
+        // Legacy single-color field still tracks palette[0]
+        REQUIRE(s.filament_color == "#000000");
+    }
+
+    SECTION("Footer-only metadata (OrcaSlicer) is found via end-of-file scan") {
+        // OrcaSlicer dumps slicer config at end of file. Build a file >1000 lines
+        // so the header scan times out, then put metadata in the last 32KB.
+        std::string gcode = "G1 Z0.2 F1000\n";
+        for (int i = 0; i < 1100; ++i) {
+            gcode += "G1 X" + std::to_string(i) + " Y0 E0.1\n";
+        }
+        gcode += "; extruder_colour = #AABBCC;#112233\n";
+        TempGCodeFile file(gcode);
+        GCodeLayerIndex index;
+        REQUIRE(index.build_from_file(file.path()));
+        const auto& s = index.get_stats();
+        REQUIRE(s.filament_palette.size() == 2);
+        REQUIRE(s.filament_palette[1] == "#112233");
+    }
+}
