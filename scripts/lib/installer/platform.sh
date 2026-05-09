@@ -4,7 +4,7 @@
 # Platform detection: AD5M vs K1 vs Pi, firmware variant, installation paths
 #
 # Reads: -
-# Writes: PLATFORM, AD5M_FIRMWARE, K1_FIRMWARE, INSTALL_DIR, INIT_SCRIPT_DEST, PREVIOUS_UI_SCRIPT, TMP_DIR, KLIPPER_USER, KLIPPER_HOME
+# Writes: PLATFORM, AD5M_FIRMWARE, K1_FIRMWARE, INSTALL_DIR, INIT_SCRIPT_DEST, PREVIOUS_UI_SCRIPT, TMP_DIR, KLIPPER_USER, KLIPPER_GROUP, KLIPPER_HOME
 
 # Source guard
 [ -n "${_HELIX_PLATFORM_SOURCED:-}" ] && return 0
@@ -24,7 +24,25 @@ PREVIOUS_UI_SCRIPT=""
 AD5M_FIRMWARE=""
 K1_FIRMWARE=""
 KLIPPER_USER=""
+KLIPPER_GROUP=""
 KLIPPER_HOME=""
+
+# Resolve the primary group of a user, falling back to the user name.
+# Some firmwares (e.g. QIDI Q2 stock) ship a `mks` user without a matching
+# `mks` group, which makes `Group=mks` in the systemd unit fail with
+# "Failed to determine group credentials". Use `id -gn` to find the actual
+# primary group; only fall back to the user name when getent fails.
+_resolve_primary_group() {
+    local _user="$1"
+    [ -n "$_user" ] || { echo "root"; return; }
+    local _g
+    _g=$(id -gn "$_user" 2>/dev/null) || _g=""
+    if [ -n "$_g" ]; then
+        echo "$_g"
+    else
+        echo "$_user"
+    fi
+}
 
 # Detect platform
 # Returns: "ad5m", "ad5x", "cc1", "k1", "k2", "pi", "pi32", "snapmaker-u1", "x86", or "unsupported"
@@ -252,8 +270,9 @@ detect_klipper_user() {
         svc_user=$(systemctl show -p User --value klipper.service 2>/dev/null) || true
         if [ -n "$svc_user" ] && [ "$svc_user" != "root" ] && id "$svc_user" >/dev/null 2>&1; then
             KLIPPER_USER="$svc_user"
+            KLIPPER_GROUP=$(_resolve_primary_group "$svc_user")
             KLIPPER_HOME=$(eval echo "~$svc_user")
-            log_info "Klipper user (systemd): $KLIPPER_USER"
+            log_info "Klipper user (systemd): $KLIPPER_USER (group: $KLIPPER_GROUP)"
             return 0
         fi
     fi
@@ -263,8 +282,9 @@ detect_klipper_user() {
     ps_user=$(ps -eo user,comm 2>/dev/null | awk '/klipper$/ && !/grep/ {print $1; exit}') || true
     if [ -n "$ps_user" ] && [ "$ps_user" != "root" ] && id "$ps_user" >/dev/null 2>&1; then
         KLIPPER_USER="$ps_user"
+        KLIPPER_GROUP=$(_resolve_primary_group "$ps_user")
         KLIPPER_HOME=$(eval echo "~$ps_user")
-        log_info "Klipper user (process): $KLIPPER_USER"
+        log_info "Klipper user (process): $KLIPPER_USER (group: $KLIPPER_GROUP)"
         return 0
     fi
 
@@ -276,8 +296,9 @@ detect_klipper_user() {
         pd_user=$(echo "$pd_dir" | sed 's|^/home/||;s|/printer_data$||')
         if [ -n "$pd_user" ] && id "$pd_user" >/dev/null 2>&1; then
             KLIPPER_USER="$pd_user"
+            KLIPPER_GROUP=$(_resolve_primary_group "$pd_user")
             KLIPPER_HOME="/home/$pd_user"
-            log_info "Klipper user (printer_data): $KLIPPER_USER"
+            log_info "Klipper user (printer_data): $KLIPPER_USER (group: $KLIPPER_GROUP)"
             return 0
         fi
     done
@@ -287,14 +308,16 @@ detect_klipper_user() {
     for known_user in biqu pi mks; do
         if id "$known_user" >/dev/null 2>&1; then
             KLIPPER_USER="$known_user"
+            KLIPPER_GROUP=$(_resolve_primary_group "$known_user")
             KLIPPER_HOME="/home/$known_user"
-            log_info "Klipper user (well-known): $KLIPPER_USER"
+            log_info "Klipper user (well-known): $KLIPPER_USER (group: $KLIPPER_GROUP)"
             return 0
         fi
     done
 
     # 5. Fallback: root (embedded platforms, AD5M, K1)
     KLIPPER_USER="root"
+    KLIPPER_GROUP="root"
     KLIPPER_HOME="/root"
     log_info "Klipper user (fallback): root"
     return 0
@@ -509,6 +532,7 @@ set_install_paths() {
         INSTALL_DIR="/usr/data/helixscreen"
         INIT_SCRIPT_DEST="/etc/init.d/S99helixscreen"
         KLIPPER_USER="root"
+        KLIPPER_GROUP="root"
         KLIPPER_HOME="/usr/data"
         case "$firmware" in
             simple_af)
@@ -536,6 +560,7 @@ set_install_paths() {
         INIT_SCRIPT_DEST="/etc/init.d/S99helixscreen"
         PREVIOUS_UI_SCRIPT=""
         KLIPPER_USER="root"
+        KLIPPER_GROUP="root"
         KLIPPER_HOME="/mnt/UDISK"
         log_info "Platform: Creality K2 series"
         log_info "Install directory: ${INSTALL_DIR}"
@@ -549,6 +574,7 @@ set_install_paths() {
         INIT_SCRIPT_DEST="/etc/init.d/helixscreen"
         PREVIOUS_UI_SCRIPT=""
         KLIPPER_USER="root"
+        KLIPPER_GROUP="root"
         KLIPPER_HOME="/root"
         INIT_SYSTEM="sysv"
         log_info "Platform: Elegoo Centauri Carbon (COSMOS)"
@@ -562,6 +588,7 @@ set_install_paths() {
         # not exist yet — make it explicit so the installer is deterministic.
         INSTALL_DIR="/userdata/helixscreen"
         KLIPPER_USER="root"
+        KLIPPER_GROUP="root"
         KLIPPER_HOME="/home/lava"
         INIT_SYSTEM="sysv"
         INIT_SCRIPT_DEST="/etc/init.d/S99helixscreen"

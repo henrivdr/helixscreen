@@ -86,7 +86,7 @@ ExecStartPre=+@@INSTALL_DIR@@/config/ensure-polkit-rule.sh @@HELIX_USER@@
 # Fix install dir ownership for self-updates.  Initial installs (run as root)
 # may leave files root-owned; the service user needs write access for in-app
 # updates under NoNewPrivileges.  Runs as root (+prefix), safe no-op if already correct.
-ExecStartPre=+/bin/sh -c 'u=@@HELIX_USER@@; [ "$$u" != "root" ] && chown -Rh "$$u:$$u" "@@INSTALL_DIR@@" 2>/dev/null || true'
+ExecStartPre=+/bin/sh -c 'u=@@HELIX_USER@@; g=@@HELIX_GROUP@@; [ "$$u" != "root" ] && chown -Rh "$$u:$$g" "@@INSTALL_DIR@@" 2>/dev/null || true'
 
 # Unbind framebuffer console before starting (requires root, runs before User= drop)
 # vtcon1 is the fbcon driver; vtcon0 is the dummy. Unbinding prevents kernel

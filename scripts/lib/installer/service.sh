@@ -203,9 +203,12 @@ install_service_systemd() {
 
     $SUDO cp "$service_src" "$service_dest"
 
-    # Template placeholders (match SysV pattern in install_service_sysv)
+    # Template placeholders (match SysV pattern in install_service_sysv).
+    # KLIPPER_GROUP is the user's actual primary group (resolved via id -gn);
+    # falling back to KLIPPER_USER would re-introduce the QIDI Q2 bug where
+    # `mks` user has no `mks` group and systemd refuses to spawn the unit.
     local helix_user="${KLIPPER_USER:-root}"
-    local helix_group="${KLIPPER_USER:-root}"
+    local helix_group="${KLIPPER_GROUP:-${KLIPPER_USER:-root}}"
     local install_dir="${INSTALL_DIR:-/opt/helixscreen}"
 
     local install_parent
@@ -538,14 +541,15 @@ deploy_platform_hooks() {
 # Uses -h to avoid following symlinks outside INSTALL_DIR.
 fix_install_ownership() {
     local user="${KLIPPER_USER:-}"
+    local group="${KLIPPER_GROUP:-$user}"
     if [ -n "$user" ] && [ "$user" != "root" ] && [ -d "$INSTALL_DIR" ]; then
-        log_info "Setting ownership to ${user}..."
+        log_info "Setting ownership to ${user}:${group}..."
         # Try without sudo first: during self-update under NoNewPrivileges,
         # sudo is blocked but files are already user-owned so chown succeeds
         # without it (or is a no-op).  Fall back to sudo for fresh installs
         # where root may own the directory.
-        chown -Rh "${user}:${user}" "${INSTALL_DIR}" 2>/dev/null || \
-            $SUDO chown -Rh "${user}:${user}" "${INSTALL_DIR}" 2>/dev/null || true
+        chown -Rh "${user}:${group}" "${INSTALL_DIR}" 2>/dev/null || \
+            $SUDO chown -Rh "${user}:${group}" "${INSTALL_DIR}" 2>/dev/null || true
     fi
 }
 
