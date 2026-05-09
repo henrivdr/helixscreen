@@ -21,10 +21,8 @@ using namespace moonraker_internal;
 // MoonrakerAPI Implementation
 // ============================================================================
 
-MoonrakerAPI::MoonrakerAPI(MoonrakerClient& client, PrinterState& state) : client_(client) {
-    // state parameter reserved for future use
-    (void)state;
-
+MoonrakerAPI::MoonrakerAPI(MoonrakerClient& client, PrinterState& state)
+    : client_(client), state_(state) {
     // Create sub-APIs
     advanced_api_ = std::make_unique<MoonrakerAdvancedAPI>(client, *this);
     file_api_ = std::make_unique<MoonrakerFileAPI>(client);

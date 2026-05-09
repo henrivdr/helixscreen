@@ -24,6 +24,9 @@ struct LedPinConfigFixture {
 
     LedPinConfigFixture() {
         state.init_subjects(false);
+        // execute_gcode() halted gate would otherwise reject all G-code: subjects
+        // initialize to SHUTDOWN until production code observes a real state update.
+        state.set_klippy_state_sync(helix::KlippyState::READY);
         mock_api = std::make_unique<MoonrakerAPIMock>(mock_client, state);
     }
 

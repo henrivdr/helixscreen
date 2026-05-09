@@ -736,6 +736,7 @@ class MoonrakerAPI : public IMoonrakerAPI {
     // (declared first) are destroyed LAST, after sub-APIs that reference them.
     std::string http_base_url_; ///< HTTP base URL for file transfers
     helix::MoonrakerClient& client_;
+    helix::PrinterState& state_;
 
     /// Discovered printer hardware (heaters, fans, sensors, LEDs, capabilities)
     helix::PrinterDiscovery hardware_;

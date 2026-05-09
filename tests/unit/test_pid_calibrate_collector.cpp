@@ -55,6 +55,8 @@ class PIDCalibrateTestFixture {
   public:
     PIDCalibrateTestFixture() : mock_client_(MoonrakerClientMock::PrinterType::VORON_24) {
         state_.init_subjects(false);
+        // execute_gcode() halted gate would otherwise reject every command.
+        state_.set_klippy_state_sync(helix::KlippyState::READY);
         api_ = std::make_unique<MoonrakerAPI>(mock_client_, state_);
     }
     ~PIDCalibrateTestFixture() {

@@ -413,8 +413,7 @@ void MoonrakerAPI::execute_gcode(const std::string& gcode, SuccessCallback on_su
     // and bypass this gate naturally. STARTUP is allowed through — it's brief
     // and Klipper queues incoming commands.
     {
-        auto& ps = get_printer_state();
-        const int klippy = lv_subject_get_int(ps.get_klippy_state_subject());
+        const int klippy = lv_subject_get_int(state_.get_klippy_state_subject());
         if (klippy == static_cast<int>(helix::KlippyState::SHUTDOWN) ||
             klippy == static_cast<int>(helix::KlippyState::ERROR)) {
             if (!silent) {
@@ -424,7 +423,7 @@ void MoonrakerAPI::execute_gcode(const std::string& gcode, SuccessCallback on_su
             }
             if (on_error) {
                 MoonrakerError err;
-                err.type = MoonrakerErrorType::VALIDATION_ERROR;
+                err.type = MoonrakerErrorType::NOT_READY;
                 err.method = "printer.gcode.script";
                 err.message = "Klipper is halted — restart firmware to continue";
                 on_error(err);
@@ -691,7 +690,7 @@ void MoonrakerAPI::update_safety_limits_from_printer(SuccessCallback on_success,
                     settings["stepper_z"].contains("position_endstop")) {
                     double endstop = settings["stepper_z"]["position_endstop"].get<double>();
                     int microns = static_cast<int>(endstop * 1000.0);
-                    get_printer_state().set_stepper_z_endstop_microns(microns);
+                    state_.set_stepper_z_endstop_microns(microns);
                     spdlog::debug(
                         "[Moonraker API] stepper_z position_endstop: {:.3f}mm ({} microns)",
                         endstop, microns);

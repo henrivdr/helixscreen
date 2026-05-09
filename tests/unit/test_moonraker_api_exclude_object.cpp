@@ -118,6 +118,9 @@ class ExcludeObjectMockTestFixture {
     ExcludeObjectMockTestFixture() : mock_client(MoonrakerClientMock::PrinterType::VORON_24) {
         // Initialize printer state
         state.init_subjects(false);
+        // execute_gcode() halted gate would otherwise reject all G-code: subjects
+        // initialize to SHUTDOWN until production code observes a real state update.
+        state.set_klippy_state_sync(KlippyState::READY);
 
         // Connect mock client (required for send_jsonrpc to work)
         mock_client.connect("ws://mock/websocket", []() {}, []() {});
