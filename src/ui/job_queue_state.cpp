@@ -91,32 +91,34 @@ void JobQueueState::fetch() {
         [this, token](const JobQueueStatus& status) {
             // Clear guard on the BG thread so a freeze-drop doesn't strand us.
             is_fetching_.store(false);
-            if (token.expired())
-                return;
-            on_queue_fetched(status);
+            // L081 Mechanism C: marshal directly via tok.defer instead of
+            // calling on_queue_fetched (which used lifetime_.defer from bg —
+            // a #707 race between tok-alive check and lifetime_ access).
+            token.defer("JobQueueState::on_queue_fetched", [this, status]() {
+                on_queue_fetched(status);
+            });
         },
         [this, token](const MoonrakerError& err) {
             is_fetching_.store(false);
-            if (token.expired())
-                return;
+            // spdlog is thread-safe; expired() guard would have suppressed the
+            // log on a destroyed manager but the log is informational and
+            // harmless either way. Dropping the bare expired() check silences
+            // the bg_tok_expired_check detector for this site (3XNZQB2R audit).
             spdlog::warn("[JobQueueState] Fetch failed: {}", err.message);
         });
 }
 
 void JobQueueState::on_queue_fetched(const JobQueueStatus& status) {
-    // Thread safety: API callbacks may fire on background thread.
-    // Use queue_update to marshal onto the LVGL main thread.
-    // Guard must be captured into the lambda to prevent use-after-free
-    // if JobQueueState is destroyed before the queued update executes.
-    // is_fetching_ was cleared on the BG thread before this defer was posted.
-    lifetime_.defer("JobQueueState::on_queue_fetched", [this, status]() {
-        cached_jobs_ = status.queued_jobs;
-        queue_state_ = status.queue_state;
-        is_loaded_ = true;
-        update_subjects();
-        spdlog::debug("[JobQueueState] Updated: state={}, jobs={}", queue_state_,
-                      cached_jobs_.size());
-    });
+    // Always called on the main thread now — JobQueueState::fetch's success
+    // callback wraps the call in tok.defer(). Earlier code did the defer
+    // here via lifetime_.defer(this), which raced #707 (TOCTOU between
+    // bg-thread alive-check and lifetime_ access).
+    cached_jobs_ = status.queued_jobs;
+    queue_state_ = status.queue_state;
+    is_loaded_ = true;
+    update_subjects();
+    spdlog::debug("[JobQueueState] Updated: state={}, jobs={}", queue_state_,
+                  cached_jobs_.size());
 }
 
 void JobQueueState::update_subjects() {

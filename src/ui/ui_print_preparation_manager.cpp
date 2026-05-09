@@ -299,14 +299,12 @@ void PrintPreparationManager::analyze_print_start_macro_internal() {
 
     analyzer.analyze(
         api_,
-        // Success callback - NOTE: runs on HTTP thread
+        // Success callback - runs on HTTP thread; the body just logs and
+        // marshals to main via tok.defer (no inline LVGL or member writes).
         [this, token](const helix::PrintStartAnalysis& analysis) {
-            if (token.expired())
-                return;
-            spdlog::debug("[PrintPreparationManager] PRINT_START analysis complete: {}",
-                          analysis.summary());
-
             token.defer("PrintPreparationManager::macro_analysis_success", [this, analysis]() {
+                spdlog::debug("[PrintPreparationManager] PRINT_START analysis complete: {}",
+                              analysis.summary());
                 macro_analysis_ = analysis;
                 macro_analysis_in_progress_ = false;
                 if (on_macro_analysis_complete_) {
@@ -314,14 +312,12 @@ void PrintPreparationManager::analyze_print_start_macro_internal() {
                 }
             });
         },
-        // Error callback - NOTE: runs on HTTP thread
+        // Error callback - runs on HTTP thread; same pattern as success.
         [this, token](const MoonrakerError& error) {
-            if (token.expired())
-                return;
-            spdlog::warn("[PrintPreparationManager] PRINT_START analysis failed (attempt {}): {}",
-                         macro_analysis_retry_count_ + 1, error.message);
-
-            token.defer("PrintPreparationManager::macro_analysis_error", [this]() {
+            token.defer("PrintPreparationManager::macro_analysis_error", [this, error]() {
+                spdlog::warn(
+                    "[PrintPreparationManager] PRINT_START analysis failed (attempt {}): {}",
+                    macro_analysis_retry_count_ + 1, error.message);
                 // Check if we should retry
                 if (macro_analysis_retry_count_ < MAX_MACRO_ANALYSIS_RETRIES) {
                     macro_analysis_retry_count_++;

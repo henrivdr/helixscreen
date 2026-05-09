@@ -477,16 +477,14 @@ void NetworkSettingsOverlay::update_ethernet_status() {
     }
 
     // Kick off an async probe — the callback fires on the UI thread via
-    // tok.defer() so it's safe to touch subjects there.
+    // tok.defer() so it's safe to touch subjects there. No bare expired()
+    // check on the bg thread: defer's own guard skips when the owner is
+    // gone, and dropping the bare check silences the bg_tok_expired_check
+    // detector for this site (3XNZQB2R audit).
     auto tok = lifetime_.token();
     ethernet_manager_->get_info_async([this, tok](const EthernetInfo& info) {
-        if (tok.expired()) return;
-        // Copy into a movable holder so the struct survives the hop to the
-        // UI thread without requiring EthernetInfo to be captured by value
-        // through defer's lambda (it already is — defer copies the lambda).
-        EthernetInfo info_copy = info;
         tok.defer("NetworkSettingsOverlay::apply_ethernet_status",
-                  [this, info_copy]() { apply_ethernet_status(info_copy); });
+                  [this, info]() { apply_ethernet_status(info); });
     });
 }
 
