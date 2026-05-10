@@ -292,126 +292,119 @@ void WizardConnectionStep::handle_test_connection_clicked() {
 }
 
 void WizardConnectionStep::on_connection_success(const helix::LifetimeToken& tok) {
-    // NOTE: This is called from WebSocket thread — use tok.defer() to marshal to main
+    // Already on main thread — caller dispatches via tok.defer (see handle_test).
+    // The inner discover_printer cbs DO fire on bg, so we keep those defers.
     spdlog::info("[Wizard Connection] Connection successful!");
 
-    tok.defer("WizardConnectionStep::on_connection_success", [this, tok]() {
-        // Get saved values under lock
-        std::string ip, port;
-        {
-            std::lock_guard<std::mutex> lock(saved_values_mutex_);
-            ip = saved_ip_;
-            port = saved_port_;
-        }
+    // Get saved values under lock
+    std::string ip, port;
+    {
+        std::lock_guard<std::mutex> lock(saved_values_mutex_);
+        ip = saved_ip_;
+        port = saved_port_;
+    }
 
-        // NOW safe to access config (on main thread)
-        Config* config = Config::get_instance();
-        try {
-            config->set(config->df() + helix::wizard::MOONRAKER_HOST, ip);
-            config->set(config->df() + helix::wizard::MOONRAKER_PORT, std::stoi(port));
-            if (config->save()) {
-                spdlog::debug("[Wizard Connection] Saved configuration: {}:{}", ip, port);
-            } else {
-                spdlog::error("[Wizard Connection] Failed to save configuration!");
-            }
-        } catch (const std::exception& e) {
-            spdlog::error("[Wizard Connection] Failed to save config: {}", e.what());
-        }
-
-        // Show "discovering" status - spinner shows via XML binding
-        lv_subject_set_int(&connection_discovering_, 1);
-        set_status(nullptr, StatusVariant::None, lv_tr("Connected! Discovering printer..."));
-        lv_subject_set_int(&connection_testing_, 0);
-
-        // Set HTTP base URL so discovery can make HTTP calls
-        MoonrakerAPI* api = get_moonraker_api();
-        if (api) {
-            std::string http_url = "http://" + ip + ":" + port;
-            api->set_http_base_url(http_url);
-        }
-
-        // Trigger hardware discovery - only enable Next when this completes
-        MoonrakerClient* client = get_moonraker_client();
-        if (client) {
-            client->discover_printer(
-                // Success callback (fires on background thread)
-                [this, tok]() {
-                    if (tok.expired()) return;
-                    spdlog::info("[Wizard Connection] Hardware discovery complete!");
-
-                    tok.defer("WizardConnectionStep::discovery_success", [this]() {
-                        MoonrakerAPI* api = get_moonraker_api();
-                        MoonrakerClient* client = get_moonraker_client();
-                        if (api) {
-                            const auto& heaters = api->hardware().heaters();
-                            const auto& sensors = api->hardware().sensors();
-                            const auto& fans = api->hardware().fans();
-                            spdlog::info("[Wizard Connection] Discovered {} heaters, {} "
-                                         "sensors, {} fans",
-                                         heaters.size(), sensors.size(), fans.size());
-                            spdlog::info("[Wizard Connection] Hostname: '{}'",
-                                         api->hardware().hostname());
-
-                            helix::init_subsystems_from_hardware(api->hardware(), api, client);
-                        }
-
-                        // NOW enable Next button - discovery is complete
-                        lv_subject_set_int(&connection_discovering_, 0);
-                        set_status("icon_check_circle", StatusVariant::Success,
-                                   lv_tr("Connection successful!"));
-                        connection_validated_ = true;
-                        lv_subject_set_int(&connection_test_passed, 1);
-                    });
-                },
-                // Error callback - discovery failed (e.g., Klippy not connected)
-                [this, tok](const std::string& reason) {
-                    if (tok.expired()) return;
-                    spdlog::warn("[Wizard Connection] Discovery failed: {}", reason);
-
-                    tok.defer("WizardConnectionStep::discovery_error", [this]() {
-                        lv_subject_set_int(&connection_discovering_, 0);
-                        set_status("icon_triangle_exclamation", StatusVariant::Warning,
-                                   "Moonraker connected, but Klipper is not running. "
-                                   "Start Klipper and retry.");
-
-                        lv_subject_set_int(&connection_testing_, 0);
-                        connection_validated_ = false;
-                        lv_subject_set_int(&connection_test_passed, 0);
-                    });
-                });
+    // Persist config (safe on main thread)
+    Config* config = Config::get_instance();
+    try {
+        config->set(config->df() + helix::wizard::MOONRAKER_HOST, ip);
+        config->set(config->df() + helix::wizard::MOONRAKER_PORT, std::stoi(port));
+        if (config->save()) {
+            spdlog::debug("[Wizard Connection] Saved configuration: {}:{}", ip, port);
         } else {
-            // No client available - still show success but warn
-            lv_subject_set_int(&connection_discovering_, 0);
-            set_status("icon_check_circle", StatusVariant::Success,
-                       lv_tr("Connected (no discovery)"));
-            connection_validated_ = true;
-            lv_subject_set_int(&connection_test_passed, 1);
+            spdlog::error("[Wizard Connection] Failed to save configuration!");
         }
-    });
+    } catch (const std::exception& e) {
+        spdlog::error("[Wizard Connection] Failed to save config: {}", e.what());
+    }
+
+    // Show "discovering" status - spinner shows via XML binding
+    lv_subject_set_int(&connection_discovering_, 1);
+    set_status(nullptr, StatusVariant::None, lv_tr("Connected! Discovering printer..."));
+    lv_subject_set_int(&connection_testing_, 0);
+
+    // Set HTTP base URL so discovery can make HTTP calls
+    MoonrakerAPI* api = get_moonraker_api();
+    if (api) {
+        std::string http_url = "http://" + ip + ":" + port;
+        api->set_http_base_url(http_url);
+    }
+
+    // Trigger hardware discovery - only enable Next when this completes
+    MoonrakerClient* client = get_moonraker_client();
+    if (client) {
+        client->discover_printer(
+            // Success callback (fires on background thread)
+            [this, tok]() {
+                spdlog::info("[Wizard Connection] Hardware discovery complete!");
+
+                tok.defer("WizardConnectionStep::discovery_success", [this]() {
+                    MoonrakerAPI* api = get_moonraker_api();
+                    MoonrakerClient* client = get_moonraker_client();
+                    if (api) {
+                        const auto& heaters = api->hardware().heaters();
+                        const auto& sensors = api->hardware().sensors();
+                        const auto& fans = api->hardware().fans();
+                        spdlog::info("[Wizard Connection] Discovered {} heaters, {} "
+                                     "sensors, {} fans",
+                                     heaters.size(), sensors.size(), fans.size());
+                        spdlog::info("[Wizard Connection] Hostname: '{}'",
+                                     api->hardware().hostname());
+
+                        helix::init_subsystems_from_hardware(api->hardware(), api, client);
+                    }
+
+                    // NOW enable Next button - discovery is complete
+                    lv_subject_set_int(&connection_discovering_, 0);
+                    set_status("icon_check_circle", StatusVariant::Success,
+                               lv_tr("Connection successful!"));
+                    connection_validated_ = true;
+                    lv_subject_set_int(&connection_test_passed, 1);
+                });
+            },
+            // Error callback - discovery failed (e.g., Klippy not connected)
+            [this, tok](const std::string& reason) {
+                spdlog::warn("[Wizard Connection] Discovery failed: {}", reason);
+
+                tok.defer("WizardConnectionStep::discovery_error", [this]() {
+                    lv_subject_set_int(&connection_discovering_, 0);
+                    set_status("icon_triangle_exclamation", StatusVariant::Warning,
+                               "Moonraker connected, but Klipper is not running. "
+                               "Start Klipper and retry.");
+
+                    lv_subject_set_int(&connection_testing_, 0);
+                    connection_validated_ = false;
+                    lv_subject_set_int(&connection_test_passed, 0);
+                });
+            });
+    } else {
+        // No client available - still show success but warn
+        lv_subject_set_int(&connection_discovering_, 0);
+        set_status("icon_check_circle", StatusVariant::Success,
+                   lv_tr("Connected (no discovery)"));
+        connection_validated_ = true;
+        lv_subject_set_int(&connection_test_passed, 1);
+    }
 }
 
-void WizardConnectionStep::on_connection_failure(const helix::LifetimeToken& tok) {
-    // NOTE: This is called from WebSocket thread — use tok.defer() to marshal to main
+void WizardConnectionStep::on_connection_failure(const helix::LifetimeToken& /*tok*/) {
+    // Already on main thread — caller dispatches via tok.defer (see handle_test).
     spdlog::debug("[Wizard Connection] on_disconnected fired");
 
-    tok.defer("WizardConnectionStep::on_connection_failure", [this]() {
-        // Check if we're still in testing mode (must check on main thread)
-        int testing_state = lv_subject_get_int(&connection_testing_);
-        spdlog::debug("[Wizard Connection] Connection failure, testing_state={}",
-                      testing_state);
+    int testing_state = lv_subject_get_int(&connection_testing_);
+    spdlog::debug("[Wizard Connection] Connection failure, testing_state={}", testing_state);
 
-        if (testing_state == 1) {
-            spdlog::error("[Wizard Connection] Connection failed");
+    if (testing_state == 1) {
+        spdlog::error("[Wizard Connection] Connection failed");
 
-            set_status("icon_close_circle", StatusVariant::Danger,
-                       lv_tr("Connection failed. Check IP/port and try again."));
-            lv_subject_set_int(&connection_testing_, 0);
-            connection_validated_ = false;
-            lv_subject_set_int(&connection_test_passed, 0);
-        } else {
-            spdlog::debug("[Wizard Connection] Ignoring disconnect (not in testing mode)");
-        }
-    });
+        set_status("icon_close_circle", StatusVariant::Danger,
+                   lv_tr("Connection failed. Check IP/port and try again."));
+        lv_subject_set_int(&connection_testing_, 0);
+        connection_validated_ = false;
+        lv_subject_set_int(&connection_test_passed, 0);
+    } else {
+        spdlog::debug("[Wizard Connection] Ignoring disconnect (not in testing mode)");
+    }
 }
 
 // ============================================================================
@@ -535,7 +528,8 @@ void WizardConnectionStep::attempt_auto_probe() {
 }
 
 void WizardConnectionStep::on_auto_probe_success(const helix::LifetimeToken& tok) {
-    // NOTE: This is called from WebSocket thread — use tok.defer() to marshal to main
+    // Already on main thread — caller dispatches via tok.defer (see auto_probe).
+    // The inner discover_printer cbs DO fire on bg, so we keep those defers.
 
     // Verify we're still in auto-probe mode (atomic read)
     if (auto_probe_state_.load() != AutoProbeState::IN_PROGRESS) {
@@ -543,122 +537,108 @@ void WizardConnectionStep::on_auto_probe_success(const helix::LifetimeToken& tok
         return;
     }
 
-    // Get saved values under lock for logging
-    std::string ip_copy, port_copy;
+    // Get saved values under lock
+    std::string ip, port;
     {
         std::lock_guard<std::mutex> lock(saved_values_mutex_);
-        ip_copy = saved_ip_;
-        port_copy = saved_port_;
+        ip = saved_ip_;
+        port = saved_port_;
     }
 
-    spdlog::info("[Wizard Connection] Auto-probe successful! Connected to {}:{}", ip_copy,
-                 port_copy);
+    spdlog::info("[Wizard Connection] Auto-probe successful! Connected to {}:{}", ip, port);
 
     auto_probe_state_.store(AutoProbeState::SUCCEEDED);
 
-    tok.defer("WizardConnectionStep::on_auto_probe_success", [this, tok]() {
-        // Get saved values under lock
-        std::string ip, port;
-        {
-            std::lock_guard<std::mutex> lock(saved_values_mutex_);
-            ip = saved_ip_;
-            port = saved_port_;
+    // Persist config (safe on main thread)
+    Config* config = Config::get_instance();
+    try {
+        config->set(config->df() + helix::wizard::MOONRAKER_HOST, ip);
+        config->set(config->df() + helix::wizard::MOONRAKER_PORT, std::stoi(port));
+        if (config->save()) {
+            spdlog::debug("[Wizard Connection] Auto-probe: Saved configuration");
         }
+    } catch (const std::exception& e) {
+        spdlog::error("[Wizard Connection] Auto-probe: Failed to save config: {}", e.what());
+    }
 
-        // NOW safe to access config (on main thread)
-        Config* config = Config::get_instance();
-        try {
-            config->set(config->df() + helix::wizard::MOONRAKER_HOST, ip);
-            config->set(config->df() + helix::wizard::MOONRAKER_PORT, std::stoi(port));
-            if (config->save()) {
-                spdlog::debug("[Wizard Connection] Auto-probe: Saved configuration");
-            }
-        } catch (const std::exception& e) {
-            spdlog::error("[Wizard Connection] Auto-probe: Failed to save config: {}",
-                          e.what());
+    // Update subjects with the successful connection target
+    lv_subject_copy_string(&connection_ip_, ip.c_str());
+    lv_subject_copy_string(&connection_port_, port.c_str());
+
+    // Hide help text on successful auto-probe
+    if (screen_root_) {
+        lv_obj_t* help_text = lv_obj_find_by_name(screen_root_, "help_text");
+        if (help_text) {
+            lv_obj_add_flag(help_text, LV_OBJ_FLAG_HIDDEN);
         }
+    }
 
-        // Update subjects with the successful connection target
-        lv_subject_copy_string(&connection_ip_, ip.c_str());
-        lv_subject_copy_string(&connection_port_, port.c_str());
+    // Show "discovering" status - spinner shows via XML binding
+    lv_subject_set_int(&connection_discovering_, 1);
+    set_status(nullptr, StatusVariant::None, lv_tr("Connected, discovering..."));
 
-        // Hide help text on successful auto-probe
-        if (screen_root_) {
-            lv_obj_t* help_text = lv_obj_find_by_name(screen_root_, "help_text");
-            if (help_text) {
-                lv_obj_add_flag(help_text, LV_OBJ_FLAG_HIDDEN);
-            }
-        }
+    // Clear testing state
+    lv_subject_set_int(&connection_testing_, 0);
 
-        // Show "discovering" status - spinner shows via XML binding
-        lv_subject_set_int(&connection_discovering_, 1);
-        set_status(nullptr, StatusVariant::None, lv_tr("Connected, discovering..."));
+    // Set HTTP base URL so discovery can make HTTP calls
+    MoonrakerAPI* api = get_moonraker_api();
+    if (api) {
+        std::string http_url = "http://" + ip + ":" + port;
+        api->set_http_base_url(http_url);
+    }
 
-        // Clear testing state
-        lv_subject_set_int(&connection_testing_, 0);
+    // Trigger hardware discovery - only enable Next when this completes
+    MoonrakerClient* client = get_moonraker_client();
+    if (client) {
+        client->discover_printer(
+            // Success callback (fires on background thread)
+            [this, tok]() {
+                spdlog::info("[Wizard Connection] Auto-probe: Hardware discovery complete");
 
-        // Set HTTP base URL so discovery can make HTTP calls
-        MoonrakerAPI* api = get_moonraker_api();
-        if (api) {
-            std::string http_url = "http://" + ip + ":" + port;
-            api->set_http_base_url(http_url);
-        }
+                tok.defer("WizardConnectionStep::auto_probe_discovery_success", [this]() {
+                    MoonrakerAPI* api = get_moonraker_api();
+                    MoonrakerClient* client = get_moonraker_client();
+                    if (api) {
+                        spdlog::info("[Wizard Connection] Hostname: '{}'",
+                                     api->hardware().hostname());
+                        helix::init_subsystems_from_hardware(api->hardware(), api, client);
+                    }
 
-        // Trigger hardware discovery - only enable Next when this completes
-        MoonrakerClient* client = get_moonraker_client();
-        if (client) {
-            client->discover_printer(
-                // Success callback (fires on background thread)
-                [this, tok]() {
-                    if (tok.expired()) return;
-                    spdlog::info("[Wizard Connection] Auto-probe: Hardware discovery complete");
-
-                    tok.defer("WizardConnectionStep::auto_probe_discovery_success", [this]() {
-                        MoonrakerAPI* api = get_moonraker_api();
-                        MoonrakerClient* client = get_moonraker_client();
-                        if (api) {
-                            spdlog::info("[Wizard Connection] Hostname: '{}'",
-                                         api->hardware().hostname());
-                            helix::init_subsystems_from_hardware(api->hardware(), api, client);
-                        }
-
-                        // NOW enable Next button - discovery is complete
-                        lv_subject_set_int(&connection_discovering_, 0);
-                        set_status("icon_check_circle", StatusVariant::Success,
-                                   lv_tr("Connection successful!"));
-                        connection_validated_ = true;
-                        lv_subject_set_int(&connection_test_passed, 1);
-                    });
-                },
-                // Error callback - discovery failed (e.g., Klippy not connected)
-                [this, tok](const std::string& reason) {
-                    if (tok.expired()) return;
-                    spdlog::warn("[Wizard Connection] Auto-probe: Discovery failed: {}", reason);
-
-                    tok.defer("WizardConnectionStep::auto_probe_discovery_error", [this]() {
-                        lv_subject_set_int(&connection_discovering_, 0);
-                        set_status("icon_triangle_exclamation", StatusVariant::Warning,
-                                   "Moonraker connected, but Klipper is not running. "
-                                   "Start Klipper and retry.");
-
-                        lv_subject_set_int(&connection_testing_, 0);
-                        connection_validated_ = false;
-                        lv_subject_set_int(&connection_test_passed, 0);
-                    });
+                    // NOW enable Next button - discovery is complete
+                    lv_subject_set_int(&connection_discovering_, 0);
+                    set_status("icon_check_circle", StatusVariant::Success,
+                               lv_tr("Connection successful!"));
+                    connection_validated_ = true;
+                    lv_subject_set_int(&connection_test_passed, 1);
                 });
-        } else {
-            // No client - still show success
-            lv_subject_set_int(&connection_discovering_, 0);
-            set_status("icon_check_circle", StatusVariant::Success,
-                       lv_tr("Connection successful!"));
-            connection_validated_ = true;
-            lv_subject_set_int(&connection_test_passed, 1);
-        }
-    });
+            },
+            // Error callback - discovery failed (e.g., Klippy not connected)
+            [this, tok](const std::string& reason) {
+                spdlog::warn("[Wizard Connection] Auto-probe: Discovery failed: {}", reason);
+
+                tok.defer("WizardConnectionStep::auto_probe_discovery_error", [this]() {
+                    lv_subject_set_int(&connection_discovering_, 0);
+                    set_status("icon_triangle_exclamation", StatusVariant::Warning,
+                               "Moonraker connected, but Klipper is not running. "
+                               "Start Klipper and retry.");
+
+                    lv_subject_set_int(&connection_testing_, 0);
+                    connection_validated_ = false;
+                    lv_subject_set_int(&connection_test_passed, 0);
+                });
+            });
+    } else {
+        // No client - still show success
+        lv_subject_set_int(&connection_discovering_, 0);
+        set_status("icon_check_circle", StatusVariant::Success,
+                   lv_tr("Connection successful!"));
+        connection_validated_ = true;
+        lv_subject_set_int(&connection_test_passed, 1);
+    }
 }
 
-void WizardConnectionStep::on_auto_probe_failure(const helix::LifetimeToken& tok) {
-    // NOTE: This is called from WebSocket thread — use tok.defer() to marshal to main
+void WizardConnectionStep::on_auto_probe_failure(const helix::LifetimeToken& /*tok*/) {
+    // Already on main thread — caller dispatches via tok.defer (see auto_probe).
 
     // Verify we're still in auto-probe mode (atomic read)
     if (auto_probe_state_.load() != AutoProbeState::IN_PROGRESS) {
@@ -670,11 +650,9 @@ void WizardConnectionStep::on_auto_probe_failure(const helix::LifetimeToken& tok
 
     auto_probe_state_.store(AutoProbeState::FAILED);
 
-    tok.defer("WizardConnectionStep::on_auto_probe_failure", [this]() {
-        set_status(nullptr, StatusVariant::None,
-                   lv_tr("Connection must be tested successfully to continue"));
-        lv_subject_set_int(&connection_testing_, 0);
-    });
+    set_status(nullptr, StatusVariant::None,
+               lv_tr("Connection must be tested successfully to continue"));
+    lv_subject_set_int(&connection_testing_, 0);
 }
 
 // ============================================================================

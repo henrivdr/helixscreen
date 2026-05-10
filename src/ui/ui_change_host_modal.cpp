@@ -218,36 +218,30 @@ void ChangeHostModal::handle_test_connection() {
 }
 
 void ChangeHostModal::on_test_success() {
+    // Already on main thread — caller dispatches via tok.defer (see handle_test).
     spdlog::info("[ChangeHostModal] Test connection successful");
 
-    // Called from BG thread — use token.defer() to avoid TOCTOU race (#707)
-    auto tok = lifetime_.token();
-    tok.defer([this]() {
-        if (!is_visible())
-            return;
+    if (!is_visible())
+        return;
 
-        set_status("icon_check_circle", "success", "Connection successful!");
-        lv_subject_set_int(&testing_subject_, 0);
-        lv_subject_set_int(&validated_subject_, 1);
+    set_status("icon_check_circle", "success", "Connection successful!");
+    lv_subject_set_int(&testing_subject_, 0);
+    lv_subject_set_int(&validated_subject_, 1);
 
-        spdlog::info("[ChangeHostModal] Test passed, Save button enabled");
-    });
+    spdlog::info("[ChangeHostModal] Test passed, Save button enabled");
 }
 
 void ChangeHostModal::on_test_failure() {
+    // Already on main thread — caller dispatches via tok.defer (see handle_test).
     spdlog::warn("[ChangeHostModal] Test connection failed");
 
-    // Called from BG thread — use token.defer() to avoid TOCTOU race (#707)
-    auto tok = lifetime_.token();
-    tok.defer([this]() {
-        if (!is_visible())
-            return;
+    if (!is_visible())
+        return;
 
-        set_status("icon_close_circle", "danger", "Connection failed");
-        lv_subject_set_int(&testing_subject_, 0);
+    set_status("icon_close_circle", "danger", "Connection failed");
+    lv_subject_set_int(&testing_subject_, 0);
 
-        spdlog::debug("[ChangeHostModal] Test failed, keeping Save disabled");
-    });
+    spdlog::debug("[ChangeHostModal] Test failed, keeping Save disabled");
 }
 
 void ChangeHostModal::handle_save() {
