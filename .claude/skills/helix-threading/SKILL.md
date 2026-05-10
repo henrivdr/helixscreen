@@ -199,6 +199,53 @@ lv_obj_clean(container);  // or safe_delete(), lv_obj_delete()
 // freeze thaws on scope exit
 ```
 
+### Hazard: tok.defer() callbacks are silently DROPPED during freeze
+
+`tok.defer(...)` routes through `queue_update`, which honors `scoped_freeze()` —
+during a freeze window, the callback is **discarded with a single warn line**
+(`[UpdateQueue] DROPPED (frozen): <tag>`) and **never runs**. For ordinary
+post-startup callbacks (UI updates, observer fan-out) this is correct: it
+prevents BG threads from enqueueing work against widgets being torn down.
+
+But for **startup-handshake callbacks** — the FIRST frame of a Klipper
+subscription, the first `notify_klippy_ready` after register, any "establish
+baseline state" path the rest of the app waits on — a single drop strands the
+app permanently. The Snapmaker U1 lane-EMPTY bug (2026-05-10) was exactly
+this: `AmsSubscriptionBackend::notify_update` got dropped during the
+splash→home freeze, so backend `slot.status` stayed at `UNKNOWN` forever and
+the AMS panel rendered every lane as empty even though firmware reported
+loaded RFID tags.
+
+Use `tok.defer_critical(tag, fn)` for these sites — it routes through
+`queue_critical` instead of `queue_update`, bypassing freeze (still honors
+`shut_down_`):
+
+```cpp
+client_->register_notify_update(
+    [this, token = lifetime_.token()](const json& notification) {
+        // First frame establishes baseline state — must survive freeze.
+        token.defer_critical("Backend::notify_update", [this, notification]() {
+            handle_status_update(notification);
+        });
+    });
+```
+
+**When to use defer_critical:**
+- WebSocket subscription callbacks (`register_notify_update`)
+- `notify_klippy_ready` handlers that gate initial state queries
+- Any callback that establishes state the rest of the app waits on
+
+**When NOT to use defer_critical:**
+- Routine UI updates / observer fan-out
+- Per-frame status processing (use regular `defer` — it's fine if one
+  frame drops, the next will arrive; only the FIRST is critical)
+- Anything that touches widgets being torn down
+
+Symptom of a missed defer_critical: feature works on a fresh boot with a
+slow startup, breaks on faster machines or post-update restarts where the
+freeze is more likely to land on the first frame. Grep for `[UpdateQueue]
+DROPPED (frozen): <Backend>::notify_update` in the device log.
+
 ## CRITICAL: Subject Shutdown Self-Registration
 
 Every `init_subjects()` MUST self-register its `deinit_subjects()` with
