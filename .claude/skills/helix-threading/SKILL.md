@@ -88,16 +88,56 @@ use-after-free when the owning object is dismissed.
 ```cpp
 // Modal and OverlayBase provide lifetime_ automatically.
 // Standalone classes: helix::AsyncLifetimeGuard lifetime_;
+```
 
-// BG-thread callback pattern:
+### Two correct patterns
+
+**Short-form — `lifetime_.bg_cb(tag, fn)`** (preferred when no bg-side parsing):
+```cpp
+api_->rest().get_strips(
+    lifetime_.bg_cb("LedController::on_strips", [this](const Resp& r) {
+        // runs on main thread; safe to touch this->member
+        wled_.add_strip(r);
+        emit_event(EVENT);
+    }),
+    [](const Err& e) { spdlog::warn("..."); });
+```
+`bg_cb` returns a wrapper that auto-defers the body — no `tok.expired()` ever appears
+on the bg thread.
+
+**Long-form — `tok.defer(tag, [...] { ... })`** (when keeping bg-side parsing matters):
+```cpp
 auto tok = lifetime_.token();
-api->fetch([this, tok]() {
-    if (tok.expired()) return;         // Owner dismissed — skip
-    tok.defer([this]() {               // Safe: uses token's shared_ptr
-        update_ui();
-    });
+api_->rest().get_strips(
+    [this, tok](const Resp& r) {
+        // BG: parse, validate, build LOCAL objects (no this access)
+        Local out = parse(r);
+        // MAIN: only the mutation
+        tok.defer("Class::on_strips_apply", [this, out = std::move(out)]() mutable {
+            wled_.set_all(std::move(out));
+        });
+    },
+    [](const Err& e) { spdlog::warn("..."); });
+```
+
+### FORBIDDEN: bare `if (tok.expired()) return;` on a bg thread
+
+```cpp
+// ❌ L081 Mechanism C — UAF if `this` destroyed between check and access
+api_->rest().get_strips([this, tok](const Resp& r) {
+    if (tok.expired()) return;
+    member_ = r;          // CRASH: race with destructor
+    emit_event(EVENT);
 });
 ```
+
+The runtime detector emits `cluster:pstat-async-delete Mechanism C` warnings on every
+bg-thread `tok.expired()` callsite. CI (`HELIX_STRICT_BG_THREAD_CHECK=1`) and tests
+(`HelixTestFixture` opts in) ABORT on first hit. The lint gate
+`scripts/check_l081_anti_pattern.py` blocks new instances at commit time.
+
+Per-line opt-out (rare; only for dtor-joined worker threads with thread-private state):
+`if (tok.expired()) return; // L081_OK: <reason>`. See `src/system/camera_stream.cpp`.
 
 **TOCTOU rule:** From background threads, use `tok.defer()` NOT `lifetime_.defer()`.
 `lifetime_.defer()` reads `this->lifetime_` — a race if `this` is being destroyed (#707).

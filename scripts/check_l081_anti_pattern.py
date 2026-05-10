@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+# Copyright (C) 2025-2026 356C LLC
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Lint gate: bg-thread callbacks must not call `token.expired()` followed by
+# `this`/`self`/`api_` member access on the bg thread itself. That's the L081
+# Mechanism C anti-pattern (cluster:pstat-async-delete) — it races on `this`
+# destruction and causes UAF crashes that look unrelated in backtraces.
+#
+# Background: AsyncLifetimeGuard's `token.expired()` is meant to be called
+# inside `tok.defer(...)` (which marshals to the main thread atomically).
+# Calling it bare on a bg thread, then dereferencing `this`/`self`/`api_`,
+# is a TOCTOU race. The runtime detector emits "cluster:pstat-async-delete
+# Mechanism C" warnings; this script catches the pattern at commit time so
+# new instances fail CI immediately.
+#
+# Approved patterns:
+#
+#   // Direct defer — wrap bg work in defer, no expired() check needed.
+#   api_->rest().get_x([this, tok = lifetime_.token()](const Resp& r) {
+#       tok.defer("Class::on_x", [this, r]() { member_ = r; });
+#   });
+#
+#   // bg_cb wrapper — even cleaner.
+#   api_->rest().get_x(lifetime_.bg_cb("Class::on_x",
+#                                      [this](const Resp& r) { member_ = r; }));
+#
+#   // Bg-thread expired check that ONLY exits the lambda, no member touch:
+#   if (tok.expired()) return;   // followed only by `return;` or local-only work
+#
+# Banned (without // L081_OK comment):
+#
+#   [this, tok](const Resp& r) {
+#       if (tok.expired()) return;   // bg-thread check
+#       member_ = r;                  // bg-thread member mutation — UAF risk
+#   }
+#
+# Per-line opt-out:
+#
+#   if (tok.expired()) return; // L081_OK: synchronous wait wrapper, see write_adventurer_json
+#
+# Usage:
+#   ./scripts/check_l081_anti_pattern.py [files...]
+#   ./scripts/check_l081_anti_pattern.py --staged-only
+#   (no args = scan src/ recursively)
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Iterable
+
+# Match `if (token.expired()) return;` or variants:
+#   if (tok.expired()) return;
+#   if (token.expired()) { return; }
+#   if (token.expired() || other_cond) return;
+EXPIRED_CHECK_RE = re.compile(
+    r'\bif\s*\([^)]*\b(?P<varname>[a-zA-Z_]\w*)\.expired\s*\(\)[^)]*\)'
+)
+
+# Patterns that count as "this access" on the line(s) following the expired check.
+# Conservative — flags only obvious member dereferences. Misses some implicit
+# `this->method(args)` calls that look like free-function calls; that's why
+# the runtime detector remains the source of truth.
+THIS_ACCESS_RE = re.compile(
+    r'\b(?:this|self|api_)\s*(?:->|\.)'  # this->, self->, api_->
+    r'|\bemit_event\s*\('                 # member fn (idiomatic in this repo)
+    r'|\bget_name\s*\('                   # virtual member fn
+    r'|\b\w+_\s*(?:=|\.|\->)'             # member-trailing-underscore deref/assign
+    r'|\b\w+_\s*\.\s*(?:store|load|exchange|fetch_add|fetch_sub|notify_one|notify_all)\s*\('
+    r'|\b\w+_mutex_\b'                    # member mutex name pattern
+    r'|\block_guard\s*<\s*std::mutex\s*>\s*\w+\s*\(\s*\w*_'  # locking a member mutex
+)
+
+OPT_OUT = "L081_OK"
+LOOKAHEAD_LINES = 10  # max lines to scan after the expired check inside the lambda
+
+
+def file_lines(path: Path) -> list[str]:
+    try:
+        return path.read_text(encoding='utf-8', errors='replace').splitlines()
+    except OSError:
+        return []
+
+
+def is_only_return(line: str) -> bool:
+    """True if the line after the expired-check predicate is just `return;` (with optional braces)."""
+    s = line.strip()
+    return s in ('return;', '{ return; }', '{return;}', '{ return; }')
+
+
+def trailing_after_paren(line: str) -> str:
+    """Return whatever follows the closing `)` of the if-condition on the same line."""
+    # naive: find first ')' after 'expired()' — fine for the codebase's style
+    idx = line.find('expired()')
+    if idx < 0:
+        return ''
+    rest = line[idx:]
+    paren_depth = 0
+    for i, ch in enumerate(rest):
+        if ch == '(':
+            paren_depth += 1
+        elif ch == ')':
+            paren_depth -= 1
+            if paren_depth == 0:
+                return rest[i + 1:].strip()
+    return ''
+
+
+DEFER_CALL_RE = re.compile(r'\b\w+\s*\.\s*defer\s*\(')
+
+
+def scan_file(path: Path) -> list[tuple[int, str]]:
+    """Return list of (line_no, snippet) for each suspect site in `path`.
+
+    Only the worst form of L081 is flagged: bg-thread `tok.expired()` followed
+    by direct `this`/member access on the bg thread BEFORE any `tok.defer(...)`.
+    The "guard-then-defer" form (`if (tok.expired()) return; tok.defer(...)`)
+    is intentionally NOT flagged here — it's suboptimal (still fires the
+    runtime warning) but not a UAF risk. Sweep those as follow-up.
+    """
+    lines = file_lines(path)
+    if not lines:
+        return []
+    hits: list[tuple[int, str]] = []
+    for i, line in enumerate(lines):
+        if OPT_OUT in line:
+            continue
+        m = EXPIRED_CHECK_RE.search(line)
+        if not m:
+            continue
+        # If the rest of the same line is just `return;`, trivially safe.
+        same_line_after = trailing_after_paren(line)
+        if same_line_after.startswith('return'):
+            continue
+        # Look ahead a few lines INSIDE the lambda. If we hit a `.defer(`
+        # before any member access, the body is correctly marshalled — skip.
+        # Stop at obvious block-end markers too.
+        flagged = False
+        for j in range(i + 1, min(i + 1 + LOOKAHEAD_LINES, len(lines))):
+            look = lines[j]
+            if OPT_OUT in look:
+                break
+            stripped = look.strip()
+            if stripped == '':
+                continue
+            if stripped in ('}', '});', '},', '});;'):
+                # End of immediate block / lambda. Stop scanning so we don't
+                # mistake outer-scope (main-thread) member access for bg-thread.
+                break
+            if DEFER_CALL_RE.search(look):
+                # Body is being deferred — remaining lines are on main thread.
+                break
+            if THIS_ACCESS_RE.search(look):
+                snippet = '\n  '.join(lines[i:j + 1])
+                hits.append((i + 1, snippet))
+                flagged = True
+                break
+        # If we never hit defer or member access in the lookahead window,
+        # assume the body is harmless or out of our scan range.
+        _ = flagged
+    return hits
+
+
+def staged_files() -> list[Path]:
+    try:
+        out = subprocess.run(
+            ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACM'],
+            capture_output=True, text=True, check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    return [Path(p) for p in out.splitlines() if p.endswith(('.cpp', '.h', '.hpp', '.cc'))]
+
+
+# Directories with predominantly bg-thread callback registration. Files here
+# can be lint-scanned with low false-positive rate. src/ui/ is intentionally
+# excluded from the default scan because observer callbacks (queue_update +
+# observe_int_sync) run on the main thread, where `tok.expired()` is fine —
+# the script can't tell observer cbs from HTTP cbs without AST-level context.
+# src/ui/ files can still be checked by passing them explicitly.
+DEFAULT_SCAN_DIRS = (
+    'src/printer',
+    'src/calibration',
+    'src/led',
+    'src/print',
+    'src/sensors',
+    'src/system',
+    'src/api',
+    'src/network',
+    'src/bluetooth',
+)
+
+
+def discover_files(roots: Iterable[Path]) -> list[Path]:
+    out: list[Path] = []
+    for root in roots:
+        if root.is_file():
+            out.append(root)
+            continue
+        if not root.is_dir():
+            continue
+        for p in root.rglob('*'):
+            if p.suffix in ('.cpp', '.h', '.hpp', '.cc') and 'build/' not in str(p):
+                out.append(p)
+    return out
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--staged-only', action='store_true',
+                        help='Check only staged-for-commit files (for pre-commit hook)')
+    parser.add_argument('files', nargs='*', help='Files to check (default: scan src/)')
+    args = parser.parse_args()
+
+    if args.staged_only:
+        # Pre-commit: only check changed files, AND restrict to known-bg-thread
+        # directories (observer callbacks in src/ui/ would false-positive).
+        files = [f for f in staged_files()
+                 if f.exists()
+                 and any(str(f).startswith(d) for d in DEFAULT_SCAN_DIRS)]
+    elif args.files:
+        files = [Path(f) for f in args.files if Path(f).exists()]
+    else:
+        files = discover_files([Path(d) for d in DEFAULT_SCAN_DIRS])
+
+    # Skip the detector implementation itself and the header that defines the API.
+    skip = {Path('src/system/async_lifetime_guard.cpp'),
+            Path('include/async_lifetime_guard.h')}
+    files = [f for f in files if f not in skip]
+
+    total = 0
+    for f in files:
+        hits = scan_file(f)
+        for line_no, snippet in hits:
+            print(f"{f}:{line_no}: L081 anti-pattern: bg-thread tok.expired() "
+                  f"followed by `this`/member access")
+            for ln in snippet.split('\n'):
+                print(f"    {ln}")
+            print(f"    Fix: wrap body in `tok.defer(\"Class::method\", [this, ...]() {{ ... }})` "
+                  f"or use `lifetime_.bg_cb(\"Class::method\", [this](...) {{ ... }})`.")
+            print(f"    Opt-out (only if you really need bg-thread `expired()`): "
+                  f"add `// {OPT_OUT}: <reason>` on the same line.")
+            print()
+            total += 1
+
+    if total > 0:
+        print(f"❌ {total} L081 anti-pattern site(s) found. See "
+              f"include/async_lifetime_guard.h for the canonical fix pattern.",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

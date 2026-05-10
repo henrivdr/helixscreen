@@ -3,6 +3,7 @@
 
 #include "helix_test_fixture.h"
 
+#include "async_lifetime_guard.h"
 #include "config.h"
 #include "system_settings_manager.h"
 #include "ui_modal.h"
@@ -10,6 +11,10 @@
 #include "ui_update_queue.h"
 
 HelixTestFixture::HelixTestFixture() {
+    // Tests opt into strict L081 detection: any bg-thread tok.expired() check
+    // while alive aborts the run instead of just warning. Production stays
+    // at warn. See include/async_lifetime_guard.h.
+    helix::internal::set_strict_bg_check(true);
     reset_all();
 }
 

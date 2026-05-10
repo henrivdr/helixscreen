@@ -116,6 +116,16 @@ Use `ObserverGuard` for RAII cleanup. See `observer_factory.h` for `observe_int_
 
 Do **NOT** use `shared_ptr<bool> alive_`, `callback_guard_`, `alive_guard_`, `weak_ptr<bool>`, or `shared_ptr<atomic<bool>>` for callback safety. Deprecated; replaced by `AsyncLifetimeGuard`. See `include/async_lifetime_guard.h`.
 
+**FORBIDDEN: bare `if (tok.expired()) return;` on a bg thread followed by `this`/member access (MANDATORY).** This is the L081 Mechanism C anti-pattern (cluster:pstat-async-delete) — TOCTOU race that causes UAF if the owner is destroyed between the check and the access. The `set_main_thread_id()` runtime detector emits a `cluster:pstat-async-delete Mechanism C` warning per first-fire callsite; CI runs `HELIX_STRICT_BG_THREAD_CHECK=1` (and `HelixTestFixture` opts in by default) so any new instance aborts the test. The lint gate `scripts/check_l081_anti_pattern.py` blocks new instances at commit time. **Cleaned up across the codebase 2026-05-09 (107 sites swept).**
+
+| ❌ FORBIDDEN bg-thread idiom | ✅ Two correct forms |
+|---|---|
+| `[this, tok](const Resp& r) {`<br>`  if (tok.expired()) return;`<br>`  member_ = r;            // UAF risk`<br>`  emit_event(EVENT);     // UAF risk`<br>`}` | **Long-form (when bg-side parsing is worth keeping off main):**<br>`[this, tok](const Resp& r) {`<br>`  // bg: parse, validate, build LOCAL objects (no this!)`<br>`  Local out = parse(r);`<br>`  // main: only the mutation`<br>`  tok.defer("Class::on_resp_apply", [this, out = std::move(out)]() mutable {`<br>`    member_ = std::move(out);`<br>`    emit_event(EVENT);`<br>`  });`<br>`}`<br><br>**Short-form (when there's nothing to parse on bg):**<br>`api_->rest().get_x(`<br>`  lifetime_.bg_cb("Class::on_x", [this](const Resp& r) {`<br>`    member_ = r;`<br>`    emit_event(EVENT);`<br>`  }), …);` |
+
+`bg_cb(tag, fn)` returns a callable that auto-defers the body — the cleanest fix when you have no bg-only parsing to keep off the main thread. When you DO have heavy bg-side work to preserve (large JSON parse), use the long-form `tok.defer(...)` explicitly. Either way, **never write `if (tok.expired()) return;` on a bg thread** — the defer wrapper checks atomically on the main thread.
+
+Per-line opt-out (rare; only for dtor-joined worker threads with thread-private state): `if (tok.expired()) return; // L081_OK: <reason>`. See `src/system/camera_stream.cpp` for examples.
+
 **HTTP work runs on HttpExecutor, NOT raw `std::thread`.** Two process-wide lanes:
 `HttpExecutor::fast()` (4 workers) for REST/API/timelapse/thumbnails/small uploads,
 `HttpExecutor::slow()` (1 worker) for large file transfers. Submitted lambdas run on a

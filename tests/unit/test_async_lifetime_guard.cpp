@@ -269,7 +269,19 @@ TEST_CASE("expired() correct on main thread (after invalidate)",
     REQUIRE(tok.expired());
 }
 
-TEST_CASE("expired() correct on bg thread (alive)", "[lifetime_guard][bg_detector]") {
+// Fixture for tests that DELIBERATELY exercise the bg-thread `expired()`
+// path the detector aborts on under strict mode. Disables strict for the
+// scope of the test and re-enables on teardown so other tests retain their
+// strict guarantees. Used by the [bg_detector] tag tests below — they prove
+// the *boolean* result of expired() is correct under bg use even though the
+// detector classifies the callsite as suspicious.
+struct BgDetectorFixture {
+    BgDetectorFixture() { helix::internal::set_strict_bg_check(false); }
+    ~BgDetectorFixture() { helix::internal::set_strict_bg_check(true); }
+};
+
+TEST_CASE_METHOD(BgDetectorFixture, "expired() correct on bg thread (alive)",
+                 "[lifetime_guard][bg_detector]") {
     helix::internal::set_main_thread_id();
     AsyncLifetimeGuard guard;
     auto tok = guard.token();
@@ -299,8 +311,8 @@ TEST_CASE("expired() correct on bg thread (after invalidate)",
     REQUIRE(bg_saw_expired.load());
 }
 
-TEST_CASE("expired() under tight bg-thread loop doesn't crash",
-         "[lifetime_guard][bg_detector]") {
+TEST_CASE_METHOD(BgDetectorFixture, "expired() under tight bg-thread loop doesn't crash",
+                 "[lifetime_guard][bg_detector]") {
     helix::internal::set_main_thread_id();
     AsyncLifetimeGuard guard;
     auto tok = guard.token();
@@ -327,7 +339,8 @@ TEST_CASE("on_main_thread() reflects current thread", "[lifetime_guard][bg_detec
     REQUIRE_FALSE(bg_saw_main.load());
 }
 
-TEST_CASE("Thread safety — concurrent token and invalidate", "[lifetime_guard][slow]") {
+TEST_CASE_METHOD(BgDetectorFixture, "Thread safety — concurrent token and invalidate",
+                 "[lifetime_guard][slow]") {
     AsyncLifetimeGuard guard;
     std::atomic<bool> stop{false};
     std::atomic<int> token_count{0};
