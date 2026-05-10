@@ -817,16 +817,19 @@ void InputShaperPanel::apply_recommendation() {
         calibrator_->apply_settings(
             x_config,
             [this, tok]() {
-                if (tok.expired())
-                    return;
-                spdlog::info("[InputShaper] X axis settings applied");
-                // Chain Y apply if we have a recommendation
-                if (!recommended_type_.empty() && recommended_freq_ > 0) {
-                    apply_y_after_x();
-                } else {
-                    ToastManager::instance().show(ToastSeverity::SUCCESS,
-                                                  lv_tr("Input shaper settings applied!"), 2500);
-                }
+                // L081 Mechanism C: reads recommended_*_ and calls apply_y_after_x()
+                // (which touches api_/lifetime_). Marshal to main.
+                tok.defer("InputShaperPanel::apply_x_success", [this]() {
+                    spdlog::info("[InputShaper] X axis settings applied");
+                    // Chain Y apply if we have a recommendation
+                    if (!recommended_type_.empty() && recommended_freq_ > 0) {
+                        apply_y_after_x();
+                    } else {
+                        ToastManager::instance().show(
+                            ToastSeverity::SUCCESS,
+                            lv_tr("Input shaper settings applied!"), 2500);
+                    }
+                });
             },
             [tok](const std::string& err) {
                 if (tok.expired())
@@ -879,24 +882,23 @@ void InputShaperPanel::apply_y_after_x() {
     calibrator_->apply_settings(
         y_config,
         [this, tok]() {
-            if (tok.expired())
-                return;
-            spdlog::info("[InputShaper] Both axis settings applied");
-            ToastManager::instance().show(ToastSeverity::SUCCESS,
-                                          lv_tr("Input shaper settings applied!"), 2500);
-            // Refresh the current config display
-            if (api_) {
-                auto tok2 = lifetime_.token();
-                api_->advanced().get_input_shaper_config(
-                    [this, tok2](const InputShaperConfig& config) {
-                        helix::ui::queue_update([this, tok2, config]() {
-                            if (tok2.expired())
-                                return;
-                            populate_current_config(config);
-                        });
-                    },
-                    [](const MoonrakerError&) {});
-            }
+            // L081 Mechanism C: reads api_, calls lifetime_.token() (member access).
+            // Marshal to main.
+            tok.defer("InputShaperPanel::apply_y_success", [this]() {
+                spdlog::info("[InputShaper] Both axis settings applied");
+                ToastManager::instance().show(ToastSeverity::SUCCESS,
+                                              lv_tr("Input shaper settings applied!"), 2500);
+                // Refresh the current config display
+                if (api_) {
+                    auto tok2 = lifetime_.token();
+                    api_->advanced().get_input_shaper_config(
+                        [this, tok2](const InputShaperConfig& config) {
+                            tok2.defer("InputShaperPanel::populate_after_y",
+                                       [this, config]() { populate_current_config(config); });
+                        },
+                        [](const MoonrakerError&) {});
+                }
+            });
         },
         [tok](const std::string& err) {
             if (tok.expired())

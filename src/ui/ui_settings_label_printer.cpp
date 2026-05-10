@@ -456,10 +456,13 @@ void LabelPrinterSettingsOverlay::start_label_printer_discovery() {
         auto token = lifetime_.token();
         mdns_discovery_->start_discovery(
             [this, token](const std::vector<DiscoveredPrinter>& printers) {
-                if (token.expired())
-                    return;
-                raw_printers_ = printers;
-                merge_and_update_discovery();
+                // L081 Mechanism C: merge_and_update_discovery() touches LVGL
+                // (lv_dropdown_set_options) — must run on main thread.
+                token.defer("LabelPrinterSettings::raw_discovery_apply",
+                            [this, printers]() {
+                                raw_printers_ = printers;
+                                merge_and_update_discovery();
+                            });
             });
     }
 
@@ -469,10 +472,13 @@ void LabelPrinterSettingsOverlay::start_label_printer_discovery() {
         auto token = lifetime_.token();
         ipp_mdns_discovery_->start_discovery(
             [this, token](const std::vector<DiscoveredPrinter>& printers) {
-                if (token.expired())
-                    return;
-                ipp_printers_ = printers;
-                merge_and_update_discovery();
+                // L081 Mechanism C: merge_and_update_discovery() touches LVGL
+                // (lv_dropdown_set_options) — must run on main thread.
+                token.defer("LabelPrinterSettings::ipp_discovery_apply",
+                            [this, printers]() {
+                                ipp_printers_ = printers;
+                                merge_and_update_discovery();
+                            });
             });
     }
 
@@ -803,9 +809,10 @@ void LabelPrinterSettingsOverlay::start_usb_detection() {
     usb_detector_ = std::make_unique<helix::UsbPrinterDetector>();
     auto token = lifetime_.token();
     usb_detector_->start_polling([this, token](const std::vector<helix::UsbPrinterInfo>& printers) {
-        if (token.expired())
-            return;
-        on_usb_printers_detected(printers);
+        // L081 Mechanism C: on_usb_printers_detected() calls
+        // lv_obj_find_by_name + lv_dropdown_set_options — must run on main.
+        token.defer("LabelPrinterSettings::usb_apply",
+                    [this, printers]() { on_usb_printers_detected(printers); });
     });
     spdlog::debug("[{}] Started USB printer detection", get_name());
 }

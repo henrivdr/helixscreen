@@ -903,35 +903,35 @@ void PrintSelectDetailView::load_gcode_for_preview() {
     api_->files().get_file_metadata(
         metadata_filename,
         [this, tok, temp_path, file_path](const FileMetadata& metadata) {
-            if (tok.expired()) {
-                return;
-            }
+            // L081 Mechanism C: marshal member writes + LVGL/show_gcode_viewer
+            // to main thread before touching `this`.
+            tok.defer("DetailView::metadata_apply", [this, tok, metadata, temp_path,
+                                                     file_path]() {
+                // Cache for PrintStartController's pre-print checks (e.g., filament weight)
+                cached_file_metadata_ = metadata;
 
-            // Cache for PrintStartController's pre-print checks (e.g., filament weight)
-            cached_file_metadata_ = metadata;
+                // Check if file is safe to render given available RAM
+                if (!helix::is_gcode_2d_streaming_safe(metadata.size)) {
+                    auto mem = helix::get_system_memory_info();
+                    spdlog::warn("[DetailView] G-code too large for streaming: file={} bytes, "
+                                 "available RAM={}MB - using thumbnail",
+                                 metadata.size, mem.available_mb());
+                    show_gcode_viewer(false);
+                    return;
+                }
 
-            // Check if file is safe to render given available RAM
-            if (!helix::is_gcode_2d_streaming_safe(metadata.size)) {
-                auto mem = helix::get_system_memory_info();
-                spdlog::warn("[DetailView] G-code too large for streaming: file={} bytes, "
-                             "available RAM={}MB - using thumbnail",
-                             metadata.size, mem.available_mb());
-                show_gcode_viewer(false);
-                return;
-            }
+                spdlog::debug("[DetailView] G-code size {} bytes - safe to render, downloading...",
+                              metadata.size);
 
-            spdlog::debug("[DetailView] G-code size {} bytes - safe to render, downloading...",
-                          metadata.size);
+                // Clean up previous temp file if different
+                if (!temp_gcode_path_.empty() && temp_gcode_path_ != temp_path) {
+                    std::remove(temp_gcode_path_.c_str());
+                    temp_gcode_path_.clear();
+                }
 
-            // Clean up previous temp file if different
-            if (!temp_gcode_path_.empty() && temp_gcode_path_ != temp_path) {
-                std::remove(temp_gcode_path_.c_str());
-                temp_gcode_path_.clear();
-            }
-
-            // Stream download to disk
-            api_->transfers().download_file_to_path(
-                "gcodes", file_path, temp_path,
+                // Stream download to disk
+                api_->transfers().download_file_to_path(
+                    "gcodes", file_path, temp_path,
                 [this, tok, temp_path](const std::string& path) {
                     if (tok.expired()) {
                         return;
@@ -982,26 +982,27 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                         ui_gcode_viewer_load_file(gcode_viewer_, path.c_str());
                     });
                 },
-                [this, tok](const MoonrakerError& err) {
-                    if (tok.expired()) {
-                        return;
-                    }
-                    spdlog::warn("[DetailView] Failed to download G-code: {}", err.message);
-                    // Marshal to main thread — this callback runs on HTTP thread
-                    helix::ui::queue_update([this, tok]() {
-                        if (tok.expired())
+                    [this, tok](const MoonrakerError& err) {
+                        if (tok.expired()) {
                             return;
-                        show_gcode_viewer(false);
+                        }
+                        spdlog::warn("[DetailView] Failed to download G-code: {}", err.message);
+                        // Marshal to main thread — this callback runs on HTTP thread
+                        helix::ui::queue_update([this, tok]() {
+                            if (tok.expired())
+                                return;
+                            show_gcode_viewer(false);
+                        });
                     });
-                });
+            });
         },
         [this, tok](const MoonrakerError& err) {
-            if (tok.expired()) {
-                return;
-            }
-            spdlog::debug("[DetailView] Failed to get G-code metadata: {} - skipping preview",
-                          err.message);
-            show_gcode_viewer(false);
+            // L081 Mechanism C: marshal LVGL show_gcode_viewer to main thread.
+            tok.defer("DetailView::metadata_error", [this, err]() {
+                spdlog::debug("[DetailView] Failed to get G-code metadata: {} - skipping preview",
+                              err.message);
+                show_gcode_viewer(false);
+            });
         },
         true // silent
     );

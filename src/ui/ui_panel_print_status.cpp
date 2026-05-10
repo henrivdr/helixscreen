@@ -2373,90 +2373,100 @@ void PrintStatusPanel::load_thumbnail_for_file(const std::string& filename) {
     api_->files().get_file_metadata(
         metadata_filename,
         [this, token, current_gen](const FileMetadata& metadata) {
-            // Abort if panel was destroyed during async operation
-            if (token.expired()) {
-                return;
-            }
-            // Check if this callback is still relevant
-            if (current_gen != thumbnail_load_generation_) {
-                spdlog::trace("[{}] Stale metadata callback (gen {} != {}), ignoring", get_name(),
-                              current_gen, thumbnail_load_generation_);
-                return;
-            }
+            // L081 Mechanism C: defer the entire body — it touches member state
+            // (thumbnail_load_generation_, get_name(), api_, cached_thumbnail_path_
+            // via the inner cb) and dispatches to LVGL-touching code paths. Run
+            // it on the main thread.
+            token.defer("PrintStatusPanel::metadata_apply",
+                        [this, token, current_gen, metadata]() {
+                // Check if this callback is still relevant
+                if (current_gen != thumbnail_load_generation_) {
+                    spdlog::trace("[{}] Stale metadata callback (gen {} != {}), ignoring",
+                                  get_name(), current_gen, thumbnail_load_generation_);
+                    return;
+                }
 
-            // Note: Layer count from metadata is now set by ActivePrintMediaManager
+                // Note: Layer count from metadata is now set by ActivePrintMediaManager
 
-            // Store slicer's estimated print time for remaining time fallback
-            if (metadata.estimated_time > 0) {
-                get_printer_state().set_estimated_print_time(
-                    static_cast<int>(metadata.estimated_time));
-            }
+                // Store slicer's estimated print time for remaining time fallback
+                if (metadata.estimated_time > 0) {
+                    get_printer_state().set_estimated_print_time(
+                        static_cast<int>(metadata.estimated_time));
+                }
 
-            // Get the largest thumbnail available
-            std::string thumbnail_rel_path = metadata.get_largest_thumbnail();
-            if (thumbnail_rel_path.empty()) {
-                spdlog::debug("[{}] No thumbnail available in metadata", get_name());
-                return;
-            }
+                // Get the largest thumbnail available
+                std::string thumbnail_rel_path = metadata.get_largest_thumbnail();
+                if (thumbnail_rel_path.empty()) {
+                    spdlog::debug("[{}] No thumbnail available in metadata", get_name());
+                    return;
+                }
 
-            spdlog::debug("[{}] Found thumbnail: {}", get_name(), thumbnail_rel_path);
+                spdlog::debug("[{}] Found thumbnail: {}", get_name(), thumbnail_rel_path);
 
-            // Note: We intentionally do NOT invalidate the cache here.
-            // PrintSelectPanel already handles file modification detection and cache
-            // invalidation when files are re-uploaded. Aggressive invalidation here
-            // causes a race condition where Print Status deletes thumbnails that
-            // Print Select just cached, resulting in placeholder thumbnails.
+                // Note: We intentionally do NOT invalidate the cache here.
+                // PrintSelectPanel already handles file modification detection and cache
+                // invalidation when files are re-uploaded. Aggressive invalidation here
+                // causes a race condition where Print Status deletes thumbnails that
+                // Print Select just cached, resulting in placeholder thumbnails.
 
-            // Use fetch_for_detail_view() for full-resolution PNG (not pre-scaled .bin)
-            // The semantic API ensures we always get the right format for large views.
-            // Create context with lifetime token for validity checking.
-            ThumbnailLoadContext ctx;
-            ctx.lifetime_token = token;
-            ctx.generation = nullptr; // Using manual gen check below
-            ctx.captured_gen = current_gen;
+                // Use fetch_for_detail_view() for full-resolution PNG (not pre-scaled .bin)
+                // The semantic API ensures we always get the right format for large views.
+                // Create context with lifetime token for validity checking.
+                ThumbnailLoadContext ctx;
+                ctx.lifetime_token = token;
+                ctx.generation = nullptr; // Using manual gen check below
+                ctx.captured_gen = current_gen;
 
-            get_thumbnail_cache().fetch_for_detail_view(
-                api_, thumbnail_rel_path, ctx,
-                [this, current_gen, token](const std::string& lvgl_path) {
-                    // Note: lifetime check is done by fetch_for_detail_view's guard.
-                    // We still need generation check since we passed nullptr for generation.
-                    if (current_gen != thumbnail_load_generation_) {
-                        spdlog::trace("[{}] Stale thumbnail callback (gen {} != {}), ignoring",
-                                      get_name(), current_gen, thumbnail_load_generation_);
-                        return;
-                    }
+                get_thumbnail_cache().fetch_for_detail_view(
+                    api_, thumbnail_rel_path, ctx,
+                    [this, current_gen, token](const std::string& lvgl_path) {
+                        // L081 Mechanism C: defer everything. The inner cb
+                        // mutates cached_thumbnail_path_ and reads
+                        // thumbnail_load_generation_/get_name(); fetch may
+                        // invoke us off the main thread depending on cache
+                        // state. Marshal the whole body.
+                        token.defer("PrintStatusPanel::thumbnail_apply",
+                                    [this, current_gen, lvgl_path]() {
+                            // Generation check (we passed nullptr for the cache's
+                            // own generation tracking).
+                            if (current_gen != thumbnail_load_generation_) {
+                                spdlog::trace(
+                                    "[{}] Stale thumbnail callback (gen {} != {}), ignoring",
+                                    get_name(), current_gen, thumbnail_load_generation_);
+                                return;
+                            }
 
-                    // Store the cached path (without "A:" prefix for internal use)
-                    cached_thumbnail_path_ = lvgl_path;
+                            // Store the cached path (without "A:" prefix for internal use)
+                            cached_thumbnail_path_ = lvgl_path;
 
-                    // Defer LVGL calls to main thread — this callback runs on the
-                    // WebSocket/libhv background thread (prestonbrown/helixscreen#192)
-                    token.defer([this, lvgl_path, current_gen]() {
-                        if (current_gen != thumbnail_load_generation_) {
-                            return;
-                        }
+                            get_printer_state().set_print_thumbnail_path(lvgl_path);
 
-                        get_printer_state().set_print_thumbnail_path(lvgl_path);
-
-                        if (print_thumbnail_) {
-                            lv_image_set_src(print_thumbnail_, lvgl_path.c_str());
-                            spdlog::info("[{}] Thumbnail loaded and displayed: {}", get_name(),
-                                         lvgl_path);
-                        } else {
-                            spdlog::info("[{}] Thumbnail cached (panel not yet displayed): {}",
-                                         get_name(), lvgl_path);
-                        }
+                            if (print_thumbnail_) {
+                                lv_image_set_src(print_thumbnail_, lvgl_path.c_str());
+                                spdlog::info("[{}] Thumbnail loaded and displayed: {}",
+                                             get_name(), lvgl_path);
+                            } else {
+                                spdlog::info(
+                                    "[{}] Thumbnail cached (panel not yet displayed): {}",
+                                    get_name(), lvgl_path);
+                            }
+                        });
+                    },
+                    [this, token](const std::string& error) {
+                        // L081 Mechanism C: defer to access get_name() on main.
+                        token.defer("PrintStatusPanel::thumbnail_fetch_error",
+                                    [this, error]() {
+                            spdlog::warn("[{}] Failed to fetch thumbnail: {}", get_name(),
+                                         error);
+                        });
                     });
-                },
-                [this](const std::string& error) {
-                    spdlog::warn("[{}] Failed to fetch thumbnail: {}", get_name(), error);
-                });
+            });
         },
         [this, token](const MoonrakerError& err) {
-            if (token.expired()) {
-                return;
-            }
-            spdlog::debug("[{}] Failed to get file metadata: {}", get_name(), err.message);
+            // L081 Mechanism C: get_name() is virtual on `this`; defer to main.
+            token.defer("PrintStatusPanel::metadata_error", [this, err]() {
+                spdlog::debug("[{}] Failed to get file metadata: {}", get_name(), err.message);
+            });
         },
         true // silent - don't trigger RPC_ERROR event/toast
     );

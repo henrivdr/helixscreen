@@ -1079,9 +1079,8 @@ void BedMeshPanel::start_calibration_probing() {
     api->get_client().send_jsonrpc(
         "printer.objects.query", params,
         [this, api, token](json response) {
-            if (token.expired())
-                return;
-
+            // BG: parse JSON without touching `this`. Member call (launch_calibration)
+            // happens inside the defer below.
             int expected = 0;
             int samples = 1;
             try {
@@ -1114,14 +1113,19 @@ void BedMeshPanel::start_calibration_probing() {
 
             spdlog::info("[BedMeshPanel] Expected probe count from config: {} (samples={})",
                          expected, samples);
-            launch_calibration(api, token, expected, samples);
+            // L081 Mechanism C: launch_calibration is a member fn; marshal to main.
+            token.defer("BedMeshPanel::launch_after_query",
+                        [this, api, token, expected, samples]() {
+                            launch_calibration(api, token, expected, samples);
+                        });
         },
         [this, api, token](const MoonrakerError& /*err*/) {
-            if (token.expired())
-                return;
-            spdlog::warn("[BedMeshPanel] Failed to query bed_mesh config, "
-                         "proceeding without expected probe count");
-            launch_calibration(api, token, 0);
+            // L081 Mechanism C: launch_calibration is a member fn; marshal to main.
+            token.defer("BedMeshPanel::launch_after_query_err", [this, api, token]() {
+                spdlog::warn("[BedMeshPanel] Failed to query bed_mesh config, "
+                             "proceeding without expected probe count");
+                launch_calibration(api, token, 0);
+            });
         });
 }
 
