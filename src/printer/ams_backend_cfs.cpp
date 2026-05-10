@@ -1054,13 +1054,15 @@ AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
 
     auto token = lifetime_.token();
     auto on_error = [this, token](const MoonrakerError& err) {
-        if (token.expired()) return;
-        // Klipper rejection (key849, busy, etc.) and timeouts both land here.
-        // Either way the driver isn't running our script anymore, so flip back
-        // to IDLE so the UI doesn't get stuck on a "loading" spinner.
-        spdlog::error("[AMS CFS] Action script failed: {}", err.message);
-        std::lock_guard<std::mutex> lock(mutex_);
-        system_info_.action = AmsAction::IDLE;
+        // L081 Mechanism C: marshal member writes (system_info_) to main.
+        token.defer("AmsBackendCfs::action_err", [this, err]() {
+            // Klipper rejection (key849, busy, etc.) and timeouts both land here.
+            // Either way the driver isn't running our script anymore, so flip back
+            // to IDLE so the UI doesn't get stuck on a "loading" spinner.
+            spdlog::error("[AMS CFS] Action script failed: {}", err.message);
+            std::lock_guard<std::mutex> lock(mutex_);
+            system_info_.action = AmsAction::IDLE;
+        });
     };
 
     // Homing-then-execute — same pattern as ensure_homed_then but with our
@@ -1077,33 +1079,41 @@ AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
         nlohmann::json{{"objects", nlohmann::json{{"toolhead", nlohmann::json::array({"homed_axes"})}}}},
         [this, token, gcode_copy, on_complete = std::move(on_complete),
          on_error = on_error](const nlohmann::json& response) {
-            if (token.expired()) return;
-
-            bool needs_home = true;
-            if (response.contains("result") && response["result"].contains("status")) {
-                const auto& status = response["result"]["status"];
-                if (status.contains("toolhead") &&
-                    status["toolhead"].contains("homed_axes") &&
-                    status["toolhead"]["homed_axes"].is_string()) {
-                    std::string axes = status["toolhead"]["homed_axes"].get<std::string>();
-                    needs_home = (axes.find("xyz") == std::string::npos);
+            // L081 Mechanism C: defer member access (api_->execute_gcode dispatch)
+            // to main thread. The inner G28-completion lambda is itself invoked
+            // on a bg thread, so it also routes its api_ call through token.defer.
+            token.defer("AmsBackendCfs::homing_query_apply",
+                        [this, token, gcode_copy, on_complete, on_error, response]() {
+                bool needs_home = true;
+                if (response.contains("result") && response["result"].contains("status")) {
+                    const auto& status = response["result"]["status"];
+                    if (status.contains("toolhead") &&
+                        status["toolhead"].contains("homed_axes") &&
+                        status["toolhead"]["homed_axes"].is_string()) {
+                        std::string axes =
+                            status["toolhead"]["homed_axes"].get<std::string>();
+                        needs_home = (axes.find("xyz") == std::string::npos);
+                    }
                 }
-            }
 
-            if (needs_home) {
-                spdlog::info("[AMS CFS] Not homed, sending G28 before action script");
-                api_->execute_gcode(
-                    "G28",
-                    [this, token, gcode_copy, on_complete, on_error]() {
-                        if (token.expired()) return;
-                        api_->execute_gcode(gcode_copy, on_complete, on_error,
-                                            MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
-                    },
-                    on_error, MoonrakerAPI::HOMING_TIMEOUT_MS);
-            } else {
-                api_->execute_gcode(gcode_copy, on_complete, on_error,
-                                    MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
-            }
+                if (needs_home) {
+                    spdlog::info("[AMS CFS] Not homed, sending G28 before action script");
+                    api_->execute_gcode(
+                        "G28",
+                        [this, token, gcode_copy, on_complete, on_error]() {
+                            // L081 Mechanism C: defer member access (api_) to main.
+                            token.defer("AmsBackendCfs::g28_done",
+                                        [this, gcode_copy, on_complete, on_error]() {
+                                api_->execute_gcode(gcode_copy, on_complete, on_error,
+                                                    MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+                            });
+                        },
+                        on_error, MoonrakerAPI::HOMING_TIMEOUT_MS);
+                } else {
+                    api_->execute_gcode(gcode_copy, on_complete, on_error,
+                                        MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+                }
+            });
         },
         on_error);
 

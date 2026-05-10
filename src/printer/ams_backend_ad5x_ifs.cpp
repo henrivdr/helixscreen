@@ -109,14 +109,15 @@ void AmsBackendAd5xIfs::on_started() {
                    // initialised, so we gate the initial query on webhooks.state == "ready".
                    {"webhooks", nullptr}}}},
         [this, token](const json& response) {
-            if (token.expired())
-                return;
-
-            // Check if the _IFS_VARS gcode macro actually exists on this printer.
-            // save_variables may contain lessWaste/bambufy data from a partially installed
-            // plugin, but the macro itself might not be loaded in Klipper.
+            // BG THREAD: extract local copies of what we need; no `this` access.
+            // save_variables may contain lessWaste/bambufy data from a partially
+            // installed plugin, but the macro itself might not be loaded in
+            // Klipper — we still flag macro_exists so the main-thread apply can
+            // update the latch correctly.
             bool macro_exists = false;
             bool klippy_ready = false;
+            bool have_status = false;
+            json status_copy;
             if (response.contains("result") && response["result"].contains("status")) {
                 const auto& status = response["result"]["status"];
                 macro_exists = status.contains("gcode_macro _ifs_vars");
@@ -124,74 +125,99 @@ void AmsBackendAd5xIfs::on_started() {
                     status["webhooks"]["state"].is_string()) {
                     klippy_ready = status["webhooks"]["state"].get<std::string>() == "ready";
                 }
-
-                // Update latch BEFORE handle_status_update so parse_save_variables
-                // sees the correct state. ifs_macro_confirmed_missing_ starts true
-                // (pessimistic) and is only cleared here when the macro exists.
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    if (macro_exists) {
-                        ifs_macro_confirmed_missing_ = false;
-                    }
-                    // !macro_exists: latch stays true (initialized true)
-                }
-
-                handle_status_update(status);
+                status_copy = status;
+                have_status = true;
             }
 
-            // Log initial state after processing query response
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                spdlog::debug("{} Initial query: has_ifs_vars={}, macro_exists={}, "
-                              "klippy_ready={}, has_per_port_sensors={}, head_filament={}, "
-                              "port_presence=[{},{},{},{}], "
-                              "colors=[{},{},{},{}]",
-                              backend_log_tag(), has_ifs_vars_, macro_exists, klippy_ready,
-                              has_per_port_sensors_, head_filament_, port_presence_[0],
-                              port_presence_[1], port_presence_[2], port_presence_[3], colors_[0],
-                              colors_[1], colors_[2], colors_[3]);
-            }
+            // MAIN THREAD: apply latch, run handle_status_update, log, and
+            // launch the follow-up chain (each call accesses api_/client_).
+            token.defer("Ad5xIfsBackend::on_started_apply",
+                        [this, macro_exists, klippy_ready, have_status,
+                         status_copy = std::move(status_copy)]() mutable {
+                            if (have_status) {
+                                // Update latch BEFORE handle_status_update so
+                                // parse_save_variables sees the correct state.
+                                // ifs_macro_confirmed_missing_ starts true
+                                // (pessimistic) and is only cleared here when
+                                // the macro exists.
+                                {
+                                    std::lock_guard<std::mutex> lock(mutex_);
+                                    if (macro_exists) {
+                                        ifs_macro_confirmed_missing_ = false;
+                                    }
+                                    // !macro_exists: latch stays true
+                                }
 
-            // Safety net: if parse_save_variables somehow set has_ifs_vars_ despite
-            // the latch (shouldn't happen), force it back off for missing macros.
-            // has_ifs_vars_ now only gates tool-mapping / current_tool / external
-            // reads from save_variables — color/type writes use CHANGE_ZCOLOR for
-            // every user regardless.
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (!macro_exists && has_ifs_vars_) {
-                    spdlog::warn("{} save_variables contain {}_ data but _IFS_VARS macro "
-                                 "not found — clearing has_ifs_vars_ (tool-mapping "
-                                 "from save_variables disabled)",
-                                 backend_log_tag(), var_prefix_);
-                    has_ifs_vars_ = false;
-                }
-            }
+                                handle_status_update(status_copy);
+                            }
 
-            // Adventurer5M.json + GET_ZCOLOR SILENT=1 are zmod's authoritative
-            // color/type sources for ALL AD5X IFS users. lessWaste/bambufy
-            // _IFS_VARS save_variables (less_waste_colors / bambufy_colors)
-            // live in a private namespace zmod does not read, so we never
-            // trust them for color/type — only for tool-mapping and friends.
-            // Register the listeners + fire the initial query unconditionally.
-            spdlog::info("{} Reading Adventurer5M.json + GET_ZCOLOR SILENT=1 for color truth",
-                         backend_log_tag());
-            read_adventurer_json();
-            // One-shot fetch of zmod's user-defined material types from
-            // /mod_data/user.cfg. Independent of the json/gcode pipelines —
-            // best-effort, 404 on non-zmod printers is silent.
-            fetch_user_cfg_materials();
-            register_zcolor_listener();
-            // notify_klippy_ready catches startup and FIRMWARE_RESTART; it's
-            // the point at which zmod is initialised and GET_ZCOLOR returns
-            // populated results.
-            register_klippy_ready_listener();
-            if (klippy_ready) {
-                schedule_zcolor_query();
-            } else {
-                spdlog::info("{} Deferring GET_ZCOLOR SILENT=1 until klippy ready",
-                             backend_log_tag());
-            }
+                            // Log initial state after processing query response
+                            {
+                                std::lock_guard<std::mutex> lock(mutex_);
+                                spdlog::debug(
+                                    "{} Initial query: has_ifs_vars={}, macro_exists={}, "
+                                    "klippy_ready={}, has_per_port_sensors={}, "
+                                    "head_filament={}, "
+                                    "port_presence=[{},{},{},{}], "
+                                    "colors=[{},{},{},{}]",
+                                    backend_log_tag(), has_ifs_vars_, macro_exists, klippy_ready,
+                                    has_per_port_sensors_, head_filament_, port_presence_[0],
+                                    port_presence_[1], port_presence_[2], port_presence_[3],
+                                    colors_[0], colors_[1], colors_[2], colors_[3]);
+                            }
+
+                            // Safety net: if parse_save_variables somehow set
+                            // has_ifs_vars_ despite the latch (shouldn't
+                            // happen), force it back off for missing macros.
+                            // has_ifs_vars_ now only gates tool-mapping /
+                            // current_tool / external reads from
+                            // save_variables — color/type writes use
+                            // CHANGE_ZCOLOR for every user regardless.
+                            {
+                                std::lock_guard<std::mutex> lock(mutex_);
+                                if (!macro_exists && has_ifs_vars_) {
+                                    spdlog::warn(
+                                        "{} save_variables contain {}_ data but _IFS_VARS "
+                                        "macro not found — clearing has_ifs_vars_ "
+                                        "(tool-mapping from save_variables disabled)",
+                                        backend_log_tag(), var_prefix_);
+                                    has_ifs_vars_ = false;
+                                }
+                            }
+
+                            // Adventurer5M.json + GET_ZCOLOR SILENT=1 are
+                            // zmod's authoritative color/type sources for ALL
+                            // AD5X IFS users. lessWaste/bambufy _IFS_VARS
+                            // save_variables (less_waste_colors /
+                            // bambufy_colors) live in a private namespace zmod
+                            // does not read, so we never trust them for
+                            // color/type — only for tool-mapping and friends.
+                            // Register the listeners + fire the initial query
+                            // unconditionally.
+                            spdlog::info(
+                                "{} Reading Adventurer5M.json + GET_ZCOLOR SILENT=1 for "
+                                "color truth",
+                                backend_log_tag());
+                            read_adventurer_json();
+                            // One-shot fetch of zmod's user-defined material
+                            // types from /mod_data/user.cfg. Independent of
+                            // the json/gcode pipelines — best-effort, 404 on
+                            // non-zmod printers is silent.
+                            fetch_user_cfg_materials();
+                            register_zcolor_listener();
+                            // notify_klippy_ready catches startup and
+                            // FIRMWARE_RESTART; it's the point at which zmod
+                            // is initialised and GET_ZCOLOR returns populated
+                            // results.
+                            register_klippy_ready_listener();
+                            if (klippy_ready) {
+                                schedule_zcolor_query();
+                            } else {
+                                spdlog::info(
+                                    "{} Deferring GET_ZCOLOR SILENT=1 until klippy ready",
+                                    backend_log_tag());
+                            }
+                        });
         });
 }
 
@@ -1664,51 +1690,60 @@ void AmsBackendAd5xIfs::fetch_user_cfg_materials() {
     api_->transfers().download_file(
         "config", "mod_data/user.cfg",
         [this, token](const std::string& content) {
-            if (token.expired())
-                return;
+            // BG THREAD: parse_user_cfg_filament_types is static, no this access.
             auto names = parse_user_cfg_filament_types(content);
             if (names.empty()) {
-                spdlog::debug("{} user.cfg parsed: no [zmod_ifs] filament_* entries",
-                              backend_log_tag());
+                spdlog::debug("[AMS AD5X-IFS] user.cfg parsed: no [zmod_ifs] filament_* "
+                              "entries");
                 return;
             }
-            // Append new names, preserving existing bambufy_custom_types order
-            // and de-duplicating case-insensitively.
-            auto lower = [](const std::string& s) {
-                std::string out = s;
-                std::transform(out.begin(), out.end(), out.begin(),
-                               [](unsigned char c) { return std::tolower(c); });
-                return out;
-            };
-            size_t total;
-            {
-                std::lock_guard<std::mutex> lock(custom_types_mutex_);
-                for (const auto& n : names) {
-                    std::string n_lc = lower(n);
-                    bool exists = false;
-                    for (const auto& existing : custom_material_types_) {
-                        if (lower(existing) == n_lc) {
-                            exists = true;
-                            break;
-                        }
-                    }
-                    if (!exists) {
-                        custom_material_types_.push_back(n);
-                    }
-                }
-                total = custom_material_types_.size();
-            }
-            spdlog::info("{} user.cfg: loaded {} user-defined filament type(s); total custom types {}",
-                         backend_log_tag(), names.size(), total);
+
+            // MAIN THREAD: merge into custom_material_types_ under member mutex.
+            token.defer("Ad5xIfsBackend::user_cfg_apply",
+                        [this, names = std::move(names)]() mutable {
+                            // Append new names, preserving existing
+                            // bambufy_custom_types order and de-duplicating
+                            // case-insensitively.
+                            auto lower = [](const std::string& s) {
+                                std::string out = s;
+                                std::transform(out.begin(), out.end(), out.begin(),
+                                               [](unsigned char c) { return std::tolower(c); });
+                                return out;
+                            };
+                            size_t total;
+                            {
+                                std::lock_guard<std::mutex> lock(custom_types_mutex_);
+                                for (const auto& n : names) {
+                                    std::string n_lc = lower(n);
+                                    bool exists = false;
+                                    for (const auto& existing : custom_material_types_) {
+                                        if (lower(existing) == n_lc) {
+                                            exists = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!exists) {
+                                        custom_material_types_.push_back(n);
+                                    }
+                                }
+                                total = custom_material_types_.size();
+                            }
+                            spdlog::info(
+                                "{} user.cfg: loaded {} user-defined filament type(s); "
+                                "total custom types {}",
+                                backend_log_tag(), names.size(), total);
+                        });
         },
-        [this, token](const MoonrakerError& err) {
-            if (token.expired())
-                return;
+        [token](const MoonrakerError& err) {
+            // BG THREAD: log only — no member access required, so no defer.
+            // (token captured to keep the lambda's call signature consistent
+            // with other download_file error paths.)
+            (void)token;
             if (err.type == MoonrakerErrorType::FILE_NOT_FOUND || err.code == 404) {
-                spdlog::debug("{} user.cfg not present (404) — no user-defined types to merge",
-                              backend_log_tag());
+                spdlog::debug("[AMS AD5X-IFS] user.cfg not present (404) — no user-defined "
+                              "types to merge");
             } else {
-                spdlog::debug("{} user.cfg fetch failed: {}", backend_log_tag(), err.message);
+                spdlog::debug("[AMS AD5X-IFS] user.cfg fetch failed: {}", err.message);
             }
         });
 }
@@ -1768,24 +1803,31 @@ void AmsBackendAd5xIfs::read_adventurer_json() {
     api_->transfers().download_file(
         "config", "Adventurer5M.json",
         [this, token](const std::string& content) {
-            if (token.expired())
-                return;
-            spdlog::debug("{} Downloaded Adventurer5M.json ({} bytes)", backend_log_tag(),
+            // BG THREAD: log size from local-only data (tag string is constexpr).
+            spdlog::debug("[AMS AD5X-IFS] Downloaded Adventurer5M.json ({} bytes)",
                           content.size());
-            // Baseline the poll cache so the next periodic poll doesn't see
-            // this content as "changed" and double-fire GET_ZCOLOR.
-            (void)note_json_content(content);
-            parse_adventurer_json(content);
+            // MAIN THREAD: note_json_content takes mutex_ and parse_adventurer_json
+            // mutates extensive member state.
+            token.defer("Ad5xIfsBackend::read_json_apply",
+                        [this, content]() mutable {
+                            // Baseline the poll cache so the next periodic poll
+                            // doesn't see this content as "changed" and
+                            // double-fire GET_ZCOLOR.
+                            (void)note_json_content(content);
+                            parse_adventurer_json(content);
+                        });
         },
         [this, token](const MoonrakerError& err) {
-            if (token.expired())
-                return;
+            // BG THREAD: log error from local-only data; defer the atomic
+            // store + 404 logging as it touches a member atomic.
             if (err.type == MoonrakerErrorType::FILE_NOT_FOUND || err.code == 404) {
-                json_poll_supported_.store(false);
-                spdlog::info("{} Adventurer5M.json not found — not a native ZMOD AD5X",
-                             backend_log_tag());
+                token.defer("Ad5xIfsBackend::read_json_404", [this]() {
+                    json_poll_supported_.store(false);
+                    spdlog::info("{} Adventurer5M.json not found — not a native ZMOD AD5X",
+                                 backend_log_tag());
+                });
             } else {
-                spdlog::warn("{} Failed to download Adventurer5M.json: {}", backend_log_tag(),
+                spdlog::warn("[AMS AD5X-IFS] Failed to download Adventurer5M.json: {}",
                              err.message);
             }
         });
@@ -1811,32 +1853,47 @@ void AmsBackendAd5xIfs::poll_adventurer_json() {
     api_->transfers().download_file(
         "config", "Adventurer5M.json",
         [this, token](const std::string& content) {
-            json_poll_in_flight_.store(false);
-            if (token.expired())
-                return;
+            // MAIN THREAD: clear in-flight gate AND apply the parse together
+            // so we never touch member state on the bg thread. The gate may
+            // stay "true" for one extra UpdateQueue tick — harmless coalescing.
+            token.defer("Ad5xIfsBackend::poll_json_apply",
+                        [this, content]() mutable {
+                            json_poll_in_flight_.store(false);
 
-            if (!note_json_content(content)) {
-                spdlog::trace("{} Adventurer5M.json unchanged ({} bytes), skipping GET_ZCOLOR",
-                              backend_log_tag(), content.size());
-                return;
-            }
+                            if (!note_json_content(content)) {
+                                spdlog::trace(
+                                    "{} Adventurer5M.json unchanged ({} bytes), "
+                                    "skipping GET_ZCOLOR",
+                                    backend_log_tag(), content.size());
+                                return;
+                            }
 
-            spdlog::debug("{} Adventurer5M.json changed ({} bytes), parsing + scheduling GET_ZCOLOR",
-                          backend_log_tag(), content.size());
-            parse_adventurer_json(content);
-            schedule_zcolor_query();
+                            spdlog::debug(
+                                "{} Adventurer5M.json changed ({} bytes), parsing + "
+                                "scheduling GET_ZCOLOR",
+                                backend_log_tag(), content.size());
+                            parse_adventurer_json(content);
+                            schedule_zcolor_query();
+                        });
         },
         [this, token](const MoonrakerError& err) {
-            json_poll_in_flight_.store(false);
-            if (token.expired())
-                return;
+            // MAIN THREAD: clearing the gate + atomic + log lives in the defer
+            // so no member access happens on the bg thread.
             if (err.type == MoonrakerErrorType::FILE_NOT_FOUND || err.code == 404) {
-                json_poll_supported_.store(false);
-                spdlog::info("{} Adventurer5M.json poll: file not found, disabling poll",
-                             backend_log_tag());
+                token.defer("Ad5xIfsBackend::poll_json_404", [this]() {
+                    json_poll_in_flight_.store(false);
+                    json_poll_supported_.store(false);
+                    spdlog::info("{} Adventurer5M.json poll: file not found, disabling poll",
+                                 backend_log_tag());
+                });
             } else {
-                spdlog::debug("{} Adventurer5M.json poll failed (will retry): {}",
-                              backend_log_tag(), err.message);
+                token.defer("Ad5xIfsBackend::poll_json_err",
+                            [this, msg = err.message]() {
+                                json_poll_in_flight_.store(false);
+                                spdlog::debug(
+                                    "{} Adventurer5M.json poll failed (will retry): {}",
+                                    backend_log_tag(), msg);
+                            });
             }
         });
 }
@@ -1874,9 +1931,8 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
 
     client_->register_method_callback(
         "notify_gcode_response", handler_name, [this, token](const json& msg) {
-            if (token.expired())
-                return;
-
+            // BG THREAD: extract the line from the JSON envelope into a local;
+            // no `this` access here.
             std::string line;
             if (msg.contains("params") && msg["params"].is_array() && !msg["params"].empty() &&
                 msg["params"][0].is_string()) {
@@ -1887,7 +1943,12 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
                 return;
             }
 
-            on_gcode_response_line(line);
+            // MAIN THREAD: on_gcode_response_line touches several member fields
+            // (zcolor_query_active_, zcolor_buffer_mutex_, schedule_*).
+            token.defer("Ad5xIfsBackend::zcolor_listener_apply",
+                        [this, line = std::move(line)]() mutable {
+                            on_gcode_response_line(line);
+                        });
         });
 }
 
@@ -1904,15 +1965,17 @@ void AmsBackendAd5xIfs::register_klippy_ready_listener() {
 
     client_->register_method_callback(
         "notify_klippy_ready", handler_name, [this, token](const json& /*msg*/) {
-            if (token.expired())
-                return;
-            spdlog::info("{} notify_klippy_ready — scheduling GET_ZCOLOR SILENT=1",
-                         backend_log_tag());
-            // Re-read the JSON cache too — firmware may have persisted new
-            // colors during boot, and the stream may have missed RUN_ZCOLOR
-            // notifications that happened before we reconnected.
-            schedule_json_reread();
-            schedule_zcolor_query();
+            // MAIN THREAD: schedule_* helpers spawn HttpExecutor work that
+            // re-reads via api_; both rely on `this` being alive.
+            token.defer("Ad5xIfsBackend::klippy_ready_apply", [this]() {
+                spdlog::info("{} notify_klippy_ready — scheduling GET_ZCOLOR SILENT=1",
+                             backend_log_tag());
+                // Re-read the JSON cache too — firmware may have persisted new
+                // colors during boot, and the stream may have missed
+                // RUN_ZCOLOR notifications that happened before we reconnected.
+                schedule_json_reread();
+                schedule_zcolor_query();
+            });
         });
 }
 
@@ -1932,12 +1995,17 @@ void AmsBackendAd5xIfs::schedule_json_reread() {
     // Bounded worker pool — bare std::thread on AD5M can hit EAGAIN under
     // thread exhaustion (feedback_no_bare_threads_arm.md).
     helix::http::HttpExecutor::fast().submit([this, token]() {
+        // BG THREAD: only the debounce sleep — no member touch.
         std::this_thread::sleep_for(std::chrono::seconds(2));
-        if (token.expired())
-            return;
-        reread_pending_.store(false);
-        spdlog::debug("{} Re-reading Adventurer5M.json after external change", backend_log_tag());
-        read_adventurer_json();
+
+        // MAIN THREAD: clear the gate atomic and chain into read_adventurer_json,
+        // which itself touches api_ and member state.
+        token.defer("Ad5xIfsBackend::reread_apply", [this]() {
+            reread_pending_.store(false);
+            spdlog::debug("{} Re-reading Adventurer5M.json after external change",
+                          backend_log_tag());
+            read_adventurer_json();
+        });
     });
 }
 
@@ -1953,16 +2021,20 @@ void AmsBackendAd5xIfs::schedule_zcolor_query() {
 
     auto token = lifetime_.token();
     helix::http::HttpExecutor::fast().submit([this, token]() {
+        // BG THREAD: just the debounce sleep — no member touch.
         // Short debounce — coalesce bursts from port-sensor changes, the
         // gcode stream, and unload-complete triggers. Multiple workers may
         // wake concurrently; only one claims via exchange.
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        if (token.expired())
-            return;
-        if (!zcolor_query_pending_.exchange(false)) {
-            return; // Another worker (or finalize) already claimed this refresh.
-        }
-        query_zcolor_silent();
+
+        // MAIN THREAD: claim the pending flag and run the query. Both touch
+        // members (zcolor_query_pending_, api_ via query_zcolor_silent).
+        token.defer("Ad5xIfsBackend::zcolor_debounce_apply", [this]() {
+            if (!zcolor_query_pending_.exchange(false)) {
+                return; // Another worker (or finalize) already claimed this refresh.
+            }
+            query_zcolor_silent();
+        });
     });
 }
 
@@ -1986,22 +2058,28 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
     api_->execute_gcode(
         "GET_ZCOLOR SILENT=1",
         [this, token]() {
+            // BG THREAD: HttpExecutor::fast() is a static accessor — no `this`
+            // touch — so we can submit the debounce worker without a guard.
             // Response lines arrive via notify_gcode_response listener;
             // schedule finalization after a short collection window.
-            if (token.expired())
-                return;
             helix::http::HttpExecutor::fast().submit([this, token]() {
+                // BG THREAD: just the debounce sleep.
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                if (token.expired())
-                    return;
-                finalize_zcolor_response();
+                // MAIN THREAD: finalize touches mutex_, atomics, and chains
+                // into apply_zcolor_result + possibly query_zcolor_silent.
+                token.defer("Ad5xIfsBackend::zcolor_finalize_apply",
+                            [this]() { finalize_zcolor_response(); });
             });
         },
         [this, token](const MoonrakerError& err) {
-            if (token.expired())
-                return;
-            spdlog::warn("{} GET_ZCOLOR SILENT=1 failed: {}", backend_log_tag(), err.message);
-            zcolor_query_active_.store(false);
+            // MAIN THREAD: log + clear the active flag together so no member
+            // touch happens on the bg execute_gcode error thread.
+            token.defer("Ad5xIfsBackend::zcolor_query_err",
+                        [this, msg = err.message]() {
+                            spdlog::warn("{} GET_ZCOLOR SILENT=1 failed: {}", backend_log_tag(),
+                                         msg);
+                            zcolor_query_active_.store(false);
+                        });
         });
 }
 

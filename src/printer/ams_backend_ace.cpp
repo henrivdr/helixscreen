@@ -94,35 +94,41 @@ void AmsBackendAce::on_started() {
     client_->send_jsonrpc(
         "printer.objects.query", params,
         [this, token](const json& response) {
-            if (token.expired()) return;
+            // L081 Mechanism C: defer all member access (parse_ace_object,
+            // info_fetched_, emit_event, start_rest_fallback) to main thread.
+            // `this` capture is safe because the defer body checks the token
+            // and skips if the owner has been destroyed.
+            token.defer("AmsBackendAce::on_started_query",
+                        [this, response]() {
+                if (response.contains("result") &&
+                    response["result"].contains("status") &&
+                    response["result"]["status"].contains("ace") &&
+                    response["result"]["status"]["ace"].is_object() &&
+                    !response["result"]["status"]["ace"].empty()) {
 
-            if (response.contains("result") &&
-                response["result"].contains("status") &&
-                response["result"]["status"].contains("ace") &&
-                response["result"]["status"]["ace"].is_object() &&
-                !response["result"]["status"]["ace"].empty()) {
+                    // ValgACE path: got real data from get_status()
+                    spdlog::info("[ACE] Klipper ace object has status data — "
+                                 "using native WebSocket subscription");
 
-                // ValgACE path: got real data from get_status()
-                spdlog::info("[ACE] Klipper ace object has status data — "
-                             "using native WebSocket subscription");
+                    const auto& ace_data = response["result"]["status"]["ace"];
+                    parse_ace_object(ace_data);
+                    info_fetched_.store(true);
+                    emit_event(EVENT_STATE_CHANGED);
 
-                const auto& ace_data = response["result"]["status"]["ace"];
-                parse_ace_object(ace_data);
-                info_fetched_.store(true);
-                emit_event(EVENT_STATE_CHANGED);
-
-            } else {
-                // BunnyACE/DuckACE path: no get_status(), try REST fallback
-                spdlog::info("[ACE] Klipper ace object has no status data — "
-                             "trying REST bridge fallback (/server/ace/*)");
-                start_rest_fallback();
-            }
+                } else {
+                    // BunnyACE/DuckACE path: no get_status(), try REST fallback
+                    spdlog::info("[ACE] Klipper ace object has no status data — "
+                                 "trying REST bridge fallback (/server/ace/*)");
+                    start_rest_fallback();
+                }
+            });
         },
         [this, token](const MoonrakerError& err) {
-            if (token.expired()) return;
-            spdlog::warn("[ACE] Initial ace query failed: {} — trying REST fallback",
-                         err.message);
-            start_rest_fallback();
+            token.defer("AmsBackendAce::on_started_query_err", [this, err]() {
+                spdlog::warn("[ACE] Initial ace query failed: {} — trying REST fallback",
+                             err.message);
+                start_rest_fallback();
+            });
         });
 }
 
@@ -266,39 +272,42 @@ AmsError AmsBackendAce::load_filament(int slot_index) {
     api_->execute_gcode(
         gcode,
         [this, token, slot_index]() {
-            if (token.expired()) return;
-            spdlog::info("[ACE] Load slot {} gcode completed", slot_index);
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                system_info_.action = AmsAction::IDLE;
-                system_info_.current_slot = slot_index;
-                system_info_.current_tool = slot_index;
-                system_info_.filament_loaded = true;
+            // L081 Mechanism C: marshal member writes (system_info_) to main.
+            token.defer("AmsBackendAce::load_done", [this, slot_index]() {
+                spdlog::info("[ACE] Load slot {} gcode completed", slot_index);
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    system_info_.action = AmsAction::IDLE;
+                    system_info_.current_slot = slot_index;
+                    system_info_.current_tool = slot_index;
+                    system_info_.filament_loaded = true;
 
-                // Update individual slot status so the UI shows it as loaded
-                if (!system_info_.units.empty()) {
-                    auto& unit = system_info_.units[0];
-                    auto si = static_cast<size_t>(slot_index);
-                    if (si < unit.slots.size()) {
-                        unit.slots[si].status = SlotStatus::LOADED;
+                    // Update individual slot status so the UI shows it as loaded
+                    if (!system_info_.units.empty()) {
+                        auto& unit = system_info_.units[0];
+                        auto si = static_cast<size_t>(slot_index);
+                        if (si < unit.slots.size()) {
+                            unit.slots[si].status = SlotStatus::LOADED;
+                        }
                     }
                 }
-            }
-            PostOpCooldownManager::instance().schedule();
-            emit_event(EVENT_STATE_CHANGED);
+                PostOpCooldownManager::instance().schedule();
+                emit_event(EVENT_STATE_CHANGED);
+            });
         },
         [this, token, gcode](const MoonrakerError& err) {
-            if (token.expired()) return;
-            if (err.type == MoonrakerErrorType::TIMEOUT) {
-                spdlog::warn("[ACE] Load gcode timed out (may still be running): {}", gcode);
-            } else {
-                spdlog::error("[ACE] Load gcode failed: {} - {}", gcode, err.message);
-            }
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                system_info_.action = AmsAction::IDLE;
-            }
-            emit_event(EVENT_STATE_CHANGED);
+            token.defer("AmsBackendAce::load_err", [this, err, gcode]() {
+                if (err.type == MoonrakerErrorType::TIMEOUT) {
+                    spdlog::warn("[ACE] Load gcode timed out (may still be running): {}", gcode);
+                } else {
+                    spdlog::error("[ACE] Load gcode failed: {} - {}", gcode, err.message);
+                }
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    system_info_.action = AmsAction::IDLE;
+                }
+                emit_event(EVENT_STATE_CHANGED);
+            });
         },
         MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
 
@@ -326,41 +335,44 @@ AmsError AmsBackendAce::unload_filament(int /*slot_index*/) {
     api_->execute_gcode(
         gcode,
         [this, token]() {
-            if (token.expired()) return;
-            spdlog::info("[ACE] Unload gcode completed");
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
+            // L081 Mechanism C: marshal member writes (system_info_) to main.
+            token.defer("AmsBackendAce::unload_done", [this]() {
+                spdlog::info("[ACE] Unload gcode completed");
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
 
-                // Revert previously loaded slot to AVAILABLE
-                if (!system_info_.units.empty() && system_info_.current_slot >= 0) {
-                    auto& unit = system_info_.units[0];
-                    auto si = static_cast<size_t>(system_info_.current_slot);
-                    if (si < unit.slots.size() &&
-                        unit.slots[si].status == SlotStatus::LOADED) {
-                        unit.slots[si].status = SlotStatus::AVAILABLE;
+                    // Revert previously loaded slot to AVAILABLE
+                    if (!system_info_.units.empty() && system_info_.current_slot >= 0) {
+                        auto& unit = system_info_.units[0];
+                        auto si = static_cast<size_t>(system_info_.current_slot);
+                        if (si < unit.slots.size() &&
+                            unit.slots[si].status == SlotStatus::LOADED) {
+                            unit.slots[si].status = SlotStatus::AVAILABLE;
+                        }
                     }
-                }
 
-                system_info_.action = AmsAction::IDLE;
-                system_info_.current_slot = -1;
-                system_info_.current_tool = -1;
-                system_info_.filament_loaded = false;
-            }
-            PostOpCooldownManager::instance().schedule();
-            emit_event(EVENT_STATE_CHANGED);
+                    system_info_.action = AmsAction::IDLE;
+                    system_info_.current_slot = -1;
+                    system_info_.current_tool = -1;
+                    system_info_.filament_loaded = false;
+                }
+                PostOpCooldownManager::instance().schedule();
+                emit_event(EVENT_STATE_CHANGED);
+            });
         },
         [this, token, gcode](const MoonrakerError& err) {
-            if (token.expired()) return;
-            if (err.type == MoonrakerErrorType::TIMEOUT) {
-                spdlog::warn("[ACE] Unload gcode timed out (may still be running): {}", gcode);
-            } else {
-                spdlog::error("[ACE] Unload gcode failed: {} - {}", gcode, err.message);
-            }
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                system_info_.action = AmsAction::IDLE;
-            }
-            emit_event(EVENT_STATE_CHANGED);
+            token.defer("AmsBackendAce::unload_err", [this, err, gcode]() {
+                if (err.type == MoonrakerErrorType::TIMEOUT) {
+                    spdlog::warn("[ACE] Unload gcode timed out (may still be running): {}", gcode);
+                } else {
+                    spdlog::error("[ACE] Unload gcode failed: {} - {}", gcode, err.message);
+                }
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    system_info_.action = AmsAction::IDLE;
+                }
+                emit_event(EVENT_STATE_CHANGED);
+            });
         },
         MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
 
@@ -966,38 +978,40 @@ void AmsBackendAce::poll_info() {
     auto token = lifetime_.token();
 
     api_->rest().call_rest_get("/server/ace/info", [this, state, token](const RestResponse& resp) {
-        if (token.expired()) {
-            std::lock_guard<std::mutex> lock(state->mtx);
-            state->done = true;
-            state->cv.notify_one();
-            return;
-        }
-
-        if (resp.success && resp.data.contains("result")) {
-            parse_info_response(resp.data["result"]);
-            info_fetched_.store(true);
-            info_fetch_failures_ = 0;
-        } else {
-            int failures = ++info_fetch_failures_;
-            spdlog::debug("[ACE] /server/ace/info attempt {} failed: {}", failures, resp.error);
-            if (failures == MAX_INFO_FETCH_FAILURES) {
-                spdlog::warn("[ACE] Moonraker bridge not available at /server/ace/info after {} "
-                             "attempts. BunnyACE/DuckACE users need to install ValgACE's "
-                             "ace_status.py Moonraker component for HelixScreen integration.",
-                             failures);
-                emit_event(EVENT_ERROR,
-                           "ACE detected but Moonraker bridge not found. "
-                           "Install the ace_status.py component from ValgACE for full ACE "
-                           "support.");
-                helix::ui::queue_update([]() {
-                    ToastManager::instance().show(
-                        ToastSeverity::WARNING,
-                        "ACE Moonraker bridge not found. Install ace_status.py "
-                        "from ValgACE for full support.",
-                        6000);
-                });
+        // L081 Mechanism C: defer member access to main thread. The synchronous
+        // waiter (state->cv) MUST be signaled regardless of owner liveness, so
+        // we set state->done=true on the bg thread BEFORE deferring the parse.
+        // The defer becomes a no-op if the owner has been destroyed; the
+        // poll_info caller is unblocked either way.
+        token.defer("AmsBackendAce::poll_info_apply",
+                    [this, resp]() {
+            if (resp.success && resp.data.contains("result")) {
+                parse_info_response(resp.data["result"]);
+                info_fetched_.store(true);
+                info_fetch_failures_ = 0;
+            } else {
+                int failures = ++info_fetch_failures_;
+                spdlog::debug("[ACE] /server/ace/info attempt {} failed: {}", failures,
+                              resp.error);
+                if (failures == MAX_INFO_FETCH_FAILURES) {
+                    spdlog::warn("[ACE] Moonraker bridge not available at /server/ace/info after "
+                                 "{} attempts. BunnyACE/DuckACE users need to install ValgACE's "
+                                 "ace_status.py Moonraker component for HelixScreen integration.",
+                                 failures);
+                    emit_event(EVENT_ERROR,
+                               "ACE detected but Moonraker bridge not found. "
+                               "Install the ace_status.py component from ValgACE for full ACE "
+                               "support.");
+                    helix::ui::queue_update([]() {
+                        ToastManager::instance().show(
+                            ToastSeverity::WARNING,
+                            "ACE Moonraker bridge not found. Install ace_status.py "
+                            "from ValgACE for full support.",
+                            6000);
+                    });
+                }
             }
-        }
+        });
 
         {
             std::lock_guard<std::mutex> lock(state->mtx);
@@ -1021,15 +1035,17 @@ void AmsBackendAce::poll_status() {
     auto token = lifetime_.token();
 
     api_->rest().call_rest_get("/server/ace/status", [this, token](const RestResponse& resp) {
-        if (token.expired()) return;
-
-        if (resp.success && resp.data.contains("result")) {
-            if (parse_status_response(resp.data["result"])) {
-                emit_event(EVENT_STATE_CHANGED);
+        // L081 Mechanism C: defer member access (parse_status_response,
+        // emit_event) to main thread.
+        token.defer("AmsBackendAce::poll_status_apply", [this, resp]() {
+            if (resp.success && resp.data.contains("result")) {
+                if (parse_status_response(resp.data["result"])) {
+                    emit_event(EVENT_STATE_CHANGED);
+                }
+            } else {
+                spdlog::debug("[ACE] Status poll failed: {}", resp.error);
             }
-        } else {
-            spdlog::debug("[ACE] Status poll failed: {}", resp.error);
-        }
+        });
     });
 }
 
@@ -1043,18 +1059,20 @@ void AmsBackendAce::poll_slots() {
     auto token = lifetime_.token();
 
     api_->rest().call_rest_get("/server/ace/slots", [this, token](const RestResponse& resp) {
-        if (token.expired()) return;
-
-        if (resp.success && resp.data.contains("result")) {
-            if (parse_slots_response(resp.data["result"])) {
-                // REST fallback parses all slots at once — use STATE_CHANGED
-                // (full-sync semantics) rather than SLOT_CHANGED without a
-                // slot_index.
-                emit_event(EVENT_STATE_CHANGED);
+        // L081 Mechanism C: defer member access (parse_slots_response,
+        // emit_event) to main thread.
+        token.defer("AmsBackendAce::poll_slots_apply", [this, resp]() {
+            if (resp.success && resp.data.contains("result")) {
+                if (parse_slots_response(resp.data["result"])) {
+                    // REST fallback parses all slots at once — use STATE_CHANGED
+                    // (full-sync semantics) rather than SLOT_CHANGED without a
+                    // slot_index.
+                    emit_event(EVENT_STATE_CHANGED);
+                }
+            } else {
+                spdlog::debug("[ACE] Slots poll failed: {}", resp.error);
             }
-        } else {
-            spdlog::debug("[ACE] Slots poll failed: {}", resp.error);
-        }
+        });
     });
 }
 

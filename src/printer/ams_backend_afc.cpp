@@ -1547,53 +1547,57 @@ void AmsBackendAfc::detect_afc_version() {
     client_->send_jsonrpc(
         "server.database.get_item", params,
         [this, token](const nlohmann::json& response) {
-            if (token.expired())
-                return;
-            bool should_query_lane_data = false;
+            // L081 Mechanism C: marshal member writes + downstream calls to main.
+            token.defer("AmsBackendAfc::detect_afc_version_success",
+                        [this, response]() {
+                bool should_query_lane_data = false;
 
-            if (response.contains("value") && response["value"].is_object()) {
-                const auto& value = response["value"];
-                if (value.contains("version") && value["version"].is_string()) {
-                    {
-                        std::lock_guard<std::mutex> lock(mutex_);
-                        afc_version_ = value["version"].get<std::string>();
-                        system_info_.version = afc_version_;
+                if (response.contains("value") && response["value"].is_object()) {
+                    const auto& value = response["value"];
+                    if (value.contains("version") && value["version"].is_string()) {
+                        {
+                            std::lock_guard<std::mutex> lock(mutex_);
+                            afc_version_ = value["version"].get<std::string>();
+                            system_info_.version = afc_version_;
 
-                        // Set capability flags based on version
-                        has_lane_data_db_ = version_at_least("1.0.32");
-                        should_query_lane_data = has_lane_data_db_;
-                    }
-                    spdlog::info("[AMS AFC] Detected AFC version: {} (lane_data DB: {})",
-                                 afc_version_, has_lane_data_db_ ? "yes" : "no");
+                            // Set capability flags based on version
+                            has_lane_data_db_ = version_at_least("1.0.32");
+                            should_query_lane_data = has_lane_data_db_;
+                        }
+                        spdlog::info("[AMS AFC] Detected AFC version: {} (lane_data DB: {})",
+                                     afc_version_, has_lane_data_db_ ? "yes" : "no");
 
-                    // Warn if AFC version is older than minimum supported
-                    if (!version_at_least("1.0.35")) {
-                        auto warning = fmt::format("AFC version {} may have compatibility issues. "
-                                                   "Please upgrade to v1.0.35 or later.",
-                                                   afc_version_);
-                        spdlog::warn("[AMS AFC] {}", warning);
-                        token.defer([msg = std::move(warning)]() {
-                            helix::ui::modal_show_alert(lv_tr("AFC Version Warning"), msg.c_str(),
+                        // Warn if AFC version is older than minimum supported
+                        if (!version_at_least("1.0.35")) {
+                            auto warning =
+                                fmt::format("AFC version {} may have compatibility issues. "
+                                            "Please upgrade to v1.0.35 or later.",
+                                            afc_version_);
+                            spdlog::warn("[AMS AFC] {}", warning);
+                            helix::ui::modal_show_alert(lv_tr("AFC Version Warning"),
+                                                        warning.c_str(),
                                                         ModalSeverity::Warning, "OK");
-                        });
+                        }
                     }
                 }
-            }
 
-            // For v1.0.32+, query lane_data database for richer data
-            // This supplements the basic lane info from printer.objects.list
-            if (should_query_lane_data) {
-                query_lane_data();
-            }
+                // For v1.0.32+, query lane_data database for richer data
+                // This supplements the basic lane info from printer.objects.list
+                if (should_query_lane_data) {
+                    query_lane_data();
+                }
+            });
         },
         [this, token](const MoonrakerError& err) {
-            if (token.expired())
-                return;
-            spdlog::warn("[AMS AFC] Could not detect AFC version: {}", err.message);
-            std::lock_guard<std::mutex> lock(mutex_);
-            afc_version_ = "unknown";
-            system_info_.version = "unknown";
-            // Don't query lane_data - we'll rely on discovered lanes from capabilities
+            // L081 Mechanism C: marshal member writes to main.
+            token.defer("AmsBackendAfc::detect_afc_version_error",
+                        [this, message = err.message]() {
+                spdlog::warn("[AMS AFC] Could not detect AFC version: {}", message);
+                std::lock_guard<std::mutex> lock(mutex_);
+                afc_version_ = "unknown";
+                system_info_.version = "unknown";
+                // Don't query lane_data - we'll rely on discovered lanes from capabilities
+            });
         },
         0,   // default timeout
         true // silent — probe only, don't show toast or log at error level
@@ -1686,21 +1690,23 @@ void AmsBackendAfc::query_initial_state() {
     client_->send_jsonrpc(
         "printer.objects.query", params,
         [this, token](const nlohmann::json& response) {
-            if (token.expired())
-                return;
-            // Response structure: {"jsonrpc": "2.0", "result": {"eventtime": ..., "status": {...}},
-            // "id": ...}
-            if (response.contains("result") && response["result"].contains("status") &&
-                response["result"]["status"].is_object()) {
-                // The status object format is the same as notify_status_update params
-                // Wrap it in a format that handle_status_update expects
-                nlohmann::json notification = {
-                    {"params", nlohmann::json::array({response["result"]["status"]})}};
-                handle_status_update(notification);
-                spdlog::info("[AMS AFC] Initial state loaded");
-            } else {
-                spdlog::warn("[AMS AFC] Initial state query returned unexpected format");
-            }
+            // L081 Mechanism C: handle_status_update mutates members + emits events.
+            token.defer("AmsBackendAfc::query_initial_state_success",
+                        [this, response]() {
+                // Response structure:
+                // {"jsonrpc": "2.0", "result": {"eventtime": ..., "status": {...}}, "id": ...}
+                if (response.contains("result") && response["result"].contains("status") &&
+                    response["result"]["status"].is_object()) {
+                    // The status object format is the same as notify_status_update params
+                    // Wrap it in a format that handle_status_update expects
+                    nlohmann::json notification = {
+                        {"params", nlohmann::json::array({response["result"]["status"]})}};
+                    handle_status_update(notification);
+                    spdlog::info("[AMS AFC] Initial state loaded");
+                } else {
+                    spdlog::warn("[AMS AFC] Initial state query returned unexpected format");
+                }
+            });
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS AFC] Failed to query initial state: {}", err.message);
@@ -1726,16 +1732,18 @@ void AmsBackendAfc::query_lane_data() {
     client_->send_jsonrpc(
         "server.database.get_item", params,
         [this, token](const nlohmann::json& response) {
-            if (token.expired())
-                return;
-            if (response.contains("value") && response["value"].is_object()) {
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    parse_lane_data(response["value"]);
+            // L081 Mechanism C: parse_lane_data mutates members under lock; emit on main.
+            token.defer("AmsBackendAfc::query_lane_data_success",
+                        [this, response]() {
+                if (response.contains("value") && response["value"].is_object()) {
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        parse_lane_data(response["value"]);
+                    }
+                    // Emit OUTSIDE the lock to avoid deadlock with callbacks
+                    emit_event(EVENT_STATE_CHANGED);
                 }
-                // Emit OUTSIDE the lock to avoid deadlock with callbacks
-                emit_event(EVENT_STATE_CHANGED);
-            }
+            });
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS AFC] Failed to query lane_data: {}", err.message);
@@ -2329,24 +2337,26 @@ void AmsBackendAfc::dispatch_lane_unload(const std::string& lane_name) {
     api_->execute_gcode(
         "LANE_UNLOAD LANE=" + lane_name,
         [this, tok, lane_name]() {
-            if (tok.expired()) {
-                return;
-            }
-            spdlog::debug("[AMS AFC] LANE_UNLOAD lane={} completed", lane_name);
-            on_lane_unload_done();
+            // L081 Mechanism C: on_lane_unload_done touches members under lock + redispatches.
+            tok.defer("AmsBackendAfc::dispatch_lane_unload_done",
+                      [this, lane_name]() {
+                spdlog::debug("[AMS AFC] LANE_UNLOAD lane={} completed", lane_name);
+                on_lane_unload_done();
+            });
         },
         [this, tok, lane_name](const MoonrakerError& err) {
-            if (tok.expired()) {
-                return;
-            }
-            if (err.type == MoonrakerErrorType::TIMEOUT) {
-                spdlog::warn("[AMS AFC] LANE_UNLOAD lane={} response timed out (may still be "
-                             "running): {}",
-                             lane_name, err.message);
-            } else {
-                spdlog::error("[AMS AFC] LANE_UNLOAD lane={} failed: {}", lane_name, err.message);
-            }
-            on_lane_unload_done();
+            // L081 Mechanism C: on_lane_unload_done touches members under lock + redispatches.
+            tok.defer("AmsBackendAfc::dispatch_lane_unload_error",
+                      [this, lane_name, err_type = err.type, err_msg = err.message]() {
+                if (err_type == MoonrakerErrorType::TIMEOUT) {
+                    spdlog::warn("[AMS AFC] LANE_UNLOAD lane={} response timed out (may still be "
+                                 "running): {}",
+                                 lane_name, err_msg);
+                } else {
+                    spdlog::error("[AMS AFC] LANE_UNLOAD lane={} failed: {}", lane_name, err_msg);
+                }
+                on_lane_unload_done();
+            });
         },
         MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
 }
@@ -2775,9 +2785,13 @@ void AmsBackendAfc::load_afc_configs() {
     // ensuring all parser writes are visible before the main thread reads them.
     auto token = lifetime_.token();
     auto check_done = [this, token, loads_remaining]() {
-        if (token.expired())
+        // L081 Mechanism C: download_file callbacks run on libhv bg thread.
+        // Decrement the atomic on bg (it's a shared_ptr, safe), but marshal
+        // the member writes + update_tip_method_from_config() + event emit to main.
+        if (loads_remaining->fetch_sub(1) != 1) {
             return;
-        if (loads_remaining->fetch_sub(1) == 1) {
+        }
+        token.defer("AmsBackendAfc::load_afc_configs_done", [this]() {
             // Both loads complete — release barrier ensures parser state is visible
             configs_loading_.store(false, std::memory_order_relaxed);
             configs_loaded_.store(true, std::memory_order_release);
@@ -2789,7 +2803,7 @@ void AmsBackendAfc::load_afc_configs() {
             update_tip_method_from_config();
 
             emit_event(EVENT_STATE_CHANGED);
-        }
+        });
     };
 
     afc_config_->load("AFC/AFC.cfg", [check_done](bool ok, const std::string& err) {

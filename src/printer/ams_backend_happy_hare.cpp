@@ -1054,53 +1054,60 @@ void AmsBackendHappyHare::query_tip_method_from_config() {
     client_->send_jsonrpc(
         "printer.objects.query", params,
         [this, token](nlohmann::json response) {
-            if (token.expired()) return;
-            try {
-                const auto& settings = response["result"]["status"]["configfile"]["settings"];
+            // L081 Mechanism C: defer member access (system_info_, emit_event)
+            // to main thread.
+            token.defer("AmsBackendHappyHare::tip_method_apply",
+                        [this, response = std::move(response)]() {
+                try {
+                    const auto& settings =
+                        response["result"]["status"]["configfile"]["settings"];
 
-                if (!settings.contains("mmu") || !settings["mmu"].is_object()) {
-                    spdlog::debug("[AMS HappyHare] No mmu section in configfile settings");
-                    return;
-                }
-
-                const auto& mmu_cfg = settings["mmu"];
-                TipMethod method = TipMethod::NONE;
-
-                if (mmu_cfg.contains("form_tip_macro") && mmu_cfg["form_tip_macro"].is_string()) {
-                    std::string macro = mmu_cfg["form_tip_macro"].get<std::string>();
-
-                    // Convert to lowercase for comparison (same as Happy Hare)
-                    std::string lower_macro = macro;
-                    for (auto& c : lower_macro) {
-                        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    if (!settings.contains("mmu") || !settings["mmu"].is_object()) {
+                        spdlog::debug("[AMS HappyHare] No mmu section in configfile settings");
+                        return;
                     }
 
-                    if (lower_macro.find("cut") != std::string::npos) {
-                        method = TipMethod::CUT;
+                    const auto& mmu_cfg = settings["mmu"];
+                    TipMethod method = TipMethod::NONE;
+
+                    if (mmu_cfg.contains("form_tip_macro") &&
+                        mmu_cfg["form_tip_macro"].is_string()) {
+                        std::string macro = mmu_cfg["form_tip_macro"].get<std::string>();
+
+                        // Convert to lowercase for comparison (same as Happy Hare)
+                        std::string lower_macro = macro;
+                        for (auto& c : lower_macro) {
+                            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                        }
+
+                        if (lower_macro.find("cut") != std::string::npos) {
+                            method = TipMethod::CUT;
+                        } else {
+                            method = TipMethod::TIP_FORM;
+                        }
+
+                        spdlog::info(
+                            "[AMS HappyHare] Tip method from config: {} (form_tip_macro={})",
+                            tip_method_to_string(method), macro);
                     } else {
+                        // No form_tip_macro configured — default to tip-forming
+                        // (Happy Hare default macro is _MMU_FORM_TIP, not a cutter)
                         method = TipMethod::TIP_FORM;
+                        spdlog::info("[AMS HappyHare] No form_tip_macro in config, defaulting "
+                                     "to TIP_FORM");
                     }
 
-                    spdlog::info("[AMS HappyHare] Tip method from config: {} (form_tip_macro={})",
-                                 tip_method_to_string(method), macro);
-                } else {
-                    // No form_tip_macro configured — default to tip-forming
-                    // (Happy Hare default macro is _MMU_FORM_TIP, not a cutter)
-                    method = TipMethod::TIP_FORM;
-                    spdlog::info(
-                        "[AMS HappyHare] No form_tip_macro in config, defaulting to TIP_FORM");
-                }
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        system_info_.tip_method = method;
+                    }
 
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    system_info_.tip_method = method;
+                    emit_event(EVENT_STATE_CHANGED);
+                } catch (const nlohmann::json::exception& e) {
+                    spdlog::warn("[AMS HappyHare] Failed to parse configfile for tip method: {}",
+                                 e.what());
                 }
-
-                emit_event(EVENT_STATE_CHANGED);
-            } catch (const nlohmann::json::exception& e) {
-                spdlog::warn("[AMS HappyHare] Failed to parse configfile for tip method: {}",
-                             e.what());
-            }
+            });
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS HappyHare] Failed to query configfile for tip method: {}",
@@ -1122,36 +1129,41 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
     client_->send_jsonrpc(
         "printer.objects.query", params,
         [this, token](nlohmann::json response) {
-            if (token.expired()) return;
-            try {
-                const auto& settings = response["result"]["status"]["configfile"]["settings"];
+            // L081 Mechanism C: defer member access (selector_type_,
+            // update_unit_topologies, emit_event) to main thread.
+            token.defer("AmsBackendHappyHare::selector_type_apply",
+                        [this, response = std::move(response)]() {
+                try {
+                    const auto& settings =
+                        response["result"]["status"]["configfile"]["settings"];
 
-                if (!settings.contains("mmu_machine") ||
-                    !settings["mmu_machine"].is_object()) {
-                    spdlog::debug(
-                        "[AMS HappyHare] No mmu_machine section in configfile settings");
-                    return;
-                }
-
-                const auto& mmu_machine = settings["mmu_machine"];
-                if (mmu_machine.contains("selector_type") &&
-                    mmu_machine["selector_type"].is_string()) {
-                    std::string type = mmu_machine["selector_type"].get<std::string>();
-                    spdlog::info("[AMS HappyHare] Selector type from config: {}", type);
-
-                    {
-                        std::lock_guard<std::mutex> lock(mutex_);
-                        selector_type_ = type;
-                        update_unit_topologies();
+                    if (!settings.contains("mmu_machine") ||
+                        !settings["mmu_machine"].is_object()) {
+                        spdlog::debug(
+                            "[AMS HappyHare] No mmu_machine section in configfile settings");
+                        return;
                     }
 
-                    emit_event(EVENT_STATE_CHANGED);
+                    const auto& mmu_machine = settings["mmu_machine"];
+                    if (mmu_machine.contains("selector_type") &&
+                        mmu_machine["selector_type"].is_string()) {
+                        std::string type = mmu_machine["selector_type"].get<std::string>();
+                        spdlog::info("[AMS HappyHare] Selector type from config: {}", type);
+
+                        {
+                            std::lock_guard<std::mutex> lock(mutex_);
+                            selector_type_ = type;
+                            update_unit_topologies();
+                        }
+
+                        emit_event(EVENT_STATE_CHANGED);
+                    }
+                } catch (const nlohmann::json::exception& e) {
+                    spdlog::warn(
+                        "[AMS HappyHare] Failed to parse configfile for selector type: {}",
+                        e.what());
                 }
-            } catch (const nlohmann::json::exception& e) {
-                spdlog::warn(
-                    "[AMS HappyHare] Failed to parse configfile for selector type: {}",
-                    e.what());
-            }
+            });
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS HappyHare] Failed to query configfile for selector type: {}",
@@ -1176,79 +1188,91 @@ void AmsBackendHappyHare::query_config_defaults() {
     client_->send_jsonrpc(
         "printer.objects.query", params,
         [this, token](nlohmann::json response) {
-            if (token.expired()) return;
-            try {
-                const auto& settings = response["result"]["status"]["configfile"]["settings"];
+            // L081 Mechanism C: defer member access (config_defaults_,
+            // load_persisted_overrides, reapply_overrides) to main thread.
+            token.defer("AmsBackendHappyHare::config_defaults_apply",
+                        [this, response = std::move(response)]() {
+                try {
+                    const auto& settings =
+                        response["result"]["status"]["configfile"]["settings"];
 
-                if (!settings.contains("mmu") || !settings["mmu"].is_object()) {
-                    spdlog::debug("[AMS HappyHare] No mmu section in configfile for defaults");
-                    return;
-                }
-
-                const auto& mmu = settings["mmu"];
-
-                // Helper to parse a float from config (values are strings in configfile)
-                auto parse_float = [&](const char* key, float& out) {
-                    if (mmu.contains(key) && mmu[key].is_string()) {
-                        try {
-                            out = std::stof(mmu[key].get<std::string>());
-                        } catch (...) {
-                            // Keep default
-                        }
+                    if (!settings.contains("mmu") || !settings["mmu"].is_object()) {
+                        spdlog::debug(
+                            "[AMS HappyHare] No mmu section in configfile for defaults");
+                        return;
                     }
-                };
 
-                // Helper to parse an int from config
-                auto parse_int = [&](const char* key, int& out) {
-                    if (mmu.contains(key) && mmu[key].is_string()) {
-                        try {
-                            out = std::stoi(mmu[key].get<std::string>());
-                        } catch (...) {
-                            // Keep default
+                    const auto& mmu = settings["mmu"];
+
+                    // Helper to parse a float from config (values are strings in configfile)
+                    auto parse_float = [&](const char* key, float& out) {
+                        if (mmu.contains(key) && mmu[key].is_string()) {
+                            try {
+                                out = std::stof(mmu[key].get<std::string>());
+                            } catch (...) {
+                                // Keep default
+                            }
                         }
+                    };
+
+                    // Helper to parse an int from config
+                    auto parse_int = [&](const char* key, int& out) {
+                        if (mmu.contains(key) && mmu[key].is_string()) {
+                            try {
+                                out = std::stoi(mmu[key].get<std::string>());
+                            } catch (...) {
+                                // Keep default
+                            }
+                        }
+                    };
+
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+
+                        parse_float("gear_from_buffer_speed",
+                                    config_defaults_.gear_from_buffer_speed);
+                        parse_float("gear_from_spool_speed",
+                                    config_defaults_.gear_from_spool_speed);
+                        parse_float("gear_unload_speed", config_defaults_.gear_unload_speed);
+                        parse_float("selector_move_speed",
+                                    config_defaults_.selector_move_speed);
+                        parse_float("extruder_load_speed",
+                                    config_defaults_.extruder_load_speed);
+                        parse_float("extruder_unload_speed",
+                                    config_defaults_.extruder_unload_speed);
+                        parse_float("toolhead_sensor_to_nozzle",
+                                    config_defaults_.toolhead_sensor_to_nozzle);
+                        parse_float("toolhead_extruder_to_nozzle",
+                                    config_defaults_.toolhead_extruder_to_nozzle);
+                        parse_float("toolhead_entry_to_extruder",
+                                    config_defaults_.toolhead_entry_to_extruder);
+                        parse_float("toolhead_ooze_reduction",
+                                    config_defaults_.toolhead_ooze_reduction);
+                        parse_int("sync_to_extruder", config_defaults_.sync_to_extruder);
+                        parse_int("clog_detection", config_defaults_.clog_detection);
+
+                        config_defaults_.loaded = true;
+
+                        spdlog::info("[AMS HappyHare] Config defaults loaded: "
+                                     "gear_buf={}, gear_spool={}, gear_unload={}, "
+                                     "ext_load={}, ext_unload={}, "
+                                     "sensor_to_nozzle={}, extruder_to_nozzle={}",
+                                     config_defaults_.gear_from_buffer_speed,
+                                     config_defaults_.gear_from_spool_speed,
+                                     config_defaults_.gear_unload_speed,
+                                     config_defaults_.extruder_load_speed,
+                                     config_defaults_.extruder_unload_speed,
+                                     config_defaults_.toolhead_sensor_to_nozzle,
+                                     config_defaults_.toolhead_extruder_to_nozzle);
                     }
-                };
 
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-
-                    parse_float("gear_from_buffer_speed", config_defaults_.gear_from_buffer_speed);
-                    parse_float("gear_from_spool_speed", config_defaults_.gear_from_spool_speed);
-                    parse_float("gear_unload_speed", config_defaults_.gear_unload_speed);
-                    parse_float("selector_move_speed", config_defaults_.selector_move_speed);
-                    parse_float("extruder_load_speed", config_defaults_.extruder_load_speed);
-                    parse_float("extruder_unload_speed", config_defaults_.extruder_unload_speed);
-                    parse_float("toolhead_sensor_to_nozzle",
-                                config_defaults_.toolhead_sensor_to_nozzle);
-                    parse_float("toolhead_extruder_to_nozzle",
-                                config_defaults_.toolhead_extruder_to_nozzle);
-                    parse_float("toolhead_entry_to_extruder",
-                                config_defaults_.toolhead_entry_to_extruder);
-                    parse_float("toolhead_ooze_reduction", config_defaults_.toolhead_ooze_reduction);
-                    parse_int("sync_to_extruder", config_defaults_.sync_to_extruder);
-                    parse_int("clog_detection", config_defaults_.clog_detection);
-
-                    config_defaults_.loaded = true;
-
-                    spdlog::info("[AMS HappyHare] Config defaults loaded: "
-                                 "gear_buf={}, gear_spool={}, gear_unload={}, "
-                                 "ext_load={}, ext_unload={}, "
-                                 "sensor_to_nozzle={}, extruder_to_nozzle={}",
-                                 config_defaults_.gear_from_buffer_speed,
-                                 config_defaults_.gear_from_spool_speed,
-                                 config_defaults_.gear_unload_speed,
-                                 config_defaults_.extruder_load_speed,
-                                 config_defaults_.extruder_unload_speed,
-                                 config_defaults_.toolhead_sensor_to_nozzle,
-                                 config_defaults_.toolhead_extruder_to_nozzle);
+                    load_persisted_overrides();
+                    reapply_overrides();
+                } catch (const nlohmann::json::exception& e) {
+                    spdlog::warn("[AMS HappyHare] Failed to parse configfile for defaults: {}",
+                                 e.what());
                 }
-
-                load_persisted_overrides();
-                reapply_overrides();
-            } catch (const nlohmann::json::exception& e) {
-                spdlog::warn("[AMS HappyHare] Failed to parse configfile for defaults: {}",
-                             e.what());
-            }
+            });
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS HappyHare] Failed to query configfile for defaults: {}",
