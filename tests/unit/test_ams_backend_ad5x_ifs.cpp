@@ -202,18 +202,27 @@ class Ad5xIfsTestAccess {
         b.override_store_ = std::move(s);
     }
     // Drive check_external_color_change directly with a caller-chosen observed
-    // color. The only way observed_color == 0 ever reaches the check site in
-    // production is through a parse path whose output color literally parses
-    // to 0 — parse_adventurer_json never produces that (empty hex becomes
-    // 0x808080 gray). Exposing the check lets us assert the "empty reading
-    // must not update baseline" contract unambiguously. `slot_has_filament`
-    // defaults to true so existing call sites that just want to drive the
-    // baseline-update path don't need to think about presence semantics.
+    // color. Convenience overloads:
+    //   - uint32_t form: pass a real reading (forwards as std::optional{value}).
+    //     Use this for tests asserting baseline updates / change detection.
+    //   - std::nullopt_t form: pass the explicit "no reading" signal.
+    //     Use this for tests asserting the "empty reading must not update
+    //     baseline" contract (parse-order race protection).
+    // `slot_has_filament` defaults to true so existing call sites that just
+    // want to drive the baseline-update path don't need to think about
+    // presence semantics.
     static void check_external_color_change(AmsBackendAd5xIfs& b, int slot_index,
                                             uint32_t observed_color,
                                             bool slot_has_filament = true) {
         std::lock_guard<std::mutex> lock(b.mutex_);
-        b.check_external_color_change(slot_index, observed_color, slot_has_filament);
+        b.check_external_color_change(slot_index, std::optional<uint32_t>{observed_color},
+                                      slot_has_filament);
+    }
+    static void check_external_color_change(AmsBackendAd5xIfs& b, int slot_index,
+                                            std::nullopt_t,
+                                            bool slot_has_filament = true) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.check_external_color_change(slot_index, std::nullopt, slot_has_filament);
     }
     static std::optional<uint32_t> last_firmware_color(const AmsBackendAd5xIfs& b, int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
@@ -2508,10 +2517,22 @@ TEST_CASE("AD5X IFS set_slot_info(persist=false) does NOT write to store",
     CHECK(info.color_rgb == 0x123456u);
 }
 
-TEST_CASE("AD5X IFS set_slot_info(persist=true) updates overrides_ so next parse preserves it",
+TEST_CASE("AD5X IFS set_slot_info(persist=true) survives a matching firmware parse",
           "[ams][ad5x_ifs][filament_slot_override][slow]") {
-    // After a persist=true write, a subsequent firmware parse must still see
-    // the user's edit — that's the whole point of the override-store layer.
+    // After a persist=true write, the user's color/material round-trip through
+    // Adventurer5M.json — so the next firmware parse reports the SAME values
+    // and apply_overrides re-lays the brand/spool_name/etc. metadata that
+    // doesn't live in firmware.
+    //
+    // Pre-color_set bug: this test fed mismatched firmware values (#000000
+    // ABS) and asserted the override won. That worked only because the
+    // OverwriteAlways auto-mirror's `observed_color == 0` short-circuit
+    // dropped the firmware change. With color_set + the IFS fix, mismatched
+    // firmware is correctly detected as an external edit and the user's
+    // values are overwritten. That's the desired production behavior — but
+    // it makes the prior test premise unrealistic. The realistic flow:
+    // write_adventurer_json succeeds in production, firmware reports the
+    // user's color back, no change detected, override metadata survives.
     Ad5xIfsTmpCacheDir tmp("task10_next_parse");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -2519,10 +2540,6 @@ TEST_CASE("AD5X IFS set_slot_info(persist=true) updates overrides_ so next parse
     MoonrakerAPIMock api(client, state);
 
     AmsBackendAd5xIfs backend(&api, nullptr);
-    // Leave has_ifs_vars_ false so the persist path also exercises the
-    // Adventurer5M.json write — write_adventurer_json will no-op because
-    // the download mock is empty, which is fine: we only care that the
-    // override persist happened and the parse layer respects it.
     auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
@@ -2531,20 +2548,69 @@ TEST_CASE("AD5X IFS set_slot_info(persist=true) updates overrides_ so next parse
     edit.brand = "Polymaker";
     edit.material = "PLA";
     edit.color_rgb = 0xFF5500;
-    // set_slot_info's Adventurer5M.json write will error out because the
-    // mock has no file — we don't care, we just need overrides_ populated.
     backend.set_slot_info(0, edit, /*persist=*/true);
 
-    // Simulate a subsequent firmware parse reporting different values — the
-    // override must win, since that's the user's saved preference.
+    // Simulate a subsequent firmware parse that mirrors the user's edit
+    // (production: write_adventurer_json succeeded). The override's brand
+    // (firmware can't carry brand) must still be visible after re-parse.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
-        "FFMInfo": {"ffmColor1": "#000000", "ffmType1": "ABS"}
+        "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
     })");
 
     auto info = backend.get_slot_info(0);
-    CHECK(info.brand == "Polymaker");     // override still wins after re-parse
-    CHECK(info.material == "PLA");         // override still wins
-    CHECK(info.color_rgb == 0xFF5500u);    // override still wins
+    CHECK(info.brand == "Polymaker");     // override fills the firmware-can't-carry field
+    CHECK(info.material == "PLA");         // matches both user + firmware
+    CHECK(info.color_rgb == 0xFF5500u);    // matches both user + firmware
+}
+
+TEST_CASE("AD5X IFS external color edit (firmware diverges from user) is detected",
+          "[ams][ad5x_ifs][filament_slot_override][slow]") {
+    // Companion to the test above: when firmware reports a value that doesn't
+    // match the in-memory override (Mainsail console / native LCD / a
+    // CHANGE_ZCOLOR macro from outside Helix), the auto-mirror detects it as
+    // an external edit and updates the override to match firmware-truth.
+    // This is the explicit OverwriteAlways behavior used by IFS — necessary
+    // for OrcaSlicer's MoonrakerPrinterAgent to track external changes.
+    Ad5xIfsTmpCacheDir tmp("ifs_external_edit_detected");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    AmsBackendAd5xIfs backend(&api, nullptr);
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    SlotInfo edit;
+    edit.brand = "Polymaker";
+    edit.material = "PLA";
+    edit.color_rgb = 0xFF5500;
+    backend.set_slot_info(0, edit, /*persist=*/true);
+
+    // Establish the user's color as the baseline (set_slot_info does this).
+    REQUIRE(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0xFF5500u);
+
+    // Now an external editor pushes pure black. Firmware-truth diverges from
+    // user-truth. The mirror catches it and rewrites the override.
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
+        "FFMInfo": {"ffmColor1": "#000000", "ffmType1": "PETG"}
+    })");
+
+    auto info = backend.get_slot_info(0);
+    // Brand survives (override-only field, mirror doesn't touch it).
+    CHECK(info.brand == "Polymaker");
+    // Color + material now reflect firmware truth. Pure black (the bug we
+    // fixed) is correctly detected as a real value and propagated.
+    CHECK(info.color_rgb == 0x000000u);
+    CHECK(info.material == "PETG");
+
+    auto staged = Ad5xIfsTestAccess::get_override(backend, 0);
+    REQUIRE(staged.has_value());
+    CHECK(staged->color_set == true);
+    CHECK(staged->color_rgb == 0x000000u);
+    CHECK(staged->material == "PETG");
+    CHECK(staged->brand == "Polymaker");
 }
 
 TEST_CASE("AD5X IFS set_slot_info(persist=true) with no store still updates in-memory map",
@@ -3317,16 +3383,13 @@ TEST_CASE("AD5X IFS firmware color change with no override creates a minimal one
     CHECK(staged->brand.empty());
 }
 
-TEST_CASE("AD5X IFS empty firmware color does not update the baseline",
+TEST_CASE("AD5X IFS nullopt firmware color does not update the baseline",
           "[ams][ad5x_ifs][filament_slot_override]") {
-    // firmware_color == 0 is treated as "no reading" and must not update
-    // the baseline. If it did, an intermittent empty poll would mask a real
-    // subsequent swap (the next non-empty poll would look like "0 -> new"
-    // which would wrongly clear), OR worse, clear on every unread poll.
-    //
-    // Drive check_external_color_change directly — the Adventurer5M.json parse
-    // path can't produce firmware_color==0 (empty hex becomes 0x808080 gray),
-    // so a direct call is the only way to exercise the guard unambiguously.
+    // nullopt is the explicit "no reading" signal (empty colors_[idx] —
+    // parse hasn't filled yet, transient JSON race). Must not update the
+    // baseline. If it did, an intermittent empty poll would mask a real
+    // subsequent swap (the next non-empty poll would look like a transition
+    // from a phantom baseline) OR worse, clear on every unread poll.
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
     helix::ams::FilamentSlotOverride ovr;
@@ -3338,19 +3401,62 @@ TEST_CASE("AD5X IFS empty firmware color does not update the baseline",
     REQUIRE(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0xFF5500u);
     REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 
-    // Firmware reports color 0 (empty/unread). Must NOT update baseline and
-    // must NOT clear the override.
-    Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0);
+    // No reading (nullopt). Must NOT update baseline and must NOT clear.
+    Ad5xIfsTestAccess::check_external_color_change(backend, 0, std::nullopt);
     CHECK(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0xFF5500u);
     CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 
     // Firmware reports FF5500 again — still matches baseline, still no clear.
-    // (If the zero-reading had wrongly overwritten the baseline, this would
-    // look like "0 -> FF5500" and trigger a spurious clear.)
+    // (If the no-reading signal had wrongly overwritten the baseline, this
+    // would look like a transition and trigger a spurious sync.)
     Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0xFF5500);
     auto staged = Ad5xIfsTestAccess::get_override(backend, 0);
     REQUIRE(staged.has_value());
     CHECK(staged->brand == "Polymaker");
+}
+
+TEST_CASE("AD5X IFS pure black (#000000) is a real reading, not a no-signal sentinel",
+          "[ams][ad5x_ifs][filament_slot_override]") {
+    // Regression for the IFS half of the color_set bug: external color edits
+    // to pure black via Mainsail console / native LCD / CHANGE_ZCOLOR were
+    // dropped because the prior `observed_color == 0` skip conflated black
+    // with "no reading". With std::optional, 0 is a real reading and an
+    // edit FROM another color TO black must trigger sync_override_to_firmware_locked.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    SECTION("First observation = black establishes a black baseline") {
+        Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0x000000);
+        REQUIRE(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0x000000u);
+    }
+
+    SECTION("External edit FROM color TO black triggers sync") {
+        // Establish baseline as red.
+        Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0xFF0000);
+        REQUIRE(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0xFF0000u);
+
+        // External edit changes color to pure black. Baseline must update.
+        Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0x000000);
+        REQUIRE(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0x000000u);
+
+        // Override should now exist with the black firmware color
+        // (sync_override_to_firmware_locked created/updated it). color_set
+        // must be true so to_lane_data_record actually emits "color":"#000000".
+        auto staged = Ad5xIfsTestAccess::get_override(backend, 0);
+        REQUIRE(staged.has_value());
+        CHECK(staged->color_rgb == 0u);
+        CHECK(staged->color_set == true);
+    }
+
+    SECTION("Steady-state black does not churn") {
+        Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0x000000);
+        // Subsequent observations of identical black must NOT bump the
+        // override (it->second == color short-circuit).
+        Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0x000000);
+        Ad5xIfsTestAccess::check_external_color_change(backend, 0, 0x000000);
+        REQUIRE(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0x000000u);
+        // First-observation rule applies: no sync was fired, so no override.
+        CHECK_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+    }
 }
 
 // ------------------------------------------------------------------

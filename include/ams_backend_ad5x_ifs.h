@@ -235,13 +235,19 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // sees firmware-truth (not the override-masked value). First observation
     // on a given slot is a baseline and never fires a sync.
     //
-    // `observed_color == 0` is treated as "no color reading" (empty slot,
-    // unread, transient) and is ignored — it must not update the baseline.
+    // `observed_color = nullopt` is the explicit "no color reading" signal —
+    // empty colors_[idx] (parse hasn't filled yet, transient JSON race). It
+    // is ignored: never updates the baseline, never fires a sync. Pure black
+    // (#000000 = 0x000000) is a legitimate user color and MUST be passed as
+    // `std::optional<uint32_t>{0}`, not nullopt — the previous "0 = no signal"
+    // sentinel silently dropped genuine black filament from external-edit
+    // detection.
+    //
     // Returns true if a sync was actually triggered (color delta detected,
     // slot has filament). Caller uses this to decide whether to push the
     // updated colors_/materials_ snapshot through _IFS_VARS so the
     // lessWaste/bambufy plugin's private save_variables track zmod truth.
-    bool check_external_color_change(int slot_index, uint32_t observed_color,
+    bool check_external_color_change(int slot_index, std::optional<uint32_t> observed_color,
                                      bool slot_has_filament);
     // Sync helper used by check_external_color_change. Caller must hold mutex_.
     // Updates an existing override's color_rgb + material, or creates a

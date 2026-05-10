@@ -599,13 +599,19 @@ void AmsBackendAd5xIfs::update_slot_from_state(int slot_index) {
     // When colors_[idx] is empty we have NO firmware reading yet —
     // entry->info.color_rgb is whatever was left there by the SlotInfo
     // default (AMS_DEFAULT_SLOT_COLOR / 0x808080) or a prior apply_overrides
-    // leak. Pass 0 (the helper's "no signal" sentinel) so we don't establish
-    // a phantom baseline that would later be misread as an external edit.
-    // Boot path: parse_save_variables / handle_status_update call
-    // update_slot_from_state BEFORE parse_adventurer_json fills in colors_[];
-    // pre-fix this populated a 0x808080 baseline, then the first real parse
-    // triggered a bogus sync.
-    const uint32_t observed_color = colors_[idx].empty() ? 0u : entry->info.color_rgb;
+    // leak. Pass nullopt (the helper's explicit "no reading" signal) so we
+    // don't establish a phantom baseline that would later be misread as an
+    // external edit. Boot path: parse_save_variables / handle_status_update
+    // call update_slot_from_state BEFORE parse_adventurer_json fills in
+    // colors_[]; pre-fix this populated a 0x808080 baseline, then the first
+    // real parse triggered a bogus sync.
+    //
+    // When colors_[idx] is non-empty, pass the parsed value AS-IS — including
+    // 0 for pure black. The helper accepts any uint32_t inside the optional
+    // as a real reading; only nullopt means "no reading" (replaces the prior
+    // ambiguous 0-as-no-signal sentinel that silently dropped black).
+    std::optional<uint32_t> observed_color =
+        colors_[idx].empty() ? std::nullopt : std::optional<uint32_t>{entry->info.color_rgb};
     // Pass slot_has_filament so the helper skips creating a phantom override
     // when a slot read came back as the empty-placeholder #808080 — the eject
     // path in parse_adventurer_json clears the override explicitly.
@@ -659,7 +665,8 @@ void AmsBackendAd5xIfs::apply_overrides(SlotInfo& slot, int slot_index) {
         slot.material = o.material;
 }
 
-bool AmsBackendAd5xIfs::check_external_color_change(int slot_index, uint32_t observed_color,
+bool AmsBackendAd5xIfs::check_external_color_change(int slot_index,
+                                                    std::optional<uint32_t> observed_color,
                                                     bool slot_has_filament) {
     // observed_color is whatever color this parse (or caller) believes is
     // currently in the slot — typically firmware-truth from the parse path,
@@ -668,12 +675,19 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index, uint32_t obs
     // can be fed a user-provided color too. Either way, the "did it change
     // from what we last saw?" contract is the same.
     //
-    // observed_color == 0 is "no reading" (empty slot, unread, transient JSON
-    // parse race). Treat as non-signal: don't update the baseline, don't sync.
-    // Otherwise every empty-slot poll would overwrite a real prior color and
-    // mask a genuine subsequent edit on the next non-empty poll.
-    if (observed_color == 0)
+    // `nullopt` is the explicit "no reading available" signal (empty
+    // colors_[idx], unread slot, transient JSON parse race). Treat as
+    // non-signal: don't update the baseline, don't sync. Otherwise every
+    // empty-slot poll would overwrite a real prior color and mask a genuine
+    // subsequent edit on the next non-empty poll.
+    //
+    // CRITICAL: a value of 0 (pure black, #000000) is a LEGITIMATE color, not
+    // a no-reading sentinel — the prior `observed_color == 0` skip silently
+    // dropped genuine black filament from external-edit detection (companion
+    // bug to the FilamentSlotOverride color_set fix in commit f69d53037).
+    if (!observed_color.has_value())
         return false;
+    const uint32_t color = *observed_color;
 
     auto it = last_firmware_color_.find(slot_index);
     if (it == last_firmware_color_.end()) {
@@ -681,19 +695,18 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index, uint32_t obs
         // override's color_rgb differs from firmware, the initial startup
         // observation is NEVER an external-edit signal. apply_overrides will
         // still run after us and the override wins.
-        last_firmware_color_[slot_index] = observed_color;
-        spdlog::debug("{} Slot {} baseline color: #{:06X}", backend_log_tag(), slot_index,
-                      observed_color);
+        last_firmware_color_[slot_index] = color;
+        spdlog::debug("{} Slot {} baseline color: #{:06X}", backend_log_tag(), slot_index, color);
         return false;
     }
-    if (it->second == observed_color)
+    if (it->second == color)
         return false; // unchanged — no edit signal
 
     // Observed color changed. Record the new color as the baseline before
     // doing anything else so a failed save_async doesn't make us re-fire
     // every poll.
     const uint32_t old_color = it->second;
-    it->second = observed_color;
+    it->second = color;
 
     if (!slot_has_filament) {
         // Empty slot reads back as the placeholder #808080 in parse_adventurer_json
@@ -703,13 +716,13 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index, uint32_t obs
         // baseline so we don't repeat this branch every poll.
         spdlog::debug("{} Slot {} firmware color changed #{:06X} -> #{:06X} "
                       "(slot empty — sync skipped, eject handled by parse path)",
-                      backend_log_tag(), slot_index, old_color, observed_color);
+                      backend_log_tag(), slot_index, old_color, color);
         return false;
     }
 
     spdlog::info("{} Slot {} firmware color changed #{:06X} -> #{:06X}, "
                  "syncing override + Moonraker DB lane_data (external edit detected)",
-                 backend_log_tag(), slot_index, old_color, observed_color);
+                 backend_log_tag(), slot_index, old_color, color);
 
     // External edit (Mainsail console, AD5X LCD, native zmod dialog,
     // CHANGE_ZCOLOR from any non-Helix path). Refresh the override's
@@ -718,7 +731,7 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index, uint32_t obs
     // sees the new state. The caller's next apply_overrides() call lays the
     // refreshed override back over entry->info; since color_rgb + material
     // now match firmware-truth, that's a no-op for those fields.
-    sync_override_to_firmware_locked(slot_index, observed_color,
+    sync_override_to_firmware_locked(slot_index, color,
                                      materials_[static_cast<size_t>(slot_index)]);
     return true;
 }
@@ -1203,13 +1216,13 @@ AmsError AmsBackendAd5xIfs::set_slot_info(int slot_index, const SlotInfo& info, 
         //
         // Applies to both persist=true (override just staged above) and
         // persist=false (preview must not retrigger a sync against
-        // last_firmware_color_). Guard on color_rgb != 0 — 0 means "no
-        // color change" here and must not overwrite the baseline (same
-        // contract as check_external_color_change treats a 0 reading as
-        // "no signal").
-        if (info.color_rgb != 0) {
-            last_firmware_color_[slot_index] = info.color_rgb;
-        }
+        // last_firmware_color_). NO guard on color_rgb == 0: pure black is
+        // a legitimate user choice and recording it as the baseline is
+        // exactly what we want — the next firmware reading of black will
+        // compare equal and not trigger a bogus sync. (Pre-fix this was
+        // gated on != 0 to match the prior 0-as-no-signal contract; that
+        // contract was wrong, so its mirror here is wrong too.)
+        last_firmware_color_[slot_index] = info.color_rgb;
 
         // Recalculate slot status now that port_presence may have changed.
         // update_slot_from_state() re-applies apply_overrides() from
