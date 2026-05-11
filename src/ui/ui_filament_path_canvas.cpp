@@ -52,12 +52,15 @@ static bool reduced_effects() {
 // widgets (static topology + state overlay) backed by cached ARGB8888 buffers
 // that LVGL composites natively, plus a DRAW_POST cb for cheap animation.
 // Setters mark `static_dirty_` / `overlay_dirty_`; canvases refresh on the
-// next paint cycle via DRAW_MAIN_BEGIN. Legacy single-callback render path
-// stays in place behind the same dispatch when the toggle is off.
+// next paint cycle. Legacy single-callback render path stays in place behind
+// the same dispatch as a fallback (set HELIX_LAYERED_FILAMENT_PATH=0 to opt
+// back to legacy if a regression appears on a specific device).
 static bool layered_renderer_enabled() {
     static const bool cached = []() {
         const char* env = getenv("HELIX_LAYERED_FILAMENT_PATH");
-        return env && (strcmp(env, "1") == 0 || strcasecmp(env, "true") == 0);
+        if (!env)
+            return true; // default on
+        return strcmp(env, "0") != 0 && strcasecmp(env, "false") != 0;
     }();
     return cached;
 }
