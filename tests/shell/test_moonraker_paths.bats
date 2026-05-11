@@ -70,6 +70,14 @@ setup() {
     echo "$MOONRAKER_CONF_PATHS" | grep -q "/home/mks/"
 }
 
+@test "static paths include AD5X ZMOD /opt/config/printer_data path (#938)" {
+    echo "$MOONRAKER_CONF_PATHS" | grep -q "^/opt/config/printer_data/config/moonraker.conf$"
+}
+
+@test "static paths include AD5X ZMOD /usr/data/config/printer_data path (#938)" {
+    echo "$MOONRAKER_CONF_PATHS" | grep -q "^/usr/data/config/printer_data/config/moonraker.conf$"
+}
+
 @test "first matching static path wins" {
     # We can't easily create files at /home/pi etc in tests,
     # but we can verify the function returns the first match

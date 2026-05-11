@@ -4154,12 +4154,17 @@ stop_service_snapmaker_u1() {
 
 #
 # Common moonraker.conf locations
+# ZMOD-on-AD5X notes:
+#   /opt/config is a symlink to /usr/data/config; printer_data lives under both.
+#   We list both forms so symlink-aware and -unaware path resolutions both hit.
 MOONRAKER_CONF_PATHS="
 /home/pi/printer_data/config/moonraker.conf
 /home/biqu/printer_data/config/moonraker.conf
 /home/mks/printer_data/config/moonraker.conf
 /root/printer_data/config/moonraker.conf
+/opt/config/printer_data/config/moonraker.conf
 /opt/config/moonraker.conf
+/usr/data/config/printer_data/config/moonraker.conf
 /usr/data/printer_data/config/moonraker.conf
 "
 
@@ -4404,7 +4409,9 @@ restart_moonraker() {
 configure_moonraker_updates() {
     local platform=$1
 
-    # Skip on AD5M (typically no Mainsail/Fluidd web UI)
+    # Skip on AD5M (stock Flashforge firmware lacks Mainsail/Fluidd).
+    # NOTE: AD5X is intentionally NOT skipped — it's only ever installed via the
+    # ZMOD chroot, which ships Mainsail/Fluidd.
     if [ "$platform" = "ad5m" ]; then
         log_info "Skipping Moonraker update_manager on AD5M (typically no web UI)"
         return 0
@@ -4419,13 +4426,21 @@ configure_moonraker_updates() {
     conf=$(find_moonraker_conf)
 
     if [ -z "$conf" ]; then
-        log_warn "Could not find moonraker.conf"
+        log_warn "Could not find moonraker.conf in any known location:"
+        if [ -n "${KLIPPER_HOME:-}" ]; then
+            log_warn "  ${KLIPPER_HOME}/printer_data/config/moonraker.conf"
+        fi
+        for tried in $MOONRAKER_CONF_PATHS; do
+            log_warn "  $tried"
+        done
         log_warn "To enable web UI updates, manually add to your moonraker.conf:"
         echo ""
         generate_update_manager_config
         echo ""
         return 0
     fi
+
+    log_info "Using moonraker.conf at: $conf"
 
     # Migrate old git_repo or zip config to type: web
     # (type: zip shows perpetual UP-TO-DATE in Mainsail — see mainsail-crew/mainsail#2444)
