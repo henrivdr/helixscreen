@@ -64,6 +64,27 @@ void FilamentMappingCard::update(const std::vector<std::string>& gcode_colors,
         return;
     }
 
+    // Hide on backends with no editable tool mapping (Snapmaker U1, ACE).
+    // Without this, users can open the modal and pick mappings that the
+    // print-start path then warns away — dead control. The print-start
+    // warning toast stays as a safety net.
+    bool any_editable = false;
+    for (int i = 0, n = ams.backend_count(); i < n; ++i) {
+        auto* backend = ams.get_backend(i);
+        if (!backend) {
+            continue;
+        }
+        auto caps = backend->get_tool_mapping_capabilities();
+        if (caps.supported && caps.editable) {
+            any_editable = true;
+            break;
+        }
+    }
+    if (!any_editable) {
+        should_show_ = false;
+        return;
+    }
+
     // Build tool info from file metadata
     tool_info_ = build_tool_info(gcode_colors, gcode_materials);
 

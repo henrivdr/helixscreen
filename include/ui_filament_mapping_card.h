@@ -23,7 +23,8 @@ namespace helix::ui {
  * (`should_show()`); the print detail view publishes that on a subject the
  * XML binds via `bind_flag_if_eq` — see print_file_detail.xml's
  * `filament_mapping_visible` binding. Card visible iff AMS/toolchanger is
- * detected AND the file uses at least one tool.
+ * detected AND the file uses at least one tool AND at least one backend
+ * advertises editable tool-mapping capabilities.
  */
 class FilamentMappingCard {
   public:
@@ -105,9 +106,8 @@ class FilamentMappingCard {
     /**
      * @brief Whether the card should be visible after the latest `update()`
      *
-     * True iff AMS is available and the file declares at least one tool.
-     * The detail view reads this and drives the `filament_mapping_visible`
-     * subject; XML's `bind_flag_if_eq` then toggles the HIDDEN flag.
+     * True iff AMS is available, at least one backend advertises editable
+     * tool-mapping capabilities, and the file declares at least one tool.
      */
     [[nodiscard]] bool should_show() const {
         return should_show_;
