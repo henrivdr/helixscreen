@@ -65,6 +65,8 @@ You may need to recalibrate if:
 
 Sometimes you need to force calibration even when HelixScreen doesn't think it's needed, or when your screen is too broken to navigate the UI. Here are five ways to do it, from easiest to most drastic.
 
+> **Before editing `settings.json` by hand:** HelixScreen rewrites `settings.json` while it's running (it auto-fills missing defaults and persists state changes). If you edit the file while the service is up, your changes can be clobbered — and your editor will report "file modified since I opened" when you try to save. **Always stop the service first**, then edit, then start it again.
+
 ### Method 1: From Settings (easiest)
 
 If you can navigate the UI:
@@ -72,60 +74,70 @@ If you can navigate the UI:
 1. Go to **Settings > System > Touch Calibration**
 2. Tap to start the calibration flow
 
-### Method 2: Command Line
+### Method 2: Environment Variable (recommended when touch is broken)
 
-Use this when your screen is too broken to navigate the UI, or when the calibration option doesn't appear in Settings.
+Use this when your screen is too damaged to navigate the UI. It's the least error-prone of the offline methods because it doesn't require hand-editing JSON.
 
 1. SSH into your device
-2. Run:
-   ```bash
-   helix-screen --calibrate-touch
+2. Open your `helixscreen.env` file. The launcher checks these locations in order:
+   - `<install dir>/config/helixscreen.env`
+   - `/etc/helixscreen/helixscreen.env`
+3. Add this line:
    ```
-3. The calibration overlay appears immediately — complete the 3-point crosshair flow
-4. After successful calibration, the app continues to start normally
+   HELIX_TOUCH_CALIBRATE=1
+   ```
+4. Restart the service:
+   ```bash
+   # Raspberry Pi (systemd):
+   sudo systemctl restart helixscreen
+
+   # Printer firmware (init.d):
+   /etc/init.d/S99helixscreen restart   # K1 / K2 / Snapmaker U1
+   /etc/init.d/S80helixscreen restart   # AD5M
+   /etc/init.d/helixscreen restart      # CC1
+   ```
+5. Complete the 3-point crosshair flow when it appears
+6. **Remove the line** from `helixscreen.env` afterwards — unlike Method 3, the env var doesn't self-clear and will re-trigger the wizard on every boot if you leave it set
 
 ### Method 3: Config File
 
-Use this for automation, remote management, or when you can't run the app interactively.
+Use this for automation, remote management, or as an alternative to the env var.
 
 1. SSH into your device
-2. Open the config file for your platform:
-
-   | Platform | Config Path |
-   |----------|-------------|
-   | MainsailOS | `~/helixscreen/config/settings.json` |
-   | AD5M Forge-X | `/opt/helixscreen/config/settings.json` |
-   | AD5M Klipper Mod | `/root/printer_software/helixscreen/config/settings.json` |
-   | K1 Simple AF | `/usr/data/helixscreen/config/settings.json` |
-
-3. Add `"force_calibration": true` to the `"input"` section:
+2. Stop the service so it doesn't overwrite your edits — use the command that matches your platform:
+   ```bash
+   sudo systemctl stop helixscreen          # Raspberry Pi
+   /etc/init.d/S99helixscreen stop          # K1 / K2 / Snapmaker U1
+   /etc/init.d/S80helixscreen stop          # AD5M
+   /etc/init.d/helixscreen stop             # CC1
+   ```
+3. Open the config file for your platform (see [Config File Locations](#config-file-locations))
+4. Add `"force_calibration": true` to the `"input"` section (leave existing keys in place):
    ```json
    {
      "input": {
-       "force_calibration": true
+       "force_calibration": true,
+       "jitter_threshold": 5,
+       "scroll_limit": 10,
+       "scroll_throw": 25
      }
    }
    ```
-4. Restart HelixScreen (or reboot your device)
-5. The calibration flow runs on startup, and the `force_calibration` flag is automatically cleared after successful calibration
+5. Save the file and start the service again (use the matching `start` command for your platform).
+6. The calibration flow runs on startup. The `force_calibration` flag is automatically cleared after a successful calibration, so you don't need to remove it manually.
 
-### Method 4: Reset Existing Calibration
+### Method 4: Command Line (advanced)
 
-If you want HelixScreen to treat your screen as uncalibrated (so the Setup Wizard includes calibration on next startup):
+Use this when you want to run calibration interactively from SSH without restarting the service. This conflicts with a running daemon for the framebuffer and touch device — **stop the service first**.
 
 1. SSH into your device
-2. Open the config file (see path table above)
-3. Find the `"display"` > `"calibration"` section and set `"valid"` to `false`:
-   ```json
-   {
-     "display": {
-       "calibration": {
-         "valid": false
-       }
-     }
-   }
+2. Stop the service (use the matching command for your platform — see Method 3)
+3. Run with the calibration flag:
+   ```bash
+   helix-screen --calibrate-touch
    ```
-4. Restart HelixScreen — the Setup Wizard will include the calibration step
+4. Complete the 3-point flow, then exit
+5. Start the service again normally
 
 ### Method 5: Factory Reset (nuclear option)
 
@@ -142,20 +154,32 @@ This resets **all** settings and re-runs the Setup Wizard from scratch, includin
 
 ### Config File Locations
 
-| Platform | Config Path |
-|----------|-------------|
-| MainsailOS | `~/helixscreen/config/settings.json` |
-| AD5M Forge-X | `/opt/helixscreen/config/settings.json` |
-| AD5M Klipper Mod | `/root/printer_software/helixscreen/config/settings.json` |
-| K1 Simple AF | `/usr/data/helixscreen/config/settings.json` |
+`settings.json` lives in your install's `config/` directory. The install root depends on platform:
 
-### Calibration Data (`display.calibration`)
+| Platform | Install Root | Full Path |
+|----------|-------------|-----------|
+| MainsailOS / Raspberry Pi (with Klipper detected) | `~/helixscreen` | `~/helixscreen/config/settings.json` |
+| MainsailOS / Raspberry Pi (no Klipper ecosystem) | `/opt/helixscreen` | `/opt/helixscreen/config/settings.json` |
+| FlashForge AD5M — Forge-X | `/opt/helixscreen` | `/opt/helixscreen/config/settings.json` |
+| FlashForge AD5M — Klipper Mod (v00.06+) | `/opt/helixscreen` | `/opt/helixscreen/config/settings.json` |
+| FlashForge AD5M — Klipper Mod (v00.05 and earlier) | `/root/printer_software/helixscreen` | `/root/printer_software/helixscreen/config/settings.json` |
+| FlashForge AD5M — ZMOD | `/srv/helixscreen` | `/srv/helixscreen/config/settings.json` |
+| FlashForge AD5X (ZMOD) | `/srv/helixscreen` | `/srv/helixscreen/config/settings.json` |
+| Creality K1 series | `/usr/data/helixscreen` | `/usr/data/helixscreen/config/settings.json` |
+| Creality K2 series | `/opt/helixscreen` | `/opt/helixscreen/config/settings.json` |
+| Elegoo Centauri Carbon (CC1) | `/user-resource/helixscreen` | `/user-resource/helixscreen/config/settings.json` |
+| Snapmaker U1 | `/userdata/helixscreen` | `/userdata/helixscreen/config/settings.json` |
+| Development (running from source) | `./` | `./config/settings.json` |
+
+> When a Klipper install is detected on a Pi (`~/klipper`, `~/moonraker`, or `~/printer_data` exists), the installer also creates a symlink at `~/printer_data/config/helixscreen/settings.json` so you can edit it through Mainsail/Fluidd's file manager. Both paths point to the same file.
+
+### Calibration Data (`input.calibration`)
 
 Set automatically during calibration. You rarely need to edit this manually.
 
 ```json
 {
-  "display": {
+  "input": {
     "calibration": {
       "valid": true,
       "a": 0.0013,
@@ -171,8 +195,9 @@ Set automatically during calibration. You rarely need to edit this manually.
 
 | Field | Description |
 |-------|-------------|
-| `valid` | Whether calibration is active (`true` or `false`) |
-| `a` through `f` | Mathematical coefficients that map touch positions to screen positions. Set automatically during calibration. Don't edit these manually unless you know what you're doing. |
+| `valid` | Whether calibration is active (`true` or `false`). HelixScreen falls back to raw touch coordinates when this is `false`. |
+| `a` through `f` | Affine transform coefficients that map raw touch positions to screen positions. Set automatically during calibration. Don't edit these by hand. |
+| `swap_axes` | Written as `false` by the wizard. The actual X/Y swap (if needed) is baked into the `a`–`f` coefficients — this field is informational only and not read at runtime. |
 
 ### Touch Device Override (`input.touch_device`)
 
@@ -218,21 +243,22 @@ For power users and developers. These override config file settings and are usef
 
 | Variable | Description | Example |
 |----------|-------------|---------|
+| `HELIX_TOUCH_CALIBRATE` | Force the calibration wizard on next launch (does not self-clear — remove after use) | `1` |
 | `HELIX_TOUCH_DEVICE` | Override touch input device | `/dev/input/event1` |
 | `HELIX_TOUCH_MIN_X` | Minimum raw X value (linear calibration) | `500` |
 | `HELIX_TOUCH_MAX_X` | Maximum raw X value (linear calibration) | `3580` |
 | `HELIX_TOUCH_MIN_Y` | Minimum raw Y value (linear calibration) | `3200` |
 | `HELIX_TOUCH_MAX_Y` | Maximum raw Y value (linear calibration) | `900` |
-| `HELIX_TOUCH_SWAP_AXES` | Swap X and Y axes (auto-detected during calibration; use this to force it) | `1` |
+| `HELIX_TOUCH_SWAP_AXES` | Swap X and Y axes before calibration (axis swap is also auto-detected during calibration — use this only to force it) | `1` |
 | `HELIX_DISPLAY_ROTATION` | Display rotation (touch auto-adjusts) | `90`, `180`, `270` |
-| `HELIX_DEBUG_TOUCH` | Draw ripple at each touch point + calibration logging | `1` |
+| `HELIX_DEBUG_TOUCH` | Draw ripple at each touch point + calibration logging (alias: `HELIX_DEBUG_TOUCHES`) | `1` |
 | `HELIX_TOUCH_JITTER` | Touch jitter filter dead zone (pixels) | `5` |
 
 > **Note:** The MIN/MAX variables provide a simple linear calibration that bypasses the 3-point system. Most users should use the built-in calibration instead.
 >
 > **Jitter filter:** If taps are being misread as swipes, the jitter filter suppresses small coordinate noise from the touch controller. The default of 5 pixels is enough for most screens; raise it to 15–25 for very noisy controllers (common on Goodix GT9xx panels), or set to `0` to disable. See also [scroll_limit and scroll_guard](../CONFIGURATION.md#input) for related touch-feel tuning.
 
-**Setting environment variables in systemd:**
+**Setting environment variables on Raspberry Pi (systemd):**
 
 ```ini
 # Open an override file for the HelixScreen service
@@ -245,6 +271,22 @@ Environment="HELIX_DISPLAY_ROTATION=90"
 
 # Save and close, then restart:
 sudo systemctl restart helixscreen
+```
+
+**Setting environment variables on printer firmware (AD5M / K1 / K2 / CC1 / Snapmaker U1):**
+
+These platforms don't use systemd. The launcher script sources `helixscreen.env` from your install's `config/` directory:
+
+```bash
+# Edit helixscreen.env in your install's config dir (see Config File Locations above)
+# Add lines like:
+HELIX_TOUCH_DEVICE=/dev/input/event0
+HELIX_DISPLAY_ROTATION=90
+
+# Then restart helix-screen (varies by platform — usually):
+/etc/init.d/S99helixscreen restart   # K1 / K2 / Snapmaker U1
+/etc/init.d/S80helixscreen restart   # AD5M
+/etc/init.d/helixscreen restart      # CC1
 ```
 
 ---

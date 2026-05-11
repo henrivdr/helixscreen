@@ -388,7 +388,7 @@ export HELIX_TOUCH_MAX_Y=900
 
 ### Affine Calibration (config file)
 
-For precise calibration including rotation and skew correction, use the touch calibration wizard. The wizard computes a 6-coefficient affine transform and saves it to the config file at `display.calibration.{a,b,c,d,e,f}`.
+For precise calibration including rotation and skew correction, use the touch calibration wizard. The wizard computes a 6-coefficient affine transform and saves it to the config file at `input.calibration.{a,b,c,d,e,f}`. (The legacy `display.calibration` path is auto-migrated to `input.calibration` on load — see `docs/devel/CONFIG_MIGRATION.md`.)
 
 **Affine transform formula:**
 ```
