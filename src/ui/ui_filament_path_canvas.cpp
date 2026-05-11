@@ -29,6 +29,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -379,6 +380,48 @@ static BaseGeometry compute_base_geometry(lv_obj_t* obj, const FilamentPathData*
         g.center_x = g.x_off + g.width / 2;
     }
     return g;
+}
+
+// Derived per-slot drawing state. Computed in one pass so each topology body
+// reads from the array instead of rederiving inline (MIXED topology derived
+// the same state twice — once in phase 2 for entry lines, again in phase 4
+// for hub/direct routing).
+struct SlotRenderState {
+    PathSegment segment = PathSegment::NONE;
+    lv_color_t color = lv_color_make(0, 0, 0); // valid only when has_filament
+    bool has_filament = false;
+    bool is_mounted = false;
+    bool at_sensor = false; // segment >= TOOLHEAD (consumed by PARALLEL/MIXED)
+    bool at_nozzle = false; // segment >= NOZZLE
+};
+
+using SlotRenderStates = std::array<SlotRenderState, FilamentPathData::MAX_SLOTS>;
+
+static SlotRenderStates compute_slot_render_states(const FilamentPathData* data) {
+    SlotRenderStates states{};
+    int count = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);
+    for (int i = 0; i < count; i++) {
+        SlotRenderState& s = states[i];
+
+        // Per-slot installed filament (default).
+        if (data->slot_filament_states[i].segment != PathSegment::NONE) {
+            s.has_filament = true;
+            s.color = lv_color_hex(data->slot_filament_states[i].color);
+            s.segment = data->slot_filament_states[i].segment;
+        }
+
+        // Active slot overrides with current load/unload state when present.
+        s.is_mounted = (i == data->active_slot);
+        if (s.is_mounted && data->filament_segment > 0) {
+            s.has_filament = true;
+            s.color = lv_color_hex(data->filament_color);
+            s.segment = static_cast<PathSegment>(data->filament_segment);
+        }
+
+        s.at_sensor = s.has_filament && (s.segment >= PathSegment::TOOLHEAD);
+        s.at_nozzle = s.has_filament && (s.segment >= PathSegment::NOZZLE);
+    }
+    return states;
 }
 
 // Check if a segment should be drawn as "active" (filament present at or past it)
@@ -1552,32 +1595,17 @@ static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPat
     int32_t line_active = data->line_width_active;
     int32_t sensor_r = data->sensor_radius;
 
+    SlotRenderStates states = compute_slot_render_states(data);
+
     // Draw each tool as an independent column
     for (int i = 0; i < data->slot_count; i++) {
         int32_t slot_x = g.slot_x[i];
-        bool is_mounted = (i == data->active_slot);
-
-        // Determine filament reach for this slot from per-slot state
-        lv_color_t tool_color = idle_color;
-        bool has_filament = false;
-        PathSegment slot_segment = PathSegment::NONE;
-
-        if (i < FilamentPathData::MAX_SLOTS &&
-            data->slot_filament_states[i].segment != PathSegment::NONE) {
-            has_filament = true;
-            tool_color = lv_color_hex(data->slot_filament_states[i].color);
-            slot_segment = data->slot_filament_states[i].segment;
-        }
-
-        // For mounted tool, use active filament color and segment if available
-        if (is_mounted && data->filament_segment > 0) {
-            tool_color = lv_color_hex(data->filament_color);
-            has_filament = true;
-            slot_segment = static_cast<PathSegment>(data->filament_segment);
-        }
-
-        bool at_sensor = has_filament && (slot_segment >= PathSegment::TOOLHEAD);
-        bool at_nozzle = has_filament && (slot_segment >= PathSegment::NOZZLE);
+        const SlotRenderState& s = states[i];
+        bool is_mounted = s.is_mounted;
+        bool has_filament = s.has_filament;
+        bool at_sensor = s.at_sensor;
+        bool at_nozzle = s.at_nozzle;
+        lv_color_t tool_color = has_filament ? s.color : idle_color;
 
         int32_t tool_scale = LV_MAX(6, data->extruder_scale * 2 / 3);
         int32_t nozzle_top = toolhead_y - tool_scale * 2; // Top of heater block
@@ -1735,6 +1763,8 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
     int32_t sensor_r = data->sensor_radius;
     int32_t tool_scale = LV_MAX(6, data->extruder_scale * 2 / 3);
 
+    SlotRenderStates states = compute_slot_render_states(data);
+
     // Phase 1: Identify hub lanes and compute hub center X
     int hub_count = 0;
     int32_t hub_x_sum = 0;
@@ -1757,25 +1787,9 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
     // Phase 2: Draw entry lines and sensor dots for ALL lanes
     for (int i = 0; i < data->slot_count; i++) {
         int32_t slot_x = g.slot_x[i];
-
-        // Determine filament state for this slot
-        lv_color_t tool_color = idle_color;
-        bool has_filament = false;
-        PathSegment slot_segment = PathSegment::NONE;
-
-        if (i < FilamentPathData::MAX_SLOTS &&
-            data->slot_filament_states[i].segment != PathSegment::NONE) {
-            has_filament = true;
-            tool_color = lv_color_hex(data->slot_filament_states[i].color);
-            slot_segment = data->slot_filament_states[i].segment;
-        }
-
-        bool is_mounted = (i == data->active_slot);
-        if (is_mounted && data->filament_segment > 0) {
-            tool_color = lv_color_hex(data->filament_color);
-            has_filament = true;
-            slot_segment = static_cast<PathSegment>(data->filament_segment);
-        }
+        const SlotRenderState& s = states[i];
+        bool has_filament = s.has_filament;
+        lv_color_t tool_color = has_filament ? s.color : idle_color;
 
         // Entry → sensor line
         if (has_filament) {
@@ -1789,7 +1803,7 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
         }
 
         // Sensor dot
-        bool at_sensor = has_filament && (slot_segment >= PathSegment::TOOLHEAD);
+        bool at_sensor = s.at_sensor;
         lv_color_t sensor_color = at_sensor ? tool_color : idle_color;
         draw_sensor_dot(layer, slot_x, sensor_y, sensor_color, at_sensor, sensor_r);
     }
@@ -1807,27 +1821,11 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
     for (int i = 0; i < data->slot_count; i++) {
         int32_t slot_x = g.slot_x[i];
         bool is_hub = data->slot_is_hub_routed[i];
-        bool is_mounted = (i == data->active_slot);
-
-        // Re-derive filament state
-        lv_color_t tool_color = idle_color;
-        bool has_filament = false;
-        PathSegment slot_segment = PathSegment::NONE;
-
-        if (i < FilamentPathData::MAX_SLOTS &&
-            data->slot_filament_states[i].segment != PathSegment::NONE) {
-            has_filament = true;
-            tool_color = lv_color_hex(data->slot_filament_states[i].color);
-            slot_segment = data->slot_filament_states[i].segment;
-        }
-
-        if (is_mounted && data->filament_segment > 0) {
-            tool_color = lv_color_hex(data->filament_color);
-            has_filament = true;
-            slot_segment = static_cast<PathSegment>(data->filament_segment);
-        }
-
-        bool at_nozzle = has_filament && (slot_segment >= PathSegment::NOZZLE);
+        const SlotRenderState& s = states[i];
+        bool is_mounted = s.is_mounted;
+        bool has_filament = s.has_filament;
+        lv_color_t tool_color = has_filament ? s.color : idle_color;
+        bool at_nozzle = s.at_nozzle;
 
         if (is_hub) {
             // Hub-routed lane: smooth curve from sensor to hub top
@@ -1865,21 +1863,10 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
                 for (int j = 0; j < data->slot_count; j++) {
                     if (!data->slot_is_hub_routed[j])
                         continue;
-                    bool j_mounted = (j == data->active_slot);
-                    PathSegment j_seg = PathSegment::NONE;
-                    lv_color_t j_color = idle_color;
-                    if (j < FilamentPathData::MAX_SLOTS &&
-                        data->slot_filament_states[j].segment != PathSegment::NONE) {
-                        j_seg = data->slot_filament_states[j].segment;
-                        j_color = lv_color_hex(data->slot_filament_states[j].color);
-                    }
-                    if (j_mounted && data->filament_segment > 0) {
-                        j_seg = static_cast<PathSegment>(data->filament_segment);
-                        j_color = lv_color_hex(data->filament_color);
-                    }
-                    if (j_seg >= PathSegment::NOZZLE) {
+                    const SlotRenderState& sj = states[j];
+                    if (sj.segment >= PathSegment::NOZZLE) {
                         any_hub_at_nozzle = true;
-                        hub_nozzle_color = j_color;
+                        hub_nozzle_color = sj.color;
                         hub_tool = (data->mapped_tool[j] >= 0) ? data->mapped_tool[j] : j;
                         break;
                     }
@@ -2414,37 +2401,23 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
     // Draw lane lines (one per slot, from entry to merge point)
     // Shows all installed filaments' colors, not just the active slot
     // ========================================================================
+    SlotRenderStates states = compute_slot_render_states(data);
     ActiveFilamentPath active_path;
 
     for (int i = 0; i < data->slot_count; i++) {
         int32_t slot_x = g.slot_x[i];
-        bool is_active_slot = (i == data->active_slot);
-
-        // Determine line color and width for this slot's lane
-        // Priority: active slot > per-slot filament state > idle
-        lv_color_t lane_color = idle_color;
+        const SlotRenderState& s = states[i];
+        bool is_active_slot = s.is_mounted;
+        bool has_filament = s.has_filament;
+        PathSegment slot_segment = s.segment;
         int32_t lane_width = line_active;
-        bool has_filament = false;
-        PathSegment slot_segment = PathSegment::NONE;
+        lv_color_t lane_color = has_filament ? s.color : idle_color;
 
-        if (is_active_slot && data->filament_segment > 0) {
-            // Active slot - use active filament color
-            has_filament = true;
-            lane_color = active_color;
-            lane_width = line_active;
-            slot_segment = fil_seg;
-
-            // Check for error in lane segments
-            if (has_error && (error_seg == PathSegment::PREP || error_seg == PathSegment::LANE)) {
-                lane_color = error_color;
-            }
-        } else if (i < FilamentPathData::MAX_SLOTS &&
-                   data->slot_filament_states[i].segment != PathSegment::NONE) {
-            // Non-active slot with installed filament - show its color to its sensor position
-            has_filament = true;
-            lane_color = lv_color_hex(data->slot_filament_states[i].color);
-            lane_width = line_active;
-            slot_segment = data->slot_filament_states[i].segment;
+        // Active-slot error overrides for PREP/LANE segments (must run AFTER
+        // base color is set; render-state struct doesn't know about errors).
+        if (is_active_slot && has_filament && has_error &&
+            (error_seg == PathSegment::PREP || error_seg == PathSegment::LANE)) {
+            lane_color = error_color;
         }
 
         // For non-active slots with filament:
@@ -2654,8 +2627,8 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
             if (data->active_slot >= 0 && is_segment_active(PathSegment::HUB, fil_seg)) {
                 hub_has_filament = true;
             } else {
-                for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
-                    if (data->slot_filament_states[i].segment >= PathSegment::HUB) {
+                for (int i = 0; i < data->slot_count; i++) {
+                    if (states[i].segment >= PathSegment::HUB) {
                         hub_has_filament = true;
                         break;
                     }
@@ -2684,9 +2657,9 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
             lv_color_t tint_color = active_color;
             if (data->active_slot < 0) {
                 // No active slot — find first slot loaded to hub for tint
-                for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
-                    if (data->slot_filament_states[i].segment >= PathSegment::HUB) {
-                        tint_color = lv_color_hex(data->slot_filament_states[i].color);
+                for (int i = 0; i < data->slot_count; i++) {
+                    if (states[i].segment >= PathSegment::HUB) {
+                        tint_color = states[i].color;
                         break;
                     }
                 }
