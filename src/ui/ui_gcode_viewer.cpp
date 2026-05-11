@@ -1344,26 +1344,50 @@ static void ui_gcode_viewer_load_file_async(lv_obj_t* obj, const char* file_path
                         spdlog::info("[GCode Viewer] Streaming 2D using external color override");
                     } else {
                         const auto& stats = st->streaming_controller_->get_index_stats();
-                        // Prefer palette[initial_tool_index] when the slicer emitted a multi-color
-                        // metadata line and the gcode actually starts on a non-T0 tool. Falls back
-                        // to filament_color (palette[0]) for single-color prints or when the palette
-                        // doesn't cover the active tool.
-                        std::string chosen = stats.filament_color;
-                        if (stats.initial_tool_index >= 0 &&
-                            stats.initial_tool_index <
-                                static_cast<int>(stats.filament_palette.size()) &&
-                            !stats.filament_palette[stats.initial_tool_index].empty()) {
-                            chosen = stats.filament_palette[stats.initial_tool_index];
+                        // Multi-color metadata: hand the full per-tool palette to the renderer so
+                        // each tool's segments render in its own color. Collapsing to a single
+                        // color via set_extrusion_color() would paint everything in palette
+                        // [initial_tool], which on a dark filament (e.g. #080A0D, a near-black
+                        // PLA) looks like a uniformly black model.
+                        if (stats.filament_palette.size() > 1) {
+                            st->layer_renderer_2d_->set_tool_color_palette(stats.filament_palette);
+                            spdlog::info("[GCode Viewer] Streaming 2D using tool palette "
+                                         "(size={}, initial_tool={})",
+                                         stats.filament_palette.size(),
+                                         stats.initial_tool_index);
+                        } else {
+                            // Single-color print: prefer palette[initial_tool_index] when the
+                            // slicer emitted a multi-color metadata line and the gcode actually
+                            // starts on a non-T0 tool. Falls back to filament_color (palette[0])
+                            // for single-color prints or when the palette doesn't cover the
+                            // active tool.
+                            std::string chosen = stats.filament_color;
+                            if (stats.initial_tool_index >= 0 &&
+                                stats.initial_tool_index <
+                                    static_cast<int>(stats.filament_palette.size()) &&
+                                !stats.filament_palette[stats.initial_tool_index].empty()) {
+                                chosen = stats.filament_palette[stats.initial_tool_index];
+                            }
+                            if (!chosen.empty()) {
+                                lv_color_t color = lv_color_hex(
+                                    std::strtol(chosen.c_str() + 1, nullptr, 16));
+                                st->layer_renderer_2d_->set_extrusion_color(color);
+                                spdlog::info("[GCode Viewer] Using filament color from metadata: "
+                                             "{} (tool={}, palette={})",
+                                             chosen, stats.initial_tool_index,
+                                             stats.filament_palette.size());
+                            }
                         }
-                        if (!chosen.empty()) {
-                            lv_color_t color = lv_color_hex(
-                                std::strtol(chosen.c_str() + 1, nullptr, 16));
-                            st->layer_renderer_2d_->set_extrusion_color(color);
-                            spdlog::info("[GCode Viewer] Using filament color from metadata: {} "
-                                         "(tool={}, palette={})",
-                                         chosen, stats.initial_tool_index,
-                                         stats.filament_palette.size());
-                        }
+                    }
+
+                    // Apply AMS tool color overrides on top of the metadata palette when
+                    // available. AMS-known slot colors are typically more accurate than
+                    // slicer-emitted palette (which can lag firmware-side filament swaps).
+                    if (!st->tool_color_overrides.empty()) {
+                        st->layer_renderer_2d_->set_tool_color_overrides(
+                            st->tool_color_overrides);
+                        spdlog::debug("[GCode Viewer] Streaming 2D applied {} AMS color overrides",
+                                      st->tool_color_overrides.size());
                     }
 
                     // Get canvas size from widget
