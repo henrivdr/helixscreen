@@ -1597,7 +1597,51 @@ static void draw_heat_glow(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t ra
 // tool with its own extruder. Unlike hub/linear topologies where filaments
 // converge to a single toolhead, parallel topology shows separate paths.
 
+// Static + state-tied content for PARALLEL — everything except animation
+// overlays. Called from the legacy renderer (draws all in one pass) and from
+// the layered renderer (paints into the overlay canvas). Animation (flow
+// dots) is split out into draw_animation_parallel below.
+static void draw_parallel_static_and_overlay(lv_obj_t* obj, lv_layer_t* layer,
+                                             FilamentPathData* data);
+
+// Animation overlay for PARALLEL — flow particles. Called from DRAW_POST in
+// the layered renderer; folded into draw_parallel_static_and_overlay in the
+// legacy renderer's single-pass invocation.
+static void draw_animation_parallel(lv_layer_t* layer, const BaseGeometry& g,
+                                    const SlotRenderStates& states, const FilamentPathData* data) {
+    if (!data->flow_anim_active)
+        return;
+    int32_t height = g.height;
+    int32_t y_off = g.y_off;
+    int32_t entry_y = y_off + static_cast<int32_t>(height * -0.12f);
+    int32_t sensor_y = y_off + static_cast<int32_t>(height * 0.38f);
+    int32_t sensor_r = data->sensor_radius;
+    bool reverse = (data->anim_direction == AnimDirection::UNLOADING);
+    int count = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);
+    for (int i = 0; i < count; i++) {
+        const SlotRenderState& s = states[i];
+        if (!s.is_mounted || !s.has_filament)
+            continue;
+        int32_t slot_x = g.slot_x[i];
+        draw_flow_dots_line(layer, slot_x, entry_y, slot_x, sensor_y - sensor_r, s.color,
+                            data->flow_offset, reverse);
+    }
+}
+
 static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
+    draw_parallel_static_and_overlay(obj, layer, data);
+
+    // Legacy path: animation lives in the same single-pass render. Layered
+    // path calls draw_animation_parallel separately from DRAW_POST.
+    if (!layered_renderer_enabled() || !data->static_canvas_) {
+        BaseGeometry g = compute_base_geometry(obj, data);
+        SlotRenderStates states = compute_slot_render_states(data);
+        draw_animation_parallel(layer, g, states, data);
+    }
+}
+
+static void draw_parallel_static_and_overlay(lv_obj_t* obj, lv_layer_t* layer,
+                                             FilamentPathData* data) {
 
     BaseGeometry g = compute_base_geometry(obj, data);
     int32_t height = g.height;
@@ -1671,13 +1715,9 @@ static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPat
         // Docked toolheads rendered at reduced opacity to visually distinguish from active
         lv_opa_t toolhead_opa = is_mounted ? LV_OPA_COVER : LV_OPA_40;
 
-        // Flow particles for active slot during load/unload
-        // Drawn BEFORE nozzle so the extruder body covers any nearby dots
-        if (is_mounted && data->flow_anim_active && has_filament) {
-            bool reverse = (data->anim_direction == AnimDirection::UNLOADING);
-            draw_flow_dots_line(layer, slot_x, entry_y, slot_x, sensor_y - sensor_r, tool_color,
-                                data->flow_offset, reverse);
-        }
+        // Flow particles for active slot — handled separately in
+        // draw_animation_parallel so the per-frame animation tick can be
+        // painted via DRAW_POST without busting the overlay canvas cache.
 
         switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
         case helix::ToolheadStyle::A4T:
@@ -2371,10 +2411,19 @@ static void layered_render_overlay(lv_obj_t* obj, FilamentPathData* data) {
     lv_canvas_finish_layer(data->overlay_canvas_, &layer);
 }
 
-// Animation layer — painted on top of both canvases in DRAW_POST.
-// SCAFFOLD: stub; animation still lives inside the legacy overlay render.
-static void layered_render_animation(lv_obj_t* /*obj*/, lv_layer_t* /*layer*/,
-                                     FilamentPathData* /*data*/) {}
+// Animation layer — painted on top of both canvases in DRAW_POST. Per-frame
+// animation ticks (flow dots, pulse glow) paint here without busting the
+// static/overlay canvas caches. The canvas surfaces handle the heavyweight
+// topology + state-tied content.
+static void layered_render_animation(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
+    if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
+        BaseGeometry g = compute_base_geometry(obj, data);
+        SlotRenderStates states = compute_slot_render_states(data);
+        draw_animation_parallel(layer, g, states, data);
+    }
+    // MIXED / LINEAR / HUB animation still lives inside the legacy renderer
+    // (in the overlay canvas) until their layered split lands in 4c–4d.
+}
 
 // Async refresh — runs OUTSIDE the LVGL render pass, so it's safe to call
 // lv_canvas_init_layer / finish_layer (which invalidate the canvas, illegal
