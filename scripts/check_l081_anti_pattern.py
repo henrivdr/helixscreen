@@ -78,6 +78,46 @@ THIS_ACCESS_RE = re.compile(
 OPT_OUT = "L081_OK"
 LOOKAHEAD_LINES = 10  # max lines to scan after the expired check inside the lambda
 
+# Mechanism D opt-out (different name so it can't be confused with Mechanism C):
+# `// L081_FREEZE_OK: <reason>` on the defer/queue_update line silences this check.
+OPT_OUT_FREEZE = "L081_FREEZE_OK"
+
+# Window to scan inside a register_method_callback / register_notify_update for
+# the inner defer. Most callbacks fit in this many lines; longer ones generally
+# split into helper methods and the helper itself will be flagged on its own.
+FREEZE_OUTER_LOOKAHEAD = 80
+
+# Within a tok.defer / queue_update body, how many lines to scan for a subject
+# mutation that would justify making it critical.
+FREEZE_INNER_LOOKAHEAD = 25
+
+# A "register" entry point — the WS-thread notification subscription path.
+# These are the only sites where a freeze drop strands foundational state at
+# startup; widget code and one-shot RPC callbacks have other safety nets.
+REGISTER_CB_RE = re.compile(
+    r'\b(?:register_method_callback|register_notify_update)\s*\('
+)
+
+# Plain (non-critical) defer/queue_update inside a register lambda.
+# Match `tok.defer(`, `token.defer(`, `lifetime_.defer(`, and
+# `helix::ui::queue_update(` — but NOT their `_critical` variants. We
+# intentionally exclude observe_int_sync / observe_string callbacks because
+# those already fire on the main thread (no marshal needed).
+PLAIN_DEFER_RE = re.compile(
+    r'\b(?:tok|token|lifetime_)\s*\.\s*defer\s*\('
+    r'|\bhelix::ui::queue_update\s*\('
+)
+
+# Anything that looks like writing to an lv_subject. Conservative — we miss
+# wrapper setter methods, but those usually delegate to one of these eventually
+# and the runtime fix (use queue_critical at the dispatch site) covers both.
+SUBJECT_MUTATION_RE = re.compile(
+    r'\blv_subject_(?:set|copy)_\w+\s*\('
+    r'|\bbump_\w+_version\s*\('               # AmsState pattern
+    r'|\bsync_backend\s*\('                   # AmsState entry point
+    r'|\bemit_event\s*\('                     # backend → AmsState mirror trigger
+)
+
 
 def file_lines(path: Path) -> list[str]:
     try:
@@ -110,7 +150,7 @@ def trailing_after_paren(line: str) -> str:
     return ''
 
 
-DEFER_CALL_RE = re.compile(r'\b\w+\s*\.\s*defer\s*\(')
+DEFER_CALL_RE = re.compile(r'\b\w+\s*\.\s*defer(?:_critical)?\s*\(')
 
 
 def scan_file(path: Path) -> list[tuple[int, str]]:
@@ -165,6 +205,86 @@ def scan_file(path: Path) -> list[tuple[int, str]]:
     return hits
 
 
+def scan_file_freeze_drop(path: Path) -> list[tuple[int, str]]:
+    """Return list of (line_no, snippet) for each Mechanism D suspect in `path`.
+
+    Pattern flagged: a `register_method_callback(...)` or
+    `register_notify_update(...)` lambda whose body uses plain `tok.defer(...)` /
+    `queue_update(...)` (NOT `*_critical`) to dispatch a callback that mutates
+    an lv_subject. Such dispatches are silently dropped during
+    `UpdateQueue::scoped_freeze()` — if the dropped event is a first-fire
+    baseline establishment (Klipper subscription frame, notify_klippy_ready,
+    etc.) the subject stays at its default forever and any widget observing
+    it goes stale.
+
+    Heuristic, with intentional false-positive tolerance. Per-line opt-out:
+    `// L081_FREEZE_OK: <reason>` on the defer/queue_update line.
+
+    Companion to scan_file (Mechanism C, bg-thread member access).
+    """
+    lines = file_lines(path)
+    if not lines:
+        return []
+    hits: list[tuple[int, str]] = []
+    n = len(lines)
+    i = 0
+    while i < n:
+        line = lines[i]
+        if not REGISTER_CB_RE.search(line):
+            i += 1
+            continue
+        # Found a notification-subscription registration. Scan the next
+        # FREEZE_OUTER_LOOKAHEAD lines (or until the call's enclosing ';')
+        # for non-critical defers. Track brace/paren depth roughly so we
+        # don't bleed past the registration.
+        end = min(i + FREEZE_OUTER_LOOKAHEAD, n)
+        depth = 0
+        saw_open = False
+        scanned_to = i
+        for j in range(i, end):
+            scanned_to = j
+            for ch in lines[j]:
+                if ch == '(':
+                    depth += 1
+                    saw_open = True
+                elif ch == ')':
+                    depth -= 1
+            if saw_open and depth <= 0 and ';' in lines[j]:
+                break
+        outer_end = scanned_to
+        # Within the lambda body, look for plain defers.
+        k = i
+        while k <= outer_end:
+            defer_line = lines[k]
+            # Opt-out can be on the defer line OR in the 3 lines above (block
+            # comment style). Looking ahead is handled by the inner-body scan.
+            preceding_opt_out = any(
+                OPT_OUT_FREEZE in lines[m] for m in range(max(0, k - 3), k)
+            )
+            if (PLAIN_DEFER_RE.search(defer_line)
+                    and OPT_OUT_FREEZE not in defer_line
+                    and not preceding_opt_out):
+                # Validate that the next FREEZE_INNER_LOOKAHEAD lines contain a
+                # subject mutation. Without that, it's likely a benign dispatch
+                # (e.g., kicking off an HTTP fetch with no subject side effect).
+                inner_end = min(k + FREEZE_INNER_LOOKAHEAD, outer_end + 1)
+                mutates = False
+                for m in range(k, inner_end):
+                    if OPT_OUT_FREEZE in lines[m]:
+                        # Annotation can also live on the inner subject-mutation line.
+                        mutates = False
+                        break
+                    if SUBJECT_MUTATION_RE.search(lines[m]):
+                        mutates = True
+                        break
+                if mutates:
+                    snippet = '\n  '.join(lines[k:min(k + 6, n)])
+                    hits.append((k + 1, snippet))
+            k += 1
+        i = outer_end + 1
+    return hits
+
+
 def staged_files() -> list[Path]:
     try:
         out = subprocess.run(
@@ -176,12 +296,10 @@ def staged_files() -> list[Path]:
     return [Path(p) for p in out.splitlines() if p.endswith(('.cpp', '.h', '.hpp', '.cc'))]
 
 
-# Directories with predominantly bg-thread callback registration. Files here
-# can be lint-scanned with low false-positive rate. src/ui/ is intentionally
-# excluded from the default scan because observer callbacks (queue_update +
+# Directories scanned for Mechanism C (bg-thread tok.expired() + member access).
+# src/ui/ is intentionally excluded because observer callbacks (queue_update +
 # observe_int_sync) run on the main thread, where `tok.expired()` is fine —
 # the script can't tell observer cbs from HTTP cbs without AST-level context.
-# src/ui/ files can still be checked by passing them explicitly.
 DEFAULT_SCAN_DIRS = (
     'src/printer',
     'src/calibration',
@@ -193,6 +311,13 @@ DEFAULT_SCAN_DIRS = (
     'src/network',
     'src/bluetooth',
 )
+
+# Mechanism D (freeze-drop) is restricted by REGISTER_CB_RE to register_method_callback
+# / register_notify_update entry points, which are inherently bg-thread WS handlers.
+# That restriction makes scanning src/ui/ safe — observer-cb false positives don't
+# apply. Files like src/ui/job_queue_state.cpp register notification handlers and
+# must be linted for Mechanism D even though they're excluded from Mechanism C.
+FREEZE_SCAN_DIRS = DEFAULT_SCAN_DIRS + ('src/ui',)
 
 
 def discover_files(roots: Iterable[Path]) -> list[Path]:
@@ -217,26 +342,32 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.staged_only:
-        # Pre-commit: only check changed files, AND restrict to known-bg-thread
-        # directories (observer callbacks in src/ui/ would false-positive).
-        files = [f for f in staged_files()
-                 if f.exists()
-                 and any(str(f).startswith(d) for d in DEFAULT_SCAN_DIRS)]
+        staged = staged_files()
+        mech_c_files = [f for f in staged
+                        if f.exists()
+                        and any(str(f).startswith(d) for d in DEFAULT_SCAN_DIRS)]
+        freeze_files = [f for f in staged
+                        if f.exists()
+                        and any(str(f).startswith(d) for d in FREEZE_SCAN_DIRS)]
     elif args.files:
         files = [Path(f) for f in args.files if Path(f).exists()]
+        mech_c_files = files
+        freeze_files = files
     else:
-        files = discover_files([Path(d) for d in DEFAULT_SCAN_DIRS])
+        mech_c_files = discover_files([Path(d) for d in DEFAULT_SCAN_DIRS])
+        freeze_files = discover_files([Path(d) for d in FREEZE_SCAN_DIRS])
 
     # Skip the detector implementation itself and the header that defines the API.
     skip = {Path('src/system/async_lifetime_guard.cpp'),
             Path('include/async_lifetime_guard.h')}
-    files = [f for f in files if f not in skip]
+    mech_c_files = [f for f in mech_c_files if f not in skip]
+    freeze_files = [f for f in freeze_files if f not in skip]
 
     total = 0
-    for f in files:
+    for f in mech_c_files:
         hits = scan_file(f)
         for line_no, snippet in hits:
-            print(f"{f}:{line_no}: L081 anti-pattern: bg-thread tok.expired() "
+            print(f"{f}:{line_no}: L081 Mechanism C: bg-thread tok.expired() "
                   f"followed by `this`/member access")
             for ln in snippet.split('\n'):
                 print(f"    {ln}")
@@ -244,6 +375,22 @@ def main() -> int:
                   f"or use `lifetime_.bg_cb(\"Class::method\", [this](...) {{ ... }})`.")
             print(f"    Opt-out (only if you really need bg-thread `expired()`): "
                   f"add `// {OPT_OUT}: <reason>` on the same line.")
+            print()
+            total += 1
+
+    for f in freeze_files:
+        freeze_hits = scan_file_freeze_drop(f)
+        for line_no, snippet in freeze_hits:
+            print(f"{f}:{line_no}: L081 Mechanism D: notification subscription dispatches "
+                  f"subject mutation via non-critical defer/queue_update")
+            for ln in snippet.split('\n'):
+                print(f"    {ln}")
+            print(f"    Fix: use `tok.defer_critical(...)` or `helix::ui::queue_critical(...)`. "
+                  f"Plain queue_update/tok.defer are dropped during scoped_freeze, which strands "
+                  f"first-fire baseline state (Klipper subscription frame, notify_klippy_ready, "
+                  f"power_changed init_on, etc).")
+            print(f"    Opt-out (e.g. high-frequency feeds that re-emit quickly): "
+                  f"add `// {OPT_OUT_FREEZE}: <reason>` on the defer line.")
             print()
             total += 1
 
