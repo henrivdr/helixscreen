@@ -248,6 +248,13 @@ struct FilamentPathData {
 
     // Theme-derived font
     const lv_font_t* label_font = nullptr;
+
+    // Full-render cache: blit cached buffer when state hash unchanged.
+    // Avoids re-running the 3500-line draw callback on every LVGL invalidation
+    // (e.g. when an overlapping modal opens/closes). Critical for K2 (CPU-only).
+    lv_draw_buf_t* render_cache_ = nullptr;
+    uint64_t cache_hash_ = 0;
+    lv_area_t cache_coords_ = {0, 0, -1, -1}; // Invalid by design — first draw misses
 };
 
 // Load theme-aware colors, fonts, and sizes
@@ -1475,9 +1482,7 @@ static void draw_heat_glow(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t ra
 // tool with its own extruder. Unlike hub/linear topologies where filaments
 // converge to a single toolhead, parallel topology shows separate paths.
 
-static void draw_parallel_topology(lv_event_t* e, FilamentPathData* data) {
-    lv_obj_t* obj = lv_event_get_target_obj(e);
-    lv_layer_t* layer = lv_event_get_layer(e);
+static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
 
     // Get widget dimensions
     lv_area_t obj_coords;
@@ -1655,9 +1660,7 @@ static void draw_parallel_topology(lv_event_t* e, FilamentPathData* data) {
 //      |        |          |              hub output line
 //     (T0)    (T2)       (T1)             nozzles + tool labels
 
-static void draw_mixed_topology(lv_event_t* e, FilamentPathData* data) {
-    lv_obj_t* obj = lv_event_get_target_obj(e);
-    lv_layer_t* layer = lv_event_get_layer(e);
+static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
 
     // Get widget dimensions
     lv_area_t obj_coords;
@@ -2018,6 +2021,178 @@ static void draw_mixed_topology(lv_event_t* e, FilamentPathData* data) {
 // Main Draw Callback
 // ============================================================================
 
+// Forward decl for the cached wrapper below.
+static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data);
+
+// ============================================================================
+// Full-render cache helpers
+// ============================================================================
+
+// FNV-1a 64-bit hash mixer (compile-time fast, low-collision for our domain).
+static inline void cache_hash_mix(uint64_t& h, const void* buf, size_t len) {
+    const uint8_t* p = static_cast<const uint8_t*>(buf);
+    constexpr uint64_t FNV_PRIME = 1099511628211ULL;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= static_cast<uint64_t>(p[i]);
+        h *= FNV_PRIME;
+    }
+}
+
+template <typename T> static inline void cache_hash_val(uint64_t& h, const T& v) {
+    cache_hash_mix(h, &v, sizeof(T));
+}
+
+// Hash every user-visible piece of state that affects rendering output.
+// Pure animation tick state (anim_progress, error_pulse_opa, etc.) IS included —
+// the cache invalidates each animation frame, but most invalidations come from
+// overlay open/close where state hasn't changed at all (the K2 pain point).
+static uint64_t compute_cache_hash(const FilamentPathData* data) {
+    uint64_t h = 14695981039346656037ULL; // FNV-1a 64-bit offset basis
+
+    cache_hash_val(h, data->topology);
+    cache_hash_val(h, data->slot_count);
+    cache_hash_val(h, data->active_slot);
+    cache_hash_val(h, data->filament_segment);
+    cache_hash_val(h, data->filament_color);
+    cache_hash_val(h, data->error_segment);
+    cache_hash_val(h, data->error_pulse_opa);
+    cache_hash_val(h, data->anim_progress);
+    cache_hash_val(h, data->prev_segment);
+    cache_hash_val(h, data->anim_direction);
+    cache_hash_val(h, data->segment_anim_active);
+    cache_hash_val(h, data->bypass_active);
+    cache_hash_val(h, data->bypass_color);
+    cache_hash_val(h, data->bypass_has_spool);
+    cache_hash_val(h, data->show_bypass);
+    cache_hash_val(h, data->hub_only);
+    cache_hash_val(h, data->eject_mode);
+    cache_hash_val(h, data->buffer_fault_state);
+    cache_hash_val(h, data->buffer_present);
+    cache_hash_val(h, data->buffer_state);
+    cache_hash_val(h, data->buffer_bias);
+    cache_hash_val(h, data->heat_active);
+    cache_hash_val(h, data->heat_pulse_opa);
+    cache_hash_val(h, data->heat_pulse_active);
+    cache_hash_val(h, data->flow_anim_active);
+    cache_hash_val(h, data->flow_offset);
+    cache_hash_val(h, data->output_x_current);
+    cache_hash_val(h, data->output_x_target);
+    cache_hash_val(h, data->output_x_anim_active);
+    cache_hash_val(h, data->slot_overlap);
+    cache_hash_val(h, data->slot_width);
+
+    // Per-slot arrays — only hash up to slot_count to avoid noise from stale entries.
+    int n = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);
+    for (int i = 0; i < n; ++i) {
+        cache_hash_val(h, data->slot_filament_states[i].segment);
+        cache_hash_val(h, data->slot_filament_states[i].color);
+        cache_hash_val(h, data->slot_has_prep_sensor[i]);
+        cache_hash_val(h, data->mapped_tool[i]);
+        cache_hash_val(h, data->slot_is_hub_routed[i]);
+    }
+
+    // Theme: dark/light mode change + key size changes invalidate cache.
+    uint32_t idle_u32 = lv_color_to_u32(data->color_idle);
+    cache_hash_val(h, idle_u32);
+    cache_hash_val(h, data->line_width_idle);
+    cache_hash_val(h, data->sensor_radius);
+
+    // Layout shifts (slot grid moves/resizes) invalidate cache.
+    if (data->slot_grid) {
+        lv_area_t grid_coords;
+        lv_obj_get_coords(data->slot_grid, &grid_coords);
+        cache_hash_val(h, grid_coords);
+    }
+
+    return h;
+}
+
+// Free + null the cache buffer (safe to call repeatedly).
+static void cache_invalidate(FilamentPathData* data) {
+    if (data->render_cache_) {
+        lv_draw_buf_destroy(data->render_cache_);
+        data->render_cache_ = nullptr;
+    }
+    data->cache_hash_ = 0;
+    data->cache_coords_ = {0, 0, -1, -1};
+}
+
+// Render the full scene into `data->render_cache_`, sized to widget bounds.
+// Returns true on success. Buffer is ARGB8888 with origin matching widget coords
+// (so existing draw helpers using absolute coords land in the right pixels).
+static bool cache_capture(lv_obj_t* obj, FilamentPathData* data, const lv_area_t& obj_coords) {
+    int32_t w = lv_area_get_width(&obj_coords);
+    int32_t h = lv_area_get_height(&obj_coords);
+    if (w <= 0 || h <= 0)
+        return false;
+
+    // (Re)allocate cache buffer if size changed.
+    bool need_alloc = !data->render_cache_;
+    if (data->render_cache_) {
+        const lv_image_header_t& hdr = data->render_cache_->header;
+        if ((int32_t)hdr.w != w || (int32_t)hdr.h != h)
+            need_alloc = true;
+    }
+    if (need_alloc) {
+        if (data->render_cache_) {
+            lv_draw_buf_destroy(data->render_cache_);
+            data->render_cache_ = nullptr;
+        }
+        data->render_cache_ = lv_draw_buf_create(w, h, LV_COLOR_FORMAT_ARGB8888, 0);
+        if (!data->render_cache_)
+            return false;
+    }
+
+    // Clear to transparent — the draw helpers don't fill the full rect.
+    lv_draw_buf_clear(data->render_cache_, nullptr);
+
+    // Construct a layer whose buffer maps absolute widget coords to (0,0) of the buffer.
+    // LVGL computes pixel offsets as (pixel - buf_area.x1), so setting buf_area = obj_coords
+    // makes draws at absolute widget coords land at the correct buffer pixel.
+    lv_layer_t cache_layer;
+    lv_layer_init(&cache_layer);
+    cache_layer.draw_buf = data->render_cache_;
+    cache_layer.color_format = LV_COLOR_FORMAT_ARGB8888;
+    cache_layer.buf_area = obj_coords;
+    cache_layer._clip_area = obj_coords;
+    cache_layer.phy_clip_area = obj_coords;
+
+    // Run the existing 3500-line draw code, writing into the cache.
+    if (data->topology == static_cast<int>(PathTopology::MIXED)) {
+        draw_mixed_topology(obj, &cache_layer, data);
+    } else if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
+        draw_parallel_topology(obj, &cache_layer, data);
+    } else {
+        filament_path_render(obj, &cache_layer, data);
+    }
+
+    // Flush pending draw tasks synchronously into the cache buffer.
+    // Mirrors lv_canvas_finish_layer() but without invalidating a widget.
+    cache_layer.all_tasks_added = true;
+    lv_display_t* disp = lv_obj_get_display(obj);
+    while (cache_layer.draw_task_head) {
+        lv_draw_dispatch_wait_for_request();
+        bool dispatched = lv_draw_dispatch_layer(disp, &cache_layer);
+        if (!dispatched) {
+            lv_draw_wait_for_finish();
+            lv_draw_dispatch_request();
+        }
+    }
+    lv_draw_unit_send_event(NULL, LV_EVENT_CHILD_DELETED, &cache_layer);
+
+    data->cache_coords_ = obj_coords;
+    return true;
+}
+
+// Blit the cache buffer onto the real layer at widget coords.
+static void cache_blit(lv_layer_t* layer, FilamentPathData* data, const lv_area_t& obj_coords) {
+    lv_draw_image_dsc_t dsc;
+    lv_draw_image_dsc_init(&dsc);
+    dsc.src = data->render_cache_;
+    dsc.image_area = obj_coords;
+    lv_draw_image(layer, &dsc, &obj_coords);
+}
+
 static void filament_path_draw_cb(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
     lv_layer_t* layer = lv_event_get_layer(e);
@@ -2025,18 +2200,47 @@ static void filament_path_draw_cb(lv_event_t* e) {
     if (!data)
         return;
 
-    // For MIXED topology (some lanes direct, some through hub), use dedicated function
-    if (data->topology == static_cast<int>(PathTopology::MIXED)) {
-        draw_mixed_topology(e, data);
+    // Get widget coords once — cache machinery and renderers all need them.
+    lv_area_t obj_coords;
+    lv_obj_get_coords(obj, &obj_coords);
+
+    // Cache hit? Blit cached buffer and skip the heavyweight draw.
+    uint64_t new_hash = compute_cache_hash(data);
+    bool coords_match = data->render_cache_ && data->cache_coords_.x1 == obj_coords.x1 &&
+                        data->cache_coords_.y1 == obj_coords.y1 &&
+                        data->cache_coords_.x2 == obj_coords.x2 &&
+                        data->cache_coords_.y2 == obj_coords.y2;
+    if (data->render_cache_ && data->cache_hash_ == new_hash && coords_match) {
+        cache_blit(layer, data, obj_coords);
         return;
     }
 
-    // For PARALLEL topology (tool changers), use dedicated drawing function
-    // This shows independent toolheads per slot instead of converging to a hub
-    if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
-        draw_parallel_topology(e, data);
+    // Cache miss — render into the cache buffer, then blit it onto the real layer.
+    if (cache_capture(obj, data, obj_coords)) {
+        data->cache_hash_ = new_hash;
+        cache_blit(layer, data, obj_coords);
         return;
     }
+
+    // Capture failed (allocation failure, zero-size widget). Fall through to direct
+    // render so the widget isn't blank.
+    cache_invalidate(data);
+    if (data->topology == static_cast<int>(PathTopology::MIXED)) {
+        draw_mixed_topology(obj, layer, data);
+        return;
+    }
+    if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
+        draw_parallel_topology(obj, layer, data);
+        return;
+    }
+    filament_path_render(obj, layer, data);
+}
+
+// ============================================================================
+// LINEAR / HUB topology rendering (the main draw body).
+// ============================================================================
+
+static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
 
     // Get widget dimensions
     lv_area_t obj_coords;
@@ -2922,6 +3126,11 @@ static void filament_path_delete_cb(lv_event_t* e) {
             lv_anim_delete(obj, error_pulse_anim_cb);
             lv_anim_delete(obj, heat_pulse_anim_cb);
             lv_anim_delete(obj, flow_anim_cb);
+            // Free the render cache buffer (if any).
+            if (data->render_cache_) {
+                lv_draw_buf_destroy(data->render_cache_);
+                data->render_cache_ = nullptr;
+            }
         }
         s_registry.erase(it);
         // data automatically freed when unique_ptr goes out of scope
