@@ -120,6 +120,16 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
 
+    // Tool reassignment is only persistable when the lessWaste/bambufy plugin
+    // is loaded (has_ifs_vars_): `_IFS_VARS tools=...` writes save_variables
+    // that the plugin replays at print start. On native ZMOD the macro is
+    // absent and set_tool_mapping() can only mutate local state, which the
+    // firmware ignores — surface that as caps={false,false} so the print
+    // start path doesn't silently drop user-supplied remaps.
+    [[nodiscard]] helix::printer::ToolMappingCapabilities
+    get_tool_mapping_capabilities() const override;
+    [[nodiscard]] std::vector<int> get_tool_mapping() const override;
+
     // Explicit user-initiated override clear (e.g. "Clear slot metadata" button
     // in the AMS edit modal). Erases overrides_[slot_index], resets the
     // override-exclusive fields on the live SlotInfo, and kicks off

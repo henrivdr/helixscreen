@@ -1323,6 +1323,31 @@ AmsError AmsBackendAd5xIfs::set_slot_info(int slot_index, const SlotInfo& info, 
     return AmsErrorHelper::success();
 }
 
+helix::printer::ToolMappingCapabilities
+AmsBackendAd5xIfs::get_tool_mapping_capabilities() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!has_ifs_vars_) {
+        return {false, false, ""};
+    }
+    return {.supported = true, .editable = true,
+            .description = "Tool reassignment via _IFS_VARS"}; // i18n: do not translate
+}
+
+std::vector<int> AmsBackendAd5xIfs::get_tool_mapping() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!has_ifs_vars_) {
+        return {};
+    }
+    std::vector<int> result(TOOL_MAP_SIZE, -1);
+    for (size_t t = 0; t < TOOL_MAP_SIZE; ++t) {
+        int port = tool_map_[t];
+        if (port >= 1 && port <= NUM_PORTS) {
+            result[t] = port - 1;
+        }
+    }
+    return result;
+}
+
 AmsError AmsBackendAd5xIfs::set_tool_mapping(int tool_number, int slot_index) {
     if (tool_number < 0 || tool_number >= TOOL_MAP_SIZE) {
         return AmsErrorHelper::invalid_parameter("Invalid tool number");
