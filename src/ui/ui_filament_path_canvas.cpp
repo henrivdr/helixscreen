@@ -48,6 +48,20 @@ static bool reduced_effects() {
 #endif
 }
 
+// Layered renderer toggle. When enabled, the widget hosts two child lv_canvas
+// widgets (static topology + state overlay) backed by cached ARGB8888 buffers
+// that LVGL composites natively, plus a DRAW_POST cb for cheap animation.
+// Setters mark `static_dirty_` / `overlay_dirty_`; canvases refresh on the
+// next paint cycle via DRAW_MAIN_BEGIN. Legacy single-callback render path
+// stays in place behind the same dispatch when the toggle is off.
+static bool layered_renderer_enabled() {
+    static const bool cached = []() {
+        const char* env = getenv("HELIX_LAYERED_FILAMENT_PATH");
+        return env && (strcmp(env, "1") == 0 || strcasecmp(env, "true") == 0);
+    }();
+    return cached;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -256,6 +270,18 @@ struct FilamentPathData {
     lv_draw_buf_t* render_cache_ = nullptr;
     uint64_t cache_hash_ = 0;
     lv_area_t cache_coords_ = {0, 0, -1, -1}; // Invalid by design — first draw misses
+
+    // Layered renderer state (only used when layered_renderer_enabled()).
+    // The widget hosts two lv_canvas children backed by ARGB8888 draw_bufs;
+    // LVGL composites them natively under a DRAW_POST animation pass.
+    lv_obj_t* static_canvas_ = nullptr;
+    lv_obj_t* overlay_canvas_ = nullptr;
+    lv_draw_buf_t* static_canvas_buf_ = nullptr;
+    lv_draw_buf_t* overlay_canvas_buf_ = nullptr;
+    bool static_dirty_ = true;  // canvas needs repaint of idle topology
+    bool overlay_dirty_ = true; // canvas needs repaint of state-tied content
+    int32_t canvas_w_ = 0;      // current canvas buffer size — tracks widget resize
+    int32_t canvas_h_ = 0;
 };
 
 // Load theme-aware colors, fonts, and sizes
@@ -2221,12 +2247,252 @@ static void cache_blit(lv_layer_t* layer, FilamentPathData* data, const lv_area_
     lv_draw_image(layer, &dsc, &obj_coords);
 }
 
+// ============================================================================
+// Layered renderer scaffold (HELIX_LAYERED_FILAMENT_PATH).
+//
+// When the env-var toggle is on, the widget hosts two lv_canvas children
+// (static topology + state overlay) backed by cached ARGB8888 buffers. LVGL
+// composites them natively. Animation paints in DRAW_POST after children.
+//
+// In this scaffold step, the topology renderers are still legacy: the entire
+// state-tied + idle content is rendered into the overlay canvas, and the
+// static canvas stays transparent. Subsequent steps move idle-topology
+// drawing into the static layer and per-frame animation into DRAW_POST.
+// ============================================================================
+
+static void layered_destroy_buffers(FilamentPathData* data) {
+    if (data->static_canvas_buf_) {
+        lv_draw_buf_destroy(data->static_canvas_buf_);
+        data->static_canvas_buf_ = nullptr;
+    }
+    if (data->overlay_canvas_buf_) {
+        lv_draw_buf_destroy(data->overlay_canvas_buf_);
+        data->overlay_canvas_buf_ = nullptr;
+    }
+}
+
+// (Re)allocate canvas buffers to match widget dims. Returns true on success.
+// Buffers swapped in BEFORE destroying old ones — `lv_canvas_set_draw_buf`
+// reads the old header to drop the cached image source.
+static bool layered_ensure_buffers(FilamentPathData* data, int32_t w, int32_t h) {
+    if (w <= 0 || h <= 0)
+        return false;
+    if (data->canvas_w_ == w && data->canvas_h_ == h && data->static_canvas_buf_ &&
+        data->overlay_canvas_buf_) {
+        return true;
+    }
+
+    auto* new_static = lv_draw_buf_create(w, h, LV_COLOR_FORMAT_ARGB8888, 0);
+    auto* new_overlay = lv_draw_buf_create(w, h, LV_COLOR_FORMAT_ARGB8888, 0);
+    if (!new_static || !new_overlay) {
+        if (new_static)
+            lv_draw_buf_destroy(new_static);
+        if (new_overlay)
+            lv_draw_buf_destroy(new_overlay);
+        return false;
+    }
+
+    auto* old_static = data->static_canvas_buf_;
+    auto* old_overlay = data->overlay_canvas_buf_;
+    data->static_canvas_buf_ = new_static;
+    data->overlay_canvas_buf_ = new_overlay;
+    if (data->static_canvas_)
+        lv_canvas_set_draw_buf(data->static_canvas_, new_static);
+    if (data->overlay_canvas_)
+        lv_canvas_set_draw_buf(data->overlay_canvas_, new_overlay);
+    if (old_static)
+        lv_draw_buf_destroy(old_static);
+    if (old_overlay)
+        lv_draw_buf_destroy(old_overlay);
+
+    data->canvas_w_ = w;
+    data->canvas_h_ = h;
+    data->static_dirty_ = true;
+    data->overlay_dirty_ = true;
+    return true;
+}
+
+// Legacy renderer paints entry-lane segments above the widget's top edge
+// (entry_y = y_off + height × -0.12, gestures up at the spool grid). Canvas
+// children are extended above the widget by this much so absolute-coord
+// draws land in the buffer instead of being clipped.
+static constexpr float CANVAS_TOP_OVERHANG_RATIO = 0.15f;
+
+static int32_t layered_overhang(int32_t widget_h) {
+    return LV_MAX(50, static_cast<int32_t>(widget_h * CANVAS_TOP_OVERHANG_RATIO));
+}
+
+// Static layer renderer — idle topology only. SCAFFOLD: clears transparent.
+// Per-topology static painting arrives in steps 4b–4d.
+static void layered_render_static(lv_obj_t* /*obj*/, FilamentPathData* data) {
+    if (!data->static_canvas_)
+        return;
+    lv_canvas_fill_bg(data->static_canvas_, lv_color_black(), LV_OPA_TRANSP);
+}
+
+// Build buf_area covering the widget bounds + top overhang. The canvas
+// widget's own coords may be stale right after `lv_obj_set_size` (layout
+// recompute is deferred), so derive the screen-space area from the widget
+// instead — the underlying draw_buf was sized to match.
+static lv_area_t layered_compute_buf_area(lv_obj_t* obj, int32_t overhang) {
+    lv_area_t a;
+    lv_obj_get_coords(obj, &a);
+    a.y1 -= overhang;
+    return a;
+}
+
+// Overlay layer renderer — state-tied content (per-slot colors, highlights).
+// SCAFFOLD: routes the legacy renderer into this canvas to produce the same
+// pixels as before. Topology-specific static/overlay split arrives later.
+static void layered_render_overlay(lv_obj_t* obj, FilamentPathData* data) {
+    if (!data->overlay_canvas_)
+        return;
+    lv_canvas_fill_bg(data->overlay_canvas_, lv_color_black(), LV_OPA_TRANSP);
+
+    int32_t overhang = layered_overhang(lv_obj_get_height(obj));
+    lv_area_t buf_area = layered_compute_buf_area(obj, overhang);
+
+    lv_layer_t layer;
+    lv_canvas_init_layer(data->overlay_canvas_, &layer);
+    // Override buf_area so legacy renderer's absolute-display-coord draws map
+    // to the right buffer pixels (LVGL maps pixel = coord - buf_area.x1).
+    // Default `lv_canvas_init_layer` uses buffer-local (0,0)→(w,h), which
+    // clips anything outside that range when fed absolute screen coords.
+    layer.buf_area = buf_area;
+    layer._clip_area = buf_area;
+    layer.phy_clip_area = buf_area;
+    if (data->topology == static_cast<int>(PathTopology::MIXED)) {
+        draw_mixed_topology(obj, &layer, data);
+    } else if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
+        draw_parallel_topology(obj, &layer, data);
+    } else {
+        filament_path_render(obj, &layer, data);
+    }
+    lv_canvas_finish_layer(data->overlay_canvas_, &layer);
+}
+
+// Animation layer — painted on top of both canvases in DRAW_POST.
+// SCAFFOLD: stub; animation still lives inside the legacy overlay render.
+static void layered_render_animation(lv_obj_t* /*obj*/, lv_layer_t* /*layer*/,
+                                     FilamentPathData* /*data*/) {}
+
+// Async refresh — runs OUTSIDE the LVGL render pass, so it's safe to call
+// lv_canvas_init_layer / finish_layer (which invalidate the canvas, illegal
+// during rendering). LVGL dedups same cb+ud, so multiple invalidations in
+// one tick collapse to one refresh.
+static void layered_refresh_async(void* arg) {
+    auto* obj = static_cast<lv_obj_t*>(arg);
+    auto it = s_registry.find(obj);
+    if (it == s_registry.end())
+        return;
+    auto* data = it->second;
+    if (!data || !data->static_canvas_)
+        return;
+
+    int32_t w = lv_obj_get_width(obj);
+    int32_t h = lv_obj_get_height(obj);
+    if (w <= 0 || h <= 0)
+        return; // layout not finished yet — INVALIDATE_AREA will retry
+
+    int32_t overhang = layered_overhang(h);
+    int32_t total_h = h + overhang;
+
+    if (w != data->canvas_w_ || total_h != data->canvas_h_) {
+        if (!layered_ensure_buffers(data, w, total_h))
+            return;
+        lv_obj_set_size(data->static_canvas_, w, total_h);
+        lv_obj_set_size(data->overlay_canvas_, w, total_h);
+        lv_obj_set_pos(data->static_canvas_, 0, -overhang);
+        lv_obj_set_pos(data->overlay_canvas_, 0, -overhang);
+        // Force layout recompute so canvas's content_coords reflect the new
+        // size immediately (otherwise the canvas's own coords stay stale
+        // until LVGL's next layout pass — would clip subsequent draws).
+        lv_obj_update_layout(data->static_canvas_);
+        lv_obj_update_layout(data->overlay_canvas_);
+    }
+
+    layered_render_static(obj, data);
+    layered_render_overlay(obj, data);
+    data->static_dirty_ = false;
+    data->overlay_dirty_ = false;
+}
+
+// Hook lv_obj_invalidate-driven repaints so legacy setters trigger a canvas
+// refresh. Schedules async work — never drives canvas APIs synchronously
+// from inside the render pass.
+static void layered_invalidate_area_cb(lv_event_t* e) {
+    lv_obj_t* obj = lv_event_get_target_obj(e);
+    lv_async_call(layered_refresh_async, obj);
+}
+
+// Create the two canvas children, configure styles, hook the refresh event.
+static bool layered_setup_canvases(lv_obj_t* obj, FilamentPathData* data) {
+    int32_t w = lv_obj_get_width(obj);
+    int32_t h = lv_obj_get_height(obj);
+    if (w <= 0)
+        w = DEFAULT_WIDTH;
+    if (h <= 0)
+        h = DEFAULT_HEIGHT;
+    int32_t overhang = layered_overhang(h);
+    int32_t total_h = h + overhang;
+
+    if (!layered_ensure_buffers(data, w, total_h))
+        return false;
+
+    // Canvases extend above the widget — needs OVERFLOW_VISIBLE on parent so
+    // LVGL doesn't clip them to the widget's bounds.
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+    data->static_canvas_ = lv_canvas_create(obj);
+    data->overlay_canvas_ = lv_canvas_create(obj);
+    if (!data->static_canvas_ || !data->overlay_canvas_) {
+        if (data->static_canvas_)
+            lv_obj_delete(data->static_canvas_);
+        if (data->overlay_canvas_)
+            lv_obj_delete(data->overlay_canvas_);
+        data->static_canvas_ = nullptr;
+        data->overlay_canvas_ = nullptr;
+        layered_destroy_buffers(data);
+        return false;
+    }
+
+    for (auto* c : {data->static_canvas_, data->overlay_canvas_}) {
+        lv_obj_set_size(c, w, total_h);
+        lv_obj_set_pos(c, 0, -overhang);
+        lv_obj_set_style_bg_opa(c, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(c, 0, 0);
+        lv_obj_set_style_pad_all(c, 0, 0);
+        lv_obj_clear_flag(c, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+    }
+    lv_canvas_set_draw_buf(data->static_canvas_, data->static_canvas_buf_);
+    lv_canvas_set_draw_buf(data->overlay_canvas_, data->overlay_canvas_buf_);
+    lv_canvas_fill_bg(data->static_canvas_, lv_color_black(), LV_OPA_TRANSP);
+    lv_canvas_fill_bg(data->overlay_canvas_, lv_color_black(), LV_OPA_TRANSP);
+
+    // Setter-side lv_obj_invalidate calls drive canvas refresh via async cb.
+    lv_obj_add_event_cb(obj, layered_invalidate_area_cb, LV_EVENT_INVALIDATE_AREA, nullptr);
+
+    // Schedule initial render — layout may not be complete yet at create
+    // time; async callback retries when layout has settled.
+    lv_async_call(layered_refresh_async, obj);
+    return true;
+}
+
 static void filament_path_draw_cb(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
     lv_layer_t* layer = lv_event_get_layer(e);
     FilamentPathData* data = get_data(obj);
     if (!data)
         return;
+
+    // Layered renderer mode: child canvases handle the heavyweight painting
+    // (refreshed in DRAW_MAIN_BEGIN before LVGL paints them). This DRAW_POST
+    // pass only contributes the cheap animation overlay on top.
+    if (layered_renderer_enabled() && data->static_canvas_) {
+        layered_render_animation(obj, layer, data);
+        return;
+    }
 
     // Get widget coords once — cache machinery and renderers all need them.
     lv_area_t obj_coords;
@@ -3133,6 +3399,13 @@ static void filament_path_delete_cb(lv_event_t* e) {
                 lv_draw_buf_destroy(data->render_cache_);
                 data->render_cache_ = nullptr;
             }
+            // Cancel any pending refresh — async cb would fire with stale obj.
+            lv_async_call_cancel(layered_refresh_async, obj);
+            // Free layered canvas buffers. The lv_canvas children themselves
+            // are deleted by LVGL as the parent tears down.
+            layered_destroy_buffers(data.get());
+            data->static_canvas_ = nullptr;
+            data->overlay_canvas_ = nullptr;
         }
         s_registry.erase(it);
         // data automatically freed when unique_ptr goes out of scope
@@ -3170,6 +3443,12 @@ static void* filament_path_xml_create(lv_xml_parser_state_t* state, const char**
     lv_obj_add_event_cb(obj, filament_path_draw_cb, LV_EVENT_DRAW_POST, nullptr);
     lv_obj_add_event_cb(obj, filament_path_click_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(obj, filament_path_delete_cb, LV_EVENT_DELETE, nullptr);
+
+    if (layered_renderer_enabled()) {
+        if (!layered_setup_canvases(obj, data)) {
+            spdlog::error("[FilamentPath] Layered canvas setup failed; falling back to legacy");
+        }
+    }
 
     spdlog::debug("[FilamentPath] Created widget");
     return obj;
@@ -3276,6 +3555,12 @@ lv_obj_t* ui_filament_path_canvas_create(lv_obj_t* parent) {
     lv_obj_add_event_cb(obj, filament_path_draw_cb, LV_EVENT_DRAW_POST, nullptr);
     lv_obj_add_event_cb(obj, filament_path_click_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(obj, filament_path_delete_cb, LV_EVENT_DELETE, nullptr);
+
+    if (layered_renderer_enabled()) {
+        if (!layered_setup_canvases(obj, data)) {
+            spdlog::error("[FilamentPath] Layered canvas setup failed; falling back to legacy");
+        }
+    }
 
     spdlog::debug("[FilamentPath] Created widget programmatically");
     return obj;
