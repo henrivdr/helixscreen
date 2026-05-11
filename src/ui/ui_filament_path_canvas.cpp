@@ -282,6 +282,17 @@ struct FilamentPathData {
     bool overlay_dirty_ = true; // canvas needs repaint of state-tied content
     int32_t canvas_w_ = 0;      // current canvas buffer size — tracks widget resize
     int32_t canvas_h_ = 0;
+
+    // LINEAR/HUB active path cache. Populated by the state-tied legacy
+    // renderer; consumed by the animation DRAW_POST pass (flow_dots, segment
+    // tip position) without needing to re-run the state-tied code each
+    // animation tick. PathLengths is cheap to recompute from the path so it
+    // isn't cached.
+    ActiveFilamentPath active_path_cache_ = {};
+    int32_t cached_center_x_ = 0; // last state-tied draw's center_x
+    int32_t cached_nozzle_y_ = 0; // last state-tied draw's nozzle_y
+    int32_t cached_sensor_r_ = 0; // last state-tied draw's sensor radius
+    bool active_path_cache_valid_ = false;
 };
 
 // Load theme-aware colors, fonts, and sizes
@@ -1604,6 +1615,75 @@ static void draw_heat_glow(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t ra
 static void draw_parallel_static_and_overlay(lv_obj_t* obj, lv_layer_t* layer,
                                              FilamentPathData* data);
 
+// Animation overlay for LINEAR/HUB — flow particles, heat glow, segment
+// transition filament tip. Reads the active_path cached by the state-tied
+// renderer (populated in filament_path_render). Called from DRAW_POST in
+// the layered renderer.
+static void draw_animation_linear_hub(lv_layer_t* layer, FilamentPathData* data) {
+    if (!data->active_path_cache_valid_)
+        return;
+
+    lv_color_t active_color = lv_color_hex(data->filament_color);
+    int32_t sensor_r = data->cached_sensor_r_;
+    int32_t center_x = data->cached_center_x_;
+    int32_t nozzle_y = data->cached_nozzle_y_;
+    int32_t extruder_scale = data->extruder_scale;
+    auto& path = data->active_path_cache_;
+
+    // Flow particles along the active filament path.
+    if (data->flow_anim_active && data->active_slot >= 0 && !data->hub_only) {
+        PathLengths lens = compute_path_lengths(path);
+        bool reverse = (data->anim_direction == AnimDirection::UNLOADING);
+        draw_flow_dots_path(layer, path, lens, active_color, data->flow_offset, reverse);
+    }
+
+    // Heat glow halo around the nozzle tip.
+    if (data->heat_active) {
+        auto effective_style = helix::SettingsManager::instance().get_effective_toolhead_style();
+        int32_t tip_y;
+        switch (effective_style) {
+        case helix::ToolheadStyle::A4T:
+            tip_y = nozzle_y + (extruder_scale * 6 / 5 * 46) / 10 - 6;
+            break;
+        case helix::ToolheadStyle::STEALTHBURNER:
+            tip_y = nozzle_y + (extruder_scale * 46) / 10 - 6;
+            break;
+        case helix::ToolheadStyle::ANTHEAD:
+            tip_y = nozzle_y + (extruder_scale * 33) / 10;
+            break;
+        default:
+            tip_y = nozzle_y + (extruder_scale * 26) / 10;
+            break;
+        }
+        draw_heat_glow(layer, center_x, tip_y, sensor_r, data->heat_pulse_opa);
+    }
+
+    // Segment transition tip — interpolated along the path.
+    if (data->segment_anim_active && data->active_slot >= 0 && !data->hub_only &&
+        path.count > 0) {
+        PathSegment prev_seg = static_cast<PathSegment>(data->prev_segment);
+        PathSegment fil_seg = static_cast<PathSegment>(data->filament_segment);
+        float progress_factor = data->anim_progress / 100.0f;
+        const float NUM_INTERVALS =
+            static_cast<float>(static_cast<int>(PathSegment::NOZZLE) -
+                               static_cast<int>(PathSegment::SPOOL));
+        float base = static_cast<float>(static_cast<int>(prev_seg) - 1);
+        float target = static_cast<float>(static_cast<int>(fil_seg) - 1);
+        float tip_fraction = (base + (target - base) * progress_factor) / NUM_INTERVALS;
+        tip_fraction = LV_CLAMP(tip_fraction, 0.0f, 1.0f);
+        PathLengths lens = compute_path_lengths(path);
+        float tip_distance = tip_fraction * lens.total;
+        int32_t tip_x, tip_y;
+        path_point_at_distance(path, lens, tip_distance, tip_x, tip_y);
+        bool in_nozzle_body =
+            (prev_seg == PathSegment::TOOLHEAD && fil_seg == PathSegment::NOZZLE) ||
+            (prev_seg == PathSegment::NOZZLE && fil_seg == PathSegment::TOOLHEAD);
+        if (!in_nozzle_body) {
+            draw_filament_tip(layer, tip_x, tip_y, active_color, sensor_r);
+        }
+    }
+}
+
 // Animation overlay for PARALLEL — flow particles. Called from DRAW_POST in
 // the layered renderer; folded into draw_parallel_static_and_overlay in the
 // legacy renderer's single-pass invocation.
@@ -2416,13 +2496,16 @@ static void layered_render_overlay(lv_obj_t* obj, FilamentPathData* data) {
 // static/overlay canvas caches. The canvas surfaces handle the heavyweight
 // topology + state-tied content.
 static void layered_render_animation(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
-    if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
+    int topo = data->topology;
+    if (topo == static_cast<int>(PathTopology::PARALLEL)) {
         BaseGeometry g = compute_base_geometry(obj, data);
         SlotRenderStates states = compute_slot_render_states(data);
         draw_animation_parallel(layer, g, states, data);
+    } else if (topo == static_cast<int>(PathTopology::LINEAR) ||
+               topo == static_cast<int>(PathTopology::HUB)) {
+        draw_animation_linear_hub(layer, data);
     }
-    // MIXED / LINEAR / HUB animation still lives inside the legacy renderer
-    // (in the overlay canvas) until their layered split lands in 4c–4d.
+    // MIXED has no per-frame animation calls — nothing to paint here.
 }
 
 // Async refresh — runs OUTSIDE the LVGL render pass, so it's safe to call
@@ -3220,9 +3303,19 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
                                       line_active);
         }
 
+        // Cache the recorded active path + geometry locals so the animation
+        // DRAW_POST pass can paint flow dots / heat glow / segment tip
+        // without re-running the state-tied draw on each animation tick.
+        data->active_path_cache_ = active_path;
+        data->cached_center_x_ = center_x;
+        data->cached_nozzle_y_ = nozzle_y;
+        data->cached_sensor_r_ = sensor_r;
+        data->active_path_cache_valid_ = true;
+
         // Draw flow particles along the recorded active filament path
         bool flow_active = dbg_flow_active || data->flow_anim_active;
-        if (flow_active && data->active_slot >= 0 && !data->hub_only) {
+        bool skip_anim_inline = layered_renderer_enabled() && data->static_canvas_;
+        if (!skip_anim_inline && flow_active && data->active_slot >= 0 && !data->hub_only) {
             AnimDirection flow_dir = dbg_flow_active ? dbg_anim_dir : data->anim_direction;
             int32_t flow_off = dbg_flow_active ? dbg_flow_offset : data->flow_offset;
             bool reverse = (flow_dir == AnimDirection::UNLOADING);
@@ -3231,7 +3324,7 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
 
         // Draw heat glow BEHIND the toolhead so it doesn't obscure the icon
         auto effective_style = helix::SettingsManager::instance().get_effective_toolhead_style();
-        if (data->heat_active) {
+        if (!skip_anim_inline && data->heat_active) {
             int32_t tip_y;
             switch (effective_style) {
             case helix::ToolheadStyle::A4T:
@@ -3241,12 +3334,9 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
                 tip_y = nozzle_y + (data->extruder_scale * 46) / 10 - 6;
                 break;
             case helix::ToolheadStyle::ANTHEAD:
-                // AntHead image: nozzle tip at ~50% below center (82/163 of image)
-                // render_height = scale_unit * 6.5, tip offset ≈ scale_unit * 3.27
                 tip_y = nozzle_y + (data->extruder_scale * 33) / 10;
                 break;
             default:
-                // Bambu, JabberWocky, Creality K1/K2: tip at cy + scale*2.6
                 tip_y = nozzle_y + (data->extruder_scale * 26) / 10;
                 break;
             }
@@ -3283,7 +3373,9 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
     // Draw animated filament tip (during segment transitions)
     // Uses the same active_path recorded by draw functions — no separate mapping.
     // ========================================================================
-    if (is_animating && data->active_slot >= 0 && !data->hub_only && active_path.count > 0) {
+    bool skip_tip_inline = layered_renderer_enabled() && data->static_canvas_;
+    if (!skip_tip_inline && is_animating && data->active_slot >= 0 && !data->hub_only &&
+        active_path.count > 0) {
         float progress_factor = anim_progress / 100.0f;
 
         // Interpolate position along the path based on segment transition progress.
