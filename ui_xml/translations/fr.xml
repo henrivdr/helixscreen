@@ -400,6 +400,7 @@
   <translation tag="Connection successful!" fr="Connexion réussie !"/>
   <translation tag="Connection timeout" fr="Délai de connexion dépassé"/>
   <translation tag="Console" fr="Console"/>
+  <translation tag="Console Settings" fr="Paramètres de la console"/>
   <translation tag="Control optional print start features" fr="Contrôler les fonctionnalités optionnelles de démarrage d&apos;impression"/>
   <translation tag="Control power relays and smart outlets" fr="Contrôler les relais et prises connectées"/>
   <translation tag="Controlled by hardware sensor" fr="Contrôlé par capteur matériel"/>
@@ -421,6 +422,8 @@
   <translation tag="Cover open" fr="Capot ouvert"/>
   <translation tag="Crash report sent — thank you!" fr="Rapport de crash envoyé — merci !"/>
   <translation tag="Creality CFS" fr="Creality CFS"/>
+  <translation tag="Creality K1" fr="Creality K1"/>
+  <translation tag="Creality K2 Plus" fr="Creality K2 Plus"/>
   <translation tag="Create New Filament" fr="Créer un nouveau filament"/>
   <translation tag="Create New Vendor" fr="Créer un nouveau fournisseur"/>
   <translation tag="Create Spool" fr="Créer une bobine"/>
@@ -525,6 +528,7 @@
   <translation tag="Effects" fr="Effets"/>
   <translation tag="Eject" fr="Éjecter"/>
   <translation tag="Eject failed: {}" fr="Échec de l&apos;éjection : {}"/>
+  <translation tag="Elegoo Centauri Carbon" fr="Elegoo Centauri Carbon"/>
   <translation tag="Emergency Stop" fr="Arrêt d&apos;urgence"/>
   <translation tag="Emergency Stop?" fr="Arrêt d&apos;urgence ?"/>
   <translation tag="Emergency stop activated" fr="Arrêt d&apos;urgence activé"/>
@@ -590,6 +594,7 @@
   <translation tag="Extruding {}mm..." fr="Extrusion de {}mm..."/>
   <translation tag="FAILED" fr="ÉCHOUÉ"/>
   <translation tag="FILAMENT MAPPING" fr="MAPPAGE DE FILAMENT"/>
+  <translation tag="FILTERS" fr="FILTRES"/>
   <translation tag="Factory Reset" fr="Réinitialisation d&apos;usine"/>
   <translation tag="Failed" fr="Échoué"/>
   <translation tag="Failed to analyze PRINT_START macro" fr="Échec de l&apos;analyse de la macro PRINT_START"/>
@@ -677,6 +682,7 @@
   <translation tag="Filament Detected" fr="Filament détecté"/>
   <translation tag="Filament Environment" fr="Environnement du filament"/>
   <translation tag="Filament Mapping" fr="Mappage du filament"/>
+  <translation tag="Filament Runout" fr="Fin de filament"/>
   <translation tag="Filament Sensor" fr="Capteur de filament"/>
   <translation tag="Filament Used" fr="Filament utilisé"/>
   <translation tag="Filament already exists" fr="Ce filament existe déjà"/>
@@ -703,6 +709,8 @@
   <translation tag="Finishing up..." fr="Finalisation..."/>
   <translation tag="Firmware Restart" fr="Redémarrage firmware"/>
   <translation tag="Firmware restarting..." fr="Redémarrage du firmware..."/>
+  <translation tag="FlashForge Adventurer 5M" fr="FlashForge Adventurer 5M"/>
+  <translation tag="FlashForge Adventurer 5X" fr="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" fr="FlashForge IFS"/>
   <translation tag="Flat Concentric Rings (existing ams_slot)" fr="Anneaux concentriques plats (ams_slot existant)"/>
   <translation tag="Flip" fr="Retourner"/>
@@ -711,6 +719,7 @@
   <translation tag="Flow change failed: {}" fr="Échec du changement de débit : {}"/>
   <translation tag="Flowguard" fr="Flowguard"/>
   <translation tag="Flying Toasters" fr="Flying Toasters"/>
+  <translation tag="Follow graph screen" fr="Suivre l&apos;écran du graphique"/>
   <translation tag="Forget" fr="Oublier"/>
   <translation tag="Forming tip..." fr="Formation de la pointe..."/>
   <translation tag="Found %zu printers" fr="%zu imprimantes trouvées"/>
@@ -773,6 +782,8 @@
   <translation tag="Help &amp; About" fr="Aide et à propos"/>
   <translation tag="Help Improve HelixScreen" fr="Aidez à améliorer HelixScreen"/>
   <translation tag="Help improve HelixScreen?" fr="Aider à améliorer HelixScreen ?"/>
+  <translation tag="Hide Firmware Noise" fr="Masquer le bruit du firmware"/>
+  <translation tag="Hide Temperature Reports" fr="Masquer les rapports de température"/>
   <translation tag="Home" fr="Origine"/>
   <translation tag="Home failed" fr="Échec de la référence"/>
   <translation tag="Homing AFC system..." fr="Référence du système AFC..."/>
@@ -894,6 +905,7 @@
   <translation tag="Loaded" fr="Chargé"/>
   <translation tag="Loading Bed Mesh..." fr="Chargement du maillage..."/>
   <translation tag="Loading Error" fr="Erreur de chargement"/>
+  <translation tag="Loading Filament..." fr="Chargement du filament..."/>
   <translation tag="Loading G-code..." fr="Chargement du G-code..."/>
   <translation tag="Loading filament ({}mm)..." fr="Chargement du filament ({}mm)..."/>
   <translation tag="Loading filament..." fr="Chargement du filament..."/>
@@ -977,6 +989,7 @@
   <translation tag="Measure belt path frequencies" fr="Mesurer les fréquences des chemins de courroie"/>
   <translation tag="Measured" fr="Mesuré"/>
   <translation tag="Measurement Failed" fr="Échec de la mesure"/>
+  <translation tag="Mechanical setup" fr="Configuration mécanique"/>
   <translation tag="Memory (MB)" fr="Mémoire (Mo)"/>
   <translation tag="Mesh Complete" fr="Maillage du plateau terminé"/>
   <translation tag="Mesh saved as &apos;{}&apos;" fr="Maillage enregistré sous &apos;{}&apos;"/>
@@ -1145,7 +1158,9 @@
   <translation tag="PID" fr="PID"/>
   <translation tag="PLA" fr="PLA"/>
   <translation tag="PLA - Black" fr="PLA - Noir"/>
+  <translation tag="POWER" fr="ALIMENTATION"/>
   <translation tag="PRE-PRINT STEPS" fr="ÉTAPES PRÉ-IMPRESSION"/>
+  <translation tag="PRINT OPTIONS" fr="OPTIONS D&apos;IMPRESSION"/>
   <translation tag="PRINTERS" fr="IMPRIMANTES"/>
   <translation tag="PROBE SENSORS" fr="CAPTEURS DE PALPAGE"/>
   <translation tag="Pair" fr="Appairer"/>
@@ -1206,6 +1221,7 @@
   <translation tag="Position" fr="Position"/>
   <translation tag="Power" fr="Alimentation"/>
   <translation tag="Power Devices" fr="Appareils électriques"/>
+  <translation tag="Power off the printer or screen" fr="Éteindre l&apos;imprimante ou l&apos;écran"/>
   <translation tag="Pre-print command failed: {}" fr="Échec de la commande pré-impression : {}"/>
   <translation tag="Preheat Macro" fr="Macro de préchauffage"/>
   <translation tag="Preheat PLA" fr="Préchauffer PLA"/>
@@ -1238,12 +1254,14 @@
   <translation tag="Print Label" fr="Imprimer l&apos;étiquette"/>
   <translation tag="Print Library" fr="Bibliothèque d&apos;impression"/>
   <translation tag="Print Objects" fr="Objets d&apos;impression"/>
+  <translation tag="Print Paused" fr="Impression en pause"/>
   <translation tag="Print Speed" fr="Vitesse d&apos;impression"/>
   <translation tag="Print Status" fr="État de l&apos;impression"/>
   <translation tag="Print Time" fr="Temps d&apos;impression"/>
   <translation tag="Print Tuning" fr="Réglage de l&apos;impression"/>
   <translation tag="Print failed" fr="Impression échouée"/>
   <translation tag="Print preparation failed: {}" fr="Échec de la préparation de l&apos;impression : {}"/>
+  <translation tag="Print quality" fr="Qualité d&apos;impression"/>
   <translation tag="Print server rejected the job — check printer status" fr="Le serveur d&apos;impression a rejeté la tâche — vérifiez l&apos;état de l&apos;imprimante"/>
   <translation tag="Printer" fr="Imprimante"/>
   <translation tag="Printer Error" fr="Erreur imprimante"/>
@@ -1301,6 +1319,7 @@
   <translation tag="Purge failed: {}" fr="Échec de la purge : {}"/>
   <translation tag="Purge macro not configured" fr="Macro de purge non configurée"/>
   <translation tag="Purge may still be running — response timed out" fr="Purge peut-être encore en cours — délai dépassé"/>
+  <translation tag="Purging" fr="Purge en cours"/>
   <translation tag="Purging nozzle" fr="Purge de la buse"/>
   <translation tag="Purging {}mm..." fr="Purge de {}mm..."/>
   <translation tag="Purging..." fr="Purge..."/>
@@ -1384,6 +1403,7 @@
   <translation tag="Restart Required" fr="Redémarrage requis"/>
   <translation tag="Restart failed: not connected" fr="Échec du redémarrage : non connecté"/>
   <translation tag="Restart the display application" fr="Redémarrer l&apos;application d&apos;affichage"/>
+  <translation tag="Restart the printer or screen" fr="Redémarrer l&apos;imprimante ou l&apos;écran"/>
   <translation tag="Restarting HelixScreen..." fr="Redémarrage de HelixScreen..."/>
   <translation tag="Restarting Klipper..." fr="Redémarrage de Klipper..."/>
   <translation tag="Restarting Moonraker..." fr="Redémarrage de Moonraker..."/>
@@ -1539,6 +1559,7 @@
   <translation tag="Show instead of dimming" fr="Afficher au lieu d&apos;atténuer"/>
   <translation tag="Show printer icon in navigation bar" fr="Afficher l&apos;icône de l&apos;imprimante dans la barre de navigation"/>
   <translation tag="Show text labels on icon-only home screen widgets" fr="Afficher les libellés sur les widgets de l&apos;écran d&apos;accueil"/>
+  <translation tag="Show whatever curves you last had visible on the full graph." fr="Afficher les dernières courbes visibles sur le graphique complet."/>
   <translation tag="Shutdown" fr="Éteindre"/>
   <translation tag="Shutdown / Reboot" fr="Éteindre / Redémarrer"/>
   <translation tag="Shutdown failed" fr="Échec de l&apos;extinction"/>
@@ -1558,6 +1579,7 @@
   <translation tag="Slot {} updated" fr="Slot {} mis à jour"/>
   <translation tag="Small labels help keep controls calm and focused." fr="Les petites étiquettes aident à garder les contrôles calmes et concentrés."/>
   <translation tag="Snapmaker SnapSwap" fr="Snapmaker SnapSwap"/>
+  <translation tag="Snapmaker U1" fr="Snapmaker U1"/>
   <translation tag="Soft" fr="Doux"/>
   <translation tag="Some settings will take effect after restart." fr="Certains paramètres prendront effet après redémarrage."/>
   <translation tag="Sound Theme" fr="Thème sonore"/>
@@ -1625,6 +1647,8 @@
   <translation tag="Success Rate" fr="Taux de réussite"/>
   <translation tag="Success!" fr="Succès !"/>
   <translation tag="Support, documentation, and version info" fr="Support, documentation et infos de version"/>
+  <translation tag="Suppress periodic &apos;T:.../B:...&apos; status lines" fr="Supprimer les lignes d&apos;état périodiques &apos;T:.../B:...&apos;"/>
+  <translation tag="Suppress raw debug output from printer firmware modules" fr="Supprimer la sortie de débogage brute des modules du firmware de l&apos;imprimante"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." fr="Les surfaces héritent des jetons d&apos;arrière-plan de l&apos;application pour les modes clair et sombre."/>
   <translation tag="Switch Printer" fr="Changer d&apos;imprimante"/>
   <translation tag="Switch Tests" fr="Tests d&apos;interrupteurs"/>
@@ -1911,6 +1935,9 @@
   <translation tag="nozzle" fr="buse"/>
   <translation tag="of" fr="de"/>
   <translation tag="off" fr="éteint"/>
+  <translation tag="pre_print_option.ai_detect.description" fr="Surveiller les anomalies d&apos;impression (caméra K2 Plus)"/>
+  <translation tag="pre_print_option.ai_detect.label" fr="Détection AI"/>
+  <translation tag="pre_print_option.timelapse.label" fr="Timelapse"/>
   <translation tag="prints" fr="impressions"/>
   <translation tag="remaining" fr="restant"/>
   <translation tag="remaining before clog detection triggers" fr="restant avant le déclenchement de la détection de bouchon"/>
@@ -1939,6 +1966,7 @@
   <translation tag="{} complete" fr="{} terminé"/>
   <translation tag="{} heater turned off" fr="Chauffage {} désactivé"/>
   <translation tag="{} macro not configured" fr="Macro {} non configurée"/>
+  <translation tag="{} may cause unintended changes. Are you sure?" fr="{} peut entraîner des modifications non souhaitées. Êtes-vous sûr ?"/>
   <translation tag="{} more taps to {} beta features" fr="{} appuis supplémentaires pour {} les fonctionnalités bêta"/>
   <translation tag="{} target set to {}°C" fr="Cible {} réglée à {}°C"/>
 </translations>

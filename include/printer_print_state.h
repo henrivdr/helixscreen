@@ -224,6 +224,13 @@ class PrinterPrintState {
         return &display_message_visible_;
     }
 
+    /// Klipper print_stats.message — typically populated on pause/error to describe
+    /// the reason (e.g. "Filament Sensor filament_sensor: Runout Detected" or error
+    /// strings). Empty for normal user-initiated PAUSE without a configured message.
+    lv_subject_t* get_print_message_subject() {
+        return &print_message_;
+    }
+
     // ========================================================================
     // Setters
     // ========================================================================
@@ -459,6 +466,10 @@ class PrinterPrintState {
     lv_subject_t display_message_{};         // String subject for UI binding
     lv_subject_t display_message_visible_{}; // Integer: 1 when non-empty, 0 when empty
     char display_message_buf_[128]{};        // Buffer for message storage
+
+    // print_stats.message from Klipper (set by firmware on pause/error to describe reason)
+    lv_subject_t print_message_{};    // String: e.g. "Filament Sensor: Runout Detected"
+    char print_message_buf_[256]{};   // Buffer for print_stats.message storage
 
     // String buffers for subject storage
     char print_filename_buf_[256]{};

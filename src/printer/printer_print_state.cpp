@@ -31,6 +31,7 @@ PrinterPrintState::PrinterPrintState() {
     std::memset(print_start_message_buf_, 0, sizeof(print_start_message_buf_));
     std::memset(print_start_time_left_buf_, 0, sizeof(print_start_time_left_buf_));
     std::memset(display_message_buf_, 0, sizeof(display_message_buf_));
+    std::memset(print_message_buf_, 0, sizeof(print_message_buf_));
 
     // Set default values
     std::strcpy(print_state_buf_, "standby");
@@ -84,6 +85,9 @@ void PrinterPrintState::init_subjects(bool register_xml) {
     // Klipper display message (M117 / display_status.message)
     INIT_SUBJECT_STRING(display_message, "", subjects_, register_xml);
     INIT_SUBJECT_INT(display_message_visible, 0, subjects_, register_xml);
+
+    // Klipper print_stats.message — pause/error reason from firmware
+    INIT_SUBJECT_STRING(print_message, "", subjects_, register_xml);
 
     // Pre-populate per-extruder filament_used map. Freezing the map structure
     // here eliminates the BG-thread emplace vs UI-thread read rehash race
@@ -159,6 +163,7 @@ void PrinterPrintState::reset_for_new_print() {
     slicer_progress_active_ = false;
     lv_subject_copy_string(&display_message_, "");
     lv_subject_set_int(&display_message_visible_, 0);
+    lv_subject_copy_string(&print_message_, "");
     lv_subject_set_int(&print_duration_, 0);
     lv_subject_set_int(&print_elapsed_, 0);
     lv_subject_set_int(&print_filament_used_, 0);
@@ -252,6 +257,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                     slicer_progress_active_ = false;
                     lv_subject_copy_string(&display_message_, "");
                     lv_subject_set_int(&display_message_visible_, 0);
+                    lv_subject_copy_string(&print_message_, "");
                 }
             }
 
@@ -303,6 +309,19 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
             std::string filename = fn_it->get<std::string>();
             if (strcmp(lv_subject_get_string(&print_filename_), filename.c_str()) != 0) {
                 lv_subject_copy_string(&print_filename_, filename.c_str());
+            }
+        }
+
+        // print_stats.message — populated by Klipper to describe pause/error reason
+        // (e.g. "Filament Sensor filament_sensor: Runout Detected"). Subscribed-field
+        // updates may send null when the field is absent on the Klipper side.
+        if (auto msg_it = stats.find("message"); msg_it != stats.end()) {
+            const char* new_msg = "";
+            if (msg_it->is_string()) {
+                new_msg = msg_it->get_ref<const std::string&>().c_str();
+            }
+            if (strcmp(lv_subject_get_string(&print_message_), new_msg) != 0) {
+                lv_subject_copy_string(&print_message_, new_msg);
             }
         }
 

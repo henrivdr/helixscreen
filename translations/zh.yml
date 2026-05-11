@@ -400,6 +400,7 @@ translations:
   Connection successful!: 连接成功！
   Connection timeout: 连接超时
   Console: 控制台
+  Console Settings: 控制台设置
   Control optional print start features: 控制可选的打印启动功能
   Control power relays and smart outlets: 控制电源继电器和智能插座
   Controlled by hardware sensor: 由硬件传感器控制
@@ -421,6 +422,8 @@ translations:
   Cover open: 盖子未关闭
   Crash report sent — thank you!: 崩溃报告已发送 — 谢谢！
   Creality CFS: Creality CFS
+  Creality K1: Creality K1
+  Creality K2 Plus: Creality K2 Plus
   Create New Filament: 创建新耗材
   Create New Vendor: 创建新供应商
   Create Spool: 创建料盘
@@ -525,6 +528,7 @@ translations:
   Effects: 特效
   Eject: 弹出
   'Eject failed: {}': '弹出失败: {}'
+  Elegoo Centauri Carbon: Elegoo Centauri Carbon
   Emergency Stop: 紧急停止
   Emergency Stop?: 紧急停止？
   Emergency stop activated: 紧急停止已激活
@@ -590,6 +594,7 @@ translations:
   Extruding {}mm...: 正在挤出 {}mm...
   FAILED: 失败
   FILAMENT MAPPING: 耗材映射
+  FILTERS: 筛选
   Factory Reset: 恢复出厂设置
   Failed: 失败
   Failed to analyze PRINT_START macro: 分析 PRINT_START 宏失败
@@ -677,6 +682,7 @@ translations:
   Filament Detected: 检测到耗材
   Filament Environment: 耗材环境
   Filament Mapping: 耗材映射
+  Filament Runout: 耗材用尽
   Filament Sensor: 耗材传感器
   Filament Used: 已用耗材
   Filament already exists: 耗材已存在
@@ -703,6 +709,8 @@ translations:
   Finishing up...: 即将完成...
   Firmware Restart: 固件重启
   Firmware restarting...: 固件重启中...
+  FlashForge Adventurer 5M: FlashForge Adventurer 5M
+  FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
   Flat Concentric Rings (existing ams_slot): 扁平同心环（现有 ams_slot）
   Flip: 翻转
@@ -711,6 +719,7 @@ translations:
   'Flow change failed: {}': '流量更改失败: {}'
   Flowguard: 流量保护
   Flying Toasters: 飞行烤面包机
+  Follow graph screen: 跟随图表屏幕
   Forget: '忘记'
   Forming tip...: 正在成型尖端...
   Found %zu printers: 找到 %zu 台打印机
@@ -774,6 +783,8 @@ translations:
   Help & About: 帮助与关于
   Help Improve HelixScreen: 帮助改进 HelixScreen
   Help improve HelixScreen?: 帮助改进 HelixScreen？
+  Hide Firmware Noise: 隐藏固件噪声
+  Hide Temperature Reports: 隐藏温度报告
   Home: 归位
   Home failed: 归位失败
   Homing AFC system...: AFC系统归位中...
@@ -896,6 +907,7 @@ translations:
   Loaded: 已加载
   Loading Bed Mesh...: 正在加载热床网格...
   Loading Error: 加载错误
+  Loading Filament...: 正在加载耗材...
   Loading G-code...: 正在加载 G-code...
   Loading filament ({}mm)...: 正在加载耗材 ({}mm)...
   Loading filament...: 正在加载耗材...
@@ -979,6 +991,7 @@ translations:
   Measure belt path frequencies: 测量皮带路径频率
   Measured: 已测量
   Measurement Failed: 测量失败
+  Mechanical setup: 机械设置
   Memory (MB): 内存 (MB)
   Mesh Complete: 网格完成
   Mesh saved as '{}': 网格已保存为 '{}'
@@ -1148,7 +1161,9 @@ translations:
   PID: PID
   PLA: PLA
   PLA - Black: PLA - 黑色
+  POWER: 电源
   PRE-PRINT STEPS: 打印前步骤
+  PRINT OPTIONS: 打印选项
   PRINTERS: 打印机
   PROBE SENSORS: 探针传感器
   Pair: 配对
@@ -1209,6 +1224,7 @@ translations:
   Position: 位置
   Power: 电源
   Power Devices: 电源设备
+  Power off the printer or screen: 关闭打印机或屏幕电源
   'Pre-print command failed: {}': '打印前命令失败: {}'
   Preheat Macro: 预热宏
   Preheat PLA: 预热 PLA
@@ -1241,12 +1257,14 @@ translations:
   Print Label: 打印标签
   Print Library: 打印库
   Print Objects: 打印对象
+  Print Paused: 打印已暂停
   Print Speed: 打印速度
   Print Status: 打印状态
   Print Time: 打印时间
   Print Tuning: 打印调优
   Print failed: 打印失败
   'Print preparation failed: {}': '打印准备失败: {}'
+  Print quality: 打印质量
   Print server rejected the job — check printer status: '打印服务器拒绝了任务 — 请检查打印机状态'
   Printer: 打印机
   Printer Error: 打印机错误
@@ -1304,6 +1322,7 @@ translations:
   'Purge failed: {}': '清洗失败: {}'
   Purge macro not configured: 清洗宏未配置
   Purge may still be running — response timed out: 清洗可能仍在运行 — 响应超时
+  Purging: 正在清料
   Purging nozzle: 正在清洗喷嘴
   Purging {}mm...: 正在清洗 {}mm...
   Purging...: 正在清料...
@@ -1387,6 +1406,7 @@ translations:
   Restart Required: 需要重启
   'Restart failed: not connected': '重启失败: 未连接'
   Restart the display application: 重启显示应用程序
+  Restart the printer or screen: 重启打印机或屏幕
   Restarting HelixScreen...: 正在重启 HelixScreen…
   Restarting Klipper...: 正在重启 Klipper...
   Restarting Moonraker...: 正在重启 Moonraker...
@@ -1543,6 +1563,7 @@ translations:
   Show instead of dimming: 显示而非变暗
   Show printer icon in navigation bar: 在导航栏中显示打印机图标
   Show text labels on icon-only home screen widgets: 在仅图标的主屏小组件上显示文字标签
+  Show whatever curves you last had visible on the full graph.: 显示您上次在完整图表上可见的曲线。
   Shutdown: 关机
   Shutdown / Reboot: 关机 / 重启
   Shutdown failed: '关机失败'
@@ -1562,6 +1583,7 @@ translations:
   Slot {} updated: 槽位 {} 已更新
   Small labels help keep controls calm and focused.: 小标签有助于保持控件简洁专注。
   Snapmaker SnapSwap: Snapmaker SnapSwap
+  Snapmaker U1: Snapmaker U1
   Soft: '柔和'
   Some settings will take effect after restart.: 某些设置将在重启后生效。
   Sound Theme: 声音主题
@@ -1629,6 +1651,8 @@ translations:
   Success Rate: 成功率
   Success!: 成功！
   Support, documentation, and version info: 支持、文档和版本信息
+  Suppress periodic 'T:.../B:...' status lines: 抑制周期性 'T:.../B:...' 状态行
+  Suppress raw debug output from printer firmware modules: 抑制打印机固件模块的原始调试输出
   Surfaces inherit app background tokens for light and dark modes.: 表面继承应用背景色用于浅色和深色模式。
   Switch Printer: 切换打印机
   Switch Tests: 开关测试
@@ -1924,6 +1948,9 @@ translations:
   nozzle: '喷嘴'
   of: 的
   'off': 关闭
+  pre_print_option.ai_detect.description: 监测打印异常（基于 K2 Plus 摄像头）
+  pre_print_option.ai_detect.label: AI 检测
+  pre_print_option.timelapse.label: 延时摄影
   prints: 打印次数
   remaining: 剩余
   remaining before clog detection triggers: 剩余即触发堵料检测
@@ -1952,5 +1979,6 @@ translations:
   '{} complete': '{} 完成'
   '{} heater turned off': '{} 加热器已关闭'
   '{} macro not configured': '{} 宏未配置'
+  '{} may cause unintended changes. Are you sure?': '{} 可能导致意外更改。确定吗？'
   '{} more taps to {} beta features': 再点击 {} 次以{}测试功能
   '{} target set to {}°C': '{} 目标已设为 {}°C'

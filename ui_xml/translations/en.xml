@@ -400,6 +400,7 @@
   <translation tag="Connection successful!" en="Connection successful!"/>
   <translation tag="Connection timeout" en="Connection timeout"/>
   <translation tag="Console" en="Console"/>
+  <translation tag="Console Settings" en="Console Settings"/>
   <translation tag="Control optional print start features" en="Control optional print start features"/>
   <translation tag="Control power relays and smart outlets" en="Control power relays and smart outlets"/>
   <translation tag="Controlled by hardware sensor" en="Controlled by hardware sensor"/>
@@ -421,6 +422,8 @@
   <translation tag="Cover open" en="Cover open"/>
   <translation tag="Crash report sent — thank you!" en="Crash report sent — thank you!"/>
   <translation tag="Creality CFS" en="Creality CFS"/>
+  <translation tag="Creality K1" en="Creality K1"/>
+  <translation tag="Creality K2 Plus" en="Creality K2 Plus"/>
   <translation tag="Create New Filament" en="Create New Filament"/>
   <translation tag="Create New Vendor" en="Create New Vendor"/>
   <translation tag="Create Spool" en="Create Spool"/>
@@ -525,6 +528,7 @@
   <translation tag="Effects" en="Effects"/>
   <translation tag="Eject" en="Eject"/>
   <translation tag="Eject failed: {}" en="Eject failed: {}"/>
+  <translation tag="Elegoo Centauri Carbon" en="Elegoo Centauri Carbon"/>
   <translation tag="Emergency Stop" en="Emergency Stop"/>
   <translation tag="Emergency Stop?" en="Emergency Stop?"/>
   <translation tag="Emergency stop activated" en="Emergency stop activated"/>
@@ -590,6 +594,7 @@
   <translation tag="Extruding {}mm..." en="Extruding {}mm..."/>
   <translation tag="FAILED" en="FAILED"/>
   <translation tag="FILAMENT MAPPING" en="FILAMENT MAPPING"/>
+  <translation tag="FILTERS" en="FILTERS"/>
   <translation tag="Factory Reset" en="Factory Reset"/>
   <translation tag="Failed" en="Failed"/>
   <translation tag="Failed to analyze PRINT_START macro" en="Failed to analyze PRINT_START macro"/>
@@ -677,6 +682,7 @@
   <translation tag="Filament Detected" en="Filament Detected"/>
   <translation tag="Filament Environment" en="Filament Environment"/>
   <translation tag="Filament Mapping" en="Filament Mapping"/>
+  <translation tag="Filament Runout" en="Filament Runout"/>
   <translation tag="Filament Sensor" en="Filament Sensor"/>
   <translation tag="Filament Used" en="Filament Used"/>
   <translation tag="Filament already exists" en="Filament already exists"/>
@@ -703,6 +709,8 @@
   <translation tag="Finishing up..." en="Finishing up..."/>
   <translation tag="Firmware Restart" en="Firmware Restart"/>
   <translation tag="Firmware restarting..." en="Firmware restarting..."/>
+  <translation tag="FlashForge Adventurer 5M" en="FlashForge Adventurer 5M"/>
+  <translation tag="FlashForge Adventurer 5X" en="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" en="FlashForge IFS"/>
   <translation tag="Flat Concentric Rings (existing ams_slot)" en="Flat Concentric Rings (existing ams_slot)"/>
   <translation tag="Flip" en="Flip"/>
@@ -711,6 +719,7 @@
   <translation tag="Flow change failed: {}" en="Flow change failed: {}"/>
   <translation tag="Flowguard" en="Flowguard"/>
   <translation tag="Flying Toasters" en="Flying Toasters"/>
+  <translation tag="Follow graph screen" en="Follow graph screen"/>
   <translation tag="Forget" en="Forget"/>
   <translation tag="Forming tip..." en="Forming tip..."/>
   <translation tag="Found %zu printers" en="Found %zu printers"/>
@@ -773,6 +782,8 @@
   <translation tag="Help &amp; About" en="Help &amp; About"/>
   <translation tag="Help Improve HelixScreen" en="Help Improve HelixScreen"/>
   <translation tag="Help improve HelixScreen?" en="Help improve HelixScreen?"/>
+  <translation tag="Hide Firmware Noise" en="Hide Firmware Noise"/>
+  <translation tag="Hide Temperature Reports" en="Hide Temperature Reports"/>
   <translation tag="Home" en="Home"/>
   <translation tag="Home failed" en="Home failed"/>
   <translation tag="Homing AFC system..." en="Homing AFC system..."/>
@@ -894,6 +905,7 @@
   <translation tag="Loaded" en="Loaded"/>
   <translation tag="Loading Bed Mesh..." en="Loading Bed Mesh..."/>
   <translation tag="Loading Error" en="Loading Error"/>
+  <translation tag="Loading Filament..." en="Loading Filament..."/>
   <translation tag="Loading G-code..." en="Loading G-code..."/>
   <translation tag="Loading filament ({}mm)..." en="Loading filament ({}mm)..."/>
   <translation tag="Loading filament..." en="Loading filament..."/>
@@ -1146,7 +1158,9 @@
   <translation tag="PID" en="PID"/>
   <translation tag="PLA" en="PLA"/>
   <translation tag="PLA - Black" en="PLA - Black"/>
+  <translation tag="POWER" en="POWER"/>
   <translation tag="PRE-PRINT STEPS" en="PRE-PRINT STEPS"/>
+  <translation tag="PRINT OPTIONS" en="PRINT OPTIONS"/>
   <translation tag="PRINTERS" en="PRINTERS"/>
   <translation tag="PROBE SENSORS" en="PROBE SENSORS"/>
   <translation tag="Pair" en="Pair"/>
@@ -1207,6 +1221,7 @@
   <translation tag="Position" en="Position"/>
   <translation tag="Power" en="Power"/>
   <translation tag="Power Devices" en="Power Devices"/>
+  <translation tag="Power off the printer or screen" en="Power off the printer or screen"/>
   <translation tag="Pre-print command failed: {}" en="Pre-print command failed: {}"/>
   <translation tag="Preheat Macro" en="Preheat Macro"/>
   <translation tag="Preheat PLA" en="Preheat PLA"/>
@@ -1239,6 +1254,7 @@
   <translation tag="Print Label" en="Print Label"/>
   <translation tag="Print Library" en="Print Library"/>
   <translation tag="Print Objects" en="Print Objects"/>
+  <translation tag="Print Paused" en="Print Paused"/>
   <translation tag="Print Speed" en="Print Speed"/>
   <translation tag="Print Status" en="Print Status"/>
   <translation tag="Print Time" en="Print Time"/>
@@ -1303,6 +1319,7 @@
   <translation tag="Purge failed: {}" en="Purge failed: {}"/>
   <translation tag="Purge macro not configured" en="Purge macro not configured"/>
   <translation tag="Purge may still be running — response timed out" en="Purge may still be running — response timed out"/>
+  <translation tag="Purging" en="Purging"/>
   <translation tag="Purging nozzle" en="Purging nozzle"/>
   <translation tag="Purging {}mm..." en="Purging {}mm..."/>
   <translation tag="Purging..." en="Purging..."/>
@@ -1386,6 +1403,7 @@
   <translation tag="Restart Required" en="Restart Required"/>
   <translation tag="Restart failed: not connected" en="Restart failed: not connected"/>
   <translation tag="Restart the display application" en="Restart the display application"/>
+  <translation tag="Restart the printer or screen" en="Restart the printer or screen"/>
   <translation tag="Restarting HelixScreen..." en="Restarting HelixScreen..."/>
   <translation tag="Restarting Klipper..." en="Restarting Klipper..."/>
   <translation tag="Restarting Moonraker..." en="Restarting Moonraker..."/>
@@ -1541,6 +1559,7 @@
   <translation tag="Show instead of dimming" en="Show instead of dimming"/>
   <translation tag="Show printer icon in navigation bar" en="Show printer icon in navigation bar"/>
   <translation tag="Show text labels on icon-only home screen widgets" en="Show text labels on icon-only home screen widgets"/>
+  <translation tag="Show whatever curves you last had visible on the full graph." en="Show whatever curves you last had visible on the full graph."/>
   <translation tag="Shutdown" en="Shutdown"/>
   <translation tag="Shutdown / Reboot" en="Shutdown / Reboot"/>
   <translation tag="Shutdown failed" en="Shutdown failed"/>
@@ -1560,6 +1579,7 @@
   <translation tag="Slot {} updated" en="Slot {} updated"/>
   <translation tag="Small labels help keep controls calm and focused." en="Small labels help keep controls calm and focused."/>
   <translation tag="Snapmaker SnapSwap" en="Snapmaker SnapSwap"/>
+  <translation tag="Snapmaker U1" en="Snapmaker U1"/>
   <translation tag="Soft" en="Soft"/>
   <translation tag="Some settings will take effect after restart." en="Some settings will take effect after restart."/>
   <translation tag="Sound Theme" en="Sound Theme"/>
@@ -1627,6 +1647,8 @@
   <translation tag="Success Rate" en="Success Rate"/>
   <translation tag="Success!" en="Success!"/>
   <translation tag="Support, documentation, and version info" en="Support, documentation, and version info"/>
+  <translation tag="Suppress periodic &apos;T:.../B:...&apos; status lines" en="Suppress periodic &apos;T:.../B:...&apos; status lines"/>
+  <translation tag="Suppress raw debug output from printer firmware modules" en="Suppress raw debug output from printer firmware modules"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." en="Surfaces inherit app background tokens for light and dark modes."/>
   <translation tag="Switch Printer" en="Switch Printer"/>
   <translation tag="Switch Tests" en="Switch Tests"/>
@@ -1944,6 +1966,7 @@
   <translation tag="{} complete" en="{} complete"/>
   <translation tag="{} heater turned off" en="{} heater turned off"/>
   <translation tag="{} macro not configured" en="{} macro not configured"/>
+  <translation tag="{} may cause unintended changes. Are you sure?" en="{} may cause unintended changes. Are you sure?"/>
   <translation tag="{} more taps to {} beta features" en="{} more taps to {} beta features"/>
   <translation tag="{} target set to {}°C" en="{} target set to {}°C"/>
 </translations>

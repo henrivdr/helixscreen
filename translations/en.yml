@@ -400,6 +400,7 @@ translations:
   Connection successful!: Connection successful!
   Connection timeout: Connection timeout
   Console: Console
+  Console Settings: Console Settings
   Control optional print start features: Control optional print start features
   Control power relays and smart outlets: Control power relays and smart outlets
   Controlled by hardware sensor: Controlled by hardware sensor
@@ -421,6 +422,8 @@ translations:
   Cover open: Cover open
   Crash report sent — thank you!: Crash report sent — thank you!
   Creality CFS: Creality CFS
+  Creality K1: Creality K1
+  Creality K2 Plus: Creality K2 Plus
   Create New Filament: Create New Filament
   Create New Vendor: Create New Vendor
   Create Spool: Create Spool
@@ -525,6 +528,7 @@ translations:
   Effects: Effects
   Eject: Eject
   'Eject failed: {}': 'Eject failed: {}'
+  Elegoo Centauri Carbon: Elegoo Centauri Carbon
   Emergency Stop: Emergency Stop
   Emergency Stop?: Emergency Stop?
   Emergency stop activated: Emergency stop activated
@@ -590,6 +594,7 @@ translations:
   Extruding {}mm...: Extruding {}mm...
   FAILED: FAILED
   FILAMENT MAPPING: FILAMENT MAPPING
+  FILTERS: FILTERS
   Factory Reset: Factory Reset
   Failed: Failed
   Failed to analyze PRINT_START macro: Failed to analyze PRINT_START macro
@@ -677,6 +682,7 @@ translations:
   Filament Detected: Filament Detected
   Filament Environment: Filament Environment
   Filament Mapping: Filament Mapping
+  Filament Runout: Filament Runout
   Filament Sensor: Filament Sensor
   Filament Used: Filament Used
   Filament already exists: Filament already exists
@@ -703,6 +709,8 @@ translations:
   Finishing up...: Finishing up...
   Firmware Restart: Firmware Restart
   Firmware restarting...: Firmware restarting...
+  FlashForge Adventurer 5M: FlashForge Adventurer 5M
+  FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
   Flat Concentric Rings (existing ams_slot): Flat Concentric Rings (existing ams_slot)
   Flip: Flip
@@ -711,6 +719,7 @@ translations:
   'Flow change failed: {}': 'Flow change failed: {}'
   Flowguard: Flowguard
   Flying Toasters: Flying Toasters
+  Follow graph screen: Follow graph screen
   Forget: Forget
   Forming tip...: Forming tip...
   Found %zu printers: Found %zu printers
@@ -774,6 +783,8 @@ translations:
   Help & About: Help & About
   Help Improve HelixScreen: Help Improve HelixScreen
   Help improve HelixScreen?: Help improve HelixScreen?
+  Hide Firmware Noise: Hide Firmware Noise
+  Hide Temperature Reports: Hide Temperature Reports
   Home: Home
   Home failed: Home failed
   Homing AFC system...: Homing AFC system...
@@ -896,6 +907,7 @@ translations:
   Loaded: Loaded
   Loading Bed Mesh...: Loading Bed Mesh...
   Loading Error: Loading Error
+  Loading Filament...: Loading Filament...
   Loading G-code...: Loading G-code...
   Loading filament ({}mm)...: Loading filament ({}mm)...
   Loading filament...: Loading filament...
@@ -1149,7 +1161,9 @@ translations:
   PID: PID
   PLA: PLA
   PLA - Black: PLA - Black
+  POWER: POWER
   PRE-PRINT STEPS: PRE-PRINT STEPS
+  PRINT OPTIONS: PRINT OPTIONS
   PRINTERS: PRINTERS
   PROBE SENSORS: PROBE SENSORS
   Pair: Pair
@@ -1210,6 +1224,7 @@ translations:
   Position: Position
   Power: Power
   Power Devices: Power Devices
+  Power off the printer or screen: Power off the printer or screen
   'Pre-print command failed: {}': 'Pre-print command failed: {}'
   Preheat Macro: Preheat Macro
   Preheat PLA: Preheat PLA
@@ -1242,13 +1257,14 @@ translations:
   Print Label: Print Label
   Print Library: Print Library
   Print Objects: Print Objects
+  Print Paused: Print Paused
   Print Speed: Print Speed
   Print Status: Print Status
   Print Time: Print Time
   Print Tuning: Print Tuning
   Print failed: Print failed
-  Print quality: Print quality
   'Print preparation failed: {}': 'Print preparation failed: {}'
+  Print quality: Print quality
   Print server rejected the job — check printer status: Print server rejected the job — check printer status
   Printer: Printer
   Printer Error: Printer Error
@@ -1306,6 +1322,7 @@ translations:
   'Purge failed: {}': 'Purge failed: {}'
   Purge macro not configured: Purge macro not configured
   Purge may still be running — response timed out: Purge may still be running — response timed out
+  Purging: Purging
   Purging nozzle: Purging nozzle
   Purging {}mm...: Purging {}mm...
   Purging...: Purging...
@@ -1389,6 +1406,7 @@ translations:
   Restart Required: Restart Required
   'Restart failed: not connected': 'Restart failed: not connected'
   Restart the display application: Restart the display application
+  Restart the printer or screen: Restart the printer or screen
   Restarting HelixScreen...: Restarting HelixScreen...
   Restarting Klipper...: Restarting Klipper...
   Restarting Moonraker...: Restarting Moonraker...
@@ -1545,6 +1563,7 @@ translations:
   Show instead of dimming: Show instead of dimming
   Show printer icon in navigation bar: Show printer icon in navigation bar
   Show text labels on icon-only home screen widgets: Show text labels on icon-only home screen widgets
+  Show whatever curves you last had visible on the full graph.: Show whatever curves you last had visible on the full graph.
   Shutdown: Shutdown
   Shutdown / Reboot: Shutdown / Reboot
   Shutdown failed: Shutdown failed
@@ -1564,6 +1583,7 @@ translations:
   Slot {} updated: Slot {} updated
   Small labels help keep controls calm and focused.: Small labels help keep controls calm and focused.
   Snapmaker SnapSwap: Snapmaker SnapSwap
+  Snapmaker U1: Snapmaker U1
   Soft: Soft
   Some settings will take effect after restart.: Some settings will take effect after restart.
   Sound Theme: Sound Theme
@@ -1631,6 +1651,8 @@ translations:
   Success Rate: Success Rate
   Success!: Success!
   Support, documentation, and version info: Support, documentation, and version info
+  Suppress periodic 'T:.../B:...' status lines: Suppress periodic 'T:.../B:...' status lines
+  Suppress raw debug output from printer firmware modules: Suppress raw debug output from printer firmware modules
   Surfaces inherit app background tokens for light and dark modes.: Surfaces inherit app background tokens for light and dark modes.
   Switch Printer: Switch Printer
   Switch Tests: Switch Tests
@@ -1957,5 +1979,6 @@ translations:
   '{} complete': '{} complete'
   '{} heater turned off': '{} heater turned off'
   '{} macro not configured': '{} macro not configured'
+  '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes. Are you sure?'
   '{} more taps to {} beta features': '{} more taps to {} beta features'
   '{} target set to {}°C': '{} target set to {}°C'

@@ -400,6 +400,7 @@
   <translation tag="Connection successful!" zh="连接成功！"/>
   <translation tag="Connection timeout" zh="连接超时"/>
   <translation tag="Console" zh="控制台"/>
+  <translation tag="Console Settings" zh="控制台设置"/>
   <translation tag="Control optional print start features" zh="控制可选的打印启动功能"/>
   <translation tag="Control power relays and smart outlets" zh="控制电源继电器和智能插座"/>
   <translation tag="Controlled by hardware sensor" zh="由硬件传感器控制"/>
@@ -421,6 +422,8 @@
   <translation tag="Cover open" zh="盖子未关闭"/>
   <translation tag="Crash report sent — thank you!" zh="崩溃报告已发送 — 谢谢！"/>
   <translation tag="Creality CFS" zh="Creality CFS"/>
+  <translation tag="Creality K1" zh="Creality K1"/>
+  <translation tag="Creality K2 Plus" zh="Creality K2 Plus"/>
   <translation tag="Create New Filament" zh="创建新耗材"/>
   <translation tag="Create New Vendor" zh="创建新供应商"/>
   <translation tag="Create Spool" zh="创建料盘"/>
@@ -525,6 +528,7 @@
   <translation tag="Effects" zh="特效"/>
   <translation tag="Eject" zh="弹出"/>
   <translation tag="Eject failed: {}" zh="弹出失败: {}"/>
+  <translation tag="Elegoo Centauri Carbon" zh="Elegoo Centauri Carbon"/>
   <translation tag="Emergency Stop" zh="紧急停止"/>
   <translation tag="Emergency Stop?" zh="紧急停止？"/>
   <translation tag="Emergency stop activated" zh="紧急停止已激活"/>
@@ -590,6 +594,7 @@
   <translation tag="Extruding {}mm..." zh="正在挤出 {}mm..."/>
   <translation tag="FAILED" zh="失败"/>
   <translation tag="FILAMENT MAPPING" zh="耗材映射"/>
+  <translation tag="FILTERS" zh="筛选"/>
   <translation tag="Factory Reset" zh="恢复出厂设置"/>
   <translation tag="Failed" zh="失败"/>
   <translation tag="Failed to analyze PRINT_START macro" zh="分析 PRINT_START 宏失败"/>
@@ -677,6 +682,7 @@
   <translation tag="Filament Detected" zh="检测到耗材"/>
   <translation tag="Filament Environment" zh="耗材环境"/>
   <translation tag="Filament Mapping" zh="耗材映射"/>
+  <translation tag="Filament Runout" zh="耗材用尽"/>
   <translation tag="Filament Sensor" zh="耗材传感器"/>
   <translation tag="Filament Used" zh="已用耗材"/>
   <translation tag="Filament already exists" zh="耗材已存在"/>
@@ -703,6 +709,8 @@
   <translation tag="Finishing up..." zh="即将完成..."/>
   <translation tag="Firmware Restart" zh="固件重启"/>
   <translation tag="Firmware restarting..." zh="固件重启中..."/>
+  <translation tag="FlashForge Adventurer 5M" zh="FlashForge Adventurer 5M"/>
+  <translation tag="FlashForge Adventurer 5X" zh="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" zh="FlashForge IFS"/>
   <translation tag="Flat Concentric Rings (existing ams_slot)" zh="扁平同心环（现有 ams_slot）"/>
   <translation tag="Flip" zh="翻转"/>
@@ -711,6 +719,7 @@
   <translation tag="Flow change failed: {}" zh="流量更改失败: {}"/>
   <translation tag="Flowguard" zh="流量保护"/>
   <translation tag="Flying Toasters" zh="飞行烤面包机"/>
+  <translation tag="Follow graph screen" zh="跟随图表屏幕"/>
   <translation tag="Forget" zh="忘记"/>
   <translation tag="Forming tip..." zh="正在成型尖端..."/>
   <translation tag="Found %zu printers" zh="找到 %zu 台打印机"/>
@@ -773,6 +782,8 @@
   <translation tag="Help &amp; About" zh="帮助与关于"/>
   <translation tag="Help Improve HelixScreen" zh="帮助改进 HelixScreen"/>
   <translation tag="Help improve HelixScreen?" zh="帮助改进 HelixScreen？"/>
+  <translation tag="Hide Firmware Noise" zh="隐藏固件噪声"/>
+  <translation tag="Hide Temperature Reports" zh="隐藏温度报告"/>
   <translation tag="Home" zh="归位"/>
   <translation tag="Home failed" zh="归位失败"/>
   <translation tag="Homing AFC system..." zh="AFC系统归位中..."/>
@@ -894,6 +905,7 @@
   <translation tag="Loaded" zh="已加载"/>
   <translation tag="Loading Bed Mesh..." zh="正在加载热床网格..."/>
   <translation tag="Loading Error" zh="加载错误"/>
+  <translation tag="Loading Filament..." zh="正在加载耗材..."/>
   <translation tag="Loading G-code..." zh="正在加载 G-code..."/>
   <translation tag="Loading filament ({}mm)..." zh="正在加载耗材 ({}mm)..."/>
   <translation tag="Loading filament..." zh="正在加载耗材..."/>
@@ -977,6 +989,7 @@
   <translation tag="Measure belt path frequencies" zh="测量皮带路径频率"/>
   <translation tag="Measured" zh="已测量"/>
   <translation tag="Measurement Failed" zh="测量失败"/>
+  <translation tag="Mechanical setup" zh="机械设置"/>
   <translation tag="Memory (MB)" zh="内存 (MB)"/>
   <translation tag="Mesh Complete" zh="网格完成"/>
   <translation tag="Mesh saved as &apos;{}&apos;" zh="网格已保存为 &apos;{}&apos;"/>
@@ -1145,7 +1158,9 @@
   <translation tag="PID" zh="PID"/>
   <translation tag="PLA" zh="PLA"/>
   <translation tag="PLA - Black" zh="PLA - 黑色"/>
+  <translation tag="POWER" zh="电源"/>
   <translation tag="PRE-PRINT STEPS" zh="打印前步骤"/>
+  <translation tag="PRINT OPTIONS" zh="打印选项"/>
   <translation tag="PRINTERS" zh="打印机"/>
   <translation tag="PROBE SENSORS" zh="探针传感器"/>
   <translation tag="Pair" zh="配对"/>
@@ -1206,6 +1221,7 @@
   <translation tag="Position" zh="位置"/>
   <translation tag="Power" zh="电源"/>
   <translation tag="Power Devices" zh="电源设备"/>
+  <translation tag="Power off the printer or screen" zh="关闭打印机或屏幕电源"/>
   <translation tag="Pre-print command failed: {}" zh="打印前命令失败: {}"/>
   <translation tag="Preheat Macro" zh="预热宏"/>
   <translation tag="Preheat PLA" zh="预热 PLA"/>
@@ -1238,12 +1254,14 @@
   <translation tag="Print Label" zh="打印标签"/>
   <translation tag="Print Library" zh="打印库"/>
   <translation tag="Print Objects" zh="打印对象"/>
+  <translation tag="Print Paused" zh="打印已暂停"/>
   <translation tag="Print Speed" zh="打印速度"/>
   <translation tag="Print Status" zh="打印状态"/>
   <translation tag="Print Time" zh="打印时间"/>
   <translation tag="Print Tuning" zh="打印调优"/>
   <translation tag="Print failed" zh="打印失败"/>
   <translation tag="Print preparation failed: {}" zh="打印准备失败: {}"/>
+  <translation tag="Print quality" zh="打印质量"/>
   <translation tag="Print server rejected the job — check printer status" zh="打印服务器拒绝了任务 — 请检查打印机状态"/>
   <translation tag="Printer" zh="打印机"/>
   <translation tag="Printer Error" zh="打印机错误"/>
@@ -1301,6 +1319,7 @@
   <translation tag="Purge failed: {}" zh="清洗失败: {}"/>
   <translation tag="Purge macro not configured" zh="清洗宏未配置"/>
   <translation tag="Purge may still be running — response timed out" zh="清洗可能仍在运行 — 响应超时"/>
+  <translation tag="Purging" zh="正在清料"/>
   <translation tag="Purging nozzle" zh="正在清洗喷嘴"/>
   <translation tag="Purging {}mm..." zh="正在清洗 {}mm..."/>
   <translation tag="Purging..." zh="正在清料..."/>
@@ -1384,6 +1403,7 @@
   <translation tag="Restart Required" zh="需要重启"/>
   <translation tag="Restart failed: not connected" zh="重启失败: 未连接"/>
   <translation tag="Restart the display application" zh="重启显示应用程序"/>
+  <translation tag="Restart the printer or screen" zh="重启打印机或屏幕"/>
   <translation tag="Restarting HelixScreen..." zh="正在重启 HelixScreen…"/>
   <translation tag="Restarting Klipper..." zh="正在重启 Klipper..."/>
   <translation tag="Restarting Moonraker..." zh="正在重启 Moonraker..."/>
@@ -1539,6 +1559,7 @@
   <translation tag="Show instead of dimming" zh="显示而非变暗"/>
   <translation tag="Show printer icon in navigation bar" zh="在导航栏中显示打印机图标"/>
   <translation tag="Show text labels on icon-only home screen widgets" zh="在仅图标的主屏小组件上显示文字标签"/>
+  <translation tag="Show whatever curves you last had visible on the full graph." zh="显示您上次在完整图表上可见的曲线。"/>
   <translation tag="Shutdown" zh="关机"/>
   <translation tag="Shutdown / Reboot" zh="关机 / 重启"/>
   <translation tag="Shutdown failed" zh="关机失败"/>
@@ -1558,6 +1579,7 @@
   <translation tag="Slot {} updated" zh="槽位 {} 已更新"/>
   <translation tag="Small labels help keep controls calm and focused." zh="小标签有助于保持控件简洁专注。"/>
   <translation tag="Snapmaker SnapSwap" zh="Snapmaker SnapSwap"/>
+  <translation tag="Snapmaker U1" zh="Snapmaker U1"/>
   <translation tag="Soft" zh="柔和"/>
   <translation tag="Some settings will take effect after restart." zh="某些设置将在重启后生效。"/>
   <translation tag="Sound Theme" zh="声音主题"/>
@@ -1625,6 +1647,8 @@
   <translation tag="Success Rate" zh="成功率"/>
   <translation tag="Success!" zh="成功！"/>
   <translation tag="Support, documentation, and version info" zh="支持、文档和版本信息"/>
+  <translation tag="Suppress periodic &apos;T:.../B:...&apos; status lines" zh="抑制周期性 &apos;T:.../B:...&apos; 状态行"/>
+  <translation tag="Suppress raw debug output from printer firmware modules" zh="抑制打印机固件模块的原始调试输出"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." zh="表面继承应用背景色用于浅色和深色模式。"/>
   <translation tag="Switch Printer" zh="切换打印机"/>
   <translation tag="Switch Tests" zh="开关测试"/>
@@ -1911,6 +1935,9 @@
   <translation tag="nozzle" zh="喷嘴"/>
   <translation tag="of" zh="的"/>
   <translation tag="off" zh="关闭"/>
+  <translation tag="pre_print_option.ai_detect.description" zh="监测打印异常（基于 K2 Plus 摄像头）"/>
+  <translation tag="pre_print_option.ai_detect.label" zh="AI 检测"/>
+  <translation tag="pre_print_option.timelapse.label" zh="延时摄影"/>
   <translation tag="prints" zh="打印次数"/>
   <translation tag="remaining" zh="剩余"/>
   <translation tag="remaining before clog detection triggers" zh="剩余即触发堵料检测"/>
@@ -1939,6 +1966,7 @@
   <translation tag="{} complete" zh="{} 完成"/>
   <translation tag="{} heater turned off" zh="{} 加热器已关闭"/>
   <translation tag="{} macro not configured" zh="{} 宏未配置"/>
+  <translation tag="{} may cause unintended changes. Are you sure?" zh="{} 可能导致意外更改。确定吗？"/>
   <translation tag="{} more taps to {} beta features" zh="再点击 {} 次以{}测试功能"/>
   <translation tag="{} target set to {}°C" zh="{} 目标已设为 {}°C"/>
 </translations>

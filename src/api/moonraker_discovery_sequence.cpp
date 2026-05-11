@@ -885,7 +885,7 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // nullptr would have us receiving every internal field per step.
     subscription_objects["print_stats"] =
         json::array({"state", "filename", "filament_used", "print_duration",
-                     "total_duration", "estimated_time", "info"});
+                     "total_duration", "estimated_time", "info", "message"});
     // virtual_sdcard.progress drives the progress bar. layer / layer_count
     // are the FALLBACK source for layer tracking — preferred source is
     // print_stats.info.{current_layer,total_layer} (slicer-supplied via

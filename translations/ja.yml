@@ -400,6 +400,7 @@ translations:
   Connection successful!: 接続成功！
   Connection timeout: 接続タイムアウト
   Console: コンソール
+  Console Settings: コンソール設定
   Control optional print start features: オプションの印刷開始機能を制御
   Control power relays and smart outlets: 電源リレーとスマートコンセントを制御
   Controlled by hardware sensor: ハードウェアセンサーで制御
@@ -421,6 +422,8 @@ translations:
   Cover open: カバーが開いています
   Crash report sent — thank you!: クラッシュレポートを送信しました — ありがとうございます！
   Creality CFS: Creality CFS
+  Creality K1: Creality K1
+  Creality K2 Plus: Creality K2 Plus
   Create New Filament: 新しいフィラメントを作成
   Create New Vendor: 新しいベンダーを作成
   Create Spool: スプールを作成
@@ -525,6 +528,7 @@ translations:
   Effects: エフェクト
   Eject: 取り出し
   'Eject failed: {}': 'イジェクトに失敗しました: {}'
+  Elegoo Centauri Carbon: Elegoo Centauri Carbon
   Emergency Stop: 緊急停止
   Emergency Stop?: 緊急停止しますか？
   Emergency stop activated: 緊急停止が作動しました
@@ -590,6 +594,7 @@ translations:
   Extruding {}mm...: '{}mm 押出中...'
   FAILED: 失敗
   FILAMENT MAPPING: フィラメントマッピング
+  FILTERS: フィルター
   Factory Reset: 工場出荷時リセット
   Failed: 失敗
   Failed to analyze PRINT_START macro: PRINT_START マクロの解析に失敗しました
@@ -677,6 +682,7 @@ translations:
   Filament Detected: フィラメント検出
   Filament Environment: フィラメント環境
   Filament Mapping: フィラメントマッピング
+  Filament Runout: フィラメント切れ
   Filament Sensor: フィラメントセンサー
   Filament Used: 使用済みフィラメント
   Filament already exists: フィラメントはすでに存在します
@@ -703,6 +709,8 @@ translations:
   Finishing up...: 完了中...
   Firmware Restart: ファームウェア再起動
   Firmware restarting...: ファームウェア再起動中...
+  FlashForge Adventurer 5M: FlashForge Adventurer 5M
+  FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
   Flat Concentric Rings (existing ams_slot): 同心円リング（既存の ams_slot）
   Flip: 反転
@@ -711,6 +719,7 @@ translations:
   'Flow change failed: {}': 'フロー変更に失敗しました: {}'
   Flowguard: フローガード
   Flying Toasters: フライングトースター
+  Follow graph screen: グラフ画面に追従
   Forget: '登録解除'
   Forming tip...: チップを形成中...
   Found %zu printers: '%zu台のプリンターを検出'
@@ -774,6 +783,8 @@ translations:
   Help & About: ヘルプと情報
   Help Improve HelixScreen: HelixScreen の改善にご協力ください
   Help improve HelixScreen?: HelixScreenの改善に協力しますか？
+  Hide Firmware Noise: ファームウェアノイズを非表示
+  Hide Temperature Reports: 温度レポートを非表示
   Home: ホーム
   Home failed: ホーミング失敗
   Homing AFC system...: AFCシステムをホーミング中...
@@ -896,6 +907,7 @@ translations:
   Loaded: 装填済み
   Loading Bed Mesh...: ベッドメッシュ読込中...
   Loading Error: 装填エラー
+  Loading Filament...: フィラメントを装填中...
   Loading G-code...: G-codeを読み込み中...
   Loading filament ({}mm)...: フィラメントを装填中 ({}mm)...
   Loading filament...: フィラメントを装填中...
@@ -979,6 +991,7 @@ translations:
   Measure belt path frequencies: ベルトパスの周波数を測定
   Measured: 測定値
   Measurement Failed: 測定失敗
+  Mechanical setup: 機械的セットアップ
   Memory (MB): メモリ (MB)
   Mesh Complete: メッシュ完了
   Mesh saved as '{}': '"メッシュを ''{}'' として保存しました"'
@@ -1148,7 +1161,9 @@ translations:
   PID: PID
   PLA: PLA
   PLA - Black: PLA - ブラック
+  POWER: 電源
   PRE-PRINT STEPS: 印刷前の手順
+  PRINT OPTIONS: 印刷オプション
   PRINTERS: プリンター
   PROBE SENSORS: プローブセンサー
   Pair: ペアリング
@@ -1209,6 +1224,7 @@ translations:
   Position: 位置
   Power: 電源
   Power Devices: 電源デバイス
+  Power off the printer or screen: プリンターまたは画面の電源をオフにします
   'Pre-print command failed: {}': '印刷前コマンドに失敗しました: {}'
   Preheat Macro: 予熱マクロ
   Preheat PLA: PLA 予熱
@@ -1241,12 +1257,14 @@ translations:
   Print Label: ラベルを印刷
   Print Library: 印刷ライブラリ
   Print Objects: 印刷オブジェクト
+  Print Paused: 印刷一時停止
   Print Speed: 印刷速度
   Print Status: 印刷ステータス
   Print Time: 印刷時間
   Print Tuning: 印刷チューニング
   Print failed: 印刷失敗
   'Print preparation failed: {}': '印刷準備に失敗しました: {}'
+  Print quality: 印刷品質
   Print server rejected the job — check printer status: '印刷サーバーがジョブを拒否しました — プリンターの状態を確認してください'
   Printer: プリンター
   Printer Error: プリンターエラー
@@ -1304,6 +1322,7 @@ translations:
   'Purge failed: {}': 'パージに失敗しました: {}'
   Purge macro not configured: パージマクロが未設定です
   Purge may still be running — response timed out: パージがまだ実行中の可能性があります — 応答タイムアウト
+  Purging: パージ中
   Purging nozzle: ノズルをパージ中
   Purging {}mm...: '{}mm パージ中...'
   Purging...: パージ中...
@@ -1387,6 +1406,7 @@ translations:
   Restart Required: 再起動が必要です
   'Restart failed: not connected': '再起動に失敗: 未接続'
   Restart the display application: ディスプレイアプリケーションを再起動
+  Restart the printer or screen: プリンターまたは画面を再起動します
   Restarting HelixScreen...: HelixScreenを再起動中...
   Restarting Klipper...: Klipper を再起動中...
   Restarting Moonraker...: Moonrakerを再起動中...
@@ -1543,6 +1563,7 @@ translations:
   Show instead of dimming: 暗くする代わりに表示
   Show printer icon in navigation bar: ナビゲーションバーにプリンターアイコンを表示
   Show text labels on icon-only home screen widgets: アイコンのみのホーム画面ウィジェットにテキストラベルを表示
+  Show whatever curves you last had visible on the full graph.: フルグラフで最後に表示していた曲線を表示します。
   Shutdown: シャットダウン
   Shutdown / Reboot: シャットダウン / 再起動
   Shutdown failed: 'シャットダウンに失敗しました'
@@ -1562,6 +1583,7 @@ translations:
   Slot {} updated: スロット {} を更新しました
   Small labels help keep controls calm and focused.: 小さなラベルはコントロールを落ち着いた集中した状態に保ちます。
   Snapmaker SnapSwap: Snapmaker SnapSwap
+  Snapmaker U1: Snapmaker U1
   Soft: 'ソフト'
   Some settings will take effect after restart.: 一部の設定は再起動後に有効になります。
   Sound Theme: サウンドテーマ
@@ -1629,6 +1651,8 @@ translations:
   Success Rate: 成功率
   Success!: 成功！
   Support, documentation, and version info: サポート、ドキュメント、バージョン情報
+  Suppress periodic 'T:.../B:...' status lines: 定期的な 'T:.../B:...' ステータス行を抑制
+  Suppress raw debug output from printer firmware modules: プリンターファームウェアモジュールからの生のデバッグ出力を抑制
   Surfaces inherit app background tokens for light and dark modes.: サーフェスはライトモードとダークモードのアプリ背景トークンを継承します。
   Switch Printer: プリンターを切り替え
   Switch Tests: スイッチテスト
@@ -1924,6 +1948,9 @@ translations:
   nozzle: 'ノズル'
   of: の
   'off': オフ
+  pre_print_option.ai_detect.description: 印刷異常を監視 (K2 Plus カメラベース)
+  pre_print_option.ai_detect.label: AI 検出
+  pre_print_option.timelapse.label: タイムラプス
   prints: 印刷
   remaining: 残り
   remaining before clog detection triggers: 残りで詰まり検出が作動します
@@ -1952,5 +1979,6 @@ translations:
   '{} complete': '{} 完了'
   '{} heater turned off': '{} ヒーターをオフにしました'
   '{} macro not configured': '{} マクロが未設定です'
+  '{} may cause unintended changes. Are you sure?': '{} は意図しない変更を引き起こす可能性があります。よろしいですか？'
   '{} more taps to {} beta features': あと{}回タップでベータ機能を{}
   '{} target set to {}°C': '{} 目標温度を {}°C に設定しました'

@@ -701,6 +701,11 @@ class PrinterState {
         return print_domain_.get_display_message_visible_subject();
     }
 
+    /// Klipper print_stats.message — pause/error reason from firmware
+    lv_subject_t* get_print_message_subject() {
+        return print_domain_.get_print_message_subject();
+    }
+
     /**
      * @brief Check if currently in print start phase
      *

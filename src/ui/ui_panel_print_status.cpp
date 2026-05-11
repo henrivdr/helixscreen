@@ -419,6 +419,20 @@ void PrintStatusPanel::init_subjects() {
     UI_MANAGED_SUBJECT_INT(show_cancelled_overlay_subject_, 0, "show_cancelled_overlay", subjects_);
     UI_MANAGED_SUBJECT_INT(show_error_overlay_subject_, 0, "show_error_overlay", subjects_);
 
+    // Pause overlay subjects + observer on print_stats.message. The state-based
+    // visibility (show_paused_overlay) is driven from on_print_state_changed(),
+    // which already runs on every PrintJobState transition. The reason text,
+    // however, can mutate while the printer remains in PAUSED (Klipper updates
+    // print_stats.message), so we also recompute on message change.
+    UI_MANAGED_SUBJECT_INT(show_paused_overlay_subject_, 0, "show_paused_overlay", subjects_);
+    UI_MANAGED_SUBJECT_STRING(print_pause_reason_subject_, print_pause_reason_buf_, "",
+                              "print_pause_reason", subjects_);
+    UI_MANAGED_SUBJECT_INT(print_pause_reason_visible_subject_, 0, "print_pause_reason_visible",
+                           subjects_);
+    print_message_observer_ = observe_string<PrintStatusPanel>(
+        printer_state_.get_print_message_subject(), this,
+        [](PrintStatusPanel* self, const char*) { self->recompute_paused_overlay_visibility(); });
+
     // Button enable states driven declaratively from XML (see update_button_states).
     UI_MANAGED_SUBJECT_INT(print_controls_enabled_subject_, 0, "print_controls_enabled", subjects_);
     UI_MANAGED_SUBJECT_INT(btn_pause_enabled_subject_, 0, "btn_pause_enabled", subjects_);
@@ -448,6 +462,11 @@ void PrintStatusPanel::init_subjects() {
     });
 
     subjects_initialized_ = true;
+
+    // Initial sync of the paused overlay — observers only fire on CHANGE, so
+    // a mid-print attach where state is already PAUSED would leave the badge
+    // hidden without this explicit recompute.
+    recompute_paused_overlay_visibility();
 
     // Sync initial state from PrinterState (in case app opens while print is in progress)
     // This is necessary because observers only fire on VALUE CHANGE, not on subscribe.
@@ -497,6 +516,7 @@ void PrintStatusPanel::deinit_subjects() {
     // structs — any ObserverGuard still holding a pointer would crash
     // in its destructor trying to lv_observer_remove() on freed memory.
     end_overlay_dismissed_observer_.reset();
+    print_message_observer_.reset();
 
     temp_observers_.clear();
     subjects_.deinit_all();
@@ -1644,6 +1664,32 @@ void PrintStatusPanel::recompute_end_overlay_visibility() {
     lv_subject_set_int(&show_error_overlay_subject_, error);
 }
 
+void PrintStatusPanel::recompute_paused_overlay_visibility() {
+    if (!subjects_initialized_)
+        return;
+
+    auto state = static_cast<PrintJobState>(
+        lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
+    bool paused = (state == PrintJobState::PAUSED);
+    lv_subject_set_int(&show_paused_overlay_subject_, paused ? 1 : 0);
+
+    // Reason resolution: prefer Klipper's print_stats.message (firmware-supplied
+    // descriptor — runout, error wrap, custom macros). If empty AND any
+    // configured runout sensor is currently tripped, surface a generic
+    // "Filament Runout" hint. Otherwise leave blank → reason label stays hidden.
+    std::string reason;
+    if (paused) {
+        const char* fw_msg = lv_subject_get_string(printer_state_.get_print_message_subject());
+        if (fw_msg && *fw_msg) {
+            reason = fw_msg;
+        } else if (FilamentSensorManager::instance().has_any_runout()) {
+            reason = lv_tr("Filament Runout");
+        }
+    }
+    lv_subject_copy_string(&print_pause_reason_subject_, reason.c_str());
+    lv_subject_set_int(&print_pause_reason_visible_subject_, reason.empty() ? 0 : 1);
+}
+
 void PrintStatusPanel::update_chamber_status() {
     if (!subjects_initialized_)
         return;
@@ -1804,6 +1850,10 @@ void PrintStatusPanel::on_print_state_changed(PrintJobState job_state) {
     if (runout_handler_) {
         runout_handler_->on_print_state_changed(result.old_state, result.new_state);
     }
+
+    // Update the "Print Paused" overlay any time the job state moves —
+    // covers PRINTING→PAUSED, PAUSED→PRINTING, PAUSED→CANCELLED, mid-print attach.
+    recompute_paused_overlay_visibility();
 
     if (result.should_reset_progress_bar) {
         if (progress_bar_) {

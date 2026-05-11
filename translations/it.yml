@@ -400,6 +400,7 @@ translations:
   Connection successful!: Connessione riuscita!
   Connection timeout: Connessione scaduta
   Console: Console
+  Console Settings: Impostazioni console
   Control optional print start features: Controlla funzionalità opzionali avvio stampa
   Control power relays and smart outlets: Controlla relè e prese intelligenti
   Controlled by hardware sensor: Controllato da sensore hardware
@@ -421,6 +422,8 @@ translations:
   Cover open: Coperchio aperto
   Crash report sent — thank you!: Report crash inviato — grazie!
   Creality CFS: Creality CFS
+  Creality K1: Creality K1
+  Creality K2 Plus: Creality K2 Plus
   Create New Filament: Crea nuovo filamento
   Create New Vendor: Crea nuovo fornitore
   Create Spool: Crea bobina
@@ -525,6 +528,7 @@ translations:
   Effects: Effetti
   Eject: Espelli
   'Eject failed: {}': 'Espulsione fallita: {}'
+  Elegoo Centauri Carbon: Elegoo Centauri Carbon
   Emergency Stop: Arresto emergenza
   Emergency Stop?: Arresto emergenza?
   Emergency stop activated: Arresto emergenza attivato
@@ -590,6 +594,7 @@ translations:
   Extruding {}mm...: Estrusione {}mm...
   FAILED: FALLITO
   FILAMENT MAPPING: MAPPATURA FILAMENTO
+  FILTERS: FILTRI
   Factory Reset: Ripristino di fabbrica
   Failed: Fallito
   Failed to analyze PRINT_START macro: Analisi macro PRINT_START fallita
@@ -677,6 +682,7 @@ translations:
   Filament Detected: Filamento rilevato
   Filament Environment: Ambiente filamento
   Filament Mapping: Mappatura filamento
+  Filament Runout: Esaurimento filamento
   Filament Sensor: Sensore filamento
   Filament Used: Filamento utilizzato
   Filament already exists: Filamento già esistente
@@ -703,6 +709,8 @@ translations:
   Finishing up...: Completamento...
   Firmware Restart: Riavvio firmware
   Firmware restarting...: Riavvio firmware...
+  FlashForge Adventurer 5M: FlashForge Adventurer 5M
+  FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
   Flat Concentric Rings (existing ams_slot): Anelli concentrici piatti (ams_slot esistente)
   Flip: Capovolgi
@@ -711,6 +719,7 @@ translations:
   'Flow change failed: {}': 'Modifica flusso fallita: {}'
   Flowguard: Flowguard
   Flying Toasters: Tostapane volanti
+  Follow graph screen: Segui schermata grafico
   Forget: 'Dimentica'
   Forming tip...: Formazione punta...
   Found %zu printers: '%zu stampanti trovate'
@@ -774,6 +783,8 @@ translations:
   Help & About: Aiuto e info
   Help Improve HelixScreen: Aiuta a migliorare HelixScreen
   Help improve HelixScreen?: Aiutare a migliorare HelixScreen?
+  Hide Firmware Noise: Nascondi rumore firmware
+  Hide Temperature Reports: Nascondi report temperature
   Home: Home
   Home failed: Homing fallito
   Homing AFC system...: Homing sistema AFC...
@@ -896,6 +907,7 @@ translations:
   Loaded: Caricato
   Loading Bed Mesh...: Caricamento mesh del piatto...
   Loading Error: Errore caricamento
+  Loading Filament...: Caricamento filamento...
   Loading G-code...: Caricamento G-code...
   Loading filament ({}mm)...: Caricamento filamento ({}mm)...
   Loading filament...: Caricamento filamento...
@@ -979,6 +991,7 @@ translations:
   Measure belt path frequencies: Misura le frequenze dei percorsi cinghia
   Measured: Misurato
   Measurement Failed: Misurazione fallita
+  Mechanical setup: Configurazione meccanica
   Memory (MB): Memoria (MB)
   Mesh Complete: Mesh completata
   Mesh saved as '{}': Mesh salvata come '{}'
@@ -1148,7 +1161,9 @@ translations:
   PID: PID
   PLA: PLA
   PLA - Black: PLA - Nero
+  POWER: ALIMENTAZIONE
   PRE-PRINT STEPS: PASSAGGI PRE-STAMPA
+  PRINT OPTIONS: OPZIONI STAMPA
   PRINTERS: STAMPANTI
   PROBE SENSORS: SENSORI SONDA
   Pair: Associa
@@ -1209,6 +1224,7 @@ translations:
   Position: Posizione
   Power: Alimentazione
   Power Devices: Dispositivi di alimentazione
+  Power off the printer or screen: Spegni la stampante o lo schermo
   'Pre-print command failed: {}': 'Comando pre-stampa fallito: {}'
   Preheat Macro: Macro preriscaldamento
   Preheat PLA: Preriscalda PLA
@@ -1241,12 +1257,14 @@ translations:
   Print Label: Stampa etichetta
   Print Library: Libreria di stampa
   Print Objects: Oggetti di Stampa
+  Print Paused: Stampa in pausa
   Print Speed: Velocità stampa
   Print Status: Stato stampa
   Print Time: Tempo stampa
   Print Tuning: Regolazione stampa
   Print failed: Stampa fallita
   'Print preparation failed: {}': 'Preparazione stampa fallita: {}'
+  Print quality: Qualità di stampa
   Print server rejected the job — check printer status: 'Il server di stampa ha rifiutato il lavoro — controlla lo stato della stampante'
   Printer: Stampante
   Printer Error: Errore stampante
@@ -1304,6 +1322,7 @@ translations:
   'Purge failed: {}': 'Spurgo fallito: {}'
   Purge macro not configured: Macro spurgo non configurata
   Purge may still be running — response timed out: Spurgo potrebbe essere ancora in corso — tempo scaduto
+  Purging: Spurgo
   Purging nozzle: Spurgo ugello
   Purging {}mm...: Spurgo {}mm...
   Purging...: Spurgo...
@@ -1387,6 +1406,7 @@ translations:
   Restart Required: Riavvio richiesto
   'Restart failed: not connected': 'Riavvio fallito: non connesso'
   Restart the display application: Riavvia l'applicazione display
+  Restart the printer or screen: Riavvia la stampante o lo schermo
   Restarting HelixScreen...: Riavvio HelixScreen...
   Restarting Klipper...: Riavvio Klipper...
   Restarting Moonraker...: Riavvio Moonraker...
@@ -1543,6 +1563,7 @@ translations:
   Show instead of dimming: Mostra invece di attenuare
   Show printer icon in navigation bar: Mostra icona stampante nella barra di navigazione
   Show text labels on icon-only home screen widgets: Mostra etichette di testo sui widget con sole icone nella schermata home
+  Show whatever curves you last had visible on the full graph.: Mostra le curve che erano visibili l'ultima volta sul grafico completo.
   Shutdown: Spegni
   Shutdown / Reboot: Spegni / Riavvia
   Shutdown failed: 'Spegnimento fallito'
@@ -1562,6 +1583,7 @@ translations:
   Slot {} updated: Slot {} aggiornato
   Small labels help keep controls calm and focused.: Le etichette piccole aiutano a mantenere i controlli ordinati e mirati.
   Snapmaker SnapSwap: Snapmaker SnapSwap
+  Snapmaker U1: Snapmaker U1
   Soft: 'Morbido'
   Some settings will take effect after restart.: Alcune impostazioni avranno effetto dopo il riavvio.
   Sound Theme: Tema sonoro
@@ -1629,6 +1651,8 @@ translations:
   Success Rate: Tasso di successo
   Success!: Successo!
   Support, documentation, and version info: Supporto, documentazione e info versione
+  Suppress periodic 'T:.../B:...' status lines: Sopprime le righe di stato periodiche 'T:.../B:...'
+  Suppress raw debug output from printer firmware modules: Sopprime l'output di debug grezzo dai moduli firmware della stampante
   Surfaces inherit app background tokens for light and dark modes.: Le superfici ereditano i token sfondo app per modalità chiara e scura.
   Switch Printer: Cambia stampante
   Switch Tests: Test interruttori
@@ -1924,6 +1948,9 @@ translations:
   nozzle: 'ugello'
   of: di
   'off': spento
+  pre_print_option.ai_detect.description: Monitora le anomalie di stampa (basato sulla camera del K2 Plus)
+  pre_print_option.ai_detect.label: Rilevamento AI
+  pre_print_option.timelapse.label: Timelapse
   prints: stampe
   remaining: rimanente
   remaining before clog detection triggers: rimanente prima che si attivi il rilevamento intasamento
@@ -1952,5 +1979,6 @@ translations:
   '{} complete': '{} completato'
   '{} heater turned off': Riscaldatore {} spento
   '{} macro not configured': Macro {} non configurata
+  '{} may cause unintended changes. Are you sure?': '{} potrebbe causare modifiche indesiderate. Sei sicuro?'
   '{} more taps to {} beta features': '{} tocchi per {} funzioni beta'
   '{} target set to {}°C': Obiettivo {} impostato a {}°C

@@ -400,6 +400,7 @@ translations:
   Connection successful!: Соединение успешно!
   Connection timeout: Тайм-аут соединения
   Console: Консоль
+  Console Settings: Настройки консоли
   Control optional print start features: Управление дополнительными функциями начала печати
   Control power relays and smart outlets: Управление реле и умными розетками
   Controlled by hardware sensor: Управляется аппаратным датчиком
@@ -421,6 +422,8 @@ translations:
   Cover open: Крышка открыта
   Crash report sent — thank you!: Отчёт об ошибке отправлен — спасибо!
   Creality CFS: Creality CFS
+  Creality K1: Creality K1
+  Creality K2 Plus: Creality K2 Plus
   Create New Filament: Создать новый филамент
   Create New Vendor: Создать нового производителя
   Create Spool: Создать катушку
@@ -525,6 +528,7 @@ translations:
   Effects: Эффекты
   Eject: Извлечь
   'Eject failed: {}': 'Ошибка извлечения: {}'
+  Elegoo Centauri Carbon: Elegoo Centauri Carbon
   Emergency Stop: Аварийная остановка
   Emergency Stop?: Аварийная остановка?
   Emergency stop activated: Аварийная остановка активирована
@@ -590,6 +594,7 @@ translations:
   Extruding {}mm...: Экструзия {}мм...
   FAILED: ОШИБКА
   FILAMENT MAPPING: НАЗНАЧЕНИЕ ФИЛАМЕНТА
+  FILTERS: ФИЛЬТРЫ
   Factory Reset: Сброс к заводским настройкам
   Failed: Ошибка
   Failed to analyze PRINT_START macro: Не удалось проанализировать макрос PRINT_START
@@ -677,6 +682,7 @@ translations:
   Filament Detected: Филамент обнаружен
   Filament Environment: Среда хранения филамента
   Filament Mapping: Назначение филамента
+  Filament Runout: Окончание филамента
   Filament Sensor: Датчик филамента
   Filament Used: Использовано филамента
   Filament already exists: Такой филамент уже существует
@@ -703,6 +709,8 @@ translations:
   Finishing up...: Завершение...
   Firmware Restart: Перезапуск прошивки
   Firmware restarting...: Перезапуск прошивки...
+  FlashForge Adventurer 5M: FlashForge Adventurer 5M
+  FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
   Flat Concentric Rings (existing ams_slot): Плоские концентрические кольца (существующий ams_slot)
   Flip: Отразить
@@ -711,6 +719,7 @@ translations:
   'Flow change failed: {}': 'Ошибка изменения потока: {}'
   Flowguard: Flowguard
   Flying Toasters: Летающие тостеры
+  Follow graph screen: Следовать экрану графика
   Forget: 'Забыть'
   Forming tip...: Формирование кончика...
   Found %zu printers: Найдено %zu принтеров
@@ -774,6 +783,8 @@ translations:
   Help & About: Помощь и о программе
   Help Improve HelixScreen: Помогите улучшить HelixScreen
   Help improve HelixScreen?: Помочь улучшить HelixScreen?
+  Hide Firmware Noise: Скрыть служебные сообщения прошивки
+  Hide Temperature Reports: Скрыть отчёты о температуре
   Home: Главная
   Home failed: Парковка не удалась
   Homing AFC system...: Парковка системы AFC...
@@ -896,6 +907,7 @@ translations:
   Loaded: Загружен
   Loading Bed Mesh...: Загрузка сетки стола...
   Loading Error: Ошибка загрузки
+  Loading Filament...: Загрузка филамента...
   Loading G-code...: Загрузка G-code...
   Loading filament ({}mm)...: Загрузка филамента ({}мм)...
   Loading filament...: Загрузка филамента...
@@ -979,6 +991,7 @@ translations:
   Measure belt path frequencies: Измерить частоты путей ремня
   Measured: Измерено
   Measurement Failed: Измерение не удалось
+  Mechanical setup: Механическая настройка
   Memory (MB): Память (МБ)
   Mesh Complete: Сетка завершена
   Mesh saved as '{}': Сетка сохранена как '{}'
@@ -1148,7 +1161,9 @@ translations:
   PID: PID
   PLA: PLA
   PLA - Black: PLA - Чёрный
+  POWER: ПИТАНИЕ
   PRE-PRINT STEPS: ЭТАПЫ ПОДГОТОВКИ
+  PRINT OPTIONS: ПАРАМЕТРЫ ПЕЧАТИ
   PRINTERS: ПРИНТЕРЫ
   PROBE SENSORS: ДАТЧИКИ ЗОНДА
   Pair: Сопряжение
@@ -1209,6 +1224,7 @@ translations:
   Position: Позиция
   Power: Питание
   Power Devices: Устройства питания
+  Power off the printer or screen: Выключить принтер или экран
   'Pre-print command failed: {}': 'Ошибка команды перед печатью: {}'
   Preheat Macro: Макрос преднагрева
   Preheat PLA: Преднагрев PLA
@@ -1241,12 +1257,14 @@ translations:
   Print Label: Печать этикетки
   Print Library: Библиотека печати
   Print Objects: Объекты печати
+  Print Paused: Печать приостановлена
   Print Speed: Скорость печати
   Print Status: Статус печати
   Print Time: Время печати
   Print Tuning: Настройка печати
   Print failed: Печать не удалась
   'Print preparation failed: {}': 'Ошибка подготовки печати: {}'
+  Print quality: Качество печати
   Print server rejected the job — check printer status: 'Сервер печати отклонил задание — проверьте статус принтера'
   Printer: Принтер
   Printer Error: Ошибка принтера
@@ -1304,6 +1322,7 @@ translations:
   'Purge failed: {}': 'Ошибка прочистки: {}'
   Purge macro not configured: Макрос прочистки не настроен
   Purge may still be running — response timed out: Прочистка может ещё выполняться — время ожидания истекло
+  Purging: Продувка
   Purging nozzle: Продувка сопла
   Purging {}mm...: Прочистка {}мм...
   Purging...: Продувка...
@@ -1387,6 +1406,7 @@ translations:
   Restart Required: Требуется перезапуск
   'Restart failed: not connected': 'Перезапуск не удался: нет подключения'
   Restart the display application: Перезапустить приложение дисплея
+  Restart the printer or screen: Перезапустить принтер или экран
   Restarting HelixScreen...: Перезапуск HelixScreen...
   Restarting Klipper...: Перезапуск Klipper...
   Restarting Moonraker...: Перезапуск Moonraker...
@@ -1543,6 +1563,7 @@ translations:
   Show instead of dimming: Показывать вместо затемнения
   Show printer icon in navigation bar: Показывать значок принтера в панели навигации
   Show text labels on icon-only home screen widgets: Показывать текстовые подписи на виджетах главного экрана
+  Show whatever curves you last had visible on the full graph.: Показывать те кривые, что были видны на полном графике в последний раз.
   Shutdown: Выключение
   Shutdown / Reboot: Выключение / Перезагрузка
   Shutdown failed: 'Ошибка выключения'
@@ -1562,6 +1583,7 @@ translations:
   Slot {} updated: Слот {} обновлён
   Small labels help keep controls calm and focused.: Мелкие надписи помогают сохранять элементы управления аккуратными.
   Snapmaker SnapSwap: Snapmaker SnapSwap
+  Snapmaker U1: Snapmaker U1
   Soft: 'Мягкий'
   Some settings will take effect after restart.: Некоторые настройки вступят в силу после перезапуска.
   Sound Theme: Звуковая тема
@@ -1629,6 +1651,8 @@ translations:
   Success Rate: Процент успеха
   Success!: Успешно!
   Support, documentation, and version info: Поддержка, документация и информация о версии
+  Suppress periodic 'T:.../B:...' status lines: Скрывать периодические строки статуса 'T:.../B:...'
+  Suppress raw debug output from printer firmware modules: Скрывать отладочный вывод модулей прошивки принтера
   Surfaces inherit app background tokens for light and dark modes.: Поверхности наследуют токены фона приложения для светлого и тёмного режимов.
   Switch Printer: Переключить принтер
   Switch Tests: Тесты переключателей
@@ -1924,6 +1948,9 @@ translations:
   nozzle: 'сопло'
   of: из
   'off': выкл
+  pre_print_option.ai_detect.description: Отслеживание дефектов печати (на основе камеры K2 Plus)
+  pre_print_option.ai_detect.label: AI-детекция
+  pre_print_option.timelapse.label: Таймлапс
   prints: печатей
   remaining: осталось
   remaining before clog detection triggers: осталось до срабатывания обнаружения засора
@@ -1952,5 +1979,6 @@ translations:
   '{} complete': '{} завершено'
   '{} heater turned off': Нагреватель {} выключен
   '{} macro not configured': Макрос {} не настроен
+  '{} may cause unintended changes. Are you sure?': '{} может привести к непреднамеренным изменениям. Вы уверены?'
   '{} more taps to {} beta features': '{} нажатий до {} бета-функций'
   '{} target set to {}°C': Целевая температура {} — {}°C

@@ -336,6 +336,16 @@ class PrintStatusPanel : public OverlayBase {
     lv_subject_t show_cancelled_overlay_subject_;
     lv_subject_t show_error_overlay_subject_;
 
+    // Pause overlay: 1 iff print_state_enum == PAUSED. Not gated on a
+    // dismiss flag — paused is a transient runtime state, not a terminal
+    // outcome, so the overlay auto-clears when the print resumes/ends.
+    lv_subject_t show_paused_overlay_subject_;
+    // Optional reason text shown as a second label *inside* the bubble below the
+    // title (print_stats.message from Klipper, or "Filament Runout" derived from
+    // a tripped sensor). The visible flag drives the reason label's hidden flag.
+    lv_subject_t print_pause_reason_subject_;
+    lv_subject_t print_pause_reason_visible_subject_;
+
     lv_subject_t exclude_objects_available_subject_; ///< Int: 1 if multi-object print
     lv_subject_t objects_text_subject_;              ///< String: "X of Y obj" display text
 
@@ -364,6 +374,7 @@ class PrintStatusPanel : public OverlayBase {
     char pause_label_buf_[16] = "Pause";             ///< Pause button label
     char objects_text_buf_[32] = "";                 ///< "X of Y obj" buffer
     char view_toggle_icon_buf_[8] = "";              ///< View toggle icon codepoint (cube/layers)
+    char print_pause_reason_buf_[256] = "";          ///< Reason line shown under "Print Paused"
 
     //
     // === Instance State ===
@@ -486,6 +497,7 @@ class PrintStatusPanel : public OverlayBase {
     void handle_temp_card_click();
     void update_chamber_status();
     void recompute_end_overlay_visibility();
+    void recompute_paused_overlay_visibility();
     void handle_pause_button();
     void handle_tune_button();
     void handle_cancel_button();
@@ -558,6 +570,7 @@ class PrintStatusPanel : public OverlayBase {
     ObserverGuard gcode_render_mode_observer_; ///< Watches settings changes to update viewer mode
     ObserverGuard print_outcome_observer_;     ///< Drives show_{complete,cancelled,error}_overlay
     ObserverGuard end_overlay_dismissed_observer_; ///< Ditto; second input to the same recompute
+    ObserverGuard print_message_observer_;     ///< Drives pause reason text from print_stats.message
 
     //
     // === Exclude Object Manager ===

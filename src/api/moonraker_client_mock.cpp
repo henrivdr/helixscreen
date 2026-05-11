@@ -2659,6 +2659,12 @@ bool MoonrakerClientMock::resume_print_internal() {
                  pause_sim);
 
     dispatch_print_state_notification("printing");
+    // Clear any pause-reason message Klipper had set (mirrors real firmware behavior).
+    {
+        json clear_msg;
+        clear_msg["print_stats"]["message"] = "";
+        dispatch_status_update(clear_msg);
+    }
     return true;
 }
 
@@ -2761,6 +2767,12 @@ bool MoonrakerClientMock::toggle_filament_runout() {
             if (get_runtime_config()->should_show_runout_modal()) {
                 spdlog::info("[MoonrakerClientMock] Filament runout during print - auto-pausing");
                 pause_print_internal();
+                // Mirror Klipper's runout_helper: set print_stats.message so the
+                // UI can surface the reason under the "Print Paused" badge.
+                json msg_status;
+                msg_status["print_stats"]["message"] =
+                    "Filament Sensor " + runout_sensor + ": Runout Detected";
+                dispatch_status_update(msg_status);
             }
         }
     }
