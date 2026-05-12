@@ -469,7 +469,9 @@ void LedController::discover_wled_strips() {
                                         "LedController::wled_addrs_apply",
                                         [this, token,
                                          wled_addrs = std::move(wled_addrs)]() mutable {
-                                            for (auto& [strip_name, addr] : wled_addrs) {
+                                            for (auto& wled_pair : wled_addrs) {
+                                                const std::string& strip_name = wled_pair.first;
+                                                const std::string& addr      = wled_pair.second;
                                                 wled_.set_strip_address(strip_name, addr);
                                                 // Attempt to fetch preset names from WLED device
                                                 wled_.fetch_presets_from_device(
