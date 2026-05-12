@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.60] - 2026-05-11
+
+The headline is the **completion of the L081 Mechanism C sweep** — 107 background-thread callsites across panels, modals, wizards, calibration, AMS backends, and macro/print preparation chains now route LVGL touches through `tok.defer` / the new `bg_cb` helper, with the strict-mode abort detector active in tests/CI to keep new regressions from landing. Pairs with two AMS firmware-writeback features (CFS via `BOX_MODIFY_TN_DATA`, Snapmaker via `filament_detect/set` Extended Firmware) that finally make color edits persist to the printer, and the **layered filament-path renderer** flipping default-on (legacy renderer deleted) for smoother animation. Round it out with **CFS hardware-error UX** surfacing key8xx faults via `respond_raw` with a recovery chain + purge-gate, and a **WiFi auto-recovery** path for stale NM profiles missing `key-mgmt`.
+
+### Added
+
+- **AMS color firmware-writeback** — color edits in the UI now persist back to the printer firmware. CFS uses `BOX_MODIFY_TN_DATA`; Snapmaker uses `filament_detect/set` (Extended Firmware). Slots auto-mirror firmware-detected colors into `lane_data` so OrcaSlicer sees the same source of truth.
+- **"Print Paused" overlay with reason** — status panel now surfaces the pause reason instead of a generic spinner.
+- **CFS pre-print step indicator** — synthesizes Cut / Feed / Retract / Purge phases from physical signals (cutter trigger, extruder motion, filament sensor) so the load step row reflects what the box is actually doing.
+- **Pre-print `requires_macro` gate** — firmware-dependent options now declare which macro they need; the option row hides when the macro is absent instead of erroring at run time.
+- **WiFi auto-recovery for stale NetworkManager profiles** — when a saved connection is missing `key-mgmt` (common after firmware updates or hand-edited keyfiles), we now rewrite the profile and reconnect instead of failing silently.
+- **`bg_cb` helper + L081 strict-mode detector** — `lifetime_.bg_cb(tag, fn)` returns a callable that auto-defers the body to the main thread; the runtime detector now aborts under `HELIX_STRICT_BG_THREAD_CHECK=1` (default in `HelixTestFixture`) so new Mechanism C anti-pattern instances fail tests immediately.
+- **L081 Mechanism D (freeze-drop) telemetry watch + aggregator** — `telemetry-crashes.py` gains anomaly watch mode; `freeze-drops.sh` aggregates `DROPPED (shutdown)` events across Pi/K2/CC1 (busybox `logread` + `/var/log/messages`).
+
+### Fixed
+
+- **L081 Mechanism C: 107 background-thread callsites across the codebase** — LedController, PrintSelectPanel, belt_tension_calibrator (17 sites), 6 AMS backends, macro/print/preparation chains, UI panels (including real LVGL-from-bg bugs caught by the detector), wizards/modals/overlays, and `camera_stream` all now wrap LVGL touches in `tok.defer` or use `bg_cb`. The forbidden bare `if (tok.expired()) return;` followed by `this`/member access is now gated by lint + strict-mode runtime abort.
+- **Layered filament-path renderer is now default; legacy renderer deleted** — the `HELIX_LAYERED_FILAMENT_PATH` scaffold shipped behind a flag last cycle; this release flips the default and removes the old single-pass renderer and `render_cache_` member. LINEAR/HUB topologies now split flow/heat/tip into the `DRAW_POST` pass; PARALLEL splits the animation into `DRAW_POST` as well. Per-setter dirty flags + cached rendered output skip redraws when nothing changed.
+- **UpdateQueue::scoped_freeze buffers callbacks instead of dropping** — freeze now splices buffered work back on release; `defer_critical` / `queue_critical` removed (single path covers all cases). `freeze-drops.sh` watches `DROPPED (shutdown)` only — should be zero on builds ≥ 2026-05-11.
+- **CFS hardware errors (key8xx) surface via `respond_raw` with recovery + purge-gate** — K2 box driver reports faults as `!!` log lines that `dispatch_action_script` swallowed silently. The modal upgrade for key8xx now offers the recovery chain and gates the purge action behind the user actually clearing the error.
+- **AMS state shows "Printing" / "Paused" while a print is active** — status string was stuck on "Idle" because the print-state listener wasn't wired through the AMS card. Now reflects the live `print_stats.state`.
+- **GCode viewer streaming mode honors per-tool palette** — the streaming path lost per-tool palette indexing during the v0.99.59 refactor; multi-color prints rendered in T0's color again. Now indexes by the slicer-recorded tool.
+- **AD5X IFS tool-mapping caps when plugin is loaded** — `{true, true}` when lessWaste/bambufy active, `{false, false}` for native ZMOD; previously inconsistent.
+- **Snapmaker AMS seeds identity `tool_to_slot_map` in constructor** — first-frame render before firmware ACK no longer shows an empty mapping.
+- **Snapmaker U1 platform hook no longer kills `lmd` / `unisrv`** — those are camera/timelapse daemons, not competing UIs; killing them broke TIMELAPSE_START. Hook now auto-recovers if they were previously killed.
+- **Installer finds `moonraker.conf` on AD5X ZMOD chroot paths** (prestonbrown/helixscreen#938).
+- **Installer doesn't kill Snapmaker `unisrv` in competing-UI sweep** (same root cause as the U1 hook fix).
+- **AMS filament-remap card hides on backends without editable mapping** — was showing a dead UI on AFC/Happy Hare setups.
+- **AMS color_set uses explicit flag, not `color_rgb == 0` sentinel** — legitimately-black filaments no longer get treated as "unset." Companion to the IFS `check_external_color_change` switch from `0 = no-signal` to `optional`.
+- **Print-select inlines post-`defer_critical` `MetadataUpdate`** — the metadata flag was getting stuck after a freeze drop; now escapes the freeze with an inline path and self-heals.
+- **AMS step indicator anchored to physical heating + live temp label** — the indicator was floating relative to the wrong subject.
+- **macOS nightly test gate** — `execute_gcode`-routing change halted the macOS CI gate; re-aligned.
+
+### Changed
+
+- **Calibration docs** — fixed wrong config path; expanded recovery options.
+- **belt_tension_calibrator** — collapsed 17 trivial long-form `tok.defer` blocks to `bg_cb`.
+- **AD5X IFS** — non-zcolor `gcode_response` lines now drop on the bg thread before the defer hop (less main-thread churn).
+
 ## [0.99.59] - 2026-05-09
 
 The headline is **diagnostic instrumentation for the post-v0.99.58 cluster:pstat-async-delete recurrence**. Bundle 3XNZQB2R crashed via a corrupted per-widget event-handler callback — a corruption surface distinct from the global event_stack v0.99.55-56 fixed. v0.99.59 adds three runtime detectors that convert the crash into a recoverable anomaly + name the widget, and wraps the five Mechanism C anti-pattern callsites the bg-thread detector found on first AD5M deploy.
@@ -3573,6 +3612,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.60]: https://github.com/prestonbrown/helixscreen/compare/v0.99.59...v0.99.60
 [0.99.59]: https://github.com/prestonbrown/helixscreen/compare/v0.99.58...v0.99.59
 [0.99.58]: https://github.com/prestonbrown/helixscreen/compare/v0.99.57...v0.99.58
 [0.99.57]: https://github.com/prestonbrown/helixscreen/compare/v0.99.56...v0.99.57
