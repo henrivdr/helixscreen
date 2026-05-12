@@ -48,22 +48,6 @@ static bool reduced_effects() {
 #endif
 }
 
-// Layered renderer toggle. When enabled, the widget hosts two child lv_canvas
-// widgets (static topology + state overlay) backed by cached ARGB8888 buffers
-// that LVGL composites natively, plus a DRAW_POST cb for cheap animation.
-// Setters mark `static_dirty_` / `overlay_dirty_`; canvases refresh on the
-// next paint cycle. Legacy single-callback render path stays in place behind
-// the same dispatch as a fallback (set HELIX_LAYERED_FILAMENT_PATH=0 to opt
-// back to legacy if a regression appears on a specific device).
-static bool layered_renderer_enabled() {
-    static const bool cached = []() {
-        const char* env = getenv("HELIX_LAYERED_FILAMENT_PATH");
-        if (!env)
-            return true; // default on
-        return strcmp(env, "0") != 0 && strcasecmp(env, "false") != 0;
-    }();
-    return cached;
-}
 
 // ============================================================================
 // Constants
@@ -267,16 +251,9 @@ struct FilamentPathData {
     // Theme-derived font
     const lv_font_t* label_font = nullptr;
 
-    // Full-render cache: blit cached buffer when state hash unchanged.
-    // Avoids re-running the 3500-line draw callback on every LVGL invalidation
-    // (e.g. when an overlapping modal opens/closes). Critical for K2 (CPU-only).
-    lv_draw_buf_t* render_cache_ = nullptr;
-    uint64_t cache_hash_ = 0;
-    lv_area_t cache_coords_ = {0, 0, -1, -1}; // Invalid by design — first draw misses
-
-    // Layered renderer state (only used when layered_renderer_enabled()).
-    // The widget hosts two lv_canvas children backed by ARGB8888 draw_bufs;
-    // LVGL composites them natively under a DRAW_POST animation pass.
+    // Layered renderer state. The widget hosts two lv_canvas children backed
+    // by ARGB8888 draw_bufs; LVGL composites them natively under a DRAW_POST
+    // animation pass.
     lv_obj_t* static_canvas_ = nullptr;
     lv_obj_t* overlay_canvas_ = nullptr;
     lv_draw_buf_t* static_canvas_buf_ = nullptr;
@@ -1611,12 +1588,10 @@ static void draw_heat_glow(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t ra
 // tool with its own extruder. Unlike hub/linear topologies where filaments
 // converge to a single toolhead, parallel topology shows separate paths.
 
-// Static + state-tied content for PARALLEL — everything except animation
-// overlays. Called from the legacy renderer (draws all in one pass) and from
-// the layered renderer (paints into the overlay canvas). Animation (flow
-// dots) is split out into draw_animation_parallel below.
-static void draw_parallel_static_and_overlay(lv_obj_t* obj, lv_layer_t* layer,
-                                             FilamentPathData* data);
+// Static + state-tied content for PARALLEL — painted into the overlay canvas
+// by layered_render_overlay. Animation (flow dots) lives separately in
+// draw_animation_parallel, painted via DRAW_POST.
+static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data);
 
 // Animation overlay for LINEAR/HUB — flow particles, heat glow, segment
 // transition filament tip. Reads the active_path cached by the state-tied
@@ -1687,9 +1662,8 @@ static void draw_animation_linear_hub(lv_layer_t* layer, FilamentPathData* data)
     }
 }
 
-// Animation overlay for PARALLEL — flow particles. Called from DRAW_POST in
-// the layered renderer; folded into draw_parallel_static_and_overlay in the
-// legacy renderer's single-pass invocation.
+// Animation overlay for PARALLEL — flow particles. Painted via DRAW_POST
+// on top of the overlay canvas.
 static void draw_animation_parallel(lv_layer_t* layer, const BaseGeometry& g,
                                     const SlotRenderStates& states, const FilamentPathData* data) {
     if (!data->flow_anim_active)
@@ -1712,19 +1686,6 @@ static void draw_animation_parallel(lv_layer_t* layer, const BaseGeometry& g,
 }
 
 static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
-    draw_parallel_static_and_overlay(obj, layer, data);
-
-    // Legacy path: animation lives in the same single-pass render. Layered
-    // path calls draw_animation_parallel separately from DRAW_POST.
-    if (!layered_renderer_enabled() || !data->static_canvas_) {
-        BaseGeometry g = compute_base_geometry(obj, data);
-        SlotRenderStates states = compute_slot_render_states(data);
-        draw_animation_parallel(layer, g, states, data);
-    }
-}
-
-static void draw_parallel_static_and_overlay(lv_obj_t* obj, lv_layer_t* layer,
-                                             FilamentPathData* data) {
 
     BaseGeometry g = compute_base_geometry(obj, data);
     int32_t height = g.height;
@@ -2198,189 +2159,15 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
 // Main Draw Callback
 // ============================================================================
 
-// Forward decl for the cached wrapper below.
 static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data);
 
 // ============================================================================
-// Full-render cache helpers
-// ============================================================================
-
-// FNV-1a 64-bit hash mixer (compile-time fast, low-collision for our domain).
-static inline void cache_hash_mix(uint64_t& h, const void* buf, size_t len) {
-    const uint8_t* p = static_cast<const uint8_t*>(buf);
-    constexpr uint64_t FNV_PRIME = 1099511628211ULL;
-    for (size_t i = 0; i < len; ++i) {
-        h ^= static_cast<uint64_t>(p[i]);
-        h *= FNV_PRIME;
-    }
-}
-
-template <typename T> static inline void cache_hash_val(uint64_t& h, const T& v) {
-    cache_hash_mix(h, &v, sizeof(T));
-}
-
-// Hash every user-visible piece of state that affects rendering output.
-// Pure animation tick state (anim_progress, error_pulse_opa, etc.) IS included —
-// the cache invalidates each animation frame, but most invalidations come from
-// overlay open/close where state hasn't changed at all (the K2 pain point).
-static uint64_t compute_cache_hash(const FilamentPathData* data) {
-    uint64_t h = 14695981039346656037ULL; // FNV-1a 64-bit offset basis
-
-    cache_hash_val(h, data->topology);
-    cache_hash_val(h, data->slot_count);
-    cache_hash_val(h, data->active_slot);
-    cache_hash_val(h, data->filament_segment);
-    cache_hash_val(h, data->filament_color);
-    cache_hash_val(h, data->error_segment);
-    cache_hash_val(h, data->error_pulse_opa);
-    cache_hash_val(h, data->anim_progress);
-    cache_hash_val(h, data->prev_segment);
-    cache_hash_val(h, data->anim_direction);
-    cache_hash_val(h, data->segment_anim_active);
-    cache_hash_val(h, data->bypass_active);
-    cache_hash_val(h, data->bypass_color);
-    cache_hash_val(h, data->bypass_has_spool);
-    cache_hash_val(h, data->show_bypass);
-    cache_hash_val(h, data->hub_only);
-    cache_hash_val(h, data->eject_mode);
-    cache_hash_val(h, data->buffer_fault_state);
-    cache_hash_val(h, data->buffer_present);
-    cache_hash_val(h, data->buffer_state);
-    cache_hash_val(h, data->buffer_bias);
-    cache_hash_val(h, data->heat_active);
-    cache_hash_val(h, data->heat_pulse_opa);
-    cache_hash_val(h, data->heat_pulse_active);
-    cache_hash_val(h, data->flow_anim_active);
-    cache_hash_val(h, data->flow_offset);
-    cache_hash_val(h, data->output_x_current);
-    cache_hash_val(h, data->output_x_target);
-    cache_hash_val(h, data->output_x_anim_active);
-    cache_hash_val(h, data->slot_overlap);
-    cache_hash_val(h, data->slot_width);
-
-    // Per-slot arrays — only hash up to slot_count to avoid noise from stale entries.
-    int n = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);
-    for (int i = 0; i < n; ++i) {
-        cache_hash_val(h, data->slot_filament_states[i].segment);
-        cache_hash_val(h, data->slot_filament_states[i].color);
-        cache_hash_val(h, data->slot_has_prep_sensor[i]);
-        cache_hash_val(h, data->mapped_tool[i]);
-        cache_hash_val(h, data->slot_is_hub_routed[i]);
-    }
-
-    // Theme: dark/light mode change + key size changes invalidate cache.
-    uint32_t idle_u32 = lv_color_to_u32(data->color_idle);
-    cache_hash_val(h, idle_u32);
-    cache_hash_val(h, data->line_width_idle);
-    cache_hash_val(h, data->sensor_radius);
-
-    // Layout shifts (slot grid moves/resizes) invalidate cache.
-    if (data->slot_grid) {
-        lv_area_t grid_coords;
-        lv_obj_get_coords(data->slot_grid, &grid_coords);
-        cache_hash_val(h, grid_coords);
-    }
-
-    return h;
-}
-
-// Free + null the cache buffer (safe to call repeatedly).
-static void cache_invalidate(FilamentPathData* data) {
-    if (data->render_cache_) {
-        lv_draw_buf_destroy(data->render_cache_);
-        data->render_cache_ = nullptr;
-    }
-    data->cache_hash_ = 0;
-    data->cache_coords_ = {0, 0, -1, -1};
-}
-
-// Render the full scene into `data->render_cache_`, sized to widget bounds.
-// Returns true on success. Buffer is ARGB8888 with origin matching widget coords
-// (so existing draw helpers using absolute coords land in the right pixels).
-static bool cache_capture(lv_obj_t* obj, FilamentPathData* data, const lv_area_t& obj_coords) {
-    int32_t w = lv_area_get_width(&obj_coords);
-    int32_t h = lv_area_get_height(&obj_coords);
-    if (w <= 0 || h <= 0)
-        return false;
-
-    // (Re)allocate cache buffer if size changed.
-    bool need_alloc = !data->render_cache_;
-    if (data->render_cache_) {
-        const lv_image_header_t& hdr = data->render_cache_->header;
-        if ((int32_t)hdr.w != w || (int32_t)hdr.h != h)
-            need_alloc = true;
-    }
-    if (need_alloc) {
-        if (data->render_cache_) {
-            lv_draw_buf_destroy(data->render_cache_);
-            data->render_cache_ = nullptr;
-        }
-        data->render_cache_ = lv_draw_buf_create(w, h, LV_COLOR_FORMAT_ARGB8888, 0);
-        if (!data->render_cache_)
-            return false;
-    }
-
-    // Clear to transparent — the draw helpers don't fill the full rect.
-    lv_draw_buf_clear(data->render_cache_, nullptr);
-
-    // Construct a layer whose buffer maps absolute widget coords to (0,0) of the buffer.
-    // LVGL computes pixel offsets as (pixel - buf_area.x1), so setting buf_area = obj_coords
-    // makes draws at absolute widget coords land at the correct buffer pixel.
-    lv_layer_t cache_layer;
-    lv_layer_init(&cache_layer);
-    cache_layer.draw_buf = data->render_cache_;
-    cache_layer.color_format = LV_COLOR_FORMAT_ARGB8888;
-    cache_layer.buf_area = obj_coords;
-    cache_layer._clip_area = obj_coords;
-    cache_layer.phy_clip_area = obj_coords;
-
-    // Run the existing 3500-line draw code, writing into the cache.
-    if (data->topology == static_cast<int>(PathTopology::MIXED)) {
-        draw_mixed_topology(obj, &cache_layer, data);
-    } else if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
-        draw_parallel_topology(obj, &cache_layer, data);
-    } else {
-        filament_path_render(obj, &cache_layer, data);
-    }
-
-    // Flush pending draw tasks synchronously into the cache buffer.
-    // Mirrors lv_canvas_finish_layer() but without invalidating a widget.
-    cache_layer.all_tasks_added = true;
-    lv_display_t* disp = lv_obj_get_display(obj);
-    while (cache_layer.draw_task_head) {
-        lv_draw_dispatch_wait_for_request();
-        bool dispatched = lv_draw_dispatch_layer(disp, &cache_layer);
-        if (!dispatched) {
-            lv_draw_wait_for_finish();
-            lv_draw_dispatch_request();
-        }
-    }
-    lv_draw_unit_send_event(NULL, LV_EVENT_CHILD_DELETED, &cache_layer);
-
-    data->cache_coords_ = obj_coords;
-    return true;
-}
-
-// Blit the cache buffer onto the real layer at widget coords.
-static void cache_blit(lv_layer_t* layer, FilamentPathData* data, const lv_area_t& obj_coords) {
-    lv_draw_image_dsc_t dsc;
-    lv_draw_image_dsc_init(&dsc);
-    dsc.src = data->render_cache_;
-    dsc.image_area = obj_coords;
-    lv_draw_image(layer, &dsc, &obj_coords);
-}
-
-// ============================================================================
-// Layered renderer scaffold (HELIX_LAYERED_FILAMENT_PATH).
+// Layered renderer
 //
-// When the env-var toggle is on, the widget hosts two lv_canvas children
-// (static topology + state overlay) backed by cached ARGB8888 buffers. LVGL
-// composites them natively. Animation paints in DRAW_POST after children.
-//
-// In this scaffold step, the topology renderers are still legacy: the entire
-// state-tied + idle content is rendered into the overlay canvas, and the
-// static canvas stays transparent. Subsequent steps move idle-topology
-// drawing into the static layer and per-frame animation into DRAW_POST.
+// The widget hosts two lv_canvas children (static topology + state overlay)
+// backed by cached ARGB8888 buffers. LVGL composites them natively. Per-frame
+// animation paints in DRAW_POST. Setters mark `static_dirty_` / `overlay_dirty_`
+// via layered_mark_dirty() which schedules an async canvas refresh.
 // ============================================================================
 
 static void layered_destroy_buffers(FilamentPathData* data) {
@@ -2651,48 +2438,10 @@ static void filament_path_draw_cb(lv_event_t* e) {
     if (!data)
         return;
 
-    // Layered renderer mode: child canvases handle the heavyweight painting
-    // (refreshed in DRAW_MAIN_BEGIN before LVGL paints them). This DRAW_POST
-    // pass only contributes the cheap animation overlay on top.
-    if (layered_renderer_enabled() && data->static_canvas_) {
-        layered_render_animation(obj, layer, data);
-        return;
-    }
-
-    // Get widget coords once — cache machinery and renderers all need them.
-    lv_area_t obj_coords;
-    lv_obj_get_coords(obj, &obj_coords);
-
-    // Cache hit? Blit cached buffer and skip the heavyweight draw.
-    uint64_t new_hash = compute_cache_hash(data);
-    bool coords_match = data->render_cache_ && data->cache_coords_.x1 == obj_coords.x1 &&
-                        data->cache_coords_.y1 == obj_coords.y1 &&
-                        data->cache_coords_.x2 == obj_coords.x2 &&
-                        data->cache_coords_.y2 == obj_coords.y2;
-    if (data->render_cache_ && data->cache_hash_ == new_hash && coords_match) {
-        cache_blit(layer, data, obj_coords);
-        return;
-    }
-
-    // Cache miss — render into the cache buffer, then blit it onto the real layer.
-    if (cache_capture(obj, data, obj_coords)) {
-        data->cache_hash_ = new_hash;
-        cache_blit(layer, data, obj_coords);
-        return;
-    }
-
-    // Capture failed (allocation failure, zero-size widget). Fall through to direct
-    // render so the widget isn't blank.
-    cache_invalidate(data);
-    if (data->topology == static_cast<int>(PathTopology::MIXED)) {
-        draw_mixed_topology(obj, layer, data);
-        return;
-    }
-    if (data->topology == static_cast<int>(PathTopology::PARALLEL)) {
-        draw_parallel_topology(obj, layer, data);
-        return;
-    }
-    filament_path_render(obj, layer, data);
+    // Child canvases handle the heavyweight static + state-tied painting
+    // (refreshed in layered_refresh_async). This DRAW_POST pass only
+    // contributes the cheap animation overlay on top.
+    layered_render_animation(obj, layer, data);
 }
 
 // ============================================================================
@@ -3345,38 +3094,12 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
         data->cached_sensor_r_ = sensor_r;
         data->active_path_cache_valid_ = true;
 
-        // Draw flow particles along the recorded active filament path
-        bool flow_active = dbg_flow_active || data->flow_anim_active;
-        bool skip_anim_inline = layered_renderer_enabled() && data->static_canvas_;
-        if (!skip_anim_inline && flow_active && data->active_slot >= 0 && !data->hub_only) {
-            AnimDirection flow_dir = dbg_flow_active ? dbg_anim_dir : data->anim_direction;
-            int32_t flow_off = dbg_flow_active ? dbg_flow_offset : data->flow_offset;
-            bool reverse = (flow_dir == AnimDirection::UNLOADING);
-            draw_flow_dots_path(layer, active_path, path_lens, active_color, flow_off, reverse);
-        }
+        // Flow particles, heat glow, and segment-transition tip live in the
+        // animation DRAW_POST pass (see draw_animation_linear_hub) — not here.
 
-        // Draw heat glow BEHIND the toolhead so it doesn't obscure the icon
         auto effective_style = helix::SettingsManager::instance().get_effective_toolhead_style();
-        if (!skip_anim_inline && data->heat_active) {
-            int32_t tip_y;
-            switch (effective_style) {
-            case helix::ToolheadStyle::A4T:
-                tip_y = nozzle_y + (data->extruder_scale * 6 / 5 * 46) / 10 - 6;
-                break;
-            case helix::ToolheadStyle::STEALTHBURNER:
-                tip_y = nozzle_y + (data->extruder_scale * 46) / 10 - 6;
-                break;
-            case helix::ToolheadStyle::ANTHEAD:
-                tip_y = nozzle_y + (data->extruder_scale * 33) / 10;
-                break;
-            default:
-                tip_y = nozzle_y + (data->extruder_scale * 26) / 10;
-                break;
-            }
-            draw_heat_glow(layer, center_x, tip_y, sensor_r, data->heat_pulse_opa);
-        }
 
-        // Extruder/print head icon (drawn after glow so icon is on top)
+        // Extruder/print head icon
         switch (effective_style) {
         case helix::ToolheadStyle::A4T:
             draw_nozzle_a4t(layer, center_x, nozzle_y, noz_color, data->extruder_scale * 6 / 5);
@@ -3399,37 +3122,6 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
         default:
             draw_nozzle_bambu(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
             break;
-        }
-    }
-
-    // ========================================================================
-    // Draw animated filament tip (during segment transitions)
-    // Uses the same active_path recorded by draw functions — no separate mapping.
-    // ========================================================================
-    bool skip_tip_inline = layered_renderer_enabled() && data->static_canvas_;
-    if (!skip_tip_inline && is_animating && data->active_slot >= 0 && !data->hub_only &&
-        active_path.count > 0) {
-        float progress_factor = anim_progress / 100.0f;
-
-        // Interpolate position along the path based on segment transition progress.
-        // Each PathSegment (SPOOL=1 through NOZZLE=7) maps to an equal fraction of
-        // total path length. The tip moves between prev_seg and fil_seg boundaries.
-        const float NUM_INTERVALS = (float)((int)PathSegment::NOZZLE - (int)PathSegment::SPOOL);
-        float base = (float)((int)prev_seg - 1);
-        float target = (float)((int)fil_seg - 1);
-        float tip_fraction = (base + (target - base) * progress_factor) / NUM_INTERVALS;
-        tip_fraction = LV_CLAMP(tip_fraction, 0.0f, 1.0f);
-        float tip_distance = tip_fraction * path_lens.total;
-
-        int32_t tip_x, tip_y;
-        path_point_at_distance(active_path, path_lens, tip_distance, tip_x, tip_y);
-
-        // Skip drawing inside the extruder body (TOOLHEAD↔NOZZLE)
-        bool in_nozzle_body =
-            (prev_seg == PathSegment::TOOLHEAD && fil_seg == PathSegment::NOZZLE) ||
-            (prev_seg == PathSegment::NOZZLE && fil_seg == PathSegment::TOOLHEAD);
-        if (!in_nozzle_body) {
-            draw_filament_tip(layer, tip_x, tip_y, active_color, sensor_r);
         }
     }
 
@@ -3568,15 +3260,10 @@ static void filament_path_delete_cb(lv_event_t* e) {
             lv_anim_delete(obj, error_pulse_anim_cb);
             lv_anim_delete(obj, heat_pulse_anim_cb);
             lv_anim_delete(obj, flow_anim_cb);
-            // Free the render cache buffer (if any).
-            if (data->render_cache_) {
-                lv_draw_buf_destroy(data->render_cache_);
-                data->render_cache_ = nullptr;
-            }
             // Cancel any pending refresh — async cb would fire with stale obj.
             lv_async_call_cancel(layered_refresh_async, obj);
-            // Free layered canvas buffers. The lv_canvas children themselves
-            // are deleted by LVGL as the parent tears down.
+            // Free canvas buffers. The lv_canvas children themselves are
+            // deleted by LVGL as the parent tears down.
             layered_destroy_buffers(data.get());
             data->static_canvas_ = nullptr;
             data->overlay_canvas_ = nullptr;
@@ -3618,10 +3305,8 @@ static void* filament_path_xml_create(lv_xml_parser_state_t* state, const char**
     lv_obj_add_event_cb(obj, filament_path_click_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(obj, filament_path_delete_cb, LV_EVENT_DELETE, nullptr);
 
-    if (layered_renderer_enabled()) {
-        if (!layered_setup_canvases(obj, data)) {
-            spdlog::error("[FilamentPath] Layered canvas setup failed; falling back to legacy");
-        }
+    if (!layered_setup_canvases(obj, data)) {
+        spdlog::error("[FilamentPath] Canvas setup failed — widget will be blank");
     }
 
     spdlog::debug("[FilamentPath] Created widget");
@@ -3730,10 +3415,8 @@ lv_obj_t* ui_filament_path_canvas_create(lv_obj_t* parent) {
     lv_obj_add_event_cb(obj, filament_path_click_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(obj, filament_path_delete_cb, LV_EVENT_DELETE, nullptr);
 
-    if (layered_renderer_enabled()) {
-        if (!layered_setup_canvases(obj, data)) {
-            spdlog::error("[FilamentPath] Layered canvas setup failed; falling back to legacy");
-        }
+    if (!layered_setup_canvases(obj, data)) {
+        spdlog::error("[FilamentPath] Canvas setup failed — widget will be blank");
     }
 
     spdlog::debug("[FilamentPath] Created widget programmatically");
