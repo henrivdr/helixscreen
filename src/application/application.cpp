@@ -3953,9 +3953,14 @@ void Application::init_printer_state() {
         set_wizard_active(true);
     }
 
-    // 7. Create CLI overlay panels (if any)
+    // 7. Create CLI overlay panels (if any). Finalize the home panel here so
+    //    its carousel + widget grid get built — HomePanel::setup() is
+    //    deliberately minimal; finalize_setup() is what creates the visible
+    //    content. Mirrors run()'s startup path; without it the home panel
+    //    renders blank after a printer switch.
     if (!m_wizard_active) {
         create_overlays();
+        get_global_home_panel().finalize_setup();
     }
 
     // 8. Reload plugins
