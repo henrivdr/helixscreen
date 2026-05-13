@@ -518,10 +518,13 @@ _mock_u1_detect_platform() {
 }
 
 @test "U1: detect_platform checks U1 before Pi (ordering)" {
+    # Verify the actual routing-emit order inside detect_platform(): the
+    # `echo "snapmaker-u1"` branch must precede the first `echo "pi"` branch,
+    # otherwise an aarch64 U1 falls through to the generic Pi tarball.
     local platform_sh="$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
     local u1_line pi_line
-    u1_line=$(grep -n 'Snapmaker U1' "$platform_sh" | head -1 | cut -d: -f1)
-    pi_line=$(grep -n 'Raspberry Pi\|ARM SBC\|Generic ARM' "$platform_sh" | head -1 | cut -d: -f1)
+    u1_line=$(grep -n 'echo "snapmaker-u1"' "$platform_sh" | head -1 | cut -d: -f1)
+    pi_line=$(grep -n 'echo "pi"' "$platform_sh" | head -1 | cut -d: -f1)
     [ -n "$u1_line" ]
     [ -n "$pi_line" ]
     [ "$u1_line" -lt "$pi_line" ]

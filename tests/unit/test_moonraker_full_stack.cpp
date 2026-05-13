@@ -93,6 +93,9 @@ class FullStackTestFixture {
 
         // Initialize printer state for reactive data
         printer_state_.init_subjects(false);
+        // execute_gcode() halted gate would otherwise reject all G-code: subjects
+        // initialize to SHUTDOWN until production code observes a real state update.
+        printer_state_.set_klippy_state_sync(helix::KlippyState::READY);
 
         // Create API mock BEFORE discovery so it can receive hardware callbacks
         api_ = std::make_unique<MoonrakerAPIMock>(client_, printer_state_);

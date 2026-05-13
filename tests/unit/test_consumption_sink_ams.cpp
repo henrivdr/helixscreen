@@ -28,8 +28,16 @@ struct AmsSlotSinkFixture : LVGLTestFixture {
 
     AmsSlotSinkFixture() {
         auto& ams = AmsState::instance();
+        auto& printer = get_printer_state();
         ams.clear_backends();
         ams.deinit_subjects();
+        // AmsState::init_subjects installs an observer on the global
+        // PrinterState's print_state_enum subject — that subject must exist
+        // before init_subjects runs, otherwise observe_int_sync attaches to an
+        // uninitialized lv_subject_t. (Crashes on macOS where every test
+        // shares one process; on Linux nightly the parallel shards happen to
+        // have a prior test that already initialized PrinterState.)
+        printer.init_subjects(false);
         ams.init_subjects(false);
 
         auto m = std::make_unique<AmsBackendMock>(4);

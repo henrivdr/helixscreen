@@ -319,6 +319,7 @@ TEST_CASE("FilamentSlotOverrideStore save_async writes AFC-shaped record to lane
     ovr.brand = "Polymaker";
     ovr.material = "PLA";
     ovr.color_rgb = 0xFF5500;
+    ovr.color_set = true;   // to_lane_data_record emits "color" iff color_set is true
     ovr.spoolman_id = 42;
     ovr.remaining_weight_g = 850.0f;
     ovr.total_weight_g = 1000.0f;
