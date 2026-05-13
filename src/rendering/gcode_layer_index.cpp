@@ -104,39 +104,50 @@ bool extract_filament_color(const char* line, size_t len, std::string& out_color
     return false;
 }
 
-// Check if line is a layer change marker
+// Check if line is a layer change marker.
+// Matches ";LAYER_CHANGE" / "; LAYER_CHANGE" (case-insensitive) where the marker
+// is the entire comment content (or terminated by whitespace). Rejects OrcaSlicer's
+// ";BEFORE_LAYER_CHANGE" / ";AFTER_LAYER_CHANGE" — those contain "LAYER_CHANGE"
+// as a substring but are bracketing tags for the before-layer-change user macro,
+// not real layer transitions.
 bool is_layer_marker(const char* line, size_t len) {
-    // Look for ;LAYER_CHANGE or ; LAYER_CHANGE
-    const char* pos = std::strstr(line, "LAYER_CHANGE");
-    if (pos && pos < line + len) {
-        return true;
-    }
-    // Also check lowercase
-    // Manual search since strstr doesn't do case-insensitive
-    for (size_t i = 0; i + 12 <= len; ++i) {
-        if (line[i] == ';') {
-            // Skip spaces after semicolon
-            size_t j = i + 1;
-            while (j < len && line[j] == ' ') {
-                ++j;
-            }
-            // Compare case-insensitively
-            if (j + 12 <= len) {
-                bool match = true;
-                const char* marker = "LAYER_CHANGE";
-                for (int k = 0; k < 12 && match; ++k) {
-                    char c = line[j + k];
-                    char m = marker[k];
-                    // Case-insensitive compare
-                    if (c != m && c != (m + 32) && (c - 32) != m) {
-                        match = false;
-                    }
-                }
-                if (match) {
-                    return true;
-                }
+    const char* marker = "LAYER_CHANGE";
+    constexpr size_t marker_len = 12;
+    for (size_t i = 0; i + marker_len <= len; ++i) {
+        if (line[i] != ';') {
+            continue;
+        }
+        size_t j = i + 1;
+        while (j < len && line[j] == ' ') {
+            ++j;
+        }
+        if (j + marker_len > len) {
+            continue;
+        }
+        bool match = true;
+        for (size_t k = 0; k < marker_len; ++k) {
+            char c = line[j + k];
+            char m = marker[k];
+            if (c != m && c != (m + 32) && (c - 32) != m) {
+                match = false;
+                break;
             }
         }
+        if (!match) {
+            continue;
+        }
+        // Marker must be terminated by end-of-line or whitespace (not a letter,
+        // digit, or underscore — which would mean it's a longer identifier like
+        // a continuation of BEFORE_/AFTER_ that we missed).
+        size_t end = j + marker_len;
+        if (end < len) {
+            char c = line[end];
+            if (c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9')) {
+                continue;
+            }
+        }
+        return true;
     }
     return false;
 }

@@ -172,6 +172,55 @@ G1 X30 E0.6
     REQUIRE(index.get_layer_z(2) == Approx(0.6f));
 }
 
+TEST_CASE("GCodeLayerIndex - OrcaSlicer BEFORE/AFTER_LAYER_CHANGE not counted",
+          "[gcode][layer_index]") {
+    // OrcaSlicer 2.3 emits three markers per layer transition:
+    //   ;LAYER_CHANGE           (real)
+    //   ;BEFORE_LAYER_CHANGE    (start of user before-layer macro)
+    //   ;AFTER_LAYER_CHANGE     (end of user before-layer macro)
+    // The user macro often contains a Z-hop (G1 Zn) which consumes the
+    // pending_layer_start flag, then ;AFTER_LAYER_CHANGE re-arms it and the
+    // real Z move creates a duplicate entry — doubling the layer count and
+    // splitting per-layer byte ranges so the renderer draws only the user-macro
+    // moves. Regression: 2D streaming renderer on Snapmaker U1.
+    std::string gcode = R"(
+;LAYER_CHANGE
+;Z:0.2
+;BEFORE_LAYER_CHANGE
+G1 Z0.4 F600
+;AFTER_LAYER_CHANGE
+G1 Z0.2 F1000
+G1 X10 Y10 E0.1
+;LAYER_CHANGE
+;Z:0.4
+;BEFORE_LAYER_CHANGE
+G1 Z0.6 F600
+;AFTER_LAYER_CHANGE
+G1 Z0.4 F1000
+G1 X20 Y20 E0.2
+;LAYER_CHANGE
+;Z:0.6
+;BEFORE_LAYER_CHANGE
+G1 Z0.8 F600
+;AFTER_LAYER_CHANGE
+G1 Z0.6 F1000
+G1 X30 Y30 E0.3
+)";
+
+    TempGCodeFile file(gcode);
+    GCodeLayerIndex index;
+    REQUIRE(index.build_from_file(file.path()));
+
+    // Primary regression: layer count must equal real ;LAYER_CHANGE count,
+    // not 2× (one entry per real marker + one per AFTER_LAYER_CHANGE rearm).
+    REQUIRE(index.get_layer_count() == 3);
+    // Byte ranges must cover each layer's full content (including the user
+    // macro). The first layer must start at offset 0 (or near it) so the
+    // ;LAYER_CHANGE marker and following moves are inside layer 0, not skipped.
+    REQUIRE(index.get_entry(0).file_offset < index.get_entry(1).file_offset);
+    REQUIRE(index.get_entry(1).file_offset < index.get_entry(2).file_offset);
+}
+
 TEST_CASE("GCodeLayerIndex - Real file", "[gcode][layer_index][integration]") {
     // Test with the real benchy file if it exists
     std::ifstream check("assets/test_gcodes/3DBenchy.gcode");
