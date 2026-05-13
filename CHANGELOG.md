@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.61] - 2026-05-12
+
+A round of **launch-time and connect-time UX polish**: the Klipper recovery dialog no longer flashes briefly when starting the app or adding a printer, the home panel no longer renders blank after switching printers, and the Snapmaker U1 wizard correctly identifies a U1 instead of showing *UNKNOWN*. Plus a fix for the M300 sound feedback loop on hosts without a Klipper-declared beeper, the AD5X *Method not found* toast on the recovery probe, and a wake-from-sleep regression during prints when sleep-while-printing is disabled.
+
 ### Added
 
 - **Android: "Keep Navigation Bar" setting** — Display & Sound > Appearance now has a toggle (Android only) that pins the system nav bar onscreen instead of using immersive mode + swipe-to-reveal. For users who prefer 3-button nav over gesture controls (prestonbrown/helixscreen#908).
+
+### Fixed
+
+- **Display stays asleep mid-print when `sleep_while_printing=false` (bundle RYAQGL6C)** — `check_display_sleep()` returned early when a print was active, but the early return also skipped the wake-on-touch path. If the display had entered sleep *before* the print started, the user was stranded on a blank screen for the duration of the print (RYAQGL6C: 8 touch events, 18-minute wake delay). Wake requests now fire during prints; only the *entering* of sleep is suppressed.
+- **Klipper recovery dialog no longer flashes briefly at launch or after Add Printer** — `PrinterNetworkState` initializes `klippy_state` to SHUTDOWN as a conservative default; the EmergencyStopOverlay observer fired once with this placeholder at subscribe time, briefly showing the recovery dialog before Moonraker reported real state. Same placeholder also injected the `firmware_restart` widget on the home panel for a few frames. Two targeted guards: the overlay drops the initial placeholder fire on every (re)subscription (singleton flag was sticky after the first launch, so Add Printer's soft restart re-triggered the flash), and `PanelWidgetManager` gates `firmware_restart` widget injection on `printer_connection_state == CONNECTED`. Genuine shutdown-at-startup is still surfaced via the parallel `KLIPPY_SHUTDOWN` event path. Regression introduced by 1d13ed6b4's freeze-buffering rework, which was previously masking the placeholder fire.
+- **"Request Failed: Method not found" toast on recovery probe (bundle VHXPB8A3)** — `PrinterRecoveryService` probes `shell_command:helix_recover` and falls back to `printer.firmware_restart` if the macro isn't defined; the probe surfaced a scary toast even though the fallback succeeded (AD5X without the macro). `MoonrakerAPI::run_shell_command` gains a `silent` flag; the recovery probe uses it so the global RPC_ERROR event is suppressed for that one call.
+- **Home panel blank after switching printers** — `tear_down_printer_state()` destroys the HomePanel singleton; the re-created instance has `finalized_=false`. The cold-launch path calls `finalize_setup()` after `create_overlays()`, but the soft-restart path used by switch_printer didn't, so the home panel rendered as an empty container until next navigation.
+- **Snapmaker U1 wizard now identifies as Snapmaker U1, not "UNKNOWN"** — original heuristics matched a hypothetical RFID-extended firmware (`fm175xx_reader`, `FILAMENT_DT_UPDATE/QUERY`) that doesn't exist on stock U1s. Replaced with patterns verified against a live device: `homing_precise_corexy`, `extruder_offset_calibration`, `filament_entangle_detect`, `machine_state_manager`, `defect_detection`, `purifier`, plus the `FEEDING_RUNOUT_EVENT_HANDLE` and `EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL` macros. Old RFID heuristics retained as secondary path for future firmware variants. Kinematics corrected from cartesian to corexy (matches `homing_precise_corexy` + tmc2240 stepper_x/y wiring).
+- **M300 sound feedback loop on hosts without a Klipper-declared beeper** — `SoundManager::create_backend()` fell through to the M300 (Klipper gcode beeper) backend whenever Moonraker was connected and no host audio backend (SDL/ALSA/PWM) initialized. On any printer whose Klipper config lacks `[output_pin BEEPER]` + `[gcode_macro M300]`, every UI sound triggered `M300` → `!! Unknown command:M300` → gcode error toast → error_tone sound → M300 feedback loop. Surfaced as "no audio + spam of unknown command M300" on hosts where local audio fails (e.g. Pi where ALSA `default` fails to open). M300 is now installed lazily from `PrinterCapabilitiesState::set_hardware()` only when `hardware.has_speaker()` is true (PrinterDiscovery detects `[output_pin BEEPER/BUZZER/SPEAKER]` in the Klipper config). `set_moonraker_client(nullptr)` drops an active M300 backend so printer switches don't carry it across.
+- **Modal dialog sized too tall for short messages** — Save Hardware, Reset to defaults, and similar short confirmations were stuck at 200px regardless of message length, with content stretched to fill (two regressions in `modal_dialog.xml`: `style_min_height=200` from f48ceb70c, `flex_grow=1` on `content_container` from 3482bb989). Content container is now `height=content` with a responsive `#dialog_content_max` token (140/200/260/320/440/600/800 across breakpoints), keeping OK/Cancel on-screen with long content.
+- **L081 Mechanism C anti-pattern in `PrintHistoryManager` and `ControlsPanel::handle_home_all`** — bare `if (token.expired()) return;` on a bg thread followed by `this`/member access is a TOCTOU race; detector hit on v0.99.60/ad5x for both callsites. `PrintHistoryManager::subscribe_to_notifications` drops the bare expired check in the WS `notify_history_changed` callback (defer's own guard runs atomically on the main thread). `ControlsPanel::handle_home_all` rewrites the `home_axes` success/error callbacks to use `lifetime_.bg_cb()` instead of manual `tok.defer` with the forbidden bg-thread expired prelude.
+
+### Changed
+
+- **Hardware Issues moved from Settings > System to Settings > Hardware & Devices** — the Hardware Issues row (visible when hardware validation detects missing/changed hardware) lived next to network/telemetry/factory-reset, but it's about printer hardware; it now sits above Printers in the Hardware & Devices overlay where users actually look. User docs and TROUBLESHOOTING.md updated for the new path (`Settings > Hardware Health` → `Settings > Hardware & Devices > Hardware Issues`).
 
 ## [0.99.60] - 2026-05-11
 
@@ -3616,6 +3635,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.61]: https://github.com/prestonbrown/helixscreen/compare/v0.99.60...v0.99.61
 [0.99.60]: https://github.com/prestonbrown/helixscreen/compare/v0.99.59...v0.99.60
 [0.99.59]: https://github.com/prestonbrown/helixscreen/compare/v0.99.58...v0.99.59
 [0.99.58]: https://github.com/prestonbrown/helixscreen/compare/v0.99.57...v0.99.58
