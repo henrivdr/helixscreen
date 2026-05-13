@@ -258,6 +258,18 @@
     <px name="temp_card_height_xlarge" value="96"/>
     <px name="temp_card_height_xxlarge" value="112"/>
 
+    <!-- dialog_content_max: max scrollable content area inside modal_dialog.
+         Bound below the (header + divider + button row + 85% dialog cap)
+         budget on each breakpoint, so the dialog never exceeds 85% screen
+         and the OK/Cancel row stays on-screen even with long messages. -->
+    <px name="dialog_content_max_micro" value="140"/>
+    <px name="dialog_content_max_tiny" value="200"/>
+    <px name="dialog_content_max_small" value="260"/>
+    <px name="dialog_content_max_medium" value="320"/>
+    <px name="dialog_content_max_large" value="440"/>
+    <px name="dialog_content_max_xlarge" value="600"/>
+    <px name="dialog_content_max_xxlarge" value="800"/>
+
 
     <!-- Row height for button containers -->
     <px name="input_height" value="48"/>
