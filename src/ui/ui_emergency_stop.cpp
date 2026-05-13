@@ -152,6 +152,20 @@ void EmergencyStopOverlay::create() {
         [](EmergencyStopOverlay* self, int state) {
             auto klippy_state = static_cast<KlippyState>(state);
 
+            // First fire carries the subject's default (SHUTDOWN) emitted before
+            // Moonraker has reported real state. Acting on it produced a
+            // recovery-dialog flash on every launch once UpdateQueue stopped
+            // dropping freeze-window callbacks (1d13ed6b4). A genuine
+            // shutdown-at-startup is still delivered via the
+            // MoonrakerEventType::KLIPPY_SHUTDOWN event in MoonrakerManager.
+            if (!self->klippy_state_initial_seen_) {
+                self->klippy_state_initial_seen_ = true;
+                spdlog::debug(
+                    "[KlipperRecovery] Skipping initial klippy_state observer fire (state={})",
+                    state);
+                return;
+            }
+
             if (klippy_state == KlippyState::SHUTDOWN) {
                 // Unified recovery path - all suppression checks are in show_recovery_for()
                 self->show_recovery_for(RecoveryReason::SHUTDOWN);

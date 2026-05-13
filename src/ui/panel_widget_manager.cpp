@@ -186,8 +186,15 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     }
     bool fw_restart_injected = false;
     if (!has_firmware_restart) {
+        // Suppress injection until Moonraker has actually reported state — the
+        // klippy_state subject defaults to SHUTDOWN, which produced a brief
+        // firmware_restart widget flash on every launch once UpdateQueue began
+        // buffering (rather than dropping) freeze-window callbacks (1d13ed6b4).
+        lv_subject_t* conn = lv_xml_get_subject(nullptr, "printer_connection_state");
+        bool connected =
+            conn && lv_subject_get_int(conn) == static_cast<int>(ConnectionState::CONNECTED);
         lv_subject_t* klippy = lv_xml_get_subject(nullptr, "klippy_state");
-        if (klippy) {
+        if (connected && klippy) {
             int state = lv_subject_get_int(klippy);
             if (state != static_cast<int>(KlippyState::READY)) {
                 const char* state_names[] = {"READY", "STARTUP", "SHUTDOWN", "ERROR"};

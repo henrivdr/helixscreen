@@ -171,6 +171,12 @@ class EmergencyStopOverlay {
     // Restart operation tracking - prevents recovery dialog during expected SHUTDOWN
     bool restart_in_progress_ = false;
 
+    // Skip the first klippy_state observer fire — it carries the subject's
+    // default (SHUTDOWN) before Moonraker has reported real state. A real
+    // shutdown at startup is delivered separately via the
+    // MoonrakerEventType::KLIPPY_SHUTDOWN event in MoonrakerManager.
+    bool klippy_state_initial_seen_ = false;
+
     // Recovery dialog state
     RecoveryReason recovery_reason_ = RecoveryReason::NONE;
 
