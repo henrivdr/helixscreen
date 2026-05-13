@@ -1958,6 +1958,13 @@ define snapmaker-u1-deploy-common
 	@echo "  $(DIM)Setting up auto-start...$(RESET)"
 	scp scripts/snapmaker-u1-setup-autostart.sh $(SNAPMAKER_U1_SSH_TARGET):/tmp/
 	ssh $(SNAPMAKER_U1_SSH_TARGET) "sh /tmp/snapmaker-u1-setup-autostart.sh $(SNAPMAKER_U1_DEPLOY_DIR)"
+	@# Mirror the installer's setup_config_symlink: helixscreen.env lives at the
+	@# Klipper-convention path (printer_data/config/helixscreen/) so Mainsail/Fluidd
+	@# can edit it, and the install-dir copy is a symlink. Fast deploys don't run
+	@# the full installer, so this step repairs the symlink if it got lost (e.g. an
+	@# older Makefile version copied a real env file into the install dir).
+	@echo "  $(DIM)Verifying helixscreen.env symlink...$(RESET)"
+	ssh $(SNAPMAKER_U1_SSH_TARGET) 'PD=/oem/printer_data/config/helixscreen; IE=$(SNAPMAKER_U1_DEPLOY_DIR)/config/helixscreen.env; CE=$$PD/helixscreen.env; mkdir -p $$PD; if [ -L "$$IE" ]; then :; elif [ -f "$$IE" ] && [ ! -e "$$CE" ]; then mv "$$IE" "$$CE" && ln -s "$$CE" "$$IE" && echo "  migrated install env to $$CE"; elif [ -f "$$IE" ] && [ -f "$$CE" ]; then if cmp -s "$$IE" "$$CE"; then rm -f "$$IE" && ln -s "$$CE" "$$IE" && echo "  collapsed duplicate install env to symlink"; else echo "  WARN: helixscreen.env diverges between $$IE and $$CE — keeping both, please reconcile manually"; fi; elif [ ! -e "$$IE" ] && [ -f "$$CE" ]; then ln -s "$$CE" "$$IE" && echo "  created missing install env symlink"; fi'
 endef
 
 deploy-snapmaker-u1:
