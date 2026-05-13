@@ -1208,7 +1208,7 @@ ps aux | grep helix-screen
 | Too many G-code files | Large directories with thumbnails use more RAM |
 | Other processes hogging CPU | Check `top` for culprits |
 | Swapping to SD card | Reduce memory usage or add swap to USB |
-| Hardware issues | Settings → Hardware Health - check for problems |
+| Hardware issues | Settings → Hardware & Devices → Hardware Issues - check for problems |
 
 **To disable verbose logging:**
 

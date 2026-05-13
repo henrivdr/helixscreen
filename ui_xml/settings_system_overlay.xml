@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- System Settings Overlay -->
-<!-- Security, network, host, touch calibration, plugins, telemetry, restart, factory reset -->
+<!-- Security, network, host, touch calibration, plugins, telemetry, log level, restart, factory reset -->
 <component>
   <view name="settings_system_overlay"
         extends="overlay_panel" width="#overlay_panel_width_full" title="System" title_tag="System"
@@ -42,17 +42,6 @@
         <setting_action_row name="row_touch_calibration"
                             label="Touch Calibration" label_tag="Touch Calibration" icon="cursor_move" description=""
                             callback="on_touch_calibration_clicked"/>
-      </lv_obj>
-      <!-- ================================================================== -->
-      <!-- HARDWARE ISSUES (hidden when no issues) -->
-      <!-- ================================================================== -->
-      <lv_obj name="container_hardware_health" width="100%" style_pad_all="0" scrollable="false">
-        <bind_flag_if_eq subject="hardware_has_issues" flag="hidden" ref_value="0"/>
-        <setting_action_row name="row_hardware_health"
-                            label="Hardware Issues" label_tag="Hardware Issues" icon="alert"
-                            description="Review detected hardware validation issues"
-                            description_tag="Review detected hardware validation issues"
-                            callback="on_hardware_health_clicked"/>
       </lv_obj>
       <!-- ================================================================== -->
       <!-- PLUGINS (gated by beta_features config flag) -->

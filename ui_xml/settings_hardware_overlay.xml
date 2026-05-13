@@ -2,13 +2,24 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- Hardware & Devices Settings Overlay -->
-<!-- Printer, AMS, fans, sensors, LEDs, power devices, spoolman, macros -->
+<!-- Hardware issues, printer, AMS, fans, sensors, LEDs, power devices, spoolman -->
 <component>
   <view name="settings_hardware_overlay"
         extends="overlay_panel" width="#overlay_panel_width_full" title="Hardware &amp; Devices" title_tag="Hardware &amp; Devices"
         bg_color="#screen_bg">
     <!-- Content Area - no padding, rows handle their own -->
     <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_top="0" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_bottom="#space_lg" scrollable="true" flex_flow="column">
+      <!-- ================================================================== -->
+      <!-- HARDWARE ISSUES (hidden when no issues) -->
+      <!-- ================================================================== -->
+      <lv_obj name="container_hardware_health" width="100%" style_pad_all="0" scrollable="false">
+        <bind_flag_if_eq subject="hardware_has_issues" flag="hidden" ref_value="0"/>
+        <setting_action_row name="row_hardware_health"
+                            label="Hardware Issues" label_tag="Hardware Issues" icon="alert"
+                            description="Review detected hardware validation issues"
+                            description_tag="Review detected hardware validation issues"
+                            callback="on_hardware_health_clicked"/>
+      </lv_obj>
       <!-- ================================================================== -->
       <!-- PRINTERS -->
       <!-- ================================================================== -->

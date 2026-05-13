@@ -68,28 +68,6 @@ If this option doesn't appear in your Settings, your screen type doesn't normall
 
 ---
 
-## Hardware Issues
-
-> Only shown when hardware issues are detected.
-
-Tap to open the Hardware Issues overlay, which lists detected issues:
-
-| Category | Meaning |
-|----------|---------|
-| **Critical** | Required hardware missing (e.g., no extruder heater) |
-| **Warning** | Expected hardware not found (e.g., bed sensor disappeared) |
-| **Info** | Newly discovered hardware that wasn't seen before |
-| **Session** | Hardware changed since last session |
-
-**Actions for non-critical issues:**
-
-- **Ignore** — Mark as optional (won't warn again even if missing)
-- **Save** — Add to expected list (will warn if it disappears later)
-
-Use this when adding or removing hardware to keep HelixScreen's expectations accurate.
-
----
-
 ## Plugins
 
 > Only shown when beta features are enabled (tap Current Version 7 times in About).
