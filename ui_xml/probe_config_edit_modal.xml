@@ -38,7 +38,7 @@
 
       <!-- Input field -->
       <text_input name="probe_config_input"
-                  width="100%" input_mode="number" keyboard_hint="numeric"
+                  width="100%" keyboard_hint="numeric"
                   bind_text="probe_config_edit_value" max_length="12"/>
 
       <!-- Warning about firmware restart -->

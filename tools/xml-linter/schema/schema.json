@@ -1465,6 +1465,9 @@
         "placeholder": {
           "type": "string"
         },
+        "placeholder_tag": {
+          "type": "string"
+        },
         "max_length": {
           "type": "int"
         },

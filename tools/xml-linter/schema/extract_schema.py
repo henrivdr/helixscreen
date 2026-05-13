@@ -1061,6 +1061,7 @@ CPP_WIDGET_FILES: dict[str, dict[str, Any]] = {
         "inherits": "lv_textarea",
         "extra_attrs": {
             "placeholder": {"type": "string"},
+            "placeholder_tag": {"type": "string"},
             "max_length": {"type": "int"},
             "multiline": {"type": "bool"},
             "bind_text": {"type": "string"},
