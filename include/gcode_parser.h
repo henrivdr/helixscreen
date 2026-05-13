@@ -19,6 +19,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -378,6 +379,17 @@ class GCodeParser {
      * normalization table without constructing a parser.
      */
     static FeatureType parse_feature_type_value(const std::string& value);
+
+    /**
+     * @brief Extract a `;TYPE:NAME` marker from an arbitrary G-code line.
+     *
+     * Returns the normalized FeatureType if the line contains a well-formed
+     * `;TYPE:` comment (optionally preceded by whitespace after `;`).
+     * Returns std::nullopt if the line has no such marker. Shared by the
+     * full-file parser and the streaming indexer so both classify identical
+     * input identically.
+     */
+    static std::optional<FeatureType> extract_type_marker(const char* line, size_t len);
 
     // Progress tracking
 

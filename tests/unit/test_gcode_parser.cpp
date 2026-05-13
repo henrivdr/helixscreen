@@ -4,6 +4,7 @@
 #include "gcode_parser.h"
 
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -1376,6 +1377,32 @@ TEST_CASE("GCodeParser - FeatureType normalization across slicer dialects",
         REQUIRE(GCodeParser::parse_feature_type_value("Squiggle") == FeatureType::Unknown);
         REQUIRE(GCodeParser::parse_feature_type_value("") == FeatureType::Unknown);
     }
+}
+
+TEST_CASE("GCodeParser - extract_type_marker handles formatting variants",
+          "[gcode][parser][feature_type]") {
+    // Shared helper used by both the full-file parser and the streaming
+    // indexer. Both must classify identically.
+    auto extract = [](const char* s) {
+        return GCodeParser::extract_type_marker(s, std::strlen(s));
+    };
+
+    REQUIRE(extract(";TYPE:Custom").value() == FeatureType::Custom);
+    REQUIRE(extract("; TYPE:Custom").value() == FeatureType::Custom);
+    REQUIRE(extract(";  TYPE:Outer wall").value() == FeatureType::OuterWall);
+    REQUIRE(extract(";TYPE:Outer wall\r\n").value() == FeatureType::OuterWall);
+    REQUIRE(extract(";TYPE:Outer wall   ").value() == FeatureType::OuterWall);
+
+    // Inline (after G-code) — slicers don't emit this, but the helper should
+    // still classify it so the parser and indexer don't diverge if a hand-
+    // edited file does.
+    REQUIRE(extract("G1 X10 Y10 ;TYPE:Brim").value() == FeatureType::Brim);
+
+    // No marker
+    REQUIRE_FALSE(extract("G1 X10 Y10").has_value());
+    REQUIRE_FALSE(extract(";").has_value());
+    REQUIRE_FALSE(extract(";comment without type").has_value());
+    REQUIRE_FALSE(extract(";FEATURE_TYPE:Outer wall").has_value());
 }
 
 TEST_CASE("GCodeParser - FeatureType bounds filter classification",

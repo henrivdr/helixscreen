@@ -240,36 +240,10 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
             // We'll start the new layer when we see the next Z move
         }
 
-        // Track ;TYPE: section. Only handle as comment (must start with ;
-        // after optional whitespace) to avoid false matches inside metadata.
-        if (line_len > 0 && line[0] == ';') {
-            size_t key_pos = line.find("TYPE:");
-            if (key_pos != std::string::npos && key_pos > 0) {
-                // Ensure everything between `;` and `TYPE:` is whitespace.
-                bool clean = true;
-                for (size_t i = 1; i < key_pos; ++i) {
-                    char c = line[i];
-                    if (c != ' ' && c != '\t') {
-                        clean = false;
-                        break;
-                    }
-                }
-                if (clean) {
-                    size_t v_start = key_pos + 5;
-                    while (v_start < line_len &&
-                           (line[v_start] == ' ' || line[v_start] == '\t')) {
-                        ++v_start;
-                    }
-                    size_t v_end = line_len;
-                    while (v_end > v_start &&
-                           (line[v_end - 1] == '\r' || line[v_end - 1] == '\n' ||
-                            line[v_end - 1] == ' ' || line[v_end - 1] == '\t')) {
-                        --v_end;
-                    }
-                    std::string value = line.substr(v_start, v_end - v_start);
-                    current_feature_type = GCodeParser::parse_feature_type_value(value);
-                }
-            }
+        // Track ;TYPE: section via the shared helper (kept in sync with the
+        // full-file parser so streaming and full-file tag identically).
+        if (auto t = GCodeParser::extract_type_marker(line.c_str(), line_len)) {
+            current_feature_type = *t;
         }
 
         // Extract filament color from metadata (only if not already found)

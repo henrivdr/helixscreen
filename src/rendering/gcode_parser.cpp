@@ -844,41 +844,52 @@ void GCodeParser::parse_wipe_tower_marker(const std::string& comment) {
     }
 }
 
-void GCodeParser::parse_type_marker(const std::string& comment) {
-    // Expect ";TYPE:NAME" — find the "TYPE:" token (allowing leading whitespace
-    // after the `;`).
-    size_t key_pos = comment.find("TYPE:");
-    if (key_pos == std::string::npos) {
-        return;
-    }
-    // Must be preceded by `;` (or `; `) — guard against substrings like
-    // ";FEATURE_TYPE:".
-    if (key_pos == 0) {
-        return; // No `;` before — malformed
-    }
-    for (size_t i = 0; i < key_pos; ++i) {
-        char c = comment[i];
-        if (c == ';' || c == ' ' || c == '\t') {
-            continue;
+std::optional<FeatureType> GCodeParser::extract_type_marker(const char* line, size_t len) {
+    // Find a `;` (the marker must be inside a comment).
+    size_t semi = std::string::npos;
+    for (size_t i = 0; i < len; ++i) {
+        if (line[i] == ';') {
+            semi = i;
+            break;
         }
-        return; // Non-whitespace between ; and TYPE: → not our marker
     }
-    size_t value_start = key_pos + 5; // strlen("TYPE:")
-    // Trim leading whitespace from value
-    while (value_start < comment.size() && (comment[value_start] == ' ' ||
-                                            comment[value_start] == '\t')) {
-        ++value_start;
+    if (semi == std::string::npos) {
+        return std::nullopt;
     }
-    // Trim trailing whitespace / newline
-    size_t value_end = comment.size();
-    while (value_end > value_start && (comment[value_end - 1] == '\r' ||
-                                       comment[value_end - 1] == '\n' ||
-                                       comment[value_end - 1] == ' ' ||
-                                       comment[value_end - 1] == '\t')) {
-        --value_end;
+    // Expect "TYPE:" after `;` and optional whitespace.
+    size_t k = semi + 1;
+    while (k < len && (line[k] == ' ' || line[k] == '\t')) {
+        ++k;
     }
-    std::string value = comment.substr(value_start, value_end - value_start);
-    current_feature_type_ = parse_feature_type_value(value);
+    static constexpr char kKey[] = "TYPE:";
+    static constexpr size_t kKeyLen = 5;
+    if (k + kKeyLen > len) {
+        return std::nullopt;
+    }
+    for (size_t i = 0; i < kKeyLen; ++i) {
+        if (line[k + i] != kKey[i]) {
+            return std::nullopt;
+        }
+    }
+    // Extract trimmed value.
+    size_t v_start = k + kKeyLen;
+    while (v_start < len && (line[v_start] == ' ' || line[v_start] == '\t')) {
+        ++v_start;
+    }
+    size_t v_end = len;
+    while (v_end > v_start && (line[v_end - 1] == '\r' || line[v_end - 1] == '\n' ||
+                               line[v_end - 1] == ' ' || line[v_end - 1] == '\t')) {
+        --v_end;
+    }
+    std::string value(line + v_start, v_end - v_start);
+    return parse_feature_type_value(value);
+}
+
+void GCodeParser::parse_type_marker(const std::string& comment) {
+    auto t = extract_type_marker(comment.data(), comment.size());
+    if (t) {
+        current_feature_type_ = *t;
+    }
 }
 
 FeatureType GCodeParser::parse_feature_type_value(const std::string& value) {
@@ -909,11 +920,15 @@ FeatureType GCodeParser::parse_feature_type_value(const std::string& value) {
         {"Bridge infill", FeatureType::Bridge},
         {"Gap infill", FeatureType::GapInfill},
         {"Support material", FeatureType::Support},
+        {"Support material interface", FeatureType::Support},
         {"Support", FeatureType::Support},
         {"Wipe tower", FeatureType::WipeTower},
+        {"Ironing", FeatureType::TopSurface},
+        {"Thin wall", FeatureType::InnerWall},
         // PrusaSlicer legacy names
         {"Perimeter", FeatureType::InnerWall},
         {"External perimeter", FeatureType::OuterWall},
+        {"Overhang perimeter", FeatureType::OverhangWall},
         {"Internal infill", FeatureType::SparseInfill},
         // Cura
         {"WALL-OUTER", FeatureType::OuterWall},
@@ -924,6 +939,7 @@ FeatureType GCodeParser::parse_feature_type_value(const std::string& value) {
         {"SKIN", FeatureType::SolidInfill},
         {"SUPPORT", FeatureType::Support},
         {"SUPPORT-INTERFACE", FeatureType::Support},
+        {"SUPPORT-INFILL", FeatureType::Support},
         {"PRIME-TOWER", FeatureType::WipeTower},
         {"CUSTOM", FeatureType::Custom},
     };
@@ -1067,11 +1083,16 @@ void GCodeParser::add_segment(const glm::vec3& start, const glm::vec3& end, bool
 
     // Global bounds only include extrusion moves — travel moves to homing/probing/
     // parking positions would inflate the viewport and make the model appear tiny.
+    // Also exclude purge/wipe-tower types so the auto-fit viewport zooms to the
+    // actual print object (parity with the streaming-mode filter in
+    // GCodeLayerRenderer::auto_fit).
     if (is_extrusion) {
-        if (!is_first_segment) {
-            global_bounds_.expand(start);
+        if (!is_excluded_from_bounds(current_feature_type_)) {
+            if (!is_first_segment) {
+                global_bounds_.expand(start);
+            }
+            global_bounds_.expand(end);
         }
-        global_bounds_.expand(end);
         current_layer.segment_count_extrusion++;
     } else {
         current_layer.segment_count_travel++;
