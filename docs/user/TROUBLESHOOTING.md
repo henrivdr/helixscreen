@@ -1402,7 +1402,7 @@ ls -la /opt/config/mod/.root/S80guppyscreen
 **Check HelixScreen is running:**
 ```bash
 /etc/init.d/S90helixscreen status
-cat /tmp/helixscreen.log
+cat /opt/helixscreen/logs/launcher.log    # AD5M launcher capture
 ```
 
 ### Service commands (SysV init)
@@ -1412,12 +1412,16 @@ AD5M uses SysV init, not systemd. Commands are different:
 ```bash
 # Forge-X
 /etc/init.d/S90helixscreen start|stop|restart|status
-cat /tmp/helixscreen.log
+cat /opt/helixscreen/logs/launcher.log
+grep helix-screen /var/log/messages | tail -100    # structured app log
 
 # Klipper Mod
 /etc/init.d/S80helixscreen start|stop|restart|status
-cat /tmp/helixscreen.log
+cat /opt/helixscreen/logs/launcher.log
+grep helix-screen /var/log/messages | tail -100
 ```
+
+> The `launcher.log` file captures startup messages and crash output from the supervisor shell. The full structured app log (everything the app itself logs) goes to the system log (`/var/log/messages`). You usually want both when reporting an issue. On pre-v0.99.62 installs the launcher log lived at `/tmp/helixscreen.log` — check that path if `launcher.log` doesn't exist.
 
 ### SSH/SCP notes
 
@@ -1594,16 +1598,48 @@ sudo journalctl -u helixscreen -p err --no-pager
 sudo journalctl -u helixscreen -f
 ```
 
-**Flashforge Adventurer 5M (SysV init):**
+**Flashforge Adventurer 5M (SysV init, BusyBox syslog):**
+
+Two streams to collect — both are needed when reporting an issue:
+
 ```bash
-# Full log file
-cat /tmp/helixscreen.log
+# 1) Structured app log (everything from spdlog: connection events, errors, etc.)
+grep helix-screen /var/log/messages | tail -200
 
-# Last 200 lines
-tail -200 /tmp/helixscreen.log
+# 2) Launcher / supervisor capture (startup banner, crash output, glibc abort messages)
+tail -200 /opt/helixscreen/logs/launcher.log    # pre-v0.99.62 installs: /tmp/helixscreen.log
 
-# Follow live (while reproducing the issue)
-tail -f /tmp/helixscreen.log
+# Follow the system log live while reproducing the issue
+tail -f /var/log/messages | grep helix-screen
+```
+
+**Creality K1 / K1C / K2 (BusyBox in-memory syslog):**
+```bash
+# Structured app log — held in a RAM ring buffer, vanishes on reboot
+logread | grep helix-screen | tail -200
+
+# Launcher / supervisor capture
+tail -200 /usr/data/helixscreen/logs/launcher.log
+```
+
+**Flashforge AD5X (ZMOD MIPS):**
+```bash
+logread | grep helix-screen | tail -200
+tail -200 /usr/data/helixscreen/logs/launcher.log
+# ghzserg's S80helixscreen also writes here:
+tail -200 /opt/config/mod_data/log/helixscreen.log
+```
+
+**Snapmaker U1:**
+```bash
+grep helix-screen /var/log/messages | tail -200
+tail -200 /var/log/helixscreen/launcher.log
+```
+
+**Elegoo Centauri Carbon (COSMOS):**
+```bash
+logread | grep helix-screen | tail -200
+tail -200 /user-resource/helixscreen/logs/launcher.log
 ```
 
 ### Configuration

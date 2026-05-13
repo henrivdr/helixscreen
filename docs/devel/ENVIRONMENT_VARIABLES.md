@@ -984,8 +984,10 @@ HELIX_DEBUG_TOUCH=1
 
 **Log prefix:** Calibration messages use `[TouchDebug]` prefix for easy filtering:
 ```bash
-# Filter touch debug messages from log
-grep '\[TouchDebug\]' /tmp/helixscreen.log
+# Filter touch debug messages from log (path varies by platform; see LOGGING.md)
+grep '\[TouchDebug\]' /var/log/messages        # AD5M, Snapmaker U1 (syslog → file)
+logread | grep '\[TouchDebug\]'                # K1/K1C/K2/CC1/AD5X (BusyBox in-RAM syslog)
+journalctl -u helixscreen | grep '\[TouchDebug\]'  # Pi/x86 (systemd journal)
 ```
 
 **What calibration logging shows:**
@@ -1064,6 +1066,8 @@ HELIX_LOG_LEVEL=trace ./build/bin/helix-screen
 ```
 
 The launcher translates this to `--log-level=<value>` on the CLI. Equivalent CLI flags: `-v` (info), `-vv` (debug), `-vvv` (trace), or `--log-level=<level>`.
+
+**Where structured logs land** depends on the platform — `Auto` resolves to systemd-journal on Pi/x86 (with `journalctl -u helixscreen`), to BusyBox syslog on K1/K2/CC1/AD5X (with `logread`), or to persistent syslog file on AD5M and Snapmaker U1 (`/var/log/messages`). The launcher's shell-stdout-redirect file (`launcher.log`) is a separate, smaller stream that captures startup echoes and crash output — see [LOGGING.md](LOGGING.md#log-destinations--retrieval) for the full map.
 
 **Priority order:**
 1. CLI `--log-level` / `-v` flags (highest)

@@ -141,8 +141,11 @@ If you encounter issues after upgrading:
 1. Ask in the [HelixScreen Discord](https://discord.gg/RZCT2StKhr) for quick help
 2. Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common problems
 3. View logs for error messages:
-   - **Pi:** `sudo journalctl -u helixscreen -n 50`
-   - **AD5M / K1:** `tail -50 /tmp/helixscreen.log`
+   - **Pi / x86 (systemd):** `sudo journalctl -u helixscreen -n 50`
+   - **AD5M:** `tail -50 /opt/helixscreen/logs/launcher.log` and `grep helix-screen /var/log/messages | tail -50`
+   - **K1 / K1C / K2 / AD5X (BusyBox):** `tail -50 /usr/data/helixscreen/logs/launcher.log` and `logread | grep helix-screen`
+   - **Snapmaker U1:** `tail -50 /var/log/helixscreen/launcher.log` and `grep helix-screen /var/log/messages | tail -50`
+   - **Pre-v0.99.62 installs (legacy):** add `tail -50 /tmp/helixscreen.log` as a fallback if `launcher.log` doesn't exist yet
 4. Open an issue on [GitHub](https://github.com/prestonbrown/helixscreen/issues) with your version and any error messages
 
 ---

@@ -488,14 +488,14 @@ Open a GitHub issue with the "enhancement" label, or suggest it in the [Discord]
 
 **Easiest method:** Go to **Settings > System > Log Level** and select **Debug** from the dropdown. The change takes effect immediately — no restart needed. Set it back to **Warn** when you're done.
 
-**Alternative (via config file):** Add `HELIX_LOG_LEVEL=debug` to your `helixscreen.env` file and restart:
+**Alternative (via config file):** Add `HELIX_LOG_LEVEL=debug` to your `helixscreen.env` file and restart. On Klipper-based printers the canonical path is in your `printer_data` config dir (the same place where you edit `printer.cfg` from Mainsail/Fluidd):
 
 ```bash
-# MainsailOS / Pi
-echo 'HELIX_LOG_LEVEL=debug' >> ~/helixscreen/config/helixscreen.env
+# MainsailOS / Pi (Klipper convention)
+echo 'HELIX_LOG_LEVEL=debug' >> ~/printer_data/config/helixscreen/helixscreen.env
 sudo systemctl restart helixscreen
 
-# AD5M (Forge-X)
+# AD5M (Forge-X) — install dir is symlinked to printer_data convention
 echo 'HELIX_LOG_LEVEL=debug' >> /opt/helixscreen/config/helixscreen.env
 /etc/init.d/S90helixscreen restart
 ```
@@ -504,15 +504,23 @@ Available levels: `warn` (default), `info`, `debug`, `trace`. **Set back to Warn
 
 ### Where are the logs?
 
-```bash
-# systemd journal (MainsailOS)
-sudo journalctl -u helixscreen -f
+The app produces **two log streams**: a structured app log (recommended starting point), and a smaller launcher/crash capture file. Where they live depends on the platform.
 
-# If using file logging
-cat /var/log/helix-screen.log
-# or
-cat ~/.local/share/helix-screen/helix.log
+```bash
+# Structured app log
+sudo journalctl -u helixscreen -f          # MainsailOS / x86 / any systemd Pi-like setup
+grep helix-screen /var/log/messages         # AD5M, Snapmaker U1 (persistent syslog)
+logread | grep helix-screen                 # K1 / K1C / K2 / CC1 / AD5X (BusyBox in-RAM)
+
+# Launcher / crash capture (SysV platforms only — systemd platforms put this in the journal)
+tail -100 /opt/helixscreen/logs/launcher.log              # AD5M
+tail -100 /usr/data/helixscreen/logs/launcher.log         # K1 / K1C / K2 / AD5X
+tail -100 /var/log/helixscreen/launcher.log               # Snapmaker U1
+tail -100 /user-resource/helixscreen/logs/launcher.log    # CC1 (COSMOS)
+tail -100 /tmp/helixscreen.log                            # pre-v0.99.62 fallback
 ```
+
+For a complete map of log locations and how they're wired up, see the [Logging](../devel/LOGGING.md#log-destinations--retrieval) developer doc.
 
 ---
 

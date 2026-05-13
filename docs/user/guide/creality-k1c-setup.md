@@ -135,9 +135,11 @@ HelixScreen starts automatically after install. The on-screen wizard walks you t
 /etc/init.d/S99helixscreen stop
 /etc/init.d/S99helixscreen restart
 
-# View logs
-cat /tmp/helixscreen.log
-tail -f /tmp/helixscreen.log    # live follow
+# View logs (K1 BusyBox keeps the app log in RAM; launcher capture is on disk)
+logread | grep helix-screen | tail -100              # structured app log
+tail -100 /usr/data/helixscreen/logs/launcher.log    # launcher / crash capture
+tail -f /usr/data/helixscreen/logs/launcher.log      # live follow launcher
+# Pre-v0.99.62 installs only: tail -f /tmp/helixscreen.log
 ```
 
 ---
@@ -179,7 +181,7 @@ This restores GuppyScreen automatically.
 | Can't SSH in | Make sure root is enabled (Step 1). Password is `creality_2023` |
 | `curl` or SSL error | K1 doesn't support HTTPS downloads. Use the two-step install (Step 4) — download on your computer, then `scp` to the printer |
 | Installer says "Moonraker not found" | Complete Step 3 first — Moonraker must be running |
-| Blank screen after install | Check logs: `cat /tmp/helixscreen.log` |
+| Blank screen after install | Check logs: `logread \| grep helix-screen \| tail -100` and `tail -100 /usr/data/helixscreen/logs/launcher.log` |
 | Touch not responding | Reboot: `reboot` |
 
 For more help: [Troubleshooting Guide](../TROUBLESHOOTING.md) | [Discord](https://discord.gg/RZCT2StKhr) | [GitHub Issues](https://github.com/prestonbrown/helixscreen/issues)

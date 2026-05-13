@@ -330,8 +330,8 @@ ps --no-headers -o comm 1
    # Service running
    /etc/init.d/S90helixscreen status
 
-   # Check logs
-   cat /tmp/helixscreen.log | tail -20 | grep -i error || echo "No errors"
+   # Check logs (both streams: structured app log + launcher capture)
+   { grep helix-screen /var/log/messages | tail -20; tail -20 /opt/helixscreen/logs/launcher.log 2>/dev/null; } | grep -i error || echo "No errors"
 
    # Active flag exists
    ls /tmp/helixscreen_active
@@ -447,8 +447,8 @@ ps --no-headers -o comm 1
    # Service running
    /etc/init.d/S80helixscreen status
 
-   # Check logs
-   cat /tmp/helixscreen.log | tail -20 | grep -i error || echo "No errors"
+   # Check logs (both streams: structured app log + launcher capture)
+   { grep helix-screen /var/log/messages | tail -20; tail -20 /opt/helixscreen/logs/launcher.log 2>/dev/null; } | grep -i error || echo "No errors"
    ```
 
 #### Uninstall Test
@@ -525,8 +525,8 @@ ps --no-headers -o comm 1
    # Service running
    /etc/init.d/S99helixscreen status
 
-   # Check logs
-   cat /tmp/helixscreen.log | tail -20 | grep -i error || echo "No errors"
+   # Check logs (both streams: in-RAM syslog + launcher capture)
+   { logread | grep helix-screen | tail -20; tail -20 /usr/data/helixscreen/logs/launcher.log 2>/dev/null; } | grep -i error || echo "No errors"
    ```
 
 #### Upgrade Install Test
@@ -687,9 +687,10 @@ sudo systemctl restart helixscreen
 # Service status (Klipper Mod)
 /etc/init.d/S80helixscreen status
 
-# Logs
-tail -f /tmp/helixscreen.log          # Follow live
-tail -100 /tmp/helixscreen.log        # Last 100 lines
+# Logs (AD5M has persistent /var/log/messages syslog; launcher capture on disk)
+grep helix-screen /var/log/messages | tail -100      # structured app log
+tail -100 /opt/helixscreen/logs/launcher.log         # launcher / crash capture
+tail -f  /opt/helixscreen/logs/launcher.log          # follow launcher live
 
 # Restart (ForgeX)
 /etc/init.d/S90helixscreen restart
@@ -698,15 +699,16 @@ tail -100 /tmp/helixscreen.log        # Last 100 lines
 /etc/init.d/S80helixscreen restart
 ```
 
-### K1 (SysV init)
+### K1 (SysV init, BusyBox in-RAM syslog)
 
 ```bash
 # Service status
 /etc/init.d/S99helixscreen status
 
 # Logs
-tail -f /tmp/helixscreen.log          # Follow live
-tail -100 /tmp/helixscreen.log        # Last 100 lines
+logread | grep helix-screen | tail -100              # structured app log (RAM ring)
+tail -100 /usr/data/helixscreen/logs/launcher.log    # launcher / crash capture
+tail -f  /usr/data/helixscreen/logs/launcher.log     # follow launcher live
 
 # Restart
 /etc/init.d/S99helixscreen restart
