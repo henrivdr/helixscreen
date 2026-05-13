@@ -723,13 +723,18 @@ void DisplayManager::check_display_sleep() {
     }
 #endif
 
-    // If sleep-while-printing is disabled, inhibit sleep/dim during active prints
+    // If sleep-while-printing is disabled, inhibit *entering* sleep/dim during
+    // active prints. We still need to honor wake-from-sleep touches: the
+    // display may have entered sleep BEFORE the print started, and bailing out
+    // here would strand the user on a blank screen for the duration of the
+    // print (debug bundle RYAQGL6C: 8 touch events, 18-minute wake delay).
+    bool inhibit_sleep_entry = false;
     if (!DisplaySettingsManager::instance().get_sleep_while_printing()) {
         PrintJobState job_state = get_printer_state().get_print_job_state();
         if (job_state == PrintJobState::PRINTING || job_state == PrintJobState::PAUSED) {
             // Reset LVGL activity timer so we don't immediately sleep when print ends
             lv_display_trigger_activity(nullptr);
-            return;
+            inhibit_sleep_entry = true;
         }
     }
 
@@ -784,12 +789,17 @@ void DisplayManager::check_display_sleep() {
         if (m_wake_requested || dismiss_on_activity) {
             m_wake_requested = false;
             wake_display();
-        } else if (sleep_timeout_sec > 0 && inactive_ms >= sleep_timeout_ms) {
+        } else if (!inhibit_sleep_entry && sleep_timeout_sec > 0 &&
+                   inactive_ms >= sleep_timeout_ms) {
             // Transition from dimmed to sleeping
             enter_sleep(sleep_timeout_sec);
         }
     } else {
-        // Currently awake - check if we should dim, start screensaver, or sleep
+        // Currently awake - check if we should dim, start screensaver, or sleep.
+        // Inhibited during prints when sleep_while_printing=false.
+        if (inhibit_sleep_entry) {
+            return;
+        }
         bool can_dim = m_backlight && m_backlight->supports_dimming();
 #ifdef HELIX_ENABLE_SCREENSAVER
         bool has_screensaver = ScreensaverManager::configured_type() != ScreensaverType::OFF;
