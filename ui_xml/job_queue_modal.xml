@@ -36,7 +36,7 @@
             flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center"
             clickable="false" scrollable="false">
       <text_body name="queue_state_label" text="Queue: Ready" variant="muted"/>
-      <ui_button name="btn_toggle_queue" text="Pause" variant="accent"
+      <ui_button name="btn_toggle_queue" text="Pause" variant="primary"
                  height="#button_height_sm">
         <event_cb trigger="clicked" callback="on_jq_modal_toggle_queue"/>
       </ui_button>

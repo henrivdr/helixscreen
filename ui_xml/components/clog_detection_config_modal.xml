@@ -82,7 +82,7 @@
                 flex_flow="column" style_pad_gap="#space_xs"
                 style_opa-disabled="128">
           <bind_state_if_eq subject="clog_cfg_mode" state="disabled" ref_value="2"/>
-          <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="space-between">
+          <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="space_between">
             <text_small text="Detection Length" translation_tag="Detection Length" style_text_color="#text_muted"/>
             <text_small name="det_length_label" text="" bind_text="clog_cfg_det_length_text" style_text_color="#text_muted"/>
           </lv_obj>
@@ -101,7 +101,7 @@
         <!-- Danger threshold -->
         <lv_obj width="1" flex_grow="1" height="content"
                 flex_flow="column" style_pad_gap="#space_xs">
-          <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="space-between">
+          <lv_obj width="100%" height="content" flex_flow="row" style_flex_main_place="space_between">
             <text_small text="Danger Zone" translation_tag="Danger Zone" style_text_color="#text_muted"/>
             <text_small name="threshold_label" text="" bind_text="clog_cfg_threshold_text" style_text_color="#text_muted"/>
           </lv_obj>

@@ -115,7 +115,7 @@
             <icon src="alert_circle" size="xs" variant="warning" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_0_status" flag="hidden" ref_value="1"/>
             </icon>
-            <icon src="close_circle" size="xs" variant="error" hidden="true">
+            <icon src="close_circle" size="xs" variant="danger" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_0_status" flag="hidden" ref_value="2"/>
             </icon>
             <text_small bind_text="ams_env_comfort_0_text"/>
@@ -131,7 +131,7 @@
             <icon src="alert_circle" size="xs" variant="warning" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_1_status" flag="hidden" ref_value="1"/>
             </icon>
-            <icon src="close_circle" size="xs" variant="error" hidden="true">
+            <icon src="close_circle" size="xs" variant="danger" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_1_status" flag="hidden" ref_value="2"/>
             </icon>
             <text_small bind_text="ams_env_comfort_1_text"/>
@@ -147,7 +147,7 @@
             <icon src="alert_circle" size="xs" variant="warning" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_2_status" flag="hidden" ref_value="1"/>
             </icon>
-            <icon src="close_circle" size="xs" variant="error" hidden="true">
+            <icon src="close_circle" size="xs" variant="danger" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_2_status" flag="hidden" ref_value="2"/>
             </icon>
             <text_small bind_text="ams_env_comfort_2_text"/>
@@ -163,7 +163,7 @@
             <icon src="alert_circle" size="xs" variant="warning" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_3_status" flag="hidden" ref_value="1"/>
             </icon>
-            <icon src="close_circle" size="xs" variant="error" hidden="true">
+            <icon src="close_circle" size="xs" variant="danger" hidden="true">
               <bind_flag_if_not_eq subject="ams_env_comfort_3_status" flag="hidden" ref_value="2"/>
             </icon>
             <text_small bind_text="ams_env_comfort_3_text"/>
