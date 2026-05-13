@@ -282,9 +282,10 @@ main() {
     # Configure Moonraker update_manager (Pi only - enables web UI updates)
     configure_moonraker_updates "$platform"
 
-    # Install platform-specific deep-recovery shell_command (K2 etc.) — no-op
-    # on platforms where firmware_restart is sufficient.
-    configure_moonraker_recovery "$platform"
+    # Install platform-specific helix-recover.sh used by PrinterRecoveryService
+    # when klippy_uds is dead and firmware_restart can't proxy. No-op on stock
+    # systemd platforms (pi/pi32/x86) where services.restart handles it.
+    configure_local_recovery "$platform"
 
     # Fix known Klipper config issues (AD5M screw_thread, etc.)
     fix_ad5m_klipper_config || true

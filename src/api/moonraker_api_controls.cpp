@@ -409,9 +409,10 @@ void MoonrakerAPI::execute_gcode(const std::string& gcode, SuccessCallback on_su
     // closes: dragging the fan slider on a K2 with `key298` produced a stream
     // of M106 commands that Klipper rejected on each tick (see /server/gcode_store
     // history during the 2026-05-05 K2 incident). Recovery paths use dedicated
-    // RPCs (printer.firmware_restart, printer.emergency_stop, machine.shell_command)
-    // and bypass this gate naturally. STARTUP is allowed through — it's brief
-    // and Klipper queues incoming commands.
+    // RPCs (printer.firmware_restart, printer.emergency_stop, machine.services.restart)
+    // plus local fork+exec of helix-recover.sh, all of which bypass this gate
+    // naturally. STARTUP is allowed through — it's brief and Klipper queues
+    // incoming commands.
     {
         const int klippy = lv_subject_get_int(state_.get_klippy_state_subject());
         if (klippy == static_cast<int>(helix::KlippyState::SHUTDOWN) ||
@@ -515,24 +516,6 @@ void MoonrakerAPI::restart_firmware(SuccessCallback on_success, ErrorCallback on
             on_success();
         },
         on_error);
-}
-
-void MoonrakerAPI::run_shell_command(const std::string& name,
-                                      std::function<void(const std::string&)> on_success,
-                                      ErrorCallback on_error,
-                                      bool silent) {
-    spdlog::info("[Moonraker API] run_shell_command: {}{}", name, silent ? " (silent)" : "");
-
-    client_.send_jsonrpc(
-        "machine.shell_command:" + name, json::object(),
-        [on_success](json reply) {
-            // Moonraker shell_command returns the captured stdout as a string.
-            std::string output = reply.is_string() ? reply.get<std::string>() : reply.dump();
-            on_success(output);
-        },
-        on_error,
-        0,        // timeout_ms (use default)
-        silent);
 }
 
 void MoonrakerAPI::restart_klipper(SuccessCallback on_success, ErrorCallback on_error) {

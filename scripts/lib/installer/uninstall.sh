@@ -225,9 +225,23 @@ uninstall() {
         remove_config_symlink || true
     fi
 
+    # Sweep state dirs holding rolling config backups (out-of-INSTALL_DIR by design)
+    clean_helix_state_dirs
+
     # Remove update_manager section from moonraker.conf (if present)
     if type remove_update_manager_section >/dev/null 2>&1; then
         remove_update_manager_section || true
+    fi
+
+    # Strip the legacy [shell_command helix_recover] block from moonraker.conf
+    # (dead since v0.99.61 — kept around on already-installed K2s until they
+    # next upgrade or, as here, uninstall).
+    if type remove_legacy_moonraker_block >/dev/null 2>&1; then
+        local _mr_conf
+        _mr_conf=$(find_moonraker_conf 2>/dev/null || true)
+        if [ -n "$_mr_conf" ] && [ -f "$_mr_conf" ]; then
+            remove_legacy_moonraker_block "$_mr_conf" "$(file_sudo "$_mr_conf")" || true
+        fi
     fi
 
     log_success "HelixScreen uninstalled"
@@ -255,6 +269,7 @@ clean_old_installation() {
     log_warn "This will PERMANENTLY DELETE:"
     log_warn "  - All HelixScreen files in ${INSTALL_DIR}"
     log_warn "  - Your configuration (settings.json)"
+    log_warn "  - Rolling config backups (/var/lib/helixscreen + .helixscreen under the service user's home)"
     log_warn "  - Thumbnail cache files"
     log_warn ""
 
@@ -337,6 +352,9 @@ clean_old_installation() {
             $SUDO rm -rf "$pd_helix"
         fi
     fi
+
+    # Sweep state dirs holding rolling config backups
+    clean_helix_state_dirs
 
     log_success "Old installation cleaned"
     echo ""

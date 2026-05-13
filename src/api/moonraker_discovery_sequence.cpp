@@ -364,18 +364,6 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                             get_printer_state().set_timelapse_available(true);
                         }
 
-                        // shell_command component — required for our deep-recovery
-                        // path (helix_recover). PrinterRecoveryService consults this
-                        // flag to short-circuit straight to firmware_restart on
-                        // hosts where shell_command is absent (Bambu, RatOS-lite,
-                        // vendor-locked builds).
-                        bool has_shell_command_component =
-                            std::find(components.begin(), components.end(), "shell_command") !=
-                            components.end();
-                        get_printer_state().set_shell_command_available(
-                            has_shell_command_component);
-                        spdlog::debug("[Moonraker Client] shell_command component: {}",
-                                      has_shell_command_component);
                     }
                 }
 

@@ -3951,7 +3951,7 @@ start_service_snapmaker_u1() {
 
     if ! $SUDO "$init_src" start; then
         log_error "Failed to start HelixScreen."
-        log_error "Check logs in: /tmp/helixscreen.log"
+        log_error "Check logs: /var/log/helixscreen/launcher.log or ${INSTALL_DIR}/logs/launcher.log"
         exit 1
     fi
 
@@ -3965,7 +3965,7 @@ start_service_snapmaker_u1() {
         fi
     done
     log_warn "Service may still be starting..."
-    log_warn "Check logs in: /tmp/helixscreen.log"
+    log_warn "Check logs: /var/log/helixscreen/launcher.log or ${INSTALL_DIR}/logs/launcher.log"
 }
 
 # Start service (systemd)
@@ -4022,7 +4022,7 @@ start_service_sysv() {
 
     if ! $SUDO "$INIT_SCRIPT_DEST" start; then
         log_error "Failed to start HelixScreen."
-        log_error "Check logs in: /tmp/helixscreen.log"
+        log_error "Check logs: /var/log/helixscreen/launcher.log or ${INSTALL_DIR}/logs/launcher.log"
         exit 1
     fi
 
@@ -4511,124 +4511,167 @@ remove_update_manager_section() {
 
 #
 #
-# Platforms that don't need this (stock Klipper / Bambu / RatOS Pi) get nothing:
-# the recovery service falls back to `printer.firmware_restart` automatically.
+# Step 2 is what this file installs. We can't use Moonraker's `[shell_command
+# helix_recover]` config block — upstream Moonraker doesn't actually parse such
+# sections (shell_command.py is a library used by machine/power/webcam, not a
+# user-config consumer). The early v0.99.5x K2 snippet was silently dead code;
+# remove_legacy_moonraker_block() strips it from already-installed K2 confs on
+# next upgrade.
+#
+# Platforms that don't need this (stock Pi/RatOS, x86 dev) get nothing — the
+# frontend's step 1 or 3 already covers them via systemd_dbus/systemd_cli.
+
 # Re-source guard
 
-# Snippet body for Creality K2 series (K2 Plus / K2 Pro / K2 Max).
-#
-# K2 runs Klipper as two host-side processes: `klippy.py` and `klipper_mcu`
-# (a separate daemon serving as the rpi virtual MCU for the RS-485 bridge to
-# the CFS unit). When the CFS unit raises an error severe enough to shut down
-# its MCU side, FIRMWARE_RESTART alone can't recover — Klipper reconnects, sees
-# rpi MCU still locked, and re-halts with `key298`.
-#
-# Recovery is: bounce the klipper_mcu daemon first, then klipper.
-helix_recover_snippet_k2() {
-    cat <<'EOF'
+# Per-platform `helix-recover.sh` body. Each function emits a stand-alone
+# POSIX-sh script that, when invoked by helix-screen, fully restarts the
+# platform's klippy + any host-side MCU daemons. Exit 0 = recovery launched
+# successfully (the platform's own init script handles the rest). Non-zero =
+# helix-screen surfaces a "Firmware restart failed" toast with stderr.
 
-[shell_command helix_recover]
+# Common header — used at the top of every emitted script.
+_helix_recover_script_header() {
+    cat <<'EOF'
+#!/bin/sh
 # HelixScreen deep-recovery (managed). See:
 # https://github.com/prestonbrown/helixscreen/blob/main/scripts/lib/installer/recovery.sh
-command: sh -c "/etc/init.d/klipper_mcu restart 2>&1; sleep 2; /etc/init.d/klipper restart 2>&1"
-timeout: 30
-verbose: True
+#
+# Invoked by PrinterRecoveryService::run_local_recovery() when klippy_uds is
+# unreachable and printer.firmware_restart can't proxy a recovery. Do not
+# edit by hand — re-install HelixScreen to regenerate.
+set -u
 EOF
 }
 
-# Probe the running Moonraker to see if its `shell_command` component is
-# loaded. The component ships with mainline Moonraker and is auto-loaded when
-# *any* `[shell_command]` block is present — but stripped/forked builds may
-# omit it (e.g. some vendor-locked firmwares). We treat absence as "this
-# platform can't host helix_recover" rather than blindly writing a section
-# Moonraker would warn about on every restart.
-#
-# Heuristic: GET /server/info, look for "shell_command" in components[].
-# Returns 0 (true) if the component is present, 1 if absent, 2 if probe failed
-# (treat as "unknown — proceed" so an offline install doesn't block).
-moonraker_has_shell_command_component() {
-    # Resolve moonraker URL — defaults to localhost; respects HELIX_MOONRAKER_URL.
-    local url="${HELIX_MOONRAKER_URL:-http://127.0.0.1:7125}"
-
-    # Prefer curl, fall back to wget. K2's busybox wget can't do HTTPS but our
-    # endpoint is HTTP-only, so it's fine here.
-    local body
-    if command -v curl >/dev/null 2>&1; then
-        body=$(curl -sf --max-time 3 "$url/server/info" 2>/dev/null) || return 2
-    elif command -v wget >/dev/null 2>&1; then
-        body=$(wget -qO- --timeout=3 "$url/server/info" 2>/dev/null) || return 2
-    else
-        return 2
-    fi
-
-    # Substring match against the JSON. We don't have jq on every target, and
-    # parsing JSON in pure POSIX shell is more pain than it's worth here.
-    case "$body" in
-        *'"shell_command"'*) return 0 ;;
-        *) return 1 ;;
-    esac
+# Creality K2 series (K2 Plus / K2 Pro / K2 Max). Two host-side processes:
+# klippy.py and klipper_mcu (rpi virtual MCU bridging the RS-485 to CFS).
+# Bouncing klipper_mcu first clears the rpi-MCU-shutdown that traps
+# FIRMWARE_RESTART after a CFS fault (key298).
+helix_recover_script_k2() {
+    _helix_recover_script_header
+    cat <<'EOF'
+/etc/init.d/klipper_mcu restart
+sleep 2
+exec /etc/init.d/klipper restart
+EOF
 }
 
-# True iff the given moonraker.conf already has our marker block.
-has_recovery_section() {
-    local conf="$1"
-    [ -f "$conf" ] && grep -q '^\[shell_command helix_recover\]' "$conf" 2>/dev/null
+# Snapmaker U1 (single-extruder, aarch64 Debian, BusyBox init). S60klipper
+# bounces both klippy_mcu (/home/lava/firmware_MCU/klippy_mcu) and the python
+# klippy host, and uses lava_io to power-cycle the MAIN_MCU and HEAD_MCU rails.
+# Verified live 2026-05-13.
+helix_recover_script_snapmaker_u1() {
+    _helix_recover_script_header
+    cat <<'EOF'
+exec /etc/init.d/S60klipper restart
+EOF
 }
 
-# Return the snippet body for the detected platform, or empty when this
-# platform doesn't need a custom recovery shell_command (firmware_restart is
-# sufficient).
-helix_recover_snippet_for_platform() {
+# Creality K1 / K1C / K1 Max (stock + Guilouz). Same klippy_mcu + klipper_service
+# split as K2 but with the SXX prefixes that Creality's BusyBox init expects.
+helix_recover_script_k1() {
+    _helix_recover_script_header
+    cat <<'EOF'
+/etc/init.d/S57klipper_mcu restart
+sleep 2
+exec /etc/init.d/S55klipper_service restart
+EOF
+}
+
+# Elegoo Centauri Carbon (COSMOS firmware, armv7l). Single klippy process,
+# no host-side mcu daemon. Init script handles a 10s SIGKILL fallback itself.
+helix_recover_script_cc1() {
+    _helix_recover_script_header
+    cat <<'EOF'
+exec /etc/init.d/klipper restart
+EOF
+}
+
+# FlashForge AD5M family (klipper_mod / ZMOD / ForgeX). Three community
+# firmwares with different klipper-start mechanisms — probe at runtime since
+# the script is generated once per install but the user can switch firmwares
+# without re-running helix-screen's installer.
+helix_recover_script_ad5m() {
+    _helix_recover_script_header
+    cat <<'EOF'
+if [ -x /opt/config/mod/.shell/restart_klipper.sh ]; then
+    exec /opt/config/mod/.shell/restart_klipper.sh
+fi
+if [ -x /etc/init.d/S55klipper_service ]; then
+    exec /etc/init.d/S55klipper_service restart
+fi
+if [ -x /root/printer_software/klipper/scripts/klipper-restart.sh ]; then
+    exec /root/printer_software/klipper/scripts/klipper-restart.sh
+fi
+echo "helix-recover: no known klipper restart mechanism on this AD5M firmware" >&2
+exit 1
+EOF
+}
+
+# Return the script body for the detected platform, or empty when this
+# platform doesn't need a local helper (firmware_restart is sufficient).
+helix_recover_script_for_platform() {
     local platform="$1"
     case "$platform" in
-        k2)   helix_recover_snippet_k2 ;;
-        # k1c)  helix_recover_snippet_k1c ;;     # TBD
-        # ad5m) helix_recover_snippet_ad5m ;;    # TBD
-        # ad5x) helix_recover_snippet_ad5x ;;    # TBD
-        # cc1)  helix_recover_snippet_cc1 ;;     # TBD
-        *)    : ;; # nothing — frontend falls back to firmware_restart
+        k2)           helix_recover_script_k2 ;;
+        k1)           helix_recover_script_k1 ;;
+        cc1)          helix_recover_script_cc1 ;;
+        ad5m|ad5x)    helix_recover_script_ad5m ;;
+        snapmaker-u1) helix_recover_script_snapmaker_u1 ;;
+        # pi / pi32 / x86: stock systemd Klipper — `machine.services.restart`
+        # works because moonraker.conf has `provider: systemd_*`. Frontend
+        # never reaches the local-recovery branch.
+        *) : ;;
     esac
 }
 
-# Install or update the helix_recover shell_command in moonraker.conf for the
-# detected platform. Idempotent: re-running on an already-configured host is a
-# no-op apart from a debug log line. Non-K2-style platforms with no snippet
-# silently skip.
-install_recovery_section() {
-    local conf="$1"
+# Write $install_dir/bin/helix-recover.sh for the platform. Idempotent: a
+# re-run with the same platform produces byte-identical output and overwrites
+# the existing file (so a recovery.sh edit on the dev side propagates on the
+# next upgrade).
+install_recovery_script() {
+    local install_dir="$1"
     local platform="$2"
     local fs="${3:-}"   # `sudo` prefix if needed, "" otherwise — match moonraker.sh idiom
 
-    [ -z "$conf" ] && return 1
+    [ -z "$install_dir" ] && return 1
     [ -z "$platform" ] && return 1
 
-    local snippet
-    snippet=$(helix_recover_snippet_for_platform "$platform")
-    if [ -z "$snippet" ]; then
-        log_info "No deep-recovery shell_command needed for platform: $platform"
+    local body
+    body=$(helix_recover_script_for_platform "$platform")
+    if [ -z "$body" ]; then
+        log_info "No local recovery script needed for platform: $platform"
         return 0
     fi
 
-    if has_recovery_section "$conf"; then
-        log_info "[shell_command helix_recover] already in $conf — skipping"
-        return 0
-    fi
-
-    log_info "Adding [shell_command helix_recover] to $conf for platform: $platform"
-    printf '%s\n' "$snippet" | $fs tee -a "$conf" >/dev/null
-    log_success "Added [shell_command helix_recover] block"
+    local script="$install_dir/bin/helix-recover.sh"
+    $fs mkdir -p "$install_dir/bin"
+    printf '%s\n' "$body" | $fs tee "$script" >/dev/null
+    $fs chmod +x "$script"
+    log_success "Installed helix-recover.sh for $platform → $script"
 }
 
-# Remove our managed block on uninstall. Strips from `[shell_command helix_recover]`
-# down to (but not including) the next `[section]` or EOF.
-remove_recovery_section() {
+# Remove the local recovery script on uninstall. No-op when absent.
+remove_recovery_script() {
+    local install_dir="$1"
+    local fs="${2:-}"
+    local script="$install_dir/bin/helix-recover.sh"
+    [ -f "$script" ] || return 0
+    $fs rm -f "$script"
+    log_success "Removed $script"
+}
+
+# Strip the legacy [shell_command helix_recover] block from moonraker.conf.
+# Early v0.99.5x K2 installs got this block; it was always silently dead since
+# Moonraker upstream doesn't parse [shell_command name] sections. Sweeping it
+# on every install keeps existing K2 confs clean as users upgrade.
+remove_legacy_moonraker_block() {
     local conf="$1"
     local fs="${2:-}"
-
     [ -f "$conf" ] || return 0
-    has_recovery_section "$conf" || return 0
+    grep -q '^\[shell_command helix_recover\]' "$conf" 2>/dev/null || return 0
 
-    log_info "Removing [shell_command helix_recover] from $conf"
+    log_info "Removing legacy [shell_command helix_recover] from $conf (dead block)"
     local tmp
     tmp=$(mktemp)
     awk '
@@ -4638,61 +4681,45 @@ remove_recovery_section() {
     ' "$conf" > "$tmp"
     $fs cp "$tmp" "$conf"
     rm -f "$tmp"
-    log_success "Removed [shell_command helix_recover] block"
 }
 
 # High-level installer entry point — drop-in companion to
 # configure_moonraker_updates() in moonraker.sh. Call from main install flow
-# AFTER configure_moonraker_updates so the conf already exists.
-configure_moonraker_recovery() {
+# AFTER install_files (so $INSTALL_DIR/bin/ exists) and AFTER
+# configure_moonraker_updates (so moonraker.conf exists for the legacy sweep).
+#
+# Reads: INSTALL_DIR, SUDO. Calls find_moonraker_conf() / file_sudo().
+configure_local_recovery() {
     local platform="$1"
 
-    # Don't probe further if this platform has no snippet — keeps logs quiet
-    # for stock Klipper / Bambu / RatOS Pi etc.
-    local snippet
-    snippet=$(helix_recover_snippet_for_platform "$platform")
-    [ -z "$snippet" ] && return 0
-
-    log_info "Configuring Moonraker deep-recovery shell_command..."
-
-    # Skip the install entirely if Moonraker doesn't support shell_command on
-    # this host. The frontend already falls back to firmware_restart in that
-    # case, so we just don't pollute the conf with an unusable section.
-    if moonraker_has_shell_command_component; then
-        : # supported
+    local body
+    body=$(helix_recover_script_for_platform "$platform")
+    if [ -z "$body" ]; then
+        # Stock systemd platform (pi/pi32/x86). Still sweep the legacy block
+        # in case the user switched platforms post-install — cheap, idempotent.
+        :
     else
-        local probe_status=$?
-        if [ "$probe_status" = "1" ]; then
-            log_warn "Moonraker on this host has no 'shell_command' component — skipping helix_recover install"
-            log_warn "Frontend will fall back to FIRMWARE_RESTART for recovery"
-            return 0
-        fi
-        # status 2 = couldn't reach moonraker (offline install, fresh image,
-        # blocked port). Proceed and let moonraker warn-or-not at next start.
-        log_info "Could not reach Moonraker at \${HELIX_MOONRAKER_URL:-http://127.0.0.1:7125}/server/info — installing snippet anyway"
+        log_info "Configuring local recovery script..."
+        install_recovery_script "${INSTALL_DIR}" "$platform" "${SUDO:-}"
     fi
 
+    # Migration sweep: strip the dead [shell_command helix_recover] block from
+    # any existing moonraker.conf. Runs on every platform so K2 users upgrading
+    # past v0.99.61 lose the stale block on the next install pass.
     local conf
-    conf=$(find_moonraker_conf)
-    if [ -z "$conf" ]; then
-        log_warn "Could not find moonraker.conf — skipping helix_recover install"
-        log_warn "To enable Deep Recovery, manually add to your moonraker.conf:"
-        echo ""
-        printf '%s\n' "$snippet"
-        echo ""
-        return 0
+    conf=$(find_moonraker_conf 2>/dev/null)
+    if [ -n "$conf" ]; then
+        local fs
+        fs=$(file_sudo "$conf")
+        remove_legacy_moonraker_block "$conf" "$fs"
     fi
+}
 
-    local fs
-    fs=$(file_sudo "$conf")
-    install_recovery_section "$conf" "$platform" "$fs"
-
-    # Restart moonraker so the new shell_command is registered. Match the
-    # pattern in configure_moonraker_updates(): only restart when we actually
-    # changed the conf — install_recovery_section is idempotent and a no-op
-    # on re-runs, but we can't tell from here, so always nudge moonraker.
-    # Cheap on K2 (~3s); skipped during dry-runs by the caller.
-    restart_moonraker 2>/dev/null || true
+# Backward-compat shim — main.sh historically called this name. Keep it
+# until the next bundle so callers that pulled an older install.sh keep
+# working through the upgrade.
+configure_moonraker_recovery() {
+    configure_local_recovery "$@"
 }
 
 # ============================================
@@ -5016,6 +5043,17 @@ uninstall() {
     # Remove update_manager section from moonraker.conf (if present)
     if type remove_update_manager_section >/dev/null 2>&1; then
         remove_update_manager_section || true
+    fi
+
+    # Strip the legacy [shell_command helix_recover] block from moonraker.conf
+    # (dead since v0.99.61 — kept around on already-installed K2s until they
+    # next upgrade or, as here, uninstall).
+    if type remove_legacy_moonraker_block >/dev/null 2>&1; then
+        local _mr_conf
+        _mr_conf=$(find_moonraker_conf 2>/dev/null || true)
+        if [ -n "$_mr_conf" ] && [ -f "$_mr_conf" ]; then
+            remove_legacy_moonraker_block "$_mr_conf" "$(file_sudo "$_mr_conf")" || true
+        fi
     fi
 
     log_success "HelixScreen uninstalled"
@@ -5406,9 +5444,10 @@ main() {
     # Configure Moonraker update_manager (Pi only - enables web UI updates)
     configure_moonraker_updates "$platform"
 
-    # Install platform-specific deep-recovery shell_command (K2 etc.) — no-op
-    # on platforms where firmware_restart is sufficient.
-    configure_moonraker_recovery "$platform"
+    # Install platform-specific helix-recover.sh used by PrinterRecoveryService
+    # when klippy_uds is dead and firmware_restart can't proxy. No-op on stock
+    # systemd platforms (pi/pi32/x86) where services.restart handles it.
+    configure_local_recovery "$platform"
 
     # Fix known Klipper config issues (AD5M screw_thread, etc.)
     fix_ad5m_klipper_config || true
