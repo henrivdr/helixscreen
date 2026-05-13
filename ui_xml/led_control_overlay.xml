@@ -18,7 +18,7 @@
     <!-- Scrollable content area -->
     <lv_obj name="content_area"
             width="100%" flex_grow="1" style_pad_all="#space_lg" style_pad_top="0" flex_flow="column"
-            style_pad_gap="#space_md" style_overflow="scroll">
+            style_pad_gap="#space_md">
 
       <!-- Strip selector chips (wrapping row above the heading) -->
       <lv_obj name="strip_selector_section"
