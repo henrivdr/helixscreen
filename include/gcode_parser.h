@@ -298,6 +298,19 @@ class GCodeParser {
         }
     }
 
+    /**
+     * @brief Seed the head position before parsing a chunk.
+     *
+     * Streaming mode parses each layer with a fresh parser, so without
+     * this the first move of every layer is drawn from (0,0) — producing
+     * stray travel/extrusion lines from origin to the real print location
+     * in the 2D viewer. Callers (GCodeLayerIndex) snapshot the position at
+     * each layer boundary; this seeds the parser before consuming bytes.
+     */
+    void set_initial_position(float x, float y, float z) {
+        current_position_ = {x, y, z};
+    }
+
     // Progress tracking
 
     /**

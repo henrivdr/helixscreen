@@ -27,6 +27,14 @@ struct StreamingLayerEntry {
     float z_height;       ///< Z coordinate of this layer (mm)
     uint16_t line_count;  ///< Number of G-code lines in this layer
     uint16_t flags;       ///< Reserved for future use (e.g., has_extrusion)
+    /// Head position when this layer's byte range begins. Streaming mode
+    /// parses each layer with a fresh GCodeParser, so the parser must be
+    /// seeded with this position — otherwise the first move of the layer
+    /// is drawn from (0,0) and produces stray lines from origin in the 2D
+    /// viewer.
+    float start_x;
+    float start_y;
+    float start_z;
 
     /// Check if this entry is valid (has been populated)
     bool is_valid() const {

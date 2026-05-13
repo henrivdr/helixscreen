@@ -251,6 +251,47 @@ G1 X30 Y30 E0.3
     REQUIRE(index.get_layer_count() == 3);
 }
 
+TEST_CASE("GCodeLayerIndex - per-layer start position",
+          "[gcode][layer_index]") {
+    // Streaming mode parses each layer with a fresh GCodeParser, so without a
+    // recorded starting position the first move of a layer is drawn from
+    // (0,0) — producing stray travel/extrusion lines from origin to the real
+    // print location on the 2D viewer. The indexer must snapshot the head
+    // position at the start of each layer's byte range so load_layer can
+    // seed the parser.
+    std::string gcode = R"(
+G1 X10 Y20 Z0.2 F1000
+G1 X30 Y40 E0.1
+G1 X50 Y60 Z0.4
+G1 X70 Y80 E0.2
+G1 X90 Y100 Z0.6
+G1 X110 Y120 E0.3
+)";
+
+    TempGCodeFile file(gcode);
+    GCodeLayerIndex index;
+    REQUIRE(index.build_from_file(file.path()));
+    REQUIRE(index.get_layer_count() == 3);
+
+    // Layer 0 starts at file position 0 — head still at default origin.
+    auto e0 = index.get_entry(0);
+    REQUIRE(e0.start_x == Approx(0.0f));
+    REQUIRE(e0.start_y == Approx(0.0f));
+
+    // Layer 1 starts after layer 0's print move, so head is at the end of
+    // that move: (30, 40), z=0.2.
+    auto e1 = index.get_entry(1);
+    REQUIRE(e1.start_x == Approx(30.0f));
+    REQUIRE(e1.start_y == Approx(40.0f));
+    REQUIRE(e1.start_z == Approx(0.2f));
+
+    // Layer 2 similarly inherits the end of layer 1.
+    auto e2 = index.get_entry(2);
+    REQUIRE(e2.start_x == Approx(70.0f));
+    REQUIRE(e2.start_y == Approx(80.0f));
+    REQUIRE(e2.start_z == Approx(0.4f));
+}
+
 TEST_CASE("GCodeLayerIndex - Real file", "[gcode][layer_index][integration]") {
     // Test with the real benchy file if it exists
     std::ifstream check("assets/test_gcodes/3DBenchy.gcode");

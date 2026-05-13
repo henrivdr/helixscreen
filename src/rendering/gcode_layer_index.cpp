@@ -22,23 +22,43 @@ namespace {
 // Layer detection tolerance for Z changes
 constexpr float Z_EPSILON = 0.001f;
 
-// Extract float parameter from G-code line (e.g., "Z1.2" -> 1.2)
-bool extract_z_param(const char* line, size_t len, float& out_z) {
-    // Find 'Z' parameter (case-insensitive)
+// Extract a single-letter float parameter (case-insensitive) from a G-code line.
+// Returns true if found. Skips over coordinates embedded inside identifier
+// tokens like "G1" by only matching at the start of a token (preceded by
+// whitespace, comma, or start-of-line).
+bool extract_axis_param(const char* line, size_t len, char axis, float& out_value) {
+    char upper = axis;
+    char lower = static_cast<char>(axis | 0x20);
     for (size_t i = 0; i < len; ++i) {
-        if ((line[i] == 'Z' || line[i] == 'z') && i + 1 < len) {
-            // Check if followed by a digit or sign
-            char next = line[i + 1];
-            if (next == '-' || next == '+' || next == '.' || (next >= '0' && next <= '9')) {
-                char* end = nullptr;
-                out_z = std::strtof(line + i + 1, &end);
-                if (end != line + i + 1) {
-                    return true;
-                }
+        if (line[i] != upper && line[i] != lower) {
+            continue;
+        }
+        // Must be at token start: preceded by whitespace or beginning of line.
+        if (i > 0) {
+            char prev = line[i - 1];
+            if (prev != ' ' && prev != '\t' && prev != ',') {
+                continue;
             }
+        }
+        if (i + 1 >= len) {
+            continue;
+        }
+        char next = line[i + 1];
+        if (next != '-' && next != '+' && next != '.' && (next < '0' || next > '9')) {
+            continue;
+        }
+        char* end = nullptr;
+        float v = std::strtof(line + i + 1, &end);
+        if (end != line + i + 1) {
+            out_value = v;
+            return true;
         }
     }
     return false;
+}
+
+bool extract_z_param(const char* line, size_t len, float& out_z) {
+    return extract_axis_param(line, len, 'Z', out_z);
 }
 
 // Check if line is a movement command (G0 or G1)
@@ -182,6 +202,14 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
     line.reserve(256);
 
     float current_z = -std::numeric_limits<float>::infinity();
+    // Running head position. Snapshotted into each new layer entry so the
+    // streaming parser can be seeded — without it, the first move of every
+    // layer would be drawn from (0,0). We assume G90 absolute mode (the
+    // ubiquitous OrcaSlicer/PrusaSlicer/Bambu convention); G91 relative
+    // would silently desync but isn't used in slicer output.
+    float current_x = 0.0f;
+    float current_y = 0.0f;
+    float current_seen_z = 0.0f; // Z position seen so far (vs current_z which only updates on layer transition)
     uint64_t current_layer_start = 0;
     uint64_t current_offset = 0;
     uint16_t current_layer_lines = 0;
@@ -263,13 +291,19 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
                         last.line_count = current_layer_lines;
                     }
 
-                    // Start new layer
+                    // Start new layer. Snapshot the head position BEFORE the
+                    // line at file_offset has been applied — i.e., the
+                    // position the streaming parser should be seeded with
+                    // before it reads this layer's bytes.
                     StreamingLayerEntry entry{};
                     entry.file_offset = current_offset;
                     entry.z_height = z;
                     entry.byte_length = 0; // Will be filled when layer ends
                     entry.line_count = 0;  // Will be filled when layer ends
                     entry.flags = 0;
+                    entry.start_x = current_x;
+                    entry.start_y = current_y;
+                    entry.start_z = current_seen_z;
                     entries_.push_back(entry);
 
                     if (!first_layer_started) {
@@ -282,6 +316,16 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
                     current_layer_start = current_offset;
                     current_layer_lines = 0;
                 }
+                current_seen_z = z;
+            }
+
+            // Update running X/Y from this move (for the next layer's snapshot).
+            float v;
+            if (extract_axis_param(line.c_str(), line_len, 'X', v)) {
+                current_x = v;
+            }
+            if (extract_axis_param(line.c_str(), line_len, 'Y', v)) {
+                current_y = v;
             }
 
             // Track extrusion vs travel

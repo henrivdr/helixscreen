@@ -639,6 +639,10 @@ std::vector<ToolpathSegment> GCodeStreamingController::load_layer(size_t layer_i
     // segment with the wrong tool index — rendering a T3-only print in T0's
     // color.
     parser.set_active_tool_index(index_.get_stats().initial_tool_index);
+    // Seed with the head position at this layer's boundary. Without this,
+    // the first move of each layer would be drawn from (0,0) — visible as
+    // stray travel/extrusion lines from origin in the 2D viewer.
+    parser.set_initial_position(entry.start_x, entry.start_y, entry.start_z);
     std::istringstream stream(std::string(bytes.begin(), bytes.end()));
     std::string line;
 
