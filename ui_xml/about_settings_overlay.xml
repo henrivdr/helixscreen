@@ -95,6 +95,14 @@
       <setting_info_row name="row_os" label="OS" label_tag="OS" icon="console">
         <text_muted name="value" bind_text="os_version"/>
       </setting_info_row>
+      <!-- Host (kernel arch · userspace bitness). Hidden on Android — irrelevant
+           when the OS row already reads "Android". -->
+      <lv_obj name="container_host_arch" width="100%" style_pad_all="0" scrollable="false">
+        <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="1"/>
+        <setting_info_row name="row_host_arch" label="Host" label_tag="Host" icon="sysinfo">
+          <text_muted name="value" bind_text="host_arch_value"/>
+        </setting_info_row>
+      </lv_obj>
       <!-- Install Root (hidden on Android — SDL-sandboxed paths are not user-meaningful) -->
       <lv_obj name="container_install_root" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="1"/>

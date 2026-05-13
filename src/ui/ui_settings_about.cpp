@@ -130,6 +130,9 @@ void AboutSettingsOverlay::init_subjects() {
         UI_MANAGED_SUBJECT_STRING(cache_dir_value_subject_, cache_dir_value_buf_,
                                   app_get_cache_dir().c_str(),
                                   "cache_dir_value", subjects_);
+        UI_MANAGED_SUBJECT_STRING(host_arch_value_subject_, host_arch_value_buf_,
+                                  helix::host_arch_string().c_str(),
+                                  "host_arch_value", subjects_);
     });
 }
 

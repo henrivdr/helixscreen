@@ -11,6 +11,7 @@
 #include "hv/requests.h"
 #include "moonraker_api.h"
 #include "platform_capabilities.h"
+#include "platform_info.h"
 #include "printer_state.h"
 #include "system/crash_history.h"
 #include "system/log_collector.h"
@@ -205,6 +206,7 @@ json DebugBundleCollector::collect_system_info() {
     json sys;
 
     sys["platform"] = UpdateChecker::get_platform_key();
+    sys["host_arch"] = helix::host_arch_string();
 
     auto caps = PlatformCapabilities::detect();
     sys["total_ram_mb"] = caps.total_ram_mb;
