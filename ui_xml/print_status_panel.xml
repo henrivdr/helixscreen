@@ -91,10 +91,10 @@
           <spinner name="preparing_spinner" size="lg"/>
           <text_heading name="preparing_operation_label"
                         width="100%" bind_text="preparing_operation" text="Preparing..." translation_tag="Preparing..."
-                        style_text_color="#overlay_text" style_text_align="center"/>
+                        style_text_color="#text" style_text_align="center"/>
           <progress_bar name="preparing_progress_bar" width="80%" bind_value="preparing_progress"/>
           <text_small name="preparing_eta"
-                      bind_text="print_start_time_left" style_text_color="#overlay_text" style_text_opa="180"/>
+                      bind_text="print_start_time_left" style_text_color="#text" style_text_opa="180"/>
         </lv_obj>
 
         <!-- Objects list button: top-left corner, visible only when multi-object print -->
