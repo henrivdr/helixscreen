@@ -146,6 +146,11 @@ void EmergencyStopOverlay::create() {
         printer_state_->get_print_state_enum_subject(), this,
         [](EmergencyStopOverlay* self, int /*state*/) { self->update_visibility(); });
 
+    // Reset the initial-fire guard so each (re)subscription — including
+    // soft-restart after Add Printer — drops the subject's placeholder
+    // SHUTDOWN before Moonraker reports the new printer's real state.
+    klippy_state_initial_seen_ = false;
+
     // Subscribe to klippy state changes for recovery dialog auto-popup
     klippy_state_observer_ = observe_int_sync<EmergencyStopOverlay>(
         printer_state_->get_klippy_state_subject(), this,
