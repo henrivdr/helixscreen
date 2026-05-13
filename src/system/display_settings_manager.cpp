@@ -20,6 +20,35 @@
 #include <cmath>
 #include <cstdlib>
 
+#ifdef __ANDROID__
+#include <SDL_system.h>
+#include <jni.h>
+
+/// Push the "keep navbar visible" preference (issue #908) into HelixActivity.
+/// Java side disables immersive mode + auto-hide + swipe-reveal while true.
+static void android_set_navbar_always_visible(bool enabled) {
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+    if (!env)
+        return;
+
+    jclass cls = env->FindClass("org/helixscreen/app/HelixActivity");
+    if (!cls) {
+        env->ExceptionClear();
+        return;
+    }
+
+    jmethodID method = env->GetStaticMethodID(cls, "setNavBarAlwaysVisible", "(Z)V");
+    if (!method) {
+        env->DeleteLocalRef(cls);
+        env->ExceptionClear();
+        return;
+    }
+
+    env->CallStaticVoidMethod(cls, method, static_cast<jboolean>(enabled));
+    env->DeleteLocalRef(cls);
+}
+#endif // __ANDROID__
+
 using namespace helix;
 
 // Display dim option values (seconds) - time before screen dims to lower brightness
@@ -204,6 +233,14 @@ void DisplaySettingsManager::init_subjects() {
     bool sys_kb = config->get<bool>("/display/use_system_keyboard", false);
     UI_MANAGED_SUBJECT_INT(use_system_keyboard_subject_, sys_kb ? 1 : 0,
                            "settings_use_system_keyboard", subjects_);
+
+    // Keep navbar onscreen preference (Android only, issue #908, default: off)
+    bool keep_navbar = config->get<bool>("/display/keep_navbar_visible", false);
+    UI_MANAGED_SUBJECT_INT(keep_navbar_visible_subject_, keep_navbar ? 1 : 0,
+                           "settings_keep_navbar_visible", subjects_);
+#ifdef __ANDROID__
+    android_set_navbar_always_visible(keep_navbar);
+#endif
 
     // Platform flag for XML conditional visibility (ephemeral, not persisted)
     int is_android = helix::is_android_platform() ? 1 : 0;
@@ -574,6 +611,24 @@ void DisplaySettingsManager::set_use_system_keyboard(bool enabled) {
     Config* config = Config::get_instance();
     config->set<bool>("/display/use_system_keyboard", enabled);
     config->save();
+}
+
+bool DisplaySettingsManager::get_keep_navbar_visible() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&keep_navbar_visible_subject_)) != 0;
+}
+
+void DisplaySettingsManager::set_keep_navbar_visible(bool enabled) {
+    spdlog::info("[DisplaySettingsManager] set_keep_navbar_visible({})", enabled);
+
+    lv_subject_set_int(&keep_navbar_visible_subject_, enabled ? 1 : 0);
+
+    Config* config = Config::get_instance();
+    config->set<bool>("/display/keep_navbar_visible", enabled);
+    config->save();
+
+#ifdef __ANDROID__
+    android_set_navbar_always_visible(enabled);
+#endif
 }
 
 int DisplaySettingsManager::get_bed_mesh_render_mode() const {

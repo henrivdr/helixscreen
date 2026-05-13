@@ -36,6 +36,10 @@ import org.libsdl.app.SDLActivity;
  *     edge and travels upward more than SWIPE_THRESHOLD_DP shows the nav bar.
  *     LVGL treats the drag as a scroll gesture and cancels any pending click,
  *     so bottom-row app buttons stay tappable without accidental reveals.
+ *   - Always-visible mode: setNavBarAlwaysVisible(true) (called from native
+ *     when the user toggles the setting) pins the nav bar onscreen and
+ *     disables both the swipe reveal and the auto-hide timer. Status bar
+ *     stays hidden either way.
  *   - Touch events are never consumed here; SDL / LVGL sees them all.
  */
 public class HelixActivity extends SDLActivity {
@@ -52,6 +56,14 @@ public class HelixActivity extends SDLActivity {
     private boolean mNavBarVisible = false;
     private boolean mSwipeArmed = false;
     private float mSwipeStartY = 0f;
+
+    /**
+     * User-controlled "keep navbar onscreen" preference (issue #908).
+     * Set via the static JNI bridge {@link #setNavBarAlwaysVisible(boolean)}
+     * from the C++ DisplaySettingsManager. Static so the value survives
+     * activity recreation and can be pushed before onResume.
+     */
+    private static volatile boolean sNavBarAlwaysVisible = false;
 
     private final Handler mHideHandler = new Handler(Looper.getMainLooper());
     private final Runnable mHideRunnable = new Runnable() {
@@ -121,7 +133,11 @@ public class HelixActivity extends SDLActivity {
         controller.setSystemBarsBehavior(
                 WindowInsetsController.BEHAVIOR_DEFAULT);
 
-        if (mNavBarVisible) {
+        if (sNavBarAlwaysVisible) {
+            // Pin nav bar, keep status bar hidden.
+            controller.hide(WindowInsets.Type.statusBars());
+            controller.show(WindowInsets.Type.navigationBars());
+        } else if (mNavBarVisible) {
             controller.show(WindowInsets.Type.navigationBars());
         } else {
             controller.hide(WindowInsets.Type.systemBars());
@@ -146,7 +162,7 @@ public class HelixActivity extends SDLActivity {
                   | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                   | View.SYSTEM_UI_FLAG_FULLSCREEN;
 
-        if (!mNavBarVisible) {
+        if (!mNavBarVisible && !sNavBarAlwaysVisible) {
             flags |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                    | View.SYSTEM_UI_FLAG_IMMERSIVE;
         }
@@ -168,7 +184,8 @@ public class HelixActivity extends SDLActivity {
         }
         mNavBarVisible = visible;
         applySystemUi();
-        if (visible) {
+        // Auto-hide is meaningless when the user has pinned the bar.
+        if (visible && !sNavBarAlwaysVisible) {
             scheduleAutoHide();
         } else {
             mHideHandler.removeCallbacks(mHideRunnable);
@@ -189,6 +206,7 @@ public class HelixActivity extends SDLActivity {
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 if (!mNavBarVisible
+                        && !sNavBarAlwaysVisible
                         && decorHeight > 0
                         && ev.getY() >= (decorHeight - edgeZonePx)) {
                     mSwipeArmed = true;
@@ -196,7 +214,7 @@ public class HelixActivity extends SDLActivity {
                 } else {
                     mSwipeArmed = false;
                 }
-                if (mNavBarVisible) {
+                if (mNavBarVisible && !sNavBarAlwaysVisible) {
                     scheduleAutoHide();
                 }
                 break;
@@ -276,6 +294,38 @@ public class HelixActivity extends SDLActivity {
     // =========================================================================
     // JNI theme bridge — called from native theme_manager
     // =========================================================================
+
+    /**
+     * Toggle the "keep navigation bar onscreen" preference (issue #908).
+     * Called from native code via JNI when the user flips the setting and
+     * once at startup with the persisted value. Status bar stays hidden
+     * either way — this affects only the navigation bar.
+     *
+     * @param alwaysVisible  true to pin nav bar onscreen, false to restore
+     *                       the default immersive + swipe-to-reveal behavior
+     */
+    public static void setNavBarAlwaysVisible(final boolean alwaysVisible) {
+        // Update the static flag unconditionally so onResume/onWindowFocusChanged
+        // pick it up even if the activity is being created right now.
+        sNavBarAlwaysVisible = alwaysVisible;
+
+        final android.content.Context ctx = SDLActivity.getContext();
+        if (!(ctx instanceof HelixActivity)) return;
+        final HelixActivity helix = (HelixActivity) ctx;
+        helix.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (alwaysVisible) {
+                    helix.mHideHandler.removeCallbacks(helix.mHideRunnable);
+                    helix.mNavBarVisible = true;
+                } else {
+                    // Drop back to immersive on next applySystemUi.
+                    helix.mNavBarVisible = false;
+                }
+                helix.applySystemUi();
+            }
+        });
+    }
 
     /**
      * Set the window background color to match the active theme.

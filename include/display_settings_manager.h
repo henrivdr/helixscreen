@@ -129,6 +129,12 @@ class DisplaySettingsManager {
     /** @brief Set system keyboard preference (updates subject + persists) */
     void set_use_system_keyboard(bool enabled);
 
+    /** @brief Keep Android navigation bar onscreen (issue #908, Android only) */
+    bool get_keep_navbar_visible() const;
+
+    /** @brief Set keep-navbar-visible preference (updates subject + persists + JNI push) */
+    void set_keep_navbar_visible(bool enabled);
+
     /** @brief Get bed mesh render mode (0=Auto, 1=3D, 2=2D) */
     int get_bed_mesh_render_mode() const;
 
@@ -284,6 +290,11 @@ class DisplaySettingsManager {
         return &use_system_keyboard_subject_;
     }
 
+    /** @brief Keep navbar visible subject (integer: 0=immersive, 1=always show) */
+    lv_subject_t* subject_keep_navbar_visible() {
+        return &keep_navbar_visible_subject_;
+    }
+
     /** @brief Android platform flag (integer: 0=not Android, 1=Android) */
     lv_subject_t* subject_is_android() {
         return &is_android_subject_;
@@ -333,6 +344,7 @@ class DisplaySettingsManager {
     lv_subject_t sleep_while_printing_subject_;
     lv_subject_t animations_enabled_subject_;
     lv_subject_t use_system_keyboard_subject_;
+    lv_subject_t keep_navbar_visible_subject_;
     lv_subject_t is_android_subject_;
     lv_subject_t bed_mesh_render_mode_subject_;
     lv_subject_t gcode_render_mode_subject_;

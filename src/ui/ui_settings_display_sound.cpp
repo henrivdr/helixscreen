@@ -104,6 +104,7 @@ void DisplaySoundSettingsOverlay::register_callbacks() {
         {"on_time_format_changed", on_time_format_changed},
         {"on_animations_changed", on_animations_changed},
         {"on_system_keyboard_changed", on_system_keyboard_changed},
+        {"on_keep_navbar_changed", on_keep_navbar_changed},
 
         // Display
         {"on_dark_mode_changed", on_dark_mode_changed},
@@ -549,6 +550,11 @@ void DisplaySoundSettingsOverlay::handle_system_keyboard_changed(bool enabled) {
     DisplaySettingsManager::instance().set_use_system_keyboard(enabled);
 }
 
+void DisplaySoundSettingsOverlay::handle_keep_navbar_changed(bool enabled) {
+    spdlog::info("[{}] Keep navbar toggled: {}", get_name(), enabled ? "ON" : "OFF");
+    DisplaySettingsManager::instance().set_keep_navbar_visible(enabled);
+}
+
 // ============================================================================
 // DISPLAY EVENT HANDLERS
 // ============================================================================
@@ -984,6 +990,14 @@ void DisplaySoundSettingsOverlay::on_system_keyboard_changed(lv_event_t* e) {
     auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
     bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
     get_display_sound_settings_overlay().handle_system_keyboard_changed(enabled);
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void DisplaySoundSettingsOverlay::on_keep_navbar_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[DisplaySoundSettingsOverlay] on_keep_navbar_changed");
+    auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+    get_display_sound_settings_overlay().handle_keep_navbar_changed(enabled);
     LVGL_SAFE_EVENT_CB_END();
 }
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Android: "Keep Navigation Bar" setting** — Display & Sound > Appearance now has a toggle (Android only) that pins the system nav bar onscreen instead of using immersive mode + swipe-to-reveal. For users who prefer 3-button nav over gesture controls (prestonbrown/helixscreen#908).
+
 ## [0.99.60] - 2026-05-11
 
 The headline is the **completion of the L081 Mechanism C sweep** — 107 background-thread callsites across panels, modals, wizards, calibration, AMS backends, and macro/print preparation chains now route LVGL touches through `tok.defer` / the new `bg_cb` helper, with the strict-mode abort detector active in tests/CI to keep new regressions from landing. Pairs with two AMS firmware-writeback features (CFS via `BOX_MODIFY_TN_DATA`, Snapmaker via `filament_detect/set` Extended Firmware) that finally make color edits persist to the printer, and the **layered filament-path renderer** flipping default-on (legacy renderer deleted) for smoother animation. Round it out with **CFS hardware-error UX** surfacing key8xx faults via `respond_raw` with a recovery chain + purge-gate, and a **WiFi auto-recovery** path for stale NM profiles missing `key-mgmt`.

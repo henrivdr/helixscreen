@@ -24,6 +24,14 @@ Choose between 12-hour and 24-hour clock display. Affects all timestamps shown t
 
 Toggle UI motion effects (transitions, panel slides, confetti). Disable for better performance on slower hardware like Raspberry Pi 3.
 
+### System Keyboard *(Android only)*
+
+When on, text fields open Android's native keyboard instead of the built-in on-screen keyboard. Handy on phones and tablets where you already have a preferred keyboard installed.
+
+### Keep Navigation Bar *(Android only)*
+
+When on, the Android navigation bar (back / home / recents) stays onscreen at all times. When off (the default), HelixScreen runs full-screen and you swipe up from the bottom edge to reveal the nav bar — it auto-hides after a few seconds. Turn this on if you use 3-button navigation instead of gestures and want the buttons always available. The status bar stays hidden either way.
+
 ### Widget Labels
 
 Toggle labels on home panel widgets. Disable for a cleaner look on small screens.

@@ -115,6 +115,14 @@ TEST_CASE_METHOD(LVGLTestFixture, "DisplaySettingsManager set/get round trips",
         REQUIRE(DisplaySettingsManager::instance().get_animations_enabled() == true);
     }
 
+    SECTION("keep_navbar_visible set/get") {
+        DisplaySettingsManager::instance().set_keep_navbar_visible(true);
+        REQUIRE(DisplaySettingsManager::instance().get_keep_navbar_visible() == true);
+
+        DisplaySettingsManager::instance().set_keep_navbar_visible(false);
+        REQUIRE(DisplaySettingsManager::instance().get_keep_navbar_visible() == false);
+    }
+
     SECTION("display_dim set/get") {
         DisplaySettingsManager::instance().set_display_dim_sec(60);
         REQUIRE(DisplaySettingsManager::instance().get_display_dim_sec() == 60);
@@ -242,6 +250,16 @@ TEST_CASE_METHOD(LVGLTestFixture, "DisplaySettingsManager subject values match g
         DisplaySettingsManager::instance().set_animations_enabled(true);
         REQUIRE(lv_subject_get_int(
                     DisplaySettingsManager::instance().subject_animations_enabled()) == 1);
+    }
+
+    SECTION("keep_navbar_visible subject reflects setter") {
+        DisplaySettingsManager::instance().set_keep_navbar_visible(true);
+        REQUIRE(lv_subject_get_int(
+                    DisplaySettingsManager::instance().subject_keep_navbar_visible()) == 1);
+
+        DisplaySettingsManager::instance().set_keep_navbar_visible(false);
+        REQUIRE(lv_subject_get_int(
+                    DisplaySettingsManager::instance().subject_keep_navbar_visible()) == 0);
     }
 
     SECTION("time_format subject reflects setter") {

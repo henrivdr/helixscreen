@@ -58,6 +58,16 @@
                           callback="on_system_keyboard_changed">
         <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="0"/>
       </setting_toggle_row>
+      <!-- Keep Navigation Bar (Android only — hidden on other platforms, issue #908) -->
+      <setting_toggle_row name="row_keep_navbar"
+                          label="Keep Navigation Bar" label_tag="Keep Navigation Bar"
+                          icon="eye"
+                          description="Always show Android navigation bar instead of using gestures"
+                          description_tag="Always show Android navigation bar instead of using gestures"
+                          subject="settings_keep_navbar_visible"
+                          callback="on_keep_navbar_changed">
+        <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="0"/>
+      </setting_toggle_row>
       <!-- Widget Labels -->
       <setting_toggle_row name="row_widget_labels"
                           label="Widget Labels" label_tag="Widget Labels" icon="view_grid"
