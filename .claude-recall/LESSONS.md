@@ -102,7 +102,7 @@
 > NEVER `lv_async_call(..., lv_obj_delete)` — uncancellable. NEVER `safe_delete()` inside `queue_update`/`async_call` lambdas — multiple sync deletes in one batch corrupt LVGL's event list (#356). ALWAYS cancel anims first ([L068]).
 
 ### [L060] [*****|*****] Interactive UI testing requires user
-- **Uses**: 100 | **Velocity**: 8.4378125 | **Learned**: 2026-02-01 | **Last**: 2026-05-11 | **Category**: correction | **Type**: constraint
+- **Uses**: 100 | **Velocity**: 10.4378125 | **Learned**: 2026-02-01 | **Last**: 2026-05-13 | **Category**: correction | **Type**: constraint
 > Don't fake automation with timed delays. Pattern:
 > 1. `Bash` with `run_in_background: true`: `./build/bin/helix-screen --test -vv -p panel_name 2>&1 | tee /tmp/test.log` — NOT shell `&` or `timeout`.
 > 2. Tell user exactly what to click.
@@ -110,8 +110,8 @@
 > 4. `Read /tmp/test.log`.
 > Failures: shell `&`, `timeout X cmd &`, retrying, assuming auto-nav. One bg task, tee to log, user interacts, you read.
 
-### [L061] [*----|*----] AD5M test printer environment
-- **Uses**: 4 | **Velocity**: 0.28125 | **Learned**: 2026-02-07 | **Last**: 2026-04-20 | **Category**: system
+### [L061] [**---|***--] AD5M test printer environment
+- **Uses**: 5 | **Velocity**: 1.28125 | **Learned**: 2026-02-07 | **Last**: 2026-05-13 | **Category**: system
 > AD5M (192.168.1.67, root@). armv7l Linux 5.4.61 (BusyBox). Gotchas: (1) wget no HTTPS, no curl. (2) No sftp-server — `scp -O`. (3) Logs go to BOTH `/tmp/helixscreen.log` AND syslog (`/var/log/messages`); syslog is current session, file may be stale. Default level WARN. (4) `/etc/ssl/certs/` empty — breaks all outbound HTTPS (libhv, wget); ship `ca-certificates.crt`. (5) No `openssl` CLI. (6) No inotify. (7) No WiFi (wpa_supplicant present, no interfaces — but see project_ad5m_wifi_actually_works.md). (8) OpenSSL 1.1 at `/usr/lib/libssl.so.1.1`. (9) Binary at `/opt/helixscreen/`, config `/opt/helixscreen/config/helixconfig.json`. (10) `ldd` may return empty for static ARM binaries.
 
 ### [L062] [***--|***--] AD5M build and deploy targets
@@ -151,7 +151,7 @@
 > Don't `lv_tr()`: product names (Spoolman, Klipper, Moonraker, HelixScreen), URLs/domains, standalone tech abbreviations (AMS, QGL, ADXL), universal terms (OK, WiFi). Mark with `// i18n: do not translate`. Sentences containing product names ARE translatable ("Restarting HelixScreen…" — "Restarting" translates). Material names (PLA, PETG, ABS, TPU, PA) are also not translated, no translation_tag in XML.
 
 ### [L072] [***--|*****] Never capture bare this in async/WebSocket callbacks
-- **Uses**: 18 | **Velocity**: 4.0625 | **Learned**: 2026-02-22 | **Last**: 2026-05-12 | **Category**: gotcha | **Type**: constraint
+- **Uses**: 19 | **Velocity**: 5.0625 | **Learned**: 2026-02-22 | **Last**: 2026-05-13 | **Category**: gotcha | **Type**: constraint
 > Callbacks to `execute_gcode()` / `send_jsonrpc()` / Moonraker fire from the WS thread, possibly after the widget is gone. Never capture raw `[this]`. Use `AsyncLifetimeGuard::token()` + `tok.defer(...)` (CLAUDE.md § Threading). Older `weak_ptr<bool>` / `shared_ptr<atomic<bool>>` patterns are deprecated.
 
 ### [L073] [***--|**---] ObserverGuard release vs reset
@@ -183,7 +183,7 @@
 > LVGL 9.5: `DRAW_TASK_ADDED` cbs fire AFTER `DRAW_MAIN_END/DRAW_POST` — `lv_draw_rect/_triangle/_fill` from there draws nothing. Broke chart gradient fills that worked in 9.4-pre. Fix: do custom fills in `DRAW_MAIN_END`, compute positions via `lv_chart_get_y_array()` + `lv_map()`. Gotcha: `lv_draw_fill` VER gradient `frac=0` is BOTTOM, `frac=255` is TOP. Use `lv_draw_fill` (not `lv_draw_rect`) for gradient-only fills to avoid bg_color bleed.
 
 ### [L080] [***--|*****] Verify deployment chain before user interaction
-- **Uses**: 18 | **Velocity**: 5.5 | **Learned**: 2026-04-16 | **Last**: 2026-05-12 | **Category**: gotcha
+- **Uses**: 20 | **Velocity**: 7.5 | **Learned**: 2026-04-16 | **Last**: 2026-05-13 | **Category**: gotcha
 > Before asking user to interact on-device, verify in one pass: (1) NEW binary running (PID start time / version in log), (2) logs land where you expect (journalctl/file/console), (3) required state on (telemetry, debug level in helixscreen.env), (4) logs reachable via SSH. Each failed round-trip burns user patience. Pi: systemctl → journalctl; `deploy-pi-fg` uses `ssh -t` (console only); nohup drops output. Production log capture: systemd + journalctl.
 
 ### [L081] [***--|****-] lifetime_.defer does NOT escape UpdateQueue batch

@@ -1,17 +1,14 @@
 {
-  "outputStyle": "~/.claude/output-styles/real.md",
   "permissions": {
     "allow": [
       "WebFetch(domain:docs.lvgl.io)",
       "WebFetch(domain:forum.lvgl.io)",
       "WebFetch(domain:wiki.libsdl.org)",
-
       "WebFetch(domain:docs.mainsail.xyz)",
       "WebFetch(domain:moonraker.readthedocs.io)",
       "WebFetch(domain:www.klipper3d.org)",
       "WebFetch(domain:klipperscreen.github.io)",
       "WebFetch(domain:klipperscreen.readthedocs.io)",
-
       "WebFetch(domain:wiki.bambulab.com)",
       "WebFetch(domain:qidi3d.com)",
       "WebFetch(domain:wiki.qidi3d.com)",
@@ -20,24 +17,20 @@
       "WebFetch(domain:3ms.3dcoded.xyz)",
       "WebFetch(domain:www.printables.com)",
       "WebFetch(domain:linux-sunxi.org)",
-
       "WebFetch(domain:materialui.co)",
       "WebFetch(domain:pictogrammers.com)",
       "WebFetch(domain:pictogrammers.github.io)",
       "WebFetch(domain:fontawesome.com)",
       "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
-
       "WebFetch(domain:archive.debian.org)",
       "WebFetch(domain:toolchains.bootlin.com)",
       "WebFetch(domain:releases.linaro.org)",
-
       "Bash(make:*)",
       "Bash(time make:*)",
       "Bash(./build/bin/*)",
       "Bash(./build/tests/*)",
       "Bash(./.worktrees/:*)",
       "Bash(./scripts/*)",
-
       "Bash(HELIX_*)",
       "Bash(LV_LOG_LEVEL=*)",
       "Bash(MOONRAKER_DEBUG_TREE=*)",
@@ -45,7 +38,6 @@
       "Bash(TARGET_SIZES=*)",
       "Bash(time ./build/bin/helix-tests:*)",
       "Bash(time timeout 120 ./build/bin/helix-tests:*)",
-
       "Bash(c++:*)",
       "Bash(g++:*)",
       "Bash(clang++:*)",
@@ -56,12 +48,10 @@
       "Bash(pkg-config:*)",
       "Bash(xmllint:*)",
       "Bash(xxd:*)",
-
       "Bash(.venv/bin/*)",
       "Bash(convert:*)",
       "Bash(magick:*)",
       "Bash(sips:*)",
-
       "Bash(docker build:*)",
       "Bash(docker info:*)",
       "Bash(docker run:*)",
@@ -71,12 +61,15 @@
       "Bash(rsync:*)",
       "Bash(scp:*)",
       "Bash(ssh:*)",
-
       "Bash(killall:*)",
       "Bash(pgrep:*)",
       "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
+  },
+  "outputStyle": "~/.claude/output-styles/real.md",
+  "enabledPlugins": {
+    "arete@arete-marketplace": true
   }
 }
