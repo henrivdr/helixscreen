@@ -14,17 +14,7 @@ setup() {
     log_info() { echo "INFO: $*"; }
     log_warn() { echo "WARN: $*"; }
     log_success() { echo "OK: $*"; }
-    # Stub helpers that the COSMOS-block extractor over-captures from lines
-    # after the actual block (the awk `^    fi$` count never reaches 4, so
-    # capture runs to EOF). These would normally be sourced from common.sh /
-    # file_sudo.sh in the real script; here we just need them callable so the
-    # extracted snippet doesn't abort with "command not found".
-    file_sudo() { echo ""; }
-    clean_helix_state_dirs() { :; }
-    remove_config_symlink() { :; }
-    remove_update_manager_section() { :; }
-    export -f log_info log_warn log_success file_sudo clean_helix_state_dirs \
-              remove_config_symlink remove_update_manager_section
+    export -f log_info log_warn log_success
 
     export MOCK_ROOT="$BATS_TEST_TMPDIR/cc1"
     mkdir -p "$MOCK_ROOT/etc/init.d" "$MOCK_ROOT/etc/klipper/config" "$MOCK_ROOT/usr/bin"
@@ -63,11 +53,13 @@ EOF
 #!/bin/sh
 SH_EOF
 
-    # Pull the contiguous "if [ -z \"$restored_ui\" ] && [ -x \"/usr/bin/update-cosmos\" ]" block
+    # Pull the contiguous "if [ -z \"$restored_ui\" ] && [ -x \"/usr/bin/update-cosmos\" ]" block.
+    # Inner ifs are indented 8 spaces; only the outer `fi` matches `^    fi$`, so we exit
+    # on the first match (not the 4th — the inner ones never match this pattern).
     awk '
         /^    # COSMOS \(Centauri Carbon\)/ { capture=1 }
         capture { print }
-        capture && /^    fi$/ && ++blocks==4 { exit }
+        capture && /^    fi$/ && ++blocks==1 { exit }
     ' "$WORKTREE_ROOT/scripts/lib/installer/uninstall.sh" >> "$BATS_TEST_TMPDIR/cosmos_restore.sh"
 
     sed -i \
