@@ -417,7 +417,7 @@ start_service_snapmaker_u1() {
 
     if ! $SUDO "$init_src" start; then
         log_error "Failed to start HelixScreen."
-        log_error "Check logs in: /tmp/helixscreen.log"
+        log_error "Check logs: /var/log/helixscreen/launcher.log or ${INSTALL_DIR}/logs/launcher.log"
         exit 1
     fi
 
@@ -431,7 +431,7 @@ start_service_snapmaker_u1() {
         fi
     done
     log_warn "Service may still be starting..."
-    log_warn "Check logs in: /tmp/helixscreen.log"
+    log_warn "Check logs: /var/log/helixscreen/launcher.log or ${INSTALL_DIR}/logs/launcher.log"
 }
 
 # Start service (systemd)
@@ -488,7 +488,7 @@ start_service_sysv() {
 
     if ! $SUDO "$INIT_SCRIPT_DEST" start; then
         log_error "Failed to start HelixScreen."
-        log_error "Check logs in: /tmp/helixscreen.log"
+        log_error "Check logs: /var/log/helixscreen/launcher.log or ${INSTALL_DIR}/logs/launcher.log"
         exit 1
     fi
 

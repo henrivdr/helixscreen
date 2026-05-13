@@ -124,6 +124,21 @@ std::vector<std::string> default_file_paths() {
     // every AD5X debug bundle ships with no helix-screen log at all.
     paths.emplace_back("/opt/config/mod_data/log/helixscreen.log");
     paths.emplace_back("/usr/data/config/mod_data/log/helixscreen.log");
+
+    // helixscreen.init's launcher-subshell shell-stdout-redirect file.
+    // Preferred FHS path (used when /var/log is persistent).
+    paths.emplace_back("/var/log/helixscreen/launcher.log");
+
+    // ${DAEMON_DIR}/logs/ fallback when /var/log is tmpfs/ramfs.
+    // Listed in priority order (most common install locations first).
+    paths.emplace_back("/opt/helixscreen/logs/launcher.log");          // Pi, AD5M Forge-X/KMod
+    paths.emplace_back("/usr/data/helixscreen/logs/launcher.log");     // K1/K1C/K2/AD5X
+    paths.emplace_back("/userdata/helixscreen/logs/launcher.log");     // Snapmaker U1
+    paths.emplace_back("/user-resource/helixscreen/logs/launcher.log"); // CC1 (COSMOS)
+    paths.emplace_back("/root/printer_software/helixscreen/logs/launcher.log"); // AD5M KMod v00.05
+
+    // Legacy /tmp location — pre-v0.99.62 installs wrote here. Kept for
+    // backward compatibility with debug bundles from older devices.
     paths.emplace_back("/tmp/helixscreen.log");
     return paths;
 }
