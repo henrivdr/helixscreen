@@ -4389,9 +4389,65 @@
         {
           "type": "object_exists",
           "field": "printer_objects",
+          "pattern": "homing_precise_corexy",
+          "confidence": 99,
+          "reason": "Snapmaker-specific homing module — definitive U1 signature"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "extruder_offset_calibration",
+          "confidence": 95,
+          "reason": "U1 toolchanger offset calibration module"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "filament_entangle_detect",
+          "confidence": 95,
+          "reason": "U1 multi-tool filament entanglement detector"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "machine_state_manager",
+          "confidence": 90,
+          "reason": "Snapmaker machine state manager"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "defect_detection",
+          "confidence": 85,
+          "reason": "U1 print-defect detection module"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "purifier",
+          "confidence": 80,
+          "reason": "U1 air purifier module"
+        },
+        {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "FEEDING_RUNOUT_EVENT_HANDLE",
+          "confidence": 90,
+          "reason": "Snapmaker U1 auto-feed runout handler"
+        },
+        {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL",
+          "confidence": 90,
+          "reason": "U1 toolchanger offset calibration macro"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
           "pattern": "fm175xx_reader",
           "confidence": 99,
-          "reason": "FM175xx RFID reader - definitive Snapmaker U1 signature"
+          "reason": "FM175xx RFID reader (Snapmaker U1 extended/RFID firmware)"
         },
         {
           "type": "macro_match",
@@ -4410,20 +4466,6 @@
         {
           "type": "object_exists",
           "field": "printer_objects",
-          "pattern": "tool",
-          "confidence": 80,
-          "reason": "Multi-tool system (U1 toolchanger)"
-        },
-        {
-          "type": "object_exists",
-          "field": "printer_objects",
-          "pattern": "camera",
-          "confidence": 60,
-          "reason": "Built-in camera (U1 feature)"
-        },
-        {
-          "type": "object_exists",
-          "field": "printer_objects",
           "pattern": "tmc2240",
           "confidence": 60,
           "reason": "TMC2240 stepper driver (used in Snapmaker U1)"
@@ -4431,9 +4473,9 @@
         {
           "type": "kinematics_match",
           "field": "kinematics",
-          "pattern": "cartesian",
-          "confidence": 20,
-          "reason": "Cartesian kinematics"
+          "pattern": "corexy",
+          "confidence": 30,
+          "reason": "CoreXY kinematics"
         },
         {
           "type": "hostname_match",
