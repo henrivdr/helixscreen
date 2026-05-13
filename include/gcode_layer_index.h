@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "gcode_parser.h"
+
 namespace helix {
 namespace gcode {
 
@@ -35,6 +37,12 @@ struct StreamingLayerEntry {
     float start_x;
     float start_y;
     float start_z;
+    /// Active ;TYPE: section at the start of this layer's byte range.
+    /// Same seeding rationale as start_x/y/z and initial_tool_index — the
+    /// prologue ;TYPE: comments live before file_offset, so without this
+    /// the per-layer parser tags segments as Unknown and the bbox filter
+    /// (auto_fit) can't exclude Custom/WipeTower from the viewport.
+    FeatureType start_feature_type{FeatureType::Unknown};
 
     /// Check if this entry is valid (has been populated)
     bool is_valid() const {

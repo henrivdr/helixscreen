@@ -132,6 +132,7 @@ void GCodeParser::parse_line(const std::string& line) {
         std::string comment = line.substr(comment_pos);
         parse_metadata_comment(comment);
         parse_wipe_tower_marker(comment);
+        parse_type_marker(comment);
     }
 
     std::string trimmed = trim_line(line);
@@ -843,6 +844,97 @@ void GCodeParser::parse_wipe_tower_marker(const std::string& comment) {
     }
 }
 
+void GCodeParser::parse_type_marker(const std::string& comment) {
+    // Expect ";TYPE:NAME" — find the "TYPE:" token (allowing leading whitespace
+    // after the `;`).
+    size_t key_pos = comment.find("TYPE:");
+    if (key_pos == std::string::npos) {
+        return;
+    }
+    // Must be preceded by `;` (or `; `) — guard against substrings like
+    // ";FEATURE_TYPE:".
+    if (key_pos == 0) {
+        return; // No `;` before — malformed
+    }
+    for (size_t i = 0; i < key_pos; ++i) {
+        char c = comment[i];
+        if (c == ';' || c == ' ' || c == '\t') {
+            continue;
+        }
+        return; // Non-whitespace between ; and TYPE: → not our marker
+    }
+    size_t value_start = key_pos + 5; // strlen("TYPE:")
+    // Trim leading whitespace from value
+    while (value_start < comment.size() && (comment[value_start] == ' ' ||
+                                            comment[value_start] == '\t')) {
+        ++value_start;
+    }
+    // Trim trailing whitespace / newline
+    size_t value_end = comment.size();
+    while (value_end > value_start && (comment[value_end - 1] == '\r' ||
+                                       comment[value_end - 1] == '\n' ||
+                                       comment[value_end - 1] == ' ' ||
+                                       comment[value_end - 1] == '\t')) {
+        --value_end;
+    }
+    std::string value = comment.substr(value_start, value_end - value_start);
+    current_feature_type_ = parse_feature_type_value(value);
+}
+
+FeatureType GCodeParser::parse_feature_type_value(const std::string& value) {
+    if (value.empty()) {
+        return FeatureType::Unknown;
+    }
+    // OrcaSlicer / PrusaSlicer / Bambu (space-separated, mixed case).
+    // Cura emits hyphenated UPPERCASE.
+    struct Mapping {
+        const char* name;
+        FeatureType type;
+    };
+    static constexpr Mapping table[] = {
+        // OrcaSlicer / PrusaSlicer / Bambu
+        {"Custom", FeatureType::Custom},
+        {"Skirt", FeatureType::Skirt},
+        {"Brim", FeatureType::Brim},
+        {"Outer wall", FeatureType::OuterWall},
+        {"Inner wall", FeatureType::InnerWall},
+        {"Overhang wall", FeatureType::OverhangWall},
+        {"Sparse infill", FeatureType::SparseInfill},
+        {"Solid infill", FeatureType::SolidInfill},
+        {"Internal solid infill", FeatureType::SolidInfill},
+        {"Top surface", FeatureType::TopSurface},
+        {"Bottom surface", FeatureType::BottomSurface},
+        {"Bridge", FeatureType::Bridge},
+        {"Internal Bridge", FeatureType::Bridge},
+        {"Bridge infill", FeatureType::Bridge},
+        {"Gap infill", FeatureType::GapInfill},
+        {"Support material", FeatureType::Support},
+        {"Support", FeatureType::Support},
+        {"Wipe tower", FeatureType::WipeTower},
+        // PrusaSlicer legacy names
+        {"Perimeter", FeatureType::InnerWall},
+        {"External perimeter", FeatureType::OuterWall},
+        {"Internal infill", FeatureType::SparseInfill},
+        // Cura
+        {"WALL-OUTER", FeatureType::OuterWall},
+        {"WALL-INNER", FeatureType::InnerWall},
+        {"SKIRT", FeatureType::Skirt},
+        {"BRIM", FeatureType::Brim},
+        {"FILL", FeatureType::SparseInfill},
+        {"SKIN", FeatureType::SolidInfill},
+        {"SUPPORT", FeatureType::Support},
+        {"SUPPORT-INTERFACE", FeatureType::Support},
+        {"PRIME-TOWER", FeatureType::WipeTower},
+        {"CUSTOM", FeatureType::Custom},
+    };
+    for (const auto& m : table) {
+        if (value == m.name) {
+            return m.type;
+        }
+    }
+    return FeatureType::Unknown;
+}
+
 bool GCodeParser::extract_param(const std::string& line, char param, float& out_value) {
     size_t pos = line.find(param);
     if (pos == std::string::npos) {
@@ -909,6 +1001,7 @@ void GCodeParser::add_segment(const glm::vec3& start, const glm::vec3& end, bool
     segment.is_extrusion = is_extrusion;
     segment.object_name_index = current_object_index_;
     segment.extrusion_amount = e_delta;
+    segment.feature_type = current_feature_type_;
 
     // Multi-color support: Tag segment with current tool
     segment.tool_index = static_cast<int8_t>(current_tool_index_);

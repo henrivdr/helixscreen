@@ -291,6 +291,13 @@ void GCodeLayerRenderer::auto_fit() {
                 for (const auto& seg : *segments) {
                     if (!seg.is_extrusion)
                         continue;
+                    // Heuristic purge/wipe-tower filter: exclude these from
+                    // the auto-fit bounding box so the viewport zooms to the
+                    // actual print object. Segments are still rendered — only
+                    // the bbox calculation ignores them. See FeatureType in
+                    // include/gcode_parser.h.
+                    if (is_excluded_from_bounds(seg.feature_type))
+                        continue;
                     bb.min.x = std::min(bb.min.x, std::min(seg.start.x, seg.end.x));
                     bb.max.x = std::max(bb.max.x, std::max(seg.start.x, seg.end.x));
                     bb.min.y = std::min(bb.min.y, std::min(seg.start.y, seg.end.y));

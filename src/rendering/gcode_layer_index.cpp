@@ -218,6 +218,10 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
     float current_x = 0.0f;
     float current_y = 0.0f;
     float current_seen_z = 0.0f; // Z position seen so far (vs current_z which only updates on layer transition)
+    // Running ;TYPE: section. Snapshotted into each new layer entry so the
+    // streaming parser can be seeded — without it, segments in the prologue
+    // (purge) get tagged Unknown and the bbox filter can't exclude them.
+    FeatureType current_feature_type = FeatureType::Unknown;
     uint64_t current_layer_start = 0;
     uint64_t current_offset = 0;
     uint16_t current_layer_lines = 0;
@@ -234,6 +238,38 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
             use_layer_markers = true;
             pending_layer_start = true;
             // We'll start the new layer when we see the next Z move
+        }
+
+        // Track ;TYPE: section. Only handle as comment (must start with ;
+        // after optional whitespace) to avoid false matches inside metadata.
+        if (line_len > 0 && line[0] == ';') {
+            size_t key_pos = line.find("TYPE:");
+            if (key_pos != std::string::npos && key_pos > 0) {
+                // Ensure everything between `;` and `TYPE:` is whitespace.
+                bool clean = true;
+                for (size_t i = 1; i < key_pos; ++i) {
+                    char c = line[i];
+                    if (c != ' ' && c != '\t') {
+                        clean = false;
+                        break;
+                    }
+                }
+                if (clean) {
+                    size_t v_start = key_pos + 5;
+                    while (v_start < line_len &&
+                           (line[v_start] == ' ' || line[v_start] == '\t')) {
+                        ++v_start;
+                    }
+                    size_t v_end = line_len;
+                    while (v_end > v_start &&
+                           (line[v_end - 1] == '\r' || line[v_end - 1] == '\n' ||
+                            line[v_end - 1] == ' ' || line[v_end - 1] == '\t')) {
+                        --v_end;
+                    }
+                    std::string value = line.substr(v_start, v_end - v_start);
+                    current_feature_type = GCodeParser::parse_feature_type_value(value);
+                }
+            }
         }
 
         // Extract filament color from metadata (only if not already found)
@@ -312,6 +348,7 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
                     entry.start_x = current_x;
                     entry.start_y = current_y;
                     entry.start_z = current_seen_z;
+                    entry.start_feature_type = current_feature_type;
                     entries_.push_back(entry);
 
                     if (!first_layer_started) {

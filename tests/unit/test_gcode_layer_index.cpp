@@ -338,6 +338,38 @@ G1 X50 Y60 Z0.4
     REQUIRE(e1.start_y == Approx(40.0f));
 }
 
+TEST_CASE("GCodeLayerIndex - per-layer start_feature_type",
+          "[gcode][layer_index][feature_type]") {
+    // Streaming mode parses each layer with a fresh GCodeParser. Without a
+    // recorded starting feature type, the prologue's ;TYPE: comment is
+    // invisible to load_layer (it lives before layer 0's byte_offset),
+    // so purge segments get tagged Unknown rather than Custom — and the
+    // bbox filter that excludes Custom from auto-fit can't fire.
+    //
+    // The indexer must snapshot the last-seen ;TYPE: into each new layer
+    // entry so load_layer can seed the parser.
+    std::string gcode = R"(
+;TYPE:Custom
+G1 X10 Y10 Z0.2 F600
+G1 X200 Y10 E5
+;TYPE:Brim
+G1 X20 Y20 Z0.4
+G1 X50 Y50 E0.1
+;TYPE:Outer wall
+G1 X30 Y30 Z0.6
+G1 X60 Y60 E0.2
+)";
+
+    TempGCodeFile file(gcode);
+    GCodeLayerIndex index;
+    REQUIRE(index.build_from_file(file.path()));
+    REQUIRE(index.get_layer_count() == 3);
+
+    REQUIRE(index.get_entry(0).start_feature_type == FeatureType::Custom);
+    REQUIRE(index.get_entry(1).start_feature_type == FeatureType::Brim);
+    REQUIRE(index.get_entry(2).start_feature_type == FeatureType::OuterWall);
+}
+
 TEST_CASE("GCodeLayerIndex - Real file", "[gcode][layer_index][integration]") {
     // Test with the real benchy file if it exists
     std::ifstream check("assets/test_gcodes/3DBenchy.gcode");

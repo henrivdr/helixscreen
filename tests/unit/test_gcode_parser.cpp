@@ -1310,3 +1310,92 @@ TEST_CASE("GCodeParser - Real OrcaSlicer SSR file metadata",
         REQUIRE(file.layers.size() <= 156);
     }
 }
+
+TEST_CASE("GCodeParser - FeatureType tagging", "[gcode][parser][feature_type]") {
+    GCodeParser parser;
+
+    // OrcaSlicer/PrusaSlicer dialect: space-separated names after `;TYPE:`
+    parser.parse_line(";TYPE:Custom");
+    parser.parse_line("G1 X10 Y10 Z0.2 F600");
+    parser.parse_line("G1 X200 Y10 E5"); // purge line (extrusion)
+    parser.parse_line(";TYPE:Brim");
+    parser.parse_line("G1 X50 Y50 E0.1");
+    parser.parse_line(";TYPE:Outer wall");
+    parser.parse_line("G1 X60 Y60 E0.2");
+    parser.parse_line(";TYPE:Wipe tower");
+    parser.parse_line("G1 X300 Y300 E0.3");
+
+    auto file = parser.finalize();
+    REQUIRE(file.total_segments == 5);
+    auto& segs = file.layers[0].segments;
+
+    // First two segments emitted under ;TYPE:Custom (travel into position +
+    // purge extrusion line).
+    REQUIRE(segs[0].feature_type == FeatureType::Custom);
+    REQUIRE(segs[1].feature_type == FeatureType::Custom);
+    REQUIRE(segs[2].feature_type == FeatureType::Brim);
+    REQUIRE(segs[3].feature_type == FeatureType::OuterWall);
+    REQUIRE(segs[4].feature_type == FeatureType::WipeTower);
+}
+
+TEST_CASE("GCodeParser - FeatureType normalization across slicer dialects",
+          "[gcode][parser][feature_type]") {
+    SECTION("OrcaSlicer / PrusaSlicer / Bambu dialect (space-separated)") {
+        REQUIRE(GCodeParser::parse_feature_type_value("Custom") == FeatureType::Custom);
+        REQUIRE(GCodeParser::parse_feature_type_value("Skirt") == FeatureType::Skirt);
+        REQUIRE(GCodeParser::parse_feature_type_value("Brim") == FeatureType::Brim);
+        REQUIRE(GCodeParser::parse_feature_type_value("Outer wall") == FeatureType::OuterWall);
+        REQUIRE(GCodeParser::parse_feature_type_value("Inner wall") == FeatureType::InnerWall);
+        REQUIRE(GCodeParser::parse_feature_type_value("Sparse infill") ==
+                FeatureType::SparseInfill);
+        REQUIRE(GCodeParser::parse_feature_type_value("Solid infill") ==
+                FeatureType::SolidInfill);
+        REQUIRE(GCodeParser::parse_feature_type_value("Top surface") == FeatureType::TopSurface);
+        REQUIRE(GCodeParser::parse_feature_type_value("Bottom surface") ==
+                FeatureType::BottomSurface);
+        REQUIRE(GCodeParser::parse_feature_type_value("Bridge") == FeatureType::Bridge);
+        REQUIRE(GCodeParser::parse_feature_type_value("Wipe tower") == FeatureType::WipeTower);
+        REQUIRE(GCodeParser::parse_feature_type_value("Support material") ==
+                FeatureType::Support);
+        REQUIRE(GCodeParser::parse_feature_type_value("Overhang wall") ==
+                FeatureType::OverhangWall);
+        REQUIRE(GCodeParser::parse_feature_type_value("Gap infill") == FeatureType::GapInfill);
+    }
+
+    SECTION("Cura dialect (hyphenated UPPERCASE)") {
+        REQUIRE(GCodeParser::parse_feature_type_value("WALL-OUTER") == FeatureType::OuterWall);
+        REQUIRE(GCodeParser::parse_feature_type_value("WALL-INNER") == FeatureType::InnerWall);
+        REQUIRE(GCodeParser::parse_feature_type_value("SKIRT") == FeatureType::Skirt);
+        REQUIRE(GCodeParser::parse_feature_type_value("FILL") == FeatureType::SparseInfill);
+        REQUIRE(GCodeParser::parse_feature_type_value("SKIN") == FeatureType::SolidInfill);
+        REQUIRE(GCodeParser::parse_feature_type_value("SUPPORT") == FeatureType::Support);
+        REQUIRE(GCodeParser::parse_feature_type_value("PRIME-TOWER") == FeatureType::WipeTower);
+    }
+
+    SECTION("Unknown values map to Unknown, not crash") {
+        REQUIRE(GCodeParser::parse_feature_type_value("Squiggle") == FeatureType::Unknown);
+        REQUIRE(GCodeParser::parse_feature_type_value("") == FeatureType::Unknown);
+    }
+}
+
+TEST_CASE("GCodeParser - FeatureType bounds filter classification",
+          "[gcode][parser][feature_type]") {
+    // Purge-like types must be excluded from bbox; physical/visible types
+    // must be included.
+    REQUIRE(is_excluded_from_bounds(FeatureType::Custom));
+    REQUIRE(is_excluded_from_bounds(FeatureType::WipeTower));
+
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::Unknown));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::Skirt));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::Brim));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::OuterWall));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::InnerWall));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::SparseInfill));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::SolidInfill));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::TopSurface));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::BottomSurface));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::Bridge));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::OverhangWall));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::GapInfill));
+    REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::Support));
+}

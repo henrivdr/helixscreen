@@ -76,6 +76,47 @@ struct AABB {
  * - Extrusion move (is_extrusion=true): Plastic is deposited
  * - Travel move (is_extrusion=false): Nozzle moves without extruding
  */
+/**
+ * @brief Slicer-emitted feature/section type (from ;TYPE: comments).
+ *
+ * Slicers annotate each region of extrusion with a `;TYPE:NAME` comment.
+ * We normalize across OrcaSlicer/PrusaSlicer/Bambu (space-separated, e.g.
+ * "Outer wall") and Cura (hyphenated UPPERCASE, e.g. "WALL-OUTER") into
+ * a single enum so callers can filter (e.g. exclude purge from bounding
+ * box) without slicer-specific string compares.
+ *
+ * Stored as int8_t in ToolpathSegment to fill existing padding.
+ */
+enum class FeatureType : int8_t {
+    Unknown = -1,       ///< No ;TYPE: seen, or unrecognized value
+    Custom = 0,         ///< Start/end gcode, priming, manual purge (EXCLUDED FROM BOUNDS)
+    Skirt,              ///< Skirt loop (physical, included in bounds)
+    Brim,               ///< Brim (physical, included in bounds)
+    OuterWall,          ///< Outer perimeter
+    InnerWall,          ///< Inner perimeter
+    OverhangWall,       ///< Overhanging perimeter
+    SparseInfill,       ///< Sparse (low-density) infill
+    SolidInfill,        ///< Solid infill, top/bottom skin
+    TopSurface,         ///< Top surface
+    BottomSurface,      ///< Bottom surface
+    Bridge,             ///< Bridging extrusion
+    GapInfill,          ///< Gap fill between features
+    Support,            ///< Support material (included — it's physical)
+    WipeTower,          ///< Multi-color purge tower (EXCLUDED FROM BOUNDS)
+};
+
+/**
+ * @brief Should this feature type be excluded from auto-fit bounding box?
+ *
+ * Returns true for types that produce extrusion outside the user's intended
+ * print object: Custom (start/end gcode purge), WipeTower (multi-color
+ * purge structure). Returns false for everything else, including Skirt and
+ * Brim which are physical and inside the user's mental model of the print.
+ */
+constexpr bool is_excluded_from_bounds(FeatureType t) {
+    return t == FeatureType::Custom || t == FeatureType::WipeTower;
+}
+
 struct ToolpathSegment {
     glm::vec3 start{0.0f, 0.0f, 0.0f};   ///< Start point (X, Y, Z) — 12 bytes
     glm::vec3 end{0.0f, 0.0f, 0.0f};     ///< End point (X, Y, Z) — 12 bytes
@@ -85,7 +126,9 @@ struct ToolpathSegment {
     uint16_t layer_index{0};               ///< Source layer index (set during geometry collection) — 2 bytes
     int8_t tool_index{0};                  ///< Which tool/extruder printed this (0-15) — 1 byte
     bool is_extrusion{false};              ///< true if extruding, false if travel move — 1 byte
-    // 2 bytes padding → total 40 bytes (was ~80 with std::string)
+    FeatureType feature_type{FeatureType::Unknown}; ///< Slicer-annotated section type — 1 byte
+    int8_t _pad{0};                        ///< Reserved (was padding) — 1 byte
+    // total 40 bytes
 };
 static_assert(sizeof(ToolpathSegment) == 40, "ToolpathSegment should be 40 bytes after interning");
 
@@ -311,6 +354,31 @@ class GCodeParser {
         current_position_ = {x, y, z};
     }
 
+    /**
+     * @brief Seed the active ;TYPE: section before parsing a chunk.
+     *
+     * Streaming mode parses each layer with a fresh parser, so a ;TYPE:
+     * comment in the file prologue (e.g. ;TYPE:Custom before the purge
+     * line) is invisible to per-layer parses. Callers (GCodeLayerIndex)
+     * snapshot the active type at each layer boundary; this seeds the
+     * parser so segments are tagged correctly for bbox filtering.
+     */
+    void set_initial_feature_type(FeatureType t) {
+        current_feature_type_ = t;
+    }
+
+    /**
+     * @brief Normalize a slicer's ;TYPE: value into a FeatureType.
+     *
+     * Recognizes both OrcaSlicer/PrusaSlicer/Bambu space-separated names
+     * ("Outer wall") and Cura hyphenated UPPERCASE ("WALL-OUTER"). Returns
+     * FeatureType::Unknown for empty or unrecognized input — never throws.
+     *
+     * Exposed as a static method so callers (and tests) can probe the
+     * normalization table without constructing a parser.
+     */
+    static FeatureType parse_feature_type_value(const std::string& value);
+
     // Progress tracking
 
     /**
@@ -412,6 +480,15 @@ class GCodeParser {
     void parse_wipe_tower_marker(const std::string& comment);
 
     /**
+     * @brief Parse ;TYPE: section markers (per-region feature annotation)
+     * @param comment Comment string (without leading ';')
+     *
+     * Updates current_feature_type_ when a `;TYPE:NAME` comment is seen.
+     * Subsequent segments inherit the new type until the next `;TYPE:`.
+     */
+    void parse_type_marker(const std::string& comment);
+
+    /**
      * @brief Extract parameter value from G-code line
      * @param line G-code line
      * @param param Parameter letter (e.g., 'X', 'Y', 'Z')
@@ -468,6 +545,7 @@ class GCodeParser {
     int initial_tool_index_{-1};                  ///< First T command seen (-1 = none)
     std::vector<std::string> tool_color_palette_; ///< Hex colors per tool: ["#ED1C24", ...]
     bool in_wipe_tower_{false};                   ///< True when inside wipe tower section
+    FeatureType current_feature_type_{FeatureType::Unknown}; ///< Active ;TYPE: section
 
     // Accumulated data
     std::vector<Layer> layers_;                  ///< All parsed layers
