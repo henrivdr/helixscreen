@@ -18,7 +18,7 @@ HelixScreen is a touchscreen interface for Klipper 3D printers. It connects to y
 - Theme editor with 17 presets (dark and light), 9 languages
 - Sound system, timelapse integration, label printing, exclude objects
 - Auto-detecting layout system for displays from 480x320 to 1920x480
-- ~13MB RAM — designed for embedded displays, no desktop required
+- ~15MB RAM on embedded targets — designed for the modest hardware most people already own, no desktop required
 
 ### Which printers are supported?
 
@@ -69,14 +69,14 @@ If you test on hardware not listed above, please let us know your results!
 | **UI Framework** | LVGL 9 XML | GTK 3 (Python) | LVGL 8 (C) |
 | **Declarative UI** | Full XML | Python only | C only |
 | **Disk Size** | ~75-115MB | ~50MB | ~60-80MB |
-| **RAM Usage** | ~13MB | ~50MB | ~15-20MB |
+| **RAM Usage** | ~15MB (32-bit) | ~50MB | ~15-20MB |
 | **Reactive Binding** | Built-in | Manual | Manual |
 | **3D G-code preview** | Yes | 2D layers | No |
 | **3D bed mesh** | Yes | 2D heatmap | 2D heatmap |
-| **Status** | Pre-1.0 (active) | Mature (maintenance) | Unmaintained |
+| **Status** | 1.0 (active) | Mature (maintenance) | Unmaintained |
 
 **HelixScreen advantages:**
-- Low memory footprint (~13MB vs ~50MB for KlipperScreen)
+- Low memory footprint (~15MB on embedded targets vs ~50MB for KlipperScreen on the same hardware)
 - Declarative XML layouts (change UI without recompiling)
 - Modern reactive architecture with 6 multi-material backends
 - 3D visualizations (G-code preview, bed mesh)
@@ -89,16 +89,18 @@ If you test on hardware not listed above, please let us know your results!
 
 ### What Raspberry Pi do I need?
 
+HelixScreen is light enough that whatever Pi you already own is almost certainly fine. The Pi you've had in a drawer for years works.
+
 | Pi Model | Supported | Notes |
 |----------|-----------|-------|
-| Pi 5 | ✅ Recommended | Best performance |
-| Pi 4 | ✅ Recommended | Great performance |
-| Pi 3B+ | ✅ Minimum | Works well |
-| Pi 3B | ⚠️ Usable | May be slow |
-| Pi Zero 2 W | ✅ OK | Good for space-constrained setups |
-| Pi Zero (original) | ❌ No | Too slow |
+| Pi 5 | ✅ | Best performance, overkill for HelixScreen alone |
+| Pi 4 | ✅ | Plenty for the touchscreen UI plus Klipper/Moonraker |
+| Pi 3B+ | ✅ | Works well — no need to upgrade for HelixScreen's sake |
+| Pi 3B | ✅ | Usable; may feel slow on heavy 3D mesh interactions |
+| Pi Zero 2 W | ✅ | Great for space-constrained setups |
+| Pi Zero (original) | ❌ | Too slow |
 
-**Memory:** 1GB minimum, 2GB+ recommended.
+**Memory:** 1GB is enough. HelixScreen itself uses ~15MB on 32-bit and a few times more on 64-bit Pi — the rest is for Klipper, Moonraker, and the OS.
 
 **32-bit and 64-bit:** Both are supported. The installer automatically detects your architecture (`uname -m`) and downloads the correct binary — `aarch64` gets the 64-bit build, `armv7l` gets the 32-bit build. No manual selection needed.
 
@@ -368,7 +370,7 @@ This option only appears if Klipper reports firmware retraction capability.
 2. **Disable animations:** Go to **Settings** → toggle **Animations** off
 3. **Check CPU/memory via SSH:** Run `top` or `htop` to see if something else is using resources
 4. **Reduce logging:** If you added `-vv` or `-vvv` to the service, remove it
-5. **Consider a faster SBC:** Pi 4 or Pi 5 will be noticeably smoother than a Pi 3 or Pi Zero
+5. **Heavy 3D interactions feel slow?** Bed mesh rotation and gcode preview lean on the CPU/GPU; a Pi 4 or Pi 5 is smoother than a Pi 3 or Zero, but everything else in HelixScreen works fine on the older Pi tier.
 
 ### Why does the setup wizard keep appearing?
 
