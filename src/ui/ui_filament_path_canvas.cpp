@@ -3124,9 +3124,6 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
             break;
         }
     }
-
-    spdlog::trace("[FilamentPath] Draw: slots={}, active={}, segment={}, anim={}", data->slot_count,
-                  data->active_slot, data->filament_segment, is_animating ? anim_progress : -1);
 }
 
 // ============================================================================

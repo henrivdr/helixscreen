@@ -287,7 +287,6 @@ void ui_icon_set_color(lv_obj_t* icon, lv_color_t color, lv_opa_t opa) {
 
     lv_obj_set_style_text_color(icon, color, LV_PART_MAIN);
     lv_obj_set_style_text_opa(icon, opa, LV_PART_MAIN);
-    spdlog::trace("[Icon] Set custom color (opa: {})", opa);
 }
 
 void ui_icon_set_clickable(lv_obj_t* icon, bool clickable) {
