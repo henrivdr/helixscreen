@@ -174,17 +174,12 @@ uint32_t TempGraphWidget::features_for_size(int colspan, int rowspan) {
     }
 
     if (rowspan >= 2) {
-        // Tall: add legend chips (enough vertical space to not obscure data)
+        // Tall: legend chips, Y-axis labels, and X-axis time labels — all
+        // need vertical room (legend above/below curves, Y to the side,
+        // X below). The 5-min window only renders 1–3 time labels so
+        // width isn't the X-axis constraint.
         features |= TEMP_GRAPH_FEATURE_LEGEND;
-    }
-
-    if (rowspan >= 2) {
-        // Tall: add Y-axis labels
         features |= TEMP_GRAPH_FEATURE_Y_AXIS;
-    }
-
-    if (colspan >= 3) {
-        // Wide (3+): add X-axis time labels (too crowded at 2x)
         features |= TEMP_GRAPH_FEATURE_X_AXIS;
     }
 
