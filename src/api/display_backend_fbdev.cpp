@@ -405,6 +405,16 @@ lv_indev_t* DisplayBackendFbdev::create_input_pointer() {
     // Load affine calibration from config (saved by calibration wizard)
     calibration_ = helix::load_touch_calibration();
 
+    // If a previously-saved calibration passed validation, the user has already
+    // calibrated this device — don't force the wizard again on every boot just
+    // because the ABS range disagrees with the display (a permanent property of
+    // panels like the Qidi Q2's 800x480 touch on a 480x272 LCD — #943).
+    if (needs_calibration_ && calibration_.valid) {
+        spdlog::info("[Fbdev Backend] Valid saved calibration found — "
+                     "not forcing wizard despite ABS/display mismatch");
+        needs_calibration_ = false;
+    }
+
     // Always install the calibrated read callback — it handles both rotation
     // transform and affine calibration independently. Without this, rotation
     // transform wouldn't be applied on devices that don't need affine cal.

@@ -582,11 +582,23 @@ lv_indev_t* DisplayBackendDRM::create_input_pointer() {
                 }
             }
 
+            // Load stored calibration and install wrapper
+            calibration_ = helix::load_touch_calibration();
+
+            // If a previously-saved calibration passed validation, the user has
+            // already calibrated this device — don't force the wizard again on
+            // every boot just because the ABS range disagrees with the display
+            // (which is a permanent property of devices like the Qidi Q2's
+            // 800x480 touch controller driving a 480x272 panel — #943).
+            if (needs_calibration_ && calibration_.valid) {
+                spdlog::info("[DRM Backend] Valid saved calibration found — "
+                             "not forcing wizard despite ABS/display mismatch");
+                needs_calibration_ = false;
+            }
+
             spdlog::info("[DRM Backend] Touch device '{}' phys='{}' — calibration {}", dev_name,
                          dev_phys, needs_calibration_ ? "needed" : "not needed");
 
-            // Load stored calibration and install wrapper
-            calibration_ = helix::load_touch_calibration();
             helix::install_calibration_wrapper(pointer_, calibration_context_, calibration_,
                                                screen_width_, screen_height_);
         }
