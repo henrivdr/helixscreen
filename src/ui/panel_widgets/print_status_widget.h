@@ -267,6 +267,9 @@ class PrintStatusWidget : public PanelWidget {
         void update_chamber_text();
         void update_multi_tool();
         void update_tool_label();
+        void update_idle_fields();
+
+        helix::HistoryChangedCallback history_cb_;
     };
 
     static inline std::unique_ptr<DetailedFormatter> s_formatter_;

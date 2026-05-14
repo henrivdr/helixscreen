@@ -30,6 +30,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <unordered_set>
 
 namespace helix {
@@ -1517,6 +1518,48 @@ void PrintStatusWidget::DetailedFormatter::update_tool_label() {
     lv_subject_copy_string(&nozzle_tool_label_subject_, nozzle_tool_label_buf_);
 }
 
+void PrintStatusWidget::DetailedFormatter::update_idle_fields() {
+    auto* hm = get_print_history_manager();
+    if (!hm || !hm->is_loaded() || hm->get_jobs().empty()) {
+        lv_subject_copy_string(&idle_filename_subject_, "");
+        lv_subject_copy_string(&idle_when_subject_, "Never printed");
+        lv_subject_copy_string(&idle_meta_subject_, "");
+        lv_subject_set_int(&idle_has_last_subject_, 0);
+        return;
+    }
+    const PrintHistoryJob& job = hm->get_jobs().front();
+    snprintf(idle_filename_buf_, sizeof(idle_filename_buf_), "%s", job.filename.c_str());
+    lv_subject_copy_string(&idle_filename_subject_, idle_filename_buf_);
+
+    double now_s = std::chrono::duration<double>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    long delta_s = static_cast<long>(now_s - job.end_time);
+    if (delta_s < 60) {
+        snprintf(idle_when_buf_, sizeof(idle_when_buf_), "Completed just now");
+    } else if (delta_s < 3600) {
+        snprintf(idle_when_buf_, sizeof(idle_when_buf_), "Completed %ldm ago", delta_s / 60);
+    } else if (delta_s < 86400) {
+        snprintf(idle_when_buf_, sizeof(idle_when_buf_), "Completed %ldh ago", delta_s / 3600);
+    } else {
+        snprintf(idle_when_buf_, sizeof(idle_when_buf_), "Completed %ldd ago", delta_s / 86400);
+    }
+    lv_subject_copy_string(&idle_when_subject_, idle_when_buf_);
+
+    if (!job.filament_str.empty() && !job.duration_str.empty()) {
+        snprintf(idle_meta_buf_, sizeof(idle_meta_buf_), "%s filament • %s",
+                 job.filament_str.c_str(), job.duration_str.c_str());
+    } else if (!job.duration_str.empty()) {
+        snprintf(idle_meta_buf_, sizeof(idle_meta_buf_), "%s", job.duration_str.c_str());
+    } else if (job.total_duration > 0) {
+        int d = static_cast<int>(job.total_duration);
+        snprintf(idle_meta_buf_, sizeof(idle_meta_buf_), "%dh %02dm", d / 3600, (d % 3600) / 60);
+    } else {
+        idle_meta_buf_[0] = '\0';
+    }
+    lv_subject_copy_string(&idle_meta_subject_, idle_meta_buf_);
+    lv_subject_set_int(&idle_has_last_subject_, 1);
+}
+
 PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     UI_MANAGED_SUBJECT_STRING(progress_pct_subject_, progress_pct_buf_, "0%",
                               "print_status_progress_pct", subjects_);
@@ -1614,11 +1657,26 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
             }
         });
 
+    // Idle hero — populate from print history and refresh on history-changed notifications.
+    // PrintHistoryManager fires observers on the main thread (defer-wrapped in on_history_fetched),
+    // so direct lv_subject_* writes here are safe; no AsyncLifetimeGuard needed.
+    history_cb_ = [this]() { update_idle_fields(); };
+    if (auto* hm = get_print_history_manager()) {
+        hm->add_observer(&history_cb_);
+        if (!hm->is_loaded()) {
+            hm->fetch();
+        }
+    }
+    update_idle_fields();
+
     spdlog::debug("[DetailedFormatter] subjects initialized");
 }
 
 PrintStatusWidget::DetailedFormatter::~DetailedFormatter() {
     spdlog::debug("[DetailedFormatter] tearing down");
+    if (auto* hm = get_print_history_manager()) {
+        hm->remove_observer(&history_cb_);
+    }
     subjects_.deinit_all();
 }
 
