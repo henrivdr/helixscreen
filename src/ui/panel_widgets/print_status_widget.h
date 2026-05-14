@@ -226,12 +226,14 @@ class PrintStatusWidget : public PanelWidget {
         ObserverGuard time_left_observer_;
         ObserverGuard filament_used_observer_;
 
-        // Nozzle temp observers — paired SubjectLifetimes per [L084] for Task 8 pinning.
-        // In auto mode (default) the static active_extruder subjects are observed, lifetimes unused.
-        ObserverGuard nozzle_temp_observer_;
-        ObserverGuard nozzle_target_observer_;
+        // Nozzle temp observers — paired SubjectLifetimes per [L084] for per-tool pinning.
+        // Lifetimes declared before observers so they destruct AFTER observers in ~dtor
+        // (the observer's cleanup queries the lifetime; reverse order = UAF on dead lifetime).
+        // In auto mode the static active_extruder subjects are observed, lifetimes unused.
         SubjectLifetime nozzle_temp_lifetime_;
         SubjectLifetime nozzle_target_lifetime_;
+        ObserverGuard nozzle_temp_observer_;
+        ObserverGuard nozzle_target_observer_;
 
         ObserverGuard bed_temp_observer_;
         ObserverGuard bed_target_observer_;
