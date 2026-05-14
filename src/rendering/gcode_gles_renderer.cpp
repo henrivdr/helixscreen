@@ -1502,11 +1502,14 @@ void GCodeGLESRenderer::set_tool_color_overrides(const std::vector<uint32_t>& am
         // Per-tool overrides replace palette entries baked into vertex data,
         // so clear any single-color override that would bypass vertex colors.
         palette_.has_override = false;
-        // Clear pre-computed buffers — they have stale colors, force CPU re-expansion
+        // Patch only the color bytes in the prepared buffers in place. Avoids
+        // discarding the ~100MB pack the background thread just produced and
+        // re-expanding it on the foreground thread — only the RGBA8 lanes
+        // need to change.
         if (geometry_) {
-            geometry_->prepared_buffers.clear();
+            geometry_->patch_prepared_buffer_colors();
         }
-        // Force VBO re-upload to bake new colors into vertex data
+        // Force VBO re-upload to push the new colors to the GPU
         // (old VBOs freed inside render() where GL context is active)
         geometry_uploaded_ = false;
         upload_next_layer_ = 0;

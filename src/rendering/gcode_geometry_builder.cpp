@@ -234,6 +234,54 @@ void RibbonGeometry::prepare_interleaved_buffers() {
     spdlog::debug("[GCode Geometry] Prepared {} layer buffers for GPU upload", num_layers);
 }
 
+void RibbonGeometry::patch_prepared_buffer_colors() {
+    if (prepared_buffers.empty() || strips.empty() || vertices.empty()) {
+        return;
+    }
+
+    size_t num_layers = layer_strip_ranges.empty() ? 1 : layer_strip_ranges.size();
+    if (num_layers != prepared_buffers.size()) {
+        // Sizing drift — rebuild from scratch rather than risk a bad patch.
+        prepare_interleaved_buffers();
+        return;
+    }
+
+    static constexpr int kTriIndices[6] = {0, 1, 2, 1, 3, 2};
+
+    for (size_t layer = 0; layer < num_layers; ++layer) {
+        size_t first_strip = 0;
+        size_t strip_count = strips.size();
+        if (!layer_strip_ranges.empty()) {
+            auto [fs, sc] = layer_strip_ranges[layer];
+            first_strip = fs;
+            strip_count = sc;
+        }
+
+        auto& prepared = prepared_buffers[layer];
+        if (prepared.vertex_count != strip_count * 6) {
+            // Sizing drift on this layer — rebuild everything to be safe.
+            prepare_interleaved_buffers();
+            return;
+        }
+
+        auto* out = reinterpret_cast<PackedVertex*>(prepared.data.data());
+        for (size_t s = 0; s < strip_count; ++s) {
+            const auto& strip = strips[first_strip + s];
+            for (int ti = 0; ti < 6; ++ti) {
+                const auto& vert = vertices[strip[static_cast<size_t>(kTriIndices[ti])]];
+                uint32_t rgb = 0x26A69A;
+                if (vert.color_index < color_palette.size()) {
+                    rgb = color_palette[vert.color_index];
+                }
+                PackedVertex::encode_color(rgb, out->color);
+                ++out;
+            }
+        }
+    }
+
+    spdlog::debug("[GCode Geometry] Patched colors in {} prepared layer buffers", num_layers);
+}
+
 void RibbonGeometry::clear() {
     vertices.clear();
     indices.clear();

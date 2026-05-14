@@ -258,11 +258,27 @@ struct RibbonGeometry {
     /**
      * @brief Pre-compute interleaved vertex buffers for GPU upload.
      *
-     * Call from background thread after build(). Expands strips into
-     * position(3f)+normal(3f)+color(3f) interleaved format per layer.
-     * The renderer can then upload directly to VBOs without CPU work.
+     * Call from background thread after build(). Expands strips into the
+     * packed 20-byte PackedVertex layout per layer. The renderer can then
+     * upload directly to VBOs without CPU work.
      */
     void prepare_interleaved_buffers();
+
+    /**
+     * @brief Patch only the color bytes inside existing prepared_buffers,
+     *        using the current color_palette.
+     *
+     * Cheap alternative to throwing away and re-building the prepared buffers
+     * when AMS / mapped tool colors arrive after the background prep has
+     * finished. Walks the same strip → expanded-vertex order as
+     * prepare_interleaved_buffers() but only writes the 4 RGBA8 bytes per
+     * vertex; positions and normals are untouched.
+     *
+     * No-op if prepared_buffers is empty. If layer/strip sizing no longer
+     * matches the prepared buffers (defensive), falls back to a full
+     * prepare_interleaved_buffers().
+     */
+    void patch_prepared_buffer_colors();
 
     /**
      * @brief Clear all geometry data
