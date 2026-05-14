@@ -1197,13 +1197,29 @@ void PrintStatusWidget::show_nozzle_tool_picker(lv_obj_t* anchor) {
         },
         LV_EVENT_DELETE, nullptr);
 
-    // Position context menu near the anchor (best-effort)
+    // Position context menu near the anchor with overflow clamp
     lv_obj_t* card = lv_obj_find_by_name(nozzle_picker_backdrop_, "context_menu");
     if (card && anchor) {
         lv_obj_update_layout(anchor);
+        lv_obj_update_layout(card);
         lv_area_t a;
         lv_obj_get_coords(anchor, &a);
-        lv_obj_set_pos(card, a.x1, a.y2 + 4);
+        int screen_h = lv_obj_get_height(parent_screen_);
+        int screen_w = lv_obj_get_width(parent_screen_);
+        int card_h = lv_obj_get_height(card);
+        int card_w = lv_obj_get_width(card);
+        int card_y = a.y2 + 4;
+        if (card_y + card_h > screen_h - 8) {
+            // Flip above the anchor
+            card_y = a.y1 - card_h - 4;
+            if (card_y < 8) card_y = 8;
+        }
+        int card_x = a.x1;
+        if (card_x + card_w > screen_w - 8) {
+            card_x = screen_w - card_w - 8;
+        }
+        if (card_x < 8) card_x = 8;
+        lv_obj_set_pos(card, card_x, card_y);
     }
 
     spdlog::debug("[PrintStatusWidget] Nozzle tool picker shown");
