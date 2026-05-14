@@ -35,13 +35,13 @@
              vertically-centered circle. The % label is a child of the arc
              with align="center", so it sits in the arc's bounds center. -->
         <lv_arc name="detailed_progress_arc"
-                flex_grow="1" width="100%" style_pad_all="0"
+                width="80" height="80" style_pad_all="0"
                 min_value="0" max_value="100" value="0"
                 bg_start_angle="135" bg_end_angle="45"
                 rotation="0" mode="normal"
                 style_arc_color="#border" style_arc_color-indicator="#primary"
-                style_arc_width="4"
-                style_arc_width-indicator="4"
+                style_arc_width="6"
+                style_arc_width-indicator="6"
                 style_arc_rounded="true" style_arc_rounded-indicator="true"
                 style_bg_opa="0" style_border_width="0"
                 style_bg_opa-knob="0" style_shadow_width-knob="0"
