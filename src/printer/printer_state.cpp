@@ -591,11 +591,15 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
     capabilities_state_.set_has_chamber_sensor(!chamber_sensor.empty());
     capabilities_state_.set_has_chamber_heater(!chamber_heater.empty());
 
-    // Update temperature sensor role badges for manual override
+    // Promote the resolved chamber sensor to CHAMBER role in the sensor
+    // manager. Required for vendors whose chamber sensor name doesn't match
+    // the "chamber" substring used by the manager's auto-categorizer
+    // (Snapmaker uses "cavity", Elegoo "enclosure"). Without this promotion,
+    // the temp graph would add the sensor twice — once as "Chamber" (from
+    // PrinterTemperatureState::chamber_sensor_name) and once under its raw
+    // display name (because the AUXILIARY role isn't filtered out).
     auto& temp_mgr = helix::sensors::TemperatureSensorManager::instance();
-    if (settings.get_chamber_sensor_assignment() != "auto") {
-        temp_mgr.apply_chamber_sensor_override(chamber_sensor);
-    }
+    temp_mgr.apply_chamber_sensor_override(chamber_sensor);
 
     // Update composite subjects for G-code modification options
     // (visibility depends on both plugin status and capability)
