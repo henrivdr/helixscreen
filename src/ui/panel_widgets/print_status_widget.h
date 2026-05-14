@@ -204,6 +204,9 @@ class PrintStatusWidget : public PanelWidget {
         /// Called by widget attach() to hand the arc widget to the formatter
         void attach_arc(lv_obj_t* arc);
 
+        /// Re-fit the arc to a square sized from its parent column (call from on_size_changed)
+        void resize_arc();
+
       private:
         ObserverGuard arc_value_observer_;
         lv_obj_t* arc_widget_ = nullptr;

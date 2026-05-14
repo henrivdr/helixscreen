@@ -444,6 +444,12 @@ void PrintStatusWidget::on_size_changed(int colspan, int rowspan, int /*width_px
 
     spdlog::debug("[PrintStatusWidget] on_size_changed {}x{} -> {} (compact={})", colspan, rowspan,
                   use_column ? "column" : "row", is_compact_);
+
+    // Re-fit the Detailed-layout progress arc to a square sized from its
+    // (now-known) parent column dimensions.
+    if (s_formatter_) {
+        s_formatter_->resize_arc();
+    }
 }
 
 void PrintStatusWidget::update_idle_compact_mode() {
@@ -1495,7 +1501,8 @@ void PrintStatusWidget::DetailedFormatter::update_filament_text() {
     if (used_mm <= 0) {
         filament_text_buf_[0] = '\0';
     } else {
-        snprintf(filament_text_buf_, sizeof(filament_text_buf_), "%.1fm", used_mm / 1000.0);
+        snprintf(filament_text_buf_, sizeof(filament_text_buf_), "Filament: %.1fm",
+                 used_mm / 1000.0);
     }
     lv_subject_copy_string(&filament_text_subject_, filament_text_buf_);
 }
@@ -1777,13 +1784,47 @@ PrintStatusWidget::DetailedFormatter::~DetailedFormatter() {
     subjects_.deinit_all();
 }
 
+// Force the arc to a square sized to fit its parent column. lv_arc draws
+// within its bounds but its actual circle takes only min(w,h) — leaving the
+// % label child stranded if the bounds are tall-narrow. Setting both
+// dimensions to the parent's height gives a true square that flex-centers
+// in the column on both axes.
+static void resize_arc_to_square(lv_obj_t* arc) {
+    if (!arc) return;
+    lv_obj_t* parent = lv_obj_get_parent(arc);
+    if (!parent) return;
+    lv_obj_update_layout(parent);
+    int ph = lv_obj_get_content_height(parent);
+    int pw = lv_obj_get_content_width(parent);
+    int dim = ph < pw ? ph : pw;
+    if (dim <= 0) return;
+    lv_obj_set_size(arc, dim, dim);
+}
+
 void PrintStatusWidget::DetailedFormatter::attach_arc(lv_obj_t* arc) {
     arc_widget_ = arc;
     if (arc) {
         // Range + angles + styling come from XML; just seed the initial value.
         int pct = lv_subject_get_int(get_printer_state().get_print_progress_subject());
         lv_arc_set_value(arc, pct);
+        // Initial square sizing (a follow-up call from on_size_changed picks
+        // up the final layout when the widget grid resolves).
+        resize_arc_to_square(arc);
+        // Re-size whenever the column relayouts (window resize, breakpoint).
+        lv_obj_t* parent = lv_obj_get_parent(arc);
+        if (parent) {
+            lv_obj_add_event_cb(parent,
+                                [](lv_event_t* e) {
+                                    auto* arc_obj = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+                                    resize_arc_to_square(arc_obj);
+                                },
+                                LV_EVENT_SIZE_CHANGED, arc);
+        }
     }
+}
+
+void PrintStatusWidget::DetailedFormatter::resize_arc() {
+    resize_arc_to_square(arc_widget_);
 }
 
 // ============================================================================
