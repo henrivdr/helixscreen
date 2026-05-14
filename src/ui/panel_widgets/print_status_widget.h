@@ -160,6 +160,7 @@ class PrintStatusWidget : public PanelWidget {
     bool is_compact_ = false;
     bool is_column_ = false;
     bool last_print_available_ = false;
+    int last_rowspan_ = 1;  // Cached for picker-dismiss re-gating
 
     // PrinterState reference for subject access
     PrinterState& printer_state_;

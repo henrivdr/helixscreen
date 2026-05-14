@@ -360,6 +360,7 @@ void PrintStatusWidget::detach() {
 
 void PrintStatusWidget::on_size_changed(int colspan, int rowspan, int /*width_px*/,
                                         int /*height_px*/) {
+    last_rowspan_ = rowspan;
     lv_subject_set_int(&colspan_subject_, colspan);
 
     // Derive layout_effective: detailed only when user opted in AND colspan >= 2
@@ -1092,8 +1093,8 @@ void PrintStatusWidget::apply_picker_state() {
         lv_obj_t* det_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_detailed");
         if (lib_btn && det_btn) {
             bool detailed = (layout_style_ == "detailed");
-            lv_obj_set_style_bg_opa(lib_btn, detailed ? 0 : 64, LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(det_btn, !detailed ? 0 : 64, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(lib_btn, detailed ? LV_OPA_TRANSP : LV_OPA_30, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(det_btn, !detailed ? LV_OPA_TRANSP : LV_OPA_30, LV_PART_MAIN);
         }
     }
 
@@ -1155,7 +1156,7 @@ void PrintStatusWidget::dismiss_configure_picker() {
     // takes effect immediately on the visible widget.
     if (widget_obj_) {
         int colspan = lv_subject_get_int(&colspan_subject_);
-        on_size_changed(colspan, 0, 0, 0);
+        on_size_changed(colspan, last_rowspan_, 0, 0);
     }
 }
 
