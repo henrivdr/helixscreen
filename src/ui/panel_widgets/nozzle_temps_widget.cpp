@@ -257,6 +257,8 @@ void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int /*width_px
     if (!container)
         return;
 
+    current_colspan_ = colspan;
+
     // Wide layout (2x1): use row-wrap so items flow into 2 columns
     bool wide = (colspan >= 2 && rowspan <= 1);
     if (wide) {
@@ -304,17 +306,50 @@ void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int /*width_px
         set_font(bed_target_label_);
     }
 
+    // Swap row labels between short ("T0") and long ("Nozzle 1") based on the
+    // available horizontal room.
+    for (auto& row : extruder_rows_) {
+        if (!row.tool_label)
+            continue;
+        const std::string& text = (colspan >= 2) ? row.long_name : row.short_name;
+        lv_label_set_text(row.tool_label, text.c_str());
+    }
+
     spdlog::debug("[NozzleTempsWidget] on_size_changed {}x{} wide={}", colspan, rowspan, wide);
 }
 
 void NozzleTempsWidget::create_extruder_row(lv_obj_t* container, ExtruderRow& row) {
-    // Resolve display name for the tool
-    std::string tool_name = ToolState::instance().tool_name_for_extruder(row.name);
-    if (tool_name.empty())
-        tool_name = row.name;
+    // Short label: the tool identifier (e.g. "T0"); falls back to the klipper
+    // extruder name when no tool is mapped (multi-extruder, no toolchanger).
+    std::string short_name = ToolState::instance().tool_name_for_extruder(row.name);
+    if (short_name.empty())
+        short_name = row.name;
+
+    // Long label: prefer the user-friendly "Nozzle N" from PrinterTemperatureState
+    // when the tool identifier is just the default Tn pattern. For toolchangers
+    // with viesturz-named tools (e.g. "Left", "Right"), the configured tool name
+    // is already meaningful — keep it.
+    std::string long_name = short_name;
+    bool is_default_tn = short_name.size() >= 2 && short_name[0] == 'T' &&
+                         std::all_of(short_name.begin() + 1, short_name.end(),
+                                     [](char c) {
+                                         return std::isdigit(static_cast<unsigned char>(c));
+                                     });
+    if (is_default_tn) {
+        const auto& exts = printer_state_.temperature_state().extruders();
+        auto it = exts.find(row.name);
+        if (it != exts.end() && !it->second.display_name.empty())
+            long_name = it->second.display_name;
+    }
+
+    row.short_name = std::move(short_name);
+    row.long_name = std::move(long_name);
+
+    const std::string& initial_label =
+        (current_colspan_ >= 2) ? row.long_name : row.short_name;
 
     // Create row from XML template — layout, fonts, colors are all declarative
-    const char* attrs[] = {"tool_name", tool_name.c_str(), nullptr};
+    const char* attrs[] = {"tool_name", initial_label.c_str(), nullptr};
     lv_obj_t* row_obj = static_cast<lv_obj_t*>(lv_xml_create(container, "nozzle_temp_row", attrs));
     if (!row_obj) {
         spdlog::error("[NozzleTempsWidget] lv_xml_create('nozzle_temp_row') returned NULL for '{}'",
@@ -323,6 +358,7 @@ void NozzleTempsWidget::create_extruder_row(lv_obj_t* container, ExtruderRow& ro
     }
 
     row.row_obj = row_obj;
+    row.tool_label = lv_obj_find_by_name(row_obj, "tool_label");
     row.temp_label = lv_obj_find_by_name(row_obj, "temp_label");
     row.target_label = lv_obj_find_by_name(row_obj, "target_label");
     row.progress_bar = lv_obj_find_by_name(row_obj, "progress_bar");

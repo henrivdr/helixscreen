@@ -10,7 +10,10 @@
                 style_pad_all="0" style_pad_row="0" style_pad_column="#space_sm"
                 style_bg_opa="0" style_border_width="0"
                 scrollable="false">
-            <icon name="bed_label" src="radiator" size="xs" variant="danger"/>
+            <icon name="bed_icon" src="radiator" size="xs" variant="danger"/>
+            <text_small name="bed_label" text="Bed" translation_tag="Bed"
+                        style_text_color="#primary"
+                        width="content" style_min_width="#space_xl"/>
             <text_small name="bed_temp_label" text="0°" flex_grow="1"/>
             <text_small name="bed_target_label" text="off" style_text_color="#text_muted"
                         style_text_align="right"/>

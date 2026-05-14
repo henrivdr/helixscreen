@@ -37,7 +37,10 @@ class NozzleTempsWidget : public PanelWidget {
 
     struct ExtruderRow {
         std::string name;
+        std::string short_name; ///< Compact label (e.g. "T0") shown in narrow layouts
+        std::string long_name;  ///< Verbose label (e.g. "Nozzle 1") shown when colspan >= 2
         lv_obj_t* row_obj = nullptr;
+        lv_obj_t* tool_label = nullptr;
         lv_obj_t* temp_label = nullptr;
         lv_obj_t* target_label = nullptr;
         lv_obj_t* progress_bar = nullptr;
@@ -72,6 +75,7 @@ class NozzleTempsWidget : public PanelWidget {
     int rebuild_gen_ = 0;     // Generation counter to break infinite rebuild cycles (L074)
     bool rebuilding_ = false; // Re-entrancy guard: drain() inside clear_rows() can fire
                               // version_observer_ which calls rebuild_rows() again (#723)
+    int current_colspan_ = 1; // Last colspan from on_size_changed; rows pick short/long label off this
 
     // MUST stay declared LAST: reverse-declaration destruction makes this the
     // first member torn down, invalidating every captured token before any
