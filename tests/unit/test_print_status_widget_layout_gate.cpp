@@ -37,6 +37,11 @@ TEST_CASE_METHOD(HelixTestFixture, "Layout gate: colspan=3 reveals filament + li
 TEST_CASE_METHOD(HelixTestFixture, "Layout gate: library stays library regardless",
                  "[print_status][layout_gate]") {
     PrintStatusWidget w;
+    // Prime: a detailed widget at colspan=3 sets effective=1
+    w.set_config({{"layout_style", "detailed"}});
+    w.on_size_changed(3, 2, 600, 400);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 1);
+    // Switch to library — must revert to 0 regardless of colspan
     w.set_config({{"layout_style", "library"}});
     w.on_size_changed(3, 3, 600, 600);
     REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 0);
