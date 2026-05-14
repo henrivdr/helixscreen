@@ -10,6 +10,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdio>
 #include <memory>
 #include <stdlib.h>
 #include <string.h>
@@ -335,7 +336,9 @@ static void draw_legend_cb(lv_event_t* e) {
     lv_obj_get_coords(chart, &coords);
     int32_t pad_left = lv_obj_get_style_pad_left(chart, LV_PART_MAIN);
     int32_t pad_top = lv_obj_get_style_pad_top(chart, LV_PART_MAIN);
+    int32_t pad_right = lv_obj_get_style_pad_right(chart, LV_PART_MAIN);
     int32_t content_x1 = coords.x1 + pad_left;
+    int32_t content_x2 = coords.x2 - pad_right;
     int32_t content_y1 = coords.y1 + pad_top;
 
     // Layout constants
@@ -348,12 +351,27 @@ static void draw_legend_cb(lv_event_t* e) {
     int32_t chip_radius = chip_h / 2; // Fully rounded ends
 
     // Starting position: upper-left with small inset
-    int32_t x = content_x1 + 4;
+    int32_t x_start = content_x1 + 4;
+    int32_t x = x_start;
     int32_t y = content_y1 + 3;
+    int32_t available_x_max = content_x2 - 4;
+
+    // Worst-case overflow indicator width ("+N" with N up to visible_count).
+    // Reserved when there could still be more chips after the one we're about
+    // to draw, so we never strand the final chip without room for the +N pill.
+    static char overflow_buf[16];
+    std::snprintf(overflow_buf, sizeof(overflow_buf), "+%d", visible_count);
+    lv_point_t overflow_txt_size;
+    lv_text_get_size(&overflow_txt_size, overflow_buf, font, 0, 0, LV_COORD_MAX,
+                     LV_TEXT_FLAG_NONE);
+    int32_t overflow_chip_w = chip_pad_h + overflow_txt_size.x + chip_pad_h;
 
     // Persistent string buffers for labels (LVGL may defer draw)
     static char legend_bufs[UI_TEMP_GRAPH_MAX_SERIES][32];
     int buf_idx = 0;
+
+    int chips_remaining = visible_count;
+    int chips_drawn = 0;
 
     for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES && buf_idx < UI_TEMP_GRAPH_MAX_SERIES; i++) {
         ui_temp_series_meta_t* meta = &graph->series_meta[i];
@@ -369,6 +387,53 @@ static void draw_legend_cb(lv_event_t* e) {
         lv_text_get_size(&txt_size, legend_bufs[buf_idx], font, 0, 0, LV_COORD_MAX,
                          LV_TEXT_FLAG_NONE);
         int32_t chip_w = chip_pad_h + swatch_size + 3 + txt_size.x + chip_pad_h;
+
+        // Reserve room for the +N pill only if more chips would follow this one.
+        bool more_after_this = chips_remaining > 1;
+        int32_t budget =
+            available_x_max - (more_after_this ? (overflow_chip_w + chip_gap) : 0);
+
+        if (x + chip_w > budget) {
+            // No room for this chip (plus a future +N if applicable). If we
+            // haven't drawn any chip at all, the legend can't fit even one —
+            // skip rendering entirely rather than show only a "+N" with no
+            // context. Otherwise draw a +N pill at the current x for the
+            // remaining (including current) chips.
+            if (chips_drawn == 0)
+                return;
+            std::snprintf(overflow_buf, sizeof(overflow_buf), "+%d", chips_remaining);
+            lv_point_t ov_size;
+            lv_text_get_size(&ov_size, overflow_buf, font, 0, 0, LV_COORD_MAX,
+                             LV_TEXT_FLAG_NONE);
+            int32_t ov_w = chip_pad_h + ov_size.x + chip_pad_h;
+
+            lv_draw_rect_dsc_t r_dsc;
+            lv_draw_rect_dsc_init(&r_dsc);
+            r_dsc.bg_color = graph->cached_graph_bg;
+            r_dsc.bg_opa = LV_OPA_70;
+            r_dsc.radius = chip_radius;
+            lv_area_t r_area;
+            r_area.x1 = x;
+            r_area.y1 = y;
+            r_area.x2 = x + ov_w;
+            r_area.y2 = y + chip_h;
+            lv_draw_rect(layer, &r_dsc, &r_area);
+
+            lv_draw_label_dsc_t l_dsc;
+            lv_draw_label_dsc_init(&l_dsc);
+            l_dsc.color = lv_obj_get_style_text_color(chart, LV_PART_MAIN);
+            l_dsc.font = font;
+            l_dsc.opa = LV_OPA_80;
+            l_dsc.align = LV_TEXT_ALIGN_CENTER;
+            l_dsc.text = overflow_buf;
+            lv_area_t l_area;
+            l_area.x1 = x + chip_pad_h;
+            l_area.y1 = y + (chip_h - font_h) / 2;
+            l_area.x2 = x + ov_w - chip_pad_h;
+            l_area.y2 = l_area.y1 + font_h;
+            lv_draw_label(layer, &l_dsc, &l_area);
+            return;
+        }
 
         // Draw chip background (semi-transparent dark)
         lv_draw_rect_dsc_t rect_dsc;
@@ -417,6 +482,8 @@ static void draw_legend_cb(lv_event_t* e) {
         // Advance to next chip position (horizontal flow)
         x += chip_w + chip_gap;
         buf_idx++;
+        chips_drawn++;
+        chips_remaining--;
     }
 }
 
