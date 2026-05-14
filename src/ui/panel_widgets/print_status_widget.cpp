@@ -1512,20 +1512,9 @@ void PrintStatusWidget::DetailedFormatter::update_nozzle_text() {
     lv_subject_t* temp_sub;
     lv_subject_t* tgt_sub;
     if (current_nozzle_override_ == "auto") {
-        // The redirected active_extruder_* subjects are unreliable when no
-        // SET_ACTIVE_EXTRUDER has fired (mock + early boot). Read the primary
-        // "extruder" per-extruder subject directly — that one always tracks
-        // the real heater values for single-tool printers.
-        temp_sub = ps.get_extruder_temp_subject("extruder");
-        tgt_sub  = ps.get_extruder_target_subject("extruder");
-        if (!temp_sub || !tgt_sub) {
-            // Multi-tool printer with no "extruder" heater — fall back to
-            // whatever the active redirect currently points at.
-            temp_sub = ps.get_active_extruder_temp_subject();
-            tgt_sub  = ps.get_active_extruder_target_subject();
-        }
+        temp_sub = ps.get_active_extruder_temp_subject();
+        tgt_sub  = ps.get_active_extruder_target_subject();
     } else {
-        // Read-only access — prefer the no-lifetime overload per [L084] note
         temp_sub = ps.get_extruder_temp_subject(current_nozzle_override_);
         tgt_sub  = ps.get_extruder_target_subject(current_nozzle_override_);
     }
