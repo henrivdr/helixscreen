@@ -290,7 +290,12 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
             });
     }
 
-    spdlog::debug("[PrintStatusWidget] Attached");
+    // Explicit visibility pass — observer fires may be deferred; ensure correct
+    // Library/Detailed sibling is shown immediately on attach.
+    update_idle_compact_mode();
+    update_active_layout_mode();
+
+    spdlog::debug("[PrintStatusWidget] Attached (layout_style={})", layout_style_);
 }
 
 void PrintStatusWidget::detach() {
