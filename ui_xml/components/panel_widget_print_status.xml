@@ -20,7 +20,7 @@
            print_status_title_hidden (1 when show_title config is off OR at micro breakpoint). -->
       <lv_obj name="library_header"
               width="100%" height="content" flex_flow="column" style_pad_left="#space_sm" style_pad_right="#space_sm"
-              style_pad_top="#space_xs" style_pad_bottom="0" style_pad_gap="#space_xxs" clickable="false"
+              style_pad_top="0" style_pad_bottom="0" style_pad_gap="#space_xxs" clickable="false"
               event_bubble="true">
         <bind_flag_if_eq subject="print_status_title_hidden" flag="hidden" ref_value="1"/>
         <text_small text="Print Library"
@@ -31,7 +31,7 @@
       <!-- Body: thumbnail left, action list right.
            pad_gap intentionally omitted inline — driven by bind_style per colspan. -->
       <lv_obj name="library_body"
-              width="100%" flex_grow="1" style_pad_all="#space_xs" style_pad_left="0" flex_flow="row" scrollable="false"
+              width="100%" flex_grow="1" style_pad_all="#space_xxs" style_pad_left="0" flex_flow="row" scrollable="false"
               clickable="false" event_bubble="true">
         <bind_style name="library_body_gap_wide" subject="print_status_colspan" ref_value="3"/>
         <bind_style name="library_body_gap_default" subject="print_status_colspan" ref_value="2"/>
@@ -43,7 +43,7 @@
              can expand; C++ also adjusts width + flex alignment on that transition. -->
         <lv_obj name="library_actions"
                 height="100%" flex_grow="1" flex_flow="column" style_pad_all="0" style_pad_top="#space_xxs"
-                style_pad_bottom="#space_xxs" style_pad_gap="#space_sm" style_flex_main_place="space_evenly"
+                style_pad_bottom="#space_xxs" style_pad_gap="#space_xs" style_flex_main_place="space_evenly"
                 scrollable="false" clickable="false" event_bubble="true">
           <bind_flag_if_eq subject="print_status_actions_hidden" flag="hidden" ref_value="1"/>
           <ui_button name="library_row_files" width="100%" height="#button_height_sm" variant="outline" layout="row">
