@@ -44,9 +44,12 @@ MemoryThresholds MemoryThresholds::for_device(const MemoryInfo& info) {
         t.critical_available_kb = 16 * 1024;
         t.growth_5min_kb = 3 * 1024;
     } else {
-        // >512MB (Pi 4/5 with 1-2GB+)
-        t.warn_rss_kb = 180 * 1024;
-        t.critical_rss_kb = 230 * 1024;
+        // >512MB (Pi 4/5, desktop) — scale RSS thresholds as a fraction of total RAM.
+        // On a 4GB Pi we are usually the largest process and can legitimately use
+        // most of it for the 3D viewer; on a desktop we want even more headroom.
+        // Floors keep us reasonable on small "good" devices (e.g. 512MB-1GB).
+        t.warn_rss_kb = std::max<size_t>(180 * 1024, info.total_kb * 30 / 100);
+        t.critical_rss_kb = std::max<size_t>(230 * 1024, info.total_kb * 50 / 100);
         t.warn_available_kb = 48 * 1024;
         t.critical_available_kb = 24 * 1024;
         t.growth_5min_kb = 5 * 1024;
