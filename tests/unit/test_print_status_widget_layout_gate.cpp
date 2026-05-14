@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "../helix_test_fixture.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
+
+#include "../catch_amalgamated.hpp"
+
+using namespace helix;
+
+TEST_CASE_METHOD(HelixTestFixture, "Layout gate: detailed at colspan=1 falls back",
+                 "[print_status][layout_gate]") {
+    PrintStatusWidget w;
+    w.set_config({{"layout_style", "detailed"}});
+    w.on_size_changed(1, 2, 200, 400);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 0);
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "Layout gate: detailed at colspan=2 activates",
+                 "[print_status][layout_gate]") {
+    PrintStatusWidget w;
+    w.set_config({{"layout_style", "detailed"}});
+    w.on_size_changed(2, 2, 400, 400);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 1);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::temp_under_thumb_subject_for_test()) == 1);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::show_filament_active_subject_for_test()) == 0);
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "Layout gate: colspan=3 reveals filament + lifts temps",
+                 "[print_status][layout_gate]") {
+    PrintStatusWidget w;
+    w.set_config({{"layout_style", "detailed"}});
+    w.on_size_changed(3, 2, 600, 400);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 1);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::temp_under_thumb_subject_for_test()) == 0);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::show_filament_active_subject_for_test()) == 1);
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "Layout gate: library stays library regardless",
+                 "[print_status][layout_gate]") {
+    PrintStatusWidget w;
+    w.set_config({{"layout_style", "library"}});
+    w.on_size_changed(3, 3, 600, 600);
+    REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 0);
+}

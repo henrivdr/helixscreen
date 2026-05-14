@@ -321,6 +321,14 @@ void PrintStatusWidget::on_size_changed(int colspan, int rowspan, int /*width_px
                                         int /*height_px*/) {
     lv_subject_set_int(&colspan_subject_, colspan);
 
+    // Derive layout_effective: detailed only when user opted in AND colspan >= 2
+    int user_pref = (layout_style_ == "detailed") ? 1 : 0;
+    lv_subject_set_int(&layout_mode_subject_, user_pref);
+    int effective = (user_pref == 1 && colspan >= 2) ? 1 : 0;
+    lv_subject_set_int(&layout_effective_subject_, effective);
+    lv_subject_set_int(&temp_under_thumb_subject_, (colspan == 2) ? 1 : 0);
+    lv_subject_set_int(&show_filament_active_subject_, (colspan >= 3) ? 1 : 0);
+
     // Compact mode: 1-column — not enough horizontal space for thumbnail + action rows
     bool compact = (colspan <= 1);
     if (compact != is_compact_) {

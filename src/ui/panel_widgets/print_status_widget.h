@@ -63,6 +63,15 @@ class PrintStatusWidget : public PanelWidget {
     const std::string& nozzle_tool_override_for_test() const {
         return nozzle_tool_override_;
     }
+    static lv_subject_t* layout_effective_subject_for_test() {
+        return &layout_effective_subject_;
+    }
+    static lv_subject_t* temp_under_thumb_subject_for_test() {
+        return &temp_under_thumb_subject_;
+    }
+    static lv_subject_t* show_filament_active_subject_for_test() {
+        return &show_filament_active_subject_;
+    }
 
   private:
     lv_obj_t* widget_obj_ = nullptr;
