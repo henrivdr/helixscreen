@@ -96,6 +96,43 @@ TEST_CASE_METHOD(NavigationTestFixture, "All panels are accessible", "[core][nav
 }
 
 // ============================================================================
+// L081 Mech D defense: indev reset primitive
+// ============================================================================
+// The nav teardown paths (go_back, switch_to_panel_impl, clear_overlay_stack)
+// each call lv_indev_reset(nullptr, nullptr) before destroying widgets, so
+// any in-flight pointer event can't dispatch to memory we're about to free.
+// This is the per-widget event_dsc cb-slot corruption family (Mech D / bundle
+// 3XNZQB2R / #937). Integration is verified by code review + on-device test
+// per [L060]; this case pins the LVGL primitive's behavior we rely on so a
+// future LVGL upgrade can't silently regress the invariant.
+
+#include "../../lib/lvgl/src/indev/lv_indev_private.h"
+
+TEST_CASE_METHOD(NavigationTestFixture, "lv_indev_reset(NULL, NULL) clears in-flight press",
+                 "[core][navigation][indev][l081]") {
+    lv_indev_t* indev = lv_indev_create();
+    REQUIRE(indev != nullptr);
+    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+
+    lv_obj_t* widget = lv_obj_create(lv_screen_active());
+    REQUIRE(widget != nullptr);
+
+    // Stage a press in flight: indev tracks widget as the active obj.
+    indev->pointer.act_obj = widget;
+    indev->pointer.last_pressed = widget;
+
+    // The exact call shape used by go_back / switch_to_panel_impl / clear_overlay_stack.
+    lv_indev_reset(nullptr, nullptr);
+
+    // Invariant the nav paths depend on: act_obj/last_pressed are nulled, so
+    // the next indev tick can't dispatch LV_EVENT_* to a freed widget.
+    REQUIRE(indev->pointer.act_obj == nullptr);
+    REQUIRE(indev->pointer.last_pressed == nullptr);
+
+    lv_obj_delete(widget);
+}
+
+// ============================================================================
 // Navbar Icon Visibility Tests (XML Integration)
 // ============================================================================
 // These tests verify that navbar icons show/hide correctly based on

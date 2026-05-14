@@ -91,6 +91,13 @@ bool NavigationManager::is_klippy_ready() const {
 }
 
 void NavigationManager::clear_overlay_stack() {
+    // L081 Mech D defense: cancel in-flight pointer input before bulk teardown.
+    // Stale clicks queued in indev would otherwise dispatch to widgets we're
+    // about to destroy, with the dispatch reading a freed event_dsc_t array.
+    lv_indev_reset(nullptr, nullptr);
+    crash_handler::breadcrumb::note("indev_rst", "clear_stack", 0);
+    spdlog::debug("[NavigationManager] indev_rst:clear_stack");
+
     // Hide all overlay panels immediately (no animation for connection loss)
     while (panel_stack_.size() > 1) {
         lv_obj_t* overlay = panel_stack_.back();
@@ -772,6 +779,14 @@ void NavigationManager::nav_button_clicked_cb(lv_event_t* event) {
 void NavigationManager::switch_to_panel_impl(int panel_id) {
     auto switch_start = std::chrono::steady_clock::now();
     spdlog::trace("[NavigationManager] switch_to_panel_impl executing for panel {}", panel_id);
+
+    // L081 Mech D defense: cancel in-flight pointer input before panel switch.
+    // Sends LV_EVENT_INDEV_RESET to current act_obj while it's still alive,
+    // then nulls indev->pointer.act_obj so the next dispatch can't target a
+    // widget we're about to tear down.
+    lv_indev_reset(nullptr, nullptr);
+    crash_handler::breadcrumb::note("indev_rst", "switch_panel", panel_id);
+    spdlog::debug("[NavigationManager] indev_rst:switch_panel({})", panel_id);
 
     // Hide ALL visible overlay panels
     lv_obj_t* screen = lv_screen_active();
@@ -1591,6 +1606,13 @@ bool NavigationManager::go_back() {
                       mgr.panel_stack_.size());
         crash_handler::breadcrumb::note("nav",  "go_back",
                                         static_cast<long>(mgr.panel_stack_.size()));
+
+        // L081 Mech D defense: cancel in-flight pointer input before teardown.
+        // Stale clicks queued in indev would otherwise dispatch to widgets the
+        // overlay-pop is about to destroy.
+        lv_indev_reset(nullptr, nullptr);
+        crash_handler::breadcrumb::note("indev_rst", "go_back", 0);
+        spdlog::debug("[NavigationManager] indev_rst:go_back");
 
         // Dismiss keyboard before navigation to restore screen position
         if (KeyboardManager::instance().is_visible()) {
