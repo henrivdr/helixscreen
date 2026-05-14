@@ -55,6 +55,10 @@ class PrintStatusWidget : public PanelWidget {
     /// Configure picker callback
     static void print_status_picker_backdrop_cb(lv_event_t* e);
 
+    /// XML event callbacks — layout selector in configure picker
+    static void print_status_layout_library_cb(lv_event_t* e);
+    static void print_status_layout_detailed_cb(lv_event_t* e);
+
     /// XML event callback — backdrop dismiss for nozzle picker
     static void print_status_nozzle_picker_backdrop_cb(lv_event_t* e);
 

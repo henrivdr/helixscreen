@@ -51,6 +51,10 @@ void register_print_status_widget() {
                              PrintStatusWidget::print_status_nozzle_picker_backdrop_cb);
     lv_xml_register_event_cb(nullptr, "print_status_nozzle_chevron_cb",
                              PrintStatusWidget::print_status_nozzle_chevron_cb);
+    lv_xml_register_event_cb(nullptr, "print_status_layout_library_cb",
+                             PrintStatusWidget::print_status_layout_library_cb);
+    lv_xml_register_event_cb(nullptr, "print_status_layout_detailed_cb",
+                             PrintStatusWidget::print_status_layout_detailed_cb);
 }
 } // namespace helix
 
@@ -1082,6 +1086,17 @@ void PrintStatusWidget::apply_picker_state() {
     if (!picker_backdrop_)
         return;
 
+    // Visual feedback on Library/Detailed selector buttons (bg_opa highlights active)
+    {
+        lv_obj_t* lib_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_library");
+        lv_obj_t* det_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_detailed");
+        if (lib_btn && det_btn) {
+            bool detailed = (layout_style_ == "detailed");
+            lv_obj_set_style_bg_opa(lib_btn, detailed ? 0 : 64, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(det_btn, !detailed ? 0 : 64, LV_PART_MAIN);
+        }
+    }
+
     lv_obj_t* option_list = lv_obj_find_by_name(picker_backdrop_, "option_list");
     if (!option_list)
         return;
@@ -1135,6 +1150,13 @@ void PrintStatusWidget::dismiss_configure_picker() {
     helix::ui::safe_delete_deferred(picker_backdrop_);
 
     spdlog::debug("[PrintStatusWidget] Configure picker dismissed");
+
+    // After the user changed layout_style, re-run width gating so the change
+    // takes effect immediately on the visible widget.
+    if (widget_obj_) {
+        int colspan = lv_subject_get_int(&colspan_subject_);
+        on_size_changed(colspan, 0, 0, 0);
+    }
 }
 
 void PrintStatusWidget::print_status_picker_backdrop_cb(lv_event_t* e) {
@@ -1144,6 +1166,28 @@ void PrintStatusWidget::print_status_picker_backdrop_cb(lv_event_t* e) {
         s_active_picker_->apply_picker_state();
         s_active_picker_->dismiss_configure_picker();
     }
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void PrintStatusWidget::print_status_layout_library_cb(lv_event_t* /*e*/) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusWidget] print_status_layout_library_cb");
+    if (!s_active_picker_)
+        return;
+    s_active_picker_->layout_style_ = "library";
+    s_active_picker_->config_["layout_style"] = "library";
+    lv_subject_set_int(&layout_mode_subject_, 0);
+    s_active_picker_->apply_picker_state();
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void PrintStatusWidget::print_status_layout_detailed_cb(lv_event_t* /*e*/) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusWidget] print_status_layout_detailed_cb");
+    if (!s_active_picker_)
+        return;
+    s_active_picker_->layout_style_ = "detailed";
+    s_active_picker_->config_["layout_style"] = "detailed";
+    lv_subject_set_int(&layout_mode_subject_, 1);
+    s_active_picker_->apply_picker_state();
     LVGL_SAFE_EVENT_CB_END();
 }
 
