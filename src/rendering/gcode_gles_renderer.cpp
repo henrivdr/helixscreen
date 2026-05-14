@@ -185,7 +185,11 @@ class EglContextGuard {
 // ============================================================
 
 static const char* kVertexShaderSource = R"(
-    // Per-pixel Phong shading with camera-following light
+    // Per-pixel Phong shading with camera-following light.
+    // Vertex format is packed (see PackedVertex):
+    //   a_position : vec3 float
+    //   a_color    : vec4 unorm8  (alpha unused)
+    //   a_normal   : vec2 snorm8  (octahedral-encoded unit normal)
     uniform mat4 u_mvp;
     uniform mat4 u_model_view;
     uniform mat3 u_normal_matrix;
@@ -194,18 +198,32 @@ static const char* kVertexShaderSource = R"(
     uniform float u_color_scale;
 
     attribute vec3 a_position;
-    attribute vec3 a_normal;
-    attribute vec3 a_color;
+    attribute vec4 a_color;
+    attribute vec2 a_normal;
 
     varying vec3 v_normal;
     varying vec3 v_position;
     varying vec3 v_base_color;
 
+    // Decode an octahedral-encoded normal (Meyer et al., 2010).
+    vec3 oct_decode(vec2 e) {
+        vec3 n;
+        n.x = e.x;
+        n.y = e.y;
+        n.z = 1.0 - abs(e.x) - abs(e.y);
+        if (n.z < 0.0) {
+            vec2 s = vec2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
+            n.xy = (1.0 - abs(n.yx)) * s;
+        }
+        return normalize(n);
+    }
+
     void main() {
         gl_Position = u_mvp * vec4(a_position, 1.0);
-        v_normal = normalize(u_normal_matrix * a_normal);
+        vec3 normal = oct_decode(a_normal);
+        v_normal = normalize(u_normal_matrix * normal);
         v_position = (u_model_view * vec4(a_position, 1.0)).xyz;
-        v_base_color = mix(u_base_color.rgb, a_color, u_use_vertex_color) * u_color_scale;
+        v_base_color = mix(u_base_color.rgb, a_color.rgb, u_use_vertex_color) * u_color_scale;
     }
 )";
 
@@ -760,12 +778,10 @@ void GCodeGLESRenderer::upload_geometry(const RibbonGeometry& geom, std::vector<
 
     vbos.resize(num_layers);
 
-    // Interleaved vertex format: position(3f) + normal(3f) + color(3f) = 36 bytes per vertex
     constexpr size_t kVertexStride = PackedVertex::stride();
-    constexpr size_t kFloatsPerVertex = kVertexStride / sizeof(float);
 
     // Reuse upload buffer across layers (sized to largest layer)
-    std::vector<float> buf;
+    std::vector<uint8_t> buf;
 
     for (size_t layer = 0; layer < num_layers; ++layer) {
         size_t first_strip = 0;
@@ -810,12 +826,12 @@ void GCodeGLESRenderer::upload_geometry(const RibbonGeometry& geom, std::vector<
 
         // Each strip = 4 vertices → 2 triangles → 6 vertices (for GL_TRIANGLES)
         size_t total_verts = strip_count * 6;
-        size_t buf_floats = total_verts * kFloatsPerVertex;
-        if (buf.size() < buf_floats) {
-            buf.resize(buf_floats);
+        size_t buf_bytes = total_verts * kVertexStride;
+        if (buf.size() < buf_bytes) {
+            buf.resize(buf_bytes);
         }
 
-        size_t out_idx = 0;
+        auto* out = reinterpret_cast<PackedVertex*>(buf.data());
         for (size_t s = 0; s < strip_count; ++s) {
             const auto& strip = geom.strips[first_strip + s];
             // Strip order: BL(0), BR(1), TL(2), TR(3)
@@ -827,21 +843,17 @@ void GCodeGLESRenderer::upload_geometry(const RibbonGeometry& geom, std::vector<
                 glm::vec3 pos = geom.quantization.dequantize_vec3(vert.position);
                 const glm::vec3& normal = geom.normal_palette[vert.normal_index];
 
-                buf[out_idx++] = pos.x;
-                buf[out_idx++] = pos.y;
-                buf[out_idx++] = pos.z;
-                buf[out_idx++] = normal.x;
-                buf[out_idx++] = normal.y;
-                buf[out_idx++] = normal.z;
+                out->position[0] = pos.x;
+                out->position[1] = pos.y;
+                out->position[2] = pos.z;
 
-                // Look up per-vertex color from geometry palette
                 uint32_t rgb = 0x26A69A; // Default teal
                 if (vert.color_index < geom.color_palette.size()) {
                     rgb = geom.color_palette[vert.color_index];
                 }
-                buf[out_idx++] = ((rgb >> 16) & 0xFF) / 255.0f; // R
-                buf[out_idx++] = ((rgb >> 8) & 0xFF) / 255.0f;  // G
-                buf[out_idx++] = (rgb & 0xFF) / 255.0f;         // B
+                PackedVertex::encode_color(rgb, out->color);
+                PackedVertex::encode_normal(normal, out->normal);
+                ++out;
             }
         }
 
@@ -879,10 +891,8 @@ bool GCodeGLESRenderer::upload_geometry_chunk(const RibbonGeometry& geom,
     std::lock_guard<std::mutex> lock(palette_mutex_);
 
     constexpr size_t kVertexStride = PackedVertex::stride();
-    constexpr size_t kFloatsPerVertex = kVertexStride / sizeof(float);
-
     // Reuse CPU buffer for layers that don't have prepared data
-    std::vector<float> buf;
+    std::vector<uint8_t> buf;
 
     while (next_layer < total_layers) {
         size_t layer = next_layer;
@@ -927,12 +937,12 @@ bool GCodeGLESRenderer::upload_geometry_chunk(const RibbonGeometry& geom,
         } else {
             // CPU fallback: expand strips inline (for color re-upload case)
             size_t total_verts = strip_count * 6;
-            size_t buf_floats = total_verts * kFloatsPerVertex;
-            if (buf.size() < buf_floats) {
-                buf.resize(buf_floats);
+            size_t buf_bytes = total_verts * kVertexStride;
+            if (buf.size() < buf_bytes) {
+                buf.resize(buf_bytes);
             }
 
-            size_t out_idx = 0;
+            auto* out = reinterpret_cast<PackedVertex*>(buf.data());
             for (size_t s = 0; s < strip_count; ++s) {
                 const auto& strip = geom.strips[first_strip + s];
                 static constexpr int kTriIndices[6] = {0, 1, 2, 1, 3, 2};
@@ -942,20 +952,17 @@ bool GCodeGLESRenderer::upload_geometry_chunk(const RibbonGeometry& geom,
                     glm::vec3 pos = geom.quantization.dequantize_vec3(vert.position);
                     const glm::vec3& normal = geom.normal_palette[vert.normal_index];
 
-                    buf[out_idx++] = pos.x;
-                    buf[out_idx++] = pos.y;
-                    buf[out_idx++] = pos.z;
-                    buf[out_idx++] = normal.x;
-                    buf[out_idx++] = normal.y;
-                    buf[out_idx++] = normal.z;
+                    out->position[0] = pos.x;
+                    out->position[1] = pos.y;
+                    out->position[2] = pos.z;
 
                     uint32_t rgb = 0x26A69A;
                     if (vert.color_index < geom.color_palette.size()) {
                         rgb = geom.color_palette[vert.color_index];
                     }
-                    buf[out_idx++] = ((rgb >> 16) & 0xFF) / 255.0f;
-                    buf[out_idx++] = ((rgb >> 8) & 0xFF) / 255.0f;
-                    buf[out_idx++] = (rgb & 0xFF) / 255.0f;
+                    PackedVertex::encode_color(rgb, out->color);
+                    PackedVertex::encode_normal(normal, out->normal);
+                    ++out;
                 }
             }
 
@@ -1279,14 +1286,17 @@ void GCodeGLESRenderer::draw_layers(const std::vector<LayerVBO>& vbos, int layer
         glBindBuffer(GL_ARRAY_BUFFER, lv.vbo);
 
         glVertexAttribPointer(static_cast<GLuint>(a_position_), 3, GL_FLOAT, GL_FALSE,
-                              static_cast<GLsizei>(kStride), reinterpret_cast<void*>(0));
+                              static_cast<GLsizei>(kStride),
+                              reinterpret_cast<void*>(PackedVertex::position_offset()));
 
-        glVertexAttribPointer(static_cast<GLuint>(a_normal_), 3, GL_FLOAT, GL_FALSE,
+        // Normal: int8[2] octahedral, decoded in the vertex shader.
+        glVertexAttribPointer(static_cast<GLuint>(a_normal_), 2, GL_BYTE, GL_TRUE,
                               static_cast<GLsizei>(kStride),
                               reinterpret_cast<void*>(PackedVertex::normal_offset()));
 
         if (a_color_ >= 0) {
-            glVertexAttribPointer(static_cast<GLuint>(a_color_), 3, GL_FLOAT, GL_FALSE,
+            // Color: RGBA8 unorm; alpha byte is present but ignored by the shader.
+            glVertexAttribPointer(static_cast<GLuint>(a_color_), 4, GL_UNSIGNED_BYTE, GL_TRUE,
                                   static_cast<GLsizei>(kStride),
                                   reinterpret_cast<void*>(PackedVertex::color_offset()));
         }

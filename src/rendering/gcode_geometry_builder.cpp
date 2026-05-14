@@ -24,6 +24,42 @@ namespace helix {
 namespace gcode {
 
 // ============================================================================
+// PackedVertex Encoding Helpers
+// ============================================================================
+
+void PackedVertex::encode_normal(const glm::vec3& n_in, int8_t out[2]) {
+    glm::vec3 n = n_in;
+    float len2 = glm::dot(n, n);
+    if (len2 > 0.0f) {
+        n *= 1.0f / std::sqrt(len2);
+    } else {
+        n = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
+    float sum = std::abs(n.x) + std::abs(n.y) + std::abs(n.z);
+    if (sum > 0.0f) {
+        n *= 1.0f / sum;
+    }
+    glm::vec2 oct{n.x, n.y};
+    if (n.z < 0.0f) {
+        oct.x = (1.0f - std::abs(n.y)) * (n.x >= 0.0f ? 1.0f : -1.0f);
+        oct.y = (1.0f - std::abs(n.x)) * (n.y >= 0.0f ? 1.0f : -1.0f);
+    }
+    auto quantize = [](float v) -> int8_t {
+        v = std::max(-1.0f, std::min(1.0f, v));
+        return static_cast<int8_t>(std::lround(v * 127.0f));
+    };
+    out[0] = quantize(oct.x);
+    out[1] = quantize(oct.y);
+}
+
+void PackedVertex::encode_color(uint32_t rgb, uint8_t out[4]) {
+    out[0] = static_cast<uint8_t>((rgb >> 16) & 0xFF);
+    out[1] = static_cast<uint8_t>((rgb >> 8) & 0xFF);
+    out[2] = static_cast<uint8_t>(rgb & 0xFF);
+    out[3] = 255;
+}
+
+// ============================================================================
 // Debug Face Colors
 // ============================================================================
 
@@ -147,8 +183,7 @@ void RibbonGeometry::prepare_interleaved_buffers() {
     size_t num_layers = layer_strip_ranges.empty() ? 1 : layer_strip_ranges.size();
     prepared_buffers.resize(num_layers);
 
-    // Interleaved vertex format: position(3f) + normal(3f) + color(3f) = 9 floats
-    constexpr size_t kFloatsPerVertex = 9;
+    constexpr size_t kStride = PackedVertex::stride();
 
     for (size_t layer = 0; layer < num_layers; ++layer) {
         size_t first_strip = 0;
@@ -168,10 +203,10 @@ void RibbonGeometry::prepare_interleaved_buffers() {
 
         size_t total_verts = strip_count * 6; // 2 triangles per strip
         prepared.vertex_count = total_verts;
-        prepared.data.resize(total_verts * kFloatsPerVertex);
+        prepared.data.resize(total_verts * kStride);
 
         static constexpr int kTriIndices[6] = {0, 1, 2, 1, 3, 2};
-        size_t out_idx = 0;
+        auto* out = reinterpret_cast<PackedVertex*>(prepared.data.data());
 
         for (size_t s = 0; s < strip_count; ++s) {
             const auto& strip = strips[first_strip + s];
@@ -181,20 +216,17 @@ void RibbonGeometry::prepare_interleaved_buffers() {
                 glm::vec3 pos = quantization.dequantize_vec3(vert.position);
                 const glm::vec3& normal = normal_palette[vert.normal_index];
 
-                prepared.data[out_idx++] = pos.x;
-                prepared.data[out_idx++] = pos.y;
-                prepared.data[out_idx++] = pos.z;
-                prepared.data[out_idx++] = normal.x;
-                prepared.data[out_idx++] = normal.y;
-                prepared.data[out_idx++] = normal.z;
+                out->position[0] = pos.x;
+                out->position[1] = pos.y;
+                out->position[2] = pos.z;
 
                 uint32_t rgb = 0x26A69A; // Default teal
                 if (vert.color_index < color_palette.size()) {
                     rgb = color_palette[vert.color_index];
                 }
-                prepared.data[out_idx++] = ((rgb >> 16) & 0xFF) / 255.0f;
-                prepared.data[out_idx++] = ((rgb >> 8) & 0xFF) / 255.0f;
-                prepared.data[out_idx++] = (rgb & 0xFF) / 255.0f;
+                PackedVertex::encode_color(rgb, out->color);
+                PackedVertex::encode_normal(normal, out->normal);
+                ++out;
             }
         }
     }

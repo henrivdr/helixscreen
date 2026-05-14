@@ -83,27 +83,49 @@ struct QuantizationParams {
 // ============================================================================
 
 /**
- * @brief Interleaved vertex format for GPU upload: position(3f) + normal(3f) + color(3f)
+ * @brief Compact interleaved vertex format for GPU upload.
  *
- * Centralizes the vertex attribute layout so that upload code (geometry builder)
- * and draw code (renderer) stay in sync. 36 bytes per vertex.
+ * Layout (20 bytes per vertex, down from the prior 36-byte 9-float format):
+ *   position : 3 × float           (12 B, offset 0)
+ *   color    : 4 × uint8 RGBA8     ( 4 B, offset 12)  GL_UNSIGNED_BYTE, normalized
+ *   normal   : 2 × int8 octahedral ( 2 B, offset 16)  GL_BYTE, normalized
+ *   (2 B implicit struct-alignment padding to bring sizeof to 20)
+ *
+ * Centralizes the vertex attribute layout so upload code (geometry builder)
+ * and draw code (renderer) stay in sync.
  */
 struct PackedVertex {
     float position[3];
-    float normal[3];
-    float color[3];
+    uint8_t color[4];     ///< RGBA8 — alpha unused (filled with 255) but pads the color attribute to a sane 4-byte unit.
+    int8_t normal[2];     ///< Octahedral-encoded unit normal; decode in vertex shader.
+
     static constexpr size_t stride() {
         return sizeof(PackedVertex);
     }
     static constexpr size_t position_offset() {
         return offsetof(PackedVertex, position);
     }
-    static constexpr size_t normal_offset() {
-        return offsetof(PackedVertex, normal);
-    }
     static constexpr size_t color_offset() {
         return offsetof(PackedVertex, color);
     }
+    static constexpr size_t normal_offset() {
+        return offsetof(PackedVertex, normal);
+    }
+
+    /**
+     * @brief Octahedral-encode a unit-length normal into two signed bytes.
+     *
+     * Maps a normal on the unit sphere to two values in [-1, 1], then
+     * quantizes symmetrically to [-127, 127]. The shader reverses the
+     * mapping; max angular error is well under 1° which is far below
+     * what Phong shading on chunky gcode tubes can show.
+     */
+    static void encode_normal(const glm::vec3& n, int8_t out[2]);
+
+    /**
+     * @brief Pack a 0xRRGGBB integer color into RGBA8 bytes (alpha=255).
+     */
+    static void encode_color(uint32_t rgb, uint8_t out[4]);
 };
 
 // ============================================================================
@@ -225,10 +247,10 @@ struct RibbonGeometry {
                layer_bboxes.size() * sizeof(AABB);
     }
 
-    /// Pre-computed interleaved vertex buffers for GPU upload (position+normal+color floats).
+    /// Pre-computed interleaved vertex buffers for GPU upload (packed 20-byte layout — see PackedVertex).
     /// Prepared on background thread to avoid blocking UI during VBO upload.
     struct PreparedLayerBuffer {
-        std::vector<float> data;
+        std::vector<uint8_t> data;   ///< Raw vertex bytes; `vertex_count * PackedVertex::stride()` bytes long.
         size_t vertex_count{0};
     };
     std::vector<PreparedLayerBuffer> prepared_buffers;
