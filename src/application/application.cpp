@@ -1170,6 +1170,30 @@ bool Application::init_display() {
     // Initialize resize handler
     m_display->init_resize_handler(m_screen);
 
+    // Refresh theme tokens (nav_width, overlay widths, spacing) and the
+    // LayoutManager state on every debounced resize.  Without this hook,
+    // theme_manager_refresh_layout_constants() only fires once at startup
+    // (after the rotation probe) and a runtime size change — e.g. fold/
+    // unfold on a Samsung Fold or Flip — leaves the ui_breakpoint subject
+    // and overlay widths stuck at startup values, and home-screen widgets
+    // do not reflow (#941).  Captureless lambda — must use singletons.
+    m_display->register_resize_callback([]() {
+        auto* dm = DisplayManager::instance();
+        if (!dm) return;
+        lv_display_t* disp = dm->display();
+        if (!disp) return;
+
+        const int w = dm->width();
+        const int h = dm->height();
+        auto& layout = helix::LayoutManager::instance();
+
+        theme_manager_refresh_layout_constants(disp);
+        layout.init(w, h);
+
+        spdlog::info("[Application] Resize: refreshed theme + layout for {}x{} ({})",
+                     w, h, layout.name());
+    });
+
     // Initialize tips manager
     TipsManager* tips_mgr = TipsManager::get_instance();
     if (!tips_mgr->init(helix::find_readable("printing_tips.json"))) {

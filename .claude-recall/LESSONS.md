@@ -151,7 +151,7 @@
 > Don't `lv_tr()`: product names (Spoolman, Klipper, Moonraker, HelixScreen), URLs/domains, standalone tech abbreviations (AMS, QGL, ADXL), universal terms (OK, WiFi). Mark with `// i18n: do not translate`. Sentences containing product names ARE translatable ("Restarting HelixScreen…" — "Restarting" translates). Material names (PLA, PETG, ABS, TPU, PA) are also not translated, no translation_tag in XML.
 
 ### [L072] [***--|*****] Never capture bare this in async/WebSocket callbacks
-- **Uses**: 19 | **Velocity**: 5.0625 | **Learned**: 2026-02-22 | **Last**: 2026-05-13 | **Category**: gotcha | **Type**: constraint
+- **Uses**: 20 | **Velocity**: 6.0625 | **Learned**: 2026-02-22 | **Last**: 2026-05-13 | **Category**: gotcha | **Type**: constraint
 > Callbacks to `execute_gcode()` / `send_jsonrpc()` / Moonraker fire from the WS thread, possibly after the widget is gone. Never capture raw `[this]`. Use `AsyncLifetimeGuard::token()` + `tok.defer(...)` (CLAUDE.md § Threading). Older `weak_ptr<bool>` / `shared_ptr<atomic<bool>>` patterns are deprecated.
 
 ### [L073] [***--|**---] ObserverGuard release vs reset
@@ -183,7 +183,7 @@
 > LVGL 9.5: `DRAW_TASK_ADDED` cbs fire AFTER `DRAW_MAIN_END/DRAW_POST` — `lv_draw_rect/_triangle/_fill` from there draws nothing. Broke chart gradient fills that worked in 9.4-pre. Fix: do custom fills in `DRAW_MAIN_END`, compute positions via `lv_chart_get_y_array()` + `lv_map()`. Gotcha: `lv_draw_fill` VER gradient `frac=0` is BOTTOM, `frac=255` is TOP. Use `lv_draw_fill` (not `lv_draw_rect`) for gradient-only fills to avoid bg_color bleed.
 
 ### [L080] [***--|*****] Verify deployment chain before user interaction
-- **Uses**: 20 | **Velocity**: 7.5 | **Learned**: 2026-04-16 | **Last**: 2026-05-13 | **Category**: gotcha
+- **Uses**: 21 | **Velocity**: 8.5 | **Learned**: 2026-04-16 | **Last**: 2026-05-13 | **Category**: gotcha
 > Before asking user to interact on-device, verify in one pass: (1) NEW binary running (PID start time / version in log), (2) logs land where you expect (journalctl/file/console), (3) required state on (telemetry, debug level in helixscreen.env), (4) logs reachable via SSH. Each failed round-trip burns user patience. Pi: systemctl → journalctl; `deploy-pi-fg` uses `ssh -t` (console only); nohup drops output. Production log capture: systemd + journalctl.
 
 ### [L081] [***--|****-] lifetime_.defer does NOT escape UpdateQueue batch

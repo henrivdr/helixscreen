@@ -1,5 +1,5 @@
 diff --git a/src/drivers/sdl/lv_sdl_window.c b/src/drivers/sdl/lv_sdl_window.c
-index 15a87ab12..27930e9a1 100644
+index 15a87ab12..7904a9510 100644
 --- a/src/drivers/sdl/lv_sdl_window.c
 +++ b/src/drivers/sdl/lv_sdl_window.c
 @@ -21,6 +21,10 @@
@@ -13,7 +13,17 @@ index 15a87ab12..27930e9a1 100644
  #if LV_COLOR_DEPTH == 1 && LV_SDL_RENDER_MODE != LV_DISPLAY_RENDER_MODE_PARTIAL
      #error SDL LV_COLOR_DEPTH 1 requires LV_SDL_RENDER_MODE LV_DISPLAY_RENDER_MODE_PARTIAL
  #endif
-@@ -83,6 +87,13 @@ lv_display_t * lv_sdl_window_create(int32_t hor_res, int32_t ver_res)
+@@ -42,6 +46,9 @@ static lv_result_t window_create(lv_display_t * disp);
+ static void sdl_event_handler(lv_timer_t * t);
+ static void release_disp_cb(lv_event_t * e);
+ static void res_chg_event_cb(lv_event_t * e);
++#ifdef __ANDROID__
++static void apply_android_logical_resolution(lv_display_t * disp);
++#endif
+ 
+ /**********************
+  *  STATIC VARIABLES
+@@ -83,6 +90,13 @@ lv_display_t * lv_sdl_window_create(int32_t hor_res, int32_t ver_res)
          return NULL;
      }
      lv_display_set_driver_data(disp, dsc);
@@ -27,7 +37,7 @@ index 15a87ab12..27930e9a1 100644
      lv_result_t res = window_create(disp);
      if(res != LV_RESULT_OK) {
          LV_LOG_ERROR("Failed to initialize window");
-@@ -91,9 +102,6 @@ lv_display_t * lv_sdl_window_create(int32_t hor_res, int32_t ver_res)
+@@ -91,9 +105,6 @@ lv_display_t * lv_sdl_window_create(int32_t hor_res, int32_t ver_res)
          return NULL;
      }
  
@@ -37,7 +47,7 @@ index 15a87ab12..27930e9a1 100644
      /*Process the initial events*/
      sdl_event_handler(NULL);
  
-@@ -122,7 +130,13 @@ void lv_sdl_window_set_zoom(lv_display_t * disp, float zoom)
+@@ -122,7 +133,13 @@ void lv_sdl_window_set_zoom(lv_display_t * disp, float zoom)
  
  float lv_sdl_window_get_zoom(lv_display_t * disp)
  {
@@ -51,7 +61,7 @@ index 15a87ab12..27930e9a1 100644
      return dsc->zoom;
  }
  
-@@ -256,12 +270,43 @@ static void sdl_event_handler(lv_timer_t * t)
+@@ -256,12 +273,50 @@ static void sdl_event_handler(lv_timer_t * t)
                      lv_sdl_backend_ops.redraw(disp);
                      break;
                  case SDL_WINDOWEVENT_RESIZED:
@@ -61,8 +71,15 @@ index 15a87ab12..27930e9a1 100644
 -                    lv_display_set_resolution(disp, hres, vres);
 -                    dsc->ignore_size_chg = 0;
 +#ifdef __ANDROID__
-+                    /* On Android, SDL_RenderSetLogicalSize handles scaling.
-+                     * Don't let native surface resizes change LVGL's logical resolution. */
++                    /* The native surface changed (fold/unfold, orientation, IME).
++                     * Recompute integer scale + logical resolution so the LVGL
++                     * canvas matches the new surface, then redraw.  Firing
++                     * lv_display_set_resolution() also triggers
++                     * res_chg_event_cb -> resize_display (SW buffers) and
++                     * LV_EVENT_SIZE_CHANGED on the root screen, which the
++                     * application uses to refresh theme constants and
++                     * relayout panels. */
++                    apply_android_logical_resolution(disp);
                      lv_refr_now(disp);
 +#else
 +                    {
@@ -100,7 +117,7 @@ index 15a87ab12..27930e9a1 100644
                      break;
                  case SDL_WINDOWEVENT_CLOSE:
                      lv_display_delete(disp);
-@@ -271,13 +316,22 @@ static void sdl_event_handler(lv_timer_t * t)
+@@ -271,16 +326,109 @@ static void sdl_event_handler(lv_timer_t * t)
              }
          }
          if(event.type == SDL_QUIT) {
@@ -126,7 +143,94 @@ index 15a87ab12..27930e9a1 100644
      }
  }
  
-@@ -294,24 +348,150 @@ static lv_result_t window_create(lv_display_t * disp)
++#ifdef __ANDROID__
++/* Maximum logical width before we bump to the next integer scale.  Anything
++ * at or above this is considered "too dense" for the LVGL canvas — most
++ * phones land at 2x; the Fold/Flip inner display lands at 2x or 3x depending
++ * on aspect. */
++#define HELIX_ANDROID_LOGICAL_W_MAX 1920
++#define HELIX_ANDROID_MIN_SCALE     2
++#define HELIX_ANDROID_MAX_SCALE     4
++#define HELIX_ANDROID_LOG_TAG       "HelixSDL"
++
++#define HELIX_ANDROID_LOG(prio, fmt, ...) \
++    __android_log_print((prio), HELIX_ANDROID_LOG_TAG, fmt, ##__VA_ARGS__)
++
++/* Compute an integer-scale logical resolution that divides evenly into the
++ * native surface size and push it into LVGL + SDL.  Called at startup from
++ * window_create() (after init_display) AND from SDL_WINDOWEVENT_RESIZED so the
++ * LVGL canvas tracks fold/unfold transitions on foldable devices (#941). */
++static void apply_android_logical_resolution(lv_display_t * disp)
++{
++    SDL_Renderer * renderer = lv_sdl_backend_ops.get_renderer(disp);
++    if(renderer == NULL) {
++        HELIX_ANDROID_LOG(ANDROID_LOG_WARN, "apply_android_logical_resolution: renderer null");
++        return;
++    }
++
++    int native_w = 0, native_h = 0;
++    SDL_GetRendererOutputSize(renderer, &native_w, &native_h);
++
++    /* SDL_GetRendererOutputSize sometimes lags during a surface change;
++     * fall back to the current display mode. */
++    if(native_w <= 0 || native_h <= 0) {
++        SDL_DisplayMode mode;
++        if(SDL_GetCurrentDisplayMode(0, &mode) == 0) {
++            native_w = mode.w;
++            native_h = mode.h;
++        }
++    }
++
++    if(native_w <= 0 || native_h <= 0) {
++        HELIX_ANDROID_LOG(ANDROID_LOG_WARN,
++            "apply_android_logical_resolution: native size unavailable (%dx%d)",
++            native_w, native_h);
++        return;
++    }
++
++    /* Smallest integer scale whose logical width is < HELIX_ANDROID_LOGICAL_W_MAX.
++     * Gives the highest usable resolution with pixel-perfect upscaling. */
++    int scale = 1;
++    for(int s = HELIX_ANDROID_MIN_SCALE; s <= HELIX_ANDROID_MAX_SCALE; s++) {
++        if(native_w / s < HELIX_ANDROID_LOGICAL_W_MAX) {
++            scale = s;
++            break;
++        }
++    }
++
++    int32_t logical_w = native_w / scale;
++    int32_t logical_h = native_h / scale;
++    int32_t prev_w = lv_display_get_horizontal_resolution(disp);
++    int32_t prev_h = lv_display_get_vertical_resolution(disp);
++
++    SDL_RenderSetLogicalSize(renderer, logical_w, logical_h);
++
++    if(logical_w == prev_w && logical_h == prev_h) {
++        HELIX_ANDROID_LOG(ANDROID_LOG_DEBUG,
++            "logical resolution unchanged: %dx%d (native %dx%d, %dx)",
++            logical_w, logical_h, native_w, native_h, scale);
++        return;
++    }
++
++    lv_sdl_window_t * dsc = lv_display_get_driver_data(disp);
++    dsc->ignore_size_chg = 1;
++    /* lv_display_set_resolution fires LV_EVENT_RESOLUTION_CHANGED, which
++     * res_chg_event_cb routes into lv_sdl_backend_ops.resize_display to
++     * resize the SW framebuffers and SDL texture.  No need to call
++     * resize_display() again here. */
++    lv_display_set_resolution(disp, logical_w, logical_h);
++    dsc->ignore_size_chg = 0;
++
++    HELIX_ANDROID_LOG(ANDROID_LOG_INFO,
++        "logical %dx%d -> %dx%d (native %dx%d, %dx integer)",
++        prev_w, prev_h, logical_w, logical_h, native_w, native_h, scale);
++}
++#endif
++
+ static lv_result_t window_create(lv_display_t * disp)
+ {
+     lv_sdl_window_t * dsc = lv_display_get_driver_data(disp);
+@@ -294,24 +442,94 @@ static lv_result_t window_create(lv_display_t * disp)
  #if LV_SDL_FULLSCREEN
      flag |= SDL_WINDOW_FULLSCREEN;
  #endif
@@ -208,68 +312,12 @@ index 15a87ab12..27930e9a1 100644
  
 +#ifdef __ANDROID__
 +    /* On Android with FULLSCREEN_DESKTOP, the window is at the native surface
-+     * size (e.g. 2272x954). We pick an integer scale factor so the logical
-+     * resolution divides evenly into the native resolution — this eliminates
-+     * fractional-scaling aliasing artifacts on high-DPI displays.
-+     * SDL_RenderSetLogicalSize handles upscaling and touch coordinate mapping. */
-+    {
-+        int actual_w = 0, actual_h = 0;
-+
-+        /* Try multiple methods to get the real native display size.
-+         * SDL_GetRendererOutputSize may return the requested (logical) size
-+         * early in the lifecycle, so also try SDL_GetCurrentDisplayMode. */
-+        SDL_Renderer * renderer = lv_sdl_backend_ops.get_renderer(disp);
-+        SDL_GetRendererOutputSize(renderer, &actual_w, &actual_h);
-+        __android_log_print(ANDROID_LOG_INFO, "HelixSDL",
-+            "renderer output=%dx%d, requested=%dx%d", actual_w, actual_h, hor_res, ver_res);
-+
-+        if(actual_w <= hor_res && actual_h <= ver_res) {
-+            SDL_DisplayMode mode;
-+            if(SDL_GetCurrentDisplayMode(0, &mode) == 0) {
-+                actual_w = mode.w;
-+                actual_h = mode.h;
-+            }
-+            __android_log_print(ANDROID_LOG_INFO, "HelixSDL",
-+                "display mode=%dx%d", actual_w, actual_h);
-+        }
-+
-+        if(actual_w > hor_res && actual_h > ver_res) {
-+            /* Find the smallest integer scale whose logical width is < 1920.
-+             * This gives the highest usable resolution with pixel-perfect
-+             * upscaling (no fractional aliasing). Most phones land at 2x. */
-+            int best_scale = 1;
-+            for(int s = 2; s <= 4; s++) {
-+                if(actual_w / s < 1920) {
-+                    best_scale = s;
-+                    break;
-+                }
-+            }
-+
-+            int32_t logical_w = actual_w / best_scale;
-+            int32_t logical_h = actual_h / best_scale;
-+
-+            SDL_RenderSetLogicalSize(renderer, logical_w, logical_h);
-+
-+            hor_res = logical_w;
-+            ver_res = logical_h;
-+            lv_display_set_resolution(disp, logical_w, logical_h);
-+
-+            /* The SW backend allocated framebuffers at the initial 800x480.
-+             * After changing the logical resolution, resize the backend's
-+             * buffers and texture to match the new dimensions. */
-+            if(lv_sdl_backend_ops.resize_display) {
-+                lv_sdl_backend_ops.resize_display(disp);
-+            }
-+
-+            __android_log_print(ANDROID_LOG_INFO, "HelixSDL",
-+                "scaling: native %dx%d -> logical %dx%d (%dx integer)",
-+                actual_w, actual_h, logical_w, logical_h, best_scale);
-+        } else {
-+            __android_log_print(ANDROID_LOG_WARN, "HelixSDL",
-+                "no scaling: actual=%dx%d <= requested=%dx%d",
-+                actual_w, actual_h, hor_res, ver_res);
-+        }
-+    }
++     * size (e.g. 2272x954). Pick an integer-scale logical resolution so the
++     * canvas divides evenly into the native surface (no fractional aliasing)
++     * and let SDL_RenderSetLogicalSize handle upscaling + touch coordinate
++     * mapping.  The same helper runs on SDL_WINDOWEVENT_RESIZED so fold/
++     * unfold transitions on foldable devices keep the canvas in sync (#941). */
++    apply_android_logical_resolution(disp);
 +#endif
 +
 +#ifndef __ANDROID__

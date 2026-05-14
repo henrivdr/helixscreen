@@ -59,8 +59,11 @@ Most commonly needed:
 | **JSON include** | `#include <nlohmann/json.hpp>` | `#include "hv/json.hpp"` (libhv's bundled version) |
 | **Build system** | `cmake`, `ninja` | `make -j` (pure Makefile) |
 | **Bug commits** | `fix: thing` (no reference) | `fix(scope): thing (prestonbrown/helixscreen#123)` |
+| **Submodule mods** | Edit `lib/lvgl/...` / `lib/libhv/...` directly | Add/amend `patches/*.patch` — `mk/patches.mk` auto-applies. Only `lib/helix-xml/` is direct-edit (not a submodule). |
 
 **ALWAYS:** Search the SAME FILE you're editing for similar patterns before implementing.
+
+**Submodule patch workflow:** Edit the file under `lib/<sub>/`, then `cd lib/<sub> && git diff > ../../patches/<name>.patch && git restore .`. The patch in `patches/` is the source of truth — direct edits get wiped on the next `git submodule update`. Check `mk/patches.mk` (`LVGL_PATCHED_FILES`, `LIBHV_PATCHED_FILES`, etc.) and existing `patches/*.patch` before creating a new one — amend an existing patch when the change is in the same area (e.g., `lvgl_sdl_window.patch` already owns `lv_sdl_window.c`).
 
 ---
 

@@ -1507,8 +1507,19 @@ void DisplayManager::resize_timer_cb(lv_timer_t* timer) {
         return;
     }
 
-    spdlog::debug("[DisplayManager] Resize debounce complete, calling {} registered callbacks",
-                  self->m_resize_callbacks.size());
+    // Refresh cached dimensions from LVGL before fanning out callbacks.
+    // lv_display_set_resolution() (e.g. from the Android SDL window resize
+    // path on fold/unfold) does not update m_width/m_height, so without
+    // this any callback that reads dm->width()/height() would see stale
+    // startup values.  Reordering also catches non-rotation resizes from
+    // any future code path that calls lv_display_set_resolution directly.
+    if (self->m_display) {
+        self->m_width = lv_display_get_horizontal_resolution(self->m_display);
+        self->m_height = lv_display_get_vertical_resolution(self->m_display);
+    }
+
+    spdlog::debug("[DisplayManager] Resize debounce complete: {}x{}, calling {} registered callbacks",
+                  self->m_width, self->m_height, self->m_resize_callbacks.size());
 
     // Call all registered callbacks
     for (auto callback : self->m_resize_callbacks) {
