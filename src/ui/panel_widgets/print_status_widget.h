@@ -162,6 +162,8 @@ class PrintStatusWidget : public PanelWidget {
         ~DetailedFormatter();
         DetailedFormatter(const DetailedFormatter&) = delete;
         DetailedFormatter& operator=(const DetailedFormatter&) = delete;
+        DetailedFormatter(DetailedFormatter&&) = delete;
+        DetailedFormatter& operator=(DetailedFormatter&&) = delete;
 
       private:
         SubjectManager subjects_;
