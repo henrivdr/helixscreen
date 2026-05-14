@@ -317,7 +317,7 @@ void PrintStatusWidget::detach() {
 
     spdlog::debug("[PrintStatusWidget] Detached");
 
-    if (--s_formatter_refcount_ == 0) {
+    if (s_formatter_refcount_ > 0 && --s_formatter_refcount_ == 0) {
         s_formatter_.reset();
     }
 }
@@ -1189,6 +1189,44 @@ void PrintStatusWidget::library_queue_cb(lv_event_t* e) {
 // DetailedFormatter — first-instance singleton lifecycle
 // ============================================================================
 
+void PrintStatusWidget::DetailedFormatter::update_progress_pct() {
+    int pct = lv_subject_get_int(get_printer_state().get_print_progress_subject());
+    snprintf(progress_pct_buf_, sizeof(progress_pct_buf_), "%d%%", pct);
+    lv_subject_copy_string(&progress_pct_subject_, progress_pct_buf_);
+}
+
+void PrintStatusWidget::DetailedFormatter::update_layer_text() {
+    auto& ps = get_printer_state();
+    int cur = lv_subject_get_int(ps.get_print_layer_current_subject());
+    int tot = lv_subject_get_int(ps.get_print_layer_total_subject());
+    if (tot <= 0) {
+        snprintf(layer_text_buf_, sizeof(layer_text_buf_), "Layer %d", cur);
+    } else {
+        snprintf(layer_text_buf_, sizeof(layer_text_buf_), "Layer %d / %d", cur, tot);
+    }
+    lv_subject_copy_string(&layer_text_subject_, layer_text_buf_);
+}
+
+void PrintStatusWidget::DetailedFormatter::update_time_text() {
+    auto& ps = get_printer_state();
+    int elapsed = lv_subject_get_int(ps.get_print_elapsed_subject());
+    int remain = lv_subject_get_int(ps.get_print_time_left_subject());
+    int total = elapsed + remain;
+    snprintf(time_text_buf_, sizeof(time_text_buf_), "%dh %02dm / %dh %02dm", elapsed / 3600,
+             (elapsed % 3600) / 60, total / 3600, (total % 3600) / 60);
+    lv_subject_copy_string(&time_text_subject_, time_text_buf_);
+}
+
+void PrintStatusWidget::DetailedFormatter::update_filament_text() {
+    int used_mm = lv_subject_get_int(get_printer_state().get_print_filament_used_subject());
+    if (used_mm <= 0) {
+        filament_text_buf_[0] = '\0';
+    } else {
+        snprintf(filament_text_buf_, sizeof(filament_text_buf_), "%.1fm", used_mm / 1000.0);
+    }
+    lv_subject_copy_string(&filament_text_subject_, filament_text_buf_);
+}
+
 PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     UI_MANAGED_SUBJECT_STRING(progress_pct_subject_, progress_pct_buf_, "0%",
                               "print_status_progress_pct", subjects_);
@@ -1214,6 +1252,34 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
                               "print_status_idle_meta", subjects_);
     UI_MANAGED_SUBJECT_INT(idle_has_last_subject_, 0,
                            "print_status_idle_has_last", subjects_);
+
+    using helix::ui::observe_int_sync;
+    auto& ps = get_printer_state();
+    progress_observer_ = observe_int_sync<DetailedFormatter>(
+        ps.get_print_progress_subject(), this,
+        [](DetailedFormatter* self, int) { self->update_progress_pct(); });
+    layer_current_observer_ = observe_int_sync<DetailedFormatter>(
+        ps.get_print_layer_current_subject(), this,
+        [](DetailedFormatter* self, int) { self->update_layer_text(); });
+    layer_total_observer_ = observe_int_sync<DetailedFormatter>(
+        ps.get_print_layer_total_subject(), this,
+        [](DetailedFormatter* self, int) { self->update_layer_text(); });
+    elapsed_observer_ = observe_int_sync<DetailedFormatter>(
+        ps.get_print_elapsed_subject(), this,
+        [](DetailedFormatter* self, int) { self->update_time_text(); });
+    time_left_observer_ = observe_int_sync<DetailedFormatter>(
+        ps.get_print_time_left_subject(), this,
+        [](DetailedFormatter* self, int) { self->update_time_text(); });
+    filament_used_observer_ = observe_int_sync<DetailedFormatter>(
+        ps.get_print_filament_used_subject(), this,
+        [](DetailedFormatter* self, int) { self->update_filament_text(); });
+
+    // Seed initial values from current subject state
+    update_progress_pct();
+    update_layer_text();
+    update_time_text();
+    update_filament_text();
+
     spdlog::debug("[DetailedFormatter] subjects initialized");
 }
 

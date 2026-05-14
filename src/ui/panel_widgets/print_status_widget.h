@@ -75,6 +75,18 @@ class PrintStatusWidget : public PanelWidget {
         return &show_filament_active_subject_;
     }
 
+    // Test-only — instantiate the formatter without needing a real attach()
+    static void ensure_formatter_for_test() {
+        if (s_formatter_refcount_++ == 0) {
+            s_formatter_ = std::make_unique<DetailedFormatter>();
+        }
+    }
+    static void release_formatter_for_test() {
+        if (--s_formatter_refcount_ == 0) {
+            s_formatter_.reset();
+        }
+    }
+
   private:
     lv_obj_t* widget_obj_ = nullptr;
     lv_obj_t* parent_screen_ = nullptr;
@@ -194,6 +206,19 @@ class PrintStatusWidget : public PanelWidget {
         lv_subject_t idle_when_subject_;
         lv_subject_t idle_meta_subject_;
         lv_subject_t idle_has_last_subject_;
+
+        // Print-state observers (wired in constructor, RAII cleanup via ObserverGuard)
+        ObserverGuard progress_observer_;
+        ObserverGuard layer_current_observer_;
+        ObserverGuard layer_total_observer_;
+        ObserverGuard elapsed_observer_;
+        ObserverGuard time_left_observer_;
+        ObserverGuard filament_used_observer_;
+
+        void update_progress_pct();
+        void update_layer_text();
+        void update_time_text();
+        void update_filament_text();
     };
 
     static inline std::unique_ptr<DetailedFormatter> s_formatter_;
