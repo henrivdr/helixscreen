@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.62] - 2026-05-13
+
+This release lands the **XML linter as a CI gate** (and the ~50 XML cleanups it surfaced), **gcode-streaming polish** for OrcaSlicer and purge/wipe-tower geometry, **launcher and installer hardening** (env preservation on upgrade, rolling-backup sweep on clean, tolerant env parsing with warnings instead of silent abort), and a **local-exec recovery script** that replaces the Moonraker `shell_command` path which never worked on printers without the `helix_recover` macro. Plus an updater fix for a 32-bit `statvfs` overflow that falsely reported "no space" on Pi.
+
+### Added
+
+- **Touch-calibration force honored across wizard and standalone paths** — the wizard's force-recalibrate option and the `--force-touch-calibration` standalone entry point now route through the same path so either reliably triggers a fresh calibration regardless of which one ran.
+- **Gcode viewer excludes purge tower and wipe tower from 2D auto-fit bounding box** — slicers that emit a purge/wipe block at the bed edge no longer drag the preview camera off the actual print; the model fills the viewport like it should.
+- **About screen surfaces kernel arch + userspace bitness** — useful for triaging cross-arch reports (e.g., SonicPad: aarch64 kernel running armhf userspace). The About panel now shows both lines so debug bundles don't have to guess.
+- **Installer sweeps rolling config-backup directories on uninstall and clean** — `~/.helixscreen-backup.*` directories from prior upgrades used to accumulate forever; `uninstall` and `clean` paths now sweep them.
+- **XML linter (`helix-xml-linter`) vendored and wired as a CI gate** — imported from GhostTypes/helix-xml-linter@2124093, auto-discovers widgets and design-token constants from the source tree, and runs as a CI gate via the Makefile. Catches unknown-const-refs, silently-dropped attributes, and style-prop typos at lint time instead of at runtime where they'd surface as warnings or misrendered widgets.
+
+### Fixed
+
+- **Installer no longer deletes bundled `helixscreen.env` on upgrade** — prior versions wiped the user's env file during upgrade, taking any custom log level / mock config / language override with it. The upgrade path now leaves it in place; only `uninstall` removes it.
+- **Recovery probe uses local `helix-recover.sh` instead of the dead Moonraker `shell_command` path** — printers without the `helix_recover` macro in their Klipper config (most non-Klipper-default builds) had no working recovery action; the probe would fall back to a "method not found" toast or worse, no-op silently. The probe now exec's a local script bundled with the installer, removing the firmware-side dependency entirely.
+- **Updater "no space" false-positive on 32-bit Pi (and other armhf platforms)** — `statvfs::f_bavail * f_frsize` overflowed `unsigned long` on armv7, returning 0 even on disks with tens of gigabytes free. Widened the multiplication to `uint64_t` so reported free-space is honest. Adjacent to the prior systemd-namespace `statvfs` mystery (bundle 7ZGHW5KX) but a different mechanism.
+- **Update manifest now publishes installer size; fallback floor lowered 200 → 120 MB** — the "minimum required free space" preflight was over-conservative when the manifest size key was absent. Now uses the published size when present and a tighter fallback otherwise.
+- **EGL init failure on backdrop-blur is sticky for the boot session** — when GPU-accelerated backdrop blur failed once, the retry loop kept hammering EGL on every frame and spamming logs. First failure now disables the path for the rest of the session; the user gets the software fallback without the log noise.
+- **Gcode streaming parser polish** — four targeted fixes to the streaming path: purge filter now applies to full-file mode too (was streaming-only); OrcaSlicer `;LAYER_CHANGE` markers index correctly without false positives on similar substrings; parser position is seeded per-layer so partial reads pick up correctly; axis extraction truncates at `;` comments so commented G1 values don't pollute bbox math.
+- **Launcher tolerant env-file parsing with malformed-line warnings** — malformed lines in `helixscreen.env` (bad quoting, stray characters, unterminated strings) used to abort startup with an opaque shell error. The launcher now warns about the bad line and continues with the rest of the file, so one broken variable doesn't leave the app unable to launch.
+- **launcher.log moved off tmpfs, prefers FHS `/var/log/helixscreen/`** — `/tmp` is cleared on reboot on many platforms, so launcher.log was already gone by the time anyone could read it after a boot-time crash. Now persists under `/var/log/helixscreen/` with a fallback for permissions-restricted environments.
+- **Logging: console sink disabled under daemon mode; per-frame trace spam removed from icon + filament path** — daemon-mode runs had duplicate console output going to journald in addition to the file sink; the console sink is now suppressed when running detached. Separately, two TRACE-level call sites in the icon-cache and filament-path render were firing at 60 Hz; both demoted/removed to silence the spam.
+- **About screen logo no longer looks misaligned** — `helixscreen-logo.png` had a baked-in transparent border that made the rendered logo appear off-center in the About panel; cropped at the asset.
+- **Installer hardening: uninstall→reinstall race + self-delete guards** — back-to-back uninstall+install (e.g., from the in-app reinstall path, or from a forced reinstall on the update path) could leave the installer mid-flight when its own `$0` lived inside `$INSTALL_DIR`. New `guard_self_delete` + sentinel-path machinery refuses to remove the directory that's currently executing, with clear error messages instead of mysterious half-states.
+- **L081 Mechanism C sweep: residual bg-thread `tok.expired()` guards removed** — follow-up to the v0.99.60 codebase-wide cleanup, picking up the remaining redundant guards the strict-mode runtime detector continued to flag.
+- **~50 XML correctness fixes surfaced by the new linter** — every cleanup the linter found, batched: unknown-const-refs (`#nonexistent_token` references), style-prop typos (`stryle_pad_all`, CSS-name aliases that LVGL doesn't honor), silently-dropped attributes replaced with their actual LVGL equivalents, `variant="muted"` removed from widgets that don't accept it or where it was redundant on `text_small`/`text_body`, `flag_` prefix and `flags=` shortcut normalized to per-flag attributes, `text_input` attributes (`placeholder`, `keyboard`) standardized, `ui_button` cleanup, and `setting_dropdown_row hide_description` properly wired.
+
+### Changed
+
+- **LVGL `lv_image_set_src` warning now includes object + parent name** — when an image fails to load, the diagnostic identifies *which* image so it's actually triageable instead of a generic "couldn't load image" pointer-style log. Internal LVGL patch (`lvgl-image-set-src-warning-context.patch`).
+- **Docs: comprehensive log destinations and retrieval per platform** — new docs page covering where logs live and how to fetch them on Pi, K1, K2, AD5M/AD5X, SonicPad, CC1, and Snapmaker U1, because the answer is different on every device.
+
 ## [0.99.61] - 2026-05-13
 
 A round of **launch-time and connect-time UX polish** plus **home-screen widget polish**: the Klipper recovery dialog no longer flashes briefly when starting the app or adding a printer, the home panel no longer renders blank after switching printers, and the Snapmaker U1 wizard correctly identifies a U1 instead of showing *UNKNOWN*. Tapping a fan tile now opens fan control instead of the picker, the fan dial debounces drag-induced Moonraker sends, and the rest of the icon widgets center their icon+label as a group when labels are on. Plus a fix for the M300 sound feedback loop on hosts without a Klipper-declared beeper, the AD5X *Method not found* toast on the recovery probe, and a wake-from-sleep regression during prints when sleep-while-printing is disabled.
@@ -3640,6 +3673,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.62]: https://github.com/prestonbrown/helixscreen/compare/v0.99.61...v0.99.62
 [0.99.61]: https://github.com/prestonbrown/helixscreen/compare/v0.99.60...v0.99.61
 [0.99.60]: https://github.com/prestonbrown/helixscreen/compare/v0.99.59...v0.99.60
 [0.99.59]: https://github.com/prestonbrown/helixscreen/compare/v0.99.58...v0.99.59
