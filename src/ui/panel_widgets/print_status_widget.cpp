@@ -1087,14 +1087,30 @@ void PrintStatusWidget::apply_picker_state() {
     if (!picker_backdrop_)
         return;
 
-    // Visual feedback on Library/Detailed selector buttons (bg_opa highlights active)
+    // Visual feedback on Library/Detailed selector buttons: selected = primary accent fill,
+    // unselected = outlined (XML default).
     {
         lv_obj_t* lib_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_library");
         lv_obj_t* det_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_detailed");
         if (lib_btn && det_btn) {
             bool detailed = (layout_style_ == "detailed");
-            lv_obj_set_style_bg_opa(lib_btn, detailed ? LV_OPA_TRANSP : LV_OPA_30, LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(det_btn, !detailed ? LV_OPA_TRANSP : LV_OPA_30, LV_PART_MAIN);
+            lv_obj_t* active = detailed ? det_btn : lib_btn;
+            lv_obj_t* inactive = detailed ? lib_btn : det_btn;
+            lv_color_t accent = theme_manager_get_color("primary");
+            lv_obj_set_style_bg_color(active, accent, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(active, LV_OPA_COVER, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(inactive, LV_OPA_TRANSP, LV_PART_MAIN);
+        }
+    }
+
+    // Show Sections only applies to the Library layout; hide that whole group when Detailed.
+    {
+        lv_obj_t* show_sections = lv_obj_find_by_name(picker_backdrop_, "show_sections_group");
+        if (show_sections) {
+            if (layout_style_ == "detailed")
+                lv_obj_add_flag(show_sections, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_remove_flag(show_sections, LV_OBJ_FLAG_HIDDEN);
         }
     }
 
@@ -1178,6 +1194,9 @@ void PrintStatusWidget::print_status_layout_library_cb(lv_event_t* /*e*/) {
     s_active_picker_->config_["layout_style"] = "library";
     lv_subject_set_int(&layout_mode_subject_, 0);
     s_active_picker_->apply_picker_state();
+    // Apply to the live widget immediately so the user sees the swap behind the picker overlay.
+    s_active_picker_->update_idle_compact_mode();
+    s_active_picker_->update_active_layout_mode();
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -1189,6 +1208,8 @@ void PrintStatusWidget::print_status_layout_detailed_cb(lv_event_t* /*e*/) {
     s_active_picker_->config_["layout_style"] = "detailed";
     lv_subject_set_int(&layout_mode_subject_, 1);
     s_active_picker_->apply_picker_state();
+    s_active_picker_->update_idle_compact_mode();
+    s_active_picker_->update_active_layout_mode();
     LVGL_SAFE_EVENT_CB_END();
 }
 

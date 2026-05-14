@@ -19,28 +19,32 @@
       <lv_obj width="100%" height="content" flex_flow="row" style_pad_all="0"
               style_pad_gap="#space_xs" scrollable="false">
         <ui_button name="layout_btn_library" flex_grow="1" height="#button_height_sm"
-                   variant="ghost" text="Library" translation_tag="Library">
+                   variant="outline" text="Library" translation_tag="Library">
           <event_cb trigger="clicked" callback="print_status_layout_library_cb"/>
         </ui_button>
         <ui_button name="layout_btn_detailed" flex_grow="1" height="#button_height_sm"
-                   variant="ghost" text="Detailed" translation_tag="Detailed">
+                   variant="outline" text="Detailed" translation_tag="Detailed">
           <event_cb trigger="clicked" callback="print_status_layout_detailed_cb"/>
         </ui_button>
       </lv_obj>
-      <lv_obj width="100%" height="1" style_bg_color="#text_muted" style_bg_opa="38"
-              style_pad_all="0" scrollable="false"
-              clickable="false" event_bubble="true"/>
-      <!-- Header -->
-      <text_small text="Show Sections" translation_tag="Show Sections"
-                  style_pad_bottom="#space_xxs"
-                  clickable="false" event_bubble="true"/>
-      <lv_obj width="100%" height="1" style_bg_color="#text_muted" style_bg_opa="38"
-              style_pad_all="0" scrollable="false"
-              clickable="false" event_bubble="true"/>
-      <!-- Option rows populated dynamically by C++ -->
-      <lv_obj name="option_list" width="100%" height="content"
-              flex_flow="column" style_pad_all="#space_xs" style_pad_gap="0"
-              scrollable="false"/>
+      <!-- Show Sections group — only relevant for Library layout; C++ hides this when Detailed is active -->
+      <lv_obj name="show_sections_group" width="100%" height="content"
+              style_pad_all="0" style_pad_gap="#space_sm" flex_flow="column"
+              scrollable="false" clickable="false" event_bubble="true">
+        <lv_obj width="100%" height="1" style_bg_color="#text_muted" style_bg_opa="38"
+                style_pad_all="0" scrollable="false"
+                clickable="false" event_bubble="true"/>
+        <text_small text="Show Sections" translation_tag="Show Sections"
+                    style_pad_bottom="#space_xxs"
+                    clickable="false" event_bubble="true"/>
+        <lv_obj width="100%" height="1" style_bg_color="#text_muted" style_bg_opa="38"
+                style_pad_all="0" scrollable="false"
+                clickable="false" event_bubble="true"/>
+        <!-- Option rows populated dynamically by C++ -->
+        <lv_obj name="option_list" width="100%" height="content"
+                flex_flow="column" style_pad_all="#space_xs" style_pad_gap="0"
+                scrollable="false"/>
+      </lv_obj>
     </lv_obj>
   </view>
 </component>
