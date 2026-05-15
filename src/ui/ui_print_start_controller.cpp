@@ -772,7 +772,10 @@ void PrintStartController::show_material_mismatch_warning(
                 loaded_temps =
                     fmt::format(" ({}\u2013{}°C)", m.loaded_nozzle_min, m.loaded_nozzle_max);
             }
-            message += fmt::format("  {} T{}: {} {}{} \u2192 {}{}\n", LV_SYMBOL_BULLET,
+            // ASCII "->" instead of "\u2192" since the bundled NotoSans
+            // weights don't include U+2190-U+2193 glyphs (only NotoSansCJK
+            // does, and CJK isn't a font fallback path for the dialog body).
+            message += fmt::format("  {} T{}: {} {}{} -> {}{}\n", LV_SYMBOL_BULLET,
                                    m.tool_index, lv_tr("needs"), m.expected_material,
                                    expected_temps, m.loaded_material, loaded_temps);
         }
