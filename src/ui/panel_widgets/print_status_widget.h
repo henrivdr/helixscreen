@@ -321,6 +321,9 @@ class PrintStatusWidget : public PanelWidget {
     void apply_visibility_config();
     void recompute_actions_visibility();
     void apply_picker_state();
+    // Idempotent visual feedback only — paints the selected layout button
+    // primary, hides Show Sections in Detailed mode. No checkbox read, no save.
+    void apply_picker_visuals();
 
     static PrintStatusWidget* s_active_picker_;
 

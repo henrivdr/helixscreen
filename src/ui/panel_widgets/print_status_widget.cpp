@@ -244,19 +244,22 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
             });
     }
 
-    // Register history observer to update idle thumbnail when history loads
+    // Register history observer to update idle thumbnail when history loads.
+    // PrintHistoryManager fires observers on the main thread today, but
+    // tok.defer() future-proofs against any bg-thread callsite and satisfies
+    // the L081 lint gate (no bare `if (tok.expired()) return;` + `this` access).
     auto token = lifetime_.token();
     history_changed_cb_ = [this, token]() {
-        if (token.expired())
-            return;
-        if (!widget_obj_ || !print_card_thumb_)
-            return;
-        auto state = static_cast<PrintJobState>(
-            lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
-        bool is_idle = (state != PrintJobState::PRINTING && state != PrintJobState::PAUSED);
-        if (is_idle) {
-            reset_print_card_to_idle();
-        }
+        token.defer("PrintStatusWidget::on_history_changed", [this]() {
+            if (!widget_obj_ || !print_card_thumb_)
+                return;
+            auto state = static_cast<PrintJobState>(
+                lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
+            bool is_idle = (state != PrintJobState::PRINTING && state != PrintJobState::PAUSED);
+            if (is_idle) {
+                reset_print_card_to_idle();
+            }
+        });
     };
     if (auto* hm = get_print_history_manager()) {
         hm->add_observer(&history_changed_cb_);
@@ -363,16 +366,11 @@ void PrintStatusWidget::detach() {
 
     spdlog::debug("[PrintStatusWidget] Detached");
 
-    // Decrement refcount but do NOT destroy the formatter — its instance subjects
-    // are referenced by bind_text observers in the widget tree, and helix-xml does
-    // not unregister scope entries on subject deinit. Destroying the formatter
-    // leaves dangling subject pointers in the global XML scope; the next
-    // bind_text observer-remove during widget delete then segfaults walking a
-    // freed linked list. Letting the formatter live for the process lifetime is
-    // safe (its memory + observers + history-callback are bounded) and matches
-    // the static-inline pattern used for the widget-level layout subjects.
-    if (s_formatter_refcount_ > 0)
-        --s_formatter_refcount_;
+    // NOTE: s_formatter_refcount_ is decremented in ~PrintStatusWidget, not
+    // here, because the dtor ALSO calls detach(). Double-decrement would
+    // corrupt the count with multiple PrintStatusWidget instances live (panel
+    // manager may keep up to 4 — one per breakpoint variant). detach() is
+    // safely idempotent — re-entry resets observers that are already null.
 }
 
 // ============================================================================
@@ -1108,42 +1106,46 @@ void PrintStatusWidget::show_configure_picker() {
     }
 
     // Initial visual state: primary-fill the selected layout button, hide the
-    // Show Sections group when Detailed is active.
-    apply_picker_state();
+    // Show Sections group when Detailed is active. Visuals-only — full
+    // apply_picker_state() would re-save the config on every open.
+    apply_picker_visuals();
 
     spdlog::debug("[PrintStatusWidget] Configure picker shown");
+}
+
+void PrintStatusWidget::apply_picker_visuals() {
+    if (!picker_backdrop_)
+        return;
+
+    // Library/Detailed selector buttons: selected = primary accent fill,
+    // unselected = outlined (XML default).
+    lv_obj_t* lib_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_library");
+    lv_obj_t* det_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_detailed");
+    if (lib_btn && det_btn) {
+        bool detailed = (layout_style_ == "detailed");
+        lv_obj_t* active = detailed ? det_btn : lib_btn;
+        lv_obj_t* inactive = detailed ? lib_btn : det_btn;
+        lv_color_t accent = theme_manager_get_color("primary");
+        lv_obj_set_style_bg_color(active, accent, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(active, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(inactive, LV_OPA_TRANSP, LV_PART_MAIN);
+    }
+
+    // Show Sections only applies to the Library layout — hide in Detailed.
+    lv_obj_t* show_sections = lv_obj_find_by_name(picker_backdrop_, "show_sections_group");
+    if (show_sections) {
+        if (layout_style_ == "detailed")
+            lv_obj_add_flag(show_sections, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_remove_flag(show_sections, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void PrintStatusWidget::apply_picker_state() {
     if (!picker_backdrop_)
         return;
 
-    // Visual feedback on Library/Detailed selector buttons: selected = primary accent fill,
-    // unselected = outlined (XML default).
-    {
-        lv_obj_t* lib_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_library");
-        lv_obj_t* det_btn = lv_obj_find_by_name(picker_backdrop_, "layout_btn_detailed");
-        if (lib_btn && det_btn) {
-            bool detailed = (layout_style_ == "detailed");
-            lv_obj_t* active = detailed ? det_btn : lib_btn;
-            lv_obj_t* inactive = detailed ? lib_btn : det_btn;
-            lv_color_t accent = theme_manager_get_color("primary");
-            lv_obj_set_style_bg_color(active, accent, LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(active, LV_OPA_COVER, LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(inactive, LV_OPA_TRANSP, LV_PART_MAIN);
-        }
-    }
-
-    // Show Sections only applies to the Library layout; hide that whole group when Detailed.
-    {
-        lv_obj_t* show_sections = lv_obj_find_by_name(picker_backdrop_, "show_sections_group");
-        if (show_sections) {
-            if (layout_style_ == "detailed")
-                lv_obj_add_flag(show_sections, LV_OBJ_FLAG_HIDDEN);
-            else
-                lv_obj_remove_flag(show_sections, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
+    apply_picker_visuals();
 
     lv_obj_t* option_list = lv_obj_find_by_name(picker_backdrop_, "option_list");
     if (!option_list)
@@ -1686,6 +1688,38 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     UI_MANAGED_SUBJECT_INT(idle_has_last_subject_, 0,
                            "print_status_idle_has_last", subjects_);
 
+    // Tear down formatter-owned subjects + observers under lv_deinit() (while
+    // spdlog and PrintHistoryManager are still alive). ~DetailedFormatter runs
+    // at C++ atexit, which is too late: spdlog sinks may be gone (UAF in log
+    // calls) and helix-xml's scope is destroyed, so deinit_all() at atexit is
+    // a no-op but the dangling pointer window between lv_deinit and atexit is
+    // closed by this earlier teardown. Safe to fire multiple times since
+    // subjects_.deinit_all() and observer .reset() are idempotent.
+    StaticSubjectRegistry::instance().register_deinit("PrintStatusWidgetDetailedFormatter", []() {
+        if (!s_formatter_) return;
+        if (auto* hm = get_print_history_manager()) {
+            hm->remove_observer(&s_formatter_->history_cb_);
+        }
+        s_formatter_->progress_observer_.reset();
+        s_formatter_->layer_current_observer_.reset();
+        s_formatter_->layer_total_observer_.reset();
+        s_formatter_->elapsed_observer_.reset();
+        s_formatter_->time_left_observer_.reset();
+        s_formatter_->filament_used_observer_.reset();
+        s_formatter_->nozzle_temp_observer_.reset();
+        s_formatter_->nozzle_target_observer_.reset();
+        s_formatter_->bed_temp_observer_.reset();
+        s_formatter_->bed_target_observer_.reset();
+        s_formatter_->chamber_temp_observer_.reset();
+        s_formatter_->chamber_target_observer_.reset();
+        s_formatter_->tool_count_observer_.reset();
+        s_formatter_->active_tool_observer_.reset();
+        s_formatter_->arc_value_observer_.reset();
+        s_formatter_->nozzle_temp_lifetime_.reset();
+        s_formatter_->nozzle_target_lifetime_.reset();
+        s_formatter_->subjects_.deinit_all();
+    });
+
     using helix::ui::observe_int_sync;
     auto& ps = get_printer_state();
     progress_observer_ = observe_int_sync<DetailedFormatter>(
@@ -1749,10 +1783,13 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     update_multi_tool();
     update_tool_label();
 
-    // Arc value observer — keeps lv_arc value in sync with print progress
+    // Arc value observer — keeps lv_arc value in sync with print progress.
+    // arc_widget_ is nulled by an LV_EVENT_DELETE callback registered in
+    // attach_arc(), so a non-null pointer here is always live (L075: no
+    // lv_obj_is_valid in observer cbs).
     arc_value_observer_ = observe_int_sync<DetailedFormatter>(
         ps.get_print_progress_subject(), this, [](DetailedFormatter* self, int pct) {
-            if (self->arc_widget_ && lv_obj_is_valid(self->arc_widget_)) {
+            if (self->arc_widget_) {
                 lv_arc_set_value(self->arc_widget_, pct);
             }
         });
@@ -1773,11 +1810,13 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
 }
 
 PrintStatusWidget::DetailedFormatter::~DetailedFormatter() {
-    spdlog::debug("[DetailedFormatter] tearing down");
-    if (auto* hm = get_print_history_manager()) {
-        hm->remove_observer(&history_cb_);
-    }
-    subjects_.deinit_all();
+    // Intentionally empty. The formatter is held in a process-lifetime
+    // std::unique_ptr (s_formatter_) and only ever destructs at C++ atexit,
+    // by which point spdlog may already be torn down (segfault in sink
+    // atomics) and PrintHistoryManager's singleton may be gone. Cleanup
+    // happens earlier via StaticSubjectRegistry::register_deinit (fires under
+    // lv_deinit), not here. subjects_'s own destructor will run, but its
+    // deinit_all() is a safe no-op once lv_deinit has cleared the registry.
 }
 
 // Force the arc to a square sized to fit its parent column. lv_arc draws
@@ -1806,7 +1845,18 @@ void PrintStatusWidget::DetailedFormatter::attach_arc(lv_obj_t* arc) {
         // Initial square sizing (a follow-up call from on_size_changed picks
         // up the final layout when the widget grid resolves).
         resize_arc_to_square(arc);
+        // Null arc_widget_ when LVGL destroys the arc — lets the progress
+        // observer null-check without lv_obj_is_valid (L075).
+        lv_obj_add_event_cb(
+            arc,
+            [](lv_event_t* /*e*/) {
+                if (s_formatter_) s_formatter_->arc_widget_ = nullptr;
+            },
+            LV_EVENT_DELETE, nullptr);
         // Re-size whenever the column relayouts (window resize, breakpoint).
+        // The parent's LV_EVENT_SIZE_CHANGED cb references the arc via
+        // user_data; the cb is auto-removed when the parent is deleted, so no
+        // explicit cleanup needed here.
         lv_obj_t* parent = lv_obj_get_parent(arc);
         if (parent) {
             lv_obj_add_event_cb(parent,
