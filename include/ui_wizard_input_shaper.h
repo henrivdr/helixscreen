@@ -82,6 +82,21 @@ class WizardInputShaperStep {
     void cleanup();
 
     /**
+     * @brief Abort an in-progress calibration via M112 + firmware_restart.
+     *
+     * Suppresses the recovery / disconnect modals, invalidates async tokens,
+     * triggers the calibrator's emergency abort sequence, and resets the
+     * wizard UI back to its Start-able state. Safe to call when nothing is
+     * running (becomes a no-op and returns false).
+     *
+     * Used by both the in-step Cancel button and by cleanup() when the
+     * user backs out while calibration is still running.
+     *
+     * @return true if an active calibration was aborted; false if nothing was running.
+     */
+    bool abort_in_progress_calibration();
+
+    /**
      * @brief Check if step is validated
      *
      * @return true if calibration complete or user explicitly skipped
@@ -168,6 +183,10 @@ class WizardInputShaperStep {
         return &calibration_started_;
     }
 
+    lv_subject_t* get_active_subject() {
+        return &calibration_active_;
+    }
+
     /**
      * @brief Get lifetime token for async callback safety
      *
@@ -194,6 +213,10 @@ class WizardInputShaperStep {
     lv_subject_t calibration_status_;
     lv_subject_t calibration_progress_;
     lv_subject_t calibration_started_; ///< 0=not started, 1=started (hides Start button)
+    lv_subject_t calibration_active_;  ///< 1 iff calibration is running (controls Cancel
+                                       ///< button visibility). Cleared on complete / cancel /
+                                       ///< error. Distinct from `started_` which stays at 1
+                                       ///< post-completion to keep the Start button hidden.
 
     // String buffers for subjects
     char status_buffer_[128] = "Ready to calibrate";

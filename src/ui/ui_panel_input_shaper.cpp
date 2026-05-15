@@ -763,34 +763,14 @@ void InputShaperPanel::cancel_calibration() {
     calibrate_all_mode_ = false;
     calibration_lifetime_.invalidate(); // Discard any in-flight async callbacks
 
-    // Cancel calibrator state so we ignore any late results
-    if (calibrator_) {
-        calibrator_->cancel();
-    }
-
     // Suppress shutdown/disconnect modals — E-stop + restart triggers expected reconnect
     EmergencyStopOverlay::instance().suppress_recovery_dialog(RecoverySuppression::LONG);
     if (api_) {
         api_->suppress_disconnect_modal(15000);
     }
 
-    // M112 emergency stop halts immediately at MCU level (bypasses blocked gcode queue),
-    // then firmware restart brings Klipper back online
-    if (api_) {
-        api_->emergency_stop(
-            [this]() {
-                spdlog::debug("[InputShaper] Emergency stop sent, sending firmware restart");
-                if (api_) {
-                    api_->restart_firmware(
-                        []() { spdlog::debug("[InputShaper] Firmware restart initiated"); },
-                        [](const MoonrakerError& err) {
-                            spdlog::error("[InputShaper] Firmware restart failed: {}", err.message);
-                        });
-                }
-            },
-            [](const MoonrakerError& err) {
-                spdlog::error("[InputShaper] Emergency stop failed: {}", err.message);
-            });
+    if (calibrator_) {
+        calibrator_->emergency_abort();
     }
 
     set_state(State::IDLE);

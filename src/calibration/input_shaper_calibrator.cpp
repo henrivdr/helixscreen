@@ -209,6 +209,36 @@ void InputShaperCalibrator::run_calibration(char axis, ProgressCallback on_progr
 }
 
 // ============================================================================
+// emergency_abort()
+// ============================================================================
+
+void InputShaperCalibrator::emergency_abort() {
+    state_ = State::IDLE;
+
+    if (!api_) {
+        spdlog::warn("[InputShaperCalibrator] emergency_abort called without API");
+        return;
+    }
+
+    spdlog::info("[InputShaperCalibrator] Emergency abort: sending M112 + firmware_restart");
+
+    MoonrakerAPI* api = api_;
+    api_->emergency_stop(
+        [api]() {
+            spdlog::debug("[InputShaperCalibrator] M112 sent, restarting firmware");
+            api->restart_firmware(
+                []() { spdlog::debug("[InputShaperCalibrator] Firmware restart initiated"); },
+                [](const MoonrakerError& err) {
+                    spdlog::error("[InputShaperCalibrator] Firmware restart failed: {}",
+                                  err.message);
+                });
+        },
+        [](const MoonrakerError& err) {
+            spdlog::error("[InputShaperCalibrator] Emergency stop failed: {}", err.message);
+        });
+}
+
+// ============================================================================
 // apply_settings()
 // ============================================================================
 

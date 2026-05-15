@@ -2,6 +2,7 @@
 
 #include "ui_wizard_input_shaper.h"
 
+#include "ui_emergency_stop.h"
 #include "ui_update_queue.h"
 #include "ui_wizard_helpers.h"
 
@@ -10,6 +11,7 @@
 #include "input_shaper_calibrator.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "moonraker_api.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
 
@@ -61,6 +63,7 @@ WizardInputShaperStep::~WizardInputShaperStep() {
         lv_subject_deinit(&calibration_status_);
         lv_subject_deinit(&calibration_progress_);
         lv_subject_deinit(&calibration_started_);
+        lv_subject_deinit(&calibration_active_);
         subjects_initialized_ = false;
     }
 
@@ -93,6 +96,10 @@ void WizardInputShaperStep::init_subjects() {
 
     // Initialize started subject (controls Start button and skip hint visibility)
     helix::ui::wizard::init_int_subject(&calibration_started_, 0, "wizard_input_shaper_started");
+
+    // Initialize active subject (controls Cancel button visibility — 1 only while
+    // calibration is in flight; cleared on complete / cancel / error)
+    helix::ui::wizard::init_int_subject(&calibration_active_, 0, "wizard_input_shaper_active");
 
     subjects_initialized_ = true;
     spdlog::debug("[{}] Subjects initialized", get_name());
@@ -138,6 +145,8 @@ static void safe_set_complete(helix::LifetimeToken token) {
         if (step) {
             lv_subject_copy_string(step->get_status_subject(), lv_tr("Calibration complete!"));
             lv_subject_set_int(step->get_progress_subject(), 100);
+            // Calibration finished — hide the Cancel button
+            lv_subject_set_int(step->get_active_subject(), 0);
             step->set_calibration_complete(true);
 
             // Enable wizard Next button (connection_test_passed controls disabled state)
@@ -151,7 +160,13 @@ static void safe_handle_error(helix::LifetimeToken token) {
         if (token.expired()) {
             return;
         }
-        // On error: switch footer back to Skip so user can proceed past the step
+        // On error: switch footer back to Skip so user can proceed past the step,
+        // and hide the Cancel button (nothing to cancel anymore).
+        WizardInputShaperStep* step = get_wizard_input_shaper_step();
+        if (step) {
+            lv_subject_set_int(step->get_active_subject(), 0);
+            lv_subject_set_int(step->get_started_subject(), 0);
+        }
         lv_subject_set_int(&connection_test_passed, 1);
         lv_subject_set_int(&wizard_show_skip, 1);
     });
@@ -168,6 +183,8 @@ static void on_start_calibration_clicked(lv_event_t* e) {
 
     // Hide Start button and skip hint via subject binding
     lv_subject_set_int(step->get_started_subject(), 1);
+    // Mark calibration in-flight — surfaces the Cancel button
+    lv_subject_set_int(step->get_active_subject(), 1);
 
     // Switch footer from Skip to Next (disabled during calibration)
     lv_subject_set_int(&wizard_show_skip, 0);
@@ -261,10 +278,26 @@ static void on_start_calibration_clicked(lv_event_t* e) {
     }
 }
 
+// Cancel button visible during in-progress calibration. Routes through
+// abort_in_progress_calibration() which sends M112 + firmware_restart so
+// Klipper actually stops the SHAPER_CALIBRATE macro (cancel() alone only
+// resets local state — the macro blocks the gcode queue, so the printer
+// keeps sweeping until M112).
+static void on_cancel_calibration_clicked(lv_event_t* e) {
+    (void)e;
+    spdlog::info("[Wizard Input Shaper] Cancel clicked");
+    WizardInputShaperStep* step = get_wizard_input_shaper_step();
+    if (!step) {
+        return;
+    }
+    step->abort_in_progress_calibration();
+}
+
 void WizardInputShaperStep::register_callbacks() {
     spdlog::debug("[{}] Registering callbacks", get_name());
 
     lv_xml_register_event_cb(nullptr, "on_start_is_calibration", on_start_calibration_clicked);
+    lv_xml_register_event_cb(nullptr, "on_cancel_is_calibration", on_cancel_calibration_clicked);
 }
 
 // ============================================================================
@@ -302,11 +335,22 @@ lv_obj_t* WizardInputShaperStep::create(lv_obj_t* parent) {
 void WizardInputShaperStep::cleanup() {
     spdlog::debug("[{}] Cleaning up resources", get_name());
 
+    // If calibration is mid-flight on the printer, send M112 + firmware_restart
+    // so Klipper actually stops. cancel() alone only resets local state — the
+    // macro blocks the gcode queue, leaving the sweep running after Back.
+    bool aborted = false;
+    if (calibrator_ && calibrator_->is_active()) {
+        aborted = abort_in_progress_calibration();
+    }
+
     // Invalidate lifetime to prevent callbacks from updating subjects
+    // (abort_in_progress_calibration already invalidated, but invalidate
+    //  is idempotent and we still need it on the non-active path).
     lifetime_.invalidate();
 
-    // Cancel any in-progress calibration
-    if (calibrator_) {
+    // Cancel any in-progress calibration (local state — covers the non-active
+    // path as well as defensively redundant when aborted above).
+    if (calibrator_ && !aborted) {
         calibrator_->cancel();
     }
 
@@ -322,6 +366,10 @@ void WizardInputShaperStep::cleanup() {
         lv_subject_set_int(&calibration_progress_, 0);
         lv_subject_copy_string(&calibration_status_, "Ready to calibrate");
     }
+    // Always clear active on cleanup (whether complete or not — nothing is running anymore)
+    if (subjects_initialized_) {
+        lv_subject_set_int(&calibration_active_, 0);
+    }
 
     // Reset footer subjects for next step
     lv_subject_set_int(&wizard_show_skip, 0);
@@ -333,6 +381,43 @@ void WizardInputShaperStep::cleanup() {
     screen_root_ = nullptr;
 
     spdlog::debug("[{}] Cleanup complete", get_name());
+}
+
+// ============================================================================
+// Abort in-progress calibration
+// ============================================================================
+
+bool WizardInputShaperStep::abort_in_progress_calibration() {
+    if (!calibrator_ || !calibrator_->is_active()) {
+        return false;
+    }
+
+    spdlog::info("[{}] Aborting in-progress calibration (M112 + firmware_restart)", get_name());
+
+    // Suppress shutdown/disconnect modals — M112 + restart triggers expected reconnect
+    EmergencyStopOverlay::instance().suppress_recovery_dialog(RecoverySuppression::LONG);
+    if (auto* api = get_moonraker_api()) {
+        api->suppress_disconnect_modal(15000);
+    }
+
+    // Discard any in-flight async callbacks (token expires; chain bails out
+    // when the X-axis collector eventually fires)
+    lifetime_.invalidate();
+
+    calibrator_->emergency_abort();
+
+    // Reset UI back to start-able state. Step is still on-screen; user can
+    // Skip via footer or click Start to retry once Klipper is back.
+    if (subjects_initialized_) {
+        lv_subject_set_int(&calibration_started_, 0);
+        lv_subject_set_int(&calibration_active_, 0);
+        lv_subject_set_int(&calibration_progress_, 0);
+        lv_subject_copy_string(&calibration_status_, lv_tr("Cancelled"));
+    }
+    lv_subject_set_int(&wizard_show_skip, 1);
+    lv_subject_set_int(&connection_test_passed, 0);
+
+    return true;
 }
 
 // ============================================================================

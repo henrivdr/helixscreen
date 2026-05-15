@@ -64,6 +64,19 @@
         <bind_flag_if_eq subject="wizard_input_shaper_started" flag="hidden" ref_value="1"/>
       </ui_button>
 
+      <!-- Cancel button (visible only while calibration is running). Triggers
+           M112 + firmware_restart so Klipper actually stops the SHAPER_CALIBRATE
+           macro — the gcode queue is blocked during the sweep, so M112 is the
+           only reliable abort. Visibility is driven by a single
+           wizard_input_shaper_active subject so we don't get two bind_flag_if_eq
+           rules fighting over the hidden flag. -->
+      <ui_button name="cancel_calibration_btn"
+                 width="#wizard_button_width" height="#button_height" text="Cancel"
+                 translation_tag="Cancel" variant="warning">
+        <event_cb trigger="clicked" callback="on_cancel_is_calibration"/>
+        <bind_flag_if_eq subject="wizard_input_shaper_active" flag="hidden" ref_value="0"/>
+      </ui_button>
+
       <!-- Help text (hidden once calibration starts) -->
       <text_small width="100%"
                   text="You can skip this and calibrate later in Settings."

@@ -177,10 +177,38 @@ class InputShaperCalibrator {
      *
      * Aborts current test and returns to IDLE state.
      * Safe to call even if no calibration is running.
+     *
+     * NOTE: This only resets local state. Once SHAPER_CALIBRATE or
+     * MEASURE_AXES_NOISE has been dispatched, Klipper will run it to
+     * completion regardless. Use emergency_abort() to actually stop the
+     * macro on the printer side.
      */
     void cancel() {
         state_ = State::IDLE;
     }
+
+    /**
+     * @brief True iff a calibration command has been dispatched and not
+     *        yet completed (CHECKING_ADXL / TESTING_X / TESTING_Y).
+     */
+    [[nodiscard]] bool is_active() const {
+        return state_ == State::CHECKING_ADXL || state_ == State::TESTING_X ||
+               state_ == State::TESTING_Y;
+    }
+
+    /**
+     * @brief Emergency-abort an in-progress calibration on the printer.
+     *
+     * Sends M112 followed by firmware_restart — the only reliable way to
+     * stop SHAPER_CALIBRATE / TEST_RESONANCES once Klipper has started
+     * the macro (it blocks the gcode queue, so CANCEL_PRINT won't help).
+     * Fire-and-forget; logs success/failure. Sets local state to IDLE.
+     *
+     * Callers should suppress the EmergencyStopOverlay recovery dialog
+     * and the disconnect modal *before* invoking this, since M112 +
+     * restart triggers both.
+     */
+    void emergency_abort();
 
     /**
      * @brief Get stored calibration results

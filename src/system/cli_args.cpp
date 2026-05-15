@@ -460,13 +460,13 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
         // Wizard step
         else if (strcmp(argv[i], "--wizard-step") == 0) {
             if (i + 1 >= argc) {
-                printf("Error: --wizard-step requires an argument (0-9)\n");
+                printf("Error: --wizard-step requires an argument (0-12)\n");
                 return false;
             }
             args.wizard_step = atoi(argv[++i]);
             args.force_wizard = true;
-            if (args.wizard_step < 0 || args.wizard_step > 9) {
-                printf("Error: wizard step must be 0-9\n");
+            if (args.wizard_step < 0 || args.wizard_step > 12) {
+                printf("Error: wizard step must be 0-12\n");
                 return false;
             }
         }
