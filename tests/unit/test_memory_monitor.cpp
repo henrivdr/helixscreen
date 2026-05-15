@@ -51,8 +51,25 @@ TEST_CASE("MemoryThresholds for good device", "[memory_monitor]") {
 
     auto t = MemoryThresholds::for_device(info);
 
-    REQUIRE(t.warn_rss_kb == 180 * 1024);
-    REQUIRE(t.critical_rss_kb == 230 * 1024);
+    // "good" tier scales RSS as a fraction of total RAM, with 180MB/230MB floors:
+    //   warn     = max(180MB, total * 30%)
+    //   critical = max(230MB, total * 50%)
+    // At 2GB total, the scaled values win.
+    REQUIRE(t.warn_rss_kb == info.total_kb * 30 / 100);
+    REQUIRE(t.critical_rss_kb == info.total_kb * 50 / 100);
+}
+
+TEST_CASE("MemoryThresholds for good device honors RSS floor on small good devices",
+          "[memory_monitor]") {
+    // 512MB device: 30% = 153MB < 180MB floor; 50% = 256MB > 230MB floor.
+    MemoryInfo info;
+    info.total_kb = 512 * 1024;
+    info.available_kb = 400 * 1024;
+
+    auto t = MemoryThresholds::for_device(info);
+
+    REQUIRE(t.warn_rss_kb == 180u * 1024);
+    REQUIRE(t.critical_rss_kb == info.total_kb * 50 / 100);
 }
 
 // =============================================================================
