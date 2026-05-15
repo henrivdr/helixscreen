@@ -124,6 +124,7 @@ translations:
   Allow display to sleep during active prints: Permitir suspensão da tela durante impressões
   Allwinner: Allwinner
   Already connecting — wait a moment and try again: 'Já está conectando — aguarde um momento e tente novamente'
+  Always show Android navigation bar instead of using gestures: ''
   Ambient Transfer: Transferência Ambiente
   An accelerometer was detected on your printer.: Um acelerômetro foi detectado na sua impressora.
   An error occurred during calibration.: Ocorreu um erro durante a calibração.
@@ -688,6 +689,7 @@ translations:
   Filament Mapping: Mapeamento de Filamento
   Filament Runout: Fim de Filamento
   Filament Sensor: Sensor de Filamento
+  Filament System Error: ''
   Filament Used: Filamento Usado
   Filament already exists: Filamento já existe
   Filament by Type: Filamento por Tipo
@@ -723,6 +725,7 @@ translations:
   'Flow change failed: {}': 'Falha ao alterar fluxo: {}'
   Flowguard: Proteção de Fluxo
   Flying Toasters: Torradeiras Voadoras
+  Follow active tool: ''
   Follow graph screen: Acompanhar tela do gráfico
   Forget: 'Esquecer'
   Forming Tip: ''
@@ -863,6 +866,7 @@ translations:
   Just now: Agora mesmo
   KEYBOARD LAYOUT: 'LAYOUT DO TECLADO'
   KLICKY CONTROLS: CONTROLES KLICKY
+  Keep Navigation Bar: ''
   Keep Printing: Continuar Imprimindo
   Keep Required: Manter Obrigatório
   Keyboard Test (Gboard-style): Teste de Teclado (estilo Gboard)
@@ -904,6 +908,7 @@ translations:
   Learn More: Saiba Mais
   'Length:': 'Comprimento:'
   Leveling Gantry...: Nivelando pórtico...
+  Library: ''
   Lifetime Print Stats: Estatísticas de Impressão Totais
   Light: Claro
   Listen to all theme sounds: 'Ouvir todos os sons do tema'
@@ -1146,6 +1151,7 @@ translations:
   'ON': 'ON'
   OS: OS
   Object positions unavailable: Posições dos objetos indisponíveis
+  Objects: ''
   'Off': Desligado
   'On': Ligado
   On and Off macros must be different: Macros de Ligar e Desligar devem ser diferentes
@@ -1573,6 +1579,7 @@ translations:
   Show detailed print preparation status: Mostrar status detalhado de preparação de impressão
   Show instead of dimming: Exibir em vez de escurecer
   Show printer icon in navigation bar: Mostrar ícone da impressora na barra de navegação
+  Show temp for: ''
   Show text labels on icon-only home screen widgets: Mostrar rótulos de texto em widgets da tela inicial com apenas ícones
   Show whatever curves you last had visible on the full graph.: Mostrar as curvas que estavam visíveis por último no gráfico completo.
   Shutdown: Desligar

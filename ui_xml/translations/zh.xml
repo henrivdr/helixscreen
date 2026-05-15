@@ -124,6 +124,7 @@
   <translation tag="Allow display to sleep during active prints" zh="打印时允许屏幕休眠"/>
   <translation tag="Allwinner" zh="Allwinner"/>
   <translation tag="Already connecting — wait a moment and try again" zh="正在连接中 — 请稍候再试"/>
+  <translation tag="Always show Android navigation bar instead of using gestures"/>
   <translation tag="Ambient Transfer" zh="环境传热"/>
   <translation tag="An accelerometer was detected on your printer." zh="在您的打印机上检测到加速度计。"/>
   <translation tag="An error occurred during calibration." zh="校准过程中发生错误。"/>
@@ -688,6 +689,7 @@
   <translation tag="Filament Mapping" zh="耗材映射"/>
   <translation tag="Filament Runout" zh="耗材用尽"/>
   <translation tag="Filament Sensor" zh="耗材传感器"/>
+  <translation tag="Filament System Error"/>
   <translation tag="Filament Used" zh="已用耗材"/>
   <translation tag="Filament already exists" zh="耗材已存在"/>
   <translation tag="Filament by Type" zh="按类型分类的耗材"/>
@@ -723,6 +725,7 @@
   <translation tag="Flow change failed: {}" zh="流量更改失败: {}"/>
   <translation tag="Flowguard" zh="流量保护"/>
   <translation tag="Flying Toasters" zh="飞行烤面包机"/>
+  <translation tag="Follow active tool"/>
   <translation tag="Follow graph screen" zh="跟随图表屏幕"/>
   <translation tag="Forget" zh="忘记"/>
   <translation tag="Forming Tip"/>
@@ -862,6 +865,7 @@
   <translation tag="Just now" zh="刚刚"/>
   <translation tag="KEYBOARD LAYOUT" zh="键盘布局"/>
   <translation tag="KLICKY CONTROLS" zh="KLICKY 控制"/>
+  <translation tag="Keep Navigation Bar"/>
   <translation tag="Keep Printing" zh="继续打印"/>
   <translation tag="Keep Required" zh="保持必需"/>
   <translation tag="Keyboard Test (Gboard-style)" zh="键盘测试（Gboard 风格）"/>
@@ -902,6 +906,7 @@
   <translation tag="Learn More" zh="了解更多"/>
   <translation tag="Length:" zh="长度："/>
   <translation tag="Leveling Gantry..." zh="正在调平龙门..."/>
+  <translation tag="Library"/>
   <translation tag="Lifetime Print Stats" zh="累计打印统计"/>
   <translation tag="Light" zh="浅色"/>
   <translation tag="Listen to all theme sounds" zh="试听所有主题声音"/>
@@ -1143,6 +1148,7 @@
   <translation tag="ON" zh="开"/>
   <translation tag="OS" zh="OS"/>
   <translation tag="Object positions unavailable" zh="对象位置不可用"/>
+  <translation tag="Objects"/>
   <translation tag="Off" zh="关"/>
   <translation tag="On" zh="开"/>
   <translation tag="On and Off macros must be different" zh="开和关的宏必须不同"/>
@@ -1569,6 +1575,7 @@
   <translation tag="Show detailed print preparation status" zh="显示详细的打印准备状态"/>
   <translation tag="Show instead of dimming" zh="显示而非变暗"/>
   <translation tag="Show printer icon in navigation bar" zh="在导航栏中显示打印机图标"/>
+  <translation tag="Show temp for"/>
   <translation tag="Show text labels on icon-only home screen widgets" zh="在仅图标的主屏小组件上显示文字标签"/>
   <translation tag="Show whatever curves you last had visible on the full graph." zh="显示您上次在完整图表上可见的曲线。"/>
   <translation tag="Shutdown" zh="关机"/>

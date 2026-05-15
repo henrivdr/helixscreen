@@ -124,6 +124,7 @@
   <translation tag="Allow display to sleep during active prints" ja="印刷中のスリープを許可"/>
   <translation tag="Allwinner" ja="Allwinner"/>
   <translation tag="Already connecting — wait a moment and try again" ja="接続処理中です — 少し待ってからもう一度お試しください"/>
+  <translation tag="Always show Android navigation bar instead of using gestures"/>
   <translation tag="Ambient Transfer" ja="環境熱伝達"/>
   <translation tag="An accelerometer was detected on your printer." ja="プリンターで加速度センサーが検出されました。"/>
   <translation tag="An error occurred during calibration." ja="キャリブレーション中にエラーが発生しました。"/>
@@ -688,6 +689,7 @@
   <translation tag="Filament Mapping" ja="フィラメントマッピング"/>
   <translation tag="Filament Runout" ja="フィラメント切れ"/>
   <translation tag="Filament Sensor" ja="フィラメントセンサー"/>
+  <translation tag="Filament System Error"/>
   <translation tag="Filament Used" ja="使用済みフィラメント"/>
   <translation tag="Filament already exists" ja="フィラメントはすでに存在します"/>
   <translation tag="Filament by Type" ja="種類別フィラメント"/>
@@ -723,6 +725,7 @@
   <translation tag="Flow change failed: {}" ja="フロー変更に失敗しました: {}"/>
   <translation tag="Flowguard" ja="フローガード"/>
   <translation tag="Flying Toasters" ja="フライングトースター"/>
+  <translation tag="Follow active tool"/>
   <translation tag="Follow graph screen" ja="グラフ画面に追従"/>
   <translation tag="Forget" ja="登録解除"/>
   <translation tag="Forming Tip"/>
@@ -862,6 +865,7 @@
   <translation tag="Just now" ja="たった今"/>
   <translation tag="KEYBOARD LAYOUT" ja="KEYBOARD LAYOUT"/>
   <translation tag="KLICKY CONTROLS" ja="KLICKY CONTROLS"/>
+  <translation tag="Keep Navigation Bar"/>
   <translation tag="Keep Printing" ja="印刷を続行"/>
   <translation tag="Keep Required" ja="必須を維持"/>
   <translation tag="Keyboard Test (Gboard-style)" ja="キーボードテスト（Gboard風）"/>
@@ -902,6 +906,7 @@
   <translation tag="Learn More" ja="詳細を見る"/>
   <translation tag="Length:" ja="長さ:"/>
   <translation tag="Leveling Gantry..." ja="ガントリーレベリング中..."/>
+  <translation tag="Library"/>
   <translation tag="Lifetime Print Stats" ja="累計印刷統計"/>
   <translation tag="Light" ja="ライト"/>
   <translation tag="Listen to all theme sounds" ja="すべてのテーマサウンドを試聴"/>
@@ -1143,6 +1148,7 @@
   <translation tag="ON" ja="ON"/>
   <translation tag="OS" ja="OS"/>
   <translation tag="Object positions unavailable" ja="オブジェクト位置が利用できません"/>
+  <translation tag="Objects"/>
   <translation tag="Off" ja="オフ"/>
   <translation tag="On" ja="オン"/>
   <translation tag="On and Off macros must be different" ja="オンとオフのマクロは異なるものにしてください"/>
@@ -1569,6 +1575,7 @@
   <translation tag="Show detailed print preparation status" ja="詳細な印刷準備ステータスを表示"/>
   <translation tag="Show instead of dimming" ja="暗くする代わりに表示"/>
   <translation tag="Show printer icon in navigation bar" ja="ナビゲーションバーにプリンターアイコンを表示"/>
+  <translation tag="Show temp for"/>
   <translation tag="Show text labels on icon-only home screen widgets" ja="アイコンのみのホーム画面ウィジェットにテキストラベルを表示"/>
   <translation tag="Show whatever curves you last had visible on the full graph." ja="フルグラフで最後に表示していた曲線を表示します。"/>
   <translation tag="Shutdown" ja="シャットダウン"/>

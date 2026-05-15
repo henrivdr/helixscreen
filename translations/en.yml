@@ -124,6 +124,7 @@ translations:
   Allow display to sleep during active prints: Allow display to sleep during active prints
   Allwinner: Allwinner
   Already connecting — wait a moment and try again: Already connecting — wait a moment and try again
+  Always show Android navigation bar instead of using gestures: Always show Android navigation bar instead of using gestures
   Ambient Transfer: Ambient Transfer
   An accelerometer was detected on your printer.: An accelerometer was detected on your printer.
   An error occurred during calibration.: An error occurred during calibration.
@@ -688,6 +689,7 @@ translations:
   Filament Mapping: Filament Mapping
   Filament Runout: Filament Runout
   Filament Sensor: Filament Sensor
+  Filament System Error: Filament System Error
   Filament Used: Filament Used
   Filament already exists: Filament already exists
   Filament by Type: Filament by Type
@@ -723,6 +725,7 @@ translations:
   'Flow change failed: {}': 'Flow change failed: {}'
   Flowguard: Flowguard
   Flying Toasters: Flying Toasters
+  Follow active tool: Follow active tool
   Follow graph screen: Follow graph screen
   Forget: Forget
   Forming Tip: Forming Tip
@@ -863,6 +866,7 @@ translations:
   Just now: Just now
   KEYBOARD LAYOUT: KEYBOARD LAYOUT
   KLICKY CONTROLS: KLICKY CONTROLS
+  Keep Navigation Bar: Keep Navigation Bar
   Keep Printing: Keep Printing
   Keep Required: Keep Required
   Keyboard Test (Gboard-style): Keyboard Test (Gboard-style)
@@ -904,6 +908,7 @@ translations:
   Learn More: Learn More
   'Length:': 'Length:'
   Leveling Gantry...: Leveling Gantry...
+  Library: Library
   Lifetime Print Stats: Lifetime Print Stats
   Light: Light
   Listen to all theme sounds: Listen to all theme sounds
@@ -1146,6 +1151,7 @@ translations:
   'ON': 'ON'
   OS: OS
   Object positions unavailable: Object positions unavailable
+  Objects: Objects
   'Off': 'Off'
   'On': 'On'
   On and Off macros must be different: On and Off macros must be different
@@ -1573,6 +1579,7 @@ translations:
   Show detailed print preparation status: Show detailed print preparation status
   Show instead of dimming: Show instead of dimming
   Show printer icon in navigation bar: Show printer icon in navigation bar
+  Show temp for: Show temp for
   Show text labels on icon-only home screen widgets: Show text labels on icon-only home screen widgets
   Show whatever curves you last had visible on the full graph.: Show whatever curves you last had visible on the full graph.
   Shutdown: Shutdown

@@ -124,6 +124,7 @@ translations:
   Allow display to sleep during active prints: 打印时允许屏幕休眠
   Allwinner: Allwinner
   Already connecting — wait a moment and try again: '正在连接中 — 请稍候再试'
+  Always show Android navigation bar instead of using gestures: ''
   Ambient Transfer: 环境传热
   An accelerometer was detected on your printer.: 在您的打印机上检测到加速度计。
   An error occurred during calibration.: 校准过程中发生错误。
@@ -688,6 +689,7 @@ translations:
   Filament Mapping: 耗材映射
   Filament Runout: 耗材用尽
   Filament Sensor: 耗材传感器
+  Filament System Error: ''
   Filament Used: 已用耗材
   Filament already exists: 耗材已存在
   Filament by Type: 按类型分类的耗材
@@ -723,6 +725,7 @@ translations:
   'Flow change failed: {}': '流量更改失败: {}'
   Flowguard: 流量保护
   Flying Toasters: 飞行烤面包机
+  Follow active tool: ''
   Follow graph screen: 跟随图表屏幕
   Forget: '忘记'
   Forming Tip: ''
@@ -863,6 +866,7 @@ translations:
   Just now: 刚刚
   KEYBOARD LAYOUT: '键盘布局'
   KLICKY CONTROLS: KLICKY 控制
+  Keep Navigation Bar: ''
   Keep Printing: 继续打印
   Keep Required: 保持必需
   Keyboard Test (Gboard-style): 键盘测试（Gboard 风格）
@@ -904,6 +908,7 @@ translations:
   Learn More: 了解更多
   'Length:': 长度：
   Leveling Gantry...: 正在调平龙门...
+  Library: ''
   Lifetime Print Stats: 累计打印统计
   Light: 浅色
   Listen to all theme sounds: '试听所有主题声音'
@@ -1146,6 +1151,7 @@ translations:
   'ON': 开
   OS: OS
   Object positions unavailable: 对象位置不可用
+  Objects: ''
   'Off': 关
   'On': 开
   On and Off macros must be different: 开和关的宏必须不同
@@ -1573,6 +1579,7 @@ translations:
   Show detailed print preparation status: 显示详细的打印准备状态
   Show instead of dimming: 显示而非变暗
   Show printer icon in navigation bar: 在导航栏中显示打印机图标
+  Show temp for: ''
   Show text labels on icon-only home screen widgets: 在仅图标的主屏小组件上显示文字标签
   Show whatever curves you last had visible on the full graph.: 显示您上次在完整图表上可见的曲线。
   Shutdown: 关机

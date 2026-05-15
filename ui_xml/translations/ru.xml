@@ -124,6 +124,7 @@
   <translation tag="Allow display to sleep during active prints" ru="Разрешить спящий режим дисплея во время печати"/>
   <translation tag="Allwinner" ru="Allwinner"/>
   <translation tag="Already connecting — wait a moment and try again" ru="Подключение уже выполняется — подождите и попробуйте снова"/>
+  <translation tag="Always show Android navigation bar instead of using gestures"/>
   <translation tag="Ambient Transfer" ru="Теплообмен с окружающей средой"/>
   <translation tag="An accelerometer was detected on your printer." ru="На вашем принтере обнаружен акселерометр."/>
   <translation tag="An error occurred during calibration." ru="Во время калибровки произошла ошибка."/>
@@ -688,6 +689,7 @@
   <translation tag="Filament Mapping" ru="Назначение филамента"/>
   <translation tag="Filament Runout" ru="Окончание филамента"/>
   <translation tag="Filament Sensor" ru="Датчик филамента"/>
+  <translation tag="Filament System Error"/>
   <translation tag="Filament Used" ru="Использовано филамента"/>
   <translation tag="Filament already exists" ru="Такой филамент уже существует"/>
   <translation tag="Filament by Type" ru="Филамент по типу"/>
@@ -723,6 +725,7 @@
   <translation tag="Flow change failed: {}" ru="Ошибка изменения потока: {}"/>
   <translation tag="Flowguard" ru="Flowguard"/>
   <translation tag="Flying Toasters" ru="Летающие тостеры"/>
+  <translation tag="Follow active tool"/>
   <translation tag="Follow graph screen" ru="Следовать экрану графика"/>
   <translation tag="Forget" ru="Забыть"/>
   <translation tag="Forming Tip"/>
@@ -862,6 +865,7 @@
   <translation tag="Just now" ru="Только что"/>
   <translation tag="KEYBOARD LAYOUT" ru="РАСКЛАДКА КЛАВИАТУРЫ"/>
   <translation tag="KLICKY CONTROLS" ru="УПРАВЛЕНИЕ KLICKY"/>
+  <translation tag="Keep Navigation Bar"/>
   <translation tag="Keep Printing" ru="Продолжить печать"/>
   <translation tag="Keep Required" ru="Оставить обязательным"/>
   <translation tag="Keyboard Test (Gboard-style)" ru="Тест клавиатуры (стиль Gboard)"/>
@@ -902,6 +906,7 @@
   <translation tag="Learn More" ru="Подробнее"/>
   <translation tag="Length:" ru="Длина:"/>
   <translation tag="Leveling Gantry..." ru="Выравнивание портала..."/>
+  <translation tag="Library"/>
   <translation tag="Lifetime Print Stats" ru="Статистика за всё время"/>
   <translation tag="Light" ru="Подсветка"/>
   <translation tag="Listen to all theme sounds" ru="Прослушать все звуки темы"/>
@@ -1143,6 +1148,7 @@
   <translation tag="ON" ru="ВКЛ"/>
   <translation tag="OS" ru="OS"/>
   <translation tag="Object positions unavailable" ru="Позиции объектов недоступны"/>
+  <translation tag="Objects"/>
   <translation tag="Off" ru="Выкл"/>
   <translation tag="On" ru="Вкл"/>
   <translation tag="On and Off macros must be different" ru="Макросы включения и выключения должны отличаться"/>
@@ -1569,6 +1575,7 @@
   <translation tag="Show detailed print preparation status" ru="Показывать детальный статус подготовки к печати"/>
   <translation tag="Show instead of dimming" ru="Показывать вместо затемнения"/>
   <translation tag="Show printer icon in navigation bar" ru="Показывать значок принтера в панели навигации"/>
+  <translation tag="Show temp for"/>
   <translation tag="Show text labels on icon-only home screen widgets" ru="Показывать текстовые подписи на виджетах главного экрана"/>
   <translation tag="Show whatever curves you last had visible on the full graph." ru="Показывать те кривые, что были видны на полном графике в последний раз."/>
   <translation tag="Shutdown" ru="Выключение"/>

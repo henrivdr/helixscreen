@@ -124,6 +124,7 @@ translations:
   Allow display to sleep during active prints: Разрешить спящий режим дисплея во время печати
   Allwinner: Allwinner
   Already connecting — wait a moment and try again: 'Подключение уже выполняется — подождите и попробуйте снова'
+  Always show Android navigation bar instead of using gestures: ''
   Ambient Transfer: Теплообмен с окружающей средой
   An accelerometer was detected on your printer.: На вашем принтере обнаружен акселерометр.
   An error occurred during calibration.: Во время калибровки произошла ошибка.
@@ -688,6 +689,7 @@ translations:
   Filament Mapping: Назначение филамента
   Filament Runout: Окончание филамента
   Filament Sensor: Датчик филамента
+  Filament System Error: ''
   Filament Used: Использовано филамента
   Filament already exists: Такой филамент уже существует
   Filament by Type: Филамент по типу
@@ -723,6 +725,7 @@ translations:
   'Flow change failed: {}': 'Ошибка изменения потока: {}'
   Flowguard: Flowguard
   Flying Toasters: Летающие тостеры
+  Follow active tool: ''
   Follow graph screen: Следовать экрану графика
   Forget: 'Забыть'
   Forming Tip: ''
@@ -863,6 +866,7 @@ translations:
   Just now: Только что
   KEYBOARD LAYOUT: 'РАСКЛАДКА КЛАВИАТУРЫ'
   KLICKY CONTROLS: УПРАВЛЕНИЕ KLICKY
+  Keep Navigation Bar: ''
   Keep Printing: Продолжить печать
   Keep Required: Оставить обязательным
   Keyboard Test (Gboard-style): Тест клавиатуры (стиль Gboard)
@@ -904,6 +908,7 @@ translations:
   Learn More: Подробнее
   'Length:': 'Длина:'
   Leveling Gantry...: Выравнивание портала...
+  Library: ''
   Lifetime Print Stats: Статистика за всё время
   Light: Подсветка
   Listen to all theme sounds: 'Прослушать все звуки темы'
@@ -1146,6 +1151,7 @@ translations:
   'ON': ВКЛ
   OS: OS
   Object positions unavailable: Позиции объектов недоступны
+  Objects: ''
   'Off': Выкл
   'On': Вкл
   On and Off macros must be different: Макросы включения и выключения должны отличаться
@@ -1573,6 +1579,7 @@ translations:
   Show detailed print preparation status: Показывать детальный статус подготовки к печати
   Show instead of dimming: Показывать вместо затемнения
   Show printer icon in navigation bar: Показывать значок принтера в панели навигации
+  Show temp for: ''
   Show text labels on icon-only home screen widgets: Показывать текстовые подписи на виджетах главного экрана
   Show whatever curves you last had visible on the full graph.: Показывать те кривые, что были видны на полном графике в последний раз.
   Shutdown: Выключение

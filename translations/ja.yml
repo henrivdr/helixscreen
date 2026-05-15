@@ -124,6 +124,7 @@ translations:
   Allow display to sleep during active prints: 印刷中のスリープを許可
   Allwinner: Allwinner
   Already connecting — wait a moment and try again: '接続処理中です — 少し待ってからもう一度お試しください'
+  Always show Android navigation bar instead of using gestures: ''
   Ambient Transfer: 環境熱伝達
   An accelerometer was detected on your printer.: プリンターで加速度センサーが検出されました。
   An error occurred during calibration.: キャリブレーション中にエラーが発生しました。
@@ -688,6 +689,7 @@ translations:
   Filament Mapping: フィラメントマッピング
   Filament Runout: フィラメント切れ
   Filament Sensor: フィラメントセンサー
+  Filament System Error: ''
   Filament Used: 使用済みフィラメント
   Filament already exists: フィラメントはすでに存在します
   Filament by Type: 種類別フィラメント
@@ -723,6 +725,7 @@ translations:
   'Flow change failed: {}': 'フロー変更に失敗しました: {}'
   Flowguard: フローガード
   Flying Toasters: フライングトースター
+  Follow active tool: ''
   Follow graph screen: グラフ画面に追従
   Forget: '登録解除'
   Forming Tip: ''
@@ -863,6 +866,7 @@ translations:
   Just now: たった今
   KEYBOARD LAYOUT: 'KEYBOARD LAYOUT'
   KLICKY CONTROLS: KLICKY CONTROLS
+  Keep Navigation Bar: ''
   Keep Printing: 印刷を続行
   Keep Required: 必須を維持
   Keyboard Test (Gboard-style): キーボードテスト（Gboard風）
@@ -904,6 +908,7 @@ translations:
   Learn More: 詳細を見る
   'Length:': '長さ:'
   Leveling Gantry...: ガントリーレベリング中...
+  Library: ''
   Lifetime Print Stats: 累計印刷統計
   Light: ライト
   Listen to all theme sounds: 'すべてのテーマサウンドを試聴'
@@ -1146,6 +1151,7 @@ translations:
   'ON': 'ON'
   OS: OS
   Object positions unavailable: オブジェクト位置が利用できません
+  Objects: ''
   'Off': オフ
   'On': オン
   On and Off macros must be different: オンとオフのマクロは異なるものにしてください
@@ -1573,6 +1579,7 @@ translations:
   Show detailed print preparation status: 詳細な印刷準備ステータスを表示
   Show instead of dimming: 暗くする代わりに表示
   Show printer icon in navigation bar: ナビゲーションバーにプリンターアイコンを表示
+  Show temp for: ''
   Show text labels on icon-only home screen widgets: アイコンのみのホーム画面ウィジェットにテキストラベルを表示
   Show whatever curves you last had visible on the full graph.: フルグラフで最後に表示していた曲線を表示します。
   Shutdown: シャットダウン

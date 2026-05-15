@@ -124,6 +124,7 @@
   <translation tag="Allow display to sleep during active prints" fr="Permettre la mise en veille pendant l&apos;impression"/>
   <translation tag="Allwinner" fr="Allwinner"/>
   <translation tag="Already connecting — wait a moment and try again" fr="Connexion déjà en cours — patientez un instant et réessayez"/>
+  <translation tag="Always show Android navigation bar instead of using gestures"/>
   <translation tag="Ambient Transfer" fr="Transfert ambiant"/>
   <translation tag="An accelerometer was detected on your printer." fr="Un accéléromètre a été détecté sur votre imprimante."/>
   <translation tag="An error occurred during calibration." fr="Une erreur s&apos;est produite pendant la calibration."/>
@@ -688,6 +689,7 @@
   <translation tag="Filament Mapping" fr="Mappage du filament"/>
   <translation tag="Filament Runout" fr="Fin de filament"/>
   <translation tag="Filament Sensor" fr="Capteur de filament"/>
+  <translation tag="Filament System Error"/>
   <translation tag="Filament Used" fr="Filament utilisé"/>
   <translation tag="Filament already exists" fr="Ce filament existe déjà"/>
   <translation tag="Filament by Type" fr="Filament par type"/>
@@ -723,6 +725,7 @@
   <translation tag="Flow change failed: {}" fr="Échec du changement de débit : {}"/>
   <translation tag="Flowguard" fr="Flowguard"/>
   <translation tag="Flying Toasters" fr="Flying Toasters"/>
+  <translation tag="Follow active tool"/>
   <translation tag="Follow graph screen" fr="Suivre l&apos;écran du graphique"/>
   <translation tag="Forget" fr="Oublier"/>
   <translation tag="Forming Tip"/>
@@ -862,6 +865,7 @@
   <translation tag="Just now" fr="À l&apos;instant"/>
   <translation tag="KEYBOARD LAYOUT" fr="DISPOSITION DU CLAVIER"/>
   <translation tag="KLICKY CONTROLS" fr="COMMANDES KLICKY"/>
+  <translation tag="Keep Navigation Bar"/>
   <translation tag="Keep Printing" fr="Continuer l&apos;impression"/>
   <translation tag="Keep Required" fr="Garder obligatoire"/>
   <translation tag="Keyboard Test (Gboard-style)" fr="Test clavier (style Gboard)"/>
@@ -902,6 +906,7 @@
   <translation tag="Learn More" fr="En savoir plus"/>
   <translation tag="Length:" fr="Longueur :"/>
   <translation tag="Leveling Gantry..." fr="Nivellement du portique..."/>
+  <translation tag="Library"/>
   <translation tag="Lifetime Print Stats" fr="Statistiques d&apos;impression totales"/>
   <translation tag="Light" fr="Clair"/>
   <translation tag="Listen to all theme sounds" fr="Écouter tous les sons du thème"/>
@@ -1143,6 +1148,7 @@
   <translation tag="ON" fr="ON"/>
   <translation tag="OS" fr="OS"/>
   <translation tag="Object positions unavailable" fr="Positions des objets indisponibles"/>
+  <translation tag="Objects"/>
   <translation tag="Off" fr="Éteint"/>
   <translation tag="On" fr="Allumé"/>
   <translation tag="On and Off macros must be different" fr="Les macros On et Off doivent être différentes"/>
@@ -1569,6 +1575,7 @@
   <translation tag="Show detailed print preparation status" fr="Afficher l&apos;état détaillé de la préparation d&apos;impression"/>
   <translation tag="Show instead of dimming" fr="Afficher au lieu d&apos;atténuer"/>
   <translation tag="Show printer icon in navigation bar" fr="Afficher l&apos;icône de l&apos;imprimante dans la barre de navigation"/>
+  <translation tag="Show temp for"/>
   <translation tag="Show text labels on icon-only home screen widgets" fr="Afficher les libellés sur les widgets de l&apos;écran d&apos;accueil"/>
   <translation tag="Show whatever curves you last had visible on the full graph." fr="Afficher les dernières courbes visibles sur le graphique complet."/>
   <translation tag="Shutdown" fr="Éteindre"/>
