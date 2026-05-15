@@ -1646,6 +1646,7 @@ void PrintStatusWidget::DetailedFormatter::set_nozzle_tool_override(
             ps.get_active_extruder_target_subject(), this,
             [](DetailedFormatter* self, int) { self->update_nozzle_text(); });
         update_nozzle_text();
+        update_tool_label();
     };
 
     if (override_name.empty() || override_name == "auto") {
@@ -1674,6 +1675,7 @@ void PrintStatusWidget::DetailedFormatter::set_nozzle_tool_override(
         tgt_sub, this,
         [](DetailedFormatter* self, int) { self->update_nozzle_text(); });
     update_nozzle_text();
+    update_tool_label();
 }
 
 void PrintStatusWidget::DetailedFormatter::update_bed_text() {
@@ -1706,7 +1708,19 @@ void PrintStatusWidget::DetailedFormatter::update_tool_label() {
     if (count <= 1) {
         nozzle_tool_label_buf_[0] = '\0';
     } else {
-        int idx = ToolState::instance().active_tool_index();
+        // Label tracks what the user is VIEWING — the pinned tool when one
+        // is set, otherwise the currently active tool. Anything else looks
+        // broken right after a pin ("I picked Nozzle 2 but it still says T0").
+        int idx;
+        if (current_nozzle_override_ == "extruder") {
+            idx = 0;
+        } else if (current_nozzle_override_.rfind("extruder", 0) == 0 &&
+                   current_nozzle_override_.size() > 8) {
+            idx = std::atoi(current_nozzle_override_.c_str() + 8);
+        } else {
+            // "auto" or unrecognized → follow active tool.
+            idx = ToolState::instance().active_tool_index();
+        }
         snprintf(nozzle_tool_label_buf_, sizeof(nozzle_tool_label_buf_), "T%d", idx);
     }
     lv_subject_copy_string(&nozzle_tool_label_subject_, nozzle_tool_label_buf_);
