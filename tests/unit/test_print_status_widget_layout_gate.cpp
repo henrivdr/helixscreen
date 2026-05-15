@@ -20,17 +20,15 @@ TEST_CASE_METHOD(HelixTestFixture, "Layout gate: detailed at colspan=2 activates
     w.set_config({{"layout_style", "detailed"}});
     w.on_size_changed(2, 2, 400, 400);
     REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 1);
-    REQUIRE(lv_subject_get_int(PrintStatusWidget::temp_under_thumb_subject_for_test()) == 1);
     REQUIRE(lv_subject_get_int(PrintStatusWidget::show_filament_active_subject_for_test()) == 0);
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "Layout gate: colspan=3 reveals filament + lifts temps",
+TEST_CASE_METHOD(HelixTestFixture, "Layout gate: colspan>=3 reveals filament line",
                  "[print_status][layout_gate]") {
     PrintStatusWidget w;
     w.set_config({{"layout_style", "detailed"}});
     w.on_size_changed(3, 2, 600, 400);
     REQUIRE(lv_subject_get_int(PrintStatusWidget::layout_effective_subject_for_test()) == 1);
-    REQUIRE(lv_subject_get_int(PrintStatusWidget::temp_under_thumb_subject_for_test()) == 0);
     REQUIRE(lv_subject_get_int(PrintStatusWidget::show_filament_active_subject_for_test()) == 1);
 }
 

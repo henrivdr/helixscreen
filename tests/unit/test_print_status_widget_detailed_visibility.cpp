@@ -151,3 +151,70 @@ TEST_CASE_METHOD(PrintStatusDetailedVisibilityFixture,
 
     w.detach();
 }
+
+TEST_CASE_METHOD(PrintStatusDetailedVisibilityFixture,
+                 "Detailed falls back to Library at colspan=1 (compact)",
+                 "[print_status][detailed_visibility]") {
+    PrintStatusWidget w;
+    w.set_config(nlohmann::json{{"layout_style", "detailed"}});
+    w.on_size_changed(1, 2, 200, 400);
+
+    lv_obj_t* container = create_mock_tree(test_screen());
+    w.attach(container, test_screen());
+    process_lvgl(50);
+
+    // Even with layout_style="detailed", colspan=1 forces is_compact_ and the
+    // Detailed body must stay hidden; Library wins.
+    lv_obj_t* detailed_active = lv_obj_find_by_name(container, "print_card_printing_detailed");
+    lv_obj_t* legacy_layout   = lv_obj_find_by_name(container, "print_card_layout");
+    REQUIRE(lv_obj_has_flag(detailed_active, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE_FALSE(lv_obj_has_flag(legacy_layout, LV_OBJ_FLAG_HIDDEN));
+
+    w.detach();
+}
+
+TEST_CASE_METHOD(PrintStatusDetailedVisibilityFixture,
+                 "Idle Detailed hero visible at colspan>=2; Library idle bodies hidden",
+                 "[print_status][detailed_visibility]") {
+    PrintStatusWidget w;
+    w.set_config(nlohmann::json{{"layout_style", "detailed"}});
+    w.on_size_changed(2, 2, 400, 400);
+
+    lv_obj_t* container = create_mock_tree(test_screen());
+    w.attach(container, test_screen());
+    process_lvgl(50);
+
+    lv_obj_t* idle          = lv_obj_find_by_name(container, "print_card_idle");
+    lv_obj_t* idle_compact  = lv_obj_find_by_name(container, "print_card_idle_compact");
+    lv_obj_t* idle_detailed = lv_obj_find_by_name(container, "print_card_idle_detailed");
+    REQUIRE(idle != nullptr);
+    REQUIRE(idle_compact != nullptr);
+    REQUIRE(idle_detailed != nullptr);
+    REQUIRE_FALSE(lv_obj_has_flag(idle_detailed, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(idle, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(idle_compact, LV_OBJ_FLAG_HIDDEN));
+
+    w.detach();
+}
+
+TEST_CASE_METHOD(PrintStatusDetailedVisibilityFixture,
+                 "Idle Library compact wins at colspan=1 regardless of layout_style",
+                 "[print_status][detailed_visibility]") {
+    PrintStatusWidget w;
+    w.set_config(nlohmann::json{{"layout_style", "detailed"}});
+    w.on_size_changed(1, 2, 200, 400);
+
+    lv_obj_t* container = create_mock_tree(test_screen());
+    w.attach(container, test_screen());
+    process_lvgl(50);
+
+    lv_obj_t* idle          = lv_obj_find_by_name(container, "print_card_idle");
+    lv_obj_t* idle_compact  = lv_obj_find_by_name(container, "print_card_idle_compact");
+    lv_obj_t* idle_detailed = lv_obj_find_by_name(container, "print_card_idle_detailed");
+    // compact mode wins on small widths even with detailed requested
+    REQUIRE_FALSE(lv_obj_has_flag(idle_compact, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(idle, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(idle_detailed, LV_OBJ_FLAG_HIDDEN));
+
+    w.detach();
+}

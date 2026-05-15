@@ -97,8 +97,6 @@ PrintStatusWidget::PrintStatusWidget() : printer_state_(get_printer_state()) {
         lv_xml_register_subject(nullptr, "print_status_layout_mode", &layout_mode_subject_);
         lv_subject_init_int(&layout_effective_subject_, 0);
         lv_xml_register_subject(nullptr, "print_status_layout_effective", &layout_effective_subject_);
-        lv_subject_init_int(&temp_under_thumb_subject_, 1);
-        lv_xml_register_subject(nullptr, "print_status_temp_under_thumb", &temp_under_thumb_subject_);
         lv_subject_init_int(&show_filament_active_subject_, 0);
         lv_xml_register_subject(nullptr, "print_status_show_filament_active",
                                 &show_filament_active_subject_);
@@ -110,7 +108,6 @@ PrintStatusWidget::PrintStatusWidget() : printer_state_(get_printer_state()) {
             if (detailed_subjects_initialized_ && lv_is_initialized()) {
                 lv_subject_deinit(&layout_mode_subject_);
                 lv_subject_deinit(&layout_effective_subject_);
-                lv_subject_deinit(&temp_under_thumb_subject_);
                 lv_subject_deinit(&show_filament_active_subject_);
                 lv_subject_deinit(&multi_tool_subject_);
                 detailed_subjects_initialized_ = false;
@@ -136,12 +133,12 @@ PrintStatusWidget::PrintStatusWidget() : printer_state_(get_printer_state()) {
     }
 
     // Eager DetailedFormatter creation — its subjects (print_status_progress_pct,
-    // print_status_bed_text, print_status_temp_under_thumb, etc.) MUST be
-    // registered BEFORE lv_xml_create parses the widget XML. helix-xml's
-    // bind_text/bind_flag_if_eq parser permanently skips bindings whose subject
-    // doesn't exist at parse time. Constructing the formatter here (before the
-    // ctor returns, and well before attach() runs lv_xml_create) ensures the
-    // subjects exist when the XML tree is built.
+    // print_status_bed_text, etc.) MUST be registered BEFORE lv_xml_create
+    // parses the widget XML. helix-xml's bind_text/bind_flag_if_eq parser
+    // permanently skips bindings whose subject doesn't exist at parse time.
+    // Constructing the formatter here (before the ctor returns, and well
+    // before attach() runs lv_xml_create) ensures the subjects exist when the
+    // XML tree is built.
     if (s_formatter_refcount_++ == 0) {
         s_formatter_ = std::make_unique<DetailedFormatter>();
     }
@@ -387,7 +384,6 @@ void PrintStatusWidget::on_size_changed(int colspan, int rowspan, int /*width_px
     lv_subject_set_int(&layout_mode_subject_, user_pref);
     int effective = (user_pref == 1 && colspan >= 2) ? 1 : 0;
     lv_subject_set_int(&layout_effective_subject_, effective);
-    lv_subject_set_int(&temp_under_thumb_subject_, (colspan == 2) ? 1 : 0);
     lv_subject_set_int(&show_filament_active_subject_, (colspan >= 3) ? 1 : 0);
 
     // Compact mode: 1-column — not enough horizontal space for thumbnail + action rows
@@ -454,8 +450,10 @@ void PrintStatusWidget::update_idle_compact_mode() {
     // Detailed only at colspan>=2 (is_compact_ == false); else fall back to Library
     bool use_detailed = (layout_style_ == "detailed") && !is_compact_;
 
+    // detach() nulls every print_card_* member, so a non-null pointer here is
+    // always a live LVGL object (no lv_obj_is_valid needed — L075).
     auto set_hidden = [](lv_obj_t* o, bool hide) {
-        if (!o || !lv_obj_is_valid(o)) return;
+        if (!o) return;
         if (hide) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
         else      lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
     };
@@ -467,7 +465,7 @@ void PrintStatusWidget::update_idle_compact_mode() {
 void PrintStatusWidget::update_active_layout_mode() {
     bool use_detailed = (layout_style_ == "detailed") && !is_compact_;
     auto set_hidden = [](lv_obj_t* o, bool hide) {
-        if (!o || !lv_obj_is_valid(o)) return;
+        if (!o) return;
         if (hide) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
         else      lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
     };
@@ -1810,13 +1808,37 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
 }
 
 PrintStatusWidget::DetailedFormatter::~DetailedFormatter() {
-    // Intentionally empty. The formatter is held in a process-lifetime
-    // std::unique_ptr (s_formatter_) and only ever destructs at C++ atexit,
-    // by which point spdlog may already be torn down (segfault in sink
-    // atomics) and PrintHistoryManager's singleton may be gone. Cleanup
-    // happens earlier via StaticSubjectRegistry::register_deinit (fires under
-    // lv_deinit), not here. subjects_'s own destructor will run, but its
-    // deinit_all() is a safe no-op once lv_deinit has cleared the registry.
+    // Two destruction paths:
+    //   1. Production: never destructs at runtime (s_formatter_ lives forever).
+    //      At C++ atexit the dtor runs after spdlog teardown — so no spdlog
+    //      calls here. By that point register_deinit has already torn things
+    //      down under lv_deinit; the calls below are safe idempotent no-ops.
+    //   2. Tests: release_formatter_for_test() destroys the formatter between
+    //      runs to keep subjects from leaking across PrinterState resets.
+    //      In this path lv_deinit has NOT fired, so register_deinit has NOT
+    //      run; the cleanup below is the only thing that detaches observers
+    //      before subjects get reset by the next test.
+    if (auto* hm = get_print_history_manager()) {
+        hm->remove_observer(&history_cb_);
+    }
+    progress_observer_.reset();
+    layer_current_observer_.reset();
+    layer_total_observer_.reset();
+    elapsed_observer_.reset();
+    time_left_observer_.reset();
+    filament_used_observer_.reset();
+    nozzle_temp_observer_.reset();
+    nozzle_target_observer_.reset();
+    bed_temp_observer_.reset();
+    bed_target_observer_.reset();
+    chamber_temp_observer_.reset();
+    chamber_target_observer_.reset();
+    tool_count_observer_.reset();
+    active_tool_observer_.reset();
+    arc_value_observer_.reset();
+    nozzle_temp_lifetime_.reset();
+    nozzle_target_lifetime_.reset();
+    subjects_.deinit_all();
 }
 
 // Force the arc to a square sized to fit its parent column. lv_arc draws

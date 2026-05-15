@@ -100,21 +100,23 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter filament text formatted in
     lv_subject_set_int(ps.get_print_filament_used_subject(), 2500); // 2.5m
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_filament_text"))) == "2.5m");
+    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_filament_text"))) == "Filament: 2.5m");
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter writes temps (centidegrees rounding)",
+TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter writes temps (decidegree rounding)",
                  "[print_status][formatter][temps]") {
     PrinterState& ps = get_printer_state();
     PrinterStateTestAccess::reset(ps);
     ps.init_subjects(false);
 
     FormatterScope fs;
-    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 21570);    // 215.70 → 216
-    lv_subject_set_int(ps.get_active_extruder_target_subject(), 22000);  // 220
-    lv_subject_set_int(ps.get_bed_temp_subject(), 6005);                  // 60.05 → 60
-    lv_subject_set_int(ps.get_bed_target_subject(), 6000);                // 60
-    lv_subject_set_int(ps.get_chamber_temp_subject(), 3800);              // 38, no target
+    // Temp subjects store decidegrees (1 unit = 0.1°C; see L021 +
+    // helix::units::to_centidegrees which multiplies by 10, not 100).
+    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 2157);    // 215.7°C → 216
+    lv_subject_set_int(ps.get_active_extruder_target_subject(), 2200);  // 220°C
+    lv_subject_set_int(ps.get_bed_temp_subject(), 601);                  // 60.1°C → 60
+    lv_subject_set_int(ps.get_bed_target_subject(), 600);                // 60°C
+    lv_subject_set_int(ps.get_chamber_temp_subject(), 380);              // 38°C, no target
     lv_subject_set_int(ps.get_chamber_target_subject(), 0);
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
@@ -130,8 +132,8 @@ TEST_CASE_METHOD(HelixTestFixture, "Chamber with target shows pair",
     ps.init_subjects(false);
 
     FormatterScope fs;
-    lv_subject_set_int(ps.get_chamber_temp_subject(), 3500);     // 35
-    lv_subject_set_int(ps.get_chamber_target_subject(), 4500);   // 45
+    lv_subject_set_int(ps.get_chamber_temp_subject(), 350);     // 35°C
+    lv_subject_set_int(ps.get_chamber_target_subject(), 450);   // 45°C
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
     REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_chamber_text"))) == "35 / 45°C");
 }
