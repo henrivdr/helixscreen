@@ -1341,13 +1341,24 @@ void PrintStatusWidget::show_nozzle_tool_picker(lv_obj_t* anchor) {
             LV_EVENT_DELETE, nullptr);
     };
 
-    add_row("Follow active tool", "auto");
+    add_row(lv_tr("Follow active tool"), "auto");
+    // Use the same display names PrinterTemperatureState exposes — "Nozzle 1",
+    // "Nozzle 2", ... — for parity with the temp_graph config modal and the
+    // multi-tool nozzle_temps widget.
+    const auto& exts = printer_state_.temperature_state().extruders();
     int count = ToolState::instance().tool_count();
     for (int i = 0; i < count; ++i) {
         std::string name = (i == 0) ? "extruder" : ("extruder" + std::to_string(i));
-        char label[16];
-        snprintf(label, sizeof(label), "T%d", i);
-        add_row(label, name);
+        std::string label;
+        auto it = exts.find(name);
+        if (it != exts.end() && !it->second.display_name.empty()) {
+            label = it->second.display_name;
+        } else {
+            // Fallback when extruders haven't been discovered yet.
+            label = (i == 0) ? std::string(lv_tr("Nozzle"))
+                             : std::string(lv_tr("Nozzle")) + " " + std::to_string(i + 1);
+        }
+        add_row(label.c_str(), name);
     }
 
     s_active_nozzle_picker_ = this;
