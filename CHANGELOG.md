@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.63] - 2026-05-15
+
+This release lands the **Detailed print-status layout** — a multi-tool-aware redesign with per-nozzle temperature pinning, a Library/Detailed picker, and an idle hero pulling thumbnails from print history — plus **3D gcode-viewer performance wins** (vertex packing 36→20 bytes for ~44% buffer reduction, in-place tool-color patching), a **real input-shaper wizard abort** when you back out mid-calibration, and a fix for **settings loss on flash power-loss** by `fsync`'ing `settings.json` and its parent directory.
+
+### Added
+
+- **Detailed print-status layout** — new `Detailed` option in the print-status layout picker (alongside Library), with a multi-tool-aware UI: per-nozzle temperature row using `Nozzle N` display names, tool-pinning picker that fixes the displayed nozzle to a specific extruder, idle hero populated from `PrintHistoryManager`, progress arc with the `%` label nested inside, layer/time/filament rows, and width-gating so the full detail set only appears at sufficient breakpoints. Persisted via `layout_style` and `nozzle_tool_override` config keys.
+- **`multi_tool` subject + `T<n>` active-tool label** — print-status exposes a multi-tool subject; the T-label tracks the pinned tool when set, otherwise auto-follows the active extruder.
+- **Temperature-graph legend overflow pill** — when more sensors are charted than fit, the legend truncates with a `+N` pill so the chart doesn't get squeezed by an over-long label row.
+- **Qidi X-Smart 3 in printer database** — initial profile added; QIDI docs clarified that FreeDi runs as a remote client.
+
+### Fixed
+
+- **Input-shaper wizard now aborts in-progress calibration when you back out** (prestonbrown/helixscreen#945) — exiting mid-calibration previously left the chain running on the printer; the wizard now sends a real abort and allows a clean restart on re-entry.
+- **Settings survive flash power-loss** (prestonbrown/helixscreen#943) — `Config::save_settings()` now `fsync`'s `settings.json` and its parent directory before returning. Companion: forced touch-calibration skips when a valid saved cal exists, so a power-loss-induced incomplete write doesn't trigger a recalibration prompt.
+- **Android: SDL surface resize propagates through LVGL + theme refresh** (prestonbrown/helixscreen#941) — clamshell foldables (Galaxy Z Flip 7, Fold series) now redraw correctly when the screen geometry changes mid-session.
+- **DNS: fail closed on embedded ARM/MIPS when `dns_resolv` fails** — silent DNS misconfiguration on resource-constrained devices no longer surfaces as a generic connection failure with no diagnostic.
+- **Indev cancellation on navigation teardown** (prestonbrown/helixscreen#906) — in-flight input-device events at panel/overlay teardown boundaries are now cancelled cleanly, closing one of the L081 Mechanism C surfaces.
+- **AfcConfigManager bg-thread access** — residual L081 Mechanism C site flagged by the extended `->expired()` lint.
+- **AmsState print-state observer UAF across deinit cycles** — caught by the nightly test gate; observer/lifetime ordering corrected.
+- **Memory: pressure-driven viewer release with telemetry context** — dropped the static `is_low_memory` gate in favor of a runtime pressure signal; trigger reason recoverable from bundles.
+- **Auto-discovered chamber sensor promoted to CHAMBER role** — sensors discovered via Klipper introspection now correctly classified; chamber-override path skips redundant work when the sensor is already chamber-classified.
+- **Temperature graph: stale widget tolerated on config-save** (bundle RP293UCW) — chart hide-pre-delete prevents a crash when the user saves config while the temp graph is mid-redraw.
+- **Temperature graph: consistent `Nozzle N` labels in mini-graph + multi-tool defaults; X-axis labels gated on rowspan, not colspan; extruders sorted for stable ordering.**
+- **Print library button outlines no longer clip top/bottom** — extra padding restored.
+- **Settings > Hardware Health entry now shows unconditionally** — previously hidden behind a stale capability check.
+- **M117 row deduplicated and surfaced on the full print panel** — message was being echoed in two places under certain print states.
+- **Printer-list spacing** — breathing room added between rows and the `Add Printer` button.
+
+### Changed
+
+- **3D gcode viewer: PackedVertex layout shrunk 36 → 20 bytes** — octahedral normal encoding + RGBA8 color packing cuts vertex buffer size ~44%; companion test updates.
+- **3D gcode viewer: tool color changes patch the prepared buffer in place** instead of dumping and rebuilding it, eliminating a noticeable hitch when toggling per-tool colors mid-view.
+- **Memory: 'good tier' RSS thresholds scale as a fraction of total RAM** — fixed-MB thresholds were over-eager on small devices and over-permissive on large ones; thresholds now scale with installed RAM.
+- **Temperature graph: pre-discovery configs auto-upgrade on load** — removes a class of config-load mismatches when migrating from an older profile snapshot; partition logic simplified.
+- **Nightly CI captures core dumps on test-all failure** — failed tests now leave a recoverable artifact for backtrace resolution instead of an opaque failure log.
+- **Docs: CC1 OpenCentauri COSMOS links repaired; CC1 architecture clarified as `armv7-a`.**
+
 ## [0.99.62] - 2026-05-13
 
 This release lands the **XML linter as a CI gate** (and the ~50 XML cleanups it surfaced), **gcode-streaming polish** for OrcaSlicer and purge/wipe-tower geometry, **launcher and installer hardening** (env preservation on upgrade, rolling-backup sweep on clean, tolerant env parsing with warnings instead of silent abort), and a **local-exec recovery script** that replaces the Moonraker `shell_command` path which never worked on printers without the `helix_recover` macro. Plus an updater fix for a 32-bit `statvfs` overflow that falsely reported "no space" on Pi.
@@ -3673,6 +3711,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.63]: https://github.com/prestonbrown/helixscreen/compare/v0.99.62...v0.99.63
 [0.99.62]: https://github.com/prestonbrown/helixscreen/compare/v0.99.61...v0.99.62
 [0.99.61]: https://github.com/prestonbrown/helixscreen/compare/v0.99.60...v0.99.61
 [0.99.60]: https://github.com/prestonbrown/helixscreen/compare/v0.99.59...v0.99.60
