@@ -9,7 +9,6 @@
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
 #include "ui_exclude_object_map_view.h"
-#include "ui_exclude_objects_list_overlay.h"
 #include "ui_filename_utils.h"
 #include "ui_gcode_viewer.h"
 #include "ui_modal.h"
@@ -888,7 +887,8 @@ void PrintStatusPanel::on_ui_destroyed() {
     // Note: LVGL animations are already cancelled by lv_obj_delete() in the base
     // class destroy_overlay_ui() call, so no need to cancel them here.
 
-    // Clean up map view before the widget tree is gone
+    // Clean up map view + side list before the widget tree is gone
+    side_list_.reset();
     if (map_view_) {
         map_view_->destroy();
         map_view_.reset();
@@ -1078,52 +1078,109 @@ void PrintStatusPanel::show_exclude_map_view() {
     if (!exclude_manager_)
         return;
 
-    // Get bed dimensions from MoonrakerAPI hardware info
-    float bed_w = 235.0f, bed_h = 235.0f; // sensible defaults
-    if (api_) {
-        const auto& vol = api_->hardware().build_volume();
-        float w = vol.x_max - vol.x_min;
-        float h = vol.y_max - vol.y_min;
-        if (w > 0.0f && h > 0.0f) {
-            bed_w = w;
-            bed_h = h;
-        }
-    }
-
-    // Find thumbnail section container
-    lv_obj_t* thumbnail_section = lv_obj_find_by_name(overlay_root_, "thumbnail_section");
-    if (!thumbnail_section) {
-        spdlog::warn("[{}] Cannot show map view: thumbnail_section not found", get_name());
+    // Map (when in thumbnail mode) parents into thumbnail_section as before;
+    // the side list parents into overlay_content (the two-column row) as a
+    // FLOATING child so it can slide in from the screen's right edge over the
+    // controls column without disturbing flex layout. Map and gcode viewer
+    // keep their full size — the list lands on top of the controls.
+    lv_obj_t* overlay_content = lv_obj_find_by_name(overlay_root_, "overlay_content");
+    if (!overlay_content) {
+        spdlog::warn("[{}] Cannot show exclude panel: overlay_content not found", get_name());
         return;
     }
+    lv_obj_t* thumbnail_section = lv_obj_find_by_name(overlay_content, "thumbnail_section");
 
-    // XML bindings on print_thumbnail and gradient_background hide them whenever
-    // exclude_map_active == 1 — setting this before creating the map avoids a
-    // brief frame with the overlay atop still-visible thumbnail/gradient.
-    lv_subject_set_int(&exclude_map_active_subject_, 1);
+    int viewer_mode = lv_subject_get_int(&gcode_viewer_mode_subject_);
+    bool thumbnail_mode = (viewer_mode == 0);
 
-    map_view_ = std::make_unique<helix::ui::ExcludeObjectMapView>();
-    map_view_->set_close_callback([this]() { hide_exclude_map_view(); });
+    if (thumbnail_mode && thumbnail_section) {
+        // Bed dimensions for the overhead map view (thumbnail mode only).
+        float bed_w = 235.0f, bed_h = 235.0f;
+        if (api_) {
+            const auto& vol = api_->hardware().build_volume();
+            float w = vol.x_max - vol.x_min;
+            float h = vol.y_max - vol.y_min;
+            if (w > 0.0f && h > 0.0f) {
+                bed_w = w;
+                bed_h = h;
+            }
+        }
 
-    // Try to get parsed GCode data from the viewer (may be nullptr in thumbnail-only mode)
-    std::shared_ptr<helix::gcode::ParsedGCodeFile> parsed;
-    if (gcode_viewer_) {
-        const auto* raw = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
-        if (raw) {
-            // Wrap in a no-op shared_ptr (we don't own it, viewer manages lifetime)
-            parsed = std::shared_ptr<helix::gcode::ParsedGCodeFile>(
-                const_cast<helix::gcode::ParsedGCodeFile*>(raw),
-                [](helix::gcode::ParsedGCodeFile*) {});
+        // XML bindings on print_thumbnail/gradient_background hide them when
+        // exclude_map_active == 1 — set before creating the map to avoid one
+        // frame with the overlay atop still-visible thumbnail/gradient.
+        lv_subject_set_int(&exclude_map_active_subject_, 1);
+
+        map_view_ = std::make_unique<helix::ui::ExcludeObjectMapView>();
+        map_view_->set_close_callback([this]() { hide_exclude_map_view(); });
+
+        std::shared_ptr<helix::gcode::ParsedGCodeFile> parsed;
+        if (gcode_viewer_) {
+            const auto* raw = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
+            if (raw) {
+                parsed = std::shared_ptr<helix::gcode::ParsedGCodeFile>(
+                    const_cast<helix::gcode::ParsedGCodeFile*>(raw),
+                    [](helix::gcode::ParsedGCodeFile*) {});
+            }
+        }
+
+        map_view_->create(thumbnail_section, printer_state_.get_excluded_objects_state(), bed_w,
+                          bed_h, exclude_manager_.get(), parsed);
+
+        // The side list's X already closes the whole panel — hide the map's
+        // duplicate close button so users have one obvious dismiss control.
+        if (auto* map_root = map_view_->root()) {
+            if (lv_obj_t* map_close = lv_obj_find_by_name(map_root, "close_btn")) {
+                lv_obj_add_flag(map_close, LV_OBJ_FLAG_HIDDEN);
+            }
         }
     }
 
-    map_view_->create(thumbnail_section, printer_state_.get_excluded_objects_state(), bed_w, bed_h,
-                      exclude_manager_.get(), parsed);
+    // right_section is 4/9 ≈ 44% of overlay_content; side list at the same
+    // percentage exactly covers the controls column.
+    constexpr int kSideListWidthPct = 44;
 
-    spdlog::debug("[{}] Showed exclude object map view (bed: {}x{}mm)", get_name(), bed_w, bed_h);
+    side_list_ = std::make_unique<helix::ui::ExcludeObjectSideList>();
+    side_list_->set_close_callback([this]() { hide_exclude_map_view(); });
+    side_list_->set_gcode_viewer(gcode_viewer_);
+    side_list_->create(overlay_content, &printer_state_, exclude_manager_.get(),
+                       kSideListWidthPct);
+
+    // Tapping an object in the viewer should request exclude, mirroring the
+    // side list's row taps. Installed regardless of current view mode so that
+    // switching from thumbnail → 2D/3D while the side list is open still wires
+    // up taps. Uninstalled in hide_exclude_map_view().
+    if (gcode_viewer_) {
+        ui_gcode_viewer_set_object_tap_callback(
+            gcode_viewer_,
+            [](lv_obj_t* /*viewer*/, const char* name, void* /*user_data*/) {
+                if (!name || name[0] == '\0') {
+                    return;
+                }
+                auto& panel = get_global_print_status_panel();
+                if (panel.exclude_manager_) {
+                    spdlog::info("[PrintStatusPanel] Viewer tap on object: '{}'", name);
+                    panel.exclude_manager_->request_exclude(std::string(name));
+                }
+            },
+            nullptr);
+    }
+
+    spdlog::debug("[{}] Showed exclude panel (mode={})", get_name(), viewer_mode);
 }
 
 void PrintStatusPanel::hide_exclude_map_view() {
+    // Detach the viewer tap-to-exclude wire-up and clear any lingering
+    // highlight from row-tap symmetry.
+    if (gcode_viewer_) {
+        ui_gcode_viewer_set_object_tap_callback(gcode_viewer_, nullptr, nullptr);
+        ui_gcode_viewer_set_highlighted_objects(gcode_viewer_, {});
+    }
+
+    if (side_list_) {
+        side_list_->destroy();
+        side_list_.reset();
+    }
     if (map_view_) {
         map_view_->destroy();
         map_view_.reset();
@@ -1540,22 +1597,12 @@ void PrintStatusPanel::on_objects_clicked(lv_event_t* e) {
     (void)e;
     auto& panel = get_global_print_status_panel();
 
-    int mode = lv_subject_get_int(&panel.gcode_viewer_mode_subject_);
-
-    if (mode == 0) {
-        // Thumbnail-only mode: toggle the overhead map view
-        if (panel.map_view_ && panel.map_view_->is_active()) {
-            panel.hide_exclude_map_view();
-        } else {
-            panel.show_exclude_map_view();
-        }
+    // Toggle the unified exclude panel (map+side-list in thumbnail mode,
+    // shrunk-viewer + side-list in 3D/2D mode).
+    if (panel.side_list_ && panel.side_list_->is_active()) {
+        panel.hide_exclude_map_view();
     } else {
-        // 3D/2D viewer mode: show the list overlay
-        if (panel.exclude_manager_ && panel.parent_screen_) {
-            helix::ui::get_exclude_objects_list_overlay().show(
-                panel.parent_screen_, panel.api_, panel.printer_state_,
-                panel.exclude_manager_.get(), panel.gcode_viewer_);
-        }
+        panel.show_exclude_map_view();
     }
     LVGL_SAFE_EVENT_CB_END();
 }

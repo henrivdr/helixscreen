@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ui_exclude_object_map_view.h"
+#include "ui_exclude_object_side_list.h"
 #include "ui_filament_runout_handler.h"
 #include "ui_modal.h"
 #include "ui_observer_guard.h"
@@ -581,6 +582,9 @@ class PrintStatusPanel : public OverlayBase {
 
     /// Overhead map view for exclude objects (shown in thumbnail-only mode)
     std::unique_ptr<helix::ui::ExcludeObjectMapView> map_view_;
+
+    /// Side-panel companion list (shown alongside map_view_).
+    std::unique_ptr<helix::ui::ExcludeObjectSideList> side_list_;
 
     /// Print cancel confirmation modal (RAII - auto-hides when destroyed)
     PrintCancelModal cancel_modal_;

@@ -2343,6 +2343,13 @@ lv_color_t theme_manager_get_color(const char* base_name) {
     return lv_color_hex(0x000000);
 }
 
+lv_color_t theme_manager_get_object_palette_color(int index) {
+    constexpr int kObjectPaletteSize = 8;
+    char token[32];
+    snprintf(token, sizeof(token), "object_color_%d", (index % kObjectPaletteSize) + 1);
+    return theme_manager_get_color(token);
+}
+
 /**
  * Apply theme-appropriate background color to object
  *

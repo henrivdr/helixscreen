@@ -1411,60 +1411,16 @@ void GCodeLayerRenderer::render_selection_brackets(lv_layer_t* layer) {
         dsc.width = 2;
         dsc.opa = LV_OPA_COVER;
 
-        // Define all 8 corners of the AABB
-        const glm::vec3 corners[8] = {
-            {bbox.min.x, bbox.min.y, bbox.min.z}, // 0: min,min,min
-            {bbox.max.x, bbox.min.y, bbox.min.z}, // 1: max,min,min
-            {bbox.max.x, bbox.max.y, bbox.min.z}, // 2: max,max,min
-            {bbox.min.x, bbox.max.y, bbox.min.z}, // 3: min,max,min
-            {bbox.min.x, bbox.min.y, bbox.max.z}, // 4: min,min,max
-            {bbox.max.x, bbox.min.y, bbox.max.z}, // 5: max,min,max
-            {bbox.max.x, bbox.max.y, bbox.max.z}, // 6: max,max,max
-            {bbox.min.x, bbox.max.y, bbox.max.z}, // 7: min,max,max
-        };
-
-        // For each corner, define 3 bracket directions (along X, Y, Z axes)
-        // Sign: +1 if bracket goes toward max, -1 if toward min
-        const float signs[8][3] = {
-            {+1, +1, +1}, // corner 0: min,min,min -> bracket toward max
-            {-1, +1, +1}, // corner 1: max,min,min
-            {-1, -1, +1}, // corner 2: max,max,min
-            {+1, -1, +1}, // corner 3: min,max,min
-            {+1, +1, -1}, // corner 4: min,min,max
-            {-1, +1, -1}, // corner 5: max,min,max
-            {-1, -1, -1}, // corner 6: max,max,max
-            {+1, -1, -1}, // corner 7: min,max,max
-        };
-
-        for (int c = 0; c < 8; ++c) {
-            glm::ivec2 corner_screen = world_to_screen(corners[c].x, corners[c].y, corners[c].z);
-
-            // Draw bracket line along X axis
-            glm::ivec2 bx = world_to_screen(corners[c].x + signs[c][0] * bracket_len, corners[c].y,
-                                            corners[c].z);
-
-            dsc.p1.x = static_cast<lv_value_precise_t>(corner_screen.x);
-            dsc.p1.y = static_cast<lv_value_precise_t>(corner_screen.y);
-            dsc.p2.x = static_cast<lv_value_precise_t>(bx.x);
-            dsc.p2.y = static_cast<lv_value_precise_t>(bx.y);
-            lv_draw_line(layer, &dsc);
-
-            // Draw bracket line along Y axis
-            glm::ivec2 by = world_to_screen(corners[c].x, corners[c].y + signs[c][1] * bracket_len,
-                                            corners[c].z);
-
-            dsc.p2.x = static_cast<lv_value_precise_t>(by.x);
-            dsc.p2.y = static_cast<lv_value_precise_t>(by.y);
-            lv_draw_line(layer, &dsc);
-
-            // Draw bracket line along Z axis
-            glm::ivec2 bz = world_to_screen(corners[c].x, corners[c].y,
-                                            corners[c].z + signs[c][2] * bracket_len);
-
-            dsc.p2.x = static_cast<lv_value_precise_t>(bz.x);
-            dsc.p2.y = static_cast<lv_value_precise_t>(bz.y);
-            lv_draw_line(layer, &dsc);
-        }
+        bbox.for_each_bracket_arm(bracket_len,
+                                  [&](const glm::vec3& origin, const glm::vec3& tip) {
+                                      glm::ivec2 a = world_to_screen(origin.x, origin.y, origin.z);
+                                      glm::ivec2 b = world_to_screen(tip.x, tip.y, tip.z);
+                                      dsc.p1.x = static_cast<lv_value_precise_t>(a.x);
+                                      dsc.p1.y = static_cast<lv_value_precise_t>(a.y);
+                                      dsc.p2.x = static_cast<lv_value_precise_t>(b.x);
+                                      dsc.p2.y = static_cast<lv_value_precise_t>(b.y);
+                                      lv_draw_line(layer, &dsc);
+                                  });
     }
 }
 

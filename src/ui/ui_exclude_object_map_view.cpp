@@ -774,9 +774,7 @@ void ExcludeObjectMapView::build_key_bar() {
 // ============================================================================
 
 lv_color_t ExcludeObjectMapView::get_object_color(int index) const {
-    char token[32];
-    snprintf(token, sizeof(token), "object_color_%d", (index % 8) + 1);
-    return theme_manager_get_color(token);
+    return theme_manager_get_object_palette_color(index);
 }
 
 // ============================================================================

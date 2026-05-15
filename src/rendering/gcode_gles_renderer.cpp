@@ -677,6 +677,14 @@ void GCodeGLESRenderer::destroy_gl() {
             glDeleteProgram(program_);
             program_ = 0;
         }
+        if (line_program_) {
+            glDeleteProgram(line_program_);
+            line_program_ = 0;
+        }
+        if (line_vbo_) {
+            glDeleteBuffers(1, &line_vbo_);
+            line_vbo_ = 0;
+        }
 
         // Unbind before destroying
         SDL_GL_MakeCurrent(static_cast<SDL_Window*>(sdl_gl_window_), nullptr);
@@ -715,6 +723,14 @@ void GCodeGLESRenderer::destroy_gl() {
     if (program_) {
         glDeleteProgram(program_);
         program_ = 0;
+    }
+    if (line_program_) {
+        glDeleteProgram(line_program_);
+        line_program_ = 0;
+    }
+    if (line_vbo_) {
+        glDeleteBuffers(1, &line_vbo_);
+        line_vbo_ = 0;
     }
 
     if (egl_display_ && egl_context_) {
@@ -1097,6 +1113,7 @@ void GCodeGLESRenderer::render(lv_layer_t* layer, const ParsedGCodeFile& gcode,
     current_state.layer_start = layer_start_;
     current_state.layer_end = layer_end_;
     current_state.highlight_count = highlighted_objects_.size();
+    current_state.highlight_set_hash = highlighted_objects_hash_;
     current_state.exclude_count = excluded_objects_.size();
     current_state.filament_color = filament_color_;
     current_state.ghost_opacity = ghost_opacity_;
@@ -1135,7 +1152,7 @@ void GCodeGLESRenderer::render(lv_layer_t* layer, const ParsedGCodeFile& gcode,
 // FBO Rendering
 // ============================================================
 
-void GCodeGLESRenderer::render_to_fbo(const ParsedGCodeFile& /*gcode*/, const GCodeCamera& camera) {
+void GCodeGLESRenderer::render_to_fbo(const ParsedGCodeFile& gcode, const GCodeCamera& camera) {
     int render_w = viewport_width_;
     int render_h = viewport_height_;
     if (render_w < 1)
@@ -1168,21 +1185,11 @@ void GCodeGLESRenderer::render_to_fbo(const ParsedGCodeFile& /*gcode*/, const GC
     // Use shader program
     glUseProgram(program_);
 
-    // Model transform: rotate -90° (CW) around Z to match slicer thumbnail orientation
+    glm::mat4 mvp = build_mvp(camera);
+
+    // Normal matrix (inverse transpose of upper-left 3x3 of model-view).
     glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0, 0, 1));
     glm::mat4 view = camera.get_view_matrix();
-    glm::mat4 proj = camera.get_projection_matrix();
-
-    // Apply vertical content offset (shifts scene up to avoid metadata overlay at bottom)
-    if (std::abs(content_offset_y_percent_) > 0.001f) {
-        // Translate in NDC space: offset_percent of -0.1 shifts content up by 10%
-        // In NDC, Y range is [-1, 1], so multiply by 2
-        proj[3][1] += -content_offset_y_percent_ * 2.0f;
-    }
-
-    glm::mat4 mvp = proj * view * model;
-
-    // Normal matrix (inverse transpose of upper-left 3x3 of model-view)
     glm::mat3 normal_mat = glm::transpose(glm::inverse(glm::mat3(view * model)));
 
     // Set uniforms
@@ -1256,6 +1263,12 @@ void GCodeGLESRenderer::render_to_fbo(const ParsedGCodeFile& /*gcode*/, const GC
     }
 
     glUseProgram(0);
+
+    // Selection brackets on top, using the same MVP as the geometry pass so
+    // brackets stay anchored to objects under rotation/zoom. Drawn last with
+    // depth test disabled inside render_brackets_3d().
+    render_brackets_3d(gcode, mvp);
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -1431,7 +1444,8 @@ bool GCodeGLESRenderer::CachedRenderState::operator==(const CachedRenderState& o
            near_angle(target.x, o.target.x) && near_angle(target.y, o.target.y) &&
            near_angle(target.z, o.target.z) && progress_layer == o.progress_layer &&
            layer_start == o.layer_start && layer_end == o.layer_end &&
-           highlight_count == o.highlight_count && exclude_count == o.exclude_count &&
+           highlight_count == o.highlight_count &&
+           highlight_set_hash == o.highlight_set_hash && exclude_count == o.exclude_count &&
            filament_color == o.filament_color && ghost_opacity == o.ghost_opacity;
 }
 
@@ -1569,6 +1583,13 @@ void GCodeGLESRenderer::set_highlighted_object(const std::string& name) {
 void GCodeGLESRenderer::set_highlighted_objects(const std::unordered_set<std::string>& names) {
     if (highlighted_objects_ != names) {
         highlighted_objects_ = names;
+        // Memoize the set hash so the per-frame cached-state build doesn't
+        // iterate every name on each LVGL invalidation tick.
+        size_t h = 0;
+        for (const auto& n : highlighted_objects_) {
+            h ^= std::hash<std::string>{}(n) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        highlighted_objects_hash_ = h;
         frame_dirty_ = true;
     }
 }
@@ -1741,6 +1762,151 @@ size_t GCodeGLESRenderer::get_triangle_count() const {
     return 0;
 }
 
+glm::mat4 GCodeGLESRenderer::build_mvp(const GCodeCamera& camera) const {
+    // Model: -90° CW around Z to match slicer thumbnail orientation.
+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0, 0, 1));
+    glm::mat4 proj = camera.get_projection_matrix();
+    // NDC Y range is [-1, 1]; multiply by 2 so the percent maps to a full shift.
+    if (std::abs(content_offset_y_percent_) > 0.001f) {
+        proj[3][1] += -content_offset_y_percent_ * 2.0f;
+    }
+    return proj * camera.get_view_matrix() * model;
+}
+
+// ============================================================
+// Selection Brackets (3D, GPU-side — drawn inside the FBO)
+// ============================================================
+
+static const char* kLineVertexShader = R"(
+    uniform mat4 u_mvp;
+    attribute vec3 a_position;
+    void main() {
+        gl_Position = u_mvp * vec4(a_position, 1.0);
+    }
+)";
+
+static const char* kLineFragmentShader = R"(
+    precision mediump float;
+    uniform vec4 u_color;
+    void main() {
+        gl_FragColor = u_color;
+    }
+)";
+
+bool GCodeGLESRenderer::init_line_program() {
+    if (line_program_)
+        return true;
+
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, kLineVertexShader);
+    if (!vs)
+        return false;
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, kLineFragmentShader);
+    if (!fs) {
+        glDeleteShader(vs);
+        return false;
+    }
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, fs);
+    glLinkProgram(prog);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    GLint linked = GL_FALSE;
+    glGetProgramiv(prog, GL_LINK_STATUS, &linked);
+    if (!linked) {
+        GLchar log[512];
+        glGetProgramInfoLog(prog, sizeof(log), nullptr, log);
+        spdlog::error("[GCode GLES] Line program link failed: {}", log);
+        glDeleteProgram(prog);
+        return false;
+    }
+
+    line_program_ = prog;
+    line_u_mvp_ = glGetUniformLocation(prog, "u_mvp");
+    line_u_color_ = glGetUniformLocation(prog, "u_color");
+    line_a_position_ = glGetAttribLocation(prog, "a_position");
+
+    GLuint vbo = 0;
+    glGenBuffers(1, &vbo);
+    line_vbo_ = vbo;
+    return true;
+}
+
+void GCodeGLESRenderer::render_brackets_3d(const ParsedGCodeFile& gcode, const glm::mat4& mvp) {
+    if (highlighted_objects_.empty())
+        return;
+    if (!line_program_ && !init_line_program())
+        return;
+
+    // Collect line endpoints (one vec3 per vertex, two verts per line).
+    // 8 corners * 3 axes * 2 verts = 48 vertices per object.
+    std::vector<glm::vec3> verts;
+    verts.reserve(highlighted_objects_.size() * 48);
+
+    for (const auto& name : highlighted_objects_) {
+        auto it = gcode.objects.find(name);
+        if (it == gcode.objects.end())
+            continue;
+        const AABB& bbox = it->second.bounding_box;
+        if (bbox.is_empty())
+            continue;
+
+        // Run the bbox through the same quantization the geometry pipeline
+        // applied to vertices, so brackets sit on the rendered surface rather
+        // than offset by a fraction of a quantization step.
+        glm::vec3 bmin = bbox.min;
+        glm::vec3 bmax = bbox.max;
+        if (geometry_) {
+            const auto& quant = geometry_->quantization;
+            bmin = quant.dequantize_vec3(quant.quantize_vec3(bbox.min));
+            bmax = quant.dequantize_vec3(quant.quantize_vec3(bbox.max));
+        }
+
+        const float dx = bmax.x - bmin.x;
+        const float dy = bmax.y - bmin.y;
+        const float dz = bmax.z - bmin.z;
+        const float min_edge = std::min({dx, dy, dz});
+        // 20% of shortest edge, capped at 5mm — matches the 2D layer renderer
+        // and the deleted TinyGL impl, so 2D and 3D bracket sizing feel alike.
+        const float bracket_len = std::min(min_edge * 0.2f, 5.0f);
+        if (bracket_len < 0.01f)
+            continue;
+
+        AABB{bmin, bmax}.for_each_bracket_arm(bracket_len,
+                                              [&](const glm::vec3& origin, const glm::vec3& tip) {
+                                                  verts.push_back(origin);
+                                                  verts.push_back(tip);
+                                              });
+    }
+
+    if (verts.empty())
+        return;
+
+    // Draw on top of existing geometry. Brackets are unlit and uniform color.
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(line_program_);
+    glUniformMatrix4fv(line_u_mvp_, 1, GL_FALSE, glm::value_ptr(mvp));
+    // #C0C0C0 silver, fully opaque — matches the 2D bracket color.
+    glUniform4f(line_u_color_, 0.75f, 0.75f, 0.75f, 1.0f);
+
+    glBindBuffer(GL_ARRAY_BUFFER, line_vbo_);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(glm::vec3)),
+                 verts.data(), GL_STREAM_DRAW);
+
+    glEnableVertexAttribArray(static_cast<GLuint>(line_a_position_));
+    glVertexAttribPointer(static_cast<GLuint>(line_a_position_), 3, GL_FLOAT, GL_FALSE,
+                          sizeof(glm::vec3), nullptr);
+
+    glLineWidth(2.0f);
+    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(verts.size()));
+
+    glDisableVertexAttribArray(static_cast<GLuint>(line_a_position_));
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glUseProgram(0);
+    glEnable(GL_DEPTH_TEST);
+}
+
 // ============================================================
 // Object Picking (CPU-side, no GL needed)
 // ============================================================
@@ -1748,7 +1914,7 @@ size_t GCodeGLESRenderer::get_triangle_count() const {
 std::optional<std::string> GCodeGLESRenderer::pick_object(const glm::vec2& screen_pos,
                                                           const ParsedGCodeFile& gcode,
                                                           const GCodeCamera& camera) const {
-    glm::mat4 transform = camera.get_view_projection_matrix();
+    glm::mat4 transform = build_mvp(camera);
     float closest_distance = std::numeric_limits<float>::max();
     std::optional<std::string> picked_object;
 
@@ -1802,6 +1968,55 @@ std::optional<std::string> GCodeGLESRenderer::pick_object(const glm::vec2& scree
             }
         }
     }
+
+    // Fallback: after 3D geometry build, ParsedGCodeFile::clear_segments() frees
+    // per-layer toolpath data to save memory — segment iteration above then
+    // returns nothing. Project each defined object's AABB to screen space and
+    // hit-test the resulting 2D bounding rect so taps still work post-build.
+    if (!picked_object) {
+        float closest_inside_area = std::numeric_limits<float>::max();
+        for (const auto& [name, obj] : gcode.objects) {
+            const auto& bbox = obj.bounding_box;
+            if (bbox.is_empty())
+                continue;
+
+            const auto corners = bbox.corners();
+
+            float min_sx = std::numeric_limits<float>::max();
+            float min_sy = std::numeric_limits<float>::max();
+            float max_sx = std::numeric_limits<float>::lowest();
+            float max_sy = std::numeric_limits<float>::lowest();
+            bool any_in_front = false;
+
+            for (const auto& corner : corners) {
+                glm::vec4 clip = transform * glm::vec4(corner, 1.0f);
+                if (clip.w <= kClipSpaceWEpsilon)
+                    continue;  // behind the camera
+                any_in_front = true;
+                glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                float sx = (ndc.x + 1.0f) * 0.5f * viewport_width_;
+                float sy = (1.0f - ndc.y) * 0.5f * viewport_height_;
+                min_sx = std::min(min_sx, sx);
+                min_sy = std::min(min_sy, sy);
+                max_sx = std::max(max_sx, sx);
+                max_sy = std::max(max_sy, sy);
+            }
+            if (!any_in_front)
+                continue;
+
+            if (screen_pos.x < min_sx || screen_pos.x > max_sx || screen_pos.y < min_sy ||
+                screen_pos.y > max_sy)
+                continue;
+
+            // Prefer the smallest (innermost) hit when objects overlap on screen.
+            float area = (max_sx - min_sx) * (max_sy - min_sy);
+            if (area < closest_inside_area) {
+                closest_inside_area = area;
+                picked_object = name;
+            }
+        }
+    }
+
     return picked_object;
 }
 

@@ -262,6 +262,18 @@ class GCodeGLESRenderer {
     void blit_to_lvgl(lv_layer_t* layer, const lv_area_t* widget_coords);
     void draw_cached_to_lvgl(lv_layer_t* layer, const lv_area_t* widget_coords);
 
+    /// Build the model-view-projection matrix the GLES geometry pass applies:
+    /// -90° model rotation about Z plus the optional vertical content offset.
+    /// Shared by render_to_fbo, render_brackets_3d, and pick_object so they
+    /// can't drift — drift caused #22 (clicks landing on the wrong object).
+    glm::mat4 build_mvp(const GCodeCamera& camera) const;
+    /// Lazily compile/link the simple line shader used for selection brackets.
+    bool init_line_program();
+    /// Draw 3D corner brackets around highlighted objects into the FBO. Called
+    /// at the end of render_to_fbo so brackets become part of the rendered
+    /// image that gets blitted to LVGL. Matches the deleted TinyGL impl.
+    void render_brackets_3d(const ParsedGCodeFile& gcode, const glm::mat4& mvp);
+
     // ====== Frame Skip ======
 
     struct CachedRenderState {
@@ -274,6 +286,7 @@ class GCodeGLESRenderer {
         int layer_start = -2;
         int layer_end = -2;
         size_t highlight_count = 0;
+        size_t highlight_set_hash = 0;  // distinguishes different single-object selections
         size_t exclude_count = 0;
         glm::vec4 filament_color{-1.0f};
         uint8_t ghost_opacity = 0;
@@ -303,6 +316,12 @@ class GCodeGLESRenderer {
     // ====== Shader State ======
 
     unsigned int program_ = 0; // GLuint
+    // Unlit line program for selection-bracket overlays.
+    unsigned int line_program_ = 0;
+    int line_u_mvp_ = -1;
+    int line_u_color_ = -1;
+    int line_a_position_ = -1;
+    unsigned int line_vbo_ = 0;
     // Uniform locations
     int u_mvp_ = -1;
     int u_normal_matrix_ = -1;
@@ -367,6 +386,7 @@ class GCodeGLESRenderer {
     int layer_end_ = -1;
     std::string highlighted_object_;
     std::unordered_set<std::string> highlighted_objects_;
+    size_t highlighted_objects_hash_ = 0;  // recomputed in set_highlighted_objects
     std::unordered_set<std::string> excluded_objects_;
     lv_opa_t global_opacity_ = LV_OPA_COVER;
 

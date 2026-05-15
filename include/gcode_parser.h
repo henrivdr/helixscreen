@@ -14,6 +14,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <array>
 #include <climits>
 #include <glm/glm.hpp>
 #include <limits>
@@ -67,6 +68,34 @@ struct AABB {
      */
     bool is_empty() const {
         return min.x > max.x || min.y > max.y || min.z > max.z;
+    }
+
+    /// 8 corners of the box. Order: bits 0/1/2 of the index select max for x/y/z.
+    std::array<glm::vec3, 8> corners() const {
+        return {{
+            {min.x, min.y, min.z}, {max.x, min.y, min.z},
+            {min.x, max.y, min.z}, {max.x, max.y, min.z},
+            {min.x, min.y, max.z}, {max.x, min.y, max.z},
+            {min.x, max.y, max.z}, {max.x, max.y, max.z},
+        }};
+    }
+
+    /// Visit each of the 24 corner-bracket arm segments (8 corners × 3 axes)
+    /// in world space. `fn(origin, tip)` fires once per arm. Both the 2D
+    /// `GCodeLayerRenderer::render_selection_brackets` and the 3D
+    /// `GCodeGLESRenderer::render_brackets_3d` share this geometry — the
+    /// renderers differ only in how they emit the resulting line segments.
+    template <typename F>
+    void for_each_bracket_arm(float arm_length, F&& fn) const {
+        const auto cs = corners();
+        for (int c = 0; c < 8; ++c) {
+            const glm::vec3& origin = cs[c];
+            for (int axis = 0; axis < 3; ++axis) {
+                glm::vec3 tip = origin;
+                tip[axis] += ((c & (1 << axis)) ? -arm_length : +arm_length);
+                fn(origin, tip);
+            }
+        }
     }
 };
 

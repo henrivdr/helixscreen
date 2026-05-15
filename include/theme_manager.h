@@ -563,6 +563,15 @@ void theme_apply_current_palette_to_tree(lv_obj_t* root);
 lv_color_t theme_manager_get_color(const char* base_name);
 
 /**
+ * @brief Look up the Nth color from the rotating `object_color_1..8` palette.
+ *
+ * Cycles every 8 (`(index % 8) + 1`). Used by exclude-object visuals so the
+ * map view's rect colors, the side list's badge colors, and the 3D selection
+ * brackets stay consistent for the same object index.
+ */
+lv_color_t theme_manager_get_object_palette_color(int index);
+
+/**
  * @brief Apply themed background color to widget
  *
  * Sets widget background color using theme-aware color lookup.
