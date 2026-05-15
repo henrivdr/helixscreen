@@ -128,13 +128,13 @@ See [docs/devel/GALLERY.md](docs/devel/GALLERY.md) for the full gallery.
 | Snapmaker U1 (SnapSwap toolchanger) | aarch64 | Tested |
 | QIDI Q2, Plus 4, Max 4 | aarch64 | Supported¹ |
 | Sovol SV06 / SV08 | Pi build | Tested |
-| Elegoo Centauri Carbon | Dedicated build | Tested² |
+| Elegoo Centauri Carbon | armv7-a | Tested² |
 | x86 Mini PC (Debian) | x86_64 | Tested |
 | macOS / Linux desktop | x86_64 / ARM64 | Development / CI |
 
 ¹ QIDI models with Linux framebuffer displays (Q2, Plus 4, Max 4) only. Stock firmware runs standard Moonraker and works directly; community firmware like [FreeDi](https://github.com/Phil1988/FreeDi), [53Aries/Q2-Firmware](https://github.com/53Aries/Q2-Firmware), or [OpenQIDI](https://openqidi.com/) is optional. Older models (X-Max 3, X-Plus 3, Q1 Pro, X-Smart 3) use TJC/Nextion serial displays and are **not compatible** without a screen replacement.
 
-² Elegoo Centauri Carbon requires the community [OpenCentauri COSMOS](https://docs.opencentauri.cc/klipper-conversion/cosmos/) firmware (stock Elegoo firmware has no SSH, Klipper, or Moonraker). Ships with factory white-balance calibration for the 4.3" panel.
+² Elegoo Centauri Carbon requires the community [OpenCentauri COSMOS](https://github.com/OpenCentauri/cosmos) firmware ([docs](https://docs.opencentauri.cc/klipper-conversion/cosmos/cosmos/); stock Elegoo firmware has no SSH, Klipper, or Moonraker). Ships with factory white-balance calibration for the 4.3" panel.
 
 ## Installation
 

@@ -242,7 +242,7 @@ The same applies to the uninstaller — run it from inside the chroot.
 
 ### Elegoo Centauri Carbon
 
-> **Tested and working.** Prebuilt binaries ship in releases and the installer has auto-detection support. Requires the community [OpenCentauri COSMOS firmware](https://docs.opencentauri.cc/klipper-conversion/cosmos/) — stock Elegoo firmware is not supported (no SSH, no Klipper, no Moonraker).
+> **Tested and working.** Prebuilt binaries ship in releases and the installer has auto-detection support. Requires the community [OpenCentauri COSMOS firmware](https://docs.opencentauri.cc/klipper-conversion/cosmos/cosmos/) — stock Elegoo firmware is not supported (no SSH, no Klipper, no Moonraker).
 
 - **Hardware:**
   - Elegoo Centauri Carbon (4.3" 480×272 touchscreen, Allwinner R528, armv7l)
