@@ -3,10 +3,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
   <consts>
-    <!-- Stroke thickness only — responsive per breakpoint. The arc's
-         overall diameter is computed dynamically in C++ from the actual
-         arc_holder dimensions (on_size_changed). XML just specifies a
-         placeholder size that C++ overrides. -->
+    <!-- Stroke thickness — responsive per breakpoint. Overall arc diameter
+         is computed dynamically in C++ from the arc_holder dimensions; the
+         XML width/height are placeholders that C++ overrides. -->
     <px name="progress_arc_thickness_tiny"    value="6"/>
     <px name="progress_arc_thickness_small"   value="7"/>
     <px name="progress_arc_thickness_medium"  value="8"/>
@@ -20,20 +19,19 @@
     <!-- Main row: thumb | arc | data -->
     <lv_obj name="detailed_main_row"
             width="100%" flex_grow="1" style_pad_all="0" flex_flow="row"
-            style_pad_column="#space_md"
-            style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
+            style_pad_column="#space_md" style_flex_cross_place="center"
+            scrollable="false" clickable="false" event_bubble="true">
       <lv_image name="detailed_thumb"
                 flex_grow="2" height="100%" src="A:assets/images/benchy_thumbnail_white.png"
                 bind_src="print_thumbnail_path"
                 inner_align="contain" clickable="false" event_bubble="true"/>
       <lv_obj name="detailed_center_col"
               flex_grow="2" height="100%" style_pad_all="0" flex_flow="column"
-              style_flex_cross_place="center"
-              style_pad_gap="#space_xs" scrollable="false" clickable="false" event_bubble="true">
-        <!-- Arc holder: flex_grow=1 fills remaining vertical space; arc + % label
-             are siblings absolutely positioned to the holder's center (same
-             pattern as fan_arc_core.xml). The C++ resize_arc_to_square reads
-             this holder's dimensions and sizes the arc square. -->
+              style_flex_cross_place="center" style_pad_gap="0"
+              scrollable="false" clickable="false" event_bubble="true">
+        <!-- Arc holder: flex_grow=1 fills column; arc + % are siblings at
+             align="center" (fan_arc_core.xml pattern). C++ resize_arc_to_square
+             reads this holder's dimensions and sizes the arc square. -->
         <lv_obj name="detailed_arc_holder"
                 width="100%" flex_grow="1" style_pad_all="0"
                 scrollable="false" clickable="false" event_bubble="true">
@@ -54,46 +52,6 @@
           <text_body name="detailed_progress_pct" align="center"
                      bind_text="print_status_progress_pct" clickable="false" event_bubble="true"/>
         </lv_obj>
-        <!-- Temps under arc/data when colspan>=3 -->
-        <lv_obj name="detailed_temp_row_under_data"
-                width="100%" height="content" style_pad_all="0" flex_flow="row"
-                style_pad_gap="#space_md" style_flex_main_place="space_around"
-                style_flex_cross_place="center"
-                scrollable="false" clickable="false" event_bubble="true">
-          <bind_flag_if_eq subject="print_status_temp_under_thumb" flag="hidden" ref_value="1"/>
-          <lv_obj width="content" height="content" style_pad_all="0" flex_flow="row"
-                  style_pad_gap="#space_xs" style_flex_cross_place="center"
-                  scrollable="false" clickable="false" event_bubble="true">
-            <text_small bind_text="print_status_nozzle_tool_label" clickable="false" event_bubble="true">
-              <bind_flag_if_eq subject="print_status_multi_tool" flag="hidden" ref_value="0"/>
-            </text_small>
-            <nozzle_icon size="sm" badge_subject="" clickable="false" event_bubble="true"/>
-            <temp_display size="sm" show_target="true"
-                          bind_current="extruder_temp" bind_target="extruder_target"
-                          clickable="false" event_bubble="true"/>
-            <icon src="chevron_down" size="sm">
-              <bind_flag_if_eq subject="print_status_multi_tool" flag="hidden" ref_value="0"/>
-              <event_cb trigger="clicked" callback="print_status_nozzle_chevron_cb"/>
-            </icon>
-          </lv_obj>
-          <lv_obj width="content" height="content" style_pad_all="0" flex_flow="row"
-                  style_pad_gap="#space_xs" style_flex_cross_place="center"
-                  scrollable="false" clickable="false" event_bubble="true">
-            <icon src="radiator" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
-            <temp_display size="sm" show_target="true"
-                          bind_current="bed_temp" bind_target="bed_target"
-                          clickable="false" event_bubble="true"/>
-          </lv_obj>
-          <lv_obj width="content" height="content" style_pad_all="0" flex_flow="row"
-                  style_pad_gap="#space_xs" style_flex_cross_place="center"
-                  scrollable="false" clickable="false" event_bubble="true">
-            <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
-            <icon src="fridge_industrial" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
-            <temp_display size="sm" show_target="true"
-                          bind_current="chamber_temp" bind_target="chamber_target"
-                          clickable="false" event_bubble="true"/>
-          </lv_obj>
-        </lv_obj>
       </lv_obj>
       <lv_obj name="detailed_data_col"
               flex_grow="3" height="100%" style_pad_all="0" flex_flow="column"
@@ -110,13 +68,12 @@
         </text_small>
       </lv_obj>
     </lv_obj>
-    <!-- Temps full-width when colspan==2 -->
-    <lv_obj name="detailed_temp_row_full"
+    <!-- Temps: always a full-width row at the bottom of the card -->
+    <lv_obj name="detailed_temp_row"
             width="100%" height="content" style_pad_all="0" flex_flow="row"
-            style_pad_gap="#space_md" style_flex_main_place="space_around"
+            style_pad_gap="#space_sm" style_flex_main_place="space_evenly"
             style_flex_cross_place="center"
             scrollable="false" clickable="false" event_bubble="true">
-      <bind_flag_if_eq subject="print_status_temp_under_thumb" flag="hidden" ref_value="0"/>
       <lv_obj width="content" height="content" style_pad_all="0" flex_flow="row"
               style_pad_gap="#space_xs" style_flex_cross_place="center"
               scrollable="false" clickable="false" event_bubble="true">
@@ -124,9 +81,7 @@
           <bind_flag_if_eq subject="print_status_multi_tool" flag="hidden" ref_value="0"/>
         </text_small>
         <nozzle_icon size="sm" badge_subject="" clickable="false" event_bubble="true"/>
-        <temp_display size="sm" show_target="true"
-                      bind_current="extruder_temp" bind_target="extruder_target"
-                      clickable="false" event_bubble="true"/>
+        <text_small bind_text="print_status_nozzle_text" clickable="false" event_bubble="true"/>
         <icon src="chevron_down" size="sm">
           <bind_flag_if_eq subject="print_status_multi_tool" flag="hidden" ref_value="0"/>
           <event_cb trigger="clicked" callback="print_status_nozzle_chevron_cb"/>
@@ -136,18 +91,14 @@
               style_pad_gap="#space_xs" style_flex_cross_place="center"
               scrollable="false" clickable="false" event_bubble="true">
         <icon src="radiator" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
-        <temp_display size="sm" show_target="true"
-                      bind_current="bed_temp" bind_target="bed_target"
-                      clickable="false" event_bubble="true"/>
+        <text_small bind_text="print_status_bed_text" clickable="false" event_bubble="true"/>
       </lv_obj>
       <lv_obj width="content" height="content" style_pad_all="0" flex_flow="row"
               style_pad_gap="#space_xs" style_flex_cross_place="center"
               scrollable="false" clickable="false" event_bubble="true">
         <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
         <icon src="fridge_industrial" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
-        <temp_display size="sm" show_target="true"
-                      bind_current="chamber_temp" bind_target="chamber_target"
-                      clickable="false" event_bubble="true"/>
+        <text_small bind_text="print_status_chamber_text" clickable="false" event_bubble="true"/>
       </lv_obj>
     </lv_obj>
     <!-- M117 footer -->
