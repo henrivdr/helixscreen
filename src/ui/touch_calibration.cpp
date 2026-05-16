@@ -142,19 +142,13 @@ bool is_calibration_valid(const TouchCalibration& cal) {
         return false;
     }
 
-    // Check all coefficients are finite (not NaN or Infinity)
+    // Check all coefficients are finite (not NaN or Infinity). No magnitude
+    // bound: legitimate hardware (e.g. Mellow FLY-TFT35 with Goodix capacitive
+    // touch) needs scale/offset terms in the thousands to map a compressed
+    // ABS sub-range across the panel. Geometric validity is enforced by
+    // validate_calibration_result() at compute time.
     if (!std::isfinite(cal.a) || !std::isfinite(cal.b) || !std::isfinite(cal.c) ||
         !std::isfinite(cal.d) || !std::isfinite(cal.e) || !std::isfinite(cal.f)) {
-        return false;
-    }
-
-    // Check coefficients are within reasonable bounds
-    if (std::abs(cal.a) > MAX_CALIBRATION_COEFFICIENT ||
-        std::abs(cal.b) > MAX_CALIBRATION_COEFFICIENT ||
-        std::abs(cal.c) > MAX_CALIBRATION_COEFFICIENT ||
-        std::abs(cal.d) > MAX_CALIBRATION_COEFFICIENT ||
-        std::abs(cal.e) > MAX_CALIBRATION_COEFFICIENT ||
-        std::abs(cal.f) > MAX_CALIBRATION_COEFFICIENT) {
         return false;
     }
 
@@ -250,22 +244,30 @@ bool validate_calibration_result(const TouchCalibration& cal, const Point screen
         spdlog::warn("[TouchDebug]   screen {}x{}, max_residual={:.1f}px", screen_width, screen_height, max_residual);
     }
 
-    // Check 1: Coefficient sanity — scaling factors beyond 10x indicate bad input
-    // (e.g., touch points clustered in a tiny area). The c/f offsets can be larger
-    // (up to screen dimensions), so use the general MAX_CALIBRATION_COEFFICIENT for those.
-    constexpr float MAX_SCALE_COEFFICIENT = 10.0f;
-    if (std::abs(cal.a) > MAX_SCALE_COEFFICIENT || std::abs(cal.b) > MAX_SCALE_COEFFICIENT ||
-        std::abs(cal.d) > MAX_SCALE_COEFFICIENT || std::abs(cal.e) > MAX_SCALE_COEFFICIENT) {
-        spdlog::warn("[TouchCalibration] Calibration coefficients out of range "
-                     "(a={:.2f}, b={:.2f}, d={:.2f}, e={:.2f})",
-                     cal.a, cal.b, cal.d, cal.e);
-        return false;
-    }
-    if (std::abs(cal.c) > MAX_CALIBRATION_COEFFICIENT ||
-        std::abs(cal.f) > MAX_CALIBRATION_COEFFICIENT) {
-        spdlog::warn("[TouchCalibration] Calibration offset out of range "
-                     "(c={:.2f}, f={:.2f})",
-                     cal.c, cal.f);
+    // Coefficient magnitudes are intentionally not bounded. Both scales
+    // (a, b, d, e) and offsets (c, f) can legitimately grow large when a
+    // touch controller's config restricts output to a narrow sub-range of
+    // its declared ABS axes — e.g. Mellow FLY-TFT35 with Goodix capacitive
+    // touch reports X≈0..50 and Y≈280..320 across the full 480x320 panel,
+    // requiring a≈8.4, e≈13.2, f≈-4000. NaN/Inf is filtered upstream by
+    // is_calibration_valid(); ill-conditioned matrices are caught by the
+    // input-side touch-span check below plus the residual + center checks.
+
+    // Check 1: Touch points must span enough range on each axis that the
+    // resulting affine is meaningful. Three calibration taps jittered within
+    // a few sensor units don't define a real transform — the matrix is
+    // mathematically exact but wildly noise-sensitive (a single 1-unit touch
+    // jitter at runtime produces hundreds of pixels of pointer motion).
+    constexpr int MIN_TOUCH_AXIS_SPAN = 5;
+    int tx_min = std::min({touch_points[0].x, touch_points[1].x, touch_points[2].x});
+    int tx_max = std::max({touch_points[0].x, touch_points[1].x, touch_points[2].x});
+    int ty_min = std::min({touch_points[0].y, touch_points[1].y, touch_points[2].y});
+    int ty_max = std::max({touch_points[0].y, touch_points[1].y, touch_points[2].y});
+    if ((tx_max - tx_min) < MIN_TOUCH_AXIS_SPAN ||
+        (ty_max - ty_min) < MIN_TOUCH_AXIS_SPAN) {
+        spdlog::warn("[TouchCalibration] Touch points too clustered "
+                     "(x_span={}, y_span={}, min={})",
+                     tx_max - tx_min, ty_max - ty_min, MIN_TOUCH_AXIS_SPAN);
         return false;
     }
 

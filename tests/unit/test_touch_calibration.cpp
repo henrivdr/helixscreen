@@ -866,6 +866,21 @@ TEST_CASE("TouchCalibration: validate_calibration_result accepts real ns2009 cal
     REQUIRE(validate_calibration_result(cal, screen_points, touch_points, 480, 272) == true);
 }
 
+TEST_CASE("TouchCalibration: validate_calibration_result accepts narrow-range capacitive device",
+          "[touch-calibration][validate]") {
+    // Mellow FLY-TFT35 with a Goodix capacitive touch IC whose config bytes
+    // emit a compressed sub-range of the chip's declared 0..4095 ABS axes:
+    // X spans ~7..48, Y spans ~299..313 across the full 480x320 panel. The
+    // affine fit needs scale coefficients around a≈8.4, e≈13.2 — well above
+    // the old 10x cap that wrongly rejected this device.
+    Point screen_points[3] = {{72, 64}, {240, 249}, {408, 64}};
+    Point touch_points[3] = {{8, 300}, {28, 313}, {48, 299}};
+    TouchCalibration cal;
+    compute_calibration(screen_points, touch_points, cal);
+
+    REQUIRE(validate_calibration_result(cal, screen_points, touch_points, 480, 320) == true);
+}
+
 // ============================================================================
 // Multi-Sample Input Filtering Tests
 // ============================================================================

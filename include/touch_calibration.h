@@ -213,9 +213,6 @@ bool validate_calibration_result(const TouchCalibration& cal, const Point screen
 bool detect_and_correct_axis_swap(TouchCalibration& cal, const Point screen_points[3],
                                   Point touch_points[3]);
 
-/// Maximum reasonable coefficient value for validation
-constexpr float MAX_CALIBRATION_COEFFICIENT = 1000.0f;
-
 /**
  * @brief Check if a sysfs phys path indicates a USB-connected input device
  *
