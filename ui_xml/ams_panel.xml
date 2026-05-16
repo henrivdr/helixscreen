@@ -2,52 +2,9 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
-  <!-- Component-local constants -->
-  <consts>
-    <!-- Right column width. ~40% narrower at MICRO/TINY so the left
-         content (slots + flow graphic) gets more horizontal room. -->
-    <px name="ams_right_col_w_micro" value="145"/>
-    <px name="ams_right_col_w_tiny" value="145"/>
-    <px name="ams_right_col_w_small" value="200"/>
-    <px name="ams_right_col_w_medium" value="240"/>
-    <px name="ams_right_col_w_large" value="240"/>
-    <!-- AMS slot spool widget size. Previously `space_lg * 4` which collapsed
-         to 32px at MICRO/TINY (too small given available space). -->
-    <px name="ams_slot_spool_size_micro" value="48"/>
-    <px name="ams_slot_spool_size_tiny" value="48"/>
-    <px name="ams_slot_spool_size_small" value="48"/>
-    <px name="ams_slot_spool_size_medium" value="64"/>
-    <px name="ams_slot_spool_size_large" value="80"/>
-    <!-- Badge border thickness — thinner at MICRO/TINY to reclaim pixels on the
-         already-small spool. -->
-    <px name="ams_slot_badge_border_w_micro" value="1"/>
-    <px name="ams_slot_badge_border_w_tiny" value="1"/>
-    <px name="ams_slot_badge_border_w_small" value="2"/>
-    <px name="ams_slot_badge_border_w_medium" value="2"/>
-    <px name="ams_slot_badge_border_w_large" value="2"/>
-    <!-- Badge internal padding + overall dimensions. Tight at MICRO/TINY so the
-         single-digit slot number / tool label isn't swimming in whitespace. -->
-    <px name="ams_slot_badge_pad_h_micro" value="2"/>
-    <px name="ams_slot_badge_pad_h_tiny" value="2"/>
-    <px name="ams_slot_badge_pad_h_small" value="4"/>
-    <px name="ams_slot_badge_pad_h_medium" value="4"/>
-    <px name="ams_slot_badge_pad_h_large" value="4"/>
-    <px name="ams_slot_status_badge_size_micro" value="16"/>
-    <px name="ams_slot_status_badge_size_tiny" value="16"/>
-    <px name="ams_slot_status_badge_size_small" value="20"/>
-    <px name="ams_slot_status_badge_size_medium" value="20"/>
-    <px name="ams_slot_status_badge_size_large" value="20"/>
-    <px name="ams_slot_tool_badge_h_micro" value="14"/>
-    <px name="ams_slot_tool_badge_h_tiny" value="14"/>
-    <px name="ams_slot_tool_badge_h_small" value="16"/>
-    <px name="ams_slot_tool_badge_h_medium" value="16"/>
-    <px name="ams_slot_tool_badge_h_large" value="16"/>
-    <px name="ams_slot_tool_badge_min_w_micro" value="18"/>
-    <px name="ams_slot_tool_badge_min_w_tiny" value="18"/>
-    <px name="ams_slot_tool_badge_min_w_small" value="22"/>
-    <px name="ams_slot_tool_badge_min_w_medium" value="22"/>
-    <px name="ams_slot_tool_badge_min_w_large" value="22"/>
-  </consts>
+  <!-- All ams_* responsive tokens live in ui_xml/ams_tokens.xml (feature-scoped,
+       same pattern as fan_tokens.xml). Referenced here via the bare base name
+       e.g. #ams_right_col_w — theme_manager picks the per-breakpoint value. -->
   <!-- Overlay panel - right-aligned, row layout so right column spans full height -->
   <view name="ams_panel"
         extends="lv_obj" width="#overlay_panel_width" height="100%" align="right_mid" style_pad_all="0"

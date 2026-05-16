@@ -159,35 +159,7 @@
 
     <!-- Fan card tokens (fan_*) live in fan_tokens.xml -->
 
-    <!-- ===================================================================== -->
-    <!-- Responsive AMS Overview Card Sizes (ams_*)                            -->
-    <!-- ===================================================================== -->
-    <!-- Runtime selects appropriate variant via ui_theme_register_responsive_spacing()
-         AMS unit card component dimensions for the multi-unit overview panel -->
-    <!-- ams_logo_size: Unit type logo (Box Turtle, Night Owl, etc.) -->
-    <px name="ams_logo_size_small" value="20"/>
-    <px name="ams_logo_size_medium" value="24"/>
-    <px name="ams_logo_size_large" value="28"/>
-    <px name="ams_logo_size_xlarge" value="32"/>
-    <px name="ams_logo_size_xxlarge" value="40"/>
-    <!-- ams_bars_height: Mini status bars container height -->
-    <px name="ams_bars_height_small" value="36"/>
-    <px name="ams_bars_height_medium" value="48"/>
-    <px name="ams_bars_height_large" value="56"/>
-    <px name="ams_bars_height_xlarge" value="68"/>
-    <px name="ams_bars_height_xxlarge" value="80"/>
-    <!-- ams_card_min_width: Minimum unit card width -->
-    <px name="ams_card_min_width_small" value="80"/>
-    <px name="ams_card_min_width_medium" value="100"/>
-    <px name="ams_card_min_width_large" value="120"/>
-    <px name="ams_card_min_width_xlarge" value="140"/>
-    <px name="ams_card_min_width_xxlarge" value="180"/>
-    <!-- ams_card_max_width: Maximum unit card width -->
-    <px name="ams_card_max_width_small" value="160"/>
-    <px name="ams_card_max_width_medium" value="200"/>
-    <px name="ams_card_max_width_large" value="240"/>
-    <px name="ams_card_max_width_xlarge" value="280"/>
-    <px name="ams_card_max_width_xxlarge" value="360"/>
+    <!-- AMS tokens (ams_*) live in ams_tokens.xml -->
 
     <!-- ===================================================================== -->
     <!-- Responsive Keypad Sizes (keypad_*)                                    -->

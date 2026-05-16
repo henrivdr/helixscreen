@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 /// Breakpoint tiers — used everywhere instead of magic integers.
 /// Selected based on screen height (vertical resolution).
@@ -52,4 +53,29 @@ inline UiBreakpoint as_breakpoint(int32_t raw) {
 
     raw = std::clamp(raw, min, max);
     return static_cast<UiBreakpoint>(raw);
+}
+
+/// Parse a lowercase breakpoint name ("micro" | "tiny" | "small" | "medium" |
+/// "large" | "xlarge" | "xxlarge") into its UiBreakpoint int. Returns -1 for
+/// nullptr, empty, or unrecognized input — callers use that as a "not set"
+/// sentinel (e.g. XML props that default to ""). String-input helper for the
+/// XML widget layer; the C++ enum is already sufficient for in-code use.
+inline int breakpoint_from_name(const char* s) {
+    if (!s || s[0] == '\0')
+        return -1;
+    struct Entry {
+        const char* name;
+        UiBreakpoint bp;
+    };
+    constexpr Entry table[] = {
+        {"micro", UiBreakpoint::Micro},     {"tiny", UiBreakpoint::Tiny},
+        {"small", UiBreakpoint::Small},     {"medium", UiBreakpoint::Medium},
+        {"large", UiBreakpoint::Large},     {"xlarge", UiBreakpoint::XLarge},
+        {"xxlarge", UiBreakpoint::XXLarge},
+    };
+    for (const auto& e : table) {
+        if (std::strcmp(s, e.name) == 0)
+            return to_int(e.bp);
+    }
+    return -1;
 }

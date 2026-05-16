@@ -490,21 +490,6 @@ std::string PanelWidgetConfig::generate_page_id() {
     return "page_" + std::to_string(next_page_id_++);
 }
 
-// Breakpoint name to index mapping for default_layout.json
-static int breakpoint_name_to_index(const std::string& name) {
-    if (name == "tiny")
-        return 0;
-    if (name == "small")
-        return 1;
-    if (name == "medium")
-        return 2;
-    if (name == "large")
-        return 3;
-    if (name == "xlarge")
-        return 4;
-    return -1;
-}
-
 std::vector<PanelWidgetEntry> PanelWidgetConfig::build_default_grid() {
     const auto& defs = get_all_widget_defs();
 

@@ -2,10 +2,11 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
-  <consts>
-    <!-- Sidebar width for status/controls column (matches ams_panel right_col_width) -->
-    <percentage name="sidebar_width" value="28%"/>
-  </consts>
+  <!-- Right sidebar width comes from `#ams_right_col_w` (defined in
+       ams_panel.xml). theme_manager scans every ui_xml file for responsive
+       px tokens and registers the bare base name in the globals scope, so
+       both panels resolve to the SAME breakpoint-aware value — single
+       source of truth, can't drift. -->
   <!-- Overlay panel - right-aligned, row layout so right column spans full height -->
   <view name="ams_overview_panel"
         extends="lv_obj" width="#overlay_panel_width" height="100%" align="right_mid" style_pad_all="0"
@@ -85,7 +86,7 @@
     </lv_obj>
     <!-- Right column (loaded info + action buttons) - spans full panel height -->
     <lv_obj name="right_column"
-            height="100%" width="240" style_pad_all="#space_sm" style_pad_gap="#space_sm" flex_flow="column"
+            height="100%" width="#ams_right_col_w" style_pad_all="#space_sm" style_pad_gap="#space_sm" flex_flow="column"
             style_flex_main_place="start" style_flex_cross_place="start" scrollable="false">
       <bind_state_if_not_eq subject="nav_buttons_enabled" state="disabled" ref_value="1"/>
       <ams_sidebar name="ams_operation_sidebar"/>
