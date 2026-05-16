@@ -98,26 +98,31 @@ void attach_progress_arc(lv_obj_t* arc, lv_obj_t* parent, lv_subject_t* tier_sub
 
     // Bind the 5 thickness styles to the tier subject. Styles live in the
     // helix_progress_arc component scope; lookup is deterministic by name.
+    // If the scope isn't registered (e.g., in LVGLTestFixture-based unit
+    // tests that don't load XML), skip the binding but still wire the
+    // resize behavior — the arc stays at LVGL's default stroke instead of
+    // throwing the whole feature away.
     auto* scope = lv_xml_component_get_scope(kComponentScopeName);
-    if (!scope) {
-        spdlog::warn("[progress_arc] component scope '{}' not registered — "
-                     "ensure helix_progress_arc.xml is registered at startup",
-                     kComponentScopeName);
-        return;
-    }
-    for (int tier = 0; tier < kTierCount; ++tier) {
-        auto* xs = lv_xml_get_style_by_name(scope, kTierStyleNames[tier]);
-        if (!xs) {
-            spdlog::warn("[progress_arc] style '{}' missing from component scope",
-                         kTierStyleNames[tier]);
-            continue;
+    if (scope) {
+        for (int tier = 0; tier < kTierCount; ++tier) {
+            auto* xs = lv_xml_get_style_by_name(scope, kTierStyleNames[tier]);
+            if (!xs) {
+                spdlog::warn("[progress_arc] style '{}' missing from component scope",
+                             kTierStyleNames[tier]);
+                continue;
+            }
+            // Same style applies to LV_PART_MAIN AND LV_PART_INDICATOR — both
+            // edges of the arc track must share the width. (XML parts="..."
+            // attr does this in one line; here we hand-roll because the
+            // binding is programmatic.)
+            lv_obj_bind_style(arc, &xs->style, LV_PART_MAIN, tier_subject, tier);
+            lv_obj_bind_style(arc, &xs->style, LV_PART_INDICATOR, tier_subject, tier);
         }
-        // Same style applies to LV_PART_MAIN AND LV_PART_INDICATOR — both
-        // edges of the arc track must share the width. (XML parts="..." attr
-        // does this in one line; here we hand-roll because the binding is
-        // programmatic.)
-        lv_obj_bind_style(arc, &xs->style, LV_PART_MAIN, tier_subject, tier);
-        lv_obj_bind_style(arc, &xs->style, LV_PART_INDICATOR, tier_subject, tier);
+    } else {
+        spdlog::warn("[progress_arc] component scope '{}' not registered — "
+                     "ensure helix_progress_arc.xml is registered at startup. "
+                     "Skipping bind_style; arc will use LVGL default stroke.",
+                     kComponentScopeName);
     }
 
     // Per-arc context survives until the arc is deleted.

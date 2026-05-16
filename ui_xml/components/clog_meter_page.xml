@@ -24,16 +24,10 @@
       <lv_obj name="clog_arc_container"
               style_pad_all="0" style_pad_top="#space_sm" scrollable="false" flex_grow="1"
               clickable="false" event_bubble="true">
-        <lv_arc name="clog_arc" align="center"
-                bg_start_angle="135" bg_end_angle="45"
-                start_angle="135" end_angle="135"
-                min_value="0" max_value="100" value="0"
-                mode="normal" clickable="false" event_bubble="true"
-                style_arc_color="#border" style_arc_color-indicator="#primary"
-                style_arc_rounded="true" style_arc_rounded-indicator="true"
-                style_bg_opa="0" style_border_width="0"
-                style_bg_opa-knob="0" style_shadow_width-knob="0"
-                style_outline_width-knob="0"/>
+        <!-- Main arc — shared helix_progress_arc handles common styling
+             and diameter-driven stroke tier. UiClogMeter syncs the
+             danger/peak overlay arcs (created in C++) to match. -->
+        <helix_progress_arc name="clog_arc" align="center" event_bubble="true"/>
         <text_tiny name="clog_value_text" align="center"
                    bind_text="clog_meter_value_text"
                    style_text_align="center"

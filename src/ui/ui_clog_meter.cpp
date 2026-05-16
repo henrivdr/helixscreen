@@ -7,6 +7,7 @@
 #include "observer_factory.h"
 #include "theme_manager.h"
 #include "ui_fonts.h"
+#include "ui_progress_arc.h"
 #include "ui_update_queue.h"
 
 #include "lvgl/lvgl.h"
@@ -43,8 +44,18 @@ UiClogMeter::UiClogMeter(lv_obj_t* parent) {
         return;
     }
 
+    // Hook the shared helix_progress_arc helper. We still own arc_container_
+    // sizing (fill-mode logic etc.) — the helper sizes the arc *inside* the
+    // container, computes the diameter tier, and the helix_progress_arc.xml
+    // bind_styles apply the matching stroke. Use the *_owned variant so the
+    // helper allocates + manages the tier subject's lifetime, tied to the
+    // arc's deletion — UiClogMeter is destroyed before its widgets (the arc
+    // is owned by the LVGL tree under the card), so a member-owned subject
+    // would leave dangling bind_style observers on the still-live arc.
+    helix::ui::attach_progress_arc_owned(arc_, arc_container_);
+
     // Attach SIZE_CHANGED callback on the loaded card (root_'s parent)
-    // to dynamically size the arc to fill available height
+    // to dynamically size the arc container to fill available height
     lv_obj_t* card = lv_obj_get_parent(root_);
     if (card) {
         // SIZE_CHANGED is a layout event — cannot be registered via XML <event_cb>
@@ -88,6 +99,9 @@ UiClogMeter::~UiClogMeter() {
     center_label_ = nullptr;
     safe_icon_ = nullptr;
     value_text_ = nullptr;
+    // The progress arc's tier subject (allocated via attach_progress_arc_owned)
+    // is freed automatically when the arc is deleted by LVGL — no cleanup
+    // needed here.
     spdlog::debug("[ClogMeter] Destroyed");
 }
 
@@ -318,14 +332,17 @@ void UiClogMeter::resize_arc() {
         return;
     }
 
-    // Size the container and arc to the computed square
+    // Size the container — the shared helper resizes the arc inside it
+    // and applies stroke via bind_style.
     lv_obj_set_size(arc_container_, arc_size, arc_size);
-    lv_obj_set_size(arc_, arc_size, arc_size);
+    helix::ui::refresh_progress_arc(arc_);
 
-    // Scale stroke width proportionally
-    int32_t stroke = LV_MAX(arc_size / ARC_TO_STROKE_RATIO, MIN_STROKE_WIDTH);
-    lv_obj_set_style_arc_width(arc_, stroke, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc_, stroke, LV_PART_INDICATOR);
+    // Read the stroke the helper just applied (cascaded from the
+    // matching arc_w_* style in helix_progress_arc.xml) so overlays
+    // can size their own strokes to match.
+    int32_t stroke = lv_obj_get_style_arc_width(arc_, LV_PART_MAIN);
+    if (stroke <= 0)
+        stroke = LV_MAX(arc_size / ARC_TO_STROKE_RATIO, MIN_STROKE_WIDTH);
 
     // Resize enhanced widgets to match main arc
     if (fill_mode_ && danger_arc_) {

@@ -26,10 +26,9 @@
     <px name="fan_arc_size_small" value="88"/>
     <px name="fan_arc_size_medium" value="110"/>
     <px name="fan_arc_size_large" value="132"/>
-    <!-- Arc track/indicator width -->
-    <px name="fan_arc_width_small" value="8"/>
-    <px name="fan_arc_width_medium" value="10"/>
-    <px name="fan_arc_width_large" value="12"/>
+    <!-- Arc track/indicator width is now driven by the shared
+         helix_progress_arc tier system (see ui_progress_arc.h); these
+         per-breakpoint tokens were never wired up and are removed. -->
     <!-- Button row height -->
     <px name="fan_btn_row_height_small" value="28"/>
     <px name="fan_btn_row_height_medium" value="32"/>

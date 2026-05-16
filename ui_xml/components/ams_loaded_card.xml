@@ -53,16 +53,8 @@
       <!-- Mini arc (sized by C++) -->
       <lv_obj name="clog_arc_container"
               style_pad_all="0" scrollable="false">
-        <lv_arc name="clog_arc" align="center"
-                bg_start_angle="135" bg_end_angle="45"
-                start_angle="135" end_angle="135"
-                min_value="0" max_value="100" value="0"
-                mode="normal" clickable="false"
-                style_arc_color="#border" style_arc_color-indicator="#primary"
-                style_arc_rounded="true" style_arc_rounded-indicator="true"
-                style_bg_opa="0" style_border_width="0"
-                style_bg_opa-knob="0" style_shadow_width-knob="0"
-                style_outline_width-knob="0"/>
+        <!-- Main arc — see clog_meter_page.xml for the migration note. -->
+        <helix_progress_arc name="clog_arc" align="center"/>
         <!-- Center: flow value -->
         <text_tiny name="clog_value_text" align="center"
                    bind_text="clog_meter_value_text"
