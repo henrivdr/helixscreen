@@ -331,6 +331,38 @@ Inline style attributes (e.g., `style_bg_color="#card_bg"`) have **higher priori
 
 **Rule:** When using `bind_style` for reactive visual changes, do NOT set inline style attributes for the properties you want to change reactively.
 
+#### Applying One Style to Multiple Parts (`parts=...`)
+
+For widgets with several parts that should share the same reactive style — arc background+indicator at the same stroke width, slider track+indicator+knob at the same color — `bind_style` and every `bind_style_if_*` variant accept a `parts="..."` attribute that takes a comma-separated list of part names:
+
+| Part name | LV_PART_* |
+|-----------|-----------|
+| `main` | `LV_PART_MAIN` |
+| `scrollbar` | `LV_PART_SCROLLBAR` |
+| `indicator` | `LV_PART_INDICATOR` |
+| `knob` | `LV_PART_KNOB` |
+| `selected` | `LV_PART_SELECTED` |
+| `items` | `LV_PART_ITEMS` |
+| `cursor` | `LV_PART_CURSOR` |
+
+```xml
+<styles>
+    <style name="arc_w_8" arc_width="8"/>
+</styles>
+
+<!-- One line applies arc_w_8 to LV_PART_MAIN AND LV_PART_INDICATOR. -->
+<lv_arc>
+    <bind_style name="arc_w_8" parts="main,indicator"
+                subject="arc_thickness_tier" ref_value="2"/>
+</lv_arc>
+```
+
+State bits from `selector` (if present) are preserved across each part — `parts="main,indicator" selector="pressed"` applies the style to both parts in the pressed state.
+
+**Without `parts`**, the existing `selector="indicator"` form (single part + optional state) still works. `parts` is an opt-in extension for the multi-part case; it's helix-xml's extension over upstream LVGL XML.
+
+Max 8 parts per attribute (more than enough — even sliders only have 3-4).
+
 #### Conditional Style Bindings with Comparison Operators
 
 `bind_style_if_*` elements apply a style only when the subject value matches a comparison condition. Unlike `bind_style` (which only does exact match), these support all six comparison operators:
@@ -344,7 +376,7 @@ Inline style attributes (e.g., `style_bg_color="#card_bg"`) have **higher priori
 | `<bind_style_if_lt>` | `subject < ref_value` |
 | `<bind_style_if_le>` | `subject <= ref_value` |
 
-Attributes are the same as `bind_style`: `name` (style name), `subject` (subject name), `ref_value` (comparison value), and optional `selector` (part selector).
+Attributes are the same as `bind_style`: `name` (style name), `subject` (subject name), `ref_value` (comparison value), and optional `selector` (part+state selector) or `parts` (comma-list of parts — see "Applying One Style to Multiple Parts" above).
 
 ```xml
 <styles>

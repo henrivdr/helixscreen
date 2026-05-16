@@ -489,6 +489,30 @@ void * lv_obj_xml_bind_style_create(lv_xml_parser_state_t * state, const char **
     return item;
 }
 
+/* Parse a `parts="main,indicator,knob"` comma-list into up to `max` part
+ * selectors. State bits (focused/pressed/etc) parsed from the existing
+ * `selector` attr are OR'd into each part. Returns the count parsed; 0
+ * means "no parts attr — caller should fall back to single-selector mode". */
+static size_t lv_xml_parse_parts_attr(const char * parts_str,
+                                      lv_style_selector_t state_bits,
+                                      lv_style_selector_t * out,
+                                      size_t max)
+{
+    if(parts_str == NULL || parts_str[0] == '\0') return 0;
+    char buf[128];
+    lv_strncpy(buf, parts_str, sizeof(buf));
+    char * bufp = buf;
+    size_t n = 0;
+    const char * tok = lv_xml_split_str(&bufp, ',');
+    while(tok && n < max) {
+        while(*tok == ' ') tok++; /* trim leading whitespace */
+        lv_part_t part = lv_xml_style_part_to_enum(tok);
+        out[n++] = (lv_style_selector_t)part | state_bits;
+        tok = lv_xml_split_str(&bufp, ',');
+    }
+    return n;
+}
+
 void lv_obj_xml_bind_style_apply(lv_xml_parser_state_t * state, const char ** attrs)
 {
     const char * name = lv_xml_get_value_of(attrs, "name");
@@ -527,7 +551,22 @@ void lv_obj_xml_bind_style_apply(lv_xml_parser_state_t * state, const char ** at
     lv_style_selector_t selector = lv_xml_style_selector_text_to_enum(selector_str);
 
     void * item = lv_xml_state_get_parent(state);
-    lv_obj_bind_style(item, &xml_style->style, selector, subject, ref_value);
+
+    /* `parts="main,indicator"` — apply same style to multiple parts in one
+     * element. State bits from the existing `selector` attr are preserved.
+     * Halves the line count for multi-part widgets (arc bg+indicator,
+     * slider bg+indicator+knob, etc). */
+    const char * parts_str = lv_xml_get_value_of(attrs, "parts");
+    lv_style_selector_t parts[8];
+    /* state bits live in the low 16 — preserve them across each part */
+    size_t n_parts = lv_xml_parse_parts_attr(parts_str, selector & 0xFFFF, parts, 8);
+    if(n_parts > 0) {
+        for(size_t i = 0; i < n_parts; i++) {
+            lv_obj_bind_style(item, &xml_style->style, parts[i], subject, ref_value);
+        }
+    } else {
+        lv_obj_bind_style(item, &xml_style->style, selector, subject, ref_value);
+    }
 }
 
 /* Comparison operators for bind_style_if_* */
@@ -628,20 +667,32 @@ void lv_obj_xml_bind_style_cmp_apply(lv_xml_parser_state_t * state, const char *
 
     void * item = lv_xml_state_get_parent(state);
 
-    /* Add the style (starts enabled, observer will immediately set correct state) */
-    lv_obj_add_style(item, &xml_style->style, selector);
+    /* `parts="main,indicator"` — apply same style + observer to multiple
+     * parts in one element. Each part gets its own observer because
+     * lv_obj_style_set_disabled operates on (style, selector) pairs. */
+    const char * parts_str = lv_xml_get_value_of(attrs, "parts");
+    lv_style_selector_t parts[8];
+    size_t n_parts = lv_xml_parse_parts_attr(parts_str, selector & 0xFFFF, parts, 8);
 
-    bind_style_cmp_data_t * p = lv_malloc(sizeof(bind_style_cmp_data_t));
-    LV_ASSERT_MALLOC(p);
-    if(p == NULL) return;
+    size_t count = (n_parts > 0) ? n_parts : 1;
+    for(size_t i = 0; i < count; i++) {
+        lv_style_selector_t sel = (n_parts > 0) ? parts[i] : selector;
 
-    p->style = &xml_style->style;
-    p->selector = selector;
-    p->value = ref_value;
-    p->cmp = cmp;
+        /* Add the style (starts enabled, observer will immediately set correct state) */
+        lv_obj_add_style(item, &xml_style->style, sel);
 
-    lv_observer_t * obs = lv_subject_add_observer_obj(subject, bind_style_cmp_observer_cb, item, p);
-    obs->auto_free_user_data = 1;
+        bind_style_cmp_data_t * p = lv_malloc(sizeof(bind_style_cmp_data_t));
+        LV_ASSERT_MALLOC(p);
+        if(p == NULL) return;
+
+        p->style = &xml_style->style;
+        p->selector = sel;
+        p->value = ref_value;
+        p->cmp = cmp;
+
+        lv_observer_t * obs = lv_subject_add_observer_obj(subject, bind_style_cmp_observer_cb, item, p);
+        obs->auto_free_user_data = 1;
+    }
 }
 
 void * lv_obj_xml_bind_style_prop_create(lv_xml_parser_state_t * state, const char ** attrs)

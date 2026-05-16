@@ -141,9 +141,11 @@ Define in `<styles>`, apply with child `<style>`. Drop `style_` prefix.
 </lv_button>
 ```
 
-**Selectors:** `default`, `pressed`, `checked`, `focused`, `disabled` | **Parts:** `main`, `indicator`, `knob`
+**Selectors:** `default`, `pressed`, `checked`, `focused`, `disabled` | **Parts:** `main`, `scrollbar`, `indicator`, `knob`, `selected`, `items`, `cursor`
 
 **Combine:** `selector="indicator:pressed"` | **Remove:** `bg_color="remove"` | **Constants:** `bg_color="#primary"`
+
+**`bind_style` / `bind_style_if_*` — `parts="main,indicator"`:** apply one style to multiple parts in one line (helix-xml extension). State bits from `selector` are preserved per part. See `LVGL9_XML_GUIDE.md` § "Applying One Style to Multiple Parts".
 
 ---
 
