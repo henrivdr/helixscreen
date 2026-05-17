@@ -5,6 +5,7 @@
 
 #include "async_lifetime_guard.h"
 #include "config.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
 #include "system_settings_manager.h"
 #include "ui_modal.h"
 #include "ui_test_utils.h"
@@ -43,6 +44,21 @@ void HelixTestFixture::reset_all() {
 
     // Delete any tracked modal widgets and clear the modal stack.
     ModalStack::instance().clear();
+
+    // Destroy any lingering PrintStatusWidget::DetailedFormatter singleton.
+    // PrintStatusWidget's ctor eagerly creates s_formatter_ (needed before XML
+    // parse), and its dtor only decrements the refcount — by design, the
+    // formatter survives widget destruction so helix-xml's global scope keeps
+    // valid subject pointers in production. In tests that's a UAF trap:
+    // subsequent tests calling PrinterStateTestAccess::reset(ps) deinit the
+    // PrinterState subjects the formatter observes; lv_subject_deinit frees
+    // the observer nodes, leaving the formatter's ObserverGuards with
+    // dangling lv_observer_t* pointers. The next destructor that walks those
+    // guards crashes on macOS (libc++/libmalloc is stricter than glibc).
+    // Tearing the formatter down here — while the subjects it observes are
+    // still alive — closes the window. No-op when no formatter exists, which
+    // is the common case.
+    helix::PrintStatusWidget::destroy_formatter_for_test();
 
     // NOTE: NavigationManager has no public reset API (clear_overlay_stack is
     // private; shutdown() is a one-way teardown for app exit). Add a reset
