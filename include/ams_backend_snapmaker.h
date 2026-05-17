@@ -134,6 +134,17 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// Per-extruder cached state
     std::array<ExtruderToolState, NUM_TOOLS> extruder_states_;
 
+    /// Per-slot filament_motion_sensor "filament_detected" state. True means
+    /// filament is currently being fed to the toolhead; false means runout has
+    /// fired. Tracks `filament_motion_sensor e0..e3_filament` (and the
+    /// matching `filament_switch_sensor` form as a fallback). Defaults to true
+    /// so a slot without a configured sensor doesn't render as "runout" — the
+    /// flag flips only when Klipper sends an explicit `filament_detected:false`
+    /// for that sensor, which only happens on configured runout sensors. Read
+    /// by get_filament_segment() / get_slot_filament_segment() to break the
+    /// spool→toolhead line when the active tool has run out.
+    std::array<bool, NUM_TOOLS> sensor_filament_present_{{true, true, true, true}};
+
     /// Validate slot index is within range
     AmsError validate_slot_index(int slot_index) const;
 

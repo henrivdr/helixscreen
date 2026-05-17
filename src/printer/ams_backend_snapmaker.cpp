@@ -128,6 +128,13 @@ PathSegment AmsBackendSnapmaker::get_slot_filament_segment(int slot_index) const
     const auto* slot = system_info_.get_slot_global(slot_index);
     if (!slot) return PathSegment::NONE;
 
+    // If the slot's runout sensor is tripped, the physical filament is gone
+    // even if the spool/extruder still "thinks" it's loaded. Render no line.
+    if (slot_index >= 0 && slot_index < NUM_TOOLS &&
+        !sensor_filament_present_[slot_index]) {
+        return PathSegment::NONE;
+    }
+
     if (slot->status == SlotStatus::LOADED) {
         return PathSegment::NOZZLE;
     }
@@ -153,9 +160,28 @@ AmsError AmsBackendSnapmaker::load_filament(int slot_index) {
     auto err = validate_slot_index(slot_index);
     if (err.result != AmsResult::SUCCESS) return err;
 
-    // Use T{n} tool change which handles heating automatically.
-    // AUTO_FEEDING is a raw feed macro that requires pre-heated nozzle.
-    return execute_gcode(fmt::format("T{}", slot_index));
+    // Snapmaker U1 firmware: AUTO_FEEDING is a thin macro wrapper that
+    // forwards to the underlying FEED_AUTO command with module/channel
+    // resolved from _FILAMENT_FEED_VARIABLE. FEED_AUTO has explicit LOAD /
+    // UNLOAD / AUTO parameters — passing none of them is a silent no-op
+    // (cmd_FEED_AUTO falls through every branch and returns).
+    //
+    // We must pass LOAD=1 to actually trigger the feed sequence. PRINTING
+    // is left at the default 0 so we skip the firmware's port-input
+    // filament-detected gate (which silent-returns when PRINTING=1 and the
+    // port sensor reads no filament — the exact runout-recovery state).
+    //
+    // Trail of bad guesses, in order:
+    //   1. T{n} — no-op when target tool already active (Klipper logged
+    //      "Extruder extruderN already active"). That's always the case
+    //      after a runout, so loads did nothing.
+    //   2. AUTO_FEEDING EXTRUDER={n} — silent no-op because no LOAD
+    //      parameter was passed; cmd_FEED_AUTO fell through.
+    //   3. SM_PRINT_AUTO_FEED — gated on print_task_config.extruders_used,
+    //      which can be all-false on a partially-extruded paused print.
+    // The firmware's cmd_FEED_AUTO is the definitive reference; see
+    // /home/lava/klipper/klippy/extras/filament_feed.py around line 1681.
+    return execute_gcode(fmt::format("AUTO_FEEDING EXTRUDER={} LOAD=1", slot_index));
 }
 
 AmsError AmsBackendSnapmaker::unload_filament(int /*slot_index*/) {
@@ -776,6 +802,89 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                     changed = true;
                 }
             }
+        }
+    }
+
+    // Parse filament_motion_sensor / filament_switch_sensor for per-slot
+    // runout state. Snapmaker U1's config has [filament_motion_sensor e{N}_filament]
+    // with pause_on_runout=True; when filament stops moving past the encoder,
+    // Klipper publishes filament_detected:false and triggers PAUSE. The slot
+    // status / extruder pin state don't reflect this — the tool is still
+    // "active" but no filament reaches the nozzle. Mirror the sensor flag so
+    // the path canvas can break the spool→toolhead line at runout.
+    //
+    // Match both prefixes (motion is the Snapmaker default; switch is the
+    // generic fallback) and any "e{N}_filament" / "e{N}" sensor name suffix.
+    for (auto it = status.begin(); it != status.end(); ++it) {
+        const std::string& key = it.key();
+        const auto motion_prefix = std::string_view("filament_motion_sensor ");
+        const auto switch_prefix = std::string_view("filament_switch_sensor ");
+        std::string_view sensor_name;
+        if (key.compare(0, motion_prefix.size(), motion_prefix) == 0) {
+            sensor_name = std::string_view(key).substr(motion_prefix.size());
+        } else if (key.compare(0, switch_prefix.size(), switch_prefix) == 0) {
+            sensor_name = std::string_view(key).substr(switch_prefix.size());
+        } else {
+            continue;
+        }
+        // Expect "e{N}_filament" or "e{N}". Anything else (toolhead_sensor,
+        // bypass_sensor, custom names) is unrelated to per-tool runout.
+        if (sensor_name.size() < 2 || sensor_name[0] != 'e') continue;
+        int tool_idx = -1;
+        try {
+            size_t digit_end = 1;
+            while (digit_end < sensor_name.size() &&
+                   std::isdigit(static_cast<unsigned char>(sensor_name[digit_end]))) {
+                ++digit_end;
+            }
+            if (digit_end == 1) continue; // no digits
+            tool_idx = std::stoi(std::string(sensor_name.substr(1, digit_end - 1)));
+        } catch (...) { continue; }
+        if (tool_idx < 0 || tool_idx >= NUM_TOOLS) continue;
+        if (!it.value().is_object()) continue;
+        // filament_detected: Klipper emits as bool; default true (no runout)
+        // so missing field == "no change" via the contains check. Use .find()
+        // + is_boolean() (per [L087]) rather than .value() which would throw
+        // on a null payload.
+        auto fd_it = it.value().find("filament_detected");
+        if (fd_it == it.value().end() || !fd_it->is_boolean()) continue;
+        bool present = fd_it->get<bool>();
+        if (sensor_filament_present_[tool_idx] != present) {
+            sensor_filament_present_[tool_idx] = present;
+            changed = true;
+            spdlog::info("{} Tool {} filament sensor: {} ({})", backend_log_tag(), tool_idx,
+                         present ? "PRESENT" : "RUNOUT", key);
+        }
+    }
+
+    // If the active tool's filament sensor reports runout, the global
+    // filament_loaded flag (used by get_filament_segment) should reflect that.
+    // The pin-state path above sets filament_loaded=(active>=0) — override
+    // here so the canvas's spool→toolhead line breaks on runout even though
+    // the tool itself is still "active".
+    if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS &&
+        !sensor_filament_present_[system_info_.current_tool]) {
+        if (system_info_.filament_loaded) {
+            system_info_.filament_loaded = false;
+            changed = true;
+        }
+    }
+
+    // Per-slot runout demotion: any slot whose motion sensor reports
+    // no filament should be AVAILABLE (spool present, ready to feed), not
+    // LOADED. Without this, the AMS context menu's Load button is gated off
+    // (pending_is_loaded_ from slot.status==LOADED disables it) and the user
+    // has no way to re-feed filament from the UI after a runout — they get
+    // Unload/Reset on a slot that has no filament between feeder and nozzle.
+    // EMPTY is wrong here because the slot's RFID/print_task_config still
+    // reports a spool present; AVAILABLE accurately captures "spool yes,
+    // filament-at-toolhead no".
+    for (int i = 0; i < NUM_TOOLS; ++i) {
+        if (sensor_filament_present_[i]) continue;
+        auto* slot = system_info_.units[0].get_slot(i);
+        if (slot && slot->status == SlotStatus::LOADED) {
+            slot->status = SlotStatus::AVAILABLE;
+            changed = true;
         }
     }
 
