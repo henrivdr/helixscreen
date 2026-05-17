@@ -47,19 +47,19 @@
         {
           "enabled": true,
           "klipper_name": "filament_motion_sensor e1_filament",
-          "role": "none",
+          "role": "runout",
           "type": "motion"
         },
         {
           "enabled": true,
           "klipper_name": "filament_motion_sensor e2_filament",
-          "role": "none",
+          "role": "runout",
           "type": "motion"
         },
         {
           "enabled": true,
           "klipper_name": "filament_motion_sensor e3_filament",
-          "role": "none",
+          "role": "runout",
           "type": "motion"
         }
       ]
