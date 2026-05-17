@@ -55,14 +55,14 @@ FanDial::FanDial(lv_obj_t* parent, const std::string& name, const std::string& f
     arc_ = lv_obj_find_by_name(root_, "dial_arc");
     speed_label_ = lv_obj_find_by_name(root_, "speed_label");
     fan_icon_ = lv_obj_find_by_name(root_, "fan_icon");
-    btn_off_ = lv_obj_find_by_name(root_, "btn_off");
-    btn_on_ = lv_obj_find_by_name(root_, "btn_on");
+    onoff_switch_ = lv_obj_find_by_name(root_, "onoff_switch");
+    onoff_label_ = lv_obj_find_by_name(root_, "onoff_label");
 
-    if (!arc_ || !speed_label_ || !btn_off_ || !btn_on_) {
+    if (!arc_ || !speed_label_ || !onoff_switch_ || !onoff_label_) {
         spdlog::error("[FanDial] Failed to find child widgets for '{}': arc={} label={} "
-                      "off={} on={}",
-                      name, arc_ != nullptr, speed_label_ != nullptr, btn_off_ != nullptr,
-                      btn_on_ != nullptr);
+                      "switch={} state_label={}",
+                      name, arc_ != nullptr, speed_label_ != nullptr, onoff_switch_ != nullptr,
+                      onoff_label_ != nullptr);
         return;
     }
 
@@ -83,15 +83,14 @@ FanDial::FanDial(lv_obj_t* parent, const std::string& name, const std::string& f
     // miss intermediate VALUE_CHANGED ticks; the timer is the safety net).
     lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_RELEASED, this);
     lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_PRESS_LOST, this);
-    lv_obj_add_event_cb(btn_off_, on_off_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(btn_on_, on_on_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(onoff_switch_, on_switch_changed, LV_EVENT_VALUE_CHANGED, this);
 
     // Attach auto-resize callback for dynamic arc scaling
     helix::ui::fan_arc_attach_auto_resize(root_);
 
-    // Set initial speed display, button states, and fan animation
+    // Set initial speed display, switch state, and fan animation
     update_speed_label(initial_speed);
-    update_button_states(initial_speed);
+    update_onoff_state(initial_speed);
     update_knob_glow(initial_speed);
     update_fan_animation(initial_speed);
 
@@ -118,10 +117,8 @@ FanDial::~FanDial() {
         lv_obj_remove_event_cb(arc_, on_arc_value_changed);
         lv_obj_remove_event_cb(arc_, on_arc_released);
     }
-    if (btn_off_)
-        lv_obj_remove_event_cb(btn_off_, on_off_clicked);
-    if (btn_on_)
-        lv_obj_remove_event_cb(btn_on_, on_on_clicked);
+    if (onoff_switch_)
+        lv_obj_remove_event_cb(onoff_switch_, on_switch_changed);
     if (fan_icon_)
         lv_obj_remove_event_cb(fan_icon_, on_icon_clicked);
 
@@ -130,7 +127,8 @@ FanDial::~FanDial() {
 
 FanDial::FanDial(FanDial&& other) noexcept
     : root_(other.root_), arc_(other.arc_), speed_label_(other.speed_label_),
-      fan_icon_(other.fan_icon_), btn_off_(other.btn_off_), btn_on_(other.btn_on_),
+      fan_icon_(other.fan_icon_), onoff_switch_(other.onoff_switch_),
+      onoff_label_(other.onoff_label_),
       name_(std::move(other.name_)), fan_id_(std::move(other.fan_id_)),
       current_speed_(other.current_speed_), on_speed_changed_(std::move(other.on_speed_changed_)),
       on_icon_clicked_(std::move(other.on_icon_clicked_)), syncing_(other.syncing_),
@@ -145,8 +143,8 @@ FanDial::FanDial(FanDial&& other) noexcept
     other.arc_ = nullptr;
     other.speed_label_ = nullptr;
     other.fan_icon_ = nullptr;
-    other.btn_off_ = nullptr;
-    other.btn_on_ = nullptr;
+    other.onoff_switch_ = nullptr;
+    other.onoff_label_ = nullptr;
 
     // Re-target label animation var from old instance to this one
     lv_anim_delete(&other, label_anim_exec_cb);
@@ -159,13 +157,9 @@ FanDial::FanDial(FanDial&& other) noexcept
         lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_RELEASED, this);
         lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_PRESS_LOST, this);
     }
-    if (btn_off_) {
-        lv_obj_remove_event_cb(btn_off_, on_off_clicked);
-        lv_obj_add_event_cb(btn_off_, on_off_clicked, LV_EVENT_CLICKED, this);
-    }
-    if (btn_on_) {
-        lv_obj_remove_event_cb(btn_on_, on_on_clicked);
-        lv_obj_add_event_cb(btn_on_, on_on_clicked, LV_EVENT_CLICKED, this);
+    if (onoff_switch_) {
+        lv_obj_remove_event_cb(onoff_switch_, on_switch_changed);
+        lv_obj_add_event_cb(onoff_switch_, on_switch_changed, LV_EVENT_VALUE_CHANGED, this);
     }
     if (fan_icon_) {
         lv_obj_remove_event_cb(fan_icon_, on_icon_clicked);
@@ -186,10 +180,8 @@ FanDial& FanDial::operator=(FanDial&& other) noexcept {
             lv_obj_remove_event_cb(arc_, on_arc_value_changed);
             lv_obj_remove_event_cb(arc_, on_arc_released);
         }
-        if (btn_off_)
-            lv_obj_remove_event_cb(btn_off_, on_off_clicked);
-        if (btn_on_)
-            lv_obj_remove_event_cb(btn_on_, on_on_clicked);
+        if (onoff_switch_)
+            lv_obj_remove_event_cb(onoff_switch_, on_switch_changed);
         if (fan_icon_)
             lv_obj_remove_event_cb(fan_icon_, on_icon_clicked);
         // Child widgets are destroyed with root_
@@ -200,8 +192,8 @@ FanDial& FanDial::operator=(FanDial&& other) noexcept {
         arc_ = other.arc_;
         speed_label_ = other.speed_label_;
         fan_icon_ = other.fan_icon_;
-        btn_off_ = other.btn_off_;
-        btn_on_ = other.btn_on_;
+        onoff_switch_ = other.onoff_switch_;
+        onoff_label_ = other.onoff_label_;
         name_ = std::move(other.name_);
         fan_id_ = std::move(other.fan_id_);
         current_speed_ = other.current_speed_;
@@ -219,8 +211,8 @@ FanDial& FanDial::operator=(FanDial&& other) noexcept {
         other.arc_ = nullptr;
         other.speed_label_ = nullptr;
         other.fan_icon_ = nullptr;
-        other.btn_off_ = nullptr;
-        other.btn_on_ = nullptr;
+        other.onoff_switch_ = nullptr;
+        other.onoff_label_ = nullptr;
 
         // Update event callback user_data to point to this instance
         if (arc_) {
@@ -230,13 +222,9 @@ FanDial& FanDial::operator=(FanDial&& other) noexcept {
             lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_RELEASED, this);
             lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_PRESS_LOST, this);
         }
-        if (btn_off_) {
-            lv_obj_remove_event_cb(btn_off_, on_off_clicked);
-            lv_obj_add_event_cb(btn_off_, on_off_clicked, LV_EVENT_CLICKED, this);
-        }
-        if (btn_on_) {
-            lv_obj_remove_event_cb(btn_on_, on_on_clicked);
-            lv_obj_add_event_cb(btn_on_, on_on_clicked, LV_EVENT_CLICKED, this);
+        if (onoff_switch_) {
+            lv_obj_remove_event_cb(onoff_switch_, on_switch_changed);
+            lv_obj_add_event_cb(onoff_switch_, on_switch_changed, LV_EVENT_VALUE_CHANGED, this);
         }
         if (fan_icon_) {
             lv_obj_remove_event_cb(fan_icon_, on_icon_clicked);
@@ -277,9 +265,9 @@ void FanDial::set_speed(int percent) {
         lv_arc_set_value(arc_, percent);
     }
 
-    // Update label, button states, and fan animation
+    // Update label, switch state, and fan animation
     update_speed_label(percent);
-    update_button_states(percent);
+    update_onoff_state(percent);
     update_knob_glow(percent);
     update_fan_animation(percent);
 
@@ -306,20 +294,20 @@ void FanDial::handle_icon_clicked() {
     }
 }
 
-void FanDial::update_button_states(int percent) {
-    if (btn_off_) {
-        if (percent == 0) {
-            lv_obj_add_state(btn_off_, LV_STATE_DISABLED);
+void FanDial::update_onoff_state(int percent) {
+    bool is_on = percent > 0;
+    if (onoff_switch_) {
+        // Suppress VALUE_CHANGED feedback while we sync visual state to current speed.
+        syncing_ = true;
+        if (is_on) {
+            lv_obj_add_state(onoff_switch_, LV_STATE_CHECKED);
         } else {
-            lv_obj_remove_state(btn_off_, LV_STATE_DISABLED);
+            lv_obj_remove_state(onoff_switch_, LV_STATE_CHECKED);
         }
+        syncing_ = false;
     }
-    if (btn_on_) {
-        if (percent == 100) {
-            lv_obj_add_state(btn_on_, LV_STATE_DISABLED);
-        } else {
-            lv_obj_remove_state(btn_on_, LV_STATE_DISABLED);
-        }
+    if (onoff_label_) {
+        lv_label_set_text(onoff_label_, lv_tr(is_on ? "On" : "Off"));
     }
 }
 
@@ -379,7 +367,7 @@ void FanDial::handle_arc_changed() {
     int value = lv_arc_get_value(arc_);
     current_speed_ = value;
     update_speed_label(value);
-    update_button_states(value);
+    update_onoff_state(value);
     update_knob_glow(value);
     update_fan_animation(value);
 
@@ -439,7 +427,7 @@ void FanDial::label_anim_exec_cb(void* var, int32_t value) {
     auto* self = static_cast<FanDial*>(var);
     int percent = static_cast<int>(value);
     self->update_speed_label(percent);
-    self->update_button_states(percent);
+    self->update_onoff_state(percent);
     self->update_knob_glow(percent);
     if (self->arc_) {
         lv_arc_set_value(self->arc_, value);
@@ -457,7 +445,7 @@ void FanDial::animate_speed_label(int from, int to) {
     // Skip animation when value unchanged or animations disabled
     if (from == to || !DisplaySettingsManager::instance().get_animations_enabled()) {
         update_speed_label(to);
-        update_button_states(to);
+        update_onoff_state(to);
         if (arc_) {
             lv_arc_set_value(arc_, to);
         }
@@ -482,32 +470,25 @@ void FanDial::animate_speed_label(int from, int to) {
     lv_anim_start(&anim);
 }
 
-void FanDial::handle_off_clicked() {
+void FanDial::handle_switch_changed() {
+    // Ignore the value_changed pulse we triggered ourselves while syncing
+    // the visual state to current_speed_.
+    if (syncing_ || !onoff_switch_)
+        return;
+
     last_user_input_ = lv_tick_get();
+    bool checked = lv_obj_has_state(onoff_switch_, LV_STATE_CHECKED);
     int prev_speed = current_speed_;
-    current_speed_ = 0;
-    animate_speed_label(prev_speed, 0);
-    update_fan_animation(0);
+    int new_speed = checked ? 100 : 0;
+    current_speed_ = new_speed;
+    animate_speed_label(prev_speed, new_speed);
+    update_fan_animation(new_speed);
 
     if (on_speed_changed_) {
-        on_speed_changed_(fan_id_, 0);
+        on_speed_changed_(fan_id_, new_speed);
     }
 
-    spdlog::debug("[FanDial] '{}' Off button clicked", name_);
-}
-
-void FanDial::handle_on_clicked() {
-    last_user_input_ = lv_tick_get();
-    int prev_speed = current_speed_;
-    current_speed_ = 100;
-    animate_speed_label(prev_speed, 100);
-    update_fan_animation(100);
-
-    if (on_speed_changed_) {
-        on_speed_changed_(fan_id_, 100);
-    }
-
-    spdlog::debug("[FanDial] '{}' On button clicked", name_);
+    spdlog::debug("[FanDial] '{}' switch toggled -> {}%", name_, new_speed);
 }
 
 void FanDial::set_read_only(bool read_only) {
@@ -526,11 +507,11 @@ void FanDial::set_read_only(bool read_only) {
         lv_color_t primary = theme_manager_get_color("primary");
         lv_obj_set_style_arc_color(arc_, primary, LV_PART_INDICATOR);
 
-        // Hide Off/On buttons, show "Auto" label instead
-        if (btn_off_)
-            lv_obj_add_flag(btn_off_, LV_OBJ_FLAG_HIDDEN);
-        if (btn_on_)
-            lv_obj_add_flag(btn_on_, LV_OBJ_FLAG_HIDDEN);
+        // Hide the Off/On switch + state label, show "Auto" indicator instead
+        if (onoff_switch_)
+            lv_obj_add_flag(onoff_switch_, LV_OBJ_FLAG_HIDDEN);
+        if (onoff_label_)
+            lv_obj_add_flag(onoff_label_, LV_OBJ_FLAG_HIDDEN);
 
         // Add "Auto" indicator in the button row
         lv_obj_t* btn_row = lv_obj_find_by_name(root_, "button_row");
@@ -550,10 +531,10 @@ void FanDial::set_read_only(bool read_only) {
         lv_obj_set_style_bg_opa(arc_, LV_OPA_COVER, LV_PART_KNOB);
         lv_color_t primary = theme_manager_get_color("primary");
         lv_obj_set_style_arc_color(arc_, primary, LV_PART_INDICATOR);
-        if (btn_off_)
-            lv_obj_remove_flag(btn_off_, LV_OBJ_FLAG_HIDDEN);
-        if (btn_on_)
-            lv_obj_remove_flag(btn_on_, LV_OBJ_FLAG_HIDDEN);
+        if (onoff_switch_)
+            lv_obj_remove_flag(onoff_switch_, LV_OBJ_FLAG_HIDDEN);
+        if (onoff_label_)
+            lv_obj_remove_flag(onoff_label_, LV_OBJ_FLAG_HIDDEN);
     }
 
     spdlog::debug("[FanDial] '{}' set_read_only({})", name_, read_only);
@@ -580,8 +561,7 @@ void FanDial::update_fan_animation(int speed_pct) {
 
 DEFINE_EVENT_TRAMPOLINE_SIMPLE(FanDial, on_arc_value_changed, handle_arc_changed)
 DEFINE_EVENT_TRAMPOLINE_SIMPLE(FanDial, on_arc_released, handle_arc_released)
-DEFINE_EVENT_TRAMPOLINE_SIMPLE(FanDial, on_off_clicked, handle_off_clicked)
-DEFINE_EVENT_TRAMPOLINE_SIMPLE(FanDial, on_on_clicked, handle_on_clicked)
+DEFINE_EVENT_TRAMPOLINE_SIMPLE(FanDial, on_switch_changed, handle_switch_changed)
 DEFINE_EVENT_TRAMPOLINE_SIMPLE(FanDial, on_icon_clicked, handle_icon_clicked)
 
 // ============================================================================
@@ -596,19 +576,14 @@ static void xml_fan_dial_value_changed(lv_event_t* /*e*/) {
     // No-op: actual handling is via C++ event callbacks with user_data
 }
 
-static void xml_fan_dial_off_clicked(lv_event_t* /*e*/) {
-    // No-op: actual handling is via C++ event callbacks with user_data
-}
-
-static void xml_fan_dial_on_clicked(lv_event_t* /*e*/) {
+static void xml_fan_dial_switch_changed(lv_event_t* /*e*/) {
     // No-op: actual handling is via C++ event callbacks with user_data
 }
 
 void register_fan_dial_callbacks() {
     // Register XML callbacks (required for XML parsing, but we use C++ callbacks)
     lv_xml_register_event_cb(nullptr, "on_fan_dial_value_changed", xml_fan_dial_value_changed);
-    lv_xml_register_event_cb(nullptr, "on_fan_dial_off_clicked", xml_fan_dial_off_clicked);
-    lv_xml_register_event_cb(nullptr, "on_fan_dial_on_clicked", xml_fan_dial_on_clicked);
+    lv_xml_register_event_cb(nullptr, "on_fan_dial_switch_changed", xml_fan_dial_switch_changed);
 
     spdlog::trace("[FanDial] Registered XML event callbacks");
 }

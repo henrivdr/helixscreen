@@ -17,7 +17,8 @@
         style_min_width="#fan_card_min_width" style_max_width="#fan_card_max_width"
         flex_flow="column"
         style_flex_main_place="start" style_flex_cross_place="center"
-        style_pad_all="#space_sm" style_pad_gap="#space_xs" scrollable="false"
+        style_pad_all="#space_sm" style_pad_bottom="#space_xs"
+        style_pad_gap="0" scrollable="false"
         style_clip_content="false">
     <!-- Fan name label at top (hidden via C++ when label_bottom=true) — non-clickable for event bubble -->
     <text_small name="name_label" text="$fan_name"
@@ -28,18 +29,21 @@
     <text_tiny name="name_label_bottom" text="$fan_name" hidden="true"
               style_margin_top="-4" style_pad_all="0"
               clickable="false" event_bubble="true"/>
-    <!-- Off/On button row at bottom -->
+    <!-- Off/On switch row at bottom. Height is content-sized so the
+         switch's intrinsic height (which varies by screen breakpoint) doesn't
+         clip against the card. Column-flex pad_gap is zeroed on the parent
+         so this row sits flush against the arc above. -->
     <lv_obj name="button_row"
-            width="100%" height="#fan_btn_row_height"
-            style_pad_all="0" scrollable="false" flex_flow="row"
-            style_flex_main_place="space_evenly" style_flex_cross_place="center"
-            style_pad_gap="#space_xs">
-      <ui_button name="btn_off" width="#fan_btn_max_width" height="#fan_btn_height" text="Off" translation_tag="Off" variant="secondary">
-        <event_cb trigger="clicked" callback="on_fan_dial_off_clicked"/>
-      </ui_button>
-      <ui_button name="btn_on" width="#fan_btn_max_width" height="#fan_btn_height" text="On" translation_tag="On" variant="secondary">
-        <event_cb trigger="clicked" callback="on_fan_dial_on_clicked"/>
-      </ui_button>
+            width="100%" height="content"
+            style_pad_all="0"
+            scrollable="false" flex_flow="row"
+            style_flex_main_place="center" style_flex_cross_place="center"
+            style_pad_gap="#space_sm">
+      <ui_switch name="onoff_switch" size="tiny">
+        <event_cb trigger="value_changed" callback="on_fan_dial_switch_changed"/>
+      </ui_switch>
+      <text_small name="onoff_label" text="Off" translation_tag="Off"
+                  clickable="false" event_bubble="true"/>
     </lv_obj>
   </view>
 </component>

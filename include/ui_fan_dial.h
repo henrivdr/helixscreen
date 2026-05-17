@@ -17,7 +17,7 @@
  * Features:
  * - Bambu-style 270-degree arc dial
  * - Center percentage display
- * - Off/On quick-set buttons
+ * - Off/On toggle switch with state label
  * - Callback-based notification of speed changes
  *
  * Usage:
@@ -101,7 +101,7 @@ class FanDial {
      * @brief Make the dial read-only (for auto-controlled fans)
      *
      * Disables arc interaction, hides the knob, changes indicator to muted color,
-     * and replaces Off/On buttons with an "Auto" label.
+     * and replaces the Off/On switch with an "Auto" label.
      */
     void set_read_only(bool read_only);
 
@@ -114,13 +114,12 @@ class FanDial {
 
   private:
     void update_speed_label(int percent);
-    void update_button_states(int percent);
+    void update_onoff_state(int percent);
     void animate_speed_label(int from, int to);
     void handle_arc_changed();
     void handle_arc_released();
 
-    void handle_off_clicked();
-    void handle_on_clicked();
+    void handle_switch_changed();
     void handle_icon_clicked();
 
     void cancel_pending_send();
@@ -129,8 +128,7 @@ class FanDial {
     // Static callbacks
     static void on_arc_value_changed(lv_event_t* e);
     static void on_arc_released(lv_event_t* e);
-    static void on_off_clicked(lv_event_t* e);
-    static void on_on_clicked(lv_event_t* e);
+    static void on_switch_changed(lv_event_t* e);
     static void on_icon_clicked(lv_event_t* e);
     static void label_anim_exec_cb(void* var, int32_t value);
     static void anim_completed_cb(lv_anim_t* anim);
@@ -143,8 +141,8 @@ class FanDial {
     lv_obj_t* arc_ = nullptr;
     lv_obj_t* speed_label_ = nullptr;
     lv_obj_t* fan_icon_ = nullptr;
-    lv_obj_t* btn_off_ = nullptr;
-    lv_obj_t* btn_on_ = nullptr;
+    lv_obj_t* onoff_switch_ = nullptr;
+    lv_obj_t* onoff_label_ = nullptr;
 
     std::string name_;
     std::string fan_id_;
@@ -165,6 +163,6 @@ class FanDial {
  * @brief Register fan dial XML event callbacks
  *
  * Must be called before creating any FanDial widgets via XML.
- * Registers: on_fan_dial_value_changed, on_fan_dial_off_clicked, on_fan_dial_on_clicked
+ * Registers: on_fan_dial_value_changed, on_fan_dial_switch_changed
  */
 void register_fan_dial_callbacks();

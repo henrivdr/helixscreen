@@ -2087,10 +2087,13 @@ void PrintStatusPanel::recompute_fans_density() {
 
     int controls_w = lv_obj_get_content_width(controls);
     // Slack accounts for measurement-vs-render discrepancy (font metric rounding,
-    // gap accounting differences, etc.). A tight 4px slack lets borderline cases
-    // pick a density that visually clips; 24px is "definitely fits with breathing
-    // room", which is what the user actually wants.
-    constexpr int kDensitySlack = 24;
+    // gap accounting differences, etc.). Too tight clips; too loose forces a
+    // lower-density tier than necessary. 8px is the largest value that still
+    // lets density 0 win when the hotend label is at its widest realistic
+    // value ("100%") — the visible label changes when the mock's auto heater
+    // fan trips, so the cached natural width can be measured against either
+    // "0%" or "100%" and we need both to fit.
+    constexpr int kDensitySlack = 8;
     int next_density = 2;
     if (controls_w >= fan_row_natural_width_[0] + kDensitySlack)
         next_density = 0;
