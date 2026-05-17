@@ -332,7 +332,7 @@
 
         <!-- Fan info row: part / hotend / aux speeds, click → fan control overlay. -->
         <!-- Visibility driven by print_status_fans_fit subject (computed in C++). -->
-        <print_status_fan_row/>
+        <print_status_fan_row name="print_status_fan_row"/>
 
         <!-- Control Buttons (flex_grow pushes to bottom via main_place=end) -->
         <lv_obj name="button_grid"

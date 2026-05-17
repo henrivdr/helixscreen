@@ -415,6 +415,13 @@ void PrintStatusPanel::init_subjects() {
     UI_MANAGED_SUBJECT_INT(fans_fit_subject_, 0, "print_status_fans_fit", subjects_);
     UI_MANAGED_SUBJECT_INT(aux_fan_present_subject_, 0, "print_status_aux_fan_present", subjects_);
 
+    // Density + composite subjects for 3-tier adaptive content.
+    UI_MANAGED_SUBJECT_INT(fan_row_density_subject_, 0, "print_status_fan_row_density", subjects_);
+    UI_MANAGED_SUBJECT_INT(aux_icon_visible_subject_, 0, "print_status_aux_icon_visible", subjects_);
+    UI_MANAGED_SUBJECT_INT(aux_full_visible_subject_, 0, "print_status_aux_full_visible", subjects_);
+    UI_MANAGED_SUBJECT_INT(aux_short_visible_subject_, 0, "print_status_aux_short_visible",
+                           subjects_);
+
     // Fan classification refresh on discovery
     {
         auto token = lifetime_.token();
@@ -425,6 +432,70 @@ void PrintStatusPanel::init_subjects() {
                     return;
                 self->bind_fan_observers();
             });
+    }
+
+    // Density + fit recompute on breakpoint change
+    {
+        lv_subject_t* bp = lv_xml_get_subject(nullptr, "ui_breakpoint");
+        if (bp) {
+            auto token = lifetime_.token();
+            breakpoint_observer_ = observe_int_sync<PrintStatusPanel>(
+                bp, this,
+                [token](PrintStatusPanel* self, int) {
+                    if (token.expired())
+                        return;
+                    self->recompute_fans_density();
+                    self->recompute_fans_fit();
+                });
+        }
+    }
+
+    // Density + fit recompute when filament sensor count changes
+    {
+        lv_subject_t* s = lv_xml_get_subject(nullptr, "filament_sensor_count");
+        if (s) {
+            auto token = lifetime_.token();
+            filament_sensor_count_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this,
+                [token](PrintStatusPanel* self, int) {
+                    if (token.expired())
+                        return;
+                    self->recompute_fans_density();
+                    self->recompute_fans_fit();
+                });
+        }
+    }
+
+    // Density + fit recompute when AMS slot count changes
+    {
+        lv_subject_t* s = lv_xml_get_subject(nullptr, "ams_slot_count");
+        if (s) {
+            auto token = lifetime_.token();
+            ams_slot_count_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this,
+                [token](PrintStatusPanel* self, int) {
+                    if (token.expired())
+                        return;
+                    self->recompute_fans_density();
+                    self->recompute_fans_fit();
+                });
+        }
+    }
+
+    // Density + fit recompute when toolchange panel appears/disappears
+    {
+        lv_subject_t* s = lv_xml_get_subject(nullptr, "toolchange_visible");
+        if (s) {
+            auto token = lifetime_.token();
+            toolchange_visible_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this,
+                [token](PrintStatusPanel* self, int) {
+                    if (token.expired())
+                        return;
+                    self->recompute_fans_density();
+                    self->recompute_fans_fit();
+                });
+        }
     }
 
     // Animation-settings refresh
@@ -555,6 +626,10 @@ void PrintStatusPanel::deinit_subjects() {
     // Fan-row observers — lifetimes BEFORE observer guards per [L084]
     fans_version_observer_.reset();
     animations_enabled_observer_.reset();
+    breakpoint_observer_.reset();
+    filament_sensor_count_observer_.reset();
+    ams_slot_count_observer_.reset();
+    toolchange_visible_observer_.reset();
     part_speed_lifetime_.reset();
     part_speed_observer_.reset();
     hotend_speed_lifetime_.reset();
@@ -781,6 +856,23 @@ lv_obj_t* PrintStatusPanel::create(lv_obj_t* parent) {
     // Initial fan classification (may rebind later when fans_version updates)
     bind_fan_observers();
 
+    // Wire LV_EVENT_SIZE_CHANGED on controls_section so any column-width change
+    // triggers a density + fit recompute. Direct lv_obj_add_event_cb is correct
+    // here — SIZE_CHANGED has no XML binding equivalent (pattern from
+    // ui_buffer_meter.cpp:52 and ui_ams_mini_status.cpp:540).
+    lv_obj_t* controls_section = lv_obj_find_by_name(overlay_root_, "controls_section");
+    if (controls_section) {
+        lv_obj_add_event_cb(controls_section, on_controls_size_changed,
+                            LV_EVENT_SIZE_CHANGED, this);
+        spdlog::debug("[{}] Registered SIZE_CHANGED on controls_section", get_name());
+    } else {
+        spdlog::warn("[{}] controls_section not found — SIZE_CHANGED not wired", get_name());
+    }
+
+    // Initial density + fit recompute is scheduled from on_activate() — running
+    // it here is futile because overlay_root_ is HIDDEN until activation, and a
+    // hidden subtree has 0-width layout in LVGL (so measurement returns 0).
+
     spdlog::debug("[{}] Setup complete!", get_name());
     return overlay_root_;
 }
@@ -859,6 +951,19 @@ void PrintStatusPanel::on_activate() {
         }
         ui_gcode_viewer_set_print_progress(gcode_viewer_, viewer_layer);
     }
+    // Fan row adaptive-fit + density recompute: this is the earliest point where
+    // overlay_root_ and its parents are visible, so LVGL will actually compute
+    // non-zero widths for the row. Deferred so layout has at least one tick to
+    // settle after on_activate() un-hides the panel.
+    {
+        auto token = lifetime_.token();
+        token.defer("PrintStatusPanel::on_activate_fan_row_recompute",
+                    [this]() {
+                        recompute_fans_density();
+                        recompute_fans_fit();
+                    });
+    }
+
     crash_handler::breadcrumb::note("pstat_act", "exit");
 }
 
@@ -1804,6 +1909,9 @@ void PrintStatusPanel::bind_fan_observers() {
     // Aux cluster visibility — subject drives XML bind_flag_if_eq
     lv_subject_set_int(&aux_fan_present_subject_, aux_fan_name_.empty() ? 0 : 1);
 
+    // Recompute composite aux subjects (icon/full/short) with updated aux_present.
+    recompute_aux_composites();
+
     spdlog::debug("[{}] Bound fans: part='{}' hotend='{}' aux='{}'", get_name(),
                   part_fan_name_, hotend_fan_name_, aux_fan_name_);
 }
@@ -1879,6 +1987,213 @@ void PrintStatusPanel::refresh_fan_animations() {
     refresh_one(part_fan_name_, "part_fan_icon");
     refresh_one(hotend_fan_name_, "hotend_fan_icon");
     refresh_one(aux_fan_name_, "aux_fan_icon");
+}
+
+// ============================================================================
+// FAN ROW: ADAPTIVE FIT + CONTENT DENSITY
+// ============================================================================
+
+void PrintStatusPanel::recompute_aux_composites() {
+    bool aux_present = !aux_fan_name_.empty();
+    int density = lv_subject_get_int(&fan_row_density_subject_);
+    lv_subject_set_int(&aux_icon_visible_subject_, (aux_present && density == 0) ? 1 : 0);
+    lv_subject_set_int(&aux_full_visible_subject_, (aux_present && density != 2) ? 1 : 0);
+    lv_subject_set_int(&aux_short_visible_subject_, (aux_present && density == 2) ? 1 : 0);
+}
+
+void PrintStatusPanel::recompute_aux_composites_for_measurement(int density, bool aux_present) {
+    lv_subject_set_int(&aux_icon_visible_subject_, (aux_present && density == 0) ? 1 : 0);
+    lv_subject_set_int(&aux_full_visible_subject_, (aux_present && density != 2) ? 1 : 0);
+    lv_subject_set_int(&aux_short_visible_subject_, (aux_present && density == 2) ? 1 : 0);
+}
+
+void PrintStatusPanel::recompute_fans_density() {
+    spdlog::debug("[{}] recompute_fans_density: entry", get_name());
+    if (!overlay_root_) {
+        spdlog::debug("[{}] recompute_fans_density: overlay_root_ is null", get_name());
+        return;
+    }
+    lv_obj_t* fan_row = lv_obj_find_by_name(overlay_root_, "print_status_fan_row");
+    lv_obj_t* controls = lv_obj_find_by_name(overlay_root_, "controls_section");
+    if (!fan_row || !controls) {
+        spdlog::debug("[{}] recompute_fans_density: fan_row={} controls={}", get_name(),
+                     fmt::ptr(fan_row), fmt::ptr(controls));
+        return;
+    }
+
+    // First-time measurement: force each density tier and measure the row's
+    // natural CONTENT width. The row has width="100%" so `lv_obj_get_width()`
+    // returns the column width (useless). We must temporarily set width to
+    // LV_SIZE_CONTENT so flex sums child widths.
+    if (fan_row_natural_width_[0] == 0) {
+        bool was_hidden = lv_obj_has_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
+        if (was_hidden)
+            lv_obj_remove_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
+
+        int saved_density = lv_subject_get_int(&fan_row_density_subject_);
+        lv_obj_set_width(fan_row, LV_SIZE_CONTENT);
+
+        for (int d = 0; d < 3; ++d) {
+            lv_subject_set_int(&fan_row_density_subject_, d);
+            recompute_aux_composites_for_measurement(d, /*aux_present=*/true);
+            lv_obj_update_layout(fan_row);
+            fan_row_natural_width_[d] = lv_obj_get_width(fan_row);
+        }
+
+        // Restore 100% width and original density
+        lv_obj_set_width(fan_row, lv_pct(100));
+        lv_subject_set_int(&fan_row_density_subject_, saved_density);
+        recompute_aux_composites();
+        lv_obj_update_layout(fan_row);
+
+        if (was_hidden)
+            lv_obj_add_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
+
+        spdlog::debug("[{}] fan_row natural widths: full={} med={} compact={}", get_name(),
+                     fan_row_natural_width_[0], fan_row_natural_width_[1],
+                     fan_row_natural_width_[2]);
+
+        if (fan_row_natural_width_[0] <= 0) {
+            spdlog::info("[{}] widths zero — retrying on next tick", get_name());
+            auto token = lifetime_.token();
+            token.defer("PrintStatusPanel::recompute_fans_density_retry",
+                        [this]() { recompute_fans_density(); });
+            return;
+        }
+    }
+
+    int controls_w = lv_obj_get_content_width(controls);
+    // Slack accounts for measurement-vs-render discrepancy (font metric rounding,
+    // gap accounting differences, etc.). A tight 4px slack lets borderline cases
+    // pick a density that visually clips; 24px is "definitely fits with breathing
+    // room", which is what the user actually wants.
+    constexpr int kDensitySlack = 24;
+    int next_density = 2;
+    if (controls_w >= fan_row_natural_width_[0] + kDensitySlack)
+        next_density = 0;
+    else if (controls_w >= fan_row_natural_width_[1] + kDensitySlack)
+        next_density = 1;
+
+    int current = lv_subject_get_int(&fan_row_density_subject_);
+    spdlog::debug("[{}] fan_row_density check: current={} next={} controls_w={} widths=[{},{},{}]",
+                 get_name(), current, next_density, controls_w,
+                 fan_row_natural_width_[0], fan_row_natural_width_[1],
+                 fan_row_natural_width_[2]);
+    if (next_density != current) {
+        lv_subject_set_int(&fan_row_density_subject_, next_density);
+        recompute_aux_composites();
+    }
+}
+
+void PrintStatusPanel::recompute_fans_fit() {
+    spdlog::debug("[{}] recompute_fans_fit: entry", get_name());
+    if (!overlay_root_) {
+        spdlog::debug("[{}] recompute_fans_fit: overlay_root_ is null", get_name());
+        return;
+    }
+    lv_obj_t* controls = lv_obj_find_by_name(overlay_root_, "controls_section");
+    lv_obj_t* fan_row = lv_obj_find_by_name(overlay_root_, "print_status_fan_row");
+    if (!controls || !fan_row) {
+        spdlog::debug("[{}] recompute_fans_fit: controls={} fan_row={}", get_name(),
+                     fmt::ptr(controls), fmt::ptr(fan_row));
+        return;
+    }
+
+    lv_obj_update_layout(controls);
+
+    if (fan_row_natural_height_ == 0) {
+        bool was_hidden = lv_obj_has_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
+        if (was_hidden)
+            lv_obj_remove_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_update_layout(fan_row);
+        fan_row_natural_height_ = lv_obj_get_height(fan_row);
+        if (was_hidden)
+            lv_obj_add_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
+        spdlog::debug("[{}] fan_row natural height={}", get_name(), fan_row_natural_height_);
+        if (fan_row_natural_height_ <= 0) {
+            auto token = lifetime_.token();
+            token.defer("PrintStatusPanel::recompute_fans_fit_retry",
+                        [this]() { recompute_fans_fit(); });
+            return;
+        }
+    }
+
+    int controls_h = lv_obj_get_height(controls);
+    int used = 0;
+    int visible_count = 0;
+
+    auto add_child_height = [&](const char* name) {
+        lv_obj_t* o = lv_obj_find_by_name(overlay_root_, name);
+        if (!o || lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN))
+            return;
+        used += lv_obj_get_height(o);
+        ++visible_count;
+    };
+    add_child_height("temp_card");
+    add_child_height("speed_flow_row");
+    add_child_height("filament_ams_status_row");
+
+    // button_grid is flex_grow=1 so its OWN height is stretched. Sum the
+    // visible button-row children directly to get the natural content height.
+    lv_obj_t* btn_grid = lv_obj_find_by_name(overlay_root_, "button_grid");
+    if (btn_grid && !lv_obj_has_flag(btn_grid, LV_OBJ_FLAG_HIDDEN)) {
+        int btn_grid_used = 0;
+        int btn_rows_visible = 0;
+        uint32_t n = lv_obj_get_child_count(btn_grid);
+        for (uint32_t i = 0; i < n; ++i) {
+            lv_obj_t* row = lv_obj_get_child(btn_grid, i);
+            if (!row || lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN))
+                continue;
+            btn_grid_used += lv_obj_get_height(row);
+            ++btn_rows_visible;
+        }
+        const char* space_sm_str = lv_xml_get_const(nullptr, "space_sm");
+        int space_sm = space_sm_str ? std::atoi(space_sm_str) : 4;
+        if (btn_rows_visible > 1)
+            btn_grid_used += (btn_rows_visible - 1) * space_sm;
+        used += btn_grid_used;
+        ++visible_count;
+    }
+    add_child_height("print_status_extras");
+
+    // Account for inter-child gaps: (N-1) gaps between N visible children.
+    // The fan row would add one more visible child, so include +1 in gap count.
+    const char* space_md_str = lv_xml_get_const(nullptr, "space_md");
+    int space_md = space_md_str ? std::atoi(space_md_str) : 8;
+    if (visible_count >= 1)
+        used += visible_count * space_md; // (visible_count - 1) for existing + 1 for fan row
+
+    int available = controls_h - used;
+    int current = lv_subject_get_int(&fans_fit_subject_);
+    int next = current;
+    if (current == 1) {
+        if (available < fan_row_natural_height_)
+            next = 0;
+    } else {
+        if (available >= fan_row_natural_height_ + 4)
+            next = 1;
+    }
+    spdlog::info(
+        "[{}] fans_fit check: controls_h={} used={} available={} needed={} current={} next={}",
+        get_name(), controls_h, used, available, fan_row_natural_height_, current, next);
+    if (next != current) {
+        lv_subject_set_int(&fans_fit_subject_, next);
+    }
+}
+
+// SIZE_CHANGED on controls_section — defers density + fit recompute via lifetime token
+void PrintStatusPanel::on_controls_size_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_controls_size_changed");
+    auto* self = static_cast<PrintStatusPanel*>(lv_event_get_user_data(e));
+    if (self) {
+        auto token = self->lifetime_.token();
+        token.defer("PrintStatusPanel::size_changed_recompute",
+                    [self]() {
+                        self->recompute_fans_density();
+                        self->recompute_fans_fit();
+                    });
+    }
+    LVGL_SAFE_EVENT_CB_END();
 }
 
 void PrintStatusPanel::recompute_paused_overlay_visibility() {

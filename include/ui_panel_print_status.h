@@ -335,9 +335,24 @@ class PrintStatusPanel : public OverlayBase {
     // Set by bind_fan_speeds() when an aux fan is discovered.
     lv_subject_t aux_fan_present_subject_{};
 
+    // Fan row content density (0=full: icon+label+val, 1=medium: label+val,
+    // 2=compact: single-letter+val). Set by recompute_fans_density().
+    lv_subject_t fan_row_density_subject_{};
+
+    // Composite visibility subjects for the aux cluster.  Each combines
+    // aux_fan_present AND the current density tier so each aux widget only
+    // needs ONE bind_flag (satisfying [L042]).
+    lv_subject_t aux_icon_visible_subject_{};  // aux_present && density==0
+    lv_subject_t aux_full_visible_subject_{};  // aux_present && density!=2
+    lv_subject_t aux_short_visible_subject_{}; // aux_present && density==2
+
     // Cached natural height of the fan row (measured at attach while
     // forced-visible). Used by recompute_fans_fit() as the `needed` value.
     int fan_row_natural_height_ = 0;
+
+    // Cached natural widths per density tier (measured at attach).
+    // Index 0=full, 1=medium, 2=compact. 0 means not yet measured.
+    int fan_row_natural_width_[3] = {0, 0, 0};
 
     bool animations_enabled_ = false; ///< Cached from DisplaySettingsManager
 
@@ -493,6 +508,10 @@ class PrintStatusPanel : public OverlayBase {
                            const char* icon_widget_name);
     void update_fan_speed_display(const char* label_name, const char* icon_name, int speed);
     void refresh_fan_animations();
+    void recompute_fans_fit();         ///< Height-based row visibility (fans_fit_subject_)
+    void recompute_fans_density();     ///< Width-based content tier (fan_row_density_subject_)
+    void recompute_aux_composites();   ///< Compute 3 aux_*_visible from aux_present + density
+    void recompute_aux_composites_for_measurement(int density, bool aux_present); ///< Measurement helper
 
     void update_all_displays();
     void show_gcode_viewer(bool show);
@@ -544,6 +563,10 @@ class PrintStatusPanel : public OverlayBase {
     static void on_objects_clicked(lv_event_t* e);
     static void on_view_toggle_clicked(lv_event_t* e);
     static void on_fans_clicked(lv_event_t* e);
+    // SIZE_CHANGED on controls_section — triggers density + fit recompute.
+    // Direct lv_obj_add_event_cb registration is correct here: SIZE_CHANGED
+    // has no XML binding equivalent (only click/value events go through XML).
+    static void on_controls_size_changed(lv_event_t* e);
     void handle_fans_click();
 
     // Static resize callback (registered with ui_resize_handler)
