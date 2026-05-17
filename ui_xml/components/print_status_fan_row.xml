@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Horizontal 3-fan info row for the print status panel. -->
+<!-- Visibility is driven by print_status_fans_fit (adaptive fit calc). -->
+<!-- Aux cluster is driven by print_status_aux_fan_present. -->
+<component>
+  <view name="print_status_fan_row_root"
+        extends="lv_obj"
+        width="100%" height="content"
+        style_pad_all="0" style_pad_left="#space_md" style_pad_right="#space_md"
+        flex_flow="row"
+        style_flex_main_place="center" style_flex_cross_place="center"
+        style_pad_gap="#space_sm"
+        scrollable="false" clickable="true">
+
+    <!-- Hide whole row when adaptive-fit calc says no -->
+    <bind_flag_if_eq subject="print_status_fans_fit" flag="hidden" ref_value="0"/>
+
+    <event_cb trigger="clicked" callback="on_print_status_fans_clicked"/>
+
+    <!-- Part fan -->
+    <icon name="part_fan_icon" src="fan" size="xs" variant="secondary"
+          clickable="false" event_bubble="true"/>
+    <text_small name="part_fan_label" text="Part" translation_tag="Part"
+                style_text_color="#primary"
+                clickable="false" event_bubble="true"/>
+    <text_small name="part_fan_speed" text="--"
+                clickable="false" event_bubble="true"/>
+
+    <!-- Separator before hotend -->
+    <text_small text=" · " style_text_color="#text_muted"
+                clickable="false" event_bubble="true"/>
+
+    <!-- Hotend fan -->
+    <icon name="hotend_fan_icon" src="fan" size="xs" variant="secondary"
+          clickable="false" event_bubble="true"/>
+    <text_small name="hotend_fan_label" text="Hotend" translation_tag="Hotend"
+                style_text_color="#primary"
+                clickable="false" event_bubble="true"/>
+    <text_small name="hotend_fan_speed" text="--"
+                clickable="false" event_bubble="true"/>
+
+    <!-- Aux cluster: separator + icon + label + speed, all hide together -->
+    <text_small name="aux_separator" text=" · " style_text_color="#text_muted"
+                clickable="false" event_bubble="true">
+      <bind_flag_if_eq subject="print_status_aux_fan_present" flag="hidden" ref_value="0"/>
+    </text_small>
+    <icon name="aux_fan_icon" src="fan" size="xs" variant="secondary"
+          clickable="false" event_bubble="true">
+      <bind_flag_if_eq subject="print_status_aux_fan_present" flag="hidden" ref_value="0"/>
+    </icon>
+    <text_small name="aux_fan_label" text="Aux" translation_tag="Aux"
+                style_text_color="#primary"
+                clickable="false" event_bubble="true">
+      <bind_flag_if_eq subject="print_status_aux_fan_present" flag="hidden" ref_value="0"/>
+    </text_small>
+    <text_small name="aux_fan_speed" text="--"
+                clickable="false" event_bubble="true">
+      <bind_flag_if_eq subject="print_status_aux_fan_present" flag="hidden" ref_value="0"/>
+    </text_small>
+  </view>
+</component>
