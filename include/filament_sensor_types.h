@@ -68,7 +68,13 @@ struct FilamentSensorState {
     bool available;         ///< Whether the sensor exists in current Klipper config
 
     FilamentSensorState()
-        : filament_detected(false), enabled(true), detection_count(0), available(false) {}
+        : filament_detected(true), enabled(true), detection_count(0), available(false) {}
+    // filament_detected defaults to TRUE (optimistic "present until proven empty"). The
+    // false default meant that any read before Moonraker's first status update arrived
+    // saw every sensor as a runout — a false positive that hit FilamentRunoutHandler
+    // on print-status panel construction within ~5s of helix-screen startup. The
+    // FilamentSensorManager startup-grace-period gate (formerly in has_any_runout)
+    // was a band-aid for this default; now redundant and removed.
 };
 
 /**
