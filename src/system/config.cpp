@@ -1556,9 +1556,112 @@ void Config::set_preset(const std::string& preset_name) {
 }
 
 bool Config::apply_preset_file(const std::string& preset_name) {
-    // Guard: only apply if wizard hasn't been completed for this printer
-    if (get<bool>(df() + "wizard_completed", false)) {
-        spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+    // Guard: only full-apply if wizard hasn't been completed for this printer.
+    // Post-wizard, still allow a narrow migration for filament_sensors so that
+    // a printer detected with an empty filament_sensors block (preset never
+    // populated it at first-install, or preset was extended later) gets the
+    // current preset's runout/toolhead role assignments. Without this, fixing
+    // a preset only helps fresh installs — existing users stay broken even
+    // after an update.
+    const bool wizard_done = get<bool>(df() + "wizard_completed", false);
+    if (wizard_done) {
+        // Post-wizard migration window. Two cases:
+        //  A) filament_sensors.sensors is empty/missing → seed from preset
+        //     (original installs whose old preset didn't write the block).
+        //  B) Block exists but the preset has been updated to assign RUNOUT
+        //     to sensors that the user's stored copy still has at "none" —
+        //     stale role=none from a prior preset version. Upgrade those
+        //     specific sensors. User-edited role=runout entries are never
+        //     downgraded; role=none entries the preset also wants at none
+        //     are left alone.
+        if (active_printer_id_.empty()) {
+            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+            return false;
+        }
+        std::string preset_relpath = std::string("presets/") + preset_name + ".json";
+        std::string preset_path = helix::find_readable(preset_relpath);
+        if (!fs::exists(preset_path)) {
+            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+            return false;
+        }
+        json preset_json;
+        try {
+            preset_json = json::parse(std::fstream(preset_path));
+        } catch (const json::exception&) {
+            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+            return false;
+        }
+        if (!preset_json.contains("printer") || !preset_json["printer"].is_object() ||
+            !preset_json["printer"].contains("filament_sensors")) {
+            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+            return false;
+        }
+        const auto& preset_fs = preset_json["printer"]["filament_sensors"];
+
+        json::json_pointer fs_ptr(df() + "filament_sensors");
+        json::json_pointer sensors_ptr(df() + "filament_sensors/sensors");
+
+        // Case A: empty/missing block — full seed.
+        if (!data.contains(sensors_ptr) ||
+            (data.at(sensors_ptr).is_array() && data.at(sensors_ptr).empty())) {
+            auto& printer_node = data["printers"][active_printer_id_];
+            if (!printer_node.is_object()) {
+                printer_node = json::object();
+            }
+            printer_node["filament_sensors"] = preset_fs;
+            spdlog::info("[Config] Migrated filament_sensors from preset '{}' "
+                         "(existing block was empty)",
+                         preset_name);
+            save();
+            return true;
+        }
+
+        // Case B: per-sensor role-upgrade from "none" → preset's role.
+        if (!preset_fs.contains("sensors") || !preset_fs["sensors"].is_array()) {
+            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+            return false;
+        }
+        if (!data.at(sensors_ptr).is_array()) {
+            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
+            return false;
+        }
+        int upgraded = 0;
+        auto& user_sensors = data.at(sensors_ptr);
+        for (const auto& preset_sensor : preset_fs["sensors"]) {
+            if (!preset_sensor.is_object()) continue;
+            std::string preset_klipper = preset_sensor.value("klipper_name", "");
+            std::string preset_role = preset_sensor.value("role", "none");
+            if (preset_klipper.empty() || preset_role == "none") continue;
+            bool found = false;
+            for (auto& user_sensor : user_sensors) {
+                if (!user_sensor.is_object()) continue;
+                if (user_sensor.value("klipper_name", "") != preset_klipper) continue;
+                found = true;
+                std::string user_role = user_sensor.value("role", "none");
+                // Only upgrade when user has role=none — never overwrite an
+                // explicit user assignment (runout/toolhead/entry/z_probe).
+                if (user_role == "none") {
+                    user_sensor["role"] = preset_role;
+                    ++upgraded;
+                    spdlog::info("[Config] Upgraded sensor '{}' role: none -> {} (preset '{}')",
+                                 preset_klipper, preset_role, preset_name);
+                }
+                break;
+            }
+            // Sensor in preset but missing entirely from user settings → append.
+            if (!found) {
+                user_sensors.push_back(preset_sensor);
+                ++upgraded;
+                spdlog::info("[Config] Added missing sensor '{}' from preset '{}'",
+                             preset_klipper, preset_name);
+            }
+        }
+        if (upgraded > 0) {
+            save();
+            return true;
+        }
+        spdlog::info("[Config] Wizard completed, preset '{}' already applied (no upgrades)",
+                     preset_name);
         return false;
     }
 

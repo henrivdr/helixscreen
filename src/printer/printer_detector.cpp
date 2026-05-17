@@ -1652,6 +1652,17 @@ bool PrinterDetector::auto_detect_and_save(const helix::PrinterDiscovery& discov
     if (!saved_type.empty()) {
         spdlog::debug("[PrinterDetector] Printer type already set: '{}', skipping auto-detection",
                       saved_type);
+        // Even when the printer type is already saved, run the post-wizard
+        // preset migration path. apply_preset_file checks wizard_completed and
+        // only writes filament_sensors when the user's block is empty/missing —
+        // a no-op for fully-configured installs, a one-shot fix for users whose
+        // older preset didn't seed the block (Snapmaker U1 shipped pre-2026-05
+        // with role=none on e1/e2/e3; tonight's preset fix only helped fresh
+        // installs without this hook).
+        std::string saved_preset = get_preset_for_name(saved_type);
+        if (!saved_preset.empty()) {
+            config->apply_preset_file(saved_preset);
+        }
         // Still compact if database was loaded (e.g., by list building)
         compact_database();
         return false;
