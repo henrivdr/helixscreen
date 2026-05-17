@@ -16,6 +16,7 @@
 
     <!-- Hide whole row when adaptive-fit calc says no -->
     <bind_flag_if_eq subject="print_status_fans_fit" flag="hidden" ref_value="0"/>
+    <bind_state_if_not_eq subject="printer_connection_state" state="disabled" ref_value="2"/>
 
     <event_cb trigger="clicked" callback="on_print_status_fans_clicked"/>
 
