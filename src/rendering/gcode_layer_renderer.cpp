@@ -649,13 +649,13 @@ void GCodeLayerRenderer::ensure_cache(int width, int height) {
     }
 }
 
-void GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
+int GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
     if (!cache_buf_)
-        return;
+        return from_layer - 1;
 
     // Need either gcode file or streaming controller
     if (!gcode_ && !streaming_controller_)
-        return;
+        return from_layer - 1;
 
     // Capture transform params for coordinate conversion
     // This ensures consistent rendering with widget offset set to 0 for cache
@@ -665,13 +665,18 @@ void GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
 
     int layer_count = get_layer_count();
     size_t segments_rendered = 0;
+    int last_rendered = from_layer - 1;
 
     // Compute extrusion line width in pixels (scale-dependent)
     int line_width = get_extrusion_pixel_width();
 
     for (int layer_idx = from_layer; layer_idx <= to_layer; ++layer_idx) {
-        if (layer_idx < 0 || layer_idx >= layer_count)
+        if (layer_idx < 0 || layer_idx >= layer_count) {
+            // Out-of-range slot — treat as rendered so the caller advances.
+            // (Bounds-clamped target_layer normally prevents this.)
+            last_rendered = layer_idx;
             continue;
+        }
 
         // Get segments from appropriate source
         // For streaming mode, hold shared_ptr to keep data alive during iteration
@@ -688,8 +693,16 @@ void GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
             segments = &gcode_->layers[layer_idx].segments;
         }
 
-        if (!segments)
-            continue;
+        if (!segments) {
+            // Streaming load failed for this layer. Stop here so the caller
+            // does not advance cached_up_to_layer_ past it — next frame
+            // retries this layer; the load may succeed once prefetch catches
+            // up. Silently skipping would leave a permanent gap.
+            spdlog::debug("[GCodeLayerRenderer] Streaming load missed layer {}, "
+                          "stopping at {} for retry",
+                          layer_idx, last_rendered);
+            return last_rendered;
+        }
 
         for (const auto& seg : *segments) {
             if (!should_render_segment(seg))
@@ -788,12 +801,16 @@ void GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
             }
             ++segments_rendered;
         }
+
+        last_rendered = layer_idx;
     }
 
     spdlog::trace("[GCodeLayerRenderer] Rendered layers {}-{}: {} segments to cache (direct), "
                   "buf={}x{} stride={}",
                   from_layer, to_layer, segments_rendered, cached_width_, cached_height_,
                   cache_buf_ ? cache_buf_->header.stride : 0);
+
+    return last_rendered;
 }
 
 void GCodeLayerRenderer::blit_cache(lv_layer_t* target) {
@@ -1008,8 +1025,10 @@ void GCodeLayerRenderer::render(lv_layer_t* layer, const lv_area_t* widget_area)
                 int from_layer = cached_up_to_layer_ + 1;
                 int to_layer = std::min(from_layer + layers_per_frame_ - 1, target_layer);
 
-                render_layers_to_cache(from_layer, to_layer);
-                cached_up_to_layer_ = to_layer;
+                // Advance cache only as far as the renderer actually rendered.
+                // In streaming mode a transient load miss returns < to_layer so
+                // the next frame retries the missing layer.
+                cached_up_to_layer_ = render_layers_to_cache(from_layer, to_layer);
 
                 // If we haven't caught up yet, caller should check needs_more_frames()
                 // and invalidate the widget to trigger another frame
@@ -1024,8 +1043,7 @@ void GCodeLayerRenderer::render(lv_layer_t* layer, const lv_area_t* widget_area)
                 cached_up_to_layer_ = -1;
 
                 int to_layer = std::min(layers_per_frame_ - 1, target_layer);
-                render_layers_to_cache(0, to_layer);
-                cached_up_to_layer_ = to_layer;
+                cached_up_to_layer_ = render_layers_to_cache(0, to_layer);
                 // Caller checks needs_more_frames() for continuation
             }
             // else: same layer, just blit cached image

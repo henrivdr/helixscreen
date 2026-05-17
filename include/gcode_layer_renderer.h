@@ -636,7 +636,12 @@ class GCodeLayerRenderer {
 
     void invalidate_cache();
     void ensure_cache(int width, int height);
-    void render_layers_to_cache(int from_layer, int to_layer);
+    /// Render [from_layer, to_layer] into cache_buf_. Returns the highest layer
+    /// successfully rendered. In streaming mode, a layer that returns null
+    /// segments (load failed or cache miss with failed I/O) stops the run so
+    /// the next frame retries from that layer — silently advancing past a
+    /// missing layer would leave a permanent gap in the printed render.
+    int render_layers_to_cache(int from_layer, int to_layer);
     void blit_cache(lv_layer_t* target);
     void destroy_cache();
 
