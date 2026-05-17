@@ -325,7 +325,22 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
         if (state == PrintJobState::PRINTING || state == PrintJobState::PAUSED) {
             on_print_state_changed(state);
         } else {
-            reset_print_card_to_idle();
+            // Defer the initial idle reset to the next LVGL tick. Running it
+            // synchronously here cascades: lv_subject_copy_string(idle_thumb_path)
+            // → bind_src observer → lv_image_set_src → update_align →
+            // lv_obj_update_layout walks up to the page grid that populate_page
+            // is still building sibling widgets into. grid_update then crashes
+            // reading half-initialized track data (AD5M SY6JLLKJ #?). Raw
+            // lv_async_call escapes the UpdateQueue batch (see CLAUDE.md
+            // "Safe escape routes"); live_instances() guards UAF.
+            lv_async_call(
+                [](void* ud) {
+                    auto* self = static_cast<PrintStatusWidget*>(ud);
+                    if (live_instances().count(self) != 0 && self->widget_obj_) {
+                        self->reset_print_card_to_idle();
+                    }
+                },
+                this);
         }
         spdlog::debug("[PrintStatusWidget] Found print card widgets for dynamic updates");
     } else {
