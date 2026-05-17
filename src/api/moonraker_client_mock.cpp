@@ -3048,6 +3048,17 @@ void MoonrakerClientMock::dispatch_initial_state() {
         initial_status[key] = value;
     }
 
+    // Auto-controlled heater_fans trip at 50°C (Klipper default). Mirror here
+    // so the initial subscription response reports the correct hotend fan speed.
+    {
+        double hotend_fan_speed = (ext_temp > 50.0) ? 1.0 : 0.0;
+        for (const auto& fan_name : discovery_.fans()) {
+            if (fan_name.rfind("heater_fan ", 0) == 0) {
+                initial_status[fan_name] = {{"speed", hotend_fan_speed}};
+            }
+        }
+    }
+
     // Override fan speeds with explicitly-set values from fan_speeds_ map
     {
         std::lock_guard<std::mutex> lock(fan_mutex_);
@@ -3641,6 +3652,11 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         }
         fan_speed_.store(fan);
 
+        // Klipper [heater_fan] auto-trips at heater_temp (default 50°C). Mirror that
+        // here so the mock's hotend fan reads 100% whenever the extruder is hot
+        // (printing, preheating, or cooling down from a recent print).
+        double hotend_fan_speed = (ext_temp > 50.0) ? 1.0 : 0.0;
+
         // ========== Build and Dispatch Status Notification ==========
         // Only dispatch notifications every NOTIFICATION_INTERVAL_TICKS to reduce log spam
         // Physics still runs every tick for smooth temperature changes
@@ -3767,6 +3783,15 @@ void MoonrakerClientMock::temperature_simulation_loop() {
                 break;
             }
             status_obj["webhooks"] = {{"state", state_str}};
+        }
+
+        // Auto-controlled heater_fans follow extruder temperature, matching
+        // Klipper behavior. Apply BEFORE the explicit-override loop so users
+        // can still pin a fan speed via M106 for testing.
+        for (const auto& fan_name : discovery_.fans()) {
+            if (fan_name.rfind("heater_fan ", 0) == 0) {
+                status_obj[fan_name] = {{"speed", hotend_fan_speed}};
+            }
         }
 
         // Override fan speeds with explicitly-set values from fan_speeds_ map
