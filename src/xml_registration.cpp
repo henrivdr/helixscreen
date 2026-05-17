@@ -403,6 +403,7 @@ void register_xml_components() {
     register_xml("components/panel_widget_print_status.xml");
     register_xml("components/print_status_detailed_active.xml");
     register_xml("components/print_status_detailed_idle.xml");
+    register_xml("components/print_status_fan_row.xml");
     register_xml("components/panel_widget_shutdown.xml");
     register_xml("components/panel_widget_lock.xml");
     register_xml("components/nozzle_temp_row.xml");
