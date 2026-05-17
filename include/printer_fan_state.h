@@ -63,6 +63,19 @@ struct FanInfo {
 };
 
 /**
+ * @brief Picked primary fan object names for the standard 3-fan display.
+ *
+ * Each member is the object_name of the first fan of that role found in
+ * the discovered fan list (in fan-discovery order), or empty if none.
+ */
+struct PrimaryFans {
+    std::string part;   ///< First PART_COOLING fan, or empty
+    std::string hotend; ///< First HEATER_FAN, or empty
+    std::string aux;    ///< First of CONTROLLER_FAN, TEMPERATURE_FAN,
+                        ///< GENERIC_FAN, OUTPUT_PIN_FAN — or empty
+};
+
+/**
  * @brief Manages fan-related subjects for printer state
  *
  * Handles both static fan subjects (main fan speed, version) and
@@ -150,6 +163,13 @@ class PrinterFanState {
     const std::vector<FanInfo>& get_fans() const {
         return fans_;
     }
+
+    /// Pick first fan of each primary role from the discovered list.
+    /// Returns empty strings for roles with no detected fan.
+    PrimaryFans classify_primary_fans() const;
+
+    /// Test-only: inject a synthesized fan list, bypassing Moonraker discovery.
+    void set_fans_for_test(std::vector<FanInfo> fans) { fans_ = std::move(fans); }
 
   private:
     friend class PrinterFanStateTestAccess;

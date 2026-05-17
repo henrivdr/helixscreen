@@ -172,6 +172,30 @@ FanType PrinterFanState::classify_fan_type(const std::string& object_name) const
     }
 }
 
+PrimaryFans PrinterFanState::classify_primary_fans() const {
+    PrimaryFans out;
+    for (const auto& fan : fans_) {
+        switch (fan.type) {
+        case FanType::PART_COOLING:
+            if (out.part.empty())
+                out.part = fan.object_name;
+            break;
+        case FanType::HEATER_FAN:
+            if (out.hotend.empty())
+                out.hotend = fan.object_name;
+            break;
+        case FanType::CONTROLLER_FAN:
+        case FanType::TEMPERATURE_FAN:
+        case FanType::GENERIC_FAN:
+        case FanType::OUTPUT_PIN_FAN:
+            if (out.aux.empty())
+                out.aux = fan.object_name;
+            break;
+        }
+    }
+    return out;
+}
+
 std::string PrinterFanState::get_role_display_name(const std::string& object_name) const {
     auto it = role_display_names_.find(object_name);
     if (it != role_display_names_.end()) {
