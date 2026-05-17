@@ -3004,18 +3004,28 @@ void Application::init_action_prompt() {
 
                     // Cross-source dedup: when a caller (e.g. the print-status
                     // Resume/Pause handler) sent the gcode that triggered this
-                    // `!!`, the RPC error response already invoked the
-                    // caller's error_cb, which surfaces a contextual toast
-                    // ("Failed to resume print: ..."). The generic
-                    // ui_notification_error("Klipper Error", ...) here would
-                    // be a redundant second toast for the same root cause.
-                    // Skip it — the contextual one is more useful and the
-                    // user already saw it. Recovery actions (key298, key8xx
-                    // below) bypass this gate because they DO add value the
-                    // caller's toast can't (action button, modal).
+                    // `!!`, the RPC error response invokes the caller's
+                    // error_cb which surfaces a contextual toast ("Failed to
+                    // resume print: ..."). The generic ui_notification_error
+                    // here would be redundant for the same root cause.
+                    //
+                    // The two channels (broadcast `!!` and RPC error response)
+                    // can arrive in EITHER order — the broadcast often beats
+                    // the JSON-RPC response on slow devices. So checking the
+                    // correlation buffer synchronously is unreliable when the
+                    // `!!` arrives first. We defer the toast emission by
+                    // ~150ms and re-check at fire time, which absorbs both
+                    // arrival orderings and the WebSocket dispatch jitter.
+                    // For spontaneous errors with no correlated RPC (e.g.
+                    // MCU shutdown), the toast still emits after the delay.
+                    //
+                    // Recovery actions (key298, key8xx below) bypass this
+                    // defer because they DO add value the caller's toast
+                    // can't (action button, modal).
                     if (helix::rpc_error_correlation::was_recently_handled(clean)) {
                         spdlog::info("[GcodeError] Suppressing duplicate `!!` toast "
-                                     "(caller-handled RPC error): {}", clean);
+                                     "(caller-handled RPC error already recorded): {}",
+                                     clean);
                         return;
                     }
 
@@ -3062,7 +3072,38 @@ void Application::init_action_prompt() {
                         return;
                     }
 
-                    ui_notification_error("Klipper Error", clean.c_str(), false);
+                    // Defer the generic toast emission ~150ms to catch the
+                    // late-arrival ordering: the broadcast `!!` channel can
+                    // beat the RPC error response on slow devices, so the
+                    // synchronous correlation check above sees an empty
+                    // buffer. The timer cb re-checks after the RPC path has
+                    // had a chance to populate. If still no correlation
+                    // (spontaneous error with no associated RPC), the toast
+                    // emits — slightly delayed but not lost.
+                    struct DeferredKlipperErrorCtx {
+                        std::string clean;
+                    };
+                    auto* dctx = new DeferredKlipperErrorCtx{clean};
+                    auto* dt = lv_timer_create(
+                        [](lv_timer_t* timer) {
+                            auto* c = static_cast<DeferredKlipperErrorCtx*>(
+                                lv_timer_get_user_data(timer));
+                            if (c) {
+                                if (helix::rpc_error_correlation::was_recently_handled(c->clean)) {
+                                    spdlog::info(
+                                        "[GcodeError] Suppressing deferred `!!` toast "
+                                        "(caller-handled RPC error arrived after): {}",
+                                        c->clean);
+                                } else {
+                                    ui_notification_error("Klipper Error", c->clean.c_str(),
+                                                          false);
+                                }
+                                delete c;
+                            }
+                            lv_timer_delete(timer);
+                        },
+                        150, dctx);
+                    lv_timer_set_repeat_count(dt, 1);
                     return;
                 }
 

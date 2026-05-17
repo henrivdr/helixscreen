@@ -103,14 +103,17 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
     runout_modal_.set_on_resume([this, token]() {
         if (token.expired()) return;
 
-        // Check if filament is now present before allowing resume
-        auto& sensor_mgr = helix::FilamentSensorManager::instance();
-        if (sensor_mgr.has_any_runout()) {
-            spdlog::warn(
-                "[FilamentRunoutHandler] User attempted resume but filament still not detected");
-            NOTIFY_WARNING(lv_tr("Insert filament before resuming"));
-            return; // Modal stays open - user needs to load filament first
-        }
+        // No client-side filament-present gate here. The previous
+        // has_any_runout() check used the encoder-based motion sensor, which
+        // only flips back to "present" after actual extrusion happens — so on
+        // a tool-changer like the Snapmaker U1, where the user reloads a spool
+        // at the buffer/port and the buffer auto-feeds to within a few inches
+        // of the toolhead, the sensor stays in runout state until Klipper's
+        // RESUME chain extrudes. Gating on the sensor refused legitimate user
+        // intent ("Insert filament before resuming" while a fresh spool was
+        // sitting in the buffer). Trust Klipper to enforce — INNER_RESUME has
+        // its own CHECK_FILAMENT_RUNOUT, and any rejection now surfaces as a
+        // single contextual error toast via the suppress_auto_toast path.
 
         // Check if resume slot is available
         const auto& resume_info = StandardMacros::instance().get(StandardMacroSlot::Resume);
@@ -133,7 +136,8 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
                     spdlog::error("[FilamentRunoutHandler] Failed to resume print: {}",
                                   err.message);
                     NOTIFY_ERROR(lv_tr("Failed to resume: {}"), err.user_message());
-                });
+                },
+                /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
         }
     });
 
