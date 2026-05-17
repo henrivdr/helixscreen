@@ -1593,8 +1593,9 @@ void PrintStatusPanel::on_cancel_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-void PrintStatusPanel::on_fans_clicked(lv_event_t* /*e*/) {
+void PrintStatusPanel::on_fans_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_fans_clicked");
+    (void)e;
     get_global_print_status_panel().handle_fans_click();
     LVGL_SAFE_EVENT_CB_END();
 }
