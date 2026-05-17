@@ -230,14 +230,16 @@ void StandardMacros::save_to_config() {
 }
 
 bool StandardMacros::execute(StandardMacroSlot slot, MoonrakerAPI* api, SuccessCallback on_success,
-                             ErrorCallback on_error, uint32_t timeout_ms) {
-    return execute(slot, api, {}, std::move(on_success), std::move(on_error), timeout_ms);
+                             ErrorCallback on_error, uint32_t timeout_ms,
+                             bool suppress_auto_toast) {
+    return execute(slot, api, {}, std::move(on_success), std::move(on_error), timeout_ms,
+                   suppress_auto_toast);
 }
 
 bool StandardMacros::execute(StandardMacroSlot slot, MoonrakerAPI* api,
                              const std::map<std::string, std::string>& params,
                              SuccessCallback on_success, ErrorCallback on_error,
-                             uint32_t timeout_ms) {
+                             uint32_t timeout_ms, bool suppress_auto_toast) {
     const auto& info = get(slot);
 
     if (info.is_empty()) {
@@ -253,7 +255,7 @@ bool StandardMacros::execute(StandardMacroSlot slot, MoonrakerAPI* api,
 
     spdlog::info("[StandardMacros] Executing {} via {}", info.slot_name, macro_name);
     api->advanced().execute_macro(macro_name, params, std::move(on_success), std::move(on_error),
-                                   timeout_ms);
+                                   timeout_ms, suppress_auto_toast);
     return true;
 }
 

@@ -3,6 +3,8 @@
 
 #include "moonraker_request_tracker.h"
 
+#include "rpc_error_correlation.h"
+
 #include "hv/WebSocketClient.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -207,6 +209,14 @@ bool MoonrakerRequestTracker::route_response(
         } else {
             spdlog::debug("[Request Tracker] Silent request {} failed: {}", method_name,
                           error.message);
+            // Silent caller has an error_cb that will surface this to the user
+            // itself. Record the exact Klipper-supplied error so the
+            // GcodeError `!!` broadcast for the same root cause (which arrives
+            // through a different transport channel) can suppress its
+            // independent toast — see include/rpc_error_correlation.h.
+            if (error_cb) {
+                helix::rpc_error_correlation::record_caller_handled(error.message);
+            }
         }
 
         if (error_cb) {

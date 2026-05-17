@@ -1595,7 +1595,11 @@ void PrintStatusPanel::handle_pause_button() {
         if (api_) {
             spdlog::info("[{}] Using StandardMacros pause: {}", get_name(), pause_info.get_macro());
             start_pending_action(PendingPrintAction::Pausing);
-            // Stateless callbacks to avoid use-after-free if panel destroyed [L012]
+            // Stateless callbacks to avoid use-after-free if panel destroyed [L012].
+            // suppress_auto_toast=true: we surface a contextual error toast
+            // from on_error below ("Failed to pause print: ..."); the generic
+            // RPC_ERROR auto-toast and Klipper's `!!` broadcast for the same
+            // root cause would be redundant noise.
             StandardMacros::instance().execute(
                 StandardMacroSlot::Pause, api_,
                 []() {
@@ -1609,7 +1613,8 @@ void PrintStatusPanel::handle_pause_button() {
                     // than waiting on the 25s timeout. Panel is a singleton so
                     // the static-context lookup is safe.
                     get_global_print_status_panel().clear_pending_action();
-                });
+                },
+                /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
         } else {
             // Fall back to local state change for mock mode
             spdlog::warn("[{}] API not available - using local state change", get_name());
@@ -1630,7 +1635,8 @@ void PrintStatusPanel::handle_pause_button() {
             spdlog::info("[{}] Using StandardMacros resume: {}", get_name(),
                          resume_info.get_macro());
             start_pending_action(PendingPrintAction::Resuming);
-            // Stateless callbacks to avoid use-after-free if panel destroyed [L012]
+            // Stateless callbacks to avoid use-after-free if panel destroyed [L012].
+            // suppress_auto_toast=true: see Pause path above for rationale.
             StandardMacros::instance().execute(
                 StandardMacroSlot::Resume, api_,
                 []() {
@@ -1641,7 +1647,8 @@ void PrintStatusPanel::handle_pause_button() {
                     spdlog::error("[Print Status] Failed to resume print: {}", err.message);
                     NOTIFY_ERROR(lv_tr("Failed to resume print: {}"), err.user_message());
                     get_global_print_status_panel().clear_pending_action();
-                });
+                },
+                /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
         } else {
             // Fall back to local state change for mock mode
             spdlog::warn("[{}] API not available - using local state change", get_name());

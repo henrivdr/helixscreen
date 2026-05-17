@@ -40,6 +40,7 @@
 #include "post_op_cooldown_manager.h"
 #include "power_device_state.h"
 #include "print_history_manager.h"
+#include "rpc_error_correlation.h"
 #include "screenshot.h"
 #include "sensor_state.h"
 #include "sound_manager.h"
@@ -3000,6 +3001,23 @@ void Application::init_action_prompt() {
                     clean_for_toast(clean, code);
                     spdlog::error("[GcodeError] Emergency: {} (code={})", clean,
                                   code.empty() ? "-" : code);
+
+                    // Cross-source dedup: when a caller (e.g. the print-status
+                    // Resume/Pause handler) sent the gcode that triggered this
+                    // `!!`, the RPC error response already invoked the
+                    // caller's error_cb, which surfaces a contextual toast
+                    // ("Failed to resume print: ..."). The generic
+                    // ui_notification_error("Klipper Error", ...) here would
+                    // be a redundant second toast for the same root cause.
+                    // Skip it — the contextual one is more useful and the
+                    // user already saw it. Recovery actions (key298, key8xx
+                    // below) bypass this gate because they DO add value the
+                    // caller's toast can't (action button, modal).
+                    if (helix::rpc_error_correlation::was_recently_handled(clean)) {
+                        spdlog::info("[GcodeError] Suppressing duplicate `!!` toast "
+                                     "(caller-handled RPC error): {}", clean);
+                        return;
+                    }
 
                     // Specific codes that warrant a one-tap deep-recovery action.
                     // key298: rpi MCU bridge daemon shut down — the canonical
