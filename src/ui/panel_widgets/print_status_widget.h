@@ -21,7 +21,13 @@ namespace helix {
 class PrinterState;
 enum class PrintJobState;
 
+// Forward-declared friend that gives unit tests access to private static
+// subjects without exposing them on the production API (see [L065]).
+class PrintStatusWidgetTestAccess;
+
 class PrintStatusWidget : public PanelWidget {
+    friend class PrintStatusWidgetTestAccess;
+
   public:
     PrintStatusWidget();
     ~PrintStatusWidget() override;

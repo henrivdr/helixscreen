@@ -10,6 +10,17 @@
 
 using namespace helix;
 
+// Friend access to private static subjects (header forward-declares this class
+// inside namespace helix; the definition must live in the same namespace).
+namespace helix {
+class PrintStatusWidgetTestAccess {
+  public:
+    static lv_subject_t* idle_thumb_path_subject() {
+        return &PrintStatusWidget::idle_thumb_path_subject_;
+    }
+};
+} // namespace helix
+
 static bool s_widget_registered = false;
 
 /// Fixture for testing PrintStatusWidget idle thumbnail behavior
@@ -141,4 +152,57 @@ TEST_CASE_METHOD(PrintStatusIdleThumbFixture,
     // After detach, LVGL processing should not crash
     // (validates that alive guard prevents stale async callbacks)
     process_lvgl(200);
+}
+
+// =============================================================================
+// Regression: attach() must defer the initial idle reset (AD5M SY6JLLKJ)
+//
+// Calling reset_print_card_to_idle() synchronously from attach() cascades:
+//   lv_subject_copy_string(idle_thumb_path) → bind_src observer →
+//   lv_image_set_src → update_align → lv_obj_update_layout → grid_update
+// which crashed in grid_update reading half-built track data when the parent
+// page-grid was still mid-construction (populate_page builds widgets one at a
+// time). The fix defers the initial reset via lv_async_call. This test pins
+// the deferral invariant: idle_thumb_path_subject_ must NOT be touched
+// synchronously during attach().
+// =============================================================================
+TEST_CASE_METHOD(PrintStatusIdleThumbFixture,
+                 "PrintStatusWidget: attach() defers initial idle reset (no sync subject notify)",
+                 "[print_status_widget][idle_thumb][regression]") {
+    auto* subj = PrintStatusWidgetTestAccess::idle_thumb_path_subject();
+    REQUIRE(subj != nullptr);
+
+    // Seed the subject buffer with a sentinel so we can detect whether
+    // reset_print_card_to_idle() (which rewrites to benchy) ran before
+    // attach() returned, or only after the next LVGL tick.
+    static constexpr const char* SENTINEL = "A:assets/images/__test_seed__.png";
+    lv_subject_copy_string(subj, SENTINEL);
+
+    auto current_value = [&]() {
+        const char* p = static_cast<const char*>(subj->value.pointer);
+        return std::string(p ? p : "");
+    };
+    REQUIRE(current_value() == SENTINEL);
+
+    PrintStatusWidget widget;
+    lv_obj_t* container = create_mock_print_card(test_screen());
+
+    widget.attach(container, test_screen());
+    std::string after_attach = current_value();
+
+    // Pump the queue + LVGL timers so the deferred async_call can fire.
+    process_lvgl(200);
+    std::string after_process = current_value();
+
+    // Invariant: attach() must NOT synchronously call reset_print_card_to_idle.
+    // If it does, the bind_src observer on idle_thumb cascades through
+    // lv_image_set_src → layout → grid_update on the page grid that
+    // populate_page is still building sibling widgets into (AD5M SY6JLLKJ).
+    REQUIRE(after_attach == SENTINEL);
+
+    // Sanity: after one LVGL tick the deferred reset has run and rewritten
+    // the subject back to benchy (no history available in this fixture).
+    REQUIRE(after_process == BENCHY_PATH);
+
+    widget.detach();
 }
