@@ -775,6 +775,34 @@ TEST_CASE("QIDI Box current_tool follows value_t mapping",
     REQUIRE(backend.get_current_tool() == 0);
 }
 
+// =====================================================================
+// is_tool_change reflects through to AmsAction
+// =====================================================================
+// box_extras.py sets save_variables.is_tool_change=1 while
+// _BOX_CHANGE_FILAMENT is running, clears it on completion. Map this
+// onto AmsAction so the UI shows an in-flight indicator.
+
+TEST_CASE("QIDI Box is_tool_change=1 sets action to LOADING",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+
+    QidiBoxTestAccess::parse_vars(backend, json{{"is_tool_change", 1}});
+
+    REQUIRE(backend.get_system_info().action == AmsAction::LOADING);
+}
+
+TEST_CASE("QIDI Box is_tool_change=0 returns action to IDLE",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::parse_vars(backend, json{{"is_tool_change", 1}});
+    REQUIRE(backend.get_system_info().action == AmsAction::LOADING);
+
+    QidiBoxTestAccess::parse_vars(backend, json{{"is_tool_change", 0}});
+
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+}
+
 TEST_CASE("QIDI Box parse_save_variables applies cached profile to SlotInfo temps",
           "[ams][qidi_box]") {
     AmsBackendQidi backend(nullptr, nullptr);

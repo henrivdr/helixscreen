@@ -355,6 +355,16 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     //                per-slot signal hasn't caught up, e.g. recovery paths)
     //   "slot-1"   → demote any slot still claiming LOADED to AVAILABLE
     //                (nothing is in the extruder anymore)
+    // is_tool_change: box_extras.py sets this to 1 while _BOX_CHANGE_FILAMENT
+    // is mid-flight, clears to 0 on completion. Surface as AmsAction::LOADING
+    // so the UI can show an in-flight indicator. (LOADING is the closest
+    // existing action; there's no TOOL_CHANGING enum value yet.)
+    auto tool_change_it = variables.find("is_tool_change");
+    if (tool_change_it != variables.end() && tool_change_it->is_number_integer()) {
+        system_info_.action =
+            tool_change_it->get<int>() != 0 ? AmsAction::LOADING : AmsAction::IDLE;
+    }
+
     auto load_it = variables.find("last_load_slot");
     if (load_it != variables.end() && load_it->is_string()) {
         const std::string val = load_it->get<std::string>();
