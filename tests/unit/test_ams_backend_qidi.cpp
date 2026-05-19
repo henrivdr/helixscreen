@@ -28,6 +28,9 @@ class QidiBoxTestAccess {
     static int vendor_id(const AmsBackendQidi& b, int slot) {
         return b.slot_rfid_.at(static_cast<size_t>(slot)).vendor_id;
     }
+    static void apply_query(AmsBackendQidi& b, const json& response) {
+        b.apply_query_response(response);
+    }
 };
 
 // Build a Moonraker-shaped status notification carrying save_variables.
@@ -376,6 +379,48 @@ TEST_CASE("QIDI Box multiple heater_box readings expose the maximum",
     auto info = backend.get_system_info();
     REQUIRE(info.units[0].environment.has_value());
     REQUIRE(info.units[0].environment->temperature_c == Catch::Approx(50.0).epsilon(0.01));
+}
+
+// =====================================================================
+// apply_query_response: bootstrap from printer.objects.query result
+// =====================================================================
+// on_started() issues a printer.objects.query to fetch the initial state
+// of save_variables (and per-box heater objects when they exist). The
+// response shape is `{result: {status: {save_variables: {...}, ...}}}`.
+// apply_query_response unwraps the result.status envelope and feeds the
+// inner object through handle_status_update, reusing every parser we
+// already test.
+
+TEST_CASE("QIDI Box apply_query_response unwraps result.status and parses",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    REQUIRE_FALSE(backend.get_system_info().units[0].connected);
+
+    json response = json{
+        {"result", json{
+                       {"status", json{
+                                      {"save_variables",
+                                       json{{"variables",
+                                             json{{"enable_box", 1},
+                                                  {"box_count", 2}}}}},
+                                  }},
+                   }},
+    };
+    QidiBoxTestAccess::apply_query(backend, response);
+
+    auto info = backend.get_system_info();
+    REQUIRE(info.units[0].connected);
+    REQUIRE(info.total_slots == 8);
+}
+
+TEST_CASE("QIDI Box apply_query_response handles missing result gracefully",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+
+    // Wrong-shape response — must not crash, must not mutate state.
+    QidiBoxTestAccess::apply_query(backend, json{{"error", "timed out"}});
+
+    REQUIRE_FALSE(backend.get_system_info().units[0].connected);
 }
 
 TEST_CASE("QIDI Box notifications without heater data leave environment alone",

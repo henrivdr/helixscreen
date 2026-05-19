@@ -85,9 +85,55 @@ AmsBackendQidi::~AmsBackendQidi() = default;
 // --- Lifecycle hooks ---
 
 void AmsBackendQidi::on_started() {
-    spdlog::warn("{} {} not yet implemented — backend is a stub pending live hardware",
-                 backend_log_tag(), __func__);
-    // Intentionally no subscription work: we have nothing to subscribe to yet.
+    if (!client_) {
+        return;
+    }
+    // Bootstrap: notify_status_update only carries deltas, so we need an
+    // initial snapshot to populate save_variables. Subscribe to the QIDI
+    // objects too — Moonraker won't push notifications for anything we
+    // haven't subscribed to.
+    //
+    // For now we query the entire save_variables namespace + box_extras
+    // status; heater_box<N> and aht20_f heater_box<N> are wildcarded by
+    // box_count so we issue follow-up subscribes lazily as box_count is
+    // observed (TODO once we have field data).
+    nlohmann::json params = {
+        {"objects", nlohmann::json::object({
+                        {"save_variables", nullptr},
+                        {"box_extras", nullptr},
+                    })},
+    };
+
+    auto token = lifetime_.token();
+    client_->send_jsonrpc(
+        "printer.objects.query", params,
+        [this, token](nlohmann::json response) {
+            // L081 Mechanism C: defer member access to main thread.
+            token.defer("AmsBackendQidi::on_started_apply",
+                        [this, response = std::move(response)]() {
+                            apply_query_response(response);
+                        });
+        });
+    spdlog::info("{} Bootstrap query issued for save_variables + box_extras",
+                 backend_log_tag());
+}
+
+void AmsBackendQidi::apply_query_response(const nlohmann::json& response) {
+    if (!response.is_object()) {
+        return;
+    }
+    auto result_it = response.find("result");
+    if (result_it == response.end() || !result_it->is_object()) {
+        return;
+    }
+    auto status_it = result_it->find("status");
+    if (status_it == result_it->end() || !status_it->is_object()) {
+        return;
+    }
+    // The status object has the same shape as a notify_status_update
+    // payload — both are `{<object_name>: <fields>, ...}` — so reuse
+    // the notification handler verbatim.
+    handle_status_update(*status_it);
 }
 
 void AmsBackendQidi::handle_status_update(const nlohmann::json& notification) {

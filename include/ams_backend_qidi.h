@@ -101,6 +101,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// max temperature and max humidity observed across all boxes.
     void apply_heater_status(const nlohmann::json& notification);
 
+    /// Unwrap a printer.objects.query response (`result.status.{...}`)
+    /// and feed the inner object through handle_status_update so the
+    /// bootstrap fetch reuses every parser already exercised by the
+    /// notification path.
+    void apply_query_response(const nlohmann::json& response);
+
     /// Raw RFID indices read from save_variables. Per-slot side-table so we
     /// don't pollute SlotInfo with backend-specific fields. Resolution to
     /// material/color/brand happens via the officiall_filas_list.cfg lookup
