@@ -195,7 +195,6 @@ class ToolState {
     int ams_topology_tool_count_ = 0;
     std::vector<int> ams_topology_tool_to_slot_;
     std::string ams_topology_tool_name_prefix_ = "T";
-    int ams_topology_backend_index_ = 0;
 
     /// Save spool assignments to local JSON file
     void save_spool_json() const;

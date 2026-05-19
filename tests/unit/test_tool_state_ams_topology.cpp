@@ -1,3 +1,4 @@
+// Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "tool_state.h"
@@ -27,7 +28,7 @@ struct ToolStateFixture : public LVGLTestFixture {
 
 TEST_CASE_METHOD(ToolStateFixture,
                  "[ToolState][ams-topology] set_ams_topology populates 15 tools",
-                 "[tool_state][ams][ams-topology]") {
+                 "[tool-state][ams][ams-topology]") {
     ToolTopology topo;
     topo.tool_count = 15;
     topo.active_tool = 0;
@@ -46,7 +47,7 @@ TEST_CASE_METHOD(ToolStateFixture,
 
 TEST_CASE_METHOD(ToolStateFixture,
                  "[ToolState][ams-topology] active tool updates without rebuilding tools list",
-                 "[tool_state][ams][ams-topology]") {
+                 "[tool-state][ams][ams-topology]") {
     ToolTopology topo;
     topo.tool_count = 4;
     topo.active_tool = 0;
@@ -64,11 +65,15 @@ TEST_CASE_METHOD(ToolStateFixture,
     REQUIRE(ToolState::instance().active_tool_index() == 2);
     REQUIRE(lv_subject_get_int(ToolState::instance().get_tools_version_subject()) ==
             initial_version); // No rebuild
+    // Pin list shape + content so a future "bump version but silently rebuild"
+    // regression also fails this test.
+    REQUIRE(ToolState::instance().tool_count() == 4);
+    REQUIRE(ToolState::instance().tools()[0].name == "T0");
 }
 
 TEST_CASE_METHOD(ToolStateFixture,
                  "[ToolState][ams-topology] clear_ams_topology releases override",
-                 "[tool_state][ams][ams-topology]") {
+                 "[tool-state][ams][ams-topology]") {
     ToolTopology topo;
     topo.tool_count = 6;
     topo.active_tool = 3;

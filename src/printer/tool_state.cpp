@@ -191,7 +191,6 @@ void ToolState::set_ams_topology(const ToolTopology& topo) {
     ams_topology_tool_count_ = topo.tool_count;
     ams_topology_tool_to_slot_ = topo.tool_to_slot;
     ams_topology_tool_name_prefix_ = topo.tool_name_prefix;
-    ams_topology_backend_index_ = topo.backend_index;
 
     if (needs_rebuild) {
         tools_.clear();
@@ -215,7 +214,7 @@ void ToolState::set_ams_topology(const ToolTopology& topo) {
 
     int new_active = topo.active_tool;
     if (new_active < 0 || new_active >= static_cast<int>(tools_.size())) {
-        new_active = (tools_.empty()) ? 0 : 0; // Default to 0 when out of range
+        new_active = 0; // Out-of-range falls back to T0 (matches init_tools convention)
     }
     if (new_active != active_tool_index_) {
         active_tool_index_ = new_active;
