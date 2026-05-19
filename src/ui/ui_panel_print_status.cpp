@@ -50,6 +50,7 @@
 #include "thumbnail_cache.h"
 #include "thumbnail_processor.h"
 #include "tool_state.h"
+#include "ui_resume_dispatch.h"
 #include "wizard_config_paths.h"
 
 #include <spdlog/spdlog.h>
@@ -1636,49 +1637,18 @@ void PrintStatusPanel::handle_pause_button() {
                          resume_info.get_macro());
             start_pending_action(PendingPrintAction::Resuming);
 
-            // The actual RESUME dispatch. Hoisted into a stateless lambda so
-            // both the backend-prep success path and the no-backend fallback
-            // share one path. Stateless to avoid UAF if the panel is destroyed
-            // before completion [L012]; error path re-acquires the singleton.
-            auto* api = api_;
-            auto dispatch_resume = [api]() {
-                StandardMacros::instance().execute(
-                    StandardMacroSlot::Resume, api,
-                    []() {
-                        spdlog::info("[Print Status] Resume command sent successfully");
-                        // State updates via PrinterState observer when Moonraker confirms.
-                    },
-                    [](const MoonrakerError& err) {
-                        spdlog::error("[Print Status] Failed to resume print: {}", err.message);
-                        NOTIFY_ERROR(lv_tr("Failed to resume print: {}"), err.user_message());
-                        get_global_print_status_panel().clear_pending_action();
-                    },
-                    /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
-            };
-
-            // Backend-side resume prep. On Snapmaker U1 a latched runout
-            // exception requires a recovery extrude before RESUME can do
-            // anything; the backend detects this and runs the chain
-            // internally. Other backends (default impl) invoke the callback
-            // immediately. Optimistic UI (Resuming spinner) already covers
-            // the entire window from click → backend prep done → RESUME ack.
-            AmsBackend* backend = AmsState::instance().get_backend();
-            if (backend) {
-                int slot = backend->get_current_slot();
-                backend->prepare_for_resume(slot,
-                                            [dispatch_resume](const AmsError& err) {
-                    if (!err.success()) {
-                        spdlog::error("[Print Status] prepare_for_resume failed: {}",
-                                      err.technical_msg);
-                        NOTIFY_ERROR(lv_tr("Resume preparation failed: {}"), err.user_msg);
-                        get_global_print_status_panel().clear_pending_action();
-                        return;
-                    }
-                    dispatch_resume();
-                });
-            } else {
-                dispatch_resume();
-            }
+            // Shared prep+dispatch helper handles the backend-side
+            // prepare_for_resume → Resume StandardMacro chain (and any
+            // contextual error toasts). On Snapmaker U1, prepare_for_resume
+            // runs a recovery extrude before RESUME; other backends invoke
+            // the dispatch immediately. The optimistic Resuming spinner spans
+            // the full click → backend prep → RESUME ack window, so we only
+            // clear it on failure — the success path waits on PrinterState
+            // observer confirmation. Stateless `on_failure` because the panel
+            // is a singleton and may be destroyed before the async fires.
+            helix::ui::dispatch_prepared_resume(
+                api_, "[Print Status]",
+                []() { get_global_print_status_panel().clear_pending_action(); });
         } else {
             // Fall back to local state change for mock mode
             spdlog::warn("[{}] API not available - using local state change", get_name());

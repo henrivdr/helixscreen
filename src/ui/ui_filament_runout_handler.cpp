@@ -9,12 +9,12 @@
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "ui_update_queue.h"
 
-#include "ams_state.h"
 #include "filament_sensor_manager.h"
 #include "moonraker_api.h"
 #include "print_lifecycle_state.h" // For PrintState enum
 #include "runtime_config.h"
 #include "standard_macros.h"
+#include "ui_resume_dispatch.h"
 
 #include <spdlog/spdlog.h>
 
@@ -137,44 +137,14 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
 
         spdlog::info("[FilamentRunoutHandler] User chose to resume print after runout");
 
-        // Resume via StandardMacros, but first give the AMS backend a chance
-        // to run any prep gcode it needs (e.g., Snapmaker U1 runs a recovery
-        // extrude to clear Klipper's latched runout exception). Backends that
-        // don't need prep invoke the callback immediately.
-        if (api_) {
-            spdlog::info("[FilamentRunoutHandler] Using StandardMacros resume: {}",
-                         resume_info.get_macro());
-
-            auto* api = api_;
-            auto dispatch_resume = [api]() {
-                StandardMacros::instance().execute(
-                    StandardMacroSlot::Resume, api,
-                    []() { spdlog::info("[FilamentRunoutHandler] Print resumed after runout"); },
-                    [](const MoonrakerError& err) {
-                        spdlog::error("[FilamentRunoutHandler] Failed to resume print: {}",
-                                      err.message);
-                        NOTIFY_ERROR(lv_tr("Failed to resume: {}"), err.user_message());
-                    },
-                    /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
-            };
-
-            AmsBackend* backend = AmsState::instance().get_backend();
-            if (backend) {
-                int slot = backend->get_current_slot();
-                backend->prepare_for_resume(slot,
-                                            [dispatch_resume](const AmsError& err) {
-                    if (!err.success()) {
-                        spdlog::error("[FilamentRunoutHandler] prepare_for_resume failed: {}",
-                                      err.technical_msg);
-                        NOTIFY_ERROR(lv_tr("Resume preparation failed: {}"), err.user_msg);
-                        return;
-                    }
-                    dispatch_resume();
-                });
-            } else {
-                dispatch_resume();
-            }
-        }
+        // Resume via the shared prep+dispatch helper. The AMS backend gets
+        // a chance to run any recovery gcode it needs (e.g., Snapmaker U1's
+        // post-runout extrude) before the Resume StandardMacro fires.
+        // Backends with no prep invoke the dispatch immediately. There's no
+        // optimistic-UI state to clean up here, so on_failure is omitted.
+        spdlog::info("[FilamentRunoutHandler] Using StandardMacros resume: {}",
+                     resume_info.get_macro());
+        dispatch_prepared_resume(api_, "[FilamentRunoutHandler]");
     });
 
     runout_modal_.set_on_cancel_print([this, token]() {
