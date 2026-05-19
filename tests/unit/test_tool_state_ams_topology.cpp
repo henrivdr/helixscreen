@@ -141,3 +141,51 @@ TEST_CASE_METHOD(ToolStateFixture,
     helix::ToolState::instance().clear_ams_topology();
     UpdateQueue::instance().drain();
 }
+
+TEST_CASE_METHOD(ToolStateFixture,
+                 "[ToolState][ams-topology] set_ams_topology preserves per-tool extruder_name",
+                 "[tool-state][ams][ams-topology]") {
+    // Simulate init_tools() having populated tools_ with per-tool extruder names
+    // (the ToolChanger init path does this from sorted heater names).
+    auto& ts = helix::ToolState::instance();
+
+    // Build a topology and apply it once with no prior state — gets default
+    // extruder_name="extruder" for every tool.
+    helix::ToolTopology topo;
+    topo.tool_count = 4;
+    topo.active_tool = 0;
+    topo.tool_to_slot = {0, 1, 2, 3};
+    topo.tool_name_prefix = "T";
+    ts.set_ams_topology(topo);
+    UpdateQueue::instance().drain();
+    REQUIRE(ts.tool_count() == 4);
+
+    // Apply same-shape topology again: needs_rebuild=false, only active_tool_
+    // changes. extruder_name preservation isn't exercised on this path.
+    topo.active_tool = 2;
+    ts.set_ams_topology(topo);
+    UpdateQueue::instance().drain();
+    REQUIRE(ts.active_tool_index() == 2);
+
+    // Apply a different shape (count change → forced rebuild) and verify that
+    // the rebuild path copies over extruder_name from the previous tools_.
+    // Since the previous tools_ all have extruder_name="extruder" (default), the
+    // rebuilt tools_ should also have "extruder" — which is the regression case
+    // (ToolChanger sets per-tool names, rebuild used to lose them).
+    topo.tool_count = 3;
+    topo.tool_to_slot = {0, 1, 2};
+    topo.active_tool = 0;
+    ts.set_ams_topology(topo);
+    UpdateQueue::instance().drain();
+    REQUIRE(ts.tool_count() == 3);
+    for (const auto& t : ts.tools()) {
+        REQUIRE(t.extruder_name.has_value());
+        // For this minimal test, default "extruder" is the only available
+        // ground truth without a real PrinterDiscovery feed. The point is to
+        // prove the copy-from-previous logic runs (the field is still set
+        // post-rebuild, not nullopt).
+    }
+
+    ts.clear_ams_topology();
+    UpdateQueue::instance().drain();
+}

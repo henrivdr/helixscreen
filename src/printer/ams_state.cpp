@@ -666,6 +666,10 @@ void AmsState::clear_backends() {
     }
     backends_.clear();
 
+    // Drop AMS-derived tool topology so the UI doesn't show stale tool pills
+    // between backend disappearance and the next reconnect's init_tools().
+    helix::ToolState::instance().clear_ams_topology();
+
     // Clean up secondary slot subjects
     for (auto& subs : secondary_slot_subjects_) {
         subs.deinit();

@@ -210,6 +210,12 @@ void ToolState::set_ams_topology(const ToolTopology& topo) {
     ams_topology_tool_name_prefix_ = topo.tool_name_prefix;
 
     if (needs_rebuild) {
+        // Snapshot per-tool hardware mappings populated by init_tools() so we can
+        // preserve them across the rebuild. Without this, ToolChanger printers
+        // (which advertise supports_tool_mapping=true and trigger this rebuild)
+        // lose their per-tool extruder/heater/fan assignments and revert to the
+        // ToolInfo default extruder_name="extruder", breaking heater/fan control.
+        std::vector<ToolInfo> previous = std::move(tools_);
         tools_.clear();
         tools_.reserve(topo.tool_count);
         for (int i = 0; i < topo.tool_count; ++i) {
@@ -220,6 +226,15 @@ void ToolState::set_ams_topology(const ToolTopology& topo) {
             t.backend_slot = (i < static_cast<int>(topo.tool_to_slot.size()))
                                  ? topo.tool_to_slot[i]
                                  : -1;
+            if (i < static_cast<int>(previous.size())) {
+                // Carry over hardware mappings init_tools set up.
+                t.extruder_name = previous[i].extruder_name;
+                t.heater_name = previous[i].heater_name;
+                t.fan_name = previous[i].fan_name;
+                t.gcode_x_offset = previous[i].gcode_x_offset;
+                t.gcode_y_offset = previous[i].gcode_y_offset;
+                t.gcode_z_offset = previous[i].gcode_z_offset;
+            }
             tools_.push_back(std::move(t));
         }
         lv_subject_set_int(&tool_count_, static_cast<int>(tools_.size()));
@@ -261,47 +276,50 @@ void ToolState::update_from_status(const nlohmann::json& status) {
         return;
     }
 
-    if (ams_topology_active_) {
-        // AMS owns active tool; ignore toolchanger.tool_number / toolhead.extruder.
-        return;
-    }
-
     bool changed = false;
 
-    // Parse active tool from toolchanger object
-    if (status.contains("toolchanger") && status["toolchanger"].is_object()) {
-        const auto& tc = status["toolchanger"];
-        if (tc.contains("tool_number") && tc["tool_number"].is_number_integer()) {
-            int new_index = tc["tool_number"].get<int>();
-            if (new_index != active_tool_index_) {
-                active_tool_index_ = new_index;
-                lv_subject_set_int(&active_tool_, active_tool_index_);
-                changed = true;
-                spdlog::debug("[ToolState] Active tool changed to {}", active_tool_index_);
+    // Parse active tool from toolchanger object.
+    // When AMS owns the active tool (e.g., AFC), ignore Klipper's toolchanger
+    // view — the logical T-number is driven by the backend, not the printer.
+    if (!ams_topology_active_) {
+        if (status.contains("toolchanger") && status["toolchanger"].is_object()) {
+            const auto& tc = status["toolchanger"];
+            if (tc.contains("tool_number") && tc["tool_number"].is_number_integer()) {
+                int new_index = tc["tool_number"].get<int>();
+                if (new_index != active_tool_index_) {
+                    active_tool_index_ = new_index;
+                    lv_subject_set_int(&active_tool_, active_tool_index_);
+                    changed = true;
+                    spdlog::debug("[ToolState] Active tool changed to {}", active_tool_index_);
+                }
             }
         }
     }
 
-    // Cross-check active tool from toolhead.extruder field
+    // Cross-check active tool from toolhead.extruder field.
     // This handles non-toolchanger multi-extruder setups where the active
-    // extruder changes but there's no "toolchanger" object in status
-    if (status.contains("toolhead") && status["toolhead"].is_object()) {
-        const auto& toolhead = status["toolhead"];
-        if (toolhead.contains("extruder") && toolhead["extruder"].is_string()) {
-            std::string ext_name = toolhead["extruder"].get<std::string>();
-            // Find which tool maps to this extruder
-            for (int i = 0; i < static_cast<int>(tools_.size()); ++i) {
-                if (tools_[i].extruder_name.has_value() &&
-                    tools_[i].extruder_name.value() == ext_name) {
-                    if (i != active_tool_index_) {
-                        active_tool_index_ = i;
-                        lv_subject_set_int(&active_tool_, active_tool_index_);
-                        changed = true;
-                        spdlog::debug(
-                            "[ToolState] Active tool updated to {} (from toolhead.extruder={})", i,
-                            ext_name);
+    // extruder changes but there's no "toolchanger" object in status.
+    // When AMS owns the active tool, ignore this too — the backend's tool index
+    // is the source of truth, not Klipper's view of the physical extruder.
+    if (!ams_topology_active_) {
+        if (status.contains("toolhead") && status["toolhead"].is_object()) {
+            const auto& toolhead = status["toolhead"];
+            if (toolhead.contains("extruder") && toolhead["extruder"].is_string()) {
+                std::string ext_name = toolhead["extruder"].get<std::string>();
+                // Find which tool maps to this extruder
+                for (int i = 0; i < static_cast<int>(tools_.size()); ++i) {
+                    if (tools_[i].extruder_name.has_value() &&
+                        tools_[i].extruder_name.value() == ext_name) {
+                        if (i != active_tool_index_) {
+                            active_tool_index_ = i;
+                            lv_subject_set_int(&active_tool_, active_tool_index_);
+                            changed = true;
+                            spdlog::debug(
+                                "[ToolState] Active tool updated to {} (from toolhead.extruder={})",
+                                i, ext_name);
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         }
