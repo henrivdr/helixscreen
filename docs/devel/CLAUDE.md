@@ -70,7 +70,7 @@ All developer documentation lives here. When working on features, look up the re
 |-----|-------------|
 | `INSTALLER.md` | Installation system, KIAUH extension, shell tests (bats) |
 | `printers/CREALITY_K1_SUPPORT.md` | Creality K1 series platform (K1, K1C, K1 Max) |
-| `printers/QIDI_SUPPORT.md` | QIDI platform (Q2, Plus 4, Max 4, older TJC models) |
+| `printers/QIDI_SUPPORT.md` | QIDI platform (Q2 + Max 4 on-device; Plus 4 + older 3-series TJC models are remote-only) |
 | `printers/SNAPMAKER_U1_SUPPORT.md` | Snapmaker U1 toolchanger platform |
 | `printers/CREALITY_K2_SUPPORT.md` | Creality K2 series platform |
 | `printers/FLASHFORGE_AD5X_SUPPORT.md` | FlashForge Adventurer 5X (MIPS, ZMOD) |

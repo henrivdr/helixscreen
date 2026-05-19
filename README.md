@@ -126,7 +126,7 @@ See [docs/devel/GALLERY.md](docs/devel/GALLERY.md) for the full gallery.
 | Flashforge AD5M / AD5M Pro | armv7-a | Tested |
 | Flashforge AD5X | MIPS32 | Tested |
 | Snapmaker U1 (SnapSwap toolchanger) | aarch64 | Tested |
-| QIDI Q2, Plus 4, Max 4 | aarch64 | Supported¹ |
+| QIDI Q2, Max 4 | aarch64 | Supported¹ |
 | Sovol SV06 / SV08 | Pi build | Tested |
 | Elegoo Centauri Carbon | armv7-a | Tested² |
 | x86 Mini PC (Debian) | x86_64 | Tested |
