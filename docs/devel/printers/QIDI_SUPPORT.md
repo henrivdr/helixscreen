@@ -156,13 +156,33 @@ The stock Q2 `QD_Q2/bin/client` binary also writes wpa_supplicant config directl
 
 QIDI sells a 4-slot RFID-aware filament changer — the **QIDI Box** — for PLUS4, Q2, and MAX4 (not for Q1 Pro or X-Max 3). Chainable to 16 slots, active drying up to 65°C, MIFARE Classic RFID.
 
-HelixScreen has a **stub backend** for the Box (`AmsType::QIDI_BOX`, `AmsBackendQidi`). The type round-trips through the enum, factory, and UI identify wizard, but no protocol is implemented — every operation logs a warning and reports not-supported. Detection is **not** wired up yet; the `"ams_type": "qidi_box"` capability on the Plus 4 and Q2 printer-database entries is informational today.
+HelixScreen has a **read-only state mirror** and a **gated write-path** for the Box (`AmsType::QIDI_BOX`, `AmsBackendQidi`). Issue #954 contributed the Python sources for the stock Klipper extensions (`box_extras`, `box_stepper`, `box_rfid`, `aht20_f`, `box_heater_fan`, `box_detect`, `buttons_irq`) which were the protocol reference for this work.
 
-Full context, references to the `qidi-community/Plus4-Wiki` open-source reimplementation, and the follow-up work list live in [`FILAMENT_MANAGEMENT.md` → QIDI Box](../FILAMENT_MANAGEMENT.md#qidi-box-qidi-plus4--q2--max4).
+**What works today:**
 
-**Workaround today: [Bunny Box](https://github.com/Wazzup77/Bunny-Box)** — a community open-source replacement that reimplements the QIDI Box as a [Happy Hare](https://github.com/moggieuk/Happy-Hare) MMU. HelixScreen already has Happy Hare support, so a printer flashed with Bunny Box is controllable through HelixScreen via its existing Happy Hare integration. Plus 4 is the most mature target (tested on stock QIDI 1.7.3, FreeDi, and Kalico); Q2 is in active testing; Max 4 is not yet supported. Bunny Box currently depends on the maintainer's [Happy Hare fork](https://github.com/Wazzup77/Happy-Hare) for QIDI-specific hall-sensor and cutter handling, pending upstream merge.
+- **Detection** — `PrinterDiscovery` recognises `box_stepper slot<N>` Klipper objects and registers `AmsType::QIDI_BOX`. Slot count derives from how many `box_stepper slot<N>` sections exist (4/8/12/16). Happy Hare takes priority if both are present.
+- **State mirror** — subscribes to `notify_status_update` and parses `save_variables.variables`:
+  - `enable_box` → unit connected/disconnected
+  - `box_count` → resizes the slot vector (4 per box, up to 16)
+  - `slot<N>` → per-slot `SlotStatus` (0=empty, 1=available, 2=loaded, 3=transitional, -1/-2/-3=BLOCKED)
+  - `value_t<N>="slot<M>"` → tool-to-slot mapping
+  - `last_load_slot` → authoritative LOADED (with `"slot-1"` = nothing loaded)
+  - `filament_slot<N>` / `color_slot<N>` / `vendor_slot<N>` → raw RFID indices in a private side-table
+- **Temperature profiles** — fetches `/server/files/config/officiall_filas_list.cfg` via Moonraker's file API at `on_started()`. Parses the ConfigParser INI sections (`[fila<N>]` with `min_temp` / `max_temp` / `box_min_temp` / `box_max_temp`), caches them, and applies the nozzle min/max to `SlotInfo` whenever a `filament_slot<N>` index arrives. HTTP failure is non-fatal.
+- **Bootstrap** — `on_started()` issues a `printer.objects.query` for `save_variables` + `box_extras` so the initial snapshot lands; subsequent `notify_status_update` frames carry deltas only.
+- **Heater drying state** — `heater_generic heater_box<N>` notifications (temperature/target) flow into `AmsUnit::environment` as the max across all boxes, so the UI can show drying-active state regardless of which physical box is active.
+- **Write-path (gated)** — set `HELIX_QIDI_BOX_WRITE=1` to enable `load_filament` (`T<tool>`), `unload_filament` (`UNLOAD_T<tool>`, supports `-1` for active slot), `change_tool` (`T<tool>`), and `set_tool_mapping` (`SAVE_VARIABLE VARIABLE=value_t<t> VALUE="slot<s>"`). Default off — production builds return `not_supported` so unvalidated gcode never reaches live hardware.
 
-Stock QIDI Box integration is blocked on test-hardware access.
+**Known gaps:**
+
+- `aht20_f heater_box<N>` humidity isn't subscribed today — the classifier in `moonraker_discovery_sequence.cpp` only recognises `temperature_sensor <name>`/`temperature_fan <name>`/`tmc2240`/`tmc5160` as sensors. The parser handles humidity if it arrives, but the subscription side has to be extended.
+- `color_slot<N>` / `vendor_slot<N>` raw indices are captured but not yet mapped to material/color/brand strings — the python source doesn't read those names from `officiall_filas_list.cfg`, so the palette source needs separate identification.
+- No `qidi_box_64.png` logo asset yet — `AmsState::get_system_logo_path()` returns nullptr for `"qidi box"`, UI falls back to a generic AMS chip.
+- Write-path needs field validation against real hardware. Tracking via issue #954.
+
+Full context and references to the `qidi-community/Plus4-Wiki` open-source reimplementation live in [`FILAMENT_MANAGEMENT.md` → QIDI Box](../FILAMENT_MANAGEMENT.md#qidi-box-qidi-plus4--q2--max4).
+
+**Alternative path: [Bunny Box](https://github.com/Wazzup77/Bunny-Box)** — a community open-source replacement that reimplements the QIDI Box as a [Happy Hare](https://github.com/moggieuk/Happy-Hare) MMU. HelixScreen already has Happy Hare support, so a printer flashed with Bunny Box is controllable through HelixScreen via its existing Happy Hare integration. Plus 4 is the most mature target (tested on stock QIDI 1.7.3, FreeDi, and Kalico); Q2 is in active testing; Max 4 is not yet supported. Bunny Box currently depends on the maintainer's [Happy Hare fork](https://github.com/Wazzup77/Happy-Hare) for QIDI-specific hall-sensor and cutter handling, pending upstream merge.
 
 ## Known Limitations
 

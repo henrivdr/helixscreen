@@ -193,6 +193,15 @@ void AmsBackendQidi::handle_status_update(const nlohmann::json& notification) {
 }
 
 void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
+    // NOTE: heater_generic heater_box<N> rides on the heaters loop in
+    // moonraker_discovery_sequence.cpp (subscribed with temperature+target).
+    // aht20_f heater_box<N> is NOT subscribed today — the classifier in
+    // discovery only recognises "temperature_sensor <name>" / "temperature_fan
+    // <name>" / "tmc2240"/"tmc5160" as sensors, so the aht20_f object falls
+    // through and Moonraker never pushes its humidity. Until that classifier
+    // gains an aht20_* branch (and the sensor fields gain "humidity"), the
+    // humidity path here only fires when the unit also publishes via some
+    // other subscribed object — keep the parser tolerant either way.
     constexpr std::string_view kHeaterPrefix = "heater_generic heater_box";
     constexpr std::string_view kAht20Prefix = "aht20_f heater_box";
 
