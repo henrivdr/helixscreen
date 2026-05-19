@@ -432,6 +432,47 @@ TEST_CASE("parse_probe_position rejects non-probe lines",
     REQUIRE_FALSE(helix::parse_probe_position("probe at is z=0").has_value());
 }
 
+// ============================================================================
+// parse_adapted_probe_count — stock Klipper adaptive bed_mesh signal
+// ============================================================================
+
+TEST_CASE("parse_adapted_probe_count extracts N*M from Klipper line",
+          "[bed_mesh_collector][adapted]") {
+    SECTION("Bare form") {
+        auto n = helix::parse_adapted_probe_count("Adapted probe count: 4,4");
+        REQUIRE(n.has_value());
+        REQUIRE(*n == 16);
+    }
+
+    SECTION("With gcode_response // prefix") {
+        auto n = helix::parse_adapted_probe_count("// Adapted probe count: 5,3");
+        REQUIRE(n.has_value());
+        REQUIRE(*n == 15);
+    }
+
+    SECTION("Whitespace tolerance around comma") {
+        auto n = helix::parse_adapted_probe_count("Adapted probe count: 6 , 6");
+        REQUIRE(n.has_value());
+        REQUIRE(*n == 36);
+    }
+
+    SECTION("Large grid (Voron 350)") {
+        auto n = helix::parse_adapted_probe_count("Adapted probe count: 9,9");
+        REQUIRE(n.has_value());
+        REQUIRE(*n == 81);
+    }
+}
+
+TEST_CASE("parse_adapted_probe_count rejects unrelated lines",
+          "[bed_mesh_collector][adapted]") {
+    REQUIRE_FALSE(helix::parse_adapted_probe_count("Probing point 5/25").has_value());
+    REQUIRE_FALSE(helix::parse_adapted_probe_count("// bed_mesh: generated points").has_value());
+    REQUIRE_FALSE(helix::parse_adapted_probe_count("Mesh X,Y: 10,10").has_value());
+    REQUIRE_FALSE(helix::parse_adapted_probe_count("Adapted probe count: 0,4").has_value());
+    REQUIRE_FALSE(helix::parse_adapted_probe_count("Adapted probe count: 4,0").has_value());
+    REQUIRE_FALSE(helix::parse_adapted_probe_count("").has_value());
+}
+
 /**
  * @brief Simulate Klipper's `samples: N` probe stream with dedupe
  *

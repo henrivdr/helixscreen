@@ -81,6 +81,39 @@ struct ProbePosition {
  *
  * @return Parsed position or std::nullopt if line doesn't match
  */
+/**
+ * @brief Stock Klipper's adaptive bed_mesh emits this line when the slicer
+ * passes MESH_MIN/MESH_MAX overrides (or ADAPTIVE=1) and bed_mesh.py reduces
+ * the grid from configfile defaults.
+ *
+ * Format: "Adapted probe count: N,M" (preceded by "// " in gcode_response).
+ * The total = N * M, fired once before the first probe — usable as a live
+ * denominator on stock Klipper / Voron / KAMP setups.
+ *
+ * NOT emitted by Snapmaker U1's custom firmware fork (the count exists in
+ * klippy.log as "Updated Mesh Configuration" but never reaches
+ * gcode_response). U1 uses adaptive_meshing=true in its profile to skip the
+ * configfile fallback and rely on probed_matrix from the prior print.
+ *
+ * @return Total probe count (N * M) or std::nullopt
+ */
+inline std::optional<int> parse_adapted_probe_count(const std::string& line) {
+    static const std::regex adapt_regex(R"(Adapted probe count:\s*(\d+)\s*,\s*(\d+))");
+    std::smatch match;
+    if (std::regex_search(line, match, adapt_regex) && match.size() == 3) {
+        try {
+            int x = std::stoi(match[1].str());
+            int y = std::stoi(match[2].str());
+            if (x > 0 && y > 0) {
+                return x * y;
+            }
+        } catch (...) {
+            // fall through
+        }
+    }
+    return std::nullopt;
+}
+
 inline std::optional<ProbePosition> parse_probe_position(const std::string& line) {
     // Matches "probe at x: 181.474, y: 55.048 is z=..." and "probe at 150.0,150.0 is z=..."
     static const std::regex pos_regex(

@@ -2309,3 +2309,45 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     REQUIRE(msg.find("(3") != std::string::npos);
     REQUIRE(msg.find("(1)") == std::string::npos);
 }
+
+// ============================================================================
+// Stock Klipper adaptive bed_mesh — "Adapted probe count: N,M" populates the
+// live denominator via the generic gcode_response parser (no profile-side
+// schema needed). Uses the default profile to verify the path works for
+// Voron / KAMP / generic Klipper setups that emit this line.
+// ============================================================================
+
+TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
+                 "Adapted probe count line populates mesh_probe_total_",
+                 "[print][collector][bed_mesh][adapted]") {
+    collector().start();
+    drain_async_updates();
+
+    REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 0);
+
+    auto feed = [&](const std::string& line) {
+        nlohmann::json msg = {{"method", "notify_gcode_response"}, {"params", {line}}};
+        client().dispatch_method_callback("notify_gcode_response", msg);
+        drain_async_updates();
+    };
+
+    SECTION("Stock Klipper line with // prefix sets total = N * M") {
+        feed("// Adapted probe count: 4,4");
+        REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 16);
+    }
+
+    SECTION("Subsequent line with different count overwrites the total") {
+        feed("// Adapted probe count: 5,3");
+        REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 15);
+        feed("// Adapted probe count: 6,6");
+        REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 36);
+    }
+
+    SECTION("Unrelated lines do not perturb the total") {
+        feed("// Adapted probe count: 4,4");
+        REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 16);
+        feed("// probe at 10.000,10.000 is z=-0.100000");
+        feed("// Bed preheating: 30s left");
+        REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 16);
+    }
+}

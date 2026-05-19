@@ -36,4 +36,11 @@ class PrintStartCollectorTestAccess {
     static void set_silent_progression_idx(PrintStartCollector& c, size_t idx) {
         c.silent_progression_idx_ = idx;
     }
+
+    /// Read mesh_probe_total_ — used to verify the "Adapted probe count"
+    /// gcode parser updates the live denominator.
+    static int get_mesh_probe_total(PrintStartCollector& c) {
+        std::lock_guard<std::mutex> lock(c.state_mutex_);
+        return c.mesh_probe_total_;
+    }
 };

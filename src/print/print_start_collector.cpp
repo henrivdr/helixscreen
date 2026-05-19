@@ -653,6 +653,18 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
         return;
     }
 
+    // Stock Klipper's bed_mesh.py emits "// Adapted probe count: N,M" once
+    // when adaptive meshing reduces the grid (slicer-passed MESH_MIN/MESH_MAX
+    // or ADAPTIVE=1). Fires before the first probe — perfect timing to
+    // populate the live denominator. NOT emitted by Snapmaker U1's firmware
+    // fork; they get an empty `mesh_probe_total_` and we show "(N)" without
+    // total via adaptive_meshing=true in the profile.
+    if (auto adapt_total = helix::parse_adapted_probe_count(line)) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        mesh_probe_total_ = *adapt_total;
+        spdlog::info("[PrintStartCollector] Adapted probe count from gcode: {}", *adapt_total);
+    }
+
     // Check for bed mesh probe progress (sub-phase tracking within BED_MESH).
     // Also detects BED_MESH phase entry from probe lines on printers that don't
     // emit a separate BED_MESH_CALIBRATE command line before probing starts.
