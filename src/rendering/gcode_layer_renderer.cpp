@@ -705,6 +705,9 @@ int GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
             spdlog::debug("[GCodeLayerRenderer] Streaming load missed layer {}, "
                           "stopping at {} for retry",
                           layer_idx, last_rendered);
+            if (last_rendered >= from_layer) {
+                ssao_cache_valid_ = false;
+            }
             return last_rendered;
         }
 
@@ -813,6 +816,12 @@ int GCodeLayerRenderer::render_layers_to_cache(int from_layer, int to_layer) {
                   "buf={}x{} stride={}",
                   from_layer, to_layer, segments_rendered, cached_width_, cached_height_,
                   cache_buf_ ? cache_buf_->header.stride : 0);
+
+    // Cache content changed; the SSAO post-processed copy is now stale.
+    // Without this, blit_ssao_cache() keeps drawing the first SSAO snapshot
+    // (frozen at the layer where SSAO was first applied) and progressive
+    // layers never become visible during an active print.
+    ssao_cache_valid_ = false;
 
     return last_rendered;
 }
