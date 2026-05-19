@@ -341,6 +341,92 @@ TEST_CASE_METHOD(CrashTestFixture,
     REQUIRE_FALSE(msg.empty());
     REQUIRE(msg.find("helixscreen abort_msg capture test") != std::string::npos);
 }
+
+TEST_CASE_METHOD(CrashTestFixture,
+                 "Crash: SIGABRT handler normalizes newlines in __abort_msg to spaces",
+                 "[telemetry][crash][subprocess]") {
+    if (dlsym(RTLD_DEFAULT, "__abort_msg") == nullptr) {
+        SKIP("__abort_msg not resolvable on this libc");
+    }
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        void** abort_msg_slot =
+            static_cast<void**>(dlsym(RTLD_DEFAULT, "__abort_msg"));
+        if (abort_msg_slot == nullptr) {
+            _exit(98);
+        }
+        // Embedded \n and \r must flatten to spaces — the crash file format
+        // is "key:value\n", and a raw newline inside the value would split
+        // the line at the parser and break the single-field invariant.
+        static const char synthetic_msg[] = "line one\nline two\rline three";
+        *abort_msg_slot = const_cast<char*>(synthetic_msg);
+
+        crash_handler::install(crash_path());
+        raise(SIGABRT);
+        _exit(99);
+    }
+
+    int status = 0;
+    REQUIRE(waitpid(pid, &status, 0) == pid);
+    REQUIRE(WIFEXITED(status));
+    REQUIRE(WEXITSTATUS(status) == 128 + SIGABRT);
+
+    auto result = crash_handler::read_crash_file(crash_path());
+    REQUIRE_FALSE(result.is_null());
+    REQUIRE(result.contains("abort_msg"));
+    std::string msg = result["abort_msg"];
+    REQUIRE(msg == "line one line two line three");
+}
+
+TEST_CASE_METHOD(CrashTestFixture,
+                 "Crash: SIGABRT handler truncates oversized __abort_msg",
+                 "[telemetry][crash][subprocess]") {
+    if (dlsym(RTLD_DEFAULT, "__abort_msg") == nullptr) {
+        SKIP("__abort_msg not resolvable on this libc");
+    }
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        void** abort_msg_slot =
+            static_cast<void**>(dlsym(RTLD_DEFAULT, "__abort_msg"));
+        if (abort_msg_slot == nullptr) {
+            _exit(98);
+        }
+        // 500 'a's followed by a tail marker the bounded copy MUST NOT
+        // capture — handler buffer is 256 bytes, max content 255 chars.
+        static char long_msg[600] = {};
+        for (size_t i = 0; i < 500; ++i) {
+            long_msg[i] = 'a';
+        }
+        const char tail[] = "TAILMARKER_SHOULD_BE_TRUNCATED";
+        for (size_t j = 0; j < sizeof(tail); ++j) {
+            long_msg[500 + j] = tail[j];
+        }
+        *abort_msg_slot = long_msg;
+
+        crash_handler::install(crash_path());
+        raise(SIGABRT);
+        _exit(99);
+    }
+
+    int status = 0;
+    REQUIRE(waitpid(pid, &status, 0) == pid);
+    REQUIRE(WIFEXITED(status));
+    REQUIRE(WEXITSTATUS(status) == 128 + SIGABRT);
+
+    auto result = crash_handler::read_crash_file(crash_path());
+    REQUIRE_FALSE(result.is_null());
+    REQUIRE(result.contains("abort_msg"));
+    std::string msg = result["abort_msg"];
+    REQUIRE(msg.size() == 255);
+    REQUIRE(msg.find("TAILMARKER") == std::string::npos);
+    REQUIRE(msg.find_first_not_of('a') == std::string::npos);
+}
 #endif
 
 // ============================================================================
