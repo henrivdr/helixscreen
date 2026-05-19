@@ -16,6 +16,7 @@
 
 #include "lvgl/src/others/translation/lv_translation.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <utility>
@@ -132,11 +133,24 @@ void show_restart_required_modal(MoonrakerAPI* api, const std::string& filename,
     ctx->filename = filename;
     ctx->log_prefix = std::move(log_prefix);
     ctx->on_failure = std::move(on_failure);
+
+    // Klipper's print_stats.message describes the cause of the abort
+    // (Snapmaker firmware writes e.g. "Dirty bed detected" / "Filament Sensor:
+    // Runout Detected"). When present, surface it so the user knows why
+    // restart is needed instead of seeing only generic copy.
+    const char* fw_msg =
+        lv_subject_get_string(get_printer_state().get_print_message_subject());
+    std::string body =
+        (fw_msg && *fw_msg)
+            ? fmt::format(lv_tr("Reason: {}\n\nThe printer cannot resume this print. "
+                                "Restart from the beginning?"),
+                          fw_msg)
+            : std::string(lv_tr("The printer halted this print and cannot resume it. "
+                                "Restart from the beginning?"));
+
     ctx->modal = modal_show_confirmation(
-        lv_tr("Print Was Terminated"),
-        lv_tr("The printer halted this print and cannot resume it. "
-              "Restart from the beginning?"),
-        ModalSeverity::Warning, lv_tr("Restart"), on_restart_confirm, on_restart_cancel, ctx);
+        lv_tr("Print Was Terminated"), body.c_str(), ModalSeverity::Warning,
+        lv_tr("Restart"), on_restart_confirm, on_restart_cancel, ctx);
     if (!ctx->modal) {
         spdlog::error("{} Failed to create restart-from-beginning modal", ctx->log_prefix);
         auto fail = std::move(ctx->on_failure);
