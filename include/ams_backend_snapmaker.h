@@ -98,6 +98,23 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     AmsError reset() override;
     AmsError cancel() override;
 
+    // Resume preparation. Snapmaker latches a motion-sensor runout exception
+    // in Klipper that RESUME alone can't clear when the printer's
+    // extruders_used flags are all false. When sensor_filament_present_ is
+    // false for the active tool, run a single gcode chain: disable the runout
+    // sensor, heat to the slot's recorded nozzle min temp (fallback 200°C),
+    // extrude 30 mm to push past the encoder, re-enable the sensor. Otherwise
+    // invoke the callback immediately so the caller dispatches RESUME without
+    // delay. on_ready is always called on the main thread.
+    void prepare_for_resume(int slot_index, ResumeReadyCallback on_ready) override;
+
+    // True when the motion sensor reports runout but the port sensor still
+    // reads filament present — i.e. the encoder is stale (e.g., it never
+    // saw the start-of-print purge) but physical filament is in the buffer.
+    // Callers (FilamentRunoutHandler) auto-recover silently instead of
+    // showing the modal.
+    [[nodiscard]] bool is_stuck_motion_sensor_runout(int slot_index) const override;
+
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
@@ -144,6 +161,17 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// by get_filament_segment() / get_slot_filament_segment() to break the
     /// spool→toolhead line when the active tool has run out.
     std::array<bool, NUM_TOOLS> sensor_filament_present_{{true, true, true, true}};
+
+    /// Per-slot port/buffer sensor state — the filament_feed left/right
+    /// .extruder{N}.filament_detected flag. Reads the physical-presence
+    /// sensor at the spool/buffer side, NOT the encoder-based motion sensor.
+    /// Used together with sensor_filament_present_ to differentiate real
+    /// runouts (both false) from stale motion sensor false positives
+    /// (motion=false, port=true). Defaults to false so a slot we've never
+    /// seen filament_feed data for doesn't generate a "stuck sensor" false
+    /// positive of its own — the auto-recover path requires the port sensor
+    /// to explicitly report present.
+    std::array<bool, NUM_TOOLS> port_sensor_filament_present_{{false, false, false, false}};
 
     /// Validate slot index is within range
     AmsError validate_slot_index(int slot_index) const;

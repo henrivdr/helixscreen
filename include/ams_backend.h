@@ -501,6 +501,68 @@ class AmsBackend {
     virtual AmsError cancel() = 0;
 
     // ========================================================================
+    // Resume Preparation
+    // ========================================================================
+
+    /**
+     * @brief Completion callback for prepare_for_resume()
+     *
+     * Always invoked on the main thread. Pass an AmsError with
+     * AmsResult::SUCCESS to proceed with RESUME; any other result aborts
+     * the resume sequence and surfaces a user-facing error.
+     */
+    using ResumeReadyCallback = std::function<void(const AmsError&)>;
+
+    /**
+     * @brief Backend-side preparation hook fired before a print Resume.
+     *
+     * Lets a backend run any device-specific recovery gcode (heating,
+     * motor-engagement, encoder priming, etc.) before the caller dispatches
+     * the RESUME macro. Implementations may detect their own stuck states
+     * and either run a recovery sequence or no-op. The default implementation
+     * is a no-op that invokes the callback immediately — appropriate when
+     * Klipper's stock RESUME path is sufficient.
+     *
+     * Contract: on_ready is always invoked exactly once. It fires on the
+     * main thread regardless of where the backend's gcode execution lands.
+     * Pass AmsResult::SUCCESS to indicate the caller may proceed with
+     * RESUME; any other result aborts the resume sequence and surfaces a
+     * user-facing error.
+     *
+     * @param slot_index Active slot the caller intends to resume on
+     *                   (-1 if no AMS context — backend may fall back to
+     *                   whatever it considers "current")
+     * @param on_ready   Callback fired when preparation is complete or
+     *                   has failed
+     */
+    virtual void prepare_for_resume(int slot_index, ResumeReadyCallback on_ready) {
+        (void)slot_index;
+        if (on_ready) {
+            on_ready(AmsErrorHelper::success());
+        }
+    }
+
+    /**
+     * @brief True when the current runout signal looks like a stale-sensor
+     *        false positive rather than a genuine filament-out.
+     *
+     * On Snapmaker U1 the encoder-based motion sensor latches
+     * filament_detected=false whenever no extrusion has happened recently —
+     * so it can fire pause_on_runout at print start, before filament has
+     * physically moved. The port/buffer sensor at the spool side still reads
+     * filament present in that case. Callers use this to suppress the runout
+     * guidance modal and auto-trigger prepare_for_resume + RESUME silently.
+     *
+     * Default: false (treat every runout signal as real).
+     *
+     * @param slot_index Slot to check (typically current active slot)
+     */
+    [[nodiscard]] virtual bool is_stuck_motion_sensor_runout(int slot_index) const {
+        (void)slot_index;
+        return false;
+    }
+
+    // ========================================================================
     // Configuration Operations
     // ========================================================================
 
