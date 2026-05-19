@@ -364,8 +364,17 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
                     slot.status = SlotStatus::AVAILABLE;
                 }
             }
+            // Nothing loaded — clear the system-level cursors so
+            // get_current_slot() / get_current_tool() / is_filament_loaded()
+            // report the truth instead of stale -1 defaults.
+            system_info_.current_slot = -1;
+            system_info_.current_tool = -1;
+            system_info_.filament_loaded = false;
         } else if (auto idx = parse_slot_name(val, slot_count)) {
             unit_ref.slots[*idx].status = SlotStatus::LOADED;
+            system_info_.current_slot = *idx;
+            system_info_.current_tool = unit_ref.slots[*idx].mapped_tool;
+            system_info_.filament_loaded = true;
         }
     }
 

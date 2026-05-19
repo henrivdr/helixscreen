@@ -725,6 +725,56 @@ box_max_temp = 0
     REQUIRE_FALSE(QidiBoxTestAccess::get_profile(backend, 0).has_value());
 }
 
+// =====================================================================
+// last_load_slot also drives current_slot / current_tool / filament_loaded
+// =====================================================================
+// The AmsSubscriptionBackend base exposes these via get_current_slot() /
+// get_current_tool() / is_filament_loaded(), reading directly from
+// system_info_. Mirroring last_load_slot onto slot.status alone left the
+// rest of the system at -1 / false even when something was clearly loaded.
+
+TEST_CASE("QIDI Box last_load_slot populates current_slot/current_tool",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"slot2", 2},
+                                               {"last_load_slot", "slot2"},
+                                           });
+
+    REQUIRE(backend.get_current_slot() == 2);
+    // Default tool=slot mapping, so current_tool == current_slot.
+    REQUIRE(backend.get_current_tool() == 2);
+    REQUIRE(backend.is_filament_loaded());
+}
+
+TEST_CASE("QIDI Box last_load_slot=slot-1 clears current_*",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    // Seed loaded first.
+    QidiBoxTestAccess::parse_vars(backend, json{{"last_load_slot", "slot1"}});
+    REQUIRE(backend.is_filament_loaded());
+
+    QidiBoxTestAccess::parse_vars(backend, json{{"last_load_slot", "slot-1"}});
+
+    REQUIRE_FALSE(backend.is_filament_loaded());
+    REQUIRE(backend.get_current_slot() == -1);
+    REQUIRE(backend.get_current_tool() == -1);
+}
+
+TEST_CASE("QIDI Box current_tool follows value_t mapping",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    // Map slot 3 to tool 0, then load it.
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"value_t0", "slot3"},
+                                               {"last_load_slot", "slot3"},
+                                           });
+
+    REQUIRE(backend.get_current_slot() == 3);
+    REQUIRE(backend.get_current_tool() == 0);
+}
+
 TEST_CASE("QIDI Box parse_save_variables applies cached profile to SlotInfo temps",
           "[ams][qidi_box]") {
     AmsBackendQidi backend(nullptr, nullptr);
