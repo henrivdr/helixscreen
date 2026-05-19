@@ -1551,15 +1551,19 @@ void PrintStatusPanel::update_all_displays() {
 
     // Update pause button icon and label based on state, with optimistic
     // override while a Pause/Resume RPC is in flight (Klipper takes ~20s to
-    // acknowledge, real lifecycle state lags the user's tap).
-    // MDI icons: play=F040A, pause=F03E4 (UTF-8: play=F3 B0 90 8A, pause=F3 B0 8F A4)
+    // acknowledge, real lifecycle state lags the user's tap). During a
+    // pending action, swap to the hourglass glyph — a distinct shape change
+    // (not just an opacity dim) so the user sees an unmistakable response
+    // to their tap instead of wanting to hammer the button.
+    // MDI icons: play=F040A, pause=F03E4, hourglass=F051F
+    //   play     UTF-8: F3 B0 90 8A
+    //   pause    UTF-8: F3 B0 8F A4
+    //   hourglass UTF-8: F3 B0 94 9F
     if (pending_action_ == PendingPrintAction::Pausing) {
-        // Show paused glyph while waiting for confirmation — communicates the
-        // intent immediately; label clarifies it's in-flight.
-        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x8F\xA4"); // pause
+        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x94\x9F"); // hourglass
         std::snprintf(pause_label_buf_, sizeof(pause_label_buf_), "Pausing...");
     } else if (pending_action_ == PendingPrintAction::Resuming) {
-        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x90\x8A"); // play
+        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x94\x9F"); // hourglass
         std::snprintf(pause_label_buf_, sizeof(pause_label_buf_), "Resuming...");
     } else if (lifecycle_.state() == PrintState::Paused) {
         std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x90\x8A"); // play
