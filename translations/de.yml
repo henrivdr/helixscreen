@@ -546,6 +546,7 @@ translations:
   Emergency stop and print alerts: Notstopp und Druckwarnungen
   'Emergency stop failed: not connected': 'Notaus fehlgeschlagen: nicht verbunden'
   Empty: Leer
+  Empty filament slot: ''
   Empty slots disable the associated functionality: Leere Slots deaktivieren die zugehörige Funktionalität
   Enable: Aktivieren
   Enable Monitoring: Überwachung aktivieren
@@ -1167,6 +1168,7 @@ translations:
   'On': Ein
   On and Off macros must be different: Ein- und Aus-Makros müssen unterschiedlich sein
   On/Off (state-aware): Ein/Aus (zustandsbewusst)
+  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: ''
   Open: Öffnen
   Open Source Licenses: Open-Source-Lizenzen
   Operation already in progress: Vorgang läuft bereits
@@ -1273,6 +1275,7 @@ translations:
   Price: Preis
   Primary: Primär
   Print: Drucken
+  Print Anyway: ''
   Print Cancelled: Druck abgebrochen
   Print Complete!: Druck abgeschlossen!
   Print Completion Alert: Druckabschluss-Benachrichtigung
@@ -1377,6 +1380,7 @@ translations:
   Re-probe: Erneut abtasten
   Ready: Bereit
   Ready to Apply: Bereit zum Anwenden
+  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': ''
   Reboot: Neustart
   Reboot failed: 'Neustart fehlgeschlagen'
   Reboot failed — host is still reachable: 'Neustart fehlgeschlagen — Host ist weiterhin erreichbar'

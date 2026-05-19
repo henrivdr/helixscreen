@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" de="Notstopp und Druckwarnungen"/>
   <translation tag="Emergency stop failed: not connected" de="Notaus fehlgeschlagen: nicht verbunden"/>
   <translation tag="Empty" de="Leer"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" de="Leere Slots deaktivieren die zugehörige Funktionalität"/>
   <translation tag="Enable" de="Aktivieren"/>
   <translation tag="Enable Monitoring" de="Überwachung aktivieren"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" de="Ein"/>
   <translation tag="On and Off macros must be different" de="Ein- und Aus-Makros müssen unterschiedlich sein"/>
   <translation tag="On/Off (state-aware)" de="Ein/Aus (zustandsbewusst)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" de="Öffnen"/>
   <translation tag="Open Source Licenses" de="Open-Source-Lizenzen"/>
   <translation tag="Operation already in progress" de="Vorgang läuft bereits"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" de="Preis"/>
   <translation tag="Primary" de="Primär"/>
   <translation tag="Print" de="Drucken"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" de="Druck abgebrochen"/>
   <translation tag="Print Complete!" de="Druck abgeschlossen!"/>
   <translation tag="Print Completion Alert" de="Druckabschluss-Benachrichtigung"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" de="Erneut abtasten"/>
   <translation tag="Ready" de="Bereit"/>
   <translation tag="Ready to Apply" de="Bereit zum Anwenden"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" de="Neustart"/>
   <translation tag="Reboot failed" de="Neustart fehlgeschlagen"/>
   <translation tag="Reboot failed — host is still reachable" de="Neustart fehlgeschlagen — Host ist weiterhin erreichbar"/>

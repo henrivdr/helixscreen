@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" it="Arresto di emergenza e avvisi di stampa"/>
   <translation tag="Emergency stop failed: not connected" it="Arresto emergenza fallito: non connesso"/>
   <translation tag="Empty" it="Vuoto"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" it="Gli slot vuoti disabilitano le funzionalità associate"/>
   <translation tag="Enable" it="Abilita"/>
   <translation tag="Enable Monitoring" it="Abilita monitoraggio"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" it="On"/>
   <translation tag="On and Off macros must be different" it="Le macro On e Off devono essere diverse"/>
   <translation tag="On/Off (state-aware)" it="On/Off (con stato)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" it="Apri"/>
   <translation tag="Open Source Licenses" it="Licenze open source"/>
   <translation tag="Operation already in progress" it="Operazione già in corso"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" it="Prezzo"/>
   <translation tag="Primary" it="Primario"/>
   <translation tag="Print" it="Stampa"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" it="Stampa annullata"/>
   <translation tag="Print Complete!" it="Stampa completata!"/>
   <translation tag="Print Completion Alert" it="Avviso completamento stampa"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" it="Risonda"/>
   <translation tag="Ready" it="Pronto"/>
   <translation tag="Ready to Apply" it="Pronto per applicare"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" it="Riavvia"/>
   <translation tag="Reboot failed" it="Riavvio fallito"/>
   <translation tag="Reboot failed — host is still reachable" it="Riavvio fallito — l&apos;host è ancora raggiungibile"/>

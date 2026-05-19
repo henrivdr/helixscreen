@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" fr="Arrêt d&apos;urgence et alertes d&apos;impression"/>
   <translation tag="Emergency stop failed: not connected" fr="Échec de l&apos;arrêt d&apos;urgence : non connecté"/>
   <translation tag="Empty" fr="Vide"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" fr="Les slots vides désactivent la fonctionnalité associée"/>
   <translation tag="Enable" fr="Activer"/>
   <translation tag="Enable Monitoring" fr="Activer la surveillance"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" fr="Allumé"/>
   <translation tag="On and Off macros must be different" fr="Les macros On et Off doivent être différentes"/>
   <translation tag="On/Off (state-aware)" fr="On/Off (avec suivi d&apos;état)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" fr="Ouvrir"/>
   <translation tag="Open Source Licenses" fr="Licences open source"/>
   <translation tag="Operation already in progress" fr="Opération déjà en cours"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" fr="Prix"/>
   <translation tag="Primary" fr="Principal"/>
   <translation tag="Print" fr="Imprimer"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" fr="Impression annulée"/>
   <translation tag="Print Complete!" fr="Impression terminée !"/>
   <translation tag="Print Completion Alert" fr="Alerte de fin d&apos;impression"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" fr="Re-palper"/>
   <translation tag="Ready" fr="Prêt"/>
   <translation tag="Ready to Apply" fr="Prêt à appliquer"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" fr="Redémarrer"/>
   <translation tag="Reboot failed" fr="Échec du redémarrage"/>
   <translation tag="Reboot failed — host is still reachable" fr="Échec du redémarrage — l&apos;hôte est toujours joignable"/>

@@ -546,6 +546,7 @@ translations:
   Emergency stop and print alerts: 紧急停止和打印警报
   'Emergency stop failed: not connected': '紧急停止失败: 未连接'
   Empty: 空
+  Empty filament slot: ''
   Empty slots disable the associated functionality: 空料仓将禁用相关功能
   Enable: 启用
   Enable Monitoring: 启用监控
@@ -1167,6 +1168,7 @@ translations:
   'On': 开
   On and Off macros must be different: 开和关的宏必须不同
   On/Off (state-aware): 开/关（状态跟踪）
+  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: ''
   Open: 打开
   Open Source Licenses: 开源许可证
   Operation already in progress: 操作正在进行中
@@ -1273,6 +1275,7 @@ translations:
   Price: 价格
   Primary: 主要
   Print: 打印
+  Print Anyway: ''
   Print Cancelled: 打印已取消
   Print Complete!: 打印完成！
   Print Completion Alert: 打印完成提醒
@@ -1377,6 +1380,7 @@ translations:
   Re-probe: 重新探测
   Ready: 就绪
   Ready to Apply: 准备应用
+  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': ''
   Reboot: 重启
   Reboot failed: '重启失败'
   Reboot failed — host is still reachable: '重启失败 — 主机仍可访问'

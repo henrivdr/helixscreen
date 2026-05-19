@@ -546,6 +546,7 @@ translations:
   Emergency stop and print alerts: 緊急停止と印刷アラート
   'Emergency stop failed: not connected': '緊急停止に失敗: 未接続'
   Empty: 空
+  Empty filament slot: ''
   Empty slots disable the associated functionality: 空のスロットは関連機能を無効にします
   Enable: 有効化
   Enable Monitoring: 監視を有効化
@@ -1167,6 +1168,7 @@ translations:
   'On': オン
   On and Off macros must be different: オンとオフのマクロは異なるものにしてください
   On/Off (state-aware): オン/オフ（状態追跡）
+  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: ''
   Open: 開く
   Open Source Licenses: オープンソースライセンス
   Operation already in progress: 操作がすでに進行中です
@@ -1273,6 +1275,7 @@ translations:
   Price: 価格
   Primary: プライマリ
   Print: 印刷
+  Print Anyway: ''
   Print Cancelled: 印刷キャンセル
   Print Complete!: 印刷完了！
   Print Completion Alert: 印刷完了通知
@@ -1377,6 +1380,7 @@ translations:
   Re-probe: 再プローブ
   Ready: 準備完了
   Ready to Apply: 適用の準備完了
+  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': ''
   Reboot: 再起動
   Reboot failed: '再起動に失敗しました'
   Reboot failed — host is still reachable: '再起動に失敗しました — ホストに依然として到達可能です'

@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" pt="Parada de emergência e alertas de impressão"/>
   <translation tag="Emergency stop failed: not connected" pt="Parada de emergência falhou: não conectado"/>
   <translation tag="Empty" pt="Vazio"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" pt="Slots vazios desabilitam a funcionalidade associada"/>
   <translation tag="Enable" pt="Habilitar"/>
   <translation tag="Enable Monitoring" pt="Habilitar Monitoramento"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" pt="Ligado"/>
   <translation tag="On and Off macros must be different" pt="Macros de Ligar e Desligar devem ser diferentes"/>
   <translation tag="On/Off (state-aware)" pt="Ligar/Desligar (com estado)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" pt="Abrir"/>
   <translation tag="Open Source Licenses" pt="Licenças de código aberto"/>
   <translation tag="Operation already in progress" pt="Operação já em andamento"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" pt="Preço"/>
   <translation tag="Primary" pt="Primário"/>
   <translation tag="Print" pt="Imprimir"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" pt="Impressão Cancelada"/>
   <translation tag="Print Complete!" pt="Impressão Concluída!"/>
   <translation tag="Print Completion Alert" pt="Alerta de Conclusão de Impressão"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" pt="Sondar Novamente"/>
   <translation tag="Ready" pt="Pronto"/>
   <translation tag="Ready to Apply" pt="Pronto para Aplicar"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" pt="Reiniciar"/>
   <translation tag="Reboot failed" pt="Falha ao reiniciar"/>
   <translation tag="Reboot failed — host is still reachable" pt="Falha ao reiniciar — o host ainda está acessível"/>

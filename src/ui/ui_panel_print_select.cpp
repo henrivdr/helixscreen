@@ -2475,10 +2475,37 @@ void PrintSelectPanel::on_file_long_pressed(size_t file_index) {
     show_delete_confirmation();
 }
 
-void PrintSelectPanel::start_print() {
+void PrintSelectPanel::start_print(bool force) {
     if (!print_controller_) {
         spdlog::error("[{}] Cannot start print - controller not initialized", get_name());
         NOTIFY_ERROR(lv_tr("Cannot start print: internal error"));
+        return;
+    }
+
+    // Pre-flight check: confirm before printing if any required tool's
+    // filament slot is empty. Backend-agnostic — the detail view publishes
+    // empty_tools_warning by inspecting AmsSlotInfo::has_filament_info()
+    // for each tool the gcode references. Bypassed when force=true (the
+    // user pressed "Print Anyway" on the confirmation modal).
+    if (!force && detail_view_ && detail_view_->has_empty_tool_warning()) {
+        ui::modal_show_confirmation(
+            lv_tr("Empty filament slot"),
+            lv_tr("One or more tools required by this file have no filament loaded. "
+                  "The print will likely fail. Print anyway?"),
+            ModalSeverity::Warning,
+            lv_tr("Print Anyway"),
+            [](lv_event_t*) {
+                LVGL_SAFE_EVENT_CB_BEGIN("on_empty_filament_confirm")
+                // modal_show_confirmation replaces the default close cb with
+                // ours, so we must close the modal explicitly before the
+                // panel transition kicks in.
+                if (auto* top = Modal::get_top()) {
+                    Modal::hide(top);
+                }
+                get_global_print_select_panel().start_print(true);
+                LVGL_SAFE_EVENT_CB_END()
+            },
+            nullptr, nullptr);
         return;
     }
 

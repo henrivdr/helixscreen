@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" ru="Аварийная остановка и оповещения печати"/>
   <translation tag="Emergency stop failed: not connected" ru="Аварийная остановка не удалась: нет подключения"/>
   <translation tag="Empty" ru="Пусто"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" ru="Пустые слоты отключают связанный функционал"/>
   <translation tag="Enable" ru="Включить"/>
   <translation tag="Enable Monitoring" ru="Включить мониторинг"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" ru="Вкл"/>
   <translation tag="On and Off macros must be different" ru="Макросы включения и выключения должны отличаться"/>
   <translation tag="On/Off (state-aware)" ru="Вкл/Выкл (с отслеживанием)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" ru="Открыть"/>
   <translation tag="Open Source Licenses" ru="Лицензии с открытым кодом"/>
   <translation tag="Operation already in progress" ru="Операция уже выполняется"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" ru="Цена"/>
   <translation tag="Primary" ru="Основной"/>
   <translation tag="Print" ru="Печать"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" ru="Печать отменена"/>
   <translation tag="Print Complete!" ru="Печать завершена!"/>
   <translation tag="Print Completion Alert" ru="Уведомление о завершении печати"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" ru="Перепроверить"/>
   <translation tag="Ready" ru="Готов"/>
   <translation tag="Ready to Apply" ru="Готово к применению"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" ru="Перезагрузка"/>
   <translation tag="Reboot failed" ru="Ошибка перезагрузки"/>
   <translation tag="Reboot failed — host is still reachable" ru="Ошибка перезагрузки — хост всё ещё доступен"/>

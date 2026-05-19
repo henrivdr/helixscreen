@@ -546,6 +546,7 @@ translations:
   Emergency stop and print alerts: Emergency stop and print alerts
   'Emergency stop failed: not connected': 'Emergency stop failed: not connected'
   Empty: Empty
+  Empty filament slot: Empty filament slot
   Empty slots disable the associated functionality: Empty slots disable the associated functionality
   Enable: Enable
   Enable Monitoring: Enable Monitoring
@@ -1167,6 +1168,7 @@ translations:
   'On': 'On'
   On and Off macros must be different: On and Off macros must be different
   On/Off (state-aware): On/Off (state-aware)
+  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?
   Open: Open
   Open Source Licenses: Open Source Licenses
   Operation already in progress: Operation already in progress
@@ -1273,6 +1275,7 @@ translations:
   Price: Price
   Primary: Primary
   Print: Print
+  Print Anyway: Print Anyway
   Print Cancelled: Print Cancelled
   Print Complete!: Print Complete!
   Print Completion Alert: Print Completion Alert
@@ -1377,6 +1380,7 @@ translations:
   Re-probe: Re-probe
   Ready: Ready
   Ready to Apply: Ready to Apply
+  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': 'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?'
   Reboot: Reboot
   Reboot failed: Reboot failed
   Reboot failed — host is still reachable: Reboot failed — host is still reachable

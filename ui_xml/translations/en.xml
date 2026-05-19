@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" en="Emergency stop and print alerts"/>
   <translation tag="Emergency stop failed: not connected" en="Emergency stop failed: not connected"/>
   <translation tag="Empty" en="Empty"/>
+  <translation tag="Empty filament slot" en="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" en="Empty slots disable the associated functionality"/>
   <translation tag="Enable" en="Enable"/>
   <translation tag="Enable Monitoring" en="Enable Monitoring"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" en="On"/>
   <translation tag="On and Off macros must be different" en="On and Off macros must be different"/>
   <translation tag="On/Off (state-aware)" en="On/Off (state-aware)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?" en="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" en="Open"/>
   <translation tag="Open Source Licenses" en="Open Source Licenses"/>
   <translation tag="Operation already in progress" en="Operation already in progress"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" en="Price"/>
   <translation tag="Primary" en="Primary"/>
   <translation tag="Print" en="Print"/>
+  <translation tag="Print Anyway" en="Print Anyway"/>
   <translation tag="Print Cancelled" en="Print Cancelled"/>
   <translation tag="Print Complete!" en="Print Complete!"/>
   <translation tag="Print Completion Alert" en="Print Completion Alert"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" en="Re-probe"/>
   <translation tag="Ready" en="Ready"/>
   <translation tag="Ready to Apply" en="Ready to Apply"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?" en="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" en="Reboot"/>
   <translation tag="Reboot failed" en="Reboot failed"/>
   <translation tag="Reboot failed — host is still reachable" en="Reboot failed — host is still reachable"/>

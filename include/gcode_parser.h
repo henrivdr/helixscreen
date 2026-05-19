@@ -21,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -230,6 +231,12 @@ struct ParsedGCodeFile {
     // Multi-color support
     std::vector<std::string> tool_color_palette; ///< Hex colors per tool (e.g., ["#ED1C24", ...])
 
+    /// Tool indices actually referenced by the gcode (T-commands seen during parse).
+    /// For single-extruder files with slicer color metadata but no T-commands, this
+    /// contains {0} (implicit default tool) so swatch UIs still render. Distinct
+    /// from `tool_color_palette` which holds every color the slicer emitted.
+    std::set<int> tools_used_indices;
+
     /**
      * @brief Get layer at specific index
      * @param index Layer index (0-based)
@@ -365,6 +372,7 @@ class GCodeParser {
     void set_active_tool_index(int tool) {
         if (tool >= 0) {
             current_tool_index_ = tool;
+            tools_used_.insert(tool);
             if (initial_tool_index_ < 0) {
                 initial_tool_index_ = tool;
             }
@@ -585,6 +593,7 @@ class GCodeParser {
     int current_tool_index_{0};                   ///< Active extruder/tool (0-indexed)
     int initial_tool_index_{-1};                  ///< First T command seen (-1 = none)
     std::vector<std::string> tool_color_palette_; ///< Hex colors per tool: ["#ED1C24", ...]
+    std::set<int> tools_used_;                    ///< Tool indices seen via T-commands
     bool in_wipe_tower_{false};                   ///< True when inside wipe tower section
     FeatureType current_feature_type_{FeatureType::Unknown}; ///< Active ;TYPE: section
 

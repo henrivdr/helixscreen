@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" es="Parada de emergencia y alertas de impresión"/>
   <translation tag="Emergency stop failed: not connected" es="Parada de emergencia fallida: no conectado"/>
   <translation tag="Empty" es="Vacío"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" es="Las ranuras vacías desactivan la funcionalidad asociada"/>
   <translation tag="Enable" es="Activar"/>
   <translation tag="Enable Monitoring" es="Activar Monitoreo"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" es="Encendido"/>
   <translation tag="On and Off macros must be different" es="Los macros de Encendido y Apagado deben ser diferentes"/>
   <translation tag="On/Off (state-aware)" es="On/Off (con estado)"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" es="Abrir"/>
   <translation tag="Open Source Licenses" es="Licencias de código abierto"/>
   <translation tag="Operation already in progress" es="Operación ya en curso"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" es="Precio"/>
   <translation tag="Primary" es="Primario"/>
   <translation tag="Print" es="Imprimir"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" es="Impresión Cancelada"/>
   <translation tag="Print Complete!" es="¡Impresión Completa!"/>
   <translation tag="Print Completion Alert" es="Alerta de Impresión Completa"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" es="Re-sondear"/>
   <translation tag="Ready" es="Listo"/>
   <translation tag="Ready to Apply" es="Listo para Aplicar"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" es="Reiniciar"/>
   <translation tag="Reboot failed" es="Error al reiniciar"/>
   <translation tag="Reboot failed — host is still reachable" es="Error al reiniciar — el host sigue accesible"/>

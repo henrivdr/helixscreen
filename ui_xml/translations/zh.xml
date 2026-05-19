@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" zh="紧急停止和打印警报"/>
   <translation tag="Emergency stop failed: not connected" zh="紧急停止失败: 未连接"/>
   <translation tag="Empty" zh="空"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" zh="空料仓将禁用相关功能"/>
   <translation tag="Enable" zh="启用"/>
   <translation tag="Enable Monitoring" zh="启用监控"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" zh="开"/>
   <translation tag="On and Off macros must be different" zh="开和关的宏必须不同"/>
   <translation tag="On/Off (state-aware)" zh="开/关（状态跟踪）"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" zh="打开"/>
   <translation tag="Open Source Licenses" zh="开源许可证"/>
   <translation tag="Operation already in progress" zh="操作正在进行中"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" zh="价格"/>
   <translation tag="Primary" zh="主要"/>
   <translation tag="Print" zh="打印"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" zh="打印已取消"/>
   <translation tag="Print Complete!" zh="打印完成！"/>
   <translation tag="Print Completion Alert" zh="打印完成提醒"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" zh="重新探测"/>
   <translation tag="Ready" zh="就绪"/>
   <translation tag="Ready to Apply" zh="准备应用"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" zh="重启"/>
   <translation tag="Reboot failed" zh="重启失败"/>
   <translation tag="Reboot failed — host is still reachable" zh="重启失败 — 主机仍可访问"/>

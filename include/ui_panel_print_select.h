@@ -399,9 +399,14 @@ class PrintSelectPanel : public PanelBase {
     void on_usb_drive_removed();
 
     /**
-     * @brief Start print of currently selected file
+     * @brief Start print of currently selected file.
+     *
+     * @param force If false (default) and the detail view reports an empty-
+     *              filament-slot warning for any tool required by this file,
+     *              shows a confirmation modal first. The modal's confirm
+     *              callback re-enters with force=true to bypass the check.
      */
-    void start_print();
+    void start_print(bool force = false);
 
     /**
      * @brief Delete currently selected file

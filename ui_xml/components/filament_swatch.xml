@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <!-- Per-tool color swatch shown in the Print File Detail FILAMENTS card.
+       One instance per tool index used by the gcode. Appearance (layout,
+       sizing, padding, radius, label font, default visual, empty-state
+       visual) all live here. C++ owns only the dynamic data:
+         - background color (the live AMS slot color)
+         - tool label text ("T0", "T1", ...)
+         - contrast text color (computed against background brightness)
+         - LV_STATE_USER_1 toggle for the empty-slot variant
+       Tweak appearance here without touching code. -->
+  <styles>
+    <!-- Empty-slot variant: warning-colored border + reduced bg opacity.
+         Toggled by C++ via lv_obj_add_state(swatch, LV_STATE_USER_1)
+         when the gcode references a tool whose AMS slot is empty. -->
+    <style name="empty_slot"
+           bg_opa="60"
+           border_width="2" border_color="#warning" border_opa="255"/>
+  </styles>
+  <view name="swatch"
+        extends="lv_obj" width="content" height="100%"
+        flex_flow="row" style_flex_main_place="center" style_flex_cross_place="center"
+        style_pad_left="#space_md" style_pad_right="#space_md"
+        style_pad_top="0" style_pad_bottom="0"
+        style_radius="4"
+        style_bg_color="#text_muted" style_bg_opa="255"
+        style_border_width="1"
+        style_border_color="#text_muted" style_border_opa="30"
+        scrollable="false" clickable="false" event_bubble="true">
+    <style name="empty_slot" selector="user_1"/>
+    <!-- "T<n>" label. Centered by the parent's flex alignment. Text and
+         contrast color are set from C++ (contrast requires a runtime
+         brightness computation against the swatch bg). -->
+    <lv_label name="tool_label"
+              text="" align="center"
+              style_text_font="#font_small"
+              style_text_color="#text"
+              clickable="false" event_bubble="true"/>
+  </view>
+</component>

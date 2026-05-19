@@ -4,6 +4,7 @@
 #include "ui_print_select_detail_view.h"
 
 #include "ams_state.h"
+#include "tool_state.h"
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
 #include "ui_filename_utils.h"
@@ -135,6 +136,10 @@ void PrintSelectDetailView::init_subjects() {
     // The two subjects are mutually exclusive by construction — see show()
     // and the metadata-derived-colors path.
     UI_MANAGED_SUBJECT_INT(color_swatches_visible_, 0, "color_swatches_visible", subjects_);
+
+    // Empty-tools warning visibility (0=hidden, 1=visible). Set by
+    // update_color_swatches() when any T-command-referenced slot is empty.
+    UI_MANAGED_SUBJECT_INT(empty_tools_warning_, 0, "empty_tools_warning", subjects_);
 
     // Pre-print time estimate (formatted string for bind_text)
     UI_MANAGED_SUBJECT_STRING(prep_time_estimate_subject_, prep_time_estimate_buf_, "",
@@ -328,17 +333,28 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
 
     // Publish all three color-display subjects so XML drives every HIDDEN
     // flag and the warning icon. Mapping card and swatches card are mutually
-    // exclusive: swatches only show when mapping doesn't AND file is
-    // multi-tool.
+    // exclusive: swatches only show when mapping doesn't AND the card's
+    // own visibility predicate (see swatches_card_visible_for) is met.
     const bool mapping_visible = filament_mapping_card_.should_show();
-    const bool swatches_visible = !mapping_visible && filament_colors.size() > 1;
+    const bool swatches_visible =
+        !mapping_visible && swatches_card_visible_for(filament_colors.size());
     lv_subject_set_int(&filament_mapping_visible_, mapping_visible ? 1 : 0);
     lv_subject_set_int(&color_swatches_visible_, swatches_visible ? 1 : 0);
     lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
 
-    // Build swatch content only when swatches will actually be shown.
+    // Build swatch content only when swatches will actually be shown. At
+    // this point we don't yet have parsed gcode — fall back to a synthetic
+    // tool index set covering the slicer palette so the swatch row still
+    // populates. The parsed-gcode path below (try_extract_gcode_colors) will
+    // re-call this with the precise tools_used set once the gcode loads.
     if (swatches_visible) {
-        update_color_swatches(filament_colors);
+        std::set<int> synthetic_tools;
+        for (size_t i = 0; i < filament_colors.size(); ++i) {
+            synthetic_tools.insert(static_cast<int>(i));
+        }
+        update_color_swatches(synthetic_tools, filament_colors);
+    } else {
+        lv_subject_set_int(&empty_tools_warning_, 0);
     }
 
     // Register with NavigationManager for lifecycle callbacks
@@ -604,68 +620,76 @@ void PrintSelectDetailView::on_cancel_delete_static(lv_event_t* e) {
     }
 }
 
-void PrintSelectDetailView::update_color_swatches(const std::vector<std::string>& colors) {
-    // Builds swatch widgets for the given color palette. Visibility of the
-    // enclosing color_requirements_card is driven entirely by the
-    // color_swatches_visible subject — this function never touches the
-    // HIDDEN flag. Caller is responsible for not invoking this when there
-    // aren't enough colors to display.
+void PrintSelectDetailView::update_color_swatches(
+    const std::set<int>& tool_indices, const std::vector<std::string>& palette_colors) {
+    // Color source priority: (1) live AMS backend slot at slot index == tool
+    // index, (2) slicer palette entry palette_colors[tool] when no backend.
+    //
+    // Empty-slot detection uses the inverse of AmsSlotInfo::has_filament_info()
+    // as a heuristic. It under-warns (cached metadata after physical removal
+    // still looks loaded) but doesn't false-positive. See post-1.0 issue
+    // prestonbrown/helixscreen#962 for a precise empty-detection API.
     if (!color_swatches_row_) {
         return;
     }
 
-    // Clear existing swatches
     helix::ui::safe_clean_children(color_swatches_row_);
 
-    // Create swatches for each color
-    for (size_t i = 0; i < colors.size(); ++i) {
-        const std::string& hex_color = colors[i];
+    auto* backend = AmsState::instance().get_backend();
+    bool any_empty = false;
 
-        // Create swatch container with tool number label
-        lv_obj_t* swatch = lv_obj_create(color_swatches_row_);
-        lv_obj_remove_style_all(swatch);
-        lv_obj_set_flex_grow(swatch, 1);
-        lv_obj_set_height(swatch, LV_PCT(100));
-        lv_obj_set_style_radius(swatch, 4, 0);
-        lv_obj_set_style_border_width(swatch, 1, 0);
-        lv_obj_set_style_border_color(swatch, lv_color_white(), 0);
-        lv_obj_set_style_border_opa(swatch, 30, 0);
-        lv_obj_remove_flag(swatch, LV_OBJ_FLAG_SCROLLABLE);
+    for (int tool : tool_indices) {
+        std::string hex_color;
+        bool slot_is_empty = false;
 
-        // Parse and set background color
-        if (!hex_color.empty()) {
-            lv_color_t color = theme_manager_parse_hex_color(hex_color.c_str());
-            lv_obj_set_style_bg_color(swatch, color, 0);
-            lv_obj_set_style_bg_opa(swatch, LV_OPA_COVER, 0);
-        } else {
-            // Empty color - show gray placeholder
-            lv_obj_set_style_bg_color(swatch, theme_manager_get_color("text_muted"), 0);
-            lv_obj_set_style_bg_opa(swatch, LV_OPA_COVER, 0);
+        if (backend) {
+            auto slot = backend->get_slot_info(tool);
+            if (slot.has_filament_info()) {
+                char buf[8];
+                snprintf(buf, sizeof(buf), "#%06x", slot.color_rgb & 0xFFFFFF);
+                hex_color = buf;
+            } else {
+                // Print needs this tool but the AMS doesn't have it loaded.
+                slot_is_empty = true;
+                any_empty = true;
+            }
+        } else if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size()) {
+            // No backend — slicer palette is the only source; no empty check
+            // possible (no source of truth for "what's loaded").
+            hex_color = palette_colors[tool];
         }
 
-        // Add tool number label (T0, T1, etc.)
-        lv_obj_t* label = lv_label_create(swatch);
-        char tool_str[8];
-        snprintf(tool_str, sizeof(tool_str), "T%zu", i);
-        lv_label_set_text(label, tool_str);
-        lv_obj_center(label);
-        lv_obj_set_style_text_font(label, theme_manager_get_font("font_small"), 0);
+        auto* swatch = static_cast<lv_obj_t*>(
+            lv_xml_create(color_swatches_row_, "filament_swatch", nullptr));
+        if (!swatch) {
+            continue;
+        }
 
-        // Use contrasting text color based on background brightness
-        auto parsed_color = helix::parse_hex_color(hex_color);
-        if (parsed_color) {
-            uint32_t rgb = *parsed_color;
-            int r = (rgb >> 16) & 0xFF;
-            int g = (rgb >> 8) & 0xFF;
-            int b = rgb & 0xFF;
-            // Simple brightness check using luminance weights
-            int brightness = (r * 299 + g * 587 + b * 114) / 1000;
-            lv_color_t text_color = brightness > 128 ? lv_color_black() : lv_color_white();
-            lv_obj_set_style_text_color(label, text_color, 0);
+        if (slot_is_empty) {
+            lv_obj_add_state(swatch, LV_STATE_USER_1);
+        } else if (!hex_color.empty()) {
+            lv_obj_set_style_bg_color(
+                swatch, theme_manager_parse_hex_color(hex_color.c_str()), 0);
+        }
+
+        auto* label = lv_obj_find_by_name(swatch, "tool_label");
+        if (label) {
+            lv_label_set_text_fmt(label, "T%d", tool);
+
+            if (slot_is_empty) {
+                lv_obj_set_style_text_color(label, theme_manager_get_color("warning"), 0);
+            } else if (auto parsed_color = helix::parse_hex_color(hex_color)) {
+                uint32_t rgb = *parsed_color;
+                int brightness = (((rgb >> 16) & 0xFF) * 299 + ((rgb >> 8) & 0xFF) * 587 +
+                                  (rgb & 0xFF) * 114) /
+                                 1000;
+                lv_obj_set_style_text_color(
+                    label, brightness > 128 ? lv_color_black() : lv_color_white(), 0);
+            }
         }
     }
 
-    spdlog::debug("[DetailView] Updated color swatches: {} colors", colors.size());
+    lv_subject_set_int(&empty_tools_warning_, any_empty ? 1 : 0);
 }
 
 void PrintSelectDetailView::update_history_status(FileHistoryStatus status, int success_count) {
@@ -775,32 +799,46 @@ void PrintSelectDetailView::apply_mapped_tool_colors() {
 }
 
 void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
-    // Only needed when metadata didn't provide colors
-    if (!current_filament_colors_.empty()) {
-        return;
-    }
-
     auto* parsed = ui_gcode_viewer_get_parsed_file(viewer);
-    if (!parsed || parsed->tool_color_palette.empty()) {
+    if (!parsed) {
         return;
     }
 
-    spdlog::info("[DetailView] Metadata lacked filament colors — extracted {} from parsed gcode",
-                 parsed->tool_color_palette.size());
-    current_filament_colors_ = parsed->tool_color_palette;
+    // Backfill filament_colors when slicer metadata didn't provide them
+    // (Snapmaker and a few other Moonraker variants).
+    if (current_filament_colors_.empty() && !parsed->tool_color_palette.empty()) {
+        spdlog::info("[DetailView] Metadata lacked filament colors — extracted {} from parsed gcode",
+                     parsed->tool_color_palette.size());
+        current_filament_colors_ = parsed->tool_color_palette;
 
-    // Update the mapping card with extracted colors and republish all three
-    // color-display subjects (mapping/swatches are mutually exclusive).
-    filament_mapping_card_.update(current_filament_colors_, current_filament_materials_);
+        // Republish the mapping/mismatch subjects (mapping card uses these
+        // colors when AMS is present).
+        filament_mapping_card_.update(current_filament_colors_, current_filament_materials_);
+        lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
+    }
+
+    // Re-publish swatches/mapping visibility using the precise tools_used set
+    // from parsed gcode — not the slicer palette size (which often over-counts).
     const bool mapping_visible = filament_mapping_card_.should_show();
-    const bool swatches_visible = !mapping_visible && current_filament_colors_.size() > 1;
+    const bool swatches_visible =
+        !mapping_visible && swatches_card_visible_for(parsed->tools_used_indices.size());
     lv_subject_set_int(&filament_mapping_visible_, mapping_visible ? 1 : 0);
     lv_subject_set_int(&color_swatches_visible_, swatches_visible ? 1 : 0);
-    lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
 
     if (swatches_visible) {
-        update_color_swatches(current_filament_colors_);
+        update_color_swatches(parsed->tools_used_indices, current_filament_colors_);
+    } else {
+        lv_subject_set_int(&empty_tools_warning_, 0);
     }
+}
+
+bool PrintSelectDetailView::swatches_card_visible_for(size_t tool_count) const {
+    // Multi-tool printers: any tool referenced is enough (lane identity matters).
+    // Single-extruder: 2+ tools required (manual-swap multi-color files).
+    const int ams_slots = lv_subject_get_int(AmsState::instance().get_slot_count_subject());
+    const bool is_multi_tool_printer =
+        helix::ToolState::instance().is_multi_tool() || ams_slots > 1;
+    return is_multi_tool_printer ? tool_count > 0 : tool_count > 1;
 }
 
 void PrintSelectDetailView::load_gcode_for_preview() {

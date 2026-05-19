@@ -16,6 +16,7 @@
 #include <lvgl.h>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 
 // Forward declarations
@@ -179,6 +180,17 @@ class PrintSelectDetailView : public OverlayBase {
      * Uses nav system to properly hide with backdrop management.
      */
     void hide();
+
+    /**
+     * @brief Whether the currently-shown file references any tool whose
+     *        AMS lane/slot is empty. Backend-agnostic — driven by
+     *        SlotInfo::has_filament_info() for each used tool index.
+     *        Used by the print-start path to confirm with the user before
+     *        sending a print that will likely fail mid-flight.
+     */
+    [[nodiscard]] bool has_empty_tool_warning() {
+        return lv_subject_get_int(&empty_tools_warning_) == 1;
+    }
 
     // Note: is_visible() inherited from OverlayBase
 
@@ -356,6 +368,7 @@ class PrintSelectDetailView : public OverlayBase {
     lv_subject_t filament_mismatch_{};          // 1 = material mismatch warning visible
     lv_subject_t filament_mapping_visible_{};   // 1 = filament mapping card visible (AMS+tools)
     lv_subject_t color_swatches_visible_{};     // 1 = legacy color swatches card visible
+    lv_subject_t empty_tools_warning_{};        // 1 = at least one used tool's slot is empty
     lv_subject_t prep_time_estimate_subject_{}; // formatted prep time string for bind_text
     char prep_time_estimate_buf_[64]{};         // buffer backing the string subject
     SubjectManager subjects_;                   // RAII manager for subject cleanup
@@ -451,11 +464,32 @@ class PrintSelectDetailView : public OverlayBase {
     static void on_cancel_delete_static(lv_event_t* e);
 
     /**
-     * @brief Update color swatches display
+     * @brief Update color swatches display.
      *
-     * @param colors Hex color strings (e.g., "#ED1C24")
+     * Renders one swatch per entry in `tool_indices`, sourcing each swatch's
+     * color from the live AMS backend slot when available (slot index = tool
+     * index), falling back to `palette_colors[tool]` when no backend exists.
+     * Also publishes `empty_tools_warning_` (1 if any used tool's slot is
+     * empty, 0 otherwise).
+     *
+     * @param tool_indices Tool indices to render (from
+     *                     ParsedGCodeFile::tools_used_indices)
+     * @param palette_colors Slicer-provided palette (fallback when no AMS
+     *                       backend; indexed by tool)
      */
-    void update_color_swatches(const std::vector<std::string>& colors);
+    void update_color_swatches(const std::set<int>& tool_indices,
+                               const std::vector<std::string>& palette_colors);
+
+    /**
+     * @brief Whether the FILAMENTS card should be visible for `tool_count` tools.
+     *
+     * Multi-tool printers (toolchanger / multi-extruder / multi-slot AMS) show
+     * the card whenever at least one tool is referenced — lane identity matters
+     * even for single-tool prints. Single-extruder printers only show it for
+     * 2+ tools (manual-swap multi-color files). Caller is responsible for
+     * AND-ing with `!filament_mapping_card_.should_show()`.
+     */
+    [[nodiscard]] bool swatches_card_visible_for(size_t tool_count) const;
 };
 
 } // namespace helix::ui

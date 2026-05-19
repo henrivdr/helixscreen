@@ -546,6 +546,7 @@
   <translation tag="Emergency stop and print alerts" ja="緊急停止と印刷アラート"/>
   <translation tag="Emergency stop failed: not connected" ja="緊急停止に失敗: 未接続"/>
   <translation tag="Empty" ja="空"/>
+  <translation tag="Empty filament slot"/>
   <translation tag="Empty slots disable the associated functionality" ja="空のスロットは関連機能を無効にします"/>
   <translation tag="Enable" ja="有効化"/>
   <translation tag="Enable Monitoring" ja="監視を有効化"/>
@@ -1164,6 +1165,7 @@
   <translation tag="On" ja="オン"/>
   <translation tag="On and Off macros must be different" ja="オンとオフのマクロは異なるものにしてください"/>
   <translation tag="On/Off (state-aware)" ja="オン/オフ（状態追跡）"/>
+  <translation tag="One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?"/>
   <translation tag="Open" ja="開く"/>
   <translation tag="Open Source Licenses" ja="オープンソースライセンス"/>
   <translation tag="Operation already in progress" ja="操作がすでに進行中です"/>
@@ -1270,6 +1272,7 @@
   <translation tag="Price" ja="価格"/>
   <translation tag="Primary" ja="プライマリ"/>
   <translation tag="Print" ja="印刷"/>
+  <translation tag="Print Anyway"/>
   <translation tag="Print Cancelled" ja="印刷キャンセル"/>
   <translation tag="Print Complete!" ja="印刷完了！"/>
   <translation tag="Print Completion Alert" ja="印刷完了通知"/>
@@ -1374,6 +1377,7 @@
   <translation tag="Re-probe" ja="再プローブ"/>
   <translation tag="Ready" ja="準備完了"/>
   <translation tag="Ready to Apply" ja="適用の準備完了"/>
+  <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
   <translation tag="Reboot" ja="再起動"/>
   <translation tag="Reboot failed" ja="再起動に失敗しました"/>
   <translation tag="Reboot failed — host is still reachable" ja="再起動に失敗しました — ホストに依然として到達可能です"/>

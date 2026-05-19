@@ -546,6 +546,7 @@ translations:
   Emergency stop and print alerts: Аварийная остановка и оповещения печати
   'Emergency stop failed: not connected': 'Аварийная остановка не удалась: нет подключения'
   Empty: Пусто
+  Empty filament slot: ''
   Empty slots disable the associated functionality: Пустые слоты отключают связанный функционал
   Enable: Включить
   Enable Monitoring: Включить мониторинг
@@ -1167,6 +1168,7 @@ translations:
   'On': Вкл
   On and Off macros must be different: Макросы включения и выключения должны отличаться
   On/Off (state-aware): Вкл/Выкл (с отслеживанием)
+  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: ''
   Open: Открыть
   Open Source Licenses: Лицензии с открытым кодом
   Operation already in progress: Операция уже выполняется
@@ -1273,6 +1275,7 @@ translations:
   Price: Цена
   Primary: Основной
   Print: Печать
+  Print Anyway: ''
   Print Cancelled: Печать отменена
   Print Complete!: Печать завершена!
   Print Completion Alert: Уведомление о завершении печати
@@ -1377,6 +1380,7 @@ translations:
   Re-probe: Перепроверить
   Ready: Готов
   Ready to Apply: Готово к применению
+  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': ''
   Reboot: Перезагрузка
   Reboot failed: 'Ошибка перезагрузки'
   Reboot failed — host is still reachable: 'Ошибка перезагрузки — хост всё ещё доступен'

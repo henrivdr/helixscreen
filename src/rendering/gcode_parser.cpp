@@ -113,6 +113,7 @@ void GCodeParser::reset() {
     is_absolute_extrusion_ = true;
     current_tool_index_ = 0;
     initial_tool_index_ = -1;
+    tools_used_.clear();
     layers_.clear();
     objects_.clear();
     global_bounds_ = AABB();
@@ -819,6 +820,7 @@ void GCodeParser::parse_tool_change_command(const std::string& line) {
     int tool_num = std::stoi(tool_str);
 
     current_tool_index_ = tool_num;
+    tools_used_.insert(tool_num);
     if (initial_tool_index_ < 0) {
         initial_tool_index_ = tool_num;
         // If palette already parsed, retroactively pick the active tool's color
@@ -1201,6 +1203,15 @@ ParsedGCodeFile GCodeParser::finalize() {
 
     // Transfer multi-color tool palette
     result.tool_color_palette = tool_color_palette_;
+
+    // Transfer the set of tool indices actually referenced by T-commands.
+    // For single-extruder files with palette metadata but no T-commands
+    // (manual-swap multi-color, or single-tool prints), fall back to {0}
+    // so the swatch UI still has something to render.
+    result.tools_used_indices = tools_used_;
+    if (result.tools_used_indices.empty() && !result.tool_color_palette.empty()) {
+        result.tools_used_indices.insert(0);
+    }
 
     // Transfer interned object name table
     result.object_name_table = std::move(object_name_table_);
