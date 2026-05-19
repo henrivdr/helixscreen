@@ -57,6 +57,17 @@ struct ToolInfo {
     }
 };
 
+/// Tool topology sourced from an AMS backend that multiplexes tools (e.g. AFC).
+/// When set, ToolState rebuilds its tool list from this and ignores extruder
+/// enumeration. tool_to_slot[i] is the backend slot index that tool i sources.
+struct ToolTopology {
+    int tool_count = 0;
+    int active_tool = -1;
+    std::vector<int> tool_to_slot;
+    std::string tool_name_prefix = "T"; ///< Generated names: "{prefix}{index}"
+    int backend_index = 0;              ///< Source backend in AmsState::backends_
+};
+
 /// Manages tool information for multi-tool printers (toolchangers, multi-extruder).
 /// Thread safety: All public methods must be called from the LVGL/UI thread only.
 /// Subject updates are routed through helix::ui::queue_update() from background threads.
@@ -71,6 +82,19 @@ class ToolState {
 
     void init_tools(const helix::PrinterDiscovery& hardware);
     void update_from_status(const nlohmann::json& status);
+
+    /// Push AMS-backend-derived topology. Overrides extruder-based init. Idempotent:
+    /// rebuilds tools_ only when count or mapping changes; updates active_tool_index_
+    /// every call. Must be called from the LVGL/UI thread.
+    void set_ams_topology(const ToolTopology& topo);
+
+    /// Remove the AMS topology override. tools_ is cleared; caller should follow
+    /// with init_tools() to repopulate from extruders/toolchanger if appropriate.
+    void clear_ams_topology();
+
+    [[nodiscard]] bool ams_topology_active() const {
+        return ams_topology_active_;
+    }
 
     [[nodiscard]] const std::vector<ToolInfo>& tools() const {
         return tools_;
@@ -163,6 +187,15 @@ class ToolState {
     std::string config_dir_ = "config"; ///< Directory for local JSON persistence
     bool spool_dirty_ = false;          ///< True when spool data changed since last save
     bool spool_assignments_loaded_ = false; ///< True after load_spool_assignments() completes
+
+    // AMS topology override (set by AMS backends that multiplex tools, e.g. AFC).
+    // When ams_topology_active_ is true, tools_ is sourced from the backend's
+    // lane->tool mapping rather than from PrinterDiscovery extruder enumeration.
+    bool ams_topology_active_ = false;
+    int ams_topology_tool_count_ = 0;
+    std::vector<int> ams_topology_tool_to_slot_;
+    std::string ams_topology_tool_name_prefix_ = "T";
+    int ams_topology_backend_index_ = 0;
 
     /// Save spool assignments to local JSON file
     void save_spool_json() const;

@@ -181,6 +181,65 @@ void ToolState::init_tools(const helix::PrinterDiscovery& hardware) {
     spdlog::info("[ToolState] Initialized {} tools (version {})", tools_.size(), version);
 }
 
+void ToolState::set_ams_topology(const ToolTopology& topo) {
+    bool needs_rebuild = !ams_topology_active_ ||
+                         ams_topology_tool_count_ != topo.tool_count ||
+                         ams_topology_tool_to_slot_ != topo.tool_to_slot ||
+                         ams_topology_tool_name_prefix_ != topo.tool_name_prefix;
+
+    ams_topology_active_ = true;
+    ams_topology_tool_count_ = topo.tool_count;
+    ams_topology_tool_to_slot_ = topo.tool_to_slot;
+    ams_topology_tool_name_prefix_ = topo.tool_name_prefix;
+    ams_topology_backend_index_ = topo.backend_index;
+
+    if (needs_rebuild) {
+        tools_.clear();
+        tools_.reserve(topo.tool_count);
+        for (int i = 0; i < topo.tool_count; ++i) {
+            ToolInfo t;
+            t.index = i;
+            t.name = ::fmt::format("{}{}", topo.tool_name_prefix, i);
+            t.backend_index = topo.backend_index;
+            t.backend_slot = (i < static_cast<int>(topo.tool_to_slot.size()))
+                                 ? topo.tool_to_slot[i]
+                                 : -1;
+            tools_.push_back(std::move(t));
+        }
+        lv_subject_set_int(&tool_count_, static_cast<int>(tools_.size()));
+        int version = lv_subject_get_int(&tools_version_) + 1;
+        lv_subject_set_int(&tools_version_, version);
+        spdlog::info("[ToolState] AMS topology applied: {} tools (version {})", tools_.size(),
+                     version);
+    }
+
+    int new_active = topo.active_tool;
+    if (new_active < 0 || new_active >= static_cast<int>(tools_.size())) {
+        new_active = (tools_.empty()) ? 0 : 0; // Default to 0 when out of range
+    }
+    if (new_active != active_tool_index_) {
+        active_tool_index_ = new_active;
+        lv_subject_set_int(&active_tool_, active_tool_index_);
+        spdlog::debug("[ToolState] AMS topology active tool: T{}", active_tool_index_);
+    }
+}
+
+void ToolState::clear_ams_topology() {
+    if (!ams_topology_active_)
+        return;
+    ams_topology_active_ = false;
+    ams_topology_tool_count_ = 0;
+    ams_topology_tool_to_slot_.clear();
+    ams_topology_tool_name_prefix_ = "T";
+    tools_.clear();
+    active_tool_index_ = 0;
+    lv_subject_set_int(&tool_count_, 0);
+    lv_subject_set_int(&active_tool_, 0);
+    int version = lv_subject_get_int(&tools_version_) + 1;
+    lv_subject_set_int(&tools_version_, version);
+    spdlog::info("[ToolState] AMS topology cleared");
+}
+
 void ToolState::update_from_status(const nlohmann::json& status) {
     if (tools_.empty()) {
         return;
