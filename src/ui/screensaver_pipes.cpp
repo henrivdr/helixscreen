@@ -4,6 +4,8 @@
 
 #include "screensaver_pipes.h"
 
+#include "ui_utils.h"
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -150,9 +152,8 @@ void PipesScreensaver::start() {
     if (!draw_buf_) {
         spdlog::error("[Screensaver] Failed to allocate {}KB draw buffer for pipes",
                       buf_size / 1024);
-        lv_obj_delete(overlay_);
-        overlay_ = nullptr;
-        canvas_ = nullptr;
+        helix::ui::safe_delete_deferred(overlay_);
+        canvas_ = nullptr; // deleted as child of overlay
         return;
     }
 
@@ -196,10 +197,14 @@ void PipesScreensaver::stop() {
         draw_buf_ = nullptr;
     }
 
+    // Async delete — stop() runs from the main loop's wake path which can be
+    // adjacent to lv_timer_handler ticks, and synchronous deletion of an
+    // overlay carrying child widgets risks corrupting LVGL's event linked
+    // list (#316). Matches FlyingToaster and Starfield screensavers, which
+    // both use safe_delete_deferred() for the same reason.
     if (overlay_) {
-        lv_obj_delete(overlay_);
-        overlay_ = nullptr;
-        canvas_ = nullptr;
+        helix::ui::safe_delete_deferred(overlay_);
+        canvas_ = nullptr; // deleted as child of overlay
     }
 
     for (auto& p : pipes_) p.alive = false;
