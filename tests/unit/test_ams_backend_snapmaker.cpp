@@ -72,6 +72,10 @@ class SnapmakerTestAccess {
             return std::nullopt;
         return it->second;
     }
+    static void set_sensor_present(AmsBackendSnapmaker& b, int slot_index, bool present) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.sensor_filament_present_[slot_index] = present;
+    }
 };
 
 namespace {
@@ -994,4 +998,61 @@ TEST_CASE("Snapmaker prepare_for_resume proceeds normally when SD active",
 
     REQUIRE(callback_fired);
     REQUIRE(captured.result != AmsResult::RESUME_REQUIRES_RESTART);
+}
+
+TEST_CASE("Snapmaker prepare_for_resume skips recovery when sensor reports filament present",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    PrinterState& ps = get_printer_state();
+    PrinterStateTestAccess::reset(ps);
+    ps.init_subjects(false);
+
+    json active = {{"print_stats", {{"state", "paused"}}},
+                   {"virtual_sdcard", {{"is_active", true}}}};
+    ps.update_from_status(active);
+
+    // Backend constructed with nullptr api_ — proves we never reach the gcode
+    // chain. Default sensor_filament_present_ is true for all slots, so passing
+    // a valid slot_index hits the "skip recovery" branch.
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    AmsError captured{AmsResult::NOT_CONNECTED}; // poison
+    bool callback_fired = false;
+    backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+
+    REQUIRE(callback_fired);
+    REQUIRE(captured.success());
+    REQUIRE(captured.result == AmsResult::SUCCESS);
+}
+
+TEST_CASE("Snapmaker prepare_for_resume reports NOT_CONNECTED when api unavailable + runout latched",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    PrinterState& ps = get_printer_state();
+    PrinterStateTestAccess::reset(ps);
+    ps.init_subjects(false);
+
+    json active = {{"print_stats", {{"state", "paused"}}},
+                   {"virtual_sdcard", {{"is_active", true}}}};
+    ps.update_from_status(active);
+
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Force the sensor-runout-latched branch: filament reads as absent on
+    // slot 0. With api_=nullptr the backend should return NOT_CONNECTED
+    // rather than crashing on a null api_ deref.
+    SnapmakerTestAccess::set_sensor_present(backend, 0, false);
+
+    AmsError captured{AmsResult::SUCCESS};
+    bool callback_fired = false;
+    backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+
+    REQUIRE(callback_fired);
+    REQUIRE(captured.result == AmsResult::NOT_CONNECTED);
 }
