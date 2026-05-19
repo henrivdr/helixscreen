@@ -142,15 +142,58 @@ TEST_CASE_METHOD(ToolStateFixture,
     UpdateQueue::instance().drain();
 }
 
-TEST_CASE_METHOD(ToolStateFixture,
-                 "[ToolState][ams-topology] set_ams_topology preserves per-tool extruder_name",
-                 "[tool-state][ams][ams-topology]") {
-    // Simulate init_tools() having populated tools_ with per-tool extruder names
-    // (the ToolChanger init path does this from sorted heater names).
-    auto& ts = helix::ToolState::instance();
+// =============================================================================
+// REGRESSION TESTS — final code review found two ToolChanger-printer regressions
+// in the original #956 series. These tests fail without commit 1e9e4a69d's fixes
+// (extruder_name preservation in set_ams_topology + narrowed update_from_status
+// guard). Cite [L065] friend pattern: no public *_for_testing accessors;
+// PrinterDiscovery's public parse_objects API is the injection point.
+// =============================================================================
 
-    // Build a topology and apply it once with no prior state — gets default
-    // extruder_name="extruder" for every tool.
+#include "printer_discovery.h"
+
+namespace {
+// Build a real PrinterDiscovery that looks like a 4-tool ToolChanger printer
+// (4 named tools T0..T3, 4 extruder heaters). Goes through the same
+// parse_objects path Klipper hits in production — no friends required.
+helix::PrinterDiscovery make_toolchanger_discovery() {
+    nlohmann::json objects = {
+        "toolchanger",
+        "tool T0", "tool T1", "tool T2", "tool T3",
+        "extruder", "extruder1", "extruder2", "extruder3"
+    };
+    helix::PrinterDiscovery disc;
+    disc.parse_objects(objects);
+    return disc;
+}
+} // namespace
+
+TEST_CASE_METHOD(ToolStateFixture,
+                 "set_ams_topology preserves ToolChanger per-tool extruder_name "
+                 "across rebuild (regression for ToolChanger backend)",
+                 "[tool-state][ams][ams-topology][regression]") {
+    // Production sequence for a ToolChanger printer that also advertises
+    // supports_tool_mapping=true (AmsBackendToolChanger does):
+    //   1. init_tools(discovery) → tools_[i].extruder_name = "extruder", "extruder1", ...
+    //   2. sync_from_backend() → build_ams_topology() → set_ams_topology() rebuilds tools_
+    //
+    // Pre-fix bug: rebuild constructed fresh ToolInfo whose default extruder_name
+    // is "extruder" (struct default initializer) — wiping the per-tool mapping
+    // and routing all heater/fan control to extruder0.
+    auto& ts = helix::ToolState::instance();
+    auto disc = make_toolchanger_discovery();
+
+    ts.init_tools(disc);
+    UpdateQueue::instance().drain();
+    REQUIRE(ts.tool_count() == 4);
+    REQUIRE(ts.tools()[0].extruder_name.has_value());
+    REQUIRE(ts.tools()[0].extruder_name.value() == "extruder");
+    REQUIRE(ts.tools()[1].extruder_name.value() == "extruder1");
+    REQUIRE(ts.tools()[2].extruder_name.value() == "extruder2");
+    REQUIRE(ts.tools()[3].extruder_name.value() == "extruder3");
+
+    // Apply a same-shape topology — this hits needs_rebuild=true because
+    // ams_topology_active_ was false. The rebuild path must preserve names.
     helix::ToolTopology topo;
     topo.tool_count = 4;
     topo.active_tool = 0;
@@ -158,33 +201,111 @@ TEST_CASE_METHOD(ToolStateFixture,
     topo.tool_name_prefix = "T";
     ts.set_ams_topology(topo);
     UpdateQueue::instance().drain();
+
     REQUIRE(ts.tool_count() == 4);
+    REQUIRE(ts.tools()[0].extruder_name.value() == "extruder");
+    REQUIRE(ts.tools()[1].extruder_name.value() == "extruder1");
+    REQUIRE(ts.tools()[2].extruder_name.value() == "extruder2");
+    REQUIRE(ts.tools()[3].extruder_name.value() == "extruder3");
 
-    // Apply same-shape topology again: needs_rebuild=false, only active_tool_
-    // changes. extruder_name preservation isn't exercised on this path.
-    topo.active_tool = 2;
-    ts.set_ams_topology(topo);
-    UpdateQueue::instance().drain();
-    REQUIRE(ts.active_tool_index() == 2);
-
-    // Apply a different shape (count change → forced rebuild) and verify that
-    // the rebuild path copies over extruder_name from the previous tools_.
-    // Since the previous tools_ all have extruder_name="extruder" (default), the
-    // rebuilt tools_ should also have "extruder" — which is the regression case
-    // (ToolChanger sets per-tool names, rebuild used to lose them).
+    // Force another rebuild via shape change (tool_count differs → needs_rebuild).
+    // The first 3 entries must still carry their per-tool extruder names.
     topo.tool_count = 3;
     topo.tool_to_slot = {0, 1, 2};
-    topo.active_tool = 0;
     ts.set_ams_topology(topo);
     UpdateQueue::instance().drain();
+
     REQUIRE(ts.tool_count() == 3);
-    for (const auto& t : ts.tools()) {
-        REQUIRE(t.extruder_name.has_value());
-        // For this minimal test, default "extruder" is the only available
-        // ground truth without a real PrinterDiscovery feed. The point is to
-        // prove the copy-from-previous logic runs (the field is still set
-        // post-rebuild, not nullopt).
-    }
+    REQUIRE(ts.tools()[0].extruder_name.value() == "extruder");
+    REQUIRE(ts.tools()[1].extruder_name.value() == "extruder1");
+    REQUIRE(ts.tools()[2].extruder_name.value() == "extruder2");
+
+    // Grow back to 5 tools — first 3 preserve, extras keep ToolInfo default.
+    topo.tool_count = 5;
+    topo.tool_to_slot = {0, 1, 2, 3, 4};
+    ts.set_ams_topology(topo);
+    UpdateQueue::instance().drain();
+
+    REQUIRE(ts.tool_count() == 5);
+    REQUIRE(ts.tools()[0].extruder_name.value() == "extruder");
+    REQUIRE(ts.tools()[1].extruder_name.value() == "extruder1");
+    REQUIRE(ts.tools()[2].extruder_name.value() == "extruder2");
+    // Indices 3, 4: no prior entry → default "extruder" (acceptable for AFC;
+    // ToolChanger printers wouldn't have a 5th tool here).
+    REQUIRE(ts.tools()[3].extruder_name.has_value());
+    REQUIRE(ts.tools()[4].extruder_name.has_value());
+
+    ts.clear_ams_topology();
+    UpdateQueue::instance().drain();
+}
+
+TEST_CASE_METHOD(ToolStateFixture,
+                 "update_from_status processes per-tool status while topology is active "
+                 "(regression for ToolChanger backend)",
+                 "[tool-state][ams][ams-topology][regression]") {
+    // Pre-fix bug: update_from_status had a top-of-function early-return when
+    // ams_topology_active_=true. This blocked the toolchanger.tool_number and
+    // toolhead.extruder parsing (correct) BUT also blocked the per-tool loop
+    // that updates tool.active / .mounted / .detect_state / .gcode_offset from
+    // "tool {name}" Klipper objects (wrong — ToolChanger users lost live tool
+    // status). The narrowed guard wraps only the two blocks it's meant to
+    // skip; the per-tool loop runs unconditionally.
+    auto& ts = helix::ToolState::instance();
+    auto disc = make_toolchanger_discovery();
+    ts.init_tools(disc);
+    UpdateQueue::instance().drain();
+    REQUIRE(ts.tool_count() == 4);
+
+    // Install topology to set ams_topology_active_=true.
+    helix::ToolTopology topo;
+    topo.tool_count = 4;
+    topo.active_tool = 0;
+    topo.tool_to_slot = {0, 1, 2, 3};
+    topo.tool_name_prefix = "T";
+    ts.set_ams_topology(topo);
+    UpdateQueue::instance().drain();
+    REQUIRE(ts.ams_topology_active());
+
+    // Feed status that includes per-tool keys ("tool T0", "tool T1", ...).
+    // The toolchanger.tool_number block MUST be ignored (topology owns active),
+    // but the per-tool loop MUST update .mounted / .gcode_x_offset.
+    nlohmann::json status = {
+        {"toolchanger", {{"tool_number", 99}}}, // Should be ignored — out-of-range proves it
+        {"tool T0", {
+            {"active", false},
+            {"mounted", true},
+            {"gcode_x_offset", 0.0},
+            {"gcode_y_offset", 0.0},
+            {"gcode_z_offset", 0.0}
+        }},
+        {"tool T1", {
+            {"active", false},
+            {"mounted", true},
+            {"gcode_x_offset", 12.5},
+            {"gcode_y_offset", -3.25},
+            {"gcode_z_offset", 0.0}
+        }},
+        {"tool T2", {
+            {"active", false},
+            {"mounted", false},
+            {"gcode_x_offset", 0.0},
+            {"gcode_y_offset", 0.0},
+            {"gcode_z_offset", 0.0}
+        }}
+    };
+    ts.update_from_status(status);
+    UpdateQueue::instance().drain();
+
+    // Per-tool loop must have updated mounted + offsets.
+    REQUIRE(ts.tools()[0].mounted == true);
+    REQUIRE(ts.tools()[1].mounted == true);
+    REQUIRE(ts.tools()[1].gcode_x_offset == Catch::Approx(12.5));
+    REQUIRE(ts.tools()[1].gcode_y_offset == Catch::Approx(-3.25));
+    REQUIRE(ts.tools()[2].mounted == false);
+
+    // Active-tool guard must still hold: toolchanger.tool_number=99 was ignored.
+    // active_tool_index_ should still be 0 (set by set_ams_topology), not 99.
+    REQUIRE(ts.active_tool_index() == 0);
 
     ts.clear_ams_topology();
     UpdateQueue::instance().drain();
