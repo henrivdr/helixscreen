@@ -89,8 +89,14 @@ class MoonrakerClientSecurityFixture {
 // Issue #4: Use-After-Free - Destructor Cleanup
 // ============================================================================
 
+// [slow] tag: the "Multiple rapid create/destroy cycles" SECTION exercises a
+// known race in libhv's WebSocketClient teardown when the loop is externally
+// owned (is_loop_owner=false). startConnect() can be mid-flight when
+// EventLoopThread::stop() nulls EventLoop::loop_, causing SEGV in hio_get().
+// Production uses default-constructed clients (is_loop_owner=true) and isn't
+// affected. Keeping the test in the dedicated test-eventloop CI lane per L052.
 TEST_CASE("MoonrakerClient destructor clears callbacks (UAF prevention)",
-          "[connection][security][uaf][issue4][eventloop]") {
+          "[connection][security][uaf][issue4][eventloop][slow]") {
     SECTION("Destroy client before connection completes") {
         auto loop = std::make_shared<hv::EventLoop>();
         auto client = std::make_unique<MoonrakerClient>(loop);
