@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.66] - 2026-05-19
+
+The big-ticket items: a **toolchanger-aware print-detail FILAMENTS card** with three-tier temperature precedence (user override > vendor profile > printer database), the **QIDI Box AMS backend read-path** (with the write-path landing behind `HELIX_QIDI_BOX_WRITE` for field testing), and a **new fan row in the print-status panel** with live animation and click-through to fan controls. Plus **Snapmaker U1 prepare-for-resume hooks** for modal-driven runout recovery, **`__abort_msg` capture on SIGABRT** for clearer crash reports, a **Touch & Input settings sub-overlay**, and another sweep through L081 background-thread sites.
+
+### Added
+
+- **Toolchanger-aware FILAMENTS card on the print-detail panel** — respects the active extruder, per-tool nozzle temperatures, and tool topology when displaying loaded filament info. Three-tier temperature precedence (prestonbrown/helixscreen#961) means user overrides win over vendor profiles, which win over the printer-database default; live nozzle temperature is shown during heating; mini temp-graph + heater observers rebind correctly on tool change. Compact-mode tool picker scrolls vertically when crowded and horizontally for the pill row; pills even-distribute across two rows when there's vertical room.
+- **QIDI Box AMS backend read-path** (prestonbrown/helixscreen#954) — detection wiring, read-only state mirror, per-slot RFID capture from `save_variables`, official filament-list lookup for temperature profiles, drying state mirrored onto unit environment, `last_load_slot` mirror to `current_slot`, integration tests. Write-path landed behind `HELIX_QIDI_BOX_WRITE` for field testing — `is_tool_change` flag propagated onto `AmsAction`, `get_slot_info` bounds-checked against current total slots.
+- **Print-status fan row** — new XML component wires part/hotend/aux fan observers with spin animation, adaptive fit based on available height + content density, click-through to fan controls, and a disabled state when the printer is disconnected. Falls between the filament row and the button row.
+- **Touch & Input settings sub-overlay** — calibration and tuning knobs (long-press delay, scroll throttle, drag start, etc.) now live under a dedicated overlay in Settings instead of being scattered.
+- **`helix_progress_arc` shared component** — single reusable arc widget driven by a diameter token so progress arcs across the UI stay consistent in stroke width and style. Clog meter migrated first.
+- **helix-xml `parts=...` attribute on `bind_style`** — apply one bound style to multiple part selectors in a single declaration instead of duplicate `bind_style` rows.
+- **helix-xml `scroll_dir` attribute parsing on `lv_obj`** — declarative scroll direction without a custom widget.
+- **`SIGUSR1` triggers in-process screenshot** — useful for field-bundle capture without prompting the user to press `S`.
+- **Snapmaker U1 `prepare_for_resume` hook + rewritten print-start profile** — modal-driven runout recovery dispatches via a shared `dispatch_prepared_resume` helper; the print-start profile was recaptured from live gcode and rewritten to match. Includes a dirty-bed restart UX, runout sensor `role=runout` assignment, and a post-wizard preset-migration window for filament sensors so existing configs upgrade cleanly.
+- **Crash handler captures glibc `__abort_msg` on SIGABRT** (prestonbrown/helixscreen#960) — the abort-message string (assert text, terminate exception, etc.) is now included in the crash bundle alongside the backtrace. Truncated to 256 bytes with the trailing newline stripped.
+- **`print_status` silent-phase progression** — invisible cleaning / purge windows mid-print no longer leave the UI looking idle; the arc keeps advancing through the silent phases.
+- **`print_status` hourglass during pending Pause/Resume** — optimistic UI updates the icon immediately on tap, then settles to the confirmed state.
+- **Home widget Paused badge** on the print-status widget when the print is paused.
+- **`print_start` parses Klipper's "Adapted probe count" line** for a live mesh denominator; `virtual_sdcard.is_active` exposed on printer state.
+- **Per-tool gcode tracking + material-mismatch UX fix in the mock backend** — exercises multi-tool material-mismatch flows under `--test`.
+- **33 strings translated across 9 languages** — 100% coverage for the latest UI additions.
+
+### Fixed
+
+- **QR scanner background thread no longer races on `tok.expired()`** — drops the bg-thread `expired()` checks and relies on a `running_` flag instead, closing one of the remaining L081 Mechanism C surfaces.
+- **L081 strict-mode abort gated to non-release builds** — release tarballs no longer crash when the detector trips; telemetry still emits the anomaly. (Snapmaker U1 hit a stray strict-mode abort on 2026-05-14, sig 307b6f48.)
+- **gcode-viewer restores live 2D/3D switching mid-print** — toggling render modes during a print no longer leaves the viewer blank.
+- **gcode-viewer force-redraws on display wake** — waking from screensaver with a 3D viewer on-screen no longer shows the prior frame.
+- **gcode-renderer invalidates SSAO cache after writing new layers** — ambient occlusion stays in sync with streaming geometry.
+- **gcode-renderer retries streaming load misses** instead of silently skipping the missed window.
+- **`print_status_widget` keeps progress arc live across layout rebuilds** — breakpoint transitions during a print no longer momentarily reset the arc.
+- **`filament_sensor` shows disabled state instead of hiding the indicator** — the slot stays in the UI with a "disabled" badge so users can tell a sensor was intentionally disabled vs. missing.
+- **One toast per Klipper rejection, not three** — and the generic `!!` toast is deferred so a runout modal can pre-empt it.
+- **Restart-from-beginning modal surfaces `print_stats.message`** when present.
+- **Screensaver pipes overlay teardown via `safe_delete_deferred`** instead of sync `lv_obj_delete`, avoiding UpdateQueue-batch corruption.
+- **Cached navigation overlays re-register on every push** so navbar switches don't drop the binding mid-session.
+- **`filament_sensor` defaults to `detected=true`** — dropping the startup grace gate that would briefly show "no filament" on every cold start.
+- **Tool-changer AMS always shows the runout modal** — previously could fall through silently when topology wasn't yet known.
+- **Filament panel loads directly into the active slot** and skips the AMS-redirect detour when the user just wants to load filament now.
+- **AMS demotes halted-Klipper gcode refusals to debug** — a halted printer rejecting a queued gcode is expected, not warn-worthy.
+- **Per-tool hardware mappings preserved across `update_from_status`** (prestonbrown/helixscreen#956) — re-querying status no longer overwrites tool-mapping fields the AMS backend owns.
+- **`print_status` BED_MESH probe counter resets on sub-phase change** — counting now restarts cleanly at each calibration sub-step.
+- **`print_status` configfile probe-count fallback skipped for adaptive meshing** — adaptive paths get their denominator from the parsed "Adapted probe count" line.
+- **Crash file writers serialized** — SIGABRT and EXCEPTION paths no longer race to truncate each other.
+- **Telemetry crash classifier uses memory-map `r-xp` segments** — improves backtrace symbolization.
+- **3D viewer no longer blank when toggled mid-print** in `--test` mode.
+
+### Changed
+
+- **Print-detail FILAMENTS card reworked for toolchanger UX** — single shared layout used across AMS panels, with a bypass-spool widget + material label DRY'd, and an updated External Spool context menu shared from one source. AMS XML tokens consolidated under `ams_*` + shared breakpoint helper.
+- **AMS state forwards backend tool topology to `ToolState`** via a new `set_ams_topology` API (prestonbrown/helixscreen#956); `update_from_status` guards against overwriting topology when the AMS owns it.
+- **2D gcode render: darker outer walls** for better depth perception in ghost render mode.
+
 ## [0.99.65] - 2026-05-15
 
 Same-day cherry-pick on top of v0.99.64 to repair the release-pipeline build. Debian Bullseye's multi-arch apt resolver couldn't reconcile the pre-installed `linux-libc-dev:amd64` against a newer `linux-libc-dev:arm64` from the mirror, blocking `libc6-dev:arm64` install in both the Pi and Pi32 Docker toolchain images. No code changes — same payload as v0.99.64.
@@ -3739,6 +3793,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.66]: https://github.com/prestonbrown/helixscreen/compare/v0.99.65...v0.99.66
 [0.99.65]: https://github.com/prestonbrown/helixscreen/compare/v0.99.64...v0.99.65
 [0.99.64]: https://github.com/prestonbrown/helixscreen/compare/v0.99.63...v0.99.64
 [0.99.63]: https://github.com/prestonbrown/helixscreen/compare/v0.99.62...v0.99.63
