@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.67] - 2026-05-20
+
+### Fixed
+
+- **Manually-set nozzle target preserved across filament load/unload** — if you'd already heated the hotend (e.g. ABS at 240°C) and clicked Load with a different material selected, the post-op cooldown manager killed the heater 120s later thinking it owned the preheat. Now snapshots the live extruder target at every op-handler entry, and the preheat path won't drop a higher manual setpoint to a lower material preset (no more 240→200 dip on cold-nozzle load).
+- **Chamber-temp display no longer flashes bed temp on QIDI Q2** (prestonbrown/helixscreen#947) — two independent bugs: (a) heater + thermal-protection sensor coexisting let partial Moonraker updates overwrite chamber_temp with the bed-side sensor reading, so heater is now the canonical source when present; (b) `is_chamber_keyword()` greedily matched `BOX` substrings, so QIDI Box dryer objects (`box1_heater`, `Box1_STM32`) hijacked the chamber slot. Now scores CHAMBER=100 / ENCLOSURE=90 / CAVITY=85 / standalone-token BOX=60 and tracks the best match per channel.
+- **Cached overlays reflow to current canvas width on resize** (prestonbrown/helixscreen#951) — `OverlayBase` caches its root widget across show/hide for state preservation, but the width was baked in at first create. When the canvas later shrank (Android navbar pin shrinking the LVGL surface), the cached overlay kept its old width and slid left under the sidebar. The resize callback now re-applies `overlay_panel_width_full`/`overlay_panel_width` to any `*_overlay` widget without destroying it.
+- **Android Keep Navigation Bar setting survives fold and app-switch on Galaxy Z Fold 7** (prestonbrown/helixscreen#951) — `configChanges` in AndroidManifest keeps the activity alive across folds so `onResume` never fired; an `onConfigurationChanged` override + `OnApplyWindowInsetsListener` self-correct after SDL's window-style race. With targetSdk 35 + edge-to-edge enforced, the content view is now padded manually by `WindowInsets.Type.navigationBars()` so LVGL no longer draws behind a pinned side navbar (Fold 7 landscape clipping). System-bar icon appearance follows the active theme's background luminance; targetSdk/compileSdk bumped 34 → 35 for Play Store forward compatibility.
+- **Snapmaker U1 post-install commands point at the real init script** (prestonbrown/helixscreen#952) — `INIT_SCRIPT_DEST` was `/etc/init.d/S99helixscreen`, a path that has never existed on U1 (the installer patches stock `/etc/init.d/S99screen` to delegate to `helixscreen.init`). Now points at `${INSTALL_DIR}/config/helixscreen.init`. Log-path hint also corrected — U1 writes to `/var/log/helixscreen/launcher.log` or `${INSTALL_DIR}/logs/launcher.log`, never `/tmp/helixscreen.log`.
+
+### Changed
+
+- **QIDI documentation refactor** (#963) — `docs/user/QIDI_SUPPORT.md` reordered by release date, TJC reframed as OEM (not a clone), Plus 4 reclassified to the older MKSPI bucket. Follow-up fixup restored the `plus4`/`plus-4` hostname pattern, GitHub repo URL (no spaces), the FILAMENT_MANAGEMENT anchor, and propagated the TJC-OEM correction to `README.md` + `docs/devel/printer-research/QIDI_PLUS_4_RESEARCH.md`.
+
 ## [0.99.66] - 2026-05-19
 
 The big-ticket items: a **toolchanger-aware print-detail FILAMENTS card** with three-tier temperature precedence (user override > vendor profile > printer database), the **QIDI Box AMS backend read-path** (with the write-path landing behind `HELIX_QIDI_BOX_WRITE` for field testing), and a **new fan row in the print-status panel** with live animation and click-through to fan controls. Plus **Snapmaker U1 prepare-for-resume hooks** for modal-driven runout recovery, **`__abort_msg` capture on SIGABRT** for clearer crash reports, a **Touch & Input settings sub-overlay**, and another sweep through L081 background-thread sites.
@@ -3793,6 +3807,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.67]: https://github.com/prestonbrown/helixscreen/compare/v0.99.66...v0.99.67
 [0.99.66]: https://github.com/prestonbrown/helixscreen/compare/v0.99.65...v0.99.66
 [0.99.65]: https://github.com/prestonbrown/helixscreen/compare/v0.99.64...v0.99.65
 [0.99.64]: https://github.com/prestonbrown/helixscreen/compare/v0.99.63...v0.99.64
