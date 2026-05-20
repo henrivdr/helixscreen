@@ -41,6 +41,10 @@
           "type": "enum",
           "enum": "scrollbar_mode"
         },
+        "scroll_dir": {
+          "type": "enum",
+          "enum": "dir"
+        },
         "hidden": {
           "type": "bool"
         },
@@ -1624,6 +1628,9 @@
         "show_target": {
           "type": "bool"
         },
+        "hide_target_below_bp": {
+          "type": "string"
+        },
         "bind_current": {
           "type": "string"
         },
@@ -2919,10 +2926,6 @@
     "fan_arc_size_medium",
     "fan_arc_size_small",
     "fan_arc_size_tiny",
-    "fan_arc_width",
-    "fan_arc_width_large",
-    "fan_arc_width_medium",
-    "fan_arc_width_small",
     "fan_btn_height",
     "fan_btn_height_large",
     "fan_btn_height_medium",
@@ -3135,12 +3138,6 @@
     "metadata_clip_height_small",
     "metadata_clip_height_tiny",
     "metadata_label_min_width",
-    "metadata_overlay_height",
-    "metadata_overlay_height_large",
-    "metadata_overlay_height_medium",
-    "metadata_overlay_height_micro",
-    "metadata_overlay_height_small",
-    "metadata_overlay_height_tiny",
     "metadata_overlay_min_height",
     "metadata_overlay_opacity",
     "metadata_row_height",
@@ -3201,7 +3198,6 @@
     "shadow_intensity",
     "shadow_offset_y",
     "shadow_opa",
-    "sidebar_width",
     "size_lg",
     "size_lg_micro",
     "size_md",
