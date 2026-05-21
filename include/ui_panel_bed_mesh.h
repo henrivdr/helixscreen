@@ -101,8 +101,7 @@ class BedMeshPanel : public OverlayBase {
     void start_calibration_probing();
 
   private:
-    void launch_calibration(MoonrakerAPI* api, helix::LifetimeToken token, int expected_probes,
-                            int probe_samples = 1);
+    void launch_calibration(MoonrakerAPI* api, int expected_probes, int probe_samples = 1);
     // ========== Subject Manager (RAII cleanup) ==========
     SubjectManager subjects_;
 
