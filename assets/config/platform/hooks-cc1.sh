@@ -51,6 +51,23 @@ platform_wait_for_services() {
 
 platform_pre_start() {
     export HELIX_CACHE_DIR="/opt/helixscreen/cache"
+
+    # Logging policy: write to flash (/user-resource is ext4 with ~4 GB free),
+    # NOT to /tmp. /tmp here is tmpfs backed by ~56 MiB shared RAM, and CC1
+    # memory is tight — even moderate log volume there steals RAM from the UI.
+    # /board-resource is also flash but small (~100 MiB, shared with Klipper);
+    # /user-resource is the right place for app logs on this device.
+    #
+    # Rotation is constrained tighter than the spdlog default (5 MiB × 3 =
+    # ~15 MiB) because helix logs are tiny at WARN/INFO and we don't want
+    # surprise growth on flash. 1 MiB × 3 = ~3 MiB cap gives months of
+    # headroom at normal levels.
+    export HELIX_LOG_DEST=file
+    export HELIX_LOG_FILE="/user-resource/helixscreen/logs/helix.log"
+    export HELIX_LOG_ROTATE_BYTES=1048576
+    export HELIX_LOG_ROTATE_FILES=3
+    mkdir -p "/user-resource/helixscreen/logs" 2>/dev/null || true
+
     return 0
 }
 

@@ -87,6 +87,20 @@ platform_wait_for_services() {
 
 platform_pre_start() {
     export HELIX_CACHE_DIR="/usr/data/helixscreen/cache"
+
+    # Logging policy: write to /usr/data (mmcblk0p10 ext4, ~5.7 GB free on
+    # a typical install), NOT to /tmp. /tmp here is a ~104 MB tmpfs and
+    # /var/log is a symlink into it (../tmp), so spdlog's syslog target
+    # AND the launcher.log redirect both land in RAM. K1 family RAM is
+    # ~256 MB total, often <50 MB free — log volume there steals from the
+    # UI. Constrain rotation to 1 MiB × 3 (~3 MiB cap); at WARN/INFO that
+    # gives months of headroom, and a debug session still has a bounded
+    # window before rolling over.
+    export HELIX_LOG_DEST=file
+    export HELIX_LOG_FILE="/usr/data/helixscreen/logs/helix.log"
+    export HELIX_LOG_ROTATE_BYTES=1048576
+    export HELIX_LOG_ROTATE_FILES=3
+    mkdir -p "/usr/data/helixscreen/logs" 2>/dev/null || true
 }
 
 platform_post_stop() {

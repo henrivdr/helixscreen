@@ -135,9 +135,27 @@ void add_system_sink(std::vector<spdlog::sink_ptr>& sinks, LogTarget target,
 #endif
     case LogTarget::File: {
         std::string path = resolve_log_file_path(file_path);
-        // 5MB max size, 3 rotated files
+        // Default: 5 MiB per file × 3 files (~15 MiB cap). Constrained-flash
+        // platforms tune lower via HELIX_LOG_ROTATE_BYTES / _FILES env vars
+        // (e.g., CC1 sets 1 MiB × 3 in hooks-cc1.sh).
+        size_t max_bytes = 5 * 1024 * 1024;
+        size_t max_files = 3;
+        if (const char* env = std::getenv("HELIX_LOG_ROTATE_BYTES")) {
+            char* end = nullptr;
+            unsigned long long v = std::strtoull(env, &end, 10);
+            if (end != env && v > 0) {
+                max_bytes = static_cast<size_t>(v);
+            }
+        }
+        if (const char* env = std::getenv("HELIX_LOG_ROTATE_FILES")) {
+            char* end = nullptr;
+            unsigned long long v = std::strtoull(env, &end, 10);
+            if (end != env && v > 0) {
+                max_files = static_cast<size_t>(v);
+            }
+        }
         sinks.push_back(
-            std::make_shared<spdlog::sinks::rotating_file_sink_mt>(path, 5 * 1024 * 1024, 3));
+            std::make_shared<spdlog::sinks::rotating_file_sink_mt>(path, max_bytes, max_files));
         break;
     }
 #ifdef HELIX_PLATFORM_ANDROID

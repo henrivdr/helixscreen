@@ -186,6 +186,19 @@ platform_start_wpa_supplicant() {
 # ForgeX's screen.sh could run at any time via Klipper's delayed_gcode.
 platform_pre_start() {
     export HELIX_CACHE_DIR="/data/helixscreen/cache"
+
+    # Logging policy: write to flash (/data is ext4 with ~4.6 GB free), NOT
+    # to /tmp. AD5M has only ~107 MB RAM and /tmp is a 54 MB tmpfs — under
+    # normal load free memory is single-digit MB, so any log volume to tmpfs
+    # actively steals from the UI. Worse, /var/log is a symlink to /tmp here
+    # (Yocto convention), so spdlog's syslog target also lands in RAM. Force
+    # the file sink to flash to bypass both paths.
+    export HELIX_LOG_DEST=file
+    export HELIX_LOG_FILE="/data/helixscreen/logs/helix.log"
+    export HELIX_LOG_ROTATE_BYTES=1048576
+    export HELIX_LOG_ROTATE_FILES=3
+    mkdir -p "/data/helixscreen/logs" 2>/dev/null || true
+
     touch /tmp/helixscreen_active
     platform_load_wifi_driver
     platform_start_wpa_supplicant

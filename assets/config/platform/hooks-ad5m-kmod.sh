@@ -71,6 +71,17 @@ platform_wait_for_services() {
 # or screen.sh equivalent that checks for a third-party UI.
 platform_pre_start() {
     export HELIX_CACHE_DIR="/data/helixscreen/cache"
+
+    # Logging policy: see hooks-ad5m-forgex.sh for the full rationale.
+    # Short version: AD5M has 107 MB RAM, /tmp is a 54 MB tmpfs typically
+    # at <10 MB free, and /var/log is symlinked to /tmp. Write logs to
+    # /data (ext4, 4.6 GB free) and constrain rotation tightly.
+    export HELIX_LOG_DEST=file
+    export HELIX_LOG_FILE="/data/helixscreen/logs/helix.log"
+    export HELIX_LOG_ROTATE_BYTES=1048576
+    export HELIX_LOG_ROTATE_FILES=3
+    mkdir -p "/data/helixscreen/logs" 2>/dev/null || true
+
     return 0
 }
 

@@ -35,14 +35,25 @@ PIDFILE="/var/run/${NAME}.pid"
 # Klipper. DAEMON_DIR is persistent ext4 on every SysV platform.
 LOGFILE=""
 if [ -d /var/log ] && [ -w /var/log ]; then
-    _fs=$(awk '$2 == "/var/log" {print $3; exit}' /proc/mounts 2>/dev/null)
-    [ -z "$_fs" ] && _fs=$(awk '$2 == "/var" {print $3; exit}' /proc/mounts 2>/dev/null)
-    [ -z "$_fs" ] && _fs=$(awk '$2 == "/" {print $3; exit}' /proc/mounts 2>/dev/null)
+    # Resolve any symlink first: some Yocto/BusyBox systems (e.g., Elegoo CC1
+    # COSMOS) make /var/log a symlink to /var/volatile/log, which is tmpfs.
+    # Without following the link the walk below sees /var/log as not-a-mount,
+    # falls through to / (squashfs/ext4), and concludes "persistent" — wrong.
+    _real=$(readlink -f /var/log 2>/dev/null || echo /var/log)
+    _check="$_real"
+    _fs=""
+    # Walk up from the resolved path until we find a mount point in /proc/mounts.
+    while :; do
+        _fs=$(awk -v p="$_check" '$2 == p {print $3; exit}' /proc/mounts 2>/dev/null)
+        [ -n "$_fs" ] && break
+        [ "$_check" = "/" ] && break
+        _check=$(dirname "$_check")
+    done
     case "$_fs" in
         "" | tmpfs | ramfs) ;;
         *) LOGFILE="/var/log/helixscreen/launcher.log" ;;
     esac
-    unset _fs
+    unset _fs _real _check
 fi
 [ -n "$LOGFILE" ] || LOGFILE="${DAEMON_DIR}/logs/launcher.log"
 
