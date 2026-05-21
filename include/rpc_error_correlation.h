@@ -45,6 +45,6 @@ void record_caller_handled(const std::string& message);
 bool was_recently_handled(const std::string& message);
 
 /// Clear all recorded messages — for tests.
-void clear_for_testing();
+void clear_for_test();
 
 } // namespace helix::rpc_error_correlation

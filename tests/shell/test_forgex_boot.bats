@@ -203,11 +203,14 @@ EOF
 # --- helixscreen_active flag coordination ---
 
 @test "ForgeX hooks create helixscreen_active flag in pre_start" {
-    grep -A3 'platform_pre_start()' "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh" | grep -q 'helixscreen_active'
+    # Extract the full platform_pre_start() function body, then check for the flag.
+    # Don't use grep -A<N>: the function body grows over time and any fixed
+    # context window goes stale (broke on 481a2f176 logging refactor).
+    awk '/^platform_pre_start\(\)/,/^}/' "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh" | grep -q 'helixscreen_active'
 }
 
 @test "ForgeX hooks remove helixscreen_active flag in post_stop" {
-    grep -A3 'platform_post_stop()' "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh" | grep -q 'helixscreen_active'
+    awk '/^platform_post_stop\(\)/,/^}/' "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh" | grep -q 'helixscreen_active'
 }
 
 @test "all screen.sh patches check helixscreen_active flag" {

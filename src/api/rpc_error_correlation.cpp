@@ -64,7 +64,7 @@ bool was_recently_handled(const std::string& message) {
     return false;
 }
 
-void clear_for_testing() {
+void clear_for_test() {
     std::lock_guard<std::mutex> lock(mu());
     entries().clear();
 }
