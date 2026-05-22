@@ -63,8 +63,20 @@ void PerformanceState::deinit_subjects() {
     initialized_ = false;
 }
 
-void PerformanceState::set_source(std::unique_ptr<IPerformanceSource>) {
-    // Wired in Task 9
+void PerformanceState::set_source(std::unique_ptr<IPerformanceSource> source) {
+    if (source_) {
+        source_->stop();
+        source_.reset();
+    }
+    source_ = std::move(source);
+    if (!source_) return;
+
+    auto tok = lifetime_.token();
+    source_->set_callback([this, tok](const PerfSample& s) {
+        tok.defer("PerformanceState::apply_sample",
+                  [this, s]() { apply_sample(s); });
+    });
+    source_->start();
 }
 
 std::vector<float> PerformanceState::read_history(const std::string& name) const {
