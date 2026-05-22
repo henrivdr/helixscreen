@@ -88,7 +88,6 @@ void MoonrakerPerformanceSource::stop() {
     // Unregister persistent method callbacks.
     api_->unregister_method_callback("notify_proc_stat_update", kHandlerName);
     api_->unregister_method_callback("notify_klippy_ready",     kHandlerName);
-    api_->unregister_method_callback("notify_status_update",    kHandlerName);
 
     // Drop the notify_status_update subscription registered for MCU live updates.
     if (status_sub_id_ != 0) {
@@ -254,7 +253,10 @@ void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
         if (ls.contains("mcu_awake") && ls["mcu_awake"].is_number()) {
             const double awake = ls["mcu_awake"].get<double>();
             const auto   now   = std::chrono::steady_clock::now();
-            float load = 0.0f;
+            // Leave load absent on the first sample and on degenerate deltas;
+            // downstream subjects honour `present = 0` for std::nullopt so the
+            // UI bar hides instead of snapping to 0%.
+            std::optional<float> load;
             if (st.initialized) {
                 const double d_awake = awake - st.last_awake;
                 const double d_t = std::chrono::duration<double>(now - st.last_t).count();
