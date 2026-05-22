@@ -153,7 +153,60 @@ void PerformanceState::update_about_summary(const PerfSample& s) {
     }
     lv_subject_copy_string(&s_about_summary_, tmp);
 }
-void PerformanceState::update_mcu_subjects(const std::vector<McuStat>&) { /* Task 5 */ }
+void PerformanceState::update_mcu_subjects(const std::vector<McuStat>& mcus) {
+    // Sort by name for deterministic order
+    std::vector<McuStat> sorted = mcus;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const McuStat& a, const McuStat& b) { return a.name < b.name; });
+
+    // Add subjects for any new MCUs
+    for (const auto& m : sorted) {
+        const std::string safe = mcu_safe_name(m.name);
+        if (mcu_subjects_.find(safe) == mcu_subjects_.end()) {
+            auto subs = std::make_unique<McuSubjects>();
+            const std::string load_name = "perf_mcu_" + safe + "_load_pct";
+            const std::string retr_name = "perf_mcu_" + safe + "_retrans";
+            const std::string pres_name = "perf_mcu_" + safe + "_present";
+            lv_subject_init_int(&subs->load_pct, 0);
+            lv_subject_init_int(&subs->retrans, 0);
+            lv_subject_init_int(&subs->present, 0);
+            helix::xml::register_subject_in_current_scope(load_name.c_str(), &subs->load_pct);
+            helix::xml::register_subject_in_current_scope(retr_name.c_str(), &subs->retrans);
+            helix::xml::register_subject_in_current_scope(pres_name.c_str(), &subs->present);
+            mcu_subjects_.emplace(safe, std::move(subs));
+        }
+    }
+
+    // Update values + present flags
+    std::unordered_map<std::string, bool> seen;
+    for (const auto& m : sorted) {
+        const std::string safe = mcu_safe_name(m.name);
+        auto& subs = mcu_subjects_[safe];
+        if (m.load) {
+            lv_subject_set_int(&subs->load_pct,
+                               static_cast<int>(*m.load * 100.0f + 0.5f));
+            push_history("mcu_" + safe + "_load_pct", *m.load * 100.0f);
+        }
+        if (m.retransmits) {
+            lv_subject_set_int(&subs->retrans, static_cast<int>(*m.retransmits));
+        }
+        lv_subject_set_int(&subs->present, m.load.has_value() ? 1 : 0);
+        seen[safe] = true;
+    }
+    for (auto& [safe, subs] : mcu_subjects_) {
+        if (!seen.count(safe)) {
+            lv_subject_set_int(&subs->present, 0);
+        }
+    }
+
+    // Build comma-joined names string
+    std::string joined;
+    for (size_t i = 0; i < sorted.size(); ++i) {
+        if (i) joined += ",";
+        joined += sorted[i].name;
+    }
+    lv_subject_copy_string(&s_mcu_names_, joined.c_str());
+}
 
 void PerformanceState::push_history(const std::string& key, float value) {
     std::lock_guard<std::mutex> lk(history_mu_);

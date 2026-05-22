@@ -155,3 +155,52 @@ TEST_CASE_METHOD(PerfStateFixture,
         lv_subject_get_string(lv_xml_get_subject(nullptr, "perf_about_summary"));
     REQUIRE(std::string(summary) == "37% CPU");
 }
+
+TEST_CASE_METHOD(PerfStateFixture,
+                 "PerformanceState creates per-MCU subjects on first sample",
+                 "[performance]") {
+    using helix::perf::PerfSample;
+    using helix::perf::McuStat;
+
+    PerfSample s;
+    s.host_cpu_pct = 10.0f;
+    McuStat a; a.name = "mcu";    a.load = 0.10f; a.retransmits = 0;
+    McuStat b; b.name = "mcu sb"; b.load = 0.22f; b.retransmits = 14;
+    s.mcus = {a, b};
+
+    PerformanceState::instance().push_sample_for_testing(s);
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+
+    REQUIRE(lv_xml_get_subject(nullptr, "perf_mcu_mcu_load_pct") != nullptr);
+    REQUIRE(lv_xml_get_subject(nullptr, "perf_mcu_mcu_sb_load_pct") != nullptr);
+    REQUIRE(lv_xml_get_subject(nullptr, "perf_mcu_mcu_sb_retrans") != nullptr);
+
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_mcu_mcu_load_pct")) == 10);
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_mcu_mcu_sb_retrans")) == 14);
+
+    const char* names = lv_subject_get_string(lv_xml_get_subject(nullptr, "perf_mcu_names"));
+    REQUIRE(std::string(names) == "mcu,mcu sb");
+}
+
+TEST_CASE_METHOD(PerfStateFixture,
+                 "PerformanceState updates existing MCU subjects without recreating",
+                 "[performance]") {
+    using helix::perf::PerfSample;
+    using helix::perf::McuStat;
+    auto& ps = PerformanceState::instance();
+
+    {
+        PerfSample s; McuStat a; a.name = "mcu"; a.load = 0.10f; s.mcus = {a};
+        ps.push_sample_for_testing(s);
+    }
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    auto* first = lv_xml_get_subject(nullptr, "perf_mcu_mcu_load_pct");
+    REQUIRE(first != nullptr);
+    {
+        PerfSample s; McuStat a; a.name = "mcu"; a.load = 0.30f; s.mcus = {a};
+        ps.push_sample_for_testing(s);
+    }
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(lv_xml_get_subject(nullptr, "perf_mcu_mcu_load_pct") == first);
+    REQUIRE(lv_subject_get_int(first) == 30);
+}
