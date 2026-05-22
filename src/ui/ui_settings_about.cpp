@@ -12,6 +12,7 @@
 #include "ui_event_safety.h"
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
+#include "ui_overlay_performance.h"
 #include "ui_panel_history_dashboard.h"
 #include "ui_snake_game.h"
 #include "ui_toast_manager.h"
@@ -154,6 +155,7 @@ void AboutSettingsOverlay::register_callbacks() {
         {"on_about_check_updates_clicked", on_about_check_updates_clicked},
         {"on_about_install_update_clicked", on_about_install_update_clicked},
         {"on_about_print_hours_clicked", on_about_print_hours_clicked},
+        {"on_about_performance_clicked", on_about_performance_clicked},
         {"on_update_download_start", on_about_update_download_start},
         {"on_update_download_cancel", on_about_update_download_cancel},
         {"on_update_download_dismiss", on_about_update_download_dismiss},
@@ -536,6 +538,15 @@ void AboutSettingsOverlay::on_about_install_update_clicked(lv_event_t* /*e*/) {
 void AboutSettingsOverlay::on_about_print_hours_clicked(lv_event_t* /*e*/) {
     LVGL_SAFE_EVENT_CB_BEGIN("[AboutSettings] on_about_print_hours_clicked");
     get_about_settings_overlay().handle_print_hours_clicked();
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void AboutSettingsOverlay::on_about_performance_clicked(lv_event_t* /*e*/) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[AboutSettings] on_about_performance_clicked");
+    auto* overlay = helix::ui::UiOverlayPerformance::instance().create(lv_screen_active());
+    if (overlay) {
+        NavigationManager::instance().push_overlay(overlay);
+    }
     LVGL_SAFE_EVENT_CB_END();
 }
 
