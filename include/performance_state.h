@@ -71,10 +71,14 @@ class PerformanceState {
     lv_subject_t s_about_summary_{};
     lv_subject_t s_available_{};
     lv_subject_t s_history_tick_{};
+    lv_subject_t s_host_cpu_pct_text_{};
+    lv_subject_t s_host_mem_free_text_{};
 
     char buf_throttle_text_[96]{};
     char buf_mcu_names_[256]{};
     char buf_about_summary_[64]{};
+    char buf_cpu_text_[48]{};
+    char buf_mem_text_[48]{};
 
     // ---- Dynamic per-MCU subjects ----
     struct McuSubjects {

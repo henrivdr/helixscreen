@@ -204,3 +204,23 @@ TEST_CASE_METHOD(PerfStateFixture,
     REQUIRE(lv_xml_get_subject(nullptr, "perf_mcu_mcu_load_pct") == first);
     REQUIRE(lv_subject_get_int(first) == 30);
 }
+
+TEST_CASE_METHOD(PerfStateFixture,
+                 "PerformanceState formats CPU and Mem text rows",
+                 "[performance]") {
+    using helix::perf::PerfSample;
+    PerfSample s;
+    s.host_cpu_pct = 37.0f;
+    s.host_cpu_temp_c = 61.4f;
+    s.host_mem_free_mb = 812;
+    s.host_mem_pct_used = 41.0f;
+    PerformanceState::instance().push_sample_for_testing(s);
+    UpdateQueueTestAccess::drain(UpdateQueue::instance());
+
+    const char* cpu_text = lv_subject_get_string(
+        lv_xml_get_subject(nullptr, "perf_host_cpu_pct_text"));
+    const char* mem_text = lv_subject_get_string(
+        lv_xml_get_subject(nullptr, "perf_host_mem_free_text"));
+    REQUIRE(std::string(cpu_text) == "37% \xc2\xb7 61.4\xc2\xb0""C");
+    REQUIRE(std::string(mem_text) == "812 MB free");
+}

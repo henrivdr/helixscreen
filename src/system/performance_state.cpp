@@ -38,6 +38,10 @@ void PerformanceState::init_subjects() {
                               "perf_about_summary", subjects_);
     UI_MANAGED_SUBJECT_INT(s_available_,    0, "perf_available",    subjects_);
     UI_MANAGED_SUBJECT_INT(s_history_tick_, 0, "perf_history_tick", subjects_);
+    UI_MANAGED_SUBJECT_STRING(s_host_cpu_pct_text_, buf_cpu_text_, "\xe2\x80\x94",
+                              "perf_host_cpu_pct_text", subjects_);
+    UI_MANAGED_SUBJECT_STRING(s_host_mem_free_text_, buf_mem_text_, "\xe2\x80\x94",
+                              "perf_host_mem_free_text", subjects_);
 
     StaticSubjectRegistry::instance().register_deinit(
         "PerformanceState", []() { PerformanceState::instance().deinit_subjects(); });
@@ -129,6 +133,24 @@ void PerformanceState::apply_sample(const PerfSample& s) {
     if (!s.host_throttle_text.empty()) {
         lv_subject_copy_string(&s_host_throttle_text_, s.host_throttle_text.c_str());
     }
+
+    char tmp[48];
+    if (s.host_cpu_pct && s.host_cpu_temp_c) {
+        snprintf(tmp, sizeof(tmp), "%d%% \xc2\xb7 %.1f\xc2\xb0""C",
+                 static_cast<int>(*s.host_cpu_pct + 0.5f), *s.host_cpu_temp_c);
+    } else if (s.host_cpu_pct) {
+        snprintf(tmp, sizeof(tmp), "%d%%", static_cast<int>(*s.host_cpu_pct + 0.5f));
+    } else {
+        snprintf(tmp, sizeof(tmp), "\xe2\x80\x94");
+    }
+    lv_subject_copy_string(&s_host_cpu_pct_text_, tmp);
+
+    if (s.host_mem_free_mb) {
+        snprintf(tmp, sizeof(tmp), "%u MB free", *s.host_mem_free_mb);
+    } else {
+        snprintf(tmp, sizeof(tmp), "\xe2\x80\x94");
+    }
+    lv_subject_copy_string(&s_host_mem_free_text_, tmp);
 
     update_mcu_subjects(s.mcus);
 
