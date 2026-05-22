@@ -68,6 +68,8 @@ TEST_CASE_METHOD(PerfStateFixture,
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_cpu_temp_c10")) == 614);
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_mem_free_mb")) == 812);
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_mem_pct_used")) == 41);
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_mem_present")) == 1);
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_cpu_temp_present")) == 1);
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_available")) == 1);
 }
 
@@ -94,8 +96,25 @@ TEST_CASE_METHOD(PerfStateFixture,
                  "PerformanceState absent fields drop _present flags",
                  "[performance]") {
     using helix::perf::PerfSample;
-    PerfSample s; // every optional empty
-    PerformanceState::instance().push_sample_for_testing(s);
+    auto& ps = PerformanceState::instance();
+
+    // First push a fully-populated sample so flags go to 1
+    {
+        PerfSample s;
+        s.host_cpu_pct = 10.0f;
+        s.host_cpu_temp_c = 30.0f;
+        s.host_mem_free_mb = 500;
+        s.host_mem_pct_used = 50.0f;
+        ps.push_sample_for_testing(s);
+    }
+    UpdateQueueTestAccess::drain(UpdateQueue::instance());
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_cpu_pct_present")) == 1);
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_mem_present")) == 1);
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_cpu_temp_present")) == 1);
+
+    // Then push an all-absent sample — flags must clear back to 0
+    PerfSample empty;
+    ps.push_sample_for_testing(empty);
     UpdateQueueTestAccess::drain(UpdateQueue::instance());
 
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "perf_host_cpu_pct_present")) == 0);

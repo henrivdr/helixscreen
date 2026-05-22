@@ -114,9 +114,7 @@ void PerformanceState::apply_sample(const PerfSample& s) {
 
     lv_subject_set_int(&s_host_throttle_state_, static_cast<int>(s.host_throttle_bits));
     if (!s.host_throttle_text.empty()) {
-        snprintf(buf_throttle_text_, sizeof(buf_throttle_text_), "%s",
-                 s.host_throttle_text.c_str());
-        lv_subject_notify(&s_host_throttle_text_);
+        lv_subject_copy_string(&s_host_throttle_text_, s.host_throttle_text.c_str());
     }
 
     update_mcu_subjects(s.mcus);
