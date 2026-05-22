@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.68] - 2026-05-22
+
+Headline is a **Performance overlay** under Settings → System with live CPU / memory / per-MCU readouts and sparklines — backed by `MoonrakerPerformanceSource` on hardware and `MockPerformanceSource` under `--test`. Also: refreshed **Voron printer artwork**, **installer hook dispatch fixed** on CC1 / M1 / AD5X / AD5M-ZMOD, **embedded logs now persisted to flash**, and another **L081 sweep** in bedmesh.
+
+### Added
+
+- **Performance overlay** (Settings → System → Performance) — live CPU load, memory usage, and per-MCU stats (load, awake, retransmits) with sparklines. `MoonrakerPerformanceSource` uses `proc_stats` + mcu subscription on real hardware; `MockPerformanceSource` reads `/proc` and synthesizes MCUs under `--test`. New `helix_sparkline` custom widget, reusable `perf_metric_row` XML component, pre-formatted CPU/mem/per-MCU text subjects, and dynamic per-MCU subjects.
+- **Voron printer artwork refresh** (prestonbrown/helixscreen#964) — added V0, Legacy, and V2; retired V2.4-r2 and the 0-2 variants. Existing configs auto-migrate (v16 → v17).
+- **Active log destination shown in Settings → About** — confirms at a glance where logs are landing on the current device.
+
+### Fixed
+
+- **Performance overlay now populates on real hardware** — `MoonrakerPerformanceSource::start()` runs at app init, before the Moonraker WS is connected and before the HTTP base URL is set, so the initial REST `/machine/proc_stats` and `printer.objects.list` RPC were both lost (REST: "HTTP base URL not configured"; RPC: rejected by `ready_to_send`, response callback silently dropped). `notify_klippy_ready` would normally retrigger discovery, but Moonraker doesn't emit it on cold-connect to an already-ready Klippy. Adds a multi-listener `add_connected_observer` / `remove_connected_observer` registry on `MoonrakerClient` (fires alongside the primary `on_connected` callback on WS open and Klippy ready, with immediate-fire if already connected). The perf source now hooks this observer to defer its initial handshake until the WS is up.
+- **Installer hook dispatch on CC1, M1, AD5X, and AD5M-ZMOD** — missing `case` branches meant platform-specific post-install steps silently no-op'd on these targets.
+- **Embedded log routing prefers persistent flash** — prevents log loss on devices where the previous default landed on tmpfs and disappeared across reboot.
+- **Theme border-radius applied to progress bars** — they now match the rest of the UI instead of rendering with sharp corners.
+- **Retired Voron `printer_image` IDs auto-migrate (v16 → v17)** — configs referencing the old IDs no longer show a broken-image placeholder after upgrade.
+- **L081 cleanup in bedmesh background callbacks** — replaced bare `tok.expired()` checks with `lifetime_.bg_cb` to close another Mechanism C UAF surface.
+- **Bundled 16-bit PNGs downsampled to 8-bit** — workaround for a lodepng SIGSEGV on certain platforms.
+
+### Changed
+
+- **Performance row moved from About to Settings → System** — keeps About focused on identity / version and groups diagnostic readouts together.
+
 ## [0.99.67] - 2026-05-20
 
 ### Fixed
@@ -3807,6 +3831,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.68]: https://github.com/prestonbrown/helixscreen/compare/v0.99.67...v0.99.68
 [0.99.67]: https://github.com/prestonbrown/helixscreen/compare/v0.99.66...v0.99.67
 [0.99.66]: https://github.com/prestonbrown/helixscreen/compare/v0.99.65...v0.99.66
 [0.99.65]: https://github.com/prestonbrown/helixscreen/compare/v0.99.64...v0.99.65
