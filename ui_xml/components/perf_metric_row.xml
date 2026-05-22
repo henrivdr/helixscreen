@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Reusable performance metric row: label + bar + sparkline + value text. -->
+<!-- Row hides when $bind_present == 0. -->
+<!-- Usage: <perf_metric_row label="CPU" bind_value="cpu_pct" bind_text="cpu_text_subject" -->
+<!--         bind_present="cpu_present" sparkline_source="cpu_history"/> -->
+<component>
+  <api>
+    <prop name="label"            type="string"/>
+    <prop name="label_tag"        type="string" default=""/>
+    <prop name="bind_value"       type="string"/>
+    <prop name="bind_text"        type="string"/>
+    <prop name="bind_present"     type="string"/>
+    <prop name="sparkline_source" type="string"/>
+  </api>
+  <view extends="lv_obj"
+        width="100%" height="content" style_pad_all="0" style_pad_gap="#space_sm"
+        flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center"
+        scrollable="false">
+    <bind_flag_if_eq subject="$bind_present" flag="hidden" ref_value="0"/>
+    <text_body text="$label" translation_tag="$label_tag" width="80"/>
+    <lv_bar bind_value="$bind_value" min_value="0" max_value="100"
+            flex_grow="1" height="8"/>
+    <helix_sparkline source="$sparkline_source" width="60" height="16"
+                     style_line_color="#accent"/>
+    <text_muted bind_text="$bind_text" width="80" style_text_align="right"/>
+  </view>
+</component>
