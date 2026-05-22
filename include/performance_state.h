@@ -1,0 +1,103 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+
+#include "async_lifetime_guard.h"
+#include "performance_source.h"
+#include "subject_managed_panel.h"
+
+#include <array>
+#include <lvgl.h>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+
+namespace helix {
+namespace perf {
+
+/// Size of the per-metric ring buffer (60 samples × ~1 Hz = ~60 s of history).
+constexpr std::size_t kHistorySamples = 60;
+
+/// Singleton — sibling to PrinterState/AmsState/ToolState.
+class PerformanceState {
+  public:
+    static PerformanceState& instance();
+
+    /// Register subjects and self-register cleanup. Idempotent.
+    /// Called from Application::init_subsystems() after MoonrakerAPI is up.
+    void init_subjects(bool register_xml = true);
+
+    /// Tear down subjects. Called from StaticSubjectRegistry on shutdown.
+    void deinit_subjects();
+
+    /// Install a data source and start it. Replaces any prior source.
+    /// Owns the source. Safe to call multiple times (re-init for reconnect).
+    void set_source(std::unique_ptr<IPerformanceSource> source);
+
+    /// Read a snapshot of a ring buffer (for sparkline paint). Returns the
+    /// buffer in chronological order (oldest first). Returns empty when the
+    /// named buffer doesn't exist.
+    std::vector<float> read_history(const std::string& name) const;
+
+    // === Test access ===
+    /// Push a sample synchronously (no defer, no thread hop). Test-only.
+    void push_sample_for_testing(const PerfSample& sample);
+
+  private:
+    PerformanceState() = default;
+    PerformanceState(const PerformanceState&) = delete;
+    PerformanceState& operator=(const PerformanceState&) = delete;
+
+    // ---- Main-thread sample application ----
+    void apply_sample(const PerfSample& sample);
+    void update_about_summary();
+    void update_mcu_subjects(const std::vector<McuStat>& mcus);
+    void push_history(const std::string& key, float value);
+    static std::string mcu_safe_name(const std::string& raw);
+
+    // ---- Subjects (static set) ----
+    SubjectManager subjects_;
+    lv_subject_t s_host_cpu_pct_{};
+    lv_subject_t s_host_cpu_pct_present_{};
+    lv_subject_t s_host_cpu_temp_c10_{};
+    lv_subject_t s_host_cpu_temp_present_{};
+    lv_subject_t s_host_mem_free_mb_{};
+    lv_subject_t s_host_mem_pct_used_{};
+    lv_subject_t s_host_mem_present_{};
+    lv_subject_t s_host_throttle_state_{};
+    lv_subject_t s_host_throttle_text_{};
+    lv_subject_t s_mcu_names_{};
+    lv_subject_t s_about_summary_{};
+    lv_subject_t s_available_{};
+    lv_subject_t s_history_tick_{};
+
+    char buf_throttle_text_[96]{};
+    char buf_mcu_names_[256]{};
+    char buf_about_summary_[64]{};
+
+    // ---- Dynamic per-MCU subjects ----
+    struct McuSubjects {
+        lv_subject_t load_pct{};
+        lv_subject_t retrans{};
+        lv_subject_t present{};
+    };
+    std::unordered_map<std::string, std::unique_ptr<McuSubjects>> mcu_subjects_;
+
+    // ---- Ring buffers ----
+    struct Ring {
+        std::array<float, kHistorySamples> data{};
+        std::size_t head = 0; ///< index of NEXT write (rolls)
+        std::size_t fill = 0; ///< samples written (clamped to kHistorySamples)
+    };
+    mutable std::mutex history_mu_;
+    std::unordered_map<std::string, Ring> history_;
+
+    // ---- Source ----
+    std::unique_ptr<IPerformanceSource> source_;
+    AsyncLifetimeGuard lifetime_;
+    bool initialized_ = false;
+};
+
+} // namespace perf
+} // namespace helix
