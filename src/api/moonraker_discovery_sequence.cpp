@@ -35,6 +35,7 @@ void MoonrakerDiscoverySequence::clear_cache() {
     steppers_.clear();
     afc_objects_.clear();
     filament_sensors_.clear();
+    mcus_.clear();
     {
         std::lock_guard<std::mutex> lock(hardware_mutex_);
         hardware_ = PrinterDiscovery{};
@@ -863,7 +864,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     const PrinterDiscovery& hw, const std::vector<std::string>& heaters,
     const std::vector<std::string>& sensors, const std::vector<std::string>& fans,
     const std::vector<std::string>& leds, const std::vector<std::string>& afc_objects,
-    const std::vector<std::string>& filament_sensors) {
+    const std::vector<std::string>& filament_sensors,
+    const std::vector<std::string>& mcus) {
     json subscription_objects;
 
     // Core non-optional objects — narrow each to the fields HelixScreen
@@ -1165,6 +1167,19 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     subscription_objects["gcode_macro START_PRINT"] = json::array({"preparation_done"});
     subscription_objects["gcode_macro _HELIX_STATE"] = json::array({"print_started"});
 
+    // MCUs — PerformanceState (MoonrakerPerformanceSource) reads
+    // last_stats.mcu_awake for the load % and last_stats.bytes_retransmit
+    // for the link-health counter. Subscribing to last_stats pulls the whole
+    // dict (both fields land in one update). Host throttle bits arrive via
+    // notify_proc_stat_update (not subscribed here). Must be in this union
+    // subscription: printer.objects.subscribe REPLACES the per-connection
+    // subscription, so a separate subscribe call from PerformanceSource
+    // would wipe everything above.
+    static const json mcu_fields = json::array({"last_stats"});
+    for (const auto& mcu : mcus) {
+        subscription_objects[mcu] = mcu_fields;
+    }
+
     return subscription_objects;
 }
 
@@ -1179,7 +1194,12 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
     // Step 5: Subscribe to all discovered objects + core objects. The pure
     // helper builds the full objects map; per-section logging stays here.
     json subscription_objects = build_subscription_objects(
-        hw, heaters_, sensors_, fans_, leds_, afc_objects_, filament_sensors_);
+        hw, heaters_, sensors_, fans_, leds_, afc_objects_, filament_sensors_, mcus_);
+
+    if (!mcus_.empty()) {
+        spdlog::info("[Moonraker Client] Subscribing to {} MCU object(s): {}", mcus_.size(),
+                     json(mcus_).dump());
+    }
 
     spdlog::info("[Moonraker Client] Subscribing to {} fans: {}", fans_.size(),
                  json(fans_).dump());
@@ -1310,6 +1330,7 @@ void MoonrakerDiscoverySequence::parse_objects(const json& objects) {
     steppers_.clear();
     afc_objects_.clear();
     filament_sensors_.clear();
+    mcus_.clear();
 
     // Collect printer_objects for hardware_ as we iterate
     std::vector<std::string> all_objects;
@@ -1398,12 +1419,20 @@ void MoonrakerDiscoverySequence::parse_objects(const json& objects) {
                  name.rfind("filament_motion_sensor ", 0) == 0) {
             filament_sensors_.push_back(name);
         }
+        // MCUs: "mcu" (primary) and "mcu <name>" (secondary boards, host MCU,
+        // toolhead MCUs, etc.). Subscribed for PerformanceState — last_stats
+        // for load %, bytes_retransmit for link health. Must ride the main
+        // subscription because Moonraker replaces the per-connection
+        // subscription on every printer.objects.subscribe call.
+        else if (name == "mcu" || name.rfind("mcu ", 0) == 0) {
+            mcus_.push_back(name);
+        }
     }
 
     spdlog::debug("[Moonraker Client] Discovered: {} heaters, {} sensors, {} fans, {} LEDs, {} "
-                  "steppers, {} AFC objects, {} filament sensors",
+                  "steppers, {} AFC objects, {} filament sensors, {} MCUs",
                   heaters_.size(), sensors_.size(), fans_.size(), leds_.size(), steppers_.size(),
-                  afc_objects_.size(), filament_sensors_.size());
+                  afc_objects_.size(), filament_sensors_.size(), mcus_.size());
 
     // Debug output of discovered objects
     if (!heaters_.empty()) {

@@ -269,7 +269,8 @@ class MoonrakerDiscoverySequence {
         const PrinterDiscovery& hw, const std::vector<std::string>& heaters,
         const std::vector<std::string>& sensors, const std::vector<std::string>& fans,
         const std::vector<std::string>& leds, const std::vector<std::string>& afc_objects,
-        const std::vector<std::string>& filament_sensors);
+        const std::vector<std::string>& filament_sensors,
+        const std::vector<std::string>& mcus);
 
   private:
     MoonrakerClient& client_;
@@ -288,6 +289,12 @@ class MoonrakerDiscoverySequence {
     std::vector<std::string> steppers_;
     std::vector<std::string> afc_objects_;
     std::vector<std::string> filament_sensors_;
+    // MCUs (matches "mcu" and "mcu <name>" — e.g. "mcu host", "mcu e0").
+    // Subscribed alongside the rest so PerformanceState gets live
+    // last_stats/bytes_retransmit via the single union subscription. Moonraker
+    // replaces the subscription on every printer.objects.subscribe call, so
+    // PerformanceSource cannot subscribe separately without wiping ours.
+    std::vector<std::string> mcus_;
 
     PrinterDiscovery hardware_;
     mutable std::mutex hardware_mutex_; // Protects hardware_ from concurrent read/write (#777)

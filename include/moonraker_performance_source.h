@@ -39,11 +39,10 @@ class MoonrakerPerformanceSource : public IPerformanceSource {
     /// the initial /machine/proc_stats REST snapshot.
     void on_proc_stat_payload(const json& body);
 
-    /// Issue printer.objects.list and subscribe to all matching MCU objects.
-    void rediscover_mcus();
-
-    /// Run the initial REST proc_stats fetch + MCU discovery. Fired on every
-    /// MoonrakerClient connected-observer signal (WS open / Klippy ready).
+    /// Run the initial REST proc_stats fetch. Fired on every MoonrakerClient
+    /// connected-observer signal (WS open / Klippy ready). MCU live updates
+    /// flow through the main MoonrakerDiscoverySequence subscription — see
+    /// notify_status_update registration in start().
     void run_initial_handshake();
 
     /// Called on main thread for each MCU status payload.
@@ -71,6 +70,9 @@ class MoonrakerPerformanceSource : public IPerformanceSource {
     std::unordered_map<std::string, McuRunningState> mcu_state_;
 
     /// ID for the notify_status_update subscription (for MCU live updates).
+    /// notify_callbacks_ is the channel that MoonrakerClient::dispatch_status_update
+    /// fans out to — it carries both the initial subscription snapshot and live
+    /// frames. method_callbacks_ would skip the initial snapshot.
     uint64_t status_sub_id_ = 0;
 };
 

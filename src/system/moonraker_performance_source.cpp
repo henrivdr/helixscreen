@@ -7,7 +7,6 @@
 #include "hv/json.hpp"
 
 #include <algorithm>
-#include <regex>
 #include <spdlog/spdlog.h>
 
 namespace helix {
@@ -48,8 +47,7 @@ void MoonrakerPerformanceSource::start() {
                             if (body.is_object()) on_proc_stat_payload(body);
                         }));
 
-    // Re-discover on Klippy ready (handles firmware restarts where MCU objects
-    // may change — e.g. secondary MCU added or renamed in printer.cfg).
+    // Re-fetch proc_stats on Klippy ready (firmware restart).
     api_->register_method_callback(
         "notify_klippy_ready", kHandlerName,
         lifetime_.bg_cb("MoonrakerPerformanceSource::notify_klippy_ready",
@@ -58,14 +56,44 @@ void MoonrakerPerformanceSource::start() {
                             run_initial_handshake();
                         }));
 
-    // Hook the WS connect event. The handshake (initial REST proc_stats +
-    // rediscover_mcus) requires the WS to be CONNECTED and the HTTP base URL
-    // to be set. PerformanceState::set_source() runs at app init, BEFORE
-    // Application calls api->set_http_base_url() and m_moonraker->connect(),
-    // so firing the handshake here would lose the discovery RPC (rejected by
-    // ready_to_send) and the initial REST (HTTP base URL not configured).
-    // add_connected_observer fires immediately if already connected, or on
-    // the next WS open / Klippy ready transition.
+    // Hook notify_status_update for MCU live frames. MCU objects are
+    // subscribed by MoonrakerDiscoverySequence as part of the single union
+    // subscription — issuing our own printer.objects.subscribe here would
+    // replace the main subscription and wipe heater/print_stats/fan updates
+    // (Moonraker docs: "A new request will override a previous request").
+    //
+    // Use subscribe_notifications (notify_callbacks_) instead of
+    // register_method_callback (method_callbacks_): only notify_callbacks_
+    // is fanned out by MoonrakerClient::dispatch_status_update, which is
+    // how the discovery-sequence subscribe response delivers the initial
+    // MCU snapshot. method_callbacks_ would only receive subsequent live
+    // WS frames, leaving MCU rows blank until Klipper's first incremental
+    // push.
+    status_sub_id_ = api_->subscribe_notifications(
+        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_status",
+                        [this](const json& j) {
+                            // Runs on main thread via bg_cb defer.
+                            // notify_callbacks_ also receives notify_filelist_changed
+                            // and other methods — filter by the key shape since the
+                            // params[0] payload differs per method.
+                            if (!j.contains("params") || !j["params"].is_array() ||
+                                j["params"].empty())
+                                return;
+                            const json& obj = j["params"][0];
+                            if (!obj.is_object()) return;
+                            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                                // Route MCU keys (matches "mcu" and "mcu <name>").
+                                const std::string& key = it.key();
+                                if (key == "mcu" || key.rfind("mcu ", 0) == 0) {
+                                    on_mcu_status_update(key, it.value());
+                                }
+                            }
+                        }));
+
+    // Hook the WS connect event for the proc_stats REST fetch. Requires the
+    // HTTP base URL to be set, which Application configures AFTER
+    // PerformanceState::set_source(). add_connected_observer fires immediately
+    // if already connected, or on the next WS open / Klippy ready transition.
     api_->get_client().add_connected_observer(
         kHandlerName,
         lifetime_.bg_cb("MoonrakerPerformanceSource::on_connected",
@@ -93,8 +121,8 @@ void MoonrakerPerformanceSource::run_initial_handshake() {
                             }
                         }));
 
-    // Discover MCUs and set up subscriptions for live updates.
-    rediscover_mcus();
+    // MCU live updates ride the main union subscription set up by
+    // MoonrakerDiscoverySequence (see "Hook notify_status_update" in start()).
 }
 
 void MoonrakerPerformanceSource::stop() {
@@ -171,90 +199,6 @@ void MoonrakerPerformanceSource::on_proc_stat_payload(const json& body) {
 }
 
 // ----------------------------------------------------------------------------
-// rediscover_mcus  (main thread — called from bg_cb deferred body)
-// ----------------------------------------------------------------------------
-
-void MoonrakerPerformanceSource::rediscover_mcus() {
-    // Step 1: list all Klipper objects, filter for MCU names.
-    api_->get_client().send_jsonrpc(
-        "printer.objects.list", json::object(),
-        lifetime_.bg_cb("MoonrakerPerformanceSource::objects_list",
-                        [this](const json& resp) {
-                            // Runs on main thread via bg_cb defer.
-                            if (!resp.contains("result"))           return;
-                            const auto& result = resp["result"];
-                            if (!result.contains("objects") || !result["objects"].is_array())
-                                return;
-
-                            const std::regex mcu_re("^mcu( .+)?$");
-                            std::vector<std::string> mcu_names;
-                            for (const auto& o : result["objects"]) {
-                                if (!o.is_string()) continue;
-                                const std::string s = o.get<std::string>();
-                                if (std::regex_match(s, mcu_re)) mcu_names.push_back(s);
-                            }
-
-                            if (mcu_names.empty()) {
-                                spdlog::debug("[perf] no MCU objects found");
-                                return;
-                            }
-
-                            spdlog::debug("[perf] subscribing to {} MCU object(s)", mcu_names.size());
-
-                            // Step 2: subscribe to those objects to get initial state + live updates.
-                            json subs = json::object();
-                            for (const auto& n : mcu_names) subs[n] = nullptr;
-
-                            api_->get_client().send_jsonrpc(
-                                "printer.objects.subscribe",
-                                {{"objects", subs}},
-                                lifetime_.bg_cb("MoonrakerPerformanceSource::objects_subscribe",
-                                                [this, mcu_names](const json& sub_resp) {
-                                                    // Runs on main thread via bg_cb defer.
-                                                    if (!sub_resp.contains("result"))        return;
-                                                    const auto& r = sub_resp["result"];
-                                                    if (!r.contains("status") || !r["status"].is_object())
-                                                        return;
-                                                    const auto& st = r["status"];
-                                                    for (const auto& n : mcu_names) {
-                                                        if (st.contains(n) && st[n].is_object())
-                                                            on_mcu_status_update(n, st[n]);
-                                                    }
-                                                }));
-
-                            // Step 3: hook notify_status_update for live MCU incremental frames.
-                            // Unregister any previous subscription before re-registering to avoid
-                            // double-delivery on Klippy restarts.
-                            if (status_sub_id_ != 0) {
-                                api_->unsubscribe_notifications(status_sub_id_);
-                                status_sub_id_ = 0;
-                            }
-
-                            // register_notify_update callbacks receive the full WS message.
-                            // notify_status_update format:
-                            //   { "method": "notify_status_update", "params": [ {<objects>}, <timestamp> ] }
-                            status_sub_id_ = api_->subscribe_notifications(
-                                lifetime_.bg_cb("MoonrakerPerformanceSource::notify_status",
-                                                [this](const json& j) {
-                                                    // Runs on main thread via bg_cb defer.
-                                                    if (!j.contains("params") ||
-                                                        !j["params"].is_array() ||
-                                                        j["params"].empty())
-                                                        return;
-                                                    const json& obj = j["params"][0];
-                                                    if (!obj.is_object()) return;
-                                                    for (auto it = obj.begin(); it != obj.end(); ++it) {
-                                                        // Route MCU keys (matches "mcu" and "mcu <name>").
-                                                        const std::string& key = it.key();
-                                                        if (key == "mcu" || key.rfind("mcu ", 0) == 0) {
-                                                            on_mcu_status_update(key, it.value());
-                                                        }
-                                                    }
-                                                }));
-                        }));
-}
-
-// ----------------------------------------------------------------------------
 // on_mcu_status_update  (main thread)
 // ----------------------------------------------------------------------------
 
@@ -310,16 +254,21 @@ void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
         }
     }
 
-    // bytes_retransmit: cumulative retransmit byte counter.
-    if (payload.contains("bytes_retransmit") && payload["bytes_retransmit"].is_number()) {
-        st.retrans = payload["bytes_retransmit"].get<uint64_t>();
-        for (auto& m : latest_.mcus) {
-            if (m.name == name) {
-                m.retransmits = st.retrans;
-                break;
+    // bytes_retransmit: cumulative retransmit byte counter. Klipper publishes
+    // this INSIDE last_stats (see Status_Reference.html#mcu: "last_stats.<name>")
+    // — reading it at the top level (the old path) silently never fired.
+    if (payload.contains("last_stats") && payload["last_stats"].is_object()) {
+        const auto& ls = payload["last_stats"];
+        if (ls.contains("bytes_retransmit") && ls["bytes_retransmit"].is_number()) {
+            st.retrans = ls["bytes_retransmit"].get<uint64_t>();
+            for (auto& m : latest_.mcus) {
+                if (m.name == name) {
+                    m.retransmits = st.retrans;
+                    break;
+                }
             }
+            updated = true;
         }
-        updated = true;
     }
 
     if (updated && cb_) cb_(latest_);

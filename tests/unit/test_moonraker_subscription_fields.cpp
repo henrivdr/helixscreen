@@ -36,6 +36,7 @@ struct DiscoveryFixture {
     std::vector<std::string> leds;
     std::vector<std::string> afc_objects;
     std::vector<std::string> filament_sensors;
+    std::vector<std::string> mcus;
     json all_objects = json::array();
 
     void add(const std::string& name, std::initializer_list<const char*> categories) {
@@ -54,6 +55,8 @@ struct DiscoveryFixture {
                 afc_objects.push_back(name);
             else if (c == "filament_sensor")
                 filament_sensors.push_back(name);
+            else if (c == "mcu")
+                mcus.push_back(name);
         }
     }
 
@@ -61,7 +64,7 @@ struct DiscoveryFixture {
         PrinterDiscovery hw;
         hw.parse_objects(all_objects);
         return MoonrakerDiscoverySequence::build_subscription_objects(
-            hw, heaters, sensors, fans, leds, afc_objects, filament_sensors);
+            hw, heaters, sensors, fans, leds, afc_objects, filament_sensors, mcus);
     }
 };
 
@@ -475,5 +478,68 @@ TEST_CASE("Subscription: fan_feedback subscribed only when present",
             CAPTURE(field);
             REQUIRE(has_field(subs, "fan_feedback", field));
         }
+    }
+}
+
+// MCU subscriptions cover MoonrakerPerformanceSource's reads. These MUST ride
+// the single union subscription built here — Moonraker docs:
+// "A new request will override a previous request." A separate
+// printer.objects.subscribe call from PerformanceSource would wipe the entire
+// subscription, severing notify_status_update for heaters / print_stats /
+// fans / AFC. Regression of this guard reintroduces the v0.99.68 outage.
+TEST_CASE("Subscription: MCU objects narrow to PerformanceSource reads",
+          "[moonraker][subscription]") {
+    SECTION("none subscribed when no MCU objects discovered") {
+        DiscoveryFixture fx;
+        // No MCU added — this is the "before discovery" / mock-printer case.
+        json subs = fx.build();
+        REQUIRE_FALSE(subs.contains("mcu"));
+    }
+
+    SECTION("primary mcu subscribes last_stats") {
+        DiscoveryFixture fx;
+        fx.add("mcu", {"mcu"});
+        json subs = fx.build();
+
+        // on_mcu_status_update reads last_stats.mcu_awake and
+        // last_stats.bytes_retransmit — both arrive in the same last_stats
+        // dict (Klipper Status_Reference.html#mcu). Top-level
+        // bytes_retransmit does NOT exist; subscribing to it was a no-op.
+        REQUIRE(has_field(subs, "mcu", "last_stats"));
+    }
+
+    SECTION("secondary MCUs (host + per-toolhead) each subscribe last_stats") {
+        DiscoveryFixture fx;
+        fx.add("mcu", {"mcu"});
+        fx.add("mcu host", {"mcu"});
+        fx.add("mcu e0", {"mcu"});
+        fx.add("mcu e1", {"mcu"});
+        json subs = fx.build();
+
+        for (const char* name : {"mcu", "mcu host", "mcu e0", "mcu e1"}) {
+            CAPTURE(name);
+            REQUIRE(has_field(subs, name, "last_stats"));
+        }
+    }
+
+    SECTION("MCU subscription coexists with heater/print_stats — the v0.99.68 outage was about replacement") {
+        DiscoveryFixture fx;
+        fx.add("mcu", {"mcu"});
+        fx.add("mcu host", {"mcu"});
+        fx.add("extruder", {"heater"});
+        fx.add("heater_bed", {"heater"});
+        json subs = fx.build();
+
+        // The point of the union subscription: adding MCU objects must NOT
+        // wipe the heaters that v0.99.68's separate subscribe call clobbered.
+        REQUIRE(has_field(subs, "mcu", "last_stats"));
+        REQUIRE(has_field(subs, "mcu host", "last_stats"));
+        REQUIRE(has_field(subs, "extruder", "temperature"));
+        REQUIRE(has_field(subs, "extruder", "target"));
+        REQUIRE(has_field(subs, "heater_bed", "temperature"));
+        REQUIRE(has_field(subs, "heater_bed", "target"));
+        // print_stats and virtual_sdcard are core; should always be present.
+        REQUIRE(has_field(subs, "print_stats", "state"));
+        REQUIRE(has_field(subs, "virtual_sdcard", "progress"));
     }
 }
