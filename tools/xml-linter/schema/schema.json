@@ -1773,6 +1773,14 @@
     "z_offset_indicator": {
       "attributes": {},
       "inherits": "lv_obj"
+    },
+    "helix_sparkline": {
+      "attributes": {
+        "source": {
+          "type": "string"
+        }
+      },
+      "inherits": "lv_obj"
     }
   },
   "enums": {
@@ -2738,7 +2746,8 @@
     "system_path_canvas",
     "endless_spool_arrows",
     "ui_split_button",
-    "z_offset_indicator"
+    "z_offset_indicator",
+    "helix_sparkline"
   ],
   "runtime_constants": [
     "accent_bar_gap",
