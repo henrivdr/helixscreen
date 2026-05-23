@@ -2252,14 +2252,34 @@ deploy-k2:
 	@if [ -d build/assets/images/printers/prerendered ] && ls build/assets/images/printers/prerendered/*.bin >/dev/null 2>&1; then \
 		COPYFILE_DISABLE=1 tar -cf - -C build/assets/images/printers prerendered | ssh $(K2_SSH_TARGET) "cd $(K2_DEPLOY_DIR)/assets/images/printers && tar -xf -"; \
 	fi
-	@# Install/update init script for boot persistence
-	@echo "$(DIM)Installing init script...$(RESET)"
-	@cat config/helixscreen.init | ssh $(K2_SSH_TARGET) '\
-		cat > /etc/init.d/S99helixscreen && \
-		chmod +x /etc/init.d/S99helixscreen && \
-		sed -i "s|DAEMON_DIR=.*|DAEMON_DIR=\"/opt/helixscreen\"|" /etc/init.d/S99helixscreen && \
-		ln -sf ../init.d/S99helixscreen /etc/rc.d/S99helixscreen 2>/dev/null; \
-		echo "Init script installed"'
+	@# Install/update init script + procd shim for boot persistence.
+	@# K2 (procd) silently skips plain SysV scripts at boot ([L086]) — only
+	@# scripts with `#!/bin/sh /etc/rc.common` + DEPEND= are invoked. The
+	@# shim at /etc/init.d/helixscreen is what procd's boot iterator picks up;
+	@# it delegates to the SysV script. Single source of truth for the shim
+	@# is config/helixscreen-k2-procd-shim.sh — also used by
+	@# install_procd_shim_k2() in scripts/lib/installer/service.sh. One ssh
+	@# (set -e) so any failure aborts the deploy; rc.d symlinks are verified
+	@# post-enable because `enable` exits 0 even when the symlinks are wrong.
+	@echo "$(DIM)Installing init script + procd shim...$(RESET)"
+	@tar -cf - -C config helixscreen.init helixscreen-k2-procd-shim.sh \
+		| ssh $(K2_SSH_TARGET) 'set -e; \
+			cd /tmp && tar -xf - && \
+			cp helixscreen.init /etc/init.d/S99helixscreen && \
+			chmod +x /etc/init.d/S99helixscreen && \
+			sed -i "s|DAEMON_DIR=.*|DAEMON_DIR=\"/opt/helixscreen\"|" /etc/init.d/S99helixscreen && \
+			cp helixscreen-k2-procd-shim.sh /etc/init.d/helixscreen && \
+			chmod +x /etc/init.d/helixscreen && \
+			rm -f /etc/rc.d/S99helixscreen /etc/rc.d/K01helixscreen && \
+			/etc/init.d/helixscreen enable && \
+			s99=$$(readlink /etc/rc.d/S99helixscreen 2>/dev/null || true); \
+			k01=$$(readlink /etc/rc.d/K01helixscreen 2>/dev/null || true); \
+			if [ "$$s99" != "../init.d/helixscreen" ] || [ "$$k01" != "../init.d/helixscreen" ]; then \
+				echo "ERROR: rc.d symlinks not pointing at shim (S99=$$s99 K01=$$k01)" >&2; \
+				exit 1; \
+			fi; \
+			rm -f /tmp/helixscreen.init /tmp/helixscreen-k2-procd-shim.sh; \
+			echo "Init script + procd shim installed (boot symlinks verified)"'
 	@# Ensure /opt/helixscreen symlink exists (points to UDISK for storage)
 	@ssh $(K2_SSH_TARGET) '\
 		if [ ! -e /opt/helixscreen ]; then \
