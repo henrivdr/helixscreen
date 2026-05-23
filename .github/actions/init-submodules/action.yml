@@ -1,0 +1,46 @@
+name: Initialize submodules with retry
+description: |
+  Initializes git submodules recursively, retrying on transient GitHub auth
+  failures. Pair with `actions/checkout` configured with `submodules: false`;
+  this step uses the credential header `actions/checkout` already persists on
+  the parent repository for clone authentication.
+
+  Background: `actions/checkout`'s built-in `submodules: recursive` flow hits
+  intermittent `fatal: could not read Username for 'https://github.com'`
+  errors under GitHub Actions load — the credential header is set, but
+  subprocess clones for individual submodules sometimes don't inherit it.
+  Retrying clears the transient on the next attempt.
+
+inputs:
+  attempts:
+    description: Maximum number of submodule init attempts.
+    required: false
+    default: "5"
+  jobs:
+    description: Parallel clone jobs passed to `git submodule update --jobs`.
+    required: false
+    default: "4"
+
+runs:
+  using: composite
+  steps:
+    - name: Initialize submodules
+      shell: bash
+      env:
+        ATTEMPTS: ${{ inputs.attempts }}
+        JOBS: ${{ inputs.jobs }}
+      run: |
+        set -u
+        for ((i=1; i<=ATTEMPTS; i++)); do
+          if git submodule update --init --recursive --jobs "$JOBS"; then
+            echo "Submodules initialized on attempt $i"
+            exit 0
+          fi
+          if (( i == ATTEMPTS )); then
+            echo "::error::Submodule init failed after $ATTEMPTS attempts"
+            exit 1
+          fi
+          sleep_secs=$(( i * 5 ))
+          echo "::warning::Submodule init attempt $i failed; retrying in ${sleep_secs}s"
+          sleep "$sleep_secs"
+        done

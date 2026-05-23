@@ -36,7 +36,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install dependencies
       uses: nick-fields/retry@v4
@@ -117,7 +120,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install runtime deps
       run: |
@@ -222,7 +228,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install runtime deps
       run: |
@@ -257,7 +266,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install bats
       run: |
@@ -279,7 +291,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install dependencies
       uses: nick-fields/retry@v4
@@ -362,7 +377,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install dependencies
       uses: nick-fields/retry@v4
@@ -475,7 +493,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        submodules: recursive
+        submodules: false
+
+    - name: Initialize submodules
+      uses: ./.github/actions/init-submodules
 
     - name: Install dependencies
       run: brew install sdl2 libusb ccache coreutils
