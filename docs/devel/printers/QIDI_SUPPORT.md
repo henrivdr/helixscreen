@@ -31,7 +31,7 @@ The TJC panel on Plus 4 and the 3-series is part of QIDI's **MKS PI smart-panel*
 
 HelixScreen renders LVGL directly to a Linux framebuffer / DRM / SDL surface; it has no architecture for pushing UI to a remote serial HMI. Even if we added a TJC backend, the panel firmware would still be the actual UI — HelixScreen would be reduced to a thumbnail-encoder shim, not a touchscreen UI replacement. The two architectures don't meet halfway.
 
-A community pure-Python reimplementation of `libColPic.so` exists (byte-for-byte verified, 30/30 cases against the original, May 2026) and is useful to anyone driving the stock panel from host-side tooling (FreeDi, community firmware). It is **not** a path to running HelixScreen on the stock display.
+A community pure-Python reimplementation of `libColPic.so` exists (byte-for-byte verified, 30/30 cases against the original, by `Sib6019`, May 22 2026; full panel + encoder writeup in [`../printer-research/QIDI_PLUS_4_RESEARCH.md`](../printer-research/QIDI_PLUS_4_RESEARCH.md) § 0). It is useful to anyone driving the stock panel from host-side tooling (FreeDi, community firmware). It is **not** a path to running HelixScreen on the stock display.
 
 The only way to run HelixScreen on-device on a Plus 4 or 3-series printer is to replace the MKS panel with a Linux-driven display (HDMI/DSI/SDL framebuffer). Remote-control mode is unaffected.
 
@@ -48,7 +48,7 @@ QIDI uses two generations of mainboard:
 |-------|-------------|------------|--------------------|-------|
 | Max 4 | Linux framebuffer (5" capacitive) | 800x480 | **Likely yes** (untested) | Same new-gen mainboard as Q2, with a larger framebuffer display. |
 | Q2 | Linux framebuffer (4.3" IPS capacitive) | 480x272 | **Yes** (confirmed) | Goodix touch controller. User-confirmed working install. WiFi requires wpa_supplicant backend (see below). |
-| Plus 4 | TJC HMI (serial) | 800x480 | **No** | Requires screen replacement. Same display firmware as X-Max 3. Auto-detected as remote target. |
+| Plus 4 | TJC HMI (serial) | 800x480 | **No** | Panel identified: `TJC8048X250_011C_I_Z03`, firmware V1.65, CST3240 touch, driven by `xindi` daemon over `/dev/ttyS1 @ 115200`. Requires screen replacement. Auto-detected as remote target. |
 | Q1 Pro | TJC HMI (serial) | 480x272 | **No** | Requires screen replacement. TJC model TJC4827X243_011. Auto-detected as remote target. |
 | X-Max 3 | TJC HMI (serial) | 800x480 | **No** | Requires screen replacement (HDMI/DSI touchscreen). Auto-detected as remote target. |
 | X-Plus 3 | TJC HMI (serial) | 800x480 | **No** | Requires screen replacement. Same display firmware as X-Max 3. Auto-detected as remote target. |

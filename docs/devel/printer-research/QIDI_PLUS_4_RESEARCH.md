@@ -12,6 +12,41 @@
 
 The stock Plus 4 ships with an **MKS PI smart-panel** — the same architecture used across the 3-series (X-Max 3, X-Plus 3, X-Smart 3, Q1 Pro). It is a standalone microcontroller-driven HMI (TJC is the original Chinese OEM; Nextion is the same panel family licensed for global distribution) wired to the mainboard over serial UART, **not** a Linux framebuffer. The panel runs its own firmware and *is* the UI; the Klipper host pushes UI state and pre-rendered thumbnails into it via TJC commands.
 
+### Panel hardware (confirmed)
+
+From Sib6019's May 22, 2026 closeout report (`colpic_TJC8048X250_project_report.pdf`):
+
+| Marking | Meaning |
+|---------|---------|
+| `TJC8048X250_011C_I_Z03` | Panel model + revision — 5" 800×480 capacitive HMI |
+| `V1.65` (in QR `HXFJTQFKXSFK77FKV1.65+10806070`) | Panel firmware version |
+| `CST3240` | Capacitive touch controller |
+| `0500A013V1` | 5" LCD flex identifier |
+| Header pinout `5V / A / B / Z / Y / GND`, `VCC = 5V` | RS-485-style serial header carrying TJC/Nextion UART |
+
+### Host data path and UART map
+
+```
+slicer PNG
+  └─> /home/mks/gene4.py        # PIL resize/pad → RGB565 (truncation)
+       └─> /home/mks/libColPic.so   # ColPic_EncodeStr → palette+RLE+base-6 ASCII
+            └─> *.tjc file
+                 └─> xindi (/root/xindi/build/xindi, launched by start.sh)
+                      └─> /dev/ttyS1 @ 115200 baud, 8N1 raw
+                           └─> TJC8048X250 panel
+```
+
+Host is `mkspi` (ARM aarch64, Debian, Python 3.7.3). UART ownership on a live stock Plus 4:
+
+| Device | Owner | Role |
+|--------|-------|------|
+| `/dev/ttyS0` | `klippy.py` | Klipper — printer MCU link |
+| `/dev/ttyS1` | `xindi` | Display panel (TJC8048X250) @ 115200 |
+| `/dev/ttyS2` | `klippy.py` | Klipper — secondary MCU link |
+| `/dev/ttyACM0` | (USB-CDC) | Mainboard "QIDI BOX V1" (Klipper) |
+
+`/etc/init.d/tuning` is **not** the display manager — it only sets CPU governors and thread affinity, and references `xindi` solely to pin its threads. The actual launcher is `/root/xindi/build/start.sh`.
+
 ### Thumbnail pipeline
 
 Thumbnails are encoded via `/home/mks/libColPic.so` — a 12 KB closed-source ARM aarch64 binary exporting one symbol, `ColPic_EncodeStr`. The function packs an RGB565 pixel buffer into a custom RLE+palette format and base-6 ASCII-encodes the result into a `.tjc` blob the panel decodes. Seven stages, fully documented:
@@ -24,7 +59,20 @@ Thumbnails are encoded via `/home/mks/libColPic.so` — a 12 KB closed-source AR
 6. Pixel-data RLE with `(idx >> 5)` escape bytes for palette high-bits
 7. Base-6 ASCII pack (3 → 4 bytes, `0x5C` substituted as `0x7E` to escape backslash)
 
-A community pure-Python reimplementation exists (byte-for-byte verified, 30/30 cases against the original, May 2026 by `Sib6019`). Files capture the full disassembly mapping and dead-code analysis. **Useful for FreeDi/community-firmware contributors** writing tooling that pushes to the stock panel from the host side. **Not useful for HelixScreen integration** — see below.
+A community pure-Python reimplementation exists (byte-for-byte verified, 30/30 cases against the original, May 22 2026 by `Sib6019`; reference report `colpic_TJC8048X250_project_report.pdf`). Files capture the full disassembly mapping and dead-code analysis. **Useful for FreeDi/community-firmware contributors** writing tooling that pushes to the stock panel from the host side. **Not useful for HelixScreen integration** — see below.
+
+A practically-significant upstream-encoder bug surfaced during that review: `gene4.py`'s PNG→RGB565 conversion silently overflows the 1024-colour palette cap on photographic input — roughly 24% of pixels collapse to `palette[0]` (the dominant colour) through the encoder's linear-search miss path, because the dead overflow handler (stage 3) is never reached. A one-line PIL `.quantize(colors=256)` upstream of the `>>3/>>2/>>3` truncation drops MAE 15–25× and shrinks `.tjc` output ~17%. This is a fix for the MKS / FreeDi community, not us.
+
+### Encoder binary fingerprint (for cross-checking community reimplementations)
+
+| Field | Value |
+|-------|-------|
+| Path | `/home/mks/libColPic.so` |
+| Size | 12,448 B ELF |
+| Toolchain | GCC 8.3.0 |
+| Build date | May 27, 2023 |
+| Build ID | `70f8067e3777d486589c59ffcc0522039437436d` |
+| Default invocation | `ColPic_EncodeStr(rgb16, w, h, out, w*h*10, 1024)` (size 200, palette cap 1024) |
 
 ### Why HelixScreen can't drive this panel
 
@@ -37,6 +85,10 @@ The on-device install path requires replacing the MKS panel with a Linux-driven 
 - **Do not propose** "TJC backend for HelixScreen" or "drive the stock panel via libColPic" — both are architecturally dead ends.
 - If we ever want a printer-mounted display on a stock Plus 4, the only viable path is replacing the panel or augmenting the printer with a separate Pi-driven display.
 - The colpic RE work belongs in the FreeDi / community-firmware ecosystem, not here.
+
+### Operational gotcha (if anyone ever probes the stock panel)
+
+Direct Nextion-style `connect` handshakes against `/dev/ttyS1` while `xindi` is running trigger Linux's interrupt-storm protection (`Disabling IRQ #58` in kernel log). The serial port goes dead until reboot. **Do not `pkill xindi`** to free the port either — QIDI's customised TJC protocol does not respond to stock Nextion identification queries, so seizing the port gains nothing. For any future sniffing, use a passive read or a hardware TX-line tap. The panel's identity is already established by convergent evidence (sticker + QR + UART map + verified gene4.py→libColPic.so pipeline); no further on-line probing is warranted.
 
 ---
 
