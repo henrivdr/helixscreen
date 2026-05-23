@@ -476,10 +476,14 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
     SECTION("load gcode uses CR_BOX commands with TNN, wrapped in park envelope") {
         const std::string expected_a =
             "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
+            "BOX_SAVE_FAN\n"
             "BOX_GO_TO_EXTRUDE_POS\n"
+            "BOX_SET_TEMP\n"
+            "BOX_MODE_WAIT\n"
             "CR_BOX_PRE_OPT\nCR_BOX_EXTRUDE TNN=T1A\n"
             "CR_BOX_WASTE\nCR_BOX_FLUSH TNN=T1A\nCR_BOX_END_OPT\n"
             "BOX_NOZZLE_CLEAN\n"
+            "BOX_RESTORE_FAN\n"
             "BOX_MOVE_TO_SAFE_POS\n"
             "RESTORE_GCODE_STATE NAME=helix_cfs_load";
         REQUIRE(AmsBackendCfs::load_gcode(0) == expected_a);
@@ -489,6 +493,11 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
                 std::string::npos);
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_MOVE_TO_SAFE_POS") !=
                 std::string::npos);
+        // Stock-parity envelope: heat + wait + fan save/restore around the op.
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_SET_TEMP") != std::string::npos);
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_MODE_WAIT") != std::string::npos);
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_SAVE_FAN") != std::string::npos);
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_RESTORE_FAN") != std::string::npos);
         // Load ends with fresh filament in the nozzle — wipe before parking.
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_NOZZLE_CLEAN") !=
                 std::string::npos);
@@ -499,9 +508,12 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
     SECTION("unload gcode uses CR_BOX commands inside park envelope") {
         const std::string g = AmsBackendCfs::unload_gcode();
         REQUIRE(g.find("SAVE_GCODE_STATE NAME=helix_cfs_load") != std::string::npos);
+        REQUIRE(g.find("BOX_SAVE_FAN") != std::string::npos);
         REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
-        REQUIRE(g.find("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_END_OPT") !=
-                std::string::npos);
+        REQUIRE(g.find("BOX_SET_TEMP") != std::string::npos);
+        REQUIRE(g.find("CR_BOX_PRE_OPT\nCR_BOX_CUT\nBOX_MODE_WAIT\n"
+                       "CR_BOX_RETRUDE\nCR_BOX_END_OPT") != std::string::npos);
+        REQUIRE(g.find("BOX_RESTORE_FAN") != std::string::npos);
         REQUIRE(g.find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
         REQUIRE(g.find("RESTORE_GCODE_STATE NAME=helix_cfs_load") != std::string::npos);
         // Unload ends with retrude — nozzle is empty; no wipe needed.
@@ -512,8 +524,9 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
         for (int idx : {0, 1, 3}) {
             const std::string g = AmsBackendCfs::swap_gcode(idx);
             REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
-            REQUIRE(g.find("CR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_EXTRUDE TNN=") !=
-                    std::string::npos);
+            REQUIRE(g.find("BOX_SET_TEMP") != std::string::npos);
+            REQUIRE(g.find("CR_BOX_CUT\nBOX_MODE_WAIT\nCR_BOX_RETRUDE\n"
+                           "BOX_MODE_WAIT\nCR_BOX_EXTRUDE TNN=") != std::string::npos);
             REQUIRE(g.find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
             // Swap ends with flush of the new slot — wipe before parking.
             REQUIRE(g.find("BOX_NOZZLE_CLEAN") != std::string::npos);

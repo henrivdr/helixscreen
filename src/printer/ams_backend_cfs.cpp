@@ -1107,33 +1107,44 @@ AmsError AmsBackendCfs::disable_bypass() {
 
 namespace {
 
-/// Wrap a CR_BOX_* operation with the K2 stock screen's positioning
-/// envelope. Without this, the flush extrudes onto the build plate instead
-/// of into the K2's waste port — `BOX_GO_TO_EXTRUDE_POS` parks the toolhead
-/// over the waste chute (extrude_pos X=133/Y=378 on K2 Plus) and
-/// `BOX_MOVE_TO_SAFE_POS` parks it back at safe_pos (X=225/Y=345) when the
-/// op finishes. SAVE/RESTORE_GCODE_STATE preserves the caller's coordinate
-/// mode, feedrate, and absolute/relative state.
+/// Wrap a CR_BOX_* operation with the stock K2 macro envelope.
 ///
-/// `wipe_after`: when true, run `BOX_NOZZLE_CLEAN` between the body and
-/// the safe-pos move. The clean macro performs a wipe at the silicone pad
-/// (clean_pos_left/right X=160-170, Y=374). Without this, a freshly
-/// flushed nozzle is still wet — moving directly to safe_pos drags hot
-/// filament across the build plate (observed on K2 Plus 2026-05-23 by
-/// Preston: T1 load left a drip trail on the bed). Stock
-/// `BOX_LOAD_MATERIAL_END` doesn't include this either, but the K2 stock
-/// UI clearly drives a wipe somewhere in its load path — likely via a
-/// pre-baked sequence we don't share. Adding it here mirrors the
-/// user-visible behavior.
+/// The envelope mirrors what stock BOX_LOAD_MATERIAL_* does around the
+/// raw `CR_BOX_*` calls, in this order:
+///
+///   1. SAVE_GCODE_STATE        — preserve caller coordinate mode + feedrate
+///   2. BOX_SAVE_FAN            — suppress part-cooling during the op
+///   3. BOX_GO_TO_EXTRUDE_POS   — toolhead over waste chute (X=133/Y=378)
+///   4. BOX_SET_TEMP            — heat extruder to Tn_extrude_temp (220°C
+///                                from [box] config), required or Klipper
+///                                rejects extrude with min_extrude_temp
+///   5. BOX_MODE_WAIT           — wait for box state machine + extruder
+///                                target to settle before active phase
+///   6. <body>                  — CR_BOX_PRE_OPT, EXTRUDE/CUT/RETRUDE/etc.
+///   7. BOX_NOZZLE_CLEAN        — (load/swap only) wipe on silicone pad
+///                                at X=160-170, Y=374 so the flushed
+///                                nozzle doesn't drip on the move home
+///   8. BOX_RESTORE_FAN         — restore part-cooling state
+///   9. BOX_MOVE_TO_SAFE_POS    — park at safe_pos (X=225/Y=345)
+///  10. RESTORE_GCODE_STATE
+///
+/// `wipe_after` toggles step 7. Load and swap end with the nozzle full
+/// of fresh filament — wipe required (observed K2 Plus 2026-05-23: T1
+/// load drip-trailed across the bed). Unload ends with the nozzle empty
+/// post-cut — wipe omitted to avoid pushing dribble back into the hotend.
 std::string wrap_with_park(const std::string& body, bool wipe_after) {
     std::string post_body = "\n";
     if (wipe_after) {
         post_body += "BOX_NOZZLE_CLEAN\n";
     }
-    post_body += "BOX_MOVE_TO_SAFE_POS\n"
+    post_body += "BOX_RESTORE_FAN\n"
+                 "BOX_MOVE_TO_SAFE_POS\n"
                  "RESTORE_GCODE_STATE NAME=helix_cfs_load";
     return "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
-           "BOX_GO_TO_EXTRUDE_POS\n" +
+           "BOX_SAVE_FAN\n"
+           "BOX_GO_TO_EXTRUDE_POS\n"
+           "BOX_SET_TEMP\n"
+           "BOX_MODE_WAIT\n" +
            body + post_body;
 }
 
@@ -1159,7 +1170,11 @@ std::string AmsBackendCfs::unload_gcode() {
     // Unload ends with CR_BOX_RETRUDE — the nozzle is empty (cut + retracted),
     // so no wipe needed. Skipping the wipe also avoids the wipe macro pushing
     // anything back into the hotend during a "filament-out" state.
-    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_END_OPT",
+    // BOX_MODE_WAIT before CR_BOX_RETRUDE mirrors the stock
+    // BOX_QUIT_MATERIAL_RETRUDE_MATERIAL sequence (state-machine settle
+    // after the cut).
+    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nBOX_MODE_WAIT\n"
+                          "CR_BOX_RETRUDE\nCR_BOX_END_OPT",
                           /*wipe_after=*/false);
 }
 
@@ -1170,11 +1185,14 @@ std::string AmsBackendCfs::swap_gcode(int idx) {
         return "";
     }
     // Full swap: unload current (cut+retract) then load new slot, all in one
-    // session. Ends with flush of the NEW filament so wipe is required, same
-    // as load_gcode().
-    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_EXTRUDE TNN=" +
-                              tnn + "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn +
-                              "\nCR_BOX_END_OPT",
+    // session. BOX_MODE_WAIT interposed after CR_BOX_CUT (let the cutter
+    // recover) and before CR_BOX_EXTRUDE (new slot's state-machine handoff).
+    // Ends with flush of the NEW filament so wipe is required, same as load.
+    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nBOX_MODE_WAIT\n"
+                          "CR_BOX_RETRUDE\nBOX_MODE_WAIT\n"
+                          "CR_BOX_EXTRUDE TNN=" + tnn +
+                          "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn +
+                          "\nCR_BOX_END_OPT",
                           /*wipe_after=*/true);
 }
 
