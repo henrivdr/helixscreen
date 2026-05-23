@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "async_lifetime_guard.h"
 #include "hv/json.hpp"
 
 #include <mutex>
@@ -78,6 +79,18 @@ class GcodeErrorRouter {
     /// without this we'd modal the same error twice.
     std::mutex replay_mutex_;
     double last_replayed_time_ = 0.0;
+
+    /// [L072] Generation guard for callbacks captured by MoonrakerClient.
+    /// `MoonrakerClient::unregister_method_callback` and
+    /// `remove_connected_observer` are not synchronized against in-flight
+    /// invocations (callbacks are copied under lock then invoked outside),
+    /// so a WS-thread callback that already entered the invoke phase can
+    /// fire on a destroyed router. All three registrations route through
+    /// `lifetime_.bg_cb(...)`, which queues to main and skips on
+    /// generation mismatch. Declared last so it destructs FIRST in member
+    /// teardown — outstanding tokens are invalidated before anything else
+    /// the body might touch.
+    AsyncLifetimeGuard lifetime_;
 };
 
 }  // namespace helix

@@ -55,18 +55,36 @@ GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client)
         return;
     }
 
-    // Live broadcast handler. Captures `this`; the dtor unregisters
-    // before MoonrakerClient is destroyed, so the WS thread can't fire
-    // on a dangling pointer.
+    // [L072] Both registrations run on the WS thread. MoonrakerClient
+    // copies the callback list under lock and invokes outside it, so
+    // unregister_method_callback / remove_connected_observer in our dtor
+    // do NOT block in-flight invocations. lifetime_.bg_cb wraps the
+    // delivery: when the WS thread fires the wrapper, it queues `fn` to
+    // the main thread with a generation snapshot; on main-thread dispatch
+    // the gen is re-checked, so a callback that fires after the dtor
+    // invalidates `lifetime_` is silently dropped.
     client_->register_method_callback(
         "notify_gcode_response", kNotifyHandlerName,
-        [this](const nlohmann::json& msg) { on_notify_gcode_response(msg); });
+        lifetime_.bg_cb("GcodeErrorRouter::on_notify",
+                        [this](const nlohmann::json& msg) {
+                            on_notify_gcode_response(msg);
+                        }));
 
     // Reconnect replay. Fires on WS open + Klippy ready transitions.
-    client_->add_connected_observer(kReplayObserverName, [this]() { on_connected(); });
+    // bg_cb takes a 0-arg callback fine — the lambda below doesn't need
+    // arguments; the wrapper just defers and gen-checks.
+    client_->add_connected_observer(
+        kReplayObserverName,
+        lifetime_.bg_cb("GcodeErrorRouter::on_connected", [this]() { on_connected(); }));
 }
 
 GcodeErrorRouter::~GcodeErrorRouter() {
+    // Erase the map entries so no NEW invocations start after this point.
+    // In-flight invocations (already past the map lookup, queued for dispatch)
+    // are handled by lifetime_'s generation guard — see the bg_cb usage in
+    // the ctor. lifetime_ destructs after this body returns and invalidates
+    // all outstanding tokens, so any deferred body that lands on main after
+    // the unregister is silently dropped.
     if (client_) {
         client_->unregister_method_callback("notify_gcode_response", kNotifyHandlerName);
         client_->remove_connected_observer(kReplayObserverName);
@@ -266,9 +284,16 @@ void GcodeErrorRouter::on_notify_gcode_response(const nlohmann::json& msg) {
 
 void GcodeErrorRouter::on_connected() {
     if (!client_) return;
+    // [L072] get_gcode_store's success callback fires on the WS thread when
+    // Moonraker responds. The request tracker holds the callback for the
+    // duration of the RPC, so a late response delivered after our dtor would
+    // otherwise re-enter `this` on freed memory. bg_cb defers to main with
+    // a generation guard.
     client_->get_gcode_store(
         kReplayFetchCount,
-        [this](const std::vector<GcodeStoreEntry>& entries) {
+        lifetime_.bg_cb(
+            "GcodeErrorRouter::replay_response",
+            [this](const std::vector<GcodeStoreEntry>& entries) {
             // gcode_store is oldest-first; walk reverse for newest.
             for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
                 if (it->type != "response") continue;
@@ -313,7 +338,7 @@ void GcodeErrorRouter::on_connected() {
                 ui_notification_error(title, clean.c_str(), /*modal=*/true);
                 return;
             }
-        },
+        }),
         [](const MoonrakerError& err) {
             spdlog::debug("[GcodeError replay] gcode_store query failed: {}", err.message);
         });
