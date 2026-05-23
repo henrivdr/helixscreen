@@ -1110,15 +1110,31 @@ namespace {
 /// Wrap a CR_BOX_* operation with the K2 stock screen's positioning
 /// envelope. Without this, the flush extrudes onto the build plate instead
 /// of into the K2's waste port — `BOX_GO_TO_EXTRUDE_POS` parks the toolhead
-/// over the waste area and `BOX_MOVE_TO_SAFE_POS` parks it back when the
-/// CR_BOX_END_OPT terminator finishes. SAVE/RESTORE_GCODE_STATE preserves
-/// the caller's coordinate mode, feedrate, and absolute/relative state.
-std::string wrap_with_park(const std::string& body) {
+/// over the waste chute (extrude_pos X=133/Y=378 on K2 Plus) and
+/// `BOX_MOVE_TO_SAFE_POS` parks it back at safe_pos (X=225/Y=345) when the
+/// op finishes. SAVE/RESTORE_GCODE_STATE preserves the caller's coordinate
+/// mode, feedrate, and absolute/relative state.
+///
+/// `wipe_after`: when true, run `BOX_NOZZLE_CLEAN` between the body and
+/// the safe-pos move. The clean macro performs a wipe at the silicone pad
+/// (clean_pos_left/right X=160-170, Y=374). Without this, a freshly
+/// flushed nozzle is still wet — moving directly to safe_pos drags hot
+/// filament across the build plate (observed on K2 Plus 2026-05-23 by
+/// Preston: T1 load left a drip trail on the bed). Stock
+/// `BOX_LOAD_MATERIAL_END` doesn't include this either, but the K2 stock
+/// UI clearly drives a wipe somewhere in its load path — likely via a
+/// pre-baked sequence we don't share. Adding it here mirrors the
+/// user-visible behavior.
+std::string wrap_with_park(const std::string& body, bool wipe_after) {
+    std::string post_body = "\n";
+    if (wipe_after) {
+        post_body += "BOX_NOZZLE_CLEAN\n";
+    }
+    post_body += "BOX_MOVE_TO_SAFE_POS\n"
+                 "RESTORE_GCODE_STATE NAME=helix_cfs_load";
     return "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
            "BOX_GO_TO_EXTRUDE_POS\n" +
-           body +
-           "\nBOX_MOVE_TO_SAFE_POS\n"
-           "RESTORE_GCODE_STATE NAME=helix_cfs_load";
+           body + post_body;
 }
 
 } // namespace
@@ -1133,13 +1149,18 @@ std::string AmsBackendCfs::load_gcode(int idx) {
     // on Creality's Klipper fork (always evaluates to 0, loading T1A regardless of I= value).
     // CR_BOX_PRE_OPT is required before extrude — sets CFS to material-change mode.
     // CR_BOX_WASTE must follow CR_BOX_EXTRUDE (purges transition material).
+    // wipe_after=true: nozzle is full of fresh filament; wipe before parking.
     return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_EXTRUDE TNN=" + tnn +
-                          "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn + "\nCR_BOX_END_OPT");
+                              "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn + "\nCR_BOX_END_OPT",
+                          /*wipe_after=*/true);
 }
 
 std::string AmsBackendCfs::unload_gcode() {
-    // Unload doesn't need TNN — operates on currently loaded filament
-    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_END_OPT");
+    // Unload ends with CR_BOX_RETRUDE — the nozzle is empty (cut + retracted),
+    // so no wipe needed. Skipping the wipe also avoids the wipe macro pushing
+    // anything back into the hotend during a "filament-out" state.
+    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_END_OPT",
+                          /*wipe_after=*/false);
 }
 
 std::string AmsBackendCfs::swap_gcode(int idx) {
@@ -1148,9 +1169,13 @@ std::string AmsBackendCfs::swap_gcode(int idx) {
         spdlog::error("[AMS CFS] Invalid slot index for swap: {}", idx);
         return "";
     }
-    // Full swap: unload current (cut+retract) then load new slot, all in one session
-    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_EXTRUDE TNN=" + tnn +
-                          "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn + "\nCR_BOX_END_OPT");
+    // Full swap: unload current (cut+retract) then load new slot, all in one
+    // session. Ends with flush of the NEW filament so wipe is required, same
+    // as load_gcode().
+    return wrap_with_park("CR_BOX_PRE_OPT\nCR_BOX_CUT\nCR_BOX_RETRUDE\nCR_BOX_EXTRUDE TNN=" +
+                              tnn + "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn +
+                              "\nCR_BOX_END_OPT",
+                          /*wipe_after=*/true);
 }
 
 AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
