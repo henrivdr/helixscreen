@@ -173,6 +173,15 @@ static const std::unordered_map<std::string, CfsErrorEntry> CFS_ERROR_TABLE = {
     {"key298", {"MCU bridge daemon is shut down", "Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge", AmsAlertLevel::SYSTEM, nullptr}},
     {"key585", {"Move out of range", "The requested position is outside the printer's bounds", AmsAlertLevel::SYSTEM, nullptr}},
 
+    // Motor controller init errors (motor_control_wrapper.so). Typically fire
+    // during CFS bring-up. Users can't fix these directly — power cycle is the
+    // standard remedy. Surfacing them avoids the raw chinglish from Creality
+    // ("Motor set pin restore io status error").
+    {"key800", {"Motor controller error", "A motor IO pin couldn't be restored. Power-cycle the printer to recover", AmsAlertLevel::SYSTEM, nullptr}},
+    {"key801", {"Z motor calibration failed", "Stall detection setup failed for the Z motor — power-cycle to retry", AmsAlertLevel::SYSTEM, nullptr}},
+    {"key802", {"Extruder motor calibration failed", "Stall detection setup failed for the extruder — power-cycle to retry", AmsAlertLevel::SYSTEM, nullptr}},
+    {"key803", {"Motor parameter setup failed", "A motor's parameters couldn't be written. Power-cycle the printer to retry", AmsAlertLevel::SYSTEM, nullptr}},
+
     {"key831", {"Lost connection to CFS unit", "Check the RS-485 cable between printer and CFS", AmsAlertLevel::SYSTEM, nullptr}},
     {"key834", {"Invalid parameters sent to CFS", "This may indicate a firmware bug — try restarting", AmsAlertLevel::SYSTEM, nullptr}},
     {"key835", {"Filament jammed at CFS connector", "Open the CFS lid, check the PTFE tube connection for the stuck slot", AmsAlertLevel::SLOT, fmt_unit_slot}},
@@ -193,6 +202,7 @@ static const std::unordered_map<std::string, CfsErrorEntry> CFS_ERROR_TABLE = {
     {"key851", {"Retract didn't reach buffer empty position", "The filament may not have fully retracted — try again or manually pull", AmsAlertLevel::SLOT, fmt_unit_slot}},
     {"key852", {"Sensor mismatch — check extruder and CFS sensors", "Extruder and CFS disagree on filament state — inspect both sensors", AmsAlertLevel::SYSTEM, nullptr}},
     {"key853", {"Humidity sensor malfunction", "CFS unit's humidity sensor is not responding — may need service", AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key854", {"Cutter blade didn't sever filament", "Filament is still present after the cut — the blade may be dull or misaligned", AmsAlertLevel::SYSTEM, nullptr}},
     {"key855", {"Filament cutter position error", "The cutter is out of alignment — recalibrate with CALIBRATE_CUT_POS", AmsAlertLevel::SYSTEM, nullptr}},
     {"key856", {"Filament cutter not detected", "Check that the cutter mechanism is properly installed", AmsAlertLevel::SYSTEM, nullptr}},
     {"key857", {"CFS motor overloaded", "A spool may be tangled or the drive gear is jammed", AmsAlertLevel::UNIT, fmt_unit_only}},
@@ -204,6 +214,9 @@ static const std::unordered_map<std::string, CfsErrorEntry> CFS_ERROR_TABLE = {
     {"key863", {"Retract error — filament still detected", "Filament didn't fully retract, may need manual removal", AmsAlertLevel::SLOT, fmt_unit_slot}},
     {"key864", {"Extrude error — buffer not full", "Filament didn't fill buffer tube during load", AmsAlertLevel::SLOT, fmt_unit_slot}},
     {"key865", {"Retract error — failed to exit connector", "Filament stuck in connector during unload", AmsAlertLevel::SLOT, fmt_unit_slot}},
+    // key866 is a second "no cutter" variant emitted from the motor driver path
+    // (key856 comes from the box driver). Same root cause, same remedy.
+    {"key866", {"Filament cutter not detected", "Check that the cutter mechanism is properly installed", AmsAlertLevel::SYSTEM, nullptr}},
 };
 
 std::optional<std::pair<const char*, const char*>>
