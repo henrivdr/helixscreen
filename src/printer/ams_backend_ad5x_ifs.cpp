@@ -120,7 +120,17 @@ void AmsBackendAd5xIfs::on_started() {
             json status_copy;
             if (response.contains("result") && response["result"].contains("status")) {
                 const auto& status = response["result"]["status"];
-                macro_exists = status.contains("gcode_macro _ifs_vars");
+                // Klipper/Kalico's webhooks _do_query() (klippy/webhooks.py)
+                // returns `{}` for objects that don't exist — the key is
+                // still present in the response. So `status.contains(...)` is
+                // always true after a successful query, even on stock zmod
+                // without lessWaste/bambufy. Distinguish a real macro by the
+                // presence of its variables: lessWaste/bambufy's _IFS_VARS
+                // macro declares variable_colors / variable_tools / etc., so
+                // a real macro's get_status() returns a non-empty dict.
+                macro_exists = status.contains("gcode_macro _ifs_vars") &&
+                               status["gcode_macro _ifs_vars"].is_object() &&
+                               !status["gcode_macro _ifs_vars"].empty();
                 if (status.contains("webhooks") && status["webhooks"].contains("state") &&
                     status["webhooks"]["state"].is_string()) {
                     klippy_ready = status["webhooks"]["state"].get<std::string>() == "ready";
@@ -1961,7 +1971,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
 
     // NOTE: register_zcolor_listener() has a bg-side pre-filter that drops
     // every line not containing one of these tokens (and not buffering for
-    // an active query). If you add a third trigger here, update that filter
+    // an active query). If you add a new trigger here, update that filter
     // too — otherwise the new token will be silently dropped before it
     // reaches this function on heavy-print response streams.
     if (line.find("RUN_ZCOLOR") != std::string::npos ||
@@ -1971,6 +1981,27 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                       backend_log_tag());
         schedule_json_reread();
         schedule_zcolor_query();
+        return false;
+    }
+
+    // Self-heal: Klipper/Kalico answer unrecognised commands with
+    // `// Unknown command:"X"` (via gcode.cmd_default → respond_info). If
+    // our own _IFS_VARS mirror writes come back rejected, the
+    // lessWaste/bambufy macro isn't actually loaded even though
+    // has_ifs_vars_ said it was — demote and latch missing so the rest of
+    // the session takes the native-ZMOD path and stops echoing rejected
+    // gcodes on every Adventurer5M.json poll.
+    if (line.find("Unknown command:\"_IFS_VARS\"") != std::string::npos) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (has_ifs_vars_ || !ifs_macro_confirmed_missing_) {
+            spdlog::warn("{} Klipper rejected _IFS_VARS as unknown command — "
+                         "disabling has_ifs_vars_ for the session "
+                         "(plugin macro not loaded)",
+                         backend_log_tag());
+            has_ifs_vars_ = false;
+            ifs_macro_confirmed_missing_ = true;
+        }
+        return false;
     }
     return false;
 }
@@ -2019,7 +2050,14 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             const bool query_active = zcolor_query_active_.load(std::memory_order_acquire);
             const bool is_zcolor_token = (line.find("RUN_ZCOLOR") != std::string::npos ||
                                           line.find("CHANGE_ZCOLOR") != std::string::npos);
-            if (!query_active && !is_zcolor_token) {
+            // Self-heal: if our _IFS_VARS mirror writes come back as
+            // "Unknown command", the lessWaste/bambufy macro isn't actually
+            // loaded — demote has_ifs_vars_ so we stop spamming the console.
+            // The substring match (no leading `// `) handles both Klipper's
+            // and Kalico's response framing.
+            const bool is_unknown_ifs_vars =
+                (line.find("Unknown command:\"_IFS_VARS\"") != std::string::npos);
+            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars) {
                 return;
             }
 
@@ -2050,11 +2088,61 @@ void AmsBackendAd5xIfs::register_klippy_ready_listener() {
             token.defer("Ad5xIfsBackend::klippy_ready_apply", [this]() {
                 spdlog::info("{} notify_klippy_ready — scheduling GET_ZCOLOR SILENT=1",
                              backend_log_tag());
+                // Re-check macro existence: FIRMWARE_RESTART can change which
+                // gcode_macros are loaded (e.g. user uninstalls lessWaste and
+                // restarts Klipper while helixscreen is still running). Without
+                // this, has_ifs_vars_ stays cached true and we keep firing
+                // _IFS_VARS writes that Klipper now rejects as "Unknown
+                // command:".
+                recheck_ifs_vars_macro();
                 // Re-read the JSON cache too — firmware may have persisted new
                 // colors during boot, and the stream may have missed
                 // RUN_ZCOLOR notifications that happened before we reconnected.
                 schedule_json_reread();
                 schedule_zcolor_query();
+            });
+        });
+}
+
+void AmsBackendAd5xIfs::recheck_ifs_vars_macro() {
+    if (!client_)
+        return;
+
+    auto token = lifetime_.token();
+    client_->send_jsonrpc(
+        "printer.objects.query",
+        json{{"objects", json{{"gcode_macro _ifs_vars", nullptr}}}},
+        [this, token](const json& response) {
+            // BG THREAD: extract macro_exists; no `this` access.
+            // Same detection rule as on_started: key presence isn't enough
+            // (Klipper returns `{}` for missing objects), require a non-empty
+            // variables dict.
+            bool macro_exists = false;
+            if (response.contains("result") && response["result"].contains("status")) {
+                const auto& status = response["result"]["status"];
+                macro_exists = status.contains("gcode_macro _ifs_vars") &&
+                               status["gcode_macro _ifs_vars"].is_object() &&
+                               !status["gcode_macro _ifs_vars"].empty();
+            }
+            token.defer("Ad5xIfsBackend::recheck_macro_apply", [this, macro_exists]() {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (macro_exists) {
+                    if (ifs_macro_confirmed_missing_) {
+                        spdlog::info(
+                            "{} _IFS_VARS macro now present (post FIRMWARE_RESTART) — "
+                            "re-enabling save_variables tool-mapping reads",
+                            backend_log_tag());
+                        ifs_macro_confirmed_missing_ = false;
+                    }
+                } else {
+                    if (!ifs_macro_confirmed_missing_ || has_ifs_vars_) {
+                        spdlog::warn("{} _IFS_VARS macro no longer present (post "
+                                     "FIRMWARE_RESTART) — disabling _IFS_VARS writes",
+                                     backend_log_tag());
+                    }
+                    ifs_macro_confirmed_missing_ = true;
+                    has_ifs_vars_ = false;
+                }
             });
         });
 }

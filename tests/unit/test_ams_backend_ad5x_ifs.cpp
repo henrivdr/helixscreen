@@ -1229,6 +1229,37 @@ TEST_CASE("AD5X IFS stale save_variables ignored when plugin macro missing",
     CHECK(backend.is_bypass_active());
 }
 
+// Regression: native-ZMOD users without lessWaste/bambufy who happened to
+// have stale prefixed save_variables data could land in a state where
+// has_ifs_vars_ was true (e.g. theory-2 from the Vger1700 Discord report:
+// Klipper/Kalico return `{}` for non-existent objects, so key presence
+// alone falsely satisfied the macro-existence check). When that happened,
+// every Adventurer5M.json poll fired `_IFS_VARS colors=...` / `types=...`
+// and Klipper rejected them with `// Unknown command:"_IFS_VARS"`. This
+// asserts the self-heal path: as soon as Klipper rejects the command, we
+// demote has_ifs_vars_ and latch the macro as missing.
+TEST_CASE("AD5X IFS self-heals on Unknown command:\"_IFS_VARS\" response",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Seed the wrong-state: macro 'confirmed present' and has_ifs_vars_ true.
+    Ad5xIfsTestAccess::set_ifs_macro_confirmed_missing(backend, false);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+    REQUIRE(Ad5xIfsTestAccess::has_ifs_vars(backend));
+
+    // Klipper's gcode.cmd_default emits this exact line via respond_info
+    // when an unknown command is dispatched (klippy/gcode.py).
+    const std::string rejection = "// Unknown command:\"_IFS_VARS\"";
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, rejection);
+
+    CHECK_FALSE(Ad5xIfsTestAccess::has_ifs_vars(backend));
+
+    // Once latched missing, replaying save_variables can't re-enable it
+    // (same contract as the existing stale-save_variables regression test).
+    Ad5xIfsTestAccess::handle_status(backend, make_save_variables(standard_variables()));
+    CHECK_FALSE(Ad5xIfsTestAccess::has_ifs_vars(backend));
+}
+
 // ==========================================================================
 // 23. parse_adventurer_json (native ZMOD Adventurer5M.json)
 // ==========================================================================

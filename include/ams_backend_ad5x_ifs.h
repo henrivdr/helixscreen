@@ -285,6 +285,11 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // schedule_zcolor_query() at ~2-4 Hz).
     bool on_gcode_response_line(const std::string& line);
     void register_klippy_ready_listener();
+    // Re-query `gcode_macro _ifs_vars` and update the latch + has_ifs_vars_.
+    // Fired from notify_klippy_ready so a FIRMWARE_RESTART that adds or
+    // removes the lessWaste/bambufy plugin macro doesn't leave us caching
+    // the wrong has_ifs_vars_ for the rest of the helixscreen session.
+    void recheck_ifs_vars_macro();
     void unregister_moonraker_listeners();
     void schedule_json_reread();
     // True when `content` differs from the last observed Adventurer5M.json
@@ -383,14 +388,19 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // (read/written via Moonraker HTTP file API).
     bool has_ifs_vars_ = false;
 
-    // Latch: starts TRUE (pessimistic) — cleared only when the initial
-    // gcode_macro query confirms the macro exists. Prevents the race where
-    // a notify_status_update with save_variables arrives between subscription
-    // registration and the initial query callback, which would set
-    // has_ifs_vars_ = true before we've verified the macro is loaded.
-    // Once the initial query confirms the macro is missing, stays true for
-    // the session so subsequent save_variables notifies can't re-enable
-    // has_ifs_vars_.
+    // Latch: starts TRUE (pessimistic) — cleared when a `gcode_macro
+    // _ifs_vars` query returns a non-empty variables dict (real macro
+    // present). Prevents the race where a notify_status_update with
+    // save_variables arrives between subscription registration and the
+    // initial query callback, which would set has_ifs_vars_ = true before
+    // we've verified the macro is loaded. Re-evaluated on every
+    // notify_klippy_ready via recheck_ifs_vars_macro() so a FIRMWARE_RESTART
+    // that adds/removes the macro takes effect without restarting
+    // helixscreen — also forces has_ifs_vars_ = false when the macro goes
+    // missing after a restart, and on Unknown-command responses to our own
+    // _IFS_VARS writes (self-heal). Note: Klipper/Kalico return `{}` for
+    // missing objects rather than erroring the query, so empty-vs-non-empty
+    // is the discriminator, not key presence.
     bool ifs_macro_confirmed_missing_ = true;
     std::atomic<bool> reread_pending_{false};
 
