@@ -31,12 +31,17 @@ setup() {
 
 # Helper: create a valid test tarball containing a fake ELF binary
 # The tarball extracts to helixscreen/ (relative)
+#
+# Must include every top-level entry that extract_release()'s Phase 2
+# validation requires — currently bin/helix-screen, ui_xml/, assets/. Missing
+# any of these is treated as a corrupt archive and the install aborts.
 create_test_tarball() {
     local platform=${1:-ad5m}
     local staging="$BATS_TEST_TMPDIR/staging"
     mkdir -p "$staging/helixscreen/bin"
     mkdir -p "$staging/helixscreen/config"
     mkdir -p "$staging/helixscreen/ui_xml"
+    mkdir -p "$staging/helixscreen/assets"
 
     # Create appropriate fake ELF for the platform
     case "$platform" in
@@ -50,6 +55,32 @@ create_test_tarball() {
     chmod +x "$staging/helixscreen/bin/helix-screen"
 
     # Create tarball
+    tar -czf "$TMP_DIR/helixscreen.tar.gz" -C "$staging" helixscreen
+    rm -rf "$staging"
+}
+
+# Helper: create a tarball missing a specific top-level entry (e.g. "ui_xml",
+# "assets"). Otherwise the same shape as create_test_tarball, so failures are
+# attributable to the missing entry rather than other defects.
+create_tarball_missing() {
+    local platform=${1:-ad5m}
+    local omit=$2
+    local staging="$BATS_TEST_TMPDIR/staging"
+    mkdir -p "$staging/helixscreen/bin"
+    mkdir -p "$staging/helixscreen/config"
+    [ "$omit" = "ui_xml" ] || mkdir -p "$staging/helixscreen/ui_xml"
+    [ "$omit" = "assets" ] || mkdir -p "$staging/helixscreen/assets"
+
+    case "$platform" in
+        ad5m|k1|pi32)
+            create_fake_arm32_elf "$staging/helixscreen/bin/helix-screen"
+            ;;
+        pi)
+            create_fake_aarch64_elf "$staging/helixscreen/bin/helix-screen"
+            ;;
+    esac
+    chmod +x "$staging/helixscreen/bin/helix-screen"
+
     tar -czf "$TMP_DIR/helixscreen.tar.gz" -C "$staging" helixscreen
     rm -rf "$staging"
 }
@@ -159,6 +190,65 @@ setup_existing_install() {
     [ "$status" -ne 0 ]
     # Old installation should still be intact
     [ -f "$INSTALL_DIR/bin/helix-screen" ]
+}
+
+# --- Incomplete archive (missing top-level dirs) ---
+#
+# Regression coverage for prestonbrown/helixscreen#970: an update that landed a
+# tree without ui_xml/ wedged the device into a dead-loop with "Could not find
+# HelixScreen data root". Extraction must reject such archives BEFORE touching
+# the existing install, not after.
+
+@test "extract_release: missing ui_xml in tarball preserves old install" {
+    setup_existing_install
+    # Seed the existing install with the dirs the new tree would replace, so
+    # a regression (rm-then-discover-missing) would leave a bin/config-only
+    # shell visible to the assertions.
+    mkdir -p "$INSTALL_DIR/ui_xml" "$INSTALL_DIR/assets"
+    touch "$INSTALL_DIR/ui_xml/sentinel" "$INSTALL_DIR/assets/sentinel"
+
+    create_tarball_missing "ad5m" "ui_xml"
+    run extract_release "ad5m"
+    [ "$status" -ne 0 ]
+    # Old installation must remain entirely intact — bin, ui_xml, assets, config
+    [ -f "$INSTALL_DIR/bin/helix-screen" ]
+    [ -f "$INSTALL_DIR/ui_xml/sentinel" ]
+    [ -f "$INSTALL_DIR/assets/sentinel" ]
+    [ -f "$INSTALL_DIR/config/settings.json" ]
+}
+
+@test "extract_release: missing assets in tarball preserves old install" {
+    setup_existing_install
+    mkdir -p "$INSTALL_DIR/ui_xml" "$INSTALL_DIR/assets"
+    touch "$INSTALL_DIR/ui_xml/sentinel" "$INSTALL_DIR/assets/sentinel"
+
+    create_tarball_missing "ad5m" "assets"
+    run extract_release "ad5m"
+    [ "$status" -ne 0 ]
+    [ -f "$INSTALL_DIR/bin/helix-screen" ]
+    [ -f "$INSTALL_DIR/ui_xml/sentinel" ]
+    [ -f "$INSTALL_DIR/assets/sentinel" ]
+    [ -f "$INSTALL_DIR/config/settings.json" ]
+}
+
+@test "extract_release: missing ui_xml error message names the missing entry" {
+    create_tarball_missing "ad5m" "ui_xml"
+    run extract_release "ad5m"
+    [ "$status" -ne 0 ]
+    echo "$output" | grep -q "ui_xml"
+    echo "$output" | grep -q "incomplete"
+}
+
+@test "extract_release: incomplete archive cleans up extract dir" {
+    create_tarball_missing "ad5m" "assets"
+    run extract_release "ad5m"
+    [ "$status" -ne 0 ]
+    [ ! -d "$TMP_DIR/extract" ]
+}
+
+@test "install.sh (bundled) has incomplete-archive guard" {
+    grep -q 'Extracted archive is incomplete' \
+        "$BATS_TEST_DIRNAME/../../scripts/install.sh"
 }
 
 # --- cleanup_old_install ---
@@ -347,7 +437,8 @@ echo "tmpfs       51200     48640  2560       95% /tmp"
 
     # Create tarball that ships a new printer_database.json
     local staging="$BATS_TEST_TMPDIR/staging"
-    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config"
+    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config" \
+             "$staging/helixscreen/ui_xml" "$staging/helixscreen/assets"
     create_fake_arm32_elf "$staging/helixscreen/bin/helix-screen"
     chmod +x "$staging/helixscreen/bin/helix-screen"
     echo '{"new_bundled": true}' > "$staging/helixscreen/config/printer_database.json"
@@ -393,7 +484,8 @@ echo "tmpfs       51200     48640  2560       95% /tmp"
     setup_existing_install
     # Create a tarball that ships a default settings.json
     local staging="$BATS_TEST_TMPDIR/staging"
-    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config"
+    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config" \
+             "$staging/helixscreen/ui_xml" "$staging/helixscreen/assets"
     create_fake_arm32_elf "$staging/helixscreen/bin/helix-screen"
     chmod +x "$staging/helixscreen/bin/helix-screen"
     echo '{"default_preset": true}' > "$staging/helixscreen/config/settings.json"
@@ -411,7 +503,8 @@ echo "tmpfs       51200     48640  2560       95% /tmp"
     setup_existing_install
     # Create a tarball with a default settings.json
     local staging="$BATS_TEST_TMPDIR/staging"
-    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config"
+    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config" \
+             "$staging/helixscreen/ui_xml" "$staging/helixscreen/assets"
     create_fake_arm32_elf "$staging/helixscreen/bin/helix-screen"
     chmod +x "$staging/helixscreen/bin/helix-screen"
     echo '{"default_preset": true}' > "$staging/helixscreen/config/settings.json"
@@ -440,7 +533,8 @@ echo "tmpfs       51200     48640  2560       95% /tmp"
     [ ! -d "$INSTALL_DIR" ]
 
     local staging="$BATS_TEST_TMPDIR/staging"
-    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config"
+    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config" \
+             "$staging/helixscreen/ui_xml" "$staging/helixscreen/assets"
     create_fake_arm32_elf "$staging/helixscreen/bin/helix-screen"
     chmod +x "$staging/helixscreen/bin/helix-screen"
     echo '{"default_preset": true}' > "$staging/helixscreen/config/settings.json"

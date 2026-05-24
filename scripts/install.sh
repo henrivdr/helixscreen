@@ -3329,10 +3329,25 @@ extract_release() {
         exit 1
     fi
 
-    # Phase 2: Validate extracted content
-    if [ ! -f "${new_install}/bin/helix-screen" ]; then
-        log_error "Extraction failed - helix-screen binary not found."
-        log_error "Expected: helixscreen/bin/helix-screen in archive"
+    # Phase 2: Validate extracted content.
+    #
+    # The in-place update path (NoNewPrivileges, parent read-only) deletes the
+    # old contents before moving the new ones in — so a new tree missing any
+    # critical top-level entry leaves the user with a half-installed system
+    # (see prestonbrown/helixscreen#970: ui_xml absent → "Could not find
+    # HelixScreen data root" dead loop). Validate the full set up-front so we
+    # bail BEFORE touching the existing install.
+    _missing=""
+    for _required in bin/helix-screen ui_xml assets; do
+        if [ ! -e "${new_install}/${_required}" ]; then
+            _missing="${_missing} ${_required}"
+        fi
+    done
+    if [ -n "$_missing" ]; then
+        log_error "Extracted archive is incomplete — missing:${_missing}"
+        log_error "Expected layout: helixscreen/{bin/helix-screen, ui_xml/, assets/, …}"
+        log_error "The archive may be corrupted or built without all asset stages."
+        log_error "Existing installation is untouched."
         rm -rf "$extract_dir"
         exit 1
     fi

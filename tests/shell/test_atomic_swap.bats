@@ -44,6 +44,7 @@ create_test_tarball() {
     mkdir -p "$staging/helixscreen/bin"
     mkdir -p "$staging/helixscreen/config"
     mkdir -p "$staging/helixscreen/ui_xml"
+    mkdir -p "$staging/helixscreen/assets"
     echo "new content" > "$staging/helixscreen/ui_xml/test.xml"
 
     case "$platform" in
@@ -189,7 +190,8 @@ mock_has_privs() {
 
     # Create tarball with a new config file that doesn't exist in old install
     local staging="$BATS_TEST_TMPDIR/staging"
-    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config"
+    mkdir -p "$staging/helixscreen/bin" "$staging/helixscreen/config" \
+             "$staging/helixscreen/ui_xml" "$staging/helixscreen/assets"
     create_fake_aarch64_elf "$staging/helixscreen/bin/helix-screen"
     chmod +x "$staging/helixscreen/bin/helix-screen"
     echo '{"new_default": true}' > "$staging/helixscreen/config/new_feature.json"
