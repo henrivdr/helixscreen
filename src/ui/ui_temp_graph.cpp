@@ -563,7 +563,10 @@ static void draw_target_lines_cb(lv_event_t* e) {
         if (!meta->chart_series || !meta->visible || !meta->show_target)
             continue;
 
-        lv_color_t muted = mute_color(meta->color, LV_OPA_50, graph->cached_graph_bg);
+        // Dashed target trace is intentionally subdued (~70% transparent) so it
+        // reads as background context, not a peer of the actuals polyline. The
+        // accent tick at the current setpoint stays full-color for emphasis.
+        lv_color_t muted = mute_color(meta->color, LV_OPA_30, graph->cached_graph_bg);
 
         // -----------------------------------------------------------------
         // Legacy horizontal-line mode (fallback when TARGET_HISTORY is off)

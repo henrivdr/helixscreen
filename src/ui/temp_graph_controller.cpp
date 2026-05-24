@@ -319,11 +319,16 @@ void TempGraphController::setup_observers() {
                         return;
 
                     float target_deg = centi_to_degrees_f(target_centi);
-                    bool show = target_deg > 0.0f;
                     // Stage the new setpoint — the buffer push happens on the
                     // next actuals sample, so multiple target updates between
                     // samples collapse to "latest target wins" naturally.
-                    ui_temp_graph_set_current_target(self->graph_, si.series_id, target_deg, show);
+                    //
+                    // Always pass show=true: the series has a target capability
+                    // (otherwise this observer wouldn't be registered). The buffer's
+                    // 0-sentinel handles "off period" gaps via the segmenter, so we
+                    // never want to flip show_target off here — that would erase the
+                    // whole historical trace.
+                    ui_temp_graph_set_current_target(self->graph_, si.series_id, target_deg, true);
                     self->apply_auto_range();
                 },
                 s.lifetime);
@@ -414,8 +419,10 @@ void TempGraphController::backfill_history() {
         // Stage the latest target for the accent tick + next-sample push.
         if (s.show_target) {
             float target_deg = centi_to_degrees_f(last.target_centi);
-            ui_temp_graph_set_current_target(graph_, s.series_id, target_deg,
-                                             target_deg > 0.0f);
+            // Pass show=true unconditionally — see live-observer comment above for
+            // why we don't gate on (target_deg > 0): the buffer's 0-sentinel handles
+            // the off-period gap via the segmenter.
+            ui_temp_graph_set_current_target(graph_, s.series_id, target_deg, true);
         }
     }
 }
