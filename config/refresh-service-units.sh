@@ -25,6 +25,45 @@ DEST="/etc/systemd/system/helixscreen.service"
 # Nothing to do if main service isn't installed
 [ -f "$DEST" ] || exit 0
 
+# Wait for Moonraker's extraction to settle before we touch INSTALL_DIR.
+#
+# helixscreen-update.path fires PathChanged on release_info.json as soon as
+# Moonraker recreates it during zip extraction; the update.service then waits
+# 10s and calls us.  On slow MIPS flash (AD5X / K1) Moonraker may still be
+# extracting at that point, so refresh_config_symlinks would race against the
+# extraction and leave the install dir in a state Moonraker can't finish
+# cleaning up — producing the "ENOTEMPTY: /srv/helixscreen" toast in Mainsail
+# and a binary-missing crash loop afterward.
+#
+# Heuristic: binary + release_info.json both present and the binary's size
+# stable across two polls 2s apart.  Times out after 90s and proceeds anyway
+# (a half-broken refresh is still better than not refreshing at all — e.g.
+# during recovery when the binary is missing entirely).
+wait_for_install_stable() {
+    local binary="${IDIR}/bin/helix-screen"
+    local release_info="${IDIR}/release_info.json"
+    local budget=90 elapsed=0 prev_size=-1 stable=0 size
+
+    while [ "$elapsed" -lt "$budget" ]; do
+        if [ -x "$binary" ] && [ -f "$release_info" ]; then
+            size=$(stat -c%s "$binary" 2>/dev/null || echo -1)
+            if [ "$size" -gt 0 ] && [ "$size" = "$prev_size" ]; then
+                stable=$((stable + 1))
+                [ "$stable" -ge 2 ] && return 0
+            else
+                stable=0
+                prev_size="$size"
+            fi
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    echo "refresh-service-units: install dir not stable after ${budget}s — proceeding" >&2
+    return 1
+}
+
+wait_for_install_stable || true
+
 # Read current identity from the installed service file BEFORE overwriting
 USER_VAL="$(grep "^User=" "$DEST" | cut -d= -f2)"
 GROUP_VAL="$(grep "^Group=" "$DEST" | cut -d= -f2)"

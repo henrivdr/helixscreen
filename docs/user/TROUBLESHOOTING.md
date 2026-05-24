@@ -72,6 +72,27 @@ tail -f /var/log/messages | grep helix    # AD5M / non-systemd
 
 ## Startup Issues
 
+### Update failed in Mainsail — screen won't start after update (AD5X)
+
+**Symptoms:**
+- Mainsail's Update Manager showed an error toast like `Error updating helixscreen: [Errno 93] Directory not empty: PosixPath('/srv/helixscreen')`
+- After the failed update, the touchscreen stays black or shows the splash and never starts
+- Logs (if reachable) show repeated `[Watchdog] execv failed: No such file or directory` and `[helix-launcher] Exiting with code 42`
+
+**What happened:** Moonraker's in-place update wiped part of `/srv/helixscreen` (including the `bin/helix-screen` binary) before something interrupted it. The install directory now has leftover files but no working binary, so the launcher can't start anything, and a retry from Mainsail trips over those leftovers.
+
+**Fix:** Re-run the CLI installer from inside the ZMOD chroot — it cleans up the broken state and lays down a fresh install while preserving your settings. Full procedure: [UPGRADING.md → Adventurer 5X (ZMOD)](UPGRADING.md#quick-upgrade).
+
+Quick form, from a Mainsail Shell or SSH:
+
+```bash
+ssh root@<printer-ip>
+chroot /usr/data/.mod/.zmod
+curl -fsSL https://get.helixscreen.org | sh -s -- --update
+```
+
+The `chroot` step is required — see UPGRADING.md for why.
+
 ### HelixScreen crashes immediately (segfault)
 
 **Symptoms:**

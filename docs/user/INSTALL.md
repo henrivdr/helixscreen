@@ -221,24 +221,22 @@ wget -O - http://dl.helixscreen.org/install.sh | sh
 - **Auto-detection:** HelixScreen automatically detects ZMOD firmware (by recognizing ZMOD-specific Klipper device names) and applies ZMOD-optimized presets for display, input, and fan configuration. No manual configuration needed.
 - IFS (4-channel filament system) supported — see [Filament Management](guide/filament.md)
 
-#### Manual installs and updates (advanced)
+#### Manual install from the command line (advanced)
 
-Most users never need this — ZMOD handles installs and updates through Moonraker's update manager and that path "just works." The notes below apply only if you're piping the installer yourself for a specific version, a `--local` zip, troubleshooting, or `--uninstall`.
+Most users never need this — ZMOD handles initial install and ongoing updates through Moonraker's update manager and that path "just works." Use the manual route only if you're pinning a specific version, working from a `--local` zip, or recovering from a failed update.
 
 ZMOD installs HelixScreen into a chroot rooted at `/usr/data/.mod/.zmod/`. When you SSH into the printer you land in the host filesystem, *not* the chroot — so a plain `curl … | sh` writes into the squashfs base view that HelixScreen never sees. The installer detects this and refuses to run with a friendly message; the fix is to enter the chroot first:
 
 ```bash
 ssh root@<printer-ip>
 chroot /usr/data/.mod/.zmod
-# now you're in the same view HelixScreen runs from — re-run your command:
+# now you're in the same view HelixScreen runs from:
 curl -fsSL https://get.helixscreen.org | sh
-# or:
-sh /tmp/install.sh --local /tmp/helixscreen-ad5x.zip
-sh /tmp/install.sh --update
-sh /tmp/install.sh --uninstall
 ```
 
-The same applies to the uninstaller — run it from inside the chroot.
+The same applies to the uninstaller — run `sh /tmp/install.sh --uninstall` from inside the chroot.
+
+For **upgrades** (including recovery from a failed Mainsail update) see [UPGRADING.md → Adventurer 5X (ZMOD)](UPGRADING.md#quick-upgrade).
 
 ### Elegoo Centauri Carbon
 
