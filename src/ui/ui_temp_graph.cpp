@@ -1208,10 +1208,11 @@ void ui_temp_graph_show_series(ui_temp_graph_t* graph, int series_id, bool visib
                   visible ? "shown" : "hidden");
 }
 
-// Helper: push current target into the parallel buffer, mirroring chart's shift semantics.
-// Writes the latest meta->target_temp (converted to centi) at position [target_head].
-// When buffer is full (target_head == point_count), shifts entries left by 1 and writes
-// at [point_count - 1]. Called from update_series* immediately after lv_chart_set_next_value.
+// Helper: push current target into the parallel buffer in lockstep with the LVGL
+// chart's actuals push. Uses a shift-left store (NOT LVGL's ring buffer) so the
+// draw callback can walk target_centi_buf[0..target_head-1] linearly, oldest-to-newest,
+// without tracking the chart's start_point offset. Called from update_series*
+// immediately after lv_chart_set_next_value.
 static void push_target_sample(ui_temp_graph_t* graph, ui_temp_series_meta_t* meta) {
     if (!meta->target_centi_buf || graph->point_count <= 0)
         return;
