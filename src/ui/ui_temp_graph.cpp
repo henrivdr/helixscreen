@@ -1401,6 +1401,20 @@ void ui_temp_graph_set_point_count(ui_temp_graph_t* graph, int count) {
     graph->point_count = count;
     lv_chart_set_point_count(graph->chart, static_cast<uint32_t>(count));
 
+    // Realloc per-series target buffers to match. We discard old history on resize —
+    // the chart itself does the same (LVGL's set_point_count truncates / clears).
+    for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
+        auto& m = graph->series_meta[i];
+        if (!m.chart_series)
+            continue;
+        delete[] m.target_centi_buf;
+        m.target_centi_buf = new (std::nothrow) int16_t[static_cast<size_t>(count)]();
+        m.target_head = 0;
+        if (!m.target_centi_buf) {
+            spdlog::error("[TempGraph] Failed to realloc target buffer for series '{}'", m.name);
+        }
+    }
+
     spdlog::trace("[TempGraph] Point count set: {}", count);
 }
 

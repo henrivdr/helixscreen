@@ -895,3 +895,44 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: target buffer freed on re
 
     ui_temp_graph_destroy(g);
 }
+
+TEST_CASE_METHOD(TempGraphTestFixture,
+                 "ui_temp_graph: set_point_count reallocs all target buffers",
+                 "[temp_graph][target_history]") {
+    ui_temp_graph_t* g = ui_temp_graph_create(screen);
+    REQUIRE(g != nullptr);
+
+    int id_a = ui_temp_graph_add_series(g, "A", lv_color_hex(0xFF0000));
+    int id_b = ui_temp_graph_add_series(g, "B", lv_color_hex(0x00FF00));
+    REQUIRE(id_a >= 0);
+    REQUIRE(id_b >= 0);
+
+    // Capture original pointers
+    int16_t* orig_a = nullptr;
+    int16_t* orig_b = nullptr;
+    for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
+        if (g->series_meta[i].chart_series) {
+            if (g->series_meta[i].id == id_a) orig_a = g->series_meta[i].target_centi_buf;
+            if (g->series_meta[i].id == id_b) orig_b = g->series_meta[i].target_centi_buf;
+        }
+    }
+    REQUIRE(orig_a != nullptr);
+    REQUIRE(orig_b != nullptr);
+
+    // Shrink: default (1200) → 100
+    ui_temp_graph_set_point_count(g, 100);
+    REQUIRE(g->point_count == 100);
+
+    for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
+        if (g->series_meta[i].chart_series) {
+            REQUIRE(g->series_meta[i].target_centi_buf != nullptr);
+            REQUIRE(g->series_meta[i].target_head == 0);
+            // First 100 entries are accessible and zeroed.
+            for (int j = 0; j < 100; j++) {
+                REQUIRE(g->series_meta[i].target_centi_buf[j] == 0);
+            }
+        }
+    }
+
+    ui_temp_graph_destroy(g);
+}
