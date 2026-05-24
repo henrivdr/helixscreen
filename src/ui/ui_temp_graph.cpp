@@ -1032,11 +1032,13 @@ void ui_temp_graph_destroy(ui_temp_graph_t* graph) {
         lv_obj_t* chart = graph_ptr->chart;
         crash_handler::breadcrumb::note("tg", "destroy_async", reinterpret_cast<long>(chart));
 
-        // Remove all series (cursors will be cleaned up automatically)
+        // Remove all series and free per-series target buffers.
         for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
             if (graph_ptr->series_meta[i].chart_series) {
                 lv_chart_remove_series(chart, graph_ptr->series_meta[i].chart_series);
             }
+            delete[] graph_ptr->series_meta[i].target_centi_buf;
+            graph_ptr->series_meta[i].target_centi_buf = nullptr;
         }
 
         // Sever every callback that captured `graph` as user_data so the deferred
@@ -1138,6 +1140,15 @@ int ui_temp_graph_add_series(ui_temp_graph_t* graph, const char* name, lv_color_
     meta->gradient_top_opa = UI_TEMP_GRAPH_GRADIENT_TOP_OPA;
     meta->first_value_received = false;
 
+    // Allocate target history buffer (zero-init = heater off sentinel)
+    meta->target_centi_buf = new (std::nothrow) int16_t[static_cast<size_t>(graph->point_count)]();
+    meta->target_head = 0;
+    if (!meta->target_centi_buf) {
+        spdlog::error("[TempGraph] Failed to allocate target buffer for series '{}'", name);
+        lv_chart_remove_series(graph->chart, ser);
+        return -1;
+    }
+
     graph->series_count++;
 
     spdlog::trace("[TempGraph] Added series {} '{}' (slot {}, color 0x{:06X})", meta->id,
@@ -1157,7 +1168,10 @@ void ui_temp_graph_remove_series(ui_temp_graph_t* graph, int series_id) {
     // Remove chart series
     lv_chart_remove_series(graph->chart, meta->chart_series);
 
-    // Clear metadata
+    // Free target history buffer
+    delete[] meta->target_centi_buf;
+
+    // Clear metadata (also zeros target_centi_buf and target_head)
     memset(meta, 0, sizeof(ui_temp_series_meta_t));
     meta->chart_series = nullptr;
 
