@@ -1330,6 +1330,41 @@ void ui_temp_graph_set_series_data(ui_temp_graph_t* graph, int series_id, const 
                   points_to_copy);
 }
 
+// Replace all data + target history for a series (array mode, parallel arrays).
+// Used by backfill paths that have both temp and target history per sample
+// (e.g., TemperatureHistoryManager::get_samples_since() replay).
+void ui_temp_graph_set_series_data_with_targets(ui_temp_graph_t* graph, int series_id,
+                                                const float* temps, const float* targets,
+                                                int count) {
+    ui_temp_series_meta_t* meta = find_series(graph, series_id);
+    if (!meta || !temps || !targets || count <= 0) {
+        spdlog::error("[TempGraph] Invalid parameters");
+        return;
+    }
+
+    // Reuse existing temp data path (it already handles capping at point_count
+    // and chart refresh).
+    ui_temp_graph_set_series_data(graph, series_id, temps, count);
+
+    // Mirror the same cap.
+    int points_to_copy = count > graph->point_count ? graph->point_count : count;
+
+    // Populate target buffer in lockstep. Zero-init any tail we don't fill.
+    if (meta->target_centi_buf) {
+        for (int i = 0; i < points_to_copy; i++) {
+            meta->target_centi_buf[i] = static_cast<int16_t>(targets[i] * TEMP_SCALE);
+        }
+        if (points_to_copy < graph->point_count) {
+            memset(meta->target_centi_buf + points_to_copy, 0,
+                   static_cast<size_t>(graph->point_count - points_to_copy) * sizeof(int16_t));
+        }
+        meta->target_head = points_to_copy;
+    }
+
+    spdlog::trace("[TempGraph] Series {} '{}' data+targets set ({} points)", series_id,
+                  meta->name, points_to_copy);
+}
+
 // Clear all data
 void ui_temp_graph_clear(ui_temp_graph_t* graph) {
     if (!graph || !graph->chart)

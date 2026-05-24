@@ -1080,3 +1080,36 @@ TEST_CASE_METHOD(TempGraphTestFixture,
 
     ui_temp_graph_destroy(g);
 }
+
+TEST_CASE_METHOD(TempGraphTestFixture,
+                 "ui_temp_graph: set_series_data_with_targets populates both buffers",
+                 "[temp_graph][target_history]") {
+    ui_temp_graph_t* g = ui_temp_graph_create(screen);
+    REQUIRE(g != nullptr);
+
+    int id = ui_temp_graph_add_series(g, "N", lv_color_hex(0xFF0000));
+    REQUIRE(id >= 0);
+
+    auto get_meta = [&]() -> ui_temp_series_meta_t* {
+        for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
+            if (g->series_meta[i].chart_series && g->series_meta[i].id == id)
+                return &g->series_meta[i];
+        }
+        return nullptr;
+    };
+
+    const float temps[]   = { 25.0f,  30.0f, 100.0f, 200.0f, 210.0f };
+    const float targets[] = {  0.0f,   0.0f, 220.0f, 220.0f, 220.0f };
+    ui_temp_graph_set_series_data_with_targets(g, id, temps, targets, 5);
+
+    auto* m = get_meta();
+    REQUIRE(m != nullptr);
+    REQUIRE(m->target_head == 5);
+    REQUIRE(m->target_centi_buf[0] == 0);
+    REQUIRE(m->target_centi_buf[1] == 0);
+    REQUIRE(m->target_centi_buf[2] == 2200);
+    REQUIRE(m->target_centi_buf[3] == 2200);
+    REQUIRE(m->target_centi_buf[4] == 2200);
+
+    ui_temp_graph_destroy(g);
+}
