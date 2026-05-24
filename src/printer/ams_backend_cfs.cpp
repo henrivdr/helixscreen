@@ -170,6 +170,7 @@ static const std::unordered_map<std::string, CfsErrorEntry> CFS_ERROR_TABLE = {
     // Klipper-internal errors (not CFS-specific) that we frequently surface to
     // users. Despite living in the CFS table for now, these are general — the
     // table predates the broader use case. TODO: rename to KlipperErrorTable.
+    {"key111", {"Pre-heat the extruder first", "Filament can't be loaded below the minimum extrude temperature. Set a hotend target (e.g. 220°C for PLA, 240°C for PETG), wait for it to reach temperature, then try again", AmsAlertLevel::SYSTEM, nullptr}},
     {"key298", {"MCU bridge daemon is shut down", "Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge", AmsAlertLevel::SYSTEM, nullptr}},
     {"key585", {"Move out of range", "The requested position is outside the printer's bounds", AmsAlertLevel::SYSTEM, nullptr}},
 
@@ -1107,28 +1108,35 @@ AmsError AmsBackendCfs::disable_bypass() {
 
 namespace {
 
-/// Wrap a CR_BOX_* operation with the stock K2 macro envelope.
+/// Wrap a CR_BOX_* operation with the K2 macro envelope.
 ///
-/// The envelope mirrors what stock BOX_LOAD_MATERIAL_* does around the
-/// raw `CR_BOX_*` calls, in this order:
+/// Sequence (better-than-stock — see notes below):
 ///
 ///   1. SAVE_GCODE_STATE        — preserve caller coordinate mode + feedrate
 ///   2. BOX_SAVE_FAN            — suppress part-cooling during the op
 ///   3. BOX_GO_TO_EXTRUDE_POS   — toolhead over waste chute (X=133/Y=378)
-///   4. BOX_SET_TEMP            — heat extruder to Tn_extrude_temp (220°C
-///                                from [box] config), required or Klipper
-///                                rejects extrude with min_extrude_temp
-///   5. BOX_MODE_WAIT           — wait for box state machine + extruder
-///                                target to settle before active phase
-///   6. <body>                  — CR_BOX_PRE_OPT, EXTRUDE/CUT/RETRUDE/etc.
-///   7. BOX_NOZZLE_CLEAN        — (load/swap only) wipe on silicone pad
-///                                at X=160-170, Y=374 so the flushed
-///                                nozzle doesn't drip on the move home
-///   8. BOX_RESTORE_FAN         — restore part-cooling state
-///   9. BOX_MOVE_TO_SAFE_POS    — park at safe_pos (X=225/Y=345)
-///  10. RESTORE_GCODE_STATE
+///   4. BOX_MODE_WAIT           — wait for box state machine to settle
+///                                before the active phase
+///   5. <body>                  — CR_BOX_PRE_OPT, EXTRUDE/CUT/RETRUDE/etc.
+///   6. BOX_NOZZLE_CLEAN        — (load/swap only) wipe on silicone pad
+///                                at X=160-170, Y=374
+///   7. BOX_RESTORE_FAN         — restore part-cooling state
+///   8. BOX_MOVE_TO_SAFE_POS    — park at safe_pos (X=225/Y=345)
+///   9. RESTORE_GCODE_STATE
 ///
-/// `wipe_after` toggles step 7. Load and swap end with the nozzle full
+/// Stock K2 BOX_LOAD_MATERIAL_HEATING calls BOX_SET_TEMP, which targets
+/// Tn_extrude_temp (220°C). We deliberately omit it: if a user has PETG
+/// loaded at 240°C and taps Load, BOX_SET_TEMP would cool the hotend
+/// mid-op and the subsequent flush would underextrude. A cold extruder
+/// instead surfaces a friendly "Extrude below minimum temp — pre-heat
+/// first" modal via the key111 entry in CFS_ERROR_TABLE.
+///
+/// Klipper macros have no try/finally — if the body raises, steps 7-9
+/// are skipped. Best-effort unwind (independent BOX_RESTORE_FAN +
+/// RESTORE_GCODE_STATE scripts) lives in `dispatch_action_script`'s
+/// on_error path.
+///
+/// `wipe_after` toggles step 6. Load and swap end with the nozzle full
 /// of fresh filament — wipe required (observed K2 Plus 2026-05-23: T1
 /// load drip-trailed across the bed). Unload ends with the nozzle empty
 /// post-cut — wipe omitted to avoid pushing dribble back into the hotend.
@@ -1143,7 +1151,6 @@ std::string wrap_with_park(const std::string& body, bool wipe_after) {
     return "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
            "BOX_SAVE_FAN\n"
            "BOX_GO_TO_EXTRUDE_POS\n"
-           "BOX_SET_TEMP\n"
            "BOX_MODE_WAIT\n" +
            body + post_body;
 }
@@ -1220,9 +1227,30 @@ AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
             // Either way the driver isn't running our script anymore, so flip back
             // to IDLE so the UI doesn't get stuck on a "loading" spinner.
             spdlog::error("[AMS CFS] Action script failed: {}", err.message);
-            std::lock_guard<std::mutex> lock(mutex_);
-            system_info_.action = AmsAction::IDLE;
-            end_phase_tracking();
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                system_info_.action = AmsAction::IDLE;
+                end_phase_tracking();
+            }
+
+            // Best-effort unwind. The wrap_with_park envelope emits
+            // BOX_SAVE_FAN + SAVE_GCODE_STATE upfront and relies on the
+            // tail of the script to restore them — but Klipper macros
+            // have no try/finally, so if the body raised mid-sequence
+            // (key849, key851, min_extrude_temp, etc.) the restore lines
+            // never ran. Fire each cleanup as a separate gcode_script
+            // with empty callbacks so one failing (e.g. RESTORE_GCODE_STATE
+            // when no save exists because SAVE never ran) doesn't block
+            // the other. Worst case: cleanup is a no-op.
+            if (api_) {
+                api_->execute_gcode("BOX_RESTORE_FAN", []() {},
+                                    [](const MoonrakerError&) {},
+                                    MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+                api_->execute_gcode("RESTORE_GCODE_STATE NAME=helix_cfs_load",
+                                    []() {},
+                                    [](const MoonrakerError&) {},
+                                    MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+            }
         });
     };
 

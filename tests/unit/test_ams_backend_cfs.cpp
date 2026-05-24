@@ -263,6 +263,15 @@ TEST_CASE("CFS error message+values decoding", "[ams][cfs]") {
         REQUIRE(out->first.find("on unit 3") != std::string::npos);
     }
 
+    SECTION("key111 (cold extruder) surfaces pre-heat guidance") {
+        json values = json::array();
+        auto out = CfsErrorDecoder::lookup_message_with_values("key111", values);
+        REQUIRE(out.has_value());
+        REQUIRE(out->first.find("Pre-heat") != std::string::npos);
+        REQUIRE(out->second.find("220") != std::string::npos);
+        REQUIRE(out->second.find("PETG") != std::string::npos);
+    }
+
     SECTION("key298 (system, no formatter) returns message untouched") {
         json values = json::array();
         auto out = CfsErrorDecoder::lookup_message_with_values("key298", values);
@@ -478,7 +487,6 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
             "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
             "BOX_SAVE_FAN\n"
             "BOX_GO_TO_EXTRUDE_POS\n"
-            "BOX_SET_TEMP\n"
             "BOX_MODE_WAIT\n"
             "CR_BOX_PRE_OPT\nCR_BOX_EXTRUDE TNN=T1A\n"
             "CR_BOX_WASTE\nCR_BOX_FLUSH TNN=T1A\nCR_BOX_END_OPT\n"
@@ -493,8 +501,11 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
                 std::string::npos);
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_MOVE_TO_SAFE_POS") !=
                 std::string::npos);
-        // Stock-parity envelope: heat + wait + fan save/restore around the op.
-        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_SET_TEMP") != std::string::npos);
+        // Envelope: mode-wait + fan save/restore around the op.
+        // No BOX_SET_TEMP — we deliberately don't lower a hotter pre-set
+        // extruder target (e.g. PETG @ 240°C); cold extruders surface a
+        // friendly key111 modal instead.
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_SET_TEMP") == std::string::npos);
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_MODE_WAIT") != std::string::npos);
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_SAVE_FAN") != std::string::npos);
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_RESTORE_FAN") != std::string::npos);
@@ -510,7 +521,7 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
         REQUIRE(g.find("SAVE_GCODE_STATE NAME=helix_cfs_load") != std::string::npos);
         REQUIRE(g.find("BOX_SAVE_FAN") != std::string::npos);
         REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
-        REQUIRE(g.find("BOX_SET_TEMP") != std::string::npos);
+        REQUIRE(g.find("BOX_SET_TEMP") == std::string::npos);
         REQUIRE(g.find("CR_BOX_PRE_OPT\nCR_BOX_CUT\nBOX_MODE_WAIT\n"
                        "CR_BOX_RETRUDE\nCR_BOX_END_OPT") != std::string::npos);
         REQUIRE(g.find("BOX_RESTORE_FAN") != std::string::npos);
@@ -524,7 +535,7 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
         for (int idx : {0, 1, 3}) {
             const std::string g = AmsBackendCfs::swap_gcode(idx);
             REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
-            REQUIRE(g.find("BOX_SET_TEMP") != std::string::npos);
+            REQUIRE(g.find("BOX_SET_TEMP") == std::string::npos);
             REQUIRE(g.find("CR_BOX_CUT\nBOX_MODE_WAIT\nCR_BOX_RETRUDE\n"
                            "BOX_MODE_WAIT\nCR_BOX_EXTRUDE TNN=") != std::string::npos);
             REQUIRE(g.find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
