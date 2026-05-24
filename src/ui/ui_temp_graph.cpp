@@ -10,13 +10,11 @@
 
 #include <spdlog/spdlog.h>
 
-#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -639,37 +637,6 @@ static void draw_target_lines_cb(lv_event_t* e) {
 
         auto segments = helix::temp_graph_internal::segment_target_buf(
             meta->target_centi_buf, meta->target_head);
-
-        // -------- TEMPORARY DIAGNOSTIC (remove after debug) --------
-        {
-            static std::unordered_map<std::string, int64_t> s_last_trace_ms;
-            int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::steady_clock::now().time_since_epoch()).count();
-            std::string key = std::string(meta->name) + "@" + std::to_string(reinterpret_cast<uintptr_t>(graph));
-            int64_t& last = s_last_trace_ms[key];
-            if (now_ms - last > 2000) {
-                last = now_ms;
-                std::string seg_str;
-                for (const auto& s : segments) {
-                    int16_t v_at_start = meta->target_centi_buf[s.first];
-                    seg_str += "[" + std::to_string(s.first) + "," + std::to_string(s.second)
-                            + ")=" + std::to_string(v_at_start) + " ";
-                }
-                std::string sample_str;
-                int n = head;
-                if (n > 0) {
-                    int step = std::max(1, n / 10);
-                    for (int i = 0; i < n; i += step) {
-                        sample_str += std::to_string(i) + ":" + std::to_string(meta->target_centi_buf[i]) + " ";
-                    }
-                    sample_str += "last(" + std::to_string(n - 1) + "):" +
-                                  std::to_string(meta->target_centi_buf[n - 1]);
-                }
-                spdlog::info("[TempGraph::diag] series='{}' head={} vis_offset={} segs={} | {}| samples: {}",
-                             meta->name, head, visual_offset, segments.size(), seg_str, sample_str);
-            }
-        }
-        // -------- END TEMPORARY DIAGNOSTIC --------
 
         for (const auto& seg : segments) {
             // Vertical riser at segment start (target transitioned from 0 → value).
