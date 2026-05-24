@@ -320,7 +320,10 @@ void TempGraphController::setup_observers() {
 
                     float target_deg = centi_to_degrees_f(target_centi);
                     bool show = target_deg > 0.0f;
-                    ui_temp_graph_set_series_target(self->graph_, si.series_id, target_deg, show);
+                    // Stage the new setpoint — the buffer push happens on the
+                    // next actuals sample, so multiple target updates between
+                    // samples collapse to "latest target wins" naturally.
+                    ui_temp_graph_set_current_target(self->graph_, si.series_id, target_deg, show);
                     self->apply_auto_range();
                 },
                 s.lifetime);
