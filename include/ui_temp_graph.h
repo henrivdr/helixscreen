@@ -93,9 +93,10 @@ struct ui_temp_series_meta_t {
     // Target history (parallel to chart series buffer):
     //   target_centi_buf[i] holds the target × 10 at the time chart sample i was pushed.
     //   0 sentinel = "no target / heater off" (segment break in draw).
-    //   Sized to graph->point_count; reallocated by set_point_count.
-    int16_t* target_centi_buf;
-    int      target_head;            // Count of valid samples in [0, target_head).
+    //   Must be (re)allocated to graph->point_count entries by add_series /
+    //   set_point_count; freed by remove_series / destroy.
+    int16_t* target_centi_buf = nullptr;
+    int      target_head = 0;        // Count of valid samples in [0, target_head).
                                      //   Caps at point_count; shift-left on overflow.
 };
 
