@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <utility>
 #include <vector>
 
 using helix::ui::format_time;
@@ -40,6 +41,33 @@ static ui_temp_series_meta_t* find_series(ui_temp_graph_t* graph, int series_id)
     }
     return nullptr;
 }
+
+namespace helix::temp_graph_internal {
+
+// Split a target buffer into [start, end) runs of strictly positive samples.
+// Pure: no LVGL, no allocation beyond the return vector. Exposed for unit testing.
+std::vector<std::pair<int, int>> segment_target_buf(const int16_t* buf, int count) {
+    std::vector<std::pair<int, int>> out;
+    if (!buf || count <= 0)
+        return out;
+
+    int seg_start = -1;
+    for (int i = 0; i < count; i++) {
+        bool active = buf[i] > 0;
+        if (active && seg_start < 0) {
+            seg_start = i;
+        } else if (!active && seg_start >= 0) {
+            out.emplace_back(seg_start, i);
+            seg_start = -1;
+        }
+    }
+    if (seg_start >= 0)
+        out.emplace_back(seg_start, count);
+
+    return out;
+}
+
+} // namespace helix::temp_graph_internal
 
 // Helper: Create a muted (reduced opacity) version of a color
 // Since LVGL chart cursors don't support opacity, we blend toward the background

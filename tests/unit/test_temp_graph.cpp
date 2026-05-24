@@ -1148,3 +1148,66 @@ TEST_CASE_METHOD(TempGraphTestFixture,
 
     ui_temp_graph_destroy(g);
 }
+
+// =============================================================================
+// Target history segmenter (pure logic, no LVGL)
+// =============================================================================
+//
+// The segmenter walks the parallel target buffer and emits [start, end) index
+// pairs for each run of positive samples. Tested as a free function so we can
+// exercise edge cases (all-zero, all-positive, mid-zeros, single-sample runs)
+// without spinning up a real chart.
+
+#include <utility>
+#include <vector>
+
+// Forward declaration of the function under test (defined in ui_temp_graph.cpp).
+namespace helix::temp_graph_internal {
+std::vector<std::pair<int, int>> segment_target_buf(const int16_t* buf, int count);
+}
+
+TEST_CASE("segment_target_buf: empty input yields no segments", "[temp_graph][target_history]") {
+    auto segs = helix::temp_graph_internal::segment_target_buf(nullptr, 0);
+    REQUIRE(segs.empty());
+
+    int16_t buf[1] = {0};
+    segs = helix::temp_graph_internal::segment_target_buf(buf, 0);
+    REQUIRE(segs.empty());
+}
+
+TEST_CASE("segment_target_buf: all zeros yields no segments",
+          "[temp_graph][target_history]") {
+    int16_t buf[5] = {0, 0, 0, 0, 0};
+    auto segs = helix::temp_graph_internal::segment_target_buf(buf, 5);
+    REQUIRE(segs.empty());
+}
+
+TEST_CASE("segment_target_buf: single all-positive run yields one segment",
+          "[temp_graph][target_history]") {
+    int16_t buf[4] = {100, 200, 300, 400};
+    auto segs = helix::temp_graph_internal::segment_target_buf(buf, 4);
+    REQUIRE(segs.size() == 1);
+    REQUIRE(segs[0].first == 0);
+    REQUIRE(segs[0].second == 4); // exclusive end
+}
+
+TEST_CASE("segment_target_buf: gap in the middle splits into two segments",
+          "[temp_graph][target_history]") {
+    int16_t buf[8] = {0, 0, 500, 600, 600, 0, 0, 800};
+    auto segs = helix::temp_graph_internal::segment_target_buf(buf, 8);
+    REQUIRE(segs.size() == 2);
+    REQUIRE(segs[0].first == 2);
+    REQUIRE(segs[0].second == 5);
+    REQUIRE(segs[1].first == 7);
+    REQUIRE(segs[1].second == 8);
+}
+
+TEST_CASE("segment_target_buf: negative values treated as gaps too",
+          "[temp_graph][target_history]") {
+    int16_t buf[5] = {100, -50, 200, 0, 300};
+    auto segs = helix::temp_graph_internal::segment_target_buf(buf, 5);
+    REQUIRE(segs.size() == 3);
+    REQUIRE(segs[0] == std::make_pair(0, 1));
+    REQUIRE(segs[1] == std::make_pair(2, 3));
+    REQUIRE(segs[2] == std::make_pair(4, 5));
+}
