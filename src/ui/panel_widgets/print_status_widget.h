@@ -347,6 +347,13 @@ class PrintStatusWidget : public PanelWidget {
     void on_print_state_changed(PrintJobState state);
     void on_print_thumbnail_path_changed(const char* path);
     void reset_print_card_to_idle();
+    // Schedule reset_print_card_to_idle() on the next LVGL tick via lv_async_call.
+    // Required when called from UpdateQueue::process_pending() contexts (subject
+    // observers, token.defer bodies): reset_print_card_to_idle() does synchronous
+    // lv_image_set_src which cascades into lv_obj_update_layout up to the page
+    // grid; if populate_page is mid-rebuild, grid_update reads freed track data
+    // and SIGSEGVs (J2URYGSM AD5M / SY6JLLKJ / FFATPQWB Pi5).
+    void defer_reset_print_card_to_idle();
     void update_idle_compact_mode();
     void update_active_layout_mode();
     void update_last_print_availability();

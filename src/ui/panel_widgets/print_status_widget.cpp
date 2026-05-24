@@ -292,7 +292,10 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
                 lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
             bool is_idle = (state != PrintJobState::PRINTING && state != PrintJobState::PAUSED);
             if (is_idle) {
-                reset_print_card_to_idle();
+                // Defer: token.defer body runs inside UpdateQueue::process_pending,
+                // and synchronous reset_print_card_to_idle would cascade lv_image_set_src
+                // into a grid layout that populate_page may be mid-rebuilding.
+                defer_reset_print_card_to_idle();
             }
         });
     };
@@ -325,22 +328,12 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
         if (state == PrintJobState::PRINTING || state == PrintJobState::PAUSED) {
             on_print_state_changed(state);
         } else {
-            // Defer the initial idle reset to the next LVGL tick. Running it
-            // synchronously here cascades: lv_subject_copy_string(idle_thumb_path)
-            // → bind_src observer → lv_image_set_src → update_align →
-            // lv_obj_update_layout walks up to the page grid that populate_page
-            // is still building sibling widgets into. grid_update then crashes
-            // reading half-initialized track data (AD5M SY6JLLKJ #?). Raw
-            // lv_async_call escapes the UpdateQueue batch (see CLAUDE.md
-            // "Safe escape routes"); live_instances() guards UAF.
-            lv_async_call(
-                [](void* ud) {
-                    auto* self = static_cast<PrintStatusWidget*>(ud);
-                    if (live_instances().count(self) != 0 && self->widget_obj_) {
-                        self->reset_print_card_to_idle();
-                    }
-                },
-                this);
+            // Defer the initial idle reset: synchronous reset_print_card_to_idle
+            // cascades lv_image_set_src → update_align → lv_obj_update_layout up
+            // to the page grid that populate_page is still building sibling
+            // widgets into, and grid_update crashes on half-initialized track
+            // data (AD5M SY6JLLKJ, Pi5 FFATPQWB).
+            defer_reset_print_card_to_idle();
         }
         spdlog::debug("[PrintStatusWidget] Found print card widgets for dynamic updates");
     } else {
@@ -668,7 +661,10 @@ void PrintStatusWidget::on_print_state_changed(PrintJobState state) {
         spdlog::debug("[PrintStatusWidget] Print active - state updated via subject bindings");
     } else {
         spdlog::debug("[PrintStatusWidget] Print not active - reverting card to idle state");
-        reset_print_card_to_idle();
+        // print_state_observer_ fires deferred via UpdateQueue::process_pending;
+        // synchronous reset_print_card_to_idle would crash grid_update if
+        // populate_page is concurrently rebuilding the page grid (J2URYGSM AD5M).
+        defer_reset_print_card_to_idle();
     }
 }
 
@@ -727,6 +723,20 @@ std::string PrintStatusWidget::get_last_print_thumbnail_path() const {
 
     // Fallback: use pre-selected largest thumbnail
     return job.thumbnail_path;
+}
+
+void PrintStatusWidget::defer_reset_print_card_to_idle() {
+    // Raw lv_async_call escapes the UpdateQueue::process_pending() batch (see
+    // CLAUDE.md "Safe escape routes"). live_instances() + widget_obj_ guard UAF
+    // if the widget is destroyed before the next tick.
+    lv_async_call(
+        [](void* ud) {
+            auto* self = static_cast<PrintStatusWidget*>(ud);
+            if (live_instances().count(self) != 0 && self->widget_obj_) {
+                self->reset_print_card_to_idle();
+            }
+        },
+        this);
 }
 
 void PrintStatusWidget::reset_print_card_to_idle() {
