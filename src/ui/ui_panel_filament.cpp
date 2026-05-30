@@ -376,13 +376,11 @@ void FilamentPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     // sizing is owned by apply_left_column_sizing() (called from
     // update_multi_filament_card_visibility). At MICRO/TINY with no AMS the
     // spool card has almost no content, so the graph becomes the flex filler.
-    ams_type_observer_ = observe_int_sync<FilamentPanel>(
-        AmsState::instance().get_ams_type_subject(),
-        this,
-        [](FilamentPanel* self, int /*ams_type*/) {
-            self->update_multi_filament_card_visibility();
-        });
-
+    ams_type_observer_ =
+        observe_int_sync<FilamentPanel>(AmsState::instance().get_ams_type_subject(), this,
+                                        [](FilamentPanel* self, int /*ams_type*/) {
+                                            self->update_multi_filament_card_visibility();
+                                        });
 
     // End operation guard when AMS action returns to idle (load/unload complete)
     ams_action_observer_ = observe_int_sync<FilamentPanel>(
