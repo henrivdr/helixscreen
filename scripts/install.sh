@@ -67,6 +67,27 @@ _is_self_update() {
     [ "${HELIX_SELF_UPDATE:-}" = "1" ]
 }
 
+# Probe for a usable Python interpreter with working ssl + urllib (cached).
+# Sets _PY_BIN to the first of python3/python that can import ssl and
+# urllib.request. Used as a download/extraction fallback on platforms that
+# lack curl/wget/unzip (notably recent Creality K2 Tina/OpenWrt firmware).
+# Returns 0 if a usable interpreter was found, non-zero otherwise.
+_PY_BIN=""
+_PY_PROBED=""
+_has_python() {
+    if [ -z "$_PY_PROBED" ]; then
+        _PY_PROBED=1
+        for _cand in python3 python; do
+            if command -v "$_cand" >/dev/null 2>&1 && \
+               "$_cand" -c 'import ssl, urllib.request' >/dev/null 2>&1; then
+                _PY_BIN="$_cand"
+                break
+            fi
+        done
+    fi
+    [ -n "$_PY_BIN" ]
+}
+
 # Get sudo prefix needed for a file operation.
 # Returns empty string if current user has write access, $SUDO otherwise.
 # For existing files, checks file writability. For new files, checks parent dir.
@@ -1482,23 +1503,28 @@ _helix_add_missing() { missing="${missing:+$missing, }$1"; }
 check_requirements() {
     local missing=""
 
-    # Need either curl or wget
-    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-        _helix_add_missing "curl or wget"
+    # Need curl, wget, or python3 (urllib) to download the release.
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1 && ! _has_python; then
+        _helix_add_missing "curl, wget, or python3"
     fi
     command -v tar >/dev/null 2>&1 || _helix_add_missing "tar"
     # gunzip needed for AD5M BusyBox tar which doesn't support -z
     command -v gunzip >/dev/null 2>&1 || _helix_add_missing "gunzip"
 
-    # Try transparent apt-install of unzip when missing — many minimal
-    # Debian/Ubuntu images (notably Snapmaker U1 extended firmware) ship without it.
+    # Zip extraction: prefer unzip, but python's zipfile module is a built-in
+    # fallback (used on platforms like recent Creality K2 firmware that lack
+    # unzip but ship python3). Try a transparent apt-install of unzip on
+    # Debian/Ubuntu images that lack it (notably Snapmaker U1 extended firmware);
+    # only mark it missing when there's no apt AND no python fallback.
     if ! command -v unzip >/dev/null 2>&1; then
         if command -v apt-get >/dev/null 2>&1 && ! _has_no_new_privs; then
             log_info "Installing missing dependency: unzip"
             _apt_update_once
-            $SUDO apt-get install -y --no-install-recommends unzip >/dev/null 2>&1 \
-                || _helix_add_missing "unzip"
-        else
+            $SUDO apt-get install -y --no-install-recommends unzip >/dev/null 2>&1 || true
+            if ! command -v unzip >/dev/null 2>&1 && ! _has_python; then
+                _helix_add_missing "unzip"
+            fi
+        elif ! _has_python; then
             _helix_add_missing "unzip"
         fi
     fi
@@ -2645,6 +2671,108 @@ _has_real_curl() {
     [ "$_REAL_CURL" = "yes" ]
 }
 
+# User-Agent for python downloads. Our CDN/origin returns HTTP 403 to requests
+# with an empty UA or the default Python-urllib/x.y UA; any other UA passes.
+_PY_UA="helixscreen-installer/1.0"
+
+# Fetch a URL to stdout via python urllib (fallback when curl/wget unavailable).
+# Sends a non-default User-Agent so the CDN doesn't 403 us. Returns non-zero on
+# any error. Args: url
+_py_fetch() {
+    _has_python || return 1
+    HELIX_PY_URL="$1" HELIX_PY_UA="$_PY_UA" "$_PY_BIN" - <<'PYEOF'
+import os, sys, urllib.request
+url = os.environ["HELIX_PY_URL"]
+ua = os.environ["HELIX_PY_UA"]
+try:
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        import shutil
+        shutil.copyfileobj(resp, sys.stdout.buffer)
+except Exception:
+    sys.exit(1)
+PYEOF
+}
+
+# Download a URL to a file via python urllib (fallback when curl/wget
+# unavailable). Sends a non-default User-Agent so the CDN doesn't 403 us.
+# Returns non-zero on error. Args: url dest [max_seconds]
+_py_download() {
+    _has_python || return 1
+    HELIX_PY_URL="$1" HELIX_PY_DEST="$2" HELIX_PY_UA="$_PY_UA" \
+        HELIX_PY_TIMEOUT="${3:-300}" "$_PY_BIN" - <<'PYEOF'
+import os, sys, urllib.request, shutil
+url = os.environ["HELIX_PY_URL"]
+dest = os.environ["HELIX_PY_DEST"]
+ua = os.environ["HELIX_PY_UA"]
+try:
+    timeout = float(os.environ.get("HELIX_PY_TIMEOUT", "300"))
+except ValueError:
+    timeout = 300.0
+try:
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with open(dest, "wb") as out:
+            shutil.copyfileobj(resp, out)
+except Exception:
+    sys.exit(1)
+PYEOF
+}
+
+# Test a zip archive for validity via python zipfile (fallback when unzip
+# unavailable). Returns non-zero if the archive is missing or corrupt.
+# Args: archive
+_py_unzip_test() {
+    _has_python || return 1
+    HELIX_PY_ZIP="$1" "$_PY_BIN" - <<'PYEOF'
+import os, sys, zipfile
+path = os.environ["HELIX_PY_ZIP"]
+try:
+    with zipfile.ZipFile(path) as zf:
+        if zf.testzip() is not None:
+            sys.exit(1)
+except Exception:
+    sys.exit(1)
+PYEOF
+}
+
+# Extract a zip archive into a destination directory via python zipfile
+# (fallback when unzip unavailable). Restores unix permission bits from each
+# entry's external_attr (extractall does NOT preserve them); files under a
+# bin/ path are forced owner-executable so helixscreen/bin/helix-screen ends up
+# runnable even when the zip carries no mode bits. Args: archive destdir
+_py_unzip_extract() {
+    _has_python || return 1
+    HELIX_PY_ZIP="$1" HELIX_PY_DESTDIR="$2" "$_PY_BIN" - <<'PYEOF'
+import os, sys, stat, zipfile
+path = os.environ["HELIX_PY_ZIP"]
+destdir = os.environ["HELIX_PY_DESTDIR"]
+try:
+    with zipfile.ZipFile(path) as zf:
+        for info in zf.infolist():
+            zf.extract(info, destdir)
+            # Directory entries: nothing to chmod.
+            if info.filename.endswith("/"):
+                continue
+            target = os.path.join(destdir, info.filename)
+            # Restore unix permission bits from the zip's external_attr
+            # (extractall/extract do NOT preserve them).
+            mode = (info.external_attr >> 16) & 0o777
+            if mode:
+                os.chmod(target, mode)
+            # Ensure anything under a bin/ path is owner-executable, even when
+            # the zip carried no exec bit (e.g. helixscreen/bin/helix-screen
+            # stored as 0644 or with no mode bits at all). Must run regardless
+            # of whether external_attr had mode bits.
+            parts = info.filename.split("/")
+            if "bin" in parts[:-1]:
+                st = os.stat(target)
+                os.chmod(target, st.st_mode | stat.S_IXUSR)
+except Exception:
+    sys.exit(1)
+PYEOF
+}
+
 # Fetch a URL to stdout using curl or wget
 # Returns non-zero if neither is available or fetch fails
 fetch_url() {
@@ -2653,6 +2781,8 @@ fetch_url() {
         curl -sSL --connect-timeout 10 "$url" 2>/dev/null
     elif command -v wget >/dev/null 2>&1; then
         wget -qO- --timeout=10 "$url" 2>/dev/null
+    elif _has_python; then
+        _py_fetch "$url"
     else
         return 1
     fi
@@ -2666,6 +2796,8 @@ fetch_url_http() {
         wget -qO- --timeout=10 "$url" 2>/dev/null
     elif _has_real_curl; then
         curl -sSL --connect-timeout 10 "$url" 2>/dev/null
+    elif _has_python; then
+        _py_fetch "$url"
     else
         return 1
     fi
@@ -2685,6 +2817,8 @@ download_file_http() {
         fi
     elif _has_real_curl; then
         download_file "$url" "$dest" "$max_secs"
+    elif _has_python; then
+        _py_download "$url" "$dest" "$max_secs" && [ -f "$dest" ] && [ -s "$dest" ]
     else
         return 1
     fi
@@ -2738,6 +2872,13 @@ download_file() {
             wget -q --timeout="$max_secs" -O "$dest" "$url" && \
                 [ -f "$dest" ] && [ -s "$dest" ]
         fi
+    elif _has_python; then
+        # urllib can't honor min_speed (no speed floor); rely on max_secs.
+        if _py_download "$url" "$dest" "$max_secs" && [ -f "$dest" ] && [ -s "$dest" ]; then
+            _DOWNLOAD_HTTP_CODE="200"
+            return 0
+        fi
+        return 1
     else
         return 1
     fi
@@ -2768,9 +2909,20 @@ validate_archive() {
 
     case "$archive" in
         *.zip)
-            if ! unzip -tqq "$archive" >/dev/null 2>&1; then
-                log_error "${context}file is not a valid zip archive."
-                [ -n "$context" ] && log_error "The ${context}may have been corrupted or incomplete."
+            if command -v unzip >/dev/null 2>&1; then
+                if ! unzip -tqq "$archive" >/dev/null 2>&1; then
+                    log_error "${context}file is not a valid zip archive."
+                    [ -n "$context" ] && log_error "The ${context}may have been corrupted or incomplete."
+                    exit 1
+                fi
+            elif _has_python; then
+                if ! _py_unzip_test "$archive"; then
+                    log_error "${context}file is not a valid zip archive."
+                    [ -n "$context" ] && log_error "The ${context}may have been corrupted or incomplete."
+                    exit 1
+                fi
+            else
+                log_error "${context}file is a zip but neither unzip nor python3 is available to validate it."
                 exit 1
             fi
             ;;
@@ -2801,6 +2953,12 @@ validate_tarball() {
 # Check if we can download from HTTPS URLs
 # BusyBox wget on AD5M doesn't support HTTPS
 check_https_capability() {
+    # python urllib has working ssl (verified system CA certs) on python-only
+    # systems like recent Creality K2 firmware — treat as HTTPS-capable.
+    if _has_python; then
+        return 0
+    fi
+
     # curl with SSL support works (skip BusyBox curl which lacks needed flags)
     if _has_real_curl; then
         # Test if curl can reach HTTPS (quick timeout)
@@ -2963,7 +3121,14 @@ _try_download_candidate() {
     case "$dest" in
         *.zip)
             # unzip -tqq returns 0 if the central directory + every entry CRC is valid.
-            unzip -tqq "$dest" >/dev/null 2>&1 || return 1
+            # Fall back to python zipfile when unzip isn't present (K2 firmware).
+            if command -v unzip >/dev/null 2>&1; then
+                unzip -tqq "$dest" >/dev/null 2>&1 || return 1
+            elif _has_python; then
+                _py_unzip_test "$dest" || return 1
+            else
+                return 1
+            fi
             ;;
         *)
             gunzip -t "$dest" 2>/dev/null || return 1
@@ -3298,10 +3463,14 @@ extract_release() {
             # code layout-agnostic, we re-create the helixscreen/ prefix here
             # by extracting into a subdirectory.
             # -o overwrites without prompting (no TTY in CI / systemd contexts),
-            # -q suppresses the per-file listing.
-            mkdir -p helixscreen && \
-                ( cd helixscreen && unzip -q -o "$archive" ) && \
-                extract_ok=true
+            # -q suppresses the per-file listing. Fall back to python zipfile
+            # when unzip isn't present (recent Creality K2 firmware).
+            mkdir -p helixscreen
+            if command -v unzip >/dev/null 2>&1; then
+                ( cd helixscreen && unzip -q -o "$archive" ) && extract_ok=true
+            elif _has_python; then
+                _py_unzip_extract "$archive" "${extract_dir}/helixscreen" && extract_ok=true
+            fi
             ;;
         *)
             # BusyBox tar doesn't support -z; use gunzip pipe on embedded platforms

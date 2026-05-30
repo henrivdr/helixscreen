@@ -38,6 +38,27 @@ _is_self_update() {
     [ "${HELIX_SELF_UPDATE:-}" = "1" ]
 }
 
+# Probe for a usable Python interpreter with working ssl + urllib (cached).
+# Sets _PY_BIN to the first of python3/python that can import ssl and
+# urllib.request. Used as a download/extraction fallback on platforms that
+# lack curl/wget/unzip (notably recent Creality K2 Tina/OpenWrt firmware).
+# Returns 0 if a usable interpreter was found, non-zero otherwise.
+_PY_BIN=""
+_PY_PROBED=""
+_has_python() {
+    if [ -z "$_PY_PROBED" ]; then
+        _PY_PROBED=1
+        for _cand in python3 python; do
+            if command -v "$_cand" >/dev/null 2>&1 && \
+               "$_cand" -c 'import ssl, urllib.request' >/dev/null 2>&1; then
+                _PY_BIN="$_cand"
+                break
+            fi
+        done
+    fi
+    [ -n "$_PY_BIN" ]
+}
+
 # Get sudo prefix needed for a file operation.
 # Returns empty string if current user has write access, $SUDO otherwise.
 # For existing files, checks file writability. For new files, checks parent dir.

@@ -192,13 +192,14 @@ Installs to `/usr/data/helixscreen/`, boot service at `/etc/init.d/S99helixscree
 
 **Install:**
 ```bash
-wget -O - http://dl.helixscreen.org/install.sh | sh
+python3 -c "import urllib.request as u; open('/tmp/install.sh','wb').write(u.urlopen(u.Request('http://dl.helixscreen.org/install.sh', headers={'User-Agent':'helixscreen-installer/1.0'}), timeout=30).read())" && sh /tmp/install.sh
 ```
 
-> **If you see `-ash: wget: not found` or `-ash: curl: not found`:** some K2 firmware variants (notably newer Tina / OpenWrt 21.02 builds on the K2 Plus) ship without `wget` and `curl` in `PATH`, even though the BusyBox `wget` applet is still inside the BusyBox binary. Invoke it directly:
-> ```bash
-> busybox wget -O - http://dl.helixscreen.org/install.sh | sh
-> ```
+> **Why not `wget`?** Recent K2 firmware (Tina/OpenWrt) ships neither `wget` nor `curl` on the
+> `PATH` — even the BusyBox `wget` applet has been compiled out. Every K2 does include `python3`
+> (Klipper and Moonraker need it), so the command above uses Python to fetch the installer; the
+> installer then uses Python for the rest of the download and extraction. If your firmware still
+> has `wget` (older builds did), `wget -O - http://dl.helixscreen.org/install.sh | sh` also works.
 
 **What's different from K1:**
 - ARM processor (Allwinner, not MIPS) — standard cross-compilation

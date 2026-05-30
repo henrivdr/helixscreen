@@ -32,23 +32,28 @@ _helix_add_missing() { missing="${missing:+$missing, }$1"; }
 check_requirements() {
     local missing=""
 
-    # Need either curl or wget
-    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-        _helix_add_missing "curl or wget"
+    # Need curl, wget, or python3 (urllib) to download the release.
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1 && ! _has_python; then
+        _helix_add_missing "curl, wget, or python3"
     fi
     command -v tar >/dev/null 2>&1 || _helix_add_missing "tar"
     # gunzip needed for AD5M BusyBox tar which doesn't support -z
     command -v gunzip >/dev/null 2>&1 || _helix_add_missing "gunzip"
 
-    # Try transparent apt-install of unzip when missing — many minimal
-    # Debian/Ubuntu images (notably Snapmaker U1 extended firmware) ship without it.
+    # Zip extraction: prefer unzip, but python's zipfile module is a built-in
+    # fallback (used on platforms like recent Creality K2 firmware that lack
+    # unzip but ship python3). Try a transparent apt-install of unzip on
+    # Debian/Ubuntu images that lack it (notably Snapmaker U1 extended firmware);
+    # only mark it missing when there's no apt AND no python fallback.
     if ! command -v unzip >/dev/null 2>&1; then
         if command -v apt-get >/dev/null 2>&1 && ! _has_no_new_privs; then
             log_info "Installing missing dependency: unzip"
             _apt_update_once
-            $SUDO apt-get install -y --no-install-recommends unzip >/dev/null 2>&1 \
-                || _helix_add_missing "unzip"
-        else
+            $SUDO apt-get install -y --no-install-recommends unzip >/dev/null 2>&1 || true
+            if ! command -v unzip >/dev/null 2>&1 && ! _has_python; then
+                _helix_add_missing "unzip"
+            fi
+        elif ! _has_python; then
             _helix_add_missing "unzip"
         fi
     fi

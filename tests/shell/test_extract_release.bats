@@ -116,6 +116,49 @@ create_tarball_no_binary() {
     rm -rf "$staging"
 }
 
+# Helper: build a PATH dir that mirrors all of /bin, /usr/bin, /usr/local/bin
+# EXCEPT unzip — so extract_release() must fall through to the python zipfile
+# extraction path. Every other command (df, awk, tar, gunzip, cp, mv, rm,
+# python3, ...) stays available.
+nounzip_path() {
+    local b="$BATS_TEST_TMPDIR/nounzip"
+    mkdir -p "$b"
+    for d in /bin /usr/bin /usr/local/bin; do
+        [ -d "$d" ] || continue
+        for f in "$d"/*; do
+            local n
+            n=$(basename "$f")
+            [ "$n" = unzip ] && continue
+            [ -e "$b/$n" ] || ln -sf "$f" "$b/$n" 2>/dev/null || true
+        done
+    done
+    echo "$b"
+}
+
+# Helper: build a FLAT zip (no top-level helixscreen/ dir) containing a real
+# ARM32 ELF at bin/helix-screen, stored 0644 to exercise the bin/ exec-forcing
+# logic in _py_unzip_extract. Uses python's zipfile so no `zip` binary needed.
+make_flat_zip_with_elf() {
+    local zip=$1
+    local elf="$BATS_TEST_TMPDIR/elf_staging/helix-screen"
+    mkdir -p "$(dirname "$elf")"
+    create_fake_arm32_elf "$elf"
+    python3 - "$zip" "$elf" <<'PY'
+import sys, zipfile
+zipname, elfpath = sys.argv[1], sys.argv[2]
+with open(elfpath, "rb") as fh:
+    elf = fh.read()
+z = zipfile.ZipFile(zipname, "w")
+def add(name, data, mode):
+    zi = zipfile.ZipInfo(name)
+    zi.external_attr = (mode & 0o7777) << 16
+    z.writestr(zi, data)
+add("bin/helix-screen", elf, 0o644)          # stored NON-executable on purpose
+add("config/settings.json", b"{}", 0o644)
+z.close()
+PY
+}
+
 # Helper: set up a fake existing installation
 setup_existing_install() {
     mkdir -p "$INSTALL_DIR/bin"
@@ -561,4 +604,40 @@ echo "tmpfs       51200     48640  2560       95% /tmp"
     # Config should be migrated to new location
     [ -f "$INSTALL_DIR/config/settings.json" ]
     grep -q '"legacy"' "$INSTALL_DIR/config/settings.json"
+}
+
+# --- Zip extraction via python fallback when unzip absent ---
+
+@test "extract_release: uses python zip fallback when unzip is absent" {
+    command -v python3 >/dev/null 2>&1 || skip "python3 not available"
+
+    log_error()   { echo "ERROR: $*"; }
+    log_info()    { echo "INFO: $*"; }
+    log_success() { echo "OK: $*"; }
+    log_warn()    { echo "WARN: $*"; }
+
+    make_flat_zip_with_elf "$TMP_DIR/helixscreen.zip"
+
+    # Run extract_release with unzip hidden from PATH; the zip branch must fall
+    # through to _py_unzip_extract. Re-source modules inside the subshell so the
+    # restricted PATH (no unzip) is what they observe.
+    run env PATH="$(nounzip_path)" /bin/bash -c "
+        source tests/shell/helpers.bash
+        log_error()   { echo \"ERROR: \$*\"; }
+        log_info()    { echo \"INFO: \$*\"; }
+        log_success() { echo \"OK: \$*\"; }
+        log_warn()    { echo \"WARN: \$*\"; }
+        unset _HELIX_COMMON_SOURCED _HELIX_RELEASE_SOURCED _PY_BIN _PY_PROBED
+        source scripts/lib/installer/common.sh
+        _has_no_new_privs() { return 1; }
+        source scripts/lib/installer/release.sh
+        export TMP_DIR='$TMP_DIR'
+        export INSTALL_DIR='$INSTALL_DIR'
+        export SUDO=''
+        export _ARCHIVE_FORMAT=zip
+        extract_release ad5m
+    "
+    [ "$status" -eq 0 ]
+    [ -f "$INSTALL_DIR/bin/helix-screen" ]
+    [ -x "$INSTALL_DIR/bin/helix-screen" ]
 }

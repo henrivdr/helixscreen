@@ -16,6 +16,15 @@ setup() {
     log_success() { echo "OK: $*"; }
     export -f log_error log_warn log_info log_success
 
+    # common.sh provides _has_python(), which check_requirements() now calls.
+    # Must be sourced BEFORE requirements.sh or the call hits an undefined fn.
+    unset _HELIX_COMMON_SOURCED
+    . "$WORKTREE_ROOT/scripts/lib/installer/common.sh"
+
+    # requirements.sh references _has_no_new_privs (defined in service.sh).
+    _has_no_new_privs() { return 1; }
+    export -f _has_no_new_privs
+
     # Reset source guard so we can re-source per test
     unset _HELIX_REQUIREMENTS_SOURCED
     . "$WORKTREE_ROOT/scripts/lib/installer/requirements.sh"
@@ -52,7 +61,9 @@ run_check_requirements_with_path() {
         log_success() { echo \"OK: \$*\"; }
         export -f log_error log_info log_success
         export PATH='$restricted_path'
-        unset _HELIX_REQUIREMENTS_SOURCED
+        unset _HELIX_COMMON_SOURCED _HELIX_REQUIREMENTS_SOURCED _PY_BIN _PY_PROBED
+        . '$WORKTREE_ROOT/scripts/lib/installer/common.sh'
+        _has_no_new_privs() { return 1; }
         . '$WORKTREE_ROOT/scripts/lib/installer/requirements.sh'
         check_requirements
     "
@@ -74,7 +85,7 @@ run_check_requirements_with_path() {
 
     run_check_requirements_with_path "$rbin"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"curl or wget"* ]]
+    [[ "$output" == *"curl, wget, or python3"* ]]
 }
 
 @test "check_requirements: fails when tar missing" {
@@ -120,7 +131,7 @@ run_check_requirements_with_path() {
 
     run_check_requirements_with_path "$rbin"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"curl or wget"* ]]
+    [[ "$output" == *"curl, wget, or python3"* ]]
     [[ "$output" == *"tar"* ]]
     [[ "$output" == *"gunzip"* ]]
 }
@@ -131,6 +142,49 @@ run_check_requirements_with_path() {
 
     run_check_requirements_with_path "$rbin"
     [ "$status" -ne 0 ]
+}
+
+# --- python3 download/extraction fallback ---
+
+@test "check_requirements: succeeds with python3 but no curl/wget/unzip" {
+    command -v python3 >/dev/null 2>&1 || skip "python3 not available"
+    local rbin
+    # python3 covers BOTH download (urllib) and zip extraction (zipfile).
+    rbin=$(make_restricted_path tar gunzip python3)
+
+    run_check_requirements_with_path "$rbin"
+    [ "$status" -eq 0 ]
+}
+
+@test "check_requirements: fails when curl/wget/python all missing" {
+    local rbin
+    # tar/gunzip/unzip present, but no downloader at all (no python3 either).
+    rbin=$(make_restricted_path tar gunzip unzip)
+
+    run_check_requirements_with_path "$rbin"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"curl, wget, or python3"* ]]
+}
+
+@test "check_requirements: unzip not required when python3 present" {
+    command -v python3 >/dev/null 2>&1 || skip "python3 not available"
+    local rbin
+    # curl for download, python3 covers zip extraction — no unzip, no apt-get.
+    rbin=$(make_restricted_path curl tar gunzip python3)
+
+    run_check_requirements_with_path "$rbin"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"unzip"* ]]
+}
+
+@test "check_requirements: unzip required when no python and no apt" {
+    local rbin
+    # curl for download, but no unzip, no python fallback, and no apt-get.
+    rbin=$(make_restricted_path curl tar gunzip)
+
+    run_check_requirements_with_path "$rbin"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"unzip"* ]]
 }
 
 # ===========================================================================

@@ -40,6 +40,19 @@ create_valid_gzip() {
     dd if=/dev/urandom bs=1024 count="$size_kb" 2>/dev/null | gzip > "$dest"
 }
 
+# Helper: build a PATH dir containing ONLY a real python3 (no curl/wget).
+# Lets us exercise the python urllib fallback in fetch_url/download_file/
+# check_https_capability with no curl/wget to leak through.
+make_pybin() {
+    local pybin="$BATS_TEST_TMPDIR/pybin"
+    mkdir -p "$pybin"
+    local real
+    real="$(command -v python3 2>/dev/null)" || real="$(command -v python 2>/dev/null)"
+    [ -n "$real" ] || return 1
+    ln -sf "$real" "$pybin/$(basename "$real")"
+    echo "$pybin"
+}
+
 # =========================================================================
 # fetch_url
 # =========================================================================
@@ -342,6 +355,65 @@ MOCK
         check_https_capability
     '
     [ "$status" -ne 0 ]
+}
+
+# =========================================================================
+# python urllib fallback (no curl/wget in PATH)
+# =========================================================================
+
+@test "fetch_url: falls back to python when curl and wget absent" {
+    local pybin
+    pybin=$(make_pybin) || skip "no python interpreter available"
+
+    local f="$BATS_TEST_TMPDIR/fetch_body.txt"
+    printf 'py-fallback-fetch-7788\n' > "$f"
+
+    run env PATH="$pybin" /bin/bash -c "
+        source tests/shell/helpers.bash
+        unset _HELIX_COMMON_SOURCED _HELIX_RELEASE_SOURCED _PY_BIN _PY_PROBED _REAL_CURL
+        source scripts/lib/installer/common.sh
+        _has_no_new_privs() { return 1; }
+        source scripts/lib/installer/release.sh
+        fetch_url 'file://$f'
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"py-fallback-fetch-7788"* ]]
+}
+
+@test "download_file: falls back to python when curl and wget absent" {
+    local pybin
+    pybin=$(make_pybin) || skip "no python interpreter available"
+
+    local src="$BATS_TEST_TMPDIR/dl_src.bin"
+    local dest="$TMP_DIR/dl_py.bin"
+    printf 'py-fallback-download-9900\n' > "$src"
+
+    run env PATH="$pybin" /bin/bash -c "
+        source tests/shell/helpers.bash
+        unset _HELIX_COMMON_SOURCED _HELIX_RELEASE_SOURCED _PY_BIN _PY_PROBED _REAL_CURL
+        source scripts/lib/installer/common.sh
+        _has_no_new_privs() { return 1; }
+        source scripts/lib/installer/release.sh
+        download_file 'file://$src' '$dest'
+    "
+    [ "$status" -eq 0 ]
+    [ -f "$dest" ]
+    grep -q "py-fallback-download-9900" "$dest"
+}
+
+@test "check_https_capability: returns 0 when only python available" {
+    local pybin
+    pybin=$(make_pybin) || skip "no python interpreter available"
+
+    run env PATH="$pybin" /bin/bash -c "
+        source tests/shell/helpers.bash
+        unset _HELIX_COMMON_SOURCED _HELIX_RELEASE_SOURCED _PY_BIN _PY_PROBED _REAL_CURL
+        source scripts/lib/installer/common.sh
+        _has_no_new_privs() { return 1; }
+        source scripts/lib/installer/release.sh
+        check_https_capability
+    "
+    [ "$status" -eq 0 ]
 }
 
 # =========================================================================
