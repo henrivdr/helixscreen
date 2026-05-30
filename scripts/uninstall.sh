@@ -60,6 +60,42 @@ _is_self_update() {
     [ "${HELIX_SELF_UPDATE:-}" = "1" ]
 }
 
+# Probe for a usable Python interpreter with urllib (cached). Sets _PY_BIN to
+# the first of python3/python that can import urllib.request — the baseline for
+# downloading over plain HTTP. Used as a download/extraction fallback on
+# platforms that lack curl/wget/unzip (notably recent Creality K2 Tina/OpenWrt
+# firmware). HTTPS and zip support are probed separately via _py_has_module
+# (ssl / zipfile) so an ssl-less or zlib-less python can still serve the
+# HTTP-only mirror rather than being rejected outright. Returns 0 if a usable
+# interpreter was found, non-zero otherwise.
+_PY_BIN=""
+_PY_PROBED=""
+_has_python() {
+    if [ -z "$_PY_PROBED" ]; then
+        _PY_PROBED=1
+        for _cand in python3 python; do
+            if command -v "$_cand" >/dev/null 2>&1 && \
+               "$_cand" -c 'import urllib.request' >/dev/null 2>&1; then
+                _PY_BIN="$_cand"
+                break
+            fi
+        done
+    fi
+    [ -n "$_PY_BIN" ]
+}
+
+# Check that the resolved python (_PY_BIN) can import the named module(s).
+# Args: one or more module names (e.g. "ssl", or "zipfile zlib"). Returns
+# non-zero if no python is available or any module fails to import. Modules are
+# passed as argv (no external tr/echo dependency, so this works on a minimal
+# PATH). Not cached — callers invoke it once per capability gate.
+_py_has_module() {
+    _has_python || return 1
+    "$_PY_BIN" -c 'import sys
+for m in sys.argv[1:]:
+    __import__(m)' "$@" >/dev/null 2>&1
+}
+
 # Get sudo prefix needed for a file operation.
 # Returns empty string if current user has write access, $SUDO otherwise.
 # For existing files, checks file writability. For new files, checks parent dir.
@@ -1475,23 +1511,32 @@ _helix_add_missing() { missing="${missing:+$missing, }$1"; }
 check_requirements() {
     local missing=""
 
-    # Need either curl or wget
-    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-        _helix_add_missing "curl or wget"
+    # Need curl, wget, or python3 (urllib) to download the release.
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1 && ! _has_python; then
+        _helix_add_missing "curl, wget, or python3"
     fi
     command -v tar >/dev/null 2>&1 || _helix_add_missing "tar"
     # gunzip needed for AD5M BusyBox tar which doesn't support -z
     command -v gunzip >/dev/null 2>&1 || _helix_add_missing "gunzip"
 
-    # Try transparent apt-install of unzip when missing — many minimal
-    # Debian/Ubuntu images (notably Snapmaker U1 extended firmware) ship without it.
+    # Zip extraction: prefer unzip, but python's zipfile module is a built-in
+    # fallback (used on platforms like recent Creality K2 firmware that lack
+    # unzip but ship python3). The fallback needs zipfile + zlib (release zips
+    # are DEFLATE-compressed), so gate on those modules rather than mere python
+    # presence — otherwise a zlib-less python passes here and the install dies
+    # in extract_release instead of failing fast with a clear message. Try a
+    # transparent apt-install of unzip on Debian/Ubuntu images that lack it
+    # (notably Snapmaker U1 extended firmware); only mark it missing when
+    # there's no apt AND no usable python zipfile fallback.
     if ! command -v unzip >/dev/null 2>&1; then
         if command -v apt-get >/dev/null 2>&1 && ! _has_no_new_privs; then
             log_info "Installing missing dependency: unzip"
             _apt_update_once
-            $SUDO apt-get install -y --no-install-recommends unzip >/dev/null 2>&1 \
-                || _helix_add_missing "unzip"
-        else
+            $SUDO apt-get install -y --no-install-recommends unzip >/dev/null 2>&1 || true
+            if ! command -v unzip >/dev/null 2>&1 && ! _py_has_module zipfile zlib; then
+                _helix_add_missing "unzip"
+            fi
+        elif ! _py_has_module zipfile zlib; then
             _helix_add_missing "unzip"
         fi
     fi
