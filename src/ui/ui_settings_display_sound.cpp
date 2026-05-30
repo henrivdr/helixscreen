@@ -17,6 +17,7 @@
 #include "ui_toast_manager.h"
 #include "ui_utils.h"
 
+#include "alsa_device_enum.h"
 #include "audio_settings_manager.h"
 #include "border_radius_sizes.h"
 #include "display_manager.h"
@@ -31,6 +32,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdlib>
 #include <memory>
 
 namespace helix::settings {
@@ -135,6 +137,7 @@ void DisplaySoundSettingsOverlay::register_callbacks() {
         {"on_volume_changed", on_volume_changed},
         {"on_ui_sounds_changed", on_ui_sounds_changed},
         {"on_sound_theme_changed", on_sound_theme_changed},
+        {"on_audio_device_changed", on_audio_device_changed},
         {"on_preview_sounds", on_preview_sounds},
         {"on_test_tracker", on_test_tracker},
     });
@@ -223,6 +226,7 @@ void DisplaySoundSettingsOverlay::on_activate() {
     init_sounds_toggle();
     init_volume_slider();
     init_sound_theme_dropdown();
+    init_audio_device_dropdown();
 
 #ifndef HELIX_HAS_TRACKER
     if (overlay_root_) {
@@ -516,6 +520,76 @@ void DisplaySoundSettingsOverlay::init_sound_theme_dropdown() {
         spdlog::trace("[{}] Sound theme dropdown ({} themes, current={})", get_name(),
                       themes.size(), current_theme);
     }
+}
+
+void DisplaySoundSettingsOverlay::init_audio_device_dropdown() {
+    if (!overlay_root_)
+        return;
+
+    lv_obj_t* container = lv_obj_find_by_name(overlay_root_, "container_audio_device");
+    if (!container)
+        return;
+
+    // Only meaningful with the runtime-selectable ALSA backend. Hide the whole
+    // row otherwise (matches the screensaver/tracker capability-gating in this file).
+    if (!SoundManager::instance().has_alsa_backend()) {
+        lv_obj_add_flag(container, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    lv_obj_t* row = lv_obj_find_by_name(container, "row_audio_device");
+    lv_obj_t* dropdown = row ? lv_obj_find_by_name(row, "dropdown") : nullptr;
+    if (!dropdown)
+        return;
+
+    auto devices = helix::audio::list();
+    std::string current = helix::audio::resolve_alsa_device();
+
+    std::string options;
+    int selected_index = 0;
+    for (int i = 0; i < static_cast<int>(devices.size()); i++) {
+        if (i > 0)
+            options += "\n";
+        options += devices[i].label;
+        if (devices[i].pcm == current) {
+            selected_index = i;
+        }
+    }
+    if (!options.empty()) {
+        lv_dropdown_set_options(dropdown, options.c_str());
+        lv_dropdown_set_selected(dropdown, static_cast<uint32_t>(selected_index));
+    }
+
+    // Env lock: HELIX_ALSA_DEVICE wins, so the picker can't change anything.
+    if (const char* e = std::getenv("HELIX_ALSA_DEVICE"); e && e[0] != '\0') {
+        lv_obj_add_state(dropdown, LV_STATE_DISABLED);
+        spdlog::info("[{}] Output device picker disabled (HELIX_ALSA_DEVICE override)", get_name());
+    }
+}
+
+void DisplaySoundSettingsOverlay::handle_audio_device_changed(int index) {
+    auto devices = helix::audio::list();
+    if (index < 0 || index >= static_cast<int>(devices.size())) {
+        spdlog::warn("[{}] Output device index {} out of range ({})", get_name(), index,
+                     devices.size());
+        return;
+    }
+    const std::string& pcm = devices[index].pcm;
+    spdlog::info("[{}] Output device changed: {} ({})", get_name(), devices[index].label, pcm);
+
+    if (!SoundManager::instance().set_output_device(pcm)) {
+        // Device failed (or fell back) — re-sync the dropdown to what's actually open.
+        spdlog::warn("[{}] Output device '{}' did not apply; re-syncing dropdown", get_name(), pcm);
+        init_audio_device_dropdown();
+    }
+}
+
+void DisplaySoundSettingsOverlay::on_audio_device_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[DisplaySoundSettingsOverlay] on_audio_device_changed");
+    auto* dropdown = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    int index = static_cast<int>(lv_dropdown_get_selected(dropdown));
+    get_display_sound_settings_overlay().handle_audio_device_changed(index);
+    LVGL_SAFE_EVENT_CB_END();
 }
 
 // ============================================================================

@@ -212,6 +212,15 @@
                               label="Sound Theme" label_tag="Sound Theme" icon="tune" description="Choose sound style"
                               description_tag="Choose sound style" callback="on_sound_theme_changed"/>
       </lv_obj>
+      <!-- Output Device Dropdown (hidden when master sounds off; also hidden in
+           C++ when the active backend is not ALSA) -->
+      <lv_obj name="container_audio_device" width="100%" style_pad_all="0" scrollable="false">
+        <bind_flag_if_eq subject="settings_sounds_enabled" flag="hidden" ref_value="0"/>
+        <setting_dropdown_row name="row_audio_device"
+                              label="Output Device" label_tag="Output Device" icon="volume_high"
+                              description="Where UI sounds play" description_tag="Where UI sounds play"
+                              callback="on_audio_device_changed"/>
+      </lv_obj>
       <!-- Preview Sounds (hidden when master sounds off) -->
       <lv_obj name="container_preview_sounds" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="settings_sounds_enabled" flag="hidden" ref_value="0"/>
