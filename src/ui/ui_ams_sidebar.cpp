@@ -7,20 +7,19 @@
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
-
-#include "lvgl/src/others/translation/lv_translation.h"
 #include "ui_step_progress.h"
 #include "ui_temperature_utils.h"
 
-#include "ams_backend.h"
 #include "active_material_provider.h"
+#include "ams_backend.h"
 #include "ams_state.h"
 #include "ams_types.h"
 #include "app_constants.h"
 #include "filament_database.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
-#include "post_op_cooldown_manager.h"
 #include "observer_factory.h"
+#include "post_op_cooldown_manager.h"
 #include "printer_state.h"
 #include "ui/ui_cleanup_helpers.h"
 
@@ -772,9 +771,13 @@ void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
         return;
     }
 
-    // Determine operation type BEFORE calling backend
+    // Determine operation type BEFORE calling backend. The load-vs-swap rule is
+    // centralized in needs_unload_before_load() so the UI and backend agree —
+    // K1 CFS reports a preloaded cassette slot with an empty nozzle, and a SWAP
+    // there would cut nothing and stall at the cut step (#968). The K1 override
+    // keys on filament_loaded only; K2 keeps filament_loaded || current_slot.
     AmsSystemInfo info = backend->get_system_info();
-    if (info.current_slot >= 0 && info.current_slot != slot_index) {
+    if (backend->needs_unload_before_load(info) && info.current_slot != slot_index) {
         start_operation(StepOperationType::LOAD_SWAP, slot_index);
     } else {
         start_operation(StepOperationType::LOAD_FRESH, slot_index);
@@ -782,7 +785,7 @@ void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
 
     // Helper: initiate load or tool change depending on current state
     auto do_load_or_swap = [&]() {
-        if (info.current_slot >= 0 && info.current_slot != slot_index) {
+        if (backend->needs_unload_before_load(info) && info.current_slot != slot_index) {
             const SlotInfo* slot_info = info.get_slot_global(slot_index);
             if (slot_info && slot_info->mapped_tool >= 0) {
                 spdlog::info("[AmsSidebar] Preheat path: swapping via tool change T{}",
@@ -857,7 +860,10 @@ void AmsOperationSidebar::check_pending_load() {
         AmsBackend* backend = AmsState::instance().get_backend();
         if (backend) {
             AmsSystemInfo preheat_info = backend->get_system_info();
-            if (preheat_info.current_slot >= 0 && preheat_info.current_slot != slot) {
+            // Same centralized load-vs-swap rule as handle_load_with_preheat /
+            // on_path_slot_clicked — keeps K1 vs K2 consistent (#968).
+            if (backend->needs_unload_before_load(preheat_info) &&
+                preheat_info.current_slot != slot) {
                 const SlotInfo* slot_info = preheat_info.get_slot_global(slot);
                 if (slot_info && slot_info->mapped_tool >= 0) {
                     spdlog::info("[AmsSidebar] Preheat complete, swapping via tool change T{}",

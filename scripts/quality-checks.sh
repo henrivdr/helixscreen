@@ -251,18 +251,44 @@ echo ""
 # NOTE: clang-format versions differ between local (macOS Homebrew) and CI (Ubuntu)
 # which can cause false positives. Use pre-commit hook for local enforcement.
 echo "🎨 Checking code formatting (clang-format)..."
+# Resolve clang-format to the version CI enforces (clang-format 18 — see
+# .github/workflows/quality.yml; "Version must match .clang-format expectations").
+# Preference order: $CLANG_FORMAT override, clang-format-18 on PATH, the project
+# .venv (pip clang-format==18.x, shared into worktrees), then bare clang-format.
+# Auto-fix only runs when the resolved binary is v18, so a mismatched local
+# clang-format (e.g. Homebrew's newer release) can never reflow whole files.
+CF_BIN=""
+CF_VER=""
+for cf_cand in "${CLANG_FORMAT:-}" clang-format-18 "$REPO_ROOT/.venv/bin/clang-format" clang-format; do
+  [ -n "$cf_cand" ] || continue
+  command -v "$cf_cand" >/dev/null 2>&1 || [ -x "$cf_cand" ] || continue
+  cf_v="$("$cf_cand" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  [ -n "$cf_v" ] || continue
+  CF_BIN="$cf_cand"
+  CF_VER="$cf_v"
+  case "$cf_v" in 18.*) break ;; esac
+done
 if [ -n "$FILES" ]; then
-  if command -v clang-format >/dev/null 2>&1; then
+  if [ -n "$CF_BIN" ]; then
     if [ -f ".clang-format" ]; then
       FORMAT_ISSUES=""
       for file in $FILES; do
         if [ -f "$file" ]; then
           # Check if file needs formatting
-          if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
+          if ! "$CF_BIN" --dry-run --Werror "$file" >/dev/null 2>&1; then
             FORMAT_ISSUES="$FORMAT_ISSUES $file"
             if [ "$AUTO_FIX" = true ]; then
-              clang-format -i "$file"
-              echo "   ✓ Auto-formatted: $file"
+              case "$CF_VER" in
+                18.*)
+                  "$CF_BIN" -i "$file"
+                  echo "   ✓ Auto-formatted: $file"
+                  ;;
+                *)
+                  echo "   ⚠️  Skipping auto-format of $file: resolved clang-format $CF_VER != 18"
+                  echo "       (auto-formatting with a non-CI version would reflow the whole file)"
+                  echo "       Install v18: pip install 'clang-format==18.1.8' into .venv, or set CLANG_FORMAT=clang-format-18"
+                  ;;
+              esac
             fi
           fi
         fi

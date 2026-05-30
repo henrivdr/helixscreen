@@ -9,32 +9,28 @@
 #include "post_op_cooldown_manager.h"
 #include "printer_detector.h"
 
-#include "hv/json.hpp"
-
 #include <spdlog/spdlog.h>
 
 #include <fstream>
+
+#include "hv/json.hpp"
 
 namespace helix::printer {
 
 using json = nlohmann::json;
 
-const CfsMaterialDb& CfsMaterialDb::instance()
-{
+const CfsMaterialDb& CfsMaterialDb::instance() {
     static CfsMaterialDb db;
     return db;
 }
 
-CfsMaterialDb::CfsMaterialDb()
-{
+CfsMaterialDb::CfsMaterialDb() {
     load_database();
 }
 
-void CfsMaterialDb::load_database()
-{
-    for (const auto& path : {"assets/cfs_materials.json",
-                              "../assets/cfs_materials.json",
-                              "/opt/helixscreen/assets/cfs_materials.json"}) {
+void CfsMaterialDb::load_database() {
+    for (const auto& path : {"assets/cfs_materials.json", "../assets/cfs_materials.json",
+                             "/opt/helixscreen/assets/cfs_materials.json"}) {
         std::ifstream f(path);
         if (!f.is_open())
             continue;
@@ -43,13 +39,13 @@ void CfsMaterialDb::load_database()
             auto j = nlohmann::json::parse(f);
             for (auto& [id, entry] : j.items()) {
                 CfsMaterialInfo info;
-                info.id            = id;
-                info.brand         = entry.value("brand", "");
-                info.name          = entry.value("name", "");
+                info.id = id;
+                info.brand = entry.value("brand", "");
+                info.name = entry.value("name", "");
                 info.material_type = entry.value("type", "");
-                info.min_temp      = entry.value("min_temp", 0);
-                info.max_temp      = entry.value("max_temp", 0);
-                materials_[id]     = std::move(info);
+                info.min_temp = entry.value("min_temp", 0);
+                info.max_temp = entry.value("max_temp", 0);
+                materials_[id] = std::move(info);
             }
             spdlog::info("[AMS CFS] Loaded {} materials from {}", materials_.size(), path);
             return;
@@ -60,14 +56,12 @@ void CfsMaterialDb::load_database()
     spdlog::warn("[AMS CFS] Material database not found");
 }
 
-const CfsMaterialInfo* CfsMaterialDb::lookup(const std::string& id) const
-{
+const CfsMaterialInfo* CfsMaterialDb::lookup(const std::string& id) const {
     auto it = materials_.find(id);
     return it != materials_.end() ? &it->second : nullptr;
 }
 
-std::string CfsMaterialDb::strip_code(const std::string& code)
-{
+std::string CfsMaterialDb::strip_code(const std::string& code) {
     if (code == "-1" || code == "None" || code.empty())
         return "";
     if (code.size() == 6 && code[0] == '1')
@@ -75,8 +69,7 @@ std::string CfsMaterialDb::strip_code(const std::string& code)
     return code;
 }
 
-uint32_t CfsMaterialDb::parse_color(const std::string& color_str)
-{
+uint32_t CfsMaterialDb::parse_color(const std::string& color_str) {
     if (color_str == "-1" || color_str == "None" || color_str.empty())
         return DEFAULT_COLOR;
     std::string hex = color_str;
@@ -89,18 +82,16 @@ uint32_t CfsMaterialDb::parse_color(const std::string& color_str)
     }
 }
 
-std::string CfsMaterialDb::slot_to_tnn(int global_index)
-{
+std::string CfsMaterialDb::slot_to_tnn(int global_index) {
     if (global_index < 0 || global_index > 15)
         return "";
-    int unit   = global_index / 4 + 1;
-    int slot   = global_index % 4;
+    int unit = global_index / 4 + 1;
+    int slot = global_index % 4;
     char letter = 'A' + static_cast<char>(slot);
     return "T" + std::to_string(unit) + letter;
 }
 
-int CfsMaterialDb::tnn_to_slot(const std::string& tnn)
-{
+int CfsMaterialDb::tnn_to_slot(const std::string& tnn) {
     if (tnn.size() != 3 || tnn[0] != 'T')
         return -1;
     int unit = tnn[1] - '0';
@@ -124,14 +115,19 @@ namespace {
 ///     !! {"code":"key849","values":[1,"B"]}
 ///   → " in unit 1 slot B"
 std::string format_unit_slot(const nlohmann::json& values) {
-    if (!values.is_array() || values.size() < 2) return "";
-    if (!values[0].is_number_integer()) return "";
-    if (!values[1].is_string()) return "";
+    if (!values.is_array() || values.size() < 2)
+        return "";
+    if (!values[0].is_number_integer())
+        return "";
+    if (!values[1].is_string())
+        return "";
     int unit = values[0].get<int>();
     std::string slot = values[1].get<std::string>();
-    if (unit < 1 || slot.size() != 1) return "";
+    if (unit < 1 || slot.size() != 1)
+        return "";
     char c = slot[0];
-    if (c < 'A' || c > 'D') return "";
+    if (c < 'A' || c > 'D')
+        return "";
     return " in unit " + std::to_string(unit) + " slot " + slot;
 }
 
@@ -139,10 +135,13 @@ std::string format_unit_slot(const nlohmann::json& values) {
 /// We just grab the leading int and ignore tails. Empty string if the
 /// shape doesn't match.
 std::string format_unit_only(const nlohmann::json& values) {
-    if (!values.is_array() || values.empty()) return "";
-    if (!values[0].is_number_integer()) return "";
+    if (!values.is_array() || values.empty())
+        return "";
+    if (!values[0].is_number_integer())
+        return "";
     int unit = values[0].get<int>();
-    if (unit < 1) return "";
+    if (unit < 1)
+        return "";
     return " on unit " + std::to_string(unit);
 }
 
@@ -171,54 +170,155 @@ static const std::unordered_map<std::string, CfsErrorEntry> CFS_ERROR_TABLE = {
     // Klipper-internal errors (not CFS-specific) that we frequently surface to
     // users. Despite living in the CFS table for now, these are general — the
     // table predates the broader use case. TODO: rename to KlipperErrorTable.
-    {"key111", {"Pre-heat the extruder first", "Filament can't be loaded below the minimum extrude temperature. Set a hotend target (e.g. 220°C for PLA, 240°C for PETG), wait for it to reach temperature, then try again", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key298", {"MCU bridge daemon is shut down", "Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key585", {"Move out of range", "The requested position is outside the printer's bounds", AmsAlertLevel::SYSTEM, nullptr}},
+    {"key111",
+     {"Pre-heat the extruder first",
+      "Filament can't be loaded below the minimum extrude temperature. Set a hotend target (e.g. "
+      "220°C for PLA, 240°C for PETG), wait for it to reach temperature, then try again",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key298",
+     {"MCU bridge daemon is shut down",
+      "Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key585",
+     {"Move out of range", "The requested position is outside the printer's bounds",
+      AmsAlertLevel::SYSTEM, nullptr}},
 
     // Motor controller init errors (motor_control_wrapper.so). Typically fire
     // during CFS bring-up. Users can't fix these directly — power cycle is the
     // standard remedy. Surfacing them avoids the raw chinglish from Creality
     // ("Motor set pin restore io status error").
-    {"key800", {"Motor controller error", "A motor IO pin couldn't be restored. Power-cycle the printer to recover", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key801", {"Z motor calibration failed", "Stall detection setup failed for the Z motor — power-cycle to retry", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key802", {"Extruder motor calibration failed", "Stall detection setup failed for the extruder — power-cycle to retry", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key803", {"Motor parameter setup failed", "A motor's parameters couldn't be written. Power-cycle the printer to retry", AmsAlertLevel::SYSTEM, nullptr}},
+    {"key800",
+     {"Motor controller error",
+      "A motor IO pin couldn't be restored. Power-cycle the printer to recover",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key801",
+     {"Z motor calibration failed",
+      "Stall detection setup failed for the Z motor — power-cycle to retry", AmsAlertLevel::SYSTEM,
+      nullptr}},
+    {"key802",
+     {"Extruder motor calibration failed",
+      "Stall detection setup failed for the extruder — power-cycle to retry", AmsAlertLevel::SYSTEM,
+      nullptr}},
+    {"key803",
+     {"Motor parameter setup failed",
+      "A motor's parameters couldn't be written. Power-cycle the printer to retry",
+      AmsAlertLevel::SYSTEM, nullptr}},
 
-    {"key831", {"Lost connection to CFS unit", "Check the RS-485 cable between printer and CFS", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key834", {"Invalid parameters sent to CFS", "This may indicate a firmware bug — try restarting", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key835", {"Filament jammed at CFS connector", "Open the CFS lid, check the PTFE tube connection for the stuck slot", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key836", {"Filament jammed between CFS and sensor", "Check the Bowden tube for kinks or debris", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key837", {"Filament jammed before extruder gear", "Check for tangles on the spool and clear the filament path to the printhead", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key838", {"Filament reached extruder but won't feed", "Check for a clog in the hotend or a worn drive gear", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key839", {"No filament detected at CFS extrude position", "The selected slot may be empty or the filament didn't reach the CFS extruder", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key840", {"CFS unit state error", "A unit reported an unexpected state — check its current operation", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key841", {"Filament cutter stuck", "The cutter blade didn't return — check for filament wrapped around the cutting mechanism", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key843", {"Can't read filament RFID tag", "Re-seat the spool in the slot, ensure the RFID label faces the reader", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key844", {"PTFE tube connection loose", "Re-seat the Bowden tube connector on the CFS unit", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key845", {"Nozzle clog detected", "Run a cold pull or replace the nozzle", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key846", {"Empty print detected — feed rate too slow", "CFS feed rate fell below extruder demand. The spool may be empty or jammed", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key847", {"Empty spool — filament wound around hub", "Remove the empty spool and clear wound filament from the CFS hub", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key848", {"Filament snapped inside CFS", "Open the CFS unit and remove the broken filament from the slot", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key849", {"Retract failed — filament stuck in connector", "Manually pull the filament back through the connector", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key850", {"Retract error — multiple connectors triggered", "Check that only one filament path is active", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key851", {"Retract didn't reach buffer empty position", "The filament may not have fully retracted — try again or manually pull", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key852", {"Sensor mismatch — check extruder and CFS sensors", "Extruder and CFS disagree on filament state — inspect both sensors", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key853", {"Humidity sensor malfunction", "CFS unit's humidity sensor is not responding — may need service", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key854", {"Cutter blade didn't sever filament", "Filament is still present after the cut — the blade may be dull or misaligned", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key855", {"Filament cutter position error", "The cutter is out of alignment — recalibrate with CALIBRATE_CUT_POS", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key856", {"Filament cutter not detected", "Check that the cutter mechanism is properly installed", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key857", {"CFS motor overloaded", "A spool may be tangled or the drive gear is jammed", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key858", {"EEPROM error on CFS unit", "CFS unit storage is corrupted — may need firmware reflash", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key859", {"Measuring wheel error", "The filament length sensor is malfunctioning", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key860", {"Buffer tube problem", "Check the buffer unit on the back of the printer", AmsAlertLevel::SYSTEM, nullptr}},
-    {"key861", {"RFID reader malfunction (left)", "The left RFID reader in this CFS unit may need service", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key862", {"RFID reader malfunction (right)", "The right RFID reader in this CFS unit may need service", AmsAlertLevel::UNIT, fmt_unit_only}},
-    {"key863", {"Retract error — filament still detected", "Filament didn't fully retract, may need manual removal", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key864", {"Extrude error — buffer not full", "Filament didn't fill buffer tube during load", AmsAlertLevel::SLOT, fmt_unit_slot}},
-    {"key865", {"Retract error — failed to exit connector", "Filament stuck in connector during unload", AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key831",
+     {"Lost connection to CFS unit", "Check the RS-485 cable between printer and CFS",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key834",
+     {"Invalid parameters sent to CFS", "This may indicate a firmware bug — try restarting",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key835",
+     {"Filament jammed at CFS connector",
+      "Open the CFS lid, check the PTFE tube connection for the stuck slot", AmsAlertLevel::SLOT,
+      fmt_unit_slot}},
+    {"key836",
+     {"Filament jammed between CFS and sensor", "Check the Bowden tube for kinks or debris",
+      AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key837",
+     {"Filament jammed before extruder gear",
+      "Check for tangles on the spool and clear the filament path to the printhead",
+      AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key838",
+     {"Filament reached extruder but won't feed",
+      "Check for a clog in the hotend or a worn drive gear", AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key839",
+     {"No filament detected at CFS extrude position",
+      "The selected slot may be empty or the filament didn't reach the CFS extruder",
+      AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key840",
+     {"CFS unit state error", "A unit reported an unexpected state — check its current operation",
+      AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key841",
+     {"Filament cutter stuck",
+      "The cutter blade didn't return — check for filament wrapped around the cutting mechanism",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key843",
+     {"Can't read filament RFID tag",
+      "Re-seat the spool in the slot, ensure the RFID label faces the reader", AmsAlertLevel::SLOT,
+      fmt_unit_slot}},
+    {"key844",
+     {"PTFE tube connection loose", "Re-seat the Bowden tube connector on the CFS unit",
+      AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key845",
+     {"Nozzle clog detected", "Run a cold pull or replace the nozzle", AmsAlertLevel::SYSTEM,
+      nullptr}},
+    {"key846",
+     {"Empty print detected — feed rate too slow",
+      "CFS feed rate fell below extruder demand. The spool may be empty or jammed",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key847",
+     {"Empty spool — filament wound around hub",
+      "Remove the empty spool and clear wound filament from the CFS hub", AmsAlertLevel::SLOT,
+      fmt_unit_slot}},
+    {"key848",
+     {"Filament snapped inside CFS",
+      "Open the CFS unit and remove the broken filament from the slot", AmsAlertLevel::SLOT,
+      fmt_unit_slot}},
+    {"key849",
+     {"Retract failed — filament stuck in connector",
+      "Manually pull the filament back through the connector", AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key850",
+     {"Retract error — multiple connectors triggered",
+      "Check that only one filament path is active", AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key851",
+     {"Retract didn't reach buffer empty position",
+      "The filament may not have fully retracted — try again or manually pull", AmsAlertLevel::SLOT,
+      fmt_unit_slot}},
+    {"key852",
+     {"Sensor mismatch — check extruder and CFS sensors",
+      "Extruder and CFS disagree on filament state — inspect both sensors", AmsAlertLevel::SYSTEM,
+      nullptr}},
+    {"key853",
+     {"Humidity sensor malfunction",
+      "CFS unit's humidity sensor is not responding — may need service", AmsAlertLevel::UNIT,
+      fmt_unit_only}},
+    {"key854",
+     {"Cutter blade didn't sever filament",
+      "Filament is still present after the cut — the blade may be dull or misaligned",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key855",
+     {"Filament cutter position error",
+      "The cutter is out of alignment — recalibrate with CALIBRATE_CUT_POS", AmsAlertLevel::SYSTEM,
+      nullptr}},
+    {"key856",
+     {"Filament cutter not detected", "Check that the cutter mechanism is properly installed",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key857",
+     {"CFS motor overloaded", "A spool may be tangled or the drive gear is jammed",
+      AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key858",
+     {"EEPROM error on CFS unit", "CFS unit storage is corrupted — may need firmware reflash",
+      AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key859",
+     {"Measuring wheel error", "The filament length sensor is malfunctioning", AmsAlertLevel::UNIT,
+      fmt_unit_only}},
+    {"key860",
+     {"Buffer tube problem", "Check the buffer unit on the back of the printer",
+      AmsAlertLevel::SYSTEM, nullptr}},
+    {"key861",
+     {"RFID reader malfunction (left)", "The left RFID reader in this CFS unit may need service",
+      AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key862",
+     {"RFID reader malfunction (right)", "The right RFID reader in this CFS unit may need service",
+      AmsAlertLevel::UNIT, fmt_unit_only}},
+    {"key863",
+     {"Retract error — filament still detected",
+      "Filament didn't fully retract, may need manual removal", AmsAlertLevel::SLOT,
+      fmt_unit_slot}},
+    {"key864",
+     {"Extrude error — buffer not full", "Filament didn't fill buffer tube during load",
+      AmsAlertLevel::SLOT, fmt_unit_slot}},
+    {"key865",
+     {"Retract error — failed to exit connector", "Filament stuck in connector during unload",
+      AmsAlertLevel::SLOT, fmt_unit_slot}},
     // key866 is a second "no cutter" variant emitted from the motor driver path
     // (key856 comes from the box driver). Same root cause, same remedy.
-    {"key866", {"Filament cutter not detected", "Check that the cutter mechanism is properly installed", AmsAlertLevel::SYSTEM, nullptr}},
+    {"key866",
+     {"Filament cutter not detected", "Check that the cutter mechanism is properly installed",
+      AmsAlertLevel::SYSTEM, nullptr}},
 };
 
 std::optional<std::pair<const char*, const char*>>
@@ -246,9 +346,8 @@ CfsErrorDecoder::lookup_message_with_values(const std::string& key_code,
     return std::make_pair(std::move(message), std::string(entry.hint));
 }
 
-std::optional<AmsAlert> CfsErrorDecoder::decode(const std::string& key_code,
-                                                 int unit_index, int slot_index)
-{
+std::optional<AmsAlert> CfsErrorDecoder::decode(const std::string& key_code, int unit_index,
+                                                int slot_index) {
     auto it = CFS_ERROR_TABLE.find(key_code);
     if (it == CFS_ERROR_TABLE.end())
         return std::nullopt;
@@ -291,8 +390,7 @@ AmsBackendCfs::AmsBackendCfs(MoonrakerAPI* api, helix::MoonrakerClient* client)
     // the resolved printer database entry, which is settled by the time the
     // AMS backend is constructed (printer discovery → detector → backend
     // create). #968.
-    macro_variant_ = PrinterDetector::is_creality_k1() ? CfsMacroVariant::K1
-                                                       : CfsMacroVariant::K2;
+    macro_variant_ = PrinterDetector::is_creality_k1() ? CfsMacroVariant::K1 : CfsMacroVariant::K2;
 
     spdlog::info("[AMS CFS] Backend created — macro variant: {}",
                  macro_variant_ == CfsMacroVariant::K1 ? "K1 (BOX_*)" : "K2 (CR_BOX_*)");
@@ -321,8 +419,7 @@ void AmsBackendCfs::on_started() {
             std::lock_guard<std::mutex> lock(mutex_);
             overrides_ = std::move(loaded);
         }
-        spdlog::info("[AMS CFS] Loaded {} slot overrides from filament_slot store",
-                     loaded_count);
+        spdlog::info("[AMS CFS] Loaded {} slot overrides from filament_slot store", loaded_count);
     }
 
     // Query initial state explicitly since the subscription response may have
@@ -370,8 +467,7 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
     info.supports_tool_mapping = true;
 
     // Parse filament loaded state (only meaningful when field present)
-    info.filament_loaded = box_json.contains("filament") &&
-                           box_json["filament"].get<int>() != 0;
+    info.filament_loaded = box_json.contains("filament") && box_json["filament"].get<int>() != 0;
 
     // Parse tool mapping from "map" object
     if (box_json.contains("map") && box_json["map"].is_object()) {
@@ -449,8 +545,7 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
         // Environment: temperature and humidity
         std::string temp_str = unit_json.value("temperature", "None");
         std::string humid_str = unit_json.value("dry_and_humidity", "None");
-        if (temp_str != "None" && temp_str != "-1" && humid_str != "None" &&
-            humid_str != "-1") {
+        if (temp_str != "None" && temp_str != "-1" && humid_str != "None" && humid_str != "-1") {
             EnvironmentData env;
             try {
                 env.temperature_c = std::stof(temp_str);
@@ -617,8 +712,8 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
         // Distinguish meaningful updates from noise (e.g., just measuring_wheel).
         // Full updates have "filament"/"map". Unit updates have "T1"/"T2"/etc.
         bool has_top_level = box.contains("filament") || box.contains("map");
-        bool has_unit_data = box.contains("T1") || box.contains("T2") ||
-                             box.contains("T3") || box.contains("T4");
+        bool has_unit_data =
+            box.contains("T1") || box.contains("T2") || box.contains("T3") || box.contains("T4");
         bool is_full_update = has_top_level || has_unit_data;
 
         if (is_full_update) {
@@ -732,16 +827,14 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (extr.contains("target") && extr["target"].is_number()) {
-                last_extruder_target_centi_ =
-                    static_cast<int>(extr["target"].get<double>() * 10);
+                last_extruder_target_centi_ = static_cast<int>(extr["target"].get<double>() * 10);
             }
             if (extr.contains("temperature") && extr["temperature"].is_number()) {
                 last_extruder_temp_centi_ =
                     static_cast<int>(extr["temperature"].get<double>() * 10);
             }
             AmsAction before = system_info_.action;
-            on_extruder_temp_change_locked(last_extruder_temp_centi_,
-                                           last_extruder_target_centi_);
+            on_extruder_temp_change_locked(last_extruder_temp_centi_, last_extruder_target_centi_);
             action_transitioned = (system_info_.action != before);
         }
         // Extruder telemetry is high-frequency; only emit when action
@@ -833,7 +926,8 @@ PathSegment AmsBackendCfs::infer_error_segment() const {
 
 AmsError AmsBackendCfs::load_filament(int slot_index) {
     auto err = check_preconditions();
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
     auto gcode = load_gcode(slot_index, macro_variant_);
     if (gcode.empty()) {
         return AmsErrorHelper::invalid_slot(slot_index, 15);
@@ -850,7 +944,8 @@ AmsError AmsBackendCfs::load_filament(int slot_index) {
 
 AmsError AmsBackendCfs::unload_filament(int) {
     auto err = check_preconditions();
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         system_info_.action = AmsAction::UNLOADING;
@@ -866,17 +961,23 @@ AmsError AmsBackendCfs::select_slot(int) {
 
 AmsError AmsBackendCfs::change_tool(int tool) {
     auto err = check_preconditions();
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
 
     bool needs_unload = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        needs_unload = system_info_.filament_loaded || system_info_.current_slot >= 0;
+        // Cut-first decision centralized in needs_unload_before_load(): on K1 CFS
+        // current_slot reports a *preloaded* (cassette-staged) slot with the
+        // nozzle still empty, so the K1 override keys on filament_loaded only
+        // (avoids the "hallucinated cut on an empty nozzle" the reporter saw,
+        // #968). K2 retains the filament_loaded || current_slot >= 0 behavior.
+        needs_unload = needs_unload_before_load(system_info_);
     }
 
     // Validate gcode before mutating state
-    std::string gcode = needs_unload ? swap_gcode(tool, macro_variant_)
-                                     : load_gcode(tool, macro_variant_);
+    std::string gcode =
+        needs_unload ? swap_gcode(tool, macro_variant_) : load_gcode(tool, macro_variant_);
     if (gcode.empty()) {
         return AmsErrorHelper::invalid_slot(tool, 15);
     }
@@ -893,19 +994,22 @@ AmsError AmsBackendCfs::change_tool(int tool) {
 
 AmsError AmsBackendCfs::reset() {
     auto err = check_preconditions();
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
     return execute_gcode(reset_gcode());
 }
 
 AmsError AmsBackendCfs::recover() {
     auto err = check_preconditions();
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
     return execute_gcode(recover_gcode());
 }
 
 AmsError AmsBackendCfs::cancel() {
     auto err = check_preconditions();
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
     return execute_gcode("CANCEL_PRINT");
 }
 
@@ -986,8 +1090,8 @@ AmsError AmsBackendCfs::set_slot_info(int slot_index, const SlotInfo& info, bool
         }
     }
 
-    spdlog::info("[AMS CFS] Updated slot {} info (persist={}): {} {}",
-                 slot_index, persist, info.material, info.color_name);
+    spdlog::info("[AMS CFS] Updated slot {} info (persist={}): {} {}", slot_index, persist,
+                 info.material, info.color_name);
 
     if (persist && override_store_) {
         // Re-read from overrides_ under the lock to pick up the staged copy.
@@ -1005,8 +1109,7 @@ AmsError AmsBackendCfs::set_slot_info(int slot_index, const SlotInfo& info, bool
         // the scheduled save by design.
         const std::string tag = backend_log_tag();
         override_store_->save_async(
-            slot_index, ovr_to_save,
-            [tag, slot_index](bool success, const std::string& err) {
+            slot_index, ovr_to_save, [tag, slot_index](bool success, const std::string& err) {
                 if (!success) {
                     spdlog::warn("{} Override persist failed for slot {}: {}", tag, slot_index,
                                  err);
@@ -1036,12 +1139,12 @@ void AmsBackendCfs::push_slot_color_to_firmware(int global_index, uint32_t color
     // responsible for only invoking this when a real color was chosen.
     constexpr int kCfsMaxSlots = 16; // 4 units × 4 slots
     if (global_index < 0 || global_index >= kCfsMaxSlots) {
-        spdlog::debug("{} push_slot_color_to_firmware: skipping invalid slot {}",
-                      backend_log_tag(), global_index);
+        spdlog::debug("{} push_slot_color_to_firmware: skipping invalid slot {}", backend_log_tag(),
+                      global_index);
         return;
     }
 
-    const int unit = (global_index / 4) + 1;          // 1..4
+    const int unit = (global_index / 4) + 1;           // 1..4
     const char slot_letter = 'A' + (global_index % 4); // A..D
     char data[16];
     // CFS color_value format observed in tn_data.json: 7 hex chars, leading
@@ -1051,8 +1154,8 @@ void AmsBackendCfs::push_slot_color_to_firmware(int global_index, uint32_t color
 
     char gcode[96];
     std::snprintf(gcode, sizeof(gcode),
-                  "BOX_MODIFY_TN_DATA ADDR=%d NUM=%c PART=color_value DATA=%s", unit,
-                  slot_letter, data);
+                  "BOX_MODIFY_TN_DATA ADDR=%d NUM=%c PART=color_value DATA=%s", unit, slot_letter,
+                  data);
 
     auto err = execute_gcode(gcode);
     if (err.result != AmsResult::SUCCESS) {
@@ -1103,6 +1206,18 @@ AmsError AmsBackendCfs::set_tool_mapping(int tool_number, int slot_index) {
 
     std::string cmd = "BOX_MODIFY_TN " + tool_tnn + "=" + slot_tnn;
     spdlog::info("[AMS CFS] Remapping tool {} -> slot {} ({})", tool_tnn, slot_tnn, cmd);
+    if (macro_variant_ == CfsMacroVariant::K1) {
+        // #968 Phase 5 — the reporter confirmed BOX_MODIFY_TN no-ops on the K1
+        // official CFS upgrade firmware (the box's "current TN" state it sets is
+        // ignored), and we have no confirmed working alternative. We still emit
+        // it because it is harmless (no key61 "Unknown command"), but in-print
+        // tool->slot remap may simply not take effect on K1. The optimistic
+        // local update above keeps the UI consistent regardless.
+        // TODO(#968): confirm a working K1 remap path on hardware (console test)
+        // before advertising remap capability on K1 in get_tool_mapping_capabilities.
+        spdlog::info("[AMS CFS] K1 firmware: in-print tool remap (BOX_MODIFY_TN) may be "
+                     "unsupported; emitting anyway (harmless). Verify on hardware (#968).");
+    }
     return execute_gcode(cmd);
 }
 
@@ -1165,36 +1280,39 @@ std::string wrap_with_park_k2(const std::string& body, bool wipe_after) {
            body + post_body;
 }
 
-/// Wrap a BOX_* operation with the K1 macro envelope (#968).
+/// Wrap a BOX_* step body with the K1 official CFS macro envelope (#968).
 ///
-/// Simpler than K2 — the K1 official CFS upgrade firmware does not expose
-/// BOX_SAVE_FAN / BOX_RESTORE_FAN / BOX_MODE_WAIT (verified absent in the
-/// public K1-Max box.cfg dump at DieDutchman/K1-Max-KAMP-CFS-Fix, and from
-/// the #968 reporter's gcode/help output where `BOX_GO_TO_EXTRUDE_POS` and
-/// `BOX_MOVE_TO_SAFE_POS` were the only envelope helpers that succeeded).
+/// The K1 firmware does not expose BOX_SAVE_FAN / BOX_RESTORE_FAN /
+/// BOX_MODE_WAIT (verified absent in the public K1-Max box.cfg dump at
+/// DieDutchman/K1-Max-KAMP-CFS-Fix, and from the #968 reporter's gcode/help
+/// output). Every K1 load/swap/unload sequence shares the same envelope:
 ///
-/// Sequence:
-///   1. SAVE_GCODE_STATE        — preserve coordinate mode + feedrate
-///   2. BOX_GO_TO_EXTRUDE_POS   — toolhead over waste port
-///   3. <body>                  — BOX_EXTRUDE_MATERIAL / BOX_CUT_MATERIAL / etc.
-///   4. BOX_NOZZLE_CLEAN        — (load/swap only) wipe before parking
-///   5. BOX_MOVE_TO_SAFE_POS    — park
-///   6. RESTORE_GCODE_STATE
-std::string wrap_with_park_k1(const std::string& body, bool wipe_after) {
-    std::string post_body = "\n";
-    if (wipe_after) {
-        post_body += "BOX_NOZZLE_CLEAN\n";
-    }
-    post_body += "BOX_MOVE_TO_SAFE_POS\n"
-                 "RESTORE_GCODE_STATE NAME=helix_cfs_load";
+///   SAVE_GCODE_STATE NAME=helix_cfs_load
+///   BOX_ERROR_CLEAR
+///   BOX_CHECK_MATERIAL
+///   <body>                       — the variant-specific BOX_* step list
+///   BOX_MOVE_TO_SAFE_POS         — park
+///   RESTORE_GCODE_STATE NAME=helix_cfs_load
+///
+/// `body` carries everything between CHECK_MATERIAL and the safe-park tail,
+/// including each builder's own positioning (BOX_GO_TO_EXTRUDE_POS) and wipe
+/// (BOX_NOZZLE_CLEAN) — load wipes after the feed, swap wipes before it, and
+/// unload has neither, so those steps live in the body rather than the
+/// envelope. The emitted string is byte-identical to the prior inline literals.
+std::string wrap_with_envelope_k1(const std::string& body) {
     return "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
-           "BOX_GO_TO_EXTRUDE_POS\n" +
-           body + post_body;
+           "BOX_ERROR_CLEAR\n"
+           "BOX_CHECK_MATERIAL\n" +
+           body +
+           "\nBOX_MOVE_TO_SAFE_POS\n"
+           "RESTORE_GCODE_STATE NAME=helix_cfs_load";
 }
 
-std::string wrap_with_park(CfsMacroVariant variant, const std::string& body,
-                           bool wipe_after) {
-    return variant == CfsMacroVariant::K1 ? wrap_with_park_k1(body, wipe_after)
+std::string wrap_with_park(CfsMacroVariant variant, const std::string& body, bool wipe_after) {
+    // Only the K2 (CR_BOX_*) builders route through here — the K1 builders own
+    // their wipe/positioning explicitly and call wrap_with_envelope_k1 directly.
+    // The K1 branch (envelope has no wipe knob) is kept for completeness/safety.
+    return variant == CfsMacroVariant::K1 ? wrap_with_envelope_k1(body)
                                           : wrap_with_park_k2(body, wipe_after);
 }
 
@@ -1207,13 +1325,22 @@ std::string AmsBackendCfs::load_gcode(int idx, CfsMacroVariant variant) {
         return "";
     }
     if (variant == CfsMacroVariant::K1) {
-        // K1 official CFS upgrade firmware (≥ v2.3.5.33) — see header docs.
-        // Body: extrude from cassette → flush new material.
-        // Envelope wipe handles BOX_NOZZLE_CLEAN; no PRE_OPT/END_OPT counterparts.
-        return wrap_with_park(variant,
-                              "BOX_EXTRUDE_MATERIAL TNN=" + tnn +
-                                  "\nBOX_MATERIAL_FLUSH TNN=" + tnn,
-                              /*wipe_after=*/true);
+        // K1 official CFS upgrade firmware — fresh load, nozzle empty. Mirrors
+        // the firmware orchestrator BOX_LOAD_MATERIAL_WITHOUT_MATERIAL step
+        // list with explicit TNN= (the box's bare-macro "current TN" set via
+        // BOX_MODIFY_TN no-ops on K1, per the reporter):
+        //   ERROR_CLEAR → CHECK_MATERIAL → EXTRUDE → EXTRUDER_EXTRUDE → FLUSH
+        // BOX_EXTRUDER_EXTRUDE is the root-cause fix for "no auto-extrude after
+        // load" (#968): the firmware's WITHOUT_MATERIAL chain drives the main
+        // extruder after the cassette feed, and we previously omitted it.
+        // Homing is handled upstream by dispatch_action_script; do NOT add
+        // IF_NEED_HOME here. Envelope (wrap_with_envelope_k1) adds ERROR_CLEAR /
+        // CHECK_MATERIAL / MOVE_TO_SAFE_POS; the body carries positioning, the
+        // feed steps, and the post-feed wipe. All commands confirmed in box.cfg.
+        return wrap_with_envelope_k1("BOX_GO_TO_EXTRUDE_POS\n"
+                                     "BOX_EXTRUDE_MATERIAL TNN=" +
+                                     tnn + "\nBOX_EXTRUDER_EXTRUDE TNN=" + tnn +
+                                     "\nBOX_MATERIAL_FLUSH TNN=" + tnn + "\nBOX_NOZZLE_CLEAN");
     }
     // Use CR_BOX_* commands directly — M8200 macro's Jinja2 `params.I|int` is broken
     // on Creality's Klipper fork (always evaluates to 0, loading T1A regardless of I= value).
@@ -1228,15 +1355,14 @@ std::string AmsBackendCfs::load_gcode(int idx, CfsMacroVariant variant) {
 
 std::string AmsBackendCfs::unload_gcode(CfsMacroVariant variant) {
     if (variant == CfsMacroVariant::K1) {
-        // K1: BOX_CUT_MATERIAL handles the cut; BOX_RETRUDE_MATERIAL is the
-        // no-TNN retract primitive (operates on the currently-loaded slot
-        // tracked by the box driver) — same one BOX_QUIT_MATERIAL uses in
-        // box.cfg. A separate BOX_RETRUDE_MATERIAL_WITH_TNN macro exists for
-        // slot-targeted retracts, but we don't use it: when unloading there
-        // is no caller-known target slot, only the current one.
-        return wrap_with_park(variant,
-                              "BOX_CUT_MATERIAL\nBOX_RETRUDE_MATERIAL",
-                              /*wipe_after=*/false);
+        // K1: mirror the firmware BOX_QUIT_MATERIAL step list:
+        //   ERROR_CLEAR → CHECK_MATERIAL → CUT → RETRUDE → safe park.
+        // BOX_CUT_MATERIAL handles the cut; BOX_RETRUDE_MATERIAL is the no-TNN
+        // retract primitive (operates on the currently-loaded slot tracked by
+        // the box driver) — same one BOX_QUIT_MATERIAL uses in box.cfg. Nozzle
+        // is empty after the cut+retract, so no wipe. Homing handled upstream.
+        return wrap_with_envelope_k1("BOX_CUT_MATERIAL\n"
+                                     "BOX_RETRUDE_MATERIAL");
     }
     // Unload ends with CR_BOX_RETRUDE — the nozzle is empty (cut + retracted),
     // so no wipe needed. Skipping the wipe also avoids the wipe macro pushing
@@ -1257,14 +1383,21 @@ std::string AmsBackendCfs::swap_gcode(int idx, CfsMacroVariant variant) {
         return "";
     }
     if (variant == CfsMacroVariant::K1) {
-        // K1: unload (cut + retract) then load new slot. No BOX_MODE_WAIT
-        // available on K1 firmware; cut + retract chain back-to-back as the
-        // BOX_QUIT_MATERIAL macro does in box.cfg.
-        return wrap_with_park(variant,
-                              "BOX_CUT_MATERIAL\nBOX_RETRUDE_MATERIAL\n"
-                              "BOX_EXTRUDE_MATERIAL TNN=" + tnn +
-                                  "\nBOX_MATERIAL_FLUSH TNN=" + tnn,
-                              /*wipe_after=*/true);
+        // K1: nozzle loaded — mirror the firmware BOX_LOAD_MATERIAL_WITH_MATERIAL
+        // step list with explicit TNN=:
+        //   ERROR_CLEAR → CHECK_MATERIAL → CUT → RETRUDE → GO_TO_EXTRUDE_POS →
+        //   NOZZLE_CLEAN → EXTRUDE → EXTRUDER_EXTRUDE → FLUSH → safe park.
+        // No BOX_MODE_WAIT on K1 firmware. BOX_EXTRUDER_EXTRUDE between EXTRUDE
+        // and FLUSH is the same auto-extrude fix as the fresh-load path (#968).
+        // Wipe (NOZZLE_CLEAN) precedes the new feed here exactly as the firmware
+        // WITH_MATERIAL chain does. Homing handled upstream.
+        return wrap_with_envelope_k1("BOX_CUT_MATERIAL\n"
+                                     "BOX_RETRUDE_MATERIAL\n"
+                                     "BOX_GO_TO_EXTRUDE_POS\n"
+                                     "BOX_NOZZLE_CLEAN\n"
+                                     "BOX_EXTRUDE_MATERIAL TNN=" +
+                                     tnn + "\nBOX_EXTRUDER_EXTRUDE TNN=" + tnn +
+                                     "\nBOX_MATERIAL_FLUSH TNN=" + tnn);
     }
     // Full swap: unload current (cut+retract) then load new slot, all in one
     // session. BOX_MODE_WAIT interposed after CR_BOX_CUT (let the cutter
@@ -1273,9 +1406,8 @@ std::string AmsBackendCfs::swap_gcode(int idx, CfsMacroVariant variant) {
     return wrap_with_park(variant,
                           "CR_BOX_PRE_OPT\nCR_BOX_CUT\nBOX_MODE_WAIT\n"
                           "CR_BOX_RETRUDE\nBOX_MODE_WAIT\n"
-                          "CR_BOX_EXTRUDE TNN=" + tnn +
-                          "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn +
-                          "\nCR_BOX_END_OPT",
+                          "CR_BOX_EXTRUDE TNN=" +
+                              tnn + "\nCR_BOX_WASTE\nCR_BOX_FLUSH TNN=" + tnn + "\nCR_BOX_END_OPT",
                           /*wipe_after=*/true);
 }
 
@@ -1319,13 +1451,18 @@ AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
             // when no save exists because SAVE never ran) doesn't block
             // the other. Worst case: cleanup is a no-op.
             if (api_) {
-                api_->execute_gcode("BOX_RESTORE_FAN", []() {},
-                                    [](const MoonrakerError&) {},
-                                    MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
-                api_->execute_gcode("RESTORE_GCODE_STATE NAME=helix_cfs_load",
-                                    []() {},
-                                    [](const MoonrakerError&) {},
-                                    MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+                // BOX_RESTORE_FAN only exists on K2 firmware (and only the K2
+                // envelope ran BOX_SAVE_FAN). The K1 official CFS upgrade
+                // firmware lacks the macro and never saved fan state, so emitting
+                // it there just returns key61 — skip it on K1. (#968)
+                if (macro_variant_ != CfsMacroVariant::K1) {
+                    api_->execute_gcode(
+                        "BOX_RESTORE_FAN", []() {}, [](const MoonrakerError&) {},
+                        MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+                }
+                api_->execute_gcode(
+                    "RESTORE_GCODE_STATE NAME=helix_cfs_load", []() {},
+                    [](const MoonrakerError&) {}, MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
             }
         });
     };
@@ -1341,22 +1478,21 @@ AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
     auto gcode_copy = std::move(gcode);
     client_->send_jsonrpc(
         "printer.objects.query",
-        nlohmann::json{{"objects", nlohmann::json{{"toolhead", nlohmann::json::array({"homed_axes"})}}}},
+        nlohmann::json{
+            {"objects", nlohmann::json{{"toolhead", nlohmann::json::array({"homed_axes"})}}}},
         [this, token, gcode_copy, on_complete = std::move(on_complete),
          on_error = on_error](const nlohmann::json& response) {
             // L081 Mechanism C: defer member access (api_->execute_gcode dispatch)
             // to main thread. The inner G28-completion lambda is itself invoked
             // on a bg thread, so it also routes its api_ call through token.defer.
-            token.defer("AmsBackendCfs::homing_query_apply",
-                        [this, token, gcode_copy, on_complete, on_error, response]() {
+            token.defer("AmsBackendCfs::homing_query_apply", [this, token, gcode_copy, on_complete,
+                                                              on_error, response]() {
                 bool needs_home = true;
                 if (response.contains("result") && response["result"].contains("status")) {
                     const auto& status = response["result"]["status"];
-                    if (status.contains("toolhead") &&
-                        status["toolhead"].contains("homed_axes") &&
+                    if (status.contains("toolhead") && status["toolhead"].contains("homed_axes") &&
                         status["toolhead"]["homed_axes"].is_string()) {
-                        std::string axes =
-                            status["toolhead"]["homed_axes"].get<std::string>();
+                        std::string axes = status["toolhead"]["homed_axes"].get<std::string>();
                         needs_home = (axes.find("xyz") == std::string::npos);
                     }
                 }
@@ -1367,8 +1503,8 @@ AmsError AmsBackendCfs::dispatch_action_script(std::string gcode) {
                         "G28",
                         [this, token, gcode_copy, on_complete, on_error]() {
                             // L081 Mechanism C: defer member access (api_) to main.
-                            token.defer("AmsBackendCfs::g28_done",
-                                        [this, gcode_copy, on_complete, on_error]() {
+                            token.defer("AmsBackendCfs::g28_done", [this, gcode_copy, on_complete,
+                                                                    on_error]() {
                                 api_->execute_gcode(gcode_copy, on_complete, on_error,
                                                     MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
                             });
@@ -1415,19 +1551,17 @@ void AmsBackendCfs::end_phase_tracking() {
 
 void AmsBackendCfs::on_filament_transition_locked(bool new_detected) {
     if (!phase_tracker_.active) {
-        spdlog::debug("[AMS CFS] Phase: filament {} -> {} (no active op)",
-                      last_filament_detected_, new_detected);
+        spdlog::debug("[AMS CFS] Phase: filament {} -> {} (no active op)", last_filament_detected_,
+                      new_detected);
         return;
     }
     if (last_filament_detected_ && !new_detected) {
         phase_tracker_.seen_filament_drop = true;
         spdlog::info("[AMS CFS] Phase: filament drop (cut completed)");
-    } else if (!last_filament_detected_ && new_detected &&
-               phase_tracker_.seen_filament_drop) {
+    } else if (!last_filament_detected_ && new_detected && phase_tracker_.seen_filament_drop) {
         phase_tracker_.seen_filament_rise = true;
         spdlog::info("[AMS CFS] Phase: filament rise after drop (swap feed complete)");
-    } else if (!last_filament_detected_ && new_detected &&
-               !phase_tracker_.started_with_filament) {
+    } else if (!last_filament_detected_ && new_detected && !phase_tracker_.started_with_filament) {
         // Fresh-load case: filament arrives without a prior drop. Treat the
         // rise as the start of the post-feed phase.
         phase_tracker_.seen_filament_rise = true;
@@ -1443,12 +1577,11 @@ void AmsBackendCfs::on_filament_transition_locked(bool new_detected) {
     apply_synthesized_action_locked();
 }
 
-void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_centi,
-                                                    int new_target_centi) {
-    if (!phase_tracker_.active) return;
+void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_centi, int new_target_centi) {
+    if (!phase_tracker_.active)
+        return;
 
-    if (new_target_centi > 0 &&
-        new_temp_centi >= (new_target_centi - 50 /* 5°C centi */)) {
+    if (new_target_centi > 0 && new_temp_centi >= (new_target_centi - 50 /* 5°C centi */)) {
         if (!phase_tracker_.reached_target_once) {
             phase_tracker_.reached_target_once = true;
             phase_tracker_.baseline_target_centi = new_target_centi;
@@ -1465,13 +1598,13 @@ void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_centi,
     // of filament state, then promote to seen_purge_signal once the feed
     // physically completes (seen_filament_rise = true). UNLOAD has no rise,
     // so promotion never happens and purge correctly stays off.
-    if (phase_tracker_.reached_target_once &&
-        phase_tracker_.baseline_target_centi > 0 &&
+    if (phase_tracker_.reached_target_once && phase_tracker_.baseline_target_centi > 0 &&
         new_target_centi > phase_tracker_.baseline_target_centi + 100 /* 10°C centi */ &&
         !phase_tracker_.pending_purge_target) {
         phase_tracker_.pending_purge_target = true;
-        spdlog::debug("[AMS CFS] Phase: purge target jump latched (target {}°C > baseline {}°C + 10)",
-                      new_target_centi / 10, phase_tracker_.baseline_target_centi / 10);
+        spdlog::debug(
+            "[AMS CFS] Phase: purge target jump latched (target {}°C > baseline {}°C + 10)",
+            new_target_centi / 10, phase_tracker_.baseline_target_centi / 10);
     }
     if (phase_tracker_.pending_purge_target && phase_tracker_.seen_filament_rise &&
         !phase_tracker_.seen_purge_signal) {
@@ -1483,17 +1616,16 @@ void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_centi,
 }
 
 void AmsBackendCfs::apply_synthesized_action_locked() {
-    if (!phase_tracker_.active) return;
+    if (!phase_tracker_.active)
+        return;
 
     AmsAction synth;
     if (phase_tracker_.seen_purge_signal) {
         synth = AmsAction::PURGING;
-    } else if (phase_tracker_.started_with_filament &&
-               !phase_tracker_.seen_filament_drop) {
+    } else if (phase_tracker_.started_with_filament && !phase_tracker_.seen_filament_drop) {
         // Swap or unload, before the cutter trips — Cut/Tip phase.
         synth = AmsAction::CUTTING;
-    } else if (phase_tracker_.seen_filament_drop &&
-               !phase_tracker_.seen_filament_rise) {
+    } else if (phase_tracker_.seen_filament_drop && !phase_tracker_.seen_filament_rise) {
         // After cut, before new filament arrives (or whole unload retract).
         synth = AmsAction::UNLOADING;
     } else {
@@ -1502,8 +1634,7 @@ void AmsBackendCfs::apply_synthesized_action_locked() {
     }
 
     if (system_info_.action != synth && system_info_.action != AmsAction::IDLE) {
-        spdlog::info("[AMS CFS] Phase synth: {} -> {}",
-                     ams_action_to_string(system_info_.action),
+        spdlog::info("[AMS CFS] Phase synth: {} -> {}", ams_action_to_string(system_info_.action),
                      ams_action_to_string(synth));
         system_info_.action = synth;
     }
@@ -1528,7 +1659,8 @@ helix::printer::EndlessSpoolCapabilities AmsBackendCfs::get_endless_spool_capabi
 }
 
 helix::printer::ToolMappingCapabilities AmsBackendCfs::get_tool_mapping_capabilities() const {
-    return {.supported = true, .editable = true,
+    return {.supported = true,
+            .editable = true,
             .description = "Tool reassignment via BOX_MODIFY_TN"}; // i18n: do not translate
 }
 
@@ -1541,22 +1673,67 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
     using DA = helix::printer::DeviceAction;
     using AT = helix::printer::ActionType;
     return {
-        DA{"refresh_rfid", "Refresh RFID", "", "", "Re-read spool RFID tags and remaining length",
-           AT::BUTTON, {}, {}, 0, 100, "", -1, true, ""},
-        DA{"toggle_auto_refill", "Toggle Auto-Refill", "", "",
+        DA{"refresh_rfid",
+           "Refresh RFID",
+           "",
+           "",
+           "Re-read spool RFID tags and remaining length",
+           AT::BUTTON,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
+        DA{"toggle_auto_refill",
+           "Toggle Auto-Refill",
+           "",
+           "",
            "Enable/disable automatic backup spool switching",
-           AT::TOGGLE, {}, {}, 0, 100, "", -1, true, ""},
-        DA{"nozzle_clean", "Clean Nozzle", "", "",
+           AT::TOGGLE,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
+        DA{"nozzle_clean",
+           "Clean Nozzle",
+           "",
+           "",
            "Wipe nozzle on silicone cleaning strip",
-           AT::BUTTON, {}, {}, 0, 100, "", -1, true, ""},
-        DA{"comm_test", "Communication Test", "", "",
+           AT::BUTTON,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
+        DA{"comm_test",
+           "Communication Test",
+           "",
+           "",
            "Test RS-485 link to CFS units",
-           AT::BUTTON, {}, {}, 0, 100, "", -1, true, ""},
+           AT::BUTTON,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
     };
 }
 
 AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
-                                               const std::any& /*value*/) {
+                                              const std::any& /*value*/) {
     if (action_id == "refresh_rfid") {
         // Re-query box state from Moonraker (the box module polls CFS automatically)
         on_started(); // Triggers printer.objects.query for box state
@@ -1632,8 +1809,8 @@ void AmsBackendCfs::check_hardware_event_clear(SlotInfo& slot, int slot_index,
         // first observation is NEVER a swap signal. apply_overrides still
         // runs after us and the override wins.
         last_rfid_uid_[slot_index] = observed_uid;
-        spdlog::debug("{} Slot {} baseline RFID fingerprint: {}", backend_log_tag(),
-                      slot_index, observed_uid);
+        spdlog::debug("{} Slot {} baseline RFID fingerprint: {}", backend_log_tag(), slot_index,
+                      observed_uid);
         return;
     }
     if (it->second == observed_uid)
@@ -1685,12 +1862,11 @@ void AmsBackendCfs::clear_override_locked(int slot_index, SlotInfo& slot) {
         // this returns (MR tracker ~60s) and potentially after the backend
         // itself is gone. Same rationale as save_async.
         const std::string tag = backend_log_tag();
-        override_store_->clear_async(
-            slot_index, [tag, slot_index](bool ok, std::string err) {
-                if (!ok) {
-                    spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
-                }
-            });
+        override_store_->clear_async(slot_index, [tag, slot_index](bool ok, std::string err) {
+            if (!ok) {
+                spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
+            }
+        });
     }
 }
 

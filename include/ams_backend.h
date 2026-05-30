@@ -360,6 +360,23 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether a load operation must first unload/cut the currently
+     *        present filament (load-vs-swap decision).
+     *
+     * Returns true when filament is physically at the nozzle (or, for most
+     * backends, when a slot is otherwise reported as engaged) so the caller
+     * picks the cut-before-load (swap) path instead of a fresh load. Centralized
+     * here so the UI and backends agree on the rule and per-variant quirks
+     * (e.g. K1 CFS preloads current_slot with an empty nozzle) live in one place.
+     *
+     * Default: filament at nozzle OR a slot engaged. Override where the
+     * current_slot signal does not imply filament at the nozzle.
+     */
+    [[nodiscard]] virtual bool needs_unload_before_load(const AmsSystemInfo& info) const {
+        return info.filament_loaded || info.current_slot >= 0;
+    }
+
+    /**
      * @brief Load filament from specified slot (async)
      *
      * Initiates filament load from the specified slot to the extruder.
@@ -953,8 +970,7 @@ class AmsBackend {
      * Callers should filter dropdowns and normalize outgoing values to this
      * list. An empty vector is treated the same as nullopt (no restriction).
      */
-    [[nodiscard]] virtual std::optional<std::vector<std::string>>
-    get_supported_materials() const {
+    [[nodiscard]] virtual std::optional<std::vector<std::string>> get_supported_materials() const {
         return std::nullopt;
     }
 
