@@ -404,6 +404,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     bool ifs_macro_confirmed_missing_ = true;
     std::atomic<bool> reread_pending_{false};
 
+    // Signature (count + per-slot color/material) of the slots parsed from the
+    // last Adventurer5M.json read. Native ZMOD re-reads the file on every sensor
+    // change / ~5s poll cycle; comparing against this lets the "Loaded N slots"
+    // line log at INFO only when the parsed set actually changed.
+    std::string last_parsed_signature_;
+
     // GET_ZCOLOR SILENT=1 query state.
     // zcolor_silent_supported_ starts optimistic; a prompt-style response
     // flips it false for the session (not retried).

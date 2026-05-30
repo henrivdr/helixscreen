@@ -374,7 +374,7 @@ void AmsBackendAd5xIfs::parse_save_variables(const json& vars) {
     if (vars.contains("bambufy_colors") || vars.contains("bambufy_tools")) {
         if (var_prefix_ != "bambufy") {
             var_prefix_ = "bambufy";
-            spdlog::info("{} Detected bambufy variable prefix", backend_log_tag());
+            spdlog::debug("{} Detected bambufy variable prefix", backend_log_tag());
         }
         if (!ifs_macro_confirmed_missing_) {
             has_ifs_vars_ = true;
@@ -382,7 +382,7 @@ void AmsBackendAd5xIfs::parse_save_variables(const json& vars) {
     } else if (vars.contains("less_waste_colors") || vars.contains("less_waste_tools")) {
         if (var_prefix_ != "less_waste") {
             var_prefix_ = "less_waste";
-            spdlog::info("{} Detected lessWaste variable prefix", backend_log_tag());
+            spdlog::debug("{} Detected lessWaste variable prefix", backend_log_tag());
         }
         if (!ifs_macro_confirmed_missing_) {
             has_ifs_vars_ = true;
@@ -1862,7 +1862,8 @@ void AmsBackendAd5xIfs::read_adventurer_json() {
         "config", "Adventurer5M.json",
         [this, token](const std::string& content) {
             // BG THREAD: log size from local-only data (tag string is constexpr).
-            spdlog::debug("[AMS AD5X-IFS] Downloaded Adventurer5M.json ({} bytes)",
+            // Demoted to trace (#981): this fires on every ~5s poll.
+            spdlog::trace("[AMS AD5X-IFS] Downloaded Adventurer5M.json ({} bytes)",
                           content.size());
             // MAIN THREAD: note_json_content takes mutex_ and parse_adventurer_json
             // mutates extensive member state.
@@ -2477,6 +2478,8 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
     std::string ifs_colors_payload;
     std::string ifs_types_payload;
     std::string ifs_var_prefix_snapshot;
+    std::string signature;
+    bool slots_changed = false;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -2520,6 +2523,17 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
                 continue;
             colors_[static_cast<size_t>(idx)] = hex;
             materials_[static_cast<size_t>(idx)] = type;
+
+            // Build a per-slot signature (count + color + material) so the
+            // "Loaded N slots" line below logs at INFO only when the parsed
+            // set actually changed since the last read. Unchanged ~5s polls
+            // are demoted to TRACE to keep the log tail clean.
+            signature.append(std::to_string(idx));
+            signature.push_back(':');
+            signature.append(hex);
+            signature.push_back('/');
+            signature.append(type);
+            signature.push_back(';');
 
             // Native ZMOD has no per-port switch sensors — infer presence from
             // Adventurer5M.json data. A non-empty color means filament is present;
@@ -2570,6 +2584,12 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             ifs_types_payload = build_type_list_value();
             ifs_var_prefix_snapshot = var_prefix_;
         }
+
+        // Change-detection (#981): demote the "Loaded N slots" line below to
+        // trace when the parsed set is identical to the previous poll, so the
+        // ~5s polling loop doesn't spam the log.
+        slots_changed = (signature != last_parsed_signature_);
+        last_parsed_signature_ = signature;
     } // release lock before emit_event + write_ifs_var (both take mutex_)
 
     if (needs_ifs_vars_push && has_ifs_vars_) {
@@ -2592,8 +2612,13 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
     }
 
     if (parsed_count > 0) {
-        spdlog::info("{} Loaded {} slots from Adventurer5M.json (native ZMOD)", backend_log_tag(),
-                     parsed_count);
+        if (slots_changed) {
+            spdlog::info("{} Loaded {} slots from Adventurer5M.json (native ZMOD)",
+                         backend_log_tag(), parsed_count);
+        } else {
+            spdlog::trace("{} Loaded {} slots from Adventurer5M.json (native ZMOD, unchanged)",
+                          backend_log_tag(), parsed_count);
+        }
         emit_event(EVENT_STATE_CHANGED);
     } else {
         spdlog::debug("{} No slot data found in Adventurer5M.json", backend_log_tag());
