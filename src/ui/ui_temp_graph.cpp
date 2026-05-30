@@ -422,8 +422,7 @@ static void draw_legend_cb(lv_event_t* e) {
     char sizing_buf[16];
     std::snprintf(sizing_buf, sizeof(sizing_buf), "+%d", visible_count);
     lv_point_t overflow_txt_size;
-    lv_text_get_size(&overflow_txt_size, sizing_buf, font, 0, 0, LV_COORD_MAX,
-                     LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&overflow_txt_size, sizing_buf, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     int32_t overflow_chip_w = chip_pad_h + overflow_txt_size.x + chip_pad_h;
 
     // Persistent string buffers for labels (LVGL may defer draw)
@@ -450,8 +449,7 @@ static void draw_legend_cb(lv_event_t* e) {
 
         // Reserve room for the +N pill only if more chips would follow this one.
         bool more_after_this = chips_remaining > 1;
-        int32_t budget =
-            available_x_max - (more_after_this ? (overflow_chip_w + chip_gap) : 0);
+        int32_t budget = available_x_max - (more_after_this ? (overflow_chip_w + chip_gap) : 0);
 
         if (x + chip_w > budget) {
             // No room for this chip (plus a future +N if applicable). If we
@@ -466,8 +464,7 @@ static void draw_legend_cb(lv_event_t* e) {
             static char overflow_buf[16];
             std::snprintf(overflow_buf, sizeof(overflow_buf), "+%d", chips_remaining);
             lv_point_t ov_size;
-            lv_text_get_size(&ov_size, overflow_buf, font, 0, 0, LV_COORD_MAX,
-                             LV_TEXT_FLAG_NONE);
+            lv_text_get_size(&ov_size, overflow_buf, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
             int32_t ov_w = chip_pad_h + ov_size.x + chip_pad_h;
 
             lv_draw_rect_dsc_t r_dsc;
@@ -665,8 +662,8 @@ static void draw_target_lines_cb(lv_event_t* e) {
         seg_dsc.dash_width = 6;
         seg_dsc.dash_gap = 4;
 
-        auto segments = helix::temp_graph_internal::segment_target_buf(
-            meta->target_centi_buf, meta->target_head);
+        auto segments = helix::temp_graph_internal::segment_target_buf(meta->target_centi_buf,
+                                                                       meta->target_head);
 
         for (const auto& seg : segments) {
             // Vertical riser at segment start (target transitioned from 0 → value).
@@ -677,8 +674,10 @@ static void draw_target_lines_cb(lv_event_t* e) {
                 int32_t riser_x = x_for_index(seg.first);
                 int32_t riser_y_top = y_for_centi(meta->target_centi_buf[seg.first]);
                 int32_t riser_y_bottom = y_for_centi(0); // baseline at 0°C
-                if (riser_y_bottom > cy2) riser_y_bottom = cy2;
-                if (riser_y_top < cy1) riser_y_top = cy1;
+                if (riser_y_bottom > cy2)
+                    riser_y_bottom = cy2;
+                if (riser_y_top < cy1)
+                    riser_y_top = cy1;
                 seg_dsc.p1.x = riser_x;
                 seg_dsc.p1.y = riser_y_bottom;
                 seg_dsc.p2.x = riser_x;
@@ -690,8 +689,8 @@ static void draw_target_lines_cb(lv_event_t* e) {
             // single line so a held setpoint draws one dashed line instead of
             // one sub-pixel line per sample (#979 — the per-frame cost that
             // froze the touch UI on slow 32-bit boards). Geometry is identical.
-            auto runs = helix::temp_graph_internal::coalesce_target_runs(
-                meta->target_centi_buf, seg.first, seg.second);
+            auto runs = helix::temp_graph_internal::coalesce_target_runs(meta->target_centi_buf,
+                                                                         seg.first, seg.second);
             for (const auto& run : runs) {
                 seg_dsc.p1.x = x_for_index(run.first);
                 seg_dsc.p1.y = y_for_centi(meta->target_centi_buf[run.first]);
@@ -1540,8 +1539,8 @@ void ui_temp_graph_set_series_data_with_targets(ui_temp_graph_t* graph, int seri
         }
     }
 
-    spdlog::trace("[TempGraph] Series {} '{}' data+targets set ({} points)", series_id,
-                  meta->name, points_to_copy);
+    spdlog::trace("[TempGraph] Series {} '{}' data+targets set ({} points)", series_id, meta->name,
+                  points_to_copy);
 }
 
 // Set X-axis timestamp tracking fields directly (no chart-buffer side effects).
