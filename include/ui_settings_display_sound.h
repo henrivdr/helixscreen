@@ -108,6 +108,7 @@ class DisplaySoundSettingsOverlay : public OverlayBase {
     void handle_volume_changed(int value);
     void handle_ui_sounds_changed(bool enabled);
     void handle_sound_theme_changed(int index);
+    void handle_audio_device_changed(int index);
     void handle_preview_sounds();
     void handle_test_tracker();
 
@@ -144,6 +145,7 @@ class DisplaySoundSettingsOverlay : public OverlayBase {
     void init_sounds_toggle();
     void init_volume_slider();
     void init_sound_theme_dropdown();
+    void init_audio_device_dropdown();
 
     //
     // === State (Display) ===
@@ -168,7 +170,6 @@ class DisplaySoundSettingsOverlay : public OverlayBase {
     /// Subject for brightness value label binding
     lv_subject_t brightness_value_subject_;
     char brightness_value_buf_[8]; // e.g., "100%"
-
 
     /// Subject for theme Apply button disabled state (1=disabled, 0=enabled)
     lv_subject_t theme_apply_disabled_subject_;
@@ -220,6 +221,7 @@ class DisplaySoundSettingsOverlay : public OverlayBase {
     static void on_volume_released(lv_event_t* e);
     static void on_ui_sounds_changed(lv_event_t* e);
     static void on_sound_theme_changed(lv_event_t* e);
+    static void on_audio_device_changed(lv_event_t* e);
     static void on_preview_sounds(lv_event_t* e);
     static void on_test_tracker(lv_event_t* e);
 };
