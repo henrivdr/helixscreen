@@ -50,8 +50,8 @@ class CfsTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.overrides_[slot_index] = ovr;
     }
-    static std::optional<helix::ams::FilamentSlotOverride>
-    get_override(const AmsBackendCfs& b, int slot_index) {
+    static std::optional<helix::ams::FilamentSlotOverride> get_override(const AmsBackendCfs& b,
+                                                                        int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         auto it = b.overrides_.find(slot_index);
         if (it == b.overrides_.end())
@@ -72,6 +72,22 @@ class CfsTestAccess {
     static helix::printer::CfsMacroVariant macro_variant(const AmsBackendCfs& b) {
         return b.macro_variant_;
     }
+    // Seed the nozzle-loaded signal + preloaded-slot index used by change_tool's
+    // WITH/WITHOUT-material selection (#968 Phase 2). filament_loaded reflects
+    // filament physically at the nozzle; current_slot can be a *preloaded*
+    // (cassette) slot with the nozzle still empty on K1 CFS.
+    static void set_loaded_state(AmsBackendCfs& b, bool filament_loaded, int current_slot) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.system_info_.filament_loaded = filament_loaded;
+        b.system_info_.current_slot = current_slot;
+    }
+    static void set_last_rfid_uid(AmsBackendCfs& b, int slot_index, const std::string& uid) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.last_rfid_uid_[slot_index] = uid;
+    }
+    static void set_macro_variant_k1(AmsBackendCfs& b) {
+        b.macro_variant_ = helix::printer::CfsMacroVariant::K1;
+    }
 };
 
 namespace {
@@ -88,6 +104,54 @@ struct CfsTmpCacheDir {
     ~CfsTmpCacheDir() {
         std::error_code ec;
         std::filesystem::remove_all(path, ec);
+    }
+};
+
+// Capturing backend subclass — records execute_gcode / dispatch_action_script
+// without a live Moonraker connection. Defined here (above the TEST_CASEs that
+// use it) so both the #968 selection/material tests and the later remap tests
+// can share it.
+class CfsRemapHelper : public AmsBackendCfs {
+  public:
+    CfsRemapHelper() : AmsBackendCfs(nullptr, nullptr) {}
+
+    // Capture gcode instead of dispatching to a real Moonraker connection.
+    AmsError execute_gcode(const std::string& gcode) override {
+        captured.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+
+    // Expose protected firmware-writeback helper for direct test calls.
+    // push_slot_color_to_firmware is protected (called from set_slot_info but
+    // not part of the public IAmsBackend surface).
+    using AmsBackendCfs::push_slot_color_to_firmware;
+
+    // Capture the assembled load/swap/unload script that change_tool /
+    // load_filament / unload_filament hand to dispatch_action_script. Returns
+    // success without touching a live Moonraker connection, so the WITH/WITHOUT-
+    // material selection (#968 Phase 2) is observable from tests.
+    AmsError dispatch_action_script(std::string gcode) override {
+        dispatched.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+
+    // Expose the protected started flag so change_tool's check_preconditions()
+    // passes without a live subscription.
+    void mark_running() {
+        running_ = true;
+    }
+
+    std::vector<std::string> captured;
+    std::vector<std::string> dispatched;
+};
+
+// K1-dialect variant of CfsRemapHelper. The macro_variant_ is normally latched
+// in the ctor from PrinterDetector; this subclass forces K1 so change_tool
+// selection tests exercise the BOX_* (not CR_BOX_*) builders.
+class CfsK1RemapHelper : public CfsRemapHelper {
+  public:
+    CfsK1RemapHelper() {
+        CfsTestAccess::set_macro_variant_k1(*this);
     }
 };
 } // namespace
@@ -151,12 +215,10 @@ TEST_CASE("CFS data model extensions", "[ams][cfs]") {
     SECTION("AmsSystemInfo has alerts vector") {
         AmsSystemInfo info;
         REQUIRE(info.alerts.empty());
-        info.alerts.push_back(AmsAlert{
-            .message = "test",
-            .hint = "fix it",
-            .error_code = "CFS-831",
-            .level = AmsAlertLevel::SYSTEM
-        });
+        info.alerts.push_back(AmsAlert{.message = "test",
+                                       .hint = "fix it",
+                                       .error_code = "CFS-831",
+                                       .level = AmsAlertLevel::SYSTEM});
         REQUIRE(info.alerts.size() == 1);
     }
 }
@@ -488,24 +550,21 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
     // BOX_GO_TO_EXTRUDE_POS / BOX_MOVE_TO_SAFE_POS envelope that mirrors
     // the K2 stock screen's LOAD_MATERIAL macro chain.
     SECTION("load gcode uses CR_BOX commands with TNN, wrapped in park envelope") {
-        const std::string expected_a =
-            "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
-            "BOX_SAVE_FAN\n"
-            "BOX_GO_TO_EXTRUDE_POS\n"
-            "BOX_MODE_WAIT\n"
-            "CR_BOX_PRE_OPT\nCR_BOX_EXTRUDE TNN=T1A\n"
-            "CR_BOX_WASTE\nCR_BOX_FLUSH TNN=T1A\nCR_BOX_END_OPT\n"
-            "BOX_NOZZLE_CLEAN\n"
-            "BOX_RESTORE_FAN\n"
-            "BOX_MOVE_TO_SAFE_POS\n"
-            "RESTORE_GCODE_STATE NAME=helix_cfs_load";
+        const std::string expected_a = "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
+                                       "BOX_SAVE_FAN\n"
+                                       "BOX_GO_TO_EXTRUDE_POS\n"
+                                       "BOX_MODE_WAIT\n"
+                                       "CR_BOX_PRE_OPT\nCR_BOX_EXTRUDE TNN=T1A\n"
+                                       "CR_BOX_WASTE\nCR_BOX_FLUSH TNN=T1A\nCR_BOX_END_OPT\n"
+                                       "BOX_NOZZLE_CLEAN\n"
+                                       "BOX_RESTORE_FAN\n"
+                                       "BOX_MOVE_TO_SAFE_POS\n"
+                                       "RESTORE_GCODE_STATE NAME=helix_cfs_load";
         REQUIRE(AmsBackendCfs::load_gcode(0) == expected_a);
 
         REQUIRE(AmsBackendCfs::load_gcode(1).find("TNN=T1B") != std::string::npos);
-        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_GO_TO_EXTRUDE_POS") !=
-                std::string::npos);
-        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_MOVE_TO_SAFE_POS") !=
-                std::string::npos);
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
         // Envelope: mode-wait + fan save/restore around the op.
         // No BOX_SET_TEMP — we deliberately don't lower a hotter pre-set
         // extruder target (e.g. PETG @ 240°C); cold extruders surface a
@@ -515,8 +574,7 @@ TEST_CASE("CFS GCode helpers", "[ams][cfs]") {
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_SAVE_FAN") != std::string::npos);
         REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_RESTORE_FAN") != std::string::npos);
         // Load ends with fresh filament in the nozzle — wipe before parking.
-        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_NOZZLE_CLEAN") !=
-                std::string::npos);
+        REQUIRE(AmsBackendCfs::load_gcode(1).find("BOX_NOZZLE_CLEAN") != std::string::npos);
 
         REQUIRE(AmsBackendCfs::load_gcode(4).find("TNN=T2A") != std::string::npos);
     }
@@ -568,15 +626,22 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
     // CR_BOX_* command returns key61 "Unknown command".
     using V = helix::printer::CfsMacroVariant;
 
-    SECTION("K1 load gcode uses BOX_* primitives with TNN, simpler envelope") {
-        const std::string expected_a =
-            "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
-            "BOX_GO_TO_EXTRUDE_POS\n"
-            "BOX_EXTRUDE_MATERIAL TNN=T1A\n"
-            "BOX_MATERIAL_FLUSH TNN=T1A\n"
-            "BOX_NOZZLE_CLEAN\n"
-            "BOX_MOVE_TO_SAFE_POS\n"
-            "RESTORE_GCODE_STATE NAME=helix_cfs_load";
+    SECTION("K1 load gcode mirrors BOX_LOAD_MATERIAL_WITHOUT_MATERIAL (#968)") {
+        // Fresh load, nozzle empty. Mirrors the firmware
+        // BOX_LOAD_MATERIAL_WITHOUT_MATERIAL step list with explicit TNN=, and
+        // ADDS the missing BOX_EXTRUDER_EXTRUDE (root cause of "no auto-extrude
+        // after load"). All commands are confirmed-present in the reporter's
+        // box.cfg. Homing is handled upstream by dispatch_action_script.
+        const std::string expected_a = "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
+                                       "BOX_ERROR_CLEAR\n"
+                                       "BOX_CHECK_MATERIAL\n"
+                                       "BOX_GO_TO_EXTRUDE_POS\n"
+                                       "BOX_EXTRUDE_MATERIAL TNN=T1A\n"
+                                       "BOX_EXTRUDER_EXTRUDE TNN=T1A\n"
+                                       "BOX_MATERIAL_FLUSH TNN=T1A\n"
+                                       "BOX_NOZZLE_CLEAN\n"
+                                       "BOX_MOVE_TO_SAFE_POS\n"
+                                       "RESTORE_GCODE_STATE NAME=helix_cfs_load";
         REQUIRE(AmsBackendCfs::load_gcode(0, V::K1) == expected_a);
 
         // No CR_BOX_* primitives on K1.
@@ -584,10 +649,24 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
         REQUIRE(g.find("CR_BOX_") == std::string::npos);
         REQUIRE(g.find("TNN=T1B") != std::string::npos);
 
+        // The fix: BOX_EXTRUDER_EXTRUDE must appear between EXTRUDE and FLUSH.
+        const auto pos_extrude = g.find("BOX_EXTRUDE_MATERIAL TNN=T1B");
+        const auto pos_extruder = g.find("BOX_EXTRUDER_EXTRUDE TNN=T1B");
+        const auto pos_flush = g.find("BOX_MATERIAL_FLUSH TNN=T1B");
+        REQUIRE(pos_extrude != std::string::npos);
+        REQUIRE(pos_extruder != std::string::npos);
+        REQUIRE(pos_flush != std::string::npos);
+        REQUIRE(pos_extrude < pos_extruder);
+        REQUIRE(pos_extruder < pos_flush);
+
         // K1 firmware lacks fan-save and mode-wait — must not be emitted.
         REQUIRE(g.find("BOX_SAVE_FAN") == std::string::npos);
         REQUIRE(g.find("BOX_RESTORE_FAN") == std::string::npos);
         REQUIRE(g.find("BOX_MODE_WAIT") == std::string::npos);
+
+        // Fresh load mirror must NOT cut (nozzle is empty).
+        REQUIRE(g.find("BOX_CUT_MATERIAL") == std::string::npos);
+        REQUIRE(g.find("BOX_RETRUDE_MATERIAL") == std::string::npos);
 
         // Envelope helpers that K1 DOES support.
         REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
@@ -599,10 +678,12 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
         // K1 firmware (per K1-Max box.cfg) uses the same TNN encoding as K2.
         // Spot-check first slot of each unit + last slot to lock in the
         // CfsMaterialDb::slot_to_tnn translation under the K1 path.
-        struct Case { int idx; const char* tnn; };
-        for (const auto& c : {Case{0, "T1A"}, Case{1, "T1B"}, Case{3, "T1D"},
-                              Case{4, "T2A"}, Case{8, "T3A"}, Case{12, "T4A"},
-                              Case{15, "T4D"}}) {
+        struct Case {
+            int idx;
+            const char* tnn;
+        };
+        for (const auto& c : {Case{0, "T1A"}, Case{1, "T1B"}, Case{3, "T1D"}, Case{4, "T2A"},
+                              Case{8, "T3A"}, Case{12, "T4A"}, Case{15, "T4D"}}) {
             const std::string g = AmsBackendCfs::load_gcode(c.idx, V::K1);
             const std::string needle = std::string("TNN=") + c.tnn;
             INFO("idx=" << c.idx << " expected " << needle);
@@ -613,36 +694,46 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
         REQUIRE(AmsBackendCfs::load_gcode(16, V::K1).empty());
     }
 
-    SECTION("K1 unload gcode exact match") {
-        const std::string expected =
-            "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
-            "BOX_GO_TO_EXTRUDE_POS\n"
-            "BOX_CUT_MATERIAL\n"
-            "BOX_RETRUDE_MATERIAL\n"
-            "BOX_MOVE_TO_SAFE_POS\n"
-            "RESTORE_GCODE_STATE NAME=helix_cfs_load";
+    SECTION("K1 unload gcode mirrors BOX_QUIT_MATERIAL (#968)") {
+        // Mirrors the firmware BOX_QUIT_MATERIAL step list:
+        // ERROR_CLEAR → CHECK_MATERIAL → CUT → RETRUDE → safe park.
+        const std::string expected = "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
+                                     "BOX_ERROR_CLEAR\n"
+                                     "BOX_CHECK_MATERIAL\n"
+                                     "BOX_CUT_MATERIAL\n"
+                                     "BOX_RETRUDE_MATERIAL\n"
+                                     "BOX_MOVE_TO_SAFE_POS\n"
+                                     "RESTORE_GCODE_STATE NAME=helix_cfs_load";
         REQUIRE(AmsBackendCfs::unload_gcode(V::K1) == expected);
         // Sanity: no K2-only macros leaked in.
         const std::string g = AmsBackendCfs::unload_gcode(V::K1);
         REQUIRE(g.find("CR_BOX_") == std::string::npos);
         REQUIRE(g.find("BOX_MODE_WAIT") == std::string::npos);
         REQUIRE(g.find("BOX_SAVE_FAN") == std::string::npos);
+        // Cut + retrude present.
+        REQUIRE(g.find("BOX_CUT_MATERIAL") != std::string::npos);
+        REQUIRE(g.find("BOX_RETRUDE_MATERIAL") != std::string::npos);
         // Nozzle empty post-cut → no wipe.
         REQUIRE(g.find("BOX_NOZZLE_CLEAN") == std::string::npos);
     }
 
-    SECTION("K1 swap gcode exact match for slot 5 (T2B)") {
-        const std::string expected =
-            "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
-            "BOX_GO_TO_EXTRUDE_POS\n"
-            "BOX_CUT_MATERIAL\n"
-            "BOX_RETRUDE_MATERIAL\n"
-            "BOX_EXTRUDE_MATERIAL TNN=T2B\n"
-            "BOX_MATERIAL_FLUSH TNN=T2B\n"
-            "BOX_NOZZLE_CLEAN\n"
-            "BOX_MOVE_TO_SAFE_POS\n"
-            "RESTORE_GCODE_STATE NAME=helix_cfs_load";
+    SECTION("K1 swap gcode mirrors BOX_LOAD_MATERIAL_WITH_MATERIAL for slot 5 (T2B) (#968)") {
+        // Nozzle loaded: cut old, retract, position, clean, then load new slot
+        // with the missing BOX_EXTRUDER_EXTRUDE between EXTRUDE and FLUSH.
+        const std::string expected = "SAVE_GCODE_STATE NAME=helix_cfs_load\n"
+                                     "BOX_ERROR_CLEAR\n"
+                                     "BOX_CHECK_MATERIAL\n"
+                                     "BOX_CUT_MATERIAL\n"
+                                     "BOX_RETRUDE_MATERIAL\n"
+                                     "BOX_GO_TO_EXTRUDE_POS\n"
+                                     "BOX_NOZZLE_CLEAN\n"
+                                     "BOX_EXTRUDE_MATERIAL TNN=T2B\n"
+                                     "BOX_EXTRUDER_EXTRUDE TNN=T2B\n"
+                                     "BOX_MATERIAL_FLUSH TNN=T2B\n"
+                                     "BOX_MOVE_TO_SAFE_POS\n"
+                                     "RESTORE_GCODE_STATE NAME=helix_cfs_load";
         REQUIRE(AmsBackendCfs::swap_gcode(5, V::K1) == expected);
+        REQUIRE(expected.find("CR_BOX_") == std::string::npos);
     }
 
     SECTION("K1 swap spot checks across slot range") {
@@ -652,7 +743,11 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
             REQUIRE(g.find("BOX_CUT_MATERIAL") != std::string::npos);
             REQUIRE(g.find("BOX_RETRUDE_MATERIAL") != std::string::npos);
             REQUIRE(g.find("BOX_EXTRUDE_MATERIAL TNN=") != std::string::npos);
+            REQUIRE(g.find("BOX_EXTRUDER_EXTRUDE TNN=") != std::string::npos);
             REQUIRE(g.find("BOX_MATERIAL_FLUSH TNN=") != std::string::npos);
+            // The missing extrude primitive must sit between EXTRUDE and FLUSH.
+            REQUIRE(g.find("BOX_EXTRUDE_MATERIAL TNN=") < g.find("BOX_EXTRUDER_EXTRUDE TNN="));
+            REQUIRE(g.find("BOX_EXTRUDER_EXTRUDE TNN=") < g.find("BOX_MATERIAL_FLUSH TNN="));
             // Swap ends with flush of new slot — wipe before parking.
             REQUIRE(g.find("BOX_NOZZLE_CLEAN") != std::string::npos);
             REQUIRE(g.find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
@@ -666,19 +761,26 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
         // BOX_SAVE_FAN/RESTORE_FAN/BOX_MODE_WAIT for the K1 path would send
         // the printer back into key61 territory (#968).
         for (const std::string& g :
-             {AmsBackendCfs::load_gcode(0, V::K1),
-              AmsBackendCfs::unload_gcode(V::K1),
+             {AmsBackendCfs::load_gcode(0, V::K1), AmsBackendCfs::unload_gcode(V::K1),
               AmsBackendCfs::swap_gcode(0, V::K1)}) {
             REQUIRE(g.find("BOX_SAVE_FAN") == std::string::npos);
             REQUIRE(g.find("BOX_RESTORE_FAN") == std::string::npos);
             REQUIRE(g.find("BOX_MODE_WAIT") == std::string::npos);
             REQUIRE(g.find("CR_BOX_") == std::string::npos);
-            // Envelope helpers the K1 firmware DOES expose are present.
-            REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
+            // Save/restore + park are common to all three K1 operations.
             REQUIRE(g.find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
             REQUIRE(g.find("SAVE_GCODE_STATE NAME=helix_cfs_load") != std::string::npos);
             REQUIRE(g.find("RESTORE_GCODE_STATE NAME=helix_cfs_load") != std::string::npos);
         }
+        // BOX_GO_TO_EXTRUDE_POS positions the toolhead over the waste port
+        // before feeding fresh filament — load + swap need it, unload does NOT
+        // (the BOX_QUIT_MATERIAL mirror only cuts + retracts, then parks).
+        REQUIRE(AmsBackendCfs::load_gcode(0, V::K1).find("BOX_GO_TO_EXTRUDE_POS") !=
+                std::string::npos);
+        REQUIRE(AmsBackendCfs::swap_gcode(0, V::K1).find("BOX_GO_TO_EXTRUDE_POS") !=
+                std::string::npos);
+        REQUIRE(AmsBackendCfs::unload_gcode(V::K1).find("BOX_GO_TO_EXTRUDE_POS") ==
+                std::string::npos);
     }
 
     SECTION("K2 default preserved when variant omitted") {
@@ -689,8 +791,80 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
     }
 }
 
-TEST_CASE("CFS backend ctor latches macro variant from PrinterDetector (#968)",
-          "[ams][cfs]") {
+// =============================================================================
+// #968 Phase 2 — WITH/WITHOUT-material selection keys on filament-at-nozzle,
+// NOT a preloaded (cassette) slot. K1 CFS reports a preloaded slot index with
+// the nozzle still EMPTY; cutting in that state is the reporter's "hallucinated
+// cut on empty nozzle" bug.
+// =============================================================================
+TEST_CASE("CFS change_tool selects load-vs-swap from filament_loaded (#968)", "[ams][cfs][k1]") {
+    CfsK1RemapHelper backend;
+    backend.mark_running();
+
+    SECTION("nozzle EMPTY but slot preloaded → fresh load (no cut)") {
+        // The exact K1 CFS state from the report: current_slot >= 0 (a cassette
+        // is staged) but filament_loaded == false (nothing at the nozzle yet).
+        CfsTestAccess::set_loaded_state(backend, /*filament_loaded=*/false,
+                                        /*current_slot=*/2);
+        REQUIRE(backend.change_tool(0).result == AmsResult::SUCCESS);
+        REQUIRE(backend.dispatched.size() == 1);
+        const std::string& g = backend.dispatched[0];
+        // Fresh load mirror — NO cut/retract.
+        REQUIRE(g.find("BOX_CUT_MATERIAL") == std::string::npos);
+        REQUIRE(g.find("BOX_RETRUDE_MATERIAL") == std::string::npos);
+        // Load primitives present, including the EXTRUDER_EXTRUDE fix.
+        REQUIRE(g.find("BOX_EXTRUDE_MATERIAL TNN=T1A") != std::string::npos);
+        REQUIRE(g.find("BOX_EXTRUDER_EXTRUDE TNN=T1A") != std::string::npos);
+    }
+
+    SECTION("filament physically at nozzle → swap (cut first)") {
+        CfsTestAccess::set_loaded_state(backend, /*filament_loaded=*/true,
+                                        /*current_slot=*/2);
+        REQUIRE(backend.change_tool(0).result == AmsResult::SUCCESS);
+        REQUIRE(backend.dispatched.size() == 1);
+        const std::string& g = backend.dispatched[0];
+        // Swap mirror — cut + retract the old filament before loading new.
+        REQUIRE(g.find("BOX_CUT_MATERIAL") != std::string::npos);
+        REQUIRE(g.find("BOX_RETRUDE_MATERIAL") != std::string::npos);
+        REQUIRE(g.find("BOX_EXTRUDE_MATERIAL TNN=T1A") != std::string::npos);
+        REQUIRE(g.find("BOX_EXTRUDER_EXTRUDE TNN=T1A") != std::string::npos);
+    }
+}
+
+// =============================================================================
+// push_slot_color_to_firmware is color-only: it emits a single
+// BOX_MODIFY_TN_DATA PART=color_value write. Changing the material *type* on CFS
+// is unsupported (no name->code forward map), so no material_type write is ever
+// emitted. Same ADDR/NUM validation + invalid-skip guard as before.
+// =============================================================================
+TEST_CASE("CFS push_slot_color_to_firmware writes color only", "[ams][cfs][firmware_writeback]") {
+    CfsRemapHelper helper;
+
+    SECTION("valid slot → single color_value write, no material_type") {
+        helper.push_slot_color_to_firmware(0, 0xFF0000);
+        REQUIRE(helper.captured.size() == 1);
+        REQUIRE(helper.captured[0] ==
+                "BOX_MODIFY_TN_DATA ADDR=1 NUM=A PART=color_value DATA=0FF0000");
+        REQUIRE(helper.captured[0].find("PART=material_type") == std::string::npos);
+    }
+
+    SECTION("a known RFID fingerprint does NOT trigger a material_type write") {
+        // Fingerprint format is "<raw_material_type>|<raw_color_value>". Even
+        // when present, color push stays color-only — material type is firmware
+        // territory we don't write back.
+        CfsTestAccess::set_last_rfid_uid(helper, 5, "101001|0FF0000");
+        helper.push_slot_color_to_firmware(5, 0x00FF00);
+        REQUIRE(helper.captured.size() == 1);
+        REQUIRE(helper.captured[0].find("PART=material_type") == std::string::npos);
+    }
+
+    SECTION("invalid slot index skips the write (must not crash klippy)") {
+        helper.push_slot_color_to_firmware(99, 0xFF0000);
+        REQUIRE(helper.captured.empty());
+    }
+}
+
+TEST_CASE("CFS backend ctor latches macro variant from PrinterDetector (#968)", "[ams][cfs]") {
     // The constructor reads PrinterDetector::is_creality_k1() once and caches
     // the result. Verify both routes resolve correctly.
     auto* config = Config::get_instance();
@@ -701,37 +875,32 @@ TEST_CASE("CFS backend ctor latches macro variant from PrinterDetector (#968)",
     SECTION("K1C printer type → K1 dialect") {
         config->set<std::string>(type_path, "Creality K1C");
         AmsBackendCfs backend(nullptr, nullptr);
-        REQUIRE(CfsTestAccess::macro_variant(backend) ==
-                helix::printer::CfsMacroVariant::K1);
+        REQUIRE(CfsTestAccess::macro_variant(backend) == helix::printer::CfsMacroVariant::K1);
     }
 
     SECTION("K1 Max printer type → K1 dialect") {
         config->set<std::string>(type_path, "Creality K1 Max");
         AmsBackendCfs backend(nullptr, nullptr);
-        REQUIRE(CfsTestAccess::macro_variant(backend) ==
-                helix::printer::CfsMacroVariant::K1);
+        REQUIRE(CfsTestAccess::macro_variant(backend) == helix::printer::CfsMacroVariant::K1);
     }
 
     SECTION("K2 Plus printer type → K2 dialect") {
         config->set<std::string>(type_path, "Creality K2 Plus");
         AmsBackendCfs backend(nullptr, nullptr);
-        REQUIRE(CfsTestAccess::macro_variant(backend) ==
-                helix::printer::CfsMacroVariant::K2);
+        REQUIRE(CfsTestAccess::macro_variant(backend) == helix::printer::CfsMacroVariant::K2);
     }
 
     SECTION("Unset printer type → K2 dialect (safe default)") {
         config->set<std::string>(type_path, "");
         AmsBackendCfs backend(nullptr, nullptr);
-        REQUIRE(CfsTestAccess::macro_variant(backend) ==
-                helix::printer::CfsMacroVariant::K2);
+        REQUIRE(CfsTestAccess::macro_variant(backend) == helix::printer::CfsMacroVariant::K2);
     }
 
     // Restore prior config so we don't bleed into adjacent tests.
     config->set<std::string>(type_path, saved);
 }
 
-TEST_CASE("PrinterDiscovery enables CFS for K1 box object (#968 gate)",
-          "[ams][cfs][discovery]") {
+TEST_CASE("PrinterDiscovery enables CFS for K1 box object (#968 gate)", "[ams][cfs][discovery]") {
     // Before 6ebe7417b: K1 + `box` → no CFS, warn log.
     // After the #968 fix flip: K1 + `box` → CFS enabled, K1 dialect chosen
     // downstream by AmsBackendCfs ctor.
@@ -842,28 +1011,7 @@ TEST_CASE("CFS parse_box_status infers active slot from tool map", "[ams][cfs]")
 // CFS BOX_MODIFY_TN tool remap (set_tool_mapping)
 // =============================================================================
 
-namespace {
-class CfsRemapHelper : public AmsBackendCfs {
-  public:
-    CfsRemapHelper() : AmsBackendCfs(nullptr, nullptr) {}
-
-    // Capture gcode instead of dispatching to a real Moonraker connection.
-    AmsError execute_gcode(const std::string& gcode) override {
-        captured.push_back(gcode);
-        return AmsErrorHelper::success();
-    }
-
-    // Expose protected firmware-writeback helper for direct test calls.
-    // push_slot_color_to_firmware is protected (called from set_slot_info but
-    // not part of the public IAmsBackend surface).
-    using AmsBackendCfs::push_slot_color_to_firmware;
-
-    std::vector<std::string> captured;
-};
-} // namespace
-
-TEST_CASE("CFS set_tool_mapping emits BOX_MODIFY_TN with TNN keys/values",
-          "[ams][cfs][remap]") {
+TEST_CASE("CFS set_tool_mapping emits BOX_MODIFY_TN with TNN keys/values", "[ams][cfs][remap]") {
     CfsRemapHelper helper;
 
     SECTION("Identity within unit 1: T1A → T1A") {
@@ -908,8 +1056,8 @@ TEST_CASE("CFS set_tool_mapping emits BOX_MODIFY_TN with TNN keys/values",
     SECTION("Multiple calls send gcode in order") {
         REQUIRE(helper.set_tool_mapping(0, 1).result == AmsResult::SUCCESS);
         REQUIRE(helper.set_tool_mapping(2, 7).result == AmsResult::SUCCESS);
-        REQUIRE(helper.captured == std::vector<std::string>{"BOX_MODIFY_TN T1A=T1B",
-                                                              "BOX_MODIFY_TN T1C=T2D"});
+        REQUIRE(helper.captured ==
+                std::vector<std::string>{"BOX_MODIFY_TN T1A=T1B", "BOX_MODIFY_TN T1C=T2D"});
     }
 }
 
@@ -1000,8 +1148,7 @@ TEST_CASE("CFS set_tool_mapping updates local tool_to_slot_map", "[ams][cfs][rem
     // successful set_tool_mapping, the restore path would be a no-op.
     CfsRemapHelper helper;
     auto status = make_cfs_status_json();
-    json notification = {{"method", "notify_status_update"},
-                         {"params", json::array({status, 0})}};
+    json notification = {{"method", "notify_status_update"}, {"params", json::array({status, 0})}};
     CfsTestAccess::handle_status(helper, notification);
 
     auto baseline = helper.get_tool_mapping();
@@ -1110,9 +1257,8 @@ TEST_CASE("CFS override loaded at init is applied over firmware data",
 
     // Firmware reports slot 0 with DIFFERENT color and material code (firmware
     // material db lookup resolves code "101001" -> PLA/Creality).
-    json box = make_single_unit_box(
-        {"101001", "101001", "101001", "101001"},
-        {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box));
 
     auto info = backend.get_slot_info(0);
@@ -1141,13 +1287,14 @@ TEST_CASE("CFS migrates from helix-screen:cfs_slot_overrides on first startup",
     // Seed legacy namespace with a PLA Orange override on slot 0. lane_data is
     // untouched -> forces migration.
     json legacy = {
-        {"0", {
-            {"brand", "Polymaker"},
-            {"material", "PLA"},
-            {"color_rgb", 0xFF5500},
-            {"spoolman_id", 42},
-            {"spool_name", "PolyLite Orange"},
-        }},
+        {"0",
+         {
+             {"brand", "Polymaker"},
+             {"material", "PLA"},
+             {"color_rgb", 0xFF5500},
+             {"spoolman_id", 42},
+             {"spool_name", "PolyLite Orange"},
+         }},
     };
     api.mock_set_db_value("helix-screen", "cfs_slot_overrides", legacy);
 
@@ -1187,9 +1334,8 @@ TEST_CASE("CFS set_slot_info(persist=true) writes to store",
     CfsTestAccess::inject_override_store(backend, std::move(store));
 
     // Prime the backend with 4 slots so set_slot_info's index check passes.
-    json box = make_single_unit_box(
-        {"101001", "101001", "101001", "101001"},
-        {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box));
 
     SlotInfo edit;
@@ -1235,9 +1381,8 @@ TEST_CASE("CFS set_slot_info(persist=false) does NOT write to store",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     CfsTestAccess::inject_override_store(backend, std::move(store));
 
-    json box = make_single_unit_box(
-        {"101001", "101001", "101001", "101001"},
-        {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box));
 
     SlotInfo edit;
@@ -1291,11 +1436,9 @@ TEST_CASE("CFS RFID fingerprint change clears override (hardware swap detected)"
 
     // Seed override AND the corresponding DB entry so we can verify
     // clear_async deletes it on swap.
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"},
-                               {"spool_id", 42},
-                               {"material", "PLA"},
-                               {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        json{{"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -1307,9 +1450,8 @@ TEST_CASE("CFS RFID fingerprint change clears override (hardware swap detected)"
 
     // First parse: material=101001, color=0FF5500 establishes the baseline.
     // No clear.
-    json box1 = make_single_unit_box(
-        {"101001", "101001", "101001", "101001"},
-        {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box1 = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                     {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box1));
 
     REQUIRE(CfsTestAccess::get_override(backend, 0).has_value());
@@ -1329,9 +1471,8 @@ TEST_CASE("CFS RFID fingerprint change clears override (hardware swap detected)"
     //
     // So the post-swap state is: override exists with ONLY firmware fields,
     // lane_data contains the new color/material (no stale user metadata).
-    json box2 = make_single_unit_box(
-        {"102001", "101001", "101001", "101001"},
-        {"000FF00", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box2 = make_single_unit_box({"102001", "101001", "101001", "101001"},
+                                     {"000FF00", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box2));
 
     CHECK(CfsTestAccess::last_rfid_uid(backend, 0) == "102001|000FF00");
@@ -1383,8 +1524,7 @@ TEST_CASE("CFS first RFID observation does NOT clear override",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     CfsTestAccess::inject_override_store(backend, std::move(store));
 
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"}, {"spool_id", 42}});
+    api.mock_set_db_value("lane_data", "lane1", json{{"vendor", "Polymaker"}, {"spool_id", 42}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -1394,9 +1534,8 @@ TEST_CASE("CFS first RFID observation does NOT clear override",
 
     // Firmware reports a fingerprint on the FIRST observation — no prior
     // baseline, so this must NOT trigger a clear. Override survives.
-    json box = make_single_unit_box(
-        {"999001", "101001", "101001", "101001"},
-        {"0123456", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box = make_single_unit_box({"999001", "101001", "101001", "101001"},
+                                    {"0123456", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box));
 
     auto staged = CfsTestAccess::get_override(backend, 0);
@@ -1429,8 +1568,7 @@ TEST_CASE("CFS empty RFID fingerprint does not update baseline or clear",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     CfsTestAccess::inject_override_store(backend, std::move(store));
 
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"}, {"spool_id", 42}});
+    api.mock_set_db_value("lane_data", "lane1", json{{"vendor", "Polymaker"}, {"spool_id", 42}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -1438,17 +1576,15 @@ TEST_CASE("CFS empty RFID fingerprint does not update baseline or clear",
     CfsTestAccess::seed_override(backend, 0, ovr);
 
     // First parse: valid fingerprint — baseline established.
-    json box1 = make_single_unit_box(
-        {"101001", "101001", "101001", "101001"},
-        {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box1 = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                     {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box1));
     REQUIRE(CfsTestAccess::last_rfid_uid(backend, 0) == "101001|0FF5500");
 
     // Second parse: slot 0 has SENTINEL material_type and color — empty
     // fingerprint. Must NOT update baseline and must NOT clear the override.
-    json box2 = make_single_unit_box(
-        {"-1", "101001", "101001", "101001"},
-        {"-1", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box2 = make_single_unit_box({"-1", "101001", "101001", "101001"},
+                                     {"-1", "0FFFFFF", "00A2989", "0C12E1F"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box2));
     CHECK(CfsTestAccess::last_rfid_uid(backend, 0) == "101001|0FF5500"); // unchanged
     CHECK(CfsTestAccess::get_override(backend, 0).has_value());
@@ -1487,9 +1623,8 @@ TEST_CASE("CFS override preserved across unchanged parses",
     CfsTestAccess::seed_override(backend, 0, ovr);
 
     // Multiple parses with the SAME fingerprint — override must persist.
-    json box = make_single_unit_box(
-        {"101001", "101001", "101001", "101001"},
-        {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
 
     for (int i = 0; i < 3; ++i) {
         CfsTestAccess::handle_status(backend, make_cfs_notification(box));

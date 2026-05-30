@@ -62,15 +62,15 @@ class CfsMaterialDb {
 class CfsErrorDecoder {
   public:
     /// Decode a CFS error code. Returns nullopt for unknown codes.
-    static std::optional<AmsAlert> decode(const std::string& key_code,
-                                          int unit_index, int slot_index);
+    static std::optional<AmsAlert> decode(const std::string& key_code, int unit_index,
+                                          int slot_index);
 
     /// Look up just the message+hint for a code, without slot/unit context.
     /// Used by the global gcode-error toast handler to translate raw Klipper
     /// `!! {"code":"key***","msg":"..."}` lines into friendly text.
     /// Returns {message, hint} or nullopt for unknown codes.
     static std::optional<std::pair<const char*, const char*>>
-        lookup_message(const std::string& key_code);
+    lookup_message(const std::string& key_code);
 
     /// Variant that splices the `values` array (e.g. `[1,"B"]` from
     /// `!! {"code":"key849","values":[1,"B"]}`) into the user-facing
@@ -79,8 +79,7 @@ class CfsErrorDecoder {
     /// concatenation. Falls back to the un-augmented message+hint when
     /// the values shape is unknown for that code.
     static std::optional<std::pair<std::string, std::string>>
-        lookup_message_with_values(const std::string& key_code,
-                                    const nlohmann::json& values);
+    lookup_message_with_values(const std::string& key_code, const nlohmann::json& values);
 };
 
 /// Macro dialect emitted by the CFS backend.
@@ -108,14 +107,18 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
   public:
     AmsBackendCfs(MoonrakerAPI* api, helix::MoonrakerClient* client);
 
-    [[nodiscard]] AmsType get_type() const override { return AmsType::CFS; }
+    [[nodiscard]] AmsType get_type() const override {
+        return AmsType::CFS;
+    }
 
     // State queries
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
 
     // Path visualization
-    [[nodiscard]] PathTopology get_topology() const override { return PathTopology::HUB; }
+    [[nodiscard]] PathTopology get_topology() const override {
+        return PathTopology::HUB;
+    }
     [[nodiscard]] PathSegment get_filament_segment() const override;
     [[nodiscard]] PathSegment get_slot_filament_segment(int slot_index) const override;
     [[nodiscard]] PathSegment infer_error_segment() const override;
@@ -128,6 +131,16 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     AmsError reset() override;
     AmsError recover() override;
     AmsError cancel() override;
+
+    // Load-vs-swap decision. K1 official CFS upgrade firmware reports a
+    // *preloaded* (cassette-staged) slot via current_slot with the nozzle still
+    // empty, so on K1 only filament_loaded implies a cut-before-load is needed.
+    // K2 keeps the base behavior (filament_loaded OR current_slot >= 0). (#968)
+    [[nodiscard]] bool needs_unload_before_load(const AmsSystemInfo& info) const override {
+        return macro_variant_ == CfsMacroVariant::K1
+                   ? info.filament_loaded
+                   : (info.filament_loaded || info.current_slot >= 0);
+    }
 
     // Slot management (user overrides persisted via shared FilamentSlotOverrideStore)
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
@@ -146,7 +159,9 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     // Bypass (not supported)
     AmsError enable_bypass() override;
     AmsError disable_bypass() override;
-    [[nodiscard]] bool is_bypass_active() const override { return false; }
+    [[nodiscard]] bool is_bypass_active() const override {
+        return false;
+    }
 
     // Capabilities
     [[nodiscard]] helix::printer::EndlessSpoolCapabilities
@@ -154,10 +169,18 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     [[nodiscard]] helix::printer::ToolMappingCapabilities
     get_tool_mapping_capabilities() const override;
     [[nodiscard]] std::vector<int> get_tool_mapping() const override;
-    [[nodiscard]] bool supports_auto_heat_on_load() const override { return true; }
-    [[nodiscard]] bool has_environment_sensors() const override { return true; }
-    [[nodiscard]] bool tracks_weight_locally() const override { return false; }
-    [[nodiscard]] bool manages_active_spool() const override { return false; }
+    [[nodiscard]] bool supports_auto_heat_on_load() const override {
+        return true;
+    }
+    [[nodiscard]] bool has_environment_sensors() const override {
+        return true;
+    }
+    [[nodiscard]] bool tracks_weight_locally() const override {
+        return false;
+    }
+    [[nodiscard]] bool manages_active_spool() const override {
+        return false;
+    }
     [[nodiscard]] std::vector<helix::printer::DeviceAction> get_device_actions() const override;
     AmsError execute_device_action(const std::string& action_id,
                                    const std::any& value = {}) override;
@@ -176,7 +199,9 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
 
   protected:
     void handle_status_update(const nlohmann::json& notification) override;
-    const char* backend_log_tag() const override { return "[AMS CFS]"; }
+    const char* backend_log_tag() const override {
+        return "[AMS CFS]";
+    }
     void on_started() override;
 
     /// Push the user's chosen color back to firmware via the undocumented
@@ -226,7 +251,10 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// CR_BOX_EXTRUDE* (step 2 of 5). The remaining `CR_BOX_WASTE` and
     /// `CR_BOX_FLUSH` (~3 min of nozzle-at-240 °C extrusion) ran while the
     /// UI told the user the load was idle.
-    AmsError dispatch_action_script(std::string gcode);
+    /// Marked virtual so test subclasses can capture the assembled load/swap/
+    /// unload script (and the WITH/WITHOUT-material selection that produced it)
+    /// without a live Moonraker connection.
+    virtual AmsError dispatch_action_script(std::string gcode);
 
     /// Layer a configured FilamentSlotOverride for `slot_index` over `slot`,
     /// mutating `slot` in place. Override wins for every non-default field;
@@ -288,14 +316,14 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     // and overwrite system_info_.action so the UI's existing step mapping
     // shows the correct phase. All access under mutex_.
     struct PhaseTracker {
-        bool active = false;                  // true between dispatch and on_complete/on_error
-        bool started_with_filament = false;   // filament_detected at op start
-        bool seen_filament_drop = false;      // true→false transition (cut completed)
-        bool seen_filament_rise = false;      // false→true transition after a drop (new filament fed)
-        bool reached_target_once = false;     // current_temp ever within 5°C of target this op
-        bool pending_purge_target = false;    // target rose >10°C above baseline (waits for rise)
-        bool seen_purge_signal = false;       // pending_purge_target gated by seen_filament_rise
-        int  baseline_target_centi = 0;       // extruder target when heating first completed
+        bool active = false;                // true between dispatch and on_complete/on_error
+        bool started_with_filament = false; // filament_detected at op start
+        bool seen_filament_drop = false;    // true→false transition (cut completed)
+        bool seen_filament_rise = false;  // false→true transition after a drop (new filament fed)
+        bool reached_target_once = false; // current_temp ever within 5°C of target this op
+        bool pending_purge_target = false; // target rose >10°C above baseline (waits for rise)
+        bool seen_purge_signal = false;    // pending_purge_target gated by seen_filament_rise
+        int baseline_target_centi = 0;     // extruder target when heating first completed
     };
     PhaseTracker phase_tracker_;
     int last_extruder_target_centi_ = 0;

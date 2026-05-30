@@ -11,8 +11,8 @@
 #include "ui_ams_slot_layout.h"
 #include "ui_endless_spool_arrows.h"
 #include "ui_error_reporting.h"
-#include "ui_external_spool_menu.h"
 #include "ui_event_safety.h"
+#include "ui_external_spool_menu.h"
 #include "ui_filament_path_canvas.h"
 #include "ui_fonts.h"
 #include "ui_icon.h"
@@ -1134,8 +1134,13 @@ void AmsPanel::on_path_slot_clicked(int slot_index, void* user_data) {
 
     AmsError error;
 
-    // If filament is already loaded from a DIFFERENT slot, use tool change (unload-then-load)
-    if (info.current_slot >= 0 && info.current_slot != slot_index) {
+    // Cut-then-load only when the backend says an unload is needed. The
+    // load-vs-swap rule is centralized in needs_unload_before_load() so the UI
+    // and backend agree: K1 CFS reports a preloaded/cassette-staged slot via
+    // current_slot with the nozzle still empty, and treating that as "loaded"
+    // triggered a cut on an empty nozzle (#968). The K1 override keys on the
+    // true at-nozzle signal; K2 keeps the filament_loaded || current_slot rule.
+    if (backend->needs_unload_before_load(info) && info.current_slot != slot_index) {
         // Get the tool number for the target slot
         const SlotInfo* slot_info = info.get_slot_global(slot_index);
         if (slot_info && slot_info->mapped_tool >= 0) {
