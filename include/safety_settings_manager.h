@@ -65,8 +65,7 @@ class SafetySettingsManager {
     /** @brief Get whether filament load/unload may run below min_extrude_temp (#978) */
     bool get_allow_cold_extrude() const;
 
-    /** @brief Set whether filament load/unload may run on a cold hotend (updates subject +
-     * persists) */
+    /** @brief Set whether filament load/unload may run on a cold hotend (updates subject + persists) */
     void set_allow_cold_extrude(bool allow);
 
     // =========================================================================

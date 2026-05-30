@@ -1293,14 +1293,16 @@ TEST_CASE("decimate_indices: empty / non-positive budget yields nothing",
     REQUIRE(helix::temp_graph_internal::decimate_indices({1, 2, 3}, 0).empty());
 }
 
-TEST_CASE("decimate_indices: fewer samples than budget keeps all", "[temp_graph][decimate]") {
+TEST_CASE("decimate_indices: fewer samples than budget keeps all",
+          "[temp_graph][decimate]") {
     std::vector<int64_t> ts = {0, 1000, 2000, 3000};
     auto keep = helix::temp_graph_internal::decimate_indices(ts, 400);
     REQUIRE(keep.size() == 4);
     REQUIRE(keep == std::vector<int>({0, 1, 2, 3}));
 }
 
-TEST_CASE("decimate_indices: all-equal timestamps keep endpoints only", "[temp_graph][decimate]") {
+TEST_CASE("decimate_indices: all-equal timestamps keep endpoints only",
+          "[temp_graph][decimate]") {
     std::vector<int64_t> ts(10, 5000); // span 0
     auto keep = helix::temp_graph_internal::decimate_indices(ts, 4);
     REQUIRE(keep.size() == 2);
@@ -1319,8 +1321,8 @@ TEST_CASE("decimate_indices: dense window compresses to <= budget, keeps newest"
 
     REQUIRE(!keep.empty());
     REQUIRE(keep.size() <= 400);
-    REQUIRE(keep.size() >= 390);  // buckets are near-evenly filled
-    REQUIRE(keep.back() == 1199); // newest sample always kept
+    REQUIRE(keep.size() >= 390);           // buckets are near-evenly filled
+    REQUIRE(keep.back() == 1199);          // newest sample always kept
     // strictly increasing
     for (size_t i = 1; i < keep.size(); i++)
         REQUIRE(keep[i] > keep[i - 1]);

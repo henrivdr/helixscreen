@@ -476,7 +476,8 @@ void TempGraphController::backfill_history() {
         // first_value_received=true so the next live update_series_with_time does
         // not wipe the just-populated buffer via lv_chart_set_all_values.
         ui_temp_graph_set_series_data_with_targets(graph_, s.series_id, temps.data(),
-                                                   targets.data(), static_cast<int>(kept.size()));
+                                                   targets.data(),
+                                                   static_cast<int>(kept.size()));
 
         // Populate X-axis timestamp tracking directly. We deliberately do NOT call
         // update_series_with_time here: that would push another sample onto the
