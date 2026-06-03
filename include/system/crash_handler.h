@@ -34,6 +34,11 @@
 
 namespace crash_handler {
 
+/// Fixed width (bytes, incl. NUL) of one captured recent-error-log entry.
+inline constexpr unsigned int kErrorLogEntryLen = 256;
+/// Number of recent ERROR-level log lines retained for crash diagnostics.
+inline constexpr unsigned int kErrorLogRingCapacity = 4;
+
 /**
  * @brief Install crash signal handlers
  *
@@ -177,6 +182,26 @@ void register_callback_tag_ptr(volatile const char* const* tag_ptr);
 void register_previous_tag_ring(volatile const char* const* ring,
                                 volatile const uint32_t* count_ring, unsigned int capacity,
                                 volatile const unsigned int* next);
+
+/**
+ * @brief Register a ring of the most recent ERROR-level log messages
+ *
+ * The signal handler emits these as `recent_error:` / `recent_error2:` / ...
+ * (newest→oldest) on ANY crash. This is the last-ditch reason when an abort
+ * sets no `__abort_msg` and doesn't pass through the std::terminate handler —
+ * e.g. a bare `abort()`/`raise(SIGABRT)` from a dependency (issue #987).
+ *
+ * `ring` is `capacity * kErrorLogEntryLen` contiguous bytes; each entry is a
+ * NUL-terminated string. The producer fills slot `*next % capacity`, NUL-
+ * terminates it, then advances `*next`. All storage must outlive any possible
+ * crash (process-lifetime / static). Pass `nullptr` ring to disable.
+ *
+ * @param ring     Base of the entry buffer (capacity × kErrorLogEntryLen bytes)
+ * @param capacity Number of entry slots in the ring
+ * @param next     Pointer to the monotonically-increasing write counter
+ */
+void register_error_log_ring(const char* ring, unsigned int capacity,
+                             volatile const unsigned int* next) noexcept;
 
 /**
  * @brief Record the LVGL event currently being dispatched

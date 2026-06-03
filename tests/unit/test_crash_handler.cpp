@@ -12,8 +12,11 @@
  */
 
 #include "config.h"
+#include "system/crash_error_log_sink.h"
 #include "system/crash_handler.h"
 #include "system/telemetry_manager.h"
+
+#include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <filesystem>
@@ -310,6 +313,28 @@ TEST_CASE_METHOD(CrashTestFixture, "Crash: parse crash file extracts terminate_m
     REQUIRE(result["terminate_msg"] == "std::bad_alloc");
 }
 
+// recent_error* labeled keys collapse into one ordered array (newest first).
+TEST_CASE_METHOD(CrashTestFixture, "Crash: parse crash file groups recent_error lines",
+                 "[telemetry][crash]") {
+    write_crash_file("signal:6\n"
+                     "name:SIGABRT\n"
+                     "version:0.99.72\n"
+                     "timestamp:1707350400\n"
+                     "uptime:100\n"
+                     "abort_msg_state:empty\n"
+                     "recent_error:newest failure\n"
+                     "recent_error2:older failure\n"
+                     "recent_error3:oldest failure\n");
+    auto result = crash_handler::read_crash_file(crash_path());
+
+    REQUIRE_FALSE(result.is_null());
+    REQUIRE(result.contains("recent_errors"));
+    REQUIRE(result["recent_errors"].is_array());
+    REQUIRE(result["recent_errors"].size() == 3);
+    REQUIRE(result["recent_errors"][0] == "newest failure");
+    REQUIRE(result["recent_errors"][2] == "oldest failure");
+}
+
 // ============================================================================
 // End-to-end: real glibc abort propagates via __abort_msg into the crash file.
 // Forks a child, triggers a malloc-corruption abort, parent reads the dump.
@@ -496,7 +521,54 @@ TEST_CASE_METHOD(CrashTestFixture,
     REQUIRE(result["abort_msg_state"] == "empty");
     REQUIRE_FALSE(result.contains("abort_msg"));
 }
-#endif
+#endif // __linux__ && __GLIBC__
+
+// End-to-end (#987 last-ditch capture): ERROR log lines flow through
+// CrashErrorLogSink into the crash file as recent_error: entries, newest-first,
+// and sub-ERROR lines are excluded. Linux-only (signal-handler crash-file
+// write path); no glibc dependency since this uses our own ring, not
+// __abort_msg.
+#if defined(__linux__)
+#include <sys/wait.h>
+TEST_CASE_METHOD(CrashTestFixture, "Crash: recent ERROR log lines captured into crash file",
+                 "[telemetry][crash][subprocess]") {
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        crash_handler::install(crash_path());
+        // Route logging through the crash error-log sink (its ctor registers
+        // the ring with the crash handler).
+        auto sink =
+            spdlog::sink_ptr(&helix::CrashErrorLogSink::instance(), [](spdlog::sinks::sink*) {});
+        auto logger = std::make_shared<spdlog::logger>("crashtest", sink);
+        logger->set_level(spdlog::level::info);
+        spdlog::set_default_logger(logger);
+
+        spdlog::error("disk on fire 17");
+        spdlog::warn("ignored warning"); // below ERROR — must NOT be captured
+        spdlog::error("kaboom 42");
+        raise(SIGABRT);
+        _exit(99); // unreachable
+    }
+
+    int status = 0;
+    REQUIRE(waitpid(pid, &status, 0) == pid);
+    REQUIRE(WIFEXITED(status));
+    REQUIRE(WEXITSTATUS(status) == 128 + SIGABRT);
+
+    auto result = crash_handler::read_crash_file(crash_path());
+    REQUIRE_FALSE(result.is_null());
+    REQUIRE(result.contains("recent_errors"));
+    auto& errs = result["recent_errors"];
+    REQUIRE(errs.size() == 2);
+    REQUIRE(errs[0] == "kaboom 42"); // newest first
+    REQUIRE(errs[1] == "disk on fire 17");
+    for (const auto& e : errs) {
+        REQUIRE(e.get<std::string>().find("ignored warning") == std::string::npos);
+    }
+}
+#endif // __linux__
 
 // ============================================================================
 // Install / Uninstall (no real signals) [telemetry][crash]

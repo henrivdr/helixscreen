@@ -121,6 +121,14 @@ static volatile const uint32_t* s_previous_tag_count_ring = nullptr;
 static unsigned int s_previous_tag_capacity = 0;
 static volatile const unsigned int* s_previous_tag_next = nullptr;
 
+/// Ring of recent ERROR-level log lines (registered by the logging sink). Each
+/// entry is crash_handler::kErrorLogEntryLen bytes, NUL-terminated; newest slot
+/// is (*s_error_log_next - 1) % s_error_log_capacity. Storage is process-
+/// lifetime (a singleton sink), so these pointers never dangle.
+static const char* s_error_log_ring = nullptr;
+static unsigned int s_error_log_capacity = 0;
+static volatile const unsigned int* s_error_log_next = nullptr;
+
 // =============================================================================
 // Heap snapshot cache
 // =============================================================================
@@ -872,6 +880,31 @@ static void crash_signal_handler(int sig, siginfo_t* info, void* ucontext) {
         }
     }
 
+    // Walk the recent-ERROR-log ring newest→oldest. Surfaces the last error
+    // messages before the crash — the only reason clue when an abort set no
+    // __abort_msg and skipped the std::terminate handler (issue #987). Entries
+    // are pre-formatted + NUL-terminated by the sink, so the handler only reads.
+    if (s_error_log_ring && s_error_log_capacity > 0 && s_error_log_next) {
+        unsigned int next = *s_error_log_next;
+        static const char* const kErrLabels[] = {
+            "recent_error:",  "recent_error2:", "recent_error3:", "recent_error4:",
+            "recent_error5:", "recent_error6:", "recent_error7:", "recent_error8:",
+        };
+        const unsigned int label_count = sizeof(kErrLabels) / sizeof(kErrLabels[0]);
+        const unsigned int limit =
+            s_error_log_capacity < label_count ? s_error_log_capacity : label_count;
+        for (unsigned int i = 0; i < limit; ++i) {
+            unsigned int idx = (next + s_error_log_capacity - 1 - i) % s_error_log_capacity;
+            const char* entry =
+                s_error_log_ring + static_cast<size_t>(idx) * crash_handler::kErrorLogEntryLen;
+            if (entry[0] == '\0')
+                break; // Unfilled slot — rest of the ring is empty.
+            safe_write(fd, kErrLabels[i]);
+            safe_write(fd, entry);
+            safe_write(fd, "\n");
+        }
+    }
+
     // Cached heap snapshot (refreshed from main loop; reads here are signal-safe).
     // Acquire pairs with the release-store of ts_ms in refresh_heap_snapshot().
     if (__atomic_load_n(&s_heap_snapshot.ts_ms, __ATOMIC_ACQUIRE) != 0) {
@@ -1199,6 +1232,13 @@ void crash_handler::register_previous_tag_ring(volatile const char* const* ring,
     s_previous_tag_count_ring = count_ring;
     s_previous_tag_capacity = capacity;
     s_previous_tag_next = next;
+}
+
+void crash_handler::register_error_log_ring(const char* ring, unsigned int capacity,
+                                            volatile const unsigned int* next) noexcept {
+    s_error_log_ring = ring;
+    s_error_log_capacity = capacity;
+    s_error_log_next = next;
 }
 
 void crash_handler::set_current_event(const void* target, const void* original_target,
@@ -1732,6 +1772,13 @@ nlohmann::json crash_handler::read_crash_file(const std::string& crash_file_path
                 result["abort_msg_state"] = value;
             } else if (key == "terminate_msg") {
                 result["terminate_msg"] = value;
+            } else if (key.rfind("recent_error", 0) == 0) {
+                // recent_error / recent_error2 / ... — distinct labeled keys
+                // (newest first), collected into one ordered array.
+                if (!result.contains("recent_errors")) {
+                    result["recent_errors"] = json::array();
+                }
+                result["recent_errors"].push_back(value);
             } else if (key == "bt") {
                 backtrace_arr.push_back(value);
             } else if (key == "map") {

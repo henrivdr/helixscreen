@@ -78,6 +78,11 @@ class CrashReporter {
         // the reason behind an otherwise-blank SIGABRT (issue #987).
         std::string terminate_msg;
 
+        // Most recent ERROR-level log lines before the crash (newest first),
+        // captured by CrashErrorLogSink. Last-ditch context when neither
+        // abort_msg nor terminate_msg is available (issue #987).
+        std::vector<std::string> recent_errors;
+
         // Fault info (Phase 2 - from siginfo_t)
         std::string fault_addr;
         int fault_code = 0;
