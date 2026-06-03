@@ -9,8 +9,10 @@
  */
 
 #include "ui_icon_codepoints.h"
+#include "ui_update_queue.h"
 
 #include "../test_fixtures.h"
+#include "../test_helpers/update_queue_test_access.h"
 
 #include <cstring>
 
@@ -354,4 +356,36 @@ TEST_CASE_METHOD(UiButtonTestFixture,
     lv_obj_t* label = find_button_label(btn);
     REQUIRE(label != nullptr);
     REQUIRE(strcmp(lv_label_get_text(label), "Close") == 0);
+}
+
+// ============================================================================
+// Deferred contrast / address-reuse crash regression (#924)
+//
+// Integration-level coverage of the deferred-contrast path: a STYLE_CHANGED
+// event defers update_button_text_contrast through the UpdateQueue; if the
+// button is destroyed before the queue drains, the deferred recompute must be
+// skipped rather than crashing. The discriminating identity-guard test (which
+// FAILS when `d->id != gen` is removed) lives in
+// test_ui_button_defer_reuse.cpp, which includes ui_button.cpp directly for
+// access to the anonymous-namespace internals.
+// ============================================================================
+
+TEST_CASE_METHOD(UiButtonTestFixture,
+                 "ui_button deferred contrast on a deleted button is safely skipped",
+                 "[ui_button][crash][quick]") {
+    const char* attrs[] = {"text", "Doomed", nullptr};
+    lv_obj_t* btn = create_button(attrs);
+    REQUIRE(btn != nullptr);
+
+    // Drain any create-time deferred contrast passes first.
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    // STYLE_CHANGED enqueues a deferred contrast recompute; destroy the button
+    // before the queue drains. lv_obj_is_valid() must reject the stale pointer.
+    lv_obj_send_event(btn, LV_EVENT_STYLE_CHANGED, nullptr);
+    lv_obj_delete(btn);
+
+    // Must not crash; the captured (now invalid) widget pointer is skipped.
+    REQUIRE_NOTHROW(
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance()));
 }

@@ -128,6 +128,8 @@ DNS_RESOLV_OBJ := $(OBJ_DIR)/tests/dns_resolv.o
 #
 # Group 3: Test-specific conflicts
 # - ui_switch.o: test_ui_switch.cpp includes the .cpp directly for unit testing
+# - ui_button.o: test_ui_button_defer_reuse.cpp includes the .cpp directly to
+#   reach anonymous-namespace internals (defer_button_contrast_update, #924)
 #
 # Everything else is automatically included - new files just work!
 
@@ -143,6 +145,7 @@ TEST_APP_OBJS := $(filter-out \
     $(OBJ_DIR)/ui/ui_text_input.o \
     $(OBJ_DIR)/ui/ui_emergency_stop.o \
     $(OBJ_DIR)/ui/ui_switch.o \
+    $(OBJ_DIR)/ui/ui_button.o \
     $(OBJ_DIR)/application/application.o \
     $(OBJ_DIR)/application/lvgl_initializer.o \
     $(OBJ_DIR)/application/subject_initializer.o \

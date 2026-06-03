@@ -28,13 +28,27 @@ namespace {
 // NOTE: Magic number required because Modal::wire_button overwrites user_data
 // with a Modal* pointer. Without this check, button_delete_cb would try to
 // delete a Modal* as if it were UiButtonData*, causing a crash on shutdown.
+//
+// `id` is a per-button unique value captured when a deferred contrast recompute
+// is queued and re-verified when it fires. lv_obj_is_valid() + magic only prove
+// the address is *a* live ui_button; under heap address reuse a freed button's
+// address can be reallocated to a *different* live ui_button before the deferred
+// tick, passing both checks. The id catches that foreign-button case (#924).
 struct UiButtonData {
     static constexpr uint32_t MAGIC = 0x42544E31; // "BTN1"
     uint32_t magic{MAGIC};
+    uint64_t id{0};     // Defer-time identity token (see note above, #924)
     lv_obj_t* icon;     // Icon widget (or nullptr if none)
     lv_obj_t* label;    // Label widget (always present)
     bool icon_on_right; // true if icon is after text
 };
+
+// Monotonic source of per-button identity tokens. Buttons are created on the
+// main thread, so a plain non-atomic counter is sufficient.
+uint64_t next_button_id() {
+    static uint64_t n = 1;
+    return n++;
+}
 
 /**
  * @brief Resolve an icon font by XML const name (e.g. icon_font_sm/md/lg)
@@ -171,6 +185,27 @@ void update_button_text_contrast(lv_obj_t* btn) {
     }
 }
 
+// Defer a contrast recompute that survives widget address reuse (#924).
+// lv_obj_is_valid() only confirms the address is *a* live object; a freed
+// button's address can be reallocated to a different ui_button before the
+// deferred tick fires, passing both lv_obj_is_valid and the magic check.
+// Capture the button's unique id at defer time and re-verify identity on the
+// main thread before touching style/state.
+void defer_button_contrast_update(lv_obj_t* btn) {
+    UiButtonData* data = static_cast<UiButtonData*>(lv_obj_get_user_data(btn));
+    if (!data || data->magic != UiButtonData::MAGIC)
+        return;
+    const uint64_t gen = data->id;
+    helix::ui::queue_update([btn, gen]() {
+        if (!lv_obj_is_valid(btn))
+            return;
+        UiButtonData* d = static_cast<UiButtonData*>(lv_obj_get_user_data(btn));
+        if (!d || d->magic != UiButtonData::MAGIC || d->id != gen)
+            return;
+        update_button_text_contrast(btn);
+    });
+}
+
 /**
  * @brief Event callback for LV_EVENT_STYLE_CHANGED and LV_EVENT_STATE_CHANGED
  *
@@ -185,8 +220,7 @@ void button_style_changed_cb(lv_event_t* e) {
     // refresh_children_style sends STYLE_CHANGED recursively; modifying child
     // styles in that handler triggers trans_delete on partially-initialized
     // transitions, crashing in lv_obj_set_local_style_prop (#729).
-    helix::ui::async_call(
-        btn, [](void* data) { update_button_text_contrast(static_cast<lv_obj_t*>(data)); }, btn);
+    defer_button_contrast_update(btn);
 }
 
 /**
@@ -386,6 +420,7 @@ void* ui_button_create(lv_xml_parser_state_t* state, const char** attrs) {
 
     // Allocate user data to track icon/label
     UiButtonData* data = new UiButtonData{.magic = UiButtonData::MAGIC,
+                                          .id = next_button_id(),
                                           .icon = nullptr,
                                           .label = nullptr,
                                           .icon_on_right = icon_on_right};
@@ -505,8 +540,7 @@ void* ui_button_create(lv_xml_parser_state_t* state, const char** attrs) {
     // created yet. By the time the async callback fires, children will have
     // their fonts and variant styles applied, so contrast and icon-skip
     // logic works correctly.
-    helix::ui::async_call(
-        btn, [](void* data) { update_button_text_contrast(static_cast<lv_obj_t*>(data)); }, btn);
+    defer_button_contrast_update(btn);
 
     const char* pos_name = icon_on_top      ? "top"
                            : icon_on_bottom ? "bottom"
