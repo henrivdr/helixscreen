@@ -87,13 +87,12 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * to drive realistic simulation timing and thermal behavior.
      */
     struct MockPrintMetadata {
-        double estimated_time_seconds = 300.0; ///< Default 5 min if not in file
-        uint32_t layer_count = 100;            ///< Default 100 layers
-        double target_bed_temp = 60.0;         ///< First layer bed temp
-        double target_nozzle_temp = 210.0;     ///< First layer nozzle temp
-        double filament_mm = 0.0;              ///< Total filament length
-        std::vector<double>
-            filament_weights_g; ///< Per-tool grams (empty when slicer didn't emit)
+        double estimated_time_seconds = 300.0;  ///< Default 5 min if not in file
+        uint32_t layer_count = 100;             ///< Default 100 layers
+        double target_bed_temp = 60.0;          ///< First layer bed temp
+        double target_nozzle_temp = 210.0;      ///< First layer nozzle temp
+        double filament_mm = 0.0;               ///< Total filament length
+        std::vector<double> filament_weights_g; ///< Per-tool grams (empty when slicer didn't emit)
 
         void reset() {
             estimated_time_seconds = 300.0;
@@ -896,6 +895,36 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         return last_send_method_;
     }
 
+    /// Test helper: force the next matching printer.gcode.script RPC to invoke its
+    /// error callback (instead of success) with the given error type/message. This
+    /// simulates an RPC-layer timeout while Klipper still processes the gcode — the
+    /// command's normal side effects still run; only the RPC response is replaced.
+    /// One-shot: cleared once it fires. When @p script_substr is non-empty, only a
+    /// gcode.script whose script contains that substring triggers the forced error.
+    void force_next_gcode_error(MoonrakerErrorType type, const std::string& message,
+                                const std::string& script_substr = "") {
+        std::lock_guard<std::mutex> lock(forced_gcode_error_mutex_);
+        forced_gcode_error_ = ForcedGcodeError{type, message, script_substr};
+    }
+
+    /// Consume a pending forced gcode error if it matches @p script. Returns the
+    /// error to fire (and clears the pending state), or nullopt if none is pending
+    /// or the script filter does not match. Used by the gcode.script mock handler.
+    std::optional<MoonrakerError> take_forced_gcode_error(const std::string& script) {
+        std::lock_guard<std::mutex> lock(forced_gcode_error_mutex_);
+        if (!forced_gcode_error_.has_value())
+            return std::nullopt;
+        if (!forced_gcode_error_->script_substr.empty() &&
+            script.find(forced_gcode_error_->script_substr) == std::string::npos)
+            return std::nullopt;
+        MoonrakerError err;
+        err.type = forced_gcode_error_->type;
+        err.message = forced_gcode_error_->message;
+        err.method = "printer.gcode.script";
+        forced_gcode_error_.reset();
+        return err;
+    }
+
   private:
     PrinterType printer_type_;
 
@@ -911,6 +940,15 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     std::string last_send_method_;
     uint32_t last_send_timeout_ms_{0};
     bool last_send_silent_{false};
+
+    // One-shot forced error injection for printer.gcode.script (test helper).
+    struct ForcedGcodeError {
+        MoonrakerErrorType type;
+        std::string message;
+        std::string script_substr;
+    };
+    std::optional<ForcedGcodeError> forced_gcode_error_;
+    mutable std::mutex forced_gcode_error_mutex_;
 
     // Temperature simulation state
     std::atomic<double> extruder_temp_{25.0};  // Current temperature
@@ -999,8 +1037,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         {
             std::lock_guard<std::mutex> lock(active_gcode_tool_mutex_);
             snapshot = active_gcode_tool_observers_;
-            if (tool >= 0 &&
-                tool < static_cast<int>(active_gcode_tool_colors_.size())) {
+            if (tool >= 0 && tool < static_cast<int>(active_gcode_tool_colors_.size())) {
                 color = active_gcode_tool_colors_[tool];
             }
         }

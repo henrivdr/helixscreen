@@ -35,6 +35,13 @@
 static lv_subject_t s_pid_cal_state;
 static bool s_callbacks_registered = false;
 
+// "Taking longer than expected" backstop thresholds (#988). Generous on purpose: a normal
+// run completes via the result line well before these, so the reassuring status only shows
+// when calibration is genuinely overrunning. Bed allows much longer than extruder because
+// slow-cooling beds (e.g. AD5M Pro) legitimately take far longer to cycle.
+static constexpr uint32_t PID_OVERTIME_EXTRUDER_MS = 12u * 60u * 1000u; // 12 min
+static constexpr uint32_t PID_OVERTIME_BED_MS = 30u * 60u * 1000u;      // 30 min
+
 // ============================================================================
 // CONSTRUCTOR / DESTRUCTOR
 // ============================================================================
@@ -429,6 +436,7 @@ void PIDCalibrationPanel::set_state(State new_state) {
     if (new_state == State::CALIBRATING) {
         setup_pid_graph();
         // Reset progress
+        cal_start_tick_ms_ = lv_tick_get();
         pid_estimated_total_ = 3;
         has_kalico_progress_ = false;
         lv_subject_set_int(&subj_pid_progress_, 0);
@@ -436,6 +444,7 @@ void PIDCalibrationPanel::set_state(State new_state) {
         lv_subject_copy_string(&subj_pid_eta_, "");
         start_progress_tracking();
     } else {
+        cal_start_tick_ms_ = 0;
         stop_progress_tracking();
     }
 }
@@ -1073,6 +1082,19 @@ void PIDCalibrationPanel::update_progress_display() {
     if (progress > 95 && progress_tracker_.phase() != PidProgressTracker::Phase::COMPLETE)
         progress = 95;
     lv_subject_set_int(&subj_pid_progress_, progress);
+
+    // Overtime backstop (#988): once a run exceeds its generous per-heater threshold,
+    // reassure the user that the printer may still be working and point at the existing
+    // Abort button, instead of leaving them staring at a stalled progress bar. The RPC
+    // timeout no longer hard-fails, so this is the only "something may be wrong" signal.
+    const uint32_t overtime_ms =
+        (selected_heater_ == Heater::EXTRUDER) ? PID_OVERTIME_EXTRUDER_MS : PID_OVERTIME_BED_MS;
+    if (cal_start_tick_ms_ != 0 && lv_tick_elaps(cal_start_tick_ms_) > overtime_ms) {
+        lv_subject_copy_string(&subj_pid_progress_text_,
+                               lv_tr("Still working... taking longer than usual"));
+        lv_subject_copy_string(&subj_pid_eta_, lv_tr("Press Abort to stop"));
+        return;
+    }
 
     // Status text
     char buf[64];

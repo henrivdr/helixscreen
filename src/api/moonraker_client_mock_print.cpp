@@ -19,13 +19,24 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
     // printer.gcode.script - Execute G-code script
     // Like real Moonraker, returns error for out-of-range moves and other gcode failures
     registry["printer.gcode.script"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         std::string script;
         if (params.contains("script")) {
             script = params["script"].get<std::string>();
         }
         int result = self->gcode_script(script); // Process G-code (updates LED state, etc.)
+
+        // Test injection: simulate an RPC-layer failure (e.g. timeout) for this command
+        // while Klipper still processed the gcode above. The collector-based APIs rely on
+        // this to exercise paths where the RPC response is lost but Klipper keeps running.
+        if (auto forced = self->take_forced_gcode_error(script)) {
+            if (error_cb)
+                error_cb(*forced);
+            return true;
+        }
+
         if (result != 0) {
             // G-code execution failed (e.g., out-of-range move)
             // Return error like real Moonraker does
@@ -44,7 +55,8 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
 
     // printer.print.start - Start a print job
     registry["printer.print.start"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         std::string filename;
         if (params.contains("filename")) {
@@ -74,7 +86,8 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
 
     // printer.print.pause - Pause current print
     registry["printer.print.pause"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)params;
         if (self->pause_print_internal()) {
@@ -93,7 +106,8 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
 
     // printer.print.resume - Resume paused print
     registry["printer.print.resume"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)params;
         if (self->resume_print_internal()) {
@@ -112,7 +126,8 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
 
     // printer.print.cancel - Cancel current print
     registry["printer.print.cancel"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)params;
         if (self->cancel_print_internal()) {

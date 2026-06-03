@@ -319,6 +319,12 @@ class PIDCalibrationPanel : public OverlayBase {
     int pid_estimated_total_ = 3;      // Dynamic estimate, starts at 3
     bool has_kalico_progress_ = false; // True once first sample callback arrives
 
+    // Tick (lv_tick_get) when the current CALIBRATING run began; 0 when not calibrating.
+    // Drives the "taking longer than expected" backstop (#988): once a run exceeds a
+    // generous per-heater threshold the status text reassures the user and points at the
+    // existing Abort button, rather than hard-failing on the RPC timeout.
+    uint32_t cal_start_tick_ms_ = 0;
+
     // Phase-aware progress tracker
     PidProgressTracker progress_tracker_;
 
