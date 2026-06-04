@@ -2840,6 +2840,84 @@ TEST_CASE("Happy Hare select_gate fails when not running", "[ams][happy_hare]") 
 }
 
 // ============================================================================
+// move_selector() Tests - selector jog (current gate +/- delta, clamped)
+// ============================================================================
+
+TEST_CASE("Happy Hare move_selector +1 jogs to next gate", "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+    helper.set_current_slot(1);
+
+    AmsError result = helper.move_selector(1);
+
+    REQUIRE(result.result == AmsResult::SUCCESS);
+    REQUIRE(helper.has_gcode("MMU_SELECT GATE=2"));
+}
+
+TEST_CASE("Happy Hare move_selector -1 jogs to previous gate",
+          "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+    helper.set_current_slot(1);
+
+    AmsError result = helper.move_selector(-1);
+
+    REQUIRE(result.result == AmsResult::SUCCESS);
+    REQUIRE(helper.has_gcode("MMU_SELECT GATE=0"));
+}
+
+TEST_CASE("Happy Hare move_selector clamps at lower bound", "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+    helper.set_current_slot(0);
+
+    AmsError result = helper.move_selector(-1);
+
+    REQUIRE(result.result == AmsResult::SUCCESS);
+    REQUIRE(helper.has_gcode("MMU_SELECT GATE=0"));
+}
+
+TEST_CASE("Happy Hare move_selector clamps at upper bound", "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+    helper.set_current_slot(3); // last gate (0-based, count=4)
+
+    AmsError result = helper.move_selector(1);
+
+    REQUIRE(result.result == AmsResult::SUCCESS);
+    REQUIRE(helper.has_gcode("MMU_SELECT GATE=3"));
+}
+
+TEST_CASE("Happy Hare move_selector treats no current slot as gate 0",
+          "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+    helper.set_current_slot(-1); // none selected
+
+    AmsError result = helper.move_selector(1);
+
+    // base = max(0, -1) = 0; target = clamp(0 + 1, 0, 3) = 1
+    REQUIRE(result.result == AmsResult::SUCCESS);
+    REQUIRE(helper.has_gcode("MMU_SELECT GATE=1"));
+}
+
+TEST_CASE("Happy Hare move_selector fails when not running", "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    // not started
+
+    AmsError result = helper.move_selector(1);
+
+    REQUIRE(result.result != AmsResult::SUCCESS);
+    REQUIRE_FALSE(helper.has_gcode("MMU_SELECT GATE=1"));
+}
+
+// ============================================================================
 // check_gate() / check_all_gates() Tests
 // ============================================================================
 

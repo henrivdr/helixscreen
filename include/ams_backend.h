@@ -531,6 +531,22 @@ class AmsBackend {
     }
 
     /**
+     * @brief Jog the selector relative to its current gate.
+     *
+     * Moves the selector to (current gate + delta), clamped to the valid range
+     * [0, slot_count - 1], without loading filament. This is convenient for
+     * stepping the selector one gate at a time during manual interventions.
+     * Gated by supports_gate_select() — selector-based systems only.
+     *
+     * @param delta Signed number of gates to move (e.g. +1, -1).
+     * @return AmsError indicating success or failure.
+     */
+    virtual AmsError move_selector(int delta) {
+        (void)delta;
+        return AmsErrorHelper::not_supported("Selector jog");
+    }
+
+    /**
      * @brief Whether the backend can probe gate sensors (MMU_CHECK_GATE).
      * @return true if check_gate()/check_all_gates() are implemented.
      */

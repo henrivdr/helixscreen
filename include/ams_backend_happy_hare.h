@@ -86,6 +86,10 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
      * @brief Move the selector to a gate without loading filament (MMU_SELECT).
      */
     AmsError select_gate(int slot_index) override;
+    /**
+     * @brief Jog the selector relative to the current gate (MMU_SELECT, clamped).
+     */
+    AmsError move_selector(int delta) override;
     [[nodiscard]] bool supports_gate_select() const override {
         return true;
     }

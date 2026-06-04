@@ -773,6 +773,32 @@ AmsError AmsBackendMock::select_gate(int slot_index) {
     return AmsErrorHelper::success();
 }
 
+AmsError AmsBackendMock::move_selector(int delta) {
+    if (system_info_.type != AmsType::HAPPY_HARE) {
+        return AmsBackend::move_selector(delta);
+    }
+
+    int target = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        const int count = slots_.slot_count();
+        if (count <= 0) {
+            return AmsErrorHelper::not_supported("Selector jog");
+        }
+
+        int base = system_info_.current_slot;
+        if (base < 0) {
+            base = 0; // No current / bypass (-1, -2) -> treat as gate 0.
+        }
+        target = std::clamp(base + delta, 0, count - 1);
+
+        spdlog::info("[AMS Mock] Executing G-code: MMU_SELECT GATE={}", target);
+    }
+
+    return AmsErrorHelper::success();
+}
+
 AmsError AmsBackendMock::check_gate(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);

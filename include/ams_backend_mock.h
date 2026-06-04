@@ -125,6 +125,7 @@ class AmsBackendMock : public AmsBackend {
 
     // Gate select / check (Happy Hare selector-based systems only)
     AmsError select_gate(int slot_index) override;
+    AmsError move_selector(int delta) override;
     [[nodiscard]] bool supports_gate_select() const override {
         return system_info_.type == AmsType::HAPPY_HARE;
     }

@@ -1676,6 +1676,32 @@ AmsError AmsBackendHappyHare::select_gate(int slot_index) {
     return execute_gcode("MMU_SELECT GATE=" + std::to_string(slot_index));
 }
 
+AmsError AmsBackendHappyHare::move_selector(int delta) {
+    int target = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Happy Hare backend not started");
+        }
+
+        const int count = slots_.slot_count();
+        if (count <= 0) {
+            return AmsErrorHelper::not_supported("Selector jog");
+        }
+
+        // Read the underlying member directly: get_current_slot() locks mutex_.
+        int base = system_info_.current_slot;
+        if (base < 0) {
+            base = 0; // No current / bypass (-1, -2) -> treat as gate 0.
+        }
+        target = std::clamp(base + delta, 0, count - 1);
+    }
+
+    spdlog::info("[AMS HappyHare] Jog selector by {} -> gate {}", delta, target);
+    return execute_gcode("MMU_SELECT GATE=" + std::to_string(target));
+}
+
 AmsError AmsBackendHappyHare::check_gate(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
