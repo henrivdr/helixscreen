@@ -1319,7 +1319,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
             {
                 AmsError error = backend->select_gate(slot);
                 if (error.result != AmsResult::SUCCESS) {
-                    NOTIFY_ERROR(lv_tr("Select gate failed: {}"), error.user_msg);
+                    NOTIFY_ERROR(lv_tr("Select slot failed: {}"), error.user_msg);
                 }
             }
             break;
@@ -1332,7 +1332,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
             {
                 AmsError error = backend->check_gate(slot);
                 if (error.result != AmsResult::SUCCESS) {
-                    NOTIFY_ERROR(lv_tr("Check gate failed: {}"), error.user_msg);
+                    NOTIFY_ERROR(lv_tr("Check slot failed: {}"), error.user_msg);
                 }
             }
             break;

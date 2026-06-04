@@ -750,7 +750,7 @@ void AmsOperationSidebar::handle_check_gates() {
 
     AmsError error = backend->check_all_gates();
     if (error.result != AmsResult::SUCCESS) {
-        NOTIFY_ERROR(lv_tr("Check gates failed: {}"), error.user_msg);
+        NOTIFY_ERROR(lv_tr("Check slots failed: {}"), error.user_msg);
     }
 }
 

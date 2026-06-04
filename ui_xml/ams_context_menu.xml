@@ -49,15 +49,15 @@
                  variant="ghost" clickable="true" style_flex_main_place="start" hidden="true">
         <event_cb trigger="clicked" callback="ams_context_reset_lane_cb"/>
       </ui_button>
-      <!-- Select Gate Button (hidden unless backend supports gate select, e.g. Happy Hare) -->
+      <!-- Select Slot Button (hidden unless backend supports direct slot select, e.g. Happy Hare MMU_SELECT) -->
       <ui_button name="btn_gate_select"
-                 height="#button_height_sm" icon="target" text="Select gate" translation_tag="Select gate"
+                 height="#button_height_sm" icon="target" text="Select slot" translation_tag="Select slot"
                  variant="ghost" clickable="true" style_flex_main_place="start" hidden="true">
         <event_cb trigger="clicked" callback="ams_context_gate_select_cb"/>
       </ui_button>
-      <!-- Check Gate Button (hidden unless backend supports gate check, e.g. Happy Hare) -->
+      <!-- Check Slot Button (hidden unless backend supports slot check, e.g. Happy Hare MMU_CHECK_GATE) -->
       <ui_button name="btn_gate_check"
-                 height="#button_height_sm" icon="refresh" text="Check this gate" translation_tag="Check gate"
+                 height="#button_height_sm" icon="refresh" text="Check slot" translation_tag="Check slot"
                  variant="ghost" clickable="true" style_flex_main_place="start" hidden="true">
         <event_cb trigger="clicked" callback="ams_context_gate_check_cb"/>
       </ui_button>
