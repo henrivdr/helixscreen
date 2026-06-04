@@ -48,7 +48,6 @@ static bool reduced_effects() {
 #endif
 }
 
-
 // ============================================================================
 // Constants
 // ============================================================================
@@ -229,6 +228,8 @@ struct FilamentPathData {
     void* bypass_user_data = nullptr;
     filament_path_buffer_cb_t buffer_callback = nullptr;
     void* buffer_user_data = nullptr;
+    hub_callback_t hub_callback = nullptr;
+    void* hub_user_data = nullptr;
 
     // Theme-derived colors (cached for performance)
     lv_color_t color_idle;
@@ -362,8 +363,8 @@ static int32_t get_slot_x(const FilamentPathData* data, int slot_index, int32_t 
 // get_slot_x() calls each topology was doing inside its phase loops (MIXED
 // alone called it three times per slot across its three phases).
 struct BaseGeometry {
-    int32_t x_off = 0;  // canvas left edge (absolute display coords)
-    int32_t y_off = 0;  // canvas top edge
+    int32_t x_off = 0; // canvas left edge (absolute display coords)
+    int32_t y_off = 0; // canvas top edge
     int32_t width = 0;
     int32_t height = 0;
     int slot_count = 0;
@@ -397,6 +398,15 @@ static BaseGeometry compute_base_geometry(lv_obj_t* obj, const FilamentPathData*
         g.center_x = g.x_off + g.width / 2;
     }
     return g;
+}
+
+// Pure coordinate hit-test for an axis-aligned box. Mirrors the inline
+// distance checks used by the buffer/bypass hit-tests in the click handler,
+// extracted here so it can be unit-tested without an LVGL display.
+// NOTE: argument order is width-then-height.
+bool helix::ui::hub_box_hit(lv_point_t p, int32_t cx, int32_t cy, int32_t w, int32_t h,
+                            int32_t margin) {
+    return (abs(p.x - cx) <= w / 2 + margin) && (abs(p.y - cy) <= h / 2 + margin);
 }
 
 // Derived per-slot drawing state. Computed in one pass so each topology body
@@ -1427,7 +1437,7 @@ static void draw_curved_hollow_tube(lv_layer_t* layer, int32_t x0, int32_t y0, i
 static void draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t width, int32_t height,
                          lv_color_t bg_color, lv_color_t border_color, lv_color_t text_color,
                          const lv_font_t* font, int32_t radius, const char* label,
-                         lv_opa_t bg_opa = LV_OPA_COVER) {
+                         lv_opa_t bg_opa = LV_OPA_COVER, bool interactive = false) {
     // Background
     lv_draw_fill_dsc_t fill_dsc;
     lv_draw_fill_dsc_init(&fill_dsc);
@@ -1458,6 +1468,28 @@ static void draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t widt
         int32_t font_h = lv_font_get_line_height(font);
         lv_area_t label_area = {cx - width / 2, cy - font_h / 2, cx + width / 2, cy + font_h / 2};
         lv_draw_label(layer, &label_dsc, &label_area);
+    }
+
+    // Tappable affordance: a small gear glyph in the top-right corner signals
+    // that the box opens a context menu when tapped.
+    if (interactive) {
+        const lv_font_t* icon_font = theme_manager_get_font("icon_font_sm");
+        if (icon_font) {
+            lv_draw_label_dsc_t gear_dsc;
+            lv_draw_label_dsc_init(&gear_dsc);
+            gear_dsc.color = border_color;
+            gear_dsc.font = icon_font;
+            gear_dsc.opa = LV_OPA_80;
+            gear_dsc.align = LV_TEXT_ALIGN_RIGHT;
+            gear_dsc.text = ICON_SETTINGS;
+
+            int32_t gear_h = lv_font_get_line_height(icon_font);
+            int32_t pad = 2;
+            // Anchor to the box top-right, inset by a small pad.
+            lv_area_t gear_area = {box_area.x1, box_area.y1 + pad, box_area.x2 - pad,
+                                   box_area.y1 + pad + gear_h};
+            lv_draw_label(layer, &gear_dsc, &gear_area);
+        }
     }
 }
 
@@ -1637,14 +1669,12 @@ static void draw_animation_linear_hub(lv_layer_t* layer, FilamentPathData* data)
     }
 
     // Segment transition tip — interpolated along the path.
-    if (data->segment_anim_active && data->active_slot >= 0 && !data->hub_only &&
-        path.count > 0) {
+    if (data->segment_anim_active && data->active_slot >= 0 && !data->hub_only && path.count > 0) {
         PathSegment prev_seg = static_cast<PathSegment>(data->prev_segment);
         PathSegment fil_seg = static_cast<PathSegment>(data->filament_segment);
         float progress_factor = data->anim_progress / 100.0f;
-        const float NUM_INTERVALS =
-            static_cast<float>(static_cast<int>(PathSegment::NOZZLE) -
-                               static_cast<int>(PathSegment::SPOOL));
+        const float NUM_INTERVALS = static_cast<float>(static_cast<int>(PathSegment::NOZZLE) -
+                                                       static_cast<int>(PathSegment::SPOOL));
         float base = static_cast<float>(static_cast<int>(prev_seg) - 1);
         float target = static_cast<float>(static_cast<int>(fil_seg) - 1);
         float tip_fraction = (base + (target - base) * progress_factor) / NUM_INTERVALS;
@@ -1686,7 +1716,6 @@ static void draw_animation_parallel(lv_layer_t* layer, const BaseGeometry& g,
 }
 
 static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
-
     BaseGeometry g = compute_base_geometry(obj, data);
     int32_t height = g.height;
     int32_t y_off = g.y_off;
@@ -1842,7 +1871,6 @@ static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPat
 //     (T0)    (T2)       (T1)             nozzles + tool labels
 
 static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
-
     BaseGeometry g = compute_base_geometry(obj, data);
     int32_t height = g.height;
     int32_t x_off = g.x_off;
@@ -2449,7 +2477,6 @@ static void filament_path_draw_cb(lv_event_t* e) {
 // ============================================================================
 
 static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
-
     BaseGeometry g = compute_base_geometry(obj, data);
     int32_t width = g.width;
     int32_t height = g.height;
@@ -2862,7 +2889,8 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
 
         lv_opa_t hub_opa = (data->topology == 0) ? LV_OPA_60 : LV_OPA_COVER;
         draw_hub_box(layer, center_x, hub_y, hub_w, hub_h, hub_bg_tinted, hub_border_final,
-                     data->color_text, data->label_font, data->border_radius, hub_label, hub_opa);
+                     data->color_text, data->label_font, data->border_radius, hub_label, hub_opa,
+                     /*interactive=*/data->hub_callback != nullptr);
 
         // Draw filament tube through SELECTOR (LINEAR topology only)
         if (data->topology == 0 && data->active_slot >= 0) {
@@ -3207,6 +3235,31 @@ static void filament_path_click_cb(lv_event_t* e) {
         if (abs(point.x - center_x) < box_w / 2 + 4 && abs(point.y - buffer_y) < box_h / 2 + 4) {
             spdlog::debug("[FilamentPath] Buffer coil clicked");
             data->buffer_callback(data->buffer_user_data);
+            return;
+        }
+    }
+
+    // Check if the selector/hub box was clicked. Gated to LINEAR (Happy Hare
+    // selector) and HUB topologies — PARALLEL has no hub box, and MIXED uses a
+    // different hub-center derivation, so both are excluded here.
+    if (data->hub_callback && (data->topology == static_cast<int>(PathTopology::LINEAR) ||
+                               data->topology == static_cast<int>(PathTopology::HUB))) {
+        int32_t hub_y = y_off + (int32_t)(height * HUB_Y_RATIO);
+        int32_t hub_h = (int32_t)(height * HUB_HEIGHT_RATIO);
+        int32_t hub_w = data->hub_width;
+        // center_x mirrors BaseGeometry::center_x (slot-bounds midpoint), the
+        // same source the renderer uses to place the hub box.
+        int32_t center_x = x_off + width / 2;
+        if (data->slot_count >= 2) {
+            int32_t first_x = x_off + get_slot_x(data, 0, x_off);
+            int32_t last_x = x_off + get_slot_x(data, data->slot_count - 1, x_off);
+            center_x = (first_x + last_x) / 2;
+        } else if (data->slot_count == 1) {
+            center_x = x_off + get_slot_x(data, 0, x_off);
+        }
+        if (helix::ui::hub_box_hit(point, center_x, hub_y, hub_w, hub_h, 4)) {
+            spdlog::debug("[FilamentPath] Selector/hub box clicked");
+            data->hub_callback(point, data->hub_user_data);
             return;
         }
     }
@@ -3609,6 +3662,14 @@ void ui_filament_path_canvas_set_slot_callback(lv_obj_t* obj, filament_path_slot
     }
 }
 
+void ui_filament_path_canvas_set_hub_callback(lv_obj_t* obj, hub_callback_t cb, void* user_data) {
+    auto* data = get_data(obj);
+    if (data) {
+        data->hub_callback = cb;
+        data->hub_user_data = user_data;
+    }
+}
+
 void ui_filament_path_canvas_animate_segment(lv_obj_t* obj, int from_segment, int to_segment) {
     auto* data = get_data(obj);
     if (!data)
@@ -3843,8 +3904,7 @@ void ui_filament_path_canvas_set_bypass_has_spool(lv_obj_t* obj, bool has_spool)
     layered_mark_dirty(obj, true, true);
 }
 
-bool ui_filament_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out,
-                                                  int32_t* cy_out) {
+bool ui_filament_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out) {
     auto* data = get_data(obj);
     if (!data || data->hub_only || !data->show_bypass) {
         return false;

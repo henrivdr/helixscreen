@@ -378,8 +378,7 @@ void ui_filament_path_canvas_set_bypass_has_spool(lv_obj_t* obj, bool has_spool)
  * point. Returns false when bypass isn't enabled (`show_bypass=false`,
  * hub-only mode) or the canvas hasn't been laid out yet.
  */
-bool ui_filament_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out,
-                                                  int32_t* cy_out);
+bool ui_filament_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out);
 
 /**
  * @brief Set the mapped tool index for a slot
@@ -420,6 +419,34 @@ void ui_filament_path_canvas_set_slot_hub_routed(lv_obj_t* obj, int slot, bool i
  */
 void ui_filament_path_canvas_set_eject_mode(lv_obj_t* obj, bool eject);
 
+/**
+ * @brief Set click callback for the selector/hub box
+ *
+ * When the user taps the selector/hub box on the path diagram, this callback
+ * is invoked with the click point. Used to open the Happy Hare selector
+ * context menu. Fires for LINEAR (selector) and HUB topologies only.
+ *
+ * @param obj The filament_path_canvas widget
+ * @param cb Callback function (click_pt, user_data)
+ * @param user_data User data passed to callback
+ */
+typedef void (*hub_callback_t)(lv_point_t click_pt, void* user_data);
+void ui_filament_path_canvas_set_hub_callback(lv_obj_t* obj, hub_callback_t cb, void* user_data);
+
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+namespace helix::ui {
+/**
+ * @brief Pure coordinate hit-test for an axis-aligned box.
+ *
+ * Returns true when point @p p falls within the box centered at (@p cx, @p cy)
+ * with width @p w and height @p h, expanded by @p margin on each side.
+ *
+ * NOTE: argument order is width-then-height.
+ */
+bool hub_box_hit(lv_point_t p, int32_t cx, int32_t cy, int32_t w, int32_t h, int32_t margin);
+} // namespace helix::ui
 #endif
