@@ -516,6 +516,7 @@ translations:
   Don't Save: Don't Save
   Don't ask again: Don't ask again
   Done: Done
+  Down: Down
   Download update?: Download update?
   Download v{}?: Download v{}?
   Downloading...: Downloading...
@@ -755,6 +756,7 @@ translations:
   G-code Console: G-code Console
   G-code Preview: G-code Preview
   G-code commands will appear here: G-code commands will appear here
+  Gear motor synced: Gear motor synced
   Gear sync: Gear sync
   Generic: Generic
   Get help and share feedback: Get help and share feedback
@@ -812,6 +814,7 @@ translations:
   Hide Firmware Noise: Hide Firmware Noise
   Hide Temperature Reports: Hide Temperature Reports
   Home: Home
+  Home selector: Home selector
   Home failed: Home failed
   Homing AFC system...: Homing AFC system...
   Homing X...: Homing X...
@@ -1033,6 +1036,8 @@ translations:
   Modified: Modified
   Monitoring: Monitoring
   Month: Month
+  Move: Move
+  Move selector: Move selector
   Moonraker: Moonraker
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker restarted but Spoolman not connected. Check server.
   Moonraker restarting...\nWaiting for reconnection...: Moonraker restarting...\nWaiting for reconnection...
@@ -1573,6 +1578,7 @@ translations:
   Selected: Selected
   Selecting: Selecting
   Selecting slot...: Selecting slot...
+  Selector: Selector
   Self-Test: Self-Test
   Semantic Size Parameter Tests: Semantic Size Parameter Tests
   Send Report: Send Report
@@ -1584,6 +1590,7 @@ translations:
   Sensor Temperature: Sensor Temperature
   Sensors: Sensors
   Separate on/off macros. HelixScreen tracks the state.: Separate on/off macros. HelixScreen tracks the state.
+  Servo: Servo
   Server Setup: Server Setup
   'Set ': 'Set '
   Set Active: Set Active
@@ -1861,6 +1868,7 @@ translations:
   Unmapped: Unmapped
   Unretract Extra: Unretract Extra
   Unretract Speed: Unretract Speed
+  Up: Up
   Update: Update
   Update Available: Update Available
   Update Channel: Update Channel

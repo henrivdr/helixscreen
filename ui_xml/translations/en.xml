@@ -516,6 +516,7 @@
   <translation tag="Don&apos;t Save" en="Don&apos;t Save"/>
   <translation tag="Don&apos;t ask again" en="Don&apos;t ask again"/>
   <translation tag="Done" en="Done"/>
+  <translation tag="Down" en="Down"/>
   <translation tag="Download update?" en="Download update?"/>
   <translation tag="Download v{}?" en="Download v{}?"/>
   <translation tag="Downloading..." en="Downloading..."/>
@@ -755,6 +756,7 @@
   <translation tag="G-code Console" en="G-code Console"/>
   <translation tag="G-code Preview" en="G-code Preview"/>
   <translation tag="G-code commands will appear here" en="G-code commands will appear here"/>
+  <translation tag="Gear motor synced" en="Gear motor synced"/>
   <translation tag="Gear sync" en="Gear sync"/>
   <translation tag="Generic" en="Generic"/>
   <translation tag="Get help and share feedback" en="Get help and share feedback"/>
@@ -812,6 +814,7 @@
   <translation tag="Hide Temperature Reports" en="Hide Temperature Reports"/>
   <translation tag="Home" en="Home"/>
   <translation tag="Home failed" en="Home failed"/>
+  <translation tag="Home selector" en="Home selector"/>
   <translation tag="Homing AFC system..." en="Homing AFC system..."/>
   <translation tag="Homing X..." en="Homing X..."/>
   <translation tag="Homing XY..." en="Homing XY..."/>
@@ -1040,7 +1043,9 @@
   <translation tag="Motors Off" en="Motors Off"/>
   <translation tag="Motors disable failed: {}" en="Motors disable failed: {}"/>
   <translation tag="Motors disabled" en="Motors disabled"/>
+  <translation tag="Move" en="Move"/>
   <translation tag="Move paper back and forth while adjusting. Stop when paper catches slightly but still slides." en="Move paper back and forth while adjusting. Stop when paper catches slightly but still slides."/>
+  <translation tag="Move selector" en="Move selector"/>
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." en="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal."/>
   <translation tag="Multi-Filament" en="Multi-Filament"/>
   <translation tag="Multi-Filament Overview" en="Multi-Filament Overview"/>
@@ -1569,6 +1574,7 @@
   <translation tag="Selected" en="Selected"/>
   <translation tag="Selecting" en="Selecting"/>
   <translation tag="Selecting slot..." en="Selecting slot..."/>
+  <translation tag="Selector" en="Selector"/>
   <translation tag="Self-Test" en="Self-Test"/>
   <translation tag="Semantic Size Parameter Tests" en="Semantic Size Parameter Tests"/>
   <translation tag="Send Report" en="Send Report"/>
@@ -1581,6 +1587,7 @@
   <translation tag="Sensors" en="Sensors"/>
   <translation tag="Separate on/off macros. HelixScreen tracks the state." en="Separate on/off macros. HelixScreen tracks the state."/>
   <translation tag="Server Setup" en="Server Setup"/>
+  <translation tag="Servo" en="Servo"/>
   <translation tag="Set " en="Set "/>
   <translation tag="Set Active" en="Set Active"/>
   <translation tag="Set PIN" en="Set PIN"/>
@@ -1851,6 +1858,7 @@
   <translation tag="Unmapped" en="Unmapped"/>
   <translation tag="Unretract Extra" en="Unretract Extra"/>
   <translation tag="Unretract Speed" en="Unretract Speed"/>
+  <translation tag="Up" en="Up"/>
   <translation tag="Update" en="Update"/>
   <translation tag="Update Available" en="Update Available"/>
   <translation tag="Update Channel" en="Update Channel"/>
