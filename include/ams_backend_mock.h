@@ -123,6 +123,22 @@ class AmsBackendMock : public AmsBackend {
         return true;
     }
 
+    // Gate select / check (Happy Hare selector-based systems only)
+    AmsError select_gate(int slot_index) override;
+    AmsError move_selector(int delta) override;
+    [[nodiscard]] bool supports_gate_select() const override {
+        return system_info_.type == AmsType::HAPPY_HARE;
+    }
+    AmsError check_gate(int slot_index) override;
+    AmsError check_all_gates() override;
+    [[nodiscard]] bool supports_gate_check() const override {
+        return system_info_.type == AmsType::HAPPY_HARE;
+    }
+    [[nodiscard]] std::string reset_button_label() const override {
+        return system_info_.type == AmsType::HAPPY_HARE ? std::string("Home")
+                                                        : std::string("Reset");
+    }
+
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
@@ -137,8 +153,7 @@ class AmsBackendMock : public AmsBackend {
 
     // Dryer
     [[nodiscard]] DryerInfo get_dryer_info() const override;
-    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
-                           int unit = 0) override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
 
     // Endless spool
@@ -595,7 +610,7 @@ class AmsBackendMock : public AmsBackend {
     mutable std::mutex shutdown_mutex_;                 ///< Protects shutdown_cv_ wait
 
     // Environment sensor simulation
-    std::string environment_mode_;                  ///< "passive", "dryer", "slot", or "" (auto)
+    std::string environment_mode_; ///< "passive", "dryer", "slot", or "" (auto)
 
     // Dryer simulation state
     bool dryer_enabled_ = false;                    ///< Whether dryer is simulated
@@ -613,8 +628,8 @@ class AmsBackendMock : public AmsBackend {
     bool multi_unit_mode_ = false;              ///< Simulate multi-unit AFC (2x Box Turtle)
     bool mixed_topology_mode_ = false;          ///< Simulate mixed topology (BT + 2x OpenAMS)
     bool vivid_mixed_mode_ = false;             ///< Simulate 2x BoxTurtle + 1x ViViD
-    bool ifs_mode_ = false;                          ///< Simulate AD5X IFS (4 slots, LINEAR)
-    bool htlf_toolchanger_mode_ = false;             ///< Simulate HTLF + Toolchanger mixed topology
+    bool ifs_mode_ = false;                     ///< Simulate AD5X IFS (4 slots, LINEAR)
+    bool htlf_toolchanger_mode_ = false;        ///< Simulate HTLF + Toolchanger mixed topology
     std::vector<PathTopology> unit_topologies_; ///< Per-unit topology storage
 
     // Endless spool simulation state

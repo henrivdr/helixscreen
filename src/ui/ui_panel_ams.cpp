@@ -44,6 +44,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <any>
 #include <cmath>
 #include <memory>
 #include <sstream>
@@ -119,6 +120,7 @@ static void ensure_ams_widgets_registered() {
     lv_xml_register_component_from_file("A:ui_xml/components/ams_sidebar.xml");
     lv_xml_register_component_from_file("A:ui_xml/ams_panel.xml");
     lv_xml_register_component_from_file("A:ui_xml/ams_context_menu.xml");
+    lv_xml_register_component_from_file("A:ui_xml/ams_selector_menu.xml");
     // NOTE: spoolman_spool_item.xml and ams_edit_modal.xml are registered
     // globally in xml_registration.cpp (needed by FilamentPanel without AMS lazy init)
     lv_xml_register_component_from_file("A:ui_xml/ams_loading_error_modal.xml");
@@ -460,6 +462,7 @@ void AmsPanel::clear_panel_reference() {
     // Reset extracted UI modules (they handle their own RAII cleanup)
     sidebar_.reset();
     context_menu_.reset();
+    selector_menu_.reset();
     edit_modal_.reset();
     error_modal_.reset();
 
@@ -707,6 +710,10 @@ void AmsPanel::setup_path_canvas() {
 
     // Set slot click callback (panel-specific)
     ui_filament_path_canvas_set_slot_callback(path_canvas_, on_path_slot_clicked, this);
+
+    // Set selector/hub click callback (opens Happy Hare selector context menu)
+    ui_filament_path_canvas_set_hub_callback(path_canvas_, &AmsPanel::on_path_hub_clicked_thunk,
+                                             this);
 
     // Set bypass spool click callback (opens edit modal for external spool)
     ui_filament_path_canvas_set_bypass_callback(path_canvas_, on_bypass_spool_clicked, this);
@@ -1179,6 +1186,84 @@ void AmsPanel::on_path_slot_clicked(int slot_index, void* user_data) {
     }
 }
 
+void AmsPanel::on_path_hub_clicked_thunk(lv_point_t click_pt, void* user_data) {
+    auto* self = static_cast<AmsPanel*>(user_data);
+    if (!self) {
+        return;
+    }
+    self->on_path_hub_clicked(click_pt);
+}
+
+void AmsPanel::on_path_hub_clicked(lv_point_t click_pt) {
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (!backend || !backend->supports_gate_select()) {
+        return; // Selector/Happy Hare backends only
+    }
+    selector_menu_ = std::make_unique<helix::ui::AmsSelectorMenu>();
+    selector_menu_->set_action_callback(
+        [this](helix::ui::AmsSelectorMenu::SelectorAction a) { dispatch_selector_action(a); });
+    selector_menu_->show_at(parent_screen_, path_canvas_, click_pt, backend);
+}
+
+void AmsPanel::dispatch_selector_action(helix::ui::AmsSelectorMenu::SelectorAction a) {
+    using SA = helix::ui::AmsSelectorMenu::SelectorAction;
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (!backend) {
+        NOTIFY_WARNING(lv_tr("AMS not available"));
+        return;
+    }
+    AmsError err{};
+    switch (a) {
+    case SA::HOME:
+        err = backend->reset();
+        break;
+    case SA::CHECK_SLOTS:
+        err = backend->check_all_gates();
+        break;
+    case SA::SERVO_UP:
+        err = backend->execute_device_action("servo_up");
+        break;
+    case SA::SERVO_MOVE:
+        err = backend->execute_device_action("servo_move");
+        break;
+    case SA::SERVO_DOWN:
+        err = backend->execute_device_action("servo_down");
+        break;
+    case SA::JOG_PREV:
+        err = backend->move_selector(-1);
+        break;
+    case SA::JOG_NEXT:
+        err = backend->move_selector(+1);
+        break;
+    case SA::GEAR_SYNC_ON:
+        err = backend->execute_device_action("gear_sync", std::any(true));
+        break;
+    case SA::GEAR_SYNC_OFF:
+        err = backend->execute_device_action("gear_sync", std::any(false));
+        break;
+    case SA::RECOVER:
+        helix::ui::modal_show_confirmation(
+            lv_tr("Recover MMU state?"),
+            lv_tr("Re-syncs Happy Hare's tracked state with the hardware."), ModalSeverity::Warning,
+            lv_tr("Recover"),
+            // Re-fetch the backend inside the confirm callback so it cannot
+            // dangle if the panel/backend changed while the dialog was open.
+            +[](lv_event_t* /*e*/) {
+                AmsBackend* b = AmsState::instance().get_backend();
+                if (b) {
+                    b->recover();
+                }
+            },
+            /*on_cancel*/ nullptr, /*user_data*/ nullptr);
+        return;
+    case SA::CANCELLED:
+        return;
+    }
+    if (err.result != AmsResult::SUCCESS) {
+        NOTIFY_ERROR(lv_tr("MMU command failed: {}"), err.user_msg);
+    }
+}
+
 void AmsPanel::on_slot_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[AmsPanel] on_slot_clicked");
     auto* self = static_cast<AmsPanel*>(lv_event_get_user_data(e));
@@ -1307,6 +1392,32 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
                 AmsError error = backend->reset_lane(slot);
                 if (error.result != AmsResult::SUCCESS) {
                     NOTIFY_ERROR(lv_tr("Reset failed: {}"), error.user_msg);
+                }
+            }
+            break;
+
+        case helix::ui::AmsContextMenu::MenuAction::SELECT_GATE:
+            if (!backend) {
+                NOTIFY_WARNING(lv_tr("AMS not available"));
+                return;
+            }
+            {
+                AmsError error = backend->select_gate(slot);
+                if (error.result != AmsResult::SUCCESS) {
+                    NOTIFY_ERROR(lv_tr("Select slot failed: {}"), error.user_msg);
+                }
+            }
+            break;
+
+        case helix::ui::AmsContextMenu::MenuAction::CHECK_GATE:
+            if (!backend) {
+                NOTIFY_WARNING(lv_tr("AMS not available"));
+                return;
+            }
+            {
+                AmsError error = backend->check_gate(slot);
+                if (error.result != AmsResult::SUCCESS) {
+                    NOTIFY_ERROR(lv_tr("Check slot failed: {}"), error.user_msg);
                 }
             }
             break;

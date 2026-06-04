@@ -183,6 +183,11 @@ void GCodeLayerRenderer::set_support_color(lv_color_t color) {
 }
 
 void GCodeLayerRenderer::set_tool_color_palette(const std::vector<std::string>& hex_colors) {
+    // Join the background ghost-render worker before mutating tool_palette_: the worker
+    // copy-reads this member without a lock (background_ghost_render_thread), so reallocating
+    // its backing vector here while the worker is mid-copy is a data race. Same discipline as
+    // set_gcode()/set_streaming_controller().
+    cancel_background_ghost_render();
     tool_palette_.set_from_hex_palette(hex_colors);
     if (tool_palette_.has_tool_colors()) {
         spdlog::debug("[GCodeLayerRenderer] Set tool color palette: {} colors", hex_colors.size());
@@ -193,6 +198,10 @@ void GCodeLayerRenderer::set_tool_color_overrides(const std::vector<uint32_t>& a
     if (ams_colors.empty()) {
         return;
     }
+
+    // Join the background ghost-render worker before mutating tool_palette_: the worker
+    // copy-reads this member without a lock, so the resize() below must not race its copy.
+    cancel_background_ghost_render();
 
     // Replace tool_palette_ entries with AMS colors
     tool_palette_.tool_colors.resize(ams_colors.size());
@@ -210,6 +219,10 @@ void GCodeLayerRenderer::set_tool_color_overrides(const std::vector<uint32_t>& a
 }
 
 void GCodeLayerRenderer::reset_colors() {
+    // Join the background ghost-render worker before clearing tool_palette_ below: the worker
+    // copy-reads this member without a lock, so freeing its backing vector here would race.
+    cancel_background_ghost_render();
+
     // Use theme colors for default appearance
     // Extrusion: info blue for visibility against dark background
     color_extrusion_ = theme_manager_get_color("info");
@@ -230,6 +243,9 @@ void GCodeLayerRenderer::set_excluded_objects(const std::unordered_set<std::stri
     if (names == excluded_objects_) {
         return; // No change - skip expensive cache invalidation
     }
+    // Join the background ghost-render worker before reassigning excluded_objects_: the worker
+    // copy-reads this member without a lock, so rehashing/freeing it here would race its copy.
+    cancel_background_ghost_render();
     excluded_objects_ = names;
     invalidate_cache();
 }

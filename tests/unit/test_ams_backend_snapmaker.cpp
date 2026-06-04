@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/printer_state_test_access.h"
+#include "../ui_test_utils.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_types.h"
 #include "app_globals.h"
@@ -9,8 +11,6 @@
 #include "moonraker_client_mock.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
-#include "../test_helpers/printer_state_test_access.h"
-#include "../ui_test_utils.h"
 
 #include <chrono>
 #include <filesystem>
@@ -97,9 +97,8 @@ struct SnapmakerTmpCacheDir {
 // Build a filament_detect status notification for a single slot with
 // configurable material, color, brand, and CARD_UID. Slot index is 0-based;
 // the notification's info array is padded to NUM_TOOLS=4 with "NONE" entries.
-json make_filament_detect_status(int slot_index, const std::string& main_type,
-                                 uint32_t argb_color, const std::string& manufacturer,
-                                 const json& card_uid) {
+json make_filament_detect_status(int slot_index, const std::string& main_type, uint32_t argb_color,
+                                 const std::string& manufacturer, const json& card_uid) {
     json info_arr = json::array();
     for (int i = 0; i < 4; ++i) {
         if (i == slot_index) {
@@ -119,6 +118,26 @@ json make_filament_detect_status(int slot_index, const std::string& main_type,
     }
     return json{{"filament_detect", json{{"info", info_arr}}}};
 }
+
+// Captures execute_gcode() so the load/unload command path can be asserted
+// without a live Moonraker connection — same idiom as test_ams_backend_afc.cpp.
+class CapturingSnapmakerBackend : public AmsBackendSnapmaker {
+  public:
+    CapturingSnapmakerBackend() : AmsBackendSnapmaker(nullptr, nullptr) {}
+
+    std::vector<std::string> captured_gcodes;
+
+    AmsError execute_gcode(const std::string& gcode) override {
+        captured_gcodes.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+
+    // current_slot is protected on the subscription base; expose a setter so
+    // tests can stand in for "filament currently loaded in slot N".
+    void set_loaded_slot(int slot) {
+        system_info_.current_slot = slot;
+    }
+};
 } // namespace
 
 TEST_CASE("Snapmaker type enum", "[ams][snapmaker]") {
@@ -148,20 +167,17 @@ TEST_CASE("Snapmaker detection via filament_detect", "[ams][snapmaker]") {
     PrinterDiscovery discovery;
 
     SECTION("filament_detect triggers SNAPMAKER detection") {
-        nlohmann::json objects = nlohmann::json::array({
-            "extruder", "extruder1", "extruder2", "extruder3",
-            "toolchanger", "filament_detect", "toolhead",
-            "heater_bed", "print_task_config"
-        });
+        nlohmann::json objects = nlohmann::json::array(
+            {"extruder", "extruder1", "extruder2", "extruder3", "toolchanger", "filament_detect",
+             "toolhead", "heater_bed", "print_task_config"});
         discovery.parse_objects(objects);
         REQUIRE(discovery.has_snapmaker());
         REQUIRE(discovery.mmu_type() == AmsType::SNAPMAKER);
     }
 
     SECTION("empty toolchanger without filament_detect is not SNAPMAKER") {
-        nlohmann::json objects = nlohmann::json::array({
-            "extruder", "toolchanger", "tool T0", "tool T1", "toolhead"
-        });
+        nlohmann::json objects =
+            nlohmann::json::array({"extruder", "toolchanger", "tool T0", "tool T1", "toolhead"});
         discovery.parse_objects(objects);
         REQUIRE_FALSE(discovery.has_snapmaker());
         REQUIRE(discovery.has_tool_changer());
@@ -173,6 +189,7 @@ TEST_CASE("Snapmaker detection via filament_detect", "[ams][snapmaker]") {
 // ============================================================================
 
 #include "ams_backend_snapmaker.h"
+
 #include "hv/json.hpp"
 
 TEST_CASE("AmsBackendSnapmaker construction", "[ams][snapmaker]") {
@@ -208,6 +225,43 @@ TEST_CASE("AmsBackendSnapmaker construction", "[ams][snapmaker]") {
         REQUIRE(info.tool_to_slot_map[1] == 1);
         REQUIRE(info.tool_to_slot_map[2] == 2);
         REQUIRE(info.tool_to_slot_map[3] == 3);
+    }
+}
+
+// ============================================================================
+// Filament Operation Command Tests
+// ============================================================================
+
+TEST_CASE("Snapmaker unload routes through AUTO_FEEDING UNLOAD=1", "[ams][snapmaker][unload]") {
+    // INNER_FILAMENT_UNLOAD is the leaf macro the firmware's feed state machine
+    // calls internally; emitting it directly skips the state transitions that
+    // aftermarket feeders (e.g. the U1-Ace ACE Pro mod) hook to retract their
+    // spool. Unload must mirror load and go through AUTO_FEEDING so the channel
+    // reaches "unload_finish". See prestonbrown/helixscreen#974.
+
+    SECTION("explicit slot emits AUTO_FEEDING EXTRUDER=n UNLOAD=1") {
+        CapturingSnapmakerBackend backend;
+        auto err = backend.unload_filament(2);
+        REQUIRE(err.success());
+        REQUIRE(backend.captured_gcodes.size() == 1);
+        REQUIRE(backend.captured_gcodes[0] == "AUTO_FEEDING EXTRUDER=2 UNLOAD=1");
+    }
+
+    SECTION("no slot falls back to the currently loaded slot") {
+        CapturingSnapmakerBackend backend;
+        backend.set_loaded_slot(1);
+        auto err = backend.unload_filament(); // default slot_index = -1
+        REQUIRE(err.success());
+        REQUIRE(backend.captured_gcodes.size() == 1);
+        REQUIRE(backend.captured_gcodes[0] == "AUTO_FEEDING EXTRUDER=1 UNLOAD=1");
+    }
+
+    SECTION("unknown loaded slot falls back to bare INNER_FILAMENT_UNLOAD") {
+        CapturingSnapmakerBackend backend; // current_slot defaults to -1
+        auto err = backend.unload_filament();
+        REQUIRE(err.success());
+        REQUIRE(backend.captured_gcodes.size() == 1);
+        REQUIRE(backend.captured_gcodes[0] == "INNER_FILAMENT_UNLOAD");
     }
 }
 
@@ -443,8 +497,8 @@ TEST_CASE("Snapmaker override loaded at init is applied over firmware data",
 
     // Firmware pushes a different color (blue) and a different material.
     // 0xFF0000FF = opaque red in ARGB.
-    json status = make_filament_detect_status(0, "ABS", 0xFF0000FFu, "OtherBrand",
-                                              json::array({1, 2, 3, 4}));
+    json status =
+        make_filament_detect_status(0, "ABS", 0xFF0000FFu, "OtherBrand", json::array({1, 2, 3, 4}));
     SnapmakerTestAccess::handle_status(backend, status);
 
     auto info = backend.get_slot_info(0);
@@ -492,16 +546,16 @@ TEST_CASE("Snapmaker set_slot_info(persist=true) writes override and survives st
     // Simulate a subsequent Klipper status update with conflicting firmware
     // data. Pre-Task-12 this wiped the user's edit; the fix is that
     // apply_overrides re-layers the saved override over the parse output.
-    json status = make_filament_detect_status(0, "ABS", 0xFF0000FFu, "OtherBrand",
-                                              json::array({1, 2, 3, 4}));
+    json status =
+        make_filament_detect_status(0, "ABS", 0xFF0000FFu, "OtherBrand", json::array({1, 2, 3, 4}));
     SnapmakerTestAccess::handle_status(backend, status);
 
     auto info = backend.get_slot_info(0);
-    CHECK(info.brand == "Polymaker");              // survived
+    CHECK(info.brand == "Polymaker");                // survived
     CHECK(info.spool_name == "PolyLite PLA Orange"); // survived
-    CHECK(info.spoolman_id == 42);                 // survived
-    CHECK(info.material == "PLA");                 // override material wins
-    CHECK(info.color_rgb == 0xFF5500u);            // override color wins
+    CHECK(info.spoolman_id == 42);                   // survived
+    CHECK(info.material == "PLA");                   // override material wins
+    CHECK(info.color_rgb == 0xFF5500u);              // override color wins
 }
 
 TEST_CASE("Snapmaker set_slot_info(persist=false) preview does NOT write store",
@@ -551,11 +605,9 @@ TEST_CASE("Snapmaker RFID UID change clears override (hardware swap detected)",
 
     // Seed an override AND the corresponding DB entry so we can verify
     // clear_async deletes it on swap.
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"},
-                               {"spool_id", 42},
-                               {"material", "PLA"},
-                               {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        json{{"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -566,9 +618,9 @@ TEST_CASE("Snapmaker RFID UID change clears override (hardware swap detected)",
     SnapmakerTestAccess::seed_override(backend, 0, ovr);
 
     // First parse: CARD_UID=[1,2,3,4] establishes the baseline. No clear.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker",
-                                    json::array({1, 2, 3, 4})));
+    SnapmakerTestAccess::handle_status(
+        backend,
+        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", json::array({1, 2, 3, 4})));
 
     REQUIRE(SnapmakerTestAccess::get_override(backend, 0).has_value());
     REQUIRE(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
@@ -576,9 +628,9 @@ TEST_CASE("Snapmaker RFID UID change clears override (hardware swap detected)",
 
     // Second parse: DIFFERENT CARD_UID — physical swap detected. Override
     // must be cleared in-memory AND the Moonraker DB entry deleted.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PETG", 0xFF00FF00u, "Generic",
-                                    json::array({5, 6, 7, 8})));
+    SnapmakerTestAccess::handle_status(
+        backend,
+        make_filament_detect_status(0, "PETG", 0xFF00FF00u, "Generic", json::array({5, 6, 7, 8})));
 
     CHECK_FALSE(SnapmakerTestAccess::get_override(backend, 0).has_value());
     CHECK(api.mock_get_db_value("lane_data", "lane1").is_null());
@@ -590,10 +642,10 @@ TEST_CASE("Snapmaker RFID UID change clears override (hardware swap detected)",
     // helper hard-codes "Basic"), and the clear preserves firmware writes
     // the same way it preserves brand / total_weight_g.
     auto info = backend.get_slot_info(0);
-    CHECK(info.brand == "Generic");      // firmware's new brand flows through
-    CHECK(info.spool_name == "Basic");   // firmware's SUB_TYPE flows through
+    CHECK(info.brand == "Generic");    // firmware's new brand flows through
+    CHECK(info.spool_name == "Basic"); // firmware's SUB_TYPE flows through
     CHECK(info.spoolman_id == 0);
-    CHECK(info.material == "PETG");      // firmware's new material
+    CHECK(info.material == "PETG"); // firmware's new material
 }
 
 TEST_CASE("Snapmaker first RFID UID observation does NOT clear override",
@@ -611,8 +663,7 @@ TEST_CASE("Snapmaker first RFID UID observation does NOT clear override",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     SnapmakerTestAccess::inject_override_store(backend, std::move(store));
 
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"}, {"spool_id", 42}});
+    api.mock_set_db_value("lane_data", "lane1", json{{"vendor", "Polymaker"}, {"spool_id", 42}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -622,9 +673,9 @@ TEST_CASE("Snapmaker first RFID UID observation does NOT clear override",
 
     // Firmware reports a UID on the FIRST observation — no prior baseline,
     // so this must NOT trigger a clear. Override survives.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PLA", 0xFF0055FFu, "Polymaker",
-                                    json::array({99, 99, 99, 99})));
+    SnapmakerTestAccess::handle_status(
+        backend, make_filament_detect_status(0, "PLA", 0xFF0055FFu, "Polymaker",
+                                             json::array({99, 99, 99, 99})));
 
     auto staged = SnapmakerTestAccess::get_override(backend, 0);
     REQUIRE(staged.has_value());
@@ -634,9 +685,9 @@ TEST_CASE("Snapmaker first RFID UID observation does NOT clear override",
 
     // A second parse of the SAME UID stays the baseline — no clear, no
     // "weird state" that fires on unchanged polls.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PLA", 0xFF0055FFu, "Polymaker",
-                                    json::array({99, 99, 99, 99})));
+    SnapmakerTestAccess::handle_status(
+        backend, make_filament_detect_status(0, "PLA", 0xFF0055FFu, "Polymaker",
+                                             json::array({99, 99, 99, 99})));
 
     CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
     CHECK(!api.mock_get_db_value("lane_data", "lane1").is_null());
@@ -659,8 +710,7 @@ TEST_CASE("Snapmaker empty RFID UID does not update baseline or clear",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     SnapmakerTestAccess::inject_override_store(backend, std::move(store));
 
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"}, {"spool_id", 42}});
+    api.mock_set_db_value("lane_data", "lane1", json{{"vendor", "Polymaker"}, {"spool_id", 42}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -668,25 +718,24 @@ TEST_CASE("Snapmaker empty RFID UID does not update baseline or clear",
     SnapmakerTestAccess::seed_override(backend, 0, ovr);
 
     // First parse: valid UID "1,2,3,4" — baseline established.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker",
-                                    json::array({1, 2, 3, 4})));
+    SnapmakerTestAccess::handle_status(
+        backend,
+        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", json::array({1, 2, 3, 4})));
     REQUIRE(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
 
     // Second parse: EMPTY UID (no CARD_UID field). Must NOT update baseline
     // and must NOT clear the override.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker",
-                                    json::array()));
+    SnapmakerTestAccess::handle_status(
+        backend, make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", json::array()));
     CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4"); // unchanged
     CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
     CHECK(!api.mock_get_db_value("lane_data", "lane1").is_null());
 
     // Third parse: same original UID "1,2,3,4" — still matches baseline,
     // no clear. Proves the empty-UID pass didn't corrupt state.
-    SnapmakerTestAccess::handle_status(backend,
-        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker",
-                                    json::array({1, 2, 3, 4})));
+    SnapmakerTestAccess::handle_status(
+        backend,
+        make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", json::array({1, 2, 3, 4})));
     CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
     CHECK(!api.mock_get_db_value("lane_data", "lane1").is_null());
 }
@@ -912,15 +961,14 @@ TEST_CASE("Snapmaker auto-mirror uses OverwriteAlways policy after firmware writ
     stale.color_rgb = 0xABCDEF;
     stale.material = "PLA";
     SnapmakerTestAccess::seed_override(backend, 0, stale);
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"color", "#ABCDEF"}, {"material", "PLA"}});
+    api.mock_set_db_value("lane_data", "lane1", json{{"color", "#ABCDEF"}, {"material", "PLA"}});
 
     // Build a status update that ALSO sets filament_detect.state[0]=1 so the
     // slot resolves to AVAILABLE — the mirror helper short-circuits when the
     // slot has no filament loaded ("no signal" contract). Stack the existing
     // info builder with an explicit state array.
-    json status = make_filament_detect_status(0, "PETG", 0xFF112233u, "Polymaker",
-                                              json::array({1, 2, 3, 4}));
+    json status =
+        make_filament_detect_status(0, "PETG", 0xFF112233u, "Polymaker", json::array({1, 2, 3, 4}));
     status["filament_detect"]["state"] = json::array({1, 0, 0, 0});
     SnapmakerTestAccess::handle_status(backend, status);
 
@@ -931,7 +979,8 @@ TEST_CASE("Snapmaker auto-mirror uses OverwriteAlways policy after firmware writ
     auto color_str = lane["color"].get<std::string>();
     // Color is stored as "#RRGGBB"; case may vary, so compare lowercase.
     std::string lower = color_str;
-    for (auto& c : lower) c = static_cast<char>(std::tolower(c));
+    for (auto& c : lower)
+        c = static_cast<char>(std::tolower(c));
     CHECK(lower == "#112233");
 }
 
@@ -1028,8 +1077,9 @@ TEST_CASE("Snapmaker prepare_for_resume skips recovery when sensor reports filam
     REQUIRE(captured.result == AmsResult::SUCCESS);
 }
 
-TEST_CASE("Snapmaker prepare_for_resume reports NOT_CONNECTED when api unavailable + runout latched",
-          "[ams][snapmaker][resume]") {
+TEST_CASE(
+    "Snapmaker prepare_for_resume reports NOT_CONNECTED when api unavailable + runout latched",
+    "[ams][snapmaker][resume]") {
     lv_init_safe();
     PrinterState& ps = get_printer_state();
     PrinterStateTestAccess::reset(ps);

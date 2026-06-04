@@ -7,6 +7,10 @@
 #endif
 #include "lvgl_assert_handler.h"
 #include "lvgl_log_handler.h"
+#ifndef HELIX_WATCHDOG
+#include "system/crash_error_log_sink.h"
+#include "system/crash_handler.h"
+#endif
 
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -66,6 +70,15 @@ bool is_path_writable(const std::string& path) {
     // Check owner write permission (simplified check)
     return (perms & std::filesystem::perms::owner_write) != std::filesystem::perms::none;
 }
+
+#ifndef HELIX_WATCHDOG
+/// Non-owning shared_ptr to the process-lifetime crash error-log sink, so it
+/// can join a logger's sink list without the logger ever freeing it (the sink
+/// outlives every logger swap, keeping the crash-handler pointers valid).
+spdlog::sink_ptr crash_error_log_sink() {
+    return spdlog::sink_ptr(&CrashErrorLogSink::instance(), [](spdlog::sinks::sink*) {});
+}
+#endif
 
 /// Get XDG_DATA_HOME or default ~/.local/share
 std::string get_xdg_data_home() {
@@ -194,6 +207,13 @@ void add_system_sink(std::vector<spdlog::sink_ptr>& sinks, LogTarget target,
 /// during rendering or layout, and re-entrant LVGL calls cause cascading
 /// assertions and SIGSEGV (crash signature 0997d072).
 void lvgl_assert_spdlog_callback(const char* file, int line, const char* func) {
+#ifndef HELIX_WATCHDOG
+    // LVGL asserts log-and-continue (never abort), but leave a durable crumb:
+    // if this assert later contributes to a crash, the breadcrumb names where
+    // it fired (issue #987). Runs on the LVGL thread — satisfies breadcrumb's
+    // single-producer contract.
+    crash_handler::breadcrumb::note("assert", func);
+#endif
     // Log via spdlog for consistent logging across all outputs
     spdlog::critical("╔═══════════════════════════════════════════════════════════╗");
     spdlog::critical("║              LVGL ASSERTION FAILED                        ║");
@@ -211,10 +231,15 @@ void lvgl_assert_spdlog_callback(const char* file, int line, const char* func) {
 } // namespace
 
 void init_early() {
-    // Create minimal console-only logger at WARN level
-    // This allows early startup code to log without crashing
-    auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    auto logger = std::make_shared<spdlog::logger>("helix", console);
+    // Create minimal console logger at WARN level so early startup code can log
+    // without crashing. Attach the crash error-log sink too, so errors during
+    // boot (before init()) are still captured for crash diagnostics (#987).
+    std::vector<spdlog::sink_ptr> sinks;
+    sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+#ifndef HELIX_WATCHDOG
+    sinks.push_back(crash_error_log_sink());
+#endif
+    auto logger = std::make_shared<spdlog::logger>("helix", sinks.begin(), sinks.end());
     logger->set_level(spdlog::level::warn);
     spdlog::set_default_logger(logger);
 }
@@ -264,6 +289,12 @@ void init(const LogConfig& config) {
 
     // Add system sink
     add_system_sink(sinks, effective_target, config.file_path);
+
+#ifndef HELIX_WATCHDOG
+    // Always retain recent ERROR-level lines for crash diagnostics, regardless
+    // of the output target (#987 last-ditch reason capture).
+    sinks.push_back(crash_error_log_sink());
+#endif
 
     // Create logger with all sinks
     auto logger = std::make_shared<spdlog::logger>("helix", sinks.begin(), sinks.end());

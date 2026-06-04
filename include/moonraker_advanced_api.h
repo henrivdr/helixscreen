@@ -55,8 +55,9 @@ class MoonrakerAdvancedAPI {
     static constexpr uint32_t LEVELING_TIMEOUT_MS = 600000; // 10 min - QGL, Z_TILT_ADJUST
     static constexpr uint32_t SHAPER_TIMEOUT_MS =
         300000; // 5 min - SHAPER_CALIBRATE, MEASURE_AXES_NOISE
-    static constexpr uint32_t PID_TIMEOUT_MS = 900000; // 15 min - PID_CALIBRATE
-    static constexpr uint32_t MPC_TIMEOUT_MS = 900000; // 15 min - MPC_CALIBRATE
+    static constexpr uint32_t PID_TIMEOUT_MS =
+        1200000; // 20 min - PID_CALIBRATE (slow-cooling beds, e.g. AD5M Pro, exceed 15 min)
+    static constexpr uint32_t MPC_TIMEOUT_MS = 1200000; // 20 min - MPC_CALIBRATE
     static constexpr uint32_t PROBING_TIMEOUT_MS =
         180000; // 3 min - PROBE_CALIBRATE, Z_ENDSTOP_CALIBRATE
     static constexpr uint32_t BELT_TENSION_TIMEOUT_MS = 120000; // 2 min per path

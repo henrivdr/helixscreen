@@ -269,6 +269,85 @@ TEST_CASE_METHOD(PIDCalibrateTestFixture, "PID calibrate backward compat without
     REQUIRE(captured_kp_ == Catch::Approx(22.865f).margin(0.001f));
 }
 
+TEST_CASE_METHOD(PIDCalibrateTestFixture,
+                 "PID calibrate survives RPC timeout and still delivers result",
+                 "[pid_calibrate]") {
+    // Regression for #988: slow-cooling beds run longer than the RPC timeout. When the
+    // printer.gcode.script RPC times out, the collector must keep listening so the later
+    // "PID parameters:" result line still completes the calibration successfully.
+    mock_client_.force_next_gcode_error(MoonrakerErrorType::TIMEOUT,
+                                        "Request timed out after 20 min", "PID_CALIBRATE");
+
+    api_->advanced().start_pid_calibrate(
+        "heater_bed", 60,
+        [this](float kp, float ki, float kd) {
+            captured_kp_ = kp;
+            captured_ki_ = ki;
+            captured_kd_ = kd;
+            result_received_.store(true);
+        },
+        [this](const MoonrakerError& err) {
+            captured_error_ = err.message;
+            error_received_.store(true);
+        });
+
+    // The RPC has already "timed out" synchronously above. Klipper finishes afterwards.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    mock_client_.dispatch_gcode_response(
+        "PID parameters: pid_Kp=73.517 pid_Ki=1.132 pid_Kd=1194.093");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    REQUIRE(result_received_.load());
+    REQUIRE_FALSE(error_received_.load());
+    REQUIRE(captured_kp_ == Catch::Approx(73.517f).margin(0.001f));
+}
+
+TEST_CASE_METHOD(PIDCalibrateTestFixture, "PID calibrate RPC timeout does not fire error callback",
+                 "[pid_calibrate]") {
+    // The RPC timeout alone must NOT surface a hard failure to the UI — the collector is
+    // the authority for completion, and the calibration may still be running on Klipper.
+    mock_client_.force_next_gcode_error(MoonrakerErrorType::TIMEOUT,
+                                        "Request timed out after 20 min", "PID_CALIBRATE");
+
+    api_->advanced().start_pid_calibrate(
+        "heater_bed", 60, [this](float, float, float) { result_received_.store(true); },
+        [this](const MoonrakerError& err) {
+            captured_error_ = err.message;
+            error_received_.store(true);
+        });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    REQUIRE_FALSE(error_received_.load());
+    REQUIRE_FALSE(result_received_.load());
+}
+
+TEST_CASE_METHOD(PIDCalibrateTestFixture, "PID calibrate non-timeout RPC error still fails fast",
+                 "[pid_calibrate]") {
+    // A genuine RPC error (not a timeout) must still tear down the collector and report
+    // failure — only TIMEOUT is treated as "keep listening".
+    mock_client_.force_next_gcode_error(MoonrakerErrorType::JSON_RPC_ERROR,
+                                        "Heater extruder not configured", "PID_CALIBRATE");
+
+    api_->advanced().start_pid_calibrate(
+        "extruder", 200, [this](float, float, float) { result_received_.store(true); },
+        [this](const MoonrakerError& err) {
+            captured_error_ = err.message;
+            error_received_.store(true);
+        });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    REQUIRE(error_received_.load());
+    REQUIRE_FALSE(result_received_.load());
+
+    // After a hard error the collector is unregistered: a stray result line is ignored.
+    result_received_.store(false);
+    mock_client_.dispatch_gcode_response(
+        "PID parameters: pid_Kp=22.865 pid_Ki=1.292 pid_Kd=101.178");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    REQUIRE_FALSE(result_received_.load());
+}
+
 TEST_CASE_METHOD(PIDCalibrateTestFixture, "get_heater_pid_values returns extruder values via API",
                  "[pid_calibrate]") {
     std::atomic<bool> cb_fired{false};

@@ -807,3 +807,25 @@ TEST_CASE("Print Select: Metadata path construction", "[ui][metadata]") {
         REQUIRE(file_path == "projects/voron/toolhead.gcode");
     }
 }
+
+TEST_CASE("thumbnail_subject_value never publishes an empty buffer",
+          "[ui][print_select][thumbnail]") {
+    // LVGL's lv_image_src_get_type classifies a buffer whose first byte is < 0x20
+    // (e.g. an empty string) as LV_IMAGE_SRC_VARIABLE, then fails to decode it and
+    // logs "lv_image_set_src: failed to get image info". The no-thumbnail sentinel
+    // must therefore be nullptr, not an empty buffer (prestonbrown/helixscreen#990).
+
+    SECTION("empty buffer -> nullptr") {
+        char buf[8] = "";
+        REQUIRE(thumbnail_subject_value(buf) == nullptr);
+    }
+
+    SECTION("null pointer -> nullptr") {
+        REQUIRE(thumbnail_subject_value(nullptr) == nullptr);
+    }
+
+    SECTION("real thumbnail path -> same buffer (unchanged)") {
+        char buf[32] = "A:/cache/thumb.png";
+        REQUIRE(thumbnail_subject_value(buf) == buf);
+    }
+}

@@ -508,6 +508,97 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether the backend can position the selector at a gate without loading.
+     * @return true if select_gate() is implemented (selector-based systems only).
+     */
+    [[nodiscard]] virtual bool supports_gate_select() const {
+        return false;
+    }
+
+    /**
+     * @brief Move the selector to a gate without loading filament.
+     *
+     * Positions the MMU selector at the given gate without loading filament
+     * into the toolhead. This is useful for manual interventions and gate
+     * inspection on selector-based systems.
+     *
+     * @param slot_index Zero-based gate index.
+     * @return AmsError indicating success or failure.
+     */
+    virtual AmsError select_gate(int slot_index) {
+        (void)slot_index;
+        return AmsErrorHelper::not_supported("Gate select not supported");
+    }
+
+    /**
+     * @brief Jog the selector relative to its current gate.
+     *
+     * Moves the selector to (current gate + delta), clamped to the valid range
+     * [0, slot_count - 1], without loading filament. This is convenient for
+     * stepping the selector one gate at a time during manual interventions.
+     * Gated by supports_gate_select() — selector-based systems only.
+     *
+     * @param delta Signed number of gates to move (e.g. +1, -1).
+     * @return AmsError indicating success or failure.
+     */
+    virtual AmsError move_selector(int delta) {
+        (void)delta;
+        return AmsErrorHelper::not_supported("Selector jog");
+    }
+
+    /**
+     * @brief Whether the backend can probe gate sensors (MMU_CHECK_GATE).
+     * @return true if check_gate()/check_all_gates() are implemented.
+     */
+    [[nodiscard]] virtual bool supports_gate_check() const {
+        return false;
+    }
+
+    /**
+     * @brief Probe a single gate's filament sensor (MMU_CHECK_GATE GATE=n).
+     *
+     * Asks the firmware to check whether filament is present at the specified
+     * gate's sensor. Useful for diagnosing gate-status discrepancies without
+     * a full load/unload cycle.
+     *
+     * Default implementation returns NOT_SUPPORTED.
+     *
+     * @param slot_index Zero-based gate index.
+     * @return AmsError indicating success or failure.
+     */
+    virtual AmsError check_gate(int slot_index) {
+        (void)slot_index;
+        return AmsErrorHelper::not_supported("Gate check not supported");
+    }
+
+    /**
+     * @brief Probe all gate sensors at once (MMU_CHECK_GATE, no params).
+     *
+     * Asks the firmware to check filament presence at every gate sensor
+     * in one pass. Useful for a full gate-status audit.
+     *
+     * Default implementation returns NOT_SUPPORTED.
+     *
+     * @return AmsError indicating success or failure.
+     */
+    virtual AmsError check_all_gates() {
+        return AmsErrorHelper::not_supported("Gate check not supported");
+    }
+
+    /**
+     * @brief Display label for the sidebar reset()-button.
+     *
+     * Backends where reset() is a genuine reset keep "Reset"; selector-based
+     * systems where reset() homes the mechanism (Happy Hare -> MMU_HOME) override
+     * this to "Home" so the word "Reset" does not collide with the recover/re-sync
+     * concept.
+     * @return untranslated label key.
+     */
+    [[nodiscard]] virtual std::string reset_button_label() const {
+        return "Reset";
+    }
+
+    /**
      * @brief Cancel current operation
      *
      * Attempts to safely abort the current operation.

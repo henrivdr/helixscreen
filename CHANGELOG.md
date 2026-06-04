@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.71] - 2026-05-30
+
+### Added
+
+- **In-app audio output device picker** (Settings → Sound) — enumerate ALSA output devices, switch live via `SoundManager::set_output_device`, and persist the selection (`/sound/output_device`) across reboots. Device resolution follows env > settings > default with a default fallback.
+- **Brightness control backend for Sonic Pad** displays.
+- **"Allow cold load/unload" filament safety setting** (prestonbrown/helixscreen#978).
+- **Sovol SV06 ACE and SV06 Plus ACE** added to the printer database (prestonbrown/helixscreen#123).
+- **Optional touch-calibration press debouncing** — enable with `HELIX_TOUCH_CAL_DEBOUNCE` (prestonbrown/helixscreen#943).
+
+### Fixed
+
+- **K1 / K1C CFS filament sequencing corrected and slot-edit safety guards added** (prestonbrown/helixscreen#968) — prevents no-extrude and dangerous ramming.
+- **Installer and uninstaller/self-update fall back to python3 for download and zip extraction** on K2 firmware that lacks wget, curl, and unzip — uses urllib for HTTP and the built-in zipfile module, gating on zlib so a zlib-less python fails fast with a clear message (prestonbrown/helixscreen#969).
+- **Installer auto-configures the ALSA default device** on HDMI-audio screens with no card 0.
+- **Several rare crashes fixed** — stale-observer use-after-free on static subjects (prestonbrown/helixscreen#985), grid relayout during teardown (prestonbrown/helixscreen#973), print-select thumbnail callbacks, print-history observer removal during dispatch, and split-button label-width computation (prestonbrown/helixscreen#980).
+- **G-code viewer no longer thrashes when a render stalls** — the watchdog now gives up gracefully.
+- **Quieted AD5X log spam** from Adventurer5M.json polling (prestonbrown/helixscreen#981).
+
+### Changed
+
+- **Temperature graph rendering optimized** to cut redraw cost on low-power displays (prestonbrown/helixscreen#979) — history decimated to ~400 points and flat target-trace runs coalesced.
+
 ## [0.99.70] - 2026-05-24
 
 Headline is **CFS support for Creality K1 / K1C / K1 Max** via the official Creality CFS firmware upgrade (>= v2.3.5.33) (prestonbrown/helixscreen#968) — the K1 firmware exposes a different `BOX_*` macro dialect than K2's `CR_BOX_*` primitives, so the AMS backend now picks the dialect at construction. Plus the rest of the CFS work: **full stock-parity envelope for load/unload/swap** with wipe-before-park, friendly translations for K2 motor init + cutter errors, and the missing K2 procd autostart shim. Also: an **installer hardening pass** (full release-tree validation before in-place update `rm`, Artillery M1 routed to the right pi/pi32 binary), a **`GcodeErrorRouter` extraction** with another L072 sweep and embedded-JSON extraction for `!!` notification lines, **abort/restart routed through `PrinterRecoveryService`** (surfaces recovery UX on stuck klippy), and a **live target trace on temperature graphs** with backfill across panel switches.
@@ -3878,6 +3901,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.71]: https://github.com/prestonbrown/helixscreen/compare/v0.99.70...v0.99.71
 [0.99.70]: https://github.com/prestonbrown/helixscreen/compare/v0.99.69...v0.99.70
 [0.99.69]: https://github.com/prestonbrown/helixscreen/compare/v0.99.68...v0.99.69
 [0.99.68]: https://github.com/prestonbrown/helixscreen/compare/v0.99.67...v0.99.68

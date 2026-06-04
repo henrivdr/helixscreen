@@ -162,13 +162,13 @@ AmsBackendMock::AmsBackendMock(int slot_count) {
     system_info_.clog_detection = 2; // Auto mode
     system_info_.encoder_flow_rate = 85;
     system_info_.encoder_info = {
-        true,   // enabled
-        85,     // flow_rate (%)
-        2,      // detection_mode (auto)
-        5.0f,   // desired_headroom (mm)
-        12.4f,  // detection_length (mm)
-        8.0f,   // headroom (mm)
-        4.2f,   // min_headroom (mm)
+        true,  // enabled
+        85,    // flow_rate (%)
+        2,     // detection_mode (auto)
+        5.0f,  // desired_headroom (mm)
+        12.4f, // detection_length (mm)
+        8.0f,  // headroom (mm)
+        4.2f,  // min_headroom (mm)
     };
 
     // Start with slot 0 loaded for realistic demo appearance
@@ -408,8 +408,7 @@ int AmsBackendMock::get_current_tool() const {
     return system_info_.current_tool;
 }
 
-void AmsBackendMock::on_simulated_gcode_tool_changed(int tool_index,
-                                                     uint32_t slicer_color_rgb) {
+void AmsBackendMock::on_simulated_gcode_tool_changed(int tool_index, uint32_t slicer_color_rgb) {
     // Called from MoonrakerClientMock at print start with the gcode's dominant
     // tool. Mirrors what Klipper would set on printer.mmu.tool. Negative means
     // "no print active / no per-tool data" — clear back to -1.
@@ -428,13 +427,12 @@ void AmsBackendMock::on_simulated_gcode_tool_changed(int tool_index,
         // Read tool→slot map fresh from slot registry (system_info_ is stale —
         // set_tool_mapping writes to slots_ registry, not the cached struct).
         auto fresh_map = slots_.build_system_info().tool_to_slot_map;
-        spdlog::debug("[AmsBackendMock] notify: tool_to_slot_map size={}, T{}={}",
-                      fresh_map.size(), tool_index,
+        spdlog::debug("[AmsBackendMock] notify: tool_to_slot_map size={}, T{}={}", fresh_map.size(),
+                      tool_index,
                       (tool_index >= 0 && tool_index < static_cast<int>(fresh_map.size()))
                           ? fresh_map[tool_index]
                           : -99);
-        if (tool_index >= 0 &&
-            tool_index < static_cast<int>(fresh_map.size())) {
+        if (tool_index >= 0 && tool_index < static_cast<int>(fresh_map.size())) {
             int mapped_slot = fresh_map[tool_index];
             if (mapped_slot >= 0 && slots_.is_valid_index(mapped_slot)) {
                 // Mapped: follow the user's mapping.
@@ -699,6 +697,9 @@ AmsError AmsBackendMock::reset() {
 
         system_info_.action = AmsAction::RESETTING;
         system_info_.operation_detail = "Resetting system";
+        if (system_info_.type == AmsType::HAPPY_HARE) {
+            spdlog::info("[AMS Mock] Executing G-code: MMU_HOME");
+        }
         spdlog::info("[AmsBackendMock] Resetting");
     }
 
@@ -755,6 +756,65 @@ AmsError AmsBackendMock::reset_lane(int slot_index) {
     }
 
     emit_event(EVENT_STATE_CHANGED);
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsBackendMock::select_gate(int slot_index) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!slots_.is_valid_index(slot_index)) {
+            return AmsErrorHelper::invalid_slot(slot_index, slots_.slot_count() - 1);
+        }
+
+        spdlog::info("[AMS Mock] Executing G-code: MMU_SELECT GATE={}", slot_index);
+    }
+
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsBackendMock::move_selector(int delta) {
+    if (system_info_.type != AmsType::HAPPY_HARE) {
+        return AmsBackend::move_selector(delta);
+    }
+
+    int target = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        const int count = slots_.slot_count();
+        if (count <= 0) {
+            return AmsErrorHelper::not_supported("Selector jog");
+        }
+
+        int base = system_info_.current_slot;
+        if (base < 0) {
+            base = 0; // No current / bypass (-1, -2) -> treat as gate 0.
+        }
+        target = std::clamp(base + delta, 0, count - 1);
+
+        spdlog::info("[AMS Mock] Executing G-code: MMU_SELECT GATE={}", target);
+    }
+
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsBackendMock::check_gate(int slot_index) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!slots_.is_valid_index(slot_index)) {
+            return AmsErrorHelper::invalid_slot(slot_index, slots_.slot_count() - 1);
+        }
+
+        spdlog::info("[AMS Mock] Executing G-code: MMU_CHECK_GATE GATE={}", slot_index);
+    }
+
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsBackendMock::check_all_gates() {
+    spdlog::info("[AMS Mock] Executing G-code: MMU_CHECK_GATE");
     return AmsErrorHelper::success();
 }
 
@@ -1045,8 +1105,7 @@ void AmsBackendMock::set_toolchange_progress(int current, int total) {
 void AmsBackendMock::set_environment_mode(const std::string& mode) {
     std::lock_guard<std::mutex> lock(mutex_);
     environment_mode_ = mode;
-    spdlog::info("[AmsBackendMock] Environment mode set to '{}'",
-                 mode.empty() ? "(auto)" : mode);
+    spdlog::info("[AmsBackendMock] Environment mode set to '{}'", mode.empty() ? "(auto)" : mode);
 }
 
 bool AmsBackendMock::has_environment_sensors() const {
@@ -2128,7 +2187,8 @@ void AmsBackendMock::set_ifs_mode(bool enabled) {
         auto populate_slot = [this](int gi, const char* material, uint32_t color,
                                     const char* color_name, SlotStatus status) {
             auto* entry = slots_.get_mut(gi);
-            if (!entry) return;
+            if (!entry)
+                return;
             entry->info.slot_index = gi;
             entry->info.global_index = gi;
             entry->info.material = material;
@@ -2282,8 +2342,8 @@ void AmsBackendMock::set_htlf_toolchanger_mode(bool enabled) {
         mock_device_sections_ = helix::printer::afc_default_sections();
         mock_device_actions_ = helix::printer::afc_default_actions();
 
-        spdlog::info(
-            "[AmsBackendMock] HTLF+Toolchanger mode: HTLF_1 (4, MIXED) + Tools (3, PARALLEL) = 7 slots");
+        spdlog::info("[AmsBackendMock] HTLF+Toolchanger mode: HTLF_1 (4, MIXED) + Tools (3, "
+                     "PARALLEL) = 7 slots");
     } else {
         htlf_toolchanger_mode_ = false;
         unit_topologies_.clear();

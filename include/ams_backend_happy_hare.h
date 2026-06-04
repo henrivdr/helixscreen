@@ -82,6 +82,31 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     [[nodiscard]] bool supports_lane_eject() const override {
         return true;
     }
+    /**
+     * @brief Move the selector to a gate without loading filament (MMU_SELECT).
+     */
+    AmsError select_gate(int slot_index) override;
+    /**
+     * @brief Jog the selector relative to the current gate (MMU_SELECT, clamped).
+     */
+    AmsError move_selector(int delta) override;
+    [[nodiscard]] bool supports_gate_select() const override {
+        return true;
+    }
+    [[nodiscard]] bool supports_gate_check() const override {
+        return true;
+    }
+    [[nodiscard]] std::string reset_button_label() const override {
+        return "Home";
+    }
+    /**
+     * @brief Probe a single gate's sensor (MMU_CHECK_GATE GATE=n).
+     */
+    AmsError check_gate(int slot_index) override;
+    /**
+     * @brief Probe all gate sensors (MMU_CHECK_GATE, no params).
+     */
+    AmsError check_all_gates() override;
     AmsError cancel() override;
 
     // Configuration
@@ -122,8 +147,7 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
 
     // Dryer support (v4 - KMS/EMU hardware with heaters)
     [[nodiscard]] DryerInfo get_dryer_info() const override;
-    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
-                           int unit = 0) override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
 
     [[nodiscard]] bool has_firmware_spool_persistence() const override {

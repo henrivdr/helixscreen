@@ -9,12 +9,10 @@
 #include "moonraker_api.h"
 #include "post_op_cooldown_manager.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
-#include <spdlog/fmt/fmt.h>
-
 #include <lvgl.h>
-
 #include <utility>
 
 // ============================================================================
@@ -129,12 +127,12 @@ PathSegment AmsBackendSnapmaker::get_filament_segment() const {
 PathSegment AmsBackendSnapmaker::get_slot_filament_segment(int slot_index) const {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto* slot = system_info_.get_slot_global(slot_index);
-    if (!slot) return PathSegment::NONE;
+    if (!slot)
+        return PathSegment::NONE;
 
     // If the slot's runout sensor is tripped, the physical filament is gone
     // even if the spool/extruder still "thinks" it's loaded. Render no line.
-    if (slot_index >= 0 && slot_index < NUM_TOOLS &&
-        !sensor_filament_present_[slot_index]) {
+    if (slot_index >= 0 && slot_index < NUM_TOOLS && !sensor_filament_present_[slot_index]) {
         return PathSegment::NONE;
     }
 
@@ -161,7 +159,8 @@ PathSegment AmsBackendSnapmaker::infer_error_segment() const {
 
 AmsError AmsBackendSnapmaker::load_filament(int slot_index) {
     auto err = validate_slot_index(slot_index);
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
 
     // Snapmaker U1 firmware: AUTO_FEEDING is a thin macro wrapper that
     // forwards to the underlying FEED_AUTO command with module/channel
@@ -187,8 +186,39 @@ AmsError AmsBackendSnapmaker::load_filament(int slot_index) {
     return execute_gcode(fmt::format("AUTO_FEEDING EXTRUDER={} LOAD=1", slot_index));
 }
 
-AmsError AmsBackendSnapmaker::unload_filament(int /*slot_index*/) {
-    return execute_gcode("INNER_FILAMENT_UNLOAD");
+AmsError AmsBackendSnapmaker::unload_filament(int slot_index) {
+    // Unload must mirror load: route through AUTO_FEEDING (the firmware macro
+    // that forwards to FEED_AUTO with module/channel resolved from
+    // _FILAMENT_FEED_VARIABLE), passing UNLOAD=1. FEED_AUTO with no STAGE runs
+    // the full unload state machine (prepare → home → pick → heat → unload →
+    // finish), which drives the firmware's per-channel feed state all the way
+    // to "unload_finish".
+    //
+    // The bare INNER_FILAMENT_UNLOAD macro is the *leaf* the state machine
+    // invokes internally — calling it directly skips the state transitions.
+    // On a plain U1 that's fine, but it breaks aftermarket feeders that hook
+    // the unload-finish state: the DnG-Crafts U1-Ace mod retracts the Anycubic
+    // ACE Pro spool only when a channel reaches "unload_finish", so the bare
+    // macro left filament dangling at the toolhead (prestonbrown/helixscreen#974).
+    //
+    // Resolve which extruder to unload: callers usually pass nothing (-1,
+    // "the currently loaded one"), so fall back to current_slot. If we still
+    // don't know which slot is loaded, fall back to the firmware's bare unload
+    // rather than guess an EXTRUDER index.
+    int extruder = slot_index;
+    if (extruder < 0) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        extruder = system_info_.current_slot;
+    }
+    if (extruder < 0) {
+        return execute_gcode("INNER_FILAMENT_UNLOAD");
+    }
+
+    auto err = validate_slot_index(extruder);
+    if (err.result != AmsResult::SUCCESS)
+        return err;
+
+    return execute_gcode(fmt::format("AUTO_FEEDING EXTRUDER={} UNLOAD=1", extruder));
 }
 
 AmsError AmsBackendSnapmaker::select_slot(int slot_index) {
@@ -197,7 +227,8 @@ AmsError AmsBackendSnapmaker::select_slot(int slot_index) {
 
 AmsError AmsBackendSnapmaker::change_tool(int tool_number) {
     auto err = validate_slot_index(tool_number);
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
 
     return execute_gcode(fmt::format("T{}", tool_number));
 }
@@ -295,8 +326,7 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     }
 
     if (slot < 0 || slot >= NUM_TOOLS) {
-        spdlog::debug("{} prepare_for_resume: no active tool, skipping prep",
-                      backend_log_tag());
+        spdlog::debug("{} prepare_for_resume: no active tool, skipping prep", backend_log_tag());
         if (on_ready) {
             on_ready(AmsErrorHelper::success());
         }
@@ -342,17 +372,16 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     // enabled, latching filament_detected:true. Proven path matches the
     // 2026-05-13 manual recovery curl that successfully resumed a stuck
     // print on this same printer.
-    std::string chain =
-        fmt::format("SET_FILAMENT_SENSOR SENSOR=e{0}_filament ENABLE=0\n"
-                    "M104 S{1} T{0}\n"
-                    "M109 S{1} T{0}\n"
-                    "AUTO_FEEDING EXTRUDER={0} LOAD=1\n"
-                    "M400\n"
-                    "M83\n"
-                    "G1 E15 F60\n"
-                    "M400\n"
-                    "M82",
-                    slot, target_temp);
+    std::string chain = fmt::format("SET_FILAMENT_SENSOR SENSOR=e{0}_filament ENABLE=0\n"
+                                    "M104 S{1} T{0}\n"
+                                    "M109 S{1} T{0}\n"
+                                    "AUTO_FEEDING EXTRUDER={0} LOAD=1\n"
+                                    "M400\n"
+                                    "M83\n"
+                                    "G1 E15 F60\n"
+                                    "M400\n"
+                                    "M82",
+                                    slot, target_temp);
 
     spdlog::info("{} prepare_for_resume: tool {} runout latched, running recovery "
                  "chain (target {}°C)",
@@ -375,83 +404,80 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
             // MoonrakerAPI callbacks fire on the libhv WebSocket thread; defer
             // to main so on_ready runs on the UI thread where the caller's
             // RESUME dispatch and pending-action UI updates live.
-            tok.defer("AmsBackendSnapmaker::prepare_for_resume.ok",
-                      [on_ready = std::move(on_ready), tag, slot, api_ptr]() {
-                          spdlog::info("{} prepare_for_resume: tool {} recovery chain complete",
-                                       tag, slot);
-                          if (on_ready) {
-                              on_ready(AmsErrorHelper::success());
-                          }
-                          // Re-arm the runout sensor a safe interval after
-                          // the caller has dispatched RESUME. By the time
-                          // this fires Klipper's INNER_RESUME has finished
-                          // running CHECK_FILAMENT_RUNOUT (sensor still off
-                          // here, so it passes) and the print is back to
-                          // actual extrusion — encoder pulses will land
-                          // while the sensor is enabled and filament_detected
-                          // latches true. Single-shot lv_timer, no captured
-                          // `this` so backend destruction doesn't UAF.
-                          //
-                          // Lifetime notes:
-                          //  - MoonrakerAPI is a process-lifetime singleton,
-                          //    so api_ptr stays valid across backend destruction.
-                          //  - ReArmCtx is heap-allocated and deleted by the
-                          //    timer cb. KNOWN MINOR LEAK: if helix-screen
-                          //    shuts down within the 20s window, lv_deinit
-                          //    destroys the timer without firing the cb,
-                          //    leaking ~16 bytes per pending re-arm. Acceptable
-                          //    trade-off versus the complexity of a robust
-                          //    backend-tracked registry; revisit if telemetry
-                          //    surfaces a measurable accumulation.
-                          struct ReArmCtx {
-                              MoonrakerAPI* api;
-                              int slot;
-                          };
-                          auto* ctx = new ReArmCtx{api_ptr, slot};
-                          auto* t = lv_timer_create(
-                              [](lv_timer_t* timer) {
-                                  auto* c = static_cast<ReArmCtx*>(
-                                      lv_timer_get_user_data(timer));
-                                  if (c && c->api) {
-                                      std::string gc = fmt::format(
-                                          "SET_FILAMENT_SENSOR SENSOR=e{}_filament "
-                                          "ENABLE=1",
-                                          c->slot);
-                                      spdlog::info("[AMS Snapmaker] post-resume re-arm: "
-                                                   "tool {} runout sensor ENABLE=1",
-                                                   c->slot);
-                                      c->api->execute_gcode(
-                                          gc, []() {}, [](const MoonrakerError&) {}, 0,
-                                          /*silent=*/true);
-                                  }
-                                  delete c;
-                              },
-                              /*period_ms=*/20000, ctx);
-                          lv_timer_set_repeat_count(t, 1);
-                      });
+            tok.defer("AmsBackendSnapmaker::prepare_for_resume.ok", [on_ready = std::move(on_ready),
+                                                                     tag, slot, api_ptr]() {
+                spdlog::info("{} prepare_for_resume: tool {} recovery chain complete", tag, slot);
+                if (on_ready) {
+                    on_ready(AmsErrorHelper::success());
+                }
+                // Re-arm the runout sensor a safe interval after
+                // the caller has dispatched RESUME. By the time
+                // this fires Klipper's INNER_RESUME has finished
+                // running CHECK_FILAMENT_RUNOUT (sensor still off
+                // here, so it passes) and the print is back to
+                // actual extrusion — encoder pulses will land
+                // while the sensor is enabled and filament_detected
+                // latches true. Single-shot lv_timer, no captured
+                // `this` so backend destruction doesn't UAF.
+                //
+                // Lifetime notes:
+                //  - MoonrakerAPI is a process-lifetime singleton,
+                //    so api_ptr stays valid across backend destruction.
+                //  - ReArmCtx is heap-allocated and deleted by the
+                //    timer cb. KNOWN MINOR LEAK: if helix-screen
+                //    shuts down within the 20s window, lv_deinit
+                //    destroys the timer without firing the cb,
+                //    leaking ~16 bytes per pending re-arm. Acceptable
+                //    trade-off versus the complexity of a robust
+                //    backend-tracked registry; revisit if telemetry
+                //    surfaces a measurable accumulation.
+                struct ReArmCtx {
+                    MoonrakerAPI* api;
+                    int slot;
+                };
+                auto* ctx = new ReArmCtx{api_ptr, slot};
+                auto* t = lv_timer_create(
+                    [](lv_timer_t* timer) {
+                        auto* c = static_cast<ReArmCtx*>(lv_timer_get_user_data(timer));
+                        if (c && c->api) {
+                            std::string gc = fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament "
+                                                         "ENABLE=1",
+                                                         c->slot);
+                            spdlog::info("[AMS Snapmaker] post-resume re-arm: "
+                                         "tool {} runout sensor ENABLE=1",
+                                         c->slot);
+                            c->api->execute_gcode(
+                                gc, []() {}, [](const MoonrakerError&) {}, 0,
+                                /*silent=*/true);
+                        }
+                        delete c;
+                    },
+                    /*period_ms=*/20000, ctx);
+                lv_timer_set_repeat_count(t, 1);
+            });
         },
         [tok, on_ready, tag, slot, api_ptr](const MoonrakerError& err) mutable {
             std::string msg = err.message;
-            tok.defer("AmsBackendSnapmaker::prepare_for_resume.err",
-                      [on_ready = std::move(on_ready), tag, slot, msg, api_ptr]() {
-                          spdlog::error("{} prepare_for_resume: tool {} recovery chain failed: {}",
-                                        tag, slot, msg);
-                          // Recovery chain disabled the sensor before failing —
-                          // re-enable it now so the printer doesn't run with
-                          // runout protection silently off. Best-effort; ignore
-                          // result.
-                          if (api_ptr) {
-                              api_ptr->execute_gcode(
-                                  fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament ENABLE=1",
-                                              slot),
-                                  []() {}, [](const MoonrakerError&) {}, 0, /*silent=*/true);
-                          }
-                          if (on_ready) {
-                              on_ready(AmsError(AmsResult::COMMAND_FAILED,
-                                                "prepare_for_resume gcode failed: " + msg,
-                                                "Recovery before resume failed"));
-                          }
-                      });
+            tok.defer(
+                "AmsBackendSnapmaker::prepare_for_resume.err",
+                [on_ready = std::move(on_ready), tag, slot, msg, api_ptr]() {
+                    spdlog::error("{} prepare_for_resume: tool {} recovery chain failed: {}", tag,
+                                  slot, msg);
+                    // Recovery chain disabled the sensor before failing —
+                    // re-enable it now so the printer doesn't run with
+                    // runout protection silently off. Best-effort; ignore
+                    // result.
+                    if (api_ptr) {
+                        api_ptr->execute_gcode(
+                            fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament ENABLE=1", slot),
+                            []() {}, [](const MoonrakerError&) {}, 0, /*silent=*/true);
+                    }
+                    if (on_ready) {
+                        on_ready(AmsError(AmsResult::COMMAND_FAILED,
+                                          "prepare_for_resume gcode failed: " + msg,
+                                          "Recovery before resume failed"));
+                    }
+                });
         },
         // 60s — M109 wait for heat from cold can take ~45s on Snapmaker;
         // AUTO_FEEDING + 15mm G1 E at 60mm/min adds ~20s on top.
@@ -465,12 +491,14 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
 
 AmsError AmsBackendSnapmaker::set_slot_info(int slot_index, const SlotInfo& info, bool persist) {
     auto err = validate_slot_index(slot_index);
-    if (err.result != AmsResult::SUCCESS) return err;
+    if (err.result != AmsResult::SUCCESS)
+        return err;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto* slot = system_info_.units[0].get_slot(slot_index);
-        if (!slot) return AmsErrorHelper::invalid_slot(slot_index, NUM_TOOLS - 1);
+        if (!slot)
+            return AmsErrorHelper::invalid_slot(slot_index, NUM_TOOLS - 1);
 
         // Update the in-memory slot directly. Covers every SlotInfo field the
         // caller may set — a persist=false preview must not silently drop
@@ -551,8 +579,7 @@ AmsError AmsBackendSnapmaker::set_slot_info(int slot_index, const SlotInfo& info
         // outlive the scheduled save by design.
         const std::string tag = backend_log_tag();
         override_store_->save_async(
-            slot_index, ovr_to_save,
-            [tag, slot_index](bool success, const std::string& err) {
+            slot_index, ovr_to_save, [tag, slot_index](bool success, const std::string& err) {
                 if (!success) {
                     spdlog::warn("{} Override persist failed for slot {}: {}", tag, slot_index,
                                  err);
@@ -612,8 +639,7 @@ AmsError AmsBackendSnapmaker::set_slot_info(int slot_index, const SlotInfo& info
         // (lesson L083: pthread EAGAIN on AD5M / CC1 / MIPS32).
         const std::string tag = backend_log_tag();
         api_->rest().call_rest_post(
-            "/printer/filament_detect/set", payload,
-            [tag, slot_index](const RestResponse& resp) {
+            "/printer/filament_detect/set", payload, [tag, slot_index](const RestResponse& resp) {
                 if (!resp.success) {
                     // 404 on stock firmware (no Extended Firmware extension)
                     // is expected — log at debug, not warn, so we don't spam
@@ -623,8 +649,8 @@ AmsError AmsBackendSnapmaker::set_slot_info(int slot_index, const SlotInfo& info
                                       "stock firmware without Extended Firmware extension",
                                       tag, slot_index);
                     } else {
-                        spdlog::warn("{} filament_detect/set failed for slot {}: HTTP {} {}",
-                                     tag, slot_index, resp.status_code, resp.error);
+                        spdlog::warn("{} filament_detect/set failed for slot {}: HTTP {} {}", tag,
+                                     slot_index, resp.status_code, resp.error);
                     }
                     return;
                 }
@@ -781,7 +807,8 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
         status_ptr = &notification["params"][0];
     }
     const auto& status = *status_ptr;
-    if (!status.is_object()) return;
+    if (!status.is_object())
+        return;
 
     bool changed = false;
 
@@ -793,411 +820,436 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
     std::array<std::string, NUM_TOOLS> observed_uids;
     std::array<bool, NUM_TOOLS> saw_rfid_info{};
 
-    {  // Scope lock — emit_event MUST be called outside mutex_ to avoid deadlock
-       // with sync_from_backend() which acquires mutex_ via get_system_info()
-    std::lock_guard<std::mutex> lock(mutex_);
+    { // Scope lock — emit_event MUST be called outside mutex_ to avoid deadlock
+      // with sync_from_backend() which acquires mutex_ via get_system_info()
+        std::lock_guard<std::mutex> lock(mutex_);
 
-    // Parse extruder0..3 state
-    // Klipper uses "extruder" for T0, "extruder1" for T1, etc.
-    static const std::string extruder_keys[] = {"extruder", "extruder1", "extruder2", "extruder3"};
-    for (int i = 0; i < NUM_TOOLS; i++) {
-        const auto& key = extruder_keys[i];
-        if (status.contains(key) && status[key].is_object()) {
-            auto new_state = parse_extruder_state(status[key]);
+        // Parse extruder0..3 state
+        // Klipper uses "extruder" for T0, "extruder1" for T1, etc.
+        static const std::string extruder_keys[] = {"extruder", "extruder1", "extruder2",
+                                                    "extruder3"};
+        for (int i = 0; i < NUM_TOOLS; i++) {
+            const auto& key = extruder_keys[i];
+            if (status.contains(key) && status[key].is_object()) {
+                auto new_state = parse_extruder_state(status[key]);
 
-            // Update slot status based on extruder state (only if pin state changed)
-            auto* slot = system_info_.units[0].get_slot(i);
-            if (slot) {
-                SlotStatus prev = slot->status;
-                if (new_state.active_pin) {
-                    slot->status = SlotStatus::LOADED;
-                } else if (new_state.park_pin) {
-                    slot->status = SlotStatus::AVAILABLE;
-                }
-                if (slot->status != prev) changed = true;
-            }
-
-            extruder_states_[i] = std::move(new_state);
-        }
-    }
-
-    // Detect active tool from extruder pin state and toolhead.extruder.
-    // Only update when we have actual evidence — incremental status updates
-    // may omit extruder/toolhead keys, so preserve the current value when
-    // no relevant data is present (prevents oscillation between valid and -1).
-    bool has_extruder_data = false;
-    int active = -1;
-    for (int i = 0; i < NUM_TOOLS; i++) {
-        if (extruder_states_[i].active_pin ||
-            (!extruder_states_[i].state.empty() && extruder_states_[i].state != "PARKED")) {
-            active = i;
-            has_extruder_data = true;
-            break;
-        }
-    }
-    if (status.contains("toolhead") && status["toolhead"].is_object()) {
-        const auto& th = status["toolhead"];
-        if (th.contains("extruder") && th["extruder"].is_string()) {
-            auto ext_name = th["extruder"].get<std::string>();
-            // "extruder" = 0, "extruder1" = 1, etc.
-            if (ext_name == "extruder") {
-                active = 0;
-            } else if (ext_name.size() > 8 && ext_name.rfind("extruder", 0) == 0) {
-                try { active = std::stoi(ext_name.substr(8)); } catch (...) {}
-            }
-            has_extruder_data = true;
-        }
-    }
-    if (has_extruder_data && active != system_info_.current_tool) {
-        // Demote previous active tool from LOADED to AVAILABLE
-        if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS) {
-            auto* prev_slot = system_info_.units[0].get_slot(system_info_.current_tool);
-            if (prev_slot && prev_slot->status == SlotStatus::LOADED) {
-                prev_slot->status = SlotStatus::AVAILABLE;
-            }
-        }
-        system_info_.current_tool = active;
-        system_info_.current_slot = active;  // 1:1 tool-to-slot on Snapmaker
-        system_info_.filament_loaded = (active >= 0);
-        // Mark active tool's slot as LOADED
-        if (active >= 0 && active < NUM_TOOLS) {
-            auto* slot = system_info_.units[0].get_slot(active);
-            if (slot && slot->status != SlotStatus::EMPTY) {
-                slot->status = SlotStatus::LOADED;
-            }
-        }
-        changed = true;
-    }
-
-    // Parse filament_detect info (RFID data per channel)
-    if (status.contains("filament_detect") && status["filament_detect"].is_object()) {
-        const auto& fd = status["filament_detect"];
-
-        // Parse RFID info per channel — filament_detect.info is a JSON array [ch0, ch1, ch2, ch3]
-        // Only apply RFID data when it contains real values (not "NONE").
-        // print_task_config is the authoritative source; RFID supplements it when tags are present.
-        if (fd.contains("info") && fd["info"].is_array()) {
-            const auto& info_arr = fd["info"];
-            for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(info_arr.size()); i++) {
-                if (!info_arr[i].is_object()) continue;
-                auto rfid = parse_rfid_info(info_arr[i]);
-
-                // Capture the UID for hardware-swap detection before any early
-                // exit. Even "NONE" tags can carry a CARD_UID in theory, and
-                // we want the observed value visible to check_hardware_event_clear
-                // regardless of whether we apply the rest of the RFID fields.
-                observed_uids[i] = rfid.uid;
-                saw_rfid_info[i] = true;
-
-                // Skip entirely if RFID reader is disabled or no tag present
-                if (rfid.main_type == "NONE") continue;
-
+                // Update slot status based on extruder state (only if pin state changed)
                 auto* slot = system_info_.units[0].get_slot(i);
                 if (slot) {
-                    slot->material = rfid.main_type;
-                    auto brand = !rfid.manufacturer.empty() ? rfid.manufacturer : rfid.vendor;
-                    if (brand != "NONE") slot->brand = brand;
-                    slot->color_rgb = rfid.color_rgb;
-                    // SUB_TYPE is Snapmaker's filament product-line name (e.g.
-                    // "SnapSpeed" for their PLA line — akin to Polymaker's
-                    // "PolyLite"). Maps to spool_name, NOT color_name. The
-                    // Snapmaker RFID doesn't expose a dedicated color-name
-                    // field — color_name stays unset here and is user-editable
-                    // via the edit modal's color picker.
-                    if (rfid.sub_type != "NONE") slot->spool_name = rfid.sub_type;
-                    slot->nozzle_temp_min = rfid.hotend_min_temp;
-                    slot->nozzle_temp_max = rfid.hotend_max_temp;
-                    slot->bed_temp = rfid.bed_temp;
-                    slot->total_weight_g = static_cast<float>(rfid.weight_g);
+                    SlotStatus prev = slot->status;
+                    if (new_state.active_pin) {
+                        slot->status = SlotStatus::LOADED;
+                    } else if (new_state.park_pin) {
+                        slot->status = SlotStatus::AVAILABLE;
+                    }
+                    if (slot->status != prev)
+                        changed = true;
                 }
+
+                extruder_states_[i] = std::move(new_state);
+            }
+        }
+
+        // Detect active tool from extruder pin state and toolhead.extruder.
+        // Only update when we have actual evidence — incremental status updates
+        // may omit extruder/toolhead keys, so preserve the current value when
+        // no relevant data is present (prevents oscillation between valid and -1).
+        bool has_extruder_data = false;
+        int active = -1;
+        for (int i = 0; i < NUM_TOOLS; i++) {
+            if (extruder_states_[i].active_pin ||
+                (!extruder_states_[i].state.empty() && extruder_states_[i].state != "PARKED")) {
+                active = i;
+                has_extruder_data = true;
+                break;
+            }
+        }
+        if (status.contains("toolhead") && status["toolhead"].is_object()) {
+            const auto& th = status["toolhead"];
+            if (th.contains("extruder") && th["extruder"].is_string()) {
+                auto ext_name = th["extruder"].get<std::string>();
+                // "extruder" = 0, "extruder1" = 1, etc.
+                if (ext_name == "extruder") {
+                    active = 0;
+                } else if (ext_name.size() > 8 && ext_name.rfind("extruder", 0) == 0) {
+                    try {
+                        active = std::stoi(ext_name.substr(8));
+                    } catch (...) {
+                    }
+                }
+                has_extruder_data = true;
+            }
+        }
+        if (has_extruder_data && active != system_info_.current_tool) {
+            // Demote previous active tool from LOADED to AVAILABLE
+            if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS) {
+                auto* prev_slot = system_info_.units[0].get_slot(system_info_.current_tool);
+                if (prev_slot && prev_slot->status == SlotStatus::LOADED) {
+                    prev_slot->status = SlotStatus::AVAILABLE;
+                }
+            }
+            system_info_.current_tool = active;
+            system_info_.current_slot = active; // 1:1 tool-to-slot on Snapmaker
+            system_info_.filament_loaded = (active >= 0);
+            // Mark active tool's slot as LOADED
+            if (active >= 0 && active < NUM_TOOLS) {
+                auto* slot = system_info_.units[0].get_slot(active);
+                if (slot && slot->status != SlotStatus::EMPTY) {
+                    slot->status = SlotStatus::LOADED;
+                }
+            }
+            changed = true;
+        }
+
+        // Parse filament_detect info (RFID data per channel)
+        if (status.contains("filament_detect") && status["filament_detect"].is_object()) {
+            const auto& fd = status["filament_detect"];
+
+            // Parse RFID info per channel — filament_detect.info is a JSON array [ch0, ch1, ch2,
+            // ch3] Only apply RFID data when it contains real values (not "NONE").
+            // print_task_config is the authoritative source; RFID supplements it when tags are
+            // present.
+            if (fd.contains("info") && fd["info"].is_array()) {
+                const auto& info_arr = fd["info"];
+                for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(info_arr.size()); i++) {
+                    if (!info_arr[i].is_object())
+                        continue;
+                    auto rfid = parse_rfid_info(info_arr[i]);
+
+                    // Capture the UID for hardware-swap detection before any early
+                    // exit. Even "NONE" tags can carry a CARD_UID in theory, and
+                    // we want the observed value visible to check_hardware_event_clear
+                    // regardless of whether we apply the rest of the RFID fields.
+                    observed_uids[i] = rfid.uid;
+                    saw_rfid_info[i] = true;
+
+                    // Skip entirely if RFID reader is disabled or no tag present
+                    if (rfid.main_type == "NONE")
+                        continue;
+
+                    auto* slot = system_info_.units[0].get_slot(i);
+                    if (slot) {
+                        slot->material = rfid.main_type;
+                        auto brand = !rfid.manufacturer.empty() ? rfid.manufacturer : rfid.vendor;
+                        if (brand != "NONE")
+                            slot->brand = brand;
+                        slot->color_rgb = rfid.color_rgb;
+                        // SUB_TYPE is Snapmaker's filament product-line name (e.g.
+                        // "SnapSpeed" for their PLA line — akin to Polymaker's
+                        // "PolyLite"). Maps to spool_name, NOT color_name. The
+                        // Snapmaker RFID doesn't expose a dedicated color-name
+                        // field — color_name stays unset here and is user-editable
+                        // via the edit modal's color picker.
+                        if (rfid.sub_type != "NONE")
+                            slot->spool_name = rfid.sub_type;
+                        slot->nozzle_temp_min = rfid.hotend_min_temp;
+                        slot->nozzle_temp_max = rfid.hotend_max_temp;
+                        slot->bed_temp = rfid.bed_temp;
+                        slot->total_weight_g = static_cast<float>(rfid.weight_g);
+                    }
+                    changed = true;
+                }
+            }
+
+            // Parse filament state per channel — filament_detect.state is [int, int, int, int]
+            // 1 = filament present, 0 = no filament / no tag
+            if (fd.contains("state") && fd["state"].is_array()) {
+                const auto& state_arr = fd["state"];
+                for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(state_arr.size()); i++) {
+                    if (!state_arr[i].is_number())
+                        continue;
+                    int state_val = state_arr[i].get<int>();
+                    auto* slot = system_info_.units[0].get_slot(i);
+                    if (slot) {
+                        // Only set from filament_detect if extruder state hasn't already
+                        // provided a more authoritative status (LOADED/AVAILABLE via
+                        // park_pin/active_pin)
+                        if (slot->status == SlotStatus::UNKNOWN) {
+                            slot->status =
+                                (state_val != 0) ? SlotStatus::AVAILABLE : SlotStatus::EMPTY;
+                        }
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        // Parse filament_feed left/right — top-level Klipper objects (not nested in
+        // filament_detect) Each contains per-extruder state: filament_detected, channel_state,
+        // channel_error
+        for (const auto& feed_key : {"filament_feed left", "filament_feed right"}) {
+            if (status.contains(feed_key) && status[feed_key].is_object()) {
+                const auto& feed = status[feed_key];
+                for (int i = 0; i < NUM_TOOLS; i++) {
+                    std::string ext_key = (i == 0) ? "extruder0" : fmt::format("extruder{}", i);
+                    if (feed.contains(ext_key) && feed[ext_key].is_object()) {
+                        const auto& ch = feed[ext_key];
+                        bool detected = ch.value("filament_detected", false);
+                        // Mirror into port_sensor_filament_present_ so
+                        // is_stuck_motion_sensor_runout can distinguish a real
+                        // runout (both sensors false) from a stale motion-sensor
+                        // false positive (motion=false, port=true). Tracked
+                        // independent of slot->status because slot status flips
+                        // to AVAILABLE/LOADED based on extruder pin state which
+                        // is orthogonal to the port sensor reading.
+                        if (i >= 0 && i < NUM_TOOLS) {
+                            port_sensor_filament_present_[i] = detected;
+                        }
+                        auto* slot = system_info_.units[0].get_slot(i);
+                        if (slot) {
+                            if (detected && (slot->status == SlotStatus::EMPTY ||
+                                             slot->status == SlotStatus::UNKNOWN)) {
+                                slot->status = SlotStatus::AVAILABLE;
+                                changed = true;
+                            } else if (!detected && slot->status != SlotStatus::LOADED) {
+                                slot->status = SlotStatus::EMPTY;
+                                changed = true;
+                            }
+                        }
+
+                        // Parse channel_state for load/unload action tracking
+                        auto state = ch.value("channel_state", "");
+                        auto error = ch.value("channel_error", "ok");
+                        if (error != "ok" && !error.empty() && error != "none") {
+                            system_info_.action = AmsAction::ERROR;
+                            system_info_.operation_detail = error;
+                            changed = true;
+                        } else if (state == "loading" || state == "preloading") {
+                            system_info_.action = AmsAction::LOADING;
+                            changed = true;
+                        } else if (state == "unloading") {
+                            system_info_.action = AmsAction::UNLOADING;
+                            changed = true;
+                        } else if (state == "load_finish" || state == "idle") {
+                            if (system_info_.action == AmsAction::LOADING ||
+                                system_info_.action == AmsAction::UNLOADING) {
+                                system_info_.action = AmsAction::IDLE;
+                                system_info_.operation_detail.clear();
+                                PostOpCooldownManager::instance().schedule();
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Parse print_task_config — authoritative filament info from Snapmaker's task manager
+        // Contains per-extruder filament type, vendor, color, and presence data
+        if (status.contains("print_task_config") && status["print_task_config"].is_object()) {
+            const auto& ptc = status["print_task_config"];
+
+            // filament_exist: [bool, bool, bool, bool] — whether filament is loaded per slot
+            if (ptc.contains("filament_exist") && ptc["filament_exist"].is_array()) {
+                const auto& exist_arr = ptc["filament_exist"];
+                for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(exist_arr.size()); i++) {
+                    if (!exist_arr[i].is_boolean())
+                        continue;
+                    bool exists = exist_arr[i].get<bool>();
+                    auto* slot = system_info_.units[0].get_slot(i);
+                    if (slot) {
+                        if (exists && slot->status != SlotStatus::LOADED) {
+                            slot->status = SlotStatus::AVAILABLE;
+                        } else if (!exists) {
+                            slot->status = SlotStatus::EMPTY;
+                        }
+                        changed = true;
+                    }
+                }
+            }
+
+            // filament_type: ["PLA", "PLA", ...] — material type per slot
+            if (ptc.contains("filament_type") && ptc["filament_type"].is_array()) {
+                const auto& type_arr = ptc["filament_type"];
+                for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(type_arr.size()); i++) {
+                    if (!type_arr[i].is_string())
+                        continue;
+                    auto* slot = system_info_.units[0].get_slot(i);
+                    if (slot) {
+                        auto type = type_arr[i].get<std::string>();
+                        slot->material = type; // Base type only (e.g., "PLA") for compact display
+                        changed = true;
+                    }
+                }
+            }
+
+            // filament_vendor: ["Snapmaker", ...] — brand per slot
+            if (ptc.contains("filament_vendor") && ptc["filament_vendor"].is_array()) {
+                const auto& vendor_arr = ptc["filament_vendor"];
+                for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(vendor_arr.size()); i++) {
+                    if (!vendor_arr[i].is_string())
+                        continue;
+                    auto* slot = system_info_.units[0].get_slot(i);
+                    if (slot) {
+                        slot->brand = vendor_arr[i].get<std::string>();
+                        changed = true;
+                    }
+                }
+            }
+
+            // filament_color_rgba: ["080A0DFF", "E2DEDBFF", ...] — hex RGBA color per slot
+            if (ptc.contains("filament_color_rgba") && ptc["filament_color_rgba"].is_array()) {
+                const auto& color_arr = ptc["filament_color_rgba"];
+                for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(color_arr.size()); i++) {
+                    if (!color_arr[i].is_string())
+                        continue;
+                    auto* slot = system_info_.units[0].get_slot(i);
+                    if (slot) {
+                        auto hex = color_arr[i].get<std::string>();
+                        // RGBA hex string → RGB uint32: take first 6 chars
+                        if (hex.size() >= 6) {
+                            try {
+                                slot->color_rgb = std::stoul(hex.substr(0, 6), nullptr, 16);
+                            } catch (...) {
+                            }
+                        }
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        // Parse filament_motion_sensor / filament_switch_sensor for per-slot
+        // runout state. Snapmaker U1's config has [filament_motion_sensor e{N}_filament]
+        // with pause_on_runout=True; when filament stops moving past the encoder,
+        // Klipper publishes filament_detected:false and triggers PAUSE. The slot
+        // status / extruder pin state don't reflect this — the tool is still
+        // "active" but no filament reaches the nozzle. Mirror the sensor flag so
+        // the path canvas can break the spool→toolhead line at runout.
+        //
+        // Match both prefixes (motion is the Snapmaker default; switch is the
+        // generic fallback) and any "e{N}_filament" / "e{N}" sensor name suffix.
+        for (auto it = status.begin(); it != status.end(); ++it) {
+            const std::string& key = it.key();
+            const auto motion_prefix = std::string_view("filament_motion_sensor ");
+            const auto switch_prefix = std::string_view("filament_switch_sensor ");
+            std::string_view sensor_name;
+            if (key.compare(0, motion_prefix.size(), motion_prefix) == 0) {
+                sensor_name = std::string_view(key).substr(motion_prefix.size());
+            } else if (key.compare(0, switch_prefix.size(), switch_prefix) == 0) {
+                sensor_name = std::string_view(key).substr(switch_prefix.size());
+            } else {
+                continue;
+            }
+            // Expect "e{N}_filament" or "e{N}". Anything else (toolhead_sensor,
+            // bypass_sensor, custom names) is unrelated to per-tool runout.
+            if (sensor_name.size() < 2 || sensor_name[0] != 'e')
+                continue;
+            int tool_idx = -1;
+            try {
+                size_t digit_end = 1;
+                while (digit_end < sensor_name.size() &&
+                       std::isdigit(static_cast<unsigned char>(sensor_name[digit_end]))) {
+                    ++digit_end;
+                }
+                if (digit_end == 1)
+                    continue; // no digits
+                tool_idx = std::stoi(std::string(sensor_name.substr(1, digit_end - 1)));
+            } catch (...) {
+                continue;
+            }
+            if (tool_idx < 0 || tool_idx >= NUM_TOOLS)
+                continue;
+            if (!it.value().is_object())
+                continue;
+            // filament_detected: Klipper emits as bool; default true (no runout)
+            // so missing field == "no change" via the contains check. Use .find()
+            // + is_boolean() (per [L087]) rather than .value() which would throw
+            // on a null payload.
+            auto fd_it = it.value().find("filament_detected");
+            if (fd_it == it.value().end() || !fd_it->is_boolean())
+                continue;
+            bool present = fd_it->get<bool>();
+            if (sensor_filament_present_[tool_idx] != present) {
+                sensor_filament_present_[tool_idx] = present;
+                changed = true;
+                spdlog::info("{} Tool {} filament sensor: {} ({})", backend_log_tag(), tool_idx,
+                             present ? "PRESENT" : "RUNOUT", key);
+            }
+        }
+
+        // If the active tool's filament sensor reports runout, the global
+        // filament_loaded flag (used by get_filament_segment) should reflect that.
+        // The pin-state path above sets filament_loaded=(active>=0) — override
+        // here so the canvas's spool→toolhead line breaks on runout even though
+        // the tool itself is still "active".
+        if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS &&
+            !sensor_filament_present_[system_info_.current_tool]) {
+            if (system_info_.filament_loaded) {
+                system_info_.filament_loaded = false;
                 changed = true;
             }
         }
 
-        // Parse filament state per channel — filament_detect.state is [int, int, int, int]
-        // 1 = filament present, 0 = no filament / no tag
-        if (fd.contains("state") && fd["state"].is_array()) {
-            const auto& state_arr = fd["state"];
-            for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(state_arr.size()); i++) {
-                if (!state_arr[i].is_number()) continue;
-                int state_val = state_arr[i].get<int>();
-                auto* slot = system_info_.units[0].get_slot(i);
-                if (slot) {
-                    // Only set from filament_detect if extruder state hasn't already
-                    // provided a more authoritative status (LOADED/AVAILABLE via park_pin/active_pin)
-                    if (slot->status == SlotStatus::UNKNOWN) {
-                        slot->status = (state_val != 0) ? SlotStatus::AVAILABLE : SlotStatus::EMPTY;
-                    }
-                    changed = true;
-                }
-            }
-        }
-    }
-
-    // Parse filament_feed left/right — top-level Klipper objects (not nested in filament_detect)
-    // Each contains per-extruder state: filament_detected, channel_state, channel_error
-    for (const auto& feed_key : {"filament_feed left", "filament_feed right"}) {
-        if (status.contains(feed_key) && status[feed_key].is_object()) {
-            const auto& feed = status[feed_key];
-            for (int i = 0; i < NUM_TOOLS; i++) {
-                std::string ext_key = (i == 0) ? "extruder0" : fmt::format("extruder{}", i);
-                if (feed.contains(ext_key) && feed[ext_key].is_object()) {
-                    const auto& ch = feed[ext_key];
-                    bool detected = ch.value("filament_detected", false);
-                    // Mirror into port_sensor_filament_present_ so
-                    // is_stuck_motion_sensor_runout can distinguish a real
-                    // runout (both sensors false) from a stale motion-sensor
-                    // false positive (motion=false, port=true). Tracked
-                    // independent of slot->status because slot status flips
-                    // to AVAILABLE/LOADED based on extruder pin state which
-                    // is orthogonal to the port sensor reading.
-                    if (i >= 0 && i < NUM_TOOLS) {
-                        port_sensor_filament_present_[i] = detected;
-                    }
-                    auto* slot = system_info_.units[0].get_slot(i);
-                    if (slot) {
-                        if (detected &&
-                            (slot->status == SlotStatus::EMPTY ||
-                             slot->status == SlotStatus::UNKNOWN)) {
-                            slot->status = SlotStatus::AVAILABLE;
-                            changed = true;
-                        } else if (!detected && slot->status != SlotStatus::LOADED) {
-                            slot->status = SlotStatus::EMPTY;
-                            changed = true;
-                        }
-                    }
-
-                    // Parse channel_state for load/unload action tracking
-                    auto state = ch.value("channel_state", "");
-                    auto error = ch.value("channel_error", "ok");
-                    if (error != "ok" && !error.empty() && error != "none") {
-                        system_info_.action = AmsAction::ERROR;
-                        system_info_.operation_detail = error;
-                        changed = true;
-                    } else if (state == "loading" || state == "preloading") {
-                        system_info_.action = AmsAction::LOADING;
-                        changed = true;
-                    } else if (state == "unloading") {
-                        system_info_.action = AmsAction::UNLOADING;
-                        changed = true;
-                    } else if (state == "load_finish" || state == "idle") {
-                        if (system_info_.action == AmsAction::LOADING ||
-                            system_info_.action == AmsAction::UNLOADING) {
-                            system_info_.action = AmsAction::IDLE;
-                            system_info_.operation_detail.clear();
-                            PostOpCooldownManager::instance().schedule();
-                            changed = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Parse print_task_config — authoritative filament info from Snapmaker's task manager
-    // Contains per-extruder filament type, vendor, color, and presence data
-    if (status.contains("print_task_config") &&
-        status["print_task_config"].is_object()) {
-        const auto& ptc = status["print_task_config"];
-
-        // filament_exist: [bool, bool, bool, bool] — whether filament is loaded per slot
-        if (ptc.contains("filament_exist") && ptc["filament_exist"].is_array()) {
-            const auto& exist_arr = ptc["filament_exist"];
-            for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(exist_arr.size()); i++) {
-                if (!exist_arr[i].is_boolean()) continue;
-                bool exists = exist_arr[i].get<bool>();
-                auto* slot = system_info_.units[0].get_slot(i);
-                if (slot) {
-                    if (exists && slot->status != SlotStatus::LOADED) {
-                        slot->status = SlotStatus::AVAILABLE;
-                    } else if (!exists) {
-                        slot->status = SlotStatus::EMPTY;
-                    }
-                    changed = true;
-                }
+        // Per-slot runout demotion: any slot whose motion sensor reports
+        // no filament should be AVAILABLE (spool present, ready to feed), not
+        // LOADED. Without this, the AMS context menu's Load button is gated off
+        // (pending_is_loaded_ from slot.status==LOADED disables it) and the user
+        // has no way to re-feed filament from the UI after a runout — they get
+        // Unload/Reset on a slot that has no filament between feeder and nozzle.
+        // EMPTY is wrong here because the slot's RFID/print_task_config still
+        // reports a spool present; AVAILABLE accurately captures "spool yes,
+        // filament-at-toolhead no".
+        for (int i = 0; i < NUM_TOOLS; ++i) {
+            if (sensor_filament_present_[i])
+                continue;
+            auto* slot = system_info_.units[0].get_slot(i);
+            if (slot && slot->status == SlotStatus::LOADED) {
+                slot->status = SlotStatus::AVAILABLE;
+                changed = true;
             }
         }
 
-        // filament_type: ["PLA", "PLA", ...] — material type per slot
-        if (ptc.contains("filament_type") && ptc["filament_type"].is_array()) {
-            const auto& type_arr = ptc["filament_type"];
-            for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(type_arr.size()); i++) {
-                if (!type_arr[i].is_string()) continue;
-                auto* slot = system_info_.units[0].get_slot(i);
-                if (slot) {
-                    auto type = type_arr[i].get<std::string>();
-                    slot->material = type;  // Base type only (e.g., "PLA") for compact display
-                    changed = true;
-                }
+        // Parse convergence point. After every firmware-sourced field on the
+        // SlotInfo has been populated above, loop through slots and apply
+        // user-configured overrides on top. check_hardware_event_clear must run
+        // FIRST so it sees firmware-truth fields (not the override-masked view)
+        // and can clear a stale override when a physical spool swap is detected.
+        // apply_overrides runs after, so the final SlotInfo the UI reads through
+        // get_slot_info / the emitted event reflects the override layer.
+        //
+        // Snapmaker has multiple parse paths feeding the same slot (RFID info,
+        // print_task_config, filament_feed). Rather than hook the override logic
+        // into each one, we run it once here at the tail — the tradeoff is that
+        // get_slot_info during a partial parse would observe uncleared overrides,
+        // but since everything runs under mutex_ and handle_status_update is the
+        // only writer, there's no observable window.
+        for (int i = 0; i < NUM_TOOLS; ++i) {
+            auto* slot = system_info_.units[0].get_slot(i);
+            if (!slot)
+                continue;
+
+            // Only pass a UID to the hardware-event check when this parse
+            // actually carried filament_detect.info for the slot. Otherwise we'd
+            // feed an empty-string UID on every incremental notify (e.g. pure
+            // toolhead status updates) and defeat the "empty = no signal"
+            // contract the helper expects. saw_rfid_info[i] captures "we had an
+            // info blob"; observed_uids[i] may still be empty if the tag's
+            // CARD_UID field was missing or malformed, which the helper also
+            // treats as no signal.
+            if (saw_rfid_info[i]) {
+                check_hardware_event_clear(*slot, i, observed_uids[i]);
             }
+            // Mirror firmware-truth color/material into lane_data so OrcaSlicer's
+            // MoonrakerPrinterAgent sees the spool. OverwriteAlways policy: user
+            // edits via set_slot_info now round-trip through firmware via the
+            // POST /printer/filament_detect/set endpoint (paxx12 Extended Firmware),
+            // so firmware-truth and user-truth converge — overwriting lane_data
+            // unconditionally is safe and also catches external edits (CHANGE_ZCOLOR
+            // from a print, manual gcode, OrcaSlicer, etc). On stock firmware the
+            // POST 404s, but the override is still persisted to lane_data
+            // separately, so this overwrite is the only path that could theoretically
+            // de-sync — accept that tradeoff in exchange for picking up external
+            // edits on extension-enabled firmware. See mirror_firmware_to_lane_data
+            // docs and AD5X IFS for the same pattern.
+            helix::ams::mirror_firmware_to_lane_data(
+                override_store_.get(), overrides_, i, slot->color_rgb, slot->material,
+                slot->status == SlotStatus::AVAILABLE, helix::ams::MirrorPolicy::OverwriteAlways,
+                backend_log_tag());
+            apply_overrides(*slot, i);
         }
 
-        // filament_vendor: ["Snapmaker", ...] — brand per slot
-        if (ptc.contains("filament_vendor") && ptc["filament_vendor"].is_array()) {
-            const auto& vendor_arr = ptc["filament_vendor"];
-            for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(vendor_arr.size()); i++) {
-                if (!vendor_arr[i].is_string()) continue;
-                auto* slot = system_info_.units[0].get_slot(i);
-                if (slot) {
-                    slot->brand = vendor_arr[i].get<std::string>();
-                    changed = true;
-                }
-            }
-        }
-
-        // filament_color_rgba: ["080A0DFF", "E2DEDBFF", ...] — hex RGBA color per slot
-        if (ptc.contains("filament_color_rgba") && ptc["filament_color_rgba"].is_array()) {
-            const auto& color_arr = ptc["filament_color_rgba"];
-            for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(color_arr.size()); i++) {
-                if (!color_arr[i].is_string()) continue;
-                auto* slot = system_info_.units[0].get_slot(i);
-                if (slot) {
-                    auto hex = color_arr[i].get<std::string>();
-                    // RGBA hex string → RGB uint32: take first 6 chars
-                    if (hex.size() >= 6) {
-                        try {
-                            slot->color_rgb = std::stoul(hex.substr(0, 6), nullptr, 16);
-                        } catch (...) {}
-                    }
-                    changed = true;
-                }
-            }
-        }
-    }
-
-    // Parse filament_motion_sensor / filament_switch_sensor for per-slot
-    // runout state. Snapmaker U1's config has [filament_motion_sensor e{N}_filament]
-    // with pause_on_runout=True; when filament stops moving past the encoder,
-    // Klipper publishes filament_detected:false and triggers PAUSE. The slot
-    // status / extruder pin state don't reflect this — the tool is still
-    // "active" but no filament reaches the nozzle. Mirror the sensor flag so
-    // the path canvas can break the spool→toolhead line at runout.
-    //
-    // Match both prefixes (motion is the Snapmaker default; switch is the
-    // generic fallback) and any "e{N}_filament" / "e{N}" sensor name suffix.
-    for (auto it = status.begin(); it != status.end(); ++it) {
-        const std::string& key = it.key();
-        const auto motion_prefix = std::string_view("filament_motion_sensor ");
-        const auto switch_prefix = std::string_view("filament_switch_sensor ");
-        std::string_view sensor_name;
-        if (key.compare(0, motion_prefix.size(), motion_prefix) == 0) {
-            sensor_name = std::string_view(key).substr(motion_prefix.size());
-        } else if (key.compare(0, switch_prefix.size(), switch_prefix) == 0) {
-            sensor_name = std::string_view(key).substr(switch_prefix.size());
-        } else {
-            continue;
-        }
-        // Expect "e{N}_filament" or "e{N}". Anything else (toolhead_sensor,
-        // bypass_sensor, custom names) is unrelated to per-tool runout.
-        if (sensor_name.size() < 2 || sensor_name[0] != 'e') continue;
-        int tool_idx = -1;
-        try {
-            size_t digit_end = 1;
-            while (digit_end < sensor_name.size() &&
-                   std::isdigit(static_cast<unsigned char>(sensor_name[digit_end]))) {
-                ++digit_end;
-            }
-            if (digit_end == 1) continue; // no digits
-            tool_idx = std::stoi(std::string(sensor_name.substr(1, digit_end - 1)));
-        } catch (...) { continue; }
-        if (tool_idx < 0 || tool_idx >= NUM_TOOLS) continue;
-        if (!it.value().is_object()) continue;
-        // filament_detected: Klipper emits as bool; default true (no runout)
-        // so missing field == "no change" via the contains check. Use .find()
-        // + is_boolean() (per [L087]) rather than .value() which would throw
-        // on a null payload.
-        auto fd_it = it.value().find("filament_detected");
-        if (fd_it == it.value().end() || !fd_it->is_boolean()) continue;
-        bool present = fd_it->get<bool>();
-        if (sensor_filament_present_[tool_idx] != present) {
-            sensor_filament_present_[tool_idx] = present;
-            changed = true;
-            spdlog::info("{} Tool {} filament sensor: {} ({})", backend_log_tag(), tool_idx,
-                         present ? "PRESENT" : "RUNOUT", key);
-        }
-    }
-
-    // If the active tool's filament sensor reports runout, the global
-    // filament_loaded flag (used by get_filament_segment) should reflect that.
-    // The pin-state path above sets filament_loaded=(active>=0) — override
-    // here so the canvas's spool→toolhead line breaks on runout even though
-    // the tool itself is still "active".
-    if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS &&
-        !sensor_filament_present_[system_info_.current_tool]) {
-        if (system_info_.filament_loaded) {
-            system_info_.filament_loaded = false;
-            changed = true;
-        }
-    }
-
-    // Per-slot runout demotion: any slot whose motion sensor reports
-    // no filament should be AVAILABLE (spool present, ready to feed), not
-    // LOADED. Without this, the AMS context menu's Load button is gated off
-    // (pending_is_loaded_ from slot.status==LOADED disables it) and the user
-    // has no way to re-feed filament from the UI after a runout — they get
-    // Unload/Reset on a slot that has no filament between feeder and nozzle.
-    // EMPTY is wrong here because the slot's RFID/print_task_config still
-    // reports a spool present; AVAILABLE accurately captures "spool yes,
-    // filament-at-toolhead no".
-    for (int i = 0; i < NUM_TOOLS; ++i) {
-        if (sensor_filament_present_[i]) continue;
-        auto* slot = system_info_.units[0].get_slot(i);
-        if (slot && slot->status == SlotStatus::LOADED) {
-            slot->status = SlotStatus::AVAILABLE;
-            changed = true;
-        }
-    }
-
-    // Parse convergence point. After every firmware-sourced field on the
-    // SlotInfo has been populated above, loop through slots and apply
-    // user-configured overrides on top. check_hardware_event_clear must run
-    // FIRST so it sees firmware-truth fields (not the override-masked view)
-    // and can clear a stale override when a physical spool swap is detected.
-    // apply_overrides runs after, so the final SlotInfo the UI reads through
-    // get_slot_info / the emitted event reflects the override layer.
-    //
-    // Snapmaker has multiple parse paths feeding the same slot (RFID info,
-    // print_task_config, filament_feed). Rather than hook the override logic
-    // into each one, we run it once here at the tail — the tradeoff is that
-    // get_slot_info during a partial parse would observe uncleared overrides,
-    // but since everything runs under mutex_ and handle_status_update is the
-    // only writer, there's no observable window.
-    for (int i = 0; i < NUM_TOOLS; ++i) {
-        auto* slot = system_info_.units[0].get_slot(i);
-        if (!slot)
-            continue;
-
-        // Only pass a UID to the hardware-event check when this parse
-        // actually carried filament_detect.info for the slot. Otherwise we'd
-        // feed an empty-string UID on every incremental notify (e.g. pure
-        // toolhead status updates) and defeat the "empty = no signal"
-        // contract the helper expects. saw_rfid_info[i] captures "we had an
-        // info blob"; observed_uids[i] may still be empty if the tag's
-        // CARD_UID field was missing or malformed, which the helper also
-        // treats as no signal.
-        if (saw_rfid_info[i]) {
-            check_hardware_event_clear(*slot, i, observed_uids[i]);
-        }
-        // Mirror firmware-truth color/material into lane_data so OrcaSlicer's
-        // MoonrakerPrinterAgent sees the spool. OverwriteAlways policy: user
-        // edits via set_slot_info now round-trip through firmware via the
-        // POST /printer/filament_detect/set endpoint (paxx12 Extended Firmware),
-        // so firmware-truth and user-truth converge — overwriting lane_data
-        // unconditionally is safe and also catches external edits (CHANGE_ZCOLOR
-        // from a print, manual gcode, OrcaSlicer, etc). On stock firmware the
-        // POST 404s, but the override is still persisted to lane_data
-        // separately, so this overwrite is the only path that could theoretically
-        // de-sync — accept that tradeoff in exchange for picking up external
-        // edits on extension-enabled firmware. See mirror_firmware_to_lane_data
-        // docs and AD5X IFS for the same pattern.
-        helix::ams::mirror_firmware_to_lane_data(
-            override_store_.get(), overrides_, i, slot->color_rgb, slot->material,
-            slot->status == SlotStatus::AVAILABLE, helix::ams::MirrorPolicy::OverwriteAlways,
-            backend_log_tag());
-        apply_overrides(*slot, i);
-    }
-
-    }  // Release mutex_ before emitting event
+    } // Release mutex_ before emitting event
 
     if (changed) {
         emit_event(EVENT_STATE_CHANGED);
@@ -1310,12 +1362,11 @@ void AmsBackendSnapmaker::clear_override_locked(int slot_index, SlotInfo& slot) 
         // after this function returns (MR tracker ~60s) and potentially
         // after the backend itself is gone. Same rationale as save_async.
         const std::string tag = backend_log_tag();
-        override_store_->clear_async(
-            slot_index, [tag, slot_index](bool ok, std::string err) {
-                if (!ok) {
-                    spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
-                }
-            });
+        override_store_->clear_async(slot_index, [tag, slot_index](bool ok, std::string err) {
+            if (!ok) {
+                spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
+            }
+        });
     }
 }
 
@@ -1327,8 +1378,8 @@ void AmsBackendSnapmaker::clear_slot_override(int slot_index) {
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto* slot = system_info_.units.empty() ? nullptr
-                                                : system_info_.units[0].get_slot(slot_index);
+        auto* slot =
+            system_info_.units.empty() ? nullptr : system_info_.units[0].get_slot(slot_index);
         if (!slot) {
             spdlog::warn("{} clear_slot_override: no slot entry for index {}", backend_log_tag(),
                          slot_index);

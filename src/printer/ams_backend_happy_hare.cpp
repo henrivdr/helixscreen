@@ -507,9 +507,8 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                 // Traditional format: 0xRRGGBB integer
                 entry->info.color_rgb = static_cast<uint32_t>(colors[i].get<int>());
                 colors_parsed = true;
-            } else if (colors[i].is_array() && colors[i].size() >= 3 &&
-                       colors[i][0].is_number() && colors[i][1].is_number() &&
-                       colors[i][2].is_number()) {
+            } else if (colors[i].is_array() && colors[i].size() >= 3 && colors[i][0].is_number() &&
+                       colors[i][1].is_number() && colors[i][2].is_number()) {
                 // EMU format: [R, G, B] floats 0.0-1.0
                 auto r = static_cast<uint8_t>(
                     std::clamp(colors[i][0].get<double>(), 0.0, 1.0) * 255.0 + 0.5);
@@ -574,8 +573,7 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
     // Parse sync_feedback_bias_modelled: printer.mmu.sync_feedback_bias_modelled (v4)
     if (mmu_data.contains("sync_feedback_bias_modelled") &&
         mmu_data["sync_feedback_bias_modelled"].is_number()) {
-        system_info_.sync_feedback_bias =
-            mmu_data["sync_feedback_bias_modelled"].get<float>();
+        system_info_.sync_feedback_bias = mmu_data["sync_feedback_bias_modelled"].get<float>();
         spdlog::trace("[AMS HappyHare] Sync feedback bias (modelled): {:.3f}",
                       system_info_.sync_feedback_bias);
     }
@@ -583,8 +581,7 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
     // Parse sync_feedback_bias_raw: printer.mmu.sync_feedback_bias_raw (v4)
     if (mmu_data.contains("sync_feedback_bias_raw") &&
         mmu_data["sync_feedback_bias_raw"].is_number()) {
-        system_info_.sync_feedback_bias_raw =
-            mmu_data["sync_feedback_bias_raw"].get<float>();
+        system_info_.sync_feedback_bias_raw = mmu_data["sync_feedback_bias_raw"].get<float>();
         spdlog::trace("[AMS HappyHare] Sync feedback bias (raw): {:.3f}",
                       system_info_.sync_feedback_bias_raw);
     }
@@ -615,12 +612,10 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
             spdlog::trace("[AMS HappyHare] Encoder flow rate: {}", system_info_.encoder_flow_rate);
         }
         if (encoder.contains("desired_headroom") && encoder["desired_headroom"].is_number()) {
-            system_info_.encoder_info.desired_headroom =
-                encoder["desired_headroom"].get<float>();
+            system_info_.encoder_info.desired_headroom = encoder["desired_headroom"].get<float>();
         }
         if (encoder.contains("detection_length") && encoder["detection_length"].is_number()) {
-            system_info_.encoder_info.detection_length =
-                encoder["detection_length"].get<float>();
+            system_info_.encoder_info.detection_length = encoder["detection_length"].get<float>();
         }
         if (encoder.contains("headroom") && encoder["headroom"].is_number()) {
             system_info_.encoder_info.headroom = encoder["headroom"].get<float>();
@@ -678,8 +673,7 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
     // Parse sync_feedback_flow_rate: printer.mmu.sync_feedback_flow_rate (top-level)
     if (mmu_data.contains("sync_feedback_flow_rate") &&
         mmu_data["sync_feedback_flow_rate"].is_number()) {
-        system_info_.sync_feedback_flow_rate =
-            mmu_data["sync_feedback_flow_rate"].get<float>();
+        system_info_.sync_feedback_flow_rate = mmu_data["sync_feedback_flow_rate"].get<float>();
         spdlog::trace("[AMS HappyHare] Sync feedback flow rate: {:.1f}",
                       system_info_.sync_feedback_flow_rate);
     }
@@ -1056,11 +1050,10 @@ void AmsBackendHappyHare::query_tip_method_from_config() {
         [this, token](nlohmann::json response) {
             // L081 Mechanism C: defer member access (system_info_, emit_event)
             // to main thread.
-            token.defer("AmsBackendHappyHare::tip_method_apply",
-                        [this, response = std::move(response)]() {
+            token.defer("AmsBackendHappyHare::tip_method_apply", [this, response =
+                                                                            std::move(response)]() {
                 try {
-                    const auto& settings =
-                        response["result"]["status"]["configfile"]["settings"];
+                    const auto& settings = response["result"]["status"]["configfile"]["settings"];
 
                     if (!settings.contains("mmu") || !settings["mmu"].is_object()) {
                         spdlog::debug("[AMS HappyHare] No mmu section in configfile settings");
@@ -1131,14 +1124,12 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
         [this, token](nlohmann::json response) {
             // L081 Mechanism C: defer member access (selector_type_,
             // update_unit_topologies, emit_event) to main thread.
-            token.defer("AmsBackendHappyHare::selector_type_apply",
-                        [this, response = std::move(response)]() {
+            token.defer("AmsBackendHappyHare::selector_type_apply", [this, response = std::move(
+                                                                               response)]() {
                 try {
-                    const auto& settings =
-                        response["result"]["status"]["configfile"]["settings"];
+                    const auto& settings = response["result"]["status"]["configfile"]["settings"];
 
-                    if (!settings.contains("mmu_machine") ||
-                        !settings["mmu_machine"].is_object()) {
+                    if (!settings.contains("mmu_machine") || !settings["mmu_machine"].is_object()) {
                         spdlog::debug(
                             "[AMS HappyHare] No mmu_machine section in configfile settings");
                         return;
@@ -1159,9 +1150,8 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
                         emit_event(EVENT_STATE_CHANGED);
                     }
                 } catch (const nlohmann::json::exception& e) {
-                    spdlog::warn(
-                        "[AMS HappyHare] Failed to parse configfile for selector type: {}",
-                        e.what());
+                    spdlog::warn("[AMS HappyHare] Failed to parse configfile for selector type: {}",
+                                 e.what());
                 }
             });
         },
@@ -1190,15 +1180,13 @@ void AmsBackendHappyHare::query_config_defaults() {
         [this, token](nlohmann::json response) {
             // L081 Mechanism C: defer member access (config_defaults_,
             // load_persisted_overrides, reapply_overrides) to main thread.
-            token.defer("AmsBackendHappyHare::config_defaults_apply",
-                        [this, response = std::move(response)]() {
+            token.defer("AmsBackendHappyHare::config_defaults_apply", [this, response = std::move(
+                                                                                 response)]() {
                 try {
-                    const auto& settings =
-                        response["result"]["status"]["configfile"]["settings"];
+                    const auto& settings = response["result"]["status"]["configfile"]["settings"];
 
                     if (!settings.contains("mmu") || !settings["mmu"].is_object()) {
-                        spdlog::debug(
-                            "[AMS HappyHare] No mmu section in configfile for defaults");
+                        spdlog::debug("[AMS HappyHare] No mmu section in configfile for defaults");
                         return;
                     }
 
@@ -1234,10 +1222,8 @@ void AmsBackendHappyHare::query_config_defaults() {
                         parse_float("gear_from_spool_speed",
                                     config_defaults_.gear_from_spool_speed);
                         parse_float("gear_unload_speed", config_defaults_.gear_unload_speed);
-                        parse_float("selector_move_speed",
-                                    config_defaults_.selector_move_speed);
-                        parse_float("extruder_load_speed",
-                                    config_defaults_.extruder_load_speed);
+                        parse_float("selector_move_speed", config_defaults_.selector_move_speed);
+                        parse_float("extruder_load_speed", config_defaults_.extruder_load_speed);
                         parse_float("extruder_unload_speed",
                                     config_defaults_.extruder_unload_speed);
                         parse_float("toolhead_sensor_to_nozzle",
@@ -1391,24 +1377,24 @@ void AmsBackendHappyHare::save_override(const std::string& key, float value) {
         // Update in-memory override
         if (key == "gear_from_buffer_speed")
             user_overrides_.gear_from_buffer_speed = value;
-    else if (key == "gear_from_spool_speed")
-        user_overrides_.gear_from_spool_speed = value;
-    else if (key == "gear_unload_speed")
-        user_overrides_.gear_unload_speed = value;
-    else if (key == "selector_move_speed" || key == "selector_speed")
-        user_overrides_.selector_move_speed = value;
-    else if (key == "extruder_load_speed")
-        user_overrides_.extruder_load_speed = value;
-    else if (key == "extruder_unload_speed")
-        user_overrides_.extruder_unload_speed = value;
-    else if (key == "toolhead_sensor_to_nozzle")
-        user_overrides_.toolhead_sensor_to_nozzle = value;
-    else if (key == "toolhead_extruder_to_nozzle")
-        user_overrides_.toolhead_extruder_to_nozzle = value;
-    else if (key == "toolhead_entry_to_extruder")
-        user_overrides_.toolhead_entry_to_extruder = value;
-    else if (key == "toolhead_ooze_reduction")
-        user_overrides_.toolhead_ooze_reduction = value;
+        else if (key == "gear_from_spool_speed")
+            user_overrides_.gear_from_spool_speed = value;
+        else if (key == "gear_unload_speed")
+            user_overrides_.gear_unload_speed = value;
+        else if (key == "selector_move_speed" || key == "selector_speed")
+            user_overrides_.selector_move_speed = value;
+        else if (key == "extruder_load_speed")
+            user_overrides_.extruder_load_speed = value;
+        else if (key == "extruder_unload_speed")
+            user_overrides_.extruder_unload_speed = value;
+        else if (key == "toolhead_sensor_to_nozzle")
+            user_overrides_.toolhead_sensor_to_nozzle = value;
+        else if (key == "toolhead_extruder_to_nozzle")
+            user_overrides_.toolhead_extruder_to_nozzle = value;
+        else if (key == "toolhead_entry_to_extruder")
+            user_overrides_.toolhead_entry_to_extruder = value;
+        else if (key == "toolhead_ooze_reduction")
+            user_overrides_.toolhead_ooze_reduction = value;
     } // end mutex scope
 
     // Persist to Config JSON (outside lock — disk I/O)
@@ -1672,6 +1658,81 @@ AmsError AmsBackendHappyHare::eject_lane(int slot_index) {
     return execute_gcode("MMU_EJECT GATE=" + std::to_string(slot_index));
 }
 
+AmsError AmsBackendHappyHare::select_gate(int slot_index) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Happy Hare backend not started");
+        }
+
+        AmsError slot_err = validate_slot_index(slot_index);
+        if (!slot_err) {
+            return slot_err;
+        }
+    }
+
+    spdlog::info("[AMS HappyHare] Selecting gate {} (no load)", slot_index);
+    return execute_gcode("MMU_SELECT GATE=" + std::to_string(slot_index));
+}
+
+AmsError AmsBackendHappyHare::move_selector(int delta) {
+    int target = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Happy Hare backend not started");
+        }
+
+        const int count = slots_.slot_count();
+        if (count <= 0) {
+            return AmsErrorHelper::not_supported("Selector jog");
+        }
+
+        // Read the underlying member directly: get_current_slot() locks mutex_.
+        int base = system_info_.current_slot;
+        if (base < 0) {
+            base = 0; // No current / bypass (-1, -2) -> treat as gate 0.
+        }
+        target = std::clamp(base + delta, 0, count - 1);
+    }
+
+    spdlog::info("[AMS HappyHare] Jog selector by {} -> gate {}", delta, target);
+    return execute_gcode("MMU_SELECT GATE=" + std::to_string(target));
+}
+
+AmsError AmsBackendHappyHare::check_gate(int slot_index) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Happy Hare backend not started");
+        }
+
+        AmsError slot_err = validate_slot_index(slot_index);
+        if (!slot_err) {
+            return slot_err;
+        }
+    }
+
+    spdlog::info("[AMS HappyHare] Checking gate {}", slot_index);
+    return execute_gcode("MMU_CHECK_GATE GATE=" + std::to_string(slot_index));
+}
+
+AmsError AmsBackendHappyHare::check_all_gates() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Happy Hare backend not started");
+        }
+    }
+
+    spdlog::info("[AMS HappyHare] Checking all gates");
+    return execute_gcode("MMU_CHECK_GATE");
+}
+
 AmsError AmsBackendHappyHare::cancel() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -1725,8 +1786,7 @@ AmsError AmsBackendHappyHare::set_slot_info(int slot_index, const SlotInfo& info
                        slot.total_weight_g != info.total_weight_g ||
                        slot.nozzle_temp_min != info.nozzle_temp_min ||
                        slot.nozzle_temp_max != info.nozzle_temp_max ||
-                       slot.bed_temp != info.bed_temp ||
-                       slot.mapped_tool != info.mapped_tool;
+                       slot.bed_temp != info.bed_temp || slot.mapped_tool != info.mapped_tool;
 
         // Update local state
         slot.color_name = info.color_name;
@@ -1795,8 +1855,7 @@ AmsError AmsBackendHappyHare::set_slot_info(int slot_index, const SlotInfo& info
         // (which is filament metadata). Emit MMU_TTG_MAP whenever the slot edit
         // path changes mapped_tool — mirrors set_tool_mapping() for the modal flow.
         if (info.mapped_tool != old_mapped_tool && info.mapped_tool >= 0) {
-            execute_gcode(
-                fmt::format("MMU_TTG_MAP TOOL={} GATE={}", info.mapped_tool, slot_index));
+            execute_gcode(fmt::format("MMU_TTG_MAP TOOL={} GATE={}", info.mapped_tool, slot_index));
         }
     }
 
@@ -2004,8 +2063,7 @@ DryerInfo AmsBackendHappyHare::get_dryer_info() const {
     return dryer_info_;
 }
 
-AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int fan_pct,
-                                           int unit) {
+AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
     (void)unit;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -2065,9 +2123,7 @@ std::vector<helix::printer::DeviceAction> AmsBackendHappyHare::get_device_action
     auto eff_f = [&](const std::optional<float>& ovr, float def) -> double {
         return static_cast<double>(ovr.value_or(def));
     };
-    auto eff_i = [&](const std::optional<int>& ovr, int def) -> int {
-        return ovr.value_or(def);
-    };
+    auto eff_i = [&](const std::optional<int>& ovr, int def) -> int { return ovr.value_or(def); };
 
     // Overlay effective values onto actions
     for (auto& a : actions) {
@@ -2144,7 +2200,8 @@ std::vector<helix::printer::DeviceAction> AmsBackendHappyHare::get_device_action
     // --- Topology filtering (Type B = hub-based, no servo/selector/encoder) ---
     if (is_type_b()) {
         for (auto& a : actions) {
-            if (a.id == "calibrate_encoder" || a.id == "servo_buzz") {
+            if (a.id == "calibrate_encoder" || a.id == "servo_buzz" || a.id == "servo_up" ||
+                a.id == "servo_move" || a.id == "servo_down") {
                 a.enabled = false;
                 a.disable_reason = "Not available on hub-based (Type B) systems";
             } else if (a.id == "selector_speed") {
@@ -2197,8 +2254,9 @@ AmsError AmsBackendHappyHare::execute_device_action(const std::string& action_id
         try {
             return {std::any_cast<double>(value), AmsErrorHelper::success()};
         } catch (const std::bad_any_cast&) {
-            return {0.0, AmsError(AmsResult::WRONG_STATE, fmt::format("Invalid {} type", label),
-                                  "Invalid value type", fmt::format("Provide a numeric {}", label))};
+            return {0.0,
+                    AmsError(AmsResult::WRONG_STATE, fmt::format("Invalid {} type", label),
+                             "Invalid value type", fmt::format("Provide a numeric {}", label))};
         }
     };
 
@@ -2211,8 +2269,9 @@ AmsError AmsBackendHappyHare::execute_device_action(const std::string& action_id
         try {
             return {std::any_cast<bool>(value), AmsErrorHelper::success()};
         } catch (const std::bad_any_cast&) {
-            return {false, AmsError(AmsResult::WRONG_STATE, fmt::format("Invalid {} type", label),
-                                    "Invalid value type", fmt::format("Provide a boolean {}", label))};
+            return {false,
+                    AmsError(AmsResult::WRONG_STATE, fmt::format("Invalid {} type", label),
+                             "Invalid value type", fmt::format("Provide a boolean {}", label))};
         }
     };
 
@@ -2227,6 +2286,9 @@ AmsError AmsBackendHappyHare::execute_device_action(const std::string& action_id
         {"test_load",           "MMU_TEST_LOAD"},
         {"test_move",           "MMU_TEST_MOVE"},
         {"servo_buzz",          "MMU_SERVO"},
+        {"servo_up",            "MMU_SERVO POS=up"},
+        {"servo_move",          "MMU_SERVO POS=move"},
+        {"servo_down",          "MMU_SERVO POS=down"},
         {"reset_servo_counter", "MMU_STATS COUNTER=servo RESET=1"},
         {"reset_blade_counter", "MMU_STATS COUNTER=cutter RESET=1"},
     };
@@ -2331,6 +2393,14 @@ AmsError AmsBackendHappyHare::execute_device_action(const std::string& action_id
             save_override(action_id, mode_int);
         }
         return result;
+    }
+
+    // --- Runtime gear-motor sync (live action, distinct from config sync_to_extruder) ---
+    if (action_id == "gear_sync") {
+        auto [enable, err] = require_bool("gear sync state");
+        if (!err)
+            return err;
+        return execute_gcode(enable ? "MMU_SYNC_GEAR_MOTOR SYNC=1" : "MMU_SYNC_GEAR_MOTOR SYNC=0");
     }
 
     // --- Motors toggle ---

@@ -34,6 +34,11 @@
 
 namespace crash_handler {
 
+/// Fixed width (bytes, incl. NUL) of one captured recent-error-log entry.
+inline constexpr unsigned int kErrorLogEntryLen = 256;
+/// Number of recent ERROR-level log lines retained for crash diagnostics.
+inline constexpr unsigned int kErrorLogRingCapacity = 4;
+
 /**
  * @brief Install crash signal handlers
  *
@@ -106,6 +111,23 @@ void write_mock_crash_file(const std::string& crash_file_path);
 void write_exception_record(const char* what) noexcept;
 
 /**
+ * @brief Stash the std::terminate reason so a re-entrant terminate still
+ *        surfaces it.
+ *
+ * Call from a `std::terminate` handler BEFORE any fault-prone work (rethrow,
+ * `exception::what()`, writing the crash file). If that handler re-faults and
+ * falls through to a bare `abort()`, glibc leaves `__abort_msg` empty and the
+ * SIGABRT signal handler would otherwise have no reason to report — it instead
+ * emits this text as `terminate_msg:` in the crash record (issue #987).
+ *
+ * Bounded copy into a static buffer, newline-stripped, no allocation — safe to
+ * call when the heap may already be corrupt. nullptr is a no-op.
+ *
+ * @param what Exception message (e.what()) or a placeholder; may be nullptr.
+ */
+void set_terminate_context(const char* what) noexcept;
+
+/**
  * @brief Intentionally SIGSEGV through a deep call chain, for verifying the
  *        signal handler's unwind path on real hardware.
  *
@@ -158,9 +180,28 @@ void register_callback_tag_ptr(volatile const char* const* tag_ptr);
  * @param next       Pointer to the write-index counter (monotonically increasing)
  */
 void register_previous_tag_ring(volatile const char* const* ring,
-                                volatile const uint32_t* count_ring,
-                                unsigned int capacity,
+                                volatile const uint32_t* count_ring, unsigned int capacity,
                                 volatile const unsigned int* next);
+
+/**
+ * @brief Register a ring of the most recent ERROR-level log messages
+ *
+ * The signal handler emits these as `recent_error:` / `recent_error2:` / ...
+ * (newest→oldest) on ANY crash. This is the last-ditch reason when an abort
+ * sets no `__abort_msg` and doesn't pass through the std::terminate handler —
+ * e.g. a bare `abort()`/`raise(SIGABRT)` from a dependency (issue #987).
+ *
+ * `ring` is `capacity * kErrorLogEntryLen` contiguous bytes; each entry is a
+ * NUL-terminated string. The producer fills slot `*next % capacity`, NUL-
+ * terminates it, then advances `*next`. All storage must outlive any possible
+ * crash (process-lifetime / static). Pass `nullptr` ring to disable.
+ *
+ * @param ring     Base of the entry buffer (capacity × kErrorLogEntryLen bytes)
+ * @param capacity Number of entry slots in the ring
+ * @param next     Pointer to the monotonically-increasing write counter
+ */
+void register_error_log_ring(const char* ring, unsigned int capacity,
+                             volatile const unsigned int* next) noexcept;
 
 /**
  * @brief Record the LVGL event currently being dispatched
@@ -177,8 +218,7 @@ void register_previous_tag_ring(volatile const char* const* ring,
  *
  * Signal-safe: two volatile writes, no locks, no allocations.
  */
-void set_current_event(const void* target, const void* original_target,
-                       unsigned int code) noexcept;
+void set_current_event(const void* target, const void* original_target, unsigned int code) noexcept;
 
 /**
  * @brief Refresh the cached heap snapshot
@@ -251,8 +291,7 @@ void dump_to_fd(int fd) noexcept;
 
 // C-ABI bridge for LVGL (C source) to record the current event target. Calls
 // crash_handler::set_current_event() — same semantics, usable from C.
-extern "C" void helix_crash_note_event(const void* target,
-                                       const void* original_target,
+extern "C" void helix_crash_note_event(const void* target, const void* original_target,
                                        unsigned int code);
 
 // C-ABI bridge for the in-flight event target's identity (class name + obj
@@ -261,8 +300,7 @@ extern "C" void helix_crash_note_event(const void* target,
 // crash handler can dump them as event_target_class / event_target_name.
 // Bundle 3XNZQB2R: bare event_target=0x23042e0 wasn't enough to ID the click;
 // next bundle in this signature should name the widget. Both args may be NULL.
-extern "C" void helix_crash_note_event_target_id(const char* class_name,
-                                                 const char* obj_name);
+extern "C" void helix_crash_note_event_target_id(const char* class_name, const char* obj_name);
 
 // C-ABI bridge: text segment bounds for the patched LVGL cb-bounds gate.
 // Returns 1 if bounds are valid, 0 if not yet captured (early init). The

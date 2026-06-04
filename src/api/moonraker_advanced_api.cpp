@@ -2270,12 +2270,18 @@ void MoonrakerAdvancedAPI::start_pid_calibrate(
     api_.execute_gcode(
         cmd, nullptr,
         [collector, on_error](const MoonrakerError& err) {
+            // The notify_gcode_response collector — not this RPC — is the authority for
+            // PID_CALIBRATE completion. Slow-cooling beds can run longer than the RPC
+            // timeout (#988); on timeout we keep the collector registered so the eventual
+            // "PID parameters:" result line still completes the calibration. The UI panel
+            // owns the user-facing "taking longer than expected" backstop. A genuine RPC
+            // error (heater misconfigured, connection lost) is still terminal.
             if (err.type == MoonrakerErrorType::TIMEOUT) {
-                spdlog::warn("[MoonrakerAPI] PID_CALIBRATE response timed out "
-                             "(calibration may still be running)");
-            } else {
-                spdlog::error("[MoonrakerAPI] Failed to send PID_CALIBRATE: {}", err.message);
+                spdlog::warn("[MoonrakerAPI] PID_CALIBRATE RPC timed out; collector still "
+                             "listening for result (calibration may still be running)");
+                return;
             }
+            spdlog::error("[MoonrakerAPI] Failed to send PID_CALIBRATE: {}", err.message);
             collector->mark_completed();
             collector->unregister();
             if (on_error)
@@ -2361,9 +2367,12 @@ void MoonrakerAdvancedAPI::detect_belt_hardware(BeltHardwareCallback on_complete
             } catch (const std::exception& e) {
                 spdlog::error("[MoonrakerAPI] Failed to parse object list: {}", e.what());
                 if (on_error)
-                    on_error(MoonrakerError{
-                        MoonrakerErrorType::JSON_RPC_ERROR, 0,
-                        fmt::format("Failed to parse printer objects: {}", e.what()), {}, {}});
+                    on_error(
+                        MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR,
+                                       0,
+                                       fmt::format("Failed to parse printer objects: {}", e.what()),
+                                       {},
+                                       {}});
                 return;
             }
 
@@ -2407,7 +2416,8 @@ void MoonrakerAdvancedAPI::detect_belt_hardware(BeltHardwareCallback on_complete
                         spdlog::error("[MoonrakerAPI] Failed to parse kinematics: {}", e.what());
                         if (on_error)
                             on_error(MoonrakerError{
-                                MoonrakerErrorType::JSON_RPC_ERROR, 0,
+                                MoonrakerErrorType::JSON_RPC_ERROR,
+                                0,
                                 fmt::format("Failed to detect kinematics: {}", e.what()),
                                 {},
                                 {}});
@@ -2529,8 +2539,10 @@ void MoonrakerAdvancedAPI::download_accel_csv(const std::string& name,
                 if (!response.contains("result")) {
                     spdlog::error("[MoonrakerAPI] File list response missing 'result' field");
                     if (on_error)
-                        on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR, 0,
-                                                "File list response missing 'result' field", {},
+                        on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR,
+                                                0,
+                                                "File list response missing 'result' field",
+                                                {},
                                                 {}});
                     return;
                 }
@@ -2538,8 +2550,11 @@ void MoonrakerAdvancedAPI::download_accel_csv(const std::string& name,
                 if (!result.is_array()) {
                     spdlog::error("[MoonrakerAPI] File list 'result' is not an array");
                     if (on_error)
-                        on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR, 0,
-                                                "File list 'result' is not an array", {}, {}});
+                        on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR,
+                                                0,
+                                                "File list 'result' is not an array",
+                                                {},
+                                                {}});
                     return;
                 }
                 for (const auto& file : result) {
@@ -2554,16 +2569,22 @@ void MoonrakerAdvancedAPI::download_accel_csv(const std::string& name,
             } catch (const std::exception& e) {
                 spdlog::error("[MoonrakerAPI] Failed to parse file list: {}", e.what());
                 if (on_error)
-                    on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR, 0,
-                                            "Failed to find CSV data file", {}, {}});
+                    on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR,
+                                            0,
+                                            "Failed to find CSV data file",
+                                            {},
+                                            {}});
                 return;
             }
 
             if (best_file.empty()) {
                 spdlog::error("[MoonrakerAPI] No CSV file found matching: {}", target_prefix);
                 if (on_error)
-                    on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR, 0,
-                                            "No accelerometer data file found", {}, {}});
+                    on_error(MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR,
+                                            0,
+                                            "No accelerometer data file found",
+                                            {},
+                                            {}});
                 return;
             }
 
@@ -2595,9 +2616,12 @@ void MoonrakerAdvancedAPI::download_accel_csv(const std::string& name,
                     } catch (const std::exception& e) {
                         spdlog::error("[MoonrakerAPI] Failed to read CSV data: {}", e.what());
                         if (on_error)
-                            on_error(MoonrakerError{
-                                MoonrakerErrorType::JSON_RPC_ERROR, 0,
-                                fmt::format("Failed to read CSV data: {}", e.what()), {}, {}});
+                            on_error(
+                                MoonrakerError{MoonrakerErrorType::JSON_RPC_ERROR,
+                                               0,
+                                               fmt::format("Failed to read CSV data: {}", e.what()),
+                                               {},
+                                               {}});
                     }
                 },
                 [on_error](const MoonrakerError& err) {

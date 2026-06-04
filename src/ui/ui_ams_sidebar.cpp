@@ -4,6 +4,7 @@
 #include "ui_ams_sidebar.h"
 
 #include "ui_ams_device_operations_overlay.h"
+#include "ui_button.h"
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
@@ -50,6 +51,7 @@ void AmsOperationSidebar::register_callbacks_static() {
         {"ams_sidebar_bypass_toggled", on_bypass_toggled_cb},
         {"ams_sidebar_unload_clicked", on_unload_clicked_cb},
         {"ams_sidebar_reset_clicked", on_reset_clicked_cb},
+        {"ams_sidebar_check_gates_clicked", on_check_gates_clicked_cb},
         {"ams_sidebar_settings_clicked", on_settings_clicked_cb},
     });
 }
@@ -105,6 +107,13 @@ void AmsOperationSidebar::on_reset_clicked_cb(lv_event_t* e) {
     }
 }
 
+void AmsOperationSidebar::on_check_gates_clicked_cb(lv_event_t* e) {
+    auto* self = get_instance_from_event(e);
+    if (self) {
+        self->handle_check_gates();
+    }
+}
+
 void AmsOperationSidebar::on_settings_clicked_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[AmsSidebar] on_settings_clicked");
 
@@ -152,6 +161,8 @@ bool AmsOperationSidebar::setup(lv_obj_t* panel) {
     update_settings_visibility();
 
     active_ = true;
+    sync_reset_button_label();
+    update_check_gates_visibility();
     spdlog::debug("[AmsSidebar] Setup complete");
     return true;
 }
@@ -212,14 +223,26 @@ void AmsOperationSidebar::init_observers() {
             self->prev_ams_action_ = action;
         });
 
-    // Current slot observer: updates loaded card display
+    // Current slot observer: updates loaded card display and reset button label
     current_slot_observer_ =
         observe_int_sync<AmsOperationSidebar>(AmsState::instance().get_current_slot_subject(), this,
                                               [](AmsOperationSidebar* self, int /*slot_index*/) {
                                                   if (!self->active_ || !self->sidebar_root_)
                                                       return;
                                                   self->update_current_loaded_display();
+                                                  self->sync_reset_button_label();
+                                                  self->update_check_gates_visibility();
                                               });
+
+    // Active backend observer: re-syncs reset button label when the user switches backend tabs
+    active_backend_observer_ = observe_int_sync<AmsOperationSidebar>(
+        AmsState::instance().get_active_backend_subject(), this,
+        [](AmsOperationSidebar* self, int /*active_index*/) {
+            if (!self->active_ || !self->sidebar_root_)
+                return;
+            self->sync_reset_button_label();
+            self->update_check_gates_visibility();
+        });
 
     // Bypass spool color observer: refreshes loaded card when external spool changes
     bypass_spool_observer_ = observe_int_sync<AmsOperationSidebar>(
@@ -288,6 +311,7 @@ void AmsOperationSidebar::cleanup() {
     // observer still holds a raw pointer to it.
     action_observer_.reset();
     current_slot_observer_.reset();
+    active_backend_observer_.reset();
     bypass_spool_observer_.reset();
     color_observer_.reset();
     extruder_temp_observer_.reset();
@@ -331,6 +355,8 @@ void AmsOperationSidebar::sync_from_state() {
 
     // Update settings visibility (backend may have changed)
     update_settings_visibility();
+    update_check_gates_visibility();
+    sync_reset_button_label();
 }
 
 // ============================================================================
@@ -352,6 +378,43 @@ void AmsOperationSidebar::update_settings_visibility() {
             lv_obj_remove_flag(btn_settings, LV_OBJ_FLAG_HIDDEN);
         }
     }
+}
+
+// ============================================================================
+// Check Gates Visibility
+// ============================================================================
+
+void AmsOperationSidebar::update_check_gates_visibility() {
+    if (!active_ || !sidebar_root_) {
+        return;
+    }
+    lv_obj_t* btn = lv_obj_find_by_name(sidebar_root_, "btn_check_gates");
+    if (!btn) {
+        return;
+    }
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (backend && backend->supports_gate_check()) {
+        lv_obj_remove_flag(btn, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+// ============================================================================
+// Reset Button Label
+// ============================================================================
+
+void AmsOperationSidebar::sync_reset_button_label() {
+    if (!active_ || !sidebar_root_) {
+        return;
+    }
+    lv_obj_t* btn_reset = lv_obj_find_by_name(sidebar_root_, "btn_reset");
+    if (!btn_reset) {
+        return;
+    }
+    AmsBackend* backend = AmsState::instance().get_backend();
+    std::string label = backend ? backend->reset_button_label() : std::string("Reset");
+    ui_button_set_text(btn_reset, lv_tr(label.c_str()));
 }
 
 // ============================================================================
@@ -673,6 +736,21 @@ void AmsOperationSidebar::handle_reset() {
     AmsError error = backend->reset();
     if (error.result != AmsResult::SUCCESS) {
         NOTIFY_ERROR(lv_tr("Reset failed: {}"), error.user_msg);
+    }
+}
+
+void AmsOperationSidebar::handle_check_gates() {
+    spdlog::info("[AmsSidebar] Check all gates requested");
+
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (!backend) {
+        NOTIFY_WARNING(lv_tr("AMS not available"));
+        return;
+    }
+
+    AmsError error = backend->check_all_gates();
+    if (error.result != AmsResult::SUCCESS) {
+        NOTIFY_ERROR(lv_tr("Check slots failed: {}"), error.user_msg);
     }
 }
 

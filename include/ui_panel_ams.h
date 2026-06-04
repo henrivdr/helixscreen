@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_ams_context_menu.h"
 #include "ui_ams_detail.h"
 #include "ui_ams_edit_modal.h"
 #include "ui_ams_loading_error_modal.h"
+#include "ui_ams_selector_menu.h"
 #include "ui_ams_sidebar.h"
 #include "ui_bypass_spool_widget.h"
 #include "ui_observer_guard.h"
@@ -15,6 +15,7 @@
 
 #include "ams_state.h"
 #include "ams_types.h" // For SlotInfo
+#include "async_lifetime_guard.h"
 
 #include <chrono>
 #include <memory>
@@ -127,6 +128,7 @@ class AmsPanel : public PanelBase {
     // === Extracted UI Modules ===
 
     std::unique_ptr<helix::ui::AmsContextMenu> context_menu_;      ///< Slot context menu
+    std::unique_ptr<helix::ui::AmsSelectorMenu> selector_menu_;    ///< Selector/hub context menu
     std::unique_ptr<helix::ui::AmsEditModal> edit_modal_;          ///< Edit filament modal
     std::unique_ptr<helix::ui::AmsLoadingErrorModal> error_modal_; ///< Loading error modal
     std::unique_ptr<helix::ui::AmsOperationSidebar> sidebar_;      ///< Shared sidebar component
@@ -144,10 +146,11 @@ class AmsPanel : public PanelBase {
     ObserverGuard path_topology_observer_;
     ObserverGuard backend_count_observer_;  ///< For backend selector visibility
     ObserverGuard external_spool_observer_; ///< Reactive updates when external spool color changes
-    helix::AsyncLifetimeGuard lifetime_;    ///< Guards deferred callbacks from accessing destroyed panel
-    bool backend_rebuild_pending_ = false;  ///< Coalesces rapid backend count changes
-    bool slot_creation_pending_ = false;    ///< Coalesces rapid slot count changes
-    bool path_update_pending_ = false;      ///< Coalesces rapid path state changes
+    helix::AsyncLifetimeGuard
+        lifetime_; ///< Guards deferred callbacks from accessing destroyed panel
+    bool backend_rebuild_pending_ = false; ///< Coalesces rapid backend count changes
+    bool slot_creation_pending_ = false;   ///< Coalesces rapid slot count changes
+    bool path_update_pending_ = false;     ///< Coalesces rapid path state changes
 
     // === Dynamic Slot State ===
 
@@ -220,7 +223,20 @@ class AmsPanel : public PanelBase {
     // === Path Canvas Callbacks ===
 
     static void on_path_slot_clicked(int slot_index, void* user_data);
+    static void on_path_hub_clicked_thunk(lv_point_t click_pt, void* user_data);
     static void on_bypass_spool_clicked(void* user_data);
+
+    /**
+     * @brief Handle a tap on the selector/hub box in the path canvas.
+     *
+     * Opens the Happy Hare selector context menu (selector-only backends).
+     */
+    void on_path_hub_clicked(lv_point_t click_pt);
+
+    /**
+     * @brief Dispatch a selector-menu action to the AMS backend.
+     */
+    void dispatch_selector_action(helix::ui::AmsSelectorMenu::SelectorAction a);
 
     /**
      * @brief Handle click on bypass spool box in path canvas
