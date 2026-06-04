@@ -508,6 +508,29 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether the backend can position the selector at a gate without loading.
+     * @return true if select_gate() is implemented (selector-based systems only).
+     */
+    [[nodiscard]] virtual bool supports_gate_select() const {
+        return false;
+    }
+
+    /**
+     * @brief Move the selector to a gate without loading filament.
+     *
+     * Positions the MMU selector at the given gate without loading filament
+     * into the toolhead. This is useful for manual interventions and gate
+     * inspection on selector-based systems.
+     *
+     * @param slot_index Zero-based gate index.
+     * @return AmsError indicating success or failure.
+     */
+    virtual AmsError select_gate(int slot_index) {
+        (void)slot_index;
+        return AmsErrorHelper::not_supported("Gate select not supported");
+    }
+
+    /**
      * @brief Cancel current operation
      *
      * Attempts to safely abort the current operation.

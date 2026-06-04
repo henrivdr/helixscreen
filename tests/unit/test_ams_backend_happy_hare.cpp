@@ -1814,9 +1814,9 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "EMU gate_filament_name parsing"
     initialize_test_gates(3);
 
     SECTION("gate_filament_name used when gate_name is null") {
-        nlohmann::json mmu_data = {{"gate_name", nullptr},
-                                   {"gate_filament_name",
-                                    {"Matte White", "Matte Black", "Matte Yellow"}}};
+        nlohmann::json mmu_data = {
+            {"gate_name", nullptr},
+            {"gate_filament_name", {"Matte White", "Matte Black", "Matte Yellow"}}};
         test_parse_mmu_state(mmu_data);
 
         auto info = get_system_info();
@@ -1860,19 +1860,19 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "Full EMU status integration",
         {"filament_pos", 10},
         {"has_bypass", true},
         {"gate_status", {2, 2, 2, 2, 2, 2, 1, 1}},
-        {"gate_color_rgb", {
-            {1.0, 1.0, 1.0},
-            {0.0, 0.0, 0.0},
-            {0.976, 0.976, 0.4},
-            {0.016, 0.184, 0.337},
-            {0.553, 0.784, 0.588},
-            {0.0, 0.0, 0.0},
-            {1.0, 1.0, 1.0},
-            {0.0, 0.0, 0.0}
-        }},
+        {"gate_color_rgb",
+         {{1.0, 1.0, 1.0},
+          {0.0, 0.0, 0.0},
+          {0.976, 0.976, 0.4},
+          {0.016, 0.184, 0.337},
+          {0.553, 0.784, 0.588},
+          {0.0, 0.0, 0.0},
+          {1.0, 1.0, 1.0},
+          {0.0, 0.0, 0.0}}},
         {"gate_material", {"PLA", "PLA", "PLA", "PLA", "PLA", "ABS", "ABS", "ASA CF"}},
-        {"gate_filament_name", {"Matte White", "Matte Black", "Matte Yellow", "Matte Navy",
-                                "Matte Green", "Black", "White", "Black"}},
+        {"gate_filament_name",
+         {"Matte White", "Matte Black", "Matte Yellow", "Matte Navy", "Matte Green", "Black",
+          "White", "Black"}},
         {"gate_temperature", {230, 230, 230, 230, 230, 260, 260, 265}},
         {"gate_name", nullptr},
         {"ttg_map", {0, 1, 2, 3, 4, 5, 6, 7}},
@@ -1886,14 +1886,12 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "Full EMU status integration",
         {"espooler_active", ""},
         {"spoolman_support", "push"},
         {"drying_state", {"", "", "", "", "", "", "", ""}},
-        {"sensors", {
-            {"mmu_pre_gate", true},
-            {"mmu_gear", true},
-            {"filament_proportional", false},
-            {"extruder", true},
-            {"toolhead", true}
-        }}
-    };
+        {"sensors",
+         {{"mmu_pre_gate", true},
+          {"mmu_gear", true},
+          {"filament_proportional", false},
+          {"extruder", true},
+          {"toolhead", true}}}};
     test_parse_mmu_state(mmu_data);
 
     auto info = get_system_info();
@@ -1911,9 +1909,9 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "Full EMU status integration",
     REQUIRE(info.supports_bypass == true);
 
     // Colors (float arrays converted to 0xRRGGBB)
-    REQUIRE(info.units[0].slots[0].color_rgb == 0xFFFFFF);  // White
-    REQUIRE(info.units[0].slots[1].color_rgb == 0x000000);  // Black
-    REQUIRE(info.units[0].slots[3].color_rgb == 0x042F56);  // Navy
+    REQUIRE(info.units[0].slots[0].color_rgb == 0xFFFFFF); // White
+    REQUIRE(info.units[0].slots[1].color_rgb == 0x000000); // Black
+    REQUIRE(info.units[0].slots[3].color_rgb == 0x042F56); // Navy
 
     // Materials
     REQUIRE(info.units[0].slots[0].material == "PLA");
@@ -1940,7 +1938,7 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "Full EMU status integration",
     REQUIRE(info.sync_drive == true);
     REQUIRE(info.sync_feedback_state == "neutral");
     REQUIRE(info.spoolman_mode == SpoolmanMode::PUSH);
-    REQUIRE(info.encoder_flow_rate == -1);  // null encoder
+    REQUIRE(info.encoder_flow_rate == -1); // null encoder
 }
 
 // ============================================================================
@@ -1971,7 +1969,7 @@ TEST_CASE("EncoderClogInfo: get_clog_pct no headroom returns 100", "[ams][clog]"
 TEST_CASE("EncoderClogInfo: get_clog_pct normal case", "[ams][clog]") {
     EncoderClogInfo info;
     info.detection_length = 10.0f;
-    info.headroom = 3.0f;  // 7mm used = 70%
+    info.headroom = 3.0f; // 7mm used = 70%
     REQUIRE(info.get_clog_pct() == 70);
 }
 
@@ -2013,13 +2011,11 @@ TEST_CASE("Happy Hare: parse full encoder object into encoder_info", "[ams][happ
 
     nlohmann::json mmu_data;
     mmu_data["clog_detection_enabled"] = 2;
-    mmu_data["encoder"] = {
-        {"flow_rate", 85},
-        {"desired_headroom", 5.0},
-        {"detection_length", 12.4},
-        {"headroom", 8.0},
-        {"min_headroom", 4.2}
-    };
+    mmu_data["encoder"] = {{"flow_rate", 85},
+                           {"desired_headroom", 5.0},
+                           {"detection_length", 12.4},
+                           {"headroom", 8.0},
+                           {"min_headroom", 4.2}};
     helper.test_parse_mmu_state(mmu_data);
 
     auto info = helper.get_system_info();
@@ -2066,14 +2062,8 @@ TEST_CASE("Happy Hare: parse flowguard object", "[ams][happy_hare][clog]") {
     helper.initialize_test_gates(4);
 
     nlohmann::json mmu_data;
-    mmu_data["flowguard"] = {
-        {"enabled", true},
-        {"active", true},
-        {"trigger", "CLOG"},
-        {"level", 0.35},
-        {"max_clog", 0.8},
-        {"max_tangle", -0.6}
-    };
+    mmu_data["flowguard"] = {{"enabled", true}, {"active", true},  {"trigger", "CLOG"},
+                             {"level", 0.35},   {"max_clog", 0.8}, {"max_tangle", -0.6}};
     helper.test_parse_mmu_state(mmu_data);
 
     auto info = helper.get_system_info();
@@ -2142,7 +2132,8 @@ TEST_CASE("Happy Hare: Type A selector types stay LINEAR", "[ams][happy_hare][to
     }
 }
 
-TEST_CASE("Happy Hare: get_unit_topology returns per-unit topology", "[ams][happy_hare][topology]") {
+TEST_CASE("Happy Hare: get_unit_topology returns per-unit topology",
+          "[ams][happy_hare][topology]") {
     AmsBackendHappyHareTestHelper helper;
     helper.set_selector_type("VirtualSelector");
     helper.initialize_test_gates(4);
@@ -2311,7 +2302,8 @@ TEST_CASE("Happy Hare actions include split gear speeds", "[ams][happy_hare][dev
 
     auto find_action = [&](const std::string& id) -> const helix::printer::DeviceAction* {
         for (const auto& a : actions) {
-            if (a.id == id) return &a;
+            if (a.id == id)
+                return &a;
         }
         return nullptr;
     };
@@ -2337,7 +2329,8 @@ TEST_CASE("Happy Hare actions include extruder speeds", "[ams][happy_hare][devic
 
     auto find_action = [&](const std::string& id) -> const helix::printer::DeviceAction* {
         for (const auto& a : actions) {
-            if (a.id == id) return &a;
+            if (a.id == id)
+                return &a;
         }
         return nullptr;
     };
@@ -2357,7 +2350,8 @@ TEST_CASE("Happy Hare actions include toolhead sliders", "[ams][happy_hare][devi
 
     auto find_action = [&](const std::string& id) -> const helix::printer::DeviceAction* {
         for (const auto& a : actions) {
-            if (a.id == id) return &a;
+            if (a.id == id)
+                return &a;
         }
         return nullptr;
     };
@@ -2379,7 +2373,8 @@ TEST_CASE("Happy Hare actions include sync_to_extruder toggle",
 
     auto find_action = [&](const std::string& id) -> const helix::printer::DeviceAction* {
         for (const auto& a : actions) {
-            if (a.id == id) return &a;
+            if (a.id == id)
+                return &a;
         }
         return nullptr;
     };
@@ -2396,7 +2391,8 @@ TEST_CASE("Happy Hare actions include test_move button", "[ams][happy_hare][devi
 
     auto find_action = [&](const std::string& id) -> const helix::printer::DeviceAction* {
         for (const auto& a : actions) {
-            if (a.id == id) return &a;
+            if (a.id == id)
+                return &a;
         }
         return nullptr;
     };
@@ -2475,8 +2471,7 @@ TEST_CASE("get_device_actions overlays sync_to_extruder as bool",
 
 // --- Phase 12: Parse status for LED/eSpooler/flowguard (Task 5) ---
 
-TEST_CASE("parse_mmu_state extracts flowguard encoder_mode",
-          "[ams][happy_hare][device_actions]") {
+TEST_CASE("parse_mmu_state extracts flowguard encoder_mode", "[ams][happy_hare][device_actions]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
@@ -2533,8 +2528,7 @@ TEST_CASE("parse_mmu_state populates espooler_active for device actions",
 
 // --- Phase 13: Topology filtering (Task 6) ---
 
-TEST_CASE("Type B topology hides servo and selector actions",
-          "[ams][happy_hare][device_actions]") {
+TEST_CASE("Type B topology hides servo and selector actions", "[ams][happy_hare][device_actions]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
     helper.set_config_defaults_for_test();
@@ -2663,8 +2657,7 @@ TEST_CASE("execute_device_action sends correct G-code for sync toggle",
     }
 }
 
-TEST_CASE("execute_device_action sends test_move G-code",
-          "[ams][happy_hare][device_actions]") {
+TEST_CASE("execute_device_action sends test_move G-code", "[ams][happy_hare][device_actions]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
@@ -2746,8 +2739,7 @@ TEST_CASE("user override persists and reapplies via in-memory cache",
     }
 }
 
-TEST_CASE("user override for toolhead distance persists",
-          "[ams][happy_hare][device_actions]") {
+TEST_CASE("user override for toolhead distance persists", "[ams][happy_hare][device_actions]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
     helper.set_config_defaults_for_test();
@@ -2763,8 +2755,7 @@ TEST_CASE("user override for toolhead distance persists",
     }
 }
 
-TEST_CASE("user override for sync_to_extruder persists",
-          "[ams][happy_hare][device_actions]") {
+TEST_CASE("user override for sync_to_extruder persists", "[ams][happy_hare][device_actions]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
     helper.set_config_defaults_for_test();
@@ -2798,4 +2789,45 @@ TEST_CASE("reapply_overrides batches into single MMU_TEST_CONFIG command",
     REQUIRE(helper.captured_gcodes.size() == 1);
     REQUIRE(helper.has_gcode_containing("GEAR_FROM_BUFFER_SPEED=200"));
     REQUIRE(helper.has_gcode_containing("EXTRUDER_LOAD_SPEED=50"));
+}
+
+// ============================================================================
+// select_gate() Tests
+// ============================================================================
+
+TEST_CASE("Happy Hare select_gate sends MMU_SELECT", "[ams][happy_hare]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+
+    AmsError result = helper.select_gate(2);
+
+    REQUIRE(result.result == AmsResult::SUCCESS);
+    REQUIRE(helper.has_gcode("MMU_SELECT GATE=2"));
+}
+
+TEST_CASE("Happy Hare advertises gate-select capability", "[ams][happy_hare][capability]") {
+    AmsBackendHappyHareTestHelper helper;
+    REQUIRE(helper.supports_gate_select());
+}
+
+TEST_CASE("Happy Hare select_gate rejects out-of-range gate", "[ams][happy_hare]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.set_running(true);
+
+    AmsError result = helper.select_gate(99);
+
+    REQUIRE(result.result != AmsResult::SUCCESS);
+    REQUIRE_FALSE(helper.has_gcode("MMU_SELECT GATE=99"));
+}
+
+TEST_CASE("Happy Hare select_gate fails when not running", "[ams][happy_hare]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    AmsError result = helper.select_gate(0);
+
+    REQUIRE_FALSE(result.success());
+    REQUIRE_FALSE(helper.has_gcode("MMU_SELECT GATE=0"));
 }
