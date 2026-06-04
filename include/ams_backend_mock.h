@@ -499,6 +499,23 @@ class AmsBackendMock : public AmsBackend {
                              int slot_index = -1);
 
     /**
+     * @brief Simulate a transient action state that returns to IDLE.
+     *
+     * Mirrors the reset() idiom: sets the given action + detail, emits a
+     * state-change event, then schedules the action to clear back to IDLE
+     * after the standard operation delay. Used by selector-context commands
+     * (check/select/jog/servo) so --test surfaces the same AMS status-display
+     * feedback that real Happy Hare reports automatically. No-op (returns
+     * busy) if an action is already in flight.
+     *
+     * @param action Transient action enum (CHECKING / SELECTING / RESETTING…)
+     * @param detail Operation detail string shown in the status display
+     * @return success once the transient state has been scheduled, busy if
+     *         the backend is already mid-operation
+     */
+    AmsError simulate_transient_action(AmsAction action, const std::string& detail);
+
+    /**
      * @brief Wait for any active operation thread to complete
      */
     void wait_for_operation_thread();

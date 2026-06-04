@@ -1116,74 +1116,34 @@ void AmsPanel::on_path_slot_clicked(int slot_index, void* user_data) {
         return;
     }
 
-    spdlog::info("[AmsPanel] Path slot {} clicked - triggering load", slot_index);
+    spdlog::info("[AmsPanel] Path slot {} clicked - opening context menu", slot_index);
 
-    // Trigger filament load for the clicked slot
-    AmsBackend* backend = AmsState::instance().get_backend();
-    if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+    // Tapping the filament tube/line opens the per-slot context menu (Load /
+    // Unload / Eject / Edit / …) — the same AmsContextMenu the spool box opens
+    // — rather than firing an unconfirmed load/swap directly. This prevents
+    // accidental tool changes from a stray tap on the path canvas. The canvas
+    // slot callback only carries a slot index (no click point), so anchor the
+    // menu to the canvas widget and let it position itself.
+    int slot_count = lv_subject_get_int(AmsState::instance().get_slot_count_subject());
+    if (slot_index < 0 || slot_index >= slot_count) {
+        spdlog::warn("[AmsPanel] Ignoring path click - invalid slot {} (slot_count={})", slot_index,
+                     slot_count);
         return;
     }
 
-    // Check if backend is busy (lockout during in-flight tool changes)
-    AmsSystemInfo info = backend->get_system_info();
-    if (info.action != AmsAction::IDLE && info.action != AmsAction::ERROR) {
-        spdlog::debug("[AmsPanel] Ignoring path click - backend busy: {}",
-                      ams_action_to_string(info.action));
+    if (!self->path_canvas_) {
         return;
     }
 
-    // Ignore click on the already-active tool
-    if (info.current_slot >= 0 && info.current_slot == slot_index) {
-        spdlog::debug("[AmsPanel] Ignoring path click - tool {} already active", slot_index);
-        return;
+    // Capture the live touch point so the menu pops up at the tap location.
+    // This runs synchronously inside the canvas's input event handler, so the
+    // active indev still reports the press coordinates.
+    lv_point_t click_pt = {0, 0};
+    if (lv_indev_t* indev = lv_indev_active()) {
+        lv_indev_get_point(indev, &click_pt);
     }
 
-    AmsError error;
-
-    // Cut-then-load only when the backend says an unload is needed. The
-    // load-vs-swap rule is centralized in needs_unload_before_load() so the UI
-    // and backend agree: K1 CFS reports a preloaded/cassette-staged slot via
-    // current_slot with the nozzle still empty, and treating that as "loaded"
-    // triggered a cut on an empty nozzle (#968). The K1 override keys on the
-    // true at-nozzle signal; K2 keeps the filament_loaded || current_slot rule.
-    if (backend->needs_unload_before_load(info) && info.current_slot != slot_index) {
-        // Get the tool number for the target slot
-        const SlotInfo* slot_info = info.get_slot_global(slot_index);
-        if (slot_info && slot_info->mapped_tool >= 0) {
-            spdlog::info(
-                "[AmsPanel] Slot {} already loaded, swapping to slot {} via tool change T{}",
-                info.current_slot, slot_index, slot_info->mapped_tool);
-            // Set up step progress BEFORE backend call
-            if (self->sidebar_) {
-                self->sidebar_->start_operation(StepOperationType::LOAD_SWAP, slot_index);
-            }
-            error = backend->change_tool(slot_info->mapped_tool);
-        } else {
-            // Fallback: unload first, then load
-            spdlog::info("[AmsPanel] Slot {} already loaded, unloading first then loading {}",
-                         info.current_slot, slot_index);
-            if (self->sidebar_) {
-                self->sidebar_->start_operation(StepOperationType::UNLOAD, info.current_slot);
-            }
-            error = backend->unload_filament();
-            if (error.result == AmsResult::SUCCESS) {
-                // Note: The actual load will be triggered after unload completes
-                // For now, we'll rely on the user clicking again or the backend auto-loading
-                NOTIFY_INFO(lv_tr("Unloading... click again to load slot {}"), slot_index + 1);
-            }
-        }
-    } else {
-        // Fresh load - no tool currently loaded
-        if (self->sidebar_) {
-            self->sidebar_->start_operation(StepOperationType::LOAD_FRESH, slot_index);
-        }
-        error = backend->load_filament(slot_index);
-    }
-
-    if (error.result != AmsResult::SUCCESS) {
-        NOTIFY_ERROR(lv_tr("Load failed: {}"), error.user_msg);
-    }
+    self->show_context_menu(slot_index, self->path_canvas_, click_pt);
 }
 
 void AmsPanel::on_path_hub_clicked_thunk(lv_point_t click_pt, void* user_data) {
@@ -1213,9 +1173,13 @@ void AmsPanel::dispatch_selector_action(helix::ui::AmsSelectorMenu::SelectorActi
         return;
     }
     AmsError err{};
+    // Feedback for these quick selector commands flows through the AMS status
+    // display (the ams_action_detail subject) — the backend sets a transient
+    // action/operation_detail and the UI observes it, matching how real Happy
+    // Hare reports "Checking"/"Selecting"/etc. automatically. No toasts here.
     switch (a) {
     case SA::HOME:
-        err = backend->reset();
+        err = backend->reset(); // reset()==MMU_HOME for HH; reads as "Homing selector"
         break;
     case SA::CHECK_SLOTS:
         err = backend->check_all_gates();
@@ -1246,13 +1210,16 @@ void AmsPanel::dispatch_selector_action(helix::ui::AmsSelectorMenu::SelectorActi
             lv_tr("Recover MMU state?"),
             lv_tr("Re-syncs Happy Hare's tracked state with the hardware."), ModalSeverity::Warning,
             lv_tr("Recover"),
-            // Re-fetch the backend inside the confirm callback so it cannot
-            // dangle if the panel/backend changed while the dialog was open.
+            // A custom on_confirm REPLACES the dialog's default close handler, so
+            // it must dismiss the dialog itself. Re-fetch the backend inside the
+            // callback so it cannot dangle if the panel/backend changed while the
+            // dialog was open. Feedback comes from the backend action state.
             +[](lv_event_t* /*e*/) {
                 AmsBackend* b = AmsState::instance().get_backend();
                 if (b) {
                     b->recover();
                 }
+                helix::ui::modal_hide(helix::ui::modal_get_top());
             },
             /*on_cancel*/ nullptr, /*user_data*/ nullptr);
         return;

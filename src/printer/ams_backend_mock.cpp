@@ -696,9 +696,15 @@ AmsError AmsBackendMock::reset() {
         }
 
         system_info_.action = AmsAction::RESETTING;
-        system_info_.operation_detail = "Resetting system";
+        // For Happy Hare, reset()==MMU_HOME — a selector home, not a system
+        // reset. Surface "Homing selector" so the status cascade shows the
+        // operation_detail instead of the shared RESETTING enum string
+        // ("Resetting"), which still applies to non-HH backends.
         if (system_info_.type == AmsType::HAPPY_HARE) {
+            system_info_.operation_detail = "Homing selector";
             spdlog::info("[AMS Mock] Executing G-code: MMU_HOME");
+        } else {
+            system_info_.operation_detail = "Resetting system";
         }
         spdlog::info("[AmsBackendMock] Resetting");
     }
@@ -708,6 +714,34 @@ AmsError AmsBackendMock::reset() {
     // Use schedule_completion for thread-safe operation
     // RESETTING action will be handled by the "else" branch which just waits and completes
     schedule_completion(AmsAction::RESETTING, EVENT_STATE_CHANGED);
+
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsBackendMock::simulate_transient_action(AmsAction action, const std::string& detail) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Mock backend not started");
+        }
+
+        if (system_info_.action != AmsAction::IDLE) {
+            return AmsErrorHelper::busy(ams_action_to_string(system_info_.action));
+        }
+
+        system_info_.action = action;
+        system_info_.operation_detail = detail;
+        spdlog::info("[AmsBackendMock] Transient action {} ({})", ams_action_to_string(action),
+                     detail);
+    }
+
+    emit_event(EVENT_STATE_CHANGED);
+
+    // schedule_completion's "else" branch waits operation_delay_ms_ then clears
+    // back to IDLE and re-emits EVENT_STATE_CHANGED — the same mechanism reset()
+    // uses for its RESETTING->IDLE transition.
+    schedule_completion(action, EVENT_STATE_CHANGED);
 
     return AmsErrorHelper::success();
 }
@@ -770,6 +804,11 @@ AmsError AmsBackendMock::select_gate(int slot_index) {
         spdlog::info("[AMS Mock] Executing G-code: MMU_SELECT GATE={}", slot_index);
     }
 
+    if (system_info_.type == AmsType::HAPPY_HARE) {
+        return simulate_transient_action(AmsAction::SELECTING,
+                                         "Selecting slot " + std::to_string(slot_index + 1));
+    }
+
     return AmsErrorHelper::success();
 }
 
@@ -796,7 +835,8 @@ AmsError AmsBackendMock::move_selector(int delta) {
         spdlog::info("[AMS Mock] Executing G-code: MMU_SELECT GATE={}", target);
     }
 
-    return AmsErrorHelper::success();
+    return simulate_transient_action(AmsAction::SELECTING,
+                                     "Selecting slot " + std::to_string(target + 1));
 }
 
 AmsError AmsBackendMock::check_gate(int slot_index) {
@@ -810,11 +850,21 @@ AmsError AmsBackendMock::check_gate(int slot_index) {
         spdlog::info("[AMS Mock] Executing G-code: MMU_CHECK_GATE GATE={}", slot_index);
     }
 
+    if (system_info_.type == AmsType::HAPPY_HARE) {
+        return simulate_transient_action(AmsAction::CHECKING,
+                                         "Checking slot " + std::to_string(slot_index + 1));
+    }
+
     return AmsErrorHelper::success();
 }
 
 AmsError AmsBackendMock::check_all_gates() {
     spdlog::info("[AMS Mock] Executing G-code: MMU_CHECK_GATE");
+
+    if (system_info_.type == AmsType::HAPPY_HARE) {
+        return simulate_transient_action(AmsAction::CHECKING, "Checking all slots");
+    }
+
     return AmsErrorHelper::success();
 }
 
@@ -2859,6 +2909,34 @@ AmsError AmsBackendMock::execute_device_action(const std::string& action_id,
             }
             spdlog::info("[AMS Mock] Executed device action: {} with value type: {}", action_id,
                          value.has_value() ? value.type().name() : "none");
+
+            // Surface brief status-display feedback for the selector-context
+            // servo / gear-sync commands so --test mirrors real Happy Hare.
+            // These are instant on hardware (no AmsAction enum of their own);
+            // the cascade prioritizes the non-empty operation_detail, so the
+            // SELECTING enum passed to simulate_transient_action is never shown
+            // — only the detail string is. Release the lock first since
+            // simulate_transient_action re-acquires mutex_ and emits events.
+            std::string detail;
+            if (action_id == "servo_up") {
+                detail = "Servo up";
+            } else if (action_id == "servo_move") {
+                detail = "Servo move";
+            } else if (action_id == "servo_down") {
+                detail = "Servo down";
+            } else if (action_id == "gear_sync") {
+                bool on = false;
+                if (value.has_value() && value.type() == typeid(bool)) {
+                    on = std::any_cast<bool>(value);
+                }
+                detail = on ? "Gear motor synced" : "Gear motor released";
+            }
+
+            if (!detail.empty() && system_info_.type == AmsType::HAPPY_HARE) {
+                lock.unlock();
+                return simulate_transient_action(AmsAction::SELECTING, detail);
+            }
+
             return AmsErrorHelper::success();
         }
     }
