@@ -967,6 +967,7 @@
   <translation tag="MCU, host, and auxiliary temperature monitoring" en="MCU, host, and auxiliary temperature monitoring"/>
   <translation tag="MDI Icons" en="MDI Icons"/>
   <translation tag="MISSING CONFIGURED" en="MISSING CONFIGURED"/>
+  <translation tag="MMU command failed: {}" en="MMU command failed: {}"/>
   <translation tag="MPC" en="MPC"/>
   <translation tag="Machine Limits" en="Machine Limits"/>
   <translation tag="Macro" en="Macro"/>
@@ -1384,6 +1385,7 @@
   <translation tag="Quick actions, calibration, speed" en="Quick actions, calibration, speed"/>
   <translation tag="RSS:" en="RSS:"/>
   <translation tag="Re-probe" en="Re-probe"/>
+  <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." en="Re-syncs Happy Hare&apos;s tracked state with the hardware."/>
   <translation tag="Ready" en="Ready"/>
   <translation tag="Ready to Apply" en="Ready to Apply"/>
   <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?" en="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
@@ -1399,6 +1401,7 @@
   <translation tag="Recorded timelapses will appear here" en="Recorded timelapses will appear here"/>
   <translation tag="Recording Mode" en="Recording Mode"/>
   <translation tag="Recover" en="Recover"/>
+  <translation tag="Recover MMU state?" en="Recover MMU state?"/>
   <translation tag="Recovering AFC system..." en="Recovering AFC system..."/>
   <translation tag="Recovery failed" en="Recovery failed"/>
   <translation tag="Reduce ringing and ghosting artifacts" en="Reduce ringing and ghosting artifacts"/>

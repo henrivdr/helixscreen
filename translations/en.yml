@@ -969,6 +969,7 @@ translations:
   MCU, host, and auxiliary temperature monitoring: MCU, host, and auxiliary temperature monitoring
   MDI Icons: MDI Icons
   MISSING CONFIGURED: MISSING CONFIGURED
+  'MMU command failed: {}': 'MMU command failed: {}'
   MPC: MPC
   Machine Limits: Machine Limits
   Macro: Macro
@@ -1387,6 +1388,7 @@ translations:
   Quick actions, calibration, speed: Quick actions, calibration, speed
   'RSS:': 'RSS:'
   Re-probe: Re-probe
+  Re-syncs Happy Hare's tracked state with the hardware.: Re-syncs Happy Hare's tracked state with the hardware.
   Ready: Ready
   Ready to Apply: Ready to Apply
   'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': 'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?'
@@ -1402,6 +1404,7 @@ translations:
   Recorded timelapses will appear here: Recorded timelapses will appear here
   Recording Mode: Recording Mode
   Recover: Recover
+  Recover MMU state?: Recover MMU state?
   Recovering AFC system...: Recovering AFC system...
   Recovery failed: Recovery failed
   Reduce ringing and ghosting artifacts: Reduce ringing and ghosting artifacts

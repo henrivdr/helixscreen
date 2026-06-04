@@ -967,6 +967,7 @@
   <translation tag="MCU, host, and auxiliary temperature monitoring" de="MCU-, Host- und Zusatztemperaturüberwachung" en="MCU, host, and auxiliary temperature monitoring" es="Monitoreo de temperatura de MCU, host y auxiliares" fr="Surveillance des températures MCU, hôte et auxiliaires" it="Monitoraggio temperature MCU, host e ausiliarie" ja="MCU、ホスト、補助温度の監視" pt="Monitoramento de temperatura MCU, host e auxiliar" ru="Мониторинг температуры MCU, хоста и вспомогательных датчиков" zh="MCU、主机及辅助温度监控"/>
   <translation tag="MDI Icons" de="MDI-Icons" en="MDI Icons" es="Iconos MDI" fr="Icônes MDI" it="Icone MDI" ja="MDI アイコン" pt="Ícones MDI" ru="Иконки MDI" zh="MDI 图标"/>
   <translation tag="MISSING CONFIGURED" de="KONFIGURIERT FEHLT" en="MISSING CONFIGURED" es="CONFIGURADO FALTANTE" fr="CONFIGURÉ MANQUANT" it="CONFIGURATO MANCANTE" ja="設定済みが見つかりません" pt="CONFIGURAÇÃO FALTANDO" ru="ОТСУТСТВУЕТ НАСТРОЕННОЕ" zh="缺少配置"/>
+  <translation tag="MMU command failed: {}" en="MMU command failed: {}"/>
   <translation tag="MPC" de="MPC" en="MPC" es="MPC" fr="MPC" it="MPC" ja="MPC" pt="MPC" ru="MPC" zh="MPC"/>
   <translation tag="Machine Limits" de="Maschinenlimits" en="Machine Limits" es="Límites de la Máquina" fr="Limites de la machine" it="Limiti macchina" ja="機械制限" pt="Limites da Máquina" ru="Ограничения принтера" zh="机器限制"/>
   <translation tag="Macro" de="Makro" en="Macro" es="Macro" fr="Macro" it="Macro" ja="マクロ" pt="Macro" ru="Макрос" zh="宏"/>
@@ -1384,6 +1385,7 @@
   <translation tag="Quick actions, calibration, speed" de="Schnellaktionen, Kalibrierung, Geschwindigkeit" en="Quick actions, calibration, speed" es="Acciones rápidas, calibración, velocidad" fr="Actions rapides, calibration, vitesse" it="Azioni rapide, calibrazione, velocità" ja="クイックアクション、キャリブレーション、速度" pt="Ações rápidas, calibração, velocidade" ru="Быстрые действия, калибровка, скорость" zh="快捷操作、校准、速度"/>
   <translation tag="RSS:" de="RSS:" en="RSS:" es="RSS:" fr="RSS :" it="RSS:" ja="RSS:" pt="RSS:" ru="RSS:" zh="RSS："/>
   <translation tag="Re-probe" de="Erneut abtasten" en="Re-probe" es="Re-sondear" fr="Re-palper" it="Risonda" ja="再プローブ" pt="Sondar Novamente" ru="Перепроверить" zh="重新探测"/>
+  <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." en="Re-syncs Happy Hare&apos;s tracked state with the hardware."/>
   <translation tag="Ready" de="Bereit" en="Ready" es="Listo" fr="Prêt" it="Pronto" ja="準備完了" pt="Pronto" ru="Готов" zh="就绪"/>
   <translation tag="Ready to Apply" de="Bereit zum Anwenden" en="Ready to Apply" es="Listo para Aplicar" fr="Prêt à appliquer" it="Pronto per applicare" ja="適用の準備完了" pt="Pronto para Aplicar" ru="Готово к применению" zh="准备应用"/>
   <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?" en="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
@@ -1399,6 +1401,7 @@
   <translation tag="Recorded timelapses will appear here" de="Aufgenommene Zeitraffer werden hier angezeigt" en="Recorded timelapses will appear here" es="Los timelapses grabados aparecerán aquí" fr="Les timelapses enregistrés apparaîtront ici" it="I timelapse registrati appariranno qui" ja="録画済みタイムラプスがここに表示されます" pt="Os timelapses gravados aparecerão aqui" ru="Записанные таймлапсы появятся здесь" zh="录制的延时摄影将显示在此处"/>
   <translation tag="Recording Mode" de="Aufnahmemodus" en="Recording Mode" es="Modo de Grabación" fr="Mode d&apos;enregistrement" it="Modalità registrazione" ja="録画モード" pt="Modo de Gravação" ru="Режим записи" zh="录制模式"/>
   <translation tag="Recover" de="Wiederherstellen" en="Recover" es="Recuperar" fr="Récupérer" it="Recupera" ja="回復" pt="Recuperar" ru="Восстановить" zh="恢复"/>
+  <translation tag="Recover MMU state?" en="Recover MMU state?"/>
   <translation tag="Recovering AFC system..." de="AFC-Wiederherstellung..." en="Recovering AFC system..." es="Recuperando sistema AFC..." fr="Récupération du système AFC..." it="Recupero sistema AFC..." ja="AFCシステムを復旧中..." pt="Recuperando sistema AFC..." ru="Восстановление системы AFC..." zh="AFC系统恢复中..."/>
   <translation tag="Recovery failed" de="Wiederherstellung fehlgeschlagen" en="Recovery failed" es="Error en recuperación" fr="Échec de la récupération" it="Recupero fallito" ja="復旧失敗" pt="Recuperação falhou" ru="Восстановление не удалось" zh="恢复失败"/>
   <translation tag="Reduce ringing and ghosting artifacts" de="Klingel- und Geisterartefakte reduzieren" en="Reduce ringing and ghosting artifacts" es="Reducir artefactos de resonancia y fantasma" fr="Réduire les artefacts d&apos;ondulation et de ghosting" it="Riduci artefatti di ringing e ghosting" ja="リンギングとゴーストのアーティファクトを軽減" pt="Reduzir artefatos de ringing e ghosting" ru="Уменьшить артефакты звона и двоения" zh="减少振纹和残影"/>
