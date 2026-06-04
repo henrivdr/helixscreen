@@ -89,7 +89,7 @@ std::vector<DeviceAction> hh_default_actions() {
     {
         DeviceAction a;
         a.id = "sync_to_extruder";
-        a.label = "Sync to Extruder";
+        a.label = "Sync during printing";
         a.section = "accessories";
         a.type = ActionType::TOGGLE;
         a.current_value = false;
@@ -100,6 +100,15 @@ std::vector<DeviceAction> hh_default_actions() {
     add_button("test_grip", "Test Grip", "maintenance");
     add_button("test_load", "Test Load", "maintenance");
     add_button("test_move", "Test Move", "maintenance");
+    {
+        DeviceAction a;
+        a.id = "gear_sync";
+        a.label = "Gear motor synced";
+        a.section = "maintenance";
+        a.type = ActionType::TOGGLE;
+        a.current_value = false;
+        actions.push_back(std::move(a));
+    }
     {
         DeviceAction a;
         a.id = "motors_toggle";

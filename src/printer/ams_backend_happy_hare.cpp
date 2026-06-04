@@ -2369,6 +2369,14 @@ AmsError AmsBackendHappyHare::execute_device_action(const std::string& action_id
         return result;
     }
 
+    // --- Runtime gear-motor sync (live action, distinct from config sync_to_extruder) ---
+    if (action_id == "gear_sync") {
+        auto [enable, err] = require_bool("gear sync state");
+        if (!err)
+            return err;
+        return execute_gcode(enable ? "MMU_SYNC_GEAR_MOTOR SYNC=1" : "MMU_SYNC_GEAR_MOTOR SYNC=0");
+    }
+
     // --- Motors toggle ---
     if (action_id == "motors_toggle") {
         auto [enable, err] = require_bool("motor state");

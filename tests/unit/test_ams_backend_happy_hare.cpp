@@ -2915,3 +2915,34 @@ TEST_CASE("Happy Hare default actions include servo positions",
     REQUIRE(has("servo_move"));
     REQUIRE(has("servo_down"));
 }
+
+TEST_CASE("Happy Hare runtime gear_sync toggles MMU_SYNC_GEAR_MOTOR",
+          "[ams][happy_hare][device_actions]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    REQUIRE(helper.execute_device_action("gear_sync", std::any(true)).success());
+    REQUIRE(helper.has_gcode("MMU_SYNC_GEAR_MOTOR SYNC=1"));
+
+    REQUIRE(helper.execute_device_action("gear_sync", std::any(false)).success());
+    REQUIRE(helper.has_gcode("MMU_SYNC_GEAR_MOTOR SYNC=0"));
+}
+
+TEST_CASE("Happy Hare config sync action is relabeled, distinct from runtime",
+          "[ams][happy_hare][device_actions]") {
+    using namespace helix::printer;
+    auto actions = hh_default_actions();
+    const DeviceAction* config_sync = nullptr;
+    const DeviceAction* runtime_sync = nullptr;
+    for (const auto& a : actions) {
+        if (a.id == "sync_to_extruder")
+            config_sync = &a;
+        if (a.id == "gear_sync")
+            runtime_sync = &a;
+    }
+    REQUIRE(config_sync != nullptr);
+    REQUIRE(runtime_sync != nullptr);
+    REQUIRE(config_sync->label == "Sync during printing");
+    REQUIRE(runtime_sync->label == "Gear motor synced");
+    REQUIRE(runtime_sync->section == "maintenance");
+}
