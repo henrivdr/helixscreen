@@ -33,12 +33,15 @@
       <!-- Servo row sizes to content (Servo label + 3 natural-width buttons); as
            the widest row it drives the card's content width, so the menu scales
            with font/button size per resolution instead of a hardcoded width. -->
+      <!-- Servo row sizes to content (the widest row) so it anchors the card's
+           responsive width. Up/Down use directional arrows; Move is a named servo
+           position (intermediate, for selector travel). -->
       <lv_obj name="servo_row"
               width="content" height="content" style_pad_all="0" style_pad_gap="#space_xs"
               flex_flow="row" style_flex_cross_place="center" scrollable="false">
         <text_small text="Servo" translation_tag="Servo"/>
         <ui_button name="btn_servo_up"
-                   height="#button_height_sm" text="Up" translation_tag="Up" variant="secondary" clickable="true">
+                   height="#button_height_sm" icon="arrow_up" variant="secondary" clickable="true">
           <event_cb trigger="clicked" callback="ams_selector_servo_up_cb"/>
         </ui_button>
         <ui_button name="btn_servo_move"
@@ -46,7 +49,7 @@
           <event_cb trigger="clicked" callback="ams_selector_servo_move_cb"/>
         </ui_button>
         <ui_button name="btn_servo_down"
-                   height="#button_height_sm" text="Down" translation_tag="Down" variant="secondary" clickable="true">
+                   height="#button_height_sm" icon="arrow_down" variant="secondary" clickable="true">
           <event_cb trigger="clicked" callback="ams_selector_servo_down_cb"/>
         </ui_button>
       </lv_obj>
@@ -56,11 +59,11 @@
               flex_flow="row" style_flex_cross_place="center" scrollable="false">
         <text_small text="Move selector" translation_tag="Move selector" flex_grow="1"/>
         <ui_button name="btn_jog_prev"
-                   height="#button_height_sm" icon="chevron_left" variant="secondary" clickable="true">
+                   height="#button_height_sm" icon="arrow_left" variant="secondary" clickable="true">
           <event_cb trigger="clicked" callback="ams_selector_jog_prev_cb"/>
         </ui_button>
         <ui_button name="btn_jog_next"
-                   height="#button_height_sm" icon="chevron_right" variant="secondary" clickable="true">
+                   height="#button_height_sm" icon="arrow_right" variant="secondary" clickable="true">
           <event_cb trigger="clicked" callback="ams_selector_jog_next_cb"/>
         </ui_button>
       </lv_obj>
