@@ -278,6 +278,10 @@ void PrintSelectPanel::init_subjects() {
     UI_MANAGED_SUBJECT_POINTER(selected_detail_thumbnail_subject_,
                                selected_detail_thumbnail_buffer_, "selected_detail_thumbnail",
                                subjects_);
+    // Publish nullptr (not the empty default buffer) so the immediate bind_src on
+    // overlay creation doesn't hit LVGL's empty-buffer warning path (#990).
+    lv_subject_set_pointer(&selected_detail_thumbnail_subject_,
+                           thumbnail_subject_value(selected_detail_thumbnail_buffer_));
 
     UI_MANAGED_SUBJECT_STRING(selected_print_time_subject_, selected_print_time_buffer_, "",
                               "selected_print_time", subjects_);
@@ -1854,7 +1858,11 @@ void PrintSelectPanel::set_selected_file(const char* filename, const char* thumb
                 sizeof(selected_detail_thumbnail_buffer_) - 1);
         selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
     }
-    lv_subject_set_pointer(&selected_detail_thumbnail_subject_, selected_detail_thumbnail_buffer_);
+    // Publish nullptr for the no-thumbnail sentinel: an empty buffer is misread by
+    // LVGL as a VARIABLE image source and warns/fails to decode (#990). The
+    // has_real block below handles the placeholder-icon/gradient UI toggle.
+    lv_subject_set_pointer(&selected_detail_thumbnail_subject_,
+                           thumbnail_subject_value(selected_detail_thumbnail_buffer_));
 
     // Toggle thumbnail image, no-thumbnail placeholder icon, and gradient background in detail view
     if (detail_view_ && detail_view_->get_widget()) {

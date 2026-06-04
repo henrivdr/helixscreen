@@ -117,6 +117,24 @@ inline bool refresh_should_skip(bool in_flight, bool force,
 }
 
 /**
+ * @brief Value to publish to a thumbnail POINTER subject (lv_image_bind_src).
+ *
+ * Returns @p buffer only when it holds a real (non-empty) thumbnail path;
+ * otherwise nullptr. Never publishes an empty buffer: LVGL's
+ * lv_image_src_get_type classifies a buffer whose first byte is < 0x20 (e.g. an
+ * empty string) as LV_IMAGE_SRC_VARIABLE, then fails to decode it — logging
+ * "lv_image_set_src: failed to get image info" (and previously crashing). Both
+ * the subject init and set_selected_file() route through this so the
+ * no-thumbnail sentinel is always nullptr (prestonbrown/helixscreen#990).
+ *
+ * Extracted as a pure function so it can be tested without the full
+ * PrintSelectPanel/LVGL fixture.
+ */
+inline char* thumbnail_subject_value(char* buffer) {
+    return (buffer && buffer[0] != '\0') ? buffer : nullptr;
+}
+
+/**
  * @brief Print file selection panel with card/list views
  *
  * Displays G-code files from Moonraker with two view modes:
