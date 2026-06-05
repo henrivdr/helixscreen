@@ -59,3 +59,23 @@ TEST_CASE("classify_pause: no signal at all => Unknown", "[pause][classify]") {
     PauseSignals s; // empty message, exception -1, sdcard active, no runout
     REQUIRE(classify_pause(s, {}) == PauseCause::Unknown);
 }
+
+TEST_CASE("classify_pause: all-wildcard matcher does not match everything", "[pause][classify]") {
+    // A default-constructed TerminalMatcher (no active criterion) must NEVER
+    // classify a pause as Terminal, even with a live signal present.
+    PauseSignals s;
+    s.message = "some pause reason";
+    std::vector<TerminalMatcher> m = {TerminalMatcher{}};
+    REQUIRE(classify_pause(s, m) == PauseCause::Recoverable);
+}
+
+TEST_CASE("classify_pause: a positive terminal match wins despite runout", "[pause][classify]") {
+    // runout_tripped only steers the no-terminal-match fallback; it must NOT
+    // rescue a pause that genuinely matches a terminal pattern.
+    PauseSignals s;
+    s.message = "Dirty bed detected";
+    s.sdcard_active = false;
+    s.runout_tripped = true;
+    std::vector<TerminalMatcher> m = {{"dirty", -1, true}};
+    REQUIRE(classify_pause(s, m) == PauseCause::Terminal);
+}
