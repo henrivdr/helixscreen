@@ -81,6 +81,17 @@ static constexpr float BYPASS_MERGE_Y_RATIO = 0.58f;
 // Buffer element position (between hub output and bypass merge)
 static constexpr float BUFFER_Y_RATIO = 0.46f;
 
+// PARALLEL topology (tool changer) Y ratios. Shared by draw_parallel_topology()
+// and the PARALLEL branch of the click hit-test so the two never drift.
+static constexpr float PARALLEL_SENSOR_Y_RATIO = 0.38f;   // Toolhead entry sensor
+static constexpr float PARALLEL_TOOLHEAD_Y_RATIO = 0.55f; // Nozzle/toolhead per slot
+
+// Slot-entry click hit-test padding (click handler only; no renderer
+// counterpart — these widen the entry band so taps near the spool grid still
+// register on the nearest slot).
+static constexpr int32_t ENTRY_HIT_MARGIN_TOP = 10;    // px above entry_y
+static constexpr int32_t ENTRY_HIT_MARGIN_BOTTOM = 20; // px below prep_y
+
 // Line widths (scaled by space_xs for responsiveness)
 static constexpr int LINE_WIDTH_IDLE_BASE = 2;
 static constexpr int LINE_WIDTH_ACTIVE_BASE = 4;
@@ -239,6 +250,22 @@ struct FilamentPathData {
     // source of truth: render writes, click reads. Reset each render.
     lv_area_t hub_hit_rect = {0, 0, 0, 0};
     bool hub_hit_valid = false;
+
+    // Buffer coil box hit rect, recorded by the renderer (absolute display
+    // coords). draw_buffer_coil() internally clamps box_w/box_h, so the click
+    // handler must read the exact drawn rect rather than re-derive it. Same
+    // record-and-read contract as hub_hit_rect. Reset each render.
+    lv_area_t buffer_hit_rect = {0, 0, 0, 0};
+    bool buffer_hit_valid = false;
+
+    // Bypass spool hit rect, recorded by the renderer (absolute display coords).
+    // The bypass spool is a sibling widget (not drawn on the canvas), but its
+    // hit region is anchored to bypass_x/bypass_merge_y computed during render;
+    // recording it keeps the click hit-test in lockstep with that geometry and
+    // with the actual visibility gate (!hub_only && show_bypass). Reset each
+    // render.
+    lv_area_t bypass_hit_rect = {0, 0, 0, 0};
+    bool bypass_hit_valid = false;
 
     // Theme-derived colors (cached for performance)
     lv_color_t color_idle;
@@ -1729,14 +1756,14 @@ static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPat
     int32_t height = g.height;
     int32_t y_off = g.y_off;
 
-    // Layout ratios for parallel topology (adjusted for per-slot toolheads)
-    constexpr float ENTRY_Y = -0.12f;   // Top entry (connects to spool)
-    constexpr float SENSOR_Y = 0.38f;   // Toolhead entry sensor (analogous to hub topology)
-    constexpr float TOOLHEAD_Y = 0.55f; // Nozzle/toolhead position per slot
+    // Layout ratios for parallel topology (adjusted for per-slot toolheads).
+    // SENSOR_Y/TOOLHEAD_Y are file-scope (PARALLEL_*_Y_RATIO) so the click
+    // hit-test reads the identical values — no drift between draw and hit.
+    constexpr float ENTRY_Y = -0.12f; // Top entry (connects to spool)
 
     int32_t entry_y = y_off + (int32_t)(height * ENTRY_Y);
-    int32_t sensor_y = y_off + (int32_t)(height * SENSOR_Y);
-    int32_t toolhead_y = y_off + (int32_t)(height * TOOLHEAD_Y);
+    int32_t sensor_y = y_off + (int32_t)(height * PARALLEL_SENSOR_Y_RATIO);
+    int32_t toolhead_y = y_off + (int32_t)(height * PARALLEL_TOOLHEAD_Y_RATIO);
 
     // Colors
     lv_color_t idle_color = data->color_idle;
@@ -2495,6 +2522,8 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
     // Invalidated until a selector/hub box is actually drawn this pass (e.g.
     // PARALLEL draws none). The draw site below records the real rect.
     data->hub_hit_valid = false;
+    data->buffer_hit_valid = false;
+    data->bypass_hit_valid = false;
 
     // Calculate Y positions
     int32_t entry_y = y_off + (int32_t)(height * ENTRY_Y_RATIO);
@@ -2776,6 +2805,16 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
     if (!data->hub_only && data->show_bypass) {
         int32_t bypass_x = x_off + (int32_t)(width * BYPASS_X_RATIO);
 
+        // Record the bypass spool hit region (absolute coords) for the click
+        // hit-test. The spool is a sibling widget, so this rect is anchored to
+        // the bypass merge geometry computed here. The click handler used a
+        // full-extent test (abs(dx) < sensor_r*3, abs(dy) < sensor_r*4), so the
+        // stored rect's half-extents equal those bounds: width = 2*sensor_r*3,
+        // height = 2*sensor_r*4 (read with margin 0 via hub_box_hit).
+        data->bypass_hit_rect = {bypass_x - sensor_r * 3, bypass_merge_y - sensor_r * 4,
+                                 bypass_x + sensor_r * 3, bypass_merge_y + sensor_r * 4};
+        data->bypass_hit_valid = true;
+
         // Determine bypass colors
         lv_color_t bypass_line_color = idle_color;
         if (data->bypass_active) {
@@ -3035,6 +3074,19 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
                              data->border_radius, buffer_has_filament, buf_fil_color,
                              data->color_text, data->label_font);
 
+            // Record the exact drawn box (absolute coords) for the click
+            // hit-test. Mirrors draw_buffer_coil()'s internal clamping so the
+            // click handler never re-derives the geometry.
+            int32_t buf_hit_w = data->hub_width * 4 / 5;
+            int32_t buf_hit_h = hub_h;
+            if (buf_hit_w < 36)
+                buf_hit_w = 36;
+            if (buf_hit_h < 16)
+                buf_hit_h = 16;
+            data->buffer_hit_rect = {center_x - buf_hit_w / 2, buffer_y - buf_hit_h / 2,
+                                     center_x + buf_hit_w / 2, buffer_y + buf_hit_h / 2};
+            data->buffer_hit_valid = true;
+
             // Continuation: buffer bottom → merge/toolhead — no top cap
             if (buffer_has_filament) {
                 draw_glow_line(layer, center_x, buf_fil_bot, center_x, output_end_y - sensor_r,
@@ -3199,10 +3251,8 @@ static void filament_path_click_cb(lv_event_t* e) {
     // For PARALLEL topology (tool changers), accept clicks on toolheads AND the
     // filament line/spool area (top half of canvas, above the sensor dots)
     if (data->topology == static_cast<int>(PathTopology::PARALLEL) && data->slot_callback) {
-        constexpr float PARALLEL_TOOLHEAD_Y = 0.55f;
-        constexpr float PARALLEL_SENSOR_Y = 0.38f;
-        int32_t toolhead_y = y_off + (int32_t)(height * PARALLEL_TOOLHEAD_Y);
-        int32_t sensor_y = y_off + (int32_t)(height * PARALLEL_SENSOR_Y);
+        int32_t toolhead_y = y_off + (int32_t)(height * PARALLEL_TOOLHEAD_Y_RATIO);
+        int32_t sensor_y = y_off + (int32_t)(height * PARALLEL_SENSOR_Y_RATIO);
         int32_t tool_scale = LV_MAX(6, data->extruder_scale * 2 / 3);
 
         // Toolhead click area (bottom half)
@@ -3233,26 +3283,15 @@ static void filament_path_click_cb(lv_event_t* e) {
         }
     }
 
-    // Check if buffer coil was clicked
-    if (data->buffer_present && data->buffer_callback) {
-        int32_t buffer_y = y_off + (int32_t)(height * BUFFER_Y_RATIO);
-        int32_t hub_h = (int32_t)(height * HUB_HEIGHT_RATIO);
-        int32_t box_w = data->hub_width * 4 / 5;
-        int32_t box_h = hub_h;
-        if (box_w < 36)
-            box_w = 36;
-        if (box_h < 16)
-            box_h = 16;
-        // Match center_x derivation used in draw callback (slot midpoint)
-        int32_t center_x = x_off + width / 2;
-        if (data->slot_count >= 2) {
-            int32_t first_x = x_off + get_slot_x(data, 0, x_off);
-            int32_t last_x = x_off + get_slot_x(data, data->slot_count - 1, x_off);
-            center_x = (first_x + last_x) / 2;
-        } else if (data->slot_count == 1) {
-            center_x = x_off + get_slot_x(data, 0, x_off);
-        }
-        if (abs(point.x - center_x) < box_w / 2 + 4 && abs(point.y - buffer_y) < box_h / 2 + 4) {
+    // Check if buffer coil was clicked. The renderer records the exact drawn
+    // box in data->buffer_hit_rect (absolute coords); reading it avoids
+    // re-deriving the clamped box dimensions and slot-midpoint center_x.
+    // buffer_hit_valid is set only when the box was actually drawn this pass.
+    if (data->buffer_present && data->buffer_callback && data->buffer_hit_valid) {
+        const lv_area_t& r = data->buffer_hit_rect;
+        int32_t cx = (r.x1 + r.x2) / 2;
+        int32_t cy = (r.y1 + r.y2) / 2;
+        if (helix::ui::hub_box_hit(point, cx, cy, r.x2 - r.x1, r.y2 - r.y1, 4)) {
             spdlog::debug("[FilamentPath] Buffer coil clicked");
             data->buffer_callback(data->buffer_user_data);
             return;
@@ -3275,15 +3314,17 @@ static void filament_path_click_cb(lv_event_t* e) {
         }
     }
 
-    // Check if bypass spool box was clicked (right side) — check before entry area
-    // Y-range guard because the spool box may be outside the slot entry area
-    if (data->show_bypass && data->bypass_callback) {
-        int32_t bypass_x = x_off + (int32_t)(width * BYPASS_X_RATIO);
-        int32_t bypass_merge_y = y_off + (int32_t)(height * BYPASS_MERGE_Y_RATIO);
-        int32_t sensor_r = data->sensor_radius;
-        int32_t box_w = sensor_r * 3;
-        int32_t box_h = sensor_r * 4;
-        if (abs(point.x - bypass_x) < box_w && abs(point.y - bypass_merge_y) < box_h) {
+    // Check if bypass spool box was clicked (right side) — check before entry area.
+    // The renderer records the exact hit region in data->bypass_hit_rect
+    // (absolute coords); bypass_hit_valid is set only when the bypass section was
+    // actually drawn (!hub_only && show_bypass), keeping the hit-test in lockstep
+    // with visibility. The rect's half-extents already encode the original
+    // full-extent bounds (sensor_r*3 / sensor_r*4), so read with margin 0.
+    if (data->show_bypass && data->bypass_callback && data->bypass_hit_valid) {
+        const lv_area_t& r = data->bypass_hit_rect;
+        int32_t cx = (r.x1 + r.x2) / 2;
+        int32_t cy = (r.y1 + r.y2) / 2;
+        if (helix::ui::hub_box_hit(point, cx, cy, r.x2 - r.x1, r.y2 - r.y1, 0)) {
             spdlog::debug("[FilamentPath] Bypass spool box clicked");
             data->bypass_callback(data->bypass_user_data);
             return;
@@ -3294,7 +3335,7 @@ static void filament_path_click_cb(lv_event_t* e) {
     int32_t entry_y = y_off + (int32_t)(height * ENTRY_Y_RATIO);
     int32_t prep_y = y_off + (int32_t)(height * PREP_Y_RATIO);
 
-    if (point.y < entry_y - 10 || point.y > prep_y + 20)
+    if (point.y < entry_y - ENTRY_HIT_MARGIN_TOP || point.y > prep_y + ENTRY_HIT_MARGIN_BOTTOM)
         return; // Click not in entry area
 
     // Find which slot was clicked
