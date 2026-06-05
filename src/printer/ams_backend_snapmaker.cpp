@@ -373,16 +373,29 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     // enabled, latching filament_detected:true. Proven path matches the
     // 2026-05-13 manual recovery curl that successfully resumed a stuck
     // print on this same printer.
-    std::string chain = fmt::format("SET_FILAMENT_SENSOR SENSOR=e{0}_filament ENABLE=0\n"
-                                    "M104 S{1} T{0}\n"
-                                    "M109 S{1} T{0}\n"
-                                    "AUTO_FEEDING EXTRUDER={0} LOAD=1\n"
-                                    "M400\n"
-                                    "M83\n"
-                                    "G1 E15 F60\n"
-                                    "M400\n"
-                                    "M82",
-                                    slot, target_temp);
+    // Snapmaker firmware drops per-extruder FILAMENT_TYPE/VENDOR when the
+    // sensor loses filament; without it RESUME errors "e0 not set filament".
+    // Re-assert from the slot record before the recovery chain. Skipped (with
+    // a warning) when we don't have both values, to avoid a malformed command.
+    std::string config_line =
+        helix::snapmaker_filament_config_gcode(slot, slot_copy.material, slot_copy.brand);
+    if (config_line.empty()) {
+        spdlog::warn("{} prepare_for_resume: tool {} missing material/brand — skipping "
+                     "SET_PRINT_FILAMENT_CONFIG re-assert",
+                     backend_log_tag(), slot);
+    }
+
+    std::string chain =
+        config_line + fmt::format("SET_FILAMENT_SENSOR SENSOR=e{0}_filament ENABLE=0\n"
+                                  "M104 S{1} T{0}\n"
+                                  "M109 S{1} T{0}\n"
+                                  "AUTO_FEEDING EXTRUDER={0} LOAD=1\n"
+                                  "M400\n"
+                                  "M83\n"
+                                  "G1 E15 F60\n"
+                                  "M400\n"
+                                  "M82",
+                                  slot, target_temp);
 
     spdlog::info("{} prepare_for_resume: tool {} runout latched, running recovery "
                  "chain (target {}°C)",
