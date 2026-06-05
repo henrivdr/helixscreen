@@ -33,27 +33,27 @@ class SnapmakerTestAccess;
 
 /// Per-extruder tool state from Snapmaker custom Klipper fields
 struct ExtruderToolState {
-    std::string state;                  ///< e.g., "PARKED", "ACTIVE", "ACTIVATING"
-    bool park_pin = false;              ///< Tool is in park position
-    bool active_pin = false;            ///< Tool is in active position
-    bool activating_move = false;       ///< Tool change move in progress
+    std::string state;                                ///< e.g., "PARKED", "ACTIVE", "ACTIVATING"
+    bool park_pin = false;                            ///< Tool is in park position
+    bool active_pin = false;                          ///< Tool is in active position
+    bool activating_move = false;                     ///< Tool change move in progress
     std::array<float, 3> extruder_offset = {0, 0, 0}; ///< XYZ offset
-    int switch_count = 0;               ///< Total tool changes for this extruder
-    int retry_count = 0;                ///< Tool change retries
-    int error_count = 0;                ///< Tool change errors
+    int switch_count = 0;                             ///< Total tool changes for this extruder
+    int retry_count = 0;                              ///< Tool change retries
+    int error_count = 0;                              ///< Tool change errors
 };
 
 /// RFID tag data parsed from filament_detect info
 struct SnapmakerRfidInfo {
-    std::string main_type;       ///< e.g., "PLA", "PETG"
-    std::string sub_type;        ///< e.g., "SnapSpeed", "Basic"
-    std::string manufacturer;    ///< e.g., "Polymaker"
-    std::string vendor;          ///< e.g., "Snapmaker"
+    std::string main_type;         ///< e.g., "PLA", "PETG"
+    std::string sub_type;          ///< e.g., "SnapSpeed", "Basic"
+    std::string manufacturer;      ///< e.g., "Polymaker"
+    std::string vendor;            ///< e.g., "Snapmaker"
     uint32_t color_rgb = 0x808080; ///< RGB color (ARGB masked to 0x00FFFFFF)
     int hotend_min_temp = 0;
     int hotend_max_temp = 0;
     int bed_temp = 0;
-    int weight_g = 0;            ///< Spool weight in grams
+    int weight_g = 0; ///< Spool weight in grams
     /// Canonical string form of CARD_UID (e.g. "144,32,196,2"). Empty when no
     /// tag is present, the RFID reader is disabled, or the field is missing.
     /// Used by the override system as the hardware-event signal: a change
@@ -65,7 +65,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
   public:
     AmsBackendSnapmaker(MoonrakerAPI* api, helix::MoonrakerClient* client);
 
-    [[nodiscard]] AmsType get_type() const override { return AmsType::SNAPMAKER; }
+    [[nodiscard]] AmsType get_type() const override {
+        return AmsType::SNAPMAKER;
+    }
 
     // State queries
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
@@ -74,15 +76,16 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// Snapmaker U1 has 4 independent extruders (extruder, extruder1, extruder2,
     /// extruder3), one per tool. Tool N sources slot N directly — identity mapping.
     [[nodiscard]] std::optional<int> slot_for_extruder(int extruder_idx) const override {
-        if (extruder_idx < 0 ||
-            extruder_idx >= static_cast<int>(get_system_info().total_slots)) {
+        if (extruder_idx < 0 || extruder_idx >= static_cast<int>(get_system_info().total_slots)) {
             return std::nullopt;
         }
         return extruder_idx;
     }
 
     // Path visualization (PARALLEL topology — each tool is independent)
-    [[nodiscard]] PathTopology get_topology() const override { return PathTopology::PARALLEL; }
+    [[nodiscard]] PathTopology get_topology() const override {
+        return PathTopology::PARALLEL;
+    }
     [[nodiscard]] PathSegment get_filament_segment() const override;
     [[nodiscard]] PathSegment get_slot_filament_segment(int slot_index) const override;
     [[nodiscard]] PathSegment infer_error_segment() const override;
@@ -132,7 +135,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Bypass (not applicable for tool changers)
     AmsError enable_bypass() override;
     AmsError disable_bypass() override;
-    [[nodiscard]] bool is_bypass_active() const override { return false; }
+    [[nodiscard]] bool is_bypass_active() const override {
+        return false;
+    }
 
     // Static parsers (public for testing)
     static ExtruderToolState parse_extruder_state(const nlohmann::json& json);
@@ -141,7 +146,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
   protected:
     void on_started() override;
     void handle_status_update(const nlohmann::json& notification) override;
-    const char* backend_log_tag() const override { return "[AMS Snapmaker]"; }
+    const char* backend_log_tag() const override {
+        return "[AMS Snapmaker]";
+    }
 
   private:
     friend class ::SnapmakerTestAccess;
@@ -217,4 +224,14 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Per-slot last-observed RFID CARD_UID. Empty = first observation not yet
     // made (or only empty UIDs seen). All access under mutex_.
     std::unordered_map<int, std::string> last_rfid_uid_;
+
+    // Post-resume no-op backstop window. PROVISIONAL(prestonbrown/helixscreen#991):
+    // conservative fixed value; tune against observed U1 dirty-bed resume timing.
+    static constexpr uint32_t kResumeNoopBackstopMs = 15000;
+
+    // Arm a single-shot timer that surfaces the restart modal if RESUME
+    // silently no-op'd (still paused + virtual_sdcard inactive after the
+    // window). Safety net for default-recoverable classification of an
+    // unrecognized terminal cause. No captured `this` (singletons only).
+    void arm_resume_noop_backstop();
 };

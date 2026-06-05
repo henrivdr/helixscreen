@@ -283,6 +283,37 @@ bool AmsBackendSnapmaker::is_stuck_motion_sensor_runout(int slot_index) const {
     return !sensor_filament_present_[slot] && port_sensor_filament_present_[slot];
 }
 
+void AmsBackendSnapmaker::arm_resume_noop_backstop() {
+    MoonrakerAPI* api_ptr = api_;
+    if (!api_ptr) {
+        return;
+    }
+    struct BackstopCtx {
+        MoonrakerAPI* api;
+    };
+    auto* ctx = new BackstopCtx{api_ptr};
+    auto* t = lv_timer_create(
+        [](lv_timer_t* timer) {
+            auto* c = static_cast<BackstopCtx*>(lv_timer_get_user_data(timer));
+            bool is_paused =
+                get_printer_state().get_print_job_state() == helix::PrintJobState::PAUSED;
+            bool sd_active = get_printer_state().is_sdcard_active();
+            if (helix::snapmaker_resume_noop_detected(is_paused, sd_active)) {
+                std::string filename =
+                    lv_subject_get_string(get_printer_state().get_print_filename_subject());
+                spdlog::warn("[AMS Snapmaker] post-resume backstop: RESUME no-op "
+                             "(still paused, SD inactive) — surfacing restart modal");
+                helix::ui::show_restart_required_modal(c ? c->api : nullptr, filename,
+                                                       "[Snapmaker backstop]", [] {});
+            } else {
+                spdlog::debug("[AMS Snapmaker] post-resume backstop: resume confirmed OK");
+            }
+            delete c;
+        },
+        /*period_ms=*/kResumeNoopBackstopMs, ctx);
+    lv_timer_set_repeat_count(t, 1);
+}
+
 void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback on_ready) {
     // Resolve target slot. Caller passes -1 when they don't know which tool
     // is active — fall back to system_info_.current_tool. If still unset, no
@@ -333,6 +364,11 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
         }
         return;
     }
+
+    // Default-recoverable: we will attempt RESUME on every path below. Arm the
+    // no-op backstop now so an unrecognized terminal cause can't strand the
+    // user on a silent no-op.
+    arm_resume_noop_backstop();
 
     if (sensor_present) {
         // Klipper's motion sensor reads filament — RESUME can clear its own
