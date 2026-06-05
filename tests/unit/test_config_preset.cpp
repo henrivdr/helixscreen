@@ -265,6 +265,37 @@ TEST_CASE_METHOD(PresetConfigFixture,
 }
 
 TEST_CASE_METHOD(PresetConfigFixture,
+                 "Config::apply_preset_file merges top-level input block into device-level input",
+                 "[config][preset]") {
+    SetUp();
+
+    // Fresh, pre-wizard. Preset carries a TOP-LEVEL "input" block (device-level,
+    // not under "printer"). This seeds touch calibration, which is read from the
+    // top-level /input/calibration/* path (touch_calibration_wrapper.cpp).
+    json preset = {{"printer", {{"heaters", {{"bed", "heater_bed"}}}}},
+                   {"input",
+                    {{"calibration",
+                      {{"valid", true},
+                       {"a", 1.66},
+                       {"b", 0.0},
+                       {"c", 0.0},
+                       {"d", 0.0},
+                       {"e", 1.76},
+                       {"f", 0.0},
+                       {"swap_axes", false}}}}}};
+    write_preset("input_preset", preset);
+
+    REQUIRE(config.apply_preset_file("input_preset") == true);
+
+    REQUIRE(config.get<bool>("/input/calibration/valid", false) == true);
+    REQUIRE(config.get<double>("/input/calibration/a", 0.0) == Catch::Approx(1.66));
+    REQUIRE(config.get<double>("/input/calibration/e", 0.0) == Catch::Approx(1.76));
+    REQUIRE(config.get<bool>("/input/calibration/swap_axes", true) == false);
+
+    TearDown();
+}
+
+TEST_CASE_METHOD(PresetConfigFixture,
                  "Config::apply_preset_file sets printer type from database preset lookup",
                  "[config][preset]") {
     SetUp();
@@ -359,23 +390,22 @@ TEST_CASE_METHOD(PresetConfigFixture,
     // first-install bug, 2026-04).
     SetUp();
 
-    json preset = {{"printer",
-                    {{"fans",
-                      {{"hotend", "heater_fan hotend_fan"},
-                       {"part", "fan"},
-                       {"chamber", "fan_generic chamber_fan"},
-                       {"exhaust", "fan_generic external_fan"},
-                       {"aux", "fan_generic internal_fan"}}},
-                     {"heaters", {{"bed", "heater_bed"}, {"hotend", "extruder"}}},
-                     {"temp_sensors", {{"bed", "heater_bed"}, {"hotend", "extruder"}}},
-                     {"leds", {{"strip", "led chamber_light"}}},
-                     {"hardware",
-                      {{"expected",
-                        {"heater_bed", "extruder", "fan", "heater_fan hotend_fan",
-                         "fan_generic internal_fan", "fan_generic chamber_fan",
-                         "fan_generic external_fan", "led chamber_light",
-                         "controller_fan driver_fan",
-                         "filament_switch_sensor e0_sensor"}}}}}}};
+    json preset = {
+        {"printer",
+         {{"fans",
+           {{"hotend", "heater_fan hotend_fan"},
+            {"part", "fan"},
+            {"chamber", "fan_generic chamber_fan"},
+            {"exhaust", "fan_generic external_fan"},
+            {"aux", "fan_generic internal_fan"}}},
+          {"heaters", {{"bed", "heater_bed"}, {"hotend", "extruder"}}},
+          {"temp_sensors", {{"bed", "heater_bed"}, {"hotend", "extruder"}}},
+          {"leds", {{"strip", "led chamber_light"}}},
+          {"hardware",
+           {{"expected",
+             {"heater_bed", "extruder", "fan", "heater_fan hotend_fan", "fan_generic internal_fan",
+              "fan_generic chamber_fan", "fan_generic external_fan", "led chamber_light",
+              "controller_fan driver_fan", "filament_switch_sensor e0_sensor"}}}}}}};
 
     write_seed_preset("ad5m_pro_forgex", preset);
     REQUIRE_FALSE(fs::exists(temp_dir + "/presets/ad5m_pro_forgex.json"));

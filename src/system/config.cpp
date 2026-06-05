@@ -1663,14 +1663,18 @@ bool Config::apply_preset_file(const std::string& preset_name) {
         int upgraded = 0;
         auto& user_sensors = data.at(sensors_ptr);
         for (const auto& preset_sensor : preset_fs["sensors"]) {
-            if (!preset_sensor.is_object()) continue;
+            if (!preset_sensor.is_object())
+                continue;
             std::string preset_klipper = preset_sensor.value("klipper_name", "");
             std::string preset_role = preset_sensor.value("role", "none");
-            if (preset_klipper.empty() || preset_role == "none") continue;
+            if (preset_klipper.empty() || preset_role == "none")
+                continue;
             bool found = false;
             for (auto& user_sensor : user_sensors) {
-                if (!user_sensor.is_object()) continue;
-                if (user_sensor.value("klipper_name", "") != preset_klipper) continue;
+                if (!user_sensor.is_object())
+                    continue;
+                if (user_sensor.value("klipper_name", "") != preset_klipper)
+                    continue;
                 found = true;
                 std::string user_role = user_sensor.value("role", "none");
                 // Only upgrade when user has role=none — never overwrite an
@@ -1687,8 +1691,8 @@ bool Config::apply_preset_file(const std::string& preset_name) {
             if (!found) {
                 user_sensors.push_back(preset_sensor);
                 ++upgraded;
-                spdlog::info("[Config] Added missing sensor '{}' from preset '{}'",
-                             preset_klipper, preset_name);
+                spdlog::info("[Config] Added missing sensor '{}' from preset '{}'", preset_klipper,
+                             preset_name);
             }
         }
         if (upgraded > 0) {
@@ -1741,6 +1745,18 @@ bool Config::apply_preset_file(const std::string& preset_name) {
             data["display"] = json::object();
         }
         data["display"].merge_patch(preset_json["display"]);
+    }
+
+    // Deep-merge device-level input settings (preserves keys not in preset).
+    // This seeds top-level /input/* — e.g. touch calibration (read from
+    // /input/calibration/*) and jitter_threshold — which is distinct from the
+    // per-printer "printer.input" block above. Pre-wizard only (guarded by
+    // wizard_completed), so it's safe to seed scaffolded defaults.
+    if (preset_json.contains("input") && preset_json["input"].is_object()) {
+        if (!data.contains("input") || !data["input"].is_object()) {
+            data["input"] = json::object();
+        }
+        data["input"].merge_patch(preset_json["input"]);
     }
 
 #if !defined(HELIX_SPLASH_ONLY) && !defined(HELIX_WATCHDOG)
