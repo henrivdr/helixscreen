@@ -274,6 +274,13 @@ if [ -n "$FILES" ]; then
       FORMAT_ISSUES=""
       for file in $FILES; do
         if [ -f "$file" ]; then
+          # Skip auto-generated sources: their on-disk format is owned by the
+          # generator (e.g. src/generated/lv_i18n_translations.c from
+          # generate_translations.py). Running clang-format on them fights the
+          # generator on every build, producing perpetual post-build churn.
+          if head -5 "$file" | grep -qiE 'auto-generated|DO NOT EDIT'; then
+            continue
+          fi
           # Check if file needs formatting
           if ! "$CF_BIN" --dry-run --Werror "$file" >/dev/null 2>&1; then
             FORMAT_ISSUES="$FORMAT_ISSUES $file"
