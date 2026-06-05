@@ -58,6 +58,12 @@ typedef struct {
     // Current jog mode
     JogMode current_mode;
 
+    // Cached zone geometry in pixels (recomputed from radius each time geometry is known).
+    // Single source of truth for the zone-boundary formulas — see jog_pad_recompute_zones().
+    int32_t radius_px;
+    int32_t home_radius_px;
+    int32_t inner_boundary_px;
+
     // Press state tracking for visual feedback
     bool is_pressed;
     JogDirection pressed_direction;
@@ -80,6 +86,15 @@ typedef struct {
 // Helper: Get widget state from object
 static jog_pad_state_t* get_state(lv_obj_t* obj) {
     return (jog_pad_state_t*)lv_obj_get_user_data(obj);
+}
+
+// Helper: Recompute cached zone-boundary pixel values from the total radius.
+// This is the SINGLE place the zone-ratio formulas live — draw, press, and click
+// all call this before reading the cached fields, so the math can never drift.
+static void jog_pad_recompute_zones(jog_pad_state_t* st, int32_t radius) {
+    st->radius_px = radius;
+    st->home_radius_px = (int32_t)(radius * HOME_ZONE_RATIO);
+    st->inner_boundary_px = (int32_t)(radius * INNER_ZONE_BOUNDARY_RATIO);
 }
 
 // Helper: Load colors from semantic theme tokens
@@ -208,7 +223,8 @@ static void jog_pad_draw_cb(lv_event_t* e) {
     lv_coord_t radius = width / 2;
 
     // Zone boundary: Inner circle at INNER_ZONE_BOUNDARY_RATIO of total radius
-    lv_coord_t inner_boundary = (lv_coord_t)(radius * INNER_ZONE_BOUNDARY_RATIO);
+    jog_pad_recompute_zones(state, radius);
+    lv_coord_t inner_boundary = state->inner_boundary_px;
 
     // LAYERED APPROACH: Draw from back to front
     // Layer 1: Full light gray background circle (0% to 100% radius)
@@ -262,7 +278,7 @@ static void jog_pad_draw_cb(lv_event_t* e) {
     lv_draw_line(layer, &line_dsc);
 
     // Draw center home button area
-    lv_coord_t home_radius = (lv_coord_t)(radius * HOME_ZONE_RATIO);
+    lv_coord_t home_radius = state->home_radius_px;
 
     // Draw filled background circle for home area
     lv_draw_arc_dsc_t home_bg_dsc;
@@ -413,7 +429,7 @@ static void jog_pad_draw_cb(lv_event_t* e) {
             lv_draw_arc_dsc_init(&highlight_dsc);
             highlight_dsc.color = state->jog_color_highlight;
             highlight_dsc.opa = LV_OPA_60; // ~23% opacity
-            lv_coord_t highlight_home_radius = (lv_coord_t)(radius * HOME_ZONE_RATIO);
+            lv_coord_t highlight_home_radius = state->home_radius_px;
             highlight_dsc.width = static_cast<uint16_t>(highlight_home_radius * 2);
             highlight_dsc.center.x = center_x;
             highlight_dsc.center.y = center_y;
@@ -442,9 +458,8 @@ static void jog_pad_draw_cb(lv_event_t* e) {
 
             if (state->pressed_is_inner) {
                 // Inner zone: Draw arc ring from 25% to 60%
-                lv_coord_t highlight_inner_boundary =
-                    (lv_coord_t)(radius * INNER_ZONE_BOUNDARY_RATIO);
-                lv_coord_t home_edge = (lv_coord_t)(radius * HOME_ZONE_RATIO);
+                lv_coord_t highlight_inner_boundary = state->inner_boundary_px;
+                lv_coord_t home_edge = state->home_radius_px;
 
                 highlight_dsc.width =
                     static_cast<uint16_t>(highlight_inner_boundary - home_edge); // 35% thickness
@@ -457,8 +472,7 @@ static void jog_pad_draw_cb(lv_event_t* e) {
                 lv_draw_arc(layer, &highlight_dsc);
             } else {
                 // Outer zone: Draw arc ring from 60% to 100%
-                lv_coord_t highlight_outer_inner_boundary =
-                    (lv_coord_t)(radius * INNER_ZONE_BOUNDARY_RATIO);
+                lv_coord_t highlight_outer_inner_boundary = state->inner_boundary_px;
 
                 highlight_dsc.width =
                     static_cast<uint16_t>(radius - highlight_outer_inner_boundary); // 40% thickness
@@ -505,8 +519,10 @@ static void jog_pad_press_cb(lv_event_t* e) {
 
     state->is_pressed = true;
 
+    jog_pad_recompute_zones(state, radius);
+
     // Home button: center at HOME_ZONE_RATIO
-    if (distance < radius * HOME_ZONE_RATIO) {
+    if (distance < state->home_radius_px) {
         state->pressed_is_home = true;
         state->pressed_is_inner = false;
         lv_obj_invalidate(obj); // Trigger redraw
@@ -520,8 +536,7 @@ static void jog_pad_press_cb(lv_event_t* e) {
     state->pressed_direction = angle_to_direction(angle);
 
     // Determine if inner or outer zone
-    float inner_boundary = radius * INNER_ZONE_BOUNDARY_RATIO;
-    state->pressed_is_inner = (distance < inner_boundary);
+    state->pressed_is_inner = (distance < state->inner_boundary_px);
 
     // Trigger redraw to show highlight
     lv_obj_invalidate(obj);
@@ -569,8 +584,10 @@ static void jog_pad_click_cb(lv_event_t* e) {
     if (distance > radius)
         return;
 
+    jog_pad_recompute_zones(state, radius);
+
     // Home button: center at HOME_ZONE_RATIO
-    if (distance < radius * HOME_ZONE_RATIO) {
+    if (distance < state->home_radius_px) {
         if (state->home_callback) {
             state->home_callback(state->home_user_data);
         }
@@ -583,9 +600,8 @@ static void jog_pad_click_cb(lv_event_t* e) {
     JogDirection direction = angle_to_direction(angle);
 
     // Zone boundary: inner ring (25-60%), outer ring (60-100%)
-    float inner_boundary = radius * INNER_ZONE_BOUNDARY_RATIO;
     const auto& mode_dist = get_jog_mode_distances(state->current_mode);
-    float jog_dist = (distance < inner_boundary) ? mode_dist.inner : mode_dist.outer;
+    float jog_dist = (distance < state->inner_boundary_px) ? mode_dist.inner : mode_dist.outer;
 
     if (state->jog_callback) {
         state->jog_callback(direction, jog_dist, state->jog_user_data);
