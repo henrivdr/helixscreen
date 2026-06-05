@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.72] - 2026-06-05
+
+### Added
+
+- **Happy Hare selector manual controls** — the AMS sidebar and slot context menu now expose Happy Hare's selector operations directly: **Select gate** (`MMU_SELECT`), **Check this gate / Check gates (all)** (`MMU_CHECK_GATE`), **discrete servo positions** (`MMU_SERVO POS=`), a **selector jog**, and a **runtime gear-sync toggle** ("Sync during printing"). The sidebar reset button is relabeled per backend ("Home" on Happy Hare), the selector/hub box is clickable with a gear affordance, and a new capability-gated selector context menu shows only the operations the backend supports. Selector actions report feedback through the AMS status display, including a brief "Recovering" status while Happy Hare's recover runs.
+- **Richer crash diagnostics for blank aborts** (prestonbrown/helixscreen#987) — the crash handler now captures the `std::terminate` reason and `abort_msg_state` for otherwise-blank `SIGABRT`s, plus recent ERROR log lines and an `lv_assert` breadcrumb, and the g-code viewer breadcrumbs its streaming render range. `resolve-backtrace.sh` gains a `--bundle` mode with call-spine extraction.
+- **Presets can seed device-level touch calibration** — a preset's top-level `input` block (e.g. a known-good touch matrix) now deep-merges into settings before the wizard runs, without clobbering values the user already set.
+
+### Fixed
+
+- **Temperature graph no longer freezes touch on low-power displays** (prestonbrown/helixscreen#979) — the per-column gradient is rendered once into an offscreen buffer and blitted on unchanged redraws, eliminating the ~2–3s touch stall seen on the K2 Plus from repainting it every frame.
+- **Snapmaker ACE Pro unload retracts correctly** (prestonbrown/helixscreen#974) — unload routes through `AUTO_FEEDING UNLOAD=1`, symmetric with load, instead of the low-level inner-filament primitive that left filament un-retracted.
+- **PID/MPC calibration survives slow-cooling beds** (prestonbrown/helixscreen#988) — the timeout is raised to 20 minutes and the collector keeps listening past the RPC timeout, so large/slow beds finish instead of timing out mid-tune.
+- **Theme falls back to default colors for missing or empty keys** (prestonbrown/helixscreen#989) — incomplete custom themes no longer render with broken/blank colors.
+- **Print-select no longer logs an LVGL warning for files without a thumbnail** (prestonbrown/helixscreen#990).
+- **Button contrast recompute guarded against widget address reuse** (prestonbrown/helixscreen#924) — a deferred contrast pass can no longer apply to a different button that reused the same address.
+- **G-code viewer joins its ghost-render worker before mutating shared state** (prestonbrown/helixscreen#987) — closes a race on the color/exclude state during ghost rendering.
+
+### Changed
+
+- **LVGL patch set updated** — backported `LV_CHECK_ARG` argument guards (global via `lv_assert.h`), fbdev arg-guard parity, and a drag-scoped slider patch.
+
 ## [0.99.71] - 2026-05-30
 
 ### Added
@@ -3901,6 +3923,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.72]: https://github.com/prestonbrown/helixscreen/compare/v0.99.71...v0.99.72
 [0.99.71]: https://github.com/prestonbrown/helixscreen/compare/v0.99.70...v0.99.71
 [0.99.70]: https://github.com/prestonbrown/helixscreen/compare/v0.99.69...v0.99.70
 [0.99.69]: https://github.com/prestonbrown/helixscreen/compare/v0.99.68...v0.99.69
