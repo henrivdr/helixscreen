@@ -1328,3 +1328,85 @@ TEST_CASE("decimate_indices: dense window compresses to <= budget, keeps newest"
     for (int idx : keep)
         REQUIRE((idx >= 0 && idx < 1200));
 }
+
+// ============================================================================
+// Gradient cache dirty-tracking (#979: K2 Plus touch freeze)
+//
+// The gradient cache recomputes the per-column software fill only when the
+// underlying data / viewport changed; otherwise it blits a cached buffer.
+// These tests pin the "recompute only when necessary" guarantee by asserting
+// the dirty flag transitions. They fail if dirty-tracking is removed.
+// ============================================================================
+
+TEST_CASE_METHOD(TempGraphTestFixture,
+                 "ui_temp_graph: gradient cache marked dirty after data update",
+                 "[temp_graph][gradient_cache]") {
+    ui_temp_graph_t* graph = ui_temp_graph_create(screen);
+    REQUIRE(graph != nullptr);
+
+    int s = ui_temp_graph_add_series(graph, "Nozzle", lv_color_hex(0xFF4444));
+    REQUIRE(s >= 0);
+
+    // Pushing a sample shifts the curve -> cache must recompute.
+    ui_temp_graph_update_series(graph, s, 100.0f);
+    REQUIRE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    // Simulate a completed render (the real recompute happens in the draw
+    // callback, which needs a live draw context we don't have here).
+    ui_temp_graph_mark_gradient_cache_clean(graph);
+    REQUIRE_FALSE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    // A new sample flips it back to dirty.
+    ui_temp_graph_update_series(graph, s, 105.0f);
+    REQUIRE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    ui_temp_graph_destroy(graph);
+}
+
+TEST_CASE_METHOD(TempGraphTestFixture,
+                 "ui_temp_graph: gradient cache dirty on temp range change but not on no-op",
+                 "[temp_graph][gradient_cache]") {
+    ui_temp_graph_t* graph = ui_temp_graph_create(screen);
+    REQUIRE(graph != nullptr);
+    int s = ui_temp_graph_add_series(graph, "Nozzle", lv_color_hex(0xFF4444));
+    REQUIRE(s >= 0);
+
+    ui_temp_graph_set_temp_range(graph, 0.0f, 300.0f);
+    ui_temp_graph_mark_gradient_cache_clean(graph);
+    REQUIRE_FALSE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    // Changing the range moves the curve mapping -> dirty.
+    ui_temp_graph_set_temp_range(graph, 0.0f, 250.0f);
+    REQUIRE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    // Redundant call with identical values must NOT dirty (so we skip recompute).
+    ui_temp_graph_mark_gradient_cache_clean(graph);
+    ui_temp_graph_set_temp_range(graph, 0.0f, 250.0f);
+    REQUIRE_FALSE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    ui_temp_graph_destroy(graph);
+}
+
+TEST_CASE_METHOD(TempGraphTestFixture,
+                 "ui_temp_graph: gradient cache dirty when gradient feature toggled",
+                 "[temp_graph][gradient_cache]") {
+    ui_temp_graph_t* graph = ui_temp_graph_create(screen);
+    REQUIRE(graph != nullptr);
+    int s = ui_temp_graph_add_series(graph, "Nozzle", lv_color_hex(0xFF4444));
+    REQUIRE(s >= 0);
+
+    uint32_t feats = ui_temp_graph_get_features(graph);
+    REQUIRE((feats & TEMP_GRAPH_FEATURE_GRADIENTS) != 0);
+
+    // Removing the GRADIENTS bit changes the gradient appearance -> dirty.
+    ui_temp_graph_mark_gradient_cache_clean(graph);
+    ui_temp_graph_set_features(graph, feats & ~TEMP_GRAPH_FEATURE_GRADIENTS);
+    REQUIRE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    // Re-adding the bit -> dirty again.
+    ui_temp_graph_mark_gradient_cache_clean(graph);
+    ui_temp_graph_set_features(graph, feats | TEMP_GRAPH_FEATURE_GRADIENTS);
+    REQUIRE(ui_temp_graph_gradient_cache_is_dirty(graph));
+
+    ui_temp_graph_destroy(graph);
+}

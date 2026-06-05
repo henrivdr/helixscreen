@@ -145,6 +145,14 @@ struct ui_temp_graph_t {
     // Cached theme colors for draw callbacks (avoid per-frame theme lookups)
     lv_color_t cached_grid_color;
     lv_color_t cached_graph_bg;
+
+    // Gradient cache: render the per-column software gradient once, blit on redraws
+    // where nothing changed. See #979 (K2 Plus touch freeze from per-frame gradient).
+    lv_obj_t* gradient_canvas;         // hidden lv_canvas used purely as an offscreen render target
+    lv_draw_buf_t* gradient_cache_buf; // ARGB8888 buffer backing gradient_canvas
+    int32_t gradient_cache_w;          // cached content width  (realloc buf when viewport changes)
+    int32_t gradient_cache_h;          // cached content height
+    bool gradient_cache_dirty;         // true => recompute on next draw; false => blit cached buf
 };
 
 /**
@@ -407,3 +415,25 @@ void ui_temp_graph_set_features(ui_temp_graph_t* graph, uint32_t features);
  * @return Bitmask of ui_temp_graph_feature flags (0 if graph is NULL)
  */
 uint32_t ui_temp_graph_get_features(ui_temp_graph_t* graph);
+
+/**
+ * Gradient cache test/introspection API (#979)
+ *
+ * The gradient cache recomputes its offscreen buffer only when the data or
+ * viewport actually changed, then blits the cached buffer on subsequent redraws.
+ * These accessors expose the dirty state so tests can pin the "recompute only
+ * when necessary" guarantee without a live draw context.
+ */
+
+/**
+ * @return true if the gradient cache needs recompute on the next draw
+ *         (false => the cached buffer will be blitted). Returns false if graph is NULL.
+ */
+bool ui_temp_graph_gradient_cache_is_dirty(const ui_temp_graph_t* graph);
+
+/**
+ * Mark the gradient cache clean, simulating a completed render. Test seam:
+ * the real recompute happens inside the draw callback (needs a draw context),
+ * so tests use this to model the post-render state.
+ */
+void ui_temp_graph_mark_gradient_cache_clean(ui_temp_graph_t* graph);
