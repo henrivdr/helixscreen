@@ -35,6 +35,8 @@ The IFS board accepts commands and returns text responses. The `zmod_ifs.py` mod
 | `F39 C{port}` | Release clamp for port | `F39 ok. FFS channel {port} release.` |
 | `F112` | Force stop all movement | `F112 ok.` or `F112 ok. yes.` |
 
+> **These F-commands are NOT exposed as Moonraker gcode macros.** They are raw serial commands handled inside the `zmod_ifs.py` serial layer. In particular, `F11 C{port}` (per-lane retract) — paired with `F10` (per-lane forward feed) and `F112` (force-stop) — is the **only** unconditional per-lane reverse motion available, and there is currently no gcode macro that surfaces it. The gcode-layer unload macros (`REMOVE_PRUTOK_IFS`, `IFS_REMOVE_PRUTOK`) operate on the toolhead, not an individual idle lane.
+
 ### F13 Status Response Fields
 
 | Field | Type | Meaning |
@@ -128,9 +130,9 @@ ifs_motion_sensor = 0
 ### Tool Change Flow
 1. `A_CHANGE_FILAMENT CHANNEL={n}` — orchestrates full tool change (save position, retract old, load new, purge, restore)
 2. `END_CHANGE_FILAMENT` — restores temperature, fan speed, position after change
-3. `INSERT_PRUTOK_IFS PRUTOK={n}` — load filament from specific port (looks up temp from config)
-4. `REMOVE_PRUTOK_IFS PRUTOK={n}` — unload filament to specific port
-5. `IFS_REMOVE_PRUTOK` — retract currently loaded filament from extruder
+3. `INSERT_PRUTOK_IFS PRUTOK={n}` — load filament from port N (toolhead load; looks up temp from config)
+4. `REMOVE_PRUTOK_IFS PRUTOK={n}` — runs the **toolhead unload** sequence (heats + retracts the filament currently loaded to the toolhead). It is toolhead-oriented, **not** a per-port/per-lane jog: observed on a real AD5X (native ZMOD), `REMOVE_PRUTOK_IFS PRUTOK=3` with filament from a *different* slot loaded at the toolhead heated the hotend and unloaded the loaded filament, ignoring port N. On native ZMOD it can error `No filament N in IFS` when the IFS state disagrees with presence. Do **not** treat it as "unload filament from port N independently."
+5. `IFS_REMOVE_PRUTOK` — retract the currently-loaded toolhead filament
 
 **Note on underscore variants**: `_INSERT_PRUTOK_IFS`, `_REMOVE_PRUTOK_IFS`, `_IFS_REMOVE_PRUTOK` are internal macros that expect an explicit `TEMP` parameter (default fallback: 220). The no-underscore public versions look up temperature from the config automatically. Always use the no-underscore versions.
 6. `SET_EXTRUDER_SLOT SLOT={n}` → `_SET_EXTRUDER_SLOT SLOT={n}` — tell firmware which slot is active
@@ -197,9 +199,11 @@ ifs_motion_sensor = 0
 
 All operations via G-code commands:
 - Tool change: `A_CHANGE_FILAMENT CHANNEL={n}`
-- Load: `INSERT_PRUTOK_IFS PRUTOK={n}`
-- Unload: `REMOVE_PRUTOK_IFS PRUTOK={n}` or `IFS_REMOVE_PRUTOK` (current)
+- Load: `INSERT_PRUTOK_IFS PRUTOK={n}` (toolhead load from port N)
+- Unload (toolhead): `REMOVE_PRUTOK_IFS PRUTOK={n}` or `IFS_REMOVE_PRUTOK` — both run the toolhead unload (heat + retract the currently-loaded filament). Neither jogs an idle lane; `PRUTOK=N` does **not** select an independent port to eject.
 - Unlock: `IFS_UNLOCK`
+
+> **No cold per-lane reverse-jog at the gcode layer.** The only unconditional per-lane retract is the raw serial command `F11 C{port} L{len} S{speed}` (see §2), which lives behind the `zmod_ifs.py` serial layer and is **not** surfaced as a Moonraker gcode macro. See §12.
 
 ---
 
@@ -330,3 +334,14 @@ Zmod has an option to rename slots from 0-indexed (0,1,2,3) to 1-indexed (1,2,3,
 | `/opt/config/mod/base_mod.cfg` | PAUSE/RESUME/CANCEL overrides, START_PRINT/END_PRINT |
 | `/opt/config/mod/client.cfg` | Client variable macros |
 | `/opt/config/mod/motion_sensor.cfg` | Runout detection macros |
+
+---
+
+## 12. Unload Semantics — Empirical Finding
+
+Observed on a real AD5X running native ZMOD: `REMOVE_PRUTOK_IFS PRUTOK=N` runs the **toolhead unload** (heat + retract the filament currently loaded to the toolhead), **not** a per-lane jog. With filament from a *different* slot loaded at the toolhead, `REMOVE_PRUTOK_IFS PRUTOK=3` heated the hotend and unloaded the loaded filament, ignoring the requested port N. On native ZMOD it can error `No filament N in IFS` when the IFS state disagrees with presence.
+
+Consequences:
+- There is **no cold per-lane reverse-jog at the gcode layer**. The only unconditional per-lane retract is the raw serial command `F11 C{port} L{len} S{speed}` (§2), which is not surfaced as a Moonraker gcode macro.
+- HelixScreen must treat `REMOVE_PRUTOK_IFS` / `IFS_REMOVE_PRUTOK` as toolhead-oriented operations and keep the currently-loaded slot unloadable even after runout (#995).
+- A true cold per-lane eject is firmware-blocked until `F11` is exposed as a macro (#996).
