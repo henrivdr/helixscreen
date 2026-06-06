@@ -864,8 +864,8 @@ Tool mapping: array index = tool number (T0-T15), value = physical port (1-4, 5=
 | Command | Action |
 |---------|--------|
 | `INSERT_PRUTOK_IFS PRUTOK={port}` | Load filament from port (looks up temp from config) |
-| `IFS_REMOVE_PRUTOK` | Unload current filament |
-| `REMOVE_PRUTOK_IFS PRUTOK={port}` | Unload specific port |
+| `IFS_REMOVE_PRUTOK` | Toolhead unload — retract the currently-loaded filament |
+| `REMOVE_PRUTOK_IFS PRUTOK={port}` | Toolhead unload (heat + retract the currently-loaded filament). **Not** a per-port jog — `PRUTOK=N` does not eject an idle lane; see note below |
 | `A_CHANGE_FILAMENT CHANNEL={port}` | Full tool change |
 | `SET_EXTRUDER_SLOT SLOT={port}` | Select slot without loading |
 | `IFS_UNLOCK` | Reset IFS driver state machine |
@@ -874,6 +874,8 @@ Tool mapping: array index = tool number (T0-T15), value = physical port (1-4, 5=
 **Variable persistence**: Use `_IFS_VARS` macro (not raw `SAVE_VARIABLE`) to persist slot data. `_IFS_VARS` updates both in-memory gcode variables AND `save_variables` with the correct prefix (`less_waste_*` for lessWaste/zmod, `bambufy_*` for bambufy). `SHOW=0` suppresses the interactive dialog. Example: `_IFS_VARS colors="['FF0000', '00FF00']" SHOW=0`.
 
 **Plugin compatibility**: HelixScreen auto-detects the variable prefix from whichever `save_variables` are present on the printer. Both lessWaste and bambufy use the same schema, just different prefixes.
+
+**Unload is toolhead-oriented, not per-lane**: Both `REMOVE_PRUTOK_IFS PRUTOK={port}` and `IFS_REMOVE_PRUTOK` run the toolhead unload sequence — they heat the hotend and retract whatever filament is currently loaded to the toolhead. The `PRUTOK={port}` argument does **not** select an idle lane to jog independently; observed on a real AD5X (native ZMOD), `REMOVE_PRUTOK_IFS PRUTOK=N` unloaded the currently-loaded filament (in a different slot) and ignored port N, and can error `No filament N in IFS` when IFS state disagrees with presence. There is currently **no cold per-lane reverse-jog at the gcode layer**: the only unconditional per-lane retract is the raw serial command `F11 C{port}` behind `zmod_ifs.py`, which is not surfaced as a Moonraker macro. This is why HelixScreen keeps the currently-loaded slot unloadable after runout (#995); a true cold per-lane eject is firmware-blocked until `F11` is exposed (#996). See `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md` §12.
 
 ### Path Topology
 
