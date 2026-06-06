@@ -4,9 +4,11 @@
 # Integration test for the generic per-printer install-time layer wiring (#986).
 # Real model detection is STUBBED/reporter-blocked, so this drives the two
 # mechanisms directly with the forced id "sovol_sv06_ace" against the REAL
-# bundled fragments in config/install_seeds/ and config/klipper_includes/.
-# This proves the seed + include payloads are well-formed and that the
-# mechanisms apply them end-to-end even though auto-detection is best-guess.
+# runtime preset in assets/config/presets/ and the include payload in
+# config/klipper_includes/. This proves the seed extracts ONLY the install-time
+# allowlist (input.calibration) from the preset, that the include payload is
+# well-formed, and that the mechanisms apply them end-to-end even though
+# auto-detection is best-guess.
 
 WORKTREE_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 
@@ -25,9 +27,10 @@ setup() {
     SUDO=""
     export SUDO
 
-    # Point the mechanisms at the REAL shipped fragment dirs in the repo so the
-    # actual sovol_sv06_ace payloads are exercised end-to-end (not test fixtures).
-    export HELIX_SEED_DIR="$WORKTREE_ROOT/config/install_seeds"
+    # Point the mechanisms at the REAL shipped payload dirs in the repo so the
+    # actual sovol_sv06_ace preset + include are exercised end-to-end (not test
+    # fixtures). The seed source is now the runtime preset.
+    export HELIX_PRESET_DIR="$WORKTREE_ROOT/assets/config/presets"
     export HELIX_KLIPPER_CFG_DIR="$WORKTREE_ROOT/config/klipper_includes"
     unset _HELIX_PRINTER_SEED_SOURCED _HELIX_KLIPPER_INCLUDE_SOURCED
 
@@ -36,15 +39,22 @@ setup() {
     . "$WORKTREE_ROOT/scripts/lib/installer/klipper_include.sh"
 }
 
-@test "wiring: real sovol seed lands the known-good calibration matrix" {
+@test "wiring: real sovol seed lands ONLY the allowlist calibration from the preset" {
     rm -f "$SETTINGS_FILE"
 
     run seed_settings_for_printer "sovol_sv06_ace"
     [ "$status" -eq 0 ]
     [ -f "$SETTINGS_FILE" ]
 
-    # The shipped matrix from issue #123 (a=1.66, e=1.76, valid:true).
+    # The shipped matrix from issue #123 (a=1.66, e=1.76, valid:true) lands...
     python3 -c "import json;d=json.load(open('$SETTINGS_FILE'));c=d['input']['calibration'];assert c['valid'] is True;assert c['a']==1.66;assert c['e']==1.76"
+
+    # ...but the preset's NON-allowlist keys (hardware mappings) do NOT, proving
+    # only the install-time pre-seed allowlist is baked into settings.json.
+    python3 -c "import json;d=json.load(open('$SETTINGS_FILE'));p=d.get('printer',{});assert 'heaters' not in p, d;assert 'leds' not in p, d;assert 'fans' not in p, d;assert 'filament_sensors' not in p, d"
+
+    # And the preset's nested provenance _comment never leaked into calibration.
+    python3 -c "import json;d=json.load(open('$SETTINGS_FILE'));assert '_comment' not in d['input']['calibration'], d"
 }
 
 @test "wiring: real sovol seed does not clobber an existing user calibration" {

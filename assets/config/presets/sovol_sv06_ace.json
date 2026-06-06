@@ -3,7 +3,7 @@
   "_todo_986_comment": "DEFERRED, needs on-device verification before enabling (#986): (1) FILAMENT MACROS -- stock printer.cfg only defines underscore-internal _LOAD_FILAMENT / _UNLOAD_FILAMENT (there is NO public LOAD_FILAMENT/UNLOAD_FILAMENT), so HelixScreen's default load/unload buttons would call macros that don't exist on this printer. Do NOT add a default_macros block until the correct public-facing macro names (or a thin LOAD_FILAMENT wrapper around _LOAD_FILAMENT) are confirmed on hardware. (2) DISPLAY ROTATION -- the stock panel runs 480x272 rotated 180 degrees, but it is NOT yet confirmed whether HelixScreen needs display.rotate:180 on this panel; setting the wrong value would flip an already-correct display. Do NOT set display.rotate until verified on the actual unit.",
   "input": {
     "calibration": {
-      "_comment": "Known-good touch matrix from issue #123 (user R8CEH). Stopgap seed because the first-run touch-calibration math produces a bad matrix on this panel. Read at runtime from /input/calibration/*. DRY: the SAME matrix is also written at install time by config/install_seeds/sovol_sv06_ace.json (the installer seed) -- keep both in sync if either changes (#986).",
+      "_comment": "Known-good touch matrix from issue #123 (user R8CEH). Stopgap seed because the first-run touch-calibration math produces a bad matrix on this panel. Read at runtime from /input/calibration/*. This preset is the SINGLE SOURCE OF TRUTH (#986): the installer pre-seeds ONLY input.calibration from here into settings.json before first launch (so the touch-calibration wizard's should_skip() sees a valid matrix); the rest of this preset is applied by the app's runtime preset loader.",
       "valid": true,
       "a": 1.66,
       "b": 0.0,

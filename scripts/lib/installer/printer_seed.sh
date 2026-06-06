@@ -6,42 +6,51 @@
 # Some printers need known-good defaults written into the install's
 # settings.json BEFORE the app starts for the first time (e.g. a verified
 # touch-calibration matrix that the first-run wizard can't compute correctly
-# on a given panel). This module deep-merges a bundled seed fragment for a
-# printer-id into settings.json WITHOUT clobbering any keys the user has
-# already set: existing settings always win over the fragment.
+# on a given panel). The app's runtime preset loader applies the full preset,
+# but too late to skip the first-run touch-calibration wizard, which checks
+# settings.json /input/calibration/valid at startup. So a small ALLOWLIST of
+# preset paths (today: just input.calibration) must be pre-baked into
+# settings.json at install time.
 #
-# Bundled fragments live at: config/install_seeds/<printer_id>.json
+# Single source of truth (#986): the source of seed data is the runtime preset
+# at assets/config/presets/<printer_id>.json (calibration + hardware mappings +
+# TODOs). Only the pre-seed allowlist (input.calibration) is baked into
+# settings.json before first launch; the rest of the preset (heaters/fans/leds/
+# filament_sensors) is applied by the app's runtime preset loader, NOT pre-baked
+# into the user's settings.json. The allowlisted subset is deep-merged WITHOUT
+# clobbering any keys the user has already set: existing settings always win.
+#
 # Seeded ids are recorded to ${INSTALL_DIR}/config/.seeded_settings so uninstall
 # can be aware of what the installer wrote.
 #
-# Reads: INSTALL_DIR, SUDO (and HELIX_SEED_DIR override for tests)
+# Reads: INSTALL_DIR, SUDO (and HELIX_PRESET_DIR override for tests)
 # Calls: file_sudo() from common.sh
 
 # Source guard
 [ -n "${_HELIX_PRINTER_SEED_SOURCED:-}" ] && return 0
 _HELIX_PRINTER_SEED_SOURCED=1
 
-# Resolve the directory holding bundled seed fragments.
-# Override with HELIX_SEED_DIR (tests). Otherwise prefer the installed copy
-# under ${INSTALL_DIR}/config/install_seeds, then fall back to the in-repo
+# Resolve the directory holding the runtime presets (single source of truth).
+# Override with HELIX_PRESET_DIR (tests). Otherwise prefer the installed copy
+# under ${INSTALL_DIR}/assets/config/presets, then fall back to the in-repo
 # source tree (dev installer running from a checkout).
-_helix_seed_dir() {
-    if [ -n "${HELIX_SEED_DIR:-}" ]; then
-        echo "$HELIX_SEED_DIR"
+_helix_preset_dir() {
+    if [ -n "${HELIX_PRESET_DIR:-}" ]; then
+        echo "$HELIX_PRESET_DIR"
         return 0
     fi
-    if [ -n "${INSTALL_DIR:-}" ] && [ -d "${INSTALL_DIR}/config/install_seeds" ]; then
-        echo "${INSTALL_DIR}/config/install_seeds"
+    if [ -n "${INSTALL_DIR:-}" ] && [ -d "${INSTALL_DIR}/assets/config/presets" ]; then
+        echo "${INSTALL_DIR}/assets/config/presets"
         return 0
     fi
-    # Dev checkout: <repo>/config/install_seeds, relative to this module.
+    # Dev checkout: <repo>/assets/config/presets, relative to this module.
     local _self_dir
     _self_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || _self_dir=""
-    if [ -n "$_self_dir" ] && [ -d "${_self_dir}/../../../config/install_seeds" ]; then
-        (cd "${_self_dir}/../../../config/install_seeds" && pwd)
+    if [ -n "$_self_dir" ] && [ -d "${_self_dir}/../../../assets/config/presets" ]; then
+        (cd "${_self_dir}/../../../assets/config/presets" && pwd)
         return 0
     fi
-    echo "${INSTALL_DIR:-/opt/helixscreen}/config/install_seeds"
+    echo "${INSTALL_DIR:-/opt/helixscreen}/assets/config/presets"
 }
 
 # Record a seeded printer-id to the state file (for uninstall awareness).
@@ -61,11 +70,14 @@ _record_seeded_settings() {
     echo "settings:${printer_id}" | $(file_sudo "${INSTALL_DIR}/config") tee -a "$state_file" >/dev/null
 }
 
-# Deep-merge a bundled seed fragment into the install's settings.json.
-# Existing user keys win over the fragment (fragment is the lower-priority side).
-# Creates settings.json from the fragment if it is absent or empty.
+# Pre-bake the install-time allowlist subset of a printer's runtime preset into
+# the install's settings.json. Only the allowlisted preset paths (see
+# PRESEED_PATHS in the embedded Python) are extracted and deep-merged; the rest
+# of the preset is applied by the app's runtime loader. Existing user keys win
+# over the seeded subset (the preset is the lower-priority side). Creates
+# settings.json from the subset if it is absent or empty.
 #
-# Graceful by design: a missing fragment is a no-op success, and an absent
+# Graceful by design: a missing preset is a no-op success, and an absent
 # python3 logs a warning and skips WITHOUT failing the install.
 #
 # Args: $1 = printer_id
@@ -73,11 +85,11 @@ seed_settings_for_printer() {
     local printer_id="$1"
     [ -n "$printer_id" ] || return 0
 
-    local seed_dir
-    seed_dir="$(_helix_seed_dir)"
-    local fragment="${seed_dir}/${printer_id}.json"
+    local preset_dir
+    preset_dir="$(_helix_preset_dir)"
+    local fragment="${preset_dir}/${printer_id}.json"
 
-    # Missing fragment → nothing to seed for this printer. Success.
+    # Missing preset → nothing to seed for this printer. Success.
     if [ ! -f "$fragment" ]; then
         return 0
     fi
@@ -102,7 +114,9 @@ seed_settings_for_printer() {
     # respect the same privilege model as the rest of the installer.
     local tmp_out="${settings}.seed.$$"
 
-    # Deep-merge: existing settings (base) take precedence; fragment fills only
+    # Extract the install-time pre-seed allowlist from the preset, strip any
+    # "_"-prefixed provenance keys, then deep-merge that subset into the base
+    # settings: existing settings (base) take precedence; the subset fills only
     # keys the base does not already define. Recurses into nested objects.
     if SETTINGS_PATH="$settings" FRAGMENT_PATH="$fragment" TMP_OUT="$tmp_out" python3 - <<'PY'
 import json, os, sys
@@ -110,6 +124,18 @@ import json, os, sys
 settings_path = os.environ["SETTINGS_PATH"]
 fragment_path = os.environ["FRAGMENT_PATH"]
 tmp_out = os.environ["TMP_OUT"]
+
+# Install-time pre-seed allowlist: the ONLY preset paths baked into the user's
+# settings.json BEFORE first launch. The rest of the preset is applied by the
+# app's runtime preset loader. input.calibration must be pre-baked because the
+# first-run touch-calibration wizard reads settings.json /input/calibration/valid
+# at startup, before the runtime preset loader runs.
+#
+# Adding a path here PRE-BAKES it into settings.json before first launch — only
+# do that for settings the app reads before its runtime preset loader applies.
+PRESEED_PATHS = [
+    ["input", "calibration"],
+]
 
 def load(path):
     if not os.path.exists(path):
@@ -123,16 +149,48 @@ def load(path):
         return obj if isinstance(obj, dict) else {}
     except (ValueError, OSError):
         # Malformed existing settings: treat as empty base rather than crash
-        # the install. The fragment becomes the new content.
+        # the install. The seeded subset becomes the new content.
         return {}
 
-def deep_merge(base, frag):
+def strip_underscore(obj):
+    """Recursively drop any "_"-prefixed keys (provenance/metadata) so the
+    preset's nested documentation (e.g. input.calibration._comment) never leaks
+    into the user's settings.json."""
+    if isinstance(obj, dict):
+        return {k: strip_underscore(v) for k, v in obj.items()
+                if not k.startswith("_")}
+    if isinstance(obj, list):
+        return [strip_underscore(v) for v in obj]
+    return obj
+
+def extract_subset(preset, paths):
+    """Build a fragment dict containing only the allowlisted paths present in
+    the preset, with provenance keys stripped."""
+    out = {}
+    for path in paths:
+        src = preset
+        ok = True
+        for key in path:
+            if isinstance(src, dict) and key in src:
+                src = src[key]
+            else:
+                ok = False
+                break
+        if not ok:
+            continue
+        cursor = out
+        for key in path[:-1]:
+            cursor = cursor.setdefault(key, {})
+        cursor[path[-1]] = strip_underscore(src)
+    return out
+
+def deep_merge(base, frag, top_level=False):
     """Return base with frag's keys filled in where base lacks them.
     Existing base values always win (fragment is lower priority)."""
     for k, v in frag.items():
-        if k == "_comment":
-            # Carry the fragment's provenance comment only if base has none.
-            base.setdefault(k, v)
+        # Defense-in-depth: never copy a top-level "_"-prefixed provenance key
+        # into the user's settings.json (the subset is already stripped above).
+        if top_level and k.startswith("_"):
             continue
         if k in base and isinstance(base[k], dict) and isinstance(v, dict):
             deep_merge(base[k], v)
@@ -142,8 +200,9 @@ def deep_merge(base, frag):
     return base
 
 base = load(settings_path)
-frag = load(fragment_path)
-merged = deep_merge(base, frag)
+preset = load(fragment_path)
+frag = extract_subset(preset, PRESEED_PATHS)
+merged = deep_merge(base, frag, top_level=True)
 
 with open(tmp_out, "w") as f:
     json.dump(merged, f, indent=2)
