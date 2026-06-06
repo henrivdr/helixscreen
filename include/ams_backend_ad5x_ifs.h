@@ -101,6 +101,14 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
     [[nodiscard]] bool is_bypass_active() const override;
 
+    // Unload-action gate (also suppresses Load for the same slot). Keeps the
+    // firmware's active slot unloadable even when a runout has cleared the head
+    // sensor and dropped the slot's display status below LOADED — that runout is
+    // precisely when the user needs Unload (#995). The same flag keeps Load
+    // hidden on the active slot, which is intended: don't offer Load on a slot
+    // the firmware still considers seated.
+    [[nodiscard]] bool can_unload_from_toolhead(int slot_index) const override;
+
     AmsError load_filament(int slot_index) override;
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;
@@ -370,12 +378,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // custom_types_mutex_; lock order is mutex_ → custom_types_mutex_.
     mutable std::mutex custom_types_mutex_;
     std::vector<std::string> custom_material_types_;
-    std::array<int, TOOL_MAP_SIZE> tool_map_;      // tool_map_[tool] = port (1-4, 5=unmapped)
-    std::array<bool, NUM_PORTS> port_presence_;    // Per-port filament sensor state
-    int active_tool_ = -1;                         // Current tool (-1 = none)
-    bool external_mode_ = false;                   // Bypass/external spool mode
-    bool head_filament_ = false;                   // Head sensor state
-    std::array<bool, NUM_PORTS> dirty_{}; // Per-slot dirty flag to prevent stale overwrites
+    std::array<int, TOOL_MAP_SIZE> tool_map_;   // tool_map_[tool] = port (1-4, 5=unmapped)
+    std::array<bool, NUM_PORTS> port_presence_; // Per-port filament sensor state
+    int active_tool_ = -1;                      // Current tool (-1 = none)
+    bool external_mode_ = false;                // Bypass/external spool mode
+    bool head_filament_ = false;                // Head sensor state
+    std::array<bool, NUM_PORTS> dirty_{};       // Per-slot dirty flag to prevent stale overwrites
 
     helix::printer::SlotRegistry slots_;
 

@@ -508,6 +508,26 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether the slot can be unloaded from the toolhead.
+     *
+     * Gates the context-menu "Unload" action, and (inverted) also suppresses the
+     * "Load" action for the same slot: a slot the firmware still considers
+     * seated/active should not offer Load. By default this tracks the display
+     * LOADED status, but that status is derived from the head-filament sensor on
+     * some backends. AD5X IFS overrides this so a runout that clears the head
+     * sensor doesn't disable Unload on the slot the firmware still reports as
+     * active — the exact moment the user needs to recover (#995).
+     *
+     * Action gating only — display status is unaffected.
+     *
+     * @param slot_index Slot to query (0-based)
+     * @return true if Unload should be offered (and Load suppressed) for this slot
+     */
+    [[nodiscard]] virtual bool can_unload_from_toolhead(int slot_index) const {
+        return get_slot_info(slot_index).status == SlotStatus::LOADED;
+    }
+
+    /**
      * @brief Whether the backend can position the selector at a gate without loading.
      * @return true if select_gate() is implemented (selector-based systems only).
      */

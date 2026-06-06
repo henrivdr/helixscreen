@@ -1447,12 +1447,13 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
         }
     });
 
-    // Determine if the slot is loaded (filament in extruder)
+    // Determine whether to offer Unload for this slot. Decoupled from the
+    // display LOADED status so a runout that clears the head sensor doesn't
+    // disable Unload on the firmware's active slot (#995).
     bool is_loaded = false;
     AmsBackend* backend = AmsState::instance().get_backend();
     if (backend) {
-        SlotInfo slot_info = backend->get_slot_info(slot_index);
-        is_loaded = (slot_info.status == SlotStatus::LOADED);
+        is_loaded = backend->can_unload_from_toolhead(slot_index);
     }
 
     // Position menu near the click point, then show

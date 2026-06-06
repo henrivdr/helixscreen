@@ -185,8 +185,8 @@ class Ad5xIfsTestAccess {
     // Lets tests assert what set_slot_info(persist=true) wrote into the
     // in-memory map without going through get_slot_info (which also layers
     // apply_overrides on top of firmware state).
-    static std::optional<helix::ams::FilamentSlotOverride>
-    get_override(const AmsBackendAd5xIfs& b, int slot_index) {
+    static std::optional<helix::ams::FilamentSlotOverride> get_override(const AmsBackendAd5xIfs& b,
+                                                                        int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         auto it = b.overrides_.find(slot_index);
         if (it == b.overrides_.end())
@@ -218,8 +218,7 @@ class Ad5xIfsTestAccess {
         b.check_external_color_change(slot_index, std::optional<uint32_t>{observed_color},
                                       slot_has_filament);
     }
-    static void check_external_color_change(AmsBackendAd5xIfs& b, int slot_index,
-                                            std::nullopt_t,
+    static void check_external_color_change(AmsBackendAd5xIfs& b, int slot_index, std::nullopt_t,
                                             bool slot_has_filament = true) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.check_external_color_change(slot_index, std::nullopt, slot_has_filament);
@@ -1191,8 +1190,7 @@ TEST_CASE("AD5X IFS has_ifs_vars reset when macro missing", "[ams][ad5x_ifs]") {
 // present, so a user with stale rows would silently keep using the dead
 // plugin's last-known tool map and active-tool guess as truth on every boot.
 // Now those reads are gated on has_ifs_vars_ — i.e. plugin actively loaded.
-TEST_CASE("AD5X IFS stale save_variables ignored when plugin macro missing",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS stale save_variables ignored when plugin macro missing", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
     // Confirm latch defaults to "macro missing" — the on_started() initial
@@ -1203,9 +1201,9 @@ TEST_CASE("AD5X IFS stale save_variables ignored when plugin macro missing",
     // installed: tools/active/external all set to non-default values that
     // would VISIBLY change behavior if applied.
     auto stale = standard_variables();
-    stale["less_waste_current_tool"] = 2;             // not the default 0
-    stale["less_waste_external"] = 1;                 // bypass mode active
-    stale["less_waste_tools"] =                       // T0 -> port 4 (not 1)
+    stale["less_waste_current_tool"] = 2; // not the default 0
+    stale["less_waste_external"] = 1;     // bypass mode active
+    stale["less_waste_tools"] =           // T0 -> port 4 (not 1)
         json::array({4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5});
 
     Ad5xIfsTestAccess::handle_status(backend, make_save_variables(stale));
@@ -1238,8 +1236,7 @@ TEST_CASE("AD5X IFS stale save_variables ignored when plugin macro missing",
 // and Klipper rejected them with `// Unknown command:"_IFS_VARS"`. This
 // asserts the self-heal path: as soon as Klipper rejects the command, we
 // demote has_ifs_vars_ and latch the macro as missing.
-TEST_CASE("AD5X IFS self-heals on Unknown command:\"_IFS_VARS\" response",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS self-heals on Unknown command:\"_IFS_VARS\" response", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
     // Seed the wrong-state: macro 'confirmed present' and has_ifs_vars_ true.
@@ -1695,11 +1692,13 @@ TEST_CASE("AD5X IFS select_unload_command", "[ams][ad5x_ifs]") {
         REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 0, true) == "IFS_REMOVE_PRUTOK");
     }
 
-    SECTION("active slot but head empty → per-port unload (lane retract)") {
-        // Filament present in lane but not at head → can't use IFS_REMOVE_PRUTOK,
-        // need explicit per-port command.
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, 2, false) ==
-                Cmd("REMOVE_PRUTOK_IFS PRUTOK=3"));
+    SECTION("active slot, head empty (runout) → IFS_REMOVE_PRUTOK (#995)") {
+        // A filament runout clears the head sensor on the slot the firmware still
+        // reports as active. The per-port REMOVE_PRUTOK_IFS PRUTOK=N macro errors
+        // on the loaded slot, so the active slot must always resolve to the
+        // firmware-aware toolhead unload regardless of head sensor state.
+        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, 2, false) == "IFS_REMOVE_PRUTOK");
+        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 0, false) == "IFS_REMOVE_PRUTOK");
     }
 
     SECTION("non-active slot → per-port unload") {
@@ -1718,6 +1717,109 @@ TEST_CASE("AD5X IFS select_unload_command", "[ams][ad5x_ifs]") {
     SECTION("out-of-range slot_index → IFS_REMOVE_PRUTOK fallback") {
         REQUIRE(AmsBackendAd5xIfs::select_unload_command(99, 0, true) == "IFS_REMOVE_PRUTOK");
     }
+}
+
+// ==========================================================================
+// can_unload_from_toolhead — #995: active slot stays unloadable after runout
+// ==========================================================================
+//
+// A filament runout clears the head sensor, dropping the display status of the
+// firmware's active slot below LOADED. Unload is exactly the recovery the user
+// needs at that moment, so the action gate is decoupled from the head-sensor-
+// derived display status: the active slot stays unloadable while the spool
+// still renders empty/available.
+
+TEST_CASE("AD5X IFS can_unload_from_toolhead keeps active slot unloadable after runout",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+
+    // Load slot 0: active tool T0 (→ port 1 → slot 0), port + head sensors set.
+    {
+        json notification;
+        notification["save_variables"] = json{{"variables", standard_variables()}};
+        notification["filament_switch_sensor _ifs_port_sensor_1"] =
+            json{{"filament_detected", true}};
+        notification["filament_switch_sensor head_switch_sensor"] =
+            json{{"filament_detected", true}};
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+    }
+    REQUIRE(backend.get_system_info().current_slot == 0);
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::LOADED);
+    REQUIRE(backend.can_unload_from_toolhead(0));
+
+    // Runout: head sensor clears and the lane sensor empties, but the firmware
+    // still reports slot 0 as the active/current slot.
+    {
+        json notification;
+        notification["save_variables"] = json{{"variables", standard_variables()}};
+        notification["filament_switch_sensor _ifs_port_sensor_1"] =
+            json{{"filament_detected", false}};
+        notification["filament_switch_sensor head_switch_sensor"] =
+            json{{"filament_detected", false}};
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+    }
+    REQUIRE(backend.get_system_info().current_slot == 0);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+
+    // Display status is no longer LOADED — the spool renders empty/available...
+    REQUIRE(backend.get_slot_info(0).status != SlotStatus::LOADED);
+    // ...but the action gate keeps the active slot unloadable (#995).
+    REQUIRE(backend.can_unload_from_toolhead(0));
+
+    // An inactive, empty slot is NOT unloadable.
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(2));
+
+    // Out-of-range indices are never unloadable. The negative case exercises the
+    // slot_index >= 0 guard: current_slot is 0 here, so -1 must NOT match it via
+    // the active-slot short-circuit — and the base LOADED check rejects it too.
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(-1));
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(AmsBackendAd5xIfs::NUM_PORTS));
+}
+
+TEST_CASE("AD5X IFS can_unload_from_toolhead with no active slot is never unloadable",
+          "[ams][ad5x_ifs]") {
+    // With no filament loaded, current_slot is -1. The slot_index >= 0 guard must
+    // prevent a caller passing -1 (or 0) from matching the -1 active-slot
+    // sentinel; every slot then falls through to the base LOADED check, which is
+    // false for an unloaded backend.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    auto vars = standard_variables();
+    vars["less_waste_current_tool"] = -1;
+    Ad5xIfsTestAccess::handle_status(backend, make_save_variables(vars));
+    REQUIRE(backend.get_system_info().current_slot == -1);
+
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(0));
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(-1));
+}
+
+TEST_CASE("AD5X IFS runout does not flip active slot display status to LOADED", "[ams][ad5x_ifs]") {
+    // Regression guard: decoupling the unload gate must NOT alter display status.
+    // Native ZMOD path (no per-port sensors), active slot, head sensor clear —
+    // the slot must still report a non-LOADED status so the spool renders
+    // empty/available.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+    seed_standard_colors(backend);
+
+    // Motion sensor present briefly to establish active slot via head detection,
+    // then cleared to simulate the runout.
+    {
+        json notification;
+        notification["save_variables"] = json{{"variables", standard_variables()}};
+        notification["filament_motion_sensor ifs_motion_sensor"] =
+            json{{"filament_detected", false}};
+        notification["filament_switch_sensor head_switch_sensor"] =
+            json{{"filament_detected", false}};
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+    }
+
+    REQUIRE(backend.get_system_info().current_slot == 0);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+    REQUIRE(backend.get_slot_info(0).status != SlotStatus::LOADED);
+    // Gate stays open for the active slot.
+    REQUIRE(backend.can_unload_from_toolhead(0));
 }
 
 // ==========================================================================
@@ -2220,9 +2322,9 @@ TEST_CASE("AD5X IFS applies override brand over Adventurer5M.json data",
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
     ovr.spool_name = "PolyLite Green";
-    ovr.color_rgb = 0x00AA00;  // Override to green
+    ovr.color_rgb = 0x00AA00; // Override to green
     ovr.color_set = true;
-    ovr.material = "PETG";      // Override to PETG
+    ovr.material = "PETG"; // Override to PETG
     ovr.spoolman_id = 42;
     ovr.remaining_weight_g = 750.0f;
     Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
@@ -2287,11 +2389,11 @@ TEST_CASE("AD5X IFS partial override only replaces specified fields",
     Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
 
     auto info = backend.get_slot_info(0);
-    REQUIRE(info.brand == "Polymaker");       // override wins
-    REQUIRE(info.color_rgb == 0xFF5500u);     // firmware untouched
-    REQUIRE(info.material == "PLA");          // firmware untouched
-    REQUIRE(info.spool_name.empty());         // default
-    REQUIRE(info.spoolman_id == 0);           // default
+    REQUIRE(info.brand == "Polymaker");        // override wins
+    REQUIRE(info.color_rgb == 0xFF5500u);      // firmware untouched
+    REQUIRE(info.material == "PLA");           // firmware untouched
+    REQUIRE(info.spool_name.empty());          // default
+    REQUIRE(info.spoolman_id == 0);            // default
     REQUIRE(info.remaining_weight_g == -1.0f); // default
 }
 
@@ -2589,9 +2691,9 @@ TEST_CASE("AD5X IFS set_slot_info(persist=true) survives a matching firmware par
     })");
 
     auto info = backend.get_slot_info(0);
-    CHECK(info.brand == "Polymaker");     // override fills the firmware-can't-carry field
-    CHECK(info.material == "PLA");         // matches both user + firmware
-    CHECK(info.color_rgb == 0xFF5500u);    // matches both user + firmware
+    CHECK(info.brand == "Polymaker");   // override fills the firmware-can't-carry field
+    CHECK(info.material == "PLA");      // matches both user + firmware
+    CHECK(info.color_rgb == 0xFF5500u); // matches both user + firmware
 }
 
 TEST_CASE("AD5X IFS user-edited slot survives firmware FFMInfo revert (#965 regression)",
@@ -2931,11 +3033,10 @@ TEST_CASE("AD5X IFS eject (empty Adventurer5M.json color) clears the override",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
-    api.mock_set_db_value("lane_data", "lane1",
-                          nlohmann::json{{"vendor", "Polymaker"},
-                                         {"spool_id", 42},
-                                         {"material", "PLA"},
-                                         {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        nlohmann::json{
+            {"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
     ovr.spoolman_id = 42;
@@ -2986,7 +3087,8 @@ class GcodeCapturingBackend : public AmsBackendAd5xIfs {
     }
     bool any_gcode_starts_with(const std::string& prefix) const {
         for (const auto& g : captured_gcodes) {
-            if (g.rfind(prefix, 0) == 0) return true;
+            if (g.rfind(prefix, 0) == 0)
+                return true;
         }
         return false;
     }
@@ -3145,11 +3247,10 @@ TEST_CASE("AD5X IFS empty colors_[] on boot does NOT establish phantom baseline"
 
     // Seed a saved override (PETG, brand, spoolman_id) — what the user
     // configured in a prior session and persisted into filament_slot store.
-    api.mock_set_db_value("lane_data", "lane1",
-                          nlohmann::json{{"vendor", "Polymaker"},
-                                         {"spool_id", 42},
-                                         {"material", "PETG"},
-                                         {"color", "#898989"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        nlohmann::json{
+            {"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PETG"}, {"color", "#898989"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -3166,8 +3267,8 @@ TEST_CASE("AD5X IFS empty colors_[] on boot does NOT establish phantom baseline"
     // fetched yet. This is the call that, pre-fix, establishes the phantom
     // 0x808080 baseline.
     json save_vars;
-    save_vars["less_waste_tools"] = json::array(
-        {0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}); // tool 0 -> port 1
+    save_vars["less_waste_tools"] =
+        json::array({0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}); // tool 0 -> port 1
     save_vars["less_waste_current_tool"] = -1;
     save_vars["less_waste_external"] = 0;
     Ad5xIfsTestAccess::parse_vars(backend, save_vars);
@@ -3253,11 +3354,10 @@ TEST_CASE("AD5X IFS first firmware color observation does NOT clear override",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
-    api.mock_set_db_value("lane_data", "lane1",
-                          nlohmann::json{{"vendor", "Polymaker"},
-                                         {"spool_id", 42},
-                                         {"material", "PLA"},
-                                         {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        nlohmann::json{
+            {"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -3574,11 +3674,10 @@ TEST_CASE("AD5X IFS clear_slot_override erases in-memory override and MR DB entr
     // Seed both halves of the override — lane_data on the Moonraker side
     // and the in-memory map on the backend side — so the clear has something
     // to remove at each layer.
-    api.mock_set_db_value("lane_data", "lane1",
-                          nlohmann::json{{"vendor", "Polymaker"},
-                                         {"spool_id", 42},
-                                         {"material", "PLA"},
-                                         {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        nlohmann::json{
+            {"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -3686,8 +3785,7 @@ TEST_CASE("AD5X IFS listener buffers RUN_ZCOLOR during in-flight query (no re-ar
     // Lines that pre-fix would have re-armed the query loop.
     bool buffered_a =
         Ad5xIfsTestAccess::on_gcode_response_line(backend, "// RUN_ZCOLOR slot=2 color=FF0000");
-    bool buffered_b =
-        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// CHANGE_ZCOLOR slot=3");
+    bool buffered_b = Ad5xIfsTestAccess::on_gcode_response_line(backend, "// CHANGE_ZCOLOR slot=3");
 
     CHECK(buffered_a);
     CHECK(buffered_b);
@@ -3710,8 +3808,7 @@ TEST_CASE("AD5X IFS listener fires schedule_zcolor_query on external RUN_ZCOLOR 
     CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
 }
 
-TEST_CASE("AD5X IFS listener ignores unrelated gcode lines",
-          "[ams][ad5x_ifs][zcolor]") {
+TEST_CASE("AD5X IFS listener ignores unrelated gcode lines", "[ams][ad5x_ifs][zcolor]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
 
@@ -3975,8 +4072,7 @@ TEST_CASE("AD5X IFS #904 single-prefix non-default tools is honored",
 
 // Both-prefixes-but-equal: no conflict, apply the map normally. (Edge case:
 // a user with bambufy active whose less_waste_tools happens to match.)
-TEST_CASE("AD5X IFS #904 both prefixes agree — no fallback",
-          "[ams][ad5x_ifs][issue_904]") {
+TEST_CASE("AD5X IFS #904 both prefixes agree — no fallback", "[ams][ad5x_ifs][issue_904]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_ifs_macro_confirmed_missing(backend, false);
 
@@ -4038,28 +4134,25 @@ TEST_CASE("AD5X IFS #904 bambufy_custom_types merged into supported materials",
 // directive is zmod's official mechanism for user-defined material types
 // (https://wiki.zmod.link/AD5X/#7-add-custom-filament-types). Out-of-section
 // matches must NOT be picked up.
-TEST_CASE("AD5X IFS #904 user.cfg [zmod_ifs] filament_* parser",
-          "[ams][ad5x_ifs][issue_904]") {
+TEST_CASE("AD5X IFS #904 user.cfg [zmod_ifs] filament_* parser", "[ams][ad5x_ifs][issue_904]") {
     SECTION("standard wiki example") {
-        const std::string body =
-            "[zmod_ifs]\n"
-            "filament_NEWTYPE: 300\n";
+        const std::string body = "[zmod_ifs]\n"
+                                 "filament_NEWTYPE: 300\n";
         auto names = AmsBackendAd5xIfs::parse_user_cfg_filament_types(body);
         REQUIRE(names.size() == 1);
         CHECK(names[0] == "NEWTYPE");
     }
 
     SECTION("multiple entries with comments and other sections") {
-        const std::string body =
-            "# global header\n"
-            "[gcode_macro FOO]\n"
-            "filament_IGNORED: 999  ; not in zmod_ifs\n"
-            "\n"
-            "[zmod_ifs]\n"
-            "filament_PLA+: 220   # inline comment\n"
-            "filament_RPLA: 215\n"
-            "filament_HELIX: 240 ; semicolon comment\n"
-            "other_setting: 42\n";
+        const std::string body = "# global header\n"
+                                 "[gcode_macro FOO]\n"
+                                 "filament_IGNORED: 999  ; not in zmod_ifs\n"
+                                 "\n"
+                                 "[zmod_ifs]\n"
+                                 "filament_PLA+: 220   # inline comment\n"
+                                 "filament_RPLA: 215\n"
+                                 "filament_HELIX: 240 ; semicolon comment\n"
+                                 "other_setting: 42\n";
         auto names = AmsBackendAd5xIfs::parse_user_cfg_filament_types(body);
         REQUIRE(names.size() == 3);
         CHECK(names[0] == "PLA+");

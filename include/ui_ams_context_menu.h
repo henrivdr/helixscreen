@@ -75,7 +75,7 @@ class AmsContextMenu : public ContextMenu {
      * @param parent Parent screen for the menu
      * @param slot_index Slot this menu is for (0-based)
      * @param near_widget Widget to position menu near (typically slot widget)
-     * @param is_loaded True if filament is loaded to extruder (enables Unload button)
+     * @param is_loaded True if the slot is loaded/active (enables Unload, suppresses Load)
      * @param backend Optional backend pointer for tool mapping/endless spool features
      * @return true if menu was shown successfully
      */
@@ -135,6 +135,9 @@ class AmsContextMenu : public ContextMenu {
     lv_obj_t* backup_dropdown_ = nullptr;
 
     // === Pending state for on_created ===
+    // True when the slot is loaded/active per backend->can_unload_from_toolhead().
+    // Gates BOTH the Unload action (enabled) and the Load action (suppressed) —
+    // a slot the firmware considers seated should not offer Load.
     bool pending_is_loaded_ = false;
     bool eject_mode_ = false;          ///< True when showing "Eject" instead of "Unload"
     bool external_spool_mode_ = false; ///< True when showing menu for external spool (bypass)

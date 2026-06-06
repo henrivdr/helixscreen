@@ -164,16 +164,16 @@ void AmsBackendAd5xIfs::on_started() {
                             // Log initial state after processing query response
                             {
                                 std::lock_guard<std::mutex> lock(mutex_);
-                                spdlog::debug(
-                                    "{} Initial query: has_ifs_vars={}, macro_exists={}, "
-                                    "klippy_ready={}, has_per_port_sensors={}, "
-                                    "head_filament={}, "
-                                    "port_presence=[{},{},{},{}], "
-                                    "colors=[{},{},{},{}]",
-                                    backend_log_tag(), has_ifs_vars_, macro_exists, klippy_ready,
-                                    has_per_port_sensors_, head_filament_, port_presence_[0],
-                                    port_presence_[1], port_presence_[2], port_presence_[3],
-                                    colors_[0], colors_[1], colors_[2], colors_[3]);
+                                spdlog::debug("{} Initial query: has_ifs_vars={}, macro_exists={}, "
+                                              "klippy_ready={}, has_per_port_sensors={}, "
+                                              "head_filament={}, "
+                                              "port_presence=[{},{},{},{}], "
+                                              "colors=[{},{},{},{}]",
+                                              backend_log_tag(), has_ifs_vars_, macro_exists,
+                                              klippy_ready, has_per_port_sensors_, head_filament_,
+                                              port_presence_[0], port_presence_[1],
+                                              port_presence_[2], port_presence_[3], colors_[0],
+                                              colors_[1], colors_[2], colors_[3]);
                             }
 
                             // Safety net: if parse_save_variables somehow set
@@ -186,11 +186,10 @@ void AmsBackendAd5xIfs::on_started() {
                             {
                                 std::lock_guard<std::mutex> lock(mutex_);
                                 if (!macro_exists && has_ifs_vars_) {
-                                    spdlog::warn(
-                                        "{} save_variables contain {}_ data but _IFS_VARS "
-                                        "macro not found — clearing has_ifs_vars_ "
-                                        "(tool-mapping from save_variables disabled)",
-                                        backend_log_tag(), var_prefix_);
+                                    spdlog::warn("{} save_variables contain {}_ data but _IFS_VARS "
+                                                 "macro not found — clearing has_ifs_vars_ "
+                                                 "(tool-mapping from save_variables disabled)",
+                                                 backend_log_tag(), var_prefix_);
                                     has_ifs_vars_ = false;
                                 }
                             }
@@ -204,10 +203,9 @@ void AmsBackendAd5xIfs::on_started() {
                             // color/type — only for tool-mapping and friends.
                             // Register the listeners + fire the initial query
                             // unconditionally.
-                            spdlog::info(
-                                "{} Reading Adventurer5M.json + GET_ZCOLOR SILENT=1 for "
-                                "color truth",
-                                backend_log_tag());
+                            spdlog::info("{} Reading Adventurer5M.json + GET_ZCOLOR SILENT=1 for "
+                                         "color truth",
+                                         backend_log_tag());
                             read_adventurer_json();
                             // One-shot fetch of zmod's user-defined material
                             // types from /mod_data/user.cfg. Independent of
@@ -223,9 +221,8 @@ void AmsBackendAd5xIfs::on_started() {
                             if (klippy_ready) {
                                 schedule_zcolor_query();
                             } else {
-                                spdlog::info(
-                                    "{} Deferring GET_ZCOLOR SILENT=1 until klippy ready",
-                                    backend_log_tag());
+                                spdlog::info("{} Deferring GET_ZCOLOR SILENT=1 until klippy ready",
+                                             backend_log_tag());
                             }
                         });
         });
@@ -461,8 +458,7 @@ void AmsBackendAd5xIfs::parse_save_variables(const json& vars) {
         // reach this branch. The guard below only matters for the
         // both-installed-then-deactivated scenario.
         const std::string other_p = (p == "bambufy") ? "less_waste" : "bambufy";
-        const bool have_self_tools =
-            vars.contains(p + "_tools") && vars[p + "_tools"].is_array();
+        const bool have_self_tools = vars.contains(p + "_tools") && vars[p + "_tools"].is_array();
         const bool have_other_tools =
             vars.contains(other_p + "_tools") && vars[other_p + "_tools"].is_array();
         bool conflict = false;
@@ -499,8 +495,7 @@ void AmsBackendAd5xIfs::parse_save_variables(const json& vars) {
         }
 
         // Current tool (-1 = none, 0-15 = tool number)
-        if (vars.contains(p + "_current_tool") &&
-            vars[p + "_current_tool"].is_number_integer()) {
+        if (vars.contains(p + "_current_tool") && vars[p + "_current_tool"].is_number_integer()) {
             active_tool_ = vars[p + "_current_tool"].get<int>();
         }
 
@@ -746,8 +741,7 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index,
     return true;
 }
 
-bool AmsBackendAd5xIfs::sync_override_to_firmware_locked(int slot_index,
-                                                         uint32_t firmware_color,
+bool AmsBackendAd5xIfs::sync_override_to_firmware_locked(int slot_index, uint32_t firmware_color,
                                                          const std::string& firmware_material) {
     // IFS callers (check_external_color_change) have already filtered for
     // empty-slot / no-signal cases, so this path always represents a real
@@ -803,12 +797,11 @@ void AmsBackendAd5xIfs::clear_override_locked(int slot_index, SlotInfo& slot) {
         // after the backend itself may be gone. Same pattern as the
         // save_async site in set_slot_info().
         const std::string tag = backend_log_tag();
-        override_store_->clear_async(
-            slot_index, [tag, slot_index](bool ok, std::string err) {
-                if (!ok) {
-                    spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
-                }
-            });
+        override_store_->clear_async(slot_index, [tag, slot_index](bool ok, std::string err) {
+            if (!ok) {
+                spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
+            }
+        });
     }
 }
 
@@ -883,6 +876,28 @@ SlotInfo AmsBackendAd5xIfs::get_slot_info(int slot_index) const {
 bool AmsBackendAd5xIfs::is_bypass_active() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return external_mode_;
+}
+
+bool AmsBackendAd5xIfs::can_unload_from_toolhead(int slot_index) const {
+    // The slot the firmware reports as active is always unloadable: a runout
+    // clears the head sensor and drops the display status below LOADED, but the
+    // filament is still seated in the IFS and must be retractable to recover.
+    // Read current_slot under the lock, then defer to the base LOADED check
+    // without holding mutex_ (get_slot_info re-acquires the non-recursive lock).
+    //
+    // The slot_index >= 0 guard is load-bearing: when no filament is loaded
+    // current_slot is -1, so a caller passing -1 would otherwise match it and
+    // wrongly report the (nonexistent) active slot as unloadable. Note the
+    // opposite negative-index convention here vs. select_unload_command(), where
+    // slot_index < 0 deliberately means "unload whatever is active." This is a
+    // per-slot capability query, so a negative index is simply out of range.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (slot_index >= 0 && system_info_.current_slot == slot_index) {
+            return true;
+        }
+    }
+    return AmsBackend::can_unload_from_toolhead(slot_index);
 }
 
 // --- Path visualization ---
@@ -988,7 +1003,11 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
 
 std::string AmsBackendAd5xIfs::select_unload_command(int slot_index, int current_slot,
                                                      bool head_filament) {
-    const bool unload_active = (slot_index < 0) || (slot_index == current_slot && head_filament);
+    // The active slot always uses the firmware-aware toolhead unload, regardless
+    // of the head sensor: a runout clears head_filament but the filament is still
+    // seated, and the per-port REMOVE_PRUTOK_IFS macro errors on the loaded slot.
+    (void)head_filament;
+    const bool unload_active = (slot_index < 0) || (slot_index == current_slot);
     if (unload_active) {
         return "IFS_REMOVE_PRUTOK";
     }
@@ -1295,8 +1314,7 @@ AmsError AmsBackendAd5xIfs::set_slot_info(int slot_index, const SlotInfo& info, 
             // the store will outlive the scheduled save by design.
             const std::string tag = backend_log_tag();
             override_store_->save_async(
-                slot_index, ovr_to_save,
-                [tag, slot_index](bool success, const std::string& err) {
+                slot_index, ovr_to_save, [tag, slot_index](bool success, const std::string& err) {
                     if (!success) {
                         spdlog::warn("{} Override persist failed for slot {}: {}", tag, slot_index,
                                      err);
@@ -1334,13 +1352,13 @@ AmsError AmsBackendAd5xIfs::set_slot_info(int slot_index, const SlotInfo& info, 
             }
             auto colors_err = write_ifs_var("colors", colors_val);
             if (!colors_err.success()) {
-                spdlog::warn("{} _IFS_VARS colors write failed for slot {}: {}",
-                             backend_log_tag(), slot_index, colors_err.technical_msg);
+                spdlog::warn("{} _IFS_VARS colors write failed for slot {}: {}", backend_log_tag(),
+                             slot_index, colors_err.technical_msg);
             }
             auto types_err = write_ifs_var("types", types_val);
             if (!types_err.success()) {
-                spdlog::warn("{} _IFS_VARS types write failed for slot {}: {}",
-                             backend_log_tag(), slot_index, types_err.technical_msg);
+                spdlog::warn("{} _IFS_VARS types write failed for slot {}: {}", backend_log_tag(),
+                             slot_index, types_err.technical_msg);
             }
         }
     }
@@ -1349,13 +1367,13 @@ AmsError AmsBackendAd5xIfs::set_slot_info(int slot_index, const SlotInfo& info, 
     return AmsErrorHelper::success();
 }
 
-helix::printer::ToolMappingCapabilities
-AmsBackendAd5xIfs::get_tool_mapping_capabilities() const {
+helix::printer::ToolMappingCapabilities AmsBackendAd5xIfs::get_tool_mapping_capabilities() const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!has_ifs_vars_) {
         return {false, false, ""};
     }
-    return {.supported = true, .editable = true,
+    return {.supported = true,
+            .editable = true,
             .description = "Tool reassignment via _IFS_VARS"}; // i18n: do not translate
 }
 
@@ -1539,7 +1557,8 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json(int slot_index) {
     api_->transfers().download_file(
         "config", "Adventurer5M.json",
         [this, token, port, hex_with_hash, material, result, done](const std::string& content) {
-            if (token.expired()) { // L081_OK: sync wait wrapper called from main; defer would deadlock against caller
+            if (token.expired()) { // L081_OK: sync wait wrapper called from main; defer would
+                                   // deadlock against caller
                 *result =
                     AmsErrorHelper::command_failed("write_adventurer_json", "Connection lost");
                 done->store(true);
@@ -1673,8 +1692,7 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json_local(int slot_index) {
         if (!out) {
             std::error_code ec;
             std::filesystem::remove(tmp_path, ec);
-            return AmsErrorHelper::command_failed("write_adventurer_json_local",
-                                                  "Write failed");
+            return AmsErrorHelper::command_failed("write_adventurer_json_local", "Write failed");
         }
     }
 
@@ -1697,8 +1715,7 @@ void AmsBackendAd5xIfs::detect_local_adventurer_json_path() {
     // /usr/prog/config/ is on a remote filesystem we can't touch.
     std::string moonraker_host;
     if (helix::Config* cfg = helix::Config::get_instance()) {
-        moonraker_host =
-            cfg->get<std::string>(cfg->df() + "moonraker_host", "localhost");
+        moonraker_host = cfg->get<std::string>(cfg->df() + "moonraker_host", "localhost");
     }
     if (!helix::is_moonraker_on_same_host(moonraker_host)) {
         spdlog::debug("{} Moonraker is remote ({}); leaving Adventurer5M.json on upload path",
@@ -1786,10 +1803,9 @@ void AmsBackendAd5xIfs::fetch_user_cfg_materials() {
                                 }
                                 total = custom_material_types_.size();
                             }
-                            spdlog::info(
-                                "{} user.cfg: loaded {} user-defined filament type(s); "
-                                "total custom types {}",
-                                backend_log_tag(), names.size(), total);
+                            spdlog::info("{} user.cfg: loaded {} user-defined filament type(s); "
+                                         "total custom types {}",
+                                         backend_log_tag(), names.size(), total);
                         });
         },
         [token](const MoonrakerError& err) {
@@ -1806,8 +1822,7 @@ void AmsBackendAd5xIfs::fetch_user_cfg_materials() {
         });
 }
 
-std::vector<std::string>
-AmsBackendAd5xIfs::parse_user_cfg_filament_types(const std::string& body) {
+std::vector<std::string> AmsBackendAd5xIfs::parse_user_cfg_filament_types(const std::string& body) {
     // zmod docs: https://wiki.zmod.link/AD5X/#7-add-custom-filament-types
     //
     //   [zmod_ifs]
@@ -1863,18 +1878,16 @@ void AmsBackendAd5xIfs::read_adventurer_json() {
         [this, token](const std::string& content) {
             // BG THREAD: log size from local-only data (tag string is constexpr).
             // Demoted to trace (#981): this fires on every ~5s poll.
-            spdlog::trace("[AMS AD5X-IFS] Downloaded Adventurer5M.json ({} bytes)",
-                          content.size());
+            spdlog::trace("[AMS AD5X-IFS] Downloaded Adventurer5M.json ({} bytes)", content.size());
             // MAIN THREAD: note_json_content takes mutex_ and parse_adventurer_json
             // mutates extensive member state.
-            token.defer("Ad5xIfsBackend::read_json_apply",
-                        [this, content]() mutable {
-                            // Baseline the poll cache so the next periodic poll
-                            // doesn't see this content as "changed" and
-                            // double-fire GET_ZCOLOR.
-                            (void)note_json_content(content);
-                            parse_adventurer_json(content);
-                        });
+            token.defer("Ad5xIfsBackend::read_json_apply", [this, content]() mutable {
+                // Baseline the poll cache so the next periodic poll
+                // doesn't see this content as "changed" and
+                // double-fire GET_ZCOLOR.
+                (void)note_json_content(content);
+                parse_adventurer_json(content);
+            });
         },
         [this, token](const MoonrakerError& err) {
             // BG THREAD: log error from local-only data; defer the atomic
@@ -1915,25 +1928,22 @@ void AmsBackendAd5xIfs::poll_adventurer_json() {
             // MAIN THREAD: clear in-flight gate AND apply the parse together
             // so we never touch member state on the bg thread. The gate may
             // stay "true" for one extra UpdateQueue tick — harmless coalescing.
-            token.defer("Ad5xIfsBackend::poll_json_apply",
-                        [this, content]() mutable {
-                            json_poll_in_flight_.store(false);
+            token.defer("Ad5xIfsBackend::poll_json_apply", [this, content]() mutable {
+                json_poll_in_flight_.store(false);
 
-                            if (!note_json_content(content)) {
-                                spdlog::trace(
-                                    "{} Adventurer5M.json unchanged ({} bytes), "
-                                    "skipping GET_ZCOLOR",
-                                    backend_log_tag(), content.size());
-                                return;
-                            }
+                if (!note_json_content(content)) {
+                    spdlog::trace("{} Adventurer5M.json unchanged ({} bytes), "
+                                  "skipping GET_ZCOLOR",
+                                  backend_log_tag(), content.size());
+                    return;
+                }
 
-                            spdlog::debug(
-                                "{} Adventurer5M.json changed ({} bytes), parsing + "
-                                "scheduling GET_ZCOLOR",
-                                backend_log_tag(), content.size());
-                            parse_adventurer_json(content);
-                            schedule_zcolor_query();
-                        });
+                spdlog::debug("{} Adventurer5M.json changed ({} bytes), parsing + "
+                              "scheduling GET_ZCOLOR",
+                              backend_log_tag(), content.size());
+                parse_adventurer_json(content);
+                schedule_zcolor_query();
+            });
         },
         [this, token](const MoonrakerError& err) {
             // MAIN THREAD: clearing the gate + atomic + log lives in the defer
@@ -1946,13 +1956,11 @@ void AmsBackendAd5xIfs::poll_adventurer_json() {
                                  backend_log_tag());
                 });
             } else {
-                token.defer("Ad5xIfsBackend::poll_json_err",
-                            [this, msg = err.message]() {
-                                json_poll_in_flight_.store(false);
-                                spdlog::debug(
-                                    "{} Adventurer5M.json poll failed (will retry): {}",
-                                    backend_log_tag(), msg);
-                            });
+                token.defer("Ad5xIfsBackend::poll_json_err", [this, msg = err.message]() {
+                    json_poll_in_flight_.store(false);
+                    spdlog::debug("{} Adventurer5M.json poll failed (will retry): {}",
+                                  backend_log_tag(), msg);
+                });
             }
         });
 }
@@ -2065,9 +2073,7 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             // MAIN THREAD: on_gcode_response_line touches several member fields
             // (zcolor_query_active_, zcolor_buffer_mutex_, schedule_*).
             token.defer("Ad5xIfsBackend::zcolor_listener_apply",
-                        [this, line = std::move(line)]() mutable {
-                            on_gcode_response_line(line);
-                        });
+                        [this, line = std::move(line)]() mutable { on_gcode_response_line(line); });
         });
 }
 
@@ -2111,8 +2117,7 @@ void AmsBackendAd5xIfs::recheck_ifs_vars_macro() {
 
     auto token = lifetime_.token();
     client_->send_jsonrpc(
-        "printer.objects.query",
-        json{{"objects", json{{"gcode_macro _ifs_vars", nullptr}}}},
+        "printer.objects.query", json{{"objects", json{{"gcode_macro _ifs_vars", nullptr}}}},
         [this, token](const json& response) {
             // BG THREAD: extract macro_exists; no `this` access.
             // Same detection rule as on_started: key presence isn't enough
@@ -2129,10 +2134,9 @@ void AmsBackendAd5xIfs::recheck_ifs_vars_macro() {
                 std::lock_guard<std::mutex> lock(mutex_);
                 if (macro_exists) {
                     if (ifs_macro_confirmed_missing_) {
-                        spdlog::info(
-                            "{} _IFS_VARS macro now present (post FIRMWARE_RESTART) — "
-                            "re-enabling save_variables tool-mapping reads",
-                            backend_log_tag());
+                        spdlog::info("{} _IFS_VARS macro now present (post FIRMWARE_RESTART) — "
+                                     "re-enabling save_variables tool-mapping reads",
+                                     backend_log_tag());
                         ifs_macro_confirmed_missing_ = false;
                     }
                 } else {
@@ -2243,12 +2247,10 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
         [this, token](const MoonrakerError& err) {
             // MAIN THREAD: log + clear the active flag together so no member
             // touch happens on the bg execute_gcode error thread.
-            token.defer("Ad5xIfsBackend::zcolor_query_err",
-                        [this, msg = err.message]() {
-                            spdlog::warn("{} GET_ZCOLOR SILENT=1 failed: {}", backend_log_tag(),
-                                         msg);
-                            zcolor_query_active_.store(false);
-                        });
+            token.defer("Ad5xIfsBackend::zcolor_query_err", [this, msg = err.message]() {
+                spdlog::warn("{} GET_ZCOLOR SILENT=1 failed: {}", backend_log_tag(), msg);
+                zcolor_query_active_.store(false);
+            });
         });
 }
 
@@ -2598,8 +2600,7 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
         // RESPOND line; lessWaste does not). Echo on lessWaste is debounced
         // by kJsonPollInterval (5s).
         const std::string suffix = (ifs_var_prefix_snapshot == "bambufy") ? " SHOW=0" : "";
-        auto colors_err =
-            execute_gcode("_IFS_VARS colors=" + ifs_colors_payload + suffix);
+        auto colors_err = execute_gcode("_IFS_VARS colors=" + ifs_colors_payload + suffix);
         if (!colors_err.success()) {
             spdlog::warn("{} _IFS_VARS colors mirror failed: {}", backend_log_tag(),
                          colors_err.technical_msg);
