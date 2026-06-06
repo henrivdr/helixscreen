@@ -3664,6 +3664,7 @@
       "name": "Sovol SV06 ACE",
       "manufacturer": "Sovol",
       "image": "sovol-sv06-ace.png",
+      "preset": "sovol_sv06_ace",
       "display": {
         "resolution": "480x272",
         "touch_controller": "goodix",

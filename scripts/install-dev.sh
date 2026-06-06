@@ -35,6 +35,8 @@ if [ -z "${_HELIX_BUNDLED_INSTALLER:-}" ]; then
     . "$LIB_DIR/requirements.sh"
     . "$LIB_DIR/forgex.sh"
     . "$LIB_DIR/competing_uis.sh"
+    . "$LIB_DIR/printer_seed.sh"      # generic per-printer settings.json seeding (#986)
+    . "$LIB_DIR/klipper_include.sh"   # generic per-printer Klipper config include (#986)
     . "$LIB_DIR/release.sh"
     . "$LIB_DIR/service.sh"
     . "$LIB_DIR/audio.sh"

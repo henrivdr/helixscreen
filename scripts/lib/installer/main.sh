@@ -359,6 +359,18 @@ main() {
     # Fix known Klipper config issues (AD5M screw_thread, etc.)
     fix_ad5m_klipper_config || true
 
+    # Generic per-printer install-time layer (#986): detect a known printer
+    # model and apply its bundled settings seed + Klipper include, if any.
+    # detect_printer_model() is conservative and returns empty for unknown
+    # hardware, so this is a no-op on every platform without a registered id.
+    local seed_pid
+    seed_pid=$(detect_printer_model)
+    if [ -n "$seed_pid" ]; then
+        log_info "Recognized printer model: ${seed_pid} -- applying install-time defaults"
+        seed_settings_for_printer "$seed_pid" || true
+        install_klipper_include_for_printer "$seed_pid" || true
+    fi
+
     # Configure ALSA "default" when the board has no card 0 (e.g. Pi + HDMI-audio
     # screens like the BTT HDMI5, whose only outputs are vc4hdmi0/vc4hdmi1 at
     # indices 1/2). Safe no-op when "default" already works or /etc/asound.conf

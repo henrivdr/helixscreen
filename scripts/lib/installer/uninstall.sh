@@ -87,6 +87,56 @@ reenable_disabled_services() {
     done < "$state_file"
 }
 
+# Undo per-printer Klipper includes recorded at install time (#986).
+# Reverses each entry in ${INSTALL_DIR}/config/.klipper_includes:
+#   cfg:<path>                      → remove the copied snippet
+#   include:<printer.cfg>:<relpath> → strip the [include <relpath>] line (and
+#                                     the installer's marker comment above it)
+# Must run BEFORE $INSTALL_DIR is removed (the state file lives in it) and
+# touches printer_data files that live outside $INSTALL_DIR.
+undo_klipper_includes() {
+    local state_file="${INSTALL_DIR}/config/.klipper_includes"
+    [ -f "$state_file" ] || return 0
+
+    log_info "Reverting HelixScreen Klipper config includes..."
+    while IFS= read -r entry; do
+        case "$entry" in ""|\#*) continue ;; esac
+
+        local type="${entry%%:*}"
+        local rest="${entry#*:}"
+
+        case "$type" in
+            cfg)
+                if [ -f "$rest" ]; then
+                    log_info "Removing Klipper snippet: $rest"
+                    $(file_sudo "$rest") rm -f "$rest" 2>/dev/null || true
+                fi
+                ;;
+            include)
+                # rest = "<printer.cfg path>:<relpath>"
+                local pcfg="${rest%%:*}"
+                local relpath="${rest#*:}"
+                if [ -f "$pcfg" ]; then
+                    log_info "Removing [include $relpath] from $pcfg"
+                    local include_line="[include ${relpath}]"
+                    local marker="# Added by HelixScreen installer (#986) -- ${relpath}"
+                    local tmp="${pcfg}.helix-uninstall.$$"
+                    # Drop the marker comment line and the include line. Anchored
+                    # full-line matches via awk for portability (no sed -i).
+                    if awk -v inc="$include_line" -v mark="$marker" \
+                        '$0 == inc { next } $0 == mark { next } { print }' \
+                        "$pcfg" > "$tmp" 2>/dev/null; then
+                        $(file_sudo "$pcfg") mv "$tmp" "$pcfg" 2>/dev/null \
+                            || rm -f "$tmp" 2>/dev/null || true
+                    else
+                        rm -f "$tmp" 2>/dev/null || true
+                    fi
+                fi
+                ;;
+        esac
+    done < "$state_file"
+}
+
 # Uninstall HelixScreen
 # Args: platform (optional)
 uninstall() {
@@ -175,6 +225,11 @@ uninstall() {
 
     # Re-enable services from state file (before removing install dir)
     reenable_disabled_services
+
+    # Revert per-printer Klipper includes (#986) — strip the [include] line from
+    # printer.cfg and remove the copied snippet. Must run before $INSTALL_DIR
+    # (which holds the .klipper_includes state file) is removed.
+    undo_klipper_includes
 
     # Remove installation (check all possible locations)
     local removed_dir=""

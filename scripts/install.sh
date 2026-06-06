@@ -688,6 +688,32 @@ get_download_platform() {
     esac
 }
 
+# Single source of truth: platform -> self-update release asset (zip) name.
+#
+# Both the Moonraker type:web updater (write_release_info() in moonraker.sh) and
+# the build-time release_info.json baked by mk/cross.mk resolve the asset name
+# through THIS function, so the two can't drift. Drift is not cosmetic: Moonraker
+# downloads the asset whose name matches release_info.json's asset_name, and if
+# no asset matches it falls back to the alphabetically-first release asset — a
+# .sym debug file — then dies with "File is not a zip file"
+# (prestonbrown/helixscreen#993). This must also agree with
+# UpdateChecker::get_platform_key() (src/system/update_checker.cpp);
+# tests/shell/test_update_platform_coverage.bats enforces the agreement.
+#
+# Convention: a platform's asset is helixscreen-<platform>.zip. The only borrows
+# are handled by get_download_platform() (m1 -> pi/pi32 by userspace bitness) and
+# the k1-dynamic dev/debug variant, which is not built by the release matrix and
+# rides the stable k1 asset.
+#
+# Args: platform (detected platform key)
+# Echoes: release asset filename, e.g. helixscreen-pi.zip
+helix_self_update_asset() {
+    case "$1" in
+        k1-dynamic) echo "helixscreen-k1.zip" ;;
+        *)          echo "helixscreen-$(get_download_platform "$1").zip" ;;
+    esac
+}
+
 # AD5X (FlashForge / ZMOD) preflight: refuse to run outside the chroot.
 #
 # ZMOD installs HelixScreen into an overlay rooted at /usr/data/.mod/.zmod/.
@@ -2309,8 +2335,19 @@ uninstall_forgex() {
 
 #
 # Known competing screen UIs to stop
-# Includes: GuppyScreen (AD5M/K1), Grumpyscreen (K1/Simple AF), KlipperScreen, FeatherScreen
-COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen"
+# Includes: GuppyScreen (AD5M/K1), Grumpyscreen (K1/Simple AF), KlipperScreen, FeatherScreen,
+# mksclient (Sovol SV06 Ace stock touchscreen UI)
+COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen mksclient"
+
+# Wayland compositors that hold the DRM/KMS master. On Armbian/Pi-class boards
+# (e.g. BTT CB1) KlipperScreen commonly runs *inside* one of these; the
+# compositor — not the UI process — owns /dev/dri/card0, so HelixScreen's direct
+# DRM output gets EACCES ("not DRM master") until it is stopped. Matched by exact
+# executable name via pidof. We deliberately do NOT touch getty/fbcon (they own
+# the legacy console /dev/fb0, not the KMS master) or seatd (a seat broker, not a
+# master holder) — stopping those carries risk without freeing card0.
+WAYLAND_COMPOSITORS="cage weston labwc sway wayfire"
+
 # Record a disabled service for later re-enablement
 # Args: $1 = type ("systemd" or "sysv-chmod"), $2 = target (service name or script path)
 record_disabled_service() {
@@ -2330,6 +2367,35 @@ record_disabled_service() {
     fi
 
     echo "$entry" | $(file_sudo "${INSTALL_DIR}/config") tee -a "$state_file" >/dev/null
+}
+
+# Stop Wayland compositors holding the DRM master (cage/weston/labwc/sway/...).
+# Run AFTER the named-UI loop so a compositor launched by a UI service (e.g.
+# KlipperScreen.service ExecStart=cage -- screen.py) is already gone; this catches
+# a standalone compositor service or one orphaned/launched from an autologin
+# .profile that still pins /dev/dri/card0. Reversible: disabled services are
+# recorded for re-enablement on uninstall. Sets found_any in the caller's scope.
+stop_wayland_compositors() {
+    local comp svc
+    for comp in $WAYLAND_COMPOSITORS; do
+        # Standalone systemd units (cage@tty1.service, weston.service, ...)
+        if [ "$INIT_SYSTEM" = "systemd" ]; then
+            for svc in "$comp" "${comp}@tty1"; do
+                if systemctl is-active --quiet "$svc" 2>/dev/null; then
+                    log_info "Stopping Wayland compositor service $svc (holds DRM master)..."
+                    $SUDO systemctl stop "$svc" 2>/dev/null || true
+                    $SUDO systemctl disable "$svc" 2>/dev/null || true
+                    record_disabled_service "systemd" "$svc"
+                    found_any=true
+                fi
+            done
+        fi
+        # Kill any lingering compositor process (exact basename via pidof)
+        if kill_process_by_name "$comp"; then
+            log_info "Killed lingering Wayland compositor: $comp (was holding /dev/dri/card0)"
+            found_any=true
+        fi
+    done
 }
 
 # Stop ForgeX-specific competing UIs (stock FlashForge firmware UI)
@@ -2391,6 +2457,35 @@ stop_k1_stock_competing_uis() {
     # S99start_app also manages dropbear (SSH) on stock K1 firmware.
     # Disabling it kills SSH on next reboot (#535). Ensure SSH survives.
     ensure_k1_ssh
+}
+
+# Stop the Sovol SV06 Ace stock touchscreen UI (#986).
+# Unlike the K1/CC1 stock UIs, mksclient is NOT a systemd/init.d service: it is a
+# plain binary at /home/sovol/printer_data/build/mksclient run as user `sovol`.
+# So there is no init script to chmod -x; we disable persistence by removing the
+# execute bit on the binary itself (the existing re-enable path chmod +x restores
+# it). mksclient also exports sysfs GPIO 67 at boot (the camera light), which pins
+# it away from Klipper's [output_pin cameralight] — so after killing mksclient we
+# unexport GPIO 67 to release it. Sets found_any in the caller's scope.
+stop_sovol_competing_uis() {
+    local bin
+    for bin in /home/sovol/printer_data/build/mksclient /home/*/printer_data/build/mksclient; do
+        # Skip if the glob didn't match (literal pattern returned) or not a file.
+        [ -f "$bin" ] || continue
+        log_info "Stopping stock Sovol UI (mksclient: $bin)..."
+        kill_process_by_name mksclient || true
+        # Persistent disable: drop the execute bit so it can't relaunch on boot.
+        # Recorded as sysv-chmod so uninstall's chmod +x re-enables the binary.
+        $SUDO chmod a-x "$bin" 2>/dev/null || true
+        record_disabled_service "sysv-chmod" "$bin"
+        found_any=true
+    done
+
+    # mksclient exports GPIO 67 (camera light) at boot; release it so Klipper's
+    # [output_pin cameralight] can claim the line after the UI is gone.
+    if [ -e /sys/class/gpio/gpio67 ]; then
+        echo 67 > /sys/class/gpio/unexport 2>/dev/null || true
+    fi
 }
 
 # Ensure SSH (dropbear) is running and will start on boot.
@@ -2575,6 +2670,13 @@ stop_competing_uis() {
         stock_klipper|guilouz) stop_k1_stock_competing_uis ;;
     esac
 
+    # Sovol SV06 Ace: stock UI is the plain `mksclient` binary (not a service).
+    # Run the dedicated handler when the binary is present so it gets chmod-a-x'd
+    # and GPIO 67 is released (the generic loop below only does a fallback kill).
+    if [ -f /home/sovol/printer_data/build/mksclient ] || ls /home/*/printer_data/build/mksclient >/dev/null 2>&1; then
+        stop_sovol_competing_uis
+    fi
+
     # CC1 / COSMOS: use gui-switcher handoff instead of disabling peers.
     # Early-return so the generic loop below doesn't chmod out grumpyscreen/guppyscreen/atomscreen.
     if [ "${platform:-}" = "cc1" ]; then
@@ -2638,12 +2740,356 @@ stop_competing_uis() {
         fi
     done
 
+    # Free the DRM master from any Wayland compositor (KlipperScreen-under-cage etc.)
+    stop_wayland_compositors
+
     if [ "$found_any" = true ]; then
         log_info "Waiting for competing UIs to stop..."
         sleep 2
     else
         log_info "No competing UIs found"
     fi
+}
+
+# ============================================
+# Module: printer_seed.sh
+# ============================================
+
+#
+# already set: existing settings always win over the fragment.
+#
+# Bundled fragments live at: config/install_seeds/<printer_id>.json
+# Seeded ids are recorded to ${INSTALL_DIR}/config/.seeded_settings so uninstall
+# can be aware of what the installer wrote.
+#
+# Reads: INSTALL_DIR, SUDO (and HELIX_SEED_DIR override for tests)
+# Calls: file_sudo() from common.sh
+
+# Source guard
+
+# Resolve the directory holding bundled seed fragments.
+# Override with HELIX_SEED_DIR (tests). Otherwise prefer the installed copy
+# under ${INSTALL_DIR}/config/install_seeds, then fall back to the in-repo
+# source tree (dev installer running from a checkout).
+_helix_seed_dir() {
+    if [ -n "${HELIX_SEED_DIR:-}" ]; then
+        echo "$HELIX_SEED_DIR"
+        return 0
+    fi
+    if [ -n "${INSTALL_DIR:-}" ] && [ -d "${INSTALL_DIR}/config/install_seeds" ]; then
+        echo "${INSTALL_DIR}/config/install_seeds"
+        return 0
+    fi
+    # Dev checkout: <repo>/config/install_seeds, relative to this module.
+    local _self_dir
+    _self_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || _self_dir=""
+    if [ -n "$_self_dir" ] && [ -d "${_self_dir}/../../../config/install_seeds" ]; then
+        (cd "${_self_dir}/../../../config/install_seeds" && pwd)
+        return 0
+    fi
+    echo "${INSTALL_DIR:-/opt/helixscreen}/config/install_seeds"
+}
+
+# Record a seeded printer-id to the state file (for uninstall awareness).
+# Args: $1 = printer_id
+_record_seeded_settings() {
+    local printer_id="$1"
+    local state_file="${INSTALL_DIR}/config/.seeded_settings"
+
+    if [ -n "${INSTALL_DIR:-}" ] && [ ! -d "${INSTALL_DIR}/config" ]; then
+        $(file_sudo "${INSTALL_DIR}") mkdir -p "${INSTALL_DIR}/config"
+    fi
+
+    # Don't duplicate.
+    if [ -f "$state_file" ] && grep -qF "settings:${printer_id}" "$state_file" 2>/dev/null; then
+        return 0
+    fi
+    echo "settings:${printer_id}" | $(file_sudo "${INSTALL_DIR}/config") tee -a "$state_file" >/dev/null
+}
+
+# Deep-merge a bundled seed fragment into the install's settings.json.
+# Existing user keys win over the fragment (fragment is the lower-priority side).
+# Creates settings.json from the fragment if it is absent or empty.
+#
+# Graceful by design: a missing fragment is a no-op success, and an absent
+# python3 logs a warning and skips WITHOUT failing the install.
+#
+# Args: $1 = printer_id
+seed_settings_for_printer() {
+    local printer_id="$1"
+    [ -n "$printer_id" ] || return 0
+
+    local seed_dir
+    seed_dir="$(_helix_seed_dir)"
+    local fragment="${seed_dir}/${printer_id}.json"
+
+    # Missing fragment → nothing to seed for this printer. Success.
+    if [ ! -f "$fragment" ]; then
+        return 0
+    fi
+
+    # JSON deep-merge requires python3. jq is NOT guaranteed on minimal targets
+    # (established #969 fallback pattern), and a deep recursive merge in pure
+    # shell is unsafe. If python3 is unavailable, warn and skip — never fail.
+    if ! command -v python3 >/dev/null 2>&1; then
+        log_warn "python3 not available; skipping settings seed for ${printer_id}"
+        return 0
+    fi
+
+    local settings="${INSTALL_DIR}/config/settings.json"
+
+    if [ -n "${INSTALL_DIR:-}" ] && [ ! -d "${INSTALL_DIR}/config" ]; then
+        $(file_sudo "${INSTALL_DIR}") mkdir -p "${INSTALL_DIR}/config"
+    fi
+
+    log_info "Seeding settings defaults for ${printer_id}..."
+
+    # Merge into a temp file we own, then move into place via file_sudo so we
+    # respect the same privilege model as the rest of the installer.
+    local tmp_out="${settings}.seed.$$"
+
+    # Deep-merge: existing settings (base) take precedence; fragment fills only
+    # keys the base does not already define. Recurses into nested objects.
+    if SETTINGS_PATH="$settings" FRAGMENT_PATH="$fragment" TMP_OUT="$tmp_out" python3 - <<'PY'
+import json, os, sys
+
+settings_path = os.environ["SETTINGS_PATH"]
+fragment_path = os.environ["FRAGMENT_PATH"]
+tmp_out = os.environ["TMP_OUT"]
+
+def load(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            data = f.read().strip()
+        if not data:
+            return {}
+        obj = json.loads(data)
+        return obj if isinstance(obj, dict) else {}
+    except (ValueError, OSError):
+        # Malformed existing settings: treat as empty base rather than crash
+        # the install. The fragment becomes the new content.
+        return {}
+
+def deep_merge(base, frag):
+    """Return base with frag's keys filled in where base lacks them.
+    Existing base values always win (fragment is lower priority)."""
+    for k, v in frag.items():
+        if k == "_comment":
+            # Carry the fragment's provenance comment only if base has none.
+            base.setdefault(k, v)
+            continue
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            deep_merge(base[k], v)
+        elif k not in base:
+            base[k] = v
+        # else: base already has a non-dict value → keep it (user wins)
+    return base
+
+base = load(settings_path)
+frag = load(fragment_path)
+merged = deep_merge(base, frag)
+
+with open(tmp_out, "w") as f:
+    json.dump(merged, f, indent=2)
+    f.write("\n")
+PY
+    then
+        if [ -f "$tmp_out" ]; then
+            if $(file_sudo "${INSTALL_DIR}/config") mv "$tmp_out" "$settings" 2>/dev/null; then
+                _record_seeded_settings "$printer_id"
+                log_success "Seeded settings defaults for ${printer_id}"
+            else
+                log_warn "Could not write seeded settings.json for ${printer_id}"
+                rm -f "$tmp_out" 2>/dev/null || true
+            fi
+        fi
+    else
+        log_warn "Failed to merge settings seed for ${printer_id}; leaving settings.json unchanged"
+        rm -f "$tmp_out" 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+# Detect a known printer-model that needs install-time seeding/config.
+# Prints a printer-id to stdout (empty if none matched).
+#
+# Returns "sovol_sv06_ace" when the stock Sovol touchscreen UI binary
+# `mksclient` is present at its confirmed install path
+# /home/sovol/printer_data/build/mksclient (also globbed as
+# /home/*/printer_data/build/mksclient for robustness if the user account
+# differs). This is the confirmed fingerprint: published Sovol/R8CEH configs
+# show mksclient is a plain binary at that path, run as user `sovol`. Empty
+# otherwise.
+#
+# TODO(#986): the binary path + `sovol` user is now the CONFIRMED fingerprint
+# (from published Sovol/R8CEH firmware configs). The only remaining uncertainty
+# is the exact /etc/hostname and /proc/device-tree/model strings on the panel,
+# which we chose not to fetch — the binary path is a strong, unambiguous signal
+# on its own, so hostname matching was dropped to avoid false negatives on
+# renamed hosts.
+detect_printer_model() {
+    # Confirmed signal: the stock Sovol UI binary at its known build path.
+    # HELIX_SOVOL_MKSCLIENT lets tests redirect the path under a temp HOME.
+    local _bin
+    for _bin in \
+        "${HELIX_SOVOL_MKSCLIENT:-}" \
+        /home/sovol/printer_data/build/mksclient \
+        /home/*/printer_data/build/mksclient; do
+        [ -n "$_bin" ] || continue
+        if [ -f "$_bin" ]; then
+            echo "sovol_sv06_ace"
+            return 0
+        fi
+    done
+
+    echo ""
+    return 0
+}
+
+# ============================================
+# Module: klipper_include.sh
+# ============================================
+
+#
+#
+# Bundled snippets live at: config/klipper_includes/<printer_id>.cfg
+# Installed to:             ~/printer_data/config/helixscreen/<printer_id>.cfg
+# printer.cfg gets:         [include helixscreen/<printer_id>.cfg]
+#
+# Both the copied cfg and the printer.cfg edit are recorded to
+# ${INSTALL_DIR}/config/.klipper_includes so uninstall can undo them.
+#
+# Reads: KLIPPER_HOME, INSTALL_DIR, SUDO (and HELIX_KLIPPER_CFG_DIR for tests)
+# Calls: file_sudo() from common.sh
+
+# Source guard
+
+# Resolve the directory holding bundled Klipper cfg snippets.
+# Override with HELIX_KLIPPER_CFG_DIR (tests). Otherwise prefer the installed
+# copy under ${INSTALL_DIR}/config/klipper_includes, then fall back to the
+# in-repo source tree (dev installer running from a checkout).
+_helix_klipper_cfg_dir() {
+    if [ -n "${HELIX_KLIPPER_CFG_DIR:-}" ]; then
+        echo "$HELIX_KLIPPER_CFG_DIR"
+        return 0
+    fi
+    if [ -n "${INSTALL_DIR:-}" ] && [ -d "${INSTALL_DIR}/config/klipper_includes" ]; then
+        echo "${INSTALL_DIR}/config/klipper_includes"
+        return 0
+    fi
+    local _self_dir
+    _self_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || _self_dir=""
+    if [ -n "$_self_dir" ] && [ -d "${_self_dir}/../../../config/klipper_includes" ]; then
+        (cd "${_self_dir}/../../../config/klipper_includes" && pwd)
+        return 0
+    fi
+    echo "${INSTALL_DIR:-/opt/helixscreen}/config/klipper_includes"
+}
+
+# Record an undo action to the include state file (deduplicated).
+# Args: $1 = entry (e.g. "cfg:/path" or "include:/printer.cfg:helixscreen/x.cfg")
+_record_klipper_include() {
+    local entry="$1"
+    local state_file="${INSTALL_DIR}/config/.klipper_includes"
+
+    if [ -n "${INSTALL_DIR:-}" ] && [ ! -d "${INSTALL_DIR}/config" ]; then
+        $(file_sudo "${INSTALL_DIR}") mkdir -p "${INSTALL_DIR}/config"
+    fi
+
+    if [ -f "$state_file" ] && grep -qF "$entry" "$state_file" 2>/dev/null; then
+        return 0
+    fi
+    echo "$entry" | $(file_sudo "${INSTALL_DIR}/config") tee -a "$state_file" >/dev/null
+}
+
+# Install the bundled Klipper include for a printer-id.
+#  1. copy config/klipper_includes/<id>.cfg → printer_data/config/helixscreen/<id>.cfg
+#  2. ensure a marker-guarded [include helixscreen/<id>.cfg] line in printer.cfg
+#  3. record both for uninstall
+#
+# Defensive: a missing bundled cfg, a missing printer_data/config, or a missing
+# printer.cfg all warn-and-skip WITHOUT failing the install.
+#
+# Args: $1 = printer_id
+install_klipper_include_for_printer() {
+    local printer_id="$1"
+    [ -n "$printer_id" ] || return 0
+
+    local cfg_dir
+    cfg_dir="$(_helix_klipper_cfg_dir)"
+    local bundled="${cfg_dir}/${printer_id}.cfg"
+
+    # Missing bundled cfg → nothing to include for this printer. Success.
+    if [ ! -f "$bundled" ]; then
+        return 0
+    fi
+
+    if [ -z "${KLIPPER_HOME:-}" ]; then
+        log_warn "KLIPPER_HOME not set; skipping Klipper include for ${printer_id}"
+        return 0
+    fi
+
+    local pd_config="${KLIPPER_HOME}/printer_data/config"
+    if [ ! -d "$pd_config" ]; then
+        log_warn "No printer_data/config found; skipping Klipper include for ${printer_id}"
+        return 0
+    fi
+
+    local printer_cfg="${pd_config}/printer.cfg"
+    if [ ! -f "$printer_cfg" ]; then
+        log_warn "printer.cfg not found at ${printer_cfg}; skipping Klipper include for ${printer_id}"
+        return 0
+    fi
+
+    # --- 1. Copy the bundled cfg into printer_data/config/helixscreen/ ---
+    local pd_helix="${pd_config}/helixscreen"
+    if [ ! -d "$pd_helix" ]; then
+        if ! $(file_sudo "$pd_config") mkdir -p "$pd_helix" 2>/dev/null; then
+            log_warn "Could not create ${pd_helix}; skipping Klipper include for ${printer_id}"
+            return 0
+        fi
+    fi
+
+    local dest_cfg="${pd_helix}/${printer_id}.cfg"
+    if $(file_sudo "$pd_helix") cp "$bundled" "$dest_cfg" 2>/dev/null; then
+        log_info "Installed Klipper config: ${dest_cfg}"
+        _record_klipper_include "cfg:${dest_cfg}"
+    else
+        log_warn "Could not copy ${bundled} to ${dest_cfg}; skipping include for ${printer_id}"
+        return 0
+    fi
+
+    # --- 2. Ensure the marker-guarded include line in printer.cfg ---
+    local include_line="[include helixscreen/${printer_id}.cfg]"
+    if grep -qF "$include_line" "$printer_cfg" 2>/dev/null; then
+        log_info "printer.cfg already includes helixscreen/${printer_id}.cfg"
+    else
+        # Append the include with a marker comment so uninstall (and humans) can
+        # identify lines the installer added.
+        {
+            printf '\n'
+            printf '%s\n' "# Added by HelixScreen installer (#986) -- helixscreen/${printer_id}.cfg"
+            printf '%s\n' "$include_line"
+        } | $(file_sudo "$printer_cfg") tee -a "$printer_cfg" >/dev/null
+
+        if grep -qF "$include_line" "$printer_cfg" 2>/dev/null; then
+            log_success "Added [include helixscreen/${printer_id}.cfg] to printer.cfg"
+            _record_klipper_include "include:${printer_cfg}:helixscreen/${printer_id}.cfg"
+            # A Klipper restart / firmware_restart is needed to pick up the new
+            # include. We do not invent a restart path here; the installer's
+            # platform recovery / service start handles process restarts, and a
+            # firmware_restart is a user-visible printer action best left to the
+            # operator after install.
+            log_info "Klipper restart / firmware_restart needed to apply helixscreen/${printer_id}.cfg"
+        else
+            log_warn "Failed to add include line to printer.cfg for ${printer_id}"
+        fi
+    fi
+
+    return 0
 }
 
 # ============================================
@@ -4823,26 +5269,13 @@ write_release_info() {
         return 0
     fi
 
-    # Determine platform-specific asset name. Platforms without a dedicated
-    # release artifact (m1) borrow pi/pi32; pick the variant matching the
-    # device's userspace bitness so Moonraker self-update fetches a runnable
-    # binary instead of a 404.
-    local asset_name="helixscreen-pi.zip"
-    case "${PLATFORM:-}" in
-        pi32)       asset_name="helixscreen-pi32.zip" ;;
-        ad5m)       asset_name="helixscreen-ad5m.zip" ;;
-        ad5x)       asset_name="helixscreen-k1.zip" ;;
-        k1)         asset_name="helixscreen-k1.zip" ;;
-        k1-dynamic) asset_name="helixscreen-k1-dynamic.zip" ;;
-        k2)         asset_name="helixscreen-k2.zip" ;;
-        m1)
-            if [ "$(getconf LONG_BIT 2>/dev/null || echo)" = "32" ]; then
-                asset_name="helixscreen-pi32.zip"
-            else
-                asset_name="helixscreen-pi.zip"
-            fi
-            ;;
-    esac
+    # Resolve the platform-specific asset name through the single source of
+    # truth in platform.sh (shared with mk/cross.mk's baked release_info.json,
+    # so the two never drift). A wrong/missing asset_name makes Moonraker fall
+    # back to the alphabetically-first release asset — a .sym debug file — and
+    # die with "File is not a zip file" (prestonbrown/helixscreen#993).
+    local asset_name
+    asset_name="$(helix_self_update_asset "${PLATFORM:-pi}")"
 
     log_info "Writing release_info.json (${version})..."
     cat > "${release_info}.tmp" << EOF
@@ -5397,6 +5830,56 @@ reenable_disabled_services() {
     done < "$state_file"
 }
 
+# Undo per-printer Klipper includes recorded at install time (#986).
+# Reverses each entry in ${INSTALL_DIR}/config/.klipper_includes:
+#   cfg:<path>                      → remove the copied snippet
+#   include:<printer.cfg>:<relpath> → strip the [include <relpath>] line (and
+#                                     the installer's marker comment above it)
+# Must run BEFORE $INSTALL_DIR is removed (the state file lives in it) and
+# touches printer_data files that live outside $INSTALL_DIR.
+undo_klipper_includes() {
+    local state_file="${INSTALL_DIR}/config/.klipper_includes"
+    [ -f "$state_file" ] || return 0
+
+    log_info "Reverting HelixScreen Klipper config includes..."
+    while IFS= read -r entry; do
+        case "$entry" in ""|\#*) continue ;; esac
+
+        local type="${entry%%:*}"
+        local rest="${entry#*:}"
+
+        case "$type" in
+            cfg)
+                if [ -f "$rest" ]; then
+                    log_info "Removing Klipper snippet: $rest"
+                    $(file_sudo "$rest") rm -f "$rest" 2>/dev/null || true
+                fi
+                ;;
+            include)
+                # rest = "<printer.cfg path>:<relpath>"
+                local pcfg="${rest%%:*}"
+                local relpath="${rest#*:}"
+                if [ -f "$pcfg" ]; then
+                    log_info "Removing [include $relpath] from $pcfg"
+                    local include_line="[include ${relpath}]"
+                    local marker="# Added by HelixScreen installer (#986) -- ${relpath}"
+                    local tmp="${pcfg}.helix-uninstall.$$"
+                    # Drop the marker comment line and the include line. Anchored
+                    # full-line matches via awk for portability (no sed -i).
+                    if awk -v inc="$include_line" -v mark="$marker" \
+                        '$0 == inc { next } $0 == mark { next } { print }' \
+                        "$pcfg" > "$tmp" 2>/dev/null; then
+                        $(file_sudo "$pcfg") mv "$tmp" "$pcfg" 2>/dev/null \
+                            || rm -f "$tmp" 2>/dev/null || true
+                    else
+                        rm -f "$tmp" 2>/dev/null || true
+                    fi
+                fi
+                ;;
+        esac
+    done < "$state_file"
+}
+
 # Uninstall HelixScreen
 # Args: platform (optional)
 uninstall() {
@@ -5485,6 +5968,11 @@ uninstall() {
 
     # Re-enable services from state file (before removing install dir)
     reenable_disabled_services
+
+    # Revert per-printer Klipper includes (#986) — strip the [include] line from
+    # printer.cfg and remove the copied snippet. Must run before $INSTALL_DIR
+    # (which holds the .klipper_includes state file) is removed.
+    undo_klipper_includes
 
     # Remove installation (check all possible locations)
     local removed_dir=""
@@ -6086,6 +6574,18 @@ main() {
 
     # Fix known Klipper config issues (AD5M screw_thread, etc.)
     fix_ad5m_klipper_config || true
+
+    # Generic per-printer install-time layer (#986): detect a known printer
+    # model and apply its bundled settings seed + Klipper include, if any.
+    # detect_printer_model() is conservative and returns empty for unknown
+    # hardware, so this is a no-op on every platform without a registered id.
+    local seed_pid
+    seed_pid=$(detect_printer_model)
+    if [ -n "$seed_pid" ]; then
+        log_info "Recognized printer model: ${seed_pid} -- applying install-time defaults"
+        seed_settings_for_printer "$seed_pid" || true
+        install_klipper_include_for_printer "$seed_pid" || true
+    fi
 
     # Configure ALSA "default" when the board has no card 0 (e.g. Pi + HDMI-audio
     # screens like the BTT HDMI5, whose only outputs are vc4hdmi0/vc4hdmi1 at

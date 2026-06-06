@@ -681,6 +681,32 @@ get_download_platform() {
     esac
 }
 
+# Single source of truth: platform -> self-update release asset (zip) name.
+#
+# Both the Moonraker type:web updater (write_release_info() in moonraker.sh) and
+# the build-time release_info.json baked by mk/cross.mk resolve the asset name
+# through THIS function, so the two can't drift. Drift is not cosmetic: Moonraker
+# downloads the asset whose name matches release_info.json's asset_name, and if
+# no asset matches it falls back to the alphabetically-first release asset — a
+# .sym debug file — then dies with "File is not a zip file"
+# (prestonbrown/helixscreen#993). This must also agree with
+# UpdateChecker::get_platform_key() (src/system/update_checker.cpp);
+# tests/shell/test_update_platform_coverage.bats enforces the agreement.
+#
+# Convention: a platform's asset is helixscreen-<platform>.zip. The only borrows
+# are handled by get_download_platform() (m1 -> pi/pi32 by userspace bitness) and
+# the k1-dynamic dev/debug variant, which is not built by the release matrix and
+# rides the stable k1 asset.
+#
+# Args: platform (detected platform key)
+# Echoes: release asset filename, e.g. helixscreen-pi.zip
+helix_self_update_asset() {
+    case "$1" in
+        k1-dynamic) echo "helixscreen-k1.zip" ;;
+        *)          echo "helixscreen-$(get_download_platform "$1").zip" ;;
+    esac
+}
+
 # AD5X (FlashForge / ZMOD) preflight: refuse to run outside the chroot.
 #
 # ZMOD installs HelixScreen into an overlay rooted at /usr/data/.mod/.zmod/.
@@ -3097,26 +3123,13 @@ write_release_info() {
         return 0
     fi
 
-    # Determine platform-specific asset name. Platforms without a dedicated
-    # release artifact (m1) borrow pi/pi32; pick the variant matching the
-    # device's userspace bitness so Moonraker self-update fetches a runnable
-    # binary instead of a 404.
-    local asset_name="helixscreen-pi.zip"
-    case "${PLATFORM:-}" in
-        pi32)       asset_name="helixscreen-pi32.zip" ;;
-        ad5m)       asset_name="helixscreen-ad5m.zip" ;;
-        ad5x)       asset_name="helixscreen-k1.zip" ;;
-        k1)         asset_name="helixscreen-k1.zip" ;;
-        k1-dynamic) asset_name="helixscreen-k1-dynamic.zip" ;;
-        k2)         asset_name="helixscreen-k2.zip" ;;
-        m1)
-            if [ "$(getconf LONG_BIT 2>/dev/null || echo)" = "32" ]; then
-                asset_name="helixscreen-pi32.zip"
-            else
-                asset_name="helixscreen-pi.zip"
-            fi
-            ;;
-    esac
+    # Resolve the platform-specific asset name through the single source of
+    # truth in platform.sh (shared with mk/cross.mk's baked release_info.json,
+    # so the two never drift). A wrong/missing asset_name makes Moonraker fall
+    # back to the alphabetically-first release asset — a .sym debug file — and
+    # die with "File is not a zip file" (prestonbrown/helixscreen#993).
+    local asset_name
+    asset_name="$(helix_self_update_asset "${PLATFORM:-pi}")"
 
     log_info "Writing release_info.json (${version})..."
     cat > "${release_info}.tmp" << EOF
@@ -3356,6 +3369,56 @@ reenable_disabled_services() {
     done < "$state_file"
 }
 
+# Undo per-printer Klipper includes recorded at install time (#986).
+# Reverses each entry in ${INSTALL_DIR}/config/.klipper_includes:
+#   cfg:<path>                      → remove the copied snippet
+#   include:<printer.cfg>:<relpath> → strip the [include <relpath>] line (and
+#                                     the installer's marker comment above it)
+# Must run BEFORE $INSTALL_DIR is removed (the state file lives in it) and
+# touches printer_data files that live outside $INSTALL_DIR.
+undo_klipper_includes() {
+    local state_file="${INSTALL_DIR}/config/.klipper_includes"
+    [ -f "$state_file" ] || return 0
+
+    log_info "Reverting HelixScreen Klipper config includes..."
+    while IFS= read -r entry; do
+        case "$entry" in ""|\#*) continue ;; esac
+
+        local type="${entry%%:*}"
+        local rest="${entry#*:}"
+
+        case "$type" in
+            cfg)
+                if [ -f "$rest" ]; then
+                    log_info "Removing Klipper snippet: $rest"
+                    $(file_sudo "$rest") rm -f "$rest" 2>/dev/null || true
+                fi
+                ;;
+            include)
+                # rest = "<printer.cfg path>:<relpath>"
+                local pcfg="${rest%%:*}"
+                local relpath="${rest#*:}"
+                if [ -f "$pcfg" ]; then
+                    log_info "Removing [include $relpath] from $pcfg"
+                    local include_line="[include ${relpath}]"
+                    local marker="# Added by HelixScreen installer (#986) -- ${relpath}"
+                    local tmp="${pcfg}.helix-uninstall.$$"
+                    # Drop the marker comment line and the include line. Anchored
+                    # full-line matches via awk for portability (no sed -i).
+                    if awk -v inc="$include_line" -v mark="$marker" \
+                        '$0 == inc { next } $0 == mark { next } { print }' \
+                        "$pcfg" > "$tmp" 2>/dev/null; then
+                        $(file_sudo "$pcfg") mv "$tmp" "$pcfg" 2>/dev/null \
+                            || rm -f "$tmp" 2>/dev/null || true
+                    else
+                        rm -f "$tmp" 2>/dev/null || true
+                    fi
+                fi
+                ;;
+        esac
+    done < "$state_file"
+}
+
 # Uninstall HelixScreen
 # Args: platform (optional)
 uninstall() {
@@ -3444,6 +3507,11 @@ uninstall() {
 
     # Re-enable services from state file (before removing install dir)
     reenable_disabled_services
+
+    # Revert per-printer Klipper includes (#986) — strip the [include] line from
+    # printer.cfg and remove the copied snippet. Must run before $INSTALL_DIR
+    # (which holds the .klipper_includes state file) is removed.
+    undo_klipper_includes
 
     # Remove installation (check all possible locations)
     local removed_dir=""

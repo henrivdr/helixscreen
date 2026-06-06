@@ -1,0 +1,43 @@
+{
+  "preset": "sovol_sv06_ace",
+  "_todo_986_comment": "DEFERRED, needs on-device verification before enabling (#986): (1) FILAMENT MACROS -- stock printer.cfg only defines underscore-internal _LOAD_FILAMENT / _UNLOAD_FILAMENT (there is NO public LOAD_FILAMENT/UNLOAD_FILAMENT), so HelixScreen's default load/unload buttons would call macros that don't exist on this printer. Do NOT add a default_macros block until the correct public-facing macro names (or a thin LOAD_FILAMENT wrapper around _LOAD_FILAMENT) are confirmed on hardware. (2) DISPLAY ROTATION -- the stock panel runs 480x272 rotated 180 degrees, but it is NOT yet confirmed whether HelixScreen needs display.rotate:180 on this panel; setting the wrong value would flip an already-correct display. Do NOT set display.rotate until verified on the actual unit.",
+  "input": {
+    "calibration": {
+      "_comment": "Known-good touch matrix from issue #123 (user R8CEH). Stopgap seed because the first-run touch-calibration math produces a bad matrix on this panel. Read at runtime from /input/calibration/*. DRY: the SAME matrix is also written at install time by config/install_seeds/sovol_sv06_ace.json (the installer seed) -- keep both in sync if either changes (#986).",
+      "valid": true,
+      "a": 1.66,
+      "b": 0.0,
+      "c": 0.0,
+      "d": 0.0,
+      "e": 1.76,
+      "f": 0.0,
+      "swap_axes": false
+    }
+  },
+  "printer": {
+    "leds": {
+      "_selected_strips_comment": "Pre-select the camera light so it is controllable as soon as Klipper exposes 'output_pin cameralight'.",
+      "selected_strips": ["output_pin cameralight"]
+    },
+    "_hardware_comment": "Confirmed stock Klipper object names from published Sovol/R8CEH SV06 Ace configs (#986). The stock printer.cfg uses STANDARD object names ([extruder], [heater_bed], [fan], [heater_fan hotend_fan], [filament_switch_sensor filament_sensor]), which match HelixScreen's built-in defaults -- so preset-mode skipping the heater/fan auto-mapping wizard is safe on this printer.",
+    "heaters": {
+      "bed": "heater_bed",
+      "hotend": "extruder"
+    },
+    "fans": {
+      "part": "fan",
+      "hotend": "heater_fan hotend_fan"
+    },
+    "filament_sensors": {
+      "_comment": "Stock filament sensor is a switch-type [filament_switch_sensor filament_sensor] (confirmed #986).",
+      "master_enabled": true,
+      "sensors": [
+        {
+          "klipper_name": "filament_switch_sensor filament_sensor",
+          "role": "runout",
+          "enabled": true
+        }
+      ]
+    }
+  }
+}

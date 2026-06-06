@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Module: competing_uis
-# Stop competing screen UIs (GuppyScreen, KlipperScreen, Xorg, stock Creality/FlashForge UI)
+# Stop competing screen UIs (GuppyScreen, KlipperScreen, Xorg, stock Creality/FlashForge/Sovol UI)
 #
 # Reads: AD5M_FIRMWARE, K1_FIRMWARE, INIT_SYSTEM, PREVIOUS_UI_SCRIPT, SUDO, INSTALL_DIR
 
@@ -10,8 +10,18 @@
 _HELIX_COMPETING_UIS_SOURCED=1
 
 # Known competing screen UIs to stop
-# Includes: GuppyScreen (AD5M/K1), Grumpyscreen (K1/Simple AF), KlipperScreen, FeatherScreen
-COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen"
+# Includes: GuppyScreen (AD5M/K1), Grumpyscreen (K1/Simple AF), KlipperScreen, FeatherScreen,
+# mksclient (Sovol SV06 Ace stock touchscreen UI)
+COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen mksclient"
+
+# Wayland compositors that hold the DRM/KMS master. On Armbian/Pi-class boards
+# (e.g. BTT CB1) KlipperScreen commonly runs *inside* one of these; the
+# compositor — not the UI process — owns /dev/dri/card0, so HelixScreen's direct
+# DRM output gets EACCES ("not DRM master") until it is stopped. Matched by exact
+# executable name via pidof. We deliberately do NOT touch getty/fbcon (they own
+# the legacy console /dev/fb0, not the KMS master) or seatd (a seat broker, not a
+# master holder) — stopping those carries risk without freeing card0.
+WAYLAND_COMPOSITORS="cage weston labwc sway wayfire"
 
 # Record a disabled service for later re-enablement
 # Args: $1 = type ("systemd" or "sysv-chmod"), $2 = target (service name or script path)
@@ -32,6 +42,35 @@ record_disabled_service() {
     fi
 
     echo "$entry" | $(file_sudo "${INSTALL_DIR}/config") tee -a "$state_file" >/dev/null
+}
+
+# Stop Wayland compositors holding the DRM master (cage/weston/labwc/sway/...).
+# Run AFTER the named-UI loop so a compositor launched by a UI service (e.g.
+# KlipperScreen.service ExecStart=cage -- screen.py) is already gone; this catches
+# a standalone compositor service or one orphaned/launched from an autologin
+# .profile that still pins /dev/dri/card0. Reversible: disabled services are
+# recorded for re-enablement on uninstall. Sets found_any in the caller's scope.
+stop_wayland_compositors() {
+    local comp svc
+    for comp in $WAYLAND_COMPOSITORS; do
+        # Standalone systemd units (cage@tty1.service, weston.service, ...)
+        if [ "$INIT_SYSTEM" = "systemd" ]; then
+            for svc in "$comp" "${comp}@tty1"; do
+                if systemctl is-active --quiet "$svc" 2>/dev/null; then
+                    log_info "Stopping Wayland compositor service $svc (holds DRM master)..."
+                    $SUDO systemctl stop "$svc" 2>/dev/null || true
+                    $SUDO systemctl disable "$svc" 2>/dev/null || true
+                    record_disabled_service "systemd" "$svc"
+                    found_any=true
+                fi
+            done
+        fi
+        # Kill any lingering compositor process (exact basename via pidof)
+        if kill_process_by_name "$comp"; then
+            log_info "Killed lingering Wayland compositor: $comp (was holding /dev/dri/card0)"
+            found_any=true
+        fi
+    done
 }
 
 # Stop ForgeX-specific competing UIs (stock FlashForge firmware UI)
@@ -93,6 +132,35 @@ stop_k1_stock_competing_uis() {
     # S99start_app also manages dropbear (SSH) on stock K1 firmware.
     # Disabling it kills SSH on next reboot (#535). Ensure SSH survives.
     ensure_k1_ssh
+}
+
+# Stop the Sovol SV06 Ace stock touchscreen UI (#986).
+# Unlike the K1/CC1 stock UIs, mksclient is NOT a systemd/init.d service: it is a
+# plain binary at /home/sovol/printer_data/build/mksclient run as user `sovol`.
+# So there is no init script to chmod -x; we disable persistence by removing the
+# execute bit on the binary itself (the existing re-enable path chmod +x restores
+# it). mksclient also exports sysfs GPIO 67 at boot (the camera light), which pins
+# it away from Klipper's [output_pin cameralight] — so after killing mksclient we
+# unexport GPIO 67 to release it. Sets found_any in the caller's scope.
+stop_sovol_competing_uis() {
+    local bin
+    for bin in /home/sovol/printer_data/build/mksclient /home/*/printer_data/build/mksclient; do
+        # Skip if the glob didn't match (literal pattern returned) or not a file.
+        [ -f "$bin" ] || continue
+        log_info "Stopping stock Sovol UI (mksclient: $bin)..."
+        kill_process_by_name mksclient || true
+        # Persistent disable: drop the execute bit so it can't relaunch on boot.
+        # Recorded as sysv-chmod so uninstall's chmod +x re-enables the binary.
+        $SUDO chmod a-x "$bin" 2>/dev/null || true
+        record_disabled_service "sysv-chmod" "$bin"
+        found_any=true
+    done
+
+    # mksclient exports GPIO 67 (camera light) at boot; release it so Klipper's
+    # [output_pin cameralight] can claim the line after the UI is gone.
+    if [ -e /sys/class/gpio/gpio67 ]; then
+        echo 67 > /sys/class/gpio/unexport 2>/dev/null || true
+    fi
 }
 
 # Ensure SSH (dropbear) is running and will start on boot.
@@ -277,6 +345,13 @@ stop_competing_uis() {
         stock_klipper|guilouz) stop_k1_stock_competing_uis ;;
     esac
 
+    # Sovol SV06 Ace: stock UI is the plain `mksclient` binary (not a service).
+    # Run the dedicated handler when the binary is present so it gets chmod-a-x'd
+    # and GPIO 67 is released (the generic loop below only does a fallback kill).
+    if [ -f /home/sovol/printer_data/build/mksclient ] || ls /home/*/printer_data/build/mksclient >/dev/null 2>&1; then
+        stop_sovol_competing_uis
+    fi
+
     # CC1 / COSMOS: use gui-switcher handoff instead of disabling peers.
     # Early-return so the generic loop below doesn't chmod out grumpyscreen/guppyscreen/atomscreen.
     if [ "${platform:-}" = "cc1" ]; then
@@ -339,6 +414,9 @@ stop_competing_uis() {
             found_any=true
         fi
     done
+
+    # Free the DRM master from any Wayland compositor (KlipperScreen-under-cage etc.)
+    stop_wayland_compositors
 
     if [ "$found_any" = true ]; then
         log_info "Waiting for competing UIs to stop..."
