@@ -506,22 +506,36 @@ else
     if [[ ! -f "$SYM_FILE" ]]; then
         echo "Downloading symbol map for v${VERSION}/${PLATFORM}..." >&2
         mkdir -p "$(dirname "$SYM_FILE")"
+        # Symbol maps are stored compressed (.sym.zst) since v0.99.73 — nm output
+        # compresses ~25:1. Try .sym.zst first (R2, then GitHub), then fall back
+        # to the legacy uncompressed .sym for older releases. R2 only keeps the 5
+        # most recent versions, so GitHub release assets are the long-tail fallback.
+        REPO="${HELIX_GITHUB_REPO:-prestonbrown/helixscreen}"
+        SYM_ZST_URL="${R2_BASE_URL}/v${VERSION}/${PLATFORM}.sym.zst"
         SYM_URL="${R2_BASE_URL}/v${VERSION}/${PLATFORM}.sym"
-        if ! curl -fsSL -o "$SYM_FILE" "$SYM_URL"; then
-            rm -f "$SYM_FILE"
-            # Fall back to GitHub release assets (R2 only keeps 5 most recent)
-            REPO="${HELIX_GITHUB_REPO:-prestonbrown/helixscreen}"
-            GH_SYM_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${PLATFORM}.sym"
-            echo "R2 symbol not found, trying GitHub release asset..." >&2
-            if ! curl -fsSL -L -o "$SYM_FILE" "$GH_SYM_URL"; then
-                echo "Error: Failed to download symbol map from both:" >&2
-                echo "  R2:     $SYM_URL" >&2
-                echo "  GitHub: $GH_SYM_URL" >&2
-                echo "  Check version/platform or set HELIX_SYM_FILE for a local file." >&2
-                rm -f "$SYM_FILE"
-                exit 1
-            fi
+        GH_SYM_ZST_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${PLATFORM}.sym.zst"
+        GH_SYM_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${PLATFORM}.sym"
+        have_zstd=0
+        command -v zstd >/dev/null 2>&1 && have_zstd=1
+
+        if [[ "$have_zstd" == 1 ]] && curl -fsSL -o "${SYM_FILE}.zst" "$SYM_ZST_URL" 2>/dev/null; then
+            zstd -d --rm -q "${SYM_FILE}.zst"
+        elif curl -fsSL -o "$SYM_FILE" "$SYM_URL" 2>/dev/null; then
+            : # legacy uncompressed map on R2 (pre-v0.99.73)
+        elif [[ "$have_zstd" == 1 ]] && curl -fsSL -L -o "${SYM_FILE}.zst" "$GH_SYM_ZST_URL" 2>/dev/null; then
+            echo "R2 symbol not found, downloaded compressed map from GitHub release..." >&2
+            zstd -d --rm -q "${SYM_FILE}.zst"
+        elif curl -fsSL -L -o "$SYM_FILE" "$GH_SYM_URL" 2>/dev/null; then
             echo "Downloaded from GitHub release (R2 version was pruned)" >&2
+        else
+            rm -f "$SYM_FILE" "${SYM_FILE}.zst"
+            echo "Error: Failed to download symbol map from R2 or GitHub:" >&2
+            echo "  R2:     $SYM_ZST_URL (and .sym)" >&2
+            echo "  GitHub: $GH_SYM_ZST_URL (and .sym)" >&2
+            echo "  Check version/platform or set HELIX_SYM_FILE for a local file." >&2
+            [[ "$have_zstd" == 0 ]] && \
+                echo "  Note: zstd not installed — only uncompressed .sym was attempted. Install: brew install zstd / apt install zstd" >&2
+            exit 1
         fi
         echo "Cached: $SYM_FILE" >&2
         prune_cache

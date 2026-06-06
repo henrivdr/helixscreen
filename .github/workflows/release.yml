@@ -433,9 +433,17 @@ jobs:
           [ -n "$sym_fb" ] && cp "$sym_fb" "release-files/${platform}-fbdev.sym"
         done
 
-        sym_count=$(find release-files -maxdepth 1 -name '*.sym' 2>/dev/null | wc -l)
-        echo "Symbol files attached to release ($sym_count .sym files):"
-        ls -lh release-files/*.sym 2>/dev/null || echo "  (none)"
+        # Compress the symbol maps before attaching them to the release.
+        # nm output compresses ~25:1 (pi.sym: 13MB -> ~540KB); the resolver
+        # (scripts/resolve-backtrace.sh) fetches .sym.zst first and decompresses.
+        for symfile in release-files/*.sym; do
+          [ -f "$symfile" ] || continue
+          zstd -19 --rm -q "$symfile"
+        done
+
+        sym_count=$(find release-files -maxdepth 1 -name '*.sym.zst' 2>/dev/null | wc -l)
+        echo "Symbol files attached to release ($sym_count .sym.zst files):"
+        ls -lh release-files/*.sym.zst 2>/dev/null || echo "  (none)"
 
     - name: Extract version from tag
       id: version
@@ -570,7 +578,7 @@ jobs:
           release-files/*.zip
           release-files/*.apk
           release-files/*.aab
-          release-files/*.sym
+          release-files/*.sym.zst
           release-files/install.sh
         fail_on_unmatched_files: false
       env:
@@ -853,20 +861,25 @@ jobs:
         done
 
         # Upload symbol maps and debug info (version-keyed, not channel-specific)
-        echo "=== Uploading symbol maps ==="
+        # Symbol maps are zstd-compressed (.sym.zst) — nm output compresses ~25:1.
+        # The resolver (scripts/resolve-backtrace.sh) fetches .sym.zst first.
+        echo "=== Uploading symbol maps (zstd compressed) ==="
         for symfile in symbol-files/*.sym; do
           [ -f "$symfile" ] || continue
           filename=$(basename "$symfile")
           platform="${filename%.sym}"
-          echo "Uploading symbols/v${RELEASE_VERSION}/${platform}.sym..."
-          aws s3 cp "$symfile" \
-            "s3://${R2_BUCKET}/symbols/v${RELEASE_VERSION}/${platform}.sym" \
+          echo "Compressing ${platform}.sym..."
+          zstd -19 --rm -q "$symfile"
+          echo "Uploading symbols/v${RELEASE_VERSION}/${platform}.sym.zst..."
+          aws s3 cp "${symfile}.zst" \
+            "s3://${R2_BUCKET}/symbols/v${RELEASE_VERSION}/${platform}.sym.zst" \
             --endpoint-url "$R2_ENDPOINT" \
-            --content-type "text/plain"
+            --content-type "application/zstd"
         done
 
         echo "=== Uploading debug info (zstd compressed) ==="
-        sym_count=$(find symbol-files -maxdepth 1 -name '*.sym' | wc -l)
+        # .sym files were zstd-compressed (--rm) above, so count the .sym.zst
+        sym_count=$(find symbol-files -maxdepth 1 -name '*.sym.zst' | wc -l)
         dbg_uploaded=0
         for dbgfile in symbol-files/*.debug; do
           [ -f "$dbgfile" ] || continue
