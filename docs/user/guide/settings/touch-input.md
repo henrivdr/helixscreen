@@ -29,7 +29,7 @@ Takes effect immediately — no restart required.
 
 ## Touch Jitter Filter
 
-A dead zone in pixels that suppresses tiny coordinate noise from the touch controller. Default `5` works for most panels.
+A dead zone in pixels that suppresses tiny coordinate noise from the touch controller. Range `0`–`30`, default `5` — which works for most panels.
 
 | Symptom | Suggested value |
 |---|---|
@@ -43,7 +43,7 @@ Requires a restart to take effect. HelixScreen offers a restart prompt automatic
 
 ## Scroll Engage Distance
 
-Pixels of finger travel before a press becomes a scroll instead of a click. Default `10`.
+Pixels of finger travel before a press becomes a scroll instead of a click. Range `1`–`20`, default `10`.
 
 | Symptom | Suggested value |
 |---|---|

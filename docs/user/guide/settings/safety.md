@@ -35,6 +35,28 @@ When a print cancel is sent, some printers take a long time to finish their canc
 
 ---
 
+## Confirm before running macros
+
+| State | Behavior |
+|-------|----------|
+| **Off** (default) | Tapping a macro button runs it immediately |
+| **On** | Shows a confirmation dialog before running any macro |
+
+Enable this if you have macros that move the toolhead, heat the printer, or perform other actions you don't want triggered by an accidental tap.
+
+---
+
+## Allow cold load/unload
+
+| State | Behavior |
+|-------|----------|
+| **Off** (default) | Filament load/unload is blocked when the nozzle is below the minimum extrude temperature |
+| **On** | Allows load/unload to run even when the nozzle is cold |
+
+By default, HelixScreen won't run a filament load or unload while the nozzle is too cold to extrude, matching Klipper's cold-extrude safety check. Turn this on if your load/unload macros heat the nozzle themselves before extruding, so the operation isn't blocked before your macro gets a chance to warm up.
+
+---
+
 ## Print Completion Alert
 
 Controls how HelixScreen notifies you when a print finishes, is cancelled, or fails — when you're not already on the print status screen.

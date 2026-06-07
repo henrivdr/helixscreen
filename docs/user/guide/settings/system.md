@@ -65,6 +65,14 @@ View installed plugins and their status. Plugins extend HelixScreen with additio
 
 ---
 
+## Performance
+
+> Only shown when performance data is available.
+
+The row description shows a live summary of host load. Tap to open the Performance overlay, which shows real-time host CPU and memory usage along with per-MCU load for each connected controller board. Useful for spotting an overloaded host or a struggling MCU when prints stutter or the UI feels sluggish.
+
+---
+
 ## Share Usage Data (Telemetry)
 
 Toggle anonymous usage telemetry that helps improve HelixScreen. Data collection is completely anonymous — no personal information, printer names, or file names are ever sent.

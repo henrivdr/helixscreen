@@ -4,11 +4,9 @@ The Hardware & Devices category contains settings for printers, peripherals, and
 
 ---
 
-## Hardware Issues
+## Hardware Health
 
-> Only shown when hardware issues are detected.
-
-Tap to open the Hardware Issues overlay, which lists detected issues:
+Tap to open the Hardware Health overlay, which lists detected hardware validation issues:
 
 | Category | Meaning |
 |----------|---------|
@@ -37,6 +35,14 @@ Manage all your configured printers. Tap to open the Printer Management overlay 
 - **Delete a printer** — Tap the trash icon next to any non-active printer and confirm. You cannot delete the last remaining printer.
 
 After switching, a toast notification confirms the new connection and you're taken to the Home panel.
+
+---
+
+## Camera
+
+> Only shown when a webcam is detected (an enabled webcam is configured in Moonraker).
+
+Tap to open a standalone fullscreen camera viewer showing the live feed from your printer's webcam.
 
 ---
 

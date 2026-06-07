@@ -25,7 +25,16 @@ Most users can leave this on **Auto**. Change it if HelixScreen picks the wrong 
 
 ## G-code Preview
 
-Enable interactive 3D G-code visualization during prints. When off, only the 2D layer view is available. Disable if your hardware struggles with 3D rendering.
+Choose how the G-code of the active print is visualized:
+
+| Option | Description |
+|--------|-------------|
+| **Auto** (default) | HelixScreen picks the best mode for your hardware — interactive 3D on capable devices, falling back to lighter modes on slower ones |
+| **3D View** | Interactive 3D rendering of the toolpath |
+| **2D Layers** | Flat per-layer view — lighter on the GPU than 3D |
+| **Thumbnail Only** | Shows just the slicer-embedded thumbnail, no live toolpath rendering — the lightest option |
+
+Use a lighter mode if your hardware struggles with 3D rendering.
 
 ---
 
