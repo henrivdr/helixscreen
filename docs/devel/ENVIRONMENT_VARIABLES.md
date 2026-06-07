@@ -463,6 +463,37 @@ HELIX_TOUCH_CAL_DEBOUNCE=1 HELIX_DEBUG_TOUCH=1 ./build/bin/helix-screen
 echo "HELIX_TOUCH_CAL_DEBOUNCE=1" >> ~/helixscreen/config/helixscreen.env
 ```
 
+### `HELIX_DEBUG_TOUCH`
+
+Enables `[TouchDebug]` diagnostic logging across the touch input and calibration paths. This is the primary tool for diagnosing a bad calibration result (wrong scale, or correct scale with garbage offsets — see [issue #986](https://github.com/prestonbrown/helixscreen/issues/986)), because it dumps every coordinate space involved so you can see exactly where they diverge.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HELIX_DEBUG_TOUCH` | Enable `[TouchDebug]` logging (`1` = enable; `HELIX_DEBUG_TOUCHES` also accepted) | Disabled |
+
+Also enableable at runtime via the `/input/debug_touches` config key.
+
+**What it logs (lines emitted during a calibration wizard run):**
+
+| Line | Coordinate space it reveals |
+|------|------------------------------|
+| `device detection: name=… event=…` / `abs=… multitouch=…` | which input device + capability flags |
+| `Touch ABS range: X(min..max), Y(min..max) — display: WxH` | the **raw** controller range vs the display (the linear-scale factor) |
+| `calibration target space: WxH display_rotation=N` | the space the on-screen **targets** are placed in (and whether rotation is active) |
+| `sample N/3 …` | each recorded tap as it's captured |
+| `compute_calibration inputs: screen[…] touch[…]` | the 3 **target** points vs the 3 **captured** points fed to the solve |
+| `determinant=… coefficients: a…f` / `transform: …` | the resulting affine matrix |
+
+If the `screen[]` (targets) and `touch[]` (captures) aren't in the same coordinate space — e.g. targets in `272x480` (rotated) while captures arrive scaled from an `800x480` ABS range — the solve yields a correct-ish scale with large translation offsets. That mismatch is what these lines are designed to surface.
+
+**Capturing a calibration diagnostic (e.g. to attach to a bug report):**
+```bash
+# Persist on the device, force the wizard, then run it once
+echo "HELIX_DEBUG_TOUCH=1" >> ~/helixscreen/config/helixscreen.env
+echo "HELIX_TOUCH_CALIBRATE=1" >> ~/helixscreen/config/helixscreen.env
+```
+The `[TouchDebug]` lines are logged at WARN, so they appear at the default log level — no `-v` needed. Then complete the 3-point wizard and grab a debug bundle (or the log). Composes with `HELIX_TOUCH_CAL_DEBOUNCE` (above) for per-press sampling evidence.
+
 ### Touch Jitter Filter
 
 Suppresses small coordinate jitter from noisy touch controllers (e.g., Goodix GT9xx) that would otherwise cause stationary taps to be misinterpreted as scroll/swipe gestures.

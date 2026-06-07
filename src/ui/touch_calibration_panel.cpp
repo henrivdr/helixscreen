@@ -68,6 +68,17 @@ void TouchCalibrationPanel::set_screen_size(int width, int height) {
     }
     screen_width_ = width;
     screen_height_ = height;
+
+    // Diagnostic: the target space the 3-point solve will map captured taps into.
+    // Combined with the ABS-range log (display backend) and the solve's
+    // screen/touch-point dump (touch_calibration.cpp), this pins down whether a
+    // coordinate-space/rotation mismatch is producing bad calibration (#986).
+    if (helix::is_touch_debug_enabled()) {
+        lv_display_t* disp = lv_display_get_default();
+        spdlog::warn("[TouchDebug] calibration target space: {}x{} display_rotation={}",
+                     screen_width_, screen_height_,
+                     disp ? static_cast<int>(lv_display_get_rotation(disp)) : -1);
+    }
 }
 
 Point TouchCalibrationPanel::compute_target_position(int step) const {
