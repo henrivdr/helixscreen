@@ -316,6 +316,10 @@
   <translation tag="Changes can be reversed anytime using the Macro Viewer." ru="Изменения можно отменить в любое время через Macro Viewer."/>
   <translation tag="Check Again" ru="Проверить снова"/>
   <translation tag="Check for Updates" ru="Проверить обновления"/>
+  <translation tag="Check slot" ru="Проверить слот"/>
+  <translation tag="Check slot failed: {}" ru="Ошибка проверки слота: {}"/>
+  <translation tag="Check slots" ru="Проверить слоты"/>
+  <translation tag="Check slots failed: {}" ru="Ошибка проверки слотов: {}"/>
   <translation tag="Check the filament path and try again." ru="Проверьте путь филамента и попробуйте снова."/>
   <translation tag="Check your heater&apos;s rating (typically 40-60W for hotends)" ru="Проверьте мощность нагревателя (обычно 40–60W для хотэндов)"/>
   <translation tag="Checking" ru="Проверка"/>
@@ -512,6 +516,7 @@
   <translation tag="Don&apos;t Save" ru="Не сохранять"/>
   <translation tag="Don&apos;t ask again" ru="Больше не спрашивать"/>
   <translation tag="Done" ru="Готово"/>
+  <translation tag="Down" ru="Вниз"/>
   <translation tag="Download update?" ru="Загрузить обновление?"/>
   <translation tag="Download v{}?" ru="Загрузить v{}?"/>
   <translation tag="Downloading..." ru="Загрузка..."/>
@@ -751,6 +756,7 @@
   <translation tag="G-code Console" ru="Консоль G-code"/>
   <translation tag="G-code Preview" ru="Просмотр G-code"/>
   <translation tag="G-code commands will appear here" ru="Здесь будут отображаться G-code команды"/>
+  <translation tag="Gear motor synced" ru="Шестерёнчатый мотор синхронизирован"/>
   <translation tag="Gear sync" ru="Синхронизация шестерни"/>
   <translation tag="Generic" ru="Общий"/>
   <translation tag="Get help and share feedback" ru="Получить помощь и поделиться отзывом"/>
@@ -808,6 +814,7 @@
   <translation tag="Hide Temperature Reports" ru="Скрыть отчёты о температуре"/>
   <translation tag="Home" ru="Главная"/>
   <translation tag="Home failed" ru="Парковка не удалась"/>
+  <translation tag="Home selector" ru="Парковать селектор"/>
   <translation tag="Homing AFC system..." ru="Парковка системы AFC..."/>
   <translation tag="Homing X..." ru="Парковка X..."/>
   <translation tag="Homing XY..." ru="Парковка XY..."/>
@@ -960,6 +967,7 @@
   <translation tag="MCU, host, and auxiliary temperature monitoring" ru="Мониторинг температуры MCU, хоста и вспомогательных датчиков"/>
   <translation tag="MDI Icons" ru="Иконки MDI"/>
   <translation tag="MISSING CONFIGURED" ru="ОТСУТСТВУЕТ НАСТРОЕННОЕ"/>
+  <translation tag="MMU command failed: {}" ru="Ошибка команды MMU: {}"/>
   <translation tag="MPC" ru="MPC"/>
   <translation tag="Machine Limits" ru="Ограничения принтера"/>
   <translation tag="Macro" ru="Макрос"/>
@@ -1036,7 +1044,9 @@
   <translation tag="Motors Off" ru="Отключить моторы"/>
   <translation tag="Motors disable failed: {}" ru="Ошибка отключения моторов: {}"/>
   <translation tag="Motors disabled" ru="Моторы отключены"/>
+  <translation tag="Move" ru="Двигать"/>
   <translation tag="Move paper back and forth while adjusting. Stop when paper catches slightly but still slides." ru="Перемещайте бумагу вперёд-назад во время регулировки. Остановитесь, когда бумага слегка цепляется, но ещё скользит."/>
+  <translation tag="Move selector" ru="Двигать селектор"/>
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." ru="Перемещает печатающую головку для измерения частот вибрации по каждой оси. Занимает 2-3 минуты. Принтер будет шуметь — это нормально."/>
   <translation tag="Multi-Filament" ru="Мульти-филамент"/>
   <translation tag="Multi-Filament Overview" ru="Обзор мульти-филамента"/>
@@ -1375,6 +1385,7 @@
   <translation tag="Quick actions, calibration, speed" ru="Быстрые действия, калибровка, скорость"/>
   <translation tag="RSS:" ru="RSS:"/>
   <translation tag="Re-probe" ru="Перепроверить"/>
+  <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." ru="Повторно синхронизирует отслеживаемое состояние Happy Hare с оборудованием."/>
   <translation tag="Ready" ru="Готов"/>
   <translation tag="Ready to Apply" ru="Готово к применению"/>
   <translation tag="Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"/>
@@ -1390,6 +1401,7 @@
   <translation tag="Recorded timelapses will appear here" ru="Записанные таймлапсы появятся здесь"/>
   <translation tag="Recording Mode" ru="Режим записи"/>
   <translation tag="Recover" ru="Восстановить"/>
+  <translation tag="Recover MMU state?" ru="Восстановить состояние MMU?"/>
   <translation tag="Recovering AFC system..." ru="Восстановление системы AFC..."/>
   <translation tag="Recovery failed" ru="Восстановление не удалось"/>
   <translation tag="Reduce ringing and ghosting artifacts" ru="Уменьшить артефакты звона и двоения"/>
@@ -1556,6 +1568,8 @@
   <translation tag="Select macro for second button" ru="Выберите макрос для второй кнопки"/>
   <translation tag="Select macro for third button" ru="Выберите макрос для третьей кнопки"/>
   <translation tag="Select sensor" ru="Выбрать датчик"/>
+  <translation tag="Select slot" ru="Выбрать слот"/>
+  <translation tag="Select slot failed: {}" ru="Ошибка выбора слота: {}"/>
   <translation tag="Select the heaters Klipper uses for your bed and hotend" ru="Выберите нагреватели Klipper для стола и хотенда"/>
   <translation tag="Select which devices the home screen power button controls" ru="Выберите устройства для кнопки питания на главном экране"/>
   <translation tag="Select which sensor triggers pause on filament runout" ru="Выберите датчик, который ставит на паузу при окончании филамента"/>
@@ -1563,6 +1577,7 @@
   <translation tag="Selected" ru="Выбрано"/>
   <translation tag="Selecting" ru="Выбор"/>
   <translation tag="Selecting slot..." ru="Выбор слота..."/>
+  <translation tag="Selector" ru="Селектор"/>
   <translation tag="Self-Test" ru="Самотестирование"/>
   <translation tag="Semantic Size Parameter Tests" ru="Тесты семантических параметров размера"/>
   <translation tag="Send Report" ru="Отправить отчёт"/>
@@ -1575,6 +1590,7 @@
   <translation tag="Sensors" ru="Датчики"/>
   <translation tag="Separate on/off macros. HelixScreen tracks the state." ru="Отдельные макросы вкл/выкл. HelixScreen отслеживает состояние."/>
   <translation tag="Server Setup" ru="Настройка сервера"/>
+  <translation tag="Servo" ru="Сервопривод"/>
   <translation tag="Set " ru="Установить "/>
   <translation tag="Set Active" ru="Сделать активной"/>
   <translation tag="Set PIN" ru="Установить PIN"/>
@@ -1845,6 +1861,7 @@
   <translation tag="Unmapped" ru="Не назначен"/>
   <translation tag="Unretract Extra" ru="Дополнительная подача"/>
   <translation tag="Unretract Speed" ru="Скорость возврата"/>
+  <translation tag="Up" ru="Вверх"/>
   <translation tag="Update" ru="Обновить"/>
   <translation tag="Update Available" ru="Доступно обновление"/>
   <translation tag="Update Channel" ru="Канал обновлений"/>
@@ -1881,6 +1898,7 @@
   <translation tag="View Timelapse" ru="Просмотр таймлапса"/>
   <translation tag="View and rename fans" ru="Просмотр и переименование вентиляторов"/>
   <translation tag="View installed plugins and status" ru="Просмотр установленных плагинов и статуса"/>
+  <translation tag="View live camera feed" ru="Просмотр трансляции с камеры"/>
   <translation tag="View print statistics and job history" ru="Просмотр статистики печати и истории заданий"/>
   <translation tag="Visual Fine-Tuning" ru="Визуальная тонкая настройка"/>
   <translation tag="Volume" ru="Громкость"/>

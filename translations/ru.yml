@@ -316,6 +316,10 @@ translations:
   Changes can be reversed anytime using the Macro Viewer.: Изменения можно отменить в любое время через Macro Viewer.
   Check Again: Проверить снова
   Check for Updates: Проверить обновления
+  Check slot: Проверить слот
+  'Check slot failed: {}': 'Ошибка проверки слота: {}'
+  Check slots: Проверить слоты
+  'Check slots failed: {}': 'Ошибка проверки слотов: {}'
   Check the filament path and try again.: Проверьте путь филамента и попробуйте снова.
   Check your heater's rating (typically 40-60W for hotends): Проверьте мощность нагревателя (обычно 40–60W для хотэндов)
   Checking: 'Проверка'
@@ -512,6 +516,7 @@ translations:
   Don't Save: Не сохранять
   Don't ask again: Больше не спрашивать
   Done: Готово
+  Down: Вниз
   Download update?: Загрузить обновление?
   Download v{}?: Загрузить v{}?
   Downloading...: Загрузка...
@@ -751,6 +756,7 @@ translations:
   G-code Console: Консоль G-code
   G-code Preview: Просмотр G-code
   G-code commands will appear here: Здесь будут отображаться G-code команды
+  Gear motor synced: Шестерёнчатый мотор синхронизирован
   Gear sync: Синхронизация шестерни
   Generic: Общий
   Get help and share feedback: Получить помощь и поделиться отзывом
@@ -808,6 +814,7 @@ translations:
   Hide Firmware Noise: Скрыть служебные сообщения прошивки
   Hide Temperature Reports: Скрыть отчёты о температуре
   Home: Главная
+  Home selector: Парковать селектор
   Home failed: Парковка не удалась
   Homing AFC system...: Парковка системы AFC...
   Homing X...: Парковка X...
@@ -962,6 +969,7 @@ translations:
   MCU, host, and auxiliary temperature monitoring: Мониторинг температуры MCU, хоста и вспомогательных датчиков
   MDI Icons: Иконки MDI
   MISSING CONFIGURED: ОТСУТСТВУЕТ НАСТРОЕННОЕ
+  'MMU command failed: {}': 'Ошибка команды MMU: {}'
   MPC: MPC
   Machine Limits: Ограничения принтера
   Macro: Макрос
@@ -1029,6 +1037,8 @@ translations:
   Modified: Изменён
   Monitoring: Мониторинг
   Month: Месяц
+  Move: Двигать
+  Move selector: Двигать селектор
   Moonraker: Moonraker
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker перезапущен, но Spoolman не подключен. Проверьте сервер.
   Moonraker restarting...\nWaiting for reconnection...: Moonraker перезапускается...\nОжидание переподключения...
@@ -1378,6 +1388,7 @@ translations:
   Quick actions, calibration, speed: Быстрые действия, калибровка, скорость
   'RSS:': 'RSS:'
   Re-probe: Перепроверить
+  Re-syncs Happy Hare's tracked state with the hardware.: Повторно синхронизирует отслеживаемое состояние Happy Hare с оборудованием.
   Ready: Готов
   Ready to Apply: Готово к применению
   'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': ''
@@ -1393,6 +1404,7 @@ translations:
   Recorded timelapses will appear here: Записанные таймлапсы появятся здесь
   Recording Mode: Режим записи
   Recover: Восстановить
+  Recover MMU state?: Восстановить состояние MMU?
   Recovering AFC system...: Восстановление системы AFC...
   Recovery failed: Восстановление не удалось
   Reduce ringing and ghosting artifacts: Уменьшить артефакты звона и двоения
@@ -1560,6 +1572,8 @@ translations:
   Select macro for second button: Выберите макрос для второй кнопки
   Select macro for third button: Выберите макрос для третьей кнопки
   Select sensor: Выбрать датчик
+  Select slot: Выбрать слот
+  'Select slot failed: {}': 'Ошибка выбора слота: {}'
   Select the heaters Klipper uses for your bed and hotend: Выберите нагреватели Klipper для стола и хотенда
   Select which devices the home screen power button controls: Выберите устройства для кнопки питания на главном экране
   Select which sensor triggers pause on filament runout: Выберите датчик, который ставит на паузу при окончании филамента
@@ -1567,6 +1581,7 @@ translations:
   Selected: 'Выбрано'
   Selecting: 'Выбор'
   Selecting slot...: Выбор слота...
+  Selector: Селектор
   Self-Test: Самотестирование
   Semantic Size Parameter Tests: Тесты семантических параметров размера
   Send Report: Отправить отчёт
@@ -1578,6 +1593,7 @@ translations:
   Sensor Temperature: Температура датчика
   Sensors: Датчики
   Separate on/off macros. HelixScreen tracks the state.: Отдельные макросы вкл/выкл. HelixScreen отслеживает состояние.
+  Servo: Сервопривод
   Server Setup: Настройка сервера
   'Set ': 'Установить '
   Set Active: Сделать активной
@@ -1855,6 +1871,7 @@ translations:
   Unmapped: Не назначен
   Unretract Extra: Дополнительная подача
   Unretract Speed: Скорость возврата
+  Up: Вверх
   Update: 'Обновить'
   Update Available: Доступно обновление
   Update Channel: Канал обновлений
@@ -1891,6 +1908,7 @@ translations:
   View Timelapse: Просмотр таймлапса
   View and rename fans: Просмотр и переименование вентиляторов
   View installed plugins and status: Просмотр установленных плагинов и статуса
+  View live camera feed: Просмотр трансляции с камеры
   View print statistics and job history: Просмотр статистики печати и истории заданий
   Visual Fine-Tuning: Визуальная тонкая настройка
   Volume: Громкость
