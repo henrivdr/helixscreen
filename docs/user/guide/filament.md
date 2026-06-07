@@ -78,6 +78,18 @@ Below the slot grid, a **filament path diagram** shows the routing from slots th
 
 Above the slot view, a **mini temperature graph** shows live nozzle, bed, and chamber temperatures (when a chamber sensor or heater is present) so you can monitor heating during filament operations without switching panels.
 
+#### Reading Error States
+
+When a slot runs into trouble, HelixScreen shows it visually so you don't have to dig through logs:
+
+- **Error dot** — A small colored dot appears at the corner of a slot's spool when that slot reports a problem. **Red** means an error (jam, runout, hardware fault); **amber** means a warning. With animations enabled, the dot gently pulses to draw your eye.
+- **Buffer-health tint** — On systems with a buffer between the slots and the toolhead (AFC TurtleNeck, or Happy Hare with sync feedback), the hub on the filament path diagram changes color as the buffer drifts toward a fault: green when healthy, yellow when approaching the fault threshold, and red when at or past it.
+
+**To recover:**
+
+- Tap the affected slot and choose **Reset Lane** to clear a jam or error on that one slot (shown only on backends that support per-slot reset).
+- For a system-wide problem, use **Reset** in the sidebar, or **Recover** in the AMS Management overlay (Settings), to bring the whole system back to a known-good state.
+
 ### Sidebar (Right)
 
 The right sidebar shows the status of the currently loaded filament and provides quick-access controls.
@@ -115,15 +127,17 @@ Each step updates in real time so you can see exactly where the operation is.
 |--------|-------------|
 | **Load** | Feed filament from this slot to the toolhead. Disabled if the slot is empty. |
 | **Unload** | Retract filament from this slot. Only available if this slot is currently loaded. |
+| **Eject** | Push filament fully out of the lane to release the spool, when the slot has filament in its lane but **not** loaded into the toolhead. Replaces the Unload button in that state. Only on backends that support per-lane eject (AFC and Happy Hare). |
 | **Reset Lane** | Clear an error or jam state on this slot. Only shown if your backend supports per-slot reset. |
 | **Spool Info** | Open the filament editor to view or change material, color, vendor, and remaining weight. |
 | **Select Spool** | Assign a saved Spoolman spool to this slot. Only shown when Spoolman is configured. |
 | **Scan QR Code** | Scan a filament QR code to auto-fill spool data. Only shown when Spoolman is configured. |
 
-For advanced multi-tool setups, the context menu also includes:
+On systems that support **Endless Spool**, the context menu also includes:
 
-- **Tool Mapping** — Assign which extruder tool (T0, T1, etc.) this slot feeds
-- **Backup Slot** (Endless Spool) — Choose a backup slot to automatically switch to if this spool runs out mid-print
+- **Backup Slot** — Choose a backup slot to automatically switch to if this spool runs out mid-print. The backup must hold a compatible material; the menu warns you if you pick an incompatible one. Shown only on backends that support endless spool (AFC, Happy Hare, and CFS auto-refill).
+
+> **Assigning tools:** Tool-to-slot mapping isn't set from the slot context menu — it's done from the **filament mapping card** that appears when you select a file to print. See [Tool Mapping](#tool-mapping) below.
 
 ### Editing Filament Properties
 
@@ -152,6 +166,20 @@ Tap **Spool Info** in the slot context menu to open the filament editor. This le
 
 Tap **Save** to apply your changes, or **Cancel** to discard them.
 
+### Tool Mapping
+
+For multi-tool prints, you can control which AMS slot feeds each tool the slicer expects (T0, T1, T2, …). The mapping controls appear as a **filament mapping card** on the file detail screen — open a file from the print browser and, if your file uses multiple tools and your AMS supports editable tool mapping, the card shows a compact row of color pairs. Tap the card to open the **Filament Mapping** dialog.
+
+In the dialog you get one row per tool in the file:
+
+- **Map to closest colors with matching material** (toggle at the top) — When on, HelixScreen auto-assigns each tool to the loaded slot with the nearest color and a compatible material; the rows become read-only. When off, you assign tools yourself.
+- **Manual assignment** — With the toggle off, tap a tool's row to pick which slot feeds it.
+- **Mismatch warnings** — A warning icon appears on any row mapped to an empty slot or a slot whose material doesn't match what the tool needs.
+
+Tap **Done** to keep your mapping, or **Cancel** to discard it.
+
+> **Note:** The mapping card only appears on backends with editable tool mapping. On fixed 1:1 systems (Snapmaker U1, ACE) tools always map directly to their matching slot, so there's nothing to assign.
+
 ### Syncing with OrcaSlicer 2.3.2+
 
 When you edit spool info in HelixScreen — on any supported filament system (AD5X IFS, Snapmaker U1, ACE, CFS) — that information is saved to your printer in the standard location OrcaSlicer 2.3.2 and later reads automatically. Open OrcaSlicer after editing and your slot's vendor, material, color, and Spoolman link show up in the filament panel with no extra setup.
@@ -172,7 +200,21 @@ Tap **Settings** in the sidebar to open the AMS Management overlay with advanced
 - **Bypass Mode** — Toggle direct-feed mode (if supported by hardware)
 - **System status** — Current system state and firmware version
 
-Additional device-specific settings may appear as expandable sections depending on your hardware.
+Below the top-level controls, **device-specific settings appear as expandable sections** that vary by hardware. Tap a section to open it; inside you'll find buttons, on/off toggles, and sliders for that group, and changes apply immediately.
+
+**AFC (Box Turtle and friends)** exposes the richest set, organized into sections:
+
+| Section | What's inside |
+|---------|---------------|
+| **Setup** | Run Calibration Wizard, Bowden Length, LED toggles (system + per-toolhead), Quiet Mode |
+| **Speed Settings** | Forward and reverse move-speed multipliers |
+| **Toolhead** | Sensor-to-nozzle, unload, and post-sensor clear distances (per tool) |
+| **Maintenance** | Test All Lanes, Change Blade, Park, Clean Brush, Reset Motor Timer |
+| **Hub & Cutter** | Cutter enable, cut distance, hub bowden length, assisted retract |
+| **Tip Forming** | Ramming volume, unloading start speed, cooling-tube length and retraction |
+| **Purge & Wipe** | Purge enable/length, brush-wipe enable |
+
+Other backends show their own (usually smaller) set of sections, or none at all.
 
 ### Tips
 
@@ -197,12 +239,13 @@ When multiple backends are detected:
 
 | System | Description |
 |--------|-------------|
-| **CFS** | Creality Filament System (K2 series printers) |
+| **CFS** | Creality Filament System (K2 series, plus K1/K1C/K1 Max with the official CFS upgrade) |
 | **Happy Hare** | MMU2, ERCF, 3MS, Tradrack, EMU |
 | **AFC** | Box Turtle, OpenAMS, ViViD |
 | **ACE** | Anycubic ACE Pro (via ValgACE/BunnyACE/DuckACE Klipper drivers) |
 | **Tool Changer** | Toolchanger-based filament routing |
 | **AD5X IFS** | FlashForge Adventurer 5X Intelligent Filament Switching (requires ZMOD firmware v1.7.0 or newer) |
+| **SnapSwap** | Snapmaker U1 4-toolhead changer (parallel, one independent toolhead per slot) |
 
 Each system displays its own logo in the AMS panel header. Happy Hare and AFC show their firmware logos; specific hardware variants (ERCF, Box Turtle, ViViD, etc.) show hardware-specific logos when detected.
 
@@ -212,7 +255,9 @@ Single-backend setups are unaffected — the panel works exactly as before with 
 
 ## Creality Filament System (CFS)
 
-The CFS is an enclosed filament storage and delivery system for **Creality K2 series** printers. Each CFS unit holds 4 spools of filament, and up to 4 units can be connected (16 total slots). HelixScreen auto-detects CFS when connected to a K2 printer.
+The CFS is an enclosed filament storage and delivery system for **Creality** printers. It ships on the **K2 series**, and is also supported on the **K1, K1C, and K1 Max** once you install Creality's official CFS upgrade kit and firmware. Each CFS unit holds 4 spools of filament, and up to 4 units can be connected (16 total slots). HelixScreen auto-detects CFS — and the correct macro dialect for your printer (K2 uses `CR_BOX_*` macros, K1 series uses `BOX_*`) — when connected.
+
+> **K1 series note:** CFS on the K1, K1C, and K1 Max requires Creality's official CFS upgrade firmware (v2.3.5.33 or newer). HelixScreen detects the K1 macro dialect automatically; no manual configuration is needed.
 
 ### Slot Layout
 
@@ -247,6 +292,28 @@ Tap the menu icon on the CFS panel to access device actions:
 | **Refresh** | Re-read all RFID tags across all units — useful after swapping spools while the printer was off |
 | **Auto-Refill** | Toggle automatic backup spool switching — when enabled, if the current spool runs out mid-print, the system loads the next spool of the same material |
 | **Nozzle Clean** | Trigger the nozzle cleaning routine using the CFS's built-in silicone strip |
+
+---
+
+## Snapmaker U1 (SnapSwap)
+
+The Snapmaker U1 is a **4-toolhead changer**, not a shared-path AMS. Each of its four slots has its own independent toolhead, so the topology is **parallel** — slot 1 always feeds tool 0, slot 2 feeds tool 1, and so on (a direct 1-to-1 mapping). There is no hub or selector to share between slots.
+
+### RFID Detection
+
+Each channel has an RFID reader that reads Snapmaker filament tags automatically:
+
+- Material type and sub-type (e.g. "PLA SnapSpeed"), manufacturer, and brand appear per slot
+- Color, recommended nozzle/bed temperatures, and spool weight come from the tag
+- When you physically swap a spool, the new tag is detected and any stale metadata you'd previously entered for that slot is cleared automatically
+
+You can still edit spool info manually from the slot context menu for spools without a tag.
+
+### Runout and Resume
+
+The U1 tracks filament with a motion sensor per tool. When a runout fires mid-print, HelixScreen prepares the printer before resuming — disabling the runout sensor, heating the tool, priming a short length of filament past the encoder, and re-enabling the sensor — so a plain Resume actually continues the print. If the motion sensor reports a runout but filament is still physically present (a stale sensor reading), HelixScreen recovers silently without prompting you.
+
+> **Note:** Because each toolhead is independent, the Snapmaker backend has no Home, Recover, Reset, Bypass, or Endless Spool controls — those apply to shared-path AMS hardware only.
 
 ---
 

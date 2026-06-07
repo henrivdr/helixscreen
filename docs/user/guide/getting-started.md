@@ -70,8 +70,8 @@ The first time you launch HelixScreen, a setup wizard guides you through configu
 
 **Core steps (always shown):**
 
-1. **WiFi Setup** — Scan and connect to your network
-2. **Printer Connection** — Enter your printer's IP address or hostname. HelixScreen tests the connection to Moonraker before continuing.
+1. **Printer Setup: Network** — Configure WiFi for this device, or skip if you're using Ethernet
+2. **Printer Setup: Connection** — Enter your printer's Moonraker address. If Moonraker is local or your screen is attached directly to the printer, HelixScreen connects automatically. Otherwise, enter the host and tap **Test Connection** before continuing.
 3. **Heater Selection** — Choose your bed and hotend heaters from the hardware detected on your printer
 4. **Fan Selection** — Choose your part cooling and hotend fans
 5. **Summary** — Review all your selections and save
@@ -87,18 +87,31 @@ The first time you launch HelixScreen, a setup wizard guides you through configu
 | **LED Configuration** | Addressable LED strips (NeoPixel, RGB) are discovered |
 | **Filament Sensor Setup** | Multiple filament runout sensors are detected |
 | **Input Shaper** | An accelerometer is detected on the printer |
+| **Help Improve HelixScreen** | Shown on preset printers in place of the Summary step (see below) |
+
+The **Help Improve HelixScreen** step asks whether to share anonymous usage statistics. No personal data is ever collected, and you can change this choice later in **Settings > System**. For details on what is and isn't collected, see the [Telemetry guide](../../TELEMETRY.md).
 
 The progress indicator (e.g., "Step 3 of 8") only counts the steps that apply to your setup — skipped steps aren't shown or counted.
+
+### Preset Mode vs. Normal Setup
+
+Some printers (for example the Creality K1 or the FlashForge Adventurer 5M) ship with a preset that already knows the hardware layout. On these devices the wizard runs in **preset mode**: it skips the heater, fan, AMS, LED, filament-sensor, input-shaper, and printer-identification steps, and shows the **Help Improve HelixScreen** telemetry step in place of the Summary. The result is a shorter, mostly automatic setup flow. On a printer without a preset, you'll see the full hardware-selection flow ending in the Summary step instead.
+
+### Adding Another Printer
+
+If you have beta multi-printer support enabled, you can add a second printer later from the printer manager. This re-runs the wizard for the new printer, but skips the WiFi and Language steps (those are device-wide and already configured). On the first step, the button reads **Cancel** instead of **Back** — tapping it discards the new printer and returns you to the one you were using. See [Beta Features](beta-features.md) for how to enable multi-printer support.
 
 > **Tip:** You can always go back to previous steps using the **Back** button. The connection test in step 2 must pass before you can proceed.
 
 For details on touch screen calibration, see the [Touch Calibration Guide](touch-calibration.md).
 
-### WiFi Configuration
+**What's next:** Once you finish the wizard, HelixScreen drops you on the Home panel, your main dashboard for status, prints, and temperatures — see the [Home Panel guide](home-panel.md).
 
-![WiFi Setup](../../images/user/wizard-wifi.png)
+### Network (WiFi) Configuration
 
-If your device needs WiFi:
+![Printer Setup: Network](../../images/user/wizard-wifi.png)
+
+This step appears on-screen as **Printer Setup: Network**. If your device needs WiFi:
 
 1. Available networks appear in a list
 2. Tap a network to select it
@@ -117,7 +130,9 @@ Enter your Moonraker connection details:
 - **Port**: Defaults to `7125` (auto-filled when you tap **Test Connection** if left empty)
 - **API Key**: Only needed if Moonraker requires authentication
 
-Tap **Test Connection** to verify before continuing. If the port field is empty, it auto-fills with the default port `7125`. HelixScreen auto-discovers printers on your network when possible — tap a discovered printer to auto-fill the connection details.
+If Moonraker is running locally — or your screen is attached directly to the printer — HelixScreen connects automatically, and you usually won't need to change anything here. Otherwise, enter the host and tap **Test Connection** to verify before continuing. If the port field is empty, it auto-fills with the default port `7125`.
+
+> **Changing the host later:** You can point HelixScreen at a different Moonraker host anytime from **Settings > System > Host** — see [System Settings](settings/system.md).
 
 ---
 

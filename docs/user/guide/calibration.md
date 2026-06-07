@@ -10,21 +10,42 @@ HelixScreen provides built-in tools for the most common Klipper calibration task
 
 ![Bed Mesh Panel](../../images/user/controls-bed-mesh.png)
 
-3D visualization of your bed surface:
+The Bed Mesh panel has two parts: a 3D visualization of your bed surface on the left, and information cards on the right.
+
+**Visualization (left):**
 
 - **Color gradient**: Blue (low) to Red (high)
 - **Touch to rotate** the 3D view
-- **Mesh profile selector**: Switch between saved meshes
+- When no mesh is loaded, the panel shows a "No mesh loaded" placeholder
 
-**Actions:**
+**Current Mesh card (right):** shows the active profile name, mesh size (probe-point grid), highest and lowest points, and the overall Z range (variance).
 
-| Button | What It Does |
-|--------|--------------|
-| **Calibrate** | Run new mesh probing |
-| **Clear** | Remove current mesh from memory |
-| **Load** | Load a saved mesh profile |
+**Probe a new mesh:** tap **Probe** in the panel header to run a fresh bed mesh calibration.
 
 The visualization mode (3D, 2D, or Auto) can be changed in **Settings > Display**.
+
+### Profile Management
+
+The **Profiles** card on the right lists your saved mesh profiles. Each row shows the profile name and its Z range, with action icons on the right:
+
+| Icon | Appears on | What It Does |
+|------|-----------|--------------|
+| **Load** (up arrow) | Inactive profiles | Loads that saved mesh, making it the active profile |
+| **Rename** (pencil) | The active profile | Opens the rename dialog (see below) |
+| **Delete** (trash) | Every profile | Removes that saved profile |
+
+Tapping a row (or its Load icon) loads that profile.
+
+**Renaming a profile:**
+
+1. Tap the **pencil** icon on the active profile
+2. The rename dialog shows the current name and a field for the new name
+3. Enter a new profile name and tap **Rename**
+
+**After renaming or deleting**, HelixScreen asks **"Save changes to persist them across restarts?"** Profile changes only live in memory until saved:
+
+- Tap **Save** to write the change to your printer's saved configuration. This persists the change across restarts but **restarts Klipper**.
+- Tap **Don't Save** to keep the change for the current session only — it will be lost when the printer reboots.
 
 ---
 

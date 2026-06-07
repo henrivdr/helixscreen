@@ -38,7 +38,17 @@ A full-featured G-code terminal for sending commands directly to your printer an
 - **Timestamps**: On medium and larger screens, each line shows an `HH:MM:SS` timestamp
 - **Clear button**: Tap the trash icon to clear the display (with confirmation)
 - **Monospace font**: Console text uses Source Code Pro for easier reading of G-code output
-- Temperature status messages (`T:210.0 /210.0 B:60.0 /60.0`) are automatically filtered out to reduce noise
+
+**Filters:**
+
+Open the console settings (the **tune/settings icon** in the console) to control which background chatter is hidden. Both filters are **on by default**, and your choices are saved:
+
+| Filter | What it hides | Default |
+|--------|---------------|---------|
+| **Hide Temperature Reports** | Periodic `T:.../B:...` temperature status lines that Klipper streams continuously | On |
+| **Hide Firmware Noise** | Raw debug output from printer firmware modules (the exact patterns are defined per printer model) | On |
+
+Turn a filter **off** if you want to see that output — for example, turn off "Hide Temperature Reports" when you're watching heater behavior live, or turn off "Hide Firmware Noise" when troubleshooting a specific firmware module.
 
 ---
 
@@ -124,10 +134,17 @@ At the top of the power panel, a **"Main Power Button"** section lets you choose
 
 HelixScreen automatically discovers power devices from Moonraker when it connects to your printer. On first discovery, all devices are selected for the home panel button by default. The **Power Devices** row in the Advanced panel is hidden when no power devices are available.
 
-**Notes:**
+### Locking During Prints
 
-- Devices may be locked during prints (safety feature)
-- Lock icon indicates protected devices
+A power device can be **locked while a print is running** so you can't accidentally cut power mid-job. This is controlled by Moonraker, not HelixScreen: any device configured with `locked_while_printing` in your `moonraker.conf` is affected.
+
+A locked device behaves as follows **only while the printer is actively printing or paused**:
+
+- Its toggle switch is **disabled** — tapping it does nothing
+- A **lock icon** appears on the row
+- The status text reads **"Locked during print"**
+
+When the print finishes (or if `locked_while_printing` isn't set for that device), the device unlocks and toggles normally again. Devices without `locked_while_printing` are never locked.
 
 ---
 

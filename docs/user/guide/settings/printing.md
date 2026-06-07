@@ -54,12 +54,23 @@ This only changes the direction labels in the UI — the actual G-code sent is t
 
 ## Machine Limits
 
-Tap to open the Machine Limits overlay. Adjust motion limits for the current session:
+Tap to open the Machine Limits overlay. A banner at the top reminds you: **"Changes are temporary and reset on printer reboot."** These sliders override your Klipper config for the current session — useful for testing or troubleshooting motion issues. To make permanent changes, edit `printer.cfg` directly.
 
-- Maximum velocity per axis
-- Maximum acceleration per axis
+Each setting has a slider with the live value shown on the right:
 
-These override your Klipper config temporarily — useful for testing or troubleshooting motion issues. **Changes are lost on restart.** To make permanent changes, edit `printer.cfg` directly.
+| Setting | Range | Description |
+|---------|-------|-------------|
+| **Max Velocity** | 50–1000 mm/s | Maximum toolhead speed |
+| **Max Acceleration** | 500–50000 mm/s² | Maximum acceleration |
+| **Accel to Decel** | 500–50000 mm/s² | Acceleration-to-deceleration limit (caps how aggressively moves slow down) |
+| **Square Corner Velocity** | 1–20 mm/s | Maximum speed carried through square corners |
+| **Extrude Speed** | 1–50 mm/s | Feedrate used for manual extrude/retract actions |
+
+> **Extrude Speed is saved.** Unlike the motion limits above, the Extrude Speed value is a persisted HelixScreen setting — it is remembered across restarts and applies to the manual extrude/retract controls.
+
+Below the adjustable sliders is a read-only **Config-defined** section showing your **Max Z Velocity** and **Max Z Accel**, which come from your Klipper config and cannot be changed here.
+
+**Reset:** the **Reset** button at the bottom restores the motion limits to your printer's original configured values.
 
 ---
 

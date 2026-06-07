@@ -51,6 +51,23 @@ Tap the **About** row at the bottom of the Settings panel to open the About over
 | **Print Hours** | Total print hours tracked — tap to open the [History Dashboard](../advanced.md) |
 | **Open Source Licenses** | View licenses for all open source libraries used by HelixScreen |
 
+### Checking for Updates
+
+Tap **Check for Updates** to look for a newer release on your selected [update channel](#update-channels). If one is available, an update dialog walks you through installing it. You'll see the following stages:
+
+1. **Update Available** — Shows the new version. Tap **Install** to begin, or **Cancel** to dismiss.
+2. **Downloading...** — A progress bar tracks the download. You can still **Cancel** at this point.
+3. **Verifying...** — HelixScreen checks the downloaded file before installing.
+4. **Installing...** — The new version is written into place. **Do not power off your printer** while this is in progress.
+5. **Update installed!** — Confirmation that the new version is in place.
+6. **Hang on, we'll be right back!** — HelixScreen restarts itself to run the new version.
+
+If something goes wrong, an **Update Failed** screen appears with a **Retry** button so you can try again, or **Close** to dismiss.
+
+> **Caution:** Once installation begins, leave the printer powered on until HelixScreen restarts on its own. Interrupting an install can leave HelixScreen in an inconsistent state.
+
+This row is hidden on Android, where updates are managed through the Play Store.
+
 ### Easter Eggs
 
 - Tap the **Printer Name** row **seven times** to launch a hidden Snake game
@@ -72,7 +89,9 @@ When beta features are enabled:
 |---------|-------------|
 | **Stable** | Recommended. Tested releases only. |
 | **Beta** | Preview builds with new features. May have rough edges. |
-| **Dev** | Development builds. Requires a configured `dev_url` in your config file. |
+| **Dev** | Development builds. Requires a `dev_url` configured under the `update` section of your config file. |
+
+> **Note:** Selecting the **Dev** channel without a `dev_url` set in your configuration shows a "Dev channel requires dev_url in config" message and won't check for updates. Dev builds are intended for HelixScreen contributors — most users should stay on **Stable** or **Beta**.
 
 ---
 

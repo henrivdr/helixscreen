@@ -66,15 +66,18 @@ Tap to open the Fan Settings overlay. This shows all detected fans and their cur
 
 > Only shown when sensors are detected.
 
-Tap to open the Sensor Settings overlay. Manage all detected filament sensors by choosing a role for each:
+Tap to open the Sensor Settings overlay. Each detected filament sensor can be assigned a role:
 
 | Role | Behavior |
 |------|----------|
-| **Runout** | Pauses print when filament runs out |
-| **Motion** | Detects filament movement (clog detection) |
-| **Ignore** | Sensor present but not monitored |
+| **None** | Sensor present but not monitored |
+| **Runout** | Pauses the print when filament runs out |
+| **Toolhead** | Monitors filament at the toolhead |
+| **Entry** | Monitors filament at the entry to the extruder path |
 
-Other detected sensors (accelerometers, probes, humidity, width, color) are listed as read-only information.
+Whether a sensor is a switch or a motion sensor is detected automatically — it is not something you choose. Other detected sensors (accelerometers, probes, humidity, width, color) are listed as read-only information.
+
+See [Sensors](../sensors.md) for the full guide.
 
 ---
 

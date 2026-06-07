@@ -75,6 +75,21 @@ Display, theme, sound, LED, network, sensors, touch calibration, hardware issues
 
 ![Settings](../images/screenshot-settings-panel.png)
 
+### [Fans](guide/fans.md)
+Discovered fans grouped by controllable vs. automatic, fan types, live speed control via animated dials, RPM readouts, and per-fan renaming.
+
+### [Sensors](guide/sensors.md)
+Filament switch and motion sensors with per-sensor role assignment (None, Runout, Toolhead, Entry), read-only probe/width/humidity/accelerometer/color/temperature sensors, and chamber heater/sensor assignment.
+
+### [Security & Screen Lock](guide/security.md)
+Set, change, or remove a PIN screen lock, auto-lock tied to the display sleep timeout, the lock-screen keypad with emergency-stop access, and what a factory reset clears.
+
+### [Camera](guide/camera.md)
+Webcam viewing via the home widget and standalone fullscreen viewer, rotation and flip configuration, stream status states, and performance throttling.
+
+### [Print History](guide/print-history.md)
+History dashboard with time-range statistics and trend charts, searchable/filterable/sortable job list, per-job details, and reprinting a previous job.
+
 ### [Advanced Features](guide/advanced.md)
 Console, macro execution, power device control (with home panel quick-toggle and device selection), print history, notification history, and timelapse settings.
 
