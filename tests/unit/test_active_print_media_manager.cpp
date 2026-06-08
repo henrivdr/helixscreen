@@ -16,6 +16,9 @@
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "active_print_media_manager.h"
+#include "moonraker_api.h"
+#include "moonraker_client_mock.h"
+#include "moonraker_file_api.h"
 #include "printer_state.h"
 
 #include <spdlog/sinks/null_sink.h>
@@ -550,14 +553,15 @@ TEST_CASE_METHOD(ActivePrintMediaManagerTestFixture,
 
     // Set up an observer on the thumbnail path subject (mimics what the widget does)
     auto observer_cb = [](lv_observer_t* observer, lv_subject_t* subj) {
-        auto* data = static_cast<std::pair<std::string*, int*>*>(lv_observer_get_user_data(observer));
+        auto* data =
+            static_cast<std::pair<std::string*, int*>*>(lv_observer_get_user_data(observer));
         *data->first = lv_subject_get_string(subj);
         (*data->second)++;
     };
 
     auto data = std::make_pair(&last_observed_path, &observer_fire_count);
-    lv_observer_t* obs = lv_subject_add_observer(state().get_print_thumbnail_path_subject(),
-                                                  observer_cb, &data);
+    lv_observer_t* obs =
+        lv_subject_add_observer(state().get_print_thumbnail_path_subject(), observer_cb, &data);
 
     // Observer fires on registration with initial (empty) value
     REQUIRE(observer_fire_count == 1);
@@ -580,9 +584,10 @@ TEST_CASE_METHOD(ActivePrintMediaManagerTestFixture,
     lv_observer_remove(obs);
 }
 
-TEST_CASE_METHOD(ActivePrintMediaManagerTestFixture,
-                 "ActivePrintMediaManager: thumbnail path observer receives correct value during rapid updates",
-                 "[ActivePrintMediaManager]") {
+TEST_CASE_METHOD(
+    ActivePrintMediaManagerTestFixture,
+    "ActivePrintMediaManager: thumbnail path observer receives correct value during rapid updates",
+    "[ActivePrintMediaManager]") {
     // This tests the scenario where the thumbnail path changes rapidly.
     // An immediate observer should receive each value in sequence.
     std::vector<std::string> observed_values;
@@ -593,7 +598,7 @@ TEST_CASE_METHOD(ActivePrintMediaManagerTestFixture,
     };
 
     lv_observer_t* obs = lv_subject_add_observer(state().get_print_thumbnail_path_subject(),
-                                                  observer_cb, &observed_values);
+                                                 observer_cb, &observed_values);
 
     // Initial fire
     REQUIRE(observed_values.size() == 1);
@@ -656,4 +661,253 @@ TEST_CASE_METHOD(ActivePrintMediaManagerTestFixture,
         set_print_filename("benchy.gcode");
         REQUIRE(get_thumbnail_path() == "A:/cache/benchy_thumb.bin");
     }
+}
+
+// ============================================================================
+// Async Lifetime / Stale-Callback Safety (background-thread UAF regression)
+// ============================================================================
+//
+// The metadata fetch in load_thumbnail_for_file() registers a callback that, on
+// a real printer, fires on the Moonraker WebSocket background thread. Before the
+// fix, that callback applied its result (layer_total / estimated_time) to the
+// PrinterState subjects WITHOUT consulting the manager's AsyncLifetimeGuard, and
+// guarded only by a non-atomic generation counter that was re-checked on the bg
+// thread. If the manager was destroyed (soft restart / reconnect) while a fetch
+// was in flight, the deferred subject write still ran against the freed object's
+// captured state -> heap-corruption UAF.
+//
+// These tests capture the metadata callback (instead of letting the mock fire it
+// synchronously) so they can fire it AFTER a superseding event:
+//   1. a newer load bumps the generation, or
+//   2. the manager is destroyed (lifetime invalidated).
+// The post-event callback MUST NOT apply its (now stale / dangling) result.
+
+namespace {
+
+/// File API that captures the metadata request instead of answering it, so the
+/// test controls exactly when (and after which lifecycle event) the success
+/// callback fires. get_file_metadata is virtual on MoonrakerFileAPI (parity with
+/// the virtual HTTP transfer methods the transfer mock overrides).
+class CapturingFileAPI : public MoonrakerFileAPI {
+  public:
+    using MoonrakerFileAPI::MoonrakerFileAPI;
+
+    void get_file_metadata(const std::string& filename, FileMetadataCallback on_success,
+                           ErrorCallback on_error, bool silent = false) override {
+        (void)silent;
+        (void)on_error;
+        last_filename_ = filename;
+        pending_.push_back(std::move(on_success));
+    }
+
+    /// Number of captured (not-yet-fired) metadata callbacks.
+    [[nodiscard]] size_t pending_count() const {
+        return pending_.size();
+    }
+    [[nodiscard]] bool has_pending() const {
+        return !pending_.empty();
+    }
+
+    /// Fire the Nth captured callback (0-based) with the given metadata, WITHOUT
+    /// consuming it from the list (so callers can fire callbacks in any order).
+    void fire_index(size_t index, const FileMetadata& metadata) {
+        REQUIRE(index < pending_.size());
+        auto cb = pending_[index];
+        cb(metadata);
+    }
+
+    /// Fire the most recently captured callback.
+    void fire_last(const FileMetadata& metadata) {
+        REQUIRE(!pending_.empty());
+        fire_index(pending_.size() - 1, metadata);
+    }
+
+  private:
+    std::vector<FileMetadataCallback> pending_;
+    std::string last_filename_;
+};
+
+/// MoonrakerAPI that installs the CapturingFileAPI in place of the real file API.
+class CapturingMoonrakerAPI : public MoonrakerAPI {
+  public:
+    CapturingMoonrakerAPI(helix::MoonrakerClient& client, helix::PrinterState& state)
+        : MoonrakerAPI(client, state) {
+        // file_api_ is protected; swap in the capturing implementation.
+        file_api_ = std::make_unique<CapturingFileAPI>(client);
+    }
+
+    CapturingFileAPI& capturing_files() {
+        return static_cast<CapturingFileAPI&>(files());
+    }
+};
+
+/// Fixture that wires the manager to a CapturingMoonrakerAPI so metadata
+/// callbacks can be fired on demand, after a lifecycle event.
+class ActivePrintMediaAsyncFixture {
+  public:
+    ActivePrintMediaAsyncFixture() : mock_client_(MoonrakerClientMock::PrinterType::VORON_24) {
+        if (!logger_initialized_) {
+            auto null_sink = std::make_shared<spdlog::sinks::null_sink_mt>();
+            auto null_logger = std::make_shared<spdlog::logger>("null", null_sink);
+            spdlog::set_default_logger(null_logger);
+            logger_initialized_ = true;
+        }
+
+        lv_init_safe();
+
+        if (!queue_initialized_) {
+            helix::ui::update_queue_init();
+            queue_initialized_ = true;
+        }
+
+        if (!display_created_) {
+            display_ = lv_display_create(480, 320);
+            alignas(64) static lv_color_t buf[480 * 10];
+            lv_display_set_buffers(display_, buf, nullptr, sizeof(buf),
+                                   LV_DISPLAY_RENDER_MODE_PARTIAL);
+            lv_display_set_flush_cb(display_, [](lv_display_t* disp, const lv_area_t*, uint8_t*) {
+                lv_display_flush_ready(disp);
+            });
+            display_created_ = true;
+        }
+
+        PrinterStateTestAccess::reset(state_);
+        state_.init_subjects(false);
+
+        api_ = std::make_unique<CapturingMoonrakerAPI>(mock_client_, state_);
+        manager_ = std::make_unique<helix::ActivePrintMediaManager>(state_);
+        manager_->set_api(api_.get());
+    }
+
+    ~ActivePrintMediaAsyncFixture() {
+        manager_.reset();
+        api_.reset();
+        UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+        helix::ui::update_queue_shutdown();
+        queue_initialized_ = false;
+        if (display_created_ && display_) {
+            lv_display_delete(display_);
+            display_ = nullptr;
+            display_created_ = false;
+        }
+        logger_initialized_ = false;
+        PrinterStateTestAccess::reset(state_);
+    }
+
+  protected:
+    PrinterState& state() {
+        return state_;
+    }
+    helix::ActivePrintMediaManager& manager() {
+        return *manager_;
+    }
+    CapturingFileAPI& files() {
+        return api_->capturing_files();
+    }
+
+    /// Set the print filename WITHOUT draining the queue, so deferred applies
+    /// stay pending until the test decides to drain.
+    void set_print_filename_no_drain(const std::string& filename) {
+        json status = {{"print_stats", {{"filename", filename}}}};
+        state_.update_from_status(status);
+    }
+
+    void drain() {
+        UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+    }
+
+    int get_layer_total() {
+        return lv_subject_get_int(state_.get_print_layer_total_subject());
+    }
+
+    static FileMetadata make_metadata(uint32_t layer_count) {
+        FileMetadata m;
+        m.layer_count = layer_count;
+        m.estimated_time = 0; // no estimate -> exercises layer path cleanly
+        return m;
+    }
+
+    std::unique_ptr<helix::ActivePrintMediaManager>& manager_ptr() {
+        return manager_;
+    }
+
+  private:
+    MoonrakerClientMock mock_client_;
+    PrinterState state_;
+    std::unique_ptr<CapturingMoonrakerAPI> api_;
+    std::unique_ptr<helix::ActivePrintMediaManager> manager_;
+    static lv_display_t* display_;
+    static bool display_created_;
+    static bool queue_initialized_;
+    static bool logger_initialized_;
+};
+
+lv_display_t* ActivePrintMediaAsyncFixture::display_ = nullptr;
+bool ActivePrintMediaAsyncFixture::display_created_ = false;
+bool ActivePrintMediaAsyncFixture::queue_initialized_ = false;
+bool ActivePrintMediaAsyncFixture::logger_initialized_ = false;
+
+} // namespace
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: metadata callback after manager destroy does not apply",
+                 "[ActivePrintMediaManager][async][lifetime]") {
+    // Start a load; the capturing API holds the metadata callback.
+    set_print_filename_no_drain("doomed.gcode");
+    drain(); // flush display-name update so only the layer apply is in flight later
+    REQUIRE(files().has_pending());
+
+    // The metadata arrives (bg thread) and the manager applies layer_total via
+    // the lifetime-guarded defer path.
+    files().fire_last(make_metadata(/*layer_count=*/137));
+
+    // Owner is destroyed BEFORE the deferred apply runs (soft restart / reconnect).
+    // AsyncLifetimeGuard destructor invalidates all outstanding tokens.
+    manager_ptr().reset();
+
+    // Now the deferred apply runs. It must be skipped — applying it would be a
+    // use-after-free against the destroyed manager's captured state.
+    drain();
+
+    REQUIRE(get_layer_total() == 0);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: stale metadata callback (superseded gen) does not apply",
+                 "[ActivePrintMediaManager][async][lifetime]") {
+    // Load A starts; capture its metadata callback (index 0).
+    set_print_filename_no_drain("print_a.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    // Load B supersedes A (bumps generation) and captures a second callback (index 1).
+    set_print_filename_no_drain("print_b.gcode");
+    REQUIRE(files().pending_count() == 2);
+
+    // B's metadata arrives FIRST and is applied (layer=222).
+    files().fire_index(1, make_metadata(/*layer_count=*/222));
+    drain();
+    REQUIRE(get_layer_total() == 222);
+
+    // A's (stale) metadata arrives LATE — its generation was superseded by B.
+    // It MUST NOT clobber B's value. On the buggy code (no generation re-check on
+    // the apply side / non-atomic gen race) this would overwrite with 111.
+    files().fire_index(0, make_metadata(/*layer_count=*/111));
+    drain();
+
+    REQUIRE(get_layer_total() == 222);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: live metadata callback applies layer total",
+                 "[ActivePrintMediaManager][async][lifetime]") {
+    // Positive control: with no superseding event, the layer total is applied.
+    set_print_filename_no_drain("live.gcode");
+    drain();
+    REQUIRE(files().has_pending());
+
+    files().fire_last(make_metadata(/*layer_count=*/99));
+    drain();
+
+    REQUIRE(get_layer_total() == 99);
 }

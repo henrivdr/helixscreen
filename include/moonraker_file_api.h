@@ -97,9 +97,12 @@ class MoonrakerFileAPI {
      * @param on_success Callback with metadata
      * @param on_error Error callback
      * @param silent If true, don't emit RPC_ERROR events (no toast on failure)
+     *
+     * @note virtual so tests can inject a capturing sub-API. The class is already
+     *       polymorphic (virtual dtor), so this adds no new ABI/vtable cost.
      */
-    void get_file_metadata(const std::string& filename, FileMetadataCallback on_success,
-                           ErrorCallback on_error, bool silent = false);
+    virtual void get_file_metadata(const std::string& filename, FileMetadataCallback on_success,
+                                   ErrorCallback on_error, bool silent = false);
 
     /**
      * @brief Trigger metadata scan for a file

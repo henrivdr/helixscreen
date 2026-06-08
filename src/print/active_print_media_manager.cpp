@@ -3,11 +3,11 @@
 
 #include "active_print_media_manager.h"
 
-#include "gcode_parser.h"
 #include "ui_filename_utils.h"
 #include "ui_update_queue.h"
 
 #include "app_globals.h"
+#include "gcode_parser.h"
 #include "memory_monitor.h"
 #include "observer_factory.h"
 #include "thumbnail_cache.h"
@@ -187,9 +187,10 @@ void ActivePrintMediaManager::load_thumbnail_for_file(const std::string& filenam
     }
 
     // Increment generation to invalidate any in-flight async operations
-    // (only after early-return checks to avoid incrementing when no async op starts)
-    ++thumbnail_load_generation_;
-    uint32_t current_gen = thumbnail_load_generation_;
+    // (only after early-return checks to avoid incrementing when no async op starts).
+    // Relaxed: the value is only compared for equality across loads; the actual
+    // happens-before ordering of the apply is provided by the UpdateQueue.
+    uint32_t current_gen = thumbnail_load_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
 
     // Resolve to original filename if this is a modified temp file
     // (Moonraker only has metadata for original files, not modified copies)
@@ -197,131 +198,138 @@ void ActivePrintMediaManager::load_thumbnail_for_file(const std::string& filenam
 
     spdlog::debug("[ActivePrintMediaManager] Loading metadata for: {}", metadata_filename);
 
-    // Get file metadata for layer count, estimated time, and optionally thumbnail
+    // Get file metadata for layer count, estimated time, and optionally thumbnail.
+    //
+    // THREADING: get_file_metadata invokes its success callback on the Moonraker
+    // WebSocket background thread. The ONLY work allowed on that thread is
+    // this-free local parsing — everything that touches `this`, `printer_state_`,
+    // `api_`, the generation counter, or any subject is marshalled to the main
+    // thread via tok.defer(). The metadata struct is copied by value into the
+    // deferred body so the bg-thread reference can't dangle.
     api_->files().get_file_metadata(
         metadata_filename,
-        [this, current_gen, skip_thumbnail, metadata_filename](const FileMetadata& metadata) {
-            // Check if this callback is still relevant
-            if (current_gen != thumbnail_load_generation_) {
-                spdlog::trace(
-                    "[ActivePrintMediaManager] Stale metadata callback (gen {} != {}), ignoring",
-                    current_gen, thumbnail_load_generation_);
-                return;
-            }
+        [this, tok = lifetime_.token(), current_gen, skip_thumbnail,
+         metadata_filename](const FileMetadata& metadata) {
+            // bg thread: copy the metadata, then marshal ALL member access to main.
+            tok.defer("ActivePrintMediaManager::on_metadata", [this, current_gen, skip_thumbnail,
+                                                               metadata_filename, metadata]() {
+                // main thread, `this` valid + lifetime-checked.
+                // Drop stale callbacks superseded by a newer load.
+                if (current_gen != thumbnail_load_generation_.load(std::memory_order_relaxed)) {
+                    spdlog::trace("[ActivePrintMediaManager] Stale metadata callback (gen {} != "
+                                  "{}), ignoring",
+                                  current_gen,
+                                  thumbnail_load_generation_.load(std::memory_order_relaxed));
+                    return;
+                }
 
-            // Set total layer count from metadata
-            if (metadata.layer_count > 0) {
-                int layer_count = static_cast<int>(metadata.layer_count);
-                PrinterState* state = &printer_state_;
-                helix::ui::queue_update<int>(
-                    std::make_unique<int>(layer_count),
-                    [state](int* count) { state->set_print_layer_total(*count); });
-                spdlog::debug("[ActivePrintMediaManager] Set total layers from metadata: {}",
-                              metadata.layer_count);
-            } else {
-                // Moonraker didn't provide layer count — scan gcode header directly.
-                // Download the first 16KB and parse slicer comments for layer info.
-                spdlog::info("[ActivePrintMediaManager] No layer count in metadata, "
-                             "scanning gcode header");
-                auto* api = this->api_;
-                auto gen = current_gen;
-                auto* self = this;
-                bool need_est_time = (metadata.estimated_time <= 0);
-                api->transfers().download_file_partial(
-                    "gcodes", metadata_filename, 16 * 1024,
-                    [self, gen, need_est_time](const std::string& content) {
-                        if (gen != self->thumbnail_load_generation_)
-                            return;
-                        auto header =
-                            helix::gcode::extract_header_metadata_from_content(content);
-                        if (header.layer_count > 0) {
-                            int lc = static_cast<int>(header.layer_count);
-                            PrinterState* state = &self->printer_state_;
-                            helix::ui::queue_update<int>(
-                                std::make_unique<int>(lc),
-                                [state](int* count) {
-                                    state->set_print_layer_total(*count);
-                                });
-                            spdlog::info("[ActivePrintMediaManager] Set total layers "
-                                         "from gcode header: {}",
-                                         lc);
-                        }
-                        if (need_est_time && header.estimated_time_seconds > 0) {
-                            int est = static_cast<int>(header.estimated_time_seconds);
-                            PrinterState* state = &self->printer_state_;
-                            helix::ui::queue_update<int>(
-                                std::make_unique<int>(est),
-                                [state](int* s) {
-                                    state->set_estimated_print_time(*s);
-                                });
-                            spdlog::info("[ActivePrintMediaManager] Set estimated time "
-                                         "from gcode header: {}s",
-                                         est);
-                        }
-                    },
-                    [](const MoonrakerError& err) {
-                        spdlog::debug("[ActivePrintMediaManager] Gcode header fetch "
-                                      "failed: {}",
-                                      err.message);
-                    });
-            }
+                // Set total layer count from metadata
+                if (metadata.layer_count > 0) {
+                    printer_state_.set_print_layer_total(static_cast<int>(metadata.layer_count));
+                    spdlog::debug("[ActivePrintMediaManager] Set total layers from metadata: {}",
+                                  metadata.layer_count);
+                } else {
+                    // Moonraker didn't provide layer count — scan gcode header directly.
+                    // Download the first 16KB and parse slicer comments for layer info.
+                    // Started on the main thread; its bg callback follows the same pattern.
+                    spdlog::info("[ActivePrintMediaManager] No layer count in metadata, "
+                                 "scanning gcode header");
+                    bool need_est_time = (metadata.estimated_time <= 0);
+                    api_->transfers().download_file_partial(
+                        "gcodes", metadata_filename, 16 * 1024,
+                        [this, tok = lifetime_.token(), current_gen,
+                         need_est_time](const std::string& content) {
+                            // bg thread (HttpExecutor::slow worker): parse locally only.
+                            auto header =
+                                helix::gcode::extract_header_metadata_from_content(content);
+                            // main thread: re-check generation + apply.
+                            tok.defer("ActivePrintMediaManager::on_gcode_header",
+                                      [this, current_gen, need_est_time, header]() {
+                                          if (current_gen != thumbnail_load_generation_.load(
+                                                                 std::memory_order_relaxed)) {
+                                              return;
+                                          }
+                                          if (header.layer_count > 0) {
+                                              printer_state_.set_print_layer_total(
+                                                  static_cast<int>(header.layer_count));
+                                              spdlog::info("[ActivePrintMediaManager] Set total "
+                                                           "layers from gcode header: {}",
+                                                           header.layer_count);
+                                          }
+                                          if (need_est_time && header.estimated_time_seconds > 0) {
+                                              printer_state_.set_estimated_print_time(
+                                                  static_cast<int>(header.estimated_time_seconds));
+                                              spdlog::info(
+                                                  "[ActivePrintMediaManager] Set estimated "
+                                                  "time from gcode header: {}s",
+                                                  static_cast<int>(header.estimated_time_seconds));
+                                          }
+                                      });
+                        },
+                        [](const MoonrakerError& err) {
+                            spdlog::debug("[ActivePrintMediaManager] Gcode header fetch failed: {}",
+                                          err.message);
+                        });
+                }
 
-            // Store slicer's estimated print time for remaining time fallback
-            if (metadata.estimated_time > 0) {
-                int est_time = static_cast<int>(metadata.estimated_time);
-                PrinterState* state = &printer_state_;
-                helix::ui::queue_update<int>(
-                    std::make_unique<int>(est_time),
-                    [state](int* seconds) { state->set_estimated_print_time(*seconds); });
-                spdlog::debug("[ActivePrintMediaManager] Set estimated print time from metadata: {}s",
-                              metadata.estimated_time);
-            }
+                // Store slicer's estimated print time for remaining time fallback
+                if (metadata.estimated_time > 0) {
+                    printer_state_.set_estimated_print_time(
+                        static_cast<int>(metadata.estimated_time));
+                    spdlog::debug(
+                        "[ActivePrintMediaManager] Set estimated print time from metadata: {}s",
+                        metadata.estimated_time);
+                }
 
-            // Skip thumbnail fetch if one is already set
-            if (skip_thumbnail) {
-                spdlog::debug("[ActivePrintMediaManager] Skipping thumbnail fetch (already set)");
-                return;
-            }
+                // Skip thumbnail fetch if one is already set
+                if (skip_thumbnail) {
+                    spdlog::debug(
+                        "[ActivePrintMediaManager] Skipping thumbnail fetch (already set)");
+                    return;
+                }
 
-            // Get the largest thumbnail available
-            std::string thumbnail_rel_path = metadata.get_largest_thumbnail();
-            if (thumbnail_rel_path.empty()) {
-                spdlog::debug("[ActivePrintMediaManager] No thumbnail available in metadata");
-                return;
-            }
+                // Get the largest thumbnail available
+                std::string thumbnail_rel_path = metadata.get_largest_thumbnail();
+                if (thumbnail_rel_path.empty()) {
+                    spdlog::debug("[ActivePrintMediaManager] No thumbnail available in metadata");
+                    return;
+                }
 
-            spdlog::debug("[ActivePrintMediaManager] Found thumbnail: {}", thumbnail_rel_path);
+                spdlog::debug("[ActivePrintMediaManager] Found thumbnail: {}", thumbnail_rel_path);
 
-            // Use detail-sized thumbnails (200-400px) — works for both card and detail views
-            // since LVGL scales down efficiently
-            ThumbnailLoadContext ctx;
-            ctx.alive = alive_;
-            ctx.generation = nullptr; // Using manual gen check below
-            ctx.captured_gen = current_gen;
+                // Use detail-sized thumbnails (200-400px) — works for both card and detail
+                // views since LVGL scales down efficiently. We do NOT hand the thumbnail
+                // cache a lifetime/alive guard: its on_success fires on a bg thread, so we
+                // marshal back ourselves via tok.defer() and do the generation + lifetime
+                // re-check there. An empty ctx would make fetch_for_detail_view's internal
+                // ctx.is_valid() guard reject every result, so capture our lifetime token
+                // (its expired() check is benign — it only short-circuits the cache's call
+                // into our already-self-guarding success callback).
+                ThumbnailLoadContext ctx = ThumbnailLoadContext::capture(lifetime_);
 
-            get_thumbnail_cache().fetch_for_detail_view(
-                api_, thumbnail_rel_path, ctx,
-                [this, current_gen](const std::string& lvgl_path) {
-                    // Note: alive check is done by fetch_for_detail_view's guard.
-                    // We still need generation check since we passed nullptr for generation.
-                    if (current_gen != thumbnail_load_generation_) {
-                        spdlog::trace(
-                            "[ActivePrintMediaManager] Stale thumbnail callback, ignoring");
-                        return;
-                    }
-
-                    // Thread-safe update to thumbnail path subject (RAII via unique_ptr)
-                    PrinterState* state = &printer_state_;
-                    helix::ui::queue_update<std::string>(
-                        std::make_unique<std::string>(lvgl_path), [state](std::string* path) {
-                            state->set_print_thumbnail_path(*path);
-                            spdlog::info("[ActivePrintMediaManager] Thumbnail path set: {}", *path);
+                get_thumbnail_cache().fetch_for_detail_view(
+                    api_, thumbnail_rel_path, ctx,
+                    [this, tok = lifetime_.token(), current_gen](const std::string& lvgl_path) {
+                        // bg thread (thumbnail prescale worker): no member access here.
+                        std::string path = lvgl_path;
+                        tok.defer("ActivePrintMediaManager::on_thumbnail", [this, current_gen,
+                                                                            path]() {
+                            if (current_gen !=
+                                thumbnail_load_generation_.load(std::memory_order_relaxed)) {
+                                spdlog::trace("[ActivePrintMediaManager] Stale thumbnail "
+                                              "callback, ignoring");
+                                return;
+                            }
+                            printer_state_.set_print_thumbnail_path(path);
+                            spdlog::info("[ActivePrintMediaManager] Thumbnail path set: {}", path);
                             helix::MemoryMonitor::log_now("thumbnail_loaded", spdlog::level::debug);
                         });
-                },
-                [](const std::string& error) {
-                    spdlog::warn("[ActivePrintMediaManager] Failed to fetch thumbnail: {}", error);
-                });
+                    },
+                    [](const std::string& error) {
+                        spdlog::warn("[ActivePrintMediaManager] Failed to fetch thumbnail: {}",
+                                     error);
+                    });
+            });
         },
         [metadata_filename](const MoonrakerError& err) {
             spdlog::debug("[ActivePrintMediaManager] Failed to get file metadata for '{}': {}",

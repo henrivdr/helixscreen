@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
 
@@ -91,14 +91,17 @@ class ActivePrintMediaManager {
     std::string last_effective_filename_;
     std::string last_loaded_thumbnail_filename_;
     bool last_was_empty_ = false; ///< Prevents repeated "empty filename" log spam
-    uint32_t thumbnail_load_generation_ = 0;
 
-    /// Async callback safety guard
+    /// Generation counter for stale-callback detection. Bumped on the main thread
+    /// each time a new load starts; read on the main thread inside deferred applies.
+    /// Atomic because the value is captured by background-thread callbacks (even
+    /// though the re-check itself always runs on the main thread via tok.defer).
+    std::atomic<uint32_t> thumbnail_load_generation_{0};
+
+    /// Async callback safety guard. Invalidated on destruction, so any in-flight
+    /// background-thread callback that marshals back via tok.defer() no-ops if the
+    /// manager has been torn down (soft restart / reconnect).
     helix::AsyncLifetimeGuard lifetime_;
-
-    /// Alive flag for ThumbnailLoadContext compatibility (kept until ThumbnailLoadContext
-    /// is migrated to LifetimeToken)
-    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 };
 
 /**
