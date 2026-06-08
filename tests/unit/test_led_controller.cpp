@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
 #include "config.h"
 #include "led/led_controller.h"
@@ -1645,4 +1646,57 @@ TEST_CASE_METHOD(LedMockApiFixture, "LedController: in-flight subject defaults t
     REQUIRE(s != nullptr);
     REQUIRE(lv_subject_get_int(s) == 0);
     REQUIRE_FALSE(ctrl.light_command_in_flight());
+}
+
+TEST_CASE_METHOD(LedMockApiFixture,
+                 "LedController: native toggle marks in-flight then clears on ACK",
+                 "[led][controller][inflight]") {
+    setup_controller_with_strip(); // NATIVE backend, "neopixel chamber"
+    auto& ctrl = helix::led::LedController::instance();
+    lv_subject_t* s = ctrl.get_led_command_in_flight_subject();
+
+    ctrl.light_set(true);
+    REQUIRE(lv_subject_get_int(s) == 1);
+
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(lv_subject_get_int(s) == 0);
+    REQUIRE_FALSE(ctrl.light_command_in_flight());
+}
+
+TEST_CASE_METHOD(LedMockApiFixture, "LedController: in-flight clears even when the ACK is an error",
+                 "[led][controller][inflight]") {
+    setup_controller_with_strip();
+    auto& ctrl = helix::led::LedController::instance();
+    lv_subject_t* s = ctrl.get_led_command_in_flight_subject();
+
+    mock_client.force_next_gcode_error(MoonrakerErrorType::TIMEOUT, "forced timeout", "SET_LED");
+    ctrl.light_set(true);
+    REQUIRE(lv_subject_get_int(s) == 1);
+
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(lv_subject_get_int(s) == 0);
+}
+
+TEST_CASE_METHOD(LedMockApiFixture, "LedController: in-flight covers all selected strips",
+                 "[led][controller][inflight]") {
+    auto& ctrl = helix::led::LedController::instance();
+    ctrl.deinit();
+    ctrl.init(mock_api.get(), &mock_client);
+
+    for (const std::string& id : {std::string("neopixel a"), std::string("neopixel b")}) {
+        helix::led::LedStripInfo strip;
+        strip.name = id;
+        strip.id = id;
+        strip.backend = helix::led::LedBackendType::NATIVE;
+        strip.supports_color = true;
+        ctrl.native().add_strip(strip);
+    }
+    ctrl.set_selected_strips({"neopixel a", "neopixel b"});
+
+    lv_subject_t* s = ctrl.get_led_command_in_flight_subject();
+    ctrl.light_set(true);
+    REQUIRE(lv_subject_get_int(s) == 1);
+
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(lv_subject_get_int(s) == 0);
 }

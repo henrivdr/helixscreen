@@ -101,6 +101,11 @@ void LedController::init(MoonrakerAPI* api, MoonrakerClient* client) {
 void LedController::deinit() {
     lifetime_.invalidate();
 
+    // Clear any in-flight count so the subject is reset to 0 before the next
+    // init. Deferred settle callbacks from the previous session are now dead
+    // (token expired), so they will never decrement the counter themselves.
+    force_clear_in_flight();
+
     native_.clear();
     effects_.clear();
     wled_.clear();
@@ -1957,6 +1962,22 @@ void LedController::toggle_all(bool on) {
         }
     }
 
+    // Factory for settle callbacks: increments the in-flight counter at dispatch
+    // and returns a (success, error) pair that each decrement it on the main thread
+    // via tok.defer() once the gcode ACK (or error) lands.
+    auto tok = lifetime_.token();
+    auto make_settle = [this, tok]() {
+        note_command_dispatched();
+        NativeBackend::SuccessCallback on_done = [this, tok]() {
+            tok.defer("LedController::led_cmd_settled", [this]() { note_command_settled(); });
+        };
+        NativeBackend::ErrorCallback on_fail = [this, tok](const std::string& msg) {
+            spdlog::warn("[LedController] LED toggle command failed: {}", msg);
+            tok.defer("LedController::led_cmd_settled", [this]() { note_command_settled(); });
+        };
+        return std::make_pair(on_done, on_fail);
+    };
+
     for (const auto& strip_id : selected_strips_) {
         auto backend_type = backend_for_strip(strip_id);
 
@@ -1966,9 +1987,11 @@ void LedController::toggle_all(bool on) {
                 // Shared helper handles the no-saved-color safety floor and the
                 // brightness==0-but-color-nonzero restore-at-100% semantics.
                 auto c = compute_scaled_last_color(last_brightness_);
-                native_.set_color(strip_id, c.r, c.g, c.b, c.w);
+                auto cbs = make_settle();
+                native_.set_color(strip_id, c.r, c.g, c.b, c.w, cbs.first, cbs.second);
             } else {
-                native_.turn_off(strip_id);
+                auto cbs = make_settle();
+                native_.turn_off(strip_id, cbs.first, cbs.second);
             }
             break;
 
@@ -1990,24 +2013,31 @@ void LedController::toggle_all(bool on) {
             for (const auto& macro : configured_macros_) {
                 if (macro.display_name == raw_name) {
                     switch (macro.type) {
-                    case MacroLedType::ON_OFF:
+                    case MacroLedType::ON_OFF: {
+                        auto cbs = make_settle();
                         if (on) {
-                            macro_.execute_on(macro.display_name);
+                            macro_.execute_on(macro.display_name, cbs.first, cbs.second);
                         } else {
-                            macro_.execute_off(macro.display_name);
+                            macro_.execute_off(macro.display_name, cbs.first, cbs.second);
                         }
                         break;
-                    case MacroLedType::TOGGLE:
-                        macro_.execute_toggle(macro.display_name);
+                    }
+                    case MacroLedType::TOGGLE: {
+                        auto cbs = make_settle();
+                        macro_.execute_toggle(macro.display_name, cbs.first, cbs.second);
                         break;
-                    case MacroLedType::PRESET:
+                    }
+                    case MacroLedType::PRESET: {
                         // For preset type, use on/off macros if available
                         if (on && !macro.on_macro.empty()) {
-                            macro_.execute_on(macro.display_name);
+                            auto cbs = make_settle();
+                            macro_.execute_on(macro.display_name, cbs.first, cbs.second);
                         } else if (!on && !macro.off_macro.empty()) {
-                            macro_.execute_off(macro.display_name);
+                            auto cbs = make_settle();
+                            macro_.execute_off(macro.display_name, cbs.first, cbs.second);
                         }
                         break;
+                    }
                     }
                     break;
                 }
@@ -2015,13 +2045,15 @@ void LedController::toggle_all(bool on) {
             break;
         }
 
-        case LedBackendType::OUTPUT_PIN:
+        case LedBackendType::OUTPUT_PIN: {
+            auto cbs = make_settle();
             if (on) {
-                output_pin_.turn_on(strip_id);
+                output_pin_.turn_on(strip_id, cbs.first, cbs.second);
             } else {
-                output_pin_.turn_off(strip_id);
+                output_pin_.turn_off(strip_id, cbs.first, cbs.second);
             }
             break;
+        }
 
         case LedBackendType::LED_EFFECT:
             // Effects are controlled separately via activate/stop
@@ -2151,7 +2183,12 @@ void LedController::light_set(bool on) {
     spdlog::info("[LedController] light_set({})", on);
     light_on_ = on;
     toggle_all(on);
-    query_tracked_led_state();
+    if (in_flight_count_ == 0) {
+        // No async gcode dispatched (instant/REST backend) — refresh state now.
+        query_tracked_led_state();
+    }
+    // Otherwise query_tracked_led_state() fires from note_command_settled()
+    // once every dispatched command's ACK has landed.
 }
 
 void LedController::query_tracked_led_state() {
