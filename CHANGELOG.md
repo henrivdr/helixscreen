@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.74] - 2026-06-08
+
+### Added
+
+- **AD5X IFS cold per-lane eject/recover** (prestonbrown/helixscreen#996) — idle IFS lanes can be ejected and recovered cold (without heating the toolhead), with a "Recover" affordance for re-seating filament.
+- **Light toggle shows in-flight feedback** — the light control marks itself busy the moment you tap it and clears once the g-code command is acknowledged, so the toggle reflects the real LED state instead of snapping back. Light buttons are disabled (with a brief toast) while a toggle is in flight, and in-flight state is cleared on printer disconnect.
+
+### Fixed
+
+- **AD5X IFS toolhead stays unloadable when firmware drops the active slot** (prestonbrown/helixscreen#995).
+- **AD5X filament consumption tracked accurately** (prestonbrown/helixscreen#981) — only slots that actually tracked consumption are flushed at pause (not every slot), weight-only consumption is persisted without re-asserting filament identity, and the debug bundle captures the live log instead of a stale leftover.
+- **Snapmaker U1 display takeover survives reboot** on PAXX firmware 1.4 — the stock UI binary is disabled so HelixScreen keeps the display after a restart.
+- **Two rare crashes fixed** — exclude-objects map-view widget deletion and print-media async callbacks are now deferred (to the main thread / outside the UpdateQueue batch), closing use-after-free and event-list corruption windows.
+
 ## [0.99.73] - 2026-06-06
 
 ### Added
@@ -3943,6 +3957,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.74]: https://github.com/prestonbrown/helixscreen/compare/v0.99.73...v0.99.74
 [0.99.73]: https://github.com/prestonbrown/helixscreen/compare/v0.99.72...v0.99.73
 [0.99.72]: https://github.com/prestonbrown/helixscreen/compare/v0.99.71...v0.99.72
 [0.99.71]: https://github.com/prestonbrown/helixscreen/compare/v0.99.70...v0.99.71
