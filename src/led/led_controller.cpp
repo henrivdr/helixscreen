@@ -1522,6 +1522,9 @@ void OutputPinBackend::set_value(const std::string& pin_id, double value,
                                  NativeBackend::ErrorCallback on_error) {
     if (!api_) {
         spdlog::warn("[OutputPinBackend] set_value called with no API (pin={})", pin_id);
+        if (on_error) {
+            on_error("OutputPinBackend: no API available");
+        }
         return;
     }
 
