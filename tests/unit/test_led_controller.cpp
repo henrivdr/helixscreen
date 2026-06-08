@@ -1275,6 +1275,8 @@ struct LedMockApiFixture {
 
     ~LedMockApiFixture() {
         auto& ctrl = helix::led::LedController::instance();
+        // ORDERING: deinit() (which resets conn_observer_) MUST precede deinit_subjects()
+        // (which frees the connection-state subject conn_observer_ is observing).
         ctrl.deinit();
         get_printer_state().deinit_subjects();
     }

@@ -562,7 +562,7 @@ class LedController {
     lv_subject_t led_controllable_{};      // 0/1 mirror of !selected_strips_.empty()
     lv_subject_t led_command_in_flight_{}; // 0/1: a light toggle is awaiting its gcode ACK
     int in_flight_count_ = 0;              // outstanding toggle commands awaiting ACK
-    ObserverGuard conn_observer_;          // clears in-flight on disconnect (used by a later task)
+    ObserverGuard conn_observer_;          // clears in-flight count on any non-CONNECTED transition
     bool version_subject_initialized_ = false;
 
     /// Push the current selected_strips_ emptiness into led_controllable_.
