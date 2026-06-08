@@ -126,6 +126,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     void request_resync() override;
 
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
+    // Weight-only persist: updates remaining/total weight in the override store
+    // and NEVER rewrites Adventurer5M.json / _IFS_VARS or re-locks material —
+    // the firmware-facing writers in set_slot_info() are what reverted the
+    // user's material on every 60 s consumption persist (#981).
+    void update_slot_weight(int slot_index, float remaining_weight_g, float total_weight_g,
+                            bool persist) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
 
     // Tool reassignment is only persistable when the lessWaste/bambufy plugin

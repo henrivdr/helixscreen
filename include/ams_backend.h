@@ -720,6 +720,37 @@ class AmsBackend {
     virtual AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) = 0;
 
     /**
+     * @brief Persist only a slot's filament weight (consumption tracking)
+     *
+     * Called by the consumption sink once per metered delta during a print.
+     * Unlike set_slot_info(), this updates ONLY remaining/total weight and MUST
+     * NOT touch material, color, or user-lock state, and MUST NOT re-emit any
+     * firmware-facing color/material write. An automated weight tracker has no
+     * business asserting filament identity — doing so clobbers an externally
+     * changed material on backends that round-trip identity through a shared
+     * firmware store (#981, AD5X native ZMOD: a 60 s weight persist rewrote
+     * ffmType and reverted the user's material).
+     *
+     * The default routes through set_slot_info() — correct for backends where
+     * weight and identity share one persist path with no clobber risk. Backends
+     * that write identity to a firmware-owned store override this to persist
+     * weight alone (see AmsBackendAd5xIfs).
+     *
+     * @param slot_index Slot to update (0-based)
+     * @param remaining_weight_g New remaining weight in grams (>= 0)
+     * @param total_weight_g Total weight in grams, or < 0 to leave unchanged
+     * @param persist If true, persist to the slot's durable store; else in-memory only
+     */
+    virtual void update_slot_weight(int slot_index, float remaining_weight_g, float total_weight_g,
+                                    bool persist) {
+        SlotInfo info = get_slot_info(slot_index);
+        info.remaining_weight_g = remaining_weight_g;
+        if (total_weight_g >= 0.0f)
+            info.total_weight_g = total_weight_g;
+        set_slot_info(slot_index, info, persist);
+    }
+
+    /**
      * @brief Set tool-to-slot mapping
      *
      * Configures which slot a tool number maps to.

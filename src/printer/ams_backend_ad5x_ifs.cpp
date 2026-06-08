@@ -1367,6 +1367,52 @@ AmsError AmsBackendAd5xIfs::set_slot_info(int slot_index, const SlotInfo& info, 
     return AmsErrorHelper::success();
 }
 
+void AmsBackendAd5xIfs::update_slot_weight(int slot_index, float remaining_weight_g,
+                                           float total_weight_g, bool persist) {
+    if (slot_index < 0 || slot_index >= NUM_PORTS) {
+        spdlog::warn("{} update_slot_weight: invalid slot {}", backend_log_tag(), slot_index);
+        return;
+    }
+
+    // Weight is automated consumption-tracker data, not filament identity. We
+    // touch ONLY the weight fields — never material/color, never the user-lock
+    // flags, and never write_adventurer_json()/_IFS_VARS. set_slot_info()'s
+    // firmware-facing writers re-emitted ffmType from a stale override material
+    // on every 60 s persist, reverting the user's material to disk (#981). Weight
+    // lives in the Moonraker DB lane_data override record, which is the only
+    // store we persist here.
+    helix::ams::FilamentSlotOverride ovr_to_save;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (auto* entry = slots_.get_mut(slot_index)) {
+            entry->info.remaining_weight_g = remaining_weight_g;
+            if (total_weight_g >= 0.0f)
+                entry->info.total_weight_g = total_weight_g;
+        }
+        // overrides_[slot] default-constructs a weight-only record when the slot
+        // had no prior override (material empty, color_set=false, locks false —
+        // apply_overrides then layers only the weight). An existing override
+        // (e.g. a user-locked material edit) keeps every other field intact.
+        auto& ovr = overrides_[slot_index];
+        ovr.remaining_weight_g = remaining_weight_g;
+        if (total_weight_g >= 0.0f)
+            ovr.total_weight_g = total_weight_g;
+        ovr_to_save = ovr;
+    }
+
+    if (persist && override_store_) {
+        const std::string tag = backend_log_tag();
+        override_store_->save_async(
+            slot_index, ovr_to_save, [tag, slot_index](bool ok, const std::string& err) {
+                if (!ok) {
+                    spdlog::warn("{} weight persist failed for slot {}: {}", tag, slot_index, err);
+                }
+            });
+    }
+
+    emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+}
+
 helix::printer::ToolMappingCapabilities AmsBackendAd5xIfs::get_tool_mapping_capabilities() const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!has_ifs_vars_) {

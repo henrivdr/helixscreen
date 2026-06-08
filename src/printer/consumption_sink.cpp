@@ -7,12 +7,12 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "filament_database.h"
-
 #include "lvgl/lvgl.h"
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cmath>
-#include <spdlog/spdlog.h>
 
 namespace helix {
 
@@ -35,8 +35,7 @@ bool ExternalSpoolSink::is_trackable() const {
 }
 
 uint32_t ExternalSpoolSink::persist_interval_ms() const {
-    return persist_interval_override_ms_ ? persist_interval_override_ms_
-                                         : kPersistIntervalMs;
+    return persist_interval_override_ms_ ? persist_interval_override_ms_ : kPersistIntervalMs;
 }
 
 void ExternalSpoolSink::snapshot(float filament_used_mm) {
@@ -53,10 +52,9 @@ void ExternalSpoolSink::snapshot(float filament_used_mm) {
     }
     auto material = filament::find_material(info.material);
     if (!material.has_value() || material->density_g_cm3 <= 0.0f) {
-        spdlog::warn(
-            "[ConsumptionSink:external] Cannot resolve density for material '{}'; "
-            "consumption tracking disabled for this print",
-            info.material);
+        spdlog::warn("[ConsumptionSink:external] Cannot resolve density for material '{}'; "
+                     "consumption tracking disabled for this print",
+                     info.material);
         return;
     }
     density_g_cm3_ = material->density_g_cm3;
@@ -66,10 +64,9 @@ void ExternalSpoolSink::snapshot(float filament_used_mm) {
     last_written_weight_g_ = info.remaining_weight_g;
     last_persist_tick_ms_ = lv_tick_get();
     active_ = true;
-    spdlog::info(
-        "[ConsumptionSink:external] Snapshot: material={}, density={} g/cm3, "
-        "weight={} g, filament_used_mm={}",
-        info.material, density_g_cm3_, snapshot_weight_g_, snapshot_mm_);
+    spdlog::info("[ConsumptionSink:external] Snapshot: material={}, density={} g/cm3, "
+                 "weight={} g, filament_used_mm={}",
+                 info.material, density_g_cm3_, snapshot_weight_g_, snapshot_mm_);
 }
 
 void ExternalSpoolSink::apply_delta(float filament_used_mm) {
@@ -85,12 +82,10 @@ void ExternalSpoolSink::apply_delta(float filament_used_mm) {
 
     // External-write detection: someone other than us updated remaining_weight_g.
     // Treat as authoritative and rebase our snapshot from it.
-    if (std::abs(info.remaining_weight_g - last_written_weight_g_) >
-        kRebaselineThresholdG) {
-        spdlog::info(
-            "[ConsumptionSink:external] External write detected (was {} g, now "
-            "{} g); rebaselining",
-            last_written_weight_g_, info.remaining_weight_g);
+    if (std::abs(info.remaining_weight_g - last_written_weight_g_) > kRebaselineThresholdG) {
+        spdlog::info("[ConsumptionSink:external] External write detected (was {} g, now "
+                     "{} g); rebaselining",
+                     last_written_weight_g_, info.remaining_weight_g);
         rebaseline(filament_used_mm);
         return;
     }
@@ -104,16 +99,14 @@ void ExternalSpoolSink::apply_delta(float filament_used_mm) {
         return;
     }
 
-    float consumed_g =
-        filament::length_to_weight_g(consumed_mm, density_g_cm3_, diameter_mm_);
+    float consumed_g = filament::length_to_weight_g(consumed_mm, density_g_cm3_, diameter_mm_);
     float new_remaining_g = snapshot_weight_g_ - consumed_g;
     if (new_remaining_g < 0.0f) {
         new_remaining_g = 0.0f;
     }
 
     // Avoid noise writes for sub-gram changes the UI can't show anyway.
-    if (std::abs(new_remaining_g - info.remaining_weight_g) <
-        kDeltaWriteThresholdG) {
+    if (std::abs(new_remaining_g - info.remaining_weight_g) < kDeltaWriteThresholdG) {
         return;
     }
 
@@ -156,9 +149,7 @@ void ExternalSpoolSink::rebaseline(float filament_used_mm) {
 
 AmsSlotSink::AmsSlotSink(int backend_index, int slot_index)
     : backend_index_(backend_index), slot_index_(slot_index),
-      name_("ams:" + std::to_string(backend_index) + ":" +
-            std::to_string(slot_index)) {
-}
+      name_("ams:" + std::to_string(backend_index) + ":" + std::to_string(slot_index)) {}
 
 std::string_view AmsSlotSink::name() const {
     return name_;
@@ -169,8 +160,7 @@ bool AmsSlotSink::is_trackable() const {
 }
 
 uint32_t AmsSlotSink::persist_interval_ms() const {
-    return persist_interval_override_ms_ ? persist_interval_override_ms_
-                                         : kPersistIntervalMs;
+    return persist_interval_override_ms_ ? persist_interval_override_ms_ : kPersistIntervalMs;
 }
 
 std::optional<SlotInfo> AmsSlotSink::current_info() const {
@@ -185,40 +175,33 @@ void AmsSlotSink::snapshot(float filament_used_mm) {
     active_ = false;
     AmsBackend* backend = AmsState::instance().get_backend(backend_index_);
     if (!backend) {
-        spdlog::debug("[ConsumptionSink:{}] Backend not registered; skipping",
-                      name_);
+        spdlog::debug("[ConsumptionSink:{}] Backend not registered; skipping", name_);
         return;
     }
     if (backend->tracks_consumption_natively()) {
-        spdlog::debug(
-            "[ConsumptionSink:{}] Backend tracks consumption natively; skipping",
-            name_);
+        spdlog::debug("[ConsumptionSink:{}] Backend tracks consumption natively; skipping", name_);
         return;
     }
     auto info_opt = current_info();
     if (!info_opt.has_value()) {
-        spdlog::debug("[ConsumptionSink:{}] Slot info unavailable; skipping",
-                      name_);
+        spdlog::debug("[ConsumptionSink:{}] Slot info unavailable; skipping", name_);
         return;
     }
     const auto& info = *info_opt;
     if (info.remaining_weight_g < 0.0f) {
-        spdlog::debug(
-            "[ConsumptionSink:{}] Unknown remaining weight; skipping", name_);
+        spdlog::debug("[ConsumptionSink:{}] Unknown remaining weight; skipping", name_);
         return;
     }
     if (info.spoolman_id != 0) {
-        spdlog::debug(
-            "[ConsumptionSink:{}] Spoolman-linked (id={}); skipping", name_,
-            info.spoolman_id);
+        spdlog::debug("[ConsumptionSink:{}] Spoolman-linked (id={}); skipping", name_,
+                      info.spoolman_id);
         return;
     }
     auto material = filament::find_material(info.material);
     if (!material.has_value() || material->density_g_cm3 <= 0.0f) {
-        spdlog::warn(
-            "[ConsumptionSink:{}] Cannot resolve density for material '{}'; "
-            "consumption tracking disabled for this print",
-            name_, info.material);
+        spdlog::warn("[ConsumptionSink:{}] Cannot resolve density for material '{}'; "
+                     "consumption tracking disabled for this print",
+                     name_, info.material);
         return;
     }
     density_g_cm3_ = material->density_g_cm3;
@@ -230,8 +213,7 @@ void AmsSlotSink::snapshot(float filament_used_mm) {
     active_ = true;
     spdlog::info("[ConsumptionSink:{}] Snapshot: material={}, density={} "
                  "g/cm3, weight={} g, filament_used_mm={}",
-                 name_, info.material, density_g_cm3_, snapshot_weight_g_,
-                 snapshot_mm_);
+                 name_, info.material, density_g_cm3_, snapshot_weight_g_, snapshot_mm_);
 }
 
 void AmsSlotSink::apply_delta(float filament_used_mm) {
@@ -257,8 +239,7 @@ void AmsSlotSink::apply_delta(float filament_used_mm) {
     if (info.spoolman_id != 0 || backend->tracks_consumption_natively()) {
         spdlog::info("[ConsumptionSink:{}] Slot became untrackable mid-stream "
                      "(spoolman_id={}, native={}); pausing",
-                     name_, info.spoolman_id,
-                     backend->tracks_consumption_natively());
+                     name_, info.spoolman_id, backend->tracks_consumption_natively());
         active_ = false;
         return;
     }
@@ -266,12 +247,10 @@ void AmsSlotSink::apply_delta(float filament_used_mm) {
     // External-write detection: someone other than us changed
     // remaining_weight_g between ticks (user edit, Spoolman poll that didn't
     // also set spoolman_id, etc.). Rebase from their value.
-    if (std::abs(info.remaining_weight_g - last_written_weight_g_) >
-        kRebaselineThresholdG) {
-        spdlog::info(
-            "[ConsumptionSink:{}] External write detected (was {} g, now "
-            "{} g); rebaselining",
-            name_, last_written_weight_g_, info.remaining_weight_g);
+    if (std::abs(info.remaining_weight_g - last_written_weight_g_) > kRebaselineThresholdG) {
+        spdlog::info("[ConsumptionSink:{}] External write detected (was {} g, now "
+                     "{} g); rebaselining",
+                     name_, last_written_weight_g_, info.remaining_weight_g);
         rebaseline(filament_used_mm);
         return;
     }
@@ -285,19 +264,20 @@ void AmsSlotSink::apply_delta(float filament_used_mm) {
         return;
     }
 
-    float consumed_g =
-        filament::length_to_weight_g(consumed_mm, density_g_cm3_, diameter_mm_);
+    float consumed_g = filament::length_to_weight_g(consumed_mm, density_g_cm3_, diameter_mm_);
     float new_remaining_g = std::max(0.0f, snapshot_weight_g_ - consumed_g);
 
-    if (std::abs(new_remaining_g - info.remaining_weight_g) <
-        kDeltaWriteThresholdG) {
+    if (std::abs(new_remaining_g - info.remaining_weight_g) < kDeltaWriteThresholdG) {
         return;
     }
 
     info.remaining_weight_g = new_remaining_g;
-    const bool persist_now =
-        lv_tick_elaps(last_persist_tick_ms_) >= persist_interval_ms();
-    backend->set_slot_info(slot_index_, info, /*persist=*/persist_now);
+    const bool persist_now = lv_tick_elaps(last_persist_tick_ms_) >= persist_interval_ms();
+    // Weight-only update: must NOT re-emit material/color or re-lock identity.
+    // set_slot_info() here re-wrote the firmware store every persist and reverted
+    // externally-set materials (#981).
+    backend->update_slot_weight(slot_index_, info.remaining_weight_g, info.total_weight_g,
+                                /*persist=*/persist_now);
     if (persist_now) {
         last_persist_tick_ms_ = lv_tick_get();
     }
@@ -313,7 +293,9 @@ void AmsSlotSink::flush() {
     if (!info_opt.has_value()) {
         return;
     }
-    backend->set_slot_info(slot_index_, *info_opt, /*persist=*/true);
+    // Weight-only flush (see apply_delta) — identity must not be re-asserted.
+    backend->update_slot_weight(slot_index_, info_opt->remaining_weight_g, info_opt->total_weight_g,
+                                /*persist=*/true);
     last_written_weight_g_ = info_opt->remaining_weight_g;
     last_persist_tick_ms_ = lv_tick_get();
 }

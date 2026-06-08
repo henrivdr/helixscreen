@@ -2650,6 +2650,104 @@ TEST_CASE("AD5X IFS set_slot_info(persist=false) does NOT write to store",
     CHECK(info.color_rgb == 0x123456u);
 }
 
+// ==========================================================================
+// #981: update_slot_weight() is the consumption-sink's weight-only persist.
+// It MUST update weight without re-asserting filament identity (material/
+// color/locks) and MUST NOT rewrite Adventurer5M.json — the firmware-facing
+// writers in set_slot_info() reverted externally-set materials on every 60 s
+// persist.
+// ==========================================================================
+
+TEST_CASE("AD5X IFS update_slot_weight preserves identity and does not write Adventurer5M.json",
+          "[ams][ad5x_ifs][filament_slot_override][981][slow]") {
+    Ad5xIfsTmpCacheDir tmp("weight_only_preserves_identity");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    AmsBackendAd5xIfs backend(&api, nullptr);
+    seed_standard_colors(backend); // firmware truth: slot 0 = PLA / #FF0000
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // A prior in-app edit: slot 0 locked to PETG / #ABCDEF with a weight.
+    helix::ams::FilamentSlotOverride locked;
+    locked.material = "PETG";
+    locked.user_locked_material = true;
+    locked.color_rgb = 0xABCDEF;
+    locked.color_set = true;
+    locked.user_locked_color = true;
+    locked.remaining_weight_g = 100.0f;
+    Ad5xIfsTestAccess::seed_override(backend, 0, locked);
+
+    // A sentinel Adventurer5M.json at the resolved local path. update_slot_weight
+    // must leave it byte-for-byte untouched (set_slot_info would rewrite it).
+    const std::string json_path = (tmp.path / "Adventurer5M.json").string();
+    const std::string sentinel = "{\"FFMInfo\":{\"ffmType1\":\"PETG\",\"sentinel\":true}}";
+    { std::ofstream(json_path) << sentinel; }
+    Ad5xIfsTestAccess::set_local_adventurer_json_path(backend, json_path);
+
+    backend.update_slot_weight(0, /*remaining=*/42.0f, /*total=*/-1.0f, /*persist=*/true);
+
+    // Weight updated; identity and locks untouched.
+    auto ovr = Ad5xIfsTestAccess::get_override(backend, 0);
+    REQUIRE(ovr.has_value());
+    CHECK(ovr->remaining_weight_g == 42.0f);
+    CHECK(ovr->material == "PETG");
+    CHECK(ovr->user_locked_material == true);
+    CHECK(ovr->color_rgb == 0xABCDEFu);
+    CHECK(ovr->user_locked_color == true);
+
+    // Adventurer5M.json was NOT rewritten — this is the #981 regression guard.
+    std::ifstream check(json_path);
+    std::string after((std::istreambuf_iterator<char>(check)), std::istreambuf_iterator<char>());
+    CHECK(after == sentinel);
+
+    // get_slot_info weight reflects the in-memory update. (Material identity is
+    // asserted on the override above; get_slot_info doesn't re-run
+    // apply_overrides here, so it still shows firmware-level state — not what
+    // this test is about.)
+    CHECK(backend.get_slot_info(0).remaining_weight_g == 42.0f);
+}
+
+TEST_CASE("AD5X IFS update_slot_weight on an un-overridden slot does not lock identity",
+          "[ams][ad5x_ifs][filament_slot_override][981][slow]") {
+    Ad5xIfsTmpCacheDir tmp("weight_only_no_lock");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    AmsBackendAd5xIfs backend(&api, nullptr);
+    seed_standard_colors(backend); // firmware truth: slot 1 = PETG / #00FF00
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // No prior override on slot 1.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 1).has_value());
+
+    backend.update_slot_weight(1, /*remaining=*/55.0f, /*total=*/-1.0f, /*persist=*/true);
+
+    // A weight-only override is created — crucially WITHOUT locking material or
+    // color. set_slot_info would have stamped user_locked_material=true and
+    // frozen the firmware material into the override (the bug).
+    auto ovr = Ad5xIfsTestAccess::get_override(backend, 1);
+    REQUIRE(ovr.has_value());
+    CHECK(ovr->remaining_weight_g == 55.0f);
+    CHECK(ovr->material.empty());
+    CHECK(ovr->user_locked_material == false);
+    CHECK(ovr->color_set == false);
+    CHECK(ovr->user_locked_color == false);
+
+    // Identity still flows from firmware (override doesn't shadow it).
+    auto info = backend.get_slot_info(1);
+    CHECK(info.material == "PETG");
+    CHECK(info.remaining_weight_g == 55.0f);
+}
+
 TEST_CASE("AD5X IFS set_slot_info(persist=true) survives a matching firmware parse",
           "[ams][ad5x_ifs][filament_slot_override][slow]") {
     // After a persist=true write, the user's color/material round-trip through
