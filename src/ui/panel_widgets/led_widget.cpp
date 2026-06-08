@@ -5,6 +5,7 @@
 
 #include "ui_event_safety.h"
 #include "ui_icon.h"
+#include "ui_toast_manager.h"
 #include "ui_utils.h"
 
 #include "app_globals.h"
@@ -71,13 +72,12 @@ void LedWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
     // Observe led_config_version to rebind when LED discovery or settings change.
     auto token = lifetime_.token();
     auto& led_ctrl = helix::led::LedController::instance();
-    led_version_observer_ =
-        helix::ui::observe_int_sync<LedWidget>(led_ctrl.get_led_config_version_subject(), this,
-                                               [token](LedWidget* self, int /*version*/) {
-                                                   if (token.expired())
-                                                       return;
-                                                   self->bind_led();
-                                               });
+    led_version_observer_ = helix::ui::observe_int_sync<LedWidget>(
+        led_ctrl.get_led_config_version_subject(), this, [token](LedWidget* self, int /*version*/) {
+            if (token.expired())
+                return;
+            self->bind_led();
+        });
 
     // Bind immediately rather than waiting for the deferred observer callback.
     // observe_int_sync defers via queue_update, so the initial fire-on-add
@@ -156,6 +156,12 @@ void LedWidget::handle_light_toggle() {
     spdlog::info("[LedWidget] Light button clicked");
 
     auto& led_ctrl = helix::led::LedController::instance();
+    if (led_ctrl.light_command_in_flight()) {
+        spdlog::debug("[LedWidget] Ignoring toggle — LED command already in flight");
+        ToastManager::instance().show(ToastSeverity::INFO,
+                                      "Light will switch when the current operation finishes");
+        return;
+    }
     if (led_ctrl.selected_strips().empty()) {
         spdlog::warn("[LedWidget] Light toggle called but no LED configured");
         return;

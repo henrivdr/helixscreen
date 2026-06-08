@@ -5,12 +5,12 @@
 
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
+#include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
 #include "led/led_controller.h"
-#include "moonraker_api.h"
-
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "moonraker_api.h"
 
 #include <spdlog/spdlog.h>
 
@@ -108,6 +108,12 @@ void PrintLightTimelapseControls::deinit_subjects() {
 // ============================================================================
 
 void PrintLightTimelapseControls::handle_light_button() {
+    if (helix::led::LedController::instance().light_command_in_flight()) {
+        spdlog::debug("[PrintLightTimelapseControls] Ignoring toggle — LED command in flight");
+        ToastManager::instance().show(ToastSeverity::INFO,
+                                      "Light will switch when the current operation finishes");
+        return;
+    }
     // Button is gated by `led_controllable` in XML, so it can't be clicked unless
     // LedController has at least one selected strip — no defensive bail-out needed.
     spdlog::info("[PrintLightTimelapseControls] Light button clicked (subject: {})",
