@@ -1192,8 +1192,8 @@ TEST_CASE("LedController: auto-select picks all selectable strips across backend
     ctrl.init(nullptr, nullptr);
 
     helix::PrinterDiscovery discovery;
-    nlohmann::json objects = nlohmann::json::array(
-        {"neopixel chamber_light", "output_pin case_light", "extruder"});
+    nlohmann::json objects =
+        nlohmann::json::array({"neopixel chamber_light", "output_pin case_light", "extruder"});
     discovery.parse_objects(objects);
     ctrl.discover_from_hardware(discovery);
 
@@ -1631,4 +1631,18 @@ TEST_CASE_METHOD(LedMockApiFixture,
     REQUIRE(color.g == Catch::Approx(0.25).margin(0.01));
     REQUIRE(color.b == Catch::Approx(0.25).margin(0.01));
     REQUIRE(color.w == Catch::Approx(0.0).margin(0.01));
+}
+
+// ============================================================================
+// Task 1: led_command_in_flight subject + counter scaffolding
+// ============================================================================
+
+TEST_CASE_METHOD(LedMockApiFixture, "LedController: in-flight subject defaults to 0",
+                 "[led][controller][inflight]") {
+    setup_controller_with_strip();
+    auto& ctrl = helix::led::LedController::instance();
+    lv_subject_t* s = ctrl.get_led_command_in_flight_subject();
+    REQUIRE(s != nullptr);
+    REQUIRE(lv_subject_get_int(s) == 0);
+    REQUIRE_FALSE(ctrl.light_command_in_flight());
 }

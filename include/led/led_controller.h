@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "async_lifetime_guard.h"
 #include "led/led_backend.h"
 
@@ -467,6 +469,16 @@ class LedController {
         return &led_controllable_;
     }
 
+    /// Int subject (0/1): a light toggle command is currently awaiting its gcode ACK.
+    /// Drives button greying while a command is in flight. Registered globally as
+    /// "led_command_in_flight" for direct XML binding.
+    lv_subject_t* get_led_command_in_flight_subject() {
+        return &led_command_in_flight_;
+    }
+    [[nodiscard]] bool light_command_in_flight() const {
+        return in_flight_count_ > 0;
+    }
+
     /// Cached last-used color including white channel
     struct LastColor {
         uint32_t rgb = 0xFFFFFF; // RGB as 0xRRGGBB (color picker compatibility)
@@ -546,13 +558,20 @@ class LedController {
     };
     [[nodiscard]] ScaledColor compute_scaled_last_color(int brightness_pct) const;
 
-    lv_subject_t led_config_version_{}; // Bumped on discover/config changes
-    lv_subject_t led_controllable_{};   // 0/1 mirror of !selected_strips_.empty()
+    lv_subject_t led_config_version_{};    // Bumped on discover/config changes
+    lv_subject_t led_controllable_{};      // 0/1 mirror of !selected_strips_.empty()
+    lv_subject_t led_command_in_flight_{}; // 0/1: a light toggle is awaiting its gcode ACK
+    int in_flight_count_ = 0;              // outstanding toggle commands awaiting ACK
+    ObserverGuard conn_observer_;          // clears in-flight on disconnect (used by a later task)
     bool version_subject_initialized_ = false;
 
     /// Push the current selected_strips_ emptiness into led_controllable_.
     /// Cheap no-op if the value is unchanged. Safe before subject init (skips).
     void publish_controllable_state();
+    void update_in_flight_subject();
+    void note_command_dispatched();
+    void note_command_settled();
+    void force_clear_in_flight();
 
     // Default color presets
     static constexpr uint32_t DEFAULT_COLOR_PRESETS[] = {0xFFFFFF, 0xFFD700, 0xFF6B35, 0x4FC3F7,
