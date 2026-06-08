@@ -158,8 +158,8 @@ void LedWidget::handle_light_toggle() {
     auto& led_ctrl = helix::led::LedController::instance();
     if (led_ctrl.light_command_in_flight()) {
         spdlog::debug("[LedWidget] Ignoring toggle — LED command already in flight");
-        ToastManager::instance().show(ToastSeverity::INFO,
-                                      "Light will switch when the current operation finishes");
+        ToastManager::instance().show(
+            ToastSeverity::INFO, lv_tr("Light will switch when the current operation finishes"));
         return;
     }
     if (led_ctrl.selected_strips().empty()) {

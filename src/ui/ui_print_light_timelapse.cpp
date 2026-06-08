@@ -110,8 +110,8 @@ void PrintLightTimelapseControls::deinit_subjects() {
 void PrintLightTimelapseControls::handle_light_button() {
     if (helix::led::LedController::instance().light_command_in_flight()) {
         spdlog::debug("[PrintLightTimelapseControls] Ignoring toggle — LED command in flight");
-        ToastManager::instance().show(ToastSeverity::INFO,
-                                      "Light will switch when the current operation finishes");
+        ToastManager::instance().show(
+            ToastSeverity::INFO, lv_tr("Light will switch when the current operation finishes"));
         return;
     }
     // Button is gated by `led_controllable` in XML, so it can't be clicked unless
