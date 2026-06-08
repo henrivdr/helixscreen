@@ -866,6 +866,7 @@ Tool mapping: array index = tool number (T0-T15), value = physical port (1-4, 5=
 | `INSERT_PRUTOK_IFS PRUTOK={port}` | Load filament from port (looks up temp from config) |
 | `IFS_REMOVE_PRUTOK` | Toolhead unload — retract the currently-loaded filament |
 | `REMOVE_PRUTOK_IFS PRUTOK={port}` | Toolhead unload (heat + retract the currently-loaded filament). **Not** a per-port jog — `PRUTOK=N` does not eject an idle lane; see note below |
+| `IFS_F11 PRUTOK={port} LEN={mm} SPEED={s} CHECK=0` | Cold per-lane retract — reverse one idle lane's feed motor toward the spool; no heat, no presence guard. Used for idle-lane recovery (#996) |
 | `A_CHANGE_FILAMENT CHANNEL={port}` | Full tool change |
 | `SET_EXTRUDER_SLOT SLOT={port}` | Select slot without loading |
 | `IFS_UNLOCK` | Reset IFS driver state machine |
@@ -875,7 +876,7 @@ Tool mapping: array index = tool number (T0-T15), value = physical port (1-4, 5=
 
 **Plugin compatibility**: HelixScreen auto-detects the variable prefix from whichever `save_variables` are present on the printer. Both lessWaste and bambufy use the same schema, just different prefixes.
 
-**Unload is toolhead-oriented, not per-lane**: Both `REMOVE_PRUTOK_IFS PRUTOK={port}` and `IFS_REMOVE_PRUTOK` run the toolhead unload sequence — they heat the hotend and retract whatever filament is currently loaded to the toolhead. The `PRUTOK={port}` argument does **not** select an idle lane to jog independently; observed on a real AD5X (native ZMOD), `REMOVE_PRUTOK_IFS PRUTOK=N` unloaded the currently-loaded filament (in a different slot) and ignored port N, and can error `No filament N in IFS` when IFS state disagrees with presence. There is currently **no cold per-lane reverse-jog at the gcode layer**: the only unconditional per-lane retract is the raw serial command `F11 C{port}` behind `zmod_ifs.py`, which is not surfaced as a Moonraker macro. This is why HelixScreen keeps the currently-loaded slot unloadable after runout (#995); a true cold per-lane eject is firmware-blocked until `F11` is exposed (#996). See `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md` §12.
+**Unload is toolhead-oriented, not per-lane**: Both `REMOVE_PRUTOK_IFS PRUTOK={port}` and `IFS_REMOVE_PRUTOK` run the toolhead unload sequence — they heat the hotend and retract whatever filament is currently loaded to the toolhead. The `PRUTOK={port}` argument does **not** select an idle lane to jog independently; observed on a real AD5X (native ZMOD), `REMOVE_PRUTOK_IFS PRUTOK=N` unloaded the currently-loaded filament (in a different slot) and ignored port N, and can error `No filament N in IFS` when IFS state disagrees with presence. A cold per-lane retract, by contrast, **is** available at the gcode layer via `IFS_F11 PRUTOK={n} LEN={mm} SPEED={s} CHECK=0` (core ZMOD — a thin wrapper over raw serial `F11 C{port}…` with no heating and, with `CHECK=0`, no presence guard). This is why HelixScreen keeps the currently-loaded slot unloadable after runout (#995); and #996 implements HelixScreen calling `IFS_F11` directly for idle-lane recovery (e.g. a snapped chunk stuck in a lane's feed path — no hot nozzle involved). See `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md` §12.
 
 ### Path Topology
 

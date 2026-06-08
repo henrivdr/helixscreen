@@ -99,6 +99,26 @@ class Ad5xIfsTestAccess {
         b.system_info_.action = a;
         b.action_start_time_ = std::chrono::steady_clock::now();
     }
+    // Flip running_ so check_preconditions() passes without a live Moonraker
+    // connection (mirrors TestableAfcBackend::set_running). Required by any test
+    // exercising a public action method (load/unload/eject) that runs the
+    // precondition gate first.
+    static void set_running(AmsBackendAd5xIfs& b, bool state) {
+        b.running_.store(state);
+    }
+    // Seed the firmware's active-slot pointer + head-filament sensor so the
+    // "loaded in toolhead" refusal in eject_lane() can be exercised. These are
+    // the exact members eject_lane()/unload_filament() read (system_info_.current_slot
+    // and head_filament_).
+    static void set_current_slot(AmsBackendAd5xIfs& b, int slot, bool filament_loaded) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.system_info_.current_slot = slot;
+        b.system_info_.filament_loaded = filament_loaded;
+    }
+    static void set_head_filament(AmsBackendAd5xIfs& b, bool detected) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.head_filament_ = detected;
+    }
     static void check_action_timeout(AmsBackendAd5xIfs& b, std::chrono::seconds elapsed) {
         b.action_start_time_ = std::chrono::steady_clock::now() - elapsed;
         b.check_action_timeout();
@@ -4397,4 +4417,120 @@ TEST_CASE("AD5X IFS #904 PLA+ round-trips through set_slot_info after custom_typ
     REQUIRE(err.success());
     auto info1 = backend.get_slot_info(1);
     CHECK(info1.material == "rPLA");
+}
+
+// ==========================================================================
+// Cold per-lane eject / recover (#996)
+//
+// IFS_F11 PRUTOK={port} CHECK=0 is a cold per-lane retract that drives ONE
+// idle lane's feed motor backward toward the spool. It does NOT heat the
+// hotend and (CHECK=0) ignores the lane presence/runout sensor, so it can
+// recover a snapped chunk stuck in an idle lane. Ports are 1-based; HelixScreen
+// slot_index is 0-based, so PRUTOK = slot_index + 1.
+// ==========================================================================
+
+namespace {
+// Captures issued G-code without a live Moonraker connection by overriding the
+// virtual execute_gcode(). eject_lane() must route through execute_gcode()
+// (NOT ensure_homed_then(), which is non-virtual and would attempt real homing),
+// so this subclass is sufficient to assert exactly what eject_lane() sends.
+class TestableAd5xIfsBackend : public AmsBackendAd5xIfs {
+  public:
+    TestableAd5xIfsBackend() : AmsBackendAd5xIfs(nullptr, nullptr) {}
+
+    std::vector<std::string> captured_gcodes;
+
+    AmsError execute_gcode(const std::string& gcode) override {
+        captured_gcodes.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+
+    bool has_gcode(const std::string& expected) const {
+        return std::find(captured_gcodes.begin(), captured_gcodes.end(), expected) !=
+               captured_gcodes.end();
+    }
+    bool has_gcode_containing(const std::string& needle) const {
+        for (const auto& g : captured_gcodes) {
+            if (g.find(needle) != std::string::npos)
+                return true;
+        }
+        return false;
+    }
+};
+} // namespace
+
+TEST_CASE("AD5X IFS reports lane-eject and force-eject support", "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    // Cold eject is always available on AD5X IFS, including for an idle lane
+    // that reports EMPTY (snapped-chunk recovery) — both caps must be true.
+    REQUIRE(backend.supports_lane_eject());
+    REQUIRE(backend.supports_force_eject());
+}
+
+TEST_CASE("AD5X IFS eject_lane issues cold IFS_F11 retract", "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    // 0-based slot 2 -> 1-based port 3.
+    AmsError err = backend.eject_lane(2);
+    REQUIRE(err.success());
+
+    // Exactly the cold retract, with CHECK=0 spelled out to document intent.
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+    REQUIRE(backend.captured_gcodes.size() == 1);
+
+    // No heating and no homing — this is a cold idle-lane retract.
+    REQUIRE_FALSE(backend.has_gcode_containing("G28"));
+    REQUIRE_FALSE(backend.has_gcode_containing("SET_HEATER"));
+    REQUIRE_FALSE(backend.has_gcode_containing("M104"));
+    REQUIRE_FALSE(backend.has_gcode_containing("M109"));
+    // Not the toolhead unload path.
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK"));
+}
+
+TEST_CASE("AD5X IFS eject_lane port mapping is 1-based", "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    REQUIRE(backend.eject_lane(0).success());
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 CHECK=0"));
+
+    REQUIRE(backend.eject_lane(3).success());
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=4 CHECK=0"));
+}
+
+TEST_CASE("AD5X IFS eject_lane refuses the slot loaded in toolhead", "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    // Slot 1 is the firmware's active slot AND filament is seated at the head:
+    // ejecting it cold would fight the loaded filament, so refuse.
+    Ad5xIfsTestAccess::set_current_slot(backend, 1, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    AmsError err = backend.eject_lane(1);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(err.result == AmsResult::WRONG_STATE);
+    REQUIRE(backend.captured_gcodes.empty());
+
+    // A DIFFERENT idle lane is still ejectable while slot 1 is loaded.
+    REQUIRE(backend.eject_lane(2).success());
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+}
+
+TEST_CASE("AD5X IFS eject_lane rejects out-of-range slots", "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    SECTION("negative slot") {
+        AmsError err = backend.eject_lane(-1);
+        REQUIRE_FALSE(err.success());
+        REQUIRE(backend.captured_gcodes.empty());
+    }
+
+    SECTION("slot == NUM_PORTS (out of range)") {
+        AmsError err = backend.eject_lane(AmsBackendAd5xIfs::NUM_PORTS);
+        REQUIRE_FALSE(err.success());
+        REQUIRE(backend.captured_gcodes.empty());
+    }
 }

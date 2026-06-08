@@ -1080,6 +1080,37 @@ AmsError AmsBackendAd5xIfs::change_tool(int tool_number) {
     return ensure_homed_then("A_CHANGE_FILAMENT CHANNEL=" + std::to_string(port));
 }
 
+AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        AmsError precondition = check_preconditions();
+        if (!precondition) {
+            return precondition;
+        }
+
+        if (!validate_slot_index(slot_index)) {
+            return AmsErrorHelper::invalid_slot(slot_index, NUM_PORTS - 1);
+        }
+
+        // Refuse to cold-eject the lane currently seated at the toolhead: the
+        // backward retract would fight the loaded filament. Mirror AFC's wording
+        // so the UI surfaces a consistent message across backends. current_slot
+        // + head_filament_ are the same members unload_filament() reads.
+        if (system_info_.current_slot == slot_index && head_filament_) {
+            return AmsError(AmsResult::WRONG_STATE, "Lane is loaded in toolhead",
+                            "Unload from toolhead first", "Use Unload before Eject");
+        }
+    }
+
+    int port = slot_index + 1;
+    spdlog::info("{} Cold eject (recover) lane {} -> IFS_F11 PRUTOK={} CHECK=0", backend_log_tag(),
+                 slot_index, port);
+    // Cold retract: no heat, no homing. Use the plain execute_gcode() helper
+    // (NOT ensure_homed_then(), which is for toolhead moves like load/unload).
+    return execute_gcode("IFS_F11 PRUTOK=" + std::to_string(port) + " CHECK=0");
+}
+
 // --- Recovery ---
 
 AmsError AmsBackendAd5xIfs::recover() {

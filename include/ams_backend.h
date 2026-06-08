@@ -508,6 +508,20 @@ class AmsBackend {
     }
 
     /**
+     * @brief Check if eject_lane() works even when the lane reports EMPTY/runout
+     *
+     * True if eject_lane() works even when the lane reports EMPTY/runout — i.e. a
+     * cold retract that ignores the presence sensor, used to recover a snapped
+     * chunk stuck in an idle lane. Distinct from supports_lane_eject() (eject an
+     * idle lane that still has filament present).
+     *
+     * @return true if a cold, sensor-ignoring eject is available
+     */
+    [[nodiscard]] virtual bool supports_force_eject() const {
+        return false;
+    }
+
+    /**
      * @brief Whether the slot can be unloaded from the toolhead.
      *
      * Gates the context-menu "Unload" action, and (inverted) also suppresses the

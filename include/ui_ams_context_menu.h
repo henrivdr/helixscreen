@@ -139,7 +139,10 @@ class AmsContextMenu : public ContextMenu {
     // Gates BOTH the Unload action (enabled) and the Load action (suppressed) —
     // a slot the firmware considers seated should not offer Load.
     bool pending_is_loaded_ = false;
-    bool eject_mode_ = false;          ///< True when showing "Eject" instead of "Unload"
+    bool eject_mode_ = false; ///< True when showing "Eject" instead of "Unload"
+    /// True when showing a force-eject/recover affordance for an idle lane that reports EMPTY —
+    /// AD5X IFS cold retract, ignores presence (#996).
+    bool force_eject_mode_ = false;
     bool external_spool_mode_ = false; ///< True when showing menu for external spool (bypass)
 
     // === Event Handlers ===

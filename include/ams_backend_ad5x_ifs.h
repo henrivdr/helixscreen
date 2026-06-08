@@ -114,6 +114,20 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     AmsError select_slot(int slot_index) override;
     AmsError change_tool(int tool_number) override;
 
+    // Cold per-lane eject / recover (#996). Issues `IFS_F11 PRUTOK={port}
+    // CHECK=0` — a cold retract that drives one idle lane's feed motor backward
+    // toward the spool. It does NOT heat the hotend and (CHECK=0) ignores the
+    // lane presence/runout sensor, so it recovers a snapped chunk stuck in an
+    // idle lane. Refuses the slot currently loaded to the toolhead (use Unload
+    // first). Not routed through ensure_homed_then() — no toolhead move.
+    AmsError eject_lane(int slot_index) override;
+    [[nodiscard]] bool supports_lane_eject() const override {
+        return true;
+    }
+    [[nodiscard]] bool supports_force_eject() const override {
+        return true;
+    }
+
     AmsError recover() override;
     AmsError reset() override;
     AmsError cancel() override;

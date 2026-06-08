@@ -247,17 +247,25 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
     }
 
     // Determine eject mode: not loaded to toolhead, but filament is in the lane,
-    // and backend supports per-lane eject (AFC only)
+    // and backend supports per-lane eject (AFC, Happy Hare, AD5X IFS)
     bool supports_eject = backend_ && backend_->supports_lane_eject();
     eject_mode_ = supports_eject && !pending_is_loaded_ && slot_has_filament;
+
+    // Determine force-eject/recover mode: idle lane reporting EMPTY, but backend
+    // supports a cold presence-ignoring retract (AD5X IFS only) to recover a
+    // snapped chunk stuck in the lane (#996). Mutually exclusive with eject_mode_:
+    // eject requires filament present, force-eject requires the lane empty.
+    bool slot_empty = !slot_has_filament;
+    force_eject_mode_ =
+        backend_ && backend_->supports_force_eject() && !pending_is_loaded_ && slot_empty;
 
     // Update the unload/eject button label and state
     bool unload_eject_enabled = false;
     if (pending_is_loaded_) {
         // Loaded to toolhead → "Unload" enabled
         unload_eject_enabled = !system_busy;
-    } else if (eject_mode_) {
-        // Filament in lane but not loaded, eject supported → "Eject" enabled
+    } else if (eject_mode_ || force_eject_mode_) {
+        // Filament-in-lane eject, or empty-lane recover → enabled when idle
         unload_eject_enabled = !system_busy;
     }
     // else: no filament or eject not supported → disabled
@@ -269,6 +277,14 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
         lv_obj_t* btn_unload = lv_obj_find_by_name(menu_obj, "btn_unload");
         if (btn_unload) {
             ui_button_set_text(btn_unload, lv_tr("Eject"));
+            ui_button_set_icon(btn_unload, "eject");
+        }
+    } else if (force_eject_mode_) {
+        // Empty/runout lane: offer "Recover" (cold IFS_F11 retract) to clear a
+        // snapped chunk the presence sensor can't see.
+        lv_obj_t* btn_unload = lv_obj_find_by_name(menu_obj, "btn_unload");
+        if (btn_unload) {
+            ui_button_set_text(btn_unload, lv_tr("Recover"));
             ui_button_set_icon(btn_unload, "eject");
         }
     }
@@ -377,8 +393,9 @@ void AmsContextMenu::handle_load() {
 }
 
 void AmsContextMenu::handle_unload() {
-    if (eject_mode_) {
-        spdlog::info("[AmsContextMenu] Eject requested for slot {}", get_item_index());
+    if (eject_mode_ || force_eject_mode_) {
+        spdlog::info("[AmsContextMenu] {} requested for slot {}",
+                     force_eject_mode_ ? "Recover/force-eject" : "Eject", get_item_index());
         dispatch_ams_action(MenuAction::EJECT);
     } else {
         spdlog::info("[AmsContextMenu] Unload requested for slot {}", get_item_index());
