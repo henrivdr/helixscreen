@@ -1733,3 +1733,33 @@ TEST_CASE_METHOD(LedMockApiFixture, "LedController: disconnect clears in-flight 
     REQUIRE(lv_subject_get_int(s) == 0);
     REQUIRE_FALSE(ctrl.light_command_in_flight());
 }
+
+// ============================================================================
+// WLED in-flight parity: REST toggle must grey the button the same as native
+// ============================================================================
+
+TEST_CASE_METHOD(LedMockApiFixture, "LedController: WLED toggle marks in-flight then clears on ACK",
+                 "[led][controller][inflight]") {
+    auto& ctrl = helix::led::LedController::instance();
+    ctrl.deinit();
+    ctrl.init(mock_api.get(), &mock_client);
+
+    helix::led::LedStripInfo wled_strip;
+    wled_strip.name = "Printer LED";
+    wled_strip.id = "wled_printer_led";
+    wled_strip.backend = helix::led::LedBackendType::WLED;
+    wled_strip.supports_color = true;
+    wled_strip.supports_white = false;
+    ctrl.wled().add_strip(wled_strip);
+    ctrl.set_selected_strips({"wled_printer_led"});
+
+    lv_subject_t* s = ctrl.get_led_command_in_flight_subject();
+    // The mock fires the WLED REST ACK synchronously, but settle callbacks land
+    // via tok.defer() (queued to the main thread).  Counter must be 1 before drain.
+    ctrl.light_set(true);
+    REQUIRE(lv_subject_get_int(s) == 1);
+
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(lv_subject_get_int(s) == 0);
+    REQUIRE_FALSE(ctrl.light_command_in_flight());
+}

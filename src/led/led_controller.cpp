@@ -2014,13 +2014,15 @@ void LedController::toggle_all(bool on) {
             }
             break;
 
-        case LedBackendType::WLED:
+        case LedBackendType::WLED: {
+            auto cbs = make_settle();
             if (on) {
-                wled_.set_on(strip_id);
+                wled_.set_on(strip_id, cbs.first, cbs.second);
             } else {
-                wled_.set_off(strip_id);
+                wled_.set_off(strip_id, cbs.first, cbs.second);
             }
             break;
+        }
 
         case LedBackendType::MACRO: {
             // Find the macro device matching this strip_id (by display name)
