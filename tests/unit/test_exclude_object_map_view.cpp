@@ -11,10 +11,10 @@
  * lv_xml_register_const tokens to be accessible via theme_manager_get_color().
  */
 
+#include "../test_fixtures.h"
 #include "theme_manager.h"
 
 #include "../catch_amalgamated.hpp"
-#include "../test_fixtures.h"
 
 // ============================================================================
 // Object color palette token tests
@@ -87,8 +87,8 @@ TEST_CASE_METHOD(XMLTestFixture, "all 8 object color tokens are registered",
         lv_color_t color = theme_manager_get_color(token);
 
         // At least one channel must be non-zero to distinguish from black fallback
-        bool is_non_black = (color.red != black.red) || (color.green != black.green) ||
-                            (color.blue != black.blue);
+        bool is_non_black =
+            (color.red != black.red) || (color.green != black.green) || (color.blue != black.blue);
         INFO("Token " << token << " returned black (missing registration)");
         REQUIRE(is_non_black);
     }
@@ -187,8 +187,7 @@ TEST_CASE("Bed size fallback from object extents", "[exclude_map][bed_size]") {
     // When bed dimensions are unknown (0x0), the caller derives them from the
     // union of all object bounding boxes plus a 10% padding margin.
     // Objects span 20-170mm x 30-140mm → effective extents: 170*1.1 x 140*1.1
-    auto mapper = ExcludeObjectMapView::CoordMapper(
-        170.0f * 1.1f, 140.0f * 1.1f, 400, 400);
+    auto mapper = ExcludeObjectMapView::CoordMapper(170.0f * 1.1f, 140.0f * 1.1f, 400, 400);
     // Center of objects area (85, 70) should map near viewport center
     auto [cx, cy] = mapper.mm_to_px(85.0f, 70.0f);
     REQUIRE(cx > 150.0f);
@@ -219,4 +218,96 @@ TEST_CASE("CoordMapper edge cases", "[exclude_map][coords]") {
         REQUIRE(r1.w >= ExcludeObjectMapView::MIN_TOUCH_TARGET_PX);
         REQUIRE(r2.w >= ExcludeObjectMapView::MIN_TOUCH_TARGET_PX);
     }
+}
+
+// ============================================================================
+// create()/destroy() lifecycle — canvas-buffer ordering + deferred deletion
+// ============================================================================
+//
+// Regression for the LVGL event-list-corruption bug: destroy() must NOT call a
+// bare synchronous lv_obj_delete(root_) (it can run inside a UpdateQueue
+// process_pending batch via the memory-pressure reclaim chain, where a second
+// sync deletion corrupts LVGL's global event linked list). It defers deletion
+// via safe_delete_deferred() instead. The canvas widget (a child of root_)
+// survives until the async delete tick, so destroy() must sever the canvas's
+// image-source reference BEFORE freeing the canvas draw buffer — otherwise the
+// still-live canvas would point at freed memory and a redraw in that window is
+// a use-after-free. These tests exercise the full create + destroy roundtrip
+// with seeded object geometry so the canvas path runs, then pump LVGL so the
+// async delete completes. They crash/assert if the ordering regresses.
+
+#include "printer_excluded_objects_state.h"
+
+namespace {
+// Seed a handful of objects with bounding boxes so create() allocates the
+// canvas draw buffer and draws first-layer outlines into it.
+void seed_objects(helix::PrinterExcludedObjectsState& st) {
+    using ObjectInfo = helix::PrinterExcludedObjectsState::ObjectInfo;
+    std::vector<ObjectInfo> objs;
+    for (int i = 0; i < 3; ++i) {
+        ObjectInfo o;
+        o.name = "OBJ_" + std::to_string(i);
+        float base = 20.0f + static_cast<float>(i) * 40.0f;
+        o.bbox_min = {base, base};
+        o.bbox_max = {base + 30.0f, base + 30.0f};
+        o.center = {base + 15.0f, base + 15.0f};
+        o.has_bbox = true;
+        o.has_center = true;
+        // Triangle polygon so draw_first_layer_outlines renders to the canvas.
+        o.polygon = {{base, base}, {base + 30.0f, base}, {base + 15.0f, base + 30.0f}};
+        objs.push_back(std::move(o));
+    }
+    st.set_defined_objects_with_geometry(objs);
+}
+} // namespace
+
+TEST_CASE_METHOD(XMLTestFixture, "ExcludeObjectMapView create/destroy roundtrip is crash-free",
+                 "[exclude_map][lifecycle]") {
+    REQUIRE(register_component("components/exclude_object_map"));
+    seed_objects(*state().get_excluded_objects_state());
+
+    auto view = std::make_unique<ExcludeObjectMapView>();
+    view->create(test_screen(), state().get_excluded_objects_state(), 235.0f, 235.0f,
+                 /*exclude_manager=*/nullptr, /*parsed_file=*/nullptr);
+    REQUIRE(view->is_active());
+
+    // Let layout settle so the canvas buffer is allocated and drawn.
+    process_lvgl(50);
+
+    view->destroy();
+    // After destroy(), root_ is deferred for async deletion; the view reports
+    // inactive immediately so callers can't re-enter the live tree.
+    REQUIRE_FALSE(view->is_active());
+
+    // Pump LVGL so the lv_obj_delete_async tick actually deletes the widget
+    // subtree (including the now-srcless canvas). If the canvas still pointed
+    // at the freed draw buffer, a redraw during this window would crash.
+    process_lvgl(50);
+
+    // Idempotent: a second destroy() on an already-destroyed view is a no-op.
+    view->destroy();
+    REQUIRE_FALSE(view->is_active());
+
+    // Destructor runs here — it must not double-free or touch freed widgets.
+    view.reset();
+    process_lvgl(20);
+}
+
+TEST_CASE_METHOD(XMLTestFixture,
+                 "ExcludeObjectMapView destructor cleans up without explicit destroy",
+                 "[exclude_map][lifecycle]") {
+    REQUIRE(register_component("components/exclude_object_map"));
+    seed_objects(*state().get_excluded_objects_state());
+
+    {
+        ExcludeObjectMapView view;
+        view.create(test_screen(), state().get_excluded_objects_state(), 200.0f, 200.0f, nullptr,
+                    nullptr);
+        REQUIRE(view.is_active());
+        process_lvgl(30);
+        // No explicit destroy(): the destructor must invoke destroy() and tear
+        // down the canvas buffer + widget tree safely.
+    }
+    process_lvgl(50);
+    SUCCEED("destructor teardown completed without crash");
 }

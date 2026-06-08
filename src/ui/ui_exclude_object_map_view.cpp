@@ -3,11 +3,11 @@
 
 #include "ui_print_exclude_object_manager.h"
 #include "ui_update_queue.h"
+#include "ui_utils.h"
 
 #include "observer_factory.h"
 #include "printer_excluded_objects_state.h"
 #include "theme_manager.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -294,14 +294,37 @@ void ExcludeObjectMapView::destroy() {
         object_rects_.clear();
         mapper_.reset();
 
-        // Free canvas draw buffer before deleting widget tree
+        // Sever the canvas widget's reference to the draw buffer BEFORE freeing
+        // the buffer. The canvas (an lv_image subclass) renders only via its
+        // image src, which points at canvas_buf_. Deletion of root_ — and thus
+        // the canvas child — is deferred below (safe_delete_deferred), so the
+        // canvas widget outlives this function by >=1 tick. Clearing the image
+        // src (NULL resets the image attributes) leaves the still-live canvas
+        // with nothing to draw, so freeing canvas_buf_ here cannot create a
+        // use-after-free window if the hidden subtree is invalidated before the
+        // async delete tick runs. canvas->draw_buf is only dereferenced by
+        // explicit canvas API calls (set_px / fill_bg / init_layer), none of
+        // which fire during a passive redraw.
+        if (canvas_ && lv_obj_is_valid(canvas_)) {
+            lv_image_set_src(canvas_, nullptr);
+        }
+        canvas_ = nullptr;
+
+        // Free canvas draw buffer now that no live widget references it.
         if (canvas_buf_) {
             lv_draw_buf_destroy(canvas_buf_);
             canvas_buf_ = nullptr;
-            canvas_ = nullptr;
         }
 
-        lv_obj_delete(root_);
+        // Deferred delete: a bare lv_obj_delete(root_) here is a sync widget
+        // deletion that can run inside a UpdateQueue process_pending batch
+        // (memory-pressure reclaim chain: PrintStatusPanel::try_reclaim_cached_print_status
+        // -> destroy_overlay_ui -> safe_delete_deferred(overlay_root_) ->
+        // on_ui_destroyed() -> map_view_->destroy()). Two sync deletions in one
+        // batch corrupt LVGL's global event linked list (#776/#190/#80).
+        // safe_delete_deferred escapes the batch via lv_obj_delete_async, and
+        // is equally correct on the standalone hide_exclude_map_view() path.
+        helix::ui::safe_delete_deferred(root_);
         root_ = nullptr;
         plate_area_ = nullptr;
         key_bar_ = nullptr;
