@@ -24,8 +24,10 @@ namespace helix::logs {
 /// (XDG_DATA_HOME, HOME) resolved at call time.
 std::vector<std::string> default_file_paths();
 
-/// Read the last `num_lines` lines from the first readable path in `paths`.
-/// Returns empty string if none exist, are empty, or are unreadable.
+/// Read the last `num_lines` lines from the most-recently-modified readable,
+/// non-empty path in `paths` (NOT first-in-list). The list is priority-ordered,
+/// but freshness wins so a stale leftover at a higher-priority path can't shadow
+/// the log being written now (#981). Returns empty if none exist/are readable.
 std::string tail_file(const std::vector<std::string>& paths, int num_lines);
 
 /// Read the last `num_lines` helix-screen entries from /var/log/messages or
@@ -45,8 +47,11 @@ std::string tail_syslog_from(const std::vector<std::string>& paths, int num_line
 /// to the current boot so we don't drag in old noise.
 std::string tail_journal(int num_lines);
 
-/// Cascade: file logs, then syslog, then journal. First source with content
-/// wins. Pass an empty `paths` vector to use `default_file_paths()`.
+/// Cascade: the app's own resolved log file (logging::effective_log_file_path)
+/// first, then the default file search (freshest wins), then syslog, then
+/// journal. First source with content wins. The authoritative-file step is
+/// skipped when the caller pins an explicit `paths` vector; pass an empty vector
+/// to use the default cascade.
 std::string tail_best(int num_lines, const std::vector<std::string>& paths = {});
 
 } // namespace helix::logs

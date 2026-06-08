@@ -33,7 +33,8 @@ enum class LogTarget {
  */
 struct LogConfig {
     spdlog::level::level_enum level = spdlog::level::warn;
-    bool enable_console = true;         ///< Enable console sink (only attached when target is Console or stdout is a TTY)
+    bool enable_console =
+        true; ///< Enable console sink (only attached when target is Console or stdout is a TTY)
     LogTarget target = LogTarget::Auto; ///< System log destination
     std::string file_path;              ///< Override file path (empty = auto)
 };
@@ -83,6 +84,19 @@ const char* log_target_name(LogTarget target);
  * Returns an empty string before init() has been called.
  */
 std::string effective_destination();
+
+/**
+ * @brief The resolved file path the active file-sink writes to
+ *
+ * Single source of truth for "which file is the app logging to right now."
+ * Returns the resolved path when the effective target is File, or an empty
+ * string for every other target (journal, syslog, console, Android) and before
+ * init() has run. Unlike effective_destination(), this never returns a
+ * human-readable label — it is meant to be read back as an actual path. The
+ * crash reporter and debug-bundle collector use it instead of re-deriving
+ * candidate paths, so the two never diverge.
+ */
+std::string effective_log_file_path();
 
 /**
  * @brief Parse log level from string

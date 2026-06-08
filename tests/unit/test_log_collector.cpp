@@ -8,6 +8,7 @@
 
 #include "system/log_collector.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -86,12 +87,49 @@ TEST_CASE("helix::logs::tail_file returns empty when no path readable", "[log_co
     REQUIRE(result.empty());
 }
 
+TEST_CASE("helix::logs::tail_file picks newest mtime, not list order", "[log_collector]") {
+    // Regression for #981: an AD5X debug bundle shipped a month-old log because
+    // a stale leftover sat at a higher-priority path and won by list position.
+    // Freshness must decide, not order.
+    TempDirGuard tmp;
+    auto stale = tmp.path / "stale.log";
+    auto fresh = tmp.path / "fresh.log";
+    write_lines(stale, 5, "stale");
+    write_lines(fresh, 5, "fresh");
+
+    auto now = fs::file_time_type::clock::now();
+    fs::last_write_time(stale, now - std::chrono::hours(48));
+    fs::last_write_time(fresh, now);
+
+    // `stale` is FIRST in the list but must lose to the fresher file.
+    auto result = helix::logs::tail_file({stale.string(), fresh.string()}, 10);
+    REQUIRE(result.find("fresh 5") != std::string::npos);
+    REQUIRE(result.find("stale") == std::string::npos);
+}
+
+TEST_CASE("helix::logs::tail_file falls through unreadable newest to next freshest",
+          "[log_collector]") {
+    // The freshest path exists but is empty (size 0); selection must skip it and
+    // fall back to the next-freshest file with real content rather than return
+    // empty.
+    TempDirGuard tmp;
+    auto older = tmp.path / "older.log";
+    auto empty_fresh = tmp.path / "empty.log";
+    write_lines(older, 4, "older");
+    { std::ofstream ofs(empty_fresh); } // newest mtime, zero bytes
+
+    auto now = fs::file_time_type::clock::now();
+    fs::last_write_time(older, now - std::chrono::hours(2));
+    fs::last_write_time(empty_fresh, now);
+
+    auto result = helix::logs::tail_file({empty_fresh.string(), older.string()}, 10);
+    REQUIRE(result.find("older 4") != std::string::npos);
+}
+
 TEST_CASE("helix::logs::tail_file returns empty when file is empty", "[log_collector]") {
     TempDirGuard tmp;
     auto empty = tmp.path / "empty.log";
-    {
-        std::ofstream ofs(empty);
-    }
+    { std::ofstream ofs(empty); }
     auto result = helix::logs::tail_file({empty.string()}, 10);
     REQUIRE(result.empty());
 }

@@ -3,16 +3,22 @@
 
 #include "system/log_collector.h"
 
+#include "logging_init.h"
+
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <deque>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
+#include <utility>
 
 namespace helix::logs {
 
@@ -129,13 +135,24 @@ std::vector<std::string> default_file_paths() {
     // Preferred FHS path (used when /var/log is persistent).
     paths.emplace_back("/var/log/helixscreen/launcher.log");
 
-    // ${DAEMON_DIR}/logs/ fallback when /var/log is tmpfs/ramfs.
-    // Listed in priority order (most common install locations first).
-    paths.emplace_back("/opt/helixscreen/logs/launcher.log");          // Pi, AD5M Forge-X/KMod
-    paths.emplace_back("/usr/data/helixscreen/logs/launcher.log");     // K1/K1C/K2/AD5X
-    paths.emplace_back("/userdata/helixscreen/logs/launcher.log");     // Snapmaker U1
-    paths.emplace_back("/user-resource/helixscreen/logs/launcher.log"); // CC1 (COSMOS)
-    paths.emplace_back("/root/printer_software/helixscreen/logs/launcher.log"); // AD5M KMod v00.05
+    // ${DAEMON_DIR}/logs/ fallback when /var/log is tmpfs/ramfs. The launcher
+    // writes BOTH helix.log (the app's file sink, --log-file) and launcher.log
+    // (the wrapper subshell's stdout) under ${root}/logs. Roots mirror
+    // scripts/install.sh HELIX_INSTALL_DIRS — keep the two in sync. This list is
+    // only a fallback for the crash-reporter-next-boot case; the live process is
+    // covered authoritatively by effective_log_file_path() in tail_best().
+    for (const char* root : {
+             "/opt/helixscreen",                   // Pi, AD5M Forge-X/KMod
+             "/usr/data/helixscreen",              // K1/K1C/K2/AD5X
+             "/userdata/helixscreen",              // Snapmaker U1
+             "/user-resource/helixscreen",         // CC1 (COSMOS)
+             "/root/printer_software/helixscreen", // AD5M KMod v00.05
+             "/srv/helixscreen",                   // generic FHS
+             "/data/helixscreen",                  // AD5X /data-rooted installs (#981)
+         }) {
+        paths.emplace_back(std::string(root) + "/logs/helix.log");
+        paths.emplace_back(std::string(root) + "/logs/launcher.log");
+    }
 
     // Legacy /tmp location — pre-v0.99.62 installs wrote here. Kept for
     // backward compatibility with debug bundles from older devices.
@@ -144,8 +161,28 @@ std::vector<std::string> default_file_paths() {
 }
 
 std::string tail_file(const std::vector<std::string>& paths, int num_lines) {
+    // Pick the most-recently-modified readable, non-empty file rather than the
+    // first one that exists. The list is priority-ordered, but a stale leftover
+    // at a higher-priority path (e.g. an old ZMOD stdout-redirect from a prior
+    // install) must not shadow the log the app is writing right now. Freshness,
+    // not list position, decides — an AD5X bundle once shipped a month-old log
+    // for exactly this reason (#981).
+    std::vector<std::pair<std::time_t, const std::string*>> candidates;
     for (const auto& path : paths) {
-        auto result = read_tail_lines(path, num_lines, "file");
+        struct ::stat st {};
+        if (::stat(path.c_str(), &st) == 0 && st.st_size > 0) {
+            candidates.emplace_back(st.st_mtime, &path);
+        }
+    }
+    // stable_sort so that on an mtime tie the original list priority is kept.
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [](const auto& a, const auto& b) { return a.first > b.first; });
+
+    // Read newest-first; skip a file that stat()'d but reads empty (e.g. became
+    // unreadable between stat and open) and try the next-freshest.
+    for (const auto& [mtime, path] : candidates) {
+        (void)mtime;
+        auto result = read_tail_lines(*path, num_lines, "file");
         if (!result.empty())
             return result;
     }
@@ -201,6 +238,17 @@ std::string tail_journal(int num_lines) {
 }
 
 std::string tail_best(int num_lines, const std::vector<std::string>& paths) {
+    // The running app already resolved exactly which file its sink writes to —
+    // prefer that over any heuristic so the collector never re-derives (and
+    // drifts from) logging_init's path logic. Only consulted for the default
+    // cascade; an explicit `paths` list from the caller is honored as-is.
+    if (paths.empty()) {
+        if (auto effective = helix::logging::effective_log_file_path(); !effective.empty()) {
+            if (auto result = read_tail_lines(effective, num_lines, "effective"); !result.empty())
+                return result;
+        }
+    }
+
     const auto& search = paths.empty() ? default_file_paths() : paths;
 
     if (auto result = tail_file(search, num_lines); !result.empty()) {

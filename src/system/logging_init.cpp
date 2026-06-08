@@ -352,6 +352,10 @@ std::string effective_destination() {
     return "";
 }
 
+std::string effective_log_file_path() {
+    return (g_effective_target == LogTarget::File) ? g_effective_file_path : std::string{};
+}
+
 const char* log_target_name(LogTarget target) {
     switch (target) {
     case LogTarget::Auto:
