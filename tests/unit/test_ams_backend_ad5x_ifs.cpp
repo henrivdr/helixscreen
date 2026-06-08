@@ -1709,9 +1709,26 @@ TEST_CASE("AD5X IFS select_unload_command", "[ams][ad5x_ifs]") {
                 Cmd("REMOVE_PRUTOK_IFS PRUTOK=4"));
     }
 
-    SECTION("no active slot (current_slot=-1) → per-port unload") {
+    SECTION("no active slot (current_slot=-1), head empty → per-port unload") {
         REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, -1, false) ==
                 Cmd("REMOVE_PRUTOK_IFS PRUTOK=3"));
+    }
+
+    SECTION("toolhead loaded, firmware dropped active slot (current_slot=-1) → "
+            "IFS_REMOVE_PRUTOK (#995)") {
+        // head_filament true + current_slot < 0: the origin lane is unknown
+        // (stock-ZMOD "Extruder: None"), so unload the toolhead rather than
+        // issue the per-port macro (which would error on the loaded slot).
+        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, -1, true) == "IFS_REMOVE_PRUTOK");
+        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, -1, true) == "IFS_REMOVE_PRUTOK");
+    }
+
+    SECTION("non-active slot with a known active slot still uses per-port (head_filament true)") {
+        // head_filament must NOT override the per-port path when the firmware
+        // still reports a valid active slot (current_slot >= 0): only the
+        // current_slot < 0 "lost pointer" case reroutes to the toolhead unload.
+        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 2, true) ==
+                Cmd("REMOVE_PRUTOK_IFS PRUTOK=1"));
     }
 
     SECTION("out-of-range slot_index → IFS_REMOVE_PRUTOK fallback") {
@@ -1792,6 +1809,66 @@ TEST_CASE("AD5X IFS can_unload_from_toolhead with no active slot is never unload
 
     REQUIRE_FALSE(backend.can_unload_from_toolhead(0));
     REQUIRE_FALSE(backend.can_unload_from_toolhead(-1));
+}
+
+TEST_CASE("AD5X IFS toolhead filament unloadable when firmware drops active slot (#995)",
+          "[ams][ad5x_ifs]") {
+    // Stock-ZMOD recovery scenario: after a runout or print-end the firmware can
+    // emit "Extruder: None" and drop its active-slot pointer to current_slot==-1
+    // while filament is STILL seated in the toolhead (head sensor true). The
+    // active-slot short-circuit can never fire (nothing matches -1), so the only
+    // signal that there is removable filament is the head sensor itself.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+    // Native ZMOD: no per-port sensors.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // No active tool (current_slot == -1) but filament present at the head.
+    {
+        auto vars = standard_variables();
+        vars["less_waste_current_tool"] = -1;
+        json notification;
+        notification["save_variables"] = json{{"variables", vars}};
+        notification["filament_switch_sensor head_switch_sensor"] =
+            json{{"filament_detected", true}};
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+    }
+    REQUIRE(backend.get_system_info().current_slot == -1);
+    REQUIRE(Ad5xIfsTestAccess::head_filament(backend));
+
+    // The gate must open even though no slot is the active slot — filament is
+    // physically in the toolhead and must be removable.
+    REQUIRE(backend.can_unload_from_toolhead(0));
+
+    // The command must route to the toolhead unload, NOT the per-port macro:
+    // the true origin lane is unknown and REMOVE_PRUTOK_IFS PRUTOK=1 errors on
+    // the loaded slot.
+    REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, /*current_slot=*/-1,
+                                                     /*head_filament=*/true) ==
+            "IFS_REMOVE_PRUTOK");
+}
+
+TEST_CASE("AD5X IFS no toolhead filament leaves slot non-unloadable (#995 regression)",
+          "[ams][ad5x_ifs]") {
+    // The mirror of the recovery case: no filament anywhere (head sensor false,
+    // current_slot == -1) must keep Unload disabled. The head_filament gate must
+    // not open when there is nothing seated in the toolhead.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+
+    {
+        auto vars = standard_variables();
+        vars["less_waste_current_tool"] = -1;
+        json notification;
+        notification["save_variables"] = json{{"variables", vars}};
+        notification["filament_switch_sensor head_switch_sensor"] =
+            json{{"filament_detected", false}};
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+    }
+    REQUIRE(backend.get_system_info().current_slot == -1);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(0));
 }
 
 TEST_CASE("AD5X IFS runout does not flip active slot display status to LOADED", "[ams][ad5x_ifs]") {
