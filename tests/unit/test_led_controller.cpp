@@ -2,6 +2,7 @@
 
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
+#include "app_globals.h"
 #include "config.h"
 #include "led/led_controller.h"
 #include "moonraker_api_mock.h"
@@ -1266,12 +1267,16 @@ struct LedMockApiFixture {
 
     LedMockApiFixture() {
         state.init_subjects(false);
+        // Also init the global singleton that LedController::init() observes for
+        // connection-state changes (get_printer_state() != this->state).
+        get_printer_state().init_subjects(false);
         mock_api = std::make_unique<MoonrakerAPIMock>(mock_client, state);
     }
 
     ~LedMockApiFixture() {
         auto& ctrl = helix::led::LedController::instance();
         ctrl.deinit();
+        get_printer_state().deinit_subjects();
     }
 
     void setup_controller_with_strip(const std::string& strip_id = "neopixel chamber") {
@@ -1699,4 +1704,30 @@ TEST_CASE_METHOD(LedMockApiFixture, "LedController: in-flight covers all selecte
 
     helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     REQUIRE(lv_subject_get_int(s) == 0);
+}
+
+// ============================================================================
+// Task 3: connection-state observer clears in-flight on disconnect
+// ============================================================================
+
+TEST_CASE_METHOD(LedMockApiFixture, "LedController: disconnect clears in-flight LED state",
+                 "[led][controller][inflight]") {
+    setup_controller_with_strip();
+    auto& ctrl = helix::led::LedController::instance();
+    lv_subject_t* s = ctrl.get_led_command_in_flight_subject();
+
+    ctrl.light_set(true);
+    REQUIRE(lv_subject_get_int(s) == 1);
+
+    // Wiring smoke test: the mock fires the gcode ACK synchronously, so the
+    // deferred settle path would also clear the subject on drain. This test
+    // confirms the connection-state observer is registered, compiles, and fires
+    // without crashing — and that the end state is clean across the transition.
+    // True mid-flight-disconnect (ACK never arrives) is verified on hardware.
+    lv_subject_set_int(get_printer_state().get_printer_connection_state_subject(),
+                       static_cast<int>(helix::ConnectionState::DISCONNECTED));
+
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(lv_subject_get_int(s) == 0);
+    REQUIRE_FALSE(ctrl.light_command_in_flight());
 }

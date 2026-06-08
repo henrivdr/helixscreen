@@ -11,6 +11,7 @@
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "moonraker_error.h"
+#include "observer_factory.h"
 #include "printer_discovery.h"
 #include "static_subject_registry.h"
 
@@ -92,6 +93,17 @@ void LedController::init(MoonrakerAPI* api, MoonrakerClient* client) {
         });
     }
 
+    // Observe printer connection state to clear in-flight count on disconnect.
+    // Prevents toggle buttons staying greyed forever when a WebSocket drop
+    // arrives while an LED command ACK is pending.
+    conn_observer_ = helix::ui::observe_int_sync(
+        get_printer_state().get_printer_connection_state_subject(), this,
+        [](LedController* self, int state) {
+            if (state != static_cast<int>(helix::ConnectionState::CONNECTED)) {
+                self->force_clear_in_flight();
+            }
+        });
+
     initialized_ = true;
     load_config();
     publish_controllable_state();
@@ -100,6 +112,10 @@ void LedController::init(MoonrakerAPI* api, MoonrakerClient* client) {
 
 void LedController::deinit() {
     lifetime_.invalidate();
+
+    // Unsubscribe the connection-state observer before clearing in-flight state
+    // so any queued observer callbacks are neutralised before we reset.
+    conn_observer_.reset();
 
     // Clear any in-flight count so the subject is reset to 0 before the next
     // init. Deferred settle callbacks from the previous session are now dead
