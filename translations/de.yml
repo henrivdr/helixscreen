@@ -930,6 +930,7 @@ translations:
   Library: 'Bibliothek'
   Lifetime Print Stats: Gesamte Druckstatistik
   Light: Hell
+  Light will switch when the current operation finishes: 'Das Licht schaltet sich, sobald der aktuelle Vorgang abgeschlossen ist.'
   Listen to all theme sounds: 'Alle Themensounds anhören'
   Load: Laden
   Load Filament: Filament laden

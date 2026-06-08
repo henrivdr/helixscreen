@@ -928,6 +928,7 @@
   <translation tag="Library" ja="ライブラリ"/>
   <translation tag="Lifetime Print Stats" ja="累計印刷統計"/>
   <translation tag="Light" ja="ライト"/>
+  <translation tag="Light will switch when the current operation finishes" ja="現在の操作が完了したらライトを切り替えます"/>
   <translation tag="Listen to all theme sounds" ja="すべてのテーマサウンドを試聴"/>
   <translation tag="Load" ja="装填"/>
   <translation tag="Load Filament" ja="フィラメントを装填"/>

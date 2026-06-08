@@ -928,6 +928,7 @@
   <translation tag="Library" ru="Библиотека"/>
   <translation tag="Lifetime Print Stats" ru="Статистика за всё время"/>
   <translation tag="Light" ru="Подсветка"/>
+  <translation tag="Light will switch when the current operation finishes" ru="Подсветка переключится после завершения текущей операции"/>
   <translation tag="Listen to all theme sounds" ru="Прослушать все звуки темы"/>
   <translation tag="Load" ru="Загрузить"/>
   <translation tag="Load Filament" ru="Загрузить филамент"/>

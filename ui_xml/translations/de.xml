@@ -928,6 +928,7 @@
   <translation tag="Library" de="Bibliothek"/>
   <translation tag="Lifetime Print Stats" de="Gesamte Druckstatistik"/>
   <translation tag="Light" de="Hell"/>
+  <translation tag="Light will switch when the current operation finishes" de="Das Licht schaltet sich, sobald der aktuelle Vorgang abgeschlossen ist."/>
   <translation tag="Listen to all theme sounds" de="Alle Themensounds anhören"/>
   <translation tag="Load" de="Laden"/>
   <translation tag="Load Filament" de="Filament laden"/>

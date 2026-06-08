@@ -930,6 +930,7 @@ translations:
   Library: 'ライブラリ'
   Lifetime Print Stats: 累計印刷統計
   Light: ライト
+  Light will switch when the current operation finishes: '現在の操作が完了したらライトを切り替えます'
   Listen to all theme sounds: 'すべてのテーマサウンドを試聴'
   Load: 装填
   Load Filament: フィラメントを装填

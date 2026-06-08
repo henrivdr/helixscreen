@@ -930,6 +930,7 @@ translations:
   Library: '库'
   Lifetime Print Stats: 累计打印统计
   Light: 浅色
+  Light will switch when the current operation finishes: '灯光将在当前操作完成后切换'
   Listen to all theme sounds: '试听所有主题声音'
   Load: 加载
   Load Filament: 加载耗材

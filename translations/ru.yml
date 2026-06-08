@@ -930,6 +930,7 @@ translations:
   Library: 'Библиотека'
   Lifetime Print Stats: Статистика за всё время
   Light: Подсветка
+  Light will switch when the current operation finishes: 'Подсветка переключится после завершения текущей операции'
   Listen to all theme sounds: 'Прослушать все звуки темы'
   Load: Загрузить
   Load Filament: Загрузить филамент

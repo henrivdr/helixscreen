@@ -930,6 +930,7 @@ translations:
   Library: 'Biblioteca'
   Lifetime Print Stats: Estadísticas de impresión totales
   Light: Claro
+  Light will switch when the current operation finishes: 'La luz cambiará cuando termine la operación actual'
   Listen to all theme sounds: 'Escucha todos los sonidos del tema'
   Load: Cargar
   Load Filament: Cargar Filamento
