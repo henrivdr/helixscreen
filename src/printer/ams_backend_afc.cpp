@@ -1548,8 +1548,7 @@ void AmsBackendAfc::detect_afc_version() {
         "server.database.get_item", params,
         [this, token](const nlohmann::json& response) {
             // L081 Mechanism C: marshal member writes + downstream calls to main.
-            token.defer("AmsBackendAfc::detect_afc_version_success",
-                        [this, response]() {
+            token.defer("AmsBackendAfc::detect_afc_version_success", [this, response]() {
                 bool should_query_lane_data = false;
 
                 if (response.contains("value") && response["value"].is_object()) {
@@ -1575,8 +1574,8 @@ void AmsBackendAfc::detect_afc_version() {
                                             afc_version_);
                             spdlog::warn("[AMS AFC] {}", warning);
                             helix::ui::modal_show_alert(lv_tr("AFC Version Warning"),
-                                                        warning.c_str(),
-                                                        ModalSeverity::Warning, "OK");
+                                                        warning.c_str(), ModalSeverity::Warning,
+                                                        "OK");
                         }
                     }
                 }
@@ -1590,8 +1589,7 @@ void AmsBackendAfc::detect_afc_version() {
         },
         [this, token](const MoonrakerError& err) {
             // L081 Mechanism C: marshal member writes to main.
-            token.defer("AmsBackendAfc::detect_afc_version_error",
-                        [this, message = err.message]() {
+            token.defer("AmsBackendAfc::detect_afc_version_error", [this, message = err.message]() {
                 spdlog::warn("[AMS AFC] Could not detect AFC version: {}", message);
                 std::lock_guard<std::mutex> lock(mutex_);
                 afc_version_ = "unknown";
@@ -1691,8 +1689,7 @@ void AmsBackendAfc::query_initial_state() {
         "printer.objects.query", params,
         [this, token](const nlohmann::json& response) {
             // L081 Mechanism C: handle_status_update mutates members + emits events.
-            token.defer("AmsBackendAfc::query_initial_state_success",
-                        [this, response]() {
+            token.defer("AmsBackendAfc::query_initial_state_success", [this, response]() {
                 // Response structure:
                 // {"jsonrpc": "2.0", "result": {"eventtime": ..., "status": {...}}, "id": ...}
                 if (response.contains("result") && response["result"].contains("status") &&
@@ -1733,8 +1730,7 @@ void AmsBackendAfc::query_lane_data() {
         "server.database.get_item", params,
         [this, token](const nlohmann::json& response) {
             // L081 Mechanism C: parse_lane_data mutates members under lock; emit on main.
-            token.defer("AmsBackendAfc::query_lane_data_success",
-                        [this, response]() {
+            token.defer("AmsBackendAfc::query_lane_data_success", [this, response]() {
                 if (response.contains("value") && response["value"].is_object()) {
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
@@ -2138,6 +2134,7 @@ AmsError AmsBackendAfc::load_filament(int slot_index) {
 }
 
 AmsError AmsBackendAfc::unload_filament(int slot_index) {
+    std::string lane_name;
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -2150,17 +2147,27 @@ AmsError AmsBackendAfc::unload_filament(int slot_index) {
             return AmsError(AmsResult::WRONG_STATE, "No filament loaded", "No filament to unload",
                             "Load filament first");
         }
+
+        // Resolve the requested lane so AFC unloads THAT lane, picking up its
+        // tool first if it isn't the one on the shuttle (#999). slot_index < 0
+        // (the default) means "unload whatever is loaded" and leaves lane_name
+        // empty; an out-of-range index resolves to "" too, falling back to the
+        // active-lane unload.
+        lane_name = slots_.name_of(slot_index);
     }
 
-    (void)slot_index; // AFC_UNSELECT_TOOL / TOOL_UNLOAD do not take a slot parameter
-
-    if (num_extruders_ > 1) {
-        spdlog::info("[AMS AFC] Unloading via toolchanger: AFC_UNSELECT_TOOL");
-        return ensure_homed_then("AFC_UNSELECT_TOOL");
+    // TOOL_UNLOAD [LANE=<lane>]: with LANE, AFC selects that lane's tool and
+    // unloads it from the toolhead; without it, AFC unloads the active lane.
+    // The lane parameter subsumes the toolchanger case, so we no longer branch
+    // to AFC_UNSELECT_TOOL (which parked the active tool while ignoring the
+    // requested lane).
+    std::string cmd = "TOOL_UNLOAD";
+    if (!lane_name.empty()) {
+        cmd += " LANE=" + lane_name;
     }
 
-    spdlog::info("[AMS AFC] Unloading filament");
-    return ensure_homed_then("TOOL_UNLOAD");
+    spdlog::info("[AMS AFC] Unloading: {}", cmd);
+    return ensure_homed_then(std::move(cmd));
 }
 
 AmsError AmsBackendAfc::select_slot(int slot_index) {
@@ -2338,16 +2345,16 @@ void AmsBackendAfc::dispatch_lane_unload(const std::string& lane_name) {
         "LANE_UNLOAD LANE=" + lane_name,
         [this, tok, lane_name]() {
             // L081 Mechanism C: on_lane_unload_done touches members under lock + redispatches.
-            tok.defer("AmsBackendAfc::dispatch_lane_unload_done",
-                      [this, lane_name]() {
+            tok.defer("AmsBackendAfc::dispatch_lane_unload_done", [this, lane_name]() {
                 spdlog::debug("[AMS AFC] LANE_UNLOAD lane={} completed", lane_name);
                 on_lane_unload_done();
             });
         },
         [this, tok, lane_name](const MoonrakerError& err) {
             // L081 Mechanism C: on_lane_unload_done touches members under lock + redispatches.
-            tok.defer("AmsBackendAfc::dispatch_lane_unload_error",
-                      [this, lane_name, err_type = err.type, err_msg = err.message]() {
+            tok.defer("AmsBackendAfc::dispatch_lane_unload_error", [this, lane_name,
+                                                                    err_type = err.type,
+                                                                    err_msg = err.message]() {
                 if (err_type == MoonrakerErrorType::TIMEOUT) {
                     spdlog::warn("[AMS AFC] LANE_UNLOAD lane={} response timed out (may still be "
                                  "running): {}",
@@ -2435,8 +2442,7 @@ AmsError AmsBackendAfc::set_slot_info(int slot_index, const SlotInfo& info, bool
                        slot.total_weight_g != info.total_weight_g ||
                        slot.nozzle_temp_min != info.nozzle_temp_min ||
                        slot.nozzle_temp_max != info.nozzle_temp_max ||
-                       slot.bed_temp != info.bed_temp ||
-                       slot.mapped_tool != info.mapped_tool;
+                       slot.bed_temp != info.bed_temp || slot.mapped_tool != info.mapped_tool;
 
         // Update local state
         slot.color_name = info.color_name;

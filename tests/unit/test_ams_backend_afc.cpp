@@ -3390,7 +3390,7 @@ TEST_CASE("AFC load_filament sends CHANGE_TOOL in single-extruder mode",
     REQUIRE_FALSE(helper.has_gcode_starting_with("AFC_SELECT_TOOL"));
 }
 
-TEST_CASE("AFC unload_filament sends AFC_UNSELECT_TOOL in toolchanger mode (no slot)",
+TEST_CASE("AFC unload_filament sends bare TOOL_UNLOAD in toolchanger mode (no slot)",
           "[ams][afc][toolchanger]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
@@ -3398,14 +3398,20 @@ TEST_CASE("AFC unload_filament sends AFC_UNSELECT_TOOL in toolchanger mode (no s
     helper.set_filament_loaded(true);
     helper.setup_toolchanger(2);
 
+    // No slot specified (slot_index = -1): unload whatever is currently loaded.
     auto result = helper.unload_filament();
 
     REQUIRE(result);
-    REQUIRE(helper.has_gcode("AFC_UNSELECT_TOOL"));
-    REQUIRE_FALSE(helper.has_gcode("TOOL_UNLOAD"));
+    REQUIRE(helper.has_gcode("TOOL_UNLOAD"));
+    REQUIRE_FALSE(helper.has_gcode_starting_with("TOOL_UNLOAD LANE="));
+    REQUIRE_FALSE(helper.has_gcode("AFC_UNSELECT_TOOL"));
 }
 
-TEST_CASE("AFC unload_filament sends AFC_UNSELECT_TOOL without params for specific slot",
+// #999: selecting a non-active lane and pressing Unload must unload THAT lane,
+// not whatever is loaded on the shuttle. AFC's TOOL_UNLOAD LANE=<lane> picks up
+// the correct tool first, so the requested lane is honored even in toolchanger
+// mode (previously this sent a bare AFC_UNSELECT_TOOL and ignored the slot).
+TEST_CASE("AFC unload_filament sends TOOL_UNLOAD LANE=<lane> for specific slot (#999)",
           "[ams][afc][toolchanger]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
@@ -3413,29 +3419,29 @@ TEST_CASE("AFC unload_filament sends AFC_UNSELECT_TOOL without params for specif
     helper.set_filament_loaded(true);
     helper.setup_toolchanger(4);
 
-    SECTION("slot 0 still sends plain AFC_UNSELECT_TOOL") {
+    SECTION("slot 0 unloads lane1") {
         auto result = helper.unload_filament(0);
         REQUIRE(result);
-        REQUIRE(helper.has_gcode("AFC_UNSELECT_TOOL"));
-        REQUIRE_FALSE(helper.has_gcode_starting_with("AFC_UNSELECT_TOOL TOOL="));
+        REQUIRE(helper.has_gcode("TOOL_UNLOAD LANE=lane1"));
+        REQUIRE_FALSE(helper.has_gcode("AFC_UNSELECT_TOOL"));
     }
 
-    SECTION("slot 1 still sends plain AFC_UNSELECT_TOOL") {
+    SECTION("slot 1 unloads lane2") {
         auto result = helper.unload_filament(1);
         REQUIRE(result);
-        REQUIRE(helper.has_gcode("AFC_UNSELECT_TOOL"));
-        REQUIRE_FALSE(helper.has_gcode_starting_with("AFC_UNSELECT_TOOL TOOL="));
+        REQUIRE(helper.has_gcode("TOOL_UNLOAD LANE=lane2"));
+        REQUIRE_FALSE(helper.has_gcode("AFC_UNSELECT_TOOL"));
     }
 
-    SECTION("slot 3 still sends plain AFC_UNSELECT_TOOL") {
+    SECTION("slot 3 unloads lane4") {
         auto result = helper.unload_filament(3);
         REQUIRE(result);
-        REQUIRE(helper.has_gcode("AFC_UNSELECT_TOOL"));
-        REQUIRE_FALSE(helper.has_gcode_starting_with("AFC_UNSELECT_TOOL TOOL="));
+        REQUIRE(helper.has_gcode("TOOL_UNLOAD LANE=lane4"));
+        REQUIRE_FALSE(helper.has_gcode("AFC_UNSELECT_TOOL"));
     }
 }
 
-TEST_CASE("AFC unload_filament sends TOOL_UNLOAD in single-extruder mode",
+TEST_CASE("AFC unload_filament sends bare TOOL_UNLOAD in single-extruder mode (no slot)",
           "[ams][afc][toolchanger]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
@@ -3446,10 +3452,11 @@ TEST_CASE("AFC unload_filament sends TOOL_UNLOAD in single-extruder mode",
 
     REQUIRE(result);
     REQUIRE(helper.has_gcode("TOOL_UNLOAD"));
+    REQUIRE_FALSE(helper.has_gcode_starting_with("TOOL_UNLOAD LANE="));
     REQUIRE_FALSE(helper.has_gcode("AFC_UNSELECT_TOOL"));
 }
 
-TEST_CASE("AFC unload_filament ignores slot_index in single-extruder mode",
+TEST_CASE("AFC unload_filament honors slot_index in single-extruder mode (#999)",
           "[ams][afc][toolchanger]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
@@ -3459,7 +3466,7 @@ TEST_CASE("AFC unload_filament ignores slot_index in single-extruder mode",
     auto result = helper.unload_filament(3);
 
     REQUIRE(result);
-    REQUIRE(helper.has_gcode("TOOL_UNLOAD"));
+    REQUIRE(helper.has_gcode("TOOL_UNLOAD LANE=lane4"));
     REQUIRE_FALSE(helper.has_gcode_starting_with("AFC_UNSELECT_TOOL"));
 }
 
