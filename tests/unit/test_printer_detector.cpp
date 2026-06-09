@@ -1428,6 +1428,111 @@ TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Rat Rig V-Core 3 fing
     REQUIRE(result.confidence >= 80);
 }
 
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: RatOS V-Core 3 by RatOS marker with renamed host",
+                 "[printer][ratrig][ratos]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .hostname = "my-printer",
+        .printer_objects = {"gcode_macro RatOS", "z_tilt"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1", "stepper_z2"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 300}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "RatRig V-Core 3");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: RatOS V-Minion is Cartesian (kinematics fix)",
+                 "[printer][ratrig][ratos]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .hostname = "ratrig-vminion",
+        .printer_objects = {"gcode_macro RatOS"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 180, .y_min = 0, .y_max = 180, .z_max = 180}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "RatRig V-Minion");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: RatOS V-Minion by Cartesian + RatOS marker (renamed host)",
+                 "[printer][ratrig][ratos]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .hostname = "tinybox",
+        .printer_objects = {"gcode_macro RatOS"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 180, .y_min = 0, .y_max = 180, .z_max = 180}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "RatRig V-Minion");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: RatOS V-Core 4 by hostname",
+                 "[printer][ratrig][ratos]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .hostname = "ratrig-vcore4",
+        .printer_objects = {"gcode_macro RatOS", "z_tilt"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 300}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "RatRig V-Core 4");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: V-Core 4 host (3Z) not misdetected as V-Core 3",
+                 "[printer][ratrig][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .hostname = "ratrig-vcore4",
+        .printer_objects = {"gcode_macro RatOS", "z_tilt"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1", "stepper_z2"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 300}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.type_name != "RatRig V-Core 3");
+    REQUIRE(result.type_name == "RatRig V-Core 4");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: RatOS V-Core 4 IDEX by ratos_hybrid_corexy + dual_carriage",
+                 "[printer][ratrig][ratos]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "extruder1", "heater_bed"},
+        .hostname = "ratrig-vcore4-idex",
+        .printer_objects = {"gcode_macro RatOS", "z_tilt", "dual_carriage"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "dual_carriage"},
+        .kinematics = "ratos_hybrid_corexy",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 300}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "RatRig V-Core 4 IDEX");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: RatOS V-Core Pro by hostname",
+                 "[printer][ratrig][ratos]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .hostname = "ratrig-vcore-pro",
+        .printer_objects = {"gcode_macro RatOS", "z_tilt"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1", "stepper_z2"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 300}};
+    auto result = PrinterDetector::detect(hardware);
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "RatRig V-Core Pro");
+}
+
 TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Anycubic Kobra fingerprint",
                  "[printer][real_world][anycubic]") {
     PrinterHardwareData hardware{

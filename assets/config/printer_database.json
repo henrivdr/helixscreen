@@ -3301,13 +3301,49 @@
       "name": "RatRig V-Core 3",
       "manufacturer": "RatRig",
       "image": "ratrig-vcore3.png",
+      "notes": "RatOS CoreXY with 3 independent Z (z_tilt). V-Core 4 / IDEX / V-Core Pro hosts are excluded so they resolve to their own entries; a renamed-host V-Core 4 still falls back here.",
       "heuristics": [
+        {
+          "type": "hostname_exclude",
+          "field": "hostname",
+          "pattern": "vcore4",
+          "confidence": 0,
+          "reason": "V-Core 4 host handled by the V-Core 4 entry"
+        },
+        {
+          "type": "hostname_exclude",
+          "field": "hostname",
+          "pattern": "v-core-4",
+          "confidence": 0,
+          "reason": "V-Core 4 host handled by the V-Core 4 entry"
+        },
+        {
+          "type": "hostname_exclude",
+          "field": "hostname",
+          "pattern": "idex",
+          "confidence": 0,
+          "reason": "IDEX host handled by the IDEX entry"
+        },
+        {
+          "type": "hostname_exclude",
+          "field": "hostname",
+          "pattern": "core-pro",
+          "confidence": 0,
+          "reason": "V-Core Pro host handled by the V-Core Pro entry"
+        },
         {
           "type": "kinematics_match",
           "field": "kinematics",
           "pattern": "corexy",
           "confidence": 40,
           "reason": "CoreXY kinematics"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "gcode_macro RatOS",
+          "confidence": 85,
+          "reason": "RatOS firmware marker (gcode_macro RatOS)"
         },
         {
           "type": "object_exists",
@@ -3327,21 +3363,35 @@
           "type": "hostname_match",
           "field": "hostname",
           "pattern": "ratrig",
-          "confidence": 85,
+          "confidence": 80,
           "reason": "Hostname contains 'ratrig'"
         },
         {
           "type": "hostname_match",
           "field": "hostname",
+          "pattern": "vcore3",
+          "confidence": 92,
+          "reason": "Hostname contains 'vcore3'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "v-core-3",
+          "confidence": 92,
+          "reason": "Hostname contains 'v-core-3'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
           "pattern": "vcore",
-          "confidence": 90,
+          "confidence": 85,
           "reason": "Hostname contains 'vcore'"
         },
         {
           "type": "hostname_match",
           "field": "hostname",
           "pattern": "v-core",
-          "confidence": 90,
+          "confidence": 85,
           "reason": "Hostname contains 'v-core'"
         }
       ]
@@ -3351,13 +3401,21 @@
       "name": "RatRig V-Minion",
       "manufacturer": "RatRig",
       "image": "ratrig-vminion.png",
+      "notes": "RatOS Cartesian printer (the only Cartesian RatOS model), ~180mm. Cartesian kinematics plus the RatOS marker identify it even with a renamed host.",
       "heuristics": [
         {
           "type": "kinematics_match",
           "field": "kinematics",
-          "pattern": "corexy",
-          "confidence": 40,
-          "reason": "CoreXY kinematics"
+          "pattern": "cartesian",
+          "confidence": 45,
+          "reason": "Cartesian kinematics (V-Minion is the only Cartesian RatOS model)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "gcode_macro RatOS",
+          "confidence": 85,
+          "reason": "RatOS firmware marker (gcode_macro RatOS)"
         },
         {
           "type": "build_volume_range",
@@ -3371,7 +3429,7 @@
           "type": "hostname_match",
           "field": "hostname",
           "pattern": "ratrig",
-          "confidence": 85,
+          "confidence": 80,
           "reason": "Hostname contains 'ratrig'"
         },
         {
@@ -3387,6 +3445,159 @@
           "pattern": "v-minion",
           "confidence": 95,
           "reason": "Hostname contains 'v-minion'"
+        }
+      ]
+    },
+    {
+      "id": "ratrig_vcore4",
+      "name": "RatRig V-Core 4",
+      "manufacturer": "RatRig",
+      "image": "ratrig-vcore4.png",
+      "notes": "RatOS CoreXY successor to V-Core 3. Distinguished from V-Core 3 by hostname; V-Core 4 Hybrid (non-IDEX) also resolves here. Runtime Z-stepper count is board-dependent so it is not used as a signal.",
+      "heuristics": [
+        {
+          "type": "hostname_exclude",
+          "field": "hostname",
+          "pattern": "idex",
+          "confidence": 0,
+          "reason": "IDEX host handled by the IDEX entry"
+        },
+        {
+          "type": "hostname_exclude",
+          "field": "hostname",
+          "pattern": "core-pro",
+          "confidence": 0,
+          "reason": "V-Core Pro host handled by the V-Core Pro entry"
+        },
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "corexy",
+          "confidence": 40,
+          "reason": "CoreXY kinematics"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "gcode_macro RatOS",
+          "confidence": 85,
+          "reason": "RatOS firmware marker (gcode_macro RatOS)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_tilt",
+          "confidence": 70,
+          "reason": "Z-tilt adjustment present"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "vcore4",
+          "confidence": 94,
+          "reason": "Hostname contains 'vcore4'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "v-core-4",
+          "confidence": 94,
+          "reason": "Hostname contains 'v-core-4'"
+        }
+      ]
+    },
+    {
+      "id": "ratrig_vcore_idex",
+      "name": "RatRig V-Core 4 IDEX",
+      "manufacturer": "RatRig",
+      "image": "ratrig-vcore4.png",
+      "notes": "RatOS IDEX (dual carriage) on the RatOS-exclusive 'ratos_hybrid_corexy' kinematics. V-Core 3 IDEX shares this signature; refined by hostname when present. Reuses the V-Core 4 image (IDEX is a V-Core 4 dual-toolhead variant).",
+      "heuristics": [
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "ratos_hybrid_corexy",
+          "confidence": 88,
+          "reason": "RatOS hybrid CoreXY kinematics (IDEX/hybrid, RatOS-exclusive)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "dual_carriage",
+          "confidence": 55,
+          "reason": "Dual carriage (IDEX) configured"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "gcode_macro RatOS",
+          "confidence": 60,
+          "reason": "RatOS firmware marker (gcode_macro RatOS)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_tilt",
+          "confidence": 60,
+          "reason": "Z-tilt adjustment present"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "idex",
+          "confidence": 90,
+          "reason": "Hostname contains 'idex'"
+        }
+      ]
+    },
+    {
+      "id": "ratrig_vcore_pro",
+      "name": "RatRig V-Core Pro",
+      "manufacturer": "RatRig",
+      "image": "ratrig-vcore3.png",
+      "notes": "Older RatOS CoreXY (V-Core Pro 1.x, discontinued). Shares the 3-Z + z_tilt fingerprint with V-Core 3; identified by hostname. Reuses the V-Core 3 image (visual predecessor; no Pro-specific photo available).",
+      "heuristics": [
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "corexy",
+          "confidence": 40,
+          "reason": "CoreXY kinematics"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "gcode_macro RatOS",
+          "confidence": 60,
+          "reason": "RatOS firmware marker (gcode_macro RatOS)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_tilt",
+          "confidence": 70,
+          "reason": "Z-tilt adjustment present"
+        },
+        {
+          "type": "stepper_count",
+          "field": "steppers",
+          "pattern": "z_count_3",
+          "confidence": 75,
+          "reason": "3 independent Z steppers"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "vcore-pro",
+          "confidence": 95,
+          "reason": "Hostname contains 'vcore-pro'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "core-pro",
+          "confidence": 95,
+          "reason": "Hostname contains 'core-pro'"
         }
       ]
     },

@@ -22,7 +22,8 @@ This directory contains shipped printer images used in the first-run configurati
 - ✅ `anycubic-chiron.png` - Anycubic Chiron (400×400mm)
 
 ### Rat Rig
-- ✅ `ratrig-vcore3.png` - Rat Rig V-Core 3 (CoreXY)
+- ✅ `ratrig-vcore3.png` - Rat Rig V-Core 3 (CoreXY); also used for V-Core Pro
+- ✅ `ratrig-vcore4.png` - Rat Rig V-Core 4 (CoreXY); also used for V-Core 4 IDEX
 - ✅ `ratrig-vminion.png` - Rat Rig V-Minion (Compact CoreXY)
 
 ### FLSUN
