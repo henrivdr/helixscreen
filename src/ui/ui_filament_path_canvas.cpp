@@ -823,16 +823,8 @@ static lv_color_t ph_blend(lv_color_t c1, lv_color_t c2, float factor) {
 // lighter tint of the filament color. For very dark filaments (black), uses a
 // contrasting blue tint so the glow is still visible.
 
-static constexpr int CURVE_SEGMENTS_FULL = 10;   // Segments per bezier curve (high quality)
-static constexpr int CURVE_SEGMENTS_REDUCED = 5; // Segments per bezier curve (low-perf devices)
-static constexpr lv_opa_t GLOW_OPA = 60;         // Base glow opacity
-static constexpr int32_t GLOW_WIDTH_EXTRA = 6;   // Extra width beyond tube on each side
-
-// Runtime curve segment count — fewer segments = fewer draw calls per curve
-static int curve_segments() {
-    static const int cached = reduced_effects() ? CURVE_SEGMENTS_REDUCED : CURVE_SEGMENTS_FULL;
-    return cached;
-}
+static constexpr lv_opa_t GLOW_OPA = 60;       // Base glow opacity
+static constexpr int32_t GLOW_WIDTH_EXTRA = 6; // Extra width beyond tube on each side
 
 // Get a suitable glow color from a filament color
 static lv_color_t get_glow_color(lv_color_t color) {
@@ -842,69 +834,6 @@ static lv_color_t get_glow_color(lv_color_t color) {
         return lv_color_hex(0x4466AA); // Dark blue glow for black/dark filaments
     }
     return ph_lighten(color, 60);
-}
-
-// Draw a glow line (wide, low-opacity backdrop)
-static void draw_glow_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                           lv_color_t filament_color, int32_t tube_width) {
-    if (reduced_effects())
-        return;
-    lv_draw_line_dsc_t line_dsc;
-    lv_draw_line_dsc_init(&line_dsc);
-    line_dsc.color = get_glow_color(filament_color);
-    line_dsc.width = tube_width + GLOW_WIDTH_EXTRA;
-    line_dsc.opa = GLOW_OPA;
-    line_dsc.p1.x = x1;
-    line_dsc.p1.y = y1;
-    line_dsc.p2.x = x2;
-    line_dsc.p2.y = y2;
-    line_dsc.round_start = true;
-    line_dsc.round_end = true;
-    lv_draw_line(layer, &line_dsc);
-}
-
-// Draw glow along a cubic bezier curve.
-// Uses butt caps on interior segment joints to prevent opacity compounding
-// where semi-transparent segments overlap. Round caps only on the very first
-// and last endpoints for clean termination.
-static void draw_glow_curve(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t cx1, int32_t cy1,
-                            int32_t cx2, int32_t cy2, int32_t x1, int32_t y1,
-                            lv_color_t filament_color, int32_t tube_width) {
-    if (reduced_effects())
-        return;
-    lv_color_t glow_color = get_glow_color(filament_color);
-    int32_t glow_width = tube_width + GLOW_WIDTH_EXTRA;
-
-    int32_t prev_x = x0;
-    int32_t prev_y = y0;
-    for (int i = 1; i <= curve_segments(); i++) {
-        float t = (float)i / curve_segments();
-        float inv = 1.0f - t;
-        float b0 = inv * inv * inv;
-        float b1 = 3.0f * inv * inv * t;
-        float b2 = 3.0f * inv * t * t;
-        float b3 = t * t * t;
-        int32_t bx = (int32_t)(b0 * x0 + b1 * cx1 + b2 * cx2 + b3 * x1);
-        int32_t by = (int32_t)(b0 * y0 + b1 * cy1 + b2 * cy2 + b3 * y1);
-
-        lv_draw_line_dsc_t line_dsc;
-        lv_draw_line_dsc_init(&line_dsc);
-        line_dsc.color = glow_color;
-        line_dsc.width = glow_width;
-        line_dsc.opa = GLOW_OPA;
-        line_dsc.p1.x = prev_x;
-        line_dsc.p1.y = prev_y;
-        line_dsc.p2.x = bx;
-        line_dsc.p2.y = by;
-        // Butt caps on interior joints to prevent opacity overlap;
-        // round caps only on the curve endpoints
-        line_dsc.round_start = (i == 1);
-        line_dsc.round_end = (i == curve_segments());
-        lv_draw_line(layer, &line_dsc);
-
-        prev_x = bx;
-        prev_y = by;
-    }
 }
 
 // ============================================================================
@@ -944,46 +873,11 @@ static void draw_flow_dots_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32
 }
 
 // ============================================================================
-// Bezier Evaluation (shared by curve drawing and path walking)
-// ============================================================================
-// P(t) = (1-t)^3*P0 + 3*(1-t)^2*t*C1 + 3*(1-t)*t^2*C2 + t^3*P1
-struct BezierPt {
-    int32_t x, y;
-};
-
-static BezierPt bezier_eval(int32_t x0, int32_t y0, int32_t cx1, int32_t cy1, int32_t cx2,
-                            int32_t cy2, int32_t x1, int32_t y1, float t) {
-    float inv = 1.0f - t;
-    float b0 = inv * inv * inv;
-    float b1 = 3.0f * inv * inv * t;
-    float b2 = 3.0f * inv * t * t;
-    float b3 = t * t * t;
-    return {(int32_t)(b0 * x0 + b1 * cx1 + b2 * cx2 + b3 * x1),
-            (int32_t)(b0 * y0 + b1 * cy1 + b2 * cy2 + b3 * y1)};
-}
-
-// ============================================================================
 // Path Segment Helpers (used by flow dots and filament tip animation)
 // ============================================================================
 // Path geometry is described with pathgeo::FilamentPath (straight runs + true
 // arcs). Length / point-at-distance come from pathgeo::path_length and
 // pathgeo::path_point_at.
-
-// TEMP bridge for the not-yet-migrated PARALLEL/MIXED bezier recording path
-// (Task 3 will route those orthogonally too). Flattens a cubic bezier into a
-// handful of LINE segments appended to a pathgeo::FilamentPath so the legacy
-// curve drawers can still feed the animation walker. Remove with the bezier
-// curve drawers in Task 3.
-static void record_bezier_as_lines(pg::FilamentPath& path, int32_t x0, int32_t y0, int32_t cx1,
-                                   int32_t cy1, int32_t cx2, int32_t cy2, int32_t x1, int32_t y1) {
-    constexpr int BRIDGE_SEGS = 8;
-    BezierPt prev = {x0, y0};
-    for (int i = 1; i <= BRIDGE_SEGS; i++) {
-        BezierPt p = bezier_eval(x0, y0, cx1, cy1, cx2, cy2, x1, y1, (float)i / BRIDGE_SEGS);
-        path.add_line((float)prev.x, (float)prev.y, (float)p.x, (float)p.y);
-        prev = p;
-    }
-}
 
 // Draw flow dots along an entire FilamentPath as a continuous stream.
 // Dots are placed at FLOW_DOT_SPACING intervals along the total path length,
@@ -1270,304 +1164,6 @@ static void draw_sensor_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_
         arc_dsc.width = 2;
         arc_dsc.color = color;
         lv_draw_arc(layer, &arc_dsc);
-    }
-}
-
-static void draw_flat_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                           lv_color_t color, int32_t width, bool cap_start = true,
-                           bool cap_end = true) {
-    lv_draw_line_dsc_t line_dsc;
-    lv_draw_line_dsc_init(&line_dsc);
-    line_dsc.color = color;
-    line_dsc.width = width;
-    line_dsc.p1.x = x1;
-    line_dsc.p1.y = y1;
-    line_dsc.p2.x = x2;
-    line_dsc.p2.y = y2;
-    line_dsc.round_start = cap_start;
-    line_dsc.round_end = cap_end;
-    lv_draw_line(layer, &line_dsc);
-}
-
-// ============================================================================
-// 3D Tube Drawing
-// ============================================================================
-// Draws lines as cylindrical PTFE tubes with shadow/body/highlight layers.
-// The 3-layer approach creates the illusion of a 3D tube catching light
-// from the top-left, which is cheap (3 line draws per segment) but has
-// significant visual impact.
-
-// Draw a 3D tube effect for any line segment (angled or straight)
-// Shadow (wider, darker) → Body (base color) → Highlight (narrower, lighter, offset)
-static void draw_tube_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                           lv_color_t color, int32_t width, bool cap_start = true,
-                           bool cap_end = true) {
-    const bool simple = reduced_effects();
-
-    // Shadow: wider, darker — provides depth beneath the tube
-    if (!simple) {
-        int32_t shadow_extra = LV_MAX(2, width / 2);
-        lv_color_t shadow_color = ph_darken(color, 35);
-        draw_flat_line(layer, x1, y1, x2, y2, shadow_color, width + shadow_extra, cap_start,
-                       cap_end);
-    }
-
-    // Body: main tube surface (always drawn)
-    draw_flat_line(layer, x1, y1, x2, y2, color, width, cap_start, cap_end);
-
-    // Highlight: narrower, lighter — specular reflection along tube surface
-    if (!simple) {
-        int32_t hl_width = LV_MAX(1, width * 2 / 5);
-        lv_color_t hl_color = ph_lighten(color, 44);
-
-        int32_t dx = x2 - x1;
-        int32_t dy = y2 - y1;
-        int32_t offset_x = 0;
-        int32_t offset_y = 0;
-        if (dx == 0) {
-            offset_x = (width / 4 + 1);
-        } else if (dy == 0) {
-            offset_y = -(width / 4 + 1);
-        } else {
-            float len = sqrtf((float)(dx * dx + dy * dy));
-            float px = -(float)dy / len;
-            float py = (float)dx / len;
-            if (px + py > 0) {
-                px = -px;
-                py = -py;
-            }
-            int32_t off_amount = width / 4 + 1;
-            offset_x = (int32_t)(px * off_amount);
-            offset_y = (int32_t)(py * off_amount);
-        }
-
-        draw_flat_line(layer, x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y, hl_color,
-                       hl_width, cap_start, cap_end);
-    }
-}
-
-// Draw a hollow tube (clear PTFE tubing look): walls + see-through bore
-// Same outer diameter as a solid tube, but the center shows the background
-static void draw_hollow_tube_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                                  lv_color_t wall_color, lv_color_t bg_color, int32_t width) {
-    const bool simple = reduced_effects();
-
-    // Shadow: same outer diameter as solid tube
-    if (!simple) {
-        int32_t shadow_extra = LV_MAX(2, width / 2);
-        lv_color_t shadow_color = ph_darken(wall_color, 25);
-        draw_flat_line(layer, x1, y1, x2, y2, shadow_color, width + shadow_extra);
-    }
-
-    // Tube wall: the PTFE material (always drawn)
-    draw_flat_line(layer, x1, y1, x2, y2, wall_color, width);
-
-    // Bore: background color fill to simulate clear center (always drawn)
-    int32_t bore_width = LV_MAX(1, width - 2);
-    draw_flat_line(layer, x1, y1, x2, y2, bg_color, bore_width);
-
-    // Highlight on outer wall surface
-    if (!simple) {
-        int32_t hl_width = LV_MAX(1, width * 2 / 5);
-        lv_color_t hl_color = ph_lighten(wall_color, 44);
-
-        int32_t dx = x2 - x1;
-        int32_t dy = y2 - y1;
-        int32_t offset_x = 0;
-        int32_t offset_y = 0;
-        if (dx == 0) {
-            offset_x = (width / 4 + 1);
-        } else if (dy == 0) {
-            offset_y = -(width / 4 + 1);
-        } else {
-            float len = sqrtf((float)(dx * dx + dy * dy));
-            float px = -(float)dy / len;
-            float py = (float)dx / len;
-            if (px + py > 0) {
-                px = -px;
-                py = -py;
-            }
-            int32_t off_amount = width / 4 + 1;
-            offset_x = (int32_t)(px * off_amount);
-            offset_y = (int32_t)(py * off_amount);
-        }
-
-        draw_flat_line(layer, x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y, hl_color,
-                       hl_width);
-    }
-}
-
-// Convenience: draw a solid vertical tube segment
-static void draw_vertical_line(lv_layer_t* layer, int32_t x, int32_t y1, int32_t y2,
-                               lv_color_t color, int32_t width, bool cap_start = true,
-                               bool cap_end = true, pg::FilamentPath* path = nullptr) {
-    draw_tube_line(layer, x, y1, x, y2, color, width, cap_start, cap_end);
-    // Only record segments with positive length (skip zero/backwards segments
-    // that occur when layout regions overlap, e.g. buffer extends past merge point)
-    if (path && y2 > y1)
-        path->add_line((float)x, (float)y1, (float)x, (float)y2);
-}
-
-// Convenience: draw a hollow vertical tube segment
-static void draw_hollow_vertical_line(lv_layer_t* layer, int32_t x, int32_t y1, int32_t y2,
-                                      lv_color_t wall_color, lv_color_t bg_color, int32_t width) {
-    draw_hollow_tube_line(layer, x, y1, x, y2, wall_color, bg_color, width);
-}
-
-// ============================================================================
-// Curved Tube Drawing (Bezier Approximation)
-// ============================================================================
-// Cubic bezier evaluated as N line segments for smooth tube routing.
-// Uses control points to create natural-looking bends like actual tube routing.
-// bezier_eval() is defined above with path segment helpers.
-
-// Draw a solid tube along a cubic bezier curve (p0 → cp1 → cp2 → p1)
-// Renders each layer (shadow, body, highlight) as a complete pass to avoid
-// visible joints between bezier segments.
-static void draw_curved_tube(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t cx1, int32_t cy1,
-                             int32_t cx2, int32_t cy2, int32_t x1, int32_t y1, lv_color_t color,
-                             int32_t width, bool cap_start = true, bool cap_end = true,
-                             pg::FilamentPath* path = nullptr) {
-    // Pre-compute all bezier points
-    BezierPt pts[CURVE_SEGMENTS_FULL + 1];
-    pts[0] = {x0, y0};
-    for (int i = 1; i <= curve_segments(); i++) {
-        pts[i] = bezier_eval(x0, y0, cx1, cy1, cx2, cy2, x1, y1, (float)i / curve_segments());
-    }
-
-    // Round caps between interior segments (overdraw is invisible since same color).
-    // Optionally suppress start/end caps at junction with adjacent straight segments.
-    const bool simple = reduced_effects();
-
-    // Pass 1: Shadow (skip on low-perf devices)
-    if (!simple) {
-        int32_t shadow_extra = LV_MAX(2, width / 2);
-        lv_color_t shadow_color = ph_darken(color, 35);
-        for (int i = 0; i < curve_segments(); i++) {
-            bool cs = (i == 0) ? cap_start : true;
-            bool ce = (i == curve_segments() - 1) ? cap_end : true;
-            draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, shadow_color,
-                           width + shadow_extra, cs, ce);
-        }
-    }
-
-    // Pass 2: Body (always drawn)
-    for (int i = 0; i < curve_segments(); i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == curve_segments() - 1) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, color, width, cs, ce);
-    }
-
-    // Pass 3: Highlight (skip on low-perf devices)
-    if (!simple) {
-        int32_t hl_width = LV_MAX(1, width * 2 / 5);
-        lv_color_t hl_color = ph_lighten(color, 44);
-        int32_t dx = x1 - x0;
-        int32_t dy = y1 - y0;
-        int32_t offset_x = 0;
-        int32_t offset_y = 0;
-        if (dx == 0) {
-            offset_x = (width / 4 + 1);
-        } else if (dy == 0) {
-            offset_y = -(width / 4 + 1);
-        } else {
-            float len = sqrtf((float)(dx * dx + dy * dy));
-            float px = -(float)dy / len;
-            float py = (float)dx / len;
-            if (px + py > 0) {
-                px = -px;
-                py = -py;
-            }
-            int32_t off_amount = width / 4 + 1;
-            offset_x = (int32_t)(px * off_amount);
-            offset_y = (int32_t)(py * off_amount);
-        }
-        for (int i = 0; i < curve_segments(); i++) {
-            bool cs = (i == 0) ? cap_start : true;
-            bool ce = (i == curve_segments() - 1) ? cap_end : true;
-            draw_flat_line(layer, pts[i].x + offset_x, pts[i].y + offset_y, pts[i + 1].x + offset_x,
-                           pts[i + 1].y + offset_y, hl_color, hl_width, cs, ce);
-        }
-    }
-    if (path)
-        record_bezier_as_lines(*path, x0, y0, cx1, cy1, cx2, cy2, x1, y1);
-}
-
-// Draw a hollow tube along a cubic bezier curve (p0 → cp1 → cp2 → p1)
-// Same layer-by-layer approach for smooth joints.
-static void draw_curved_hollow_tube(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t cx1,
-                                    int32_t cy1, int32_t cx2, int32_t cy2, int32_t x1, int32_t y1,
-                                    lv_color_t wall_color, lv_color_t bg_color, int32_t width,
-                                    bool cap_start = true, bool cap_end = true) {
-    BezierPt pts[CURVE_SEGMENTS_FULL + 1];
-    pts[0] = {x0, y0};
-    for (int i = 1; i <= curve_segments(); i++) {
-        pts[i] = bezier_eval(x0, y0, cx1, cy1, cx2, cy2, x1, y1, (float)i / curve_segments());
-    }
-
-    // Round caps between interior segments (overdraw is invisible since same color).
-    // Optionally suppress start/end caps at junction with adjacent straight segments.
-    const bool simple = reduced_effects();
-
-    // Pass 1: Shadow (skip on low-perf devices)
-    if (!simple) {
-        int32_t shadow_extra = LV_MAX(2, width / 2);
-        lv_color_t shadow_color = ph_darken(wall_color, 25);
-        for (int i = 0; i < curve_segments(); i++) {
-            bool cs = (i == 0) ? cap_start : true;
-            bool ce = (i == curve_segments() - 1) ? cap_end : true;
-            draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, shadow_color,
-                           width + shadow_extra, cs, ce);
-        }
-    }
-
-    // Pass 2: Tube wall (always drawn)
-    for (int i = 0; i < curve_segments(); i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == curve_segments() - 1) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, wall_color, width, cs,
-                       ce);
-    }
-
-    // Pass 3: Bore (always drawn — needed for hollow appearance)
-    int32_t bore_width = LV_MAX(1, width - 2);
-    for (int i = 0; i < curve_segments(); i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == curve_segments() - 1) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, bg_color, bore_width,
-                       cs, ce);
-    }
-
-    // Pass 4: Highlight (skip on low-perf devices)
-    if (!simple) {
-        int32_t hl_width = LV_MAX(1, width * 2 / 5);
-        lv_color_t hl_color = ph_lighten(wall_color, 44);
-        int32_t dx = x1 - x0;
-        int32_t dy = y1 - y0;
-        int32_t offset_x = 0;
-        int32_t offset_y = 0;
-        if (dx == 0) {
-            offset_x = (width / 4 + 1);
-        } else if (dy == 0) {
-            offset_y = -(width / 4 + 1);
-        } else {
-            float len = sqrtf((float)(dx * dx + dy * dy));
-            float px = -(float)dy / len;
-            float py = (float)dx / len;
-            if (px + py > 0) {
-                px = -px;
-                py = -py;
-            }
-            int32_t off_amount = width / 4 + 1;
-            offset_x = (int32_t)(px * off_amount);
-            offset_y = (int32_t)(py * off_amount);
-        }
-        for (int i = 0; i < curve_segments(); i++) {
-            bool cs = (i == 0) ? cap_start : true;
-            bool ce = (i == curve_segments() - 1) ? cap_end : true;
-            draw_flat_line(layer, pts[i].x + offset_x, pts[i].y + offset_y, pts[i + 1].x + offset_x,
-                           pts[i + 1].y + offset_y, hl_color, hl_width, cs, ce);
-        }
     }
 }
 
@@ -1890,14 +1486,9 @@ static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPat
         int32_t nozzle_top = toolhead_y - tool_scale * 2; // Top of heater block
 
         // Entry → sensor line: colored if filament present, hollow if idle
-        if (has_filament) {
-            draw_glow_line(layer, slot_x, entry_y, slot_x, sensor_y - sensor_r, tool_color,
-                           line_active);
-            draw_vertical_line(layer, slot_x, entry_y, sensor_y - sensor_r, tool_color,
-                               line_active);
-        } else {
-            draw_hollow_vertical_line(layer, slot_x, entry_y, sensor_y - sensor_r, idle_color,
-                                      bg_color, line_active);
+        {
+            LaneStyle st = lane_style(has_filament, tool_color, idle_color, bg_color, line_active);
+            draw_lane_vline(layer, slot_x, entry_y, sensor_y - sensor_r, st);
         }
 
         // Toolhead entry sensor dot
@@ -1905,14 +1496,9 @@ static void draw_parallel_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPat
         draw_sensor_dot(layer, slot_x, sensor_y, sensor_color, at_sensor, sensor_r);
 
         // Sensor → nozzle line: colored if filament reaches nozzle, hollow if idle
-        if (at_nozzle) {
-            draw_glow_line(layer, slot_x, sensor_y + sensor_r, slot_x, nozzle_top, tool_color,
-                           line_active);
-            draw_vertical_line(layer, slot_x, sensor_y + sensor_r, nozzle_top, tool_color,
-                               line_active);
-        } else {
-            draw_hollow_vertical_line(layer, slot_x, sensor_y + sensor_r, nozzle_top, idle_color,
-                                      bg_color, line_active);
+        {
+            LaneStyle st = lane_style(at_nozzle, tool_color, idle_color, bg_color, line_active);
+            draw_lane_vline(layer, slot_x, sensor_y + sensor_r, nozzle_top, st);
         }
 
         // Determine nozzle color - only show filament color when actually at nozzle
@@ -2066,14 +1652,9 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
         lv_color_t tool_color = has_filament ? s.color : idle_color;
 
         // Entry → sensor line
-        if (has_filament) {
-            draw_glow_line(layer, slot_x, entry_y, slot_x, sensor_y - sensor_r, tool_color,
-                           line_active);
-            draw_vertical_line(layer, slot_x, entry_y, sensor_y - sensor_r, tool_color,
-                               line_active);
-        } else {
-            draw_hollow_vertical_line(layer, slot_x, entry_y, sensor_y - sensor_r, idle_color,
-                                      bg_color, line_active);
+        {
+            LaneStyle st = lane_style(has_filament, tool_color, idle_color, bg_color, line_active);
+            draw_lane_vline(layer, slot_x, entry_y, sensor_y - sensor_r, st);
         }
 
         // Sensor dot
@@ -2102,26 +1683,13 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
         bool at_nozzle = s.at_nozzle;
 
         if (is_hub) {
-            // Hub-routed lane: smooth curve from sensor to hub top
+            // Hub-routed lane: orthogonal route (vertical -> fillet -> horizontal
+            // -> fillet -> vertical) from sensor down into the hub top.
             int32_t start_y = sensor_y + sensor_r;
             int32_t end_y = hub_top;
-            int32_t drop = end_y - start_y;
-            int32_t cp1_x = slot_x;
-            int32_t cp1_y = start_y + drop * 2 / 5;
-            int32_t cp2_x = hub_cx;
-            int32_t cp2_y = end_y - drop * 2 / 5;
 
-            if (has_filament) {
-                draw_glow_curve(layer, slot_x, start_y, cp1_x, cp1_y, cp2_x, cp2_y, hub_cx, end_y,
-                                tool_color, line_active);
-                draw_curved_tube(layer, slot_x, start_y, cp1_x, cp1_y, cp2_x, cp2_y, hub_cx, end_y,
-                                 tool_color, line_active,
-                                 /*cap_start=*/false, /*cap_end=*/true);
-            } else {
-                draw_curved_hollow_tube(layer, slot_x, start_y, cp1_x, cp1_y, cp2_x, cp2_y, hub_cx,
-                                        end_y, idle_color, bg_color, line_active,
-                                        /*cap_start=*/false);
-            }
+            LaneStyle st = lane_style(has_filament, tool_color, idle_color, bg_color, line_active);
+            draw_lane_route(layer, slot_x, start_y, hub_cx, end_y, FILLET_RADIUS, st);
 
             // Hub output line + shared nozzle (draw only once)
             if (!hub_nozzle_drawn) {
@@ -2149,14 +1717,10 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
                 int32_t nozzle_top = toolhead_y - tool_scale * 2;
 
                 // Hub bottom → nozzle top line
-                if (any_hub_at_nozzle) {
-                    draw_glow_line(layer, hub_cx, hub_bottom, hub_cx, nozzle_top, hub_nozzle_color,
-                                   line_active);
-                    draw_vertical_line(layer, hub_cx, hub_bottom, nozzle_top, hub_nozzle_color,
-                                       line_active);
-                } else {
-                    draw_hollow_vertical_line(layer, hub_cx, hub_bottom, nozzle_top, idle_color,
+                {
+                    LaneStyle st = lane_style(any_hub_at_nozzle, hub_nozzle_color, idle_color,
                                               bg_color, line_active);
+                    draw_lane_vline(layer, hub_cx, hub_bottom, nozzle_top, st);
                 }
 
                 // Draw shared hub nozzle
@@ -2234,14 +1798,10 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
             // Direct lane: straight vertical from sensor to own nozzle
             int32_t nozzle_top = toolhead_y - tool_scale * 2;
 
-            if (has_filament && at_nozzle) {
-                draw_glow_line(layer, slot_x, sensor_y + sensor_r, slot_x, nozzle_top, tool_color,
-                               line_active);
-                draw_vertical_line(layer, slot_x, sensor_y + sensor_r, nozzle_top, tool_color,
-                                   line_active);
-            } else {
-                draw_hollow_vertical_line(layer, slot_x, sensor_y + sensor_r, nozzle_top,
-                                          idle_color, bg_color, line_active);
+            {
+                LaneStyle st = lane_style(has_filament && at_nozzle, tool_color, idle_color,
+                                          bg_color, line_active);
+                draw_lane_vline(layer, slot_x, sensor_y + sensor_r, nozzle_top, st);
             }
 
             // Direct nozzle
