@@ -488,17 +488,26 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
                 auto* ctx = new ReArmCtx{api_ptr, slot};
                 auto* t = lv_timer_create(
                     [](lv_timer_t* timer) {
+                        // Guard the C/C++ boundary: this lambda runs from lv_timer_handler()
+                        // (C). An exception escaping it would terminate the process. The work
+                        // here is non-throwing in practice, but the timer always deletes its
+                        // context, so swallow-and-log keeps the boundary safe.
                         auto* c = static_cast<ReArmCtx*>(lv_timer_get_user_data(timer));
-                        if (c && c->api) {
-                            std::string gc = fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament "
-                                                         "ENABLE=1",
-                                                         c->slot);
-                            spdlog::info("[AMS Snapmaker] post-resume re-arm: "
-                                         "tool {} runout sensor ENABLE=1",
-                                         c->slot);
-                            c->api->execute_gcode(
-                                gc, []() {}, [](const MoonrakerError&) {}, 0,
-                                /*silent=*/true);
+                        try {
+                            if (c && c->api) {
+                                std::string gc =
+                                    fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament "
+                                                "ENABLE=1",
+                                                c->slot);
+                                spdlog::info("[AMS Snapmaker] post-resume re-arm: "
+                                             "tool {} runout sensor ENABLE=1",
+                                             c->slot);
+                                c->api->execute_gcode(
+                                    gc, []() {}, [](const MoonrakerError&) {}, 0,
+                                    /*silent=*/true);
+                            }
+                        } catch (const std::exception& ex) {
+                            spdlog::error("[AMS Snapmaker] re-arm timer exception: {}", ex.what());
                         }
                         delete c;
                     },

@@ -226,12 +226,19 @@ void PrinterImageWidget::schedule_cache_check() {
 
     cache_timer_ = lv_timer_create(
         [](lv_timer_t* timer) {
+            // Guard the C/C++ boundary: check_or_generate_cache() decodes and resizes
+            // images, allocating large pixel buffers that can throw std::bad_alloc on a
+            // 32-bit target. An exception escaping into lv_timer_handler() (C) would
+            // terminate the process. Cache generation is best-effort, so on failure we
+            // keep the already-displayed scaled source image.
+            LVGL_SAFE_EVENT_CB_BEGIN("[PrinterImageWidget] cache_timer");
             auto* self = static_cast<PrinterImageWidget*>(lv_timer_get_user_data(timer));
             if (self) {
                 self->cache_timer_ = nullptr;
                 self->check_or_generate_cache();
             }
             lv_timer_delete(timer);
+            LVGL_SAFE_EVENT_CB_END();
         },
         50, this);
     lv_timer_set_repeat_count(cache_timer_, 1);
