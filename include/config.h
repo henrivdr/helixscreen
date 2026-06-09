@@ -246,6 +246,9 @@ class Config {
     /// Set the preset name (written during auto-detection from printer database)
     void set_preset(const std::string& preset_name);
 
+    /// Erase the top-level "preset" marker (set_preset("") is a no-op and cannot clear it)
+    void clear_preset();
+
     /**
      * @brief Load a preset file and merge hardware config into active printer
      *

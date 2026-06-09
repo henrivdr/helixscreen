@@ -1590,6 +1590,13 @@ void Config::set_preset(const std::string& preset_name) {
     spdlog::info("[Config] Preset set to '{}'", preset_name);
 }
 
+void Config::clear_preset() {
+    if (data.contains("preset")) {
+        data.erase("preset");
+        spdlog::info("[Config] Preset marker cleared");
+    }
+}
+
 bool Config::apply_preset_file(const std::string& preset_name) {
     // Guard: only full-apply if wizard hasn't been completed for this printer.
     // Post-wizard, still allow a narrow migration for filament_sensors so that

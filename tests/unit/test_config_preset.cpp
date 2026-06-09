@@ -444,6 +444,25 @@ TEST_CASE_METHOD(PresetConfigFixture,
     TearDown();
 }
 
+TEST_CASE_METHOD(PresetConfigFixture, "Config::clear_preset removes the marker",
+                 "[config][preset]") {
+    SetUp();
+
+    auto& cfg = config;
+    cfg.set_preset("qidi_q2");
+    REQUIRE(cfg.has_preset());
+    REQUIRE(cfg.get_preset() == "qidi_q2");
+
+    cfg.clear_preset();
+    REQUIRE_FALSE(cfg.has_preset());
+    REQUIRE(cfg.get_preset().empty());
+
+    cfg.clear_preset(); // idempotent
+    REQUIRE_FALSE(cfg.has_preset());
+
+    TearDown();
+}
+
 TEST_CASE_METHOD(PresetConfigFixture, "Config::apply_preset_file integrates with detection flow",
                  "[config][preset][integration]") {
     SetUp();
