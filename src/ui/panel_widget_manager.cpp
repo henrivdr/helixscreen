@@ -484,9 +484,18 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     }
     dsc.row_dsc.push_back(LV_GRID_TEMPLATE_LAST);
 
-    // Set up grid on container
-    lv_obj_set_layout(container, LV_LAYOUT_GRID);
-    lv_obj_set_grid_dsc_array(container, dsc.col_dsc.data(), dsc.row_dsc.data());
+    // Configure grid padding now, but DEFER activating LV_LAYOUT_GRID and
+    // installing the grid descriptor array until all children have been created
+    // and attached (see the grid activation near the end of this function).
+    // lv_obj_set_grid_dsc_array() internally calls lv_obj_set_style_layout(...,
+    // LV_LAYOUT_GRID), so it cannot run here without turning the container into a
+    // live grid. Children are placed with lv_obj_set_grid_cell() — style
+    // properties that simply take effect once the layout becomes grid — so
+    // per-cell placement can be set up below without the layout being active.
+    // Activating grid before the children exist lets any widget whose attach()
+    // synchronously triggers lv_obj_update_layout (e.g. PrintStatusWidget ->
+    // lv_image_set_src -> update_align, see print_status_widget.cpp:331) cascade
+    // a grid_update over a half-built grid, which crashes (#983).
     lv_obj_set_style_pad_column(container, theme_manager_get_spacing("space_xs"), 0);
     lv_obj_set_style_pad_row(container, theme_manager_get_spacing("space_xs"), 0);
 
@@ -685,14 +694,13 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
                 lv_obj_add_state(widget, LV_STATE_DISABLED);
 
                 const auto* gated_def = find_widget_def(slot.widget_id);
-                const char* type_icon =
-                    (gated_def && gated_def->icon) ? gated_def->icon : "cancel";
+                const char* type_icon = (gated_def && gated_def->icon) ? gated_def->icon : "cancel";
 
                 const char* type_icon_attrs[] = {
                     "src",    type_icon,   "size",  "xl",           "variant", "muted", "align",
                     "center", "clickable", "false", "event_bubble", "true",    nullptr};
-                if (auto* type_overlay = static_cast<lv_obj_t*>(
-                        lv_xml_create(widget, "icon", type_icon_attrs))) {
+                if (auto* type_overlay =
+                        static_cast<lv_obj_t*>(lv_xml_create(widget, "icon", type_icon_attrs))) {
                     lv_obj_add_flag(type_overlay, LV_OBJ_FLAG_FLOATING);
                     lv_obj_set_style_opa(type_overlay, LV_OPA_COVER, 0);
                 }
@@ -700,8 +708,8 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
                 const char* badge_attrs[] = {
                     "src",    "cancel",    "size",  "xl",           "variant", "muted", "align",
                     "center", "clickable", "false", "event_bubble", "true",    nullptr};
-                if (auto* badge = static_cast<lv_obj_t*>(
-                        lv_xml_create(widget, "icon", badge_attrs))) {
+                if (auto* badge =
+                        static_cast<lv_obj_t*>(lv_xml_create(widget, "icon", badge_attrs))) {
                     lv_obj_add_flag(badge, LV_OBJ_FLAG_FLOATING);
                     lv_obj_set_style_opa(badge, LV_OPA_COVER, 0);
                 }
@@ -736,6 +744,19 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
     spdlog::debug("[PanelWidgetManager] Populated {} widgets ({} with factories) via grid for '{}'",
                   placed.size(), result.size(), panel_id);
+
+    // All children (card backgrounds + widgets) now exist and carry their
+    // per-cell grid placement. Install the grid descriptor + activate the grid
+    // layout last so the very first grid_update runs over a complete, valid grid
+    // in a single clean pass — never over a half-built one (#983).
+    // lv_obj_set_grid_dsc_array() is what turns the container into a live grid;
+    // lv_obj_set_layout() is belt-and-suspenders. The explicit update_layout
+    // forces that pass now and re-flows widgets whose attach() read a pre-grid
+    // size. `dsc` is stored in grid_descriptors_ (a member), so its backing
+    // arrays remain valid for the lifetime of the active grid.
+    lv_obj_set_grid_dsc_array(container, dsc.col_dsc.data(), dsc.row_dsc.data());
+    lv_obj_set_layout(container, LV_LAYOUT_GRID);
+    lv_obj_update_layout(container);
 
     populating_ = false;
     return result;
@@ -850,8 +871,7 @@ void PanelWidgetManager::setup_gate_observers(const std::string& panel_id,
         // can find the right rebuild_pending_ entry even if `this` outlives
         // a particular panel registration.
         observers.push_back(observe_int_sync<PanelWidgetManager>(
-            subject, this,
-            [name, panel_id](PanelWidgetManager* self, int value) {
+            subject, this, [name, panel_id](PanelWidgetManager* self, int value) {
                 spdlog::debug("[PanelWidgetManager] gate '{}' -> {} (rebuild)", name, value);
                 crash_handler::breadcrumb::note("gate", name, value);
 

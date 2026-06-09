@@ -1,14 +1,18 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../ui_test_utils.h"
-#include "panel_widget.h"
-#include "panel_widget_manager.h"
-#include "panel_widget_registry.h"
 #include "ui_update_queue.h"
 
+#include "../test_fixtures.h"
+#include "../ui_test_utils.h"
+#include "config.h"
 #include "helix-xml/src/xml/lv_xml.h"
+#include "helix-xml/src/xml/lv_xml_component.h"
 #include "misc/lv_timer_private.h"
+#include "panel_widget.h"
+#include "panel_widget_config.h"
+#include "panel_widget_manager.h"
+#include "panel_widget_registry.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -43,7 +47,9 @@ TEST_CASE("PanelWidget: supports_reuse defaults to true", "[panel_widget]") {
     struct TestWidget : PanelWidget {
         void attach(lv_obj_t*, lv_obj_t*) override {}
         void detach() override {}
-        const char* id() const override { return "test"; }
+        const char* id() const override {
+            return "test";
+        }
     };
     TestWidget w;
     REQUIRE(w.supports_reuse() == true);
@@ -185,9 +191,13 @@ TEST_CASE("PanelWidgetManager coalesces multiple gate firings into one rebuild",
             // De-dup
             bool dup = false;
             for (const auto& kv : out) {
-                if (kv.first == name) { dup = true; break; }
+                if (kv.first == name) {
+                    dup = true;
+                    break;
+                }
             }
-            if (dup) continue;
+            if (dup)
+                continue;
             if (auto* existing = lv_xml_get_subject(nullptr, name)) {
                 out.emplace_back(name, existing);
             } else {
@@ -256,4 +266,130 @@ TEST_CASE("PanelWidgetManager coalesces multiple gate firings into one rebuild",
     // destructor of ObserverGuard will call lv_observer_remove which is safe
     // because the subjects are still alive at this point.
     mgr.clear_gate_observers("test_panel");
+}
+
+namespace {
+
+// Spy PanelWidget used by the grid-build-race regression test. Records the
+// layout that the page container had at the moment its attach() ran, so the
+// test can assert children are created BEFORE the container becomes a grid.
+struct GridSpyWidget : helix::PanelWidget {
+    static int s_layout_at_attach; // lv_obj_get_style_layout of parent at attach
+    static int s_attach_count;
+    static lv_obj_t* s_attached_widget;
+
+    void attach(lv_obj_t* widget_obj, lv_obj_t* /*parent_screen*/) override {
+        s_attached_widget = widget_obj;
+        ++s_attach_count;
+        lv_obj_t* parent = widget_obj ? lv_obj_get_parent(widget_obj) : nullptr;
+        s_layout_at_attach =
+            parent ? static_cast<int>(lv_obj_get_style_layout(parent, LV_PART_MAIN)) : -1;
+    }
+    void detach() override {}
+    const char* id() const override {
+        return "clock";
+    }
+    // Use a private, dependency-free inline XML component so we exercise the
+    // real lv_xml_create() + attach() path without pulling in the clock's
+    // subjects/bindings.
+    std::string get_component_name() const override {
+        return "test_grid_spy_widget";
+    }
+};
+
+int GridSpyWidget::s_layout_at_attach = -2;
+int GridSpyWidget::s_attach_count = 0;
+lv_obj_t* GridSpyWidget::s_attached_widget = nullptr;
+
+} // namespace
+
+// Regression test for #983: SIGSEGV in LVGL grid_update() while
+// PanelWidgetManager::populate_widgets() builds the home grid. The crash
+// happened because the page container had LV_LAYOUT_GRID activated BEFORE its
+// children (card backgrounds + widgets) were created; a widget whose attach()
+// synchronously triggered lv_obj_update_layout (e.g. PrintStatusWidget ->
+// lv_image_set_src -> update_align, see print_status_widget.cpp:331) cascaded a
+// grid_update on a half-built grid. The fix defers grid-layout activation until
+// all children exist, then runs one clean layout pass.
+//
+// Invariant captured here: at the moment any widget's attach() runs, the
+// container's layout is NOT yet LV_LAYOUT_GRID; after populate_widgets()
+// returns, the container's layout IS LV_LAYOUT_GRID and the child exists.
+// This FAILS before the fix (grid active during build) and PASSES after.
+TEST_CASE_METHOD(XMLTestFixture,
+                 "PanelWidgetManager activates grid layout after children are built",
+                 "[panel_widget][manager][regression]") {
+    helix::init_widget_registrations();
+
+    // Register a minimal, dependency-free XML component for the spy widget so
+    // lv_xml_create() succeeds without needing the real widget's subjects.
+    lv_xml_register_component_from_data(
+        "test_grid_spy_widget",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+
+    // Override the 'clock' factory with our spy factory. 'clock' is a plain
+    // non-gated widget; restored at the end of the test.
+    const auto* clock_def = helix::find_widget_def("clock");
+    REQUIRE(clock_def != nullptr);
+    WidgetFactory original_clock_factory = clock_def->factory;
+    helix::register_widget_factory("clock", [](const std::string&) -> std::unique_ptr<PanelWidget> {
+        return std::make_unique<GridSpyWidget>();
+    });
+
+    GridSpyWidget::s_layout_at_attach = -2;
+    GridSpyWidget::s_attach_count = 0;
+    GridSpyWidget::s_attached_widget = nullptr;
+
+    const std::string panel_id = "test_grid_race";
+
+    // Write a 2-page config: page 0 is empty, page 1 (a secondary page, which
+    // does NOT get registry-default widgets appended) holds exactly one
+    // enabled spy widget with an explicit 1x1 grid position. Driving
+    // populate_widgets on page 1 isolates the build to our spy widget.
+    auto* cfg = Config::get_instance();
+    nlohmann::json widget_cfg = {{"main_page_index", 0},
+                                 {"next_page_id", 2},
+                                 {"pages",
+                                  {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
+                                   {{"id", "spy"},
+                                    {"widgets",
+                                     {{{"id", "clock"},
+                                       {"enabled", true},
+                                       {"col", 0},
+                                       {"row", 0},
+                                       {"colspan", 1},
+                                       {"rowspan", 1}}}}}}}};
+    cfg->set<nlohmann::json>(cfg->df() + "panel_widgets/" + panel_id, widget_cfg);
+
+    // Force a reload + clear any cached active config / grid descriptors so the
+    // populate path does a full rebuild.
+    auto& mgr = PanelWidgetManager::instance();
+    mgr.get_widget_config(panel_id).mark_dirty();
+    mgr.clear_panel_config(panel_id);
+
+    // A real on-screen container with a definite size so cell math is sane.
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 400, 300);
+    process_lvgl(10);
+
+    REQUIRE(lv_obj_get_style_layout(container, LV_PART_MAIN) != LV_LAYOUT_GRID);
+
+    auto widgets = mgr.populate_widgets(panel_id, container, /*page_index=*/1);
+
+    // The spy widget's attach() must have run, and observed a non-grid layout.
+    REQUIRE(GridSpyWidget::s_attach_count == 1);
+    INFO("layout at attach (LV_LAYOUT_GRID=" << static_cast<int>(LV_LAYOUT_GRID)
+                                             << ") was: " << GridSpyWidget::s_layout_at_attach);
+    REQUIRE(GridSpyWidget::s_layout_at_attach != static_cast<int>(LV_LAYOUT_GRID));
+
+    // After populate_widgets returns the grid IS active and the child exists.
+    REQUIRE(lv_obj_get_style_layout(container, LV_PART_MAIN) == LV_LAYOUT_GRID);
+    REQUIRE(lv_obj_get_child_count(container) > 0);
+    REQUIRE(GridSpyWidget::s_attached_widget != nullptr);
+    // The attached widget is parented into the page container.
+    REQUIRE(lv_obj_get_parent(GridSpyWidget::s_attached_widget) == container);
+
+    // Restore global registry state for subsequent tests.
+    helix::register_widget_factory("clock", original_clock_factory);
+    mgr.clear_panel_config(panel_id);
 }
