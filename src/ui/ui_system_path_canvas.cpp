@@ -130,6 +130,13 @@ struct BypassGeometry {
 // segment instead of cramming the spool right next to the hub.
 static constexpr float BYPASS_X_RATIO = 0.85f;
 
+// Half-extent of the panel's BypassSpoolWidgets overlay (box is 48 + 4*2 = 56px
+// wide; mirror it here so the canvas can guarantee the spool clears the
+// rightmost toolhead). Kept in lockstep with BOX_SIZE in ui_bypass_spool_widget.cpp.
+static constexpr int32_t BYPASS_SPOOL_HALF = 28;
+
+static int32_t calc_tool_x(int tool_index, int total_tools, int32_t x_off, int32_t width);
+
 static BypassGeometry compute_bypass_geometry(const SystemPathData* data,
                                               const lv_area_t& obj_coords) {
     int32_t width = lv_area_get_width(&obj_coords);
@@ -138,15 +145,53 @@ static BypassGeometry compute_bypass_geometry(const SystemPathData* data,
     int32_t y_off = obj_coords.y1;
 
     // Hub shifts ~10% left to keep its label clear of the long horizontal
-    // bypass merge line (single-tool, has_bypass — multi_tool path doesn't
-    // render bypass).
+    // bypass merge line (single-tool, has_bypass).
     int32_t center_x = x_off + width / 2 - width / 10;
-    int32_t bypass_x = x_off + (int32_t)(width * BYPASS_X_RATIO);
 
     int32_t hub_y = y_off + (int32_t)(height * HUB_Y_RATIO);
     int32_t hub_h = (int32_t)(height * HUB_HEIGHT_RATIO);
     int32_t nozzle_y = y_off + (int32_t)(height * NOZZLE_Y_RATIO);
     int32_t merge_y = (hub_y + hub_h / 2) + (nozzle_y - (hub_y + hub_h / 2)) / 3;
+
+    // Comfortable gap between the rightmost toolhead and the bypass spool.
+    int32_t comfort = LV_MAX(theme_manager_get_spacing("space_md"), 8);
+    // Right boundary the spool centre must stay inside (leave room for its half
+    // width + a small margin from the canvas edge).
+    int32_t right_limit = x_off + width - BYPASS_SPOOL_HALF - 4;
+
+    // Default horizontal position (single-tool / no toolhead row): the historic
+    // 0.85 ratio gives a long visible tube run from the hub.
+    int32_t bypass_x = x_off + (int32_t)(width * BYPASS_X_RATIO);
+
+    // Collision-aware placement when a toolhead row is present. The rightmost
+    // toolhead sits at calc_tool_x(total_tools-1, …); a toolhead glyph is about
+    // a nozzle-scale wide on each side. Place the bypass spool just past that
+    // glyph's right edge so the two never overlap.
+    if (data->total_tools > 0) {
+        int32_t rightmost_tool_x =
+            calc_tool_x(data->total_tools - 1, data->total_tools, x_off, width);
+        // Nozzle glyph half-width: the small (multi-tool) scale is ~3/4 of the
+        // base extruder scale; a glyph spans roughly 2*scale to each side.
+        int32_t scale = LV_MAX(6, data->extruder_scale * 3 / 4);
+        int32_t tool_half = scale * 2;
+        int32_t tool_right_edge = rightmost_tool_x + tool_half;
+
+        int32_t want_x = tool_right_edge + comfort + BYPASS_SPOOL_HALF;
+        if (want_x > bypass_x) {
+            bypass_x = want_x;
+        }
+
+        if (bypass_x > right_limit) {
+            // No horizontal room even at the canvas edge — drop the spool below
+            // the toolhead row, centred over the rightmost toolhead, so it never
+            // overlaps a nozzle. Degrades better than a clipped/overlapping spool.
+            bypass_x = LV_CLAMP(rightmost_tool_x, x_off + BYPASS_SPOOL_HALF + 4, right_limit);
+            // Sit below the toolhead row: nozzle centre + glyph drop + spool half.
+            merge_y = nozzle_y + scale * 4 + BYPASS_SPOOL_HALF + comfort;
+        }
+    }
+
+    bypass_x = LV_MIN(bypass_x, right_limit);
 
     return {bypass_x, merge_y, center_x};
 }
@@ -1361,9 +1406,13 @@ void ui_system_path_canvas_set_bypass_has_spool(lv_obj_t* obj, bool has_spool) {
 
 bool ui_system_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out) {
     auto* data = get_data(obj);
-    if (!data || !data->has_bypass || data->total_tools > 1) {
+    if (!data || !data->has_bypass) {
         return false;
     }
+    // Note: this intentionally serves both single-tool AND multi-tool (toolhead
+    // row) layouts. compute_bypass_geometry() places the spool clear of the
+    // rightmost toolhead, so the panel-side overlay no longer collides when many
+    // tools span the canvas (e.g. HTLF + toolchanger, 7 tools).
     lv_obj_update_layout(obj);
     lv_area_t obj_coords;
     lv_obj_get_coords(obj, &obj_coords);
