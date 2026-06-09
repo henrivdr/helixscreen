@@ -1597,6 +1597,190 @@ TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Sovol SV06 fingerprin
     REQUIRE(result.confidence >= 75);
 }
 
+// ============================================================================
+// Hostname-free Sovol regression tests
+//
+// These prove the Sovol lineup can be detected from Moonraker object signals
+// alone (no hostname). Every case sets `.hostname = ""` so a passing result
+// must come from printer_objects / steppers / build_volume / kinematics, not
+// from a hostname token. They guard against the ACE keying on a (now-removed)
+// `load_cell` object, the SV08 fork's unverified `probe_pressure` object, and
+// the specialized models being swallowed by their plain-SV06 siblings.
+// ============================================================================
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Sovol SV06 ACE detected hostname-free (load-cell stack)",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"smart_effector", "hx711", "lis2dw hotend", "lis2dw bed", "probe",
+                            "z_tilt"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 220, .y_min = 0, .y_max = 235, .z_max = 250}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol SV06 ACE");
+    REQUIRE(result.confidence >= 78);
+}
+
+TEST_CASE_METHOD(
+    PrinterDetectorFixture,
+    "PrinterDetector: Sovol SV06 Plus ACE detected hostname-free (300mm load-cell stack)",
+    "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"smart_effector", "hx711", "lis2dw hotend", "lis2dw bed", "probe",
+                            "z_tilt"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 350}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol SV06 Plus ACE");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Sovol SV08 detected hostname-free (probe_pressure keystone)",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"quad_gantry_level", "probe_pressure", "z_offset_calibration",
+                            "adxl345", "probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1", "stepper_z2",
+                     "stepper_z3"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 355, .y_min = 0, .y_max = 364, .z_max = 347}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    // probe_pressure is the required hostname-free discriminator vs a Voron 2.4 (both are
+    // QGL/4-Z corexy). Without it, an SV08 correctly stays ambiguous with the Voron 2.4.
+    REQUIRE(result.type_name == "Sovol SV08");
+    REQUIRE(result.confidence >= 90);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Sovol SV08 Max detected hostname-free (500mm)",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"quad_gantry_level", "probe_pressure", "z_offset_calibration",
+                            "adxl345", "probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1", "stepper_z2",
+                     "stepper_z3"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 500, .y_min = 0, .y_max = 500, .z_max = 500}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol SV08 Max");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Sovol Zero detected hostname-free (eddy + single-Z + tiny bed)",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"probe_eddy_current eddy", "z_offset_calibration"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "corexy",
+        .build_volume = {.x_min = 0, .x_max = 152, .y_min = 0, .y_max = 152, .z_max = 155}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol Zero");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Sovol SV07 detected hostname-free and NOT swallowed by SV06 ACE",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"adxl345", "z_tilt", "probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 225, .y_min = 0, .y_max = 225, .z_max = 253}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol SV07");
+    REQUIRE(result.type_name != "Sovol SV06 ACE");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Plain Sovol SV06 hostname-free NOT swallowed by SV06 ACE",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 220, .y_min = 0, .y_max = 220, .z_max = 250}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol SV06");
+    REQUIRE(result.type_name != "Sovol SV06 ACE");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Plain Sovol SV06 Plus hostname-free (300mm, no load cell)",
+                 "[printer][sovol][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 350}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Sovol SV06 Plus");
+}
+
 TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Artillery Sidewinder fingerprint",
                  "[printer][real_world][artillery]") {
     PrinterHardwareData hardware{

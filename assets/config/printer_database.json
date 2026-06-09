@@ -3683,6 +3683,20 @@
           "reason": "ADXL345 accelerometer (input shaper)"
         },
         {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "probe_pressure",
+          "confidence": 96,
+          "reason": "probe_pressure load-cell endstop (Sovol SV08 fork keystone)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_offset_calibration",
+          "confidence": 60,
+          "reason": "z_offset_calibration macro (Sovol SV08 fork)"
+        },
+        {
           "type": "hostname_match",
           "field": "hostname",
           "pattern": "sovol",
@@ -3740,13 +3754,27 @@
           "reason": "4 independent Z steppers (Voron 2.4 style)"
         },
         {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "probe_pressure",
+          "confidence": 96,
+          "reason": "probe_pressure load-cell endstop (Sovol SV08 fork keystone)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_offset_calibration",
+          "confidence": 60,
+          "reason": "z_offset_calibration macro (Sovol SV08 fork)"
+        },
+        {
           "type": "build_volume_range",
           "field": "bed_mesh",
           "min_x": 480,
           "max_x": 520,
           "min_y": 480,
           "max_y": 520,
-          "confidence": 85,
+          "confidence": 97,
           "reason": "Build volume ~500x500mm (SV08 Max size)"
         },
         {
@@ -3788,11 +3816,11 @@
         {
           "type": "build_volume_range",
           "field": "bed_mesh",
-          "min_x": 140,
-          "max_x": 165,
-          "min_y": 140,
-          "max_y": 165,
-          "confidence": 65,
+          "min_x": 130,
+          "max_x": 175,
+          "min_y": 130,
+          "max_y": 175,
+          "confidence": 75,
           "reason": "Build volume ~152x152mm (Sovol Zero size)"
         },
         {
@@ -3810,17 +3838,10 @@
           "reason": "Hostname contains 'sovol-zero'"
         },
         {
-          "type": "hostname_match",
-          "field": "hostname",
-          "pattern": "zero",
-          "confidence": 70,
-          "reason": "Hostname contains 'zero'"
-        },
-        {
           "type": "object_exists",
           "field": "printer_objects",
           "pattern": "probe_eddy_current",
-          "confidence": 70,
+          "confidence": 75,
           "reason": "Eddy current probe (Sovol Zero auto-leveling)"
         }
       ]
@@ -3852,7 +3873,7 @@
           "max_x": 240,
           "min_y": 200,
           "max_y": 240,
-          "confidence": 40,
+          "confidence": 50,
           "reason": "Build volume ~220mm (SV06 size)"
         },
         {
@@ -3883,7 +3904,7 @@
         "touch_type": "capacitive",
         "notes": "4.3\" Goodix capacitive touchscreen at 480x272. The Goodix controller may report an 800x480 ABS range; the calibration wizard runs on first boot when that mismatch is detected (#123)."
       },
-      "note": "Distinct SKU from the plain Sovol SV06 but shares the i3 Cartesian platform and 220x220x250 build volume, so the load-cell (strain-gauge) nozzle probe and an 'ace' hostname token are the only fingerprint differences. Hosts without an 'ace' token may still resolve to 'Sovol SV06' until a Sovol-ACE-specific Klipper object/macro is identified as a high-confidence discriminator. DRAFTED from public specs (#123) — verify the load_cell object name and hostname against a real SV06 ACE config before relying on detection.",
+      "note": "Distinct SKU from the plain Sovol SV06 but shares the i3 Cartesian platform and 220x220x250 build volume. The load-cell fingerprint is smart_effector + hx711 + lis2dw: mainline 'smart_effector' is the reliable signal, while 'hx711' is a Sovol fork extra whose object-list enumeration is unconfirmed. ACE vs Plus-ACE is distinguished only by build volume (<=240 vs >=280). Hosts without an 'ace' token may still resolve to 'Sovol SV06' if the load-cell objects are absent.",
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -3899,15 +3920,29 @@
           "max_x": 240,
           "min_y": 200,
           "max_y": 240,
-          "confidence": 40,
+          "confidence": 50,
           "reason": "Build volume ~220mm (SV06 ACE size)"
         },
         {
           "type": "object_exists",
           "field": "printer_objects",
-          "pattern": "load_cell",
-          "confidence": 55,
-          "reason": "Load-cell/strain-gauge nozzle probe (ACE; plain SV06 uses inductive probe)"
+          "pattern": "smart_effector",
+          "confidence": 72,
+          "reason": "smart_effector load-cell nozzle probe (ACE; plain SV06 uses inductive probe)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "hx711",
+          "confidence": 68,
+          "reason": "hx711 load-cell ADC (Sovol ACE fork extra)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "lis2dw",
+          "confidence": 45,
+          "reason": "lis2dw accelerometer (ACE input shaper / probe stack)"
         },
         {
           "type": "hostname_match",
@@ -3946,13 +3981,20 @@
           "reason": "Cartesian kinematics (bedslinger)"
         },
         {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "probe",
+          "confidence": 40,
+          "reason": "Probe present (auto-leveling)"
+        },
+        {
           "type": "build_volume_range",
           "field": "bed_mesh",
           "min_x": 280,
           "max_x": 320,
           "min_y": 280,
           "max_y": 320,
-          "confidence": 60,
+          "confidence": 66,
           "reason": "Build volume ~300mm (SV06 Plus size)"
         },
         {
@@ -3989,7 +4031,7 @@
         "touch_type": "capacitive",
         "notes": "4.3\" capacitive touchscreen (landscape orientation) at 480x272. Calibration wizard runs on first boot if the touch ABS range mismatches the panel (#123)."
       },
-      "note": "Distinct SKU from the plain Sovol SV06 Plus but shares its 300x300x350 Cartesian platform, so the load-cell (strain-gauge) nozzle probe and a 'plus-ace' hostname token are the only fingerprint differences. Hosts without an 'ace' token may still resolve to 'Sovol SV06 Plus'. DRAFTED from public specs — verify the load_cell object name and hostname against a real SV06 Plus ACE config before relying on detection.",
+      "note": "Distinct SKU from the plain Sovol SV06 Plus but shares its 300x300x350 Cartesian platform. The load-cell fingerprint is smart_effector + hx711 + lis2dw: mainline 'smart_effector' is the reliable signal, while 'hx711' is a Sovol fork extra whose object-list enumeration is unconfirmed. ACE vs Plus-ACE is distinguished only by build volume (<=240 vs >=280). Hosts without an 'ace' token may still resolve to 'Sovol SV06 Plus' if the load-cell objects are absent.",
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -4011,9 +4053,23 @@
         {
           "type": "object_exists",
           "field": "printer_objects",
-          "pattern": "load_cell",
-          "confidence": 55,
-          "reason": "Load-cell/strain-gauge nozzle probe (ACE; plain SV06 Plus uses inductive probe)"
+          "pattern": "smart_effector",
+          "confidence": 72,
+          "reason": "smart_effector load-cell nozzle probe (ACE; plain SV06 Plus uses inductive probe)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "hx711",
+          "confidence": 68,
+          "reason": "hx711 load-cell ADC (Sovol ACE fork extra)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "lis2dw",
+          "confidence": 45,
+          "reason": "lis2dw accelerometer (ACE input shaper / probe stack)"
         },
         {
           "type": "hostname_match",
@@ -4057,6 +4113,30 @@
           "pattern": "adxl345",
           "confidence": 50,
           "reason": "ADXL345 accelerometer (input shaper)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_tilt",
+          "confidence": 70,
+          "reason": "z_tilt (dual-Z gantry leveling)"
+        },
+        {
+          "type": "stepper_count",
+          "field": "steppers",
+          "pattern": "z_count_2",
+          "confidence": 55,
+          "reason": "Dual Z steppers (SV07 gantry)"
+        },
+        {
+          "type": "build_volume_range",
+          "field": "bed_mesh",
+          "min_x": 205,
+          "max_x": 240,
+          "min_y": 205,
+          "max_y": 240,
+          "confidence": 45,
+          "reason": "Build volume ~222mm (SV07 size)"
         },
         {
           "type": "hostname_match",
