@@ -20,6 +20,7 @@ The preset sets `wizard_completed: false` so the abbreviated wizard runs on firs
 | `cc1.json` | Elegoo Centauri Carbon (COSMOS firmware) | Factory white-balance calibration (per-channel panel gain), hardware mappings, load-cell probe, Moonraker on port 80 |
 | `artillery-m1-pro.json` | Artillery M1 Pro | Touch calibration, hardware mappings, sound disabled (CPU overload) |
 | `voron-v2-afc.json` | Voron V2 with AFC | Reference config, not auto-baked |
+| `qidi_q2.json` | Qidi Q2 + QIDI Box (Happy Hare) | Network-detected (applied by the wizard, not baked); hardware mappings + Happy Hare filament-sensor roles |
 
 ## What's in a Preset
 

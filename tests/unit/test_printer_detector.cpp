@@ -1473,8 +1473,7 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.type_name == "RatRig V-Minion");
 }
 
-TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: RatOS V-Core 4 by hostname",
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: RatOS V-Core 4 by hostname",
                  "[printer][ratrig][ratos]") {
     PrinterHardwareData hardware{
         .heaters = {"extruder", "heater_bed"},
@@ -1518,8 +1517,7 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.type_name == "RatRig V-Core 4 IDEX");
 }
 
-TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: RatOS V-Core Pro by hostname",
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: RatOS V-Core Pro by hostname",
                  "[printer][ratrig][ratos]") {
     PrinterHardwareData hardware{
         .heaters = {"extruder", "heater_bed"},
@@ -2115,6 +2113,38 @@ TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: MCU match - STM32F402
     REQUIRE(result.detected());
     REQUIRE(result.type_name == "Qidi Plus 4");
     REQUIRE(result.confidence >= 85);
+}
+
+// ============================================================================
+// Regression: stock Qidi Q2 ships the generic `linaro-alip` Linaro rootfs
+// hostname. That string must NOT drag detection to the Artillery M1 Pro — the
+// M1 Pro had a hostname_match heuristic on `linaro-alip` (confidence 85) that
+// collided with every linaro-based SBC, including the (CoreXY) Q2. The M1 Pro
+// keeps unique 95% object signals (probe_air / hall_fila_*), so the hostname
+// heuristic was pure redundancy for it and a false magnet for the Q2.
+// ============================================================================
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: stock Q2 (linaro-alip host) is not misdetected as Artillery",
+                 "[printer][qidi][regression]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed", "heater_generic chamber"},
+        .sensors = {"temperature_sensor chamber"},
+        .fans = {"fan", "chamber_fan"},
+        .leds = {},
+        .hostname = "linaro-alip", // generic Linaro rootfs name QIDI ships on the Q2
+        .printer_objects = {"heater_generic chamber"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "corexy",
+        .mcu = "STM32F407",
+        .mcu_list = {"STM32F407"},
+        .build_volume = {.x_min = 0, .x_max = 245, .y_min = 0, .y_max = 245, .z_max = 245},
+    };
+
+    auto result = PrinterDetector::detect(hardware);
+
+    // The bug: linaro-alip pulled this to Artillery M1 Pro. It must not.
+    REQUIRE(result.type_name != "Artillery M1 Pro");
 }
 
 // ============================================================================
@@ -3141,10 +3171,10 @@ TEST_CASE_METHOD(
     REQUIRE(result.type_name == "FlashForge Adventurer 5X");
 }
 
-TEST_CASE_METHOD(
-    PrinterDetectorFixture,
-    "PrinterDetector: AD5X with ZMOD firmware detected via [zmod_ifs] section + private _IFS_ macros",
-    "[printer][heuristics][regression][ad5x]") {
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: AD5X with ZMOD firmware detected via [zmod_ifs] section + "
+                 "private _IFS_ macros",
+                 "[printer][heuristics][regression][ad5x]") {
     // Regression for bundle Q8PJP63J: AD5X running ZMOD firmware does NOT publish
     // the `zmod_ifs_switch_sensor` object or a public `SET_EXTRUDER_SLOT` macro.
     // Instead it has a `[zmod_ifs]` section and private `_IFS_*` macros
@@ -3157,18 +3187,13 @@ TEST_CASE_METHOD(
         .fans = {},
         .leds = {"led chamber_led"}, // AD5X shares chamber LED with 5M Pro
         .hostname = "flashforge",    // Generic — no "ad5x" token
-        .printer_objects = {"zmod_ifs",
-                            "zmod_ifs_motion_sensor ifs_motion_sensor",
+        .printer_objects = {"zmod_ifs", "zmod_ifs_motion_sensor ifs_motion_sensor",
                             "filament_motion_sensor ifs_motion_sensor",
                             "filament_switch_sensor head_switch_sensor",
-                            "gcode_macro _IFS_AUTOINSERT",
-                            "gcode_macro _IFS_ON",
-                            "gcode_macro _IFS_OFF",
-                            "gcode_macro _IFS_REMOVE_PRUTOK",
-                            "gcode_macro _PRINT_IFS_MOTION",
-                            "gcode_macro IFS_UNLOCK",
-                            "gcode_macro END_CHANGE_FILAMENT",
-                            "gcode_macro START_PRINT"},
+                            "gcode_macro _IFS_AUTOINSERT", "gcode_macro _IFS_ON",
+                            "gcode_macro _IFS_OFF", "gcode_macro _IFS_REMOVE_PRUTOK",
+                            "gcode_macro _PRINT_IFS_MOTION", "gcode_macro IFS_UNLOCK",
+                            "gcode_macro END_CHANGE_FILAMENT", "gcode_macro START_PRINT"},
         .steppers = {},
         .kinematics = "corexy",
         .cpu_arch = "MIPS Ingenic X2600"};
@@ -3378,6 +3403,11 @@ TEST_CASE("PrinterDetector: get_preset_for_name resolves DB name field",
     REQUIRE(PrinterDetector::get_preset_for_name("FlashForge Adventurer 5X") == "ad5x");
     REQUIRE(PrinterDetector::get_preset_for_name("FlashForge Adventurer 5M Pro") == "ad5m_pro");
 
+    // Qidi Q2 (+ QIDI Box / Happy Hare) preset wiring — applied by the wizard on
+    // network detection (assets/config/presets/qidi_q2.json).
+    REQUIRE(PrinterDetector::get_preset_for_name("Qidi Q2") == "qidi_q2");
+    REQUIRE(PrinterDetector::get_name_for_preset("qidi_q2") == "Qidi Q2");
+
     // Round-trip: name → preset → name should be stable
     std::string name = PrinterDetector::get_name_for_preset("ad5x");
     REQUIRE(PrinterDetector::get_preset_for_name(name) == "ad5x");
@@ -3569,8 +3599,8 @@ struct CwdGuard {
 TEST_CASE("PrinterDetector: loads printer_database.json from HELIX_DATA_DIR/assets/config/",
           "[printer][seed_resolution]") {
     namespace fs = std::filesystem;
-    auto temp_root = fs::temp_directory_path() /
-                     ("test_printer_detector_seed_" + std::to_string(getpid()));
+    auto temp_root =
+        fs::temp_directory_path() / ("test_printer_detector_seed_" + std::to_string(getpid()));
 
     // Use a nested scope so guards (cwd + env) restore BEFORE the final
     // reload that puts the singleton back to its real-database state.
@@ -3583,8 +3613,7 @@ TEST_CASE("PrinterDetector: loads printer_database.json from HELIX_DATA_DIR/asse
         fs::create_directories(temp_root / "assets" / "config");
         fs::create_directories(temp_root / "config_dir");
 
-        std::ofstream(temp_root / "assets" / "config" / "printer_database.json")
-            << R"({
+        std::ofstream(temp_root / "assets" / "config" / "printer_database.json") << R"({
                 "version": "test-seed-1.0",
                 "printers": [
                     {
@@ -3712,9 +3741,10 @@ class VariantPresetFixture {
 
         config.path = temp_dir + "/settings.json";
         config.active_printer_id_ = "default";
-        config.data = {{"active_printer_id", "default"},
-                       {"printers",
-                        {{"default", {{"moonraker_host", "127.0.0.1"}, {"wizard_completed", false}}}}}};
+        config.data = {
+            {"active_printer_id", "default"},
+            {"printers",
+             {{"default", {{"moonraker_host", "127.0.0.1"}, {"wizard_completed", false}}}}}};
     }
 
     void TearDown() {
@@ -3740,9 +3770,10 @@ class VariantPresetFixture {
 
 } // namespace helix
 
-TEST_CASE_METHOD(helix::VariantPresetFixture,
-                 "apply_preset_with_variants: ZMOD signature picks _zmod variant for non-ForgeX preset",
-                 "[printer_detector][variant]") {
+TEST_CASE_METHOD(
+    helix::VariantPresetFixture,
+    "apply_preset_with_variants: ZMOD signature picks _zmod variant for non-ForgeX preset",
+    "[printer_detector][variant]") {
     SetUp();
     write_seed_preset("ad5m_pro", "fan");
     write_seed_preset("ad5m_pro_zmod", "fan_generic fanM106");
@@ -3750,8 +3781,7 @@ TEST_CASE_METHOD(helix::VariantPresetFixture,
     helix::PrinterDiscovery hw;
     hw.set_printer_objects({"fan_generic fanM106", "extruder", "heater_bed"});
 
-    std::string applied =
-        PrinterDetector::apply_preset_with_variants(&config, "ad5m_pro", hw);
+    std::string applied = PrinterDetector::apply_preset_with_variants(&config, "ad5m_pro", hw);
 
     REQUIRE(applied == "ad5m_pro_zmod");
     REQUIRE(config.get<std::string>(config.df() + "fans/part", "") == "fan_generic fanM106");
@@ -3783,9 +3813,10 @@ TEST_CASE_METHOD(helix::VariantPresetFixture,
     TearDown();
 }
 
-TEST_CASE_METHOD(helix::VariantPresetFixture,
-                 "apply_preset_with_variants: substring _forgex without suffix does not suppress _zmod",
-                 "[printer_detector][variant]") {
+TEST_CASE_METHOD(
+    helix::VariantPresetFixture,
+    "apply_preset_with_variants: substring _forgex without suffix does not suppress _zmod",
+    "[printer_detector][variant]") {
     // Tightening: the suppression must be a SUFFIX match, not substring. A
     // preset name like "ad5m_pro_forgex_special" (hypothetical future preset)
     // ending in something other than "_forgex" should still attempt the

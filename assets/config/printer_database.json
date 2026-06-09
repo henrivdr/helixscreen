@@ -2951,6 +2951,7 @@
       "name": "Qidi Q2",
       "manufacturer": "Qidi",
       "image": "qidi-q2.png",
+      "preset": "qidi_q2",
       "print_start_profile": "qidi",
       "ams_type": "qidi_box",
       "notes": "Compatible with the QIDI Box filament changer (4-slot hub-style, chainable to 16).",
@@ -4647,13 +4648,6 @@
           "pattern": "adxl345",
           "confidence": 50,
           "reason": "ADXL345 accelerometer (input shaper support)"
-        },
-        {
-          "type": "hostname_match",
-          "field": "hostname",
-          "pattern": "linaro-alip",
-          "confidence": 85,
-          "reason": "Hostname contains 'linaro-alip'"
         },
         {
           "type": "sensor_match",
