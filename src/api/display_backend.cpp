@@ -139,6 +139,63 @@ std::unique_ptr<DisplayBackend> DisplayBackend::create(DisplayBackendType type) 
     }
 }
 
+namespace {
+
+// Emitted when every compiled backend failed to initialize. Inspects the raw
+// device nodes to explain *why* nothing was usable — almost always a display
+// panel whose kernel driver / device-tree overlay never loaded. Without this
+// the only signal is the opaque "No display backend available!", which sends
+// users hunting in the wrong place (#998: BTT Pi/CB2 DSI panel on generic
+// Armbian — backlight on, but no /dev/fb0 and no connected DRM connector).
+void diagnose_no_display_hardware() {
+    struct stat st;
+    bool have_fb0 = (stat("/dev/fb0", &st) == 0);
+
+    bool have_dri = false;
+    bool have_connected_connector = false;
+#ifdef HELIX_DISPLAY_DRM
+    const char* devices[] = {"/dev/dri/card0", "/dev/dri/card1", "/dev/dri/card2"};
+    for (const char* dev : devices) {
+        int fd = open(dev, O_RDONLY | O_CLOEXEC);
+        if (fd < 0)
+            continue;
+        have_dri = true;
+        drmModeRes* resources = drmModeGetResources(fd);
+        if (resources) {
+            for (int i = 0; i < resources->count_connectors && !have_connected_connector; i++) {
+                drmModeConnector* conn = drmModeGetConnector(fd, resources->connectors[i]);
+                if (conn) {
+                    if (conn->connection == DRM_MODE_CONNECTED)
+                        have_connected_connector = true;
+                    drmModeFreeConnector(conn);
+                }
+            }
+            drmModeFreeResources(resources);
+        }
+        close(fd);
+    }
+#endif
+
+    // Hardware is present but the backend(s) still failed — permissions, a busy
+    // device, or a config mismatch. The per-backend warnings already cover that;
+    // don't muddy them with overlay guidance that doesn't apply.
+    if (have_fb0 || have_connected_connector)
+        return;
+
+    spdlog::error("[DisplayBackend] No display hardware detected: /dev/fb0 is absent "
+                  "and no DRM connector is connected{}.",
+                  have_dri ? "" : " (/dev/dri has no usable card)");
+    spdlog::error("[DisplayBackend] This almost always means your display panel's kernel "
+                  "driver or device-tree overlay is not loaded — the panel is powered "
+                  "(backlight on) but the kernel never created a framebuffer for it.");
+    spdlog::error("[DisplayBackend] Fix: enable the panel overlay for your board and "
+                  "reboot. On a BigTreeTech Pi/CB2 and similar, the stock BTT OS image "
+                  "ships the DSI panel overlay preconfigured; a generic Armbian/Debian "
+                  "image usually does not. Verify with 'ls /dev/fb0' and 'ls /sys/class/drm/'.");
+}
+
+} // namespace
+
 std::unique_ptr<DisplayBackend> DisplayBackend::create_auto() {
     // Check environment variable override first
     const char* backend_env = std::getenv("HELIX_DISPLAY_BACKEND");
@@ -232,6 +289,8 @@ std::unique_ptr<DisplayBackend> DisplayBackend::create_auto() {
                   "DRM "
 #endif
     );
+
+    diagnose_no_display_hardware();
 
     return nullptr;
 }
