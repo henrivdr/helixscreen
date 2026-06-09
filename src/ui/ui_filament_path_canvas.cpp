@@ -2155,6 +2155,19 @@ static bool layered_setup_canvases(lv_obj_t* obj, FilamentPathData* data) {
     return true;
 }
 
+// The initial refresh scheduled at create time runs before layout assigns the
+// widget a real size; layered_refresh_async() then early-returns on its w<=0
+// guard and nothing else retries it, leaving the canvases permanently blank.
+// When layout finally gives the widget a non-zero size, re-mark both layers
+// dirty and re-schedule the async refresh so it paints. layered_refresh_async
+// handles the canvas buffer (re)allocation for the new size itself.
+static void filament_path_size_changed_cb(lv_event_t* e) {
+    lv_obj_t* obj = lv_event_get_target_obj(e);
+    if (lv_obj_get_width(obj) <= 0 || lv_obj_get_height(obj) <= 0)
+        return;
+    layered_mark_dirty(obj, true, true);
+}
+
 static void filament_path_draw_cb(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
     lv_layer_t* layer = lv_event_get_layer(e);
@@ -2997,6 +3010,7 @@ static void* filament_path_xml_create(lv_xml_parser_state_t* state, const char**
     lv_obj_add_event_cb(obj, filament_path_draw_cb, LV_EVENT_DRAW_POST, nullptr);
     lv_obj_add_event_cb(obj, filament_path_click_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(obj, filament_path_delete_cb, LV_EVENT_DELETE, nullptr);
+    lv_obj_add_event_cb(obj, filament_path_size_changed_cb, LV_EVENT_SIZE_CHANGED, nullptr);
 
     if (!layered_setup_canvases(obj, data)) {
         spdlog::error("[FilamentPath] Canvas setup failed — widget will be blank");
@@ -3107,6 +3121,7 @@ lv_obj_t* ui_filament_path_canvas_create(lv_obj_t* parent) {
     lv_obj_add_event_cb(obj, filament_path_draw_cb, LV_EVENT_DRAW_POST, nullptr);
     lv_obj_add_event_cb(obj, filament_path_click_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(obj, filament_path_delete_cb, LV_EVENT_DELETE, nullptr);
+    lv_obj_add_event_cb(obj, filament_path_size_changed_cb, LV_EVENT_SIZE_CHANGED, nullptr);
 
     if (!layered_setup_canvases(obj, data)) {
         spdlog::error("[FilamentPath] Canvas setup failed — widget will be blank");
