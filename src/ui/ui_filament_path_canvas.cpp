@@ -1074,8 +1074,7 @@ static void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const T
             } else {
                 // ARC: lv_draw_arc.radius is the OUTER radius, so add half the
                 // stroke width to center the pass on the centerline. center is
-                // lv_point_t (int) — round once. Angles are degrees, 0deg at 3
-                // o'clock, increasing clockwise on screen — matches pathgeo.
+                // lv_point_t (int) — round once.
                 lv_draw_arc_dsc_t dsc;
                 lv_draw_arc_dsc_init(&dsc);
                 dsc.color = pass.color;
@@ -1086,10 +1085,33 @@ static void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const T
                 dsc.radius =
                     (uint16_t)LV_MAX(1, (int32_t)lroundf(s.radius + (float)pass.width / 2.0f));
 
+                // LVGL angle convention (verified from
+                // lib/lvgl/src/draw/sw/lv_draw_sw_arc.c and lv_draw_sw_mask.c):
+                //   - degrees, 0 at 3 o'clock, increasing CLOCKWISE on screen
+                //     (matches pathgeo: +x is 0, +y rotates toward larger angles).
+                //   - the visible arc is swept clockwise from start_angle to
+                //     end_angle; when end < start the sweep wraps through 360
+                //     (lv_draw_sw_mask_angle_init: delta = 360 - start + end).
+                //   - inputs are NOT wrapped for negatives: lv_draw_sw_arc only
+                //     reduces angles >= 360, and lv_draw_sw_mask_angle_init
+                //     CLAMPS angles < 0 to 0 (not wrap). A negative start/end
+                //     (e.g. pathgeo arc2's a0 = -90deg) therefore collapses to a
+                //     bogus ~270deg / full-ring sweep. So both endpoints must be
+                //     normalized into [0,360) before handing them to LVGL.
                 const float kRad2Deg = 57.29577951308232f;
-                float a0_deg = s.start_angle * kRad2Deg;
-                float a1_deg = (s.start_angle + s.sweep) * kRad2Deg;
-                // lv_draw_arc draws clockwise (increasing) from start to end.
+                auto norm360 = [](float deg) {
+                    deg = std::fmod(deg, 360.0f);
+                    if (deg < 0.0f)
+                        deg += 360.0f;
+                    return deg;
+                };
+                float a0_deg = norm360(s.start_angle * kRad2Deg);
+                float a1_deg = norm360((s.start_angle + s.sweep) * kRad2Deg);
+                // Order endpoints so LVGL's clockwise (increasing, wrapping)
+                // sweep traces the true arc. Positive pathgeo sweep already runs
+                // clockwise from start; negative sweep runs from the endpoint.
+                // Normalizing each endpoint independently preserves that
+                // relationship, and LVGL's end<start wrap selects the short arc.
                 if (s.sweep >= 0.0f) {
                     dsc.start_angle = a0_deg;
                     dsc.end_angle = a1_deg;
