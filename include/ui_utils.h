@@ -274,6 +274,70 @@ inline void safe_clean_children(lv_obj_t* container) {
     }
 }
 
+/**
+ * @brief Comprehensively safe deletion of a whole widget subtree
+ *
+ * Makes an LVGL layout pass (grid_update / flex_update) on a being-deleted
+ * subtree STRUCTURALLY IMPOSSIBLE rather than merely time-shifted. This is the
+ * teardown-time counterpart to the deferred grid-activation fix in
+ * populate_widgets (#983): there a relayout racing the BUILD of a grid was the
+ * hazard; here it is a relayout racing the TEARDOWN of a grid (modal close /
+ * panel rebuild during an AMS update) that could iterate a freed container or
+ * child.
+ *
+ * Why this is strictly stronger than safe_delete_deferred() alone:
+ *  - safe_delete_deferred() reparents @p obj to lv_layer_top() and async-deletes
+ *    it, but @p obj remains a child of its ORIGINAL parent only until the async
+ *    fires. (It reparents to the layer, but an ancestor of the original parent
+ *    could still relayout @p obj before that, and grid_update on @p obj itself
+ *    could still run.) This helper closes that window deterministically.
+ *  - Detach-before-delete: by moving @p obj into an off-tree, layout-less
+ *    condemned container synchronously, the original parent's child list no
+ *    longer contains @p obj, so any ancestor relayout of the original parent
+ *    cannot iterate @p obj. The original parent is marked dirty and relayouts
+ *    WITHOUT @p obj.
+ *  - Layout-less destination: the condemned container has no grid/flex layout,
+ *    so grid_update / flex_update never runs on it (or on @p obj via it).
+ *  - LV_LAYOUT_NONE on @p obj: belt-and-suspenders so @p obj itself can never
+ *    drive a layout pass over its own (doomed) children.
+ *  - Deferred deletion: the condemned subtree is freed via
+ *    safe_delete_deferred(), which escapes the current UpdateQueue batch and
+ *    uses lv_obj_delete_async() — avoiding the multi-sync-delete event-list
+ *    corruption (#776, #190, #80).
+ *
+ * Safe to call from inside UpdateQueue / observer / queued callbacks — that is
+ * the entire point. Mirrors the proven condemned-container pattern in
+ * ams_detail_destroy_slots().
+ *
+ * @param obj Subtree root to delete. nullptr / invalid input is a no-op.
+ *            (Caller-held pointers are NOT nulled — null your own copy.)
+ */
+inline void safe_delete_subtree(lv_obj_t* obj) {
+    if (!obj || !lv_obj_is_valid(obj))
+        return;
+
+    // Belt-and-suspenders: the object itself can no longer drive a grid/flex
+    // layout pass over its own children before it is freed.
+    lv_obj_set_layout(obj, LV_LAYOUT_NONE);
+
+    // Off-tree, hidden, size-0, layout-less condemned container. No grid/flex
+    // layout means grid_update never runs on it (or on obj via it).
+    lv_obj_t* condemned = lv_obj_create(lv_layer_top());
+    lv_obj_add_flag(condemned, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(condemned, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(condemned, 0, 0);
+
+    // Detach obj from its original parent's child list synchronously. After
+    // this, an ancestor relayout of the original parent no longer iterates obj;
+    // the original parent is marked dirty and relayouts WITHOUT obj.
+    lv_obj_set_parent(obj, condemned);
+
+    // Free the whole condemned subtree (incl. obj and its descendants) off-tree
+    // on the deferred path — escapes the UpdateQueue batch.
+    helix::ui::defocus_tree(condemned);
+    helix::ui::safe_delete_deferred(condemned);
+}
+
 // ============================================================================
 // Recursive Widget Flag Utilities
 // ============================================================================

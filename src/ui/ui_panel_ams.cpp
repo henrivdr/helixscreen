@@ -1638,7 +1638,14 @@ void destroy_ams_panel_ui() {
             g_ams_panel->clear_panel_reference();
         }
 
-        helix::ui::safe_delete(s_ams_panel_obj);
+        // safe_delete_subtree (not safe_delete) because the AMS panel root
+        // contains grid/flex layouts whose grid_update/flex_update could race
+        // teardown if an ancestor relayouts during this drain. Detaching the
+        // subtree off-tree before deferred deletion makes that race
+        // structurally impossible (#983). Null the pointer ourselves — the
+        // subtree helper takes a raw pointer and does not null its argument.
+        helix::ui::safe_delete_subtree(s_ams_panel_obj);
+        s_ams_panel_obj = nullptr;
 
         // Note: Widget registrations remain (LVGL doesn't support unregistration)
         // Note: g_ams_panel C++ object stays for state preservation
