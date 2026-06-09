@@ -138,6 +138,8 @@ static void print_help(const char* program_name) {
     printf("  --debug-touches      Draw ripple effects at each touch point for debugging\n");
     printf("  --no-sound           Disable all sound output (prevents audio backend init)\n");
     printf("  --moonraker <url>    Override Moonraker URL (e.g., ws://192.168.1.112:7125)\n");
+    printf("  --detect-printer     Detect printer via Moonraker REST, print JSON, exit\n");
+    printf("                       (use with --host/--port; default 127.0.0.1:7125)\n");
     printf("  --rotate <degrees>   Display rotation: 0, 90, 180, 270\n");
     printf("  --layout <type>      Override auto-detected layout (auto, standard, ultrawide, "
            "portrait, micro, micro-portrait, tiny, tiny-portrait)\n");
@@ -467,6 +469,26 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
             args.force_wizard = true;
             if (args.wizard_step < 0 || args.wizard_step > 12) {
                 printf("Error: wizard step must be 0-12\n");
+                return false;
+            }
+        }
+        // Headless printer detection
+        else if (strcmp(argv[i], "--detect-printer") == 0) {
+            args.detect_printer = true;
+        } else if (strcmp(argv[i], "--host") == 0) {
+            if (i + 1 >= argc) {
+                printf("Error: --host requires an argument\n");
+                return false;
+            }
+            args.detect_host = argv[++i];
+        } else if (strcmp(argv[i], "--port") == 0) {
+            if (i + 1 >= argc) {
+                printf("Error: --port requires an argument\n");
+                return false;
+            }
+            args.detect_port = atoi(argv[++i]);
+            if (args.detect_port <= 0 || args.detect_port > 65535) {
+                printf("Error: --port must be 1-65535\n");
                 return false;
             }
         }

@@ -5,9 +5,8 @@
  * @file test_cli_args.cpp
  * @brief Unit tests for CLI argument struct helpers
  *
- * Tests the OverlayFlags and CliArgs struct inline methods.
- * Note: panel_name_to_id() and parse_cli_args() are not tested here
- * as they require cli_args.o which depends on globals.
+ * Tests the OverlayFlags and CliArgs struct inline methods, and
+ * parse_cli_args() for flags that do not require graphics or printer state.
  */
 
 #include "cli_args.h"
@@ -223,6 +222,27 @@ TEST_CASE("OverlayFlags: needs_moonraker", "[cli_args]") {
 // ============================================================================
 // CliArgs Tests
 // ============================================================================
+
+TEST_CASE("parse_cli_args: --detect-printer with host/port", "[cli_args][detect]") {
+    const char* argv[] = {"helix-screen", "--detect-printer", "--host",
+                          "127.0.0.1",    "--port",           "7125"};
+    CliArgs args;
+    int w = 0, h = 0;
+    REQUIRE(parse_cli_args(6, const_cast<char**>(argv), args, w, h));
+    REQUIRE(args.detect_printer);
+    REQUIRE(args.detect_host == "127.0.0.1");
+    REQUIRE(args.detect_port == 7125);
+}
+
+TEST_CASE("parse_cli_args: --detect-printer defaults", "[cli_args][detect]") {
+    const char* argv[] = {"helix-screen", "--detect-printer"};
+    CliArgs args;
+    int w = 0, h = 0;
+    REQUIRE(parse_cli_args(2, const_cast<char**>(argv), args, w, h));
+    REQUIRE(args.detect_printer);
+    REQUIRE(args.detect_host == "127.0.0.1");
+    REQUIRE(args.detect_port == 7125);
+}
 
 TEST_CASE("CliArgs: default values", "[cli_args]") {
     CliArgs args;

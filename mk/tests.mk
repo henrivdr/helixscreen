@@ -116,7 +116,6 @@ DNS_RESOLV_OBJ := $(OBJ_DIR)/tests/dns_resolv.o
 # Group 1: App entry point and globals
 # - main.o: Has main() function, tests have their own entry point
 # - app_globals.o: Contains global subjects/state, ui_test_utils.o provides stubs
-# - cli_args.o: References globals from app_globals.o, not needed for tests
 #
 # Group 2: Files where ui_test_utils.o provides stub implementations
 # - ui_notification.o: Needs get_notification_subject() from app_globals.o
@@ -136,7 +135,6 @@ DNS_RESOLV_OBJ := $(OBJ_DIR)/tests/dns_resolv.o
 TEST_APP_OBJS := $(filter-out \
     $(OBJ_DIR)/main.o \
     $(OBJ_DIR)/app_globals.o \
-    $(OBJ_DIR)/system/cli_args.o \
     $(OBJ_DIR)/ui/ui_notification.o \
     $(OBJ_DIR)/ui/ui_toast.o \
     $(OBJ_DIR)/ui/ui_toast_manager.o \

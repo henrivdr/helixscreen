@@ -130,6 +130,11 @@ struct CliArgs {
     // Moonraker override (for testing/development)
     std::string moonraker_url; // --moonraker: override config URL (e.g., ws://192.168.1.112:7125)
 
+    // Headless one-shot: detect printer via Moonraker REST and print JSON verdict, then exit.
+    bool detect_printer = false;
+    std::string detect_host = "127.0.0.1";
+    int detect_port = 7125;
+
     /** @brief Check if any panels/overlays requiring Moonraker are requested */
     bool needs_moonraker_data() const {
         return overlays.needs_moonraker() || initial_panel >= 0;
