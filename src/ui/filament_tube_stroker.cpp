@@ -163,19 +163,20 @@ int build_passes(const LaneStyle& style, TubePass* out) {
     const bool simple = reduced_effects();
     int n = 0;
     if (style.solid) {
+        // Solid (loaded) lanes read the SAME outer gauge as the idle hollow
+        // tubes: the body is drawn at style.width with NO darker +2 outline
+        // pass. The hollow tube's visible wall spans width-2..width+2 (≈ width
+        // gauge), so dropping the outline here matches the two. The "loaded"
+        // emphasis is carried by the fill color, the bright centered core, and
+        // the wide glow backdrop — not by bulk.
         if (style.glow && !simple) {
             out[n++] = {get_glow_color(style.color), style.width + GLOW_WIDTH_EXTRA, GLOW_OPA};
-        }
-        if (!simple) {
-            // Outline (darker, slightly wider).
-            out[n++] = {tube_darken(style.color, 35), style.width + 2, LV_OPA_COVER};
         }
         // Body (always).
         out[n++] = {style.color, style.width, LV_OPA_COVER};
         if (!simple) {
             // Core highlight (lighter, narrower) — concentric, no offset.
-            out[n++] = {tube_lighten(style.color, 44), LV_MAX(1, style.width * 2 / 5),
-                        LV_OPA_COVER};
+            out[n++] = {tube_lighten(style.color, 44), LV_MAX(1, style.width / 2), LV_OPA_COVER};
         }
     } else {
         if (!simple) {

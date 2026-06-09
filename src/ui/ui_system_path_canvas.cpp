@@ -254,18 +254,39 @@ static void draw_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int
     draw_tube_line(layer, x1, y1, x2, y2, color, width, active);
 }
 
-// Routed tube: vertical → quarter-arc fillet → horizontal → quarter-arc fillet
-// → vertical, from (sx,sy) down to (ex,ey). route_orthogonal picks its own
-// mid-height horizontal run and clamps the fillet radius to the available
-// space, so the old horiz_y / arc_r hints are no longer needed (kept in the
-// signature for call-site compatibility).
-static void draw_routed_tube(lv_layer_t* layer, int32_t sx, int32_t sy, int32_t ex, int32_t ey,
-                             int32_t horiz_y, int32_t arc_r, lv_color_t color, int32_t width,
-                             bool active = false) {
-    LV_UNUSED(horiz_y);
-    LV_UNUSED(arc_r);
-    helix::ui::draw_lane_route(layer, sx, sy, ex, ey, helix::ui::FILLET_RADIUS,
-                               sp_lane_style(color, width, active));
+// Staggered, gently-angled routed tube: vertical drop -> bend at horiz_y ->
+// gently descending run across to ex -> drop into (ex,ey). Unlike
+// draw_routed_tube (route_orthogonal, dead-flat mid-height run) this lets the
+// caller place the horizontal at a per-route height AND angles the long run a
+// few degrees so neighbouring routes never coincide or run parallel-adjacent.
+// 3 lines + 2 fillet arcs.
+static void draw_routed_tube_angled(lv_layer_t* layer, int32_t sx, int32_t sy, int32_t ex,
+                                    int32_t ey, int32_t horiz_y, lv_color_t color, int32_t width,
+                                    bool active) {
+    // Clamp the bend so it leaves room for both fillets.
+    int32_t lo = sy + 4;
+    int32_t hi = ey - 6;
+    if (hi < lo) {
+        helix::ui::draw_lane_route(layer, sx, sy, ex, ey, helix::ui::FILLET_RADIUS,
+                                   sp_lane_style(color, width, active));
+        return;
+    }
+    horiz_y = LV_CLAMP(horiz_y, lo, hi);
+
+    int32_t dx = (ex > sx) ? (ex - sx) : (sx - ex);
+    int32_t y_approach = horiz_y + dx / 10; // ~10% downward slope along the run
+    if (y_approach > ey - 6)
+        y_approach = ey - 6;
+    if (y_approach < horiz_y)
+        y_approach = horiz_y;
+
+    pg::PathPoint pts[4] = {{(float)sx, (float)sy},
+                            {(float)sx, (float)horiz_y},
+                            {(float)ex, (float)y_approach},
+                            {(float)ex, (float)ey}};
+    pg::FilamentPath path;
+    pg::route_polyline_filleted(path, pts, 4, 9.0f);
+    helix::ui::draw_lane(layer, path, sp_lane_style(color, width, active));
 }
 
 // Push-to-connect fitting: shadow/highlight matching tube language
@@ -461,7 +482,11 @@ static void system_path_draw_cb(lv_event_t* e) {
 
     // Sizes
     int32_t line_idle = data->line_width_idle;
-    int32_t line_active = data->line_width_active;
+    // Active (loaded) tubes read the SAME gauge as idle tubes — the "loaded"
+    // emphasis is carried by color + glow backdrop, not extra width (matches the
+    // detail panel where solid lanes dropped their +2 outline). Sensor dots keep
+    // sizing off the theme's active width so they stay legible.
+    int32_t line_active = line_idle;
     int32_t sensor_r = LV_MAX(5, data->line_width_active);
     data->cached_sensor_r = sensor_r;
 
@@ -697,8 +722,12 @@ static void system_path_draw_cb(lv_event_t* e) {
                 int32_t horiz_y = route.start_y + (int32_t)(route_drop * f);
                 horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
 
-                draw_routed_tube(layer, route.start_x, route.start_y, route.end_x, route.end_y,
-                                 horiz_y, arc_r, route_color, route_w, /*active=*/tool_active);
+                // Honor the staggered bend height (route_orthogonal would discard
+                // it and re-pick mid-height, collapsing the stagger) and angle the
+                // long run a few degrees so adjacent runs never coincide.
+                draw_routed_tube_angled(layer, route.start_x, route.start_y, route.end_x,
+                                        route.end_y, horiz_y, route_color, route_w,
+                                        /*active=*/tool_active);
             } else {
                 // PARALLEL: idx 0 (leftmost end_x) at par_bot_y (lowest),
                 // idx N-1 (rightmost end_x) at par_top_y (highest)
@@ -707,8 +736,9 @@ static void system_path_draw_cb(lv_event_t* e) {
 
                 horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
 
-                draw_routed_tube(layer, route.start_x, route.start_y, route.end_x, route.end_y,
-                                 horiz_y, arc_r, route_color, route_w, /*active=*/tool_active);
+                draw_routed_tube_angled(layer, route.start_x, route.start_y, route.end_x,
+                                        route.end_y, horiz_y, route_color, route_w,
+                                        /*active=*/tool_active);
             }
         }
 
@@ -793,8 +823,29 @@ static void system_path_draw_cb(lv_event_t* e) {
 
     } else {
         // ====================================================================
-        // SINGLE-TOOL MODE: Original hub convergence (unchanged)
+        // SINGLE-TOOL MODE: hub convergence with staggered, angled merge runs
         // ====================================================================
+
+        // Rank units by horizontal travel to the hub center: closest converges
+        // LOWEST (largest bend Y), farthest HIGHEST, so no two horizontal runs
+        // coincide or cross a neighbour's vertical.
+        int conv_rank[SystemPathData::MAX_UNITS] = {};
+        int conv_count = LV_MIN(data->unit_count, SystemPathData::MAX_UNITS);
+        {
+            int32_t travel[SystemPathData::MAX_UNITS] = {};
+            for (int i = 0; i < conv_count; i++) {
+                int32_t ux = x_off + data->unit_x_positions[i];
+                travel[i] = (ux > center_x) ? (ux - center_x) : (center_x - ux);
+            }
+            for (int i = 0; i < conv_count; i++) {
+                int r = 0;
+                for (int j = 0; j < conv_count; j++) {
+                    if (travel[j] < travel[i] || (travel[j] == travel[i] && j < i))
+                        r++;
+                }
+                conv_rank[i] = r;
+            }
+        }
 
         // Draw unit entry lines (one per unit, from entry to merge point)
         for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
@@ -824,14 +875,29 @@ static void system_path_draw_cb(lv_event_t* e) {
                                    /*cap_end=*/false, /*active=*/is_active);
             }
 
-            // Unit → hub convergence: vertical → quarter-arc fillet → horizontal
-            // → quarter-arc fillet → vertical, from the unit column down to the
-            // hub top. Same clean orthogonal routing as the detail panel
-            // (replaces the old hand-flattened cubic-bezier S-curve).
+            // Unit → hub convergence: staggered, gently-angled merge run from the
+            // unit column down to the hub top. Each unit bends at its own height
+            // (by rank) so the horizontal runs never overdraw or cross.
             {
                 int32_t end_y_hub = hub_y - hub_h / 2;
-                draw_routed_tube(layer, unit_x, merge_y, center_x, end_y_hub, /*horiz_y=*/0,
-                                 /*arc_r=*/0, line_color, line_w, /*active=*/is_active);
+                int32_t band_lo = merge_y + 4;
+                int32_t band_hi = end_y_hub - 6;
+                int32_t bend_y;
+                if (band_hi <= band_lo || conv_count <= 1) {
+                    bend_y = merge_y + (end_y_hub - merge_y) / 2;
+                } else {
+                    int32_t band_h = band_hi - band_lo;
+                    int32_t step = band_h / (conv_count - 1);
+                    if (step > 12)
+                        step = 12;
+                    if (step < 8)
+                        step = 8;
+                    bend_y = band_hi - conv_rank[i] * step;
+                    if (bend_y < band_lo)
+                        bend_y = band_lo;
+                }
+                draw_routed_tube_angled(layer, unit_x, merge_y, center_x, end_y_hub, bend_y,
+                                        line_color, line_w, /*active=*/is_active);
             }
         }
 

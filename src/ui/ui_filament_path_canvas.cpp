@@ -902,6 +902,74 @@ static void draw_flow_dots_path(lv_layer_t* layer, const pg::FilamentPath& path,
 // quarter-arc fillet curves. Pulled in via the `using` declarations above.
 
 // ============================================================================
+// Staggered hub-merge routing
+// ============================================================================
+// Every hub-routed lane drops from its slot, runs across to a distinct
+// hub-entry x, then descends into the hub top. Routing all lanes' horizontal
+// runs at the same mid-height overdraws them into mush. Instead each lane gets
+// its own bend height (lanes farther from the hub entry bend HIGHER, so their
+// long runs never coincide with a nearer lane's run) and the long run descends
+// gently toward the hub (reads like real PTFE routing, not a schematic bus).
+//
+// `rank` is the lane's order among hub-routed lanes sorted by horizontal travel
+// |slot_x - entry_x| (rank 0 = closest to the hub entry, runs LOWEST; larger
+// rank = farther, runs HIGHER). `rank_count` is the number of hub-routed lanes.
+//
+// Waypoints: (slot_x, start_y) -> (slot_x, y_bend) -> (entry_x, y_approach)
+//            -> (entry_x, end_y). 3 lines + 2 fillet arcs = 5 segs (well under
+// FilamentPath::MAX_SEGS even when this is the active lane — see the budget note
+// in filament_path_render).
+static void draw_hub_merge_lane(lv_layer_t* layer, int32_t slot_x, int32_t start_y, int32_t entry_x,
+                                int32_t end_y, int rank, int rank_count, const LaneStyle& style,
+                                pg::FilamentPath* record) {
+    // Vertical band available for staggering the bend heights: from just below
+    // start_y down to a little above end_y (leave room for the descending run +
+    // the final fillet into the hub).
+    int32_t band_top = start_y + 4;
+    int32_t band_bot = end_y - 6;
+    if (band_bot <= band_top) {
+        // Too little vertical room to stagger — fall back to a plain route.
+        draw_lane_route(layer, slot_x, start_y, entry_x, end_y, 8.0f, style, record);
+        return;
+    }
+
+    // Per-rank vertical separation: active tube + outline + gap ~= 8px. Spread
+    // the ranks across the band but never closer than this, and keep the highest
+    // (farthest) lane below band_top.
+    const int32_t kSep = 8;
+    int32_t band_h = band_bot - band_top;
+    int32_t step = (rank_count > 1) ? band_h / (rank_count - 1) : 0;
+    if (step > kSep + 6)
+        step = kSep + 6; // don't over-spread on tall canvases
+    if (rank_count > 1 && step < kSep)
+        step = kSep;
+
+    // rank 0 (closest) runs LOWEST (largest y), farthest runs highest.
+    int32_t y_bend = band_bot - rank * step;
+    if (y_bend < band_top)
+        y_bend = band_top;
+
+    // Gentle downward slope along the long run: drop ~10% of the horizontal
+    // travel so it reads as real routing rather than a dead-flat bus. Clamp the
+    // approach so it still leaves room for the final fillet into the hub.
+    int32_t dx = (entry_x > slot_x) ? (entry_x - slot_x) : (slot_x - entry_x);
+    int32_t slope_drop = dx / 10;
+    int32_t y_approach = y_bend + slope_drop;
+    if (y_approach > end_y - 6)
+        y_approach = end_y - 6;
+    if (y_approach < y_bend)
+        y_approach = y_bend;
+
+    pg::PathPoint pts[4] = {{(float)slot_x, (float)start_y},
+                            {(float)slot_x, (float)y_bend},
+                            {(float)entry_x, (float)y_approach},
+                            {(float)entry_x, (float)end_y}};
+    pg::FilamentPath path;
+    pg::route_polyline_filleted(path, pts, 4, 8.0f);
+    draw_lane(layer, path, style, record);
+}
+
+// ============================================================================
 // Drawing Functions
 // ============================================================================
 
@@ -956,10 +1024,15 @@ static void draw_sensor_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_
     }
 }
 
-static void draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t width, int32_t height,
-                         lv_color_t bg_color, lv_color_t border_color, lv_color_t text_color,
-                         const lv_font_t* font, int32_t radius, const char* label,
-                         lv_opa_t bg_opa = LV_OPA_COVER, bool interactive = false) {
+// Returns the number of pixels the gear glyph extends to the RIGHT of the box's
+// right edge (0 when the gear fits inside, or when not interactive). Callers
+// that record a click hit-rect should widen it by this amount so the tap target
+// covers the gear at its actual drawn position.
+static int32_t draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t width,
+                            int32_t height, lv_color_t bg_color, lv_color_t border_color,
+                            lv_color_t text_color, const lv_font_t* font, int32_t radius,
+                            const char* label, lv_opa_t bg_opa = LV_OPA_COVER,
+                            bool interactive = false) {
     // Background
     lv_draw_fill_dsc_t fill_dsc;
     lv_draw_fill_dsc_init(&fill_dsc);
@@ -992,27 +1065,58 @@ static void draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t widt
         lv_draw_label(layer, &label_dsc, &label_area);
     }
 
-    // Tappable affordance: a small gear glyph in the top-right corner signals
-    // that the box opens a context menu when tapped.
+    // Tappable affordance: a small gear glyph signals that the box opens a
+    // context menu when tapped. Preferred placement is the top-right corner
+    // INSIDE the box, but when the label + gear + padding don't fit the box
+    // width the gear would overlap the label — so draw it immediately OUTSIDE
+    // the box's right edge, vertically centered.
+    int32_t gear_overflow = 0;
     if (interactive) {
         const lv_font_t* icon_font = theme_manager_get_font("icon_font_sm");
         if (icon_font) {
+            int32_t gear_h = lv_font_get_line_height(icon_font);
+            lv_point_t gear_sz;
+            lv_text_get_size(&gear_sz, ICON_SETTINGS, icon_font, 0, 0, LV_COORD_MAX,
+                             LV_TEXT_FLAG_NONE);
+            int32_t gear_w = gear_sz.x > 0 ? gear_sz.x : gear_h; // defensive fallback
+            const int32_t pad = 2;
+
+            // Measure the label so we know whether the gear fits beside it.
+            int32_t label_w = 0;
+            if (label && label[0] && font) {
+                lv_point_t lbl_sz;
+                lv_text_get_size(&lbl_sz, label, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+                label_w = lbl_sz.x;
+            }
+            // The label is centered; the gear needs the gap between the label's
+            // right edge and the box's right edge: (width - label_w)/2.
+            int32_t right_gap = (width - label_w) / 2;
+            bool fits_inside = (right_gap >= gear_w + pad * 2);
+
             lv_draw_label_dsc_t gear_dsc;
             lv_draw_label_dsc_init(&gear_dsc);
             gear_dsc.color = border_color;
             gear_dsc.font = icon_font;
             gear_dsc.opa = LV_OPA_80;
-            gear_dsc.align = LV_TEXT_ALIGN_RIGHT;
             gear_dsc.text = ICON_SETTINGS;
 
-            int32_t gear_h = lv_font_get_line_height(icon_font);
-            int32_t pad = 2;
-            // Anchor to the box top-right, inset by a small pad.
-            lv_area_t gear_area = {box_area.x1, box_area.y1 + pad, box_area.x2 - pad,
-                                   box_area.y1 + pad + gear_h};
-            lv_draw_label(layer, &gear_dsc, &gear_area);
+            if (fits_inside) {
+                gear_dsc.align = LV_TEXT_ALIGN_RIGHT;
+                lv_area_t gear_area = {box_area.x1, box_area.y1 + pad, box_area.x2 - pad,
+                                       box_area.y1 + pad + gear_h};
+                lv_draw_label(layer, &gear_dsc, &gear_area);
+            } else {
+                // Draw just outside the right edge, vertically centered.
+                gear_dsc.align = LV_TEXT_ALIGN_LEFT;
+                int32_t gx1 = box_area.x2 + pad;
+                int32_t gy1 = cy - gear_h / 2;
+                lv_area_t gear_area = {gx1, gy1, gx1 + gear_w, gy1 + gear_h};
+                lv_draw_label(layer, &gear_dsc, &gear_area);
+                gear_overflow = pad + gear_w;
+            }
         }
     }
+    return gear_overflow;
 }
 
 // Draw buffer box element — simple labeled box like HUB/SELECTOR
@@ -1433,6 +1537,41 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
     // Hub width: ~60% of full hub topology width, enough for the hub lanes
     int32_t hub_w = LV_MAX(40, data->hub_width * 3 / 5);
 
+    // Per-hub-lane entry X (distinct points spread across the hub box top) and
+    // stagger rank (by horizontal travel) so each hub lane's long run sits at
+    // its own height and arrives at its own x — no coincident runs.
+    int32_t hub_entry_x[FilamentPathData::MAX_SLOTS] = {};
+    int hub_lane_rank[FilamentPathData::MAX_SLOTS] = {};
+    {
+        int32_t inner = hub_w - 2 * sensor_r;
+        if (inner < 0)
+            inner = 0;
+        int32_t spacing = (hub_count > 1) ? inner / (hub_count - 1) : 0;
+        int32_t travel[FilamentPathData::MAX_SLOTS] = {};
+        int order = 0; // position among hub lanes, left-to-right by slot index
+        for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
+            if (!data->slot_is_hub_routed[i])
+                continue;
+            int32_t ex = (hub_count == 1) ? hub_cx : (hub_cx - inner / 2 + order * spacing);
+            hub_entry_x[i] = ex;
+            int32_t d = (ex > g.slot_x[i]) ? (ex - g.slot_x[i]) : (g.slot_x[i] - ex);
+            travel[i] = d;
+            order++;
+        }
+        for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
+            if (!data->slot_is_hub_routed[i])
+                continue;
+            int r = 0;
+            for (int j = 0; j < data->slot_count && j < FilamentPathData::MAX_SLOTS; j++) {
+                if (!data->slot_is_hub_routed[j])
+                    continue;
+                if (travel[j] < travel[i] || (travel[j] == travel[i] && j < i))
+                    r++;
+            }
+            hub_lane_rank[i] = r;
+        }
+    }
+
     // Phase 2: Draw entry lines and sensor dots for ALL lanes
     for (int i = 0; i < data->slot_count; i++) {
         int32_t slot_x = g.slot_x[i];
@@ -1472,13 +1611,15 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
         bool at_nozzle = s.at_nozzle;
 
         if (is_hub) {
-            // Hub-routed lane: orthogonal route (vertical -> fillet -> horizontal
-            // -> fillet -> vertical) from sensor down into the hub top.
+            // Hub-routed lane: staggered, gently-angled merge run from the sensor
+            // down to a distinct entry point on the hub top — each lane bends at
+            // its own height so the long runs never overdraw each other.
             int32_t start_y = sensor_y + sensor_r;
             int32_t end_y = hub_top;
 
             LaneStyle st = lane_style(has_filament, tool_color, idle_color, bg_color, line_active);
-            draw_lane_route(layer, slot_x, start_y, hub_cx, end_y, FILLET_RADIUS, st);
+            draw_hub_merge_lane(layer, slot_x, start_y, hub_entry_x[i], end_y, hub_lane_rank[i],
+                                hub_count, st, nullptr);
 
             // Hub output line + shared nozzle (draw only once)
             if (!hub_nozzle_drawn) {
@@ -2115,6 +2256,37 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
     SlotRenderStates states = compute_slot_render_states(data);
     pg::FilamentPath active_path;
 
+    // HUB topology: pre-compute each lane's hub-entry X and its stagger RANK
+    // among hub lanes (sorted by horizontal travel |slot_x - hub_dot_x|, closest
+    // = rank 0). draw_hub_merge_lane uses the rank to give each lane a distinct
+    // bend height so the horizontal runs never overdraw each other.
+    int32_t hub_dot_xs[FilamentPathData::MAX_SLOTS] = {};
+    int hub_rank[FilamentPathData::MAX_SLOTS] = {};
+    int hub_lane_count = 0;
+    if (data->topology == 1) {
+        int32_t hub_dot_spacing =
+            (data->slot_count > 1) ? (data->hub_width - 2 * sensor_r) / (data->slot_count - 1) : 0;
+        int32_t travel[FilamentPathData::MAX_SLOTS] = {};
+        for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
+            int32_t hx = (data->slot_count == 1) ? center_x
+                                                 : center_x - (data->hub_width - 2 * sensor_r) / 2 +
+                                                       i * hub_dot_spacing;
+            hub_dot_xs[i] = hx;
+            int32_t d = (hx > g.slot_x[i]) ? (hx - g.slot_x[i]) : (g.slot_x[i] - hx);
+            travel[i] = d;
+            hub_lane_count++;
+        }
+        // Rank by travel ascending (closest = 0). Simple count-of-smaller rank.
+        for (int i = 0; i < hub_lane_count; i++) {
+            int r = 0;
+            for (int j = 0; j < hub_lane_count; j++) {
+                if (travel[j] < travel[i] || (travel[j] == travel[i] && j < i))
+                    r++;
+            }
+            hub_rank[i] = r;
+        }
+    }
+
     for (int i = 0; i < data->slot_count; i++) {
         int32_t slot_x = g.slot_x[i];
         const SlotRenderState& s = states[i];
@@ -2173,26 +2345,20 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
 
         if (data->topology == 1) { // HUB topology - each lane targets its own hub sensor
             int32_t hub_top = hub_y - hub_h / 2;
-            // Space hub sensor dots evenly across the hub box width
-            int32_t hub_dot_spacing =
-                (data->slot_count > 1) ? (data->hub_width - 2 * sensor_r) / (data->slot_count - 1)
-                                       : 0;
-            int32_t hub_dot_x =
-                center_x - (data->hub_width - 2 * sensor_r) / 2 + i * hub_dot_spacing;
-            if (data->slot_count == 1)
-                hub_dot_x = center_x;
+            // Hub-entry X (distinct per lane) was pre-computed above.
+            int32_t hub_dot_x = hub_dot_xs[i];
 
-            // Draw curved tube from prep to hub sensor dot
-            // S-curve: CP1 below start (departs downward), CP2 above end (arrives from top)
-            // cap_start=false eliminates visible endcap seam at straight→curve junction
-            // When no prep sensor, start curve flush with the line (no gap)
+            // Staggered, gently-angled merge run from prep to the hub sensor dot.
+            // Each lane bends at its own height (by rank) so no two lanes' long
+            // runs coincide. When no prep sensor, start flush with the line.
             int32_t start_y = data->slot_has_prep_sensor[i] ? (prep_y + sensor_r) : prep_y;
             int32_t end_y = hub_top - sensor_r;
             {
                 LaneStyle st =
                     lane_style(!merge_is_idle, merge_line_color, idle_color, bg_color, lane_width);
-                draw_lane_route(layer, slot_x, start_y, hub_dot_x, end_y, FILLET_RADIUS, st,
-                                (!merge_is_idle && is_active_slot) ? &active_path : nullptr);
+                draw_hub_merge_lane(layer, slot_x, start_y, hub_dot_x, end_y, hub_rank[i],
+                                    hub_lane_count, st,
+                                    (!merge_is_idle && is_active_slot) ? &active_path : nullptr);
             }
 
             // Draw hub sensor dot - colored with filament color if loaded to hub
@@ -2375,15 +2541,18 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
         }
 
         lv_opa_t hub_opa = (data->topology == 0) ? LV_OPA_60 : LV_OPA_COVER;
-        draw_hub_box(layer, center_x, hub_y, hub_w, hub_h, hub_bg_tinted, hub_border_final,
-                     data->color_text, data->label_font, data->border_radius, hub_label, hub_opa,
-                     /*interactive=*/data->hub_callback != nullptr);
+        int32_t gear_overflow = draw_hub_box(layer, center_x, hub_y, hub_w, hub_h, hub_bg_tinted,
+                                             hub_border_final, data->color_text, data->label_font,
+                                             data->border_radius, hub_label, hub_opa,
+                                             /*interactive=*/data->hub_callback != nullptr);
 
         // Single source of truth for the selector/hub hit-test: record the exact
         // box we just drew (absolute display coords). The click handler reads
-        // this instead of re-deriving geometry that drifts from the render.
-        data->hub_hit_rect = {center_x - hub_w / 2, hub_y - hub_h / 2, center_x + hub_w / 2,
-                              hub_y + hub_h / 2};
+        // this instead of re-deriving geometry that drifts from the render. When
+        // the gear is drawn OUTSIDE the box's right edge (label too wide to fit
+        // it inside), extend the hit rect rightward so the gear stays tappable.
+        data->hub_hit_rect = {center_x - hub_w / 2, hub_y - hub_h / 2,
+                              center_x + hub_w / 2 + gear_overflow, hub_y + hub_h / 2};
         data->hub_hit_valid = true;
 
         // Draw filament tube through SELECTOR (LINEAR topology only)
