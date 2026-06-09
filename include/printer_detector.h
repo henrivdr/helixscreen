@@ -22,11 +22,15 @@ class PrinterDiscovery;
  */
 struct PrinterDetectionResult {
     std::string type_name; ///< Printer type name (e.g., "FlashForge AD5M Pro", "Voron 2.4")
-    int confidence;        ///< Confidence score 0-100 (≥70 = high confidence, <70 = low confidence)
-    std::string reason;    ///< Human-readable detection reasoning
-    int match_count = 1;   ///< Number of matching heuristics (for combined scoring)
+    int confidence;      ///< Confidence score 0-100 (≥70 = high confidence, <70 = low confidence)
+    std::string reason;  ///< Human-readable detection reasoning
+    int match_count = 1; ///< Number of matching heuristics (for combined scoring)
     int best_single_confidence = 0; ///< Highest individual heuristic confidence (tiebreaker)
-    std::string preset;    ///< Platform preset name from DB (e.g., "k1", "snapmaker_u1"), empty if none
+    std::string
+        preset; ///< Platform preset name from DB (e.g., "k1", "snapmaker_u1"), empty if none
+    std::string
+        runner_up_type_name; ///< 2nd-place candidate model name (for margin gating), empty if none
+    int runner_up_confidence = 0; ///< 2nd-place candidate confidence (0 if none)
 
     /**
      * @brief Check if detection succeeded
@@ -141,8 +145,7 @@ class PrinterDetector {
      * @param printer_name Printer name or ID
      * @return Pattern specs in load order; empty if no preset.
      */
-    static std::vector<std::string>
-    get_console_filter_patterns(const std::string& printer_name);
+    static std::vector<std::string> get_console_filter_patterns(const std::string& printer_name);
 
     /**
      * @brief Get printer display name for a platform preset
@@ -186,8 +189,7 @@ class PrinterDetector {
      * @return Preset name actually applied (may be a variant), empty if neither
      *         the base nor a variant could be applied
      */
-    static std::string apply_preset_with_variants(helix::Config* config,
-                                                  const std::string& preset,
+    static std::string apply_preset_with_variants(helix::Config* config, const std::string& preset,
                                                   const helix::PrinterDiscovery& discovery);
 
     /**
@@ -360,8 +362,7 @@ class PrinterDetector {
      * @param printer_name Printer name (e.g., "Elegoo Centauri Carbon")
      * @return phase_enum_int → seconds; empty map falls back to generic defaults.
      */
-    static std::map<int, int>
-    get_print_start_default_phases(const std::string& printer_name);
+    static std::map<int, int> get_print_start_default_phases(const std::string& printer_name);
 
     // =========================================================================
     // User Extensions API

@@ -680,6 +680,7 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
 
         // Iterate through all printers in database and find best match
         PrinterDetectionResult best_match{"", 0, "No distinctive hardware detected"};
+        PrinterDetectionResult runner_up{"", 0, ""};
 
         if (!g_database.data.contains("printers") || !g_database.data["printers"].is_array()) {
             NOTIFY_ERROR("Printer database is corrupt");
@@ -691,7 +692,6 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
         for (const auto& printer : g_database.data["printers"]) {
             PrinterDetectionResult result = execute_printer_heuristics(printer, hardware);
 
-            // Log all matches for debugging (not just best)
             if (result.confidence > 0) {
                 spdlog::info("[PrinterDetector] Candidate: '{}' scored {}% ({} matches, best={}%) "
                              "via: {}",
@@ -708,22 +708,30 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
                 continue;
             }
 
-            // Tiebreakers: best_single_confidence first (more specific match wins),
-            // then match_count (more supporting evidence)
-            if (result.confidence > best_match.confidence ||
-                (result.confidence == best_match.confidence &&
-                 result.best_single_confidence > best_match.best_single_confidence) ||
-                (result.confidence == best_match.confidence &&
-                 result.best_single_confidence == best_match.best_single_confidence &&
-                 result.match_count > best_match.match_count)) {
+            auto beats = [](const PrinterDetectionResult& a, const PrinterDetectionResult& b) {
+                return a.confidence > b.confidence ||
+                       (a.confidence == b.confidence &&
+                        a.best_single_confidence > b.best_single_confidence) ||
+                       (a.confidence == b.confidence &&
+                        a.best_single_confidence == b.best_single_confidence &&
+                        a.match_count > b.match_count);
+            };
+
+            if (beats(result, best_match)) {
+                runner_up = best_match; // demote previous winner
                 best_match = result;
                 if (printer.contains("preset") && printer["preset"].is_string()) {
                     best_match.preset = printer["preset"].get<std::string>();
                 } else {
                     best_match.preset.clear();
                 }
+            } else if (result.confidence > 0 && beats(result, runner_up)) {
+                runner_up = result;
             }
         }
+
+        best_match.runner_up_type_name = runner_up.type_name;
+        best_match.runner_up_confidence = runner_up.confidence;
 
         if (best_match.confidence > 0) {
             spdlog::info("[PrinterDetector] Detection complete: {} (confidence: {}%, {} matches, "
@@ -941,12 +949,11 @@ std::string PrinterDetector::apply_preset_with_variants(helix::Config* config,
     // for unrelated reasons should not silently disable ZMOD detection.
     static constexpr const char* kForgeXSuffix = "_forgex";
     constexpr size_t kForgeXLen = 7; // strlen("_forgex")
-    bool preset_is_forgex = preset.size() >= kForgeXLen &&
-                            preset.compare(preset.size() - kForgeXLen, kForgeXLen, kForgeXSuffix) ==
-                                0;
-    bool is_zmod =
-        !preset_is_forgex &&
-        std::find(objects.begin(), objects.end(), "fan_generic fanM106") != objects.end();
+    bool preset_is_forgex =
+        preset.size() >= kForgeXLen &&
+        preset.compare(preset.size() - kForgeXLen, kForgeXLen, kForgeXSuffix) == 0;
+    bool is_zmod = !preset_is_forgex && std::find(objects.begin(), objects.end(),
+                                                  "fan_generic fanM106") != objects.end();
 
     std::string applied = preset;
     if (is_zmod) {
@@ -1265,8 +1272,7 @@ int PrinterDetector::get_unknown_list_index(const std::string& kinematics) {
 // Pre-Print Option Set Lookup (printer-agnostic option framework)
 // ============================================================================
 
-PrePrintOptionSet
-PrinterDetector::get_pre_print_option_set(const std::string& printer_name) {
+PrePrintOptionSet PrinterDetector::get_pre_print_option_set(const std::string& printer_name) {
     PrePrintOptionSet result;
 
     if (!g_database.load()) {
@@ -1293,8 +1299,7 @@ PrinterDetector::get_pre_print_option_set(const std::string& printer_name) {
         }
 
         if (!printer.contains("pre_print_options")) {
-            spdlog::debug("[PrinterDetector] Printer '{}' has no pre_print_options",
-                          printer_name);
+            spdlog::debug("[PrinterDetector] Printer '{}' has no pre_print_options", printer_name);
             return result;
         }
 
@@ -1473,8 +1478,7 @@ std::map<int, int>
 PrinterDetector::get_print_start_default_phases(const std::string& printer_name) {
     std::map<int, int> result;
     if (!g_database.load()) {
-        spdlog::warn(
-            "[PrinterDetector] Cannot lookup print_start_default_phases without database");
+        spdlog::warn("[PrinterDetector] Cannot lookup print_start_default_phases without database");
         return result;
     }
 

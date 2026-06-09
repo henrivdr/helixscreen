@@ -2332,6 +2332,27 @@ TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Combined - Qidi Plus 
     REQUIRE(result.confidence >= 85);
 }
 
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: detect() exposes the runner-up candidate",
+                 "[printer][detector][runner_up]") {
+    PrinterDetector::reload();
+    PrinterHardwareData hw{
+        .heaters = {"extruder", "heater_bed", "heater_chamber"},
+        .sensors = {"temperature_sensor chamber"},
+        .fans = {"fan", "chamber_fan"},
+        .hostname = "qidi-plus4",
+        .kinematics = "corexy",
+        .mcu = "STM32F402",
+        .mcu_list = {"STM32F402"},
+        .build_volume = {.x_min = 0, .x_max = 305, .y_min = 0, .y_max = 305, .z_max = 305},
+    };
+    auto r = PrinterDetector::detect(hw);
+    REQUIRE(r.type_name == "Qidi Plus 4");
+    REQUIRE(r.runner_up_type_name != r.type_name);
+    REQUIRE(r.runner_up_confidence <= r.confidence);
+    REQUIRE(r.runner_up_confidence > 0);
+}
+
 // ============================================================================
 // Negative Tests - MCU Should Not Cause False Positives
 // ============================================================================
