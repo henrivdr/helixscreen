@@ -8,6 +8,7 @@
 #include "ui_observer_guard.h"
 #include "ui_panel_ams.h"
 #include "ui_panel_ams_overview.h"
+#include "ui_update_queue.h"
 #include "ui_utils.h"
 
 #include "ams_backend.h"
@@ -17,8 +18,6 @@
 #include "observer_factory.h"
 #include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
-
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 
@@ -183,10 +182,19 @@ static void rebuild_bars(AmsMiniStatusData* data) {
         return;
     if (data->rebuilding)
         return;
+    // During lv_deinit, the default display is unset BEFORE screens are deleted
+    // (lv_init.c: lv_display_set_default(NULL) precedes lv_cleanup_devices), yet
+    // the destruct cascade still delivers LV_EVENT_SIZE_CHANGED here via flex
+    // re-layout. With no active screen, condemn_row's lv_obj_create() returns
+    // NULL and lv_obj_add_flag(NULL) crashes. Nothing to rebuild at teardown.
+    if (!lv_screen_active())
+        return;
     data->rebuilding = true;
     struct ResetGuard {
         AmsMiniStatusData* d;
-        ~ResetGuard() { d->rebuilding = false; }
+        ~ResetGuard() {
+            d->rebuilding = false;
+        }
     } reset{data};
 
     // Guard: ensure overflow label has a valid font before any layout calculation.
@@ -248,6 +256,8 @@ static void rebuild_bars(AmsMiniStatusData* data) {
             return;
         if (!condemned_parent) {
             condemned_parent = lv_obj_create(lv_screen_active());
+            if (!condemned_parent)
+                return; // teardown: no active screen to host the condemned rows
             lv_obj_add_flag(condemned_parent, LV_OBJ_FLAG_HIDDEN);
             lv_obj_remove_flag(condemned_parent, LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_set_size(condemned_parent, 0, 0);
@@ -404,7 +414,9 @@ static void rebuild_bars(AmsMiniStatusData* data) {
                 } else {
                     // Update existing bar dimensions (size may have changed)
                     lv_obj_set_width(slot->col.container, bar_width);
-                    lv_obj_set_height(slot->col.container, bar_height + ams_draw::STATUS_LINE_HEIGHT_PX + ams_draw::STATUS_LINE_GAP_PX);
+                    lv_obj_set_height(slot->col.container, bar_height +
+                                                               ams_draw::STATUS_LINE_HEIGHT_PX +
+                                                               ams_draw::STATUS_LINE_GAP_PX);
                     lv_obj_set_width(slot->col.bar_bg, bar_width);
                     lv_obj_set_height(slot->col.bar_bg, bar_height);
                     lv_obj_set_width(slot->col.status_line, bar_width);
@@ -580,12 +592,12 @@ lv_obj_t* ui_ams_mini_status_create(lv_obj_t* parent, int32_t height) {
     // Observe current_slot to reactively update lane highlights
     lv_subject_t* current_slot_subject = AmsState::instance().get_current_slot_subject();
     if (current_slot_subject) {
-        data->current_slot_observer = observe_int_sync<lv_obj_t>(
-            current_slot_subject, container, [](lv_obj_t* obj, int /* slot */) {
-                auto* d = get_data(obj);
-                if (d)
-                    sync_from_ams_state(d);
-            });
+        data->current_slot_observer = observe_int_sync<lv_obj_t>(current_slot_subject, container,
+                                                                 [](lv_obj_t* obj, int /* slot */) {
+                                                                     auto* d = get_data(obj);
+                                                                     if (d)
+                                                                         sync_from_ams_state(d);
+                                                                 });
     }
 
     spdlog::trace("[AmsMiniStatus] Created (height={})", height);
@@ -740,7 +752,8 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
         slot_bar->color_rgb = slot.color_rgb;
         slot_bar->fill_pct = ams_draw::fill_percent_from_slot(slot, 0);
         slot_bar->present = slot.is_present();
-        slot_bar->loaded = (i == lv_subject_get_int(AmsState::instance().get_current_slot_subject()));
+        slot_bar->loaded =
+            (i == lv_subject_get_int(AmsState::instance().get_current_slot_subject()));
         slot_bar->has_error = (slot.status == SlotStatus::BLOCKED || slot.error.has_value());
         slot_bar->severity = slot.error.has_value() ? slot.error->severity : SlotError::INFO;
     }
@@ -854,12 +867,12 @@ static void* ui_ams_mini_status_xml_create(lv_xml_parser_state_t* state, const c
     // Observe current_slot to reactively update lane highlights
     lv_subject_t* current_slot_subject = AmsState::instance().get_current_slot_subject();
     if (current_slot_subject) {
-        data->current_slot_observer = observe_int_sync<lv_obj_t>(
-            current_slot_subject, container, [](lv_obj_t* obj, int /* slot */) {
-                auto* d = get_data(obj);
-                if (d)
-                    sync_from_ams_state(d);
-            });
+        data->current_slot_observer = observe_int_sync<lv_obj_t>(current_slot_subject, container,
+                                                                 [](lv_obj_t* obj, int /* slot */) {
+                                                                     auto* d = get_data(obj);
+                                                                     if (d)
+                                                                         sync_from_ams_state(d);
+                                                                 });
     }
 
     spdlog::trace("[AmsMiniStatus] Created via XML (responsive height)");
