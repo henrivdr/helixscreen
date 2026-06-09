@@ -48,6 +48,38 @@ nlohmann::json http_get_json(const std::string& url, int timeout_sec) {
 
 namespace helix::detect {
 
+void populate_discovery(helix::PrinterDiscovery& disc, const nlohmann::json& objects,
+                        const nlohmann::json& info, const nlohmann::json& cfg) {
+    disc.parse_objects(objects);
+
+    // Hostname from /printer/info result object — guard against null values.
+    if (info.is_object()) {
+        const auto& h = info["hostname"];
+        if (h.is_string())
+            disc.set_hostname(h.get<std::string>());
+    }
+
+    // configfile.settings block: kinematics + build volume.
+    // parse_config_keys() already guards every field with .is_string()/.is_number(),
+    // so null values in the configfile are silently skipped.
+    if (cfg.is_object() && cfg.contains("configfile") && cfg["configfile"].contains("settings")) {
+        const auto& s = cfg["configfile"]["settings"];
+        disc.parse_config_keys(s);
+
+        BuildVolume bv{};
+        auto rd = [&](const char* k, const char* f, float& out) {
+            if (s.contains(k) && s[k].is_object() && s[k].contains(f) && s[k][f].is_number())
+                out = s[k][f].get<float>();
+        };
+        rd("stepper_x", "position_min", bv.x_min);
+        rd("stepper_x", "position_max", bv.x_max);
+        rd("stepper_y", "position_min", bv.y_min);
+        rd("stepper_y", "position_max", bv.y_max);
+        rd("stepper_z", "position_max", bv.z_max);
+        disc.set_build_volume(bv);
+    }
+}
+
 int run_detect_printer(const std::string& host, int port) {
     const std::string base = "http://" + host + ":" + std::to_string(port);
     const int t = 3;
@@ -59,39 +91,21 @@ int run_detect_printer(const std::string& host, int port) {
         return 1;
     }
 
-    helix::PrinterDiscovery disc;
-    disc.parse_objects(objs["result"]["objects"]);
-
+    nlohmann::json info_result;
     if (auto info = http_get_json(base + "/printer/info", t);
-        info.is_object() && info.contains("result")) {
-        disc.set_hostname(info["result"].value("hostname", ""));
-    }
+        info.is_object() && info.contains("result"))
+        info_result = info["result"];
 
-    if (auto th = http_get_json(base + "/printer/objects/query?toolhead=kinematics", t);
-        th.is_object() && th.contains("result")) {
-        const auto& s = th["result"]["status"];
-        if (s.contains("toolhead") && s["toolhead"].contains("kinematics")) {
-            disc.set_kinematics(s["toolhead"]["kinematics"].get<std::string>());
-        }
-    }
-
+    nlohmann::json cfg_status;
     if (auto cfg = http_get_json(base + "/printer/objects/query?configfile=settings", t);
-        cfg.is_object() && cfg.contains("result")) {
-        const auto& st = cfg["result"]["status"];
-        if (st.contains("configfile") && st["configfile"].contains("settings")) {
-            const auto& s = st["configfile"]["settings"];
-            BuildVolume bv{};
-            auto rd = [&](const char* k, const char* f, float& out) {
-                if (s.contains(k) && s[k].contains(f) && s[k][f].is_number())
-                    out = s[k][f].get<float>();
-            };
-            rd("stepper_x", "position_min", bv.x_min);
-            rd("stepper_x", "position_max", bv.x_max);
-            rd("stepper_y", "position_min", bv.y_min);
-            rd("stepper_y", "position_max", bv.y_max);
-            rd("stepper_z", "position_max", bv.z_max);
-            disc.set_build_volume(bv);
-        }
+        cfg.is_object() && cfg.contains("result") && cfg["result"].contains("status"))
+        cfg_status = cfg["result"]["status"];
+
+    helix::PrinterDiscovery disc;
+    try {
+        populate_discovery(disc, objs["result"]["objects"], info_result, cfg_status);
+    } catch (const std::exception& e) {
+        spdlog::warn("[detect] JSON parsing failed, continuing with partial data: {}", e.what());
     }
 
     PrinterDetectionResult result = PrinterDetector::auto_detect(disc);
