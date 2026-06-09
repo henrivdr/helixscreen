@@ -1010,7 +1010,7 @@ jobs:
 
     steps:
     - name: Dispatch helixscreen-release event
-      uses: peter-evans/repository-dispatch@v3
+      uses: peter-evans/repository-dispatch@v4
       with:
         token: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
         repository: prestonbrown/helixscreen-website
