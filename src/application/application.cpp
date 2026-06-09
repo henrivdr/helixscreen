@@ -17,14 +17,15 @@
 #include "ui_overlay_timelapse_videos.h"
 #include "ui_update_queue.h"
 
+#include "ams_backend_cfs.h"
 #include "app_constants.h"
 #include "asset_manager.h"
 #include "cjk_font_manager.h"
-#include "translation_loader.h"
 #include "config.h"
 #include "display/lv_display_private.h"
 #include "display_manager.h"
 #include "environment_config.h"
+#include "gcode_error_router.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -32,15 +33,13 @@
 #include "keyboard_shortcuts.h"
 #include "layout_manager.h"
 #include "led/led_controller.h"
-#include "ams_backend_cfs.h"
-#include "gcode_error_router.h"
 #include "moonraker_manager.h"
-#include "printer_recovery_service.h"
 #include "panel_factory.h"
 #include "pending_startup_warnings.h"
 #include "post_op_cooldown_manager.h"
 #include "power_device_state.h"
 #include "print_history_manager.h"
+#include "printer_recovery_service.h"
 #include "rpc_error_correlation.h"
 #include "screenshot.h"
 #include "sensor_state.h"
@@ -52,6 +51,7 @@
 #include "temperature_history_manager.h"
 #include "thermal_rate_model.h"
 #include "timelapse_state.h"
+#include "translation_loader.h"
 #include "wizard_config_paths.h"
 
 // UI headers
@@ -108,7 +108,6 @@
 #include "ui_settings_sensors.h"
 #include "ui_severity_card.h"
 #include "ui_status_pill.h"
-#include "helix_sparkline.h"
 #include "ui_switch.h"
 #include "ui_temp_display.h"
 #include "ui_theme_editor_overlay.h"
@@ -125,6 +124,7 @@
 #include "android_asset_extractor.h"
 #include "data_root_resolver.h"
 #include "display_settings_manager.h"
+#include "helix_sparkline.h"
 #include "temperature_service.h"
 #ifdef HELIX_ENABLE_SCREENSAVER
 #include "screensaver.h"
@@ -139,9 +139,9 @@
 #include "system/crash_reporter.h"
 #include "system/telemetry_manager.h"
 #include "system/update_checker.h"
-#include "upgrade_banner.h"
 #include "system_settings_manager.h"
 #include "theme_manager.h"
+#include "upgrade_banner.h"
 #include "wifi_manager.h"
 
 // Backend headers
@@ -156,7 +156,6 @@
 #include "gcode_file_modifier.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_translation.h"
-#include <lvgl/src/misc/cache/instance/lv_image_cache.h>
 #include "hv/hlog.h" // libhv logging - sync level with spdlog
 #include "logging_init.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -178,6 +177,7 @@
 #include "tool_state.h"
 #include "xml_registration.h"
 
+#include <lvgl/src/misc/cache/instance/lv_image_cache.h>
 #include <spdlog/spdlog.h>
 
 #ifdef HELIX_DISPLAY_SDL
@@ -675,193 +675,197 @@ int Application::run(int argc, char** argv) {
     // but usable app instead of a watchdog crash loop they can only escape by
     // reflashing. main_loop() owns the runaway-streak guard for steady state.
     try {
-    // Heap snapshot after XML panel load completes. Delta against
-    // post_telemetry_init is the cost of init_panel_subjects + connect_moonraker
-    // + init_ui — the window where #758 class aborts have fired.
-    TelemetryManager::instance().record_memory_snapshot("post_init_ui");
+        // Heap snapshot after XML panel load completes. Delta against
+        // post_telemetry_init is the cost of init_panel_subjects + connect_moonraker
+        // + init_ui — the window where #758 class aborts have fired.
+        TelemetryManager::instance().record_memory_snapshot("post_init_ui");
 
-    // Check for crash from previous session (after UI exists, before wizard)
-    // Skip in test mode — don't show crash dialog during development
-    // Exception: --mock-crash explicitly requests the dialog for testing
-    bool show_crash_dialog =
-        !get_runtime_config()->is_test_mode() || get_runtime_config()->mock_crash;
-    if (show_crash_dialog && CrashReporter::instance().has_crash_report()) {
-        if (TelemetryManager::instance().had_update_restart()) {
-            spdlog::info("[Application] Crash from post-update restart, suppressing crash dialog");
-            CrashReporter::instance().consume_crash_file();
-        } else {
-            auto report = CrashReporter::instance().collect_report();
-            if (report.signal_name.empty()) {
-                // Empty signal_name means read_crash_file() returned null because
-                // the file lacked the required signal/name fields — typically a
-                // signal handler killed mid-write (OOM-killer, watchdog, power
-                // loss). Showing a dialog here just lets the user submit a
-                // useless bundle (see CHUQCNAE 2026-05-05).
-                spdlog::warn(
-                    "[Application] Crash file unparseable — consuming and skipping dialog");
-                CrashReporter::instance().consume_crash_file();
-            } else if (CrashReporter::instance().is_duplicate(report)) {
-                spdlog::info("[Application] Duplicate crash ({}), suppressing dialog",
-                             CrashReporter::fingerprint(report));
+        // Check for crash from previous session (after UI exists, before wizard)
+        // Skip in test mode — don't show crash dialog during development
+        // Exception: --mock-crash explicitly requests the dialog for testing
+        bool show_crash_dialog =
+            !get_runtime_config()->is_test_mode() || get_runtime_config()->mock_crash;
+        if (show_crash_dialog && CrashReporter::instance().has_crash_report()) {
+            if (TelemetryManager::instance().had_update_restart()) {
+                spdlog::info(
+                    "[Application] Crash from post-update restart, suppressing crash dialog");
                 CrashReporter::instance().consume_crash_file();
             } else {
-                spdlog::info("[Application] Previous crash detected — showing crash report dialog");
-                auto* modal = new CrashReportModal();
-                modal->set_report(report);
-                modal->show_modal(lv_screen_active());
-            }
-        }
-    }
-
-    // Register wizard completion callback for add-printer recovery
-    set_wizard_completion_callback([this]() {
-        if (!m_wizard_previous_printer_id.empty()) {
-            spdlog::info("[Application] Wizard completed — clearing add-printer recovery state");
-            m_wizard_previous_printer_id.clear();
-        }
-        m_wizard_active = false;
-        // The home panel's carousel + default layout were deferred so the
-        // build could see ams_slot_count from Moonraker discovery. Finalize
-        // now that the wizard (and thus the initial connect) is done.
-        get_global_home_panel().finalize_setup();
-    });
-
-    // Cancel callback registered by add_printer_via_wizard() when recovery state exists.
-    // Don't register here — initial wizard has nowhere to cancel back to.
-
-    // Phase 11b: Graceful recovery — clean up stale incomplete printer entries
-    // If the active printer never finished the wizard (e.g., crash during add-printer),
-    // switch to a completed printer and remove the stale entry.
-    if (m_config && m_config->is_wizard_required()) {
-        auto printer_ids = m_config->get_printer_ids();
-        auto active_id = m_config->get_active_printer_id();
-
-        // Find a completed printer to fall back to
-        std::string fallback_id;
-        for (const auto& id : printer_ids) {
-            if (id == active_id)
-                continue;
-            bool completed = m_config->get<bool>("/printers/" + id + "/wizard_completed", false);
-            if (completed) {
-                fallback_id = id;
-                break;
+                auto report = CrashReporter::instance().collect_report();
+                if (report.signal_name.empty()) {
+                    // Empty signal_name means read_crash_file() returned null because
+                    // the file lacked the required signal/name fields — typically a
+                    // signal handler killed mid-write (OOM-killer, watchdog, power
+                    // loss). Showing a dialog here just lets the user submit a
+                    // useless bundle (see CHUQCNAE 2026-05-05).
+                    spdlog::warn(
+                        "[Application] Crash file unparseable — consuming and skipping dialog");
+                    CrashReporter::instance().consume_crash_file();
+                } else if (CrashReporter::instance().is_duplicate(report)) {
+                    spdlog::info("[Application] Duplicate crash ({}), suppressing dialog",
+                                 CrashReporter::fingerprint(report));
+                    CrashReporter::instance().consume_crash_file();
+                } else {
+                    spdlog::info(
+                        "[Application] Previous crash detected — showing crash report dialog");
+                    auto* modal = new CrashReportModal();
+                    modal->set_report(report);
+                    modal->show_modal(lv_screen_active());
+                }
             }
         }
 
-        if (!fallback_id.empty()) {
-            spdlog::info("[Application] Recovering from stale printer '{}' — "
-                         "switching to completed printer '{}'",
-                         active_id, fallback_id);
-            m_config->remove_printer(active_id);
-            m_config->set_active_printer(fallback_id);
-            m_config->save();
-        }
-    }
-
-    // Phase 12: Run wizard if needed
-    if (run_wizard()) {
-        // Wizard is active - it handles its own flow
-        m_wizard_active = true;
-        set_wizard_active(true);
-    }
-
-    // Phase 13: Create overlay panels (if not in wizard)
-    if (!m_wizard_active) {
-        create_overlays();
-        // No wizard will run — finalize the home panel immediately so its
-        // default layout reflects currently-connected hardware.
-        get_global_home_panel().finalize_setup();
-    }
-
-    // Phase 14: Initialize and load plugins
-    // Must be after UI panels exist (injection points are registered by panels)
-    if (!init_plugins()) {
-        spdlog::warn("[Application] Plugin initialization had errors (non-fatal)");
-    }
-
-    // Banner: Safe Mode — UI is up, so this is the earliest the user can
-    // see why the printer connection didn't come up. Sticky (no auto-dismiss)
-    // because the user needs to act on it before the connection comes back.
-    if (s_safe_mode_active) {
-        ToastManager::instance().show(
-            ToastSeverity::WARNING,
-            "Safe Mode active. The printer connection is disabled because the app "
-            "kept crashing on startup. Open Settings to fix the issue, then reboot.",
-            0 /* sticky */);
-    }
-
-    // Phase 14b: Check WiFi availability if expected
-    check_wifi_availability();
-
-    // Phase 15: Start memory monitoring (logs at TRACE level, -vvv)
-    helix::MemoryMonitor::instance().start(5000);
-    helix::MemoryMonitor::instance().set_warning_callback(
-        [](const helix::MemoryWarningEvent& event) {
-            TelemetryManager::instance().record_memory_warning(event);
+        // Register wizard completion callback for add-printer recovery
+        set_wizard_completion_callback([this]() {
+            if (!m_wizard_previous_printer_id.empty()) {
+                spdlog::info(
+                    "[Application] Wizard completed — clearing add-printer recovery state");
+                m_wizard_previous_printer_id.clear();
+            }
+            m_wizard_active = false;
+            // The home panel's carousel + default layout were deferred so the
+            // build could see ams_slot_count from Moonraker discovery. Finalize
+            // now that the wizard (and thus the initial connect) is done.
+            get_global_home_panel().finalize_setup();
         });
 
-    // Drop LVGL's decoded-image cache on critical pressure. Printer images,
-    // thumbnails, and XML-loaded PNGs live here as full ARGB8888 pixel buffers
-    // (e.g. a 300x300 printer image is ~360KB decoded). Freeing them forces
-    // the next draw to re-decode, which is cheap compared to an OOM kill.
-    // Responder fires on the monitor thread — defer to UI thread via
-    // queue_update: lv_image_cache_drop() reaches into the draw units
-    // (LV_EVENT_INVALIDATE_AREA broadcast) which is not safe off the UI thread.
-    helix::MemoryMonitor::instance().add_pressure_responder(
-        [](helix::MemoryPressureLevel level) {
-            if (level >= helix::MemoryPressureLevel::critical) {
-                helix::ui::queue_update([]() {
-                    spdlog::warn("[Application] Pressure response: dropping LVGL image cache");
-                    crash_handler::breadcrumb::note("lvgl_imgcache", "drop");
-                    lv_image_cache_drop(nullptr);
-                });
-            }
-        });
+        // Cancel callback registered by add_printer_via_wizard() when recovery state exists.
+        // Don't register here — initial wizard has nowhere to cancel back to.
 
-    // Drop all live G-code viewer state on critical pressure. ParsedGCodeFile
-    // + GPU geometry can easily run hundreds of MB; on devices that nominally
-    // have plenty of RAM but accumulate process RSS (telemetry: pi32 held
-    // 632MB through and post-print), this is the largest single reclamation
-    // available. Each viewer's clear callback (installed by the owning panel)
-    // also flips the panel's mode subject back to thumbnail so the user sees
-    // the slicer preview rather than a blank rectangle.
-    helix::MemoryMonitor::instance().add_pressure_responder(
-        [](helix::MemoryPressureLevel level) {
-            if (level >= helix::MemoryPressureLevel::critical) {
-                helix::ui::queue_update([]() {
-                    crash_handler::breadcrumb::note("gcode_viewer", "pressure_clear");
-                    ui_gcode_viewer_clear_all_active();
-                });
-            }
-        });
+        // Phase 11b: Graceful recovery — clean up stale incomplete printer entries
+        // If the active printer never finished the wizard (e.g., crash during add-printer),
+        // switch to a completed printer and remove the stale entry.
+        if (m_config && m_config->is_wizard_required()) {
+            auto printer_ids = m_config->get_printer_ids();
+            auto active_id = m_config->get_active_printer_id();
 
-    // Phase 16b: Force full screen refresh
-    // On framebuffer displays with PARTIAL render mode, some widgets may not paint
-    // on the first frame. Schedule a deferred refresh after the first few frames
-    // to ensure all widgets are fully rendered.
-    //
-    // Skip when splash is active: the external splash process owns the framebuffer.
-    // lv_display_create() queues an initial dirty area that would flush the wizard
-    // UI to fb0 before splash exits, causing a visible flash. The post-splash
-    // handler in main_loop() performs this refresh after splash exits.
-    if (get_runtime_config()->splash_pid <= 0 || m_splash_manager.has_exited()) {
-        lv_obj_update_layout(m_screen);
-        invalidate_all_recursive(m_screen);
-        lv_refr_now(nullptr);
-
-        // Deferred refresh: Some widgets (nav icons, printer image) may not have their
-        // content fully set until after the first frame. Schedule a second refresh.
-        static auto deferred_refresh_cb = [](lv_timer_t* timer) {
-            lv_obj_t* screen = static_cast<lv_obj_t*>(lv_timer_get_user_data(timer));
-            if (screen) {
-                lv_obj_update_layout(screen);
-                invalidate_all_recursive(screen);
-                lv_refr_now(nullptr);
+            // Find a completed printer to fall back to
+            std::string fallback_id;
+            for (const auto& id : printer_ids) {
+                if (id == active_id)
+                    continue;
+                bool completed =
+                    m_config->get<bool>("/printers/" + id + "/wizard_completed", false);
+                if (completed) {
+                    fallback_id = id;
+                    break;
+                }
             }
-            lv_timer_delete(timer);
-        };
-        lv_timer_create(deferred_refresh_cb, 100, m_screen); // 100ms delay
-    }
+
+            if (!fallback_id.empty()) {
+                spdlog::info("[Application] Recovering from stale printer '{}' — "
+                             "switching to completed printer '{}'",
+                             active_id, fallback_id);
+                m_config->remove_printer(active_id);
+                m_config->set_active_printer(fallback_id);
+                m_config->save();
+            }
+        }
+
+        // Phase 12: Run wizard if needed
+        if (run_wizard()) {
+            // Wizard is active - it handles its own flow
+            m_wizard_active = true;
+            set_wizard_active(true);
+        }
+
+        // Phase 13: Create overlay panels (if not in wizard)
+        if (!m_wizard_active) {
+            create_overlays();
+            // No wizard will run — finalize the home panel immediately so its
+            // default layout reflects currently-connected hardware.
+            get_global_home_panel().finalize_setup();
+        }
+
+        // Phase 14: Initialize and load plugins
+        // Must be after UI panels exist (injection points are registered by panels)
+        if (!init_plugins()) {
+            spdlog::warn("[Application] Plugin initialization had errors (non-fatal)");
+        }
+
+        // Banner: Safe Mode — UI is up, so this is the earliest the user can
+        // see why the printer connection didn't come up. Sticky (no auto-dismiss)
+        // because the user needs to act on it before the connection comes back.
+        if (s_safe_mode_active) {
+            ToastManager::instance().show(
+                ToastSeverity::WARNING,
+                "Safe Mode active. The printer connection is disabled because the app "
+                "kept crashing on startup. Open Settings to fix the issue, then reboot.",
+                0 /* sticky */);
+        }
+
+        // Phase 14b: Check WiFi availability if expected
+        check_wifi_availability();
+
+        // Phase 15: Start memory monitoring (logs at TRACE level, -vvv)
+        helix::MemoryMonitor::instance().start(5000);
+        helix::MemoryMonitor::instance().set_warning_callback(
+            [](const helix::MemoryWarningEvent& event) {
+                TelemetryManager::instance().record_memory_warning(event);
+            });
+
+        // Drop LVGL's decoded-image cache on critical pressure. Printer images,
+        // thumbnails, and XML-loaded PNGs live here as full ARGB8888 pixel buffers
+        // (e.g. a 300x300 printer image is ~360KB decoded). Freeing them forces
+        // the next draw to re-decode, which is cheap compared to an OOM kill.
+        // Responder fires on the monitor thread — defer to UI thread via
+        // queue_update: lv_image_cache_drop() reaches into the draw units
+        // (LV_EVENT_INVALIDATE_AREA broadcast) which is not safe off the UI thread.
+        helix::MemoryMonitor::instance().add_pressure_responder(
+            [](helix::MemoryPressureLevel level) {
+                if (level >= helix::MemoryPressureLevel::critical) {
+                    helix::ui::queue_update([]() {
+                        spdlog::warn("[Application] Pressure response: dropping LVGL image cache");
+                        crash_handler::breadcrumb::note("lvgl_imgcache", "drop");
+                        lv_image_cache_drop(nullptr);
+                    });
+                }
+            });
+
+        // Drop all live G-code viewer state on critical pressure. ParsedGCodeFile
+        // + GPU geometry can easily run hundreds of MB; on devices that nominally
+        // have plenty of RAM but accumulate process RSS (telemetry: pi32 held
+        // 632MB through and post-print), this is the largest single reclamation
+        // available. Each viewer's clear callback (installed by the owning panel)
+        // also flips the panel's mode subject back to thumbnail so the user sees
+        // the slicer preview rather than a blank rectangle.
+        helix::MemoryMonitor::instance().add_pressure_responder(
+            [](helix::MemoryPressureLevel level) {
+                if (level >= helix::MemoryPressureLevel::critical) {
+                    helix::ui::queue_update([]() {
+                        crash_handler::breadcrumb::note("gcode_viewer", "pressure_clear");
+                        ui_gcode_viewer_clear_all_active();
+                    });
+                }
+            });
+
+        // Phase 16b: Force full screen refresh
+        // On framebuffer displays with PARTIAL render mode, some widgets may not paint
+        // on the first frame. Schedule a deferred refresh after the first few frames
+        // to ensure all widgets are fully rendered.
+        //
+        // Skip when splash is active: the external splash process owns the framebuffer.
+        // lv_display_create() queues an initial dirty area that would flush the wizard
+        // UI to fb0 before splash exits, causing a visible flash. The post-splash
+        // handler in main_loop() performs this refresh after splash exits.
+        if (get_runtime_config()->splash_pid <= 0 || m_splash_manager.has_exited()) {
+            lv_obj_update_layout(m_screen);
+            invalidate_all_recursive(m_screen);
+            lv_refr_now(nullptr);
+
+            // Deferred refresh: Some widgets (nav icons, printer image) may not have their
+            // content fully set until after the first frame. Schedule a second refresh.
+            static auto deferred_refresh_cb = [](lv_timer_t* timer) {
+                lv_obj_t* screen = static_cast<lv_obj_t*>(lv_timer_get_user_data(timer));
+                if (screen) {
+                    lv_obj_update_layout(screen);
+                    invalidate_all_recursive(screen);
+                    lv_refr_now(nullptr);
+                }
+                lv_timer_delete(timer);
+            };
+            lv_timer_create(deferred_refresh_cb, 100, m_screen); // 100ms delay
+        }
 
     } catch (const std::exception& e) {
         const char* type_name = typeid(e).name();
@@ -1185,8 +1189,8 @@ bool Application::init_display() {
     int32_t effective_dpi = (m_args.dpi > 0) ? m_args.dpi : LV_DPI_DEF;
     int32_t pre_set_dpi = lv_display_get_dpi(m_display->display());
     lv_display_set_dpi(m_display->display(), effective_dpi);
-    spdlog::debug("[Application] Display DPI applied: {} (was {} before set)",
-                  effective_dpi, pre_set_dpi);
+    spdlog::debug("[Application] Display DPI applied: {} (was {} before set)", effective_dpi,
+                  pre_set_dpi);
     if (pre_set_dpi < 50 && m_args.dpi == 0) {
         spdlog::warn("[Application] Display reported dpi={} before set — backend lost LV_DPI_DEF "
                      "between create and theme init. Fix-forward applied (forced to {}).",
@@ -1211,9 +1215,11 @@ bool Application::init_display() {
     // do not reflow (#941).  Captureless lambda — must use singletons.
     m_display->register_resize_callback([]() {
         auto* dm = DisplayManager::instance();
-        if (!dm) return;
+        if (!dm)
+            return;
         lv_display_t* disp = dm->display();
-        if (!disp) return;
+        if (!disp)
+            return;
 
         const int w = dm->width();
         const int h = dm->height();
@@ -1229,10 +1235,8 @@ bool Application::init_display() {
         // the current overlay_panel_width_full / overlay_panel_width to any
         // widget named *_overlay so existing overlays reflow without needing
         // to be destroyed and recreated.
-        const char* width_full_str =
-            lv_xml_get_const(nullptr, "overlay_panel_width_full");
-        const char* width_str =
-            lv_xml_get_const(nullptr, "overlay_panel_width");
+        const char* width_full_str = lv_xml_get_const(nullptr, "overlay_panel_width_full");
+        const char* width_str = lv_xml_get_const(nullptr, "overlay_panel_width");
         if (width_full_str && width_str) {
             int32_t width_full = std::atoi(width_full_str);
             int32_t width_std = std::atoi(width_str);
@@ -1242,23 +1246,26 @@ bool Application::init_display() {
                 for (uint32_t i = 0; i < n; i++) {
                     lv_obj_t* child = lv_obj_get_child(screen, i);
                     const char* name = lv_obj_get_name(child);
-                    if (!name) continue;
+                    if (!name)
+                        continue;
                     size_t len = std::strlen(name);
-                    if (len < 8) continue;
-                    if (std::strcmp(name + len - 8, "_overlay") != 0) continue;
+                    if (len < 8)
+                        continue;
+                    if (std::strcmp(name + len - 8, "_overlay") != 0)
+                        continue;
                     int32_t cur = lv_obj_get_width(child);
                     // Most overlays use _full; some narrower panels use the
                     // standard variant. Decide by which is closer to current.
-                    int32_t target =
-                        std::abs(cur - width_std) < std::abs(cur - width_full)
-                            ? width_std : width_full;
+                    int32_t target = std::abs(cur - width_std) < std::abs(cur - width_full)
+                                         ? width_std
+                                         : width_full;
                     lv_obj_set_width(child, target);
                 }
             }
         }
 
-        spdlog::info("[Application] Resize: refreshed theme + layout for {}x{} ({})",
-                     w, h, layout.name());
+        spdlog::info("[Application] Resize: refreshed theme + layout for {}x{} ({})", w, h,
+                     layout.name());
     });
 
     // Initialize tips manager
@@ -1488,7 +1495,8 @@ bool Application::register_xml_components() {
     if (RuntimeConfig::hot_reload_enabled()) {
         m_hot_reloader = std::make_unique<helix::XmlHotReloader>();
         m_hot_reloader->set_after_reload_callback([](const std::string& component) {
-            if (NavigationManager::is_destroyed()) return;
+            if (NavigationManager::is_destroyed())
+                return;
             spdlog::debug("[HotReload] Post-reload rebuild triggered by '{}'", component);
             NavigationManager::instance().rebuild_active_views();
         });
@@ -1902,6 +1910,13 @@ bool Application::run_wizard() {
         m_config->set<nlohmann::json>(m_config->df() + "filament_sensors/sensors",
                                       nlohmann::json::array());
 
+        // Drop preset-mode so a wrong install-time full-seed is recoverable: clearing
+        // the preset marker makes has_preset() false → the re-run is a FULL wizard
+        // (identify + hardware pages reappear). Also clear the host so the user
+        // re-enters the connection step. See install-time-detection design.
+        m_config->clear_preset();
+        m_config->set<std::string>(m_config->df() + "moonraker_host", "");
+
         m_config->save();
     }
 
@@ -1937,8 +1952,7 @@ bool Application::run_wizard() {
         initial_step = 0;
         spdlog::info("[Application] Forcing wizard touch-calibration step "
                      "(calibrate_touch={}, env={}, config={})",
-                     m_args.calibrate_touch, env_force_cal ? "set" : "unset",
-                     config_force_cal);
+                     m_args.calibrate_touch, env_force_cal ? "set" : "unset", config_force_cal);
     }
 
     // If step 1 was explicitly requested, force-show language chooser (for visual testing)
@@ -2354,14 +2368,13 @@ void Application::setup_discovery_callbacks() {
                       initial_status.is_object() ? initial_status.size() : 0);
         auto snapshot = std::make_shared<helix::PrinterDiscovery>(hardware);
         auto status_snapshot = std::make_shared<const nlohmann::json>(initial_status);
-        helix::ui::queue_update("Application::on_discovery_complete",
-                                [api, client, app, snapshot, status_snapshot]() {
+        helix::ui::queue_update("Application::on_discovery_complete", [api, client, app, snapshot,
+                                                                       status_snapshot]() {
             // Count invocations so crash bundles reveal whether we crashed on
             // the first discovery or on a reconnect-triggered re-run.
             static int s_discovery_complete_n = 0;
             long n = static_cast<long>(++s_discovery_complete_n);
-            crash_handler::breadcrumb::note(
-                "disc", "cb_begin", n);
+            crash_handler::breadcrumb::note("disc", "cb_begin", n);
 
             spdlog::debug("[Application] on_discovery_complete UI-thread entry (shutdown={})",
                           app->m_shutdown_complete);
@@ -2375,9 +2388,8 @@ void Application::setup_discovery_callbacks() {
             // move the snapshot into set_hardware below — the snapshot is the
             // only reference we own and nobody else aliases it, so this copy is
             // race-free (#789, #799).
-            crash_handler::breadcrumb::note(
-                "disc", "pre_api_hw",
-                static_cast<long>(snapshot->macros().size()));
+            crash_handler::breadcrumb::note("disc", "pre_api_hw",
+                                            static_cast<long>(snapshot->macros().size()));
             api->hardware() = *snapshot;
             crash_handler::breadcrumb::note("disc", "post_api_hw", n);
 
@@ -2404,15 +2416,14 @@ void Application::setup_discovery_callbacks() {
             // copy iterates against a live, potentially-mutated api->hardware_ (#799).
             // After this point *snapshot is empty — use api->hardware() for reads.
             const auto& hw = api->hardware();
-            crash_handler::breadcrumb::note(
-                "disc", "pre_set_hw",
-                static_cast<long>(snapshot->macros().size()));
+            crash_handler::breadcrumb::note("disc", "pre_set_hw",
+                                            static_cast<long>(snapshot->macros().size()));
             get_printer_state().set_hardware(std::move(*snapshot));
             crash_handler::breadcrumb::note("disc", "post_set_hw", n);
             get_printer_state().init_fans(
                 hw.fans(), helix::FanRoleConfig::from_config(Config::get_instance()));
             crash_handler::breadcrumb::note("disc", "post_init_fans",
-                                             static_cast<long>(hw.fans().size()));
+                                            static_cast<long>(hw.fans().size()));
 
             // Dispatch initial subscription status AFTER init_fans so fan/sensor subjects
             // exist when the status data is processed. The initial status is passed from the
@@ -2899,45 +2910,65 @@ void Application::init_action_prompt() {
     // bug accumulate. Period is configurable via HELIX_STRESS_PROMPT_MS
     // (default 250 ms — fast enough to outpace the modal exit animation
     // (~150 ms) so consecutive deletes pile in the same async list).
-    if (const char* on = std::getenv("HELIX_AUTO_STRESS_PROMPT"); on && *on && std::string(on) != "0") {
+    if (const char* on = std::getenv("HELIX_AUTO_STRESS_PROMPT");
+        on && *on && std::string(on) != "0") {
         int period_ms = 500;
         if (const char* p = std::getenv("HELIX_STRESS_PROMPT_MS")) {
-            try { period_ms = std::max(100, std::stoi(p)); } catch (...) {}
+            try {
+                period_ms = std::max(100, std::stoi(p));
+            } catch (...) {
+            }
         }
         int delay_ms = 30000; // default 30s so user can navigate to Print Status first
         if (const char* d = std::getenv("HELIX_STRESS_START_DELAY_SEC")) {
-            try { delay_ms = std::max(0, std::stoi(d)) * 1000; } catch (...) {}
+            try {
+                delay_ms = std::max(0, std::stoi(d)) * 1000;
+            } catch (...) {
+            }
         }
-        spdlog::warn("[ActionPrompt] HELIX_AUTO_STRESS_PROMPT=1 — will drive show/hide every {}ms after {}s delay (gated on is_showing)", period_ms, delay_ms / 1000);
+        spdlog::warn("[ActionPrompt] HELIX_AUTO_STRESS_PROMPT=1 — will drive show/hide every {}ms "
+                     "after {}s delay (gated on is_showing)",
+                     period_ms, delay_ms / 1000);
         // Gate transitions on ActionPromptManager state so we alternate
         // cleanly instead of stacking modals when the exit animation is
         // slower than our period. ActionPromptManager::is_showing() is the
         // canonical "is a prompt active right now" probe.
-        struct StressCtx { ActionPromptManager* mgr; int period_ms; };
+        struct StressCtx {
+            ActionPromptManager* mgr;
+            int period_ms;
+        };
         auto* ctx = new StressCtx{prompt_mgr, period_ms};
         // One-shot kick-off timer; on fire it spawns the repeating stress
         // timer. Gives the operator time to navigate before modals start
         // hijacking the screen.
-        auto* kickoff = lv_timer_create([](lv_timer_t* t) {
-            auto* c = static_cast<StressCtx*>(lv_timer_get_user_data(t));
-            if (!c) { lv_timer_delete(t); return; }
-            spdlog::warn("[ActionPrompt] Stress timer ARMED — show/hide cycle starting now");
-            auto* repeat = lv_timer_create([](lv_timer_t* t2) {
-                auto* mgr = static_cast<ActionPromptManager*>(lv_timer_get_user_data(t2));
-                if (!mgr) return;
-                if (ActionPromptManager::is_showing()) {
-                    mgr->process_line("// action:prompt_end");
-                } else {
-                    mgr->process_line("// action:prompt_begin StressTest");
-                    mgr->process_line("// action:prompt_text Cluster A reproducer");
-                    mgr->process_line("// action:prompt_button OK|ECHO_OK");
-                    mgr->process_line("// action:prompt_show");
+        auto* kickoff = lv_timer_create(
+            [](lv_timer_t* t) {
+                auto* c = static_cast<StressCtx*>(lv_timer_get_user_data(t));
+                if (!c) {
+                    lv_timer_delete(t);
+                    return;
                 }
-            }, c->period_ms, c->mgr);
-            (void)repeat;
-            delete c;
-            lv_timer_delete(t); // one-shot
-        }, std::max(1, delay_ms), ctx);
+                spdlog::warn("[ActionPrompt] Stress timer ARMED — show/hide cycle starting now");
+                auto* repeat = lv_timer_create(
+                    [](lv_timer_t* t2) {
+                        auto* mgr = static_cast<ActionPromptManager*>(lv_timer_get_user_data(t2));
+                        if (!mgr)
+                            return;
+                        if (ActionPromptManager::is_showing()) {
+                            mgr->process_line("// action:prompt_end");
+                        } else {
+                            mgr->process_line("// action:prompt_begin StressTest");
+                            mgr->process_line("// action:prompt_text Cluster A reproducer");
+                            mgr->process_line("// action:prompt_button OK|ECHO_OK");
+                            mgr->process_line("// action:prompt_show");
+                        }
+                    },
+                    c->period_ms, c->mgr);
+                (void)repeat;
+                delete c;
+                lv_timer_delete(t); // one-shot
+            },
+            std::max(1, delay_ms), ctx);
         (void)kickoff;
     }
 
@@ -2973,7 +3004,6 @@ void Application::init_action_prompt() {
     // (catches errors that fired while HelixScreen was offline). Lives as
     // a member so its dtor unregisters callbacks before MoonrakerClient dies.
     m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client);
-
 
     // Register layer tracking fallback via gcode responses.
     // Some slicers don't emit SET_PRINT_STATS_INFO, so Moonraker's print_stats.info
@@ -3153,151 +3183,153 @@ int Application::main_loop() {
     // Main event loop
     while (lv_display_get_next(nullptr) && !app_quit_requested()) {
         try {
-        uint32_t current_tick = DisplayManager::get_ticks();
-        m_loop_handler.on_frame(current_tick);
+            uint32_t current_tick = DisplayManager::get_ticks();
+            m_loop_handler.on_frame(current_tick);
 
-        handle_keyboard_shortcuts();
+            handle_keyboard_shortcuts();
 
-        // Android lifecycle: pause/resume when backgrounded
-        bool backgrounded = s_app_backgrounded.load();
-        if (backgrounded && !m_backgrounded) {
-            on_enter_background();
-        } else if (!backgrounded && m_backgrounded) {
-            on_enter_foreground();
-        }
-
-        // While backgrounded, still pump SDL events so we detect the
-        // foreground transition (SDL_APP_DIDENTERFOREGROUND arrives via
-        // sdl_event_handler which runs inside lv_timer_handler).
-        // Rendering is suppressed via lv_display_enable_invalidation(false)
-        // so the timer handler is cheap — just event processing + timers.
-        if (m_backgrounded) {
-            lv_timer_handler();
-            DisplayManager::delay(200);
-            continue;
-        }
-
-        // Break immediately if quit was requested (e.g., Cmd+Q) to avoid
-        // running lv_timer_handler() with stale queued callbacks that may
-        // reference destroyed objects (e.g., update_button_text_contrast
-        // on a button whose user_data was freed by Modal destruction).
-        if (app_quit_requested()) {
-            break;
-        }
-
-        // Auto-screenshot
-        if (m_loop_handler.should_take_screenshot()) {
-            helix::save_screenshot();
-            m_loop_handler.mark_screenshot_taken();
-        }
-
-        // SIGUSR1-triggered screenshot (remote debugging on touch-only devices).
-        if (s_screenshot_requested.exchange(false)) {
-            auto path = helix::save_screenshot();
-            spdlog::info("[Application] SIGUSR1 screenshot saved: {}",
-                         path.empty() ? "<failed>" : path.c_str());
-        }
-
-        // Auto-quit timeout
-        if (m_loop_handler.should_quit()) {
-            spdlog::info("[Application] Timeout reached ({} seconds)", m_args.timeout_sec);
-            break;
-        }
-
-        // Process timeouts
-        check_timeouts();
-
-        // Process Moonraker notifications
-        process_notifications();
-
-        // Check display sleep
-        m_display->check_display_sleep();
-
-        // Periodic full-screen invalidation on fbdev (self-heal kernel console bleed-through)
-        if (needs_fb_self_heal &&
-            (current_tick - last_fb_selfheal_tick) >= FB_SELFHEAL_INTERVAL_MS) {
-            lv_obj_invalidate(lv_screen_active());
-            last_fb_selfheal_tick = current_tick;
-        }
-
-        // Periodic liveness breadcrumb (counts frames so crash bundles know
-        // whether the loop was spinning normally or stalled).
-        ++frame_counter;
-        if ((current_tick - last_tick_crumb) >= TICK_CRUMB_INTERVAL_MS) {
-            crash_handler::breadcrumb::note("tick", "", static_cast<long>(frame_counter));
-            last_tick_crumb = current_tick;
-        }
-
-        // Refresh cached heap snapshot so any crash within the next window
-        // reports recent memory state.
-        if ((current_tick - last_heap_refresh) >= HEAP_REFRESH_INTERVAL_MS) {
-            crash_handler::refresh_heap_snapshot();
-            last_heap_refresh = current_tick;
-        }
-
-        // Run LVGL tasks — returns ms until next timer needs to fire
-        auto frame_start = std::chrono::steady_clock::now();
-        uint32_t time_till_next = lv_timer_handler();
-        auto frame_end = std::chrono::steady_clock::now();
-        auto frame_us =
-            std::chrono::duration_cast<std::chrono::microseconds>(frame_end - frame_start).count();
-        TelemetryManager::instance().record_frame_time(static_cast<uint32_t>(frame_us));
-
-        // Signal splash to exit when discovery completes (or timeout)
-        m_splash_manager.check_and_signal();
-
-        // Post-splash handoff: re-enable rendering and repaint
-        // Display invalidation was suppressed to prevent framebuffer flicker
-        // while both splash and main app were running simultaneously.
-        if (invalidation_suppressed && m_splash_manager.needs_post_splash_refresh()) {
-            invalidation_suppressed = false;
-            lv_display_enable_invalidation(nullptr, true);
-            restore_flush_callback();
-            spdlog::info("[Application] Post-splash handoff: flush callback restored, painting UI");
-
-            lv_obj_t* screen = lv_screen_active();
-            if (screen) {
-                lv_obj_update_layout(screen);
-                invalidate_all_recursive(screen);
-                lv_refr_now(nullptr);
+            // Android lifecycle: pause/resume when backgrounded
+            bool backgrounded = s_app_backgrounded.load();
+            if (backgrounded && !m_backgrounded) {
+                on_enter_background();
+            } else if (!backgrounded && m_backgrounded) {
+                on_enter_foreground();
             }
-            m_splash_manager.mark_refresh_done();
-        }
 
-        // Failsafe: if invalidation is still suppressed after hard deadline, force it back on.
-        // Prevents permanent black screen if splash handoff fails for any reason.
-        if (invalidation_suppressed &&
-            (current_tick - suppression_start_tick) >= INVALIDATION_FAILSAFE_MS) {
-            invalidation_suppressed = false;
-            lv_display_enable_invalidation(nullptr, true);
-            restore_flush_callback();
-            spdlog::warn("[Application] Invalidation failsafe triggered after {}ms",
-                         INVALIDATION_FAILSAFE_MS);
-            lv_obj_invalidate(lv_screen_active());
-        }
-
-        // Benchmark mode - force redraws and report FPS
-        if (loop_config.benchmark_mode) {
-            lv_obj_invalidate(lv_screen_active());
-            if (m_loop_handler.benchmark_should_report()) {
-                auto report = m_loop_handler.benchmark_get_report();
-                spdlog::info("[Application] Benchmark FPS: {:.1f}", report.fps);
+            // While backgrounded, still pump SDL events so we detect the
+            // foreground transition (SDL_APP_DIDENTERFOREGROUND arrives via
+            // sdl_event_handler which runs inside lv_timer_handler).
+            // Rendering is suppressed via lv_display_enable_invalidation(false)
+            // so the timer handler is cheap — just event processing + timers.
+            if (m_backgrounded) {
+                lv_timer_handler();
+                DisplayManager::delay(200);
+                continue;
             }
-        }
 
-        // Sleep adaptively: use LVGL's hint for when next work is due,
-        // capped to keep UI responsive. In benchmark mode, minimize delay.
-        // When display is sleeping, extend sleep to 200ms — no rendering
-        // needed, just need to stay responsive to wake events.
-        if (!loop_config.benchmark_mode) {
-            uint32_t max_sleep = m_display->is_display_sleeping() ? 200 : 33;
-            uint32_t sleep_ms = std::min(time_till_next, max_sleep);
-            if (sleep_ms < 5)
-                sleep_ms = 5;
-            DisplayManager::delay(sleep_ms);
-        } else {
-            DisplayManager::delay(1);
-        }
+            // Break immediately if quit was requested (e.g., Cmd+Q) to avoid
+            // running lv_timer_handler() with stale queued callbacks that may
+            // reference destroyed objects (e.g., update_button_text_contrast
+            // on a button whose user_data was freed by Modal destruction).
+            if (app_quit_requested()) {
+                break;
+            }
+
+            // Auto-screenshot
+            if (m_loop_handler.should_take_screenshot()) {
+                helix::save_screenshot();
+                m_loop_handler.mark_screenshot_taken();
+            }
+
+            // SIGUSR1-triggered screenshot (remote debugging on touch-only devices).
+            if (s_screenshot_requested.exchange(false)) {
+                auto path = helix::save_screenshot();
+                spdlog::info("[Application] SIGUSR1 screenshot saved: {}",
+                             path.empty() ? "<failed>" : path.c_str());
+            }
+
+            // Auto-quit timeout
+            if (m_loop_handler.should_quit()) {
+                spdlog::info("[Application] Timeout reached ({} seconds)", m_args.timeout_sec);
+                break;
+            }
+
+            // Process timeouts
+            check_timeouts();
+
+            // Process Moonraker notifications
+            process_notifications();
+
+            // Check display sleep
+            m_display->check_display_sleep();
+
+            // Periodic full-screen invalidation on fbdev (self-heal kernel console bleed-through)
+            if (needs_fb_self_heal &&
+                (current_tick - last_fb_selfheal_tick) >= FB_SELFHEAL_INTERVAL_MS) {
+                lv_obj_invalidate(lv_screen_active());
+                last_fb_selfheal_tick = current_tick;
+            }
+
+            // Periodic liveness breadcrumb (counts frames so crash bundles know
+            // whether the loop was spinning normally or stalled).
+            ++frame_counter;
+            if ((current_tick - last_tick_crumb) >= TICK_CRUMB_INTERVAL_MS) {
+                crash_handler::breadcrumb::note("tick", "", static_cast<long>(frame_counter));
+                last_tick_crumb = current_tick;
+            }
+
+            // Refresh cached heap snapshot so any crash within the next window
+            // reports recent memory state.
+            if ((current_tick - last_heap_refresh) >= HEAP_REFRESH_INTERVAL_MS) {
+                crash_handler::refresh_heap_snapshot();
+                last_heap_refresh = current_tick;
+            }
+
+            // Run LVGL tasks — returns ms until next timer needs to fire
+            auto frame_start = std::chrono::steady_clock::now();
+            uint32_t time_till_next = lv_timer_handler();
+            auto frame_end = std::chrono::steady_clock::now();
+            auto frame_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(frame_end - frame_start)
+                    .count();
+            TelemetryManager::instance().record_frame_time(static_cast<uint32_t>(frame_us));
+
+            // Signal splash to exit when discovery completes (or timeout)
+            m_splash_manager.check_and_signal();
+
+            // Post-splash handoff: re-enable rendering and repaint
+            // Display invalidation was suppressed to prevent framebuffer flicker
+            // while both splash and main app were running simultaneously.
+            if (invalidation_suppressed && m_splash_manager.needs_post_splash_refresh()) {
+                invalidation_suppressed = false;
+                lv_display_enable_invalidation(nullptr, true);
+                restore_flush_callback();
+                spdlog::info(
+                    "[Application] Post-splash handoff: flush callback restored, painting UI");
+
+                lv_obj_t* screen = lv_screen_active();
+                if (screen) {
+                    lv_obj_update_layout(screen);
+                    invalidate_all_recursive(screen);
+                    lv_refr_now(nullptr);
+                }
+                m_splash_manager.mark_refresh_done();
+            }
+
+            // Failsafe: if invalidation is still suppressed after hard deadline, force it back on.
+            // Prevents permanent black screen if splash handoff fails for any reason.
+            if (invalidation_suppressed &&
+                (current_tick - suppression_start_tick) >= INVALIDATION_FAILSAFE_MS) {
+                invalidation_suppressed = false;
+                lv_display_enable_invalidation(nullptr, true);
+                restore_flush_callback();
+                spdlog::warn("[Application] Invalidation failsafe triggered after {}ms",
+                             INVALIDATION_FAILSAFE_MS);
+                lv_obj_invalidate(lv_screen_active());
+            }
+
+            // Benchmark mode - force redraws and report FPS
+            if (loop_config.benchmark_mode) {
+                lv_obj_invalidate(lv_screen_active());
+                if (m_loop_handler.benchmark_should_report()) {
+                    auto report = m_loop_handler.benchmark_get_report();
+                    spdlog::info("[Application] Benchmark FPS: {:.1f}", report.fps);
+                }
+            }
+
+            // Sleep adaptively: use LVGL's hint for when next work is due,
+            // capped to keep UI responsive. In benchmark mode, minimize delay.
+            // When display is sleeping, extend sleep to 200ms — no rendering
+            // needed, just need to stay responsive to wake events.
+            if (!loop_config.benchmark_mode) {
+                uint32_t max_sleep = m_display->is_display_sleeping() ? 200 : 33;
+                uint32_t sleep_ms = std::min(time_till_next, max_sleep);
+                if (sleep_ms < 5)
+                    sleep_ms = 5;
+                DisplayManager::delay(sleep_ms);
+            } else {
+                DisplayManager::delay(1);
+            }
         } catch (const std::exception& e) {
             // A callback inside this iteration threw and was not caught
             // closer to the source. Pre-#931, this unwound through main()
@@ -3307,32 +3339,30 @@ int Application::main_loop() {
             // / RUNAWAY_WINDOW_MS, exit cleanly so the watchdog sees a
             // graceful shutdown instead of an infinite throw-catch tight loop.
             const char* type_name = typeid(e).name();
-            spdlog::error("[Application] Caught exception in main loop: {} ({})",
-                          e.what(), type_name);
+            spdlog::error("[Application] Caught exception in main loop: {} ({})", e.what(),
+                          type_name);
             crash_handler::breadcrumb::note("loop_catch", type_name);
             // Dump breadcrumbs so the next user log captures which observer/
             // callback path threw — root cause of #931 needs this trail.
             crash_handler::breadcrumb::dump_to_fd(STDERR_FILENO);
             try {
-                TelemetryManager::instance().record_error(
-                    "main_loop", "unhandled_exception", e.what());
+                TelemetryManager::instance().record_error("main_loop", "unhandled_exception",
+                                                          e.what());
             } catch (...) {
                 // Telemetry must never re-throw out of the catch handler.
             }
 
             uint32_t now_tick = DisplayManager::get_ticks();
-            if (exception_streak == 0 ||
-                (now_tick - streak_window_start) > RUNAWAY_WINDOW_MS) {
+            if (exception_streak == 0 || (now_tick - streak_window_start) > RUNAWAY_WINDOW_MS) {
                 streak_window_start = now_tick;
                 exception_streak = 1;
             } else {
                 ++exception_streak;
             }
             if (exception_streak >= RUNAWAY_THRESHOLD) {
-                spdlog::critical(
-                    "[Application] Runaway exception streak ({} in {}ms) — "
-                    "exiting main loop cleanly to break the throw-catch tight loop",
-                    exception_streak, RUNAWAY_WINDOW_MS);
+                spdlog::critical("[Application] Runaway exception streak ({} in {}ms) — "
+                                 "exiting main loop cleanly to break the throw-catch tight loop",
+                                 exception_streak, RUNAWAY_WINDOW_MS);
                 break;
             }
 
