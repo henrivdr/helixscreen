@@ -13,10 +13,10 @@
 
 #include "config.h"
 #include "ethernet_manager.h"
-#include "system/crash_handler.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "static_panel_registry.h"
+#include "system/crash_handler.h"
 #include "theme_manager.h"
 #include "wifi_manager.h"
 
@@ -122,6 +122,16 @@ WizardWifiStep::WizardWifiStep() {
 }
 
 WizardWifiStep::~WizardWifiStep() {
+    // Safety net: cleanup() normally invalidates lifetime_ on step transition,
+    // but the step can be destroyed via StaticPanelRegistry without cleanup()
+    // (e.g. app shutdown while on a different wizard step). The shared
+    // WiFiManager outlives this step and still holds the state observer's token
+    // registered in init_wifi_manager(); without invalidation a backend state
+    // change after teardown would defer apply_wifi_backend_state() into a freed
+    // `this`. Invalidate before releasing the manager.
+    cleanup_called_ = true;
+    lifetime_.invalidate();
+
     // Release references to managers - shared WiFiManager continues running
     wifi_manager_.reset();
     ethernet_manager_.reset();
@@ -216,7 +226,8 @@ void WizardWifiStep::update_ethernet_status() {
     auto tok = lifetime_.token();
     crash_handler::breadcrumb::note("wifi", "eth_probe_tok_ok");
     ethernet_manager_->get_info_async([this, tok](const EthernetInfo& info) {
-        if (tok.expired()) return;
+        if (tok.expired())
+            return;
         EthernetInfo info_copy = info;
         tok.defer("WizardWifiStep::apply_ethernet_status", [this, info_copy]() {
             // Belt-and-suspenders: tok.defer already skips on generation
@@ -258,8 +269,7 @@ void WizardWifiStep::update_ethernet_status() {
 
 void WizardWifiStep::populate_network_list(const std::vector<WiFiNetwork>& networks) {
     spdlog::debug("[{}] Populating network list with {} networks", get_name(), networks.size());
-    crash_handler::breadcrumb::note("wifi", "populate_begin",
-                                    static_cast<long>(networks.size()));
+    crash_handler::breadcrumb::note("wifi", "populate_begin", static_cast<long>(networks.size()));
 
     if (!network_list_container_) {
         LOG_ERROR_INTERNAL("Network list container not found");
@@ -543,8 +553,7 @@ void WizardWifiStep::handle_wifi_toggle_changed(lv_event_t* e) {
                 // thread is mid-sort (#769).
                 token.defer([this, weak_mgr, scanned = networks]() mutable {
                     if (weak_mgr.expired()) {
-                        spdlog::trace("[{}] WiFiManager destroyed, ignoring callback",
-                                      get_name());
+                        spdlog::trace("[{}] WiFiManager destroyed, ignoring callback", get_name());
                         return;
                     }
                     spdlog::info("[{}] Scan callback with {} networks", get_name(), scanned.size());
@@ -875,42 +884,76 @@ void WizardWifiStep::init_wifi_manager() {
         return;
     }
 
-    // Detect actual WiFi state from system wpa_supplicant
-    // Try to connect to existing wpa_supplicant and query state
-    if (wifi_manager_->has_hardware()) {
-        // Start the backend to connect to existing wpa_supplicant
-        crash_handler::breadcrumb::note("wifi", "set_enabled_pre");
-        bool started = wifi_manager_->set_enabled(true);
-        crash_handler::breadcrumb::note("wifi", "set_enabled_post", started ? 1 : 0);
-        if (started && wifi_manager_->is_enabled()) {
-            spdlog::info("[{}] WiFi backend connected to system wpa_supplicant", get_name());
+    // Non-blocking bringup: the WiFiManager constructor already kicks
+    // backend_->start_async(), so the backend is connecting to the system
+    // wpa_supplicant on a worker thread before we get here. We MUST NOT call
+    // the blocking set_enabled(true) — on thread-constrained printers (e.g.
+    // Snapmaker U1, co-hosted with Klipper at nice +10) it waits on a 5s
+    // condition variable on the UI thread and stalls the boot splash.
+    //
+    // Instead, subscribe to backend state changes (fired on READY/CONNECTED/
+    // DISCONNECTED via the token, i.e. on the UI thread) and apply current
+    // state once now. add_state_observer() does NOT replay an already-fired
+    // READY, so the immediate apply below is required.
+    auto tok = lifetime_.token();
+    wifi_manager_->add_state_observer(tok, [this]() { apply_wifi_backend_state(); });
+    crash_handler::breadcrumb::note("wifi", "state_obs_added");
 
-            // Update toggle and subject to reflect actual state
-            lv_subject_set_int(&wifi_enabled_, 1);
+    apply_wifi_backend_state();
 
-            // Update toggle visual state
-            lv_obj_t* wifi_toggle = lv_obj_find_by_name(screen_root_, "wifi_toggle");
-            if (wifi_toggle) {
-                lv_obj_add_state(wifi_toggle, LV_STATE_CHECKED);
-            }
+    spdlog::debug("[{}] WiFi and Ethernet managers initialized", get_name());
+    crash_handler::breadcrumb::note("wifi", "init_mgr_ok");
+}
 
-            // Check if already connected
-            if (wifi_manager_->is_connected()) {
-                std::string ssid = wifi_manager_->get_connected_ssid();
-                std::string ip = wifi_manager_->get_ip_address();
-                spdlog::info("[{}] Already connected to '{}' with IP {}", get_name(), ssid, ip);
+void WizardWifiStep::apply_wifi_backend_state() {
+    // Guard against running after the step is torn down. This runs both
+    // synchronously from init_wifi_manager() and (later) from the backend
+    // state observer, whose callback is deferred onto the UI thread via the
+    // token — by which point the step's widgets may already be gone.
+    if (cleanup_called_ || !screen_root_) {
+        return;
+    }
+    crash_handler::breadcrumb::note("wifi", "apply_state_enter");
 
-                // Update status and IP display
-                std::string status_msg = std::string(lv_tr("Connected to ")) + ssid;
-                update_wifi_status(status_msg.c_str());
-                update_wifi_ip(ip.c_str());
-            } else {
-                update_wifi_status(get_status_text("enabled"));
-            }
+    if (!wifi_manager_) {
+        return;
+    }
 
-            // Start a scan to populate the network list
+    bool enabled = wifi_manager_->is_enabled();
+    lv_subject_set_int(&wifi_enabled_, enabled ? 1 : 0);
+
+    // Reflect the backend state in the toggle's visual checked state.
+    lv_obj_t* wifi_toggle = lv_obj_find_by_name(screen_root_, "wifi_toggle");
+    if (wifi_toggle) {
+        if (enabled) {
+            lv_obj_add_state(wifi_toggle, LV_STATE_CHECKED);
+        } else {
+            lv_obj_remove_state(wifi_toggle, LV_STATE_CHECKED);
+        }
+    }
+
+    if (enabled) {
+        crash_handler::breadcrumb::note("wifi", "apply_state_enabled");
+
+        // Check if already connected
+        if (wifi_manager_->is_connected()) {
+            std::string ssid = wifi_manager_->get_connected_ssid();
+            std::string ip = wifi_manager_->get_ip_address();
+            spdlog::info("[{}] Already connected to '{}' with IP {}", get_name(), ssid, ip);
+
+            // Update status and IP display
+            std::string status_msg = std::string(lv_tr("Connected to ")) + ssid;
+            update_wifi_status(status_msg.c_str());
+            update_wifi_ip(ip.c_str());
+        } else {
+            update_wifi_status(get_status_text("enabled"));
+        }
+
+        // Kick a scan to populate the network list — exactly once.
+        if (!scan_started_) {
+            scan_started_ = true;
             lv_subject_set_int(&wifi_scanning_, 1);
-            crash_handler::breadcrumb::note("wifi", "scan_fire");
+            crash_handler::breadcrumb::note("wifi", "apply_state_scan_fire");
             auto token = lifetime_.token();
             wifi_manager_->start_scan([this, token](const std::vector<WiFiNetwork>& networks) {
                 // Marshal to UI thread via token.defer() — TOCTOU-safe lifetime
@@ -918,27 +961,23 @@ void WizardWifiStep::init_wifi_manager() {
                 // cached_networks_ is only written on the UI thread; otherwise
                 // a back-to-back scan callback on the BG thread could rewrite
                 // cached_networks_ while the UI thread is mid-sort (mirrors #769 fix at line 553).
-                token.defer("WizardWifiStep::apply_scan",
-                            [this, scanned = networks]() mutable {
-                                if (cleanup_called_ || !screen_root_) {
-                                    crash_handler::breadcrumb::note("wifi", "scan_apply_skip");
-                                    return;
-                                }
-                                crash_handler::breadcrumb::note("wifi", "scan_apply_run");
-                                cached_networks_ = std::move(scanned);
-                                lv_subject_set_int(&wifi_scanning_, 0);
-                                if (!cached_networks_.empty()) {
-                                    populate_network_list(cached_networks_);
-                                }
-                            });
+                token.defer("WizardWifiStep::apply_scan", [this, scanned = networks]() mutable {
+                    if (cleanup_called_ || !screen_root_) {
+                        crash_handler::breadcrumb::note("wifi", "scan_apply_skip");
+                        return;
+                    }
+                    crash_handler::breadcrumb::note("wifi", "scan_apply_run");
+                    cached_networks_ = std::move(scanned);
+                    lv_subject_set_int(&wifi_scanning_, 0);
+                    if (!cached_networks_.empty()) {
+                        populate_network_list(cached_networks_);
+                    }
+                });
             });
-        } else {
-            spdlog::debug("[{}] WiFi not available or failed to start", get_name());
         }
+    } else {
+        crash_handler::breadcrumb::note("wifi", "apply_state_disabled");
     }
-
-    spdlog::debug("[{}] WiFi and Ethernet managers initialized", get_name());
-    crash_handler::breadcrumb::note("wifi", "init_mgr_ok");
 }
 
 // ============================================================================

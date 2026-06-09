@@ -170,6 +170,7 @@ class WizardWifiStep {
     // State tracking
     bool subjects_initialized_ = false;
     bool cleanup_called_ = false; // Set true in cleanup() to invalidate pending callbacks
+    bool scan_started_ = false;   // Ensures the bringup scan is kicked exactly once
 
     // Async callback safety — tokens expire when cleanup() invalidates lifetime
     helix::AsyncLifetimeGuard lifetime_;
@@ -190,6 +191,12 @@ class WizardWifiStep {
     void update_wifi_status(const char* status);
     void update_wifi_ip(const char* ip);
     void update_ethernet_status();
+
+    // Apply the current (already-initialized) WiFi backend state to the UI.
+    // Called once during init_wifi_manager() and again on every backend
+    // state change via add_state_observer(). Non-blocking: never calls
+    // set_enabled(). Runs on the UI thread (state observer defers via token).
+    void apply_wifi_backend_state();
     void populate_network_list(const std::vector<WiFiNetwork>& networks);
     void clear_network_list();
 

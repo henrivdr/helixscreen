@@ -737,3 +737,53 @@ TEST_CASE_METHOD(WiFiManagerTestFixture, "State observer with expired token is n
     SUCCEED("Mocks disabled in this build — observer test skipped");
 #endif
 }
+
+// Contract guard for the non-blocking wizard WiFi bringup
+// (WizardWifiStep::init_wifi_manager / apply_wifi_backend_state): a state
+// observer added AFTER the backend's initial READY has already fired must NOT
+// be replayed that READY — add_state_observer() only push_backs. This is
+// precisely why the wizard step calls apply_wifi_backend_state() once
+// immediately after subscribing instead of relying on the observer to deliver
+// current state. If someone "fixes" add_state_observer to replay the last
+// event, the wizard would double-apply (and double-kick the scan); this test
+// fails first.
+TEST_CASE_METHOD(WiFiManagerTestFixture,
+                 "State observer added after READY is not replayed the READY",
+                 "[.disabled][macos-wifi][network][observers][slow]") {
+#ifdef HELIX_ENABLE_MOCKS
+    MockWifiGuard mock_guard;
+
+    // Rebuild under mock-wifi config so the backend is the mock that fires
+    // READY shortly after start_async() (kicked from the constructor).
+    wifi_manager.reset();
+    wifi_manager = std::make_shared<WiFiManager>(/*silent=*/true);
+    wifi_manager->init_self_reference(wifi_manager);
+
+    // Wait for the asynchronous READY to land. The mock backend reports
+    // is_enabled()==true once it has connected to its simulated supplicant.
+    bool ready = wait_for_condition(
+        [this]() {
+            helix::ui::UpdateQueue::instance().drain();
+            return wifi_manager->is_enabled();
+        },
+        5000);
+    REQUIRE(ready);
+
+    // Subscribe AFTER READY already fired.
+    helix::AsyncLifetimeGuard lifetime;
+    std::atomic<int> fires{0};
+    wifi_manager->add_state_observer(lifetime.token(), [&fires]() { fires.fetch_add(1); });
+
+    // Drain a while: no state change occurs, and the already-fired READY must
+    // not be replayed to the late subscriber.
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500)) {
+        helix::ui::UpdateQueue::instance().drain();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    REQUIRE(fires.load() == 0);
+#else
+    SUCCEED("Mocks disabled in this build — observer test skipped");
+#endif
+}
