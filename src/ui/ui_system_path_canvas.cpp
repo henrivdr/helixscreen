@@ -6,6 +6,8 @@
 #include "ui_fonts.h"
 #include "ui_spool_drawing.h"
 
+#include "filament_path_geometry.h"
+#include "filament_tube_stroker.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_parser.h"
 #include "helix-xml/src/xml/lv_xml_widget.h"
@@ -205,270 +207,65 @@ static inline lv_color_t sp_lighten(lv_color_t c, uint8_t amt) {
     return ui_color_lighten(c, amt);
 }
 
-static void draw_flat_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                           lv_color_t color, int32_t width, bool cap_start = true,
-                           bool cap_end = true) {
-    lv_draw_line_dsc_t line_dsc;
-    lv_draw_line_dsc_init(&line_dsc);
-    line_dsc.color = color;
-    line_dsc.width = width;
-    line_dsc.p1.x = x1;
-    line_dsc.p1.y = y1;
-    line_dsc.p2.x = x2;
-    line_dsc.p2.y = y2;
-    line_dsc.round_start = cap_start;
-    line_dsc.round_end = cap_end;
-    lv_draw_line(layer, &line_dsc);
+// Tube rendering now routes through the shared concentric stroker
+// (filament_tube_stroker.h), so the overview's curves are the same clean
+// quarter-arc fillets as the detail panel. Overview lanes are intentionally
+// thinner/dimmer than the detail panel — those width/color choices are made by
+// the callers and passed straight through here via LaneStyle.
+namespace pg = helix::ui::pathgeo;
+
+// Build a solid-tube LaneStyle for the overview. The overview never draws a
+// hollow PTFE bore — idle lanes are simply dimmer solid tubes — so `solid` is
+// always true. `active` lanes get the wide glow backdrop (matches the detail
+// panel's highlighted-path treatment).
+static helix::ui::LaneStyle sp_lane_style(lv_color_t color, int32_t width, bool active) {
+    helix::ui::LaneStyle st{};
+    st.solid = true;
+    st.color = color;
+    st.bg = color; // unused for solid tubes
+    st.width = width;
+    st.glow = active;
+    return st;
 }
 
-// 3D tube effect: shadow → body → highlight (same approach as filament_path_canvas)
+// Straight tube between two arbitrary points.
 static void draw_tube_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                           lv_color_t color, int32_t width, bool cap_start = true,
-                           bool cap_end = true) {
-    // Shadow: wider, darker
-    int32_t shadow_extra = LV_MAX(2, width / 2);
-    lv_color_t shadow_color = sp_darken(color, 35);
-    draw_flat_line(layer, x1, y1, x2, y2, shadow_color, width + shadow_extra, cap_start, cap_end);
-
-    // Body
-    draw_flat_line(layer, x1, y1, x2, y2, color, width, cap_start, cap_end);
-
-    // Highlight: narrower, lighter, offset toward top-left light source
-    int32_t hl_width = LV_MAX(1, width * 2 / 5);
-    lv_color_t hl_color = sp_lighten(color, 44);
-
-    int32_t dx = x2 - x1;
-    int32_t dy = y2 - y1;
-    int32_t offset_x = 0;
-    int32_t offset_y = 0;
-    if (dx == 0) {
-        offset_x = (width / 4 + 1);
-    } else if (dy == 0) {
-        offset_y = -(width / 4 + 1);
-    } else {
-        float len = sqrtf((float)(dx * dx + dy * dy));
-        float px = -(float)dy / len;
-        float py = (float)dx / len;
-        if (px + py > 0) {
-            px = -px;
-            py = -py;
-        }
-        int32_t off_amount = width / 4 + 1;
-        offset_x = (int32_t)(px * off_amount);
-        offset_y = (int32_t)(py * off_amount);
-    }
-
-    draw_flat_line(layer, x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y, hl_color,
-                   hl_width, cap_start, cap_end);
+                           lv_color_t color, int32_t width, bool active = false) {
+    pg::FilamentPath path;
+    path.add_line((float)x1, (float)y1, (float)x2, (float)y2);
+    helix::ui::draw_lane(layer, path, sp_lane_style(color, width, active));
 }
 
+// Vertical tube run. cap_start/cap_end were used to suppress round caps at
+// straight↔curve junctions in the old bezier renderer; the concentric stroker
+// joins segments tangentially with butt caps so seams are already seamless, and
+// these params are accepted for call-site compatibility but no longer needed.
 static void draw_vertical_line(lv_layer_t* layer, int32_t x, int32_t y1, int32_t y2,
                                lv_color_t color, int32_t width, bool cap_start = true,
-                               bool cap_end = true) {
-    draw_tube_line(layer, x, y1, x, y2, color, width, cap_start, cap_end);
+                               bool cap_end = true, bool active = false) {
+    LV_UNUSED(cap_start);
+    LV_UNUSED(cap_end);
+    helix::ui::draw_lane_vline(layer, x, y1, y2, sp_lane_style(color, width, active));
 }
 
+// Horizontal tube run (bypass merge line).
 static void draw_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
-                      lv_color_t color, int32_t width) {
-    draw_tube_line(layer, x1, y1, x2, y2, color, width);
+                      lv_color_t color, int32_t width, bool active = false) {
+    draw_tube_line(layer, x1, y1, x2, y2, color, width, active);
 }
 
-// Curved tube drawing (cubic bezier) — S-curve routing for clean entry angles
-static constexpr int CURVE_SEGMENTS = 16;
-
-// Layer-by-layer curved tube for smooth joints (no visible segment boundaries)
-// Uses cubic bezier with two control points for S-curve shaping:
-//   CP1 controls departure angle (below start → departs downward)
-//   CP2 controls arrival angle (above end → arrives from above)
-static void draw_curved_tube(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t cx1, int32_t cy1,
-                             int32_t cx2, int32_t cy2, int32_t x1, int32_t y1, lv_color_t color,
-                             int32_t width, bool cap_start = true, bool cap_end = true) {
-    struct Pt {
-        int32_t x, y;
-    };
-    Pt pts[CURVE_SEGMENTS + 1];
-    pts[0] = {x0, y0};
-    for (int i = 1; i <= CURVE_SEGMENTS; i++) {
-        float t = (float)i / CURVE_SEGMENTS;
-        float inv = 1.0f - t;
-        float b0 = inv * inv * inv;
-        float b1 = 3.0f * inv * inv * t;
-        float b2 = 3.0f * inv * t * t;
-        float b3 = t * t * t;
-        pts[i] = {(int32_t)(b0 * x0 + b1 * cx1 + b2 * cx2 + b3 * x1),
-                  (int32_t)(b0 * y0 + b1 * cy1 + b2 * cy2 + b3 * y1)};
-    }
-
-    // Round caps between interior segments (overdraw is invisible since same color).
-    // Optionally suppress start/end caps at junction with adjacent straight segments.
-    // Pass 1: Shadow
-    int32_t shadow_extra = LV_MAX(2, width / 2);
-    lv_color_t shadow_color = sp_darken(color, 35);
-    for (int i = 0; i < CURVE_SEGMENTS; i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == CURVE_SEGMENTS - 1) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, shadow_color,
-                       width + shadow_extra, cs, ce);
-    }
-
-    // Pass 2: Body
-    for (int i = 0; i < CURVE_SEGMENTS; i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == CURVE_SEGMENTS - 1) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, color, width, cs, ce);
-    }
-
-    // Pass 3: Highlight
-    int32_t hl_width = LV_MAX(1, width * 2 / 5);
-    lv_color_t hl_color = sp_lighten(color, 44);
-    int32_t dx = x1 - x0;
-    int32_t dy = y1 - y0;
-    int32_t offset_x = 0;
-    int32_t offset_y = 0;
-    if (dx == 0) {
-        offset_x = (width / 4 + 1);
-    } else if (dy == 0) {
-        offset_y = -(width / 4 + 1);
-    } else {
-        float len = sqrtf((float)(dx * dx + dy * dy));
-        float px = -(float)dy / len;
-        float py = (float)dx / len;
-        if (px + py > 0) {
-            px = -px;
-            py = -py;
-        }
-        int32_t off_amount = width / 4 + 1;
-        offset_x = (int32_t)(px * off_amount);
-        offset_y = (int32_t)(py * off_amount);
-    }
-    for (int i = 0; i < CURVE_SEGMENTS; i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == CURVE_SEGMENTS - 1) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x + offset_x, pts[i].y + offset_y, pts[i + 1].x + offset_x,
-                       pts[i + 1].y + offset_y, hl_color, hl_width, cs, ce);
-    }
-}
-
-// ============================================================================
-// Routed Tube Drawing (pipe-style: vertical → arc → horizontal → arc → vertical)
-// ============================================================================
-// Draws a plumbing-style routed path with perfectly vertical entry/exit and
-// smooth quarter-circle arc transitions to a horizontal run.
-
-static constexpr int ARC_STEPS = 8;
-
-struct RoutePt {
-    int32_t x, y;
-};
-
-// Build the point array for a routed path
-static int build_routed_path(RoutePt* pts, int32_t sx, int32_t sy, int32_t ex, int32_t ey,
-                             int32_t horiz_y, int32_t arc_r) {
-    int n = 0;
-
-    if (sx == ex) {
-        pts[n++] = {sx, sy};
-        pts[n++] = {ex, ey};
-        return n;
-    }
-
-    bool going_right = (ex > sx);
-    int32_t dir = going_right ? 1 : -1;
-
-    // Clamp arc radius to available space
-    int32_t horiz_space = going_right ? (ex - sx) : (sx - ex);
-    int32_t vert_space_top = horiz_y - sy;
-    int32_t vert_space_bot = ey - horiz_y;
-    arc_r = LV_MIN(arc_r, horiz_space / 2);
-    arc_r = LV_MIN(arc_r, vert_space_top);
-    arc_r = LV_MIN(arc_r, vert_space_bot);
-    arc_r = LV_MAX(arc_r, 2);
-
-    // Start
-    pts[n++] = {sx, sy};
-
-    // End of first vertical
-    pts[n++] = {sx, horiz_y - arc_r};
-
-    // First arc: vertical → horizontal
-    float cx1 = (float)(sx + dir * arc_r);
-    float cy1 = (float)(horiz_y - arc_r);
-    float a1_start = going_right ? (float)M_PI : 0.0f;
-    float a1_end = (float)(M_PI / 2.0);
-
-    for (int s = 1; s <= ARC_STEPS; s++) {
-        float t = (float)s / ARC_STEPS;
-        float angle = a1_start + t * (a1_end - a1_start);
-        pts[n++] = {(int32_t)(cx1 + arc_r * cosf(angle)), (int32_t)(cy1 + arc_r * sinf(angle))};
-    }
-
-    // End of horizontal (only if there's actual horizontal distance beyond the arcs)
-    int32_t horiz_end_x = ex - dir * arc_r;
-    int32_t horiz_start_x = sx + dir * arc_r;
-    if ((going_right && horiz_end_x > horiz_start_x + 1) ||
-        (!going_right && horiz_end_x < horiz_start_x - 1)) {
-        pts[n++] = {horiz_end_x, horiz_y};
-    }
-
-    // Second arc: horizontal → vertical
-    float cx2 = (float)(ex - dir * arc_r);
-    float cy2 = (float)(horiz_y + arc_r);
-    float a2_start = (float)(3.0 * M_PI / 2.0);
-    float a2_end = going_right ? (float)(2.0 * M_PI) : (float)M_PI;
-
-    for (int s = 1; s <= ARC_STEPS; s++) {
-        float t = (float)s / ARC_STEPS;
-        float angle = a2_start + t * (a2_end - a2_start);
-        pts[n++] = {(int32_t)(cx2 + arc_r * cosf(angle)), (int32_t)(cy2 + arc_r * sinf(angle))};
-    }
-
-    // End
-    pts[n++] = {ex, ey};
-
-    return n;
-}
-
-// Draw 3D tube along a polyline (multi-pass: shadow → body → highlight)
-static void draw_tube_polyline(lv_layer_t* layer, const RoutePt* pts, int count, lv_color_t color,
-                               int32_t width, bool cap_start = true, bool cap_end = true) {
-    if (count < 2)
-        return;
-
-    int32_t shadow_extra = LV_MAX(2, width / 2);
-    lv_color_t shadow_color = sp_darken(color, 35);
-    for (int i = 0; i < count - 1; i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == count - 2) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, shadow_color,
-                       width + shadow_extra, cs, ce);
-    }
-
-    for (int i = 0; i < count - 1; i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == count - 2) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, color, width, cs, ce);
-    }
-
-    // Highlight: consistent left offset (light from upper-left)
-    int32_t hl_width = LV_MAX(1, width * 2 / 5);
-    lv_color_t hl_color = sp_lighten(color, 44);
-    int32_t hl_off = width / 4 + 1;
-    for (int i = 0; i < count - 1; i++) {
-        bool cs = (i == 0) ? cap_start : true;
-        bool ce = (i == count - 2) ? cap_end : true;
-        draw_flat_line(layer, pts[i].x + hl_off, pts[i].y, pts[i + 1].x + hl_off, pts[i + 1].y,
-                       hl_color, hl_width, cs, ce);
-    }
-}
-
-// Draw a routed tube: vert → arc → horiz → arc → vert
+// Routed tube: vertical → quarter-arc fillet → horizontal → quarter-arc fillet
+// → vertical, from (sx,sy) down to (ex,ey). route_orthogonal picks its own
+// mid-height horizontal run and clamps the fillet radius to the available
+// space, so the old horiz_y / arc_r hints are no longer needed (kept in the
+// signature for call-site compatibility).
 static void draw_routed_tube(lv_layer_t* layer, int32_t sx, int32_t sy, int32_t ex, int32_t ey,
                              int32_t horiz_y, int32_t arc_r, lv_color_t color, int32_t width,
-                             bool cap_start = true, bool cap_end = true) {
-    constexpr int MAX_PTS = 2 + ARC_STEPS + 1 + ARC_STEPS + 1;
-    RoutePt pts[MAX_PTS];
-    int n = build_routed_path(pts, sx, sy, ex, ey, horiz_y, arc_r);
-    draw_tube_polyline(layer, pts, n, color, width, cap_start, cap_end);
+                             bool active = false) {
+    LV_UNUSED(horiz_y);
+    LV_UNUSED(arc_r);
+    helix::ui::draw_lane_route(layer, sx, sy, ex, ey, helix::ui::FILLET_RADIUS,
+                               sp_lane_style(color, width, active));
 }
 
 // Push-to-connect fitting: shadow/highlight matching tube language
@@ -775,16 +572,17 @@ static void system_path_draw_cb(lv_event_t* e) {
 
                     if (has_sensor) {
                         draw_vertical_line(layer, unit_x, entry_y, sensor_dot_y - sensor_r,
-                                           line_color, line_w);
+                                           line_color, line_w, true, true, /*active=*/is_active);
                         draw_vertical_line(layer, unit_x, sensor_dot_y + sensor_r, hub_merge_y,
-                                           line_color, line_w, true, /*cap_end=*/false);
+                                           line_color, line_w, true, /*cap_end=*/false,
+                                           /*active=*/is_active);
                         bool filled = data->unit_hub_triggered[i];
                         lv_color_t dot_color =
                             filled ? (is_active ? active_color_lv : idle_color) : idle_color;
                         draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, sensor_r);
                     } else {
                         draw_vertical_line(layer, unit_x, entry_y, hub_merge_y, line_color, line_w,
-                                           true, /*cap_end=*/false);
+                                           true, /*cap_end=*/false, /*active=*/is_active);
                     }
 
                     int32_t dist = unit_x > tool_x ? (unit_x - tool_x) : (tool_x - unit_x);
@@ -886,7 +684,7 @@ static void system_path_draw_cb(lv_event_t* e) {
             if (route.start_x == route.end_x) {
                 draw_tube_line(layer, route.start_x, route.start_y, route.end_x, route.end_y,
                                is_active ? active_color_lv : idle_color,
-                               is_active ? line_active : line_idle);
+                               is_active ? line_active : line_idle, /*active=*/tool_active);
             } else if (route.is_hub) {
                 // HUB: 20%-40% of own range for clean hub-top arrival
                 float f = 0.20f;
@@ -900,8 +698,7 @@ static void system_path_draw_cb(lv_event_t* e) {
                 horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
 
                 draw_routed_tube(layer, route.start_x, route.start_y, route.end_x, route.end_y,
-                                 horiz_y, arc_r, route_color, route_w,
-                                 /*cap_start=*/false);
+                                 horiz_y, arc_r, route_color, route_w, /*active=*/tool_active);
             } else {
                 // PARALLEL: idx 0 (leftmost end_x) at par_bot_y (lowest),
                 // idx N-1 (rightmost end_x) at par_top_y (highest)
@@ -911,8 +708,7 @@ static void system_path_draw_cb(lv_event_t* e) {
                 horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
 
                 draw_routed_tube(layer, route.start_x, route.start_y, route.end_x, route.end_y,
-                                 horiz_y, arc_r, route_color, route_w,
-                                 /*cap_start=*/false);
+                                 horiz_y, arc_r, route_color, route_w, /*active=*/tool_active);
             }
         }
 
@@ -937,7 +733,7 @@ static void system_path_draw_cb(lv_event_t* e) {
                 lv_color_t out_color = tool_active ? active_color_lv : idle_color;
                 int32_t out_w = tool_active ? line_active : line_idle;
                 draw_vertical_line(layer, hi.tool_x, hi.mini_hub_y + hi.mini_hub_h / 2, tools_y,
-                                   out_color, out_w);
+                                   out_color, out_w, true, true, /*active=*/tool_active);
             }
         }
 
@@ -1016,25 +812,26 @@ static void system_path_draw_cb(lv_event_t* e) {
             // to eliminate visible endcap seam at straight→curve junction
             if (has_sensor) {
                 draw_vertical_line(layer, unit_x, entry_y, sensor_dot_y - sensor_r, line_color,
-                                   line_w);
+                                   line_w, true, true, /*active=*/is_active);
                 draw_vertical_line(layer, unit_x, sensor_dot_y + sensor_r, merge_y, line_color,
-                                   line_w, true, /*cap_end=*/false);
+                                   line_w, true, /*cap_end=*/false, /*active=*/is_active);
                 bool filled = data->unit_hub_triggered[i];
                 lv_color_t dot_color =
                     filled ? (is_active ? active_color_lv : idle_color) : idle_color;
                 draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, sensor_r);
             } else {
                 draw_vertical_line(layer, unit_x, entry_y, merge_y, line_color, line_w, true,
-                                   /*cap_end=*/false);
+                                   /*cap_end=*/false, /*active=*/is_active);
             }
 
-            // S-curve from unit to hub — CPs at ~86% for vertical ends
+            // Unit → hub convergence: vertical → quarter-arc fillet → horizontal
+            // → quarter-arc fillet → vertical, from the unit column down to the
+            // hub top. Same clean orthogonal routing as the detail panel
+            // (replaces the old hand-flattened cubic-bezier S-curve).
             {
                 int32_t end_y_hub = hub_y - hub_h / 2;
-                int32_t drop = end_y_hub - merge_y;
-                draw_curved_tube(layer, unit_x, merge_y, unit_x, merge_y + drop * 6 / 7, center_x,
-                                 end_y_hub - drop * 6 / 7, center_x, end_y_hub, line_color, line_w,
-                                 /*cap_start=*/false);
+                draw_routed_tube(layer, unit_x, merge_y, center_x, end_y_hub, /*horiz_y=*/0,
+                                 /*arc_r=*/0, line_color, line_w, /*active=*/is_active);
             }
         }
 
@@ -1050,8 +847,8 @@ static void system_path_draw_cb(lv_event_t* e) {
 
             // Horizontal line from spool/merge to hub (line ends inside the
             // spool widget; the widget is opaque so the overlap isn't visible).
-            draw_line(layer, bg.bypass_x, bg.merge_y, bg.center_x + sensor_r, bg.merge_y,
-                      bp_color, bp_width);
+            draw_line(layer, bg.bypass_x, bg.merge_y, bg.center_x + sensor_r, bg.merge_y, bp_color,
+                      bp_width, /*active=*/bp_active);
             draw_sensor_dot(layer, bg.center_x, bg.merge_y, bp_color, bp_active, sensor_r);
         }
 
@@ -1085,10 +882,11 @@ static void system_path_draw_cb(lv_event_t* e) {
                 draw_vertical_line(layer, center_x, hub_bottom, bypass_merge_y, idle_color,
                                    line_idle);
                 draw_vertical_line(layer, center_x, bypass_merge_y, nozzle_top,
-                                   lv_color_hex(data->bypass_color), line_active);
+                                   lv_color_hex(data->bypass_color), line_active, true, true,
+                                   /*active=*/true);
             } else if (unit_active) {
                 draw_vertical_line(layer, center_x, hub_bottom, nozzle_top, active_color_lv,
-                                   line_active);
+                                   line_active, true, true, /*active=*/true);
             } else {
                 draw_vertical_line(layer, center_x, hub_bottom, nozzle_top, idle_color, line_idle);
             }
@@ -1124,12 +922,10 @@ static void system_path_draw_cb(lv_event_t* e) {
                                           data->extruder_scale);
                 break;
             case helix::ToolheadStyle::CREALITY_K1:
-                draw_nozzle_creality_k1(layer, center_x, nozzle_y, noz_color,
-                                        data->extruder_scale);
+                draw_nozzle_creality_k1(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
                 break;
             case helix::ToolheadStyle::CREALITY_K2:
-                draw_nozzle_creality_k2(layer, center_x, nozzle_y, noz_color,
-                                        data->extruder_scale);
+                draw_nozzle_creality_k2(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
                 break;
             default:
                 draw_nozzle_bambu(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
@@ -1497,8 +1293,7 @@ void ui_system_path_canvas_set_bypass_has_spool(lv_obj_t* obj, bool has_spool) {
     }
 }
 
-bool ui_system_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out,
-                                                int32_t* cy_out) {
+bool ui_system_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out) {
     auto* data = get_data(obj);
     if (!data || !data->has_bypass || data->total_tools > 1) {
         return false;

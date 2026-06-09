@@ -11,6 +11,7 @@
 #include "ams_types.h"
 #include "display_settings_manager.h"
 #include "filament_path_geometry.h"
+#include "filament_tube_stroker.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_parser.h"
 #include "helix-xml/src/xml/lv_xml_widget.h"
@@ -39,16 +40,24 @@
 using namespace helix;
 namespace pg = helix::ui::pathgeo;
 
-// Detect low-performance platforms at compile time or runtime.
-// Returns true on K1/K2/MIPS (weak CPUs) or constrained-memory devices.
-static bool reduced_effects() {
-#if defined(HELIX_PLATFORM_K2) || defined(HELIX_PLATFORM_MIPS)
-    return true;
-#else
-    static const bool cached = helix::get_system_memory_info().is_constrained_device();
-    return cached;
-#endif
-}
+// Shared concentric tube stroker (see filament_tube_stroker.h). These symbols
+// were extracted from this file so ui_system_path_canvas can render identical
+// quarter-arc fillet curves. Pull them in unqualified to keep the local draw
+// code (and the bit-identical legacy look) unchanged.
+using helix::ui::build_passes;
+using helix::ui::draw_lane;
+using helix::ui::draw_lane_hline;
+using helix::ui::draw_lane_route;
+using helix::ui::draw_lane_vline;
+using helix::ui::FILLET_RADIUS;
+using helix::ui::get_glow_color;
+using helix::ui::GLOW_OPA;
+using helix::ui::GLOW_WIDTH_EXTRA;
+using helix::ui::lane_style;
+using helix::ui::LaneStyle;
+using helix::ui::reduced_effects;
+using helix::ui::stroke_path;
+using helix::ui::TubePass;
 
 // ============================================================================
 // Constants
@@ -99,9 +108,8 @@ static constexpr int LINE_WIDTH_IDLE_BASE = 2;
 static constexpr int LINE_WIDTH_ACTIVE_BASE = 3;
 static constexpr int SENSOR_RADIUS_BASE = 4;
 
-// Centerline fillet radius for orthogonal lane routing (route_orthogonal clamps
-// internally, so tight layouts degrade gracefully to jogs / straight runs).
-static constexpr float FILLET_RADIUS = 12.0f;
+// Centerline fillet radius for orthogonal lane routing lives in
+// filament_tube_stroker.h (helix::ui::FILLET_RADIUS, pulled in above).
 
 // Default filament color (used when no active filament)
 static constexpr uint32_t DEFAULT_FILAMENT_COLOR = 0x4488FF;
@@ -797,44 +805,23 @@ static void start_output_x_animation(lv_obj_t* obj, FilamentPathData* data, int3
 // ============================================================================
 // Color Manipulation Helpers
 // ============================================================================
+// Thin aliases over the shared stroker/ams_draw color math so the many local
+// call sites (sensor dots, hub tinting, buffer coil) stay unchanged.
 
-static lv_color_t ph_darken(lv_color_t c, uint8_t amt) {
-    return lv_color_make(c.red > amt ? c.red - amt : 0, c.green > amt ? c.green - amt : 0,
-                         c.blue > amt ? c.blue - amt : 0);
+static inline lv_color_t ph_darken(lv_color_t c, uint8_t amt) {
+    return helix::ui::tube_darken(c, amt);
 }
 
-static lv_color_t ph_lighten(lv_color_t c, uint8_t amt) {
-    return lv_color_make((c.red + amt > 255) ? 255 : c.red + amt,
-                         (c.green + amt > 255) ? 255 : c.green + amt,
-                         (c.blue + amt > 255) ? 255 : c.blue + amt);
+static inline lv_color_t ph_lighten(lv_color_t c, uint8_t amt) {
+    return helix::ui::tube_lighten(c, amt);
 }
 
-static lv_color_t ph_blend(lv_color_t c1, lv_color_t c2, float factor) {
-    factor = LV_CLAMP(factor, 0.0f, 1.0f);
-    return lv_color_make((uint8_t)(c1.red + (c2.red - c1.red) * factor),
-                         (uint8_t)(c1.green + (c2.green - c1.green) * factor),
-                         (uint8_t)(c1.blue + (c2.blue - c1.blue) * factor));
+static inline lv_color_t ph_blend(lv_color_t c1, lv_color_t c2, float factor) {
+    return helix::ui::tube_blend(c1, c2, factor);
 }
 
-// ============================================================================
-// Glow Effect
-// ============================================================================
-// Soft bloom behind active filament paths. Uses a wide, low-opacity line in a
-// lighter tint of the filament color. For very dark filaments (black), uses a
-// contrasting blue tint so the glow is still visible.
-
-static constexpr lv_opa_t GLOW_OPA = 60;       // Base glow opacity
-static constexpr int32_t GLOW_WIDTH_EXTRA = 6; // Extra width beyond tube on each side
-
-// Get a suitable glow color from a filament color
-static lv_color_t get_glow_color(lv_color_t color) {
-    // If the filament is very dark, use a contrasting blue tint
-    int brightness = color.red + color.green + color.blue;
-    if (brightness < 120) {
-        return lv_color_hex(0x4466AA); // Dark blue glow for black/dark filaments
-    }
-    return ph_lighten(color, 60);
-}
+// Glow color helper + GLOW_OPA / GLOW_WIDTH_EXTRA live in
+// filament_tube_stroker.h (helix::ui::get_glow_color, pulled in above).
 
 // ============================================================================
 // Flow Particle Drawing
@@ -909,208 +896,10 @@ static void draw_flow_dots_path(lv_layer_t* layer, const pg::FilamentPath& path,
     }
 }
 
-// ============================================================================
-// Tube Stroker (concentric passes over a FilamentPath)
-// ============================================================================
-// A tube is rendered as a set of CONCENTRIC stroke passes (no perpendicular
-// offsets). Straight runs are drawn with lv_draw_line (float coords — we build
-// with LV_USE_FLOAT) and corners with lv_draw_arc (true anti-aliased arcs).
-// Round caps live only on the very first seg-start and last seg-end of the
-// path; interior joints use butt caps (segments join tangentially, so butt
-// joints are seamless and translucent passes don't double-blend).
-
-// One concentric stroke pass.
-struct TubePass {
-    lv_color_t color;
-    int32_t width;
-    lv_opa_t opa;
-};
-
-// Build-from-state descriptor for a lane's tube.
-struct LaneStyle {
-    bool solid;       // solid filament tube vs hollow idle PTFE
-    lv_color_t color; // filament color (solid) or idle wall color (hollow)
-    lv_color_t bg;    // background for hollow bore
-    int32_t width;    // tube outer width
-    bool glow;        // wide low-opacity backdrop (active lanes only)
-};
-
-// Stroke a path with N concentric passes.
-static void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass* passes,
-                        int n_passes) {
-    if (path.count <= 0)
-        return;
-
-    for (int pi = 0; pi < n_passes; pi++) {
-        const TubePass& pass = passes[pi];
-        if (pass.width <= 0)
-            continue;
-
-        for (int i = 0; i < path.count; i++) {
-            const pg::PathSeg& s = path.segs[i];
-            bool first = (i == 0);
-            bool last = (i == path.count - 1);
-
-            if (s.type == pg::PathSeg::LINE) {
-                lv_draw_line_dsc_t dsc;
-                lv_draw_line_dsc_init(&dsc);
-                dsc.color = pass.color;
-                dsc.width = pass.width;
-                dsc.opa = pass.opa;
-                // Float coords passed directly (LV_USE_FLOAT) — no rounding.
-                dsc.p1.x = s.p0.x;
-                dsc.p1.y = s.p0.y;
-                dsc.p2.x = s.p1.x;
-                dsc.p2.y = s.p1.y;
-                dsc.round_start = first;
-                dsc.round_end = last;
-                lv_draw_line(layer, &dsc);
-            } else {
-                // ARC: lv_draw_arc.radius is the OUTER radius, so add half the
-                // stroke width to center the pass on the centerline. center is
-                // lv_point_t (int) — round once.
-                lv_draw_arc_dsc_t dsc;
-                lv_draw_arc_dsc_init(&dsc);
-                dsc.color = pass.color;
-                dsc.width = pass.width;
-                dsc.opa = pass.opa;
-                dsc.center.x = (int32_t)lroundf(s.center.x);
-                dsc.center.y = (int32_t)lroundf(s.center.y);
-                dsc.radius =
-                    (uint16_t)LV_MAX(1, (int32_t)lroundf(s.radius + (float)pass.width / 2.0f));
-
-                // LVGL angle convention (verified from
-                // lib/lvgl/src/draw/sw/lv_draw_sw_arc.c and lv_draw_sw_mask.c):
-                //   - degrees, 0 at 3 o'clock, increasing CLOCKWISE on screen
-                //     (matches pathgeo: +x is 0, +y rotates toward larger angles).
-                //   - the visible arc is swept clockwise from start_angle to
-                //     end_angle; when end < start the sweep wraps through 360
-                //     (lv_draw_sw_mask_angle_init: delta = 360 - start + end).
-                //   - inputs are NOT wrapped for negatives: lv_draw_sw_arc only
-                //     reduces angles >= 360, and lv_draw_sw_mask_angle_init
-                //     CLAMPS angles < 0 to 0 (not wrap). A negative start/end
-                //     (e.g. pathgeo arc2's a0 = -90deg) therefore collapses to a
-                //     bogus ~270deg / full-ring sweep. So both endpoints must be
-                //     normalized into [0,360) before handing them to LVGL.
-                const float kRad2Deg = 57.29577951308232f;
-                auto norm360 = [](float deg) {
-                    deg = std::fmod(deg, 360.0f);
-                    if (deg < 0.0f)
-                        deg += 360.0f;
-                    return deg;
-                };
-                float a0_deg = norm360(s.start_angle * kRad2Deg);
-                float a1_deg = norm360((s.start_angle + s.sweep) * kRad2Deg);
-                // Order endpoints so LVGL's clockwise (increasing, wrapping)
-                // sweep traces the true arc. Positive pathgeo sweep already runs
-                // clockwise from start; negative sweep runs from the endpoint.
-                // Normalizing each endpoint independently preserves that
-                // relationship, and LVGL's end<start wrap selects the short arc.
-                if (s.sweep >= 0.0f) {
-                    dsc.start_angle = a0_deg;
-                    dsc.end_angle = a1_deg;
-                } else {
-                    dsc.start_angle = a1_deg;
-                    dsc.end_angle = a0_deg;
-                }
-                dsc.rounded = false; // butt ends
-                lv_draw_arc(layer, &dsc);
-            }
-        }
-    }
-}
-
-// Build the concentric pass list for a LaneStyle. Keeps the ph_darken/ph_lighten
-// numbers consistent with the legacy tube look. Returns the number of passes
-// written into `out` (caller sizes out for at least 4).
-static int build_passes(const LaneStyle& style, TubePass* out) {
-    const bool simple = reduced_effects();
-    int n = 0;
-    if (style.solid) {
-        if (style.glow && !simple) {
-            out[n++] = {get_glow_color(style.color), style.width + GLOW_WIDTH_EXTRA, GLOW_OPA};
-        }
-        if (!simple) {
-            // Outline (darker, slightly wider).
-            out[n++] = {ph_darken(style.color, 35), style.width + 2, LV_OPA_COVER};
-        }
-        // Body (always).
-        out[n++] = {style.color, style.width, LV_OPA_COVER};
-        if (!simple) {
-            // Core highlight (lighter, narrower) — concentric, no offset.
-            out[n++] = {ph_lighten(style.color, 44), LV_MAX(1, style.width * 2 / 5), LV_OPA_COVER};
-        }
-    } else {
-        if (!simple) {
-            out[n++] = {ph_darken(style.color, 25), style.width + 2, LV_OPA_COVER};
-        }
-        // Wall.
-        out[n++] = {style.color, style.width, LV_OPA_COVER};
-        // Bore (background show-through).
-        out[n++] = {style.bg, LV_MAX(1, style.width - 2), LV_OPA_COVER};
-    }
-    return n;
-}
-
-// Build a LaneStyle from slot state in ONE place.
-static LaneStyle lane_style(bool has_filament, lv_color_t tool_color, lv_color_t idle_color,
-                            lv_color_t bg, int32_t active_w) {
-    LaneStyle st{};
-    st.solid = has_filament;
-    st.color = has_filament ? tool_color : idle_color;
-    st.bg = bg;
-    st.width = active_w;
-    st.glow = has_filament; // active lanes get the glow backdrop
-    return st;
-}
-
-// Draw a path with a style; optionally record (append) the path's segments into
-// the active-path cache so the flow-dot / tip animation walks exactly what was
-// drawn. Geometry is computed once.
-static void draw_lane(lv_layer_t* layer, const pg::FilamentPath& path, const LaneStyle& style,
-                      pg::FilamentPath* record = nullptr) {
-    TubePass passes[4];
-    int n = build_passes(style, passes);
-    stroke_path(layer, path, passes, n);
-    if (record) {
-        for (int i = 0; i < path.count && record->count < pg::FilamentPath::MAX_SEGS; i++) {
-            record->segs[record->count++] = path.segs[i];
-        }
-    }
-}
-
-// Convenience: vertical tube run from (x,y0) to (x,y1).
-static void draw_lane_vline(lv_layer_t* layer, int32_t x, int32_t y0, int32_t y1,
-                            const LaneStyle& style, pg::FilamentPath* record = nullptr) {
-    pg::FilamentPath path;
-    path.add_line((float)x, (float)y0, (float)x, (float)y1);
-    TubePass passes[4];
-    int n = build_passes(style, passes);
-    stroke_path(layer, path, passes, n);
-    // Preserve the old guard: only record forward (downward) verticals.
-    if (record && y1 > y0) {
-        for (int i = 0; i < path.count && record->count < pg::FilamentPath::MAX_SEGS; i++)
-            record->segs[record->count++] = path.segs[i];
-    }
-}
-
-// Convenience: orthogonal route (vertical -> fillet -> horizontal -> fillet ->
-// vertical) from (x0,y0) down to (x1,y1).
-static void draw_lane_route(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
-                            float fillet_r, const LaneStyle& style,
-                            pg::FilamentPath* record = nullptr) {
-    pg::FilamentPath path;
-    pg::route_orthogonal(path, (float)x0, (float)y0, (float)x1, (float)y1, fillet_r);
-    draw_lane(layer, path, style, record);
-}
-
-// Convenience: horizontal tube run from (x0,y) to (x1,y) (bypass horizontal).
-static void draw_lane_hline(lv_layer_t* layer, int32_t x0, int32_t x1, int32_t y,
-                            const LaneStyle& style, pg::FilamentPath* record = nullptr) {
-    pg::FilamentPath path;
-    path.add_line((float)x0, (float)y, (float)x1, (float)y);
-    draw_lane(layer, path, style, record);
-}
+// The concentric Tube Stroker (TubePass, LaneStyle, stroke_path, build_passes,
+// lane_style, draw_lane + vline/route/hline) now lives in
+// filament_tube_stroker.{h,cpp} so ui_system_path_canvas can render identical
+// quarter-arc fillet curves. Pulled in via the `using` declarations above.
 
 // ============================================================================
 // Drawing Functions
