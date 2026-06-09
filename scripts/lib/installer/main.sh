@@ -383,6 +383,8 @@ main() {
         log_info "Recognized printer model: ${seed_pid} -- applying install-time defaults"
         seed_settings_for_printer "$seed_pid" || true
         install_klipper_include_for_printer "$seed_pid" || true
+    else
+        seed_from_moonraker_detection || true
     fi
 
     # Configure ALSA "default" when the board has no card 0 (e.g. Pi + HDMI-audio

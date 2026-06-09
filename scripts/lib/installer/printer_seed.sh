@@ -228,6 +228,208 @@ PY
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# Tier-2: Moonraker-based printer detection with confidence gate
+# ---------------------------------------------------------------------------
+
+# Call the installed helix-screen binary in detect-printer mode.
+# Prints the JSON verdict line on success, empty string on failure.
+# Never fails — Moonraker unreachable is a graceful no-op.
+detect_printer_via_moonraker() {
+    local bin="${HELIX_SCREEN_BIN:-${INSTALL_DIR:-/opt/helixscreen}/helix-screen}"
+    [ -x "$bin" ] || { echo ""; return 0; }
+    local out
+    if out=$("$bin" --detect-printer --host 127.0.0.1 --port 7125 2>/dev/null); then
+        echo "$out"
+    else
+        echo ""
+    fi
+    return 0
+}
+
+# Extract a single string field from a JSON object stored in an env var.
+# Prints the value, or empty string if absent / null.
+# Requires python3; if absent, prints empty and returns.
+_json_field() {
+    command -v python3 >/dev/null 2>&1 || { echo ""; return 0; }
+    JSON_STR="$1" JSON_KEY="$2" python3 - <<'PY'
+import json, os
+try:
+    v = json.loads(os.environ["JSON_STR"]).get(os.environ["JSON_KEY"])
+    print("" if v is None else v)
+except Exception:
+    print("")
+PY
+}
+
+# Seed the FULL preset (B-path) into settings.json.
+# Writes preset["printer"] under printers.<active_id>, seeds top-level display,
+# sets the top-level "preset" marker, and sets wizard_completed=false.
+# This mirrors the runtime apply_preset_file so that first-boot enters
+# preset-mode immediately without waiting for Moonraker detection.
+#
+# Args: $1 = printer_id (e.g. "qidi_q2")
+seed_full_preset_for_printer() {
+    local printer_id="$1"
+    [ -n "$printer_id" ] || return 0
+    local preset_dir
+    preset_dir="$(_helix_preset_dir)"
+    local fragment="${preset_dir}/${printer_id}.json"
+    [ -f "$fragment" ] || return 0
+    if ! command -v python3 >/dev/null 2>&1; then
+        log_warn "python3 not available; skipping full-preset seed for ${printer_id}"
+        return 0
+    fi
+    [ -d "${INSTALL_DIR}/config" ] || $(file_sudo "${INSTALL_DIR}") mkdir -p "${INSTALL_DIR}/config"
+    local settings="${INSTALL_DIR}/config/settings.json"
+    local tmp_out="${settings}.seed.$$"
+    log_info "Seeding FULL preset for ${printer_id} (preset-mode)..."
+    if SETTINGS_PATH="$settings" FRAGMENT_PATH="$fragment" PRESET_ID="$printer_id" TMP_OUT="$tmp_out" python3 - <<'PY'
+import json, os
+
+settings_path = os.environ["SETTINGS_PATH"]
+fragment_path = os.environ["FRAGMENT_PATH"]
+preset_id     = os.environ["PRESET_ID"]
+tmp_out       = os.environ["TMP_OUT"]
+
+def load(p):
+    try:
+        with open(p) as f:
+            d = f.read().strip()
+        o = json.loads(d) if d else {}
+        return o if isinstance(o, dict) else {}
+    except (ValueError, OSError):
+        return {}
+
+def strip_us(o):
+    """Recursively drop _-prefixed provenance keys."""
+    if isinstance(o, dict):
+        return {k: strip_us(v) for k, v in o.items() if not k.startswith("_")}
+    if isinstance(o, list):
+        return [strip_us(v) for v in o]
+    return o
+
+def merge(base, frag):
+    """Fill base with frag keys not already in base (base wins)."""
+    for k, v in frag.items():
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            merge(base[k], v)
+        elif k not in base:
+            base[k] = v
+    return base
+
+base   = load(settings_path)
+preset = strip_us(load(fragment_path))
+
+# Seed top-level display block (device-level, needed at first boot).
+if isinstance(preset.get("display"), dict):
+    base["display"] = merge(base.get("display", {}), preset["display"])
+
+# Place preset["printer"] under printers.<active_id>.
+active   = base.get("active_printer_id", "default")
+printers = base.setdefault("printers", {})
+if not isinstance(printers.get(active), dict):
+    printers[active] = {}
+pnode = printers[active]
+if isinstance(preset.get("printer"), dict):
+    merge(pnode, preset["printer"])
+
+# Top-level structural markers for multi-printer settings shape.
+base["active_printer_id"] = active
+pnode["wizard_completed"] = False
+base["preset"] = preset.get("preset", preset_id)
+
+with open(tmp_out, "w") as f:
+    json.dump(base, f, indent=2)
+    f.write("\n")
+PY
+    then
+        if [ -f "$tmp_out" ] && $(file_sudo "${INSTALL_DIR}/config") mv "$tmp_out" "$settings" 2>/dev/null; then
+            log_success "Seeded FULL preset for ${printer_id}"
+        else
+            log_warn "Could not write full-preset settings.json for ${printer_id}"
+            rm -f "$tmp_out" 2>/dev/null || true
+        fi
+    else
+        log_warn "Failed to merge full preset for ${printer_id}; leaving settings.json unchanged"
+        rm -f "$tmp_out" 2>/dev/null || true
+    fi
+    return 0
+}
+
+# C-path: pre-fill moonraker_host=127.0.0.1 in the default printer node
+# so the app finds Moonraker without any wizard interaction.
+# Idempotent — does NOT overwrite an existing moonraker_host value.
+_seed_moonraker_host_localhost() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    local settings="${INSTALL_DIR}/config/settings.json"
+    local tmp_out="${settings}.host.$$"
+    SETTINGS_PATH="$settings" TMP_OUT="$tmp_out" python3 - <<'PY' || return 0
+import json, os
+
+p = os.environ["SETTINGS_PATH"]
+t = os.environ["TMP_OUT"]
+try:
+    with open(p) as f:
+        d = json.load(f)
+    if not isinstance(d, dict):
+        d = {}
+except Exception:
+    d = {}
+
+a  = d.get("active_printer_id", "default")
+d["active_printer_id"] = a
+pr = d.setdefault("printers", {})
+if not isinstance(pr.get(a), dict):
+    pr[a] = {}
+pr[a].setdefault("moonraker_host", "127.0.0.1")
+
+with open(t, "w") as f:
+    json.dump(d, f, indent=2)
+    f.write("\n")
+PY
+    [ -f "$tmp_out" ] && $(file_sudo "${INSTALL_DIR}/config") mv "$tmp_out" "$settings" 2>/dev/null || rm -f "$tmp_out" 2>/dev/null
+}
+
+# Confidence thresholds for the B/C gate.
+# B (full preset-mode seed): confidence >= MIN_CONFIDENCE AND margin >= MIN_MARGIN
+# C (device-level + host pre-fill): preset present but ambiguous
+# Override at call-site via environment for testing.
+HELIX_DETECT_MIN_CONFIDENCE="${HELIX_DETECT_MIN_CONFIDENCE:-85}"
+HELIX_DETECT_MIN_MARGIN="${HELIX_DETECT_MIN_MARGIN:-10}"
+
+# Tier-2 orchestrator: run helix-screen --detect-printer and apply the
+# appropriate seeding path based on the confidence gate.
+# No-op (success) if Moonraker is unreachable or the verdict has no preset.
+seed_from_moonraker_detection() {
+    local verdict
+    verdict="$(detect_printer_via_moonraker)"
+    [ -n "$verdict" ] || return 0
+
+    local preset conf rconf
+    preset="$(_json_field "$verdict" preset)"
+    conf="$(_json_field "$verdict" confidence)"
+    rconf="$(_json_field "$verdict" runner_up_confidence)"
+
+    # No preset in the verdict → nothing to seed.
+    [ -n "$preset" ] || return 0
+
+    [ -n "$conf" ]  || conf=0
+    [ -n "$rconf" ] || rconf=0
+    local margin=$(( conf - rconf ))
+
+    if [ "$conf" -ge "$HELIX_DETECT_MIN_CONFIDENCE" ] && [ "$margin" -ge "$HELIX_DETECT_MIN_MARGIN" ]; then
+        log_info "Detection B (conf=${conf}, margin=${margin}) -> full preset ${preset}"
+        seed_full_preset_for_printer "$preset"
+    else
+        log_info "Detection C (conf=${conf}, margin=${margin}) -> device-level seed ${preset}"
+        seed_settings_for_printer "$preset"
+        _seed_moonraker_host_localhost
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Detect a known printer-model that needs install-time seeding/config.
 # Prints a printer-id to stdout (empty if none matched).
 #
