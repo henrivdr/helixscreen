@@ -396,3 +396,168 @@ TEST_CASE("route_orthogonal walk is smooth and monotonic (dx<0)", "[filament-pat
         prev_y = cur.y;
     }
 }
+
+// ============================================================================
+// route_polyline_filleted — general filleted-polyline routing
+// ============================================================================
+
+// Analytic length of a filleted polyline: sum of trimmed straight runs plus the
+// arc lengths. We don't predict it; we cross-check path_length against a dense
+// walk instead. These helpers verify tangency at each interior fillet.
+
+// At every LINE->ARC and ARC->LINE joint, endpoints must coincide and tangents
+// must match. route_polyline_filleted produces alternating LINE/ARC/LINE/...,
+// so the generic continuity checker applies directly.
+
+TEST_CASE("route_polyline_filleted 45-degree corner: tangency + sweep sign",
+          "[filament-path][geometry]") {
+    // Right turn: go right, then down-right at 45 degrees.
+    // p0=(0,0) -> V=(100,0) -> p2=(150,50). Interior turn is a clockwise bend
+    // on screen (heading +x then +x+y) => positive sweep.
+    PathPoint pts[3] = {{0.0f, 0.0f}, {100.0f, 0.0f}, {150.0f, 50.0f}};
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 3, 15.0f);
+
+    // LINE, ARC, LINE.
+    REQUIRE(p.count == 3);
+    REQUIRE(p.segs[0].type == PathSeg::LINE);
+    REQUIRE(p.segs[1].type == PathSeg::ARC);
+    REQUIRE(p.segs[2].type == PathSeg::LINE);
+
+    // Clockwise turn on screen (+x -> down-right) => positive sweep.
+    REQUIRE(p.segs[1].sweep > 0.0f);
+
+    check_continuity_and_endpoints(p, 0.0f, 0.0f, 150.0f, 50.0f);
+}
+
+TEST_CASE("route_polyline_filleted left turn yields negative sweep", "[filament-path][geometry]") {
+    // Heading +x then up-right (+x,-y): counter-clockwise on screen => negative sweep.
+    PathPoint pts[3] = {{0.0f, 0.0f}, {100.0f, 0.0f}, {150.0f, -50.0f}};
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 3, 15.0f);
+    REQUIRE(p.count == 3);
+    REQUIRE(p.segs[1].type == PathSeg::ARC);
+    REQUIRE(p.segs[1].sweep < 0.0f);
+    check_continuity_and_endpoints(p, 0.0f, 0.0f, 150.0f, -50.0f);
+}
+
+TEST_CASE("route_polyline_filleted shallow (20-degree) corner: tangency",
+          "[filament-path][geometry]") {
+    // Shallow bend: nearly collinear, ~20 degrees of turn.
+    // First leg along +x; second leg turned 20 degrees toward +y.
+    float ang = 20.0f * kPi / 180.0f;
+    PathPoint pts[3] = {
+        {0.0f, 0.0f},
+        {200.0f, 0.0f},
+        {200.0f + 200.0f * std::cos(ang), 0.0f + 200.0f * std::sin(ang)},
+    };
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 3, 10.0f);
+    REQUIRE(p.count == 3);
+    REQUIRE(p.segs[1].type == PathSeg::ARC);
+    REQUIRE(p.segs[1].sweep > 0.0f);
+    check_continuity_and_endpoints(p, pts[0].x, pts[0].y, pts[2].x, pts[2].y);
+}
+
+TEST_CASE("route_polyline_filleted multi-vertex mixed turns: dense walk",
+          "[filament-path][geometry]") {
+    // 5 waypoints, alternating turn directions.
+    PathPoint pts[5] = {
+        {0.0f, 0.0f}, {80.0f, 20.0f}, {160.0f, 0.0f}, {220.0f, 60.0f}, {300.0f, 40.0f},
+    };
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 5, 12.0f);
+
+    // Endpoints and per-joint tangency.
+    check_continuity_and_endpoints(p, pts[0].x, pts[0].y, pts[4].x, pts[4].y);
+
+    float total = path_length(p);
+
+    // Dense walk: 2px steps, no jump > 3px.
+    PathPoint prev = path_point_at(p, 0.0f);
+    float walk_len = 0.0f;
+    for (float d = 2.0f; d <= total; d += 2.0f) {
+        PathPoint cur = path_point_at(p, d);
+        float step = dist(prev, cur);
+        INFO("d=" << d << " step=" << step << " cur(" << cur.x << "," << cur.y << ")");
+        REQUIRE(step < 3.0f);
+        walk_len += step;
+        prev = cur;
+    }
+    // The dense walk underestimates the true length: chord-vs-arc deficit on the
+    // tight fillets plus the untraversed tail (loop stops at the last d <= total,
+    // leaving up to one 2px step). Both shortfalls are bounded; the analytic sum
+    // is path_length(total) itself. Require the walk to be within ~one step.
+    REQUIRE(walk_len <= total + 1e-3f);
+    REQUIRE(walk_len == Catch::Approx(total).margin(2.5f));
+}
+
+TEST_CASE("route_polyline_filleted oversized r clamped on short middle segment",
+          "[filament-path][geometry]") {
+    // Middle segment is short (length 20); huge fillet must clamp so trims never
+    // exceed half the adjoining segment lengths and joints stay coincident.
+    PathPoint pts[4] = {
+        {0.0f, 0.0f},
+        {100.0f, 0.0f},
+        {120.0f, 0.0f},
+        {120.0f, 100.0f},
+    };
+    // Note middle vertices (100,0) collinear with first leg; the real corner is
+    // at (120,0). Use a layout with an actual short middle leg instead:
+    PathPoint q[4] = {
+        {0.0f, 0.0f},
+        {100.0f, 0.0f},
+        {110.0f, 20.0f},
+        {110.0f, 120.0f},
+    };
+    FilamentPath p;
+    route_polyline_filleted(p, q, 4, 1000.0f);
+    // Must not crash, endpoints preserved, all joints coincident.
+    check_continuity_and_endpoints(p, q[0].x, q[0].y, q[3].x, q[3].y);
+    // Every arc radius must be positive and finite.
+    for (int i = 0; i < p.count; ++i) {
+        if (p.segs[i].type == PathSeg::ARC) {
+            REQUIRE(p.segs[i].radius > 0.0f);
+            REQUIRE(std::isfinite(p.segs[i].radius));
+        }
+    }
+    LV_UNUSED(pts);
+}
+
+TEST_CASE("route_polyline_filleted collinear waypoint gets no fillet",
+          "[filament-path][geometry]") {
+    // Middle point is exactly on the line p0->p2: no arc, just a straight run.
+    PathPoint pts[3] = {{0.0f, 0.0f}, {50.0f, 0.0f}, {100.0f, 0.0f}};
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 3, 15.0f);
+    for (int i = 0; i < p.count; ++i)
+        REQUIRE(p.segs[i].type == PathSeg::LINE);
+    // End-to-end span preserved.
+    PathPoint start = seg_start_point(p.segs[0]);
+    PathPoint end = seg_end_point(p.segs[p.count - 1]);
+    REQUIRE(start.x == Catch::Approx(0.0f).margin(1e-3));
+    REQUIRE(end.x == Catch::Approx(100.0f).margin(1e-3));
+}
+
+TEST_CASE("route_polyline_filleted duplicate waypoint is skipped", "[filament-path][geometry]") {
+    // Duplicate middle point: degenerate zero-length leg must not produce NaNs.
+    PathPoint pts[4] = {{0.0f, 0.0f}, {100.0f, 0.0f}, {100.0f, 0.0f}, {100.0f, 100.0f}};
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 4, 15.0f);
+    check_continuity_and_endpoints(p, 0.0f, 0.0f, 100.0f, 100.0f);
+    for (int i = 0; i < p.count; ++i) {
+        if (p.segs[i].type == PathSeg::ARC) {
+            REQUIRE(std::isfinite(p.segs[i].radius));
+            REQUIRE(std::isfinite(p.segs[i].sweep));
+        }
+    }
+}
+
+TEST_CASE("route_polyline_filleted two-point degenerate is a single line",
+          "[filament-path][geometry]") {
+    PathPoint pts[2] = {{0.0f, 0.0f}, {100.0f, 50.0f}};
+    FilamentPath p;
+    route_polyline_filleted(p, pts, 2, 15.0f);
+    REQUIRE(p.count == 1);
+    REQUIRE(p.segs[0].type == PathSeg::LINE);
+}

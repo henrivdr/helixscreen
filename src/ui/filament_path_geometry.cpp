@@ -195,6 +195,115 @@ void route_orthogonal(FilamentPath& out, float x0, float y0, float x1, float y1,
     out.add_line(x1, ymid + r, x1, y1);
 }
 
+void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, float fillet_r) {
+    if (!pts || n < 2)
+        return;
+    if (n == 2) {
+        out.add_line(pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+        return;
+    }
+
+    // Walking cursor: the current "pen" position. Starts at pts[0] and advances
+    // to each fillet's start-trim point, then jumps to its end-trim point.
+    PathPoint cursor = pts[0];
+
+    for (int i = 1; i < n - 1; ++i) {
+        const PathPoint V = pts[i];
+        const PathPoint A = pts[i - 1]; // previous waypoint
+        const PathPoint B = pts[i + 1]; // next waypoint
+
+        // Incoming leg direction (A->V) and outgoing (V->B), as unit vectors.
+        float in_dx = V.x - A.x, in_dy = V.y - A.y;
+        float out_dx = B.x - V.x, out_dy = B.y - V.y;
+        float in_len = std::sqrt(in_dx * in_dx + in_dy * in_dy);
+        float out_len = std::sqrt(out_dx * out_dx + out_dy * out_dy);
+
+        // Degenerate / duplicate waypoint: skip the vertex, continue straight.
+        if (in_len < 1e-4f || out_len < 1e-4f)
+            continue;
+
+        float d1x = in_dx / in_len, d1y = in_dy / in_len;
+        float d2x = out_dx / out_len, d2y = out_dy / out_len;
+
+        // Turn measure. cross > 0 => clockwise on screen (+y down) => +sweep.
+        float cross = d1x * d2y - d1y * d2x;
+        float dot = d1x * d2x + d1y * d2y;
+
+        // Collinear (no turn): no fillet, just continue the line.
+        if (std::fabs(cross) < 1e-6f) {
+            // Straight-through or 180 reversal — emit nothing here; the line to
+            // the next trim point (or final point) covers it.
+            continue;
+        }
+
+        // Interior half-angle alpha = half the angle between -d1 and d2.
+        // angle(-d1, d2): cos = (-d1).d2 = -dot ; the turn angle theta between
+        // legs has cos(theta) = dot, and alpha = (pi - theta)/2.
+        float theta = std::atan2(std::fabs(cross), dot); // [0, pi]
+        float alpha = (kPi - theta) / 2.0f;              // (0, pi/2)
+
+        float tan_a = std::tan(alpha);
+        float sin_a = std::sin(alpha);
+        if (tan_a < 1e-4f || sin_a < 1e-4f)
+            continue;
+
+        // Trim length back along each leg for the desired radius.
+        // Clamp r so the trim never exceeds half of either adjoining segment.
+        // The incoming segment's available length is from the running cursor
+        // (its real start may already be a previous fillet's end-trim point) to
+        // V; the outgoing's is V to B.
+        float avail_in =
+            std::sqrt((V.x - cursor.x) * (V.x - cursor.x) + (V.y - cursor.y) * (V.y - cursor.y));
+        float avail_out = out_len;
+        float max_trim = std::min(avail_in, avail_out) * 0.5f;
+
+        float r_eff = fillet_r;
+        float t = r_eff / tan_a;
+        if (t > max_trim) {
+            t = max_trim;
+            r_eff = t * tan_a;
+        }
+
+        // Below the meaningful-arc floor: skip the fillet, leave a sharp corner.
+        if (r_eff < kMinFillet)
+            continue;
+
+        // Trim points on each leg.
+        PathPoint t1{V.x - d1x * t, V.y - d1y * t}; // arc start (end of incoming line)
+        PathPoint t2{V.x + d2x * t, V.y + d2y * t}; // arc end   (start of outgoing line)
+
+        // Arc center: from V along the inward bisector at distance r/sin(alpha).
+        // Inward bisector unit dir = normalize(d2 - d1) flipped to the inside of
+        // the turn. Equivalently, center = t1 + r * (left/right normal of d1)
+        // pointing toward the turn interior. Use the normal of d1 rotated toward
+        // d2 (sign = sign(cross)).
+        float sgn = (cross > 0.0f) ? 1.0f : -1.0f;
+        // Normal of d1 rotated by +90 (screen, +y down): (-d1y, d1x). For a
+        // clockwise turn (cross>0) the center is on that side; flip by sgn.
+        float n1x = -d1y * sgn;
+        float n1y = d1x * sgn;
+        PathPoint center{t1.x + r_eff * n1x, t1.y + r_eff * n1y};
+
+        // Emit the straight run from the running cursor to t1.
+        out.add_line(cursor.x, cursor.y, t1.x, t1.y);
+
+        // Arc start angle = angle of the radius vector center->t1. The signed
+        // sweep magnitude is theta (= pi - 2*alpha, the central angle between the
+        // two trim points), sign from the turn direction. Because t1/t2 are
+        // symmetric about the bisector with exactly that central angle, the
+        // parametrization start_angle + sign*t lands on t2 at t == theta.
+        float a0 = std::atan2(t1.y - center.y, t1.x - center.x);
+        float sweep = sgn * theta;
+
+        out.add_arc(center.x, center.y, r_eff, a0, sweep);
+
+        cursor = t2;
+    }
+
+    // Final straight run from the cursor into the last waypoint.
+    out.add_line(cursor.x, cursor.y, pts[n - 1].x, pts[n - 1].y);
+}
+
 } // namespace pathgeo
 } // namespace ui
 } // namespace helix

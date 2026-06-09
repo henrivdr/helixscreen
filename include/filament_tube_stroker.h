@@ -9,11 +9,13 @@
  *
  * A "tube" is rendered as a set of CONCENTRIC stroke passes (no perpendicular
  * offsets) over a pathgeo::FilamentPath. Straight runs are drawn with
- * lv_draw_line (float coords — we build with LV_USE_FLOAT) and corners with
- * lv_draw_arc (true anti-aliased arcs). Round caps live only on the very first
- * seg-start and last seg-end of the path; interior joints use butt caps
- * (segments join tangentially, so butt joints are seamless and translucent
- * passes don't double-blend).
+ * lv_draw_line (float coords — we build with LV_USE_FLOAT) and corners as a fan
+ * of short straight chords sampled from the arc's exact float parametrization
+ * (also lv_draw_line, NOT lv_draw_arc, whose integer center / outer radius would
+ * round the band ~0.5px out of alignment with the adjoining lines). Round caps
+ * live only on the very first seg-start and last seg-end of the path; interior
+ * joints (including chord-to-chord) use butt caps (segments join tangentially,
+ * so butt joints are seamless and translucent passes don't double-blend).
  *
  * This layer is shared by both AMS path canvases:
  *   - ui_filament_path_canvas (single-unit detail panel)

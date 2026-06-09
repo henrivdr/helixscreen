@@ -77,55 +77,80 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
                 dsc.round_end = last;
                 lv_draw_line(layer, &dsc);
             } else {
-                // ARC: lv_draw_arc.radius is the OUTER radius, so add half the
-                // stroke width to center the pass on the centerline. center is
-                // lv_point_t (int) — round once.
-                lv_draw_arc_dsc_t dsc;
-                lv_draw_arc_dsc_init(&dsc);
-                dsc.color = pass.color;
-                dsc.width = pass.width;
-                dsc.opa = pass.opa;
-                dsc.center.x = (int32_t)lroundf(s.center.x);
-                dsc.center.y = (int32_t)lroundf(s.center.y);
-                dsc.radius =
-                    (uint16_t)LV_MAX(1, (int32_t)lroundf(s.radius + (float)pass.width / 2.0f));
+                // ARC: rendered as a fan of short straight chords at FLOAT
+                // precision (lv_draw_line), NOT lv_draw_arc.
+                //
+                // Why not lv_draw_arc: it takes an INTEGER center (lv_point_t)
+                // and an INTEGER OUTER radius (uint16_t), while lines draw at
+                // float precision. For odd pass widths the true outer edge is at
+                // a half-pixel (centerline_r + w/2 = x.5) and rounds, shifting the
+                // arc band ~0.5px radially versus the adjoining line band —
+                // visible misalignment at every fillet joint. Chords inherit the
+                // exact float arc parametrization, so line and arc bands stay
+                // flush.
+                //
+                // Angle convention (unchanged from pathgeo and the geometry
+                // module): angle 0 = +x, positive angle rotates toward +y (screen
+                // down), positive sweep = CLOCKWISE on screen. A point at
+                // parameter t in [0, |sweep|] is
+                //   angle = start_angle + sign(sweep) * t
+                //   (cx + r*cos angle, cy + r*sin angle).
+                const float r = s.radius;
+                const float sweep = s.sweep;
+                const float a0 = s.start_angle;
+                const float abs_sweep = std::fabs(sweep);
+                const float sgn = (sweep >= 0.0f) ? 1.0f : -1.0f;
 
-                // LVGL angle convention (verified from
-                // lib/lvgl/src/draw/sw/lv_draw_sw_arc.c and lv_draw_sw_mask.c):
-                //   - degrees, 0 at 3 o'clock, increasing CLOCKWISE on screen
-                //     (matches pathgeo: +x is 0, +y rotates toward larger angles).
-                //   - the visible arc is swept clockwise from start_angle to
-                //     end_angle; when end < start the sweep wraps through 360
-                //     (lv_draw_sw_mask_angle_init: delta = 360 - start + end).
-                //   - inputs are NOT wrapped for negatives: lv_draw_sw_arc only
-                //     reduces angles >= 360, and lv_draw_sw_mask_angle_init
-                //     CLAMPS angles < 0 to 0 (not wrap). A negative start/end
-                //     (e.g. pathgeo arc2's a0 = -90deg) therefore collapses to a
-                //     bogus ~270deg / full-ring sweep. So both endpoints must be
-                //     normalized into [0,360) before handing them to LVGL.
-                const float kRad2Deg = 57.29577951308232f;
-                auto norm360 = [](float deg) {
-                    deg = std::fmod(deg, 360.0f);
-                    if (deg < 0.0f)
-                        deg += 360.0f;
-                    return deg;
-                };
-                float a0_deg = norm360(s.start_angle * kRad2Deg);
-                float a1_deg = norm360((s.start_angle + s.sweep) * kRad2Deg);
-                // Order endpoints so LVGL's clockwise (increasing, wrapping)
-                // sweep traces the true arc. Positive pathgeo sweep already runs
-                // clockwise from start; negative sweep runs from the endpoint.
-                // Normalizing each endpoint independently preserves that
-                // relationship, and LVGL's end<start wrap selects the short arc.
-                if (s.sweep >= 0.0f) {
-                    dsc.start_angle = a0_deg;
-                    dsc.end_angle = a1_deg;
-                } else {
-                    dsc.start_angle = a1_deg;
-                    dsc.end_angle = a0_deg;
+                // Subdivide so the chord sagitta error stays < ~0.1px:
+                //   sagitta = r * (1 - cos(half_step)) < 0.1
+                //   => half_step < acos(1 - 0.1/r), step < 2*half_step
+                //   => n = ceil(|sweep| / step). Clamp n to [4, 16].
+                int n_chords = 4;
+                if (r > 0.0f) {
+                    float arg = 1.0f - 0.1f / r;
+                    if (arg < -1.0f)
+                        arg = -1.0f; // tiny r: just clamp to the floor below
+                    float step = 2.0f * std::acos(arg);
+                    if (step > 1e-6f)
+                        n_chords = (int)std::ceil(abs_sweep / step);
                 }
-                dsc.rounded = false; // butt ends
-                lv_draw_arc(layer, &dsc);
+                if (n_chords < 4)
+                    n_chords = 4;
+                if (n_chords > 16)
+                    n_chords = 16;
+
+                const float dt = abs_sweep / (float)n_chords;
+                float prev_a = a0;
+                float prev_x = s.center.x + r * std::cos(prev_a);
+                float prev_y = s.center.y + r * std::sin(prev_a);
+
+                for (int c = 0; c < n_chords; c++) {
+                    float cur_a = a0 + sgn * dt * (float)(c + 1);
+                    float cur_x = s.center.x + r * std::cos(cur_a);
+                    float cur_y = s.center.y + r * std::sin(cur_a);
+
+                    lv_draw_line_dsc_t dsc;
+                    lv_draw_line_dsc_init(&dsc);
+                    dsc.color = pass.color;
+                    dsc.width = pass.width;
+                    dsc.opa = pass.opa;
+                    dsc.p1.x = prev_x;
+                    dsc.p1.y = prev_y;
+                    dsc.p2.x = cur_x;
+                    dsc.p2.y = cur_y;
+                    // Terminal round caps only at the path-terminal end of an arc
+                    // that is itself the first/last seg of the path — exactly as
+                    // the LINE branch does. Interior chord joints use butt caps:
+                    // same-color opaque overdraw is invisible, and translucent
+                    // passes (glow) avoid double-blend.
+                    dsc.round_start = first && (c == 0);
+                    dsc.round_end = last && (c == n_chords - 1);
+                    lv_draw_line(layer, &dsc);
+
+                    prev_a = cur_a;
+                    prev_x = cur_x;
+                    prev_y = cur_y;
+                }
             }
         }
     }

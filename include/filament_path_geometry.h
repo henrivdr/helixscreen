@@ -9,8 +9,10 @@
  *
  * Orthogonal lane routing: straight vertical runs joined by true quarter-circle
  * arc fillets. This module is intentionally LVGL-free (plain floats) so it can
- * be unit-tested headlessly; later tasks wire it into the canvas renderer where
- * arcs are drawn with lv_draw_arc (exact, anti-aliased).
+ * be unit-tested headlessly; the canvas renderer (filament_tube_stroker)
+ * consumes the resulting ARC segments by walking their exact float
+ * parametrization as a fan of short straight chords (lv_draw_line), so arc and
+ * line bands stay flush at every joint.
  *
  * Coordinate system: SCREEN coordinates, +y is DOWN.
  *   - Angle 0 = +x axis.
@@ -91,6 +93,36 @@ PathPoint path_point_at(const FilamentPath& p, float d, PathPoint* tangent_out =
  *   - r_eff < 2.0  -> 45-degree jog: vertical, diagonal LINE, vertical (no arcs)
  */
 void route_orthogonal(FilamentPath& out, float x0, float y0, float x1, float y1, float fillet_r);
+
+/**
+ * @brief General filleted-polyline routing through arbitrary waypoints.
+ *
+ * Appends LINE segments through @p pts (n points) with a tangent circular-arc
+ * fillet inserted at each interior vertex. Unlike route_orthogonal this does NOT
+ * assume perpendicular bends — corners between non-orthogonal segments are
+ * filleted with standard corner-fillet math. Segments are appended to @p out (it
+ * is NOT cleared first).
+ *
+ * At interior vertex V with incoming unit direction d1 and outgoing unit
+ * direction d2:
+ *   - interior half-angle alpha = half the angle between -d1 and d2,
+ *   - tangent trim back along each leg t = r_eff / tan(alpha),
+ *   - arc center sits r_eff / sin(alpha) from V along the inward bisector,
+ *   - sweep magnitude = pi - 2*alpha, sign from cross(d1, d2) in screen coords
+ *     (+y down): positive cross => clockwise on screen => positive sweep
+ *     (matching the ARC convention so path_point_at walks it forward).
+ *
+ * Per-vertex r_eff is clamped so the trim never exceeds half of either adjoining
+ * segment length. Collinear vertices (cross ~ 0) get no fillet (the line simply
+ * continues); duplicate / degenerate-short legs fall back to plain lines.
+ *
+ * Degenerate cases:
+ *   - n < 2          -> nothing appended
+ *   - n == 2         -> single straight LINE pts[0]->pts[1]
+ *
+ * @p fillet_r is the desired centerline fillet radius (clamped per vertex).
+ */
+void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, float fillet_r);
 
 } // namespace pathgeo
 } // namespace ui
