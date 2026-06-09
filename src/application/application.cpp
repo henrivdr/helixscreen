@@ -13,6 +13,8 @@
 
 #include "application.h"
 
+#include "detect_printer_cmd.h"
+
 // Private LVGL header needed to read display->flush_cb for splash no-op swap
 #include "ui_overlay_timelapse_videos.h"
 #include "ui_update_queue.h"
@@ -486,6 +488,12 @@ int Application::run(int argc, char** argv) {
     spdlog::debug("[Application] DPI: {}{}", (m_args.dpi > 0 ? m_args.dpi : LV_DPI_DEF),
                   (m_args.dpi > 0 ? " (custom)" : " (default)"));
     spdlog::debug("[Application] Initial Panel: {}", m_args.initial_panel);
+
+    // Headless one-shot: detect printer via Moonraker REST, print JSON verdict, exit.
+    // Must run after logging init but before any display/LVGL init.
+    if (m_args.detect_printer) {
+        return helix::detect::run_detect_printer(m_args.detect_host, m_args.detect_port);
+    }
 
     // Read and consume the Safe Mode marker before any subscription-triggering
     // code runs. The watchdog writes this when it detects a deterministic
