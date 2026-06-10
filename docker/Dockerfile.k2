@@ -88,6 +88,27 @@ RUN export PATH="/opt/arm-musl-toolchain/bin:$PATH" && \
     rm -rf zlib-1.3.2 zlib-1.3.2.tar.gz
 
 # ==============================================================================
+# OpenSSL 1.1.1w - Static Cross-Compiled Libraries
+# ==============================================================================
+# Bootlin's musl toolchain doesn't include OpenSSL; build it static into the
+# sysroot so libhv's --with-openssl finds libssl.a/libcrypto.a automatically.
+# HTTPS is required for update checks, R2 self-update, telemetry, and crash
+# upload (local Moonraker is plain HTTP). Same proven approach as the K1 target;
+# linux-armv4 is the standard 32-bit ARM OpenSSL target.
+WORKDIR /tmp
+RUN export PATH="/opt/arm-musl-toolchain/bin:$PATH" && \
+    wget -q https://www.openssl.org/source/openssl-1.1.1w.tar.gz && \
+    tar xzf openssl-1.1.1w.tar.gz && \
+    cd openssl-1.1.1w && \
+    ./Configure linux-armv4 no-shared \
+        --cross-compile-prefix=arm-buildroot-linux-musleabihf- \
+        --prefix=/opt/arm-musl-toolchain/arm-buildroot-linux-musleabihf/sysroot/usr && \
+    make -j$(nproc) && \
+    make install_sw && \
+    cd .. && \
+    rm -rf openssl-1.1.1w openssl-1.1.1w.tar.gz
+
+# ==============================================================================
 # Cross-Compilation Environment
 # ==============================================================================
 

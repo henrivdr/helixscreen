@@ -479,8 +479,11 @@ else ifeq ($(PLATFORM_TARGET),k2)
         -fmerge-all-constants -fno-ident \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_K2
     TARGET_LDFLAGS := -Wl,--gc-sections -Wl,-O2 -Wl,--as-needed -flto=auto -static
-    # SSL disabled - Moonraker is local on port 4408 (stock firmware)
-    ENABLE_SSL := no
+    # HTTPS is required for the update check, R2 self-update download, telemetry,
+    # and crash/debug-bundle upload. (Local Moonraker is plain HTTP and works
+    # regardless of this.) Static OpenSSL is cross-built into the K2 toolchain
+    # sysroot by docker/Dockerfile.k2, mirroring the K1 musl target.
+    ENABLE_SSL := yes
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no

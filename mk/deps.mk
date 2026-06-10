@@ -335,6 +335,7 @@ ifneq ($(CROSS_COMPILE),)
 			ad5m|cc1) OPENSSL_PREFIX="/opt/arm-toolchain/arm-none-linux-gnueabihf" ;; \
 			ad5x) OPENSSL_PREFIX="/opt/mipsel-zmod-ad5x/mipsel-buildroot-linux-gnu/sysroot/usr" ;; \
 			mips|k1) OPENSSL_PREFIX="/opt/mips-toolchain/mipsel-buildroot-linux-musl/sysroot/usr" ;; \
+			k2) OPENSSL_PREFIX="/opt/arm-musl-toolchain/arm-buildroot-linux-musleabihf/sysroot/usr" ;; \
 		esac; \
 		if [ -n "$$OPENSSL_PREFIX" ]; then \
 			OPENSSL_INC=" -I$$OPENSSL_PREFIX/include"; \
