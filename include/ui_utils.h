@@ -153,6 +153,34 @@ inline bool has_sane_parent_chain(lv_obj_t* obj) {
 }
 
 /**
+ * @brief True if @p obj is currently parented under the active screen of its display.
+ *
+ * Teardown helpers (safe_clean_children(), safe_delete_deferred()) reparent
+ * condemned widgets onto lv_layer_top() before async deletion, where they linger
+ * with their layout intact until the next async tick. A widget that normally lives
+ * on a screen but now roots at a layer (or a different screen) has been moved out
+ * from under a live layout: triggering a relayout on it (e.g. lv_image_set_src)
+ * makes lv_obj_update_layout walk the whole layer and recurse into sibling
+ * condemned grid subtrees whose children may already be freed — a use-after-free
+ * in grid calc() (#1001). Use this to suppress relayout-triggering work on a widget
+ * that may be mid-teardown.
+ *
+ * NOTE: legitimate overlays/modals/toasts also live on lv_layer_top(). A false
+ * result means "not under the active screen", which signals teardown ONLY for
+ * widgets that belong on a screen to begin with — judge per caller.
+ */
+inline bool is_on_active_screen(lv_obj_t* obj) {
+    if (!obj || !lv_obj_is_valid(obj) || !has_sane_parent_chain(obj)) {
+        return false;
+    }
+    lv_display_t* disp = lv_obj_get_display(obj);
+    if (!disp) {
+        return false;
+    }
+    return lv_obj_get_screen(obj) == lv_display_get_screen_active(disp);
+}
+
+/**
  * @brief Queue LVGL object deletion for the next timer tick
  *
  * Immediately nullifies the pointer to prevent further use, hides the

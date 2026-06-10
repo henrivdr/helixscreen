@@ -189,27 +189,27 @@ TEST_CASE("UI Utils: format_modified_date - edge cases", "[ui_utils][format][edg
 TEST_CASE("UI Utils: format_relative_time", "[ui_utils][format][i18n]") {
     SECTION("Just now - under 1 minute") {
         REQUIRE(format_relative_time(0) == "Just now");
-        REQUIRE(format_relative_time(30000) == "Just now");   // 30s
-        REQUIRE(format_relative_time(59999) == "Just now");   // 59.999s
+        REQUIRE(format_relative_time(30000) == "Just now"); // 30s
+        REQUIRE(format_relative_time(59999) == "Just now"); // 59.999s
     }
 
     SECTION("Minutes ago") {
-        REQUIRE(format_relative_time(60000) == "1 min ago");  // exactly 1 min
-        REQUIRE(format_relative_time(120000) == "2 min ago"); // 2 min
-        REQUIRE(format_relative_time(300000) == "5 min ago"); // 5 min
+        REQUIRE(format_relative_time(60000) == "1 min ago");    // exactly 1 min
+        REQUIRE(format_relative_time(120000) == "2 min ago");   // 2 min
+        REQUIRE(format_relative_time(300000) == "5 min ago");   // 5 min
         REQUIRE(format_relative_time(3599999) == "59 min ago"); // just under 1 hour
     }
 
     SECTION("Hours ago") {
-        REQUIRE(format_relative_time(3600000) == "1 hour ago");   // exactly 1 hour
-        REQUIRE(format_relative_time(7200000) == "2 hours ago");  // 2 hours
+        REQUIRE(format_relative_time(3600000) == "1 hour ago");    // exactly 1 hour
+        REQUIRE(format_relative_time(7200000) == "2 hours ago");   // 2 hours
         REQUIRE(format_relative_time(86399999) == "23 hours ago"); // just under 1 day
     }
 
     SECTION("Days ago") {
-        REQUIRE(format_relative_time(86400000) == "1 day ago");    // exactly 1 day
-        REQUIRE(format_relative_time(172800000) == "2 days ago");  // 2 days
-        REQUIRE(format_relative_time(604800000) == "7 days ago");  // 1 week
+        REQUIRE(format_relative_time(86400000) == "1 day ago");   // exactly 1 day
+        REQUIRE(format_relative_time(172800000) == "2 days ago"); // 2 days
+        REQUIRE(format_relative_time(604800000) == "7 days ago"); // 1 week
     }
 }
 
@@ -406,8 +406,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(lv_obj_has_flag(parent, LV_OBJ_FLAG_CLICKABLE));
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "UI Utils: disable_widget_clicks_recursive - null is safe",
+TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: disable_widget_clicks_recursive - null is safe",
                  "[ui_utils][widget_flags][edge]") {
     helix::ui::disable_widget_clicks_recursive(nullptr); // Should not crash
 }
@@ -456,8 +455,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(lv_obj_has_state(obj, LV_STATE_CHECKED));
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "UI Utils: clear_pressed_state_recursive - null is safe",
+TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: clear_pressed_state_recursive - null is safe",
                  "[ui_utils][widget_flags][edge]") {
     helix::ui::clear_pressed_state_recursive(nullptr); // Should not crash
 }
@@ -496,8 +494,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: has_sane_parent_chain - typical tre
     REQUIRE(helix::ui::has_sane_parent_chain(grandchild));
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "UI Utils: has_sane_parent_chain - deep-but-bounded tree is sane",
+TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: has_sane_parent_chain - deep-but-bounded tree is sane",
                  "[ui_utils][parent_chain]") {
     // 128 is the cap; 100 levels should walk cleanly
     lv_obj_t* cur = test_screen();
@@ -531,4 +528,47 @@ TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: has_sane_parent_chain - cycle retur
     REQUIRE_FALSE(helix::ui::has_sane_parent_chain(b));
     // Restore before teardown so LVGL cleanup doesn't spin.
     reinterpret_cast<LvObjPublic*>(a)->parent = test_screen();
+}
+
+// ============================================================================
+// is_on_active_screen() Tests (#1001 trigger guard)
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: is_on_active_screen - null is false",
+                 "[ui_utils][active_screen]") {
+    REQUIRE_FALSE(helix::ui::is_on_active_screen(nullptr));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "UI Utils: is_on_active_screen - widget on active screen",
+                 "[ui_utils][active_screen]") {
+    // test_screen() is the active screen for this fixture's display.
+    lv_obj_t* parent = lv_obj_create(test_screen());
+    lv_obj_t* child = lv_obj_create(parent);
+    REQUIRE(helix::ui::is_on_active_screen(parent));
+    REQUIRE(helix::ui::is_on_active_screen(child));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "UI Utils: is_on_active_screen - condemned widget on layer_top is false",
+                 "[ui_utils][active_screen][edge]") {
+    // Reproduces the #1001 teardown state: safe_clean_children() reparents a
+    // condemned subtree onto lv_layer_top() before async deletion. A widget rooted
+    // at a layer (not the active screen) must read as "not on the active screen" so
+    // PrintStatusWidget::reset_print_card_to_idle() skips the relayout that crashed.
+    lv_obj_t* obj = lv_obj_create(test_screen());
+    REQUIRE(helix::ui::is_on_active_screen(obj));
+    lv_obj_set_parent(obj, lv_layer_top());
+    REQUIRE_FALSE(helix::ui::is_on_active_screen(obj));
+    // Reparent back so fixture teardown cleans it with the screen.
+    lv_obj_set_parent(obj, test_screen());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "UI Utils: is_on_active_screen - widget on inactive screen is false",
+                 "[ui_utils][active_screen][edge]") {
+    // A widget on a loaded-but-not-active screen is also not on the active screen.
+    lv_obj_t* other_screen = lv_obj_create(nullptr);
+    lv_obj_t* obj = lv_obj_create(other_screen);
+    REQUIRE_FALSE(helix::ui::is_on_active_screen(obj));
+    lv_obj_delete(other_screen);
 }

@@ -7,8 +7,8 @@
 #include "ui_nav_manager.h"
 #include "ui_overlay_temp_graph.h"
 #include "ui_panel_print_select.h"
-#include "ui_progress_arc.h"
 #include "ui_panel_print_status.h"
+#include "ui_progress_arc.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -80,7 +80,8 @@ std::unordered_set<PrintStatusWidget*>& PrintStatusWidget::live_instances() {
 void PrintStatusWidget::init_static_subjects() {
     // Register subjects before XML parsing so bind_flag_if_eq / bind_style can find them.
     // Idempotent — guarded by column_mode_subject_initialized_.
-    if (column_mode_subject_initialized_) return;
+    if (column_mode_subject_initialized_)
+        return;
 
     lv_subject_init_int(&column_mode_subject_, 0);
     lv_xml_register_subject(nullptr, "print_status_column_mode", &column_mode_subject_);
@@ -120,11 +121,9 @@ void PrintStatusWidget::init_static_subjects() {
     lv_xml_register_subject(nullptr, "print_status_view", &view_subject_);
     // Default to benchy; reset_print_card_to_idle replaces with last-print
     // thumbnail when history loads.
-    lv_subject_init_string(&idle_thumb_path_subject_, idle_thumb_path_buf_,
-                           nullptr, sizeof(idle_thumb_path_buf_),
-                           idle_thumb_path_buf_);
-    lv_xml_register_subject(nullptr, "print_status_idle_thumb_path",
-                            &idle_thumb_path_subject_);
+    lv_subject_init_string(&idle_thumb_path_subject_, idle_thumb_path_buf_, nullptr,
+                           sizeof(idle_thumb_path_buf_), idle_thumb_path_buf_);
+    lv_xml_register_subject(nullptr, "print_status_idle_thumb_path", &idle_thumb_path_subject_);
     // Default to tier 2 (8px) — matches the previous hardcoded medium thickness
     // until the arc lays out and C++ publishes the diameter-derived tier.
     lv_subject_init_int(&arc_thickness_tier_subject_, 2);
@@ -222,7 +221,8 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
     print_card_idle_ = lv_obj_find_by_name(widget_obj_, "print_card_idle");
     print_card_idle_compact_ = lv_obj_find_by_name(widget_obj_, "print_card_idle_compact");
     print_card_idle_detailed_ = lv_obj_find_by_name(widget_obj_, "print_card_idle_detailed");
-    print_card_printing_detailed_ = lv_obj_find_by_name(widget_obj_, "print_card_printing_detailed");
+    print_card_printing_detailed_ =
+        lv_obj_find_by_name(widget_obj_, "print_card_printing_detailed");
     print_card_thumb_compact_ = lv_obj_find_by_name(widget_obj_, "print_card_thumb_compact");
     library_row_last_ = lv_obj_find_by_name(widget_obj_, "library_row_last");
     compact_row_last_ = lv_obj_find_by_name(widget_obj_, "compact_row_last");
@@ -434,8 +434,7 @@ void PrintStatusWidget::on_size_changed(int colspan, int rowspan, int /*width_px
     // filament has been extruded. update_filament_text() also writes this
     // subject on used_mm changes, keeping both inputs in sync.
     int used_mm = lv_subject_get_int(printer_state_.get_print_filament_used_subject());
-    lv_subject_set_int(&show_filament_active_subject_,
-                       (colspan >= 3 && used_mm > 0) ? 1 : 0);
+    lv_subject_set_int(&show_filament_active_subject_, (colspan >= 3 && used_mm > 0) ? 1 : 0);
 
     // Compact mode: 1-column — not enough horizontal space for thumbnail + action rows
     bool compact = (colspan <= 1);
@@ -511,8 +510,12 @@ void PrintStatusWidget::update_view_subject() {
 // Kept as thin wrappers so existing call sites (on_size_changed,
 // set_config, picker layout-button cbs, on_print_state_changed) remain
 // readable. All three roads now lead through update_view_subject().
-void PrintStatusWidget::update_idle_compact_mode() { update_view_subject(); }
-void PrintStatusWidget::update_active_layout_mode() { update_view_subject(); }
+void PrintStatusWidget::update_idle_compact_mode() {
+    update_view_subject();
+}
+void PrintStatusWidget::update_active_layout_mode() {
+    update_view_subject();
+}
 
 // ============================================================================
 // Print Card Click Handler
@@ -744,6 +747,19 @@ void PrintStatusWidget::reset_print_card_to_idle() {
     update_last_print_availability();
 
     if (!print_card_thumb_ || !lv_obj_is_valid(print_card_thumb_)) {
+        return;
+    }
+
+    // Trigger hardening (#1001): deferral alone (defer_reset_print_card_to_idle) is
+    // not enough — by the time the async tick fires, populate_page's
+    // safe_clean_children() may have reparented this widget's subtree onto
+    // lv_layer_top() to await deletion. Setting the idle thumb's image src here would
+    // cascade lv_image_set_src → update_align → lv_obj_update_layout across the whole
+    // layer, recursing into sibling condemned grid subtrees whose children may already
+    // be freed → SIGSEGV in grid calc() (the LVGL guard patch is the second net).
+    if (!helix::ui::is_on_active_screen(print_card_thumb_)) {
+        spdlog::debug(
+            "[PrintStatusWidget] Skip idle reset: thumb off active screen (mid-teardown)");
         return;
     }
 
@@ -1421,9 +1437,8 @@ void PrintStatusWidget::show_nozzle_tool_picker(lv_obj_t* anchor) {
         nozzle_picker_backdrop_,
         [](lv_event_t* e) {
             LVGL_SAFE_EVENT_CB_BEGIN("nozzle_picker_backdrop_delete_cb");
-            if (s_active_nozzle_picker_ &&
-                s_active_nozzle_picker_->nozzle_picker_backdrop_ ==
-                    lv_event_get_current_target_obj(e)) {
+            if (s_active_nozzle_picker_ && s_active_nozzle_picker_->nozzle_picker_backdrop_ ==
+                                               lv_event_get_current_target_obj(e)) {
                 s_active_nozzle_picker_->nozzle_picker_backdrop_ = nullptr;
                 s_active_nozzle_picker_ = nullptr;
             }
@@ -1446,13 +1461,15 @@ void PrintStatusWidget::show_nozzle_tool_picker(lv_obj_t* anchor) {
         if (card_y + card_h > screen_h - 8) {
             // Flip above the anchor
             card_y = a.y1 - card_h - 4;
-            if (card_y < 8) card_y = 8;
+            if (card_y < 8)
+                card_y = 8;
         }
         int card_x = a.x1;
         if (card_x + card_w > screen_w - 8) {
             card_x = screen_w - card_w - 8;
         }
-        if (card_x < 8) card_x = 8;
+        if (card_x < 8)
+            card_x = 8;
         lv_obj_set_pos(card, card_x, card_y);
     }
 
@@ -1590,7 +1607,8 @@ namespace {
 // helix::units::to_centidegrees implementation in unit_conversions.h). Convert
 // to rounded °C by dividing by 10.
 int cd_to_c(int cd) {
-    if (cd >= 0) return (cd + 5) / 10;
+    if (cd >= 0)
+        return (cd + 5) / 10;
     return (cd - 5) / 10;
 }
 } // namespace
@@ -1649,13 +1667,13 @@ void PrintStatusWidget::DetailedFormatter::update_nozzle_text() {
     lv_subject_t* tgt_sub;
     if (current_nozzle_override_ == "auto") {
         temp_sub = ps.get_active_extruder_temp_subject();
-        tgt_sub  = ps.get_active_extruder_target_subject();
+        tgt_sub = ps.get_active_extruder_target_subject();
     } else {
         temp_sub = ps.get_extruder_temp_subject(current_nozzle_override_);
-        tgt_sub  = ps.get_extruder_target_subject(current_nozzle_override_);
+        tgt_sub = ps.get_extruder_target_subject(current_nozzle_override_);
     }
     int temp_dd = temp_sub ? lv_subject_get_int(temp_sub) : 0;
-    int tgt_dd  = tgt_sub  ? lv_subject_get_int(tgt_sub)  : 0;
+    int tgt_dd = tgt_sub ? lv_subject_get_int(tgt_sub) : 0;
     // Mirror into proxy subjects (decidegrees) — temp_display in the detailed
     // XML binds to these and gets heating-color rendering for free, including
     // when pinned to a specific tool.
@@ -1668,7 +1686,7 @@ void PrintStatusWidget::DetailedFormatter::update_nozzle_text() {
     // String form kept for the (unused-by-XML but test-asserted) nozzle_text
     // subject, so test_print_status_widget_tool_override.cpp still verifies
     // the pinning + auto-mode dispatch.
-    int t  = cd_to_c(temp_dd);
+    int t = cd_to_c(temp_dd);
     int tg = cd_to_c(tgt_dd);
     snprintf(nozzle_text_buf_, sizeof(nozzle_text_buf_), "%d / %d°C", t, tg);
     lv_subject_copy_string(&nozzle_text_subject_, nozzle_text_buf_);
@@ -1712,7 +1730,7 @@ bool PrintStatusWidget::DetailedFormatter::set_nozzle_tool_override(
 
     // Pinned: resolve dynamic per-tool subjects
     auto* temp_sub = ps.get_extruder_temp_subject(override_name, nozzle_temp_lifetime_);
-    auto* tgt_sub  = ps.get_extruder_target_subject(override_name, nozzle_target_lifetime_);
+    auto* tgt_sub = ps.get_extruder_target_subject(override_name, nozzle_target_lifetime_);
     if (!temp_sub || !tgt_sub) {
         spdlog::info("[DetailedFormatter] nozzle override '{}' not found, falling back to auto",
                      override_name);
@@ -1725,11 +1743,9 @@ bool PrintStatusWidget::DetailedFormatter::set_nozzle_tool_override(
 
     current_nozzle_override_ = override_name;
     nozzle_temp_observer_ = observe_int_sync<DetailedFormatter>(
-        temp_sub, this,
-        [](DetailedFormatter* self, int) { self->update_nozzle_text(); });
+        temp_sub, this, [](DetailedFormatter* self, int) { self->update_nozzle_text(); });
     nozzle_target_observer_ = observe_int_sync<DetailedFormatter>(
-        tgt_sub, this,
-        [](DetailedFormatter* self, int) { self->update_nozzle_text(); });
+        tgt_sub, this, [](DetailedFormatter* self, int) { self->update_nozzle_text(); });
     update_nozzle_text();
     update_tool_label();
     return true;
@@ -1785,8 +1801,8 @@ void PrintStatusWidget::DetailedFormatter::update_idle_fields() {
     snprintf(idle_filename_buf_, sizeof(idle_filename_buf_), "%s", job.filename.c_str());
     lv_subject_copy_string(&idle_filename_subject_, idle_filename_buf_);
 
-    double now_s = std::chrono::duration<double>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    double now_s =
+        std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
     long delta_s = static_cast<long>(now_s - job.end_time);
     if (delta_s < 60) {
         snprintf(idle_when_buf_, sizeof(idle_when_buf_), "Completed just now");
@@ -1817,8 +1833,8 @@ void PrintStatusWidget::DetailedFormatter::update_idle_fields() {
 PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     UI_MANAGED_SUBJECT_STRING(progress_pct_subject_, progress_pct_buf_, "0%",
                               "print_status_progress_pct", subjects_);
-    UI_MANAGED_SUBJECT_STRING(layer_text_subject_, layer_text_buf_, "",
-                              "print_status_layer_text", subjects_);
+    UI_MANAGED_SUBJECT_STRING(layer_text_subject_, layer_text_buf_, "", "print_status_layer_text",
+                              subjects_);
     UI_MANAGED_SUBJECT_STRING(time_text_subject_, time_text_buf_, "0h 00m / 0h 00m",
                               "print_status_time_text", subjects_);
     UI_MANAGED_SUBJECT_STRING(filament_text_subject_, filament_text_buf_, "",
@@ -1827,18 +1843,15 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
                               "print_status_nozzle_text", subjects_);
     UI_MANAGED_SUBJECT_STRING(nozzle_tool_label_subject_, nozzle_tool_label_buf_, "",
                               "print_status_nozzle_tool_label", subjects_);
-    UI_MANAGED_SUBJECT_INT(nozzle_current_subject_, 0,
-                           "print_status_nozzle_current", subjects_);
-    UI_MANAGED_SUBJECT_INT(nozzle_target_subject_, 0,
-                           "print_status_nozzle_target", subjects_);
+    UI_MANAGED_SUBJECT_INT(nozzle_current_subject_, 0, "print_status_nozzle_current", subjects_);
+    UI_MANAGED_SUBJECT_INT(nozzle_target_subject_, 0, "print_status_nozzle_target", subjects_);
     UI_MANAGED_SUBJECT_STRING(idle_filename_subject_, idle_filename_buf_, "",
                               "print_status_idle_filename", subjects_);
     UI_MANAGED_SUBJECT_STRING(idle_when_subject_, idle_when_buf_, "Never printed",
                               "print_status_idle_when", subjects_);
-    UI_MANAGED_SUBJECT_STRING(idle_meta_subject_, idle_meta_buf_, "",
-                              "print_status_idle_meta", subjects_);
-    UI_MANAGED_SUBJECT_INT(idle_has_last_subject_, 0,
-                           "print_status_idle_has_last", subjects_);
+    UI_MANAGED_SUBJECT_STRING(idle_meta_subject_, idle_meta_buf_, "", "print_status_idle_meta",
+                              subjects_);
+    UI_MANAGED_SUBJECT_INT(idle_has_last_subject_, 0, "print_status_idle_has_last", subjects_);
 
     // Tear down formatter-owned subjects + observers under lv_deinit() (while
     // spdlog and PrintHistoryManager are still alive). ~DetailedFormatter runs
@@ -1848,7 +1861,8 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     // closed by this earlier teardown. Safe to fire multiple times since
     // subjects_.deinit_all() and observer .reset() are idempotent.
     StaticSubjectRegistry::instance().register_deinit("PrintStatusWidgetDetailedFormatter", []() {
-        if (!s_formatter_) return;
+        if (!s_formatter_)
+            return;
         if (auto* hm = get_print_history_manager()) {
             hm->remove_observer(&s_formatter_->history_cb_);
         }
@@ -1909,8 +1923,7 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
 
     // Multi-tool: observe tool_count + active_tool to drive gate and T<n> label
     tool_count_observer_ = observe_int_sync<DetailedFormatter>(
-        ToolState::instance().get_tool_count_subject(), this,
-        [](DetailedFormatter* self, int) {
+        ToolState::instance().get_tool_count_subject(), this, [](DetailedFormatter* self, int) {
             self->update_multi_tool();
             self->update_tool_label();
         });
@@ -1995,7 +2008,8 @@ void PrintStatusWidget::DetailedFormatter::attach_arc(lv_obj_t* arc) {
         lv_obj_add_event_cb(
             arc,
             [](lv_event_t* e) {
-                if (!s_formatter_) return;
+                if (!s_formatter_)
+                    return;
                 lv_obj_t* deleted = lv_event_get_target_obj(e);
                 if (s_formatter_->arc_widget_ == deleted) {
                     s_formatter_->arc_widget_ = nullptr;
