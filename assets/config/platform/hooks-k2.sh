@@ -35,14 +35,20 @@ platform_enable_backlight() {
 
 platform_wait_for_services() {
     # Wait for Moonraker to be ready (K2 Moonraker is on port 7125).
-    # Real wall-clock timeout: each iteration was ~3s (2s urlopen + 1s sleep)
-    # × 30 iterations = 90s wall, which surprised us in boot diagnostics.
-    # Track elapsed seconds via `date +%s` so the timeout reflects actual
-    # wall time, and drop urlopen timeout to 1s for quicker retries.
-    local timeout_sec=30
-    local start_sec
+    # Track elapsed seconds via `date +%s` so the timeout reflects actual wall
+    # time, with a 1s urlopen timeout for quick retries. K2's dual Cortex-A7 is
+    # slow; Moonraker+Klipper cold-boot init routinely exceeds 30s, so allow up
+    # to 120s (matching hooks-ad5m-forgex) and log progress every ~10s so the
+    # launcher log doesn't look hung. On timeout the UI launches anyway —
+    # MoonrakerClient auto-reconnects indefinitely (~2s backoff), so a late
+    # Moonraker just shows a brief disconnected state then connects.
+    # Use 127.0.0.1 (not localhost): K2 has no /etc/hosts entry for localhost.
+    local timeout_sec=120
+    local start_sec elapsed
     start_sec=$(date +%s)
-    while [ $(($(date +%s) - start_sec)) -lt $timeout_sec ]; do
+    while :; do
+        elapsed=$(( $(date +%s) - start_sec ))
+        [ "$elapsed" -ge "$timeout_sec" ] && break
         if python3 -c "
 import urllib.request
 try:
@@ -53,9 +59,11 @@ except:
 " 2>/dev/null; then
             return 0
         fi
+        [ $((elapsed % 10)) -eq 0 ] && echo "[hooks-k2] Waiting for Moonraker... (${elapsed}s)"
         sleep 1
     done
-    echo "[hooks-k2] Warning: Moonraker not ready after ${timeout_sec}s"
+    echo "[hooks-k2] Warning: Moonraker not ready after ${timeout_sec}s (UI will start; it auto-reconnects)"
+    return 1
 }
 
 platform_pre_start() {
