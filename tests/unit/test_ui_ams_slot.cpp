@@ -16,6 +16,7 @@
  */
 
 #include "ui_ams_slot.h"
+#include "ui_spool_canvas.h"
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../ui_test_utils.h"
@@ -253,9 +254,31 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: material label binds to subject",
     lv_obj_delete(slot);
 }
 
+// Find the spool visual whose color the slot updates. In the default 3D style
+// the filament color lives on the lv_canvas child of spool_container (read via
+// ui_spool_canvas_get_color); apply_slot_color() writes there, NOT to
+// spool_container itself. Returns the canvas, or nullptr if not in 3D style.
+static lv_obj_t* find_spool_canvas(lv_obj_t* spool_container) {
+    if (!spool_container) {
+        return nullptr;
+    }
+    uint32_t child_count = lv_obj_get_child_count(spool_container);
+    for (uint32_t i = 0; i < child_count; i++) {
+        lv_obj_t* child = lv_obj_get_child(spool_container, i);
+        if (child && lv_obj_check_type(child, &lv_canvas_class)) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
 TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: color subject updates spool",
                  "[ui][ams_slot][binding][.skip]") {
     ui_ams_slot_register();
+    // LVGLUITestFixture does not init AmsState subjects; do it here so the
+    // per-slot color subjects are live INT subjects (otherwise lv_subject_set_int
+    // operates on an uninitialized subject and the observer never fires).
+    AmsState::instance().init_subjects(true);
 
     // Set up mock backend
     auto mock = AmsBackend::create_mock(4);
@@ -278,22 +301,28 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: color subject updates spool",
     REQUIRE(slot != nullptr);
     process_lvgl(50);
 
-    // Get initial spool color
     lv_obj_t* spool_container = UITest::find_by_name(slot, "spool_container");
     REQUIRE(spool_container != nullptr);
 
-    lv_color_t initial_color = lv_obj_get_style_bg_color(spool_container, LV_PART_MAIN);
+    // apply_slot_color() writes the filament color to the spool_canvas (default
+    // 3D style), not to spool_container. Read the color from the canvas where
+    // the widget actually applies it.
+    lv_obj_t* canvas = find_spool_canvas(spool_container);
+    REQUIRE(canvas != nullptr);
+
+    lv_color_t initial_color = ui_spool_canvas_get_color(canvas);
 
     // Now update the color subject to Blue
     lv_subject_t* color_subj = AmsState::instance().get_slot_color_subject(0);
     REQUIRE(color_subj != nullptr);
     lv_subject_set_int(color_subj, 0x0000FF); // Blue
 
-    // Process LVGL to propagate the change
+    // observe_int_sync defers callbacks via queue_update (#82), so the color
+    // observer fires on a later tick. process_lvgl() drains the UpdateQueue via
+    // lv_timer_handler_safe(), so the deferred apply_slot_color() runs here.
     process_lvgl(50);
 
-    // Get updated color
-    lv_color_t updated_color = lv_obj_get_style_bg_color(spool_container, LV_PART_MAIN);
+    lv_color_t updated_color = ui_spool_canvas_get_color(canvas);
 
     // Colors should be different (Red vs Blue)
     REQUIRE_FALSE(lv_color_eq(initial_color, updated_color));
@@ -308,6 +337,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: color subject updates spool",
 TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: status badge visible when not empty",
                  "[ui][ams_slot][status][.skip]") {
     ui_ams_slot_register();
+    AmsState::instance().init_subjects(true);
 
     // Set up mock with AVAILABLE status
     auto mock = AmsBackend::create_mock(4);
@@ -332,9 +362,10 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: status badge visible when not emp
     lv_obj_delete(slot);
 }
 
-TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: status badge hidden when empty",
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: status badge visible when empty",
                  "[ui][ams_slot][status][.skip]") {
     ui_ams_slot_register();
+    AmsState::instance().init_subjects(true);
 
     // Set up mock with EMPTY status
     auto mock = AmsBackend::create_mock(4);
@@ -353,8 +384,11 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: status badge hidden when empty",
     lv_obj_t* status_badge = UITest::find_by_name(slot, "status_badge");
     REQUIRE(status_badge != nullptr);
 
-    // Badge should be hidden for EMPTY status
-    REQUIRE_FALSE(UITest::is_visible(status_badge));
+    // Badge stays visible (gray) even for EMPTY status so that every physical
+    // gate remains numbered/visible — deliberate behavior since
+    // 260552adc "fix(ams-slot): show tool badge on empty unassigned gates"
+    // (apply_slot_status: SlotStatus::EMPTY keeps show_badge = true).
+    REQUIRE(UITest::is_visible(status_badge));
 
     lv_obj_delete(slot);
 }
@@ -601,13 +635,16 @@ SpoolVisualState inspect_spool_state(lv_obj_t* spool_container) {
     lv_obj_t* spool_visual = nullptr;
     for (uint32_t i = 0; i < n; ++i) {
         lv_obj_t* child = lv_obj_get_child(spool_container, i);
-        if (!child) continue;
+        if (!child)
+            continue;
         const char* name = lv_obj_get_name(child);
-        if (name) continue; // skip named XML children (status_badge, tool_badge)
+        if (name)
+            continue; // skip named XML children (status_badge, tool_badge)
         spool_visual = child;
         break;
     }
-    if (!spool_visual) return st;
+    if (!spool_visual)
+        return st;
 
     lv_opa_t opa = lv_obj_get_style_opa(spool_visual, LV_PART_MAIN);
     lv_opa_t bg_opa = lv_obj_get_style_bg_opa(spool_visual, LV_PART_MAIN);
