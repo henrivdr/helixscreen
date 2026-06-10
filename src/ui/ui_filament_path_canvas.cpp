@@ -1048,13 +1048,20 @@ static int32_t draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t w
                                        box_area.y1 + pad + gear_h};
                 lv_draw_label(layer, &gear_dsc, &gear_area);
             } else {
-                // Draw just outside the right edge, vertically centered.
+                // Badge style: center the gear on the box's lower-right corner
+                // (half over the box, half outside), like the pencil-edit
+                // badges used elsewhere — reads as part of the box instead of
+                // a detached icon floating beside it. Use the label text color
+                // at full opacity: border-colored at 80% reads muddy where the
+                // badge overlaps the box fill.
+                gear_dsc.color = text_color;
+                gear_dsc.opa = LV_OPA_COVER;
                 gear_dsc.align = LV_TEXT_ALIGN_LEFT;
-                int32_t gx1 = box_area.x2 + pad;
-                int32_t gy1 = cy - gear_h / 2;
+                int32_t gx1 = box_area.x2 - gear_w / 2;
+                int32_t gy1 = box_area.y2 - gear_h / 2;
                 lv_area_t gear_area = {gx1, gy1, gx1 + gear_w, gy1 + gear_h};
                 lv_draw_label(layer, &gear_dsc, &gear_area);
-                gear_overflow = pad + gear_w;
+                gear_overflow = gear_w / 2;
             }
         }
     }

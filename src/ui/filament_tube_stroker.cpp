@@ -57,6 +57,13 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
         if (pass.width <= 0)
             continue;
 
+        // Opaque passes use round caps at EVERY joint: same-color opaque
+        // overdraw is invisible, and round ends close the wedge notches that
+        // butt caps leave wherever adjacent segments/chords meet at an angle
+        // (~13° between chords). Translucent passes (glow) keep butt caps at
+        // interior joints — round caps would double-blend at the overlap.
+        const bool round_joints = (pass.opa >= LV_OPA_COVER);
+
         for (int i = 0; i < path.count; i++) {
             const pg::PathSeg& s = path.segs[i];
             bool first = (i == 0);
@@ -73,8 +80,8 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
                 dsc.p1.y = s.p0.y;
                 dsc.p2.x = s.p1.x;
                 dsc.p2.y = s.p1.y;
-                dsc.round_start = first;
-                dsc.round_end = last;
+                dsc.round_start = first || round_joints;
+                dsc.round_end = last || round_joints;
                 lv_draw_line(layer, &dsc);
             } else {
                 // ARC: rendered as a fan of short straight chords at FLOAT
@@ -138,13 +145,11 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
                     dsc.p1.y = prev_y;
                     dsc.p2.x = cur_x;
                     dsc.p2.y = cur_y;
-                    // Terminal round caps only at the path-terminal end of an arc
-                    // that is itself the first/last seg of the path — exactly as
-                    // the LINE branch does. Interior chord joints use butt caps:
-                    // same-color opaque overdraw is invisible, and translucent
-                    // passes (glow) avoid double-blend.
-                    dsc.round_start = first && (c == 0);
-                    dsc.round_end = last && (c == n_chords - 1);
+                    // Opaque passes: round caps at every chord joint (see
+                    // round_joints above). Translucent passes: butt interior
+                    // joints, terminal round caps only at true path ends.
+                    dsc.round_start = (first && (c == 0)) || round_joints;
+                    dsc.round_end = (last && (c == n_chords - 1)) || round_joints;
                     lv_draw_line(layer, &dsc);
 
                     prev_a = cur_a;
