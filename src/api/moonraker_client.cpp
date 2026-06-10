@@ -160,11 +160,12 @@ MoonrakerClient::~MoonrakerClient() {
     // reconnection after we've started destruction (avoids stderr "No route to host")
     setReconnect(nullptr);
 
-    // Close WebSocket connection - replace callbacks with no-ops to prevent new callbacks
-    // from firing during destruction. The base class destructor will handle socket cleanup.
-    onopen = []() {};
-    onmessage = [](const std::string&) {};
-    onclose = []() {};
+    // NOTE: We intentionally do NOT reassign onopen/onmessage/onclose to no-ops here.
+    // Reassigning the inherited std::function members while the libhv event-loop thread
+    // may be mid-invoke frees the running lambda's storage → UAF (the very bug this fix
+    // addresses). The install-once trampolines self-cancel safely: destruction_guard_ was
+    // reset above (before the base hv::WebSocketClient destructor runs), so any callback
+    // firing during teardown sees dg.expired() and bails before touching `this`.
 
     // Clear state change callback without locking (destructor context)
     state_change_callback_ = nullptr;
@@ -267,6 +268,12 @@ void MoonrakerClient::disconnect() {
         spdlog::debug("[Moonraker Client] Disconnecting from WebSocket server");
     }
 
+    // Arm a short suppression window so the close that THIS intentional disconnect
+    // triggers does not produce a "connection lost / reconnecting" toast. on_ws_close()
+    // checks is_disconnect_modal_suppressed() to gate the reconnect side-effects. This
+    // replicates the old lifetime_guard_-reset suppression for the common case.
+    suppress_disconnect_modal(2000);
+
     // Disable auto-reconnect BEFORE invalidation to prevent spurious reconnection
     setReconnect(nullptr);
 
@@ -281,9 +288,7 @@ void MoonrakerClient::disconnect() {
 
     // Wait for any in-flight callbacks to finish before we modify shared state.
     // Callbacks hold a shared lock; acquiring exclusive blocks until they complete.
-    {
-        std::unique_lock<std::shared_mutex> lk(callback_lifecycle_mutex_);
-    }
+    { std::unique_lock<std::shared_mutex> lk(callback_lifecycle_mutex_); }
 
     // Now safe to stop timer and close — no callbacks can restart the timer or
     // access our state because the lifetime guard is invalidated.
@@ -361,302 +366,368 @@ int MoonrakerClient::connect(const char* url, std::function<void()> on_connected
     set_connection_state(ConnectionState::CONNECTING);
     connection_generation_.fetch_add(1);
 
-    // Connection opened callback
-    // Wrap entire callback body in try-catch to prevent any exception from escaping to libhv
-    // Capture weak_ptr to lifetime_guard_ to safely detect destruction from event loop thread.
-    // url is captured BY STRING COPY — capturing the const char* directly would dangle once the
-    // caller's stack-local URL string (e.g. ws_url in WizardConnectionStep::handle_test_connection_clicked)
-    // is destroyed. Surfaced by ASAN as heap-use-after-free in spdlog format on the libhv worker thread.
-    onopen = [this, weak_guard = std::weak_ptr<bool>(lifetime_guard_), on_connected,
-              url_owned = std::string(url ? url : "")]() {
+    // Install the inherited libhv callbacks exactly ONCE. Reassigning onopen/onmessage/
+    // onclose per connect() races the libhv event-loop thread, which may be mid-invoke on
+    // the old std::function — freeing its heap storage under the running lambda → UAF
+    // (bundle UK9QCFY3). The install-once trampolines forward to on_ws_open/on_ws_message/
+    // on_ws_close, which read per-connect state from last_url_/last_on_connected_/
+    // last_on_disconnected_ (stored below under reconnect_mutex_) instead of captures.
+    // Guarded by the already-held connect_mutex_.
+    if (!ws_callbacks_installed_) {
+        install_ws_callbacks();
+        ws_callbacks_installed_ = true;
+    }
+
+    // WebSocket ping (keepalive) - use configured interval
+    setPingInterval(static_cast<int>(keepalive_interval_ms_));
+
+    // Automatic reconnection with exponential backoff - use configured values
+    reconn_setting_t reconn;
+    reconn_setting_init(&reconn);
+    reconn.min_delay = reconnect_min_delay_ms_;
+    reconn.max_delay = reconnect_max_delay_ms_;
+    reconn.delay_policy = 2; // Exponential backoff
+    setReconnect(&reconn);
+
+    // Store connection info for force_reconnect() AND for the install-once trampolines,
+    // which snapshot these (under reconnect_mutex_) on every invocation rather than
+    // capturing the per-connect callbacks/url by value.
+    {
+        std::lock_guard<std::mutex> lock(reconnect_mutex_);
+        last_url_ = url ? url : "";
+        last_on_connected_ = on_connected;
+        last_on_disconnected_ = on_disconnected;
+    }
+
+    // Connect
+    http_headers headers;
+    headers["User-Agent"] = std::string("HelixScreen/") + HELIX_VERSION;
+    return open(url, headers);
+}
+
+void MoonrakerClient::install_ws_callbacks() {
+    // Each trampoline captures ONLY [this, dg] — a weak_ptr to destruction_guard_, which
+    // is reset only in the destructor. CRITICAL ordering: dg.lock() is checked FIRST,
+    // before any `this` deref, so a callback firing during the hv::WebSocketClient base-class
+    // destructor (after destruction_guard_.reset()) bails without touching destroyed members.
+    onopen = [this, dg = std::weak_ptr<bool>(destruction_guard_)]() {
+        // Liveness check that never dereferences `this`: a null lock() means the destructor
+        // already ran (it resets destruction_guard_ before the base-class dtor). See above.
+        auto live = dg.lock();
+        if (!live)
+            return;
         try {
-            // Acquire shared lock to prevent destructor from proceeding while we execute.
-            // try_to_lock ensures we never block if destructor holds the exclusive lock.
             std::shared_lock<std::shared_mutex> lk(callback_lifecycle_mutex_, std::try_to_lock);
-            if (!lk.owns_lock() || is_destroying_.load(std::memory_order_acquire)) {
-                return; // Destructor is running or waiting, abort callback
-            }
-
-            // Check lifetime guard (defense-in-depth)
-            auto guard = weak_guard.lock();
-            if (!guard) {
-                return; // Client is being destroyed, abort callback
-            }
-
-            // Note: getHttpResponse() available here if needed for upgrade response inspection
-            spdlog::debug("[Moonraker Client] WebSocket connected to {}", url_owned);
-
-            // Check if this is a reconnection (was_connected_ is true from previous session)
-            // Emit RECONNECTED event BEFORE updating was_connected_
-            if (was_connected_.load()) {
-                emit_event(MoonrakerEventType::RECONNECTED, "Connection restored", false);
-            }
-
-            was_connected_ = true;
-            set_connection_state(ConnectionState::CONNECTED);
-
-            // Start periodic health checks (timeout detection, reconnect staleness)
-            start_health_timer();
-
-            // Reset notification flags on successful connection
-            reset_notification_flags();
-
-            invoke_connected_callback(on_connected, "WebSocket opened");
+            if (!lk.owns_lock() || is_destroying_.load(std::memory_order_acquire))
+                return;
+            on_ws_open();
         } catch (const std::exception& e) {
-            LOG_ERROR_INTERNAL("[Moonraker Client] onopen callback threw unexpected exception: {}",
-                               e.what());
+            LOG_ERROR_INTERNAL("[Moonraker Client] onopen trampoline threw: {}", e.what());
         } catch (...) {
-            LOG_ERROR_INTERNAL("[Moonraker Client] onopen callback threw unknown exception");
+            LOG_ERROR_INTERNAL("[Moonraker Client] onopen trampoline threw unknown");
         }
     };
 
-    // Message received callback
-    // Wrap entire callback body in try-catch to prevent any exception from escaping to libhv
-    // Capture weak_ptr to lifetime_guard_ to safely detect destruction from event loop thread
-    onmessage = [this, weak_guard = std::weak_ptr<bool>(lifetime_guard_), on_connected,
-                 on_disconnected](const std::string& msg) {
-        // DEBUG: Log every raw message received to diagnose AD5M WebSocket issue
-        spdlog::trace("[Moonraker Client] onmessage received {} bytes", msg.size());
-
+    onmessage = [this, dg = std::weak_ptr<bool>(destruction_guard_)](const std::string& msg) {
+        // Liveness check that never dereferences `this`: a null lock() means the destructor
+        // already ran (it resets destruction_guard_ before the base-class dtor). See above.
+        auto live = dg.lock();
+        if (!live)
+            return;
         try {
-            // Acquire shared lock to prevent destructor from proceeding while we execute.
-            // try_to_lock ensures we never block if destructor holds the exclusive lock.
             std::shared_lock<std::shared_mutex> lk(callback_lifecycle_mutex_, std::try_to_lock);
-            if (!lk.owns_lock() || is_destroying_.load(std::memory_order_acquire)) {
-                return; // Destructor is running or waiting, abort callback
+            if (!lk.owns_lock() || is_destroying_.load(std::memory_order_acquire))
+                return;
+            on_ws_message(msg);
+        } catch (const std::exception& e) {
+            LOG_ERROR_INTERNAL("[Moonraker Client] onmessage trampoline threw: {}", e.what());
+        } catch (...) {
+            LOG_ERROR_INTERNAL("[Moonraker Client] onmessage trampoline threw unknown");
+        }
+    };
+
+    onclose = [this, dg = std::weak_ptr<bool>(destruction_guard_)]() {
+        // Liveness check that never dereferences `this`: a null lock() means the destructor
+        // already ran (it resets destruction_guard_ before the base-class dtor). See above.
+        auto live = dg.lock();
+        if (!live)
+            return;
+        try {
+            std::shared_lock<std::shared_mutex> lk(callback_lifecycle_mutex_, std::try_to_lock);
+            if (!lk.owns_lock() || is_destroying_.load(std::memory_order_acquire))
+                return;
+            on_ws_close();
+        } catch (const std::exception& e) {
+            LOG_ERROR_INTERNAL("[Moonraker Client] onclose trampoline threw: {}", e.what());
+        } catch (...) {
+            LOG_ERROR_INTERNAL("[Moonraker Client] onclose trampoline threw unknown");
+        }
+    };
+}
+
+void MoonrakerClient::on_ws_open() {
+    // Snapshot per-connect callback + url; the install-once trampoline no longer captures them.
+    std::function<void()> on_connected;
+    std::string url_owned;
+    {
+        std::lock_guard<std::mutex> lk(reconnect_mutex_);
+        on_connected = last_on_connected_;
+        url_owned = last_url_;
+    }
+
+    // Note: getHttpResponse() available here if needed for upgrade response inspection
+    spdlog::debug("[Moonraker Client] WebSocket connected to {}", url_owned);
+
+    // Check if this is a reconnection (was_connected_ is true from previous session)
+    // Emit RECONNECTED event BEFORE updating was_connected_
+    if (was_connected_.load()) {
+        emit_event(MoonrakerEventType::RECONNECTED, "Connection restored", false);
+    }
+
+    was_connected_ = true;
+    set_connection_state(ConnectionState::CONNECTED);
+
+    // Start periodic health checks (timeout detection, reconnect staleness)
+    start_health_timer();
+
+    // Reset notification flags on successful connection
+    reset_notification_flags();
+
+    invoke_connected_callback(on_connected, "WebSocket opened");
+}
+
+void MoonrakerClient::on_ws_message(const std::string& msg) {
+    // Snapshot per-connect callbacks; the install-once trampoline no longer captures them.
+    std::function<void()> on_connected;
+    std::function<void()> on_disconnected;
+    {
+        std::lock_guard<std::mutex> lk(reconnect_mutex_);
+        on_connected = last_on_connected_;
+        on_disconnected = last_on_disconnected_;
+    }
+
+    // DEBUG: Log every raw message received to diagnose AD5M WebSocket issue
+    spdlog::trace("[Moonraker Client] onmessage received {} bytes", msg.size());
+
+    try {
+        // Validate message size to prevent memory exhaustion
+        static constexpr size_t MAX_MESSAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+        if (msg.size() > MAX_MESSAGE_SIZE) {
+            spdlog::error("[Moonraker Client] Message too large: {} bytes (max: {})", msg.size(),
+                          MAX_MESSAGE_SIZE);
+
+            // Emit event - this indicates a protocol problem
+            emit_event(MoonrakerEventType::MESSAGE_OVERSIZED,
+                       fmt::format("Received oversized data from printer ({} bytes). "
+                                   "This may indicate a communication error.",
+                                   msg.size()),
+                       true);
+
+            disconnect();
+            return;
+        }
+
+        // Check for timed out requests on each message (opportunistic cleanup)
+        process_timeouts();
+
+        // DEBUG: Log large messages to help diagnose history issue
+        if (msg.size() > 50000) {
+            spdlog::debug("[Moonraker Client] Received large message: {} bytes", msg.size());
+        }
+
+        // Parse JSON message
+        json j;
+        try {
+            j = json::parse(msg);
+        } catch (const json::parse_error& e) {
+            LOG_ERROR_INTERNAL("[Moonraker Client] JSON parse error: {}", e.what());
+            TelemetryManager::instance().record_error("websocket", "parse_error",
+                                                      fmt::format("JSON parse: {}", e.what()));
+            return;
+        }
+
+        // Route responses with request IDs through the tracker
+        if (j.contains("id")) {
+            tracker_.route_response(
+                j,
+                [this](MoonrakerEventType type, const std::string& msg_str, bool is_error,
+                       const std::string& details) {
+                    emit_event(type, msg_str, is_error, details);
+                },
+                []() { return AbortManager::instance().is_handling_shutdown(); });
+        }
+
+        // Handle notifications (no request ID)
+        if (j.contains("method")) {
+            // Validate 'method' field type
+            if (!j["method"].is_string()) {
+                LOG_ERROR_INTERNAL("[Moonraker Client] Invalid 'method' type in notification: {}",
+                                   j["method"].type_name());
+                return;
             }
 
-            // Check lifetime guard (defense-in-depth)
-            auto guard = weak_guard.lock();
-            if (!guard) {
-                return; // Client is being destroyed, abort callback
+            std::string method = j["method"].get<std::string>();
+
+            // Copy callbacks to invoke (to avoid holding lock during callback execution)
+            std::vector<std::function<void(const json&)>> callbacks_to_invoke;
+
+            {
+                std::lock_guard<std::mutex> lock(callbacks_mutex_);
+
+                // Printer status updates (most common)
+                if (method == "notify_status_update" || method == "notify_filelist_changed") {
+                    // Copy all notify callbacks from map
+                    callbacks_to_invoke.reserve(notify_callbacks_.size());
+                    for (const auto& [id, cb] : notify_callbacks_) {
+                        callbacks_to_invoke.push_back(cb);
+                    }
+                }
+
+                // Method-specific persistent callbacks
+                auto method_it = method_callbacks_.find(method);
+                if (method_it != method_callbacks_.end()) {
+                    for (auto& [handler_name, cb] : method_it->second) {
+                        callbacks_to_invoke.push_back(cb);
+                    }
+                }
+            } // Release lock
+
+            // Parse bed mesh updates before invoking user callbacks
+            if (method == "notify_status_update" && j.contains("params") &&
+                j["params"].is_array() && !j["params"].empty()) {
+                const json& params = j["params"][0];
+                if (params.contains("bed_mesh") && params["bed_mesh"].is_object()) {
+                    parse_bed_mesh(params["bed_mesh"]);
+                }
             }
 
-            // Validate message size to prevent memory exhaustion
-            static constexpr size_t MAX_MESSAGE_SIZE = 5 * 1024 * 1024; // 5 MB
-            if (msg.size() > MAX_MESSAGE_SIZE) {
-                spdlog::error("[Moonraker Client] Message too large: {} bytes (max: {})",
-                              msg.size(), MAX_MESSAGE_SIZE);
+            // Invoke callbacks outside lock to prevent deadlock
+            for (auto& cb : callbacks_to_invoke) {
+                // Defense-in-depth: a moved-from or empty std::function in the
+                // registration map would SIGSEGV on invocation (#765 class).
+                if (!cb)
+                    continue;
+                try {
+                    cb(j);
+                } catch (const std::exception& e) {
+                    LOG_ERROR_INTERNAL("[Moonraker Client] Callback for {} threw exception: {}",
+                                       method, e.what());
+                } catch (...) {
+                    LOG_ERROR_INTERNAL("[Moonraker Client] Callback for {} threw unknown exception",
+                                       method);
+                }
+            }
 
-                // Emit event - this indicates a protocol problem
-                emit_event(MoonrakerEventType::MESSAGE_OVERSIZED,
-                           fmt::format("Received oversized data from printer ({} bytes). "
-                                       "This may indicate a communication error.",
-                                       msg.size()),
+            // Klippy disconnected from Moonraker
+            if (method == "notify_klippy_disconnected") {
+                spdlog::warn("[Moonraker Client] Klipper disconnected from Moonraker");
+
+                // Update klippy state in PrinterState (SHUTDOWN = firmware disconnected)
+                get_printer_state().set_klippy_state(KlippyState::SHUTDOWN);
+
+                // Clear pending requests — Klippy can't process them anymore
+                tracker_.cleanup_all();
+
+                // Emit event for UI layer to handle
+                emit_event(MoonrakerEventType::KLIPPY_DISCONNECTED,
+                           "Klipper has disconnected from Moonraker. Check for errors in your "
+                           "printer interface.",
                            true);
 
-                disconnect();
-                return;
-            }
-
-            // Check for timed out requests on each message (opportunistic cleanup)
-            process_timeouts();
-
-            // DEBUG: Log large messages to help diagnose history issue
-            if (msg.size() > 50000) {
-                spdlog::debug("[Moonraker Client] Received large message: {} bytes", msg.size());
-            }
-
-            // Parse JSON message
-            json j;
-            try {
-                j = json::parse(msg);
-            } catch (const json::parse_error& e) {
-                LOG_ERROR_INTERNAL("[Moonraker Client] JSON parse error: {}", e.what());
-                TelemetryManager::instance().record_error("websocket", "parse_error",
-                                                          fmt::format("JSON parse: {}", e.what()));
-                return;
-            }
-
-            // Route responses with request IDs through the tracker
-            if (j.contains("id")) {
-                tracker_.route_response(
-                    j,
-                    [this](MoonrakerEventType type, const std::string& msg_str, bool is_error,
-                           const std::string& details) {
-                        emit_event(type, msg_str, is_error, details);
-                    },
-                    []() { return AbortManager::instance().is_handling_shutdown(); });
-            }
-
-            // Handle notifications (no request ID)
-            if (j.contains("method")) {
-                // Validate 'method' field type
-                if (!j["method"].is_string()) {
-                    LOG_ERROR_INTERNAL(
-                        "[Moonraker Client] Invalid 'method' type in notification: {}",
-                        j["method"].type_name());
-                    return;
-                }
-
-                std::string method = j["method"].get<std::string>();
-
-                // Copy callbacks to invoke (to avoid holding lock during callback execution)
-                std::vector<std::function<void(const json&)>> callbacks_to_invoke;
-
-                {
-                    std::lock_guard<std::mutex> lock(callbacks_mutex_);
-
-                    // Printer status updates (most common)
-                    if (method == "notify_status_update" || method == "notify_filelist_changed") {
-                        // Copy all notify callbacks from map
-                        callbacks_to_invoke.reserve(notify_callbacks_.size());
-                        for (const auto& [id, cb] : notify_callbacks_) {
-                            callbacks_to_invoke.push_back(cb);
-                        }
-                    }
-
-                    // Method-specific persistent callbacks
-                    auto method_it = method_callbacks_.find(method);
-                    if (method_it != method_callbacks_.end()) {
-                        for (auto& [handler_name, cb] : method_it->second) {
-                            callbacks_to_invoke.push_back(cb);
-                        }
-                    }
-                } // Release lock
-
-                // Parse bed mesh updates before invoking user callbacks
-                if (method == "notify_status_update" && j.contains("params") &&
-                    j["params"].is_array() && !j["params"].empty()) {
-                    const json& params = j["params"][0];
-                    if (params.contains("bed_mesh") && params["bed_mesh"].is_object()) {
-                        parse_bed_mesh(params["bed_mesh"]);
-                    }
-                }
-
-                // Invoke callbacks outside lock to prevent deadlock
-                for (auto& cb : callbacks_to_invoke) {
-                    // Defense-in-depth: a moved-from or empty std::function in the
-                    // registration map would SIGSEGV on invocation (#765 class).
-                    if (!cb)
-                        continue;
+                // Invoke user callback with exception safety
+                if (on_disconnected) {
                     try {
-                        cb(j);
+                        on_disconnected();
                     } catch (const std::exception& e) {
-                        LOG_ERROR_INTERNAL("[Moonraker Client] Callback for {} threw exception: {}",
-                                           method, e.what());
-                    } catch (...) {
                         LOG_ERROR_INTERNAL(
-                            "[Moonraker Client] Callback for {} threw unknown exception", method);
+                            "[Moonraker Client] Disconnection callback threw exception: {}",
+                            e.what());
+                    } catch (...) {
+                        LOG_ERROR_INTERNAL("[Moonraker Client] Disconnection callback threw "
+                                           "unknown exception");
                     }
-                }
-
-                // Klippy disconnected from Moonraker
-                if (method == "notify_klippy_disconnected") {
-                    spdlog::warn("[Moonraker Client] Klipper disconnected from Moonraker");
-
-                    // Update klippy state in PrinterState (SHUTDOWN = firmware disconnected)
-                    get_printer_state().set_klippy_state(KlippyState::SHUTDOWN);
-
-                    // Clear pending requests — Klippy can't process them anymore
-                    tracker_.cleanup_all();
-
-                    // Emit event for UI layer to handle
-                    emit_event(MoonrakerEventType::KLIPPY_DISCONNECTED,
-                               "Klipper has disconnected from Moonraker. Check for errors in your "
-                               "printer interface.",
-                               true);
-
-                    // Invoke user callback with exception safety
-                    if (on_disconnected) {
-                        try {
-                            on_disconnected();
-                        } catch (const std::exception& e) {
-                            LOG_ERROR_INTERNAL(
-                                "[Moonraker Client] Disconnection callback threw exception: {}",
-                                e.what());
-                        } catch (...) {
-                            LOG_ERROR_INTERNAL("[Moonraker Client] Disconnection callback threw "
-                                               "unknown exception");
-                        }
-                    }
-                }
-                // Klippy entered shutdown state (M112, thermal runaway, config error)
-                // Distinct from disconnect — Klipper is still running but in shutdown mode
-                else if (method == "notify_klippy_shutdown") {
-                    spdlog::warn("[Moonraker Client] Klipper entered shutdown state");
-
-                    helix::ui::queue_update("MoonrakerClient::notify_klippy_shutdown", []() {
-                        get_printer_state().set_klippy_state_sync(KlippyState::SHUTDOWN);
-                    });
-
-                    // Emit event for UI layer — recovery dialog will show
-                    emit_event(MoonrakerEventType::KLIPPY_SHUTDOWN,
-                               "Klipper has entered shutdown state.", true);
-
-                    // Shutdown is a valid gate state for discovery. If we never
-                    // completed one on this connection (Klippy was unreachable
-                    // at WS-connect time), retry now (#802).
-                    if (!discovery_.is_completed()) {
-                        spdlog::info("[Moonraker Client] Retrying discovery after Klippy shutdown");
-                        invoke_connected_callback(on_connected, "Klippy shutdown");
-                    }
-                }
-                // Klippy reconnected to Moonraker
-                else if (method == "notify_klippy_ready") {
-                    spdlog::info("[Moonraker Client] Klipper ready");
-
-                    helix::ui::queue_update("MoonrakerClient::notify_klippy_ready", []() {
-                        get_printer_state().set_klippy_state_sync(KlippyState::READY);
-                    });
-
-                    // Emit event for UI layer to show success toast
-                    emit_event(MoonrakerEventType::KLIPPY_READY, "Klipper ready", false);
-
-                    // Unconditional retrigger (unlike notify_klippy_shutdown which
-                    // checks !discovery_.is_completed()): a transition INTO ready
-                    // may follow a FIRMWARE_RESTART after config edits where the
-                    // hardware shape changed, so we always rediscover.
-                    invoke_connected_callback(on_connected, "Klippy ready");
                 }
             }
-        } catch (const std::exception& e) {
-            LOG_ERROR_INTERNAL(
-                "[Moonraker Client] onmessage callback threw unexpected exception: {}", e.what());
-        } catch (...) {
-            LOG_ERROR_INTERNAL("[Moonraker Client] onmessage callback threw unknown exception");
+            // Klippy entered shutdown state (M112, thermal runaway, config error)
+            // Distinct from disconnect — Klipper is still running but in shutdown mode
+            else if (method == "notify_klippy_shutdown") {
+                spdlog::warn("[Moonraker Client] Klipper entered shutdown state");
+
+                helix::ui::queue_update("MoonrakerClient::notify_klippy_shutdown", []() {
+                    get_printer_state().set_klippy_state_sync(KlippyState::SHUTDOWN);
+                });
+
+                // Emit event for UI layer — recovery dialog will show
+                emit_event(MoonrakerEventType::KLIPPY_SHUTDOWN,
+                           "Klipper has entered shutdown state.", true);
+
+                // Shutdown is a valid gate state for discovery. If we never
+                // completed one on this connection (Klippy was unreachable
+                // at WS-connect time), retry now (#802).
+                if (!discovery_.is_completed()) {
+                    spdlog::info("[Moonraker Client] Retrying discovery after Klippy shutdown");
+                    invoke_connected_callback(on_connected, "Klippy shutdown");
+                }
+            }
+            // Klippy reconnected to Moonraker
+            else if (method == "notify_klippy_ready") {
+                spdlog::info("[Moonraker Client] Klipper ready");
+
+                helix::ui::queue_update("MoonrakerClient::notify_klippy_ready", []() {
+                    get_printer_state().set_klippy_state_sync(KlippyState::READY);
+                });
+
+                // Emit event for UI layer to show success toast
+                emit_event(MoonrakerEventType::KLIPPY_READY, "Klipper ready", false);
+
+                // Unconditional retrigger (unlike notify_klippy_shutdown which
+                // checks !discovery_.is_completed()): a transition INTO ready
+                // may follow a FIRMWARE_RESTART after config edits where the
+                // hardware shape changed, so we always rediscover.
+                invoke_connected_callback(on_connected, "Klippy ready");
+            }
         }
-    };
+    } catch (const std::exception& e) {
+        LOG_ERROR_INTERNAL("[Moonraker Client] onmessage callback threw unexpected exception: {}",
+                           e.what());
+    } catch (...) {
+        LOG_ERROR_INTERNAL("[Moonraker Client] onmessage callback threw unknown exception");
+    }
+}
 
-    // Connection closed callback
-    // Wrap entire callback body in try-catch to prevent any exception from escaping
-    // to libhv (which may not handle exceptions properly or may be noexcept)
-    // Capture weak_ptr to lifetime_guard_ to safely detect destruction from event loop thread
-    onclose = [this, weak_guard = std::weak_ptr<bool>(lifetime_guard_), on_disconnected]() {
-        try {
-            spdlog::debug("[Moonraker Client] onclose callback invoked");
+void MoonrakerClient::on_ws_close() {
+    // Snapshot per-connect callback; the install-once trampoline no longer captures it.
+    std::function<void()> on_disconnected;
+    {
+        std::lock_guard<std::mutex> lk(reconnect_mutex_);
+        on_disconnected = last_on_disconnected_;
+    }
 
-            // Acquire shared lock to prevent destructor from proceeding while we execute.
-            // try_to_lock ensures we never block if destructor holds the exclusive lock.
-            std::shared_lock<std::shared_mutex> lk(callback_lifecycle_mutex_, std::try_to_lock);
-            if (!lk.owns_lock() || is_destroying_.load(std::memory_order_acquire)) {
-                spdlog::debug(
-                    "[Moonraker Client] onclose callback early return due to destruction");
-                return; // Destructor is running or waiting, abort callback
-            }
+    try {
+        spdlog::debug("[Moonraker Client] onclose callback invoked");
 
-            // Check lifetime guard (defense-in-depth)
-            auto guard = weak_guard.lock();
-            if (!guard) {
-                spdlog::debug(
-                    "[Moonraker Client] onclose callback early return - client destroyed");
-                return; // Client is being destroyed, abort callback
-            }
+        ConnectionState current = connection_state_.load();
 
-            ConnectionState current = connection_state_.load();
+        // Best-effort suppression of "connection lost / reconnecting" side-effects when the
+        // close was triggered by an intentional teardown (disconnect() arms a short suppress
+        // window). The unconditional cleanup below always runs. A rare residual race during
+        // change-host-to-unreachable-host may still surface one rate-limited notification —
+        // this is accepted.
+        const bool suppressed = is_disconnect_modal_suppressed();
 
-            // Cleanup all pending requests (invoke error callbacks)
-            tracker_.cleanup_all();
+        // Cleanup all pending requests (invoke error callbacks) — unconditional.
+        tracker_.cleanup_all();
 
-            if (was_connected_) {
-                spdlog::warn("[Moonraker Client] WebSocket connection closed");
-                TelemetryManager::instance().record_error("websocket", "disconnected",
-                                                          "connection closed unexpectedly");
-                was_connected_ = false;
-                // Reset so re-identification + retry-on-klippy-state happen on reconnect
-                discovery_.reset_identified();
-                discovery_.reset_completion();
+        if (was_connected_) {
+            spdlog::warn("[Moonraker Client] WebSocket connection closed");
+            TelemetryManager::instance().record_error("websocket", "disconnected",
+                                                      "connection closed unexpectedly");
+            was_connected_ = false;
+            // Reset so re-identification + retry-on-klippy-state happen on reconnect
+            discovery_.reset_identified();
+            discovery_.reset_completion();
 
+            if (!suppressed) {
                 // Emit event with rate limiting to prevent spam during reconnect loop
                 if (!g_already_notified_disconnect.load()) {
                     emit_event(MoonrakerEventType::CONNECTION_LOST,
@@ -682,62 +753,38 @@ int MoonrakerClient::connect(const char* url, std::function<void()> on_connected
                             "[Moonraker Client] Disconnection callback threw unknown exception");
                     }
                 }
-            } else {
-                spdlog::debug(
-                    "[Moonraker Client] WebSocket connection failed (printer not available)");
+            }
+        } else {
+            spdlog::debug("[Moonraker Client] WebSocket connection failed (printer not available)");
 
-                // Initial connection failed
-                if (current == ConnectionState::CONNECTING) {
-                    set_connection_state(ConnectionState::DISCONNECTED);
-                }
+            // Initial connection failed. NOT suppressed — we want failed-new-host
+            // notifications to surface (this is the initial-connection branch, not a
+            // reconnect of a previously-established session).
+            if (current == ConnectionState::CONNECTING) {
+                set_connection_state(ConnectionState::DISCONNECTED);
+            }
 
-                // Call on_disconnected() to notify about connection failure
-                // Callers can use their own state tracking (e.g. connection_testing flag)
-                // to distinguish initial connection failures from reconnection scenarios
-                if (on_disconnected) {
-                    try {
-                        on_disconnected();
-                    } catch (const std::exception& e) {
-                        LOG_ERROR_INTERNAL(
-                            "[Moonraker Client] Disconnection callback threw exception: {}",
-                            e.what());
-                    } catch (...) {
-                        LOG_ERROR_INTERNAL(
-                            "[Moonraker Client] Disconnection callback threw unknown exception");
-                    }
+            // Call on_disconnected() to notify about connection failure
+            // Callers can use their own state tracking (e.g. connection_testing flag)
+            // to distinguish initial connection failures from reconnection scenarios
+            if (on_disconnected) {
+                try {
+                    on_disconnected();
+                } catch (const std::exception& e) {
+                    LOG_ERROR_INTERNAL(
+                        "[Moonraker Client] Disconnection callback threw exception: {}", e.what());
+                } catch (...) {
+                    LOG_ERROR_INTERNAL(
+                        "[Moonraker Client] Disconnection callback threw unknown exception");
                 }
             }
-        } catch (const std::exception& e) {
-            LOG_ERROR_INTERNAL("[Moonraker Client] onclose callback threw unexpected exception: {}",
-                               e.what());
-        } catch (...) {
-            LOG_ERROR_INTERNAL("[Moonraker Client] onclose callback threw unknown exception");
         }
-    };
-
-    // WebSocket ping (keepalive) - use configured interval
-    setPingInterval(static_cast<int>(keepalive_interval_ms_));
-
-    // Automatic reconnection with exponential backoff - use configured values
-    reconn_setting_t reconn;
-    reconn_setting_init(&reconn);
-    reconn.min_delay = reconnect_min_delay_ms_;
-    reconn.max_delay = reconnect_max_delay_ms_;
-    reconn.delay_policy = 2; // Exponential backoff
-    setReconnect(&reconn);
-
-    // Store connection info for force_reconnect()
-    {
-        std::lock_guard<std::mutex> lock(reconnect_mutex_);
-        last_url_ = url;
-        last_on_connected_ = on_connected;
-        last_on_disconnected_ = on_disconnected;
+    } catch (const std::exception& e) {
+        LOG_ERROR_INTERNAL("[Moonraker Client] onclose callback threw unexpected exception: {}",
+                           e.what());
+    } catch (...) {
+        LOG_ERROR_INTERNAL("[Moonraker Client] onclose callback threw unknown exception");
     }
-
-    // Connect
-    http_headers headers;
-    headers["User-Agent"] = std::string("HelixScreen/") + HELIX_VERSION;
-    return open(url, headers);
 }
 
 SubscriptionId MoonrakerClient::register_notify_update(std::function<void(const json&)> cb) {
@@ -869,8 +916,8 @@ void MoonrakerClient::dispatch_status_update(const json& status) {
         } catch (const std::exception& e) {
             LOG_ERROR_INTERNAL(
                 "[Moonraker Client] dispatch_status_update callback threw exception: {}", e.what());
-            TelemetryManager::instance().record_error(
-                "websocket", "status_dispatch_exception", e.what());
+            TelemetryManager::instance().record_error("websocket", "status_dispatch_exception",
+                                                      e.what());
         } catch (...) {
             LOG_ERROR_INTERNAL(
                 "[Moonraker Client] dispatch_status_update callback threw unknown exception");
@@ -1062,7 +1109,8 @@ void MoonrakerClient::invoke_connected_callback(const std::function<void()>& cb,
         }
     }
     for (auto& [name, fn] : observers_copy) {
-        if (!fn) continue;
+        if (!fn)
+            continue;
         try {
             fn();
         } catch (const std::exception& e) {
@@ -1095,8 +1143,8 @@ void MoonrakerClient::add_connected_observer(const std::string& handler_name,
             immediate_cb();
         } catch (const std::exception& e) {
             LOG_ERROR_INTERNAL(
-                "[Moonraker Client] connected observer '{}' immediate-fire threw: {}",
-                handler_name, e.what());
+                "[Moonraker Client] connected observer '{}' immediate-fire threw: {}", handler_name,
+                e.what());
         } catch (...) {
             LOG_ERROR_INTERNAL(
                 "[Moonraker Client] connected observer '{}' immediate-fire threw unknown",

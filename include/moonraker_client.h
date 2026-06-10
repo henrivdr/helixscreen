@@ -311,9 +311,9 @@ class MoonrakerClient : public hv::WebSocketClient, public IMoonrakerClient {
      * @param on_success Callback with vector of GcodeStoreEntry (oldest first)
      * @param on_error Callback for errors
      */
-    void
-    get_gcode_store(int count, std::function<void(const std::vector<GcodeStoreEntry>&)> on_success,
-                    std::function<void(const MoonrakerError&)> on_error) override;
+    void get_gcode_store(int count,
+                         std::function<void(const std::vector<GcodeStoreEntry>&)> on_success,
+                         std::function<void(const MoonrakerError&)> on_error) override;
 
     // ========== Discovery (delegates to MoonrakerDiscoverySequence) ==========
 
@@ -641,6 +641,18 @@ class MoonrakerClient : public hv::WebSocketClient, public IMoonrakerClient {
      */
     void invoke_connected_callback(const std::function<void()>& cb, const char* cause);
 
+    // ========== WebSocket callback trampolines (install-once) ==========
+    // The inherited libhv std::function callbacks (onopen/onmessage/onclose) are
+    // installed exactly ONCE via install_ws_callbacks() and never reassigned per
+    // connect(). Reassigning them while the libhv event-loop thread is mid-invoke
+    // frees the std::function's heap storage under the running lambda → UAF (bundle
+    // UK9QCFY3). The trampolines forward to these real bodies, which read per-connect
+    // state from last_url_/last_on_connected_/last_on_disconnected_ instead of captures.
+    void on_ws_open();
+    void on_ws_message(const std::string& msg);
+    void on_ws_close();
+    void install_ws_callbacks(); // set onopen/onmessage/onclose ONCE
+
   protected:
     /**
      * @brief Transition to new connection state
@@ -732,6 +744,10 @@ class MoonrakerClient : public hv::WebSocketClient, public IMoonrakerClient {
     // This ensures all in-flight callbacks complete before destruction proceeds.
     mutable std::shared_mutex callback_lifecycle_mutex_;
 
+    bool ws_callbacks_installed_ =
+        false; // guarded by connect_mutex_; install-once trampolines (no per-connect
+               // reassignment — prevents UAF on the libhv thread)
+
     // Periodic health-check timer (runs on libhv event loop thread)
     // Checks request timeouts and reconnection staleness independently of message flow
     hv::TimerID health_timer_id_{0};
@@ -755,6 +771,8 @@ class MoonrakerClient : public hv::WebSocketClient, public IMoonrakerClient {
     // detect that the MoonrakerClient instance itself is gone — not that it
     // merely dropped a WebSocket connection.
     std::shared_ptr<bool> destruction_guard_ = std::make_shared<bool>(true);
+
+    friend class MoonrakerClientTestAccess;
 };
 
 } // namespace helix
