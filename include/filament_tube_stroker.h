@@ -104,5 +104,27 @@ void draw_lane_route(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t x1, int3
 void draw_lane_hline(lv_layer_t* layer, int32_t x0, int32_t x1, int32_t y, const LaneStyle& style,
                      pg::FilamentPath* record = nullptr);
 
+// One lane in a hub merge fan: its source column / diagonal-start height, draw
+// style, and an optional active-path record sink. Used by draw_merge_fan.
+struct MergeFanLane {
+    int32_t slot_x;
+    int32_t start_y;
+    LaneStyle style;
+    pg::FilamentPath* record = nullptr; // append the drawn path here (active lane)
+};
+
+// Shared hub-merge renderer: parallel diagonals per side, separation by
+// construction (see pathgeo::build_merge_fan). Computes widened hub-top entries
+// + one common slope per side so no two lanes ever overlap or pinch, then routes
+// and draws each lane. Consumed by BOTH AMS path canvases (detail HUB renderer,
+// detail mixed-topology, overview multi-tool routes, overview single-tool hub
+// convergence). @p hub_top is the verticals' final destination; @p fillet_r is
+// the corner-fillet radius (8 on the detail panel, 9 on the overview).
+//
+// If @p entry_x_out is non-null it receives each lane's computed hub-top entry x
+// (size >= n) so the caller can place sensor dots exactly where the tubes land.
+void draw_merge_fan(lv_layer_t* layer, const MergeFanLane* lanes, int n, int32_t hub_cx,
+                    int32_t hub_top, int32_t hub_w, float fillet_r, int32_t* entry_x_out = nullptr);
+
 } // namespace ui
 } // namespace helix

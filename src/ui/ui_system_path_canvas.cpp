@@ -187,7 +187,10 @@ static BypassGeometry compute_bypass_geometry(const SystemPathData* data,
             // overlaps a nozzle. Degrades better than a clipped/overlapping spool.
             bypass_x = LV_CLAMP(rightmost_tool_x, x_off + BYPASS_SPOOL_HALF + 4, right_limit);
             // Sit below the toolhead row: nozzle centre + glyph drop + spool half.
+            // Clamp so the spool's lower edge never falls off the canvas bottom on
+            // short panels (the spool overlay is centred on merge_y).
             merge_y = nozzle_y + scale * 4 + BYPASS_SPOOL_HALF + comfort;
+            merge_y = LV_MIN(merge_y, y_off + height - BYPASS_SPOOL_HALF - 4);
         }
     }
 
@@ -281,15 +284,10 @@ static void draw_tube_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2
     helix::ui::draw_lane(layer, path, sp_lane_style(color, width, active));
 }
 
-// Vertical tube run. cap_start/cap_end were used to suppress round caps at
-// straight↔curve junctions in the old bezier renderer; the concentric stroker
-// joins segments tangentially with butt caps so seams are already seamless, and
-// these params are accepted for call-site compatibility but no longer needed.
+// Vertical tube run. The concentric stroker joins segments tangentially with
+// butt caps, so straight↔curve junction seams are already seamless.
 static void draw_vertical_line(lv_layer_t* layer, int32_t x, int32_t y1, int32_t y2,
-                               lv_color_t color, int32_t width, bool cap_start = true,
-                               bool cap_end = true, bool active = false) {
-    LV_UNUSED(cap_start);
-    LV_UNUSED(cap_end);
+                               lv_color_t color, int32_t width, bool active = false) {
     helix::ui::draw_lane_vline(layer, x, y1, y2, sp_lane_style(color, width, active));
 }
 
@@ -299,15 +297,20 @@ static void draw_line(lv_layer_t* layer, int32_t x1, int32_t y1, int32_t x2, int
     draw_tube_line(layer, x1, y1, x2, y2, color, width, active);
 }
 
-// Staggered, gently-angled routed tube: vertical drop -> bend at horiz_y ->
-// gently descending run across to ex -> drop into (ex,ey). Unlike
-// draw_routed_tube (route_orthogonal, dead-flat mid-height run) this lets the
-// caller place the horizontal at a per-route height AND angles the long run a
-// few degrees so neighbouring routes never coincide or run parallel-adjacent.
-// 3 lines + 2 fillet arcs.
-static void draw_routed_tube_angled(lv_layer_t* layer, int32_t sx, int32_t sy, int32_t ex,
-                                    int32_t ey, int32_t horiz_y, lv_color_t color, int32_t width,
-                                    bool active) {
+// Parallel cable-harness routed tube: vertical drop -> bend at horiz_y ->
+// gently-descending diagonal across to ex -> drop into (ex,ey). The caller
+// places horiz_y at a per-route staggered height; parallel levels are already
+// well separated by their stagger, so a shallow fixed ~10% slope reads as nested
+// harness routing without coinciding. 3 lines + 2 fillet arcs.
+//
+// Hub MERGES (single-tool convergence, multi-tool mini-hubs) do NOT use this —
+// they route through helix::ui::draw_merge_fan (parallel diagonals per side,
+// separation by construction).
+static void draw_routed_tube_parallel(lv_layer_t* layer, int32_t sx, int32_t sy, int32_t ex,
+                                      int32_t ey, int32_t horiz_y, lv_color_t color, int32_t width,
+                                      bool active) {
+    constexpr float kFilletR = 9.0f;
+
     // Clamp the bend so it leaves room for both fillets.
     int32_t lo = sy + 4;
     int32_t hi = ey - 6;
@@ -330,7 +333,7 @@ static void draw_routed_tube_angled(lv_layer_t* layer, int32_t sx, int32_t sy, i
                             {(float)ex, (float)y_approach},
                             {(float)ex, (float)ey}};
     pg::FilamentPath path;
-    pg::route_polyline_filleted(path, pts, 4, 9.0f);
+    pg::route_polyline_filleted(path, pts, 4, kFilletR);
     helix::ui::draw_lane(layer, path, sp_lane_style(color, width, active));
 }
 
@@ -642,17 +645,16 @@ static void system_path_draw_cb(lv_event_t* e) {
 
                     if (has_sensor) {
                         draw_vertical_line(layer, unit_x, entry_y, sensor_dot_y - sensor_r,
-                                           line_color, line_w, true, true, /*active=*/is_active);
+                                           line_color, line_w, /*active=*/is_active);
                         draw_vertical_line(layer, unit_x, sensor_dot_y + sensor_r, hub_merge_y,
-                                           line_color, line_w, true, /*cap_end=*/false,
-                                           /*active=*/is_active);
+                                           line_color, line_w, /*active=*/is_active);
                         bool filled = data->unit_hub_triggered[i];
                         lv_color_t dot_color =
                             filled ? (is_active ? active_color_lv : idle_color) : idle_color;
                         draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, sensor_r);
                     } else {
                         draw_vertical_line(layer, unit_x, entry_y, hub_merge_y, line_color, line_w,
-                                           true, /*cap_end=*/false, /*active=*/is_active);
+                                           /*active=*/is_active);
                     }
 
                     int32_t dist = unit_x > tool_x ? (unit_x - tool_x) : (tool_x - unit_x);
@@ -718,13 +720,10 @@ static void system_path_draw_cb(lv_event_t* e) {
         // ================================================================
 
         int parallel_count = 0;
-        int hub_count = 0;
         for (int r = 0; r < total_routes; ++r) {
             if (all_routes[r].start_x == all_routes[r].end_x)
                 continue;
-            if (all_routes[r].is_hub)
-                hub_count++;
-            else
+            if (!all_routes[r].is_hub)
                 parallel_count++;
         }
 
@@ -741,7 +740,6 @@ static void system_path_draw_cb(lv_event_t* e) {
         int32_t par_bot_y = par_top_y + par_group_h;
 
         int parallel_idx = 0;
-        int hub_idx = 0;
 
         for (int r = 0; r < total_routes; ++r) {
             auto& route = all_routes[r];
@@ -756,23 +754,14 @@ static void system_path_draw_cb(lv_event_t* e) {
                                is_active ? active_color_lv : idle_color,
                                is_active ? line_active : line_idle, /*active=*/tool_active);
             } else if (route.is_hub) {
-                // HUB: 20%-40% of own range for clean hub-top arrival
-                float f = 0.20f;
-                if (hub_count > 1) {
-                    f = 0.20f + 0.20f * (float)hub_idx / (float)(hub_count - 1);
-                }
-                hub_idx++;
-
-                int32_t route_drop = route.end_y - route.start_y;
-                int32_t horiz_y = route.start_y + (int32_t)(route_drop * f);
-                horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
-
-                // Honor the staggered bend height (route_orthogonal would discard
-                // it and re-pick mid-height, collapsing the stagger) and angle the
-                // long run a few degrees so adjacent runs never coincide.
-                draw_routed_tube_angled(layer, route.start_x, route.start_y, route.end_x,
-                                        route.end_y, horiz_y, route_color, route_w,
-                                        /*active=*/tool_active);
+                // HUB: a single lane diagonally into its own mini-hub top, via the
+                // shared merge-fan builder (n=1 lands dead-center on end_x). Each
+                // unit feeds a distinct mini-hub so no two hub routes interact.
+                helix::ui::MergeFanLane lane{route.start_x, route.start_y,
+                                             sp_lane_style(route_color, route_w, tool_active),
+                                             nullptr};
+                helix::ui::draw_merge_fan(layer, &lane, 1, route.end_x, route.end_y,
+                                          /*hub_w=*/0, /*fillet_r=*/9.0f);
             } else {
                 // PARALLEL: idx 0 (leftmost end_x) at par_bot_y (lowest),
                 // idx N-1 (rightmost end_x) at par_top_y (highest)
@@ -781,9 +770,9 @@ static void system_path_draw_cb(lv_event_t* e) {
 
                 horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
 
-                draw_routed_tube_angled(layer, route.start_x, route.start_y, route.end_x,
-                                        route.end_y, horiz_y, route_color, route_w,
-                                        /*active=*/tool_active);
+                draw_routed_tube_parallel(layer, route.start_x, route.start_y, route.end_x,
+                                          route.end_y, horiz_y, route_color, route_w,
+                                          /*active=*/tool_active);
             }
         }
 
@@ -808,7 +797,7 @@ static void system_path_draw_cb(lv_event_t* e) {
                 lv_color_t out_color = tool_active ? active_color_lv : idle_color;
                 int32_t out_w = tool_active ? line_active : line_idle;
                 draw_vertical_line(layer, hi.tool_x, hi.mini_hub_y + hi.mini_hub_h / 2, tools_y,
-                                   out_color, out_w, true, true, /*active=*/tool_active);
+                                   out_color, out_w, /*active=*/tool_active);
             }
         }
 
@@ -868,31 +857,16 @@ static void system_path_draw_cb(lv_event_t* e) {
 
     } else {
         // ====================================================================
-        // SINGLE-TOOL MODE: hub convergence with staggered, angled merge runs
+        // SINGLE-TOOL MODE: hub convergence via the shared parallel-diagonal
+        // merge fan (separation by construction — no overlaps or pinches).
         // ====================================================================
 
-        // Rank units by horizontal travel to the hub center: closest converges
-        // LOWEST (largest bend Y), farthest HIGHEST, so no two horizontal runs
-        // coincide or cross a neighbour's vertical.
-        int conv_rank[SystemPathData::MAX_UNITS] = {};
-        int conv_count = LV_MIN(data->unit_count, SystemPathData::MAX_UNITS);
-        {
-            int32_t travel[SystemPathData::MAX_UNITS] = {};
-            for (int i = 0; i < conv_count; i++) {
-                int32_t ux = x_off + data->unit_x_positions[i];
-                travel[i] = (ux > center_x) ? (ux - center_x) : (center_x - ux);
-            }
-            for (int i = 0; i < conv_count; i++) {
-                int r = 0;
-                for (int j = 0; j < conv_count; j++) {
-                    if (travel[j] < travel[i] || (travel[j] == travel[i] && j < i))
-                        r++;
-                }
-                conv_rank[i] = r;
-            }
-        }
+        int32_t end_y_hub = hub_y - hub_h / 2;
+        helix::ui::MergeFanLane conv_lanes[SystemPathData::MAX_UNITS];
+        int conv_n = 0;
 
-        // Draw unit entry lines (one per unit, from entry to merge point)
+        // Draw unit entry lines (one per unit, from entry to merge point) and
+        // collect each unit's convergence lane for one shared draw_merge_fan call.
         for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
             int32_t unit_x = x_off + data->unit_x_positions[i];
             bool is_active = (i == data->active_unit);
@@ -904,47 +878,30 @@ static void system_path_draw_cb(lv_event_t* e) {
             bool has_sensor = data->unit_has_hub_sensor[i];
             int32_t sensor_dot_y = entry_y + (merge_y - entry_y) * 3 / 5;
 
-            // Suppress end cap on last straight segment and start cap on curve
-            // to eliminate visible endcap seam at straight→curve junction
             if (has_sensor) {
                 draw_vertical_line(layer, unit_x, entry_y, sensor_dot_y - sensor_r, line_color,
-                                   line_w, true, true, /*active=*/is_active);
+                                   line_w, /*active=*/is_active);
                 draw_vertical_line(layer, unit_x, sensor_dot_y + sensor_r, merge_y, line_color,
-                                   line_w, true, /*cap_end=*/false, /*active=*/is_active);
+                                   line_w, /*active=*/is_active);
                 bool filled = data->unit_hub_triggered[i];
                 lv_color_t dot_color =
                     filled ? (is_active ? active_color_lv : idle_color) : idle_color;
                 draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, sensor_r);
             } else {
-                draw_vertical_line(layer, unit_x, entry_y, merge_y, line_color, line_w, true,
-                                   /*cap_end=*/false, /*active=*/is_active);
+                draw_vertical_line(layer, unit_x, entry_y, merge_y, line_color, line_w,
+                                   /*active=*/is_active);
             }
 
-            // Unit → hub convergence: staggered, gently-angled merge run from the
-            // unit column down to the hub top. Each unit bends at its own height
-            // (by rank) so the horizontal runs never overdraw or cross.
-            {
-                int32_t end_y_hub = hub_y - hub_h / 2;
-                int32_t band_lo = merge_y + 4;
-                int32_t band_hi = end_y_hub - 6;
-                int32_t bend_y;
-                if (band_hi <= band_lo || conv_count <= 1) {
-                    bend_y = merge_y + (end_y_hub - merge_y) / 2;
-                } else {
-                    int32_t band_h = band_hi - band_lo;
-                    int32_t step = band_h / (conv_count - 1);
-                    if (step > 12)
-                        step = 12;
-                    if (step < 8)
-                        step = 8;
-                    bend_y = band_hi - conv_rank[i] * step;
-                    if (bend_y < band_lo)
-                        bend_y = band_lo;
-                }
-                draw_routed_tube_angled(layer, unit_x, merge_y, center_x, end_y_hub, bend_y,
-                                        line_color, line_w, /*active=*/is_active);
-            }
+            // Collect this unit's convergence lane (unit column down to the hub
+            // top). The shared builder draws them all as parallel diagonals per
+            // side after the loop.
+            conv_lanes[conv_n++] = {unit_x, merge_y, sp_lane_style(line_color, line_w, is_active),
+                                    nullptr};
         }
+
+        // Single shared draw: parallel-diagonal merge fan into the combiner hub.
+        helix::ui::draw_merge_fan(layer, conv_lanes, conv_n, center_x, end_y_hub, data->hub_width,
+                                  /*fillet_r=*/9.0f);
 
         // Draw bypass merge line. Spool + labels are rendered by the panel
         // via the shared BypassSpoolWidgets overlay centered on the merge
@@ -993,11 +950,10 @@ static void system_path_draw_cb(lv_event_t* e) {
                 draw_vertical_line(layer, center_x, hub_bottom, bypass_merge_y, idle_color,
                                    line_idle);
                 draw_vertical_line(layer, center_x, bypass_merge_y, nozzle_top,
-                                   lv_color_hex(data->bypass_color), line_active, true, true,
-                                   /*active=*/true);
+                                   lv_color_hex(data->bypass_color), line_active, /*active=*/true);
             } else if (unit_active) {
                 draw_vertical_line(layer, center_x, hub_bottom, nozzle_top, active_color_lv,
-                                   line_active, true, true, /*active=*/true);
+                                   line_active, /*active=*/true);
             } else {
                 draw_vertical_line(layer, center_x, hub_bottom, nozzle_top, idle_color, line_idle);
             }
@@ -1412,7 +1368,10 @@ bool ui_system_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, 
     // Note: this intentionally serves both single-tool AND multi-tool (toolhead
     // row) layouts. compute_bypass_geometry() places the spool clear of the
     // rightmost toolhead, so the panel-side overlay no longer collides when many
-    // tools span the canvas (e.g. HTLF + toolchanger, 7 tools).
+    // tools span the canvas (e.g. HTLF + toolchanger, 7 tools). In multi-tool
+    // mode the draw callback omits the bypass merge tube entirely (each tool has
+    // its own path), so the overlay deliberately shows a floating, tube-less
+    // bypass spool — this getter still returns its anchor for that overlay.
     lv_obj_update_layout(obj);
     lv_area_t obj_coords;
     lv_obj_get_coords(obj, &obj_coords);

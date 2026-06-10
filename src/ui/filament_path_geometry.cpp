@@ -129,7 +129,9 @@ PathPoint path_point_at(const FilamentPath& p, float d, PathPoint* tangent_out) 
     const PathSeg& s = p.segs[p.count - 1];
     if (tangent_out)
         *tangent_out = {0.0f, 0.0f};
-    return (s.type == PathSeg::LINE) ? s.p1 : s.p1;
+    // p1 is the segment endpoint for both LINE and ARC (add_arc precomputes the
+    // ARC's end point into p1), so it's the correct trailing point either way.
+    return s.p1;
 }
 
 void route_orthogonal(FilamentPath& out, float x0, float y0, float x1, float y1, float fillet_r) {
@@ -218,9 +220,15 @@ void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, flo
         float in_len = std::sqrt(in_dx * in_dx + in_dy * in_dy);
         float out_len = std::sqrt(out_dx * out_dx + out_dy * out_dy);
 
-        // Degenerate / duplicate waypoint: skip the vertex, continue straight.
-        if (in_len < 1e-4f || out_len < 1e-4f)
+        // Degenerate / duplicate waypoint (a zero-length leg). The vertex carries
+        // no turn of its own, but the cursor must still advance THROUGH it so a
+        // later real turn doesn't cut the corner back to the running cursor. Emit
+        // the straight run cursor->V and move on.
+        if (in_len < 1e-4f || out_len < 1e-4f) {
+            out.add_line(cursor.x, cursor.y, V.x, V.y);
+            cursor = V;
             continue;
+        }
 
         float d1x = in_dx / in_len, d1y = in_dy / in_len;
         float d2x = out_dx / out_len, d2y = out_dy / out_len;
@@ -244,8 +252,13 @@ void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, flo
 
         float tan_a = std::tan(alpha);
         float sin_a = std::sin(alpha);
-        if (tan_a < 1e-4f || sin_a < 1e-4f)
+        if (tan_a < 1e-4f || sin_a < 1e-4f) {
+            // Near-180 reversal with no resolvable bisector: treat as a sharp
+            // corner. Advance the cursor through V so the corner isn't cut.
+            out.add_line(cursor.x, cursor.y, V.x, V.y);
+            cursor = V;
             continue;
+        }
 
         // Trim length back along each leg for the desired radius.
         // Clamp r so the trim never exceeds half of either adjoining segment.
@@ -264,9 +277,15 @@ void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, flo
             r_eff = t * tan_a;
         }
 
-        // Below the meaningful-arc floor: skip the fillet, leave a sharp corner.
-        if (r_eff < kMinFillet)
+        // Below the meaningful-arc floor: leave a sharp corner. This is still a
+        // real turn, so advance the cursor THROUGH V (emit cursor->V) — a plain
+        // `continue` here would let the next emitted line run from the stale
+        // cursor straight to the following trim point, cutting this corner off.
+        if (r_eff < kMinFillet) {
+            out.add_line(cursor.x, cursor.y, V.x, V.y);
+            cursor = V;
             continue;
+        }
 
         // Trim points on each leg.
         PathPoint t1{V.x - d1x * t, V.y - d1y * t}; // arc start (end of incoming line)
@@ -302,6 +321,84 @@ void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, flo
 
     // Final straight run from the cursor into the last waypoint.
     out.add_line(cursor.x, cursor.y, pts[n - 1].x, pts[n - 1].y);
+}
+
+void build_merge_fan(const MergeLaneIn* lanes, int n, float hub_cx, float hub_top, float hub_w,
+                     float entry_margin, float fillet_r, float max_slope, MergeLaneOut* out) {
+    if (!lanes || !out || n <= 0)
+        return;
+
+    // Common approach height just above the hub top; every lane's short final
+    // vertical drops from here into its own entry_x at one clean level.
+    float approach_y = hub_top - std::max(6.0f, fillet_r / 2.0f);
+
+    // Entry x positions spread evenly across the usable hub-top width (leaving
+    // entry_margin inside each end), ordered identically to lane order so no two
+    // lanes cross. Single lane lands dead-center on the hub.
+    float usable = hub_w - 2.0f * entry_margin;
+    if (usable < 0.0f)
+        usable = 0.0f;
+    float left_end = hub_cx - usable * 0.5f;
+    float entry_step = (n > 1) ? usable / (float)(n - 1) : 0.0f;
+
+    float entry_x[FilamentPath::MAX_SEGS];
+    int count = std::min(n, FilamentPath::MAX_SEGS);
+    for (int i = 0; i < count; ++i)
+        entry_x[i] = (n == 1) ? hub_cx : (left_end + entry_step * (float)i);
+
+    // The bends must sit below every lane's sensor/clearance: take the lowest
+    // (largest-y) start_y as the ceiling so a bend never rises above its source.
+    float min_bend_y = lanes[0].start_y;
+    for (int i = 1; i < count; ++i)
+        min_bend_y = std::max(min_bend_y, lanes[i].start_y);
+    // Tiny clearance so the bend's incoming vertical has a real leg to fillet.
+    min_bend_y += 2.0f;
+
+    float vertical_budget = approach_y - min_bend_y;
+    if (vertical_budget < 0.0f)
+        vertical_budget = 0.0f;
+
+    // Per-side max horizontal travel (|entry_x - slot_x|). Left = entries that
+    // land left of (or at) the hub center; right = the rest. Each side gets ONE
+    // common slope so its diagonals stay parallel and never converge.
+    float max_dx_left = 0.0f;
+    float max_dx_right = 0.0f;
+    for (int i = 0; i < count; ++i) {
+        float dx = std::fabs(entry_x[i] - lanes[i].slot_x);
+        if (entry_x[i] <= hub_cx) {
+            if (dx > max_dx_left)
+                max_dx_left = dx;
+        } else {
+            if (dx > max_dx_right)
+                max_dx_right = dx;
+        }
+    }
+    float m_left =
+        (max_dx_left > 1e-3f) ? std::min(max_slope, vertical_budget / max_dx_left) : max_slope;
+    float m_right =
+        (max_dx_right > 1e-3f) ? std::min(max_slope, vertical_budget / max_dx_right) : max_slope;
+
+    for (int i = 0; i < count; ++i) {
+        float ex = entry_x[i];
+        float sx = lanes[i].slot_x;
+        float dx = std::fabs(ex - sx);
+        float m = (ex <= hub_cx) ? m_left : m_right;
+
+        // Bend height derived from this lane's own dx at the side's common slope.
+        // Lanes farther from their entry bend higher (longer diagonal); a lane
+        // directly above its entry (dx ~ 0) bends right at the approach -> a plain
+        // vertical (route_polyline_filleted collapses the collinear waypoint).
+        float y_bend = approach_y - m * dx;
+        if (y_bend < min_bend_y)
+            y_bend = min_bend_y;
+        if (y_bend > approach_y)
+            y_bend = approach_y;
+
+        out[i].pts[0] = {sx, lanes[i].start_y};
+        out[i].pts[1] = {sx, y_bend};
+        out[i].pts[2] = {ex, approach_y};
+        out[i].pts[3] = {ex, hub_top};
+    }
 }
 
 } // namespace pathgeo

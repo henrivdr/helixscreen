@@ -249,5 +249,33 @@ void draw_lane_hline(lv_layer_t* layer, int32_t x0, int32_t x1, int32_t y, const
     draw_lane(layer, path, style, record);
 }
 
+void draw_merge_fan(lv_layer_t* layer, const MergeFanLane* lanes, int n, int32_t hub_cx,
+                    int32_t hub_top, int32_t hub_w, float fillet_r, int32_t* entry_x_out) {
+    if (!lanes || n <= 0)
+        return;
+
+    // Inset the outermost entries ~8px from each hub-top end (per the design),
+    // and cap the per-side slope at 1.2 so tall hubs don't run near-vertical.
+    constexpr float kEntryMargin = 8.0f;
+    constexpr float kMaxSlope = 1.2f;
+
+    pg::MergeLaneIn in[pg::FilamentPath::MAX_SEGS];
+    pg::MergeLaneOut fan[pg::FilamentPath::MAX_SEGS];
+    int count = (n < pg::FilamentPath::MAX_SEGS) ? n : pg::FilamentPath::MAX_SEGS;
+    for (int i = 0; i < count; ++i)
+        in[i] = {(float)lanes[i].slot_x, (float)lanes[i].start_y};
+
+    pg::build_merge_fan(in, count, (float)hub_cx, (float)hub_top, (float)hub_w, kEntryMargin,
+                        fillet_r, kMaxSlope, fan);
+
+    for (int i = 0; i < count; ++i) {
+        if (entry_x_out)
+            entry_x_out[i] = (int32_t)lroundf(fan[i].pts[2].x);
+        pg::FilamentPath path;
+        pg::route_polyline_filleted(path, fan[i].pts, 4, fillet_r);
+        draw_lane(layer, path, lanes[i].style, lanes[i].record);
+    }
+}
+
 } // namespace ui
 } // namespace helix

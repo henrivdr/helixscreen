@@ -1,3 +1,4 @@
+// Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Rendering guards for the filament_path_canvas detail panel.

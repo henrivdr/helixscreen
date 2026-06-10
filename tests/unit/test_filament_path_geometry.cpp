@@ -539,18 +539,55 @@ TEST_CASE("route_polyline_filleted collinear waypoint gets no fillet",
     REQUIRE(end.x == Catch::Approx(100.0f).margin(1e-3));
 }
 
-TEST_CASE("route_polyline_filleted duplicate waypoint is skipped", "[filament-path][geometry]") {
-    // Duplicate middle point: degenerate zero-length leg must not produce NaNs.
+TEST_CASE("route_polyline_filleted duplicate waypoint preserves the corner",
+          "[filament-path][geometry]") {
+    // Duplicate middle point: the zero-length leg must not produce NaNs AND must
+    // not let the following real corner be cut. The path is an L from (0,0) along
+    // +x to (100,0) then down to (100,100) — it must hug the corner at (100,0),
+    // NOT shortcut as a single (0,0)->(100,100) diagonal.
     PathPoint pts[4] = {{0.0f, 0.0f}, {100.0f, 0.0f}, {100.0f, 0.0f}, {100.0f, 100.0f}};
     FilamentPath p;
     route_polyline_filleted(p, pts, 4, 15.0f);
-    check_continuity_and_endpoints(p, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    // Endpoints land where requested. (The duplicate vertex destroys the turn
+    // info needed to insert a fillet, so the corner stays sharp — tangent
+    // continuity is NOT asserted here; that's the acceptable degenerate-input
+    // outcome. The non-duplicate 3-point case fillets normally, covered above.)
+    REQUIRE(p.count >= 1);
+    PathPoint start = seg_start_point(p.segs[0]);
+    PathPoint end = seg_end_point(p.segs[p.count - 1]);
+    REQUIRE(start.x == Catch::Approx(0.0f).margin(1e-3));
+    REQUIRE(start.y == Catch::Approx(0.0f).margin(1e-3));
+    REQUIRE(end.x == Catch::Approx(100.0f).margin(1e-3));
+    REQUIRE(end.y == Catch::Approx(100.0f).margin(1e-3));
+    // Position continuity at every joint (no gaps).
+    for (int i = 0; i + 1 < p.count; ++i)
+        REQUIRE(dist(seg_end_point(p.segs[i]), seg_start_point(p.segs[i + 1])) < 1e-3f);
     for (int i = 0; i < p.count; ++i) {
         if (p.segs[i].type == PathSeg::ARC) {
             REQUIRE(std::isfinite(p.segs[i].radius));
             REQUIRE(std::isfinite(p.segs[i].sweep));
         }
     }
+
+    // The path must pass close to the corner (100,0). A corner-cutting diagonal
+    // would stay ~70px away from it at its nearest sample; the filleted L hugs it
+    // to within the fillet radius. Sample along arc length and take the minimum
+    // distance to the corner.
+    float total = path_length(p);
+    float min_to_corner = 1e9f;
+    const int kSamples = 200;
+    for (int i = 0; i <= kSamples; ++i) {
+        PathPoint at = path_point_at(p, total * (float)i / (float)kSamples);
+        float dx = at.x - 100.0f;
+        float dy = at.y - 0.0f;
+        float d = std::sqrt(dx * dx + dy * dy);
+        if (d < min_to_corner)
+            min_to_corner = d;
+    }
+    // 90-degree corner with r=15: nearest approach is r*(sqrt2 - 1) ~ 6.2px.
+    // Allow margin; a cut corner would be ~70px away, so this cleanly fails it.
+    REQUIRE(min_to_corner < 20.0f);
 }
 
 TEST_CASE("route_polyline_filleted two-point degenerate is a single line",
@@ -560,4 +597,78 @@ TEST_CASE("route_polyline_filleted two-point degenerate is a single line",
     route_polyline_filleted(p, pts, 2, 15.0f);
     REQUIRE(p.count == 1);
     REQUIRE(p.segs[0].type == PathSeg::LINE);
+}
+
+// ---------------------------------------------------------------------------
+// build_merge_fan — separation-by-construction hub merge
+// ---------------------------------------------------------------------------
+
+namespace {
+// Perpendicular distance between two PARALLEL line segments, measured as the
+// distance from segment b's start point to the infinite line through segment a.
+float parallel_sep(const PathPoint& a0, const PathPoint& a1, const PathPoint& b0) {
+    float dx = a1.x - a0.x, dy = a1.y - a0.y;
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1e-6f)
+        return std::sqrt((b0.x - a0.x) * (b0.x - a0.x) + (b0.y - a0.y) * (b0.y - a0.y));
+    // |cross((b0 - a0), unit_dir)|
+    return std::fabs((b0.x - a0.x) * dy - (b0.y - a0.y) * dx) / len;
+}
+} // namespace
+
+TEST_CASE("build_merge_fan single lane is a straight vertical", "[filament-path][geometry]") {
+    MergeLaneIn in[1] = {{100.0f, 0.0f}};
+    MergeLaneOut out[1];
+    build_merge_fan(in, 1, /*hub_cx=*/100.0f, /*hub_top=*/120.0f, /*hub_w=*/90.0f,
+                    /*entry_margin=*/8.0f, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, out);
+    // Entry lands dead-center on the hub; every waypoint shares slot_x == hub_cx,
+    // so the polyline collapses to a plain vertical (dx == 0).
+    REQUIRE(out[0].pts[0].x == Catch::Approx(100.0f));
+    REQUIRE(out[0].pts[2].x == Catch::Approx(100.0f));
+    REQUIRE(out[0].pts[3].x == Catch::Approx(100.0f));
+    REQUIRE(out[0].pts[3].y == Catch::Approx(120.0f));
+}
+
+TEST_CASE("build_merge_fan entries are strictly ordered (no crossings)",
+          "[filament-path][geometry]") {
+    // 4 lanes left-to-right; entries must come out left-to-right too.
+    MergeLaneIn in[4] = {{20.0f, 0.0f}, {60.0f, 0.0f}, {140.0f, 0.0f}, {180.0f, 0.0f}};
+    MergeLaneOut out[4];
+    build_merge_fan(in, 4, /*hub_cx=*/100.0f, /*hub_top=*/120.0f, /*hub_w=*/90.0f,
+                    /*entry_margin=*/8.0f, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, out);
+    for (int i = 1; i < 4; ++i)
+        REQUIRE(out[i].pts[2].x > out[i - 1].pts[2].x);
+    // Outermost entries inset ~8px from each hub-top end (hub spans 55..145).
+    REQUIRE(out[0].pts[2].x == Catch::Approx(100.0f - (90.0f - 16.0f) / 2.0f).margin(0.5));
+    REQUIRE(out[3].pts[2].x == Catch::Approx(100.0f + (90.0f - 16.0f) / 2.0f).margin(0.5));
+}
+
+TEST_CASE("build_merge_fan same-side diagonals are parallel and separated",
+          "[filament-path][geometry]") {
+    // AFC-like: 4 lanes, sensor row at y=0, hub top well below. Two lanes land on
+    // each side of the hub center after the widened entry spread.
+    MergeLaneIn in[4] = {{20.0f, 0.0f}, {60.0f, 0.0f}, {140.0f, 0.0f}, {180.0f, 0.0f}};
+    MergeLaneOut out[4];
+    build_merge_fan(in, 4, /*hub_cx=*/100.0f, /*hub_top=*/120.0f, /*hub_w=*/90.0f,
+                    /*entry_margin=*/8.0f, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, out);
+
+    auto slope = [](const MergeLaneOut& o) {
+        float dx = o.pts[2].x - o.pts[1].x;
+        float dy = o.pts[2].y - o.pts[1].y;
+        return (std::fabs(dx) > 1e-3f) ? dy / dx : 0.0f;
+    };
+
+    // Lanes 0,1 are on the left side; their diagonals must share one slope.
+    // Lanes 2,3 mirror on the right. (Slopes are signed; same side => same sign
+    // and equal magnitude shape, so compare directly within a side.)
+    REQUIRE(slope(out[0]) == Catch::Approx(slope(out[1])).margin(1e-3));
+    REQUIRE(slope(out[2]) == Catch::Approx(slope(out[3])).margin(1e-3));
+
+    // Parallel diagonals never converge: perpendicular separation between adjacent
+    // same-side diagonals must stay well above the tube gauge (~6-8px). The
+    // widened entries put it comfortably past 10px here.
+    float sep_left = parallel_sep(out[0].pts[1], out[0].pts[2], out[1].pts[1]);
+    float sep_right = parallel_sep(out[2].pts[1], out[2].pts[2], out[3].pts[1]);
+    REQUIRE(sep_left > 10.0f);
+    REQUIRE(sep_right > 10.0f);
 }

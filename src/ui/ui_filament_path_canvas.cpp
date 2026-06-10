@@ -40,10 +40,9 @@
 using namespace helix;
 namespace pg = helix::ui::pathgeo;
 
-// Shared concentric tube stroker (see filament_tube_stroker.h). These symbols
-// were extracted from this file so ui_system_path_canvas can render identical
-// quarter-arc fillet curves. Pull them in unqualified to keep the local draw
-// code (and the bit-identical legacy look) unchanged.
+// Shared concentric tube stroker (filament_tube_stroker.h): both AMS path
+// canvases draw through these so they render identical quarter-arc fillet
+// curves. Pulled in unqualified to keep the local draw code terse.
 using helix::ui::build_passes;
 using helix::ui::draw_lane;
 using helix::ui::draw_lane_hline;
@@ -902,72 +901,15 @@ static void draw_flow_dots_path(lv_layer_t* layer, const pg::FilamentPath& path,
 // quarter-arc fillet curves. Pulled in via the `using` declarations above.
 
 // ============================================================================
-// Staggered hub-merge routing
+// Hub-merge routing
 // ============================================================================
-// Every hub-routed lane drops from its slot, runs across to a distinct
-// hub-entry x, then descends into the hub top. Routing all lanes' horizontal
-// runs at the same mid-height overdraws them into mush. Instead each lane gets
-// its own bend height (lanes farther from the hub entry bend HIGHER, so their
-// long runs never coincide with a nearer lane's run) and the long run descends
-// gently toward the hub (reads like real PTFE routing, not a schematic bus).
-//
-// `rank` is the lane's order among hub-routed lanes sorted by horizontal travel
-// |slot_x - entry_x| (rank 0 = closest to the hub entry, runs LOWEST; larger
-// rank = farther, runs HIGHER). `rank_count` is the number of hub-routed lanes.
-//
-// Waypoints: (slot_x, start_y) -> (slot_x, y_bend) -> (entry_x, y_approach)
-//            -> (entry_x, end_y). 3 lines + 2 fillet arcs = 5 segs (well under
-// FilamentPath::MAX_SEGS even when this is the active lane — see the budget note
-// in filament_path_render).
-static void draw_hub_merge_lane(lv_layer_t* layer, int32_t slot_x, int32_t start_y, int32_t entry_x,
-                                int32_t end_y, int rank, int rank_count, const LaneStyle& style,
-                                pg::FilamentPath* record) {
-    // Vertical band available for staggering the bend heights: from just below
-    // start_y down to a little above end_y (leave room for the descending run +
-    // the final fillet into the hub).
-    int32_t band_top = start_y + 4;
-    int32_t band_bot = end_y - 6;
-    if (band_bot <= band_top) {
-        // Too little vertical room to stagger — fall back to a plain route.
-        draw_lane_route(layer, slot_x, start_y, entry_x, end_y, 8.0f, style, record);
-        return;
-    }
-
-    // Per-rank vertical separation: active tube + outline + gap ~= 8px. Spread
-    // the ranks across the band but never closer than this, and keep the highest
-    // (farthest) lane below band_top.
-    const int32_t kSep = 8;
-    int32_t band_h = band_bot - band_top;
-    int32_t step = (rank_count > 1) ? band_h / (rank_count - 1) : 0;
-    if (step > kSep + 6)
-        step = kSep + 6; // don't over-spread on tall canvases
-    if (rank_count > 1 && step < kSep)
-        step = kSep;
-
-    // rank 0 (closest) runs LOWEST (largest y), farthest runs highest.
-    int32_t y_bend = band_bot - rank * step;
-    if (y_bend < band_top)
-        y_bend = band_top;
-
-    // Gentle downward slope along the long run: drop ~10% of the horizontal
-    // travel so it reads as real routing rather than a dead-flat bus. Clamp the
-    // approach so it still leaves room for the final fillet into the hub.
-    int32_t dx = (entry_x > slot_x) ? (entry_x - slot_x) : (slot_x - entry_x);
-    int32_t slope_drop = dx / 10;
-    int32_t y_approach = y_bend + slope_drop;
-    if (y_approach > end_y - 6)
-        y_approach = end_y - 6;
-    if (y_approach < y_bend)
-        y_approach = y_bend;
-
-    pg::PathPoint pts[4] = {{(float)slot_x, (float)start_y},
-                            {(float)slot_x, (float)y_bend},
-                            {(float)entry_x, (float)y_approach},
-                            {(float)entry_x, (float)end_y}};
-    pg::FilamentPath path;
-    pg::route_polyline_filleted(path, pts, 4, 8.0f);
-    draw_lane(layer, path, style, record);
-}
+// Hub-routed lanes converge onto the hub box using the shared parallel-diagonal
+// fan (helix::ui::pathgeo::build_merge_fan / helix::ui::draw_merge_fan): each
+// lane drops from its slot, runs ONE common-per-side diagonal to a distinct
+// hub-top entry, then a short vertical into the hub. Separation is guaranteed by
+// construction (parallel diagonals can't converge) so no two runs overlap or
+// pinch. Call sites here precompute the fan once, then draw each lane's tube from
+// its waypoints in the per-slot loop (preserving active-path record order).
 
 // ============================================================================
 // Drawing Functions
@@ -1537,38 +1479,31 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
     // Hub width: ~60% of full hub topology width, enough for the hub lanes
     int32_t hub_w = LV_MAX(40, data->hub_width * 3 / 5);
 
-    // Per-hub-lane entry X (distinct points spread across the hub box top) and
-    // stagger rank (by horizontal travel) so each hub lane's long run sits at
-    // its own height and arrives at its own x — no coincident runs.
+    // Per-hub-lane merge fan via the shared builder: parallel diagonals per side
+    // spread across distinct hub-top entries (no coincident or pinching runs).
+    // Built once here; Phase 4 draws each lane's tube from its precomputed
+    // waypoints. hub_entry_x maps slot index -> the lane's hub-top entry x.
     int32_t hub_entry_x[FilamentPathData::MAX_SLOTS] = {};
-    int hub_lane_rank[FilamentPathData::MAX_SLOTS] = {};
+    pg::MergeLaneOut hub_fan[FilamentPathData::MAX_SLOTS]; // indexed by hub-lane order
+    int slot_to_fan[FilamentPathData::MAX_SLOTS];          // slot index -> hub-lane order (-1 none)
+    for (int i = 0; i < FilamentPathData::MAX_SLOTS; i++)
+        slot_to_fan[i] = -1;
     {
-        int32_t inner = hub_w - 2 * sensor_r;
-        if (inner < 0)
-            inner = 0;
-        int32_t spacing = (hub_count > 1) ? inner / (hub_count - 1) : 0;
-        int32_t travel[FilamentPathData::MAX_SLOTS] = {};
-        int order = 0; // position among hub lanes, left-to-right by slot index
+        int32_t hub_top_e = hub_cy - hub_h / 2;
+        pg::MergeLaneIn fan_in[FilamentPathData::MAX_SLOTS];
+        int fan_n = 0;
         for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
             if (!data->slot_is_hub_routed[i])
                 continue;
-            int32_t ex = (hub_count == 1) ? hub_cx : (hub_cx - inner / 2 + order * spacing);
-            hub_entry_x[i] = ex;
-            int32_t d = (ex > g.slot_x[i]) ? (ex - g.slot_x[i]) : (g.slot_x[i] - ex);
-            travel[i] = d;
-            order++;
+            fan_in[fan_n] = {(float)g.slot_x[i], (float)(sensor_y + sensor_r)};
+            slot_to_fan[i] = fan_n;
+            fan_n++;
         }
+        pg::build_merge_fan(fan_in, fan_n, (float)hub_cx, (float)hub_top_e, (float)hub_w,
+                            /*entry_margin=*/8.0f, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, hub_fan);
         for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
-            if (!data->slot_is_hub_routed[i])
-                continue;
-            int r = 0;
-            for (int j = 0; j < data->slot_count && j < FilamentPathData::MAX_SLOTS; j++) {
-                if (!data->slot_is_hub_routed[j])
-                    continue;
-                if (travel[j] < travel[i] || (travel[j] == travel[i] && j < i))
-                    r++;
-            }
-            hub_lane_rank[i] = r;
+            if (slot_to_fan[i] >= 0)
+                hub_entry_x[i] = (int32_t)lroundf(hub_fan[slot_to_fan[i]].pts[2].x);
         }
     }
 
@@ -1611,15 +1546,17 @@ static void draw_mixed_topology(lv_obj_t* obj, lv_layer_t* layer, FilamentPathDa
         bool at_nozzle = s.at_nozzle;
 
         if (is_hub) {
-            // Hub-routed lane: staggered, gently-angled merge run from the sensor
-            // down to a distinct entry point on the hub top — each lane bends at
-            // its own height so the long runs never overdraw each other.
-            int32_t start_y = sensor_y + sensor_r;
-            int32_t end_y = hub_top;
-
-            LaneStyle st = lane_style(has_filament, tool_color, idle_color, bg_color, line_active);
-            draw_hub_merge_lane(layer, slot_x, start_y, hub_entry_x[i], end_y, hub_lane_rank[i],
-                                hub_count, st, nullptr);
+            // Hub-routed lane: parallel-diagonal merge run from the sensor down to
+            // a distinct hub-top entry, drawn from this lane's precomputed fan
+            // waypoints (separation by construction — see build_merge_fan).
+            int fi = (i < FilamentPathData::MAX_SLOTS) ? slot_to_fan[i] : -1;
+            if (fi >= 0) {
+                LaneStyle st =
+                    lane_style(has_filament, tool_color, idle_color, bg_color, line_active);
+                pg::FilamentPath path;
+                pg::route_polyline_filleted(path, hub_fan[fi].pts, 4, 8.0f);
+                draw_lane(layer, path, st, nullptr);
+            }
 
             // Hub output line + shared nozzle (draw only once)
             if (!hub_nozzle_drawn) {
@@ -2256,35 +2193,39 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
     SlotRenderStates states = compute_slot_render_states(data);
     pg::FilamentPath active_path;
 
-    // HUB topology: pre-compute each lane's hub-entry X and its stagger RANK
-    // among hub lanes (sorted by horizontal travel |slot_x - hub_dot_x|, closest
-    // = rank 0). draw_hub_merge_lane uses the rank to give each lane a distinct
-    // bend height so the horizontal runs never overdraw each other.
+    // HUB topology: pre-compute the merge fan via the shared builder (parallel
+    // diagonals per side — no overlaps or pinches by construction). Each lane's
+    // 4-point polyline and hub-top entry x are derived once; the per-slot loop
+    // below draws each lane's tube (preserving active-path record order) and
+    // lands the hub sensor dot exactly on its tube.
+    pg::MergeLaneOut hub_fan[FilamentPathData::MAX_SLOTS];
     int32_t hub_dot_xs[FilamentPathData::MAX_SLOTS] = {};
-    int hub_rank[FilamentPathData::MAX_SLOTS] = {};
-    int hub_lane_count = 0;
+    // Width across which the hub-top entries spread. The nominal hub_width is too
+    // narrow for many lanes (entries cluster -> tubes pinch near the center), so
+    // for the HUB merge we widen the entry span toward the slot row, targeting
+    // ~22px between entries (the design's separation budget). Clamped to the slot
+    // span so the outermost entries never exceed the outermost slots. The hub box
+    // is drawn at this same width below so tubes visibly land on it.
+    int32_t hub_box_w = data->hub_width;
     if (data->topology == 1) {
-        int32_t hub_dot_spacing =
-            (data->slot_count > 1) ? (data->hub_width - 2 * sensor_r) / (data->slot_count - 1) : 0;
-        int32_t travel[FilamentPathData::MAX_SLOTS] = {};
-        for (int i = 0; i < data->slot_count && i < FilamentPathData::MAX_SLOTS; i++) {
-            int32_t hx = (data->slot_count == 1) ? center_x
-                                                 : center_x - (data->hub_width - 2 * sensor_r) / 2 +
-                                                       i * hub_dot_spacing;
-            hub_dot_xs[i] = hx;
-            int32_t d = (hx > g.slot_x[i]) ? (hx - g.slot_x[i]) : (g.slot_x[i] - hx);
-            travel[i] = d;
-            hub_lane_count++;
+        int32_t hub_top = hub_y - hub_h / 2;
+        pg::MergeLaneIn fan_in[FilamentPathData::MAX_SLOTS];
+        int fan_n = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);
+        for (int i = 0; i < fan_n; i++) {
+            int32_t start_y = data->slot_has_prep_sensor[i] ? (prep_y + sensor_r) : prep_y;
+            fan_in[i] = {(float)g.slot_x[i], (float)start_y};
         }
-        // Rank by travel ascending (closest = 0). Simple count-of-smaller rank.
-        for (int i = 0; i < hub_lane_count; i++) {
-            int r = 0;
-            for (int j = 0; j < hub_lane_count; j++) {
-                if (travel[j] < travel[i] || (travel[j] == travel[i] && j < i))
-                    r++;
-            }
-            hub_rank[i] = r;
-        }
+        constexpr int32_t kTargetEntrySpacing = 22;
+        constexpr int32_t kEntryMargin = 8;
+        int32_t want_w =
+            (fan_n > 1) ? (fan_n - 1) * kTargetEntrySpacing + 2 * kEntryMargin : data->hub_width;
+        int32_t slot_span = (data->slot_count > 1) ? (g.slot_x[data->slot_count - 1] - g.slot_x[0])
+                                                   : data->hub_width;
+        hub_box_w = LV_CLAMP(want_w, data->hub_width, LV_MAX(data->hub_width, slot_span));
+        pg::build_merge_fan(fan_in, fan_n, (float)center_x, (float)hub_top, (float)hub_box_w,
+                            (float)kEntryMargin, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, hub_fan);
+        for (int i = 0; i < fan_n; i++)
+            hub_dot_xs[i] = (int32_t)lroundf(hub_fan[i].pts[2].x);
     }
 
     for (int i = 0; i < data->slot_count; i++) {
@@ -2348,17 +2289,21 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
             // Hub-entry X (distinct per lane) was pre-computed above.
             int32_t hub_dot_x = hub_dot_xs[i];
 
-            // Staggered, gently-angled merge run from prep to the hub sensor dot.
-            // Each lane bends at its own height (by rank) so no two lanes' long
-            // runs coincide. When no prep sensor, start flush with the line.
-            int32_t start_y = data->slot_has_prep_sensor[i] ? (prep_y + sensor_r) : prep_y;
-            int32_t end_y = hub_top - sensor_r;
-            {
+            // Parallel-diagonal merge run from prep to the hub sensor dot, using
+            // this lane's precomputed fan waypoints (separation by construction).
+            // Drop the final hub_top vertex down to the sensor-dot edge so the
+            // tube meets the dot, not the box.
+            if (i < FilamentPathData::MAX_SLOTS) {
                 LaneStyle st =
                     lane_style(!merge_is_idle, merge_line_color, idle_color, bg_color, lane_width);
-                draw_hub_merge_lane(layer, slot_x, start_y, hub_dot_x, end_y, hub_rank[i],
-                                    hub_lane_count, st,
-                                    (!merge_is_idle && is_active_slot) ? &active_path : nullptr);
+                pg::PathPoint pts[4] = {hub_fan[i].pts[0],
+                                        hub_fan[i].pts[1],
+                                        hub_fan[i].pts[2],
+                                        {hub_fan[i].pts[3].x, (float)(hub_top - sensor_r)}};
+                pg::FilamentPath path;
+                pg::route_polyline_filleted(path, pts, 4, 8.0f);
+                draw_lane(layer, path, st,
+                          (!merge_is_idle && is_active_slot) ? &active_path : nullptr);
             }
 
             // Draw hub sensor dot - colored with filament color if loaded to hub
@@ -2532,7 +2477,9 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
         // For LINEAR topology, hub box spans the full slot area width.
         // slot_x values are slot centers, so we add half a slot width on each
         // side to cover the full visual extent of the outermost slots.
-        int32_t hub_w = data->hub_width;
+        // For HUB topology, use the widened entry-spread width computed above so
+        // the merge tubes land cleanly on the box (no center pinch).
+        int32_t hub_w = (data->topology == 1) ? hub_box_w : data->hub_width;
         if (data->topology == 0 && data->slot_count > 1) {
             int32_t first_slot_x = g.slot_x[0];
             int32_t last_slot_x = g.slot_x[data->slot_count - 1];
@@ -2750,6 +2697,12 @@ static void filament_path_render(lv_obj_t* obj, lv_layer_t* layer, FilamentPathD
         // Cache the recorded active path + geometry locals so the animation
         // DRAW_POST pass can paint flow dots / heat glow / segment tip
         // without re-running the state-tied draw on each animation tick.
+        //
+        // Worst-case segment budget: the longest active HUB path records the
+        // entry vertical (1) + merge fan polyline (3 lines + 2 arcs = 5) + hidden
+        // hub interior (1) + output/toolhead/nozzle run (~2) = 11 segs, safely
+        // under FilamentPath::MAX_SEGS (16). add_line/add_arc silently no-op past
+        // the cap, so an overrun would only truncate the tail, never corrupt.
         data->active_path_cache_ = active_path;
         data->cached_center_x_ = center_x;
         data->cached_nozzle_y_ = nozzle_y;

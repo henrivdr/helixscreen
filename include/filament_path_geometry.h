@@ -124,6 +124,59 @@ void route_orthogonal(FilamentPath& out, float x0, float y0, float x1, float y1,
  */
 void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, float fillet_r);
 
+/**
+ * @brief Input descriptor for one lane feeding a hub merge.
+ *
+ * @p slot_x is the lane's source column (the x it drops from). @p start_y is the
+ * y where the diagonal phase begins (just below the lane's sensor / clearance).
+ */
+struct MergeLaneIn {
+    float slot_x = 0.0f;
+    float start_y = 0.0f;
+};
+
+/// Output waypoints for one merge lane: the 4-point polyline
+/// (slot_x,start_y) -> (slot_x,y_bend) -> (entry_x,approach_y) -> (entry_x,hub_top)
+/// ready to feed route_polyline_filleted.
+struct MergeLaneOut {
+    PathPoint pts[4];
+};
+
+/**
+ * @brief Separation-by-construction hub merge fan (parallel diagonals per side).
+ *
+ * Computes non-overlapping, non-pinching routes for @p n lanes converging onto a
+ * hub box. Lanes on each side of the hub center (left: slot_x < hub_cx, right:
+ * mirrored) all run their long diagonal at ONE common slope, so parallel runs
+ * cannot converge — perpendicular separation = entry_spacing * sin(atan(m_side)),
+ * which the widened entry spread keeps comfortably above the tube gauge.
+ *
+ * Construction:
+ *   - Entry x positions spread evenly across the hub box top edge using most of
+ *     its width (leaving ~@p entry_margin px inside each end), ordered identically
+ *     to lane order (no crossings).
+ *   - Per side, m_side = min(@p max_slope, vertical_budget / max_dx_side), where
+ *     vertical_budget = approach_y - min_bend_y and max_dx_side is the largest
+ *     |entry_x - slot_x| on that side.
+ *   - approach_y = hub_top - max(6, fillet_r/2). min_bend_y = the smallest start_y
+ *     across all lanes + a small clearance (so every bend sits below its sensor).
+ *   - lane i: y_bend_i = approach_y - m_side * |entry_x_i - slot_x_i|, clamped to
+ *     >= min_bend_y. A lane directly above its entry (dx ~ 0) is a straight
+ *     vertical (y_bend == approach_y; route_polyline_filleted handles collinear).
+ *
+ * @param lanes      lane sources (size @p n), ordered left-to-right by slot index.
+ * @param n          lane count.
+ * @param hub_cx     hub center x.
+ * @param hub_top    y of the hub box top edge (the verticals' final destination).
+ * @param hub_w      hub box width (entries spread across this minus margins).
+ * @param entry_margin inset from each hub-top end for the outermost entries.
+ * @param fillet_r   fillet radius the caller will route with (sets approach gap).
+ * @param max_slope  per-side slope ceiling (1.2 keeps angles sane on tall hubs).
+ * @param out        per-lane waypoints (size @p n).
+ */
+void build_merge_fan(const MergeLaneIn* lanes, int n, float hub_cx, float hub_top, float hub_w,
+                     float entry_margin, float fillet_r, float max_slope, MergeLaneOut* out);
+
 } // namespace pathgeo
 } // namespace ui
 } // namespace helix
