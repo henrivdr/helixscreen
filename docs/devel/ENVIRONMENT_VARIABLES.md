@@ -10,6 +10,7 @@ This document provides a comprehensive reference for all environment variables u
 | [Touch Calibration](#touch-calibration) | 8 | `HELIX_TOUCH_*` |
 | [G-Code Viewer](#g-code-viewer) | 4 | `HELIX_` |
 | [Bed Mesh](#bed-mesh) | 1 | `HELIX_` |
+| [Networking](#networking) | 1 | `HELIX_` |
 | [Mock & Testing](#mock--testing) | 14 | `HELIX_MOCK_*` |
 | [UI Automation](#ui-automation) | 3 | `HELIX_AUTO_*` |
 | [Calibration](#calibration-auto-start) | 2 | `*_AUTO_START` |
@@ -646,6 +647,27 @@ Force the bed mesh visualization to use 2D heatmap mode instead of 3D surface re
 ```bash
 # Force 2D heatmap visualization
 HELIX_BED_MESH_2D=1 ./build/bin/helix-screen
+```
+
+---
+
+## Networking
+
+### `HELIX_WPA_SOCKET_DIR`
+
+Override the directory searched for the `wpa_supplicant` control socket.
+
+The WiFi backend normally finds the control socket automatically: it auto-detects the directory from the running `wpa_supplicant` process's `-O` argument, then falls back to `/run/wpa_supplicant`, `/var/run/wpa_supplicant`, and `/etc/wifi/wpa_supplicant/sockets` (the Creality K2 Plus / Creality OS location). Set this variable only if a firmware launches `wpa_supplicant` with a control directory none of those cover — without it, network discovery fails and connecting via the UI is impossible.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path containing the per-interface socket (e.g. `wlan0`) |
+| **Default** | Unset — auto-detect + known fallbacks |
+| **File** | `src/api/wifi_backend_wpa_supplicant.cpp` |
+
+```bash
+# Point HelixScreen at a vendor's non-standard control socket directory
+HELIX_WPA_SOCKET_DIR=/data/misc/wifi/sockets ./build/bin/helix-screen
 ```
 
 ---

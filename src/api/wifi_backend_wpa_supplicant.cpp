@@ -15,6 +15,8 @@
 
 #include "wpa_ctrl.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -40,6 +42,100 @@ static const char* resolve_wpa_client_dir() {
     if (fs::is_directory("/run/helixscreen"))
         return "/run/helixscreen";
     return nullptr; // nullptr → wpa_ctrl_open() uses its /tmp default
+}
+
+/// Normalise a wpa_supplicant control-interface value to a plain directory.
+///
+/// The `-O` / `ctrl_interface` value is either a bare directory
+/// (e.g. Creality's `/etc/wifi/wpa_supplicant/sockets`) or the keyed form
+/// `DIR=<path> GROUP=<grp>` (the standard systemd launch).  Return the <path>.
+static std::string parse_wpa_ctrl_value(std::string v) {
+    const std::string key = "DIR=";
+    const auto pos = v.find(key);
+    if (pos != std::string::npos)
+        v.erase(0, pos + key.size());
+    // Drop a trailing " GROUP=..." (or any other whitespace-separated token).
+    const auto ws = v.find_first_of(" \t");
+    if (ws != std::string::npos)
+        v.erase(ws);
+    return v;
+}
+
+/// Inspect running processes for `wpa_supplicant ... -O <value>` and return the
+/// control-interface directory it parses to.
+///
+/// The directory is whatever wpa_supplicant was launched with; some vendor
+/// firmwares relocate it off the standard paths.  Auto-detecting the live `-O`
+/// argument lets us adapt without per-device patches or manual symlinks.
+/// Returns "" when not found (no daemon, no -O arg, or /proc unavailable).
+static std::string detect_wpa_ctrl_dir_from_proc() {
+    std::error_code ec;
+    if (!fs::is_directory("/proc", ec))
+        return {};
+
+    for (const auto& entry : fs::directory_iterator("/proc", ec)) {
+        if (ec)
+            break;
+        // PID directories only.
+        const std::string name = entry.path().filename().string();
+        if (name.empty() ||
+            !std::all_of(name.begin(), name.end(), [](unsigned char c) { return std::isdigit(c); }))
+            continue;
+
+        // /proc/<pid>/cmdline is NUL-separated argv.
+        std::ifstream cmd(entry.path() / "cmdline", std::ios::binary);
+        if (!cmd.is_open())
+            continue;
+        std::vector<std::string> argv;
+        std::string arg;
+        while (std::getline(cmd, arg, '\0'))
+            argv.push_back(arg);
+        if (argv.empty())
+            continue;
+
+        // argv[0] basename must be wpa_supplicant.
+        if (fs::path(argv[0]).filename().string() != "wpa_supplicant")
+            continue;
+
+        // Accept "-O <value>" and the joined "-O<value>" forms.  The value may
+        // itself be the keyed "DIR=<path> GROUP=<grp>" form (parse_wpa_ctrl_value).
+        for (size_t i = 1; i < argv.size(); ++i) {
+            if (argv[i] == "-O" && i + 1 < argv.size())
+                return parse_wpa_ctrl_value(argv[i + 1]);
+            if (argv[i].rfind("-O", 0) == 0 && argv[i].size() > 2)
+                return parse_wpa_ctrl_value(argv[i].substr(2));
+        }
+    }
+    return {};
+}
+
+/// Ordered list of directories that may hold wpa_supplicant control sockets.
+///
+/// Standard distros use /run/wpa_supplicant (with the legacy /var/run alias).
+/// Vendor firmwares sometimes relocate the control interface — Creality's K2
+/// Plus launches `wpa_supplicant ... -O /etc/wifi/wpa_supplicant/sockets`, which
+/// left network discovery broken until users hand-symlinked the sockets into
+/// /var/run.  We therefore (1) honour an explicit override, (2) auto-detect the
+/// live -O path from the running daemon, then (3) fall back to the known-good
+/// locations (including the Creality path).
+static std::vector<std::string> wpa_socket_dirs() {
+    std::vector<std::string> dirs;
+    auto add = [&dirs](std::string d) {
+        // Trim trailing slashes so de-duplication is stable.
+        while (d.size() > 1 && d.back() == '/')
+            d.pop_back();
+        if (!d.empty() && std::find(dirs.begin(), dirs.end(), d) == dirs.end())
+            dirs.push_back(std::move(d));
+    };
+
+    if (const char* env = std::getenv("HELIX_WPA_SOCKET_DIR"))
+        add(env);
+    add(detect_wpa_ctrl_dir_from_proc());
+    add("/run/wpa_supplicant");
+    add("/var/run/wpa_supplicant");
+    add("/etc/wifi/wpa_supplicant/sockets"); // Creality K2 Plus / Creality OS
+
+    return dirs;
 }
 
 WifiBackendWpaSupplicant::WifiBackendWpaSupplicant()
@@ -248,7 +344,7 @@ WiFiError WifiBackendWpaSupplicant::check_system_prerequisites() {
     }
 
     // 2. Check if any wpa_supplicant sockets exist
-    std::vector<std::string> socket_paths = {"/run/wpa_supplicant", "/var/run/wpa_supplicant"};
+    std::vector<std::string> socket_paths = wpa_socket_dirs();
     bool socket_found = false;
     std::string accessible_socket;
 
@@ -414,9 +510,9 @@ void WifiBackendWpaSupplicant::init_wpa() {
     std::string wpa_socket;
     bool socket_found = false;
 
-    // Try common wpa_supplicant socket paths
+    // Try common wpa_supplicant socket paths (plus override / auto-detected / vendor)
     // Use error_code overload to handle permission denied gracefully (non-root users)
-    std::vector<std::string> socket_dirs = {"/run/wpa_supplicant", "/var/run/wpa_supplicant"};
+    std::vector<std::string> socket_dirs = wpa_socket_dirs();
     for (const auto& base_path : socket_dirs) {
         if (socket_found)
             break;
@@ -452,8 +548,11 @@ void WifiBackendWpaSupplicant::init_wpa() {
     };
 
     if (!socket_found) {
-        LOG_ERROR_INTERNAL("Could not find wpa_supplicant socket in /run or /var/run");
-        LOG_ERROR_INTERNAL("Is wpa_supplicant daemon running?");
+        LOG_ERROR_INTERNAL(
+            "Could not find wpa_supplicant socket in any known location "
+            "(/run, /var/run, /etc/wifi/wpa_supplicant/sockets, $HELIX_WPA_SOCKET_DIR)");
+        LOG_ERROR_INTERNAL("Is wpa_supplicant daemon running? Override its control dir "
+                           "with HELIX_WPA_SOCKET_DIR if it uses a non-standard path.");
         dispatch_event("INIT_FAILED", "wpa_supplicant socket not found");
         signal_init_complete();
         return;

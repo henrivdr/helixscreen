@@ -515,6 +515,7 @@ HelixScreen auto-detects K2 printers using heuristics from `config/printer_datab
 - **Low CPU** — Dual Cortex-A7 at ~57 BogoMIPS. Performance-sensitive features (bed mesh 3D, animations) may need throttling.
 - **No curl** — BusyBox wget only, no HTTPS support.
 - **WiFi managed by platform hooks** — The stock `wifi-server` is killed when HelixScreen takes over the display. Platform hooks (`hooks-k2.sh`) start `wpa_supplicant` directly using credentials at `/etc/wifi/wpa_supplicant/wpa_supplicant.conf`. WiFi configuration changes made via the stock UI are preserved.
+- **Non-standard control socket** — `hooks-k2.sh` launches `wpa_supplicant` without `-O`, so the control socket lands at the `ctrl_interface=` from the stock conf — `/etc/wifi/wpa_supplicant/sockets/wlan0` on K2 — not the usual `/run/wpa_supplicant`. The WiFi backend searches that location (and auto-detects any `-O` path from the live process), so network discovery works without manual symlinks. Firmware that uses yet another path can be pointed at it via `HELIX_WPA_SOCKET_DIR`. Surfaced by a community **K2 Plus** report.
 
 ## Related Resources
 
