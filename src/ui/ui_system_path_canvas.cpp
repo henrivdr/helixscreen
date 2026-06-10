@@ -472,8 +472,18 @@ static void draw_tool_badge(lv_layer_t* layer, int32_t cx, int32_t nozzle_y, int
 }
 
 // ============================================================================
-// Main Draw Callback
+// Draw phases
 // ============================================================================
+// system_path_draw_cb derives one SysLayout per draw, then dispatches to the
+// multi-tool or single-tool pipeline.
+//
+// Multi-tool (toolchanger / mixed overview — one nozzle per tool):
+//   collect_routes_and_draw_unit_stems → sort_routes → draw_routes →
+//   draw_mini_hubs → draw_tool_row → draw_status_centered
+//
+// Single-tool (all units converge on one nozzle):
+//   draw_unit_columns (incl. shared merge fan) → draw_bypass_merge_line →
+//   draw_combiner_hub → draw_output_to_nozzle (incl. right-aligned status)
 
 // Helper: calculate horizontal X position for a tool in the tools row
 static int32_t calc_tool_x(int tool_index, int total_tools, int32_t x_off, int32_t width) {
@@ -489,6 +499,558 @@ static int32_t calc_tool_x(int tool_index, int total_tools, int32_t x_off, int32
     return x_off + margin + (usable * tool_index) / (total_tools - 1);
 }
 
+// One dispatch point for the user's configured toolhead style.
+static void draw_toolhead_glyph(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color,
+                                int32_t scale) {
+    switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
+    case helix::ToolheadStyle::A4T:
+        draw_nozzle_a4t(layer, cx, cy, color, scale);
+        break;
+    case helix::ToolheadStyle::ANTHEAD:
+        draw_nozzle_anthead(layer, cx, cy, color, scale);
+        break;
+    case helix::ToolheadStyle::JABBERWOCKY:
+        draw_nozzle_jabberwocky(layer, cx, cy, color, scale);
+        break;
+    case helix::ToolheadStyle::STEALTHBURNER:
+        draw_nozzle_stealthburner(layer, cx, cy, color, scale);
+        break;
+    case helix::ToolheadStyle::CREALITY_K1:
+        draw_nozzle_creality_k1(layer, cx, cy, color, scale);
+        break;
+    case helix::ToolheadStyle::CREALITY_K2:
+        draw_nozzle_creality_k2(layer, cx, cy, color, scale);
+        break;
+    default:
+        draw_nozzle_bambu(layer, cx, cy, color, scale);
+        break;
+    }
+}
+
+// Per-draw layout + resolved colors/sizes shared by every phase.
+struct SysLayout {
+    lv_area_t obj_coords{};
+    int32_t width = 0, height = 0, x_off = 0, y_off = 0;
+    int32_t entry_y = 0, merge_y = 0, hub_y = 0, hub_h = 0, tools_y = 0, nozzle_y = 0;
+    int32_t center_x = 0; // shifted ~10% left in single-tool bypass layouts
+    lv_color_t idle_color, active_color_lv, hub_bg, hub_border, nozzle_color;
+    int32_t line_idle = 0, line_active = 0, sensor_r = 0;
+    bool multi_tool = false;
+};
+
+static SysLayout compute_sys_layout(SystemPathData* data, const lv_area_t& obj_coords) {
+    SysLayout L{};
+    L.obj_coords = obj_coords;
+    L.width = lv_area_get_width(&obj_coords);
+    L.height = lv_area_get_height(&obj_coords);
+    L.x_off = obj_coords.x1;
+    L.y_off = obj_coords.y1;
+
+    // Determine if multi-tool routing is needed
+    L.multi_tool = (data->total_tools > 1);
+
+    // Calculate Y positions
+    L.entry_y = L.y_off + (int32_t)(L.height * ENTRY_Y_RATIO);
+    L.merge_y = L.y_off + (int32_t)(L.height * MERGE_Y_RATIO);
+    L.hub_y = L.y_off + (int32_t)(L.height * HUB_Y_RATIO);
+    L.hub_h = (int32_t)(L.height * HUB_HEIGHT_RATIO);
+    L.tools_y = L.y_off + (int32_t)(L.height * TOOLS_Y_RATIO);
+    L.nozzle_y = L.y_off + (int32_t)(L.height * NOZZLE_Y_RATIO);
+    L.center_x = L.x_off + L.width / 2;
+
+    // Colors
+    L.idle_color = data->color_idle;
+    L.active_color_lv = lv_color_hex(data->active_color);
+    L.hub_bg = data->color_hub_bg;
+    L.hub_border = data->color_hub_border;
+    L.nozzle_color = data->color_nozzle;
+
+    // Sizes
+    L.line_idle = data->line_width_idle;
+    // Active (loaded) tubes read the SAME gauge as idle tubes — the "loaded"
+    // emphasis is carried by color + glow backdrop, not extra width (matches the
+    // detail panel where solid lanes dropped their +2 outline). Sensor dots keep
+    // sizing off the theme's active width so they stay legible.
+    L.line_active = L.line_idle;
+    L.sensor_r = LV_MAX(5, data->line_width_active);
+    data->cached_sensor_r = L.sensor_r;
+
+    // Shift center_x left when bypass is supported to make room for bypass path on the right
+    if (data->has_bypass && !L.multi_tool) {
+        L.center_x -= L.width / 10; // Shift hub/toolhead ~10% left
+    }
+    return L;
+}
+
+// ----------------------------------------------------------------------------
+// Multi-tool pipeline (per-unit routing to individual tool positions).
+// Note: Bypass rendering is intentionally omitted in this mode — bypass is not
+// applicable to multi-extruder toolchanger setups since each tool has its own
+// filament path.
+// ----------------------------------------------------------------------------
+
+// One unit→tool route collected in the first pass, drawn in the third.
+struct GlobalRoute {
+    int unit_idx;
+    int tool_idx;
+    int32_t start_x;
+    int32_t start_y;
+    int32_t end_x;
+    int32_t end_y;
+    int32_t dist; // absolute horizontal distance (for stagger ordering)
+    bool is_hub;  // HUB topology route (draws hub box after)
+};
+
+// Per-unit mini-hub info, deferred so hub boxes draw on top of the routes.
+struct HubInfo {
+    int32_t tool_x;
+    int32_t mini_hub_y;
+    int32_t mini_hub_w;
+    int32_t mini_hub_h;
+    lv_color_t hub_bg_color;
+    int first_tool;
+    bool valid;
+};
+
+// PASS 1: Collect all routed paths across all units globally. HUB units also
+// draw their entry stem here (vertical from the unit card down to the hub
+// merge point, with the optional hub sensor dot interrupting it).
+static int collect_routes_and_draw_unit_stems(lv_layer_t* layer, SystemPathData* data,
+                                              const SysLayout& L, GlobalRoute* all_routes,
+                                              HubInfo* hub_infos) {
+    int total_routes = 0;
+
+    for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
+        int32_t unit_x = L.x_off + data->unit_x_positions[i];
+        int topology = data->unit_topology[i];
+        int tool_count = data->unit_tool_count[i];
+        int first_tool = data->unit_first_tool[i];
+        bool is_active = (i == data->active_unit);
+
+        if (topology == 2 || topology == 3) {
+            // PARALLEL / MIXED: one route per unique tool position.
+            // For MIXED, tool_count already reflects unique nozzles (not lanes),
+            // so hub lanes sharing a mapped_tool produce a single route.
+            int32_t spread = LV_MIN(L.width / 6, tool_count > 1 ? 60 : 0);
+            for (int t = 0; t < tool_count && (first_tool + t) < data->total_tools; ++t) {
+                int tool_idx = first_tool + t;
+                int32_t tool_x = calc_tool_x(tool_idx, data->total_tools, L.x_off, L.width);
+                int32_t start_x = unit_x;
+                if (tool_count > 1) {
+                    start_x = unit_x - spread / 2 + (spread * t) / (tool_count - 1);
+                }
+                int32_t dist = start_x > tool_x ? (start_x - tool_x) : (tool_x - start_x);
+                all_routes[total_routes++] = {i,      tool_idx,  start_x, L.entry_y,
+                                              tool_x, L.tools_y, dist,    false};
+            }
+
+            // For MIXED topology, save hub info for the last tool (hub group)
+            if (topology == 3 && tool_count > 1) {
+                int hub_tool_idx = first_tool + tool_count - 1;
+                int hub_t = tool_count - 1;
+                // Use the same start_x math as the route above
+                int32_t hub_start_x = unit_x;
+                if (tool_count > 1) {
+                    hub_start_x = unit_x - spread / 2 + (spread * hub_t) / (tool_count - 1);
+                }
+                int32_t mhw = data->hub_width * 2 / 5;
+                int32_t mhh = L.hub_h * 2 / 3;
+                int32_t mhy = L.entry_y + mhh / 2 + 4;
+                bool hub_has_filament =
+                    is_active && data->filament_loaded && (data->active_tool == hub_tool_idx);
+                lv_color_t mini_bg = L.hub_bg;
+                if (hub_has_filament) {
+                    mini_bg = sp_blend(L.hub_bg, L.active_color_lv, 0.33f);
+                }
+                hub_infos[i] = {hub_start_x, mhy, mhw, mhh, mini_bg, hub_tool_idx, true};
+            }
+        } else {
+            // HUB: one route from unit to mini-hub position
+            if (tool_count > 0 && first_tool < data->total_tools) {
+                int32_t tool_x = calc_tool_x(first_tool, data->total_tools, L.x_off, L.width);
+                int32_t mini_hub_w = data->hub_width * 2 / 3;
+                int32_t mini_hub_h = L.hub_h * 2 / 3;
+                int32_t mini_hub_y = L.merge_y + (L.tools_y - L.merge_y) / 3;
+                int32_t end_y_mh = mini_hub_y - mini_hub_h / 2;
+
+                // Hub sensor dot and short vertical beneath it
+                // Use a shorter merge point for HUB units to leave more room
+                // between hub routes and parallel routes below
+                int32_t hub_merge_y = L.entry_y + (L.merge_y - L.entry_y) * 2 / 3;
+                bool has_sensor = data->unit_has_hub_sensor[i];
+                lv_color_t line_color = is_active ? L.active_color_lv : L.idle_color;
+                int32_t line_w = is_active ? L.line_active : L.line_idle;
+                int32_t sensor_dot_y = L.entry_y + (hub_merge_y - L.entry_y) / 3;
+
+                if (has_sensor) {
+                    draw_vertical_line(layer, unit_x, L.entry_y, sensor_dot_y - L.sensor_r,
+                                       line_color, line_w, /*active=*/is_active);
+                    draw_vertical_line(layer, unit_x, sensor_dot_y + L.sensor_r, hub_merge_y,
+                                       line_color, line_w, /*active=*/is_active);
+                    bool filled = data->unit_hub_triggered[i];
+                    lv_color_t dot_color =
+                        filled ? (is_active ? L.active_color_lv : L.idle_color) : L.idle_color;
+                    draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, L.sensor_r);
+                } else {
+                    draw_vertical_line(layer, unit_x, L.entry_y, hub_merge_y, line_color, line_w,
+                                       /*active=*/is_active);
+                }
+
+                int32_t dist = unit_x > tool_x ? (unit_x - tool_x) : (tool_x - unit_x);
+                all_routes[total_routes++] = {i,      first_tool, unit_x, hub_merge_y,
+                                              tool_x, end_y_mh,   dist,   true};
+
+                // Save hub info for deferred drawing
+                bool hub_has_filament = is_active && data->filament_loaded;
+                lv_color_t mini_hub_bg = L.hub_bg;
+                if (hub_has_filament) {
+                    mini_hub_bg = sp_blend(L.hub_bg, L.active_color_lv, 0.33f);
+                }
+                hub_infos[i] = {tool_x,      mini_hub_y, mini_hub_w, mini_hub_h,
+                                mini_hub_bg, first_tool, true};
+            }
+        }
+    }
+    return total_routes;
+}
+
+// PASS 2: Sort routes. PARALLEL by end_x ascending (leftmost tool first →
+// bottom horizontal). HUB after parallel, by distance descending.
+static void sort_routes(GlobalRoute* all_routes, int total_routes) {
+    for (int a = 0; a < total_routes - 1; ++a) {
+        for (int b = a + 1; b < total_routes; ++b) {
+            bool swap = false;
+            if (all_routes[a].is_hub && !all_routes[b].is_hub) {
+                swap = true; // parallel before hub
+            } else if (all_routes[a].is_hub == all_routes[b].is_hub) {
+                if (!all_routes[a].is_hub) {
+                    // PARALLEL: sort by end_x ascending
+                    if (all_routes[b].end_x < all_routes[a].end_x)
+                        swap = true;
+                } else {
+                    // HUB: sort by distance descending
+                    if (all_routes[b].dist > all_routes[a].dist)
+                        swap = true;
+                }
+            }
+            if (swap) {
+                GlobalRoute tmp = all_routes[a];
+                all_routes[a] = all_routes[b];
+                all_routes[b] = tmp;
+            }
+        }
+    }
+}
+
+// PASS 3: Draw all routed paths with computed coordinates.
+//
+// PARALLEL geometry (cable harness nesting):
+//   Routes sorted by end_x ascending (T0 leftmost first).
+//   Horizontal levels are fixed-spaced pixel positions centered
+//   in the midzone between entry_y and tools_y.
+//   T0 (first, leftmost end_x) → LOWEST horizontal (highest Y)
+//   T3 (last, rightmost end_x) → HIGHEST horizontal (lowest Y)
+//   This guarantees no crossings: since end_x increases left→right
+//   and horiz_y increases top→bottom in the same order, no end
+//   vertical segment can pass through another route's horizontal.
+//
+// HUB geometry:
+//   20%-40% of own vertical range for clean hub-top arrival.
+static void draw_routes(lv_layer_t* layer, SystemPathData* data, const SysLayout& L,
+                        GlobalRoute* all_routes, int total_routes) {
+    int32_t arc_r = LV_MAX(8, (L.tools_y - L.entry_y) / 10);
+
+    int parallel_count = 0;
+    for (int r = 0; r < total_routes; ++r) {
+        if (all_routes[r].start_x == all_routes[r].end_x)
+            continue;
+        if (!all_routes[r].is_hub)
+            parallel_count++;
+    }
+
+    // PARALLEL: compute absolute Y positions for each horizontal level
+    // Fixed spacing between levels (tube width * 3 gives clear visual gap)
+    int32_t par_step = LV_MAX(10, L.line_idle * 3 + 4);
+    // Total height of the stacked group
+    int32_t par_group_h = (parallel_count > 1) ? par_step * (parallel_count - 1) : 0;
+    // Center the group at 55% between entry_y and tools_y (slightly below middle)
+    int32_t par_center_y = L.entry_y + (L.tools_y - L.entry_y) * 55 / 100;
+    // Top of group (highest horizontal = smallest Y = last parallel route)
+    int32_t par_top_y = par_center_y - par_group_h / 2;
+    // Bottom of group (lowest horizontal = largest Y = first parallel route)
+    int32_t par_bot_y = par_top_y + par_group_h;
+
+    int parallel_idx = 0;
+
+    for (int r = 0; r < total_routes; ++r) {
+        auto& route = all_routes[r];
+        bool is_active = (route.unit_idx == data->active_unit);
+        bool tool_active = is_active && (route.tool_idx == data->active_tool);
+
+        lv_color_t route_color = tool_active ? L.active_color_lv : L.idle_color;
+        int32_t route_w = tool_active ? L.line_active : L.line_idle;
+
+        if (route.start_x == route.end_x) {
+            draw_tube_line(layer, route.start_x, route.start_y, route.end_x, route.end_y,
+                           is_active ? L.active_color_lv : L.idle_color,
+                           is_active ? L.line_active : L.line_idle, /*active=*/tool_active);
+        } else if (route.is_hub) {
+            // HUB: a single lane diagonally into its own mini-hub top, via the
+            // shared merge-fan builder (n=1 lands dead-center on end_x). Each
+            // unit feeds a distinct mini-hub so no two hub routes interact.
+            helix::ui::MergeFanLane lane{route.start_x, route.start_y,
+                                         sp_lane_style(route_color, route_w, tool_active), nullptr};
+            helix::ui::draw_merge_fan(layer, &lane, 1, route.end_x, route.end_y,
+                                      /*hub_w=*/0, /*fillet_r=*/9.0f);
+        } else {
+            // PARALLEL: idx 0 (leftmost end_x) at par_bot_y (lowest),
+            // idx N-1 (rightmost end_x) at par_top_y (highest)
+            int32_t horiz_y = par_bot_y - parallel_idx * par_step;
+            parallel_idx++;
+
+            horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
+
+            draw_routed_tube_parallel(layer, route.start_x, route.start_y, route.end_x, route.end_y,
+                                      horiz_y, route_color, route_w,
+                                      /*active=*/tool_active);
+        }
+    }
+}
+
+// PASS 4: Draw mini-hub boxes and hub-to-tool verticals (on top of routes).
+static void draw_mini_hubs(lv_layer_t* layer, SystemPathData* data, const SysLayout& L,
+                           const HubInfo* hub_infos) {
+    for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
+        if (!hub_infos[i].valid)
+            continue;
+        const auto& hi = hub_infos[i];
+        bool is_active = (i == data->active_unit);
+
+        int topology = data->unit_topology[i];
+        const char* hub_label = (topology == 3) ? "H" : "Hub";
+        draw_hub_box(layer, hi.tool_x, hi.mini_hub_y, hi.mini_hub_w, hi.mini_hub_h, hi.hub_bg_color,
+                     L.hub_border, data->color_text, data->label_font, data->border_radius,
+                     hub_label);
+
+        // Line from mini hub to tool (skip for MIXED — route already covers full path)
+        if (topology != 3) {
+            bool tool_active = is_active && (hi.first_tool == data->active_tool);
+            lv_color_t out_color = tool_active ? L.active_color_lv : L.idle_color;
+            int32_t out_w = tool_active ? L.line_active : L.line_idle;
+            draw_vertical_line(layer, hi.tool_x, hi.mini_hub_y + hi.mini_hub_h / 2, L.tools_y,
+                               out_color, out_w, /*active=*/tool_active);
+        }
+    }
+}
+
+// Tool nozzles + badges along the bottom row.
+static void draw_tool_row(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    int32_t small_scale = LV_MAX(6, data->extruder_scale * 3 / 4);
+    for (int t = 0; t < data->total_tools && t < SystemPathData::MAX_TOOLS; ++t) {
+        int32_t tool_x = calc_tool_x(t, data->total_tools, L.x_off, L.width);
+        bool is_active_tool = (t == data->active_tool) && data->filament_loaded;
+
+        lv_color_t noz_color = is_active_tool ? L.active_color_lv : L.nozzle_color;
+        draw_toolhead_glyph(layer, tool_x, L.tools_y, noz_color, small_scale);
+
+        // Tool badge below nozzle — use pre-formatted label from data
+        if (data->label_font && t < SystemPathData::MAX_TOOLS) {
+            draw_tool_badge(layer, tool_x, L.tools_y, small_scale, data->tool_labels[t],
+                            data->label_font, data->color_idle,
+                            is_active_tool ? L.active_color_lv : data->color_text);
+        }
+    }
+}
+
+// Status text centered along the bottom edge (multi-tool layout).
+static void draw_status_centered(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    if (!data->status_text[0] || !data->label_font)
+        return;
+    lv_draw_label_dsc_t status_dsc;
+    lv_draw_label_dsc_init(&status_dsc);
+    status_dsc.color = data->color_text;
+    status_dsc.font = data->label_font;
+    status_dsc.align = LV_TEXT_ALIGN_CENTER;
+    status_dsc.text = data->status_text;
+
+    int32_t font_h = lv_font_get_line_height(data->label_font);
+    int32_t status_y = L.y_off + L.height - font_h - 2;
+    lv_area_t status_area = {L.x_off + 4, status_y, L.x_off + L.width - 4, status_y + font_h};
+    lv_draw_label(layer, &status_dsc, &status_area);
+}
+
+static void draw_multi_tool(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    GlobalRoute all_routes[SystemPathData::MAX_TOOLS];
+    HubInfo hub_infos[SystemPathData::MAX_UNITS] = {};
+
+    int total_routes = collect_routes_and_draw_unit_stems(layer, data, L, all_routes, hub_infos);
+    sort_routes(all_routes, total_routes);
+    draw_routes(layer, data, L, all_routes, total_routes);
+    draw_mini_hubs(layer, data, L, hub_infos);
+    draw_tool_row(layer, data, L);
+    draw_status_centered(layer, data, L);
+}
+
+// ----------------------------------------------------------------------------
+// Single-tool pipeline (hub convergence to one nozzle).
+// ----------------------------------------------------------------------------
+
+// Unit entry columns (one per unit, with optional hub sensor dot) converging
+// into the combiner hub via the shared parallel-diagonal merge fan
+// (separation by construction — no overlaps or pinches).
+static void draw_unit_columns(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    int32_t end_y_hub = L.hub_y - L.hub_h / 2;
+    helix::ui::MergeFanLane conv_lanes[SystemPathData::MAX_UNITS];
+    int conv_n = 0;
+
+    // Draw unit entry lines (one per unit, from entry to merge point) and
+    // collect each unit's convergence lane for one shared draw_merge_fan call.
+    for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
+        int32_t unit_x = L.x_off + data->unit_x_positions[i];
+        bool is_active = (i == data->active_unit);
+
+        lv_color_t line_color = is_active ? L.active_color_lv : L.idle_color;
+        int32_t line_w = is_active ? L.line_active : L.line_idle;
+
+        // Hub sensor dot interrupts the vertical segment
+        bool has_sensor = data->unit_has_hub_sensor[i];
+        int32_t sensor_dot_y = L.entry_y + (L.merge_y - L.entry_y) * 3 / 5;
+
+        if (has_sensor) {
+            draw_vertical_line(layer, unit_x, L.entry_y, sensor_dot_y - L.sensor_r, line_color,
+                               line_w, /*active=*/is_active);
+            draw_vertical_line(layer, unit_x, sensor_dot_y + L.sensor_r, L.merge_y, line_color,
+                               line_w, /*active=*/is_active);
+            bool filled = data->unit_hub_triggered[i];
+            lv_color_t dot_color =
+                filled ? (is_active ? L.active_color_lv : L.idle_color) : L.idle_color;
+            draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, L.sensor_r);
+        } else {
+            draw_vertical_line(layer, unit_x, L.entry_y, L.merge_y, line_color, line_w,
+                               /*active=*/is_active);
+        }
+
+        // Collect this unit's convergence lane (unit column down to the hub
+        // top). The shared builder draws them all as parallel diagonals per
+        // side after the loop.
+        conv_lanes[conv_n++] = {unit_x, L.merge_y, sp_lane_style(line_color, line_w, is_active),
+                                nullptr};
+    }
+
+    // Single shared draw: parallel-diagonal merge fan into the combiner hub.
+    helix::ui::draw_merge_fan(layer, conv_lanes, conv_n, L.center_x, end_y_hub, data->hub_width,
+                              /*fillet_r=*/9.0f);
+}
+
+// Bypass merge line. Spool + labels are rendered by the panel via the shared
+// BypassSpoolWidgets overlay centered on the merge point — same model as
+// ui_filament_path_canvas, so both AMS panels present the bypass identically.
+static void draw_bypass_merge_line(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    if (!data->has_bypass)
+        return;
+    BypassGeometry bg = compute_bypass_geometry(data, L.obj_coords);
+    bool bp_active = data->bypass_active;
+    lv_color_t bp_color = bp_active ? lv_color_hex(data->bypass_color) : L.idle_color;
+    int32_t bp_width = bp_active ? L.line_active : L.line_idle;
+
+    // Horizontal line from spool/merge to hub (line ends inside the
+    // spool widget; the widget is opaque so the overlap isn't visible).
+    draw_line(layer, bg.bypass_x, bg.merge_y, bg.center_x + L.sensor_r, bg.merge_y, bp_color,
+              bp_width, /*active=*/bp_active);
+    draw_sensor_dot(layer, bg.center_x, bg.merge_y, bp_color, bp_active, L.sensor_r);
+}
+
+// The combiner hub box, tinted when filament is loaded through it.
+static void draw_combiner_hub(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    bool hub_has_filament = (data->active_unit >= 0 && data->filament_loaded);
+    lv_color_t hub_bg_tinted = L.hub_bg;
+    if (hub_has_filament) {
+        hub_bg_tinted = sp_blend(L.hub_bg, L.active_color_lv, 0.33f);
+    }
+    draw_hub_box(layer, L.center_x, L.hub_y, data->hub_width, L.hub_h, hub_bg_tinted, L.hub_border,
+                 data->color_text, data->label_font, data->border_radius, "Hub");
+}
+
+// Output line from hub to nozzle: sensor dots, the nozzle glyph, the virtual
+// tool badge, and the right-aligned status text.
+static void draw_output_to_nozzle(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    bool unit_active = (data->active_unit >= 0 && data->filament_loaded);
+    bool bp_active = (data->bypass_active && data->filament_loaded);
+    bool any_active = unit_active || bp_active;
+
+    int32_t hub_bottom = L.hub_y + L.hub_h / 2;
+    int32_t extruder_half_height = data->extruder_scale * 2;
+    int32_t nozzle_top = L.nozzle_y - extruder_half_height;
+    int32_t bypass_merge_y = hub_bottom + (L.nozzle_y - hub_bottom) / 3;
+    int32_t toolhead_sensor_y = hub_bottom + (nozzle_top - hub_bottom) * 2 / 3;
+
+    lv_color_t active_output_color =
+        bp_active ? lv_color_hex(data->bypass_color) : L.active_color_lv;
+
+    if (bp_active) {
+        draw_vertical_line(layer, L.center_x, hub_bottom, bypass_merge_y, L.idle_color,
+                           L.line_idle);
+        draw_vertical_line(layer, L.center_x, bypass_merge_y, nozzle_top,
+                           lv_color_hex(data->bypass_color), L.line_active, /*active=*/true);
+    } else if (unit_active) {
+        draw_vertical_line(layer, L.center_x, hub_bottom, nozzle_top, L.active_color_lv,
+                           L.line_active, /*active=*/true);
+    } else {
+        draw_vertical_line(layer, L.center_x, hub_bottom, nozzle_top, L.idle_color, L.line_idle);
+    }
+
+    if (data->has_toolhead_sensor) {
+        bool th_filled = data->toolhead_sensor_triggered;
+        lv_color_t th_dot_color = th_filled ? active_output_color : L.idle_color;
+        if (!any_active)
+            th_dot_color = L.idle_color;
+        draw_sensor_dot(layer, L.center_x, toolhead_sensor_y, th_dot_color, th_filled, L.sensor_r);
+    }
+
+    lv_color_t noz_color = L.nozzle_color;
+    if (bp_active) {
+        noz_color = lv_color_hex(data->bypass_color);
+    } else if (unit_active) {
+        noz_color = L.active_color_lv;
+    }
+
+    draw_toolhead_glyph(layer, L.center_x, L.nozzle_y, noz_color, data->extruder_scale);
+
+    // Virtual tool badge beneath nozzle — only when multiple slots feed one toolhead
+    if (data->total_tools <= 1 && data->current_tool >= 0 && data->label_font) {
+        lv_color_t badge_text = (unit_active || bp_active) ? noz_color : data->color_text;
+        draw_tool_badge(layer, L.center_x, L.nozzle_y, data->extruder_scale,
+                        data->current_tool_label, data->label_font, data->color_idle, badge_text);
+    }
+
+    if (data->status_text[0] && data->label_font) {
+        lv_draw_label_dsc_t status_dsc;
+        lv_draw_label_dsc_init(&status_dsc);
+        status_dsc.color = data->color_text;
+        status_dsc.font = data->label_font;
+        status_dsc.align = LV_TEXT_ALIGN_RIGHT;
+        status_dsc.text = data->status_text;
+
+        int32_t font_h = lv_font_get_line_height(data->label_font);
+        int32_t label_right = L.center_x - data->extruder_scale * 3;
+        int32_t label_left = L.x_off + 4;
+        lv_area_t status_area = {label_left, L.nozzle_y - font_h / 2, label_right,
+                                 L.nozzle_y + font_h / 2};
+        lv_draw_label(layer, &status_dsc, &status_area);
+    }
+}
+
+static void draw_single_tool(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
+    draw_unit_columns(layer, data, L);
+    draw_bypass_merge_line(layer, data, L);
+    draw_combiner_hub(layer, data, L);
+    draw_output_to_nozzle(layer, data, L);
+}
+
+// ============================================================================
+// Main Draw Callback
+// ============================================================================
+
 static void system_path_draw_cb(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
     lv_layer_t* layer = lv_event_get_layer(e);
@@ -501,528 +1063,14 @@ static void system_path_draw_cb(lv_event_t* e) {
         return;
     }
 
-    // Get widget dimensions
     lv_area_t obj_coords;
     lv_obj_get_coords(obj, &obj_coords);
-    int32_t width = lv_area_get_width(&obj_coords);
-    int32_t height = lv_area_get_height(&obj_coords);
-    int32_t x_off = obj_coords.x1;
-    int32_t y_off = obj_coords.y1;
+    SysLayout L = compute_sys_layout(data, obj_coords);
 
-    // Determine if multi-tool routing is needed
-    bool multi_tool = (data->total_tools > 1);
-
-    // Calculate Y positions
-    int32_t entry_y = y_off + (int32_t)(height * ENTRY_Y_RATIO);
-    int32_t merge_y = y_off + (int32_t)(height * MERGE_Y_RATIO);
-    int32_t hub_y = y_off + (int32_t)(height * HUB_Y_RATIO);
-    int32_t hub_h = (int32_t)(height * HUB_HEIGHT_RATIO);
-    int32_t tools_y = y_off + (int32_t)(height * TOOLS_Y_RATIO);
-    int32_t nozzle_y = y_off + (int32_t)(height * NOZZLE_Y_RATIO);
-    int32_t center_x = x_off + width / 2;
-
-    // Colors
-    lv_color_t idle_color = data->color_idle;
-    lv_color_t active_color_lv = lv_color_hex(data->active_color);
-    lv_color_t hub_bg = data->color_hub_bg;
-    lv_color_t hub_border = data->color_hub_border;
-    lv_color_t nozzle_color = data->color_nozzle;
-
-    // Sizes
-    int32_t line_idle = data->line_width_idle;
-    // Active (loaded) tubes read the SAME gauge as idle tubes — the "loaded"
-    // emphasis is carried by color + glow backdrop, not extra width (matches the
-    // detail panel where solid lanes dropped their +2 outline). Sensor dots keep
-    // sizing off the theme's active width so they stay legible.
-    int32_t line_active = line_idle;
-    int32_t sensor_r = LV_MAX(5, data->line_width_active);
-    data->cached_sensor_r = sensor_r;
-
-    // Shift center_x left when bypass is supported to make room for bypass path on the right
-    if (data->has_bypass && !multi_tool) {
-        center_x -= width / 10; // Shift hub/toolhead ~10% left
-    }
-
-    if (multi_tool) {
-        // ====================================================================
-        // MULTI-TOOL MODE: Per-unit routing to individual tool positions
-        // Note: Bypass rendering is intentionally omitted here — bypass mode
-        // is not applicable to multi-extruder toolchanger setups since each
-        // tool has its own filament path.
-        // ====================================================================
-
-        // ================================================================
-        // PASS 1: Collect all routed paths across all units globally
-        // ================================================================
-        struct GlobalRoute {
-            int unit_idx;
-            int tool_idx;
-            int32_t start_x;
-            int32_t start_y;
-            int32_t end_x;
-            int32_t end_y;
-            int32_t dist; // absolute horizontal distance (for stagger ordering)
-            bool is_hub;  // HUB topology route (draws hub box after)
-        };
-        GlobalRoute all_routes[SystemPathData::MAX_TOOLS];
-        int total_routes = 0;
-
-        int32_t arc_r = LV_MAX(8, (tools_y - entry_y) / 10);
-
-        // Per-unit hub info for deferred hub box drawing
-        struct HubInfo {
-            int32_t tool_x;
-            int32_t mini_hub_y;
-            int32_t mini_hub_w;
-            int32_t mini_hub_h;
-            lv_color_t hub_bg_color;
-            int first_tool;
-            bool valid;
-        };
-        HubInfo hub_infos[SystemPathData::MAX_UNITS] = {};
-
-        for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
-            int32_t unit_x = x_off + data->unit_x_positions[i];
-            int topology = data->unit_topology[i];
-            int tool_count = data->unit_tool_count[i];
-            int first_tool = data->unit_first_tool[i];
-            bool is_active = (i == data->active_unit);
-
-            if (topology == 2 || topology == 3) {
-                // PARALLEL / MIXED: one route per unique tool position.
-                // For MIXED, tool_count already reflects unique nozzles (not lanes),
-                // so hub lanes sharing a mapped_tool produce a single route.
-                int32_t spread = LV_MIN(width / 6, tool_count > 1 ? 60 : 0);
-                for (int t = 0; t < tool_count && (first_tool + t) < data->total_tools; ++t) {
-                    int tool_idx = first_tool + t;
-                    int32_t tool_x = calc_tool_x(tool_idx, data->total_tools, x_off, width);
-                    int32_t start_x = unit_x;
-                    if (tool_count > 1) {
-                        start_x = unit_x - spread / 2 + (spread * t) / (tool_count - 1);
-                    }
-                    int32_t dist = start_x > tool_x ? (start_x - tool_x) : (tool_x - start_x);
-                    all_routes[total_routes++] = {i,      tool_idx, start_x, entry_y,
-                                                  tool_x, tools_y,  dist,    false};
-                }
-
-                // For MIXED topology, save hub info for the last tool (hub group)
-                if (topology == 3 && tool_count > 1) {
-                    int hub_tool_idx = first_tool + tool_count - 1;
-                    int hub_t = tool_count - 1;
-                    // Use the same start_x math as the route above
-                    int32_t hub_start_x = unit_x;
-                    if (tool_count > 1) {
-                        hub_start_x = unit_x - spread / 2 + (spread * hub_t) / (tool_count - 1);
-                    }
-                    int32_t mhw = data->hub_width * 2 / 5;
-                    int32_t mhh = hub_h * 2 / 3;
-                    int32_t mhy = entry_y + mhh / 2 + 4;
-                    bool hub_has_filament =
-                        is_active && data->filament_loaded && (data->active_tool == hub_tool_idx);
-                    lv_color_t mini_bg = hub_bg;
-                    if (hub_has_filament) {
-                        mini_bg = sp_blend(hub_bg, active_color_lv, 0.33f);
-                    }
-                    hub_infos[i] = {hub_start_x, mhy, mhw, mhh, mini_bg, hub_tool_idx, true};
-                }
-            } else {
-                // HUB: one route from unit to mini-hub position
-                if (tool_count > 0 && first_tool < data->total_tools) {
-                    int32_t tool_x = calc_tool_x(first_tool, data->total_tools, x_off, width);
-                    int32_t mini_hub_w = data->hub_width * 2 / 3;
-                    int32_t mini_hub_h = hub_h * 2 / 3;
-                    int32_t mini_hub_y = merge_y + (tools_y - merge_y) / 3;
-                    int32_t end_y_mh = mini_hub_y - mini_hub_h / 2;
-
-                    // Hub sensor dot and short vertical beneath it
-                    // Use a shorter merge point for HUB units to leave more room
-                    // between hub routes and parallel routes below
-                    int32_t hub_merge_y = entry_y + (merge_y - entry_y) * 2 / 3;
-                    bool has_sensor = data->unit_has_hub_sensor[i];
-                    lv_color_t line_color = is_active ? active_color_lv : idle_color;
-                    int32_t line_w = is_active ? line_active : line_idle;
-                    int32_t sensor_dot_y = entry_y + (hub_merge_y - entry_y) / 3;
-
-                    if (has_sensor) {
-                        draw_vertical_line(layer, unit_x, entry_y, sensor_dot_y - sensor_r,
-                                           line_color, line_w, /*active=*/is_active);
-                        draw_vertical_line(layer, unit_x, sensor_dot_y + sensor_r, hub_merge_y,
-                                           line_color, line_w, /*active=*/is_active);
-                        bool filled = data->unit_hub_triggered[i];
-                        lv_color_t dot_color =
-                            filled ? (is_active ? active_color_lv : idle_color) : idle_color;
-                        draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, sensor_r);
-                    } else {
-                        draw_vertical_line(layer, unit_x, entry_y, hub_merge_y, line_color, line_w,
-                                           /*active=*/is_active);
-                    }
-
-                    int32_t dist = unit_x > tool_x ? (unit_x - tool_x) : (tool_x - unit_x);
-                    all_routes[total_routes++] = {i,      first_tool, unit_x, hub_merge_y,
-                                                  tool_x, end_y_mh,   dist,   true};
-
-                    // Save hub info for deferred drawing
-                    bool hub_has_filament = is_active && data->filament_loaded;
-                    lv_color_t mini_hub_bg = hub_bg;
-                    if (hub_has_filament) {
-                        mini_hub_bg = sp_blend(hub_bg, active_color_lv, 0.33f);
-                    }
-                    hub_infos[i] = {tool_x,      mini_hub_y, mini_hub_w, mini_hub_h,
-                                    mini_hub_bg, first_tool, true};
-                }
-            }
-        }
-
-        // ================================================================
-        // PASS 2: Sort routes. PARALLEL by end_x ascending (leftmost
-        // tool first → bottom horizontal). HUB after parallel, by
-        // distance descending.
-        // ================================================================
-        for (int a = 0; a < total_routes - 1; ++a) {
-            for (int b = a + 1; b < total_routes; ++b) {
-                bool swap = false;
-                if (all_routes[a].is_hub && !all_routes[b].is_hub) {
-                    swap = true; // parallel before hub
-                } else if (all_routes[a].is_hub == all_routes[b].is_hub) {
-                    if (!all_routes[a].is_hub) {
-                        // PARALLEL: sort by end_x ascending
-                        if (all_routes[b].end_x < all_routes[a].end_x)
-                            swap = true;
-                    } else {
-                        // HUB: sort by distance descending
-                        if (all_routes[b].dist > all_routes[a].dist)
-                            swap = true;
-                    }
-                }
-                if (swap) {
-                    GlobalRoute tmp = all_routes[a];
-                    all_routes[a] = all_routes[b];
-                    all_routes[b] = tmp;
-                }
-            }
-        }
-
-        // ================================================================
-        // PASS 3: Draw all routed paths with computed coordinates.
-        //
-        // PARALLEL geometry (cable harness nesting):
-        //   Routes sorted by end_x ascending (T0 leftmost first).
-        //   Horizontal levels are fixed-spaced pixel positions centered
-        //   in the midzone between entry_y and tools_y.
-        //   T0 (first, leftmost end_x) → LOWEST horizontal (highest Y)
-        //   T3 (last, rightmost end_x) → HIGHEST horizontal (lowest Y)
-        //   This guarantees no crossings: since end_x increases left→right
-        //   and horiz_y increases top→bottom in the same order, no end
-        //   vertical segment can pass through another route's horizontal.
-        //
-        // HUB geometry:
-        //   20%-40% of own vertical range for clean hub-top arrival.
-        // ================================================================
-
-        int parallel_count = 0;
-        for (int r = 0; r < total_routes; ++r) {
-            if (all_routes[r].start_x == all_routes[r].end_x)
-                continue;
-            if (!all_routes[r].is_hub)
-                parallel_count++;
-        }
-
-        // PARALLEL: compute absolute Y positions for each horizontal level
-        // Fixed spacing between levels (tube width * 3 gives clear visual gap)
-        int32_t par_step = LV_MAX(10, line_idle * 3 + 4);
-        // Total height of the stacked group
-        int32_t par_group_h = (parallel_count > 1) ? par_step * (parallel_count - 1) : 0;
-        // Center the group at 55% between entry_y and tools_y (slightly below middle)
-        int32_t par_center_y = entry_y + (tools_y - entry_y) * 55 / 100;
-        // Top of group (highest horizontal = smallest Y = last parallel route)
-        int32_t par_top_y = par_center_y - par_group_h / 2;
-        // Bottom of group (lowest horizontal = largest Y = first parallel route)
-        int32_t par_bot_y = par_top_y + par_group_h;
-
-        int parallel_idx = 0;
-
-        for (int r = 0; r < total_routes; ++r) {
-            auto& route = all_routes[r];
-            bool is_active = (route.unit_idx == data->active_unit);
-            bool tool_active = is_active && (route.tool_idx == data->active_tool);
-
-            lv_color_t route_color = tool_active ? active_color_lv : idle_color;
-            int32_t route_w = tool_active ? line_active : line_idle;
-
-            if (route.start_x == route.end_x) {
-                draw_tube_line(layer, route.start_x, route.start_y, route.end_x, route.end_y,
-                               is_active ? active_color_lv : idle_color,
-                               is_active ? line_active : line_idle, /*active=*/tool_active);
-            } else if (route.is_hub) {
-                // HUB: a single lane diagonally into its own mini-hub top, via the
-                // shared merge-fan builder (n=1 lands dead-center on end_x). Each
-                // unit feeds a distinct mini-hub so no two hub routes interact.
-                helix::ui::MergeFanLane lane{route.start_x, route.start_y,
-                                             sp_lane_style(route_color, route_w, tool_active),
-                                             nullptr};
-                helix::ui::draw_merge_fan(layer, &lane, 1, route.end_x, route.end_y,
-                                          /*hub_w=*/0, /*fillet_r=*/9.0f);
-            } else {
-                // PARALLEL: idx 0 (leftmost end_x) at par_bot_y (lowest),
-                // idx N-1 (rightmost end_x) at par_top_y (highest)
-                int32_t horiz_y = par_bot_y - parallel_idx * par_step;
-                parallel_idx++;
-
-                horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
-
-                draw_routed_tube_parallel(layer, route.start_x, route.start_y, route.end_x,
-                                          route.end_y, horiz_y, route_color, route_w,
-                                          /*active=*/tool_active);
-            }
-        }
-
-        // ================================================================
-        // PASS 4: Draw hub boxes and hub-to-tool verticals (on top of routes)
-        // ================================================================
-        for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
-            if (!hub_infos[i].valid)
-                continue;
-            auto& hi = hub_infos[i];
-            bool is_active = (i == data->active_unit);
-
-            int topology = data->unit_topology[i];
-            const char* hub_label = (topology == 3) ? "H" : "Hub";
-            draw_hub_box(layer, hi.tool_x, hi.mini_hub_y, hi.mini_hub_w, hi.mini_hub_h,
-                         hi.hub_bg_color, hub_border, data->color_text, data->label_font,
-                         data->border_radius, hub_label);
-
-            // Line from mini hub to tool (skip for MIXED — route already covers full path)
-            if (topology != 3) {
-                bool tool_active = is_active && (hi.first_tool == data->active_tool);
-                lv_color_t out_color = tool_active ? active_color_lv : idle_color;
-                int32_t out_w = tool_active ? line_active : line_idle;
-                draw_vertical_line(layer, hi.tool_x, hi.mini_hub_y + hi.mini_hub_h / 2, tools_y,
-                                   out_color, out_w, /*active=*/tool_active);
-            }
-        }
-
-        // Draw tool nozzles at the bottom
-        int32_t small_scale = LV_MAX(6, data->extruder_scale * 3 / 4);
-        for (int t = 0; t < data->total_tools && t < SystemPathData::MAX_TOOLS; ++t) {
-            int32_t tool_x = calc_tool_x(t, data->total_tools, x_off, width);
-            bool is_active_tool = (t == data->active_tool) && data->filament_loaded;
-
-            lv_color_t noz_color = is_active_tool ? active_color_lv : nozzle_color;
-            switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
-            case helix::ToolheadStyle::A4T:
-                draw_nozzle_a4t(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            case helix::ToolheadStyle::ANTHEAD:
-                draw_nozzle_anthead(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            case helix::ToolheadStyle::JABBERWOCKY:
-                draw_nozzle_jabberwocky(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            case helix::ToolheadStyle::STEALTHBURNER:
-                draw_nozzle_stealthburner(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            case helix::ToolheadStyle::CREALITY_K1:
-                draw_nozzle_creality_k1(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            case helix::ToolheadStyle::CREALITY_K2:
-                draw_nozzle_creality_k2(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            default:
-                draw_nozzle_bambu(layer, tool_x, tools_y, noz_color, small_scale);
-                break;
-            }
-
-            // Tool badge below nozzle — use pre-formatted label from data
-            if (data->label_font && t < SystemPathData::MAX_TOOLS) {
-                draw_tool_badge(layer, tool_x, tools_y, small_scale, data->tool_labels[t],
-                                data->label_font, data->color_idle,
-                                is_active_tool ? active_color_lv : data->color_text);
-            }
-        }
-
-        // Draw status text at the bottom
-        if (data->status_text[0] && data->label_font) {
-            lv_draw_label_dsc_t status_dsc;
-            lv_draw_label_dsc_init(&status_dsc);
-            status_dsc.color = data->color_text;
-            status_dsc.font = data->label_font;
-            status_dsc.align = LV_TEXT_ALIGN_CENTER;
-            status_dsc.text = data->status_text;
-
-            int32_t font_h = lv_font_get_line_height(data->label_font);
-            int32_t status_y = y_off + height - font_h - 2;
-            lv_area_t status_area = {x_off + 4, status_y, x_off + width - 4, status_y + font_h};
-            lv_draw_label(layer, &status_dsc, &status_area);
-        }
-
+    if (L.multi_tool) {
+        draw_multi_tool(layer, data, L);
     } else {
-        // ====================================================================
-        // SINGLE-TOOL MODE: hub convergence via the shared parallel-diagonal
-        // merge fan (separation by construction — no overlaps or pinches).
-        // ====================================================================
-
-        int32_t end_y_hub = hub_y - hub_h / 2;
-        helix::ui::MergeFanLane conv_lanes[SystemPathData::MAX_UNITS];
-        int conv_n = 0;
-
-        // Draw unit entry lines (one per unit, from entry to merge point) and
-        // collect each unit's convergence lane for one shared draw_merge_fan call.
-        for (int i = 0; i < data->unit_count && i < SystemPathData::MAX_UNITS; i++) {
-            int32_t unit_x = x_off + data->unit_x_positions[i];
-            bool is_active = (i == data->active_unit);
-
-            lv_color_t line_color = is_active ? active_color_lv : idle_color;
-            int32_t line_w = is_active ? line_active : line_idle;
-
-            // Hub sensor dot interrupts the vertical segment
-            bool has_sensor = data->unit_has_hub_sensor[i];
-            int32_t sensor_dot_y = entry_y + (merge_y - entry_y) * 3 / 5;
-
-            if (has_sensor) {
-                draw_vertical_line(layer, unit_x, entry_y, sensor_dot_y - sensor_r, line_color,
-                                   line_w, /*active=*/is_active);
-                draw_vertical_line(layer, unit_x, sensor_dot_y + sensor_r, merge_y, line_color,
-                                   line_w, /*active=*/is_active);
-                bool filled = data->unit_hub_triggered[i];
-                lv_color_t dot_color =
-                    filled ? (is_active ? active_color_lv : idle_color) : idle_color;
-                draw_sensor_dot(layer, unit_x, sensor_dot_y, dot_color, filled, sensor_r);
-            } else {
-                draw_vertical_line(layer, unit_x, entry_y, merge_y, line_color, line_w,
-                                   /*active=*/is_active);
-            }
-
-            // Collect this unit's convergence lane (unit column down to the hub
-            // top). The shared builder draws them all as parallel diagonals per
-            // side after the loop.
-            conv_lanes[conv_n++] = {unit_x, merge_y, sp_lane_style(line_color, line_w, is_active),
-                                    nullptr};
-        }
-
-        // Single shared draw: parallel-diagonal merge fan into the combiner hub.
-        helix::ui::draw_merge_fan(layer, conv_lanes, conv_n, center_x, end_y_hub, data->hub_width,
-                                  /*fillet_r=*/9.0f);
-
-        // Draw bypass merge line. Spool + labels are rendered by the panel
-        // via the shared BypassSpoolWidgets overlay centered on the merge
-        // point — same model as ui_filament_path_canvas, so both AMS panels
-        // present the bypass identically.
-        if (data->has_bypass) {
-            BypassGeometry bg = compute_bypass_geometry(data, obj_coords);
-            bool bp_active = data->bypass_active;
-            lv_color_t bp_color = bp_active ? lv_color_hex(data->bypass_color) : idle_color;
-            int32_t bp_width = bp_active ? line_active : line_idle;
-
-            // Horizontal line from spool/merge to hub (line ends inside the
-            // spool widget; the widget is opaque so the overlap isn't visible).
-            draw_line(layer, bg.bypass_x, bg.merge_y, bg.center_x + sensor_r, bg.merge_y, bp_color,
-                      bp_width, /*active=*/bp_active);
-            draw_sensor_dot(layer, bg.center_x, bg.merge_y, bp_color, bp_active, sensor_r);
-        }
-
-        // Draw combiner hub
-        {
-            bool hub_has_filament = (data->active_unit >= 0 && data->filament_loaded);
-            lv_color_t hub_bg_tinted = hub_bg;
-            if (hub_has_filament) {
-                hub_bg_tinted = sp_blend(hub_bg, active_color_lv, 0.33f);
-            }
-            draw_hub_box(layer, center_x, hub_y, data->hub_width, hub_h, hub_bg_tinted, hub_border,
-                         data->color_text, data->label_font, data->border_radius, "Hub");
-        }
-
-        // Draw output line from hub to nozzle (with sensor dots)
-        {
-            bool unit_active = (data->active_unit >= 0 && data->filament_loaded);
-            bool bp_active = (data->bypass_active && data->filament_loaded);
-            bool any_active = unit_active || bp_active;
-
-            int32_t hub_bottom = hub_y + hub_h / 2;
-            int32_t extruder_half_height = data->extruder_scale * 2;
-            int32_t nozzle_top = nozzle_y - extruder_half_height;
-            int32_t bypass_merge_y = hub_bottom + (nozzle_y - hub_bottom) / 3;
-            int32_t toolhead_sensor_y = hub_bottom + (nozzle_top - hub_bottom) * 2 / 3;
-
-            lv_color_t active_output_color =
-                bp_active ? lv_color_hex(data->bypass_color) : active_color_lv;
-
-            if (bp_active) {
-                draw_vertical_line(layer, center_x, hub_bottom, bypass_merge_y, idle_color,
-                                   line_idle);
-                draw_vertical_line(layer, center_x, bypass_merge_y, nozzle_top,
-                                   lv_color_hex(data->bypass_color), line_active, /*active=*/true);
-            } else if (unit_active) {
-                draw_vertical_line(layer, center_x, hub_bottom, nozzle_top, active_color_lv,
-                                   line_active, /*active=*/true);
-            } else {
-                draw_vertical_line(layer, center_x, hub_bottom, nozzle_top, idle_color, line_idle);
-            }
-
-            if (data->has_toolhead_sensor) {
-                bool th_filled = data->toolhead_sensor_triggered;
-                lv_color_t th_dot_color = th_filled ? active_output_color : idle_color;
-                if (!any_active)
-                    th_dot_color = idle_color;
-                draw_sensor_dot(layer, center_x, toolhead_sensor_y, th_dot_color, th_filled,
-                                sensor_r);
-            }
-
-            lv_color_t noz_color = nozzle_color;
-            if (bp_active) {
-                noz_color = lv_color_hex(data->bypass_color);
-            } else if (unit_active) {
-                noz_color = active_color_lv;
-            }
-
-            switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
-            case helix::ToolheadStyle::A4T:
-                draw_nozzle_a4t(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
-                break;
-            case helix::ToolheadStyle::ANTHEAD:
-                draw_nozzle_anthead(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
-                break;
-            case helix::ToolheadStyle::JABBERWOCKY:
-                draw_nozzle_jabberwocky(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
-                break;
-            case helix::ToolheadStyle::STEALTHBURNER:
-                draw_nozzle_stealthburner(layer, center_x, nozzle_y, noz_color,
-                                          data->extruder_scale);
-                break;
-            case helix::ToolheadStyle::CREALITY_K1:
-                draw_nozzle_creality_k1(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
-                break;
-            case helix::ToolheadStyle::CREALITY_K2:
-                draw_nozzle_creality_k2(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
-                break;
-            default:
-                draw_nozzle_bambu(layer, center_x, nozzle_y, noz_color, data->extruder_scale);
-                break;
-            }
-
-            // Virtual tool badge beneath nozzle — only when multiple slots feed one toolhead
-            if (data->total_tools <= 1 && data->current_tool >= 0 && data->label_font) {
-                lv_color_t badge_text = (unit_active || bp_active) ? noz_color : data->color_text;
-                draw_tool_badge(layer, center_x, nozzle_y, data->extruder_scale,
-                                data->current_tool_label, data->label_font, data->color_idle,
-                                badge_text);
-            }
-
-            if (data->status_text[0] && data->label_font) {
-                lv_draw_label_dsc_t status_dsc;
-                lv_draw_label_dsc_init(&status_dsc);
-                status_dsc.color = data->color_text;
-                status_dsc.font = data->label_font;
-                status_dsc.align = LV_TEXT_ALIGN_RIGHT;
-                status_dsc.text = data->status_text;
-
-                int32_t font_h = lv_font_get_line_height(data->label_font);
-                int32_t label_right = center_x - data->extruder_scale * 3;
-                int32_t label_left = x_off + 4;
-                lv_area_t status_area = {label_left, nozzle_y - font_h / 2, label_right,
-                                         nozzle_y + font_h / 2};
-                lv_draw_label(layer, &status_dsc, &status_area);
-            }
-        }
+        draw_single_tool(layer, data, L);
     }
 
     spdlog::trace("[SystemPath] Draw: units={}, active={}, loaded={}, tools={}, active_tool={}, "
