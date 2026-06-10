@@ -20,6 +20,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -130,6 +132,22 @@ class SymbolTable:
 
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "helixscreen" / "symbols"
 R2_BASE_URL = os.environ.get("HELIX_R2_URL", "https://releases.helixscreen.org") + "/symbols"
+GH_RELEASE_BASE = (
+    "https://github.com/" + os.environ.get("HELIX_REPO", "prestonbrown/helixscreen") + "/releases/download"
+)
+
+
+def _http_download(url: str, dest: Path) -> Optional[int]:
+    """Download url → dest. Returns None on success, or the HTTP status code on failure."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "helixscreen-crashes/1.0"})
+        with urllib.request.urlopen(req) as resp, open(dest, "wb") as out:
+            out.write(resp.read())
+        return None
+    except urllib.error.HTTPError as e:
+        return e.code
+    except urllib.error.URLError:
+        return -1
 
 
 class SymbolCache:
@@ -153,18 +171,7 @@ class SymbolCache:
         # Download if not cached
         if not sym_path.exists():
             sym_path.parent.mkdir(parents=True, exist_ok=True)
-            url = f"{R2_BASE_URL}/v{version}/{platform}.sym"
-            try:
-                print(f"  Downloading symbols for v{version}/{platform}...", file=sys.stderr)
-                req = urllib.request.Request(url, headers={"User-Agent": "helixscreen-crashes/1.0"})
-                with urllib.request.urlopen(req) as resp, open(sym_path, "wb") as out:
-                    out.write(resp.read())
-            except urllib.error.HTTPError as e:
-                self._warnings.append(f"v{version}/{platform}: symbols not available (HTTP {e.code})")
-                self._tables[key] = None
-                return None
-            except urllib.error.URLError as e:
-                self._warnings.append(f"v{version}/{platform}: download failed ({e.reason})")
+            if not self._fetch_symbols(version, platform, sym_path):
                 self._tables[key] = None
                 return None
 
@@ -185,6 +192,54 @@ class SymbolCache:
 
         self._tables[key] = table
         return table
+
+    def _fetch_symbols(self, version: str, platform: str, sym_path: Path) -> bool:
+        """Fetch the symbol map into sym_path, returning True on success.
+
+        Symbol maps are stored compressed (.sym.zst) since v0.99.73 — nm output
+        compresses ~25:1. Try .sym.zst first (R2, then GitHub), then fall back to
+        the legacy uncompressed .sym for older releases (v0.99.72 and earlier).
+        Mirrors scripts/resolve-backtrace.sh.
+        """
+        print(f"  Downloading symbols for v{version}/{platform}...", file=sys.stderr)
+        have_zstd = shutil.which("zstd") is not None
+        zst_path = sym_path.with_suffix(".sym.zst")
+
+        # (url, is_compressed) candidates in priority order
+        candidates = []
+        if have_zstd:
+            candidates.append((f"{R2_BASE_URL}/v{version}/{platform}.sym.zst", True))
+        candidates.append((f"{R2_BASE_URL}/v{version}/{platform}.sym", False))
+        if have_zstd:
+            candidates.append((f"{GH_RELEASE_BASE}/v{version}/{platform}.sym.zst", True))
+        candidates.append((f"{GH_RELEASE_BASE}/v{version}/{platform}.sym", False))
+
+        last_code = None
+        for url, compressed in candidates:
+            dest = zst_path if compressed else sym_path
+            code = _http_download(url, dest)
+            if code is not None:
+                last_code = code
+                continue
+            if compressed:
+                try:
+                    subprocess.run(
+                        ["zstd", "-d", "--rm", "-q", "-f", str(zst_path), "-o", str(sym_path)],
+                        check=True,
+                    )
+                except subprocess.CalledProcessError:
+                    zst_path.unlink(missing_ok=True)
+                    continue
+            return True
+
+        if not have_zstd:
+            self._warnings.append(
+                f"v{version}/{platform}: symbols not available (HTTP {last_code}); "
+                "install 'zstd' to fetch compressed .sym.zst maps (v0.99.73+)"
+            )
+        else:
+            self._warnings.append(f"v{version}/{platform}: symbols not available (HTTP {last_code})")
+        return False
 
 
 # ---------------------------------------------------------------------------
