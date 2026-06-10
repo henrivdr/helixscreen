@@ -317,7 +317,19 @@ Start a mock print, then long-press objects in the G-code viewer or open the Pri
 
 For the exclude objects feature to work, your slicer must output `EXCLUDE_OBJECT` metadata in the G-code. Most modern slicers support this.
 
-### PrusaSlicer / OrcaSlicer / BambuStudio
+> **Slicer support tiers:** HelixScreen is developed and tested primarily against **OrcaSlicer 2.3.2+** — that's the recommended slicer. Manufacturer slicers (Creality Print, FlashForge Orca, Bambu Studio, etc., most of which are OrcaSlicer/PrusaSlicer forks) and **PrusaSlicer / SuperSlicer** are also supported. **Cura is not a target** — we don't test against it or build features for it, but we also don't deliberately break it; its output generally works with the extra setup noted below.
+
+### OrcaSlicer (recommended)
+
+**Printer Settings > General > Firmware**:
+- Set **G-code flavor** to `Klipper`
+
+**Print Settings > Output options**:
+- Enable **Label objects** (checkbox, listed as **Exclude object** in some versions)
+
+This causes the slicer to emit `EXCLUDE_OBJECT_DEFINE`, `EXCLUDE_OBJECT_START`, and `EXCLUDE_OBJECT_END` commands. OrcaSlicer 2.3.2+ also round-trips filament presets with HelixScreen's filament slots — see `FILAMENT_MANAGEMENT.md`.
+
+### PrusaSlicer / BambuStudio
 
 **Printer Settings > General > Firmware**:
 - Set **G-code flavor** to `Klipper`
@@ -325,11 +337,11 @@ For the exclude objects feature to work, your slicer must output `EXCLUDE_OBJECT
 **Print Settings > Output options**:
 - Enable **Label objects** (checkbox)
 
-This causes the slicer to emit `EXCLUDE_OBJECT_DEFINE`, `EXCLUDE_OBJECT_START`, and `EXCLUDE_OBJECT_END` commands.
+Emits the same `EXCLUDE_OBJECT_*` commands as OrcaSlicer.
 
-### Cura
+### Cura (not a tested target)
 
-Install the **Exclude Objects for Klipper** post-processing plugin:
+Cura isn't a slicer we test against, but its output works if you enable object labeling. Install the **Exclude Objects for Klipper** post-processing plugin:
 
 1. **Extensions > Post Processing > Modify G-Code**
 2. Add **Exclude Objects for Klipper**

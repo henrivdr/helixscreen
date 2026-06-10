@@ -65,6 +65,19 @@ HelixScreen works with any Klipper-based printer running Moonraker. Tested and s
 
 If you test on hardware not listed above, please let us know your results!
 
+### Which slicer should I use?
+
+HelixScreen reads standard G-code, so most slicers work. But support is tiered:
+
+| Slicer | Status | Notes |
+|--------|--------|-------|
+| **OrcaSlicer 2.3.2+** | **Primary** | The slicer we develop and test against. Best experience — including two-way filament preset sync with HelixScreen's filament slots. Recommended for everyone. |
+| Manufacturer slicers (Creality Print, FlashForge Orca, Bambu Studio, etc.) | **Supported** | Most are OrcaSlicer/PrusaSlicer forks and work well. We aim to support them. |
+| PrusaSlicer / SuperSlicer | **Supported** | Fully usable, including exclude-objects and pre-print options. |
+| Cura | **Not targeted** | We don't test against Cura and don't build features for it, but we don't go out of our way to break it. Output generally works; some features (exclude objects, filament sync) need extra setup or aren't available. |
+
+For the best results — accurate metadata, thumbnails, exclude-object support, and filament syncing — use **OrcaSlicer 2.3.2 or later**.
+
 ### How is this different from KlipperScreen and GuppyScreen?
 
 | Feature | HelixScreen | KlipperScreen | GuppyScreen |
