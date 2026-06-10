@@ -224,8 +224,8 @@ void NetworkWidget::detect_network_type() {
 
     auto tok = lifetime_.token();
     ethernet_manager_->get_info_async([this, tok](const EthernetInfo& info) {
-        if (tok.expired())
-            return;
+        // No bg-thread tok.expired() check — tok.defer() below gates atomically on the
+        // main thread (CLAUDE.md § Threading; avoids L081 Mechanism C detector fire).
         if (!info.connected)
             return; // Wifi/disconnected already reflected
         EthernetInfo info_copy = info;

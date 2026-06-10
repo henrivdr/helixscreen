@@ -403,8 +403,7 @@ void ZOffsetCalibrationPanel::start_calibration() {
         api_->execute_gcode(
             cmd, []() { spdlog::debug("[ZOffsetCal] M140 sent, bed heating"); },
             [this, tok](const MoonrakerError& err) {
-                if (tok.expired())
-                    return;
+                // No bg-thread tok.expired() — tok.defer() gates on the main thread (L081).
                 spdlog::error("[ZOffsetCal] Failed to start bed heating: {}", err.message);
                 tok.defer("ZOffsetCalibrationPanel::on_calibration_result(bed_heat)", [this]() {
                     on_calibration_result(false, "Failed to start bed heating");
@@ -472,8 +471,7 @@ void ZOffsetCalibrationPanel::begin_probe_sequence() {
         api_->execute_gcode(
             gcode,
             [this, tok]() {
-                if (tok.expired())
-                    return;
+                // No bg-thread tok.expired() — tok.defer() gates on the main thread (L081).
                 spdlog::info("[ZOffsetCal] Moved to center at Z0.1, ready for adjustment");
                 tok.defer("ZOffsetCalibrationPanel::set_state(ADJUSTING)", [this]() {
                     set_state(State::ADJUSTING);
@@ -481,8 +479,7 @@ void ZOffsetCalibrationPanel::begin_probe_sequence() {
                 });
             },
             [this, tok](const MoonrakerError& err) {
-                if (tok.expired())
-                    return;
+                // No bg-thread tok.expired() — tok.defer()/NOTIFY_* gate on the main thread (L081).
                 if (err.type == MoonrakerErrorType::TIMEOUT) {
                     spdlog::warn("[ZOffsetCal] Move to position timed out (may still be running)");
                     NOTIFY_WARNING(
@@ -540,8 +537,7 @@ void ZOffsetCalibrationPanel::begin_probe_sequence() {
                 // State transition to ADJUSTING happens via manual_probe_active observer
             },
             [this, tok](const MoonrakerError& err) {
-                if (tok.expired())
-                    return;
+                // No bg-thread tok.expired() — tok.defer()/NOTIFY_* gate on the main thread (L081).
                 if (err.type == MoonrakerErrorType::TIMEOUT) {
                     spdlog::warn(
                         "[ZOffsetCal] Calibration response timed out (may still be running)");
@@ -571,8 +567,7 @@ void ZOffsetCalibrationPanel::adjust_z(float delta) {
         api_->execute_gcode(
             cmd,
             [this, delta, token = lifetime_.token()]() {
-                if (token.expired())
-                    return;
+                // No bg-thread token.expired() — token.defer() gates on the main thread (L081).
                 token.defer("ZOffsetCalibrationPanel::adjust_z(update)", [this, delta]() {
                     cumulative_z_delta_ += delta;
                     update_z_position(0.1f + cumulative_z_delta_);
@@ -617,15 +612,13 @@ void ZOffsetCalibrationPanel::send_accept() {
         api_->execute_gcode(
             cmd,
             [this, tok]() {
-                if (tok.expired())
-                    return;
+                // No bg-thread tok.expired() — tok.defer() gates on the main thread (L081).
                 spdlog::info("[ZOffsetCal] SET_GCODE_OFFSET applied — firmware/macros handle save");
                 tok.defer("ZOffsetCalibrationPanel::on_calibration_result(gcode_offset_ok)",
                           [this]() { on_calibration_result(true, ""); });
             },
             [this, tok](const MoonrakerError& err) {
-                if (tok.expired())
-                    return;
+                // No bg-thread tok.expired() — tok.defer() gates on the main thread (L081).
                 spdlog::error("[ZOffsetCal] SET_GCODE_OFFSET failed: {}", err.message);
                 tok.defer("ZOffsetCalibrationPanel::on_calibration_result(gcode_fail)",
                           [this]() { on_calibration_result(false, "Failed to set Z-offset"); });
@@ -635,33 +628,30 @@ void ZOffsetCalibrationPanel::send_accept() {
         spdlog::info("[ZOffsetCal] Sending ACCEPT");
         set_state(State::SAVING);
 
+        // Token + api captured on the main thread so the bg-thread ACCEPT callback never
+        // touches `this` members (no bg-thread lifetime_.token()/api_ access). api_ (the
+        // MoonrakerAPI) outlives the panel; all `this` work is deferred to the main thread (L081).
+        auto accept_token = lifetime_.token();
         api_->execute_gcode(
             "ACCEPT",
-            [this, strategy, token = lifetime_.token()]() {
-                if (token.expired())
-                    return;
+            [this, strategy, api = api_, accept_token]() {
                 spdlog::info("[ZOffsetCal] ACCEPT success, applying and saving");
-                auto token2 = lifetime_.token();
                 helix::zoffset::apply_and_save(
-                    api_, strategy,
-                    [this, token2]() {
-                        if (token2.expired())
-                            return;
-                        token2.defer("ZOffsetCalibrationPanel::on_calibration_result(accept_ok)",
-                                     [this]() { on_calibration_result(true, ""); });
+                    api, strategy,
+                    [this, accept_token]() {
+                        accept_token.defer(
+                            "ZOffsetCalibrationPanel::on_calibration_result(accept_ok)",
+                            [this]() { on_calibration_result(true, ""); });
                     },
-                    [this, token2](const std::string& error) {
-                        if (token2.expired())
-                            return;
+                    [this, accept_token](const std::string& error) {
                         std::string msg = error;
-                        token2.defer(
+                        accept_token.defer(
                             "ZOffsetCalibrationPanel::on_calibration_result(accept_save_fail)",
                             [this, msg = std::move(msg)]() { on_calibration_result(false, msg); });
                     });
             },
             [this, token = lifetime_.token()](const MoonrakerError& err) {
-                if (token.expired())
-                    return;
+                // No bg-thread token.expired() — token.defer() gates on the main thread (L081).
                 std::string msg = "ACCEPT failed: " + err.user_message();
                 token.defer("ZOffsetCalibrationPanel::on_calibration_result(accept_fail)",
                             [this, msg = std::move(msg)]() { on_calibration_result(false, msg); });

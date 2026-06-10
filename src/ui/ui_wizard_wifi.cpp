@@ -226,8 +226,8 @@ void WizardWifiStep::update_ethernet_status() {
     auto tok = lifetime_.token();
     crash_handler::breadcrumb::note("wifi", "eth_probe_tok_ok");
     ethernet_manager_->get_info_async([this, tok](const EthernetInfo& info) {
-        if (tok.expired())
-            return;
+        // No bg-thread tok.expired() — tok.defer() below gates atomically on the main
+        // thread, and the deferred body re-checks cleanup_called_/screen_root_ (L081).
         EthernetInfo info_copy = info;
         tok.defer("WizardWifiStep::apply_ethernet_status", [this, info_copy]() {
             // Belt-and-suspenders: tok.defer already skips on generation
@@ -552,7 +552,7 @@ void WizardWifiStep::handle_wifi_toggle_changed(lv_event_t* e) {
                 // thread could otherwise rewrite cached_networks_ while the UI
                 // thread is mid-sort (#769).
                 token.defer([this, weak_mgr, scanned = networks]() mutable {
-                    if (weak_mgr.expired()) {
+                    if (weak_mgr.expired()) { // L081_OK: main-thread defer body; weak_mgr is a separate WiFiManager weak_ptr, not the bg lifetime token
                         spdlog::trace("[{}] WiFiManager destroyed, ignoring callback", get_name());
                         return;
                     }
@@ -612,11 +612,9 @@ void WizardWifiStep::handle_network_item_clicked(lv_event_t* e) {
             auto token = lifetime_.token();
             wifi_manager_->connect(
                 network.ssid, "", [this, token](bool success, const std::string& error) {
-                    if (token.expired()) {
-                        spdlog::debug("[{}] Lifetime expired, ignoring connect callback",
-                                      get_name());
-                        return;
-                    }
+                    // No bg-thread token.expired() — token.defer() gates atomically on the main
+                    // thread (L081). The old expired-branch log dereferenced get_name() on a
+                    // possibly-dead `this`.
                     token.defer([this, success, error]() {
                         if (success) {
                             char msg[128];
@@ -701,11 +699,9 @@ void WizardWifiStep::handle_modal_connect_clicked() {
         auto token = lifetime_.token();
         wifi_manager_->connect(
             current_ssid_, password, [this, token](bool success, const std::string& error) {
-                if (token.expired()) {
-                    spdlog::debug("[{}] Lifetime expired, ignoring connect callback", get_name());
-                    return;
-                }
-
+                // No bg-thread token.expired() — token.defer() gates atomically on the main
+                // thread (L081). The old expired-branch log dereferenced get_name() on a
+                // possibly-dead `this`.
                 token.defer([this, success, error]() {
                     lv_subject_set_int(&wifi_connecting_, 0);
 

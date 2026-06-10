@@ -983,10 +983,9 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                 api_->transfers().download_file_to_path(
                     "gcodes", file_path, temp_path,
                 [this, tok, temp_path](const std::string& path) {
-                    if (tok.expired()) {
-                        return;
-                    }
-                    // Marshal to main thread — this callback runs on HTTP thread
+                    // Runs on HTTP thread — no bg-thread tok.expired() check (L081 Mechanism C).
+                    // The inner main-thread guard below is what gates this (queue_update is not
+                    // lifetime-aware).
                     helix::ui::queue_update([this, tok, path]() {
                         if (tok.expired()) {
                             return;
@@ -1033,11 +1032,8 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                     });
                 },
                     [this, tok](const MoonrakerError& err) {
-                        if (tok.expired()) {
-                            return;
-                        }
+                        // Runs on HTTP thread — no bg-thread tok.expired() check (L081 Mechanism C).
                         spdlog::warn("[DetailView] Failed to download G-code: {}", err.message);
-                        // Marshal to main thread — this callback runs on HTTP thread
                         helix::ui::queue_update([this, tok]() {
                             if (tok.expired())
                                 return;
