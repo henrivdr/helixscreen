@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.75] - 2026-06-10
+
+### Added
+
+- **Redesigned filament path visualization** — the AMS filament path canvas (detail and overview) is rebuilt on a new geometry engine with arc-fillet tube routing, angled non-overlapping merge fans, slimmer active lanes, and hub gear placement, for a cleaner, more legible diagram across linear, hub, parallel, and mixed topologies.
+- **Headless printer detection** — a new `--detect-printer` CLI mode (with `--host`/`--port`) queries Moonraker over REST and prints a JSON verdict, and the installer gains Tier-2 Moonraker-based detection behind a confidence gate. Detection now recognizes the Sovol lineup via hostname-free signals, RatOS (V-Core 4 / IDEX / Pro), and reports a runner-up candidate; V-Minion kinematics corrected.
+- **Qidi Q2 Happy Hare preset** (prestonbrown/helixscreen#997).
+- **Clean wizard re-run** — `--wizard` clears the saved preset marker and host so detection starts fresh.
+- **Clearer "no display backend" diagnostics** (prestonbrown/helixscreen#998) — the app now explains why no backend was found instead of failing silently.
+
+### Fixed
+
+- **WebSocket reconnect use-after-free** (bundle UK9QCFY3) — Moonraker WS callbacks are installed once, closing an onclose UAF on reconnect.
+- **K2 HTTPS now works** — static OpenSSL is linked into the K2 build, Moonraker readiness timeout raised to 120s with progress logging, and stock system dirs are prepended to PATH in the init script and installer.
+- **WiFi bringup no longer stalls the boot splash** — wizard WiFi setup is non-blocking, and the wpa_supplicant control socket is discovered in non-standard directories.
+- **AFC unload targets the requested lane**, not the active tool (prestonbrown/helixscreen#999).
+- **Several rare crashes fixed** — zero-track grid template underflow, idle-reset relayout during teardown (prestonbrown/helixscreen#1001), home grid-layout activation before children are built (prestonbrown/helixscreen#983), the printer-image cache timer throwing an uncaught exception (prestonbrown/helixscreen#1000), and AMS mini-status rebuild during `lv_deinit` teardown.
+
+### Changed
+
+- **OrcaSlicer documented as the primary supported slicer** (2.3.2+, verified against 2.4.0), with a send-from-Orca guide.
+
 ## [0.99.74] - 2026-06-08
 
 ### Added
@@ -3957,6 +3979,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.75]: https://github.com/prestonbrown/helixscreen/compare/v0.99.74...v0.99.75
 [0.99.74]: https://github.com/prestonbrown/helixscreen/compare/v0.99.73...v0.99.74
 [0.99.73]: https://github.com/prestonbrown/helixscreen/compare/v0.99.72...v0.99.73
 [0.99.72]: https://github.com/prestonbrown/helixscreen/compare/v0.99.71...v0.99.72
