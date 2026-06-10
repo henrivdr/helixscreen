@@ -1,6 +1,6 @@
 # Filament Slot Metadata — `lane_data` Convention
 
-**Status**: Informational, v1 (2026-04). See [Changelog](#changelog).
+**Status**: Informational, v1.2 (2026-06). See [Changelog](#changelog).
 
 This document describes HelixScreen's use of the `lane_data` Moonraker database
 namespace to share per-slot filament metadata with OrcaSlicer and other tools.
@@ -20,17 +20,25 @@ Moonraker exposes a per-instance JSON key/value store at
 `/server/database/item`. The `lane_data` namespace, originally introduced by
 [AFC (Armored Turtle Filament Changer)](https://www.armoredturtle.xyz/docs/afc-klipper-add-on/features.html),
 holds one record per filament lane/slot. AFC writes these records from its
-Klipper plugin; OrcaSlicer reads them to auto-populate filament presets when
-sending a print. Happy Hare adopted the same namespace in
-[moonraker/PR&nbsp;#12764](https://github.com/mainsail-crew/moonraker/pull/12764)
-so its MMU lanes surface the same way.
+Klipper plugin; OrcaSlicer reads them (read-only — it never writes back) to
+auto-populate filament presets when sending a print.
+
+> **Happy Hare uses a different path.** Happy Hare lanes are *not* surfaced to
+> OrcaSlicer through `lane_data`. Since OrcaSlicer 2.4.0, Orca reads Happy
+> Hare's live Klipper status object directly (`GET /printer/objects/query?mmu`,
+> fields `gate_status`/`gate_material`/`gate_color`/`gate_temperature`). The
+> user-visible outcome is the same, but it is a separate mechanism outside the
+> scope of this spec. This spec covers the `lane_data` namespace, written by
+> AFC and HelixScreen.
 
 HelixScreen participates as both reader and writer. When a user edits slot
 metadata in HelixScreen's filament panel (brand, material, color, Spoolman
 binding, weight), we persist that record to `lane_data` in the AFC-compatible
 shape. OrcaSlicer 2.3.2+ reads it back on the next print and pre-selects the
 correct filament preset — with no HelixScreen-specific integration on the
-slicer side.
+slicer side. Verified unchanged through OrcaSlicer 2.4.0-beta: the namespace
+and the consumed fields (`lane`, `color`, `material`, `bed_temp`,
+`nozzle_temp`) are identical to 2.3.2.
 
 The convention is intentionally permissive:
 
@@ -47,9 +55,12 @@ The convention is intentionally permissive:
 | Project | Role | Reference |
 |---------|------|-----------|
 | AFC | Originator, writes from Klipper plugin | [AFC docs](https://www.armoredturtle.xyz/docs/afc-klipper-add-on/features.html) |
-| OrcaSlicer 2.3.2+ | Reader (filament preset auto-sync) | [MoonrakerPrinterAgent.cpp, PR #12086](https://github.com/SoftFever/OrcaSlicer/pull/12086) |
-| Happy Hare | Writer (MMU lanes) | [moonraker PR #12764](https://github.com/mainsail-crew/moonraker/pull/12764) |
+| OrcaSlicer 2.3.2+ | Reader only — never writes back (filament preset auto-sync) | [MoonrakerPrinterAgent.cpp, PR #12086](https://github.com/OrcaSlicer/OrcaSlicer/pull/12086) |
 | HelixScreen | Reader + writer (this document) | `src/printer/filament_slot_override_store.cpp` |
+
+Happy Hare is intentionally **not** listed here: OrcaSlicer reads Happy Hare
+lanes from the live `mmu` Klipper object, not from `lane_data` (see the note in
+§1).
 
 ### Moonraker endpoint
 
@@ -133,9 +144,9 @@ The top group is AFC-standard. The bottom group is HelixScreen's extensions.
 | `bed_temp` | integer | optional | Celsius | Recommended bed temperature. | User entry, bound Spoolman spool's filament profile, or HelixScreen's internal material DB (in that priority order). |
 | `nozzle_temp` | integer | optional | Celsius | Recommended nozzle temperature. When derived from a Spoolman spool's min/max range, the midpoint is emitted. | Same priority order as `bed_temp`. |
 
-OrcaSlicer 2.3.2 only consumes `lane`, `color`, `material`, `bed_temp`, and
-`nozzle_temp`. All other fields are additive and must be silently ignored by
-compliant readers.
+OrcaSlicer (2.3.2 through 2.4.0-beta, verified) only consumes `lane`, `color`,
+`material`, `bed_temp`, and `nozzle_temp`. All other fields are additive and
+must be silently ignored by compliant readers.
 
 #### HelixScreen extension fields
 
@@ -314,14 +325,19 @@ Clock skew between the printer and your writer can defeat this; treat
 | Project | File | Role |
 |---------|------|------|
 | HelixScreen | `src/printer/filament_slot_override_store.cpp` | Reader + writer. `to_lane_data_record` / `from_lane_data_record` for record shape; `load_blocking` / `save_async` / `clear_async` for namespace I/O. |
-| OrcaSlicer 2.3.2 | `src/slic3r/Utils/MoonrakerPrinterAgent.cpp:727-822` | Reader (filament preset auto-sync on print send). Canonical reference for AFC-standard field semantics. |
+| OrcaSlicer 2.3.2–2.4.0-beta | `src/slic3r/Utils/MoonrakerPrinterAgent.cpp:727-822` (`fetch_moonraker_filament_data`) | Reader (filament preset auto-sync on print send). Canonical reference for AFC-standard field semantics. Unchanged across this range. |
 | AFC (Armored Turtle) | Klipper plugin | Native writer. See [AFC docs](https://www.armoredturtle.xyz/docs/afc-klipper-add-on/features.html). |
-| Happy Hare | Moonraker plugin | Native writer (MMU lanes), added in [moonraker PR #12764](https://github.com/mainsail-crew/moonraker/pull/12764). |
+| Happy Hare | — (does not use `lane_data`) | OrcaSlicer 2.4.0+ reads Happy Hare lanes from the live `mmu` Klipper object via `fetch_hh_filament_info` (`MoonrakerPrinterAgent.cpp:825-950`), not this namespace. |
 
 ---
 
 ## Changelog
 
+- **v1.2 (2026-06-09)**: Verified against the OrcaSlicer 2.4.0-beta source
+  (`MoonrakerPrinterAgent.cpp`): the `lane_data` namespace and the five consumed
+  fields are unchanged from 2.3.2, and OrcaSlicer reads the namespace read-only
+  (never writes back). Corrected the Happy Hare entries — HH lanes reach
+  OrcaSlicer through Orca's live `mmu`-object reader (2.4.0+), not `lane_data`.
 - **v1.1 (2026-04-28)**: HelixScreen now emits `bed_temp` and `nozzle_temp`
   on every save. Source priority: explicit user entry > bound Spoolman
   spool's filament profile > internal material database default (looked up

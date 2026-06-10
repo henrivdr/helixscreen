@@ -221,32 +221,40 @@ HelixScreen writes user-edited slot metadata (brand, spool name, Spoolman
 link, weights, color/material) to the Moonraker `lane_data` namespace,
 following the AFC-originated convention. This is the same namespace
 OrcaSlicer 2.3.2+ reads for filament sync, so user edits automatically
-flow to the slicer on Moonraker-based printers.
+flow to the slicer on Moonraker-based printers. The flow is one-directional:
+HelixScreen writes, OrcaSlicer reads (it never writes `lane_data` back), so
+"round-trip" here means the user's edit reaching the slicer's filament
+panel — not a slicer-to-printer write.
 
 - **Wire-format spec (public):** [`../specs/filament_slots.md`](../specs/filament_slots.md)
 - **Implementation notes (internal):** [`FILAMENT_SLOT_METADATA.md`](FILAMENT_SLOT_METADATA.md)
 
-### OrcaSlicer 2.3.2 compatibility — by backend
+### OrcaSlicer compatibility — by backend
 
 All HelixScreen-managed AMS backends write the AFC-standard `lane_data`
-record on edit, so every one of them round-trips to OrcaSlicer 2.3.2+ with
-no additional configuration:
+record on edit, so every one of them round-trips to OrcaSlicer with no
+additional configuration. **Verified against OrcaSlicer 2.4.0-beta** (source:
+`MoonrakerPrinterAgent.cpp`): the namespace and consumed fields (`lane`,
+`color`, `material`, `bed_temp`, `nozzle_temp`) are unchanged from 2.3.2, so
+nothing on the HelixScreen side needs to change for 2.4.0.
 
-| Backend | Writer | OrcaSlicer 2.3.2+ picks up edits? |
-|---------|--------|-----------------------------------|
-| AD5X IFS | HelixScreen (`FilamentSlotOverrideStore`) | Yes |
-| Snapmaker U1 | HelixScreen (`FilamentSlotOverrideStore`) | Yes |
-| ACE (Anycubic ACE Pro) | HelixScreen (`FilamentSlotOverrideStore`) | Yes |
-| CFS (Creality K2) | HelixScreen (`FilamentSlotOverrideStore`) | Yes |
-| AFC / Box Turtle | AFC's own Klipper plugin | Yes (native AFC writer) |
-| Happy Hare | Happy Hare's own Klipper plugin | Yes (native HH writer) |
+| Backend | Writer | How OrcaSlicer picks it up |
+|---------|--------|----------------------------|
+| AD5X IFS | HelixScreen (`FilamentSlotOverrideStore`) | `lane_data` namespace |
+| Snapmaker U1 | HelixScreen (`FilamentSlotOverrideStore`) | `lane_data` namespace |
+| ACE (Anycubic ACE Pro) | HelixScreen (`FilamentSlotOverrideStore`) | `lane_data` namespace |
+| CFS (Creality K2) | HelixScreen (`FilamentSlotOverrideStore`) | `lane_data` namespace |
+| AFC / Box Turtle | AFC's own Klipper plugin | `lane_data` namespace (AFC is the originator) |
+| Happy Hare | Happy Hare's own Klipper plugin | **Live `mmu` object**, not `lane_data` — Orca 2.4.0+ reads `/printer/objects/query?mmu` |
 | Tool Changer | (not applicable — no per-slot metadata) | N/A |
 
 IFS, Snapmaker, ACE, and CFS share the `FilamentSlotOverrideStore`
-infrastructure. AFC and Happy Hare manage their own `lane_data` via their
-respective Klipper plugins; HelixScreen does not touch those records, but
-the wire format is the same — a user's OrcaSlicer sees filament info from
-all of these sources the same way.
+infrastructure and publish to `lane_data`; AFC writes `lane_data` via its own
+Klipper plugin. **Happy Hare is the exception**: OrcaSlicer does not read it
+from `lane_data` at all — since 2.4.0 Orca reads HH lanes directly from the
+live `mmu` Klipper status object (gate arrays). HelixScreen doesn't manage
+that path; HH and Klipper expose the object on their own. The user-visible
+outcome is the same across all sources, but the mechanism differs for HH.
 
 ---
 

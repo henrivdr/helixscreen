@@ -180,13 +180,15 @@ Tap **Done** to keep your mapping, or **Cancel** to discard it.
 
 > **Note:** The mapping card only appears on backends with editable tool mapping. On fixed 1:1 systems (Snapmaker U1, ACE) tools always map directly to their matching slot, so there's nothing to assign.
 
-### Syncing with OrcaSlicer 2.3.2+
+### Syncing with OrcaSlicer (2.3.2 and later, including 2.4.0)
 
-When you edit spool info in HelixScreen — on any supported filament system (AD5X IFS, Snapmaker U1, ACE, CFS) — that information is saved to your printer in the standard location OrcaSlicer 2.3.2 and later reads automatically. Open OrcaSlicer after editing and your slot's vendor, material, color, and Spoolman link show up in the filament panel with no extra setup.
+When you edit spool info in HelixScreen — on any supported filament system (AD5X IFS, Snapmaker U1, ACE, CFS) — that information is saved to your printer in the standard location OrcaSlicer 2.3.2 and later reads automatically. Open OrcaSlicer after editing and your slot's vendor, material, color, and temperatures show up in the filament panel with no extra setup.
 
-**AFC (Box Turtle) and Happy Hare** work the same way automatically — their Klipper plugins write the same records on their own, so your lane assignments also flow through to OrcaSlicer with nothing to configure.
+**AFC (Box Turtle) and Happy Hare** work the same way automatically — your lane assignments flow through to OrcaSlicer with nothing to configure.
 
-Either way — whether HelixScreen is writing the metadata (IFS / Snapmaker / ACE / CFS) or your filament system's own plugin is (AFC / Happy Hare) — your printer's filament info and OrcaSlicer stay in sync.
+Either way, your printer's filament info and OrcaSlicer stay in sync. The sync is one-way (your printer → OrcaSlicer): editing in OrcaSlicer doesn't change what's loaded in your AMS.
+
+> **Tip:** For the cleanest match, use material names OrcaSlicer recognizes (PLA, PETG, ABS, TPU, etc.). OrcaSlicer matches your slot to a filament preset by material name, so a slot set to "PLA" auto-selects a PLA preset.
 
 > **Requirements:** OrcaSlicer 2.3.2 or newer, connected to the same printer's Moonraker. Nothing to enable on the HelixScreen side — it's automatic.
 
