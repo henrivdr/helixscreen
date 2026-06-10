@@ -18,6 +18,12 @@ constexpr float kHalfPi = kPi / 2.0f;
 constexpr float kMinDx = 2.0f;
 // Minimum effective fillet radius before arcs are worthwhile.
 constexpr float kMinFillet = 2.0f;
+// Extra straight room (px) reserved on each leg adjoining a merge-fan corner,
+// on top of the fillet radius itself. route_polyline_filleted clamps the fillet
+// trim to half the shorter adjoining leg, so a leg of length >= fillet_r + slack
+// guarantees the corner can sweep at (close to) the full radius instead of
+// collapsing to a starved arc or a sharp miter.
+constexpr float kFilletSlack = 4.0f;
 } // namespace
 
 void FilamentPath::add_line(float x0, float y0, float x1, float y1) {
@@ -328,9 +334,16 @@ void build_merge_fan(const MergeLaneIn* lanes, int n, float hub_cx, float hub_to
     if (!lanes || !out || n <= 0)
         return;
 
-    // Common approach height just above the hub top; every lane's short final
-    // vertical drops from here into its own entry_x at one clean level.
-    float approach_y = hub_top - std::max(6.0f, fillet_r / 2.0f);
+    // Reserve straight room for the fillet on both fan corners. The final
+    // vertical (approach_y -> hub_top) and the first vertical (start_y -> y_bend)
+    // must each be at least this long so route_polyline_filleted's half-leg trim
+    // clamp can't starve the corner down to a sharp miter (#... merge-fan notch).
+    const float leg_reserve = fillet_r + kFilletSlack;
+
+    // Common approach height above the hub top; every lane's short final vertical
+    // drops from here into its own entry_x at one clean level. Pushed up by the
+    // full reserve so the last leg is always >= leg_reserve.
+    float approach_y = hub_top - leg_reserve;
 
     // Entry x positions spread evenly across the usable hub-top width (leaving
     // entry_margin inside each end), ordered identically to lane order so no two
@@ -348,12 +361,17 @@ void build_merge_fan(const MergeLaneIn* lanes, int n, float hub_cx, float hub_to
 
     // The bends must sit below every lane's sensor/clearance: take the lowest
     // (largest-y) start_y as the ceiling so a bend never rises above its source.
-    float min_bend_y = lanes[0].start_y;
+    float deepest_start_y = lanes[0].start_y;
     for (int i = 1; i < count; ++i)
-        min_bend_y = std::max(min_bend_y, lanes[i].start_y);
-    // Tiny clearance so the bend's incoming vertical has a real leg to fillet.
-    min_bend_y += 2.0f;
+        deepest_start_y = std::max(deepest_start_y, lanes[i].start_y);
+    // Reserve the full first-leg room (not just a token 2px): the bend can't rise
+    // closer than leg_reserve below the deepest sensor, so its incoming vertical
+    // always has enough straight run to host the fillet.
+    float min_bend_y = deepest_start_y + leg_reserve;
 
+    // Recompute the common slope from the REDUCED vertical budget (min_bend_y is
+    // now higher and approach_y lower than before), so the steepest lane still
+    // bends at or below min_bend_y and the reservation holds for every lane.
     float vertical_budget = approach_y - min_bend_y;
     if (vertical_budget < 0.0f)
         vertical_budget = 0.0f;
@@ -389,8 +407,13 @@ void build_merge_fan(const MergeLaneIn* lanes, int n, float hub_cx, float hub_to
         // directly above its entry (dx ~ 0) bends right at the approach -> a plain
         // vertical (route_polyline_filleted collapses the collinear waypoint).
         float y_bend = approach_y - m * dx;
-        if (y_bend < min_bend_y)
-            y_bend = min_bend_y;
+        // Reserve the first-leg room for THIS lane: its incoming vertical
+        // (start_y -> y_bend) must be at least leg_reserve long. min_bend_y already
+        // enforces this for the deepest sensor; this per-lane floor covers any lane
+        // whose own start_y sits below the common ceiling.
+        float lane_bend_floor = std::max(min_bend_y, lanes[i].start_y + leg_reserve);
+        if (y_bend < lane_bend_floor)
+            y_bend = lane_bend_floor;
         if (y_bend > approach_y)
             y_bend = approach_y;
 

@@ -158,11 +158,16 @@ struct MergeLaneOut {
  *   - Per side, m_side = min(@p max_slope, vertical_budget / max_dx_side), where
  *     vertical_budget = approach_y - min_bend_y and max_dx_side is the largest
  *     |entry_x - slot_x| on that side.
- *   - approach_y = hub_top - max(6, fillet_r/2). min_bend_y = the smallest start_y
- *     across all lanes + a small clearance (so every bend sits below its sensor).
+ *   - Fillet room is reserved as a geometry constraint so corners can't starve:
+ *     both the final vertical (approach_y -> hub_top) and every first vertical
+ *     (start_y -> y_bend) are kept >= fillet_r + 4px. Concretely
+ *     approach_y = hub_top - (fillet_r + 4) and min_bend_y = deepest start_y +
+ *     (fillet_r + 4). The common slope is recomputed from this reduced budget so
+ *     the reservation holds even for the steepest lane.
  *   - lane i: y_bend_i = approach_y - m_side * |entry_x_i - slot_x_i|, clamped to
- *     >= min_bend_y. A lane directly above its entry (dx ~ 0) is a straight
- *     vertical (y_bend == approach_y; route_polyline_filleted handles collinear).
+ *     >= max(min_bend_y, start_y_i + fillet_r + 4). A lane directly above its
+ *     entry (dx ~ 0) is a straight vertical (y_bend == approach_y;
+ *     route_polyline_filleted handles collinear).
  *
  * @param lanes      lane sources (size @p n), ordered left-to-right by slot index.
  * @param n          lane count.
