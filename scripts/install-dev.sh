@@ -20,6 +20,14 @@
 # Fail fast on any error
 set -eu
 
+# Harden PATH against third-party mods that prepend command-shim directories onto
+# the login-shell PATH (e.g. Entware's /opt/bin, or k2-improvements' /mnt/UDISK/bin
+# wrappers for sudo/systemctl/supervisorctl injected via /etc/profile.d). Putting
+# the stock system directories first keeps our pidof/killall/kill/etc. resolving to
+# the real binaries during install. Appended (not replaced) so any genuinely needed
+# non-standard tool still resolves as a fallback.
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 # Configuration
 GITHUB_REPO="prestonbrown/helixscreen"
 SERVICE_NAME="helixscreen"

@@ -17,6 +17,13 @@
 #
 # Note: S80/S90 prefix ensures we start after network and Moonraker
 
+# Harden PATH against third-party mods that prepend command-shim directories
+# (e.g. Entware's /opt/bin, or k2-improvements' /mnt/UDISK/bin wrappers). Keeping
+# the stock system directories first ensures our killall/pidof/kill (and the
+# commands in sourced platform hooks) resolve to the real binaries at boot.
+# Appended (not replaced) so any genuinely needed non-standard tool still resolves.
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 NAME="helixscreen"
 DESC="HelixScreen 3D Printer Touch UI"
 DAEMON_DIR="/opt/helixscreen"  # Updated by installer for different firmware
