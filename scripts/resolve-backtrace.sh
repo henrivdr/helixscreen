@@ -62,6 +62,40 @@ is_garbage_symbol() {
     [[ "$GARBAGE_SYMBOLS" == *"|$1|"* ]]
 }
 
+# Repo-relative path to LVGL's event enum, used to decode numeric event_code →
+# symbolic name (e.g. 53 → LV_EVENT_GET_SELF_SIZE) in the crash-context analysis.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly LV_EVENT_HEADER="${SCRIPT_DIR}/../lib/lvgl/src/misc/lv_event.h"
+
+# Decode an lv_event_code_t ordinal to its LV_EVENT_* name by parsing the enum
+# in lv_event.h. Manual counting is error-prone (the enum has comment-only lines
+# and section dividers), so parse it. Prints "" if the header is absent or the
+# code doesn't resolve.
+lvgl_event_name() {
+    local code="$1"
+    [[ "$code" =~ ^[0-9]+$ ]] || return 0
+    [[ -f "$LV_EVENT_HEADER" ]] || return 0
+    python3 - "$LV_EVENT_HEADER" "$code" <<'PY' 2>/dev/null || true
+import re, sys
+hdr, target = sys.argv[1], int(sys.argv[2])
+m = re.search(r'enum\s*\{(.*?)\}\s*lv_event_code_t', open(hdr).read(), re.S)
+if not m:
+    sys.exit()
+val = 0
+for raw in m.group(1).splitlines():
+    code = re.sub(r'/\*.*?\*/', '', raw).strip().rstrip(',')
+    mm = re.match(r'(LV_EVENT_[A-Z0-9_]+)\s*(=\s*(0x[0-9a-fA-F]+|\d+))?$', code)
+    if not mm:
+        continue
+    if mm.group(3):
+        val = int(mm.group(3), 0)
+    if val == target:
+        print(mm.group(1))
+        break
+    val += 1
+PY
+}
+
 # Memory map entries parsed from crash file (array of "start_dec end_dec path" strings)
 MEMORY_MAPS=()
 
@@ -936,6 +970,9 @@ fi
 # stack-scan candidates among libstdc++/fmt/spdlog noise — this surfaces it.
 SPINE=()
 _spine_last=""
+# Every resolved symbol (all frames, not just app code) — used by the
+# crash-context analysis below to detect which thread the crash is on.
+ALL_SYMS=()
 # A frame is "app code" if it names our namespaces/entry points and is not the
 # crash handler itself. Tuned to the symbols this codebase actually emits.
 _is_app_frame() {
@@ -959,6 +996,7 @@ for addr in "$@"; do
     echo "$_res"
     # Strip "0x… (file: 0x…) → " prefix down to the symbol for spine matching.
     _sym="${_res#*→ }"
+    ALL_SYMS+=("$_sym")
     if _is_app_frame "$_sym" && [[ "$_sym" != "$_spine_last" ]]; then
         SPINE+=("$_sym")
         _spine_last="$_sym"
@@ -989,4 +1027,72 @@ if [[ ${#SPINE[@]} -gt 0 ]]; then
     for s in "${SPINE[@]}"; do
         echo "  $s"
     done
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Crash-context analysis: name the thread the crash is REALLY on (from the
+# resolved frames), and warn when the crash header's LVGL event_target/event_code
+# are misleading. Those fields record the LAST LVGL event on the MAIN thread —
+# ambient context, NOT the crash locus — so a background-thread crash (libhv WS
+# loop, HTTP worker) sends analysis down a phantom "LVGL widget UAF" rabbit hole.
+# (Added after bundle UK9QCFY3: a libhv onclose UAF masqueraded as an lv_label /
+# event_code 53 crash for most of an investigation.)
+_bg_ws_re='EventLoopThread::loop_thread|hloop_run|hloop_process_events|hio_handle_events|hio_handle_read|hio_close|eventfd_read_cb|websocket_parser_execute|onCustomEvent'
+_bg_http_re='HttpExecutor|http::HttpExecutor|curl_easy|curl_multi'
+_bg_thread_re='std::thread|std::__thread|BusThread|camera_stream'
+_main_re='lv_timer_handler|lv_refr|_lv_display_refr|lv_obj_redraw|indev_proc|Application::run| main\+0x'
+
+_crash_thread=""
+if [[ ${#ALL_SYMS[@]} -gt 0 ]]; then
+    _joined=$(printf '%s\n' "${ALL_SYMS[@]}")
+    if grep -Eq "$_bg_ws_re" <<<"$_joined"; then
+        _crash_thread="libhv WebSocket / event-loop  ·  BACKGROUND thread"
+    elif grep -Eq "$_bg_http_re" <<<"$_joined"; then
+        _crash_thread="HTTP worker  ·  BACKGROUND thread"
+    elif grep -Eq "$_bg_thread_re" <<<"$_joined"; then
+        _crash_thread="spawned worker  ·  BACKGROUND thread"
+    elif grep -Eq "$_main_re" <<<"$_joined"; then
+        _crash_thread="main / LVGL thread"
+    fi
+fi
+
+# Pull the ambient LVGL/queue fields from the crash header, if we have one.
+_ev_code="" _ev_class="" _ev_addr="" _q_prev="" _r_err=""
+if [[ -n "${CRASH_FILE:-}" && -f "${CRASH_FILE:-/nonexistent}" ]]; then
+    _ev_code=$(grep -m1 '^event_code:' "$CRASH_FILE" 2>/dev/null | cut -d: -f2 | tr -d '[:space:]' || true)
+    _ev_class=$(grep -m1 '^event_target_class:' "$CRASH_FILE" 2>/dev/null | cut -d: -f2 | tr -d '[:space:]' || true)
+    _ev_addr=$(grep -m1 '^event_target:' "$CRASH_FILE" 2>/dev/null | cut -d: -f2 | tr -d '[:space:]' || true)
+    _q_prev=$(grep -m1 '^queue_prev:' "$CRASH_FILE" 2>/dev/null | cut -d: -f2- || true)
+    _r_err=$(grep -m1 '^recent_error:' "$CRASH_FILE" 2>/dev/null | cut -d: -f2- || true)
+fi
+
+if [[ -n "$_crash_thread" || -n "$_ev_code$_ev_class$_q_prev$_r_err" ]]; then
+    echo ""
+    echo "── crash-context analysis ──"
+    [[ -n "$_crash_thread" ]] && echo "  Crash thread (inferred from resolved frames): $_crash_thread"
+
+    _is_bg=0
+    [[ "$_crash_thread" == *BACKGROUND* ]] && _is_bg=1
+
+    if [[ -n "$_ev_code" || -n "$_ev_class" ]]; then
+        _ev_name=$(lvgl_event_name "$_ev_code")
+        _line="  LVGL header: event_target_class=${_ev_class:-?}"
+        [[ -n "$_ev_addr" ]] && _line="$_line (${_ev_addr})"
+        _line="$_line  event_code=${_ev_code:-?}"
+        [[ -n "$_ev_name" ]] && _line="$_line → ${_ev_name}"
+        echo "$_line"
+        if (( _is_bg )); then
+            echo "  ⚠ MISLEADING: event_target_class / event_code are the LAST LVGL event on the"
+            echo "    MAIN thread — ambient state, NOT the crash locus. The crash is on a background"
+            echo "    thread (see above). Ignore these fields; trust the call spine."
+        else
+            echo "  These LVGL fields may be relevant (crash thread is main/LVGL or undetermined)."
+        fi
+    fi
+    if [[ -n "$_q_prev" || -n "$_r_err" ]]; then
+        _tag="main-thread context — may be relevant"
+        (( _is_bg )) && _tag="ambient main-thread context — likely UNRELATED to this bg-thread crash"
+        [[ -n "$_q_prev" ]] && echo "  queue_prev:${_q_prev}    [${_tag}]"
+        [[ -n "$_r_err" ]] && echo "  recent_error:${_r_err}    [${_tag}]"
+    fi
 fi
