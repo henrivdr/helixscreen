@@ -1145,7 +1145,7 @@ k2-docker: ensure-docker
 		$(MAKE) docker-toolchain-k2; \
 	fi
 	$(call ensure-ccache-dir,k2)
-	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src -w /src $(call docker-ccache-args,k2) helixscreen/toolchain-k2 \
+	$(Q)scripts/cross-compile-lock.sh docker run --platform linux/amd64 --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src -w /src $(call docker-ccache-args,k2) helixscreen/toolchain-k2 \
 		make PLATFORM_TARGET=k2 SKIP_OPTIONAL_DEPS=1 -j$(NPROC_DOCKER_RUN)
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
@@ -1243,7 +1243,7 @@ docker-toolchain-k1-dynamic: ensure-buildx
 
 docker-toolchain-k2: ensure-buildx
 	@echo "$(CYAN)Building Creality K2 series toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-k2 -f docker/Dockerfile.k2 docker/
+	$(Q)docker buildx build --platform linux/amd64 -t helixscreen/toolchain-k2 -f docker/Dockerfile.k2 docker/
 
 docker-toolchain-snapmaker-u1: ensure-buildx
 	@echo "$(CYAN)Building Snapmaker U1 toolchain Docker image...$(RESET)"
