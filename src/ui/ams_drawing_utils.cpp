@@ -811,4 +811,31 @@ void spool_visual_set_error(const SpoolVisual& sv, bool has_error) {
     }
 }
 
+lv_obj_t* create_lane_badge(lv_obj_t* parent, int lane_number, int32_t size) {
+    if (!parent)
+        return nullptr;
+    lv_obj_t* badge = lv_obj_create(parent);
+    lv_obj_set_size(badge, size, size);
+    lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(badge, theme_manager_get_color("ams_badge_bg"), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(badge, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(badge, theme_manager_get_color("card_bg"), LV_PART_MAIN);
+    lv_obj_set_style_pad_all(badge, 0, LV_PART_MAIN);
+    lv_obj_align(badge, LV_ALIGN_BOTTOM_RIGHT, -2, -2);
+    lv_obj_remove_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(badge, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_t* lbl = lv_label_create(badge);
+    char txt[8];
+    snprintf(txt, sizeof(txt), "%d", lane_number); // 1-based; lane numbers not translated
+    lv_label_set_text(lbl, txt);
+    const lv_font_t* f = theme_manager_get_font("font_xs");
+    if (f)
+        lv_obj_set_style_text_font(lbl, f, LV_PART_MAIN);
+    lv_obj_set_style_text_color(lbl, theme_manager_get_color("text"), LV_PART_MAIN);
+    lv_obj_center(lbl);
+    lv_obj_add_flag(lbl, LV_OBJ_FLAG_EVENT_BUBBLE);
+    return badge;
+}
+
 } // namespace ams_draw

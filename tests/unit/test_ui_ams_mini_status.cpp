@@ -6,6 +6,7 @@
  */
 
 #include "ui_ams_mini_status.h"
+#include "config.h"
 #include "panel_widget_registry.h"
 #include "ui_update_queue.h"
 
@@ -51,5 +52,56 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: colspan>=2 selects spool mode",
     lv_obj_t* spools = UITest::find_by_name(w, "ams_spools_container");
     REQUIRE(spools != nullptr);
     REQUIRE_FALSE(lv_obj_has_flag(spools, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_delete(w);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: cell has spool + material + pct",
+                 "[ui][ams_mini][spool]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    helix::ui::UpdateQueue::instance().drain(); // flush stray auto-sync
+    ui_ams_mini_status_set_slot_count(w, 1);
+    ui_ams_mini_status_set_slot_full(w, 0, 0xFF0000, 73, true, "PLA", 73);
+    ui_ams_mini_status_set_width(w, 260, 2);
+    helix::ui::UpdateQueue::instance().drain();
+    lv_obj_t* mat = UITest::find_by_name(w, "spool_material_0");
+    lv_obj_t* pct = UITest::find_by_name(w, "spool_pct_0");
+    REQUIRE(mat != nullptr);
+    REQUIRE(pct != nullptr);
+    REQUIRE(std::string(lv_label_get_text(mat)) == "PLA");
+    REQUIRE(std::string(lv_label_get_text(pct)) == "73%");
+    REQUIRE(UITest::find_by_name(w, "spool_cell_0") != nullptr);
+    lv_obj_delete(w);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: empty slot shows -- and no pct",
+                 "[ui][ams_mini][spool]") {
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    helix::ui::UpdateQueue::instance().drain();
+    ui_ams_mini_status_set_slot_count(w, 1);
+    ui_ams_mini_status_set_slot_full(w, 0, 0x808080, 0, false, "", -1);
+    ui_ams_mini_status_set_width(w, 260, 2);
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(std::string(lv_label_get_text(UITest::find_by_name(w, "spool_material_0"))) == "--");
+    REQUIRE(std::string(lv_label_get_text(UITest::find_by_name(w, "spool_pct_0"))) == "");
+    lv_obj_delete(w);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: all slots present incl multi-unit",
+                 "[ui][ams_mini][spool]") {
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    helix::ui::UpdateQueue::instance().drain();
+    ui_ams_mini_status_set_slot_count(w, 12); // > MAX_VISIBLE(8): uncapped vector
+    for (int i = 0; i < 12; ++i)
+        ui_ams_mini_status_set_slot_full(w, i, 0xFF0000, 50, true, "PLA", 50);
+    ui_ams_mini_status_set_width(w, 520, 4);
+    helix::ui::UpdateQueue::instance().drain();
+    lv_obj_t* spools = UITest::find_by_name(w, "ams_spools_container");
+    REQUIRE(spools != nullptr);
+    REQUIRE(lv_obj_get_child_count(spools) == 12); // single row, all slots; overflow scrolls
+    REQUIRE(UITest::find_by_name(w, "spool_cell_11") != nullptr);
     lv_obj_delete(w);
 }

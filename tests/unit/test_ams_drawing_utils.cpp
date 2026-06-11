@@ -487,3 +487,14 @@ TEST_CASE_METHOD(LVGLTestFixture, "spool_visual flat: set_color tints swatch + d
 
     lv_obj_delete(host);
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "create_lane_badge: shows 1-based number",
+                 "[ui][ams][badge]") {
+    lv_obj_t* host = lv_obj_create(test_screen());
+    lv_obj_t* badge = ams_draw::create_lane_badge(host, 3, 16);
+    REQUIRE(badge != nullptr);
+    lv_obj_t* lbl = lv_obj_get_child(badge, 0);
+    REQUIRE(lbl != nullptr);
+    REQUIRE(std::string(lv_label_get_text(lbl)) == "3");
+    lv_obj_delete(host);
+}
