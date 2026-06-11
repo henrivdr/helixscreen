@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.76] - 2026-06-11
+
+### Added
+
+- **Live load/unload phase progress on AD5X IFS** (bundle KLQGENXL) — the IFS load and unload flows now show the live phase instead of a static spinner.
+
+### Fixed
+
+- **Several rare crashes fixed** — dashboard grid-layout heap walk-offs during widget rebuild (prestonbrown/helixscreen#983) and tool-switcher pill layout (prestonbrown/helixscreen#1006), an out-of-range grid cell walk-off (bundle P234RYCL), a crash when opening the AMS / Power / Timelapse overlays (bundle 29QTNSYL), and a sweep of background-thread use-after-free guards.
+- **Print thumbnails retry on failure** — a thumbnail that fails to load now retries with backoff and re-triggers on Moonraker events instead of staying blank.
+- **AD5X IFS load/unload settles reliably** — load and unload finalize to idle on firmware (`GET_ZCOLOR`) confirmation rather than waiting out a timeout.
+
 ## [0.99.75] - 2026-06-10
 
 ### Added
@@ -3979,6 +3991,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.76]: https://github.com/prestonbrown/helixscreen/compare/v0.99.75...v0.99.76
 [0.99.75]: https://github.com/prestonbrown/helixscreen/compare/v0.99.74...v0.99.75
 [0.99.74]: https://github.com/prestonbrown/helixscreen/compare/v0.99.73...v0.99.74
 [0.99.73]: https://github.com/prestonbrown/helixscreen/compare/v0.99.72...v0.99.73
