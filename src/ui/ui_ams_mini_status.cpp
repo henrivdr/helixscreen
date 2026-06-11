@@ -66,6 +66,15 @@ struct SpoolCellData {
     int lane_number = 1; // 1-based, for the badge
 };
 
+/** Map an integer fill percent (0-100) to the spool graphic's 0.0-1.0 level. */
+static inline float fill_level_from_pct(int fill_pct) {
+    if (fill_pct <= 0)
+        return 0.0f;
+    if (fill_pct >= 100)
+        return 1.0f;
+    return fill_pct / 100.0f;
+}
+
 /**
  * @brief Per-slot data stored for each bar
  */
@@ -829,7 +838,7 @@ void ui_ams_mini_status_set_slot_full(lv_obj_t* obj, int slot_index, uint32_t co
         data->spool_cells.resize(slot_index + 1);
     SpoolCellData& c = data->spool_cells[slot_index];
     c.color_rgb = color_rgb;
-    c.fill_level = (fill_pct <= 0) ? 0.0f : (fill_pct >= 100 ? 1.0f : fill_pct / 100.0f);
+    c.fill_level = fill_level_from_pct(fill_pct);
     c.remaining_pct = remaining_pct;
     c.material = material ? material : "";
     c.present = present;
@@ -968,7 +977,7 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
         // Spool-mode cache (uncapped).
         SpoolCellData& c = data->spool_cells[i];
         c.color_rgb = slot.color_rgb;
-        c.fill_level = (fill_pct <= 0) ? 0.0f : (fill_pct >= 100 ? 1.0f : fill_pct / 100.0f);
+        c.fill_level = fill_level_from_pct(fill_pct);
         c.remaining_pct = rem;
         c.material = slot.material;
         c.present = slot.is_present();
