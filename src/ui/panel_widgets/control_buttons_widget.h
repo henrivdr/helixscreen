@@ -15,7 +15,7 @@ namespace helix {
 class ControlButtonsWidget : public PanelWidget {
   public:
     ControlButtonsWidget() = default;
-    ~ControlButtonsWidget() override = default;
+    ~ControlButtonsWidget() override;
 
     void attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) override;
     void detach() override;

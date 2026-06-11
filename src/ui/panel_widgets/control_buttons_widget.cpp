@@ -17,6 +17,10 @@ void register_control_buttons_widget() {
     // by the helix::ui::PrintControlButtons singleton at startup.
 }
 
+ControlButtonsWidget::~ControlButtonsWidget() {
+    detach();
+}
+
 void ControlButtonsWidget::attach(lv_obj_t* widget_obj, lv_obj_t* /*parent_screen*/) {
     widget_obj_ = widget_obj;
     spdlog::debug("[ControlButtonsWidget] Attached");
