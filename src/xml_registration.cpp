@@ -402,6 +402,7 @@ void register_xml_components() {
     register_xml("components/panel_widget_power_device.xml");
     register_xml("components/power_device_energy_page.xml");
     register_xml("components/panel_widget_clock.xml");
+    register_xml("components/panel_widget_control_buttons.xml");
     register_xml("components/panel_widget_tips.xml");
     register_xml("components/panel_widget_print_status.xml");
     register_xml("components/print_status_detailed_active.xml");
