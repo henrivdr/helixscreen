@@ -465,7 +465,6 @@ class PrintStatusPanel : public OverlayBase {
 
     // Control buttons (stored for enable/disable on state changes)
     lv_obj_t* btn_timelapse_ = nullptr;
-    lv_obj_t* btn_pause_ = nullptr;
     lv_obj_t* btn_tune_ = nullptr;
     lv_obj_t* btn_cancel_ = nullptr;
 
