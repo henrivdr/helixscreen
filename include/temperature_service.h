@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "async_lifetime_guard.h"
+#include "heater_limits.h"
 #include "ui_heater_config.h"
 #include "ui_heating_animator.h"
 #include "ui_observer_guard.h"
@@ -261,6 +263,18 @@ class TemperatureService {
     }
     const char* xml_component_name(helix::HeaterType type) const;
 
+    /// Resolve the Klipper object name to target for a temperature command,
+    /// always current. Nozzle → active extruder; Chamber → re-synced from
+    /// PrinterState (the cached HeaterState name can be a stale default if
+    /// discovery lost the panel-setup race). Used by BOTH this panel and the
+    /// temp-graph overlay so neither sends a stale HEATER=chamber.
+    const std::string& resolved_klipper_name(helix::HeaterType type);
+
+    /// Ensure the chamber's configured max_temp has been queried + applied to
+    /// keypad/preset limits. Idempotent (re-query only while unknown). Lets the
+    /// temp-graph overlay share the same clamp the chamber panel uses.
+    void ensure_chamber_limits();
+
   private:
     // ── Generic instance methods ────────────────────────────────────────
     void on_temp_changed(helix::HeaterType type, int temp_centi);
@@ -270,6 +284,23 @@ class TemperatureService {
     void send_temperature(helix::HeaterType type, int target);
     void update_graphs(helix::HeaterType type, float temp_deg, int64_t now_ms);
     void replay_history_to_graph(helix::HeaterType type);
+
+    // Show/hide preset buttons based on the heater's configured max_temp so a
+    // preset above the chamber's ceiling is never offered. Safe no-op when the
+    // panel isn't built or max_temp is unknown (0). Main thread only.
+    void apply_preset_limits(helix::HeaterType type);
+
+    // Fetch the chamber heater's Klipper-configured max_temp from the printer
+    // configfile and clamp the keypad range + presets to it. Async (the result
+    // lands on the WS thread, deferred to the main thread via lifetime_).
+    void query_chamber_max_temp();
+
+    // Re-sync the chamber heater's Klipper object name from PrinterState. The
+    // panel captures klipper_name once at setup, which loses the race when
+    // hardware discovery hasn't resolved the chamber heater yet — leaving the
+    // hardcoded default "heater_generic chamber" and sending an invalid
+    // HEATER=chamber. Re-reading at use time fixes that.
+    void refresh_chamber_klipper_name();
 
     // ── Graph helpers ───────────────────────────────────────────────────
     ui_temp_graph_t* create_temp_graph(lv_obj_t* chart_area, const heater_config_t* config,
@@ -282,6 +313,10 @@ class TemperatureService {
 
     helix::PrinterState& printer_state_;
     MoonrakerAPI* api_;
+
+    // Guards async configfile callbacks (chamber max_temp) against use-after-free
+    // if this service is torn down before the WS-thread response returns.
+    helix::AsyncLifetimeGuard lifetime_;
 
     // ── Per-heater state (indexed by HeaterType) ────────────────────────
     std::array<HeaterState, helix::HEATER_TYPE_COUNT> heaters_;

@@ -2,6 +2,7 @@
 
 #include "ui_temperature_utils.h"
 
+#include "../../include/heater_limits.h"
 #include "../../include/moonraker_client_mock.h"
 #include "../lvgl_test_fixture.h"
 #include "lvgl.h"
@@ -19,6 +20,40 @@ using helix::PrinterDiscovery;
 using helix::PrinterTemperatureState;
 using helix::ui::temperature::build_heater_gcode;
 using helix::ui::temperature::build_heater_off_gcode;
+
+// ============================================================================
+// Chamber keypad/preset clamping to the Klipper-configured max_temp.
+// A 60°C chamber must not offer 80°C on the keypad, nor a preset above its
+// ceiling. configured_max <= 0 means "not yet read from config" → use default.
+// ============================================================================
+
+TEST_CASE("heater_effective_max_deg uses configured max when known", "[chamber][limits]") {
+    using helix::heater_effective_max_deg;
+
+    // Known configured max overrides the panel default.
+    REQUIRE(heater_effective_max_deg(80.0f, 60) == 60.0f);
+    // A configured max equal to the default is fine (K2 Plus: both 80).
+    REQUIRE(heater_effective_max_deg(80.0f, 80) == 80.0f);
+    // Unknown (0 or negative) falls back to the panel default.
+    REQUIRE(heater_effective_max_deg(80.0f, 0) == 80.0f);
+    REQUIRE(heater_effective_max_deg(80.0f, -1) == 80.0f);
+}
+
+TEST_CASE("heater_preset_visible hides presets above the configured max", "[chamber][limits]") {
+    using helix::heater_preset_visible;
+
+    // Preset under the ceiling is shown; above is hidden.
+    REQUIRE(heater_preset_visible(40, 60));
+    REQUIRE(heater_preset_visible(60, 80));
+    REQUIRE_FALSE(heater_preset_visible(60, 50));
+    // Boundary: a preset exactly at the max is shown (inclusive).
+    REQUIRE(heater_preset_visible(50, 50));
+    // The "off" preset (0) is always shown.
+    REQUIRE(heater_preset_visible(0, 50));
+    // Unknown configured max (<= 0) shows everything.
+    REQUIRE(heater_preset_visible(80, 0));
+    REQUIRE(heater_preset_visible(80, -1));
+}
 
 // 1. PrinterDiscovery stores chamber sensor name
 TEST_CASE("PrinterDiscovery stores chamber sensor name", "[discovery][chamber]") {
