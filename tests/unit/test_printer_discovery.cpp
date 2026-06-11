@@ -1263,6 +1263,55 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
 }
 
 // ============================================================================
+// Chamber-heater TYPE tiebreak: a settable `heater_generic` must always beat a
+// same-keyword `temperature_fan` (a cooling fan), regardless of iteration order.
+// Regression for the Creality K2 Plus, which exposes BOTH
+// `heater_generic chamber_heater` (the real, settable heater) AND
+// `temperature_fan chamber_fan` (a cooling fan with its own target). With a
+// keyword-only tiebreak both score 100, so the winner depended on Moonraker's
+// iteration order — picking the fan would route "heat the chamber" to
+// SET_TEMPERATURE_FAN_TARGET (a cooling threshold) instead of the heater.
+// ============================================================================
+
+TEST_CASE("PrinterDiscovery chamber heater prefers heater_generic over temperature_fan",
+          "[printer_discovery][chamber][k2]") {
+    SECTION("K2 Plus: heater_generic wins when the temperature_fan is listed FIRST") {
+        // The failure case: cooling fan iterated before the heater.
+        json objects = {"temperature_fan chamber_fan",      "heater_fan chamber_fan",
+                        "temperature_sensor chamber_temp",  "heater_generic chamber_heater",
+                        "heater_bed",                       "extruder"};
+        PrinterDiscovery hw;
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_heater());
+        REQUIRE(hw.chamber_heater_name() == "heater_generic chamber_heater");
+        REQUIRE(hw.chamber_heater_object_name() == "chamber_heater");
+    }
+
+    SECTION("K2 Plus: heater_generic still wins when listed first (order-independent)") {
+        json objects = {"heater_generic chamber_heater", "temperature_fan chamber_fan",
+                        "temperature_sensor chamber_temp"};
+        PrinterDiscovery hw;
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.chamber_heater_name() == "heater_generic chamber_heater");
+        REQUIRE(hw.chamber_heater_object_name() == "chamber_heater");
+    }
+
+    SECTION("temperature_fan is still selected when it is the ONLY chamber control") {
+        // Printers that use a temperature_fan as their active chamber control
+        // must keep working — the type tiebreak only demotes the fan when a
+        // real heater_generic is also present.
+        json objects = {"temperature_fan chamber", "temperature_sensor chamber_aux"};
+        PrinterDiscovery hw;
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_heater());
+        REQUIRE(hw.chamber_heater_name() == "temperature_fan chamber");
+    }
+}
+
+// ============================================================================
 // Clear/Reset Tests
 // ============================================================================
 

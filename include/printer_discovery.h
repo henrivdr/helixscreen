@@ -63,14 +63,30 @@ class PrinterDiscovery {
         // Highest-confidence chamber match wins regardless of iteration order,
         // so a "chamber"-named heater always beats a "box"-named one when a
         // printer has both (e.g. QIDI Q2: real chamber heater + Qidi-Box dryer).
+        //
+        // The score is keyword-tier dominant with an object-TYPE tiebreak:
+        // when two candidates share the same keyword (e.g. the Creality K2 Plus
+        // exposes both `heater_generic chamber_heater` and a `temperature_fan
+        // chamber_fan` cooling fan), a settable heater_generic must win so that
+        // "heat the chamber" never routes to a fan's cooling threshold. The
+        // keyword weight is scaled so type only ever breaks exact-keyword ties,
+        // never promotes a weaker keyword over a stronger one.
         int best_chamber_heater_conf = 0;
         int best_chamber_sensor_conf = 0;
 
-        // Promote the current object to the best chamber heater/sensor if its
-        // keyword confidence exceeds the running best.
+        constexpr int kChamberHeaterGenericWeight = 2; // settable heater — preferred
+        constexpr int kChamberTemperatureFanWeight = 1; // fan — only wins if no heater_generic
+
+        // Promote the current object to the best chamber heater if its keyword
+        // confidence (plus object-type tiebreak) exceeds the running best.
+        // type_weight breaks ties between equal-keyword candidates.
         auto try_set_chamber_heater = [&](const std::string& full_name,
-                                          const std::string& object_name) {
-            int conf = chamber_keyword_confidence(object_name);
+                                          const std::string& object_name, int type_weight) {
+            int keyword = chamber_keyword_confidence(object_name);
+            if (keyword == 0) {
+                return; // not a chamber-named object — never a heater candidate
+            }
+            int conf = keyword * 10 + type_weight;
             if (conf > best_chamber_heater_conf) {
                 has_chamber_heater_ = true;
                 chamber_heater_name_ = full_name;
@@ -124,7 +140,7 @@ class PrinterDiscovery {
             else if (name.rfind("heater_generic ", 0) == 0) {
                 heaters_.push_back(name);
                 std::string heater_name = name.substr(15); // Remove "heater_generic " prefix
-                try_set_chamber_heater(name, heater_name);
+                try_set_chamber_heater(name, heater_name, kChamberHeaterGenericWeight);
             }
             // ================================================================
             // Sensors: temperature_sensor, temperature_fan (dual-purpose)
@@ -141,7 +157,7 @@ class PrinterDiscovery {
                 sensors_.push_back(name);
                 fans_.push_back(name); // Also add to fans for control
                 std::string fan_name = name.substr(16); // Remove "temperature_fan " prefix
-                try_set_chamber_heater(name, fan_name);
+                try_set_chamber_heater(name, fan_name, kChamberTemperatureFanWeight);
             }
             // TMC stepper drivers with built-in temperature (tmc2240, tmc5160)
             else if (name.rfind("tmc2240 ", 0) == 0 || name.rfind("tmc5160 ", 0) == 0) {
