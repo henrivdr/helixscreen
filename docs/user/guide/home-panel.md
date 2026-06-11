@@ -207,6 +207,7 @@ The default layout places:
 | **Nozzle Temperature** | Live nozzle temperature for the active extruder, with an animated heating icon that pulses when the heater is active. Tap to open the temperature graph overlay. (Singular — shows one nozzle. For all extruders at once, use **Nozzle Temperatures** below.) | 1x1 | 1x1 | 2x2 | Yes | — |
 | **Nozzle Temperatures** | Shows **all** extruder temperatures at once, each as a labeled row with current and target readings color-coded by state (green at-temp, red heating, blue cooling, gray off), plus a bed row at the bottom. On multi-tool printers each extruder gets its own row, labeled "T0", "T1", … (or "Nozzle 1", "Nozzle 2", … at wider sizes). Tap a nozzle row to open the nozzle temperature graph, or the bed row for the bed graph. (Plural — for single-extruder printers the singular **Nozzle Temperature** widget is simpler.) | 1x2 | 1x1 | 2x3 | Yes | — |
 | **Bed Temperature** | Live bed temperature with current and target readings. Tap to open the temperature graph overlay. | 1x1 | 1x1 | 2x2 | Yes | — |
+| **Chamber Temperature** | Live chamber temperature with current and target readings, shown with a chamber icon and an animated heating indicator. Tap to open the temperature graph overlay focused on the chamber. Only available on printers with a chamber temperature sensor or heater. | 1x1 | 1x1 | 2x2 | Yes | Chamber sensor or heater |
 | **Temperatures** | Stacked view showing nozzle, bed, and chamber temperatures in one widget. Each row shows current temp and target. Also available in Carousel mode (see [Display Modes](#display-modes-stack-vs-carousel) below). Tap any reading to open the temperature graph. | 1x1 | 1x1 | 3x2 | Yes | — |
 | **Temperature Sensors** | Monitor additional temperature sensors (chamber, enclosure heater, etc.) in a single-sensor or carousel view. You can add multiple instances, each configured to a different sensor. Also available in Carousel mode. | 1x1 | 1x1 | 2x1 | Horizontal only | Extra temp sensors |
 | **Temperature Graph** | Live temperature chart with configurable sensor series. Shows colored lines for each sensor with optional target setpoint lines. Content adapts to size — larger sizes show legends, axis labels, gradients, and temperature readouts. Tap to open the full-screen graph overlay. Configure which sensors to display via the gear icon in Edit Mode. You can add multiple instances. | 2x2 | 1x1 | 6x4 | Yes | — |
@@ -268,6 +269,7 @@ Some widgets depend on specific hardware being detected by Klipper. If the hardw
 | Widget | Required Hardware |
 |--------|-------------------|
 | Camera | Webcam configured in Moonraker (crowsnest, camera-streamer, etc.) |
+| Chamber Temperature | A chamber temperature sensor (`[temperature_sensor chamber]`) or chamber heater (`[heater_generic chamber]`) in Klipper |
 | AMS Status | AMS, AFC (Box Turtle), Happy Hare, ACE (Anycubic ACE Pro), or compatible MMU system |
 | Clog Detection | AMS, AFC, Happy Hare, or compatible MMU with clog/flow detection |
 | LED Light / LED Controls | Any LED strip configured in Klipper (neopixel, dotstar, output_pin) |
@@ -322,6 +324,7 @@ While **not** in Edit Mode, widgets respond to taps and other gestures:
 | Nozzle Temperature | Opens temperature graph overlay |
 | Nozzle Temperatures | Tap a nozzle row opens the nozzle graph; tap the bed row opens the bed graph |
 | Bed Temperature | Opens temperature graph overlay |
+| Chamber Temperature | Opens temperature graph overlay focused on the chamber |
 | Temperatures | Opens temperature graph for the tapped sensor |
 | Temperature Sensors | — (display only) |
 | Temperature Graph | Opens full-screen temperature graph overlay |

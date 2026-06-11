@@ -382,6 +382,7 @@ void register_xml_components() {
     register_xml("components/camera_fullscreen.xml");
     register_xml("components/panel_widget_temperature.xml");
     register_xml("components/panel_widget_bed_temperature.xml");
+    register_xml("components/panel_widget_chamber_temperature.xml");
     register_xml("components/panel_widget_temp_stack.xml");
     register_xml("components/panel_widget_temp_carousel.xml");
     register_xml("components/panel_widget_preheat.xml");

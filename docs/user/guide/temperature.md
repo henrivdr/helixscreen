@@ -59,7 +59,7 @@ Single-extruder printers are unaffected — the panel works exactly as before.
 
 ## Chamber Temperature Panel
 
-If your printer has a chamber heater or chamber temperature sensor configured in Klipper, you can access the Chamber Temperature panel by tapping the chamber row in the **Temperatures** widget on the Home Panel.
+If your printer has a chamber heater or chamber temperature sensor configured in Klipper, you can access the Chamber Temperature panel a few ways: tap the chamber row in the **Temperatures** widget, or add the dedicated **Chamber Temperature** widget to your Home Panel and tap it. Both open the temperature graph overlay focused on the chamber.
 
 - **Heated chambers** (`heater_generic chamber`): Full control panel with current/target temperature, presets, and a live temperature graph with a green trace
 - **Sensor-only chambers** (`temperature_sensor chamber`): Monitoring mode — shows the current chamber temperature and graph, with a "Monitoring" status instead of heating controls. Presets and target input are hidden since there's no heater to control.

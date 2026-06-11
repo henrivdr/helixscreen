@@ -7,7 +7,7 @@
 #include "lvgl/lvgl.h"
 #include "panel_widget_manager.h"
 #include "printer_state.h"
-#include "src/ui/panel_widgets/temperature_widget.h"
+#include "src/ui/panel_widgets/heater_temp_widget.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -59,11 +59,11 @@ TEST_CASE_METHOD(TempWidgetFixture,
     REQUIRE(btn != nullptr);
 
     // Create and attach widget
-    TemperatureWidget widget(state(), tcp.get());
+    HeaterTempWidget widget(state(), tcp.get(), nozzle_temp_config());
     widget.attach(container, test_screen());
 
     SECTION("user_data is on the container") {
-        auto* recovered = static_cast<TemperatureWidget*>(lv_obj_get_user_data(container));
+        auto* recovered = static_cast<HeaterTempWidget*>(lv_obj_get_user_data(container));
         REQUIRE(recovered == &widget);
     }
 
@@ -95,16 +95,51 @@ TEST_CASE_METHOD(TempWidgetFixture,
     lv_obj_t* btn = lv_obj_find_by_name(container, "temp_btn");
     REQUIRE(btn != nullptr);
 
-    TemperatureWidget widget(state(), tcp.get());
+    HeaterTempWidget widget(state(), tcp.get(), nozzle_temp_config());
     widget.attach(container, test_screen());
 
     // temp_clicked_cb now uses lv_event_get_user_data(e) (per-callback user_data)
     // rather than lv_obj_get_user_data(btn). Verify the container holds the widget
     // pointer (set during attach) so the widget is recoverable.
-    auto* recovered = static_cast<TemperatureWidget*>(lv_obj_get_user_data(container));
+    auto* recovered = static_cast<HeaterTempWidget*>(lv_obj_get_user_data(container));
     REQUIRE(recovered != nullptr);
     REQUIRE(recovered == &widget);
 
     widget.detach();
     mgr.clear_shared_resources();
+}
+
+TEST_CASE_METHOD(TempWidgetFixture,
+                 "HeaterTempWidget: per-heater configs are distinct and correctly wired",
+                 "[temperature_widget][regression]") {
+    const auto& nozzle = nozzle_temp_config();
+    const auto& bed = bed_temp_config();
+    const auto& chamber = chamber_temp_config();
+
+    SECTION("widget ids match the registry entries") {
+        REQUIRE(std::string(nozzle.widget_id) == "temperature");
+        REQUIRE(std::string(bed.widget_id) == "bed_temperature");
+        REQUIRE(std::string(chamber.widget_id) == "chamber_temperature");
+    }
+
+    SECTION("button + icon names match each XML component") {
+        REQUIRE(std::string(chamber.button_name) == "chamber_temp_btn");
+        REQUIRE(std::string(chamber.icon_name) == "chamber_icon_glyph");
+    }
+
+    SECTION("each config opens the matching temp-graph overlay mode") {
+        REQUIRE(nozzle.mode == TempGraphOverlay::Mode::Nozzle);
+        REQUIRE(bed.mode == TempGraphOverlay::Mode::Bed);
+        REQUIRE(chamber.mode == TempGraphOverlay::Mode::Chamber);
+    }
+
+    SECTION("subject getters resolve to the heater's own subjects") {
+        REQUIRE(chamber.temp_getter(state()) == state().get_chamber_temp_subject());
+        REQUIRE(chamber.target_getter(state()) == state().get_chamber_target_subject());
+        REQUIRE(bed.temp_getter(state()) == state().get_bed_temp_subject());
+        REQUIRE(nozzle.temp_getter(state()) == state().get_active_extruder_temp_subject());
+        // Distinct heaters never alias the same subject.
+        REQUIRE(chamber.temp_getter(state()) != bed.temp_getter(state()));
+        REQUIRE(chamber.temp_getter(state()) != nozzle.temp_getter(state()));
+    }
 }

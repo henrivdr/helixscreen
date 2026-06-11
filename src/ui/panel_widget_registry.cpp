@@ -35,6 +35,7 @@ void register_clog_detection_widget();
 void register_print_stats_widget();
 void register_gcode_console_widget();
 void register_bed_temperature_widget();
+void register_chamber_temperature_widget();
 void register_preheat_widget();
 void register_power_device_widget();
 void register_fan_widget();
@@ -68,6 +69,7 @@ static std::vector<PanelWidgetDef> s_widget_defs = {
     {"temperature",      "Nozzle Temperature","thermometer",      "Monitor and set nozzle temperature",           "Nozzle Temperature", nullptr,            nullptr,                               true,  1, 1, 1, 1, 2, 2},
     {"nozzle_temps",     "Nozzle Temperatures","thermometer",      "All extruder temperatures with progress bars",  "Nozzle Temperatures", nullptr,           nullptr,                               false, 1, 2, 1, 1, 2, 3},
     {"bed_temperature",  "Bed Temperature",   "radiator",         "Monitor and set bed temperature",              "Bed Temperature",    nullptr,            nullptr,                               false, 1, 1, 1, 1, 2, 2},
+    {"chamber_temperature", "Chamber Temperature", "fridge_industrial", "Monitor and set chamber temperature",       "Chamber Temperature", "printer_has_chamber", "No chamber temperature sensor detected", false, 1, 1, 1, 1, 2, 2},
     {"temp_stack",       "Temperatures",      "thermometer",      "Nozzle, bed, and chamber temps stacked",       "Temperatures",     nullptr,              nullptr,                               false, 1, 1, 1, 1, 3, 2},
     {"thermistor",       "Temperature Sensors", "thermometer",    "Monitor temperature sensors (single or carousel)", "Temperature Sensors", "temp_sensor_count", "No temperature sensors detected", false, 1, 1, 1, 1, 2, 1, true},
     {"temp_graph",       "Temperature Graph", "chart_line",       "Live temperature graph with configurable sensors", "Temperature Graph", nullptr,         nullptr,                               false, 2, 2, 1, 1, 6, 4, true},
@@ -153,6 +155,7 @@ void init_widget_registrations() {
     register_network_widget();
     register_temperature_widget();
     register_bed_temperature_widget();
+    register_chamber_temperature_widget();
     register_temp_stack_widget();
     register_led_widget();
     register_led_controls_widget();
