@@ -15,6 +15,7 @@
 #include "ui_save_z_offset_modal.h"
 
 #include "overlay_base.h"
+#include "print_control_buttons.h"
 #include "print_lifecycle_state.h"
 #include "printer_state.h"
 #include "subject_managed_panel.h"
@@ -310,8 +311,6 @@ class PrintStatusPanel : public OverlayBase {
     lv_subject_t chamber_status_subject_;
     lv_subject_t speed_subject_;
     lv_subject_t flow_subject_;
-    lv_subject_t pause_button_subject_;
-    lv_subject_t pause_label_subject_; ///< Pause button label ("Pause"/"Resume")
     lv_subject_t view_toggle_icon_subject_; ///< MDI codepoint for btn_view_toggle_icon (cube/layers)
 
     // Preparing state subjects
@@ -388,8 +387,6 @@ class PrintStatusPanel : public OverlayBase {
     // Button enable subjects — XML bind_state_if_eq drives LV_STATE_DISABLED
     // declaratively based on lifecycle state and macro-slot availability.
     lv_subject_t print_controls_enabled_subject_; ///< 1 when lifecycle.is_active()
-    lv_subject_t btn_pause_enabled_subject_;      ///< 1 when pause/resume slot available
-    lv_subject_t btn_cancel_enabled_subject_;     ///< 1 when cancel slot available
 
     // Subject storage buffers
     char progress_text_buf_[32] = "0%";
@@ -406,8 +403,6 @@ class PrintStatusPanel : public OverlayBase {
     char chamber_status_buf_[16] = "";
     char speed_buf_[32] = "100%";
     char flow_buf_[32] = "100%";
-    char pause_button_buf_[32] = "\xF3\xB0\x8F\xA4"; // MDI pause icon (F03E4)
-    char pause_label_buf_[16] = "Pause";             ///< Pause button label
     char objects_text_buf_[32] = "";                 ///< "X of Y obj" buffer
     char view_toggle_icon_buf_[8] = "";              ///< View toggle icon codepoint (cube/layers)
     char print_pause_reason_buf_[256] = "";          ///< Reason line shown under "Print Paused"
@@ -546,23 +541,9 @@ class PrintStatusPanel : public OverlayBase {
     void update_chamber_status();
     void recompute_end_overlay_visibility();
     void recompute_paused_overlay_visibility();
-    void handle_pause_button();
     void handle_tune_button();
-    void handle_cancel_button();
     void handle_reprint_button(); ///< Reprint the cancelled file
     void handle_resize();
-
-    /// Optimistic UI for Pause/Resume: Klipper takes up to ~20s to acknowledge
-    /// a RESUME/PAUSE macro. Without immediate UI feedback the button looks
-    /// dead and the user re-taps. start_pending_action flips the button label,
-    /// disables it, and updates the paused overlay text. clear_pending_action
-    /// is called from on_print_state_changed when the real lifecycle state
-    /// reaches the intended state, or from a timeout fallback.
-    enum class PendingPrintAction { None, Pausing, Resuming };
-    PendingPrintAction pending_action_ = PendingPrintAction::None;
-    lv_timer_t* pending_action_timeout_ = nullptr;
-    void start_pending_action(PendingPrintAction action);
-    void clear_pending_action();
 
     //
     // === Static Trampolines ===
@@ -570,9 +551,7 @@ class PrintStatusPanel : public OverlayBase {
 
     static void on_temp_card_clicked(lv_event_t* e);
     static void on_dismiss_overlay_clicked(lv_event_t* e);
-    static void on_pause_clicked(lv_event_t* e);
     static void on_tune_clicked(lv_event_t* e);
-    static void on_cancel_clicked(lv_event_t* e);
     static void on_reprint_clicked(lv_event_t* e);
     static void on_objects_clicked(lv_event_t* e);
     static void on_view_toggle_clicked(lv_event_t* e);
@@ -637,6 +616,7 @@ class PrintStatusPanel : public OverlayBase {
     ObserverGuard print_outcome_observer_;     ///< Drives show_{complete,cancelled,error}_overlay
     ObserverGuard end_overlay_dismissed_observer_; ///< Ditto; second input to the same recompute
     ObserverGuard print_message_observer_;     ///< Drives pause reason text from print_stats.message
+    ObserverGuard pending_action_observer_; ///< observes PrintControlButtons' print_pending_action for the paused overlay
 
     // Per-fan speed observers — each watches a DYNAMIC subject, so a paired
     // SubjectLifetime is mandatory (see [L084]: lifetime must outlive observer).
@@ -670,9 +650,6 @@ class PrintStatusPanel : public OverlayBase {
 
     /// Side-panel companion list (shown alongside map_view_).
     std::unique_ptr<helix::ui::ExcludeObjectSideList> side_list_;
-
-    /// Print cancel confirmation modal (RAII - auto-hides when destroyed)
-    PrintCancelModal cancel_modal_;
 
     //
     // === Filament Runout Handler ===

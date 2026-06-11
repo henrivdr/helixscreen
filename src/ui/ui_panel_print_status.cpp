@@ -319,12 +319,6 @@ PrintStatusPanel::~PrintStatusPanel() {
         gcode_load_timer_ = nullptr;
     }
 
-    // Cancel pending Pause/Resume optimistic-UI timeout
-    if (pending_action_timeout_) {
-        lv_timer_delete(pending_action_timeout_);
-        pending_action_timeout_ = nullptr;
-    }
-
     // ObserverGuard handles observer cleanup automatically
     resize_registered_ = false;
 
@@ -386,12 +380,6 @@ void PrintStatusPanel::init_subjects() {
                               "print_chamber_status", subjects_);
     UI_MANAGED_SUBJECT_STRING(speed_subject_, speed_buf_, "100%", "print_speed_text", subjects_);
     UI_MANAGED_SUBJECT_STRING(flow_subject_, flow_buf_, "100%", "print_flow_text", subjects_);
-    // Pause button icon - MDI icons (pause=F03E4, play=F040A)
-    // UTF-8: pause=F3 B0 8F A4, play=F3 B0 90 8A
-    UI_MANAGED_SUBJECT_STRING(pause_button_subject_, pause_button_buf_, "\xF3\xB0\x8F\xA4",
-                              "pause_button_icon", subjects_);
-    UI_MANAGED_SUBJECT_STRING(pause_label_subject_, pause_label_buf_, "Pause", "pause_button_label",
-                              subjects_);
     UI_MANAGED_SUBJECT_STRING(objects_text_subject_, objects_text_buf_, "", "print_objects_text",
                               subjects_);
     // View toggle icon: starts as cube (progress view), flips to layers on complete view.
@@ -545,10 +533,15 @@ void PrintStatusPanel::init_subjects() {
         printer_state_.get_print_message_subject(), this,
         [](PrintStatusPanel* self, const char*) { self->recompute_paused_overlay_visibility(); });
 
+    // Re-evaluate the paused overlay whenever the shared controller's pending
+    // action flips (optimistic Pausing/Resuming) — decoupled from our own
+    // print_state_enum observer to avoid an ordering race between the two.
+    pending_action_observer_ = observe_int_sync<PrintStatusPanel>(
+        helix::ui::PrintControlButtons::instance().pending_action_subject(), this,
+        [](PrintStatusPanel* self, int) { self->recompute_paused_overlay_visibility(); });
+
     // Button enable states driven declaratively from XML (see update_button_states).
     UI_MANAGED_SUBJECT_INT(print_controls_enabled_subject_, 0, "print_controls_enabled", subjects_);
-    UI_MANAGED_SUBJECT_INT(btn_pause_enabled_subject_, 0, "btn_pause_enabled", subjects_);
-    UI_MANAGED_SUBJECT_INT(btn_cancel_enabled_subject_, 0, "btn_cancel_enabled", subjects_);
 
     // Exclude objects availability (0=hidden, 1=visible - shown when >= 2 objects defined)
     // Note: subject already initialized in constructor (needed before observer fires)
@@ -563,9 +556,7 @@ void PrintStatusPanel::init_subjects() {
     // (tune overlay subjects/callbacks registered by singleton on first show())
     // (light and timelapse callbacks are registered by light_timelapse_controls_.init_subjects())
     register_xml_callbacks({
-        {"on_print_status_pause", on_pause_clicked},
         {"on_print_status_tune", on_tune_clicked},
-        {"on_print_status_cancel", on_cancel_clicked},
         {"on_print_status_reprint", on_reprint_clicked},
         {"on_temp_card_clicked", on_temp_card_clicked},
         {"on_print_status_objects", on_objects_clicked},
@@ -1549,31 +1540,7 @@ void PrintStatusPanel::update_all_displays() {
     helix::format::format_percent(lifecycle_.flow_percent(), flow_buf_, sizeof(flow_buf_));
     lv_subject_copy_string(&flow_subject_, flow_buf_);
 
-    // Update pause button icon and label based on state, with optimistic
-    // override while a Pause/Resume RPC is in flight (Klipper takes ~20s to
-    // acknowledge, real lifecycle state lags the user's tap). During a
-    // pending action, swap to the hourglass glyph — a distinct shape change
-    // (not just an opacity dim) so the user sees an unmistakable response
-    // to their tap instead of wanting to hammer the button.
-    // MDI icons: play=F040A, pause=F03E4, hourglass=F051F
-    //   play     UTF-8: F3 B0 90 8A
-    //   pause    UTF-8: F3 B0 8F A4
-    //   hourglass UTF-8: F3 B0 94 9F
-    if (pending_action_ == PendingPrintAction::Pausing) {
-        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x94\x9F"); // hourglass
-        std::snprintf(pause_label_buf_, sizeof(pause_label_buf_), "Pausing...");
-    } else if (pending_action_ == PendingPrintAction::Resuming) {
-        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x94\x9F"); // hourglass
-        std::snprintf(pause_label_buf_, sizeof(pause_label_buf_), "Resuming...");
-    } else if (lifecycle_.state() == PrintState::Paused) {
-        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x90\x8A"); // play
-        std::snprintf(pause_label_buf_, sizeof(pause_label_buf_), "Resume");
-    } else {
-        std::snprintf(pause_button_buf_, sizeof(pause_button_buf_), "\xF3\xB0\x8F\xA4"); // pause
-        std::snprintf(pause_label_buf_, sizeof(pause_label_buf_), "Pause");
-    }
-    lv_subject_copy_string(&pause_button_subject_, pause_button_buf_);
-    lv_subject_copy_string(&pause_label_subject_, pause_label_buf_);
+    // Pause/Resume button icon + label are owned by PrintControlButtons now.
 }
 
 // ============================================================================
@@ -1585,109 +1552,11 @@ void PrintStatusPanel::handle_temp_card_click() {
     get_global_temp_graph_overlay().open(TempGraphOverlay::Mode::GraphOnly, parent_screen_);
 }
 
-void PrintStatusPanel::handle_pause_button() {
-    if (lifecycle_.state() == PrintState::Printing) {
-        spdlog::info("[{}] Pausing print...", get_name());
-
-        // Check if pause slot is available
-        const auto& pause_info = StandardMacros::instance().get(StandardMacroSlot::Pause);
-        if (pause_info.is_empty()) {
-            spdlog::warn("[{}] Pause macro slot is empty", get_name());
-            NOTIFY_WARNING(lv_tr("Pause macro not configured"));
-            return;
-        }
-
-        if (api_) {
-            spdlog::info("[{}] Using StandardMacros pause: {}", get_name(), pause_info.get_macro());
-            start_pending_action(PendingPrintAction::Pausing);
-            // Stateless callbacks to avoid use-after-free if panel destroyed [L012].
-            // suppress_auto_toast=true: we surface a contextual error toast
-            // from on_error below ("Failed to pause print: ..."); the generic
-            // RPC_ERROR auto-toast and Klipper's `!!` broadcast for the same
-            // root cause would be redundant noise.
-            StandardMacros::instance().execute(
-                StandardMacroSlot::Pause, api_,
-                []() {
-                    spdlog::info("[Print Status] Pause command sent successfully");
-                    // State will update via PrinterState observer when Moonraker confirms
-                },
-                [](const MoonrakerError& err) {
-                    spdlog::error("[Print Status] Failed to pause print: {}", err.message);
-                    NOTIFY_ERROR(lv_tr("Failed to pause print: {}"), err.user_message());
-                    // Send-side failure: clear optimistic UI immediately rather
-                    // than waiting on the 25s timeout. Panel is a singleton so
-                    // the static-context lookup is safe.
-                    get_global_print_status_panel().clear_pending_action();
-                },
-                /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
-        } else {
-            // Fall back to local state change for mock mode
-            spdlog::warn("[{}] API not available - using local state change", get_name());
-            set_state(PrintState::Paused);
-        }
-    } else if (lifecycle_.state() == PrintState::Paused) {
-        spdlog::info("[{}] Resuming print...", get_name());
-
-        // Check if resume slot is available
-        const auto& resume_info = StandardMacros::instance().get(StandardMacroSlot::Resume);
-        if (resume_info.is_empty()) {
-            spdlog::warn("[{}] Resume macro slot is empty", get_name());
-            NOTIFY_WARNING(lv_tr("Resume macro not configured"));
-            return;
-        }
-
-        if (api_) {
-            spdlog::info("[{}] Using StandardMacros resume: {}", get_name(),
-                         resume_info.get_macro());
-            start_pending_action(PendingPrintAction::Resuming);
-
-            // Shared prep+dispatch helper handles the backend-side
-            // prepare_for_resume → Resume StandardMacro chain (and any
-            // contextual error toasts). On Snapmaker U1, prepare_for_resume
-            // runs a recovery extrude before RESUME; other backends invoke
-            // the dispatch immediately. The optimistic Resuming spinner spans
-            // the full click → backend prep → RESUME ack window, so we only
-            // clear it on failure — the success path waits on PrinterState
-            // observer confirmation. Stateless `on_failure` because the panel
-            // is a singleton and may be destroyed before the async fires.
-            helix::ui::dispatch_prepared_resume(
-                api_, "[Print Status]",
-                []() { get_global_print_status_panel().clear_pending_action(); });
-        } else {
-            // Fall back to local state change for mock mode
-            spdlog::warn("[{}] API not available - using local state change", get_name());
-            set_state(PrintState::Printing);
-        }
-    }
-}
-
 void PrintStatusPanel::handle_tune_button() {
     spdlog::info("[{}] Tune button clicked - opening tuning panel", get_name());
 
     // Use singleton - handles lazy init, subject registration, slider sync, and nav push
     get_print_tune_overlay().show(parent_screen_, api_, printer_state_);
-}
-
-void PrintStatusPanel::handle_cancel_button() {
-    spdlog::info("[{}] Cancel button clicked - showing confirmation dialog", get_name());
-
-    // Check if AbortManager is idle (not already aborting)
-    if (helix::AbortManager::instance().is_aborting()) {
-        spdlog::warn("[{}] Abort already in progress", get_name());
-        NOTIFY_WARNING(lv_tr("Abort already in progress"));
-        return;
-    }
-
-    // Set up the confirm callback to start the abort process
-    cancel_modal_.set_on_confirm([]() {
-        spdlog::info("[PrintStatusPanel] Cancel confirmed - starting AbortManager");
-
-        // AbortManager handles its own UI state (progress modal, button states)
-        helix::AbortManager::instance().start_abort();
-    });
-
-    // Show the modal (RAII handles cleanup)
-    cancel_modal_.show(lv_screen_active());
 }
 
 void PrintStatusPanel::handle_reprint_button() {
@@ -1769,24 +1638,10 @@ void PrintStatusPanel::on_dismiss_overlay_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-void PrintStatusPanel::on_pause_clicked(lv_event_t* e) {
-    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_pause_clicked");
-    (void)e;
-    get_global_print_status_panel().handle_pause_button();
-    LVGL_SAFE_EVENT_CB_END();
-}
-
 void PrintStatusPanel::on_tune_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_tune_clicked");
     (void)e;
     get_global_print_status_panel().handle_tune_button();
-    LVGL_SAFE_EVENT_CB_END();
-}
-
-void PrintStatusPanel::on_cancel_clicked(lv_event_t* e) {
-    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_cancel_clicked");
-    (void)e;
-    get_global_print_status_panel().handle_cancel_button();
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -2270,57 +2125,12 @@ void PrintStatusPanel::on_controls_size_changed(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-void PrintStatusPanel::start_pending_action(PendingPrintAction action) {
-    // Cancel any in-flight pending action before starting a new one — replaces
-    // a stale Pausing/Resuming with the latest user intent.
-    clear_pending_action();
-    pending_action_ = action;
-
-    // Optimistic 25s timeout: Klipper's RESUME/PAUSE typically lands in <2s but
-    // can stretch to 20s when buffered moves drain. After 25s assume the
-    // command silently failed and revert UI so the user can re-issue. Length
-    // is conservative — we'd rather give a slow resume time to land than show
-    // a spurious "timed out" toast on a successful command.
-    pending_action_timeout_ = lv_timer_create(
-        [](lv_timer_t* t) {
-            auto* self =
-                static_cast<PrintStatusPanel*>(lv_timer_get_user_data(t));
-            if (!self) return;
-            const char* verb = (self->pending_action_ == PendingPrintAction::Resuming)
-                                   ? "Resume"
-                                   : "Pause";
-            spdlog::warn("[Print Status] {} request timed out — clearing pending UI", verb);
-            NOTIFY_WARNING(lv_tr("{} command timed out"), verb);
-            self->clear_pending_action();
-        },
-        25000, this);
-    lv_timer_set_repeat_count(pending_action_timeout_, 1);
-
-    // Push the optimistic state to all dependent subjects right now.
-    update_all_displays();
-    update_button_states();
-    recompute_paused_overlay_visibility();
-}
-
-void PrintStatusPanel::clear_pending_action() {
-    if (pending_action_timeout_) {
-        lv_timer_delete(pending_action_timeout_);
-        pending_action_timeout_ = nullptr;
-    }
-    bool had_pending = (pending_action_ != PendingPrintAction::None);
-    pending_action_ = PendingPrintAction::None;
-    if (had_pending && subjects_initialized_) {
-        // Re-render so button label/icon/state and paused overlay snap back to
-        // whatever lifecycle_ now reports.
-        update_all_displays();
-        update_button_states();
-        recompute_paused_overlay_visibility();
-    }
-}
-
 void PrintStatusPanel::recompute_paused_overlay_visibility() {
     if (!subjects_initialized_)
         return;
+
+    auto pending = static_cast<helix::ui::PendingAction>(
+        lv_subject_get_int(helix::ui::PrintControlButtons::instance().pending_action_subject()));
 
     auto state = static_cast<PrintJobState>(
         lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
@@ -2333,9 +2143,9 @@ void PrintStatusPanel::recompute_paused_overlay_visibility() {
     // sees their tap acknowledged without waiting ~20s for Moonraker to
     // confirm.
     bool effective_paused = paused;
-    if (pending_action_ == PendingPrintAction::Pausing) {
+    if (pending == helix::ui::PendingAction::Pausing) {
         effective_paused = true;
-    } else if (pending_action_ == PendingPrintAction::Resuming) {
+    } else if (pending == helix::ui::PendingAction::Resuming) {
         effective_paused = false;
     }
     lv_subject_set_int(&show_paused_overlay_subject_, effective_paused ? 1 : 0);
@@ -2347,9 +2157,9 @@ void PrintStatusPanel::recompute_paused_overlay_visibility() {
     // generic "Filament Runout" hint. Otherwise leave blank → reason label
     // stays hidden.
     std::string reason;
-    if (pending_action_ == PendingPrintAction::Pausing) {
+    if (pending == helix::ui::PendingAction::Pausing) {
         reason = lv_tr("Pausing...");
-    } else if (pending_action_ == PendingPrintAction::Resuming) {
+    } else if (pending == helix::ui::PendingAction::Resuming) {
         reason = lv_tr("Resuming...");
     } else if (paused) {
         const char* fw_msg = lv_subject_get_string(printer_state_.get_print_message_subject());
@@ -2437,15 +2247,6 @@ void PrintStatusPanel::on_print_state_changed(PrintJobState job_state) {
     auto result = lifecycle_.on_job_state_changed(job_state, outcome);
     if (!result.state_changed) {
         return;
-    }
-
-    // Any real lifecycle transition clears an in-flight optimistic Pause/Resume
-    // — whether or not the transition matches our intent. PRINTING -> PAUSED
-    // confirms a Pause; PAUSED -> PRINTING confirms a Resume; anything else
-    // (Cancelled, Error) supersedes the intent and the optimistic UI should
-    // step aside immediately.
-    if (pending_action_ != PendingPrintAction::None) {
-        clear_pending_action();
     }
 
     // Note: Badge/Reprint button visibility is now handled via the print_outcome subject,
@@ -2957,29 +2758,15 @@ void PrintStatusPanel::update_button_states() {
     auto state = lifecycle_.state();
     bool controls_enabled = PrintLifecycleState::is_active(state);
 
-    auto& macros = StandardMacros::instance();
-    // Disable the pause/resume button while a Pause/Resume RPC is in flight so
-    // impatient users can't re-tap and queue a second macro. Real state arrival
-    // (or timeout) clears pending_action_ and re-enables.
-    bool pause_enabled = controls_enabled &&
-                         pending_action_ == PendingPrintAction::None &&
-                         !macros.get(state == PrintState::Paused ? StandardMacroSlot::Resume
-                                                                 : StandardMacroSlot::Pause)
-                              .is_empty();
-    bool cancel_enabled =
-        controls_enabled && !macros.get(StandardMacroSlot::Cancel).is_empty();
-
+    // The pause/resume and stop button enable states are owned by
+    // PrintControlButtons now; this panel only drives the timelapse/tune gate.
     lv_subject_set_int(&print_controls_enabled_subject_, controls_enabled ? 1 : 0);
-    lv_subject_set_int(&btn_pause_enabled_subject_, pause_enabled ? 1 : 0);
-    lv_subject_set_int(&btn_cancel_enabled_subject_, cancel_enabled ? 1 : 0);
 
     // Cancel/Reprint visibility is driven entirely by the print_outcome subject
     // via bind_flag_if_eq / bind_flag_if_not_eq on the <ui_button> elements.
 
-    spdlog::debug("[{}] Button states updated: controls={}, pause={}, cancel={} (state={})",
-                  get_name(), controls_enabled ? "enabled" : "disabled",
-                  pause_enabled ? "enabled" : "disabled",
-                  cancel_enabled ? "enabled" : "disabled", static_cast<int>(state));
+    spdlog::debug("[{}] Button states updated: controls={} (state={})", get_name(),
+                  controls_enabled ? "enabled" : "disabled", static_cast<int>(state));
 }
 
 void PrintStatusPanel::animate_badge_pop_in(lv_obj_t* badge, const char* label) {

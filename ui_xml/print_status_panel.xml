@@ -359,10 +359,10 @@
               <bind_state_if_eq subject="print_controls_enabled" state="disabled" ref_value="0"/>
             </ui_button>
             <ui_button name="btn_pause"
-                       height="#button_height_lg" flex_grow="1" style_max_width="50%" bind_icon="pause_button_icon"
-                       bind_text="pause_button_label" label_hidden_if_bp_eq="1">
-              <event_cb trigger="clicked" callback="on_print_status_pause"/>
-              <bind_state_if_eq subject="btn_pause_enabled" state="disabled" ref_value="0"/>
+                       height="#button_height_lg" flex_grow="1" style_max_width="50%" bind_icon="print_control_primary_icon"
+                       bind_text="print_control_primary_label" label_hidden_if_bp_eq="1">
+              <event_cb trigger="clicked" callback="on_print_control_primary"/>
+              <bind_state_if_eq subject="print_control_primary_enabled" state="disabled" ref_value="0"/>
             </ui_button>
           </lv_obj>
 
@@ -380,8 +380,8 @@
                        height="#button_height_lg" flex_grow="1" variant="danger" icon="stop" text="Cancel"
                        translation_tag="Cancel">
               <bind_flag_if_not_eq subject="print_outcome" flag="hidden" ref_value="0"/>
-              <bind_state_if_eq subject="btn_cancel_enabled" state="disabled" ref_value="0"/>
-              <event_cb trigger="clicked" callback="on_print_status_cancel"/>
+              <bind_state_if_eq subject="print_control_stop_enabled" state="disabled" ref_value="0"/>
+              <event_cb trigger="clicked" callback="on_print_control_stop"/>
             </ui_button>
             <!-- Reprint button: shown for any terminal state (complete/cancelled/error) -->
             <ui_button name="btn_reprint"
