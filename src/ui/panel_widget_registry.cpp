@@ -30,6 +30,7 @@ void register_lock_widget();
 void register_macros_widget();
 void register_motion_widget();
 void register_clock_widget();
+void register_control_buttons_widget();
 void register_job_queue_widget();
 void register_clog_detection_widget();
 void register_print_stats_widget();
@@ -82,6 +83,7 @@ static std::vector<PanelWidgetDef> s_widget_defs = {
     {"macros",           "Macros",            "script_text",      "Browse and execute Klipper macros",            "Macros",           nullptr,              nullptr,                               false, 1, 1, 1, 1, 1, 1},
     {"motion",           "Motion",            "cursor_move",      "Jump directly to motion control / jogging",    "Motion",           nullptr,              nullptr,                               false, 1, 1, 1, 1, 1, 1},
     {"clock",            "Digital Clock",     "clock",            "Current time and date",                       "Digital Clock",    nullptr,              nullptr,                               false, 2, 1, 1, 1, 3, 3},
+    {"control_buttons",  "Print Controls",    "pause",            "Pause/resume and stop the active print",       "Print Controls",   nullptr,              nullptr,                               false, 2, 1, 2, 1, 2, 1},
     {"job_queue",        "Job Queue",         "progress_clock",   "Queued print jobs",                           "Job Queue",        nullptr,              nullptr,                               false, 2, 2, 2, 1, 4, 3},
     //                                                                                                                                          hint                                en  col row min_c min_r max_c max_r
     {"tips",             "Tips",              "help_circle",      "Rotating tips and helpful information",        "Tips",             nullptr,              nullptr,                               true,  4, 2, 2, 1, 6, 2},
@@ -165,6 +167,7 @@ void init_widget_registrations() {
     register_temp_graph_widget();
     register_favorite_macro_widgets();
     register_clock_widget();
+    register_control_buttons_widget();
     register_job_queue_widget();
     register_tips_widget();
     register_humidity_widget();
