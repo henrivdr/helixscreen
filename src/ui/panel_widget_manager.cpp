@@ -747,7 +747,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
             if (slot.widget_id == "ams") {
                 lv_obj_t* ams_child = lv_obj_get_child(widget, 0);
                 if (ams_child && ui_ams_mini_status_is_valid(ams_child)) {
-                    ui_ams_mini_status_set_width(ams_child, cell_w * p.colspan);
+                    ui_ams_mini_status_set_width(ams_child, cell_w * p.colspan, p.colspan);
                 }
             }
         } catch (const std::exception& e) {

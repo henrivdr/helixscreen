@@ -19,3 +19,12 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams registry: scalable to 4x wide",
     REQUIRE(def != nullptr);
     REQUIRE(def->max_colspan == 4);
 }
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: set_width accepts colspan", "[ui][ams_mini]") {
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 40);
+    REQUIRE(w != nullptr);
+    ui_ams_mini_status_set_width(w, 260, 2); // new 3-arg signature
+    SUCCEED("compiles and runs with colspan arg");
+    lv_obj_delete(w);
+}

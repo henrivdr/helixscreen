@@ -79,6 +79,7 @@ struct AmsMiniStatusData {
 
     // Available pixel width for responsive sizing
     int width_px = 0; // 0 = unknown/default, set by set_width()
+    int colspan = 1;  // Grid columns spanned (>=2 = wide spool view), set by set_width()
 
     // Multi-unit support
     int unit_count = 0;       // Number of AMS units (0 or 1 = single row, 2+ = stacked rows)
@@ -685,20 +686,21 @@ void ui_ams_mini_status_refresh(lv_obj_t* obj) {
     }
 }
 
-void ui_ams_mini_status_set_width(lv_obj_t* obj, int width_px) {
+void ui_ams_mini_status_set_width(lv_obj_t* obj, int width_px, int colspan) {
     auto* data = get_data(obj);
     if (!data)
         return;
 
-    if (data->width_px == width_px)
+    if (data->width_px == width_px && data->colspan == colspan)
         return;
 
     data->width_px = width_px;
-    spdlog::debug("[AmsMiniStatus] Width set to {}px", width_px);
+    data->colspan = colspan;
+    spdlog::debug("[AmsMiniStatus] Width set to {}px, colspan {}", width_px, colspan);
 
     // Rebuild bars if we already have slots (width affects max bar width)
     if (data->slot_count > 0)
-        rebuild_bars(data);
+        rebuild_bars(data); // NOTE: Task 6 replaces this with rebuild(data)
 }
 
 bool ui_ams_mini_status_is_valid(lv_obj_t* obj) {

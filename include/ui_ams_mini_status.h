@@ -86,15 +86,14 @@ void ui_ams_mini_status_set_slot(lv_obj_t* obj, int slot_index, uint32_t color_r
 void ui_ams_mini_status_refresh(lv_obj_t* obj);
 
 /**
- * @brief Set width hint for responsive sizing
+ * @brief Set width + colspan hint for responsive sizing / mode selection.
  *
- * When the widget is in a narrow grid cell, this reduces the max bar
- * width and visible slot count so bars don't look oversized or clip.
- *
+ * colspan >= 2 selects the wide spool view; colspan == 1 keeps the bar view.
  * @param obj The ams_mini_status widget
  * @param width_px Available pixel width for the widget
+ * @param colspan Grid columns the widget spans (1 = narrow/bar, >=2 = wide/spool)
  */
-void ui_ams_mini_status_set_width(lv_obj_t* obj, int width_px);
+void ui_ams_mini_status_set_width(lv_obj_t* obj, int width_px, int colspan);
 
 /**
  * @brief Check if this is an ams_mini_status widget
