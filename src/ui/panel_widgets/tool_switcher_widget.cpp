@@ -121,6 +121,16 @@ void ToolSwitcherWidget::rebuild_pills() {
     pill_buttons_.clear();
     helix::ui::safe_clean_children(container);
 
+    // Neutralize any grid layout left active by a previous rebuild before we
+    // measure or repopulate. safe_clean_children() defers child deletion, so the
+    // old pills are briefly still attached; with the grid still active, the
+    // measurement lv_obj_update_layout() below (or any interleaved refresh) would
+    // run grid item_repos over them. The grid is re-activated only after every new
+    // pill has its cell set (end of this function), so a layout pass can never
+    // observe a grid child without a cell -> out-of-range track read / heap
+    // walk-off (bundle P234RYCL, AD5X).
+    lv_obj_set_layout(container, LV_LAYOUT_NONE);
+
     auto& tool_state = ToolState::instance();
     const auto& tools = tool_state.tools();
     int active = tool_state.active_tool_index();
@@ -170,12 +180,14 @@ void ToolSwitcherWidget::rebuild_pills() {
             if (cols < 1) cols = 1;
             use_grid = true;
 
+            // Build the grid descriptor now, but defer activating LV_LAYOUT_GRID
+            // until after every pill is created and placed (end of this function)
+            // so the first layout pass never reads a grid child whose cell is not
+            // yet set.
             grid_col_dsc_.assign(static_cast<size_t>(cols), LV_GRID_CONTENT);
             grid_col_dsc_.push_back(LV_GRID_TEMPLATE_LAST);
             grid_row_dsc_.assign(static_cast<size_t>(rows), LV_GRID_FR(1));
             grid_row_dsc_.push_back(LV_GRID_TEMPLATE_LAST);
-            lv_obj_set_grid_dsc_array(container, grid_col_dsc_.data(), grid_row_dsc_.data());
-            lv_obj_set_layout(container, LV_LAYOUT_GRID);
             lv_obj_set_scroll_dir(container, LV_DIR_HOR);
             lv_obj_set_style_pad_row(container, space_xs, 0);
             lv_obj_set_style_pad_column(container, space_xs, 0);
@@ -229,6 +241,13 @@ void ToolSwitcherWidget::rebuild_pills() {
             LV_EVENT_CLICKED, reinterpret_cast<void*>(static_cast<intptr_t>(i)));
 
         pill_buttons_.push_back(btn);
+    }
+
+    // Every pill now carries its grid cell (set in the loop above). Activate the
+    // grid layout last so the first layout pass can never see an unplaced child.
+    if (use_grid) {
+        lv_obj_set_grid_dsc_array(container, grid_col_dsc_.data(), grid_row_dsc_.data());
+        lv_obj_set_layout(container, LV_LAYOUT_GRID);
     }
 
     // Scroll the active pill into view when the container overflows.
