@@ -1,5 +1,5 @@
 diff --git a/src/layouts/grid/lv_grid.c b/src/layouts/grid/lv_grid.c
-index e4115ca0b..ba7b6bf36 100644
+index e4115ca0b..e912c2ace 100644
 --- a/src/layouts/grid/lv_grid.c
 +++ b/src/layouts/grid/lv_grid.c
 @@ -14,6 +14,11 @@
@@ -108,3 +108,33 @@ index e4115ca0b..ba7b6bf36 100644
                  if(lv_obj_has_flag_any(item, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_FLOATING)) continue;
                  uint32_t row_span = get_row_span(item);
                  if(row_span != 1) continue;
+@@ -482,6 +539,29 @@ static void item_repos(lv_obj_t * item, lv_grid_calc_t * c, item_repos_hint_t *
+     lv_grid_align_t col_align = get_cell_col_align(item);
+     lv_grid_align_t row_align = get_cell_row_align(item);
+ 
++    /* Guard against a cell position/span that exceeds the calculated track
++     * count. calc() sizes c->x/c->w/c->y/c->h to col_num/row_num only; it never
++     * validates that each item's cell actually fits. An item can carry a stale
++     * or garbage cell position — e.g. a still-valid object whose grid-cell style
++     * was never set (read back as a huge default), or a position approved
++     * against a larger logical grid than the live descriptor — and the c->x[...]
++     * /c->y[...] reads below would then walk off the heap end -> SIGSEGV
++     * (bundle P234RYCL, AD5X). lv_obj_is_valid() in grid_update() catches freed
++     * children; this catches valid children with out-of-range cells. */
++    if(col_pos >= c->col_num || row_pos >= c->row_num ||
++       col_pos + col_span > c->col_num || row_pos + row_span > c->row_num) {
++        /* Include the actual cell vs. track counts so the next bundle reveals
++         * which dimension overflowed and by how much — that points at the
++         * upstream producer of the bad cell (column- vs row-sizing path). */
++        char ctx[96];
++        lv_snprintf(ctx, sizeof(ctx),
++                    "item_repos: cell out of range col=%u+%u/%u row=%u+%u/%u",
++                    (unsigned)col_pos, (unsigned)col_span, (unsigned)c->col_num,
++                    (unsigned)row_pos, (unsigned)row_span, (unsigned)c->row_num);
++        helix_lvgl_anomaly("grid_update_cell_oob", ctx);
++        return;
++    }
++
+     int32_t col_x1 = 0;
+     int32_t col_x2 = 0;
+     int32_t col_w = 0;
