@@ -751,4 +751,64 @@ SpoolVisual create_spool_visual(lv_obj_t* container, int32_t spool_size) {
     return sv;
 }
 
+// Ported verbatim from ui_ams_slot.cpp apply_slot_color()
+void spool_visual_set_color(const SpoolVisual& sv, lv_color_t color) {
+    if (sv.use_3d) {
+        if (sv.canvas)
+            ui_spool_canvas_set_color(sv.canvas, color);
+    } else if (sv.color_swatch) {
+        lv_obj_set_style_bg_color(sv.color_swatch, color, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(sv.color_swatch, LV_OPA_COVER, LV_PART_MAIN);
+        if (sv.spool_outer)
+            lv_obj_set_style_bg_color(sv.spool_outer, ams_draw::darken_color(color, 50),
+                                      LV_PART_MAIN);
+    }
+}
+
+// Ported verbatim from ui_ams_slot.cpp update_filament_ring_size()
+void spool_visual_set_fill(const SpoolVisual& sv, float fill) {
+    if (fill < 0.0f)
+        fill = 0.0f;
+    if (fill > 1.0f)
+        fill = 1.0f;
+    if (sv.use_3d) {
+        if (sv.canvas)
+            ui_spool_canvas_set_fill_level(sv.canvas, fill);
+    } else if (sv.color_swatch && sv.container && sv.spool_hub) {
+        lv_obj_update_layout(sv.container);
+        int32_t spool_w = lv_obj_get_width(sv.container);
+        int32_t hub_w = lv_obj_get_width(sv.spool_hub);
+        int32_t min_ring = hub_w + 4;
+        int32_t max_ring = spool_w - 8;
+        int32_t ring_size = min_ring + static_cast<int32_t>((max_ring - min_ring) * fill);
+        lv_obj_set_size(sv.color_swatch, ring_size, ring_size);
+        lv_obj_align(sv.color_swatch, LV_ALIGN_CENTER, 0, 0);
+    }
+}
+
+void spool_visual_set_empty(const SpoolVisual& sv, bool empty) {
+    auto show = [&](lv_obj_t* o, bool visible) {
+        if (!o)
+            return;
+        if (visible)
+            lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    };
+    show(sv.empty_placeholder, empty);
+    show(sv.canvas, !empty);
+    show(sv.spool_outer, !empty);
+    show(sv.color_swatch, !empty);
+    show(sv.spool_hub, !empty);
+}
+
+void spool_visual_set_error(const SpoolVisual& sv, bool has_error) {
+    if (sv.error_indicator) {
+        if (has_error)
+            lv_obj_remove_flag(sv.error_indicator, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(sv.error_indicator, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 } // namespace ams_draw

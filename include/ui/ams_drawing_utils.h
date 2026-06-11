@@ -94,6 +94,18 @@ struct SpoolVisual {
  */
 SpoolVisual create_spool_visual(lv_obj_t* container, int32_t spool_size = 0);
 
+/** Update spool color (3D canvas or flat color_swatch + darkened outer flange) */
+void spool_visual_set_color(const SpoolVisual& sv, lv_color_t color);
+
+/** Update spool fill level 0.0-1.0 (3D canvas fill or flat concentric ring size) */
+void spool_visual_set_fill(const SpoolVisual& sv, float fill_level);
+
+/** Toggle the empty-slot placeholder vs. the spool graphic */
+void spool_visual_set_empty(const SpoolVisual& sv, bool empty);
+
+/** Toggle the error indicator dot */
+void spool_visual_set_error(const SpoolVisual& sv, bool has_error);
+
 // Shared dashed-circle draw callback for the empty-slot placeholder (moved here from
 // ui_ams_slot.cpp so both the overlay and the home widget share it).
 void draw_dashed_circle_cb(lv_event_t* e);

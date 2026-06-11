@@ -436,3 +436,54 @@ TEST_CASE_METHOD(LVGLTestFixture, "create_spool_visual: flat produces concentric
     REQUIRE(sv.spool_hub != nullptr);
     lv_obj_delete(host);
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "spool_visual_set_fill: 3D updates canvas fill",
+                 "[ui][ams][spool_visual]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
+    lv_obj_t* host = lv_obj_create(test_screen());
+    ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(host, 48);
+    ams_draw::spool_visual_set_fill(sv, 0.5f);
+    REQUIRE(ui_spool_canvas_get_fill_level(sv.canvas) == Catch::Approx(0.5f));
+    lv_obj_delete(host);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "spool_visual_set_empty: toggles placeholder vs spool",
+                 "[ui][ams][spool_visual]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
+    lv_obj_t* host = lv_obj_create(test_screen());
+    ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(host, 48);
+    ams_draw::spool_visual_set_empty(sv, true);
+    REQUIRE_FALSE(lv_obj_has_flag(sv.empty_placeholder, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(sv.canvas, LV_OBJ_FLAG_HIDDEN));
+    ams_draw::spool_visual_set_empty(sv, false);
+    REQUIRE(lv_obj_has_flag(sv.empty_placeholder, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE_FALSE(lv_obj_has_flag(sv.canvas, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_delete(host);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "spool_visual flat: set_color tints swatch + darkens outer",
+                 "[ui][ams][spool_visual]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "flat");
+    lv_obj_t* host = lv_obj_create(test_screen());
+    ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(host, 48);
+
+    ams_draw::spool_visual_set_color(sv, lv_color_hex(0xFF0000));
+    REQUIRE(lv_color_eq(lv_obj_get_style_bg_color(sv.color_swatch, LV_PART_MAIN),
+                        lv_color_hex(0xFF0000)));
+    REQUIRE(lv_color_eq(lv_obj_get_style_bg_color(sv.spool_outer, LV_PART_MAIN),
+                        ams_draw::darken_color(lv_color_hex(0xFF0000), 50)));
+
+    ams_draw::spool_visual_set_empty(sv, true);
+    REQUIRE(lv_obj_has_flag(sv.spool_outer, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(sv.color_swatch, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(sv.spool_hub, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE_FALSE(lv_obj_has_flag(sv.empty_placeholder, LV_OBJ_FLAG_HIDDEN));
+
+    ams_draw::spool_visual_set_empty(sv, false);
+    REQUIRE_FALSE(lv_obj_has_flag(sv.spool_outer, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE_FALSE(lv_obj_has_flag(sv.color_swatch, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE_FALSE(lv_obj_has_flag(sv.spool_hub, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(lv_obj_has_flag(sv.empty_placeholder, LV_OBJ_FLAG_HIDDEN));
+
+    lv_obj_delete(host);
+}
