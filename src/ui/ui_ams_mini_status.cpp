@@ -13,6 +13,7 @@
 
 #include "ams_backend.h"
 #include "ams_state.h"
+#include "config.h"
 #include "helix-xml/src/xml/lv_xml_parser.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
 #include "observer_factory.h"
@@ -64,6 +65,12 @@ struct SpoolCellData {
     std::string material;    // "" => render "--"
     bool present = false;
     int lane_number = 1; // 1-based, for the badge
+
+    bool operator==(const SpoolCellData& o) const {
+        return color_rgb == o.color_rgb && fill_level == o.fill_level &&
+               remaining_pct == o.remaining_pct && material == o.material &&
+               present == o.present && lane_number == o.lane_number;
+    }
 };
 
 /** Map an integer fill percent (0-100) to the spool graphic's 0.0-1.0 level. */
@@ -128,6 +135,14 @@ struct AmsMiniStatusData {
 
     // Per-slot data for the spool render mode (sized to slot_count; uncapped for multi-unit)
     std::vector<SpoolCellData> spool_cells;
+
+    // Cached signature of what spools_container currently renders. rebuild_spools
+    // skips the expensive clean+recreate when these still match the live inputs,
+    // avoiding constant canvas alloc/free churn on every AmsState sync.
+    std::vector<SpoolCellData> rendered_cells;
+    int rendered_width_px = -1;
+    int rendered_colspan = -1;
+    bool rendered_3d = true;
 
     // Auto-binding observer (observe AmsState slots_version subject)
     // Uses ObserverGuard for RAII lifecycle management
@@ -519,6 +534,10 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         }
     } rg{data};
 
+    // Resolve the current spool style once (matches ams_draw's /ams/spool_style read).
+    const bool cur_3d =
+        helix::Config::get_instance()->get<std::string>("/ams/spool_style", "3d") == "3d";
+
     if (!data->spools_container) {
         lv_obj_t* sc = lv_obj_create(data->container);
         lv_obj_set_name(sc, "ams_spools_container");
@@ -538,12 +557,29 @@ static void rebuild_spools(AmsMiniStatusData* data) {
     lv_obj_t* sc = data->spools_container;
     lv_obj_remove_flag(sc, LV_OBJ_FLAG_HIDDEN);
 
+    // Dirty-check: the render is fully determined by the cell data, available
+    // width, colspan, and spool style. If none changed since the last real render
+    // and the cells already exist on screen, skip the costly clean+recreate (and
+    // its transient 2x canvas-memory peak). The container was un-hidden above, so
+    // a bar->spool switch with identical data still shows the existing cells.
+    bool unchanged = (data->rendered_width_px == data->width_px) &&
+                     (data->rendered_colspan == data->colspan) &&
+                     (data->rendered_3d == cur_3d) &&
+                     (data->rendered_cells == data->spool_cells) &&
+                     (lv_obj_get_child_count(sc) > 0);
+    if (unchanged)
+        return; // identical render already on screen — skip churn
+
     // Safe teardown of previous cells (rebuild may run inside a queued callback).
     helix::ui::safe_clean_children(sc);
 
     int n = static_cast<int>(data->spool_cells.size());
     if (n <= 0) {
         lv_obj_add_flag(data->container, LV_OBJ_FLAG_HIDDEN);
+        // Container is now empty — invalidate the cache so a later non-empty
+        // render with otherwise-matching inputs isn't wrongly skipped.
+        data->rendered_cells.clear();
+        data->rendered_width_px = -1;
         return;
     }
     lv_obj_remove_flag(data->container, LV_OBJ_FLAG_HIDDEN);
@@ -560,7 +596,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         const SpoolCellData& cd = data->spool_cells[i];
 
         lv_obj_t* cell = lv_obj_create(sc);
-        char nm[24];
+        char nm[32];
         snprintf(nm, sizeof(nm), "spool_cell_%d", i);
         lv_obj_set_name(cell, nm);
         lv_obj_set_size(cell, cell_px, lv_pct(100));
@@ -608,7 +644,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         snprintf(nm, sizeof(nm), "spool_pct_%d", i);
         lv_obj_set_name(pct, nm);
         if (cd.remaining_pct >= 0) {
-            char p[8];
+            char p[16];
             snprintf(p, sizeof(p), "%d%%", cd.remaining_pct);
             lv_label_set_text(pct, p);
         } else {
@@ -619,6 +655,12 @@ static void rebuild_spools(AmsMiniStatusData* data) {
             lv_obj_set_style_text_font(pct, fxs, LV_PART_MAIN);
         lv_obj_set_style_text_color(pct, theme_manager_get_color("text_muted"), LV_PART_MAIN);
     }
+
+    // Record the rendered signature so an identical subsequent sync can be skipped.
+    data->rendered_cells = data->spool_cells;
+    data->rendered_width_px = data->width_px;
+    data->rendered_colspan = data->colspan;
+    data->rendered_3d = cur_3d;
 }
 
 /**
