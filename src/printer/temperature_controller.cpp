@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "temperature_controller.h"
 
+#include "filament_database.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
 
@@ -19,13 +20,29 @@ TemperatureController::TemperatureController(PrinterState& state, MoonrakerAPI* 
     model_[idx(HeaterType::Bed)].keypad_max_default = 150.0f;
     model_[idx(HeaterType::Chamber)].keypad_max_default = 80.0f;
 
-    // Preset values mirror temperature_service.cpp TemperatureService::init()
-    // nozzle.config.presets / bed.config.presets / chamber.config.presets.
-    // Nozzle defaults: {0, 210, 245, 255} (PLA/PETG/ABS fallbacks, lines 73-75)
-    model_[idx(HeaterType::Nozzle)].presets = {.off = 0, .pla = 210, .petg = 245, .abs = 255};
-    // Bed defaults: {0, 60, 80, 100} (PLA/PETG/ABS fallbacks, lines 78-80)
-    model_[idx(HeaterType::Bed)].presets = {.off = 0, .pla = 60, .petg = 80, .abs = 100};
-    // Chamber: hardcoded {0, 40, 50, 60} (line 120)
+    // Preset values mirror temperature_service.cpp TemperatureService ctor.
+    // Single source of truth: nozzle/bed presets are derived from the filament
+    // database (same derivation as temperature_service.cpp lines 67-80), so
+    // views reading presets from the controller match what the service produced.
+    auto pla_info = filament::find_material("PLA");
+    auto petg_info = filament::find_material("PETG");
+    auto abs_info = filament::find_material("ABS");
+
+    // Nozzle presets (fallbacks 210/245/255 match the service)
+    int nozzle_pla = pla_info ? pla_info->nozzle_recommended() : 210;
+    int nozzle_petg = petg_info ? petg_info->nozzle_recommended() : 245;
+    int nozzle_abs = abs_info ? abs_info->nozzle_recommended() : 255;
+
+    // Bed presets (fallbacks 60/80/100 match the service)
+    int bed_pla = pla_info ? pla_info->bed_temp : 60;
+    int bed_petg = petg_info ? petg_info->bed_temp : 80;
+    int bed_abs = abs_info ? abs_info->bed_temp : 100;
+
+    model_[idx(HeaterType::Nozzle)].presets = {
+        .off = 0, .pla = nozzle_pla, .petg = nozzle_petg, .abs = nozzle_abs};
+    model_[idx(HeaterType::Bed)].presets = {
+        .off = 0, .pla = bed_pla, .petg = bed_petg, .abs = bed_abs};
+    // Chamber: hardcoded {0, 40, 50, 60} in temperature_service.cpp.
     model_[idx(HeaterType::Chamber)].presets = {.off = 0, .pla = 40, .petg = 50, .abs = 60};
 }
 
