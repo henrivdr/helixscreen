@@ -24,6 +24,7 @@
 #include "display_backend_drm.h"
 #endif
 
+#include "app_constants.h"
 #include "ui_effects.h"
 #include "ui_fatal_error.h"
 #include "ui_update_queue.h"
@@ -376,6 +377,10 @@ bool DisplayManager::init(const Config& config) {
     // Configure scroll behavior and sleep-aware wrapper
     if (m_pointer) {
         configure_scroll(config.scroll_throw, config.scroll_limit);
+        // Lengthen the long-press timeout from LVGL's 400ms default so
+        // mode-switching holds (home-screen edit mode) are deliberate, not
+        // twitchy. See AppConstants::Input::LONG_PRESS_MS.
+        lv_indev_set_long_press_time(m_pointer, AppConstants::Input::LONG_PRESS_MS);
 #ifndef HELIX_DISPLAY_SDL
         // Only install on embedded - SDL's event handler identifies the mouse device
         // by checking if read_cb == sdl_mouse_read, which our wrapper breaks.

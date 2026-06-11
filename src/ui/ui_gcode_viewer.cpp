@@ -8,6 +8,7 @@
 #include "ui_utils.h"
 
 #include "ams_state.h"
+#include "app_constants.h"
 #include "gcode_camera.h"
 #include "gcode_layer_renderer.h"
 #include "gcode_parser.h"
@@ -720,8 +721,9 @@ static void gcode_viewer_draw_cb(lv_event_t* e) {
     }
 }
 
-// Long-press threshold in milliseconds
-constexpr uint32_t LONG_PRESS_THRESHOLD_MS = 500;
+// Long-press threshold in milliseconds — shares the app-wide gesture timeout so
+// the 3D viewer's hold-to-context matches every other long-press in the UI.
+constexpr uint32_t LONG_PRESS_THRESHOLD_MS = AppConstants::Input::LONG_PRESS_MS;
 
 /**
  * @brief Timer callback for long-press detection

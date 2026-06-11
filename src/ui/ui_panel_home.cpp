@@ -15,6 +15,7 @@
 #include "ui_utils.h"
 
 #include "ams_state.h"
+#include "app_constants.h"
 #include "app_globals.h"
 #include "observer_factory.h"
 #include "panel_widget_config.h"
@@ -104,6 +105,7 @@ void HomePanel::init_subjects() {
     register_xml_callbacks({
         {"printer_status_clicked_cb", printer_status_clicked_cb},
         {"ams_clicked_cb", ams_clicked_cb},
+        {"on_home_grid_pressed", on_home_grid_pressed},
         {"on_home_grid_long_press", on_home_grid_long_press},
         {"on_home_grid_clicked", on_home_grid_clicked},
         {"on_home_grid_pressing", on_home_grid_pressing},
@@ -865,11 +867,45 @@ static bool should_suppress_edit_mode(lv_event_t* e) {
     return false;
 }
 
+bool HomePanel::finger_drifted_since_press() const {
+    if (!press_point_valid_)
+        return false;
+    lv_indev_t* indev = lv_indev_active();
+    if (!indev)
+        return false;
+    lv_point_t now;
+    lv_indev_get_point(indev, &now);
+    const int dx = now.x - press_start_point_.x;
+    const int dy = now.y - press_start_point_.y;
+    const int limit = lv_dpx(AppConstants::Input::EDIT_MODE_MOVE_CANCEL_DPX);
+    return (dx * dx + dy * dy) > (limit * limit);
+}
+
+void HomePanel::on_home_grid_pressed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] on_home_grid_pressed");
+    (void)e;
+    auto& panel = get_global_home_panel();
+    lv_indev_t* indev = lv_indev_active();
+    if (indev) {
+        lv_indev_get_point(indev, &panel.press_start_point_);
+        panel.press_point_valid_ = true;
+    } else {
+        panel.press_point_valid_ = false;
+    }
+    LVGL_SAFE_EVENT_CB_END();
+}
+
 void HomePanel::on_home_grid_long_press(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] on_home_grid_long_press");
     if (!should_suppress_edit_mode(e)) {
         auto& panel = get_global_home_panel();
         if (!panel.grid_edit_mode_.is_active()) {
+            // Entering edit mode requires a deliberate, stationary hold. LVGL
+            // fires LONG_PRESSED on hold duration alone, so a press that drifted
+            // from its landing point is an accidental rest, not a hold — ignore it.
+            if (panel.finger_drifted_since_press()) {
+                return; // inside the SAFE_EVENT_CB try block; END closes it below
+            }
             // Cancel the in-progress press to prevent the widget's click
             // action from firing on release.
             lv_indev_t* indev = lv_indev_active();
@@ -931,8 +967,9 @@ void HomePanel::on_home_grid_pressing(lv_event_t* e) {
 
 void HomePanel::on_home_grid_released(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] on_home_grid_released");
+    auto& panel = get_global_home_panel();
+    panel.press_point_valid_ = false; // press cycle ended — stop drift tracking
     if (!should_suppress_edit_mode(e)) {
-        auto& panel = get_global_home_panel();
         if (panel.grid_edit_mode_.is_active()) {
             panel.grid_edit_mode_.handle_released(e);
         }

@@ -120,6 +120,25 @@ constexpr uint32_t FAST_DURATION_MS = 150;
 } // namespace Animation
 
 /**
+ * @brief Touch input gesture tuning
+ *
+ * Shared so every long-press gesture (home-screen edit mode, gcode viewer,
+ * context menus) flips at one consistent, deliberate threshold.
+ */
+namespace Input {
+/// Hold duration before a press registers as a long-press (ms).
+/// Overrides LVGL's 400ms default; matches Android's launcher widget-edit
+/// gesture (500ms) so mode-switching holds feel deliberate, not twitchy.
+constexpr uint32_t LONG_PRESS_MS = 500;
+
+/// Finger travel (in DPI-scaled px) that cancels home-grid edit-mode entry.
+/// LVGL fires LONG_PRESSED on hold duration alone, regardless of movement, so
+/// a press that drifts past this is treated as an accidental rest-then-linger
+/// rather than a deliberate hold, and does not enter edit mode.
+constexpr int EDIT_MODE_MOVE_CANCEL_DPX = 12;
+} // namespace Input
+
+/**
  * @brief Rolling config backup paths (two-tier: primary + fallback)
  *
  * Config files are backed up outside INSTALL_DIR so they survive both the

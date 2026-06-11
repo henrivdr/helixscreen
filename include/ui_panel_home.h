@@ -81,6 +81,15 @@ class HomePanel : public PanelBase {
     // Grid edit mode state machine (long-press to rearrange widgets)
     helix::GridEditMode grid_edit_mode_;
 
+    // Press-point tracking for edit-mode entry. Edit mode requires a deliberate,
+    // stationary hold; we record where the finger landed and reject the
+    // long-press if it has drifted (an accidental rest-then-linger, not a hold).
+    lv_point_t press_start_point_{};
+    bool press_point_valid_ = false;
+    /// True if the finger has moved beyond the edit-mode cancel threshold since
+    /// the press began. Returns false if no valid press point is being tracked.
+    bool finger_drifted_since_press() const;
+
     // Image change observer (triggers printer image refresh)
     ObserverGuard image_changed_observer_;
 
@@ -116,6 +125,7 @@ class HomePanel : public PanelBase {
     // Panel-level static callbacks
     static void printer_status_clicked_cb(lv_event_t* e);
     static void ams_clicked_cb(lv_event_t* e);
+    static void on_home_grid_pressed(lv_event_t* e);
     static void on_home_grid_long_press(lv_event_t* e);
     static void on_home_grid_clicked(lv_event_t* e);
     static void on_home_grid_pressing(lv_event_t* e);
