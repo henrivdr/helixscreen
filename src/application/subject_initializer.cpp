@@ -52,6 +52,7 @@
 #include "lvgl/lvgl.h"
 #include "panel_widget_manager.h"
 #include "print_completion.h"
+#include "print_control_buttons.h"
 #include "print_start_navigation.h"
 #include "printer_state.h"
 #include "probe_sensor_manager.h"
@@ -246,6 +247,14 @@ void SubjectInitializer::init_panel_subjects(MoonrakerAPI* api) {
     m_print_select_panel->init_subjects();
     if (api)
         m_print_select_panel->set_api(api);
+
+    // Shared print-control buttons own the renamed pause/resume/stop subjects +
+    // shared callbacks; register before the print-status panel (and any home
+    // widget) XML binds them.
+    auto& print_controls = helix::ui::PrintControlButtons::instance();
+    if (api)
+        print_controls.set_api(api);
+    print_controls.init_subjects();
 
     m_print_status_panel = &get_global_print_status_panel();
     if (api)
