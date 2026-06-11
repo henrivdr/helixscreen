@@ -1289,6 +1289,95 @@ TEST_CASE("AD5X IFS phase: clock resets on phase transition (no immediate timeou
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
 }
 
+// Helper: build a minimal valid GET_ZCOLOR result. extruder_slot ABSENT after
+// a successful unload, SET after a successful load. saw_valid gates a
+// meaningful read.
+static AmsBackendAd5xIfs::ZColorSilentResult make_zcolor(std::optional<int> extruder_slot,
+                                                         bool saw_valid) {
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = saw_valid;
+    r.extruder_slot = extruder_slot;
+    // slots[] left default-empty (std::array of std::optional) — the per-port
+    // loop in apply_zcolor_result handles empty entries as "not loaded".
+    return r;
+}
+
+TEST_CASE("AD5X IFS phase: zcolor quick-finish unload (head drop seen)",
+          "[ams][ad5x_ifs][phase]") {
+    // After the unload physically progresses past the cut (head drop), a fresh
+    // GET_ZCOLOR with no extruder slot is the early terminal signal — finalize
+    // to IDLE within ~1s instead of waiting out the 90s timeout backstop.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+
+    // zcolor confirms the toolhead is now empty → IDLE, no timeout call.
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, make_zcolor(std::nullopt, /*saw_valid=*/true));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend).empty());
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
+TEST_CASE("AD5X IFS phase: zcolor does NOT finalize before head transition",
+          "[ams][ad5x_ifs][phase]") {
+    // The early post-dispatch query (unload_filament schedules one immediately)
+    // must NOT finalize before the op physically progresses past the cut. With
+    // no head drop seen, progressed==false → stay in CUTTING.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    // zcolor with empty extruder, but no head drop yet → must NOT finalize.
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, make_zcolor(std::nullopt, /*saw_valid=*/true));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
+TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)",
+          "[ams][ad5x_ifs][phase]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, false);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(true));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+
+    // zcolor confirms slot 0 (port 1) now seated in the extruder → IDLE.
+    Ad5xIfsTestAccess::apply_zcolor_result(backend,
+                                           make_zcolor(std::optional<int>(0), /*saw_valid=*/true));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
+TEST_CASE("AD5X IFS phase: zcolor invalid response does not finalize",
+          "[ams][ad5x_ifs][phase]") {
+    // A junk read (saw_valid_response=false) must never finalize the op — even
+    // after a head transition. apply_zcolor_result early-returns on it.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, make_zcolor(std::nullopt, /*saw_valid=*/false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
 TEST_CASE("AD5X IFS phase: inactive tracker preserves legacy snap-to-IDLE",
           "[ams][ad5x_ifs][phase]") {
     // When the phase tracker is INACTIVE (external/firmware-initiated action set
