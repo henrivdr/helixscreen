@@ -167,6 +167,38 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: sync_from_ams_state fe
     ams.deinit_subjects();
 }
 
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: unchanged sync skips cell rebuild",
+                 "[ui][ams_mini][spool]") {
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    helix::ui::UpdateQueue::instance().drain();
+    ui_ams_mini_status_set_slot_count(w, 2);
+    ui_ams_mini_status_set_slot_full(w, 0, 0xFF0000, 70, true, "PLA", 70);
+    ui_ams_mini_status_set_slot_full(w, 1, 0x00FF00, 40, true, "PETG", 40);
+    ui_ams_mini_status_set_width(w, 260, 2);
+    helix::ui::UpdateQueue::instance().drain();
+    lv_obj_t* sc = UITest::find_by_name(w, "ams_spools_container");
+    REQUIRE(sc != nullptr);
+    lv_obj_t* cell0_before = UITest::find_by_name(w, "spool_cell_0");
+    REQUIRE(cell0_before != nullptr);
+
+    // Re-feed IDENTICAL data + refresh -> should NOT recreate cells.
+    ui_ams_mini_status_set_slot_full(w, 0, 0xFF0000, 70, true, "PLA", 70);
+    ui_ams_mini_status_set_slot_full(w, 1, 0x00FF00, 40, true, "PETG", 40);
+    ui_ams_mini_status_refresh(w);
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(UITest::find_by_name(w, "spool_cell_0") == cell0_before); // same object => no rebuild
+
+    // Change data -> cells rebuilt (pointer differs or content updates).
+    ui_ams_mini_status_set_slot_full(w, 0, 0x0000FF, 20, true, "ABS", 20);
+    ui_ams_mini_status_refresh(w);
+    helix::ui::UpdateQueue::instance().drain();
+    lv_obj_t* mat0 = UITest::find_by_name(w, "spool_material_0");
+    REQUIRE(mat0 != nullptr);
+    REQUIRE(std::string(lv_label_get_text(mat0)) == "ABS");
+    lv_obj_delete(w);
+}
+
 TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: 2x->1x restores bar view",
                  "[ui][ams_mini][mode]") {
     ui_ams_mini_status_init();
