@@ -292,7 +292,38 @@ class Ad5xIfsTestAccess {
         std::lock_guard<std::mutex> lock(b.custom_types_mutex_);
         return b.custom_material_types_;
     }
+
+    // --- Phase tracker hooks (live load/unload progress feedback) ---
+
+    // Read the dynamic operation_detail string the phase machine produced.
+    static std::string operation_detail(const AmsBackendAd5xIfs& b) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        return b.system_info_.operation_detail;
+    }
+
+    // Activate the phase tracker directly, bypassing load_filament/unload_filament's
+    // check_preconditions() (which fails with the null api/client used in tests).
+    // Mirrors what those entry points do: sets HEATING + begins phase tracking +
+    // applies the initial synthesized action/detail under mutex_.
+    static void begin_phase(AmsBackendAd5xIfs& b, bool is_unload) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.system_info_.action = AmsAction::HEATING;
+        b.action_start_time_ = std::chrono::steady_clock::now();
+        b.begin_phase_tracking_locked(is_unload);
+        b.apply_phase_action_locked();
+    }
+
+    static bool phase_active(const AmsBackendAd5xIfs& b) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        return b.phase_tracker_.active;
+    }
 };
+
+// Helper to build an extruder temperature status frame (mirrors CFS shape:
+// `{"extruder": {"temperature": T, "target": Tgt}}`).
+static json make_extruder(double temperature, double target) {
+    return json{{"extruder", json{{"temperature", temperature}, {"target", target}}}};
+}
 
 // Helper to build a full save_variables JSON payload
 static json make_save_variables(const json& variables) {
@@ -1072,6 +1103,204 @@ TEST_CASE("AD5X IFS motion sensor completes load/unload", "[ams][ad5x_ifs]") {
         Ad5xIfsTestAccess::handle_status(backend, make_motion_sensor(false));
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
     }
+}
+
+// ==========================================================================
+// 20b. Phase tracker — live load/unload progress feedback
+// ==========================================================================
+
+TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
+          "[ams][ad5x_ifs][phase]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    // Filament present at the toolhead before unload begins.
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // Begin a phased unload (firmware: HEATING → CUTTING → UNLOADING → IDLE).
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    // Before any temp seen — detail names only the target (no live temp yet).
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Heating nozzle to 230°C");
+
+    // First temp frame: still heating, detail gains the live current temp.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(185.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Heating nozzle to 230°C (185°C)");
+
+    // Temp reaches target → CUTTING.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Cutting filament");
+
+    // Head sensor drops (cut + retract started) → UNLOADING.
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) ==
+            "Retracting filament from nozzle");
+
+    // Action timeout backstop finalizes IDLE (firmware parks filament in lane;
+    // no further head transition arrives). Detail clears.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend).empty());
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
+TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)",
+          "[ams][ad5x_ifs][phase]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    // Fresh load: no filament at the toolhead initially.
+    Ad5xIfsTestAccess::set_head_filament(backend, false);
+
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    // Heating not yet complete.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(190.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    // Temp reaches target → LOADING (feeding filament toward nozzle).
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Feeding filament to nozzle");
+
+    // Head sensor rises (filament reached nozzle) → PURGING.
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(true));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Purging old filament");
+
+    // Timeout backstop finalizes IDLE.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend).empty());
+}
+
+TEST_CASE("AD5X IFS phase: RESPOND line sets target before any extruder frame",
+          "[ams][ad5x_ifs][phase]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    // Firmware emits the heat target via RESPOND before the first temp tick.
+    Ad5xIfsTestAccess::on_gcode_response_line(
+        backend, "// Heating the nozzle to 240 degrees");
+
+    // Detail should reflect the parsed 240°C target even with no extruder frame.
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Heating nozzle to 240°C");
+
+    // A temp frame whose target is 240 reaches target → CUTTING.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(240.0, 240.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+}
+
+TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation",
+          "[ams][ad5x_ifs][phase]") {
+    SECTION("\"Unloading filament\" marks an unload op") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        Ad5xIfsTestAccess::set_head_filament(backend, true);
+        // Begin as a load, then a RESPOND line corrects the direction to unload.
+        Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
+        Ad5xIfsTestAccess::on_gcode_response_line(backend,
+                                                  "// Unloading filament from IFS");
+        // Reaching target on an unload op → CUTTING (not LOADING).
+        Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+    }
+
+    SECTION("\"Loading filament\" marks a load op") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        Ad5xIfsTestAccess::set_head_filament(backend, false);
+        // Begin as an unload, then a RESPOND line corrects the direction to load.
+        Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+        Ad5xIfsTestAccess::on_gcode_response_line(backend,
+                                                  "// Loading filament into IFS");
+        // Reaching target on a load op → LOADING (not CUTTING).
+        Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
+    }
+}
+
+TEST_CASE("AD5X IFS phase: full unload with ZERO RESPOND lines (fork robustness)",
+          "[ams][ad5x_ifs][phase]") {
+    // Proves the English RESPOND strings are NOT load-bearing: temp + head
+    // sensor alone drive the entire HEATING → CUTTING → UNLOADING sequence.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(100.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+}
+
+TEST_CASE("AD5X IFS phase: HEATING does not finalize before target at 90s",
+          "[ams][ad5x_ifs][phase]") {
+    // Regression: a real AD5X cold-start unload heats ~26°C→230°C in ~158s,
+    // which exceeds the 90s ACTION_TIMEOUT. HEATING must get a longer dedicated
+    // budget so the timeout doesn't snap to IDLE mid-heat (which reproduced the
+    // original "nothing happening" complaint). Later phases keep the short 90s.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    // Still heating (120°C of 230°C target).
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(120.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    // 120s elapsed: under the 300s HEATING budget → must NOT finalize.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+
+    // Reach target → CUTTING. The transition resets the start clock, so a fresh
+    // op clock now governs the 90s budget for this phase.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    // 120s elapsed against the freshly-reset clock, with the 90s non-heating
+    // budget → now finalizes to IDLE.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
+TEST_CASE("AD5X IFS phase: clock resets on phase transition (no immediate timeout)",
+          "[ams][ad5x_ifs][phase]") {
+    // A phase transition occurring at elapsed > 90s must not immediately time
+    // out the new phase — the start clock is reset on transition.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(150.0, 230.0));
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    // Immediately after the transition, a short elapsed must NOT finalize.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(30));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+}
+
+TEST_CASE("AD5X IFS phase: inactive tracker preserves legacy snap-to-IDLE",
+          "[ams][ad5x_ifs][phase]") {
+    // When the phase tracker is INACTIVE (external/firmware-initiated action set
+    // via set_action), a head transition must still snap directly to IDLE — the
+    // legacy backward-compat path. This mirrors the existing "action state
+    // tracking" cases but asserts the gating contract explicitly.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+
+    Ad5xIfsTestAccess::set_action(backend, AmsAction::UNLOADING);
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
 }
 
 // ==========================================================================
