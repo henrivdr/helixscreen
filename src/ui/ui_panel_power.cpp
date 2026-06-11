@@ -462,8 +462,16 @@ void PowerPanel::handle_chip_clicked(const std::string& device_name) {
 }
 
 lv_obj_t* PowerPanel::get_or_create_overlay(lv_obj_t* parent_screen) {
-    if (cached_overlay_)
+    if (cached_overlay_) {
+        // Re-register before returning the cached overlay: switch_to_panel_impl()
+        // clears the non-persistent overlay_instances_ map on navbar switches, so
+        // a cached overlay re-opened after a navbar tap would otherwise be pushed
+        // unregistered (invisible to lifecycle machinery, no on_deactivate on
+        // dismiss). Idempotent (keyed by widget). All push sites call this
+        // immediately before push_overlay().
+        NavigationManager::instance().register_overlay_instance(cached_overlay_, this);
         return cached_overlay_;
+    }
 
     if (!parent_screen)
         return nullptr;

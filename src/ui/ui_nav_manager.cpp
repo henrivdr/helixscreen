@@ -33,7 +33,9 @@ using namespace helix;
 using helix::ui::observe_int_sync;
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 
 // ============================================================================
@@ -45,6 +47,35 @@ using helix::ui::observe_int_sync;
 // outlives all function-local statics, including the singleton itself.
 namespace {
 bool g_nav_manager_destroyed = false;
+
+// Strict overlay-registration check (dev/test only). Mirrors the L081
+// HELIX_STRICT_BG_THREAD_CHECK machinery: opt-in via env or setter, compiled
+// out in release builds. See NavigationManager::set_overlay_registration_strict.
+std::atomic<bool> g_overlay_strict{false};
+std::atomic<bool> g_overlay_strict_env_read{false};
+
+bool overlay_registration_strict() {
+#ifdef HELIX_RELEASE_BUILD
+    return false;
+#else
+    if (!g_overlay_strict_env_read.load(std::memory_order_acquire)) {
+        if (const char* v = std::getenv("HELIX_STRICT_OVERLAY_CHECK");
+            v != nullptr &&
+            (v[0] == '1' || v[0] == 't' || v[0] == 'T' || v[0] == 'y' || v[0] == 'Y')) {
+            g_overlay_strict.store(true, std::memory_order_release);
+        }
+        g_overlay_strict_env_read.store(true, std::memory_order_release);
+    }
+    return g_overlay_strict.load(std::memory_order_acquire);
+#endif
+}
+} // namespace
+
+void NavigationManager::set_overlay_registration_strict(bool enabled) noexcept {
+    g_overlay_strict.store(enabled, std::memory_order_release);
+    // An explicit setter call wins over the env var — mark as resolved so a
+    // later env read can't clobber the test's choice.
+    g_overlay_strict_env_read.store(true, std::memory_order_release);
 }
 
 NavigationManager::~NavigationManager() {
@@ -1422,6 +1453,24 @@ void NavigationManager::push_overlay(lv_obj_t* overlay_panel, bool hide_previous
             spdlog::warn("[NavigationManager] push_overlay({}): no register_overlay_instance "
                          "call before push — overlay invisible to lifecycle machinery",
                          (void*)overlay_panel);
+#ifndef HELIX_RELEASE_BUILD
+            // Strict mode (CI / test fixtures): abort so any new unregistered
+            // push fails the build. Print loudly to stderr so the reason is
+            // visible even at warn log level. Compiled out in release builds —
+            // users only ever get the warning above + the "unreg" telemetry
+            // breadcrumb below. Intentional lifecycle-less overlays register
+            // with a null lifecycle and so never reach this branch.
+            if (overlay_registration_strict()) {
+                std::fprintf(stderr,
+                             "\n[NavigationManager] STRICT MODE: push_overlay(%p) with no "
+                             "register_overlay_instance() before push. Call "
+                             "register_overlay_instance(widget, lifecycle) — or "
+                             "register_overlay_instance(widget, nullptr) for an intentional "
+                             "lifecycle-less overlay. See include/ui_nav_manager.h.\n",
+                             (void*)overlay_panel);
+                std::abort();
+            }
+#endif
         }
         TelemetryManager::instance().notify_overlay_opened(overlay_name);
         crash_handler::breadcrumb::note("overlay+", overlay_name.c_str());

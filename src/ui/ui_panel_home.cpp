@@ -805,6 +805,15 @@ void HomePanel::handle_ams_clicked() {
     }
     lv_obj_t* panel_obj = ams_panel.get_panel();
     if (panel_obj) {
+        // Re-register before push: get_global_ams_panel() only registers the
+        // overlay instance inside its lazy-creation block, and
+        // switch_to_panel_impl() clears overlay_instances_ on navbar switches
+        // (keeping only the persistent map). A cached panel re-opened after a
+        // navbar tap therefore loses its registration, so on_deactivate() never
+        // fires on dismiss and the filament-path animation keeps drawing into a
+        // torn-down panel. Idempotent (keyed by widget). Mirrors
+        // AmsOverviewPanel and lazy_create_and_push_overlay.
+        NavigationManager::instance().register_overlay_instance(panel_obj, &ams_panel);
         NavigationManager::instance().push_overlay(panel_obj);
     }
 }

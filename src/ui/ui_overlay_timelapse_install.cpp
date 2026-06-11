@@ -72,16 +72,20 @@ static void open_timelapse_install_overlay() {
         g_timelapse_install_panel =
             g_timelapse_install->create(lv_display_get_screen_active(nullptr));
 
-        if (g_timelapse_install_panel) {
-            NavigationManager::instance().register_overlay_instance(g_timelapse_install_panel,
-                                                                    g_timelapse_install.get());
-            spdlog::debug("[Timelapse Install] Panel created and registered");
-        } else {
+        if (!g_timelapse_install_panel) {
             spdlog::error("[Timelapse Install] Failed to create timelapse_install_overlay");
             return;
         }
+        spdlog::debug("[Timelapse Install] Panel created");
     }
 
+    // Re-register before every push: switch_to_panel_impl() clears the
+    // non-persistent overlay_instances_ map on navbar switches, so a cached
+    // panel re-opened after a navbar tap would otherwise be pushed unregistered
+    // (no on_deactivate on dismiss, leaving the wizard's async wifi-scan
+    // callbacks ungated by wizard_active_). Idempotent (keyed by widget).
+    NavigationManager::instance().register_overlay_instance(g_timelapse_install_panel,
+                                                            g_timelapse_install.get());
     NavigationManager::instance().push_overlay(g_timelapse_install_panel);
 }
 

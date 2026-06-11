@@ -8,6 +8,7 @@
 #include "src/ui/panel_widgets/print_status_widget.h"
 #include "system_settings_manager.h"
 #include "ui_modal.h"
+#include "ui_nav_manager.h"
 #include "ui_test_utils.h"
 #include "ui_update_queue.h"
 
@@ -16,6 +17,11 @@ HelixTestFixture::HelixTestFixture() {
     // while alive aborts the run instead of just warning. Production stays
     // at warn. See include/async_lifetime_guard.h.
     helix::internal::set_strict_bg_check(true);
+    // Tests also opt into strict overlay-registration detection: any
+    // push_overlay() on a widget that was never registered (so on_deactivate()
+    // would never fire on dismiss) aborts instead of just warning. Production
+    // stays at warn. See NavigationManager::set_overlay_registration_strict.
+    NavigationManager::set_overlay_registration_strict(true);
     reset_all();
 }
 

@@ -239,6 +239,23 @@ class NavigationManager {
                                    bool persistent = false);
 
     /**
+     * @brief Enable strict overlay-registration checking (dev/test only).
+     *
+     * When enabled, push_overlay() on a widget that was never passed to
+     * register_overlay_instance() (the "unreg" case — caller forgot to
+     * register, so on_deactivate() will never fire on dismiss) aborts with a
+     * diagnostic instead of merely logging a warning. Mirrors the L081
+     * HELIX_STRICT_BG_THREAD_CHECK pattern: opt-in via the
+     * HELIX_STRICT_OVERLAY_CHECK=1 env var or this setter; compiled out
+     * entirely in release builds (HELIX_RELEASE_BUILD) so a stray opt-in can
+     * never crash a user. HelixTestFixture enables it so any new unregistered
+     * push fails the test suite. Intentional lifecycle-less overlays must
+     * register with a null lifecycle (register_overlay_instance(widget,
+     * nullptr)) to opt out — that is the "anon" case and is not flagged.
+     */
+    static void set_overlay_registration_strict(bool enabled) noexcept;
+
+    /**
      * @brief Unregister C++ overlay instance
      *
      * Removes association between widget and overlay instance.
