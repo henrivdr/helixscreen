@@ -308,9 +308,6 @@ class PrinterState {
     const helix::PrinterTemperatureState& temperature_state() const {
         return temperature_state_;
     }
-    helix::PrinterTemperatureState& temperature_state() {
-        return temperature_state_;
-    }
 
     lv_subject_t* get_bed_temp_subject() {
         return temperature_state_.get_bed_temp_subject();
