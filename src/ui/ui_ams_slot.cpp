@@ -11,7 +11,6 @@
 
 #include "ams_state.h"
 #include "ams_types.h"
-#include "config.h"
 #include "display_settings_manager.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_parser.h"
@@ -34,16 +33,6 @@ using namespace helix;
 // ============================================================================
 // Per-widget user data (managed via static registry for safe shutdown)
 // ============================================================================
-
-/**
- * @brief Check if 3D spool visualization is enabled in config
- * @return true if "3d" style, false for "flat" style
- */
-static bool is_3d_spool_style() {
-    Config* cfg = Config::get_instance();
-    std::string style = cfg->get<std::string>("/ams/spool_style", "3d");
-    return (style == "3d");
-}
 
 /**
  * @brief User data stored on each ams_slot widget
@@ -184,39 +173,15 @@ static void cleanup_all_slot_data() {
  * - Flat style: Resizes concentric ring
  */
 static void update_filament_ring_size(AmsSlotData* data) {
-    if (!data) {
+    if (!data)
         return;
-    }
-
-    // Clamp fill level to valid range
-    float fill = data->fill_level;
-    if (fill < 0.0f)
-        fill = 0.0f;
-    if (fill > 1.0f)
-        fill = 1.0f;
-
-    if (data->use_3d_style && data->spool_canvas) {
-        // 3D style: Use spool_canvas fill level
-        ui_spool_canvas_set_fill_level(data->spool_canvas, fill);
-        spdlog::trace("[AmsSlot] Slot {} 3D fill={:.0f}%", data->slot_index, fill * 100.0f);
-    } else if (data->color_swatch && data->spool_container && data->spool_hub) {
-        // Flat style: Resize the concentric ring
-        lv_obj_update_layout(data->spool_container);
-
-        int32_t spool_size = lv_obj_get_width(data->spool_container);
-        int32_t hub_size = lv_obj_get_width(data->spool_hub);
-
-        int32_t min_ring = hub_size + 4;   // Minimum: slightly larger than hub
-        int32_t max_ring = spool_size - 8; // Maximum: smaller than outer flange
-
-        int32_t ring_size = min_ring + static_cast<int32_t>((max_ring - min_ring) * fill);
-
-        lv_obj_set_size(data->color_swatch, ring_size, ring_size);
-        lv_obj_align(data->color_swatch, LV_ALIGN_CENTER, 0, 0);
-
-        spdlog::trace("[AmsSlot] Slot {} flat fill={:.0f}% → ring_size={}px", data->slot_index,
-                      fill * 100.0f, ring_size);
-    }
+    ams_draw::SpoolVisual sv{};
+    sv.use_3d = data->use_3d_style;
+    sv.canvas = data->spool_canvas;
+    sv.color_swatch = data->color_swatch;
+    sv.spool_hub = data->spool_hub;
+    sv.container = data->spool_container;
+    ams_draw::spool_visual_set_fill(sv, data->fill_level);
 }
 
 // ============================================================================
@@ -230,16 +195,12 @@ static void update_filament_ring_size(AmsSlotData* data) {
  */
 static void apply_slot_color(AmsSlotData* data, int color_int) {
     lv_color_t filament_color = lv_color_hex(static_cast<uint32_t>(color_int));
-    if (data->use_3d_style && data->spool_canvas) {
-        ui_spool_canvas_set_color(data->spool_canvas, filament_color);
-    } else if (data->color_swatch) {
-        lv_obj_set_style_bg_color(data->color_swatch, filament_color, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(data->color_swatch, LV_OPA_COVER, LV_PART_MAIN);
-        if (data->spool_outer) {
-            lv_color_t darker = ams_draw::darken_color(filament_color, 50);
-            lv_obj_set_style_bg_color(data->spool_outer, darker, LV_PART_MAIN);
-        }
-    }
+    ams_draw::SpoolVisual sv{};
+    sv.use_3d = data->use_3d_style;
+    sv.canvas = data->spool_canvas;
+    sv.color_swatch = data->color_swatch;
+    sv.spool_outer = data->spool_outer;
+    ams_draw::spool_visual_set_color(sv, filament_color);
     spdlog::trace("[AmsSlot] Slot {} color updated to 0x{:06X}", data->slot_index,
                   static_cast<uint32_t>(color_int));
 }
@@ -564,39 +525,6 @@ static void ams_slot_event_cb(lv_event_t* e) {
 // Widget Creation (Internal)
 // ============================================================================
 
-// Draw a dashed circle using segmented arcs (LVGL 9.5 has no dashed border API)
-static void draw_dashed_circle_cb(lv_event_t* e) {
-    auto* obj = static_cast<lv_obj_t*>(lv_event_get_target(e));
-    auto* layer = static_cast<lv_layer_t*>(lv_event_get_layer(e));
-
-    int32_t w = lv_obj_get_width(obj);
-    int32_t h = lv_obj_get_height(obj);
-    lv_area_t coords;
-    lv_obj_get_coords(obj, &coords);
-    int32_t cx = coords.x1 + w / 2;
-    int32_t cy = coords.y1 + h / 2;
-    int32_t radius = LV_MIN(w, h) / 2 - 1;
-
-    lv_draw_arc_dsc_t arc_dsc;
-    lv_draw_arc_dsc_init(&arc_dsc);
-    arc_dsc.center.x = cx;
-    arc_dsc.center.y = cy;
-    arc_dsc.radius = static_cast<uint16_t>(radius);
-    arc_dsc.width = 2;
-    arc_dsc.color = theme_manager_get_color("text_muted");
-    arc_dsc.opa = LV_OPA_20;
-
-    // Draw 16 dashes of 15 degrees each with 7.5 degree gaps
-    constexpr int DASH_COUNT = 16;
-    constexpr int DASH_ANGLE = 15;
-    constexpr int GAP_ANGLE = 7;  // 16 * (15 + 7) = 352 ≈ 360
-    for (int d = 0; d < DASH_COUNT; d++) {
-        arc_dsc.start_angle = static_cast<uint16_t>(d * (DASH_ANGLE + GAP_ANGLE));
-        arc_dsc.end_angle = static_cast<uint16_t>(arc_dsc.start_angle + DASH_ANGLE);
-        lv_draw_arc(layer, &arc_dsc);
-    }
-}
-
 /**
  * @brief Create spool visualization inside spool_container
  *
@@ -609,143 +537,14 @@ static void create_spool_visualization(AmsSlotData* data) {
         return;
     }
 
-    // Check config for visualization style
-    data->use_3d_style = is_3d_spool_style();
-
-    // Spool size is a dedicated responsive token (see ams_panel.xml consts).
-    // Previously derived from `space_lg * 4` which gave only 32px at MICRO/TINY.
-    int32_t spool_size = theme_manager_get_spacing("ams_slot_spool_size");
-    if (spool_size <= 0) {
-        // Fallback for non-ams contexts where the token isn't registered
-        spool_size = theme_manager_get_spacing("space_lg") * 4;
-    }
-
-    // Update spool_container size to match responsive sizing
-    int32_t container_size = spool_size + 8; // Extra room for badge
-    lv_obj_set_size(data->spool_container, container_size, container_size);
-
-    if (data->use_3d_style) {
-        // ====================================================================
-        // 3D SPOOL CANVAS (Bambu-style pseudo-3D with gradients + AA)
-        // ====================================================================
-        lv_obj_t* canvas = ui_spool_canvas_create(data->spool_container, spool_size);
-        if (canvas) {
-            lv_obj_align(canvas, LV_ALIGN_CENTER, 0, 0);
-            // Prevent flex layout from resizing the canvas
-            lv_obj_set_style_min_width(canvas, spool_size, LV_PART_MAIN);
-            lv_obj_set_style_min_height(canvas, spool_size, LV_PART_MAIN);
-            lv_obj_set_style_max_width(canvas, spool_size, LV_PART_MAIN);
-            lv_obj_set_style_max_height(canvas, spool_size, LV_PART_MAIN);
-            ui_spool_canvas_set_color(canvas, lv_color_hex(AMS_DEFAULT_SLOT_COLOR));
-            ui_spool_canvas_set_fill_level(canvas, data->fill_level);
-            lv_obj_add_flag(canvas, LV_OBJ_FLAG_EVENT_BUBBLE);
-            data->spool_canvas = canvas;
-
-            spdlog::debug("[AmsSlot] Created 3D spool_canvas ({}x{})", spool_size, spool_size);
-        }
-    } else {
-        // ====================================================================
-        // FLAT STYLE (skeuomorphic concentric rings)
-        // ====================================================================
-        int32_t filament_ring_size = spool_size - 8;
-        int32_t hub_size = spool_size / 3;
-
-        // Add shadow to spool_container for flat style
-        lv_obj_set_style_radius(data->spool_container, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_obj_set_style_shadow_width(data->spool_container, 8, LV_PART_MAIN);
-        lv_obj_set_style_shadow_opa(data->spool_container, LV_OPA_20, LV_PART_MAIN);
-        lv_obj_set_style_shadow_offset_y(data->spool_container, 2, LV_PART_MAIN);
-        lv_obj_set_style_shadow_color(data->spool_container, lv_color_black(), LV_PART_MAIN);
-
-        // Layer 1: Outer ring (flange - darker shade of filament color)
-        lv_obj_t* outer_ring = lv_obj_create(data->spool_container);
-        lv_obj_set_size(outer_ring, spool_size, spool_size);
-        lv_obj_align(outer_ring, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_radius(outer_ring, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_color_t default_darker =
-            ams_draw::darken_color(lv_color_hex(AMS_DEFAULT_SLOT_COLOR), 50);
-        lv_obj_set_style_bg_color(outer_ring, default_darker, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(outer_ring, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(outer_ring, 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(outer_ring, theme_manager_get_color("ams_hub"), LV_PART_MAIN);
-        lv_obj_set_style_border_opa(outer_ring, LV_OPA_50, LV_PART_MAIN);
-        lv_obj_remove_flag(outer_ring, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(outer_ring, LV_OBJ_FLAG_EVENT_BUBBLE);
-        data->spool_outer = outer_ring;
-
-        // Layer 2: Main filament color ring
-        lv_obj_t* filament_ring = lv_obj_create(data->spool_container);
-        lv_obj_set_size(filament_ring, filament_ring_size, filament_ring_size);
-        lv_obj_align(filament_ring, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_radius(filament_ring, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(filament_ring, lv_color_hex(AMS_DEFAULT_SLOT_COLOR),
-                                  LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(filament_ring, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(filament_ring, 0, LV_PART_MAIN);
-        lv_obj_remove_flag(filament_ring, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(filament_ring, LV_OBJ_FLAG_EVENT_BUBBLE);
-        data->color_swatch = filament_ring;
-
-        // Layer 3: Center hub
-        lv_obj_t* hub = lv_obj_create(data->spool_container);
-        lv_obj_set_size(hub, hub_size, hub_size);
-        lv_obj_align(hub, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(hub, theme_manager_get_color("ams_hub"), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(hub, 1, LV_PART_MAIN);
-        lv_obj_set_style_border_color(hub, theme_manager_get_color("ams_hub_border"), LV_PART_MAIN);
-        lv_obj_remove_flag(hub, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(hub, LV_OBJ_FLAG_EVENT_BUBBLE);
-        data->spool_hub = hub;
-
-        spdlog::debug("[AmsSlot] Created flat spool rings ({}x{})", spool_size, spool_size);
-    }
-
-    // Create empty slot placeholder (circle outline with plus icon, initially hidden)
-    {
-        lv_obj_t* ph = lv_obj_create(data->spool_container);
-        lv_obj_set_size(ph, spool_size - 4, spool_size - 4);
-        lv_obj_align(ph, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_radius(ph, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(ph, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(ph, 0, LV_PART_MAIN);
-        lv_obj_add_event_cb(ph, draw_dashed_circle_cb, LV_EVENT_DRAW_MAIN, nullptr);
-        lv_obj_remove_flag(ph, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(ph, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_add_flag(ph, LV_OBJ_FLAG_HIDDEN);
-
-        // Plus icon centered in circle to communicate "empty, add filament"
-        const char* plus_glyph = ui_icon::lookup_codepoint("plus");
-        if (plus_glyph) {
-            lv_obj_t* plus = lv_label_create(ph);
-            lv_label_set_text(plus, plus_glyph);
-            lv_obj_set_style_text_font(plus, &mdi_icons_24, LV_PART_MAIN);
-            lv_obj_set_style_text_color(plus, theme_manager_get_color("text_muted"), LV_PART_MAIN);
-            lv_obj_set_style_text_opa(plus, LV_OPA_20, LV_PART_MAIN);
-            lv_obj_align(plus, LV_ALIGN_CENTER, 0, 0);
-            lv_obj_add_flag(plus, LV_OBJ_FLAG_EVENT_BUBBLE);
-        }
-
-        data->empty_placeholder = ph;
-    }
-
-    // Create error indicator dot (top-right of spool_container, initially hidden)
-    {
-        lv_obj_t* err = lv_obj_create(data->spool_container);
-        lv_obj_set_size(err, 14, 14);
-        lv_obj_set_style_radius(err, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(err, theme_manager_get_color("danger"), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(err, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(err, 0, LV_PART_MAIN);
-        lv_obj_set_align(err, LV_ALIGN_TOP_RIGHT);
-        lv_obj_set_style_translate_x(err, -2, LV_PART_MAIN);
-        lv_obj_set_style_translate_y(err, 2, LV_PART_MAIN);
-        lv_obj_remove_flag(err, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(err, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_add_flag(err, LV_OBJ_FLAG_HIDDEN);
-        data->error_indicator = err;
-    }
+    ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(data->spool_container, 0);
+    data->use_3d_style = sv.use_3d;
+    data->spool_canvas = sv.canvas;
+    data->spool_outer = sv.spool_outer;
+    data->color_swatch = sv.color_swatch;
+    data->spool_hub = sv.spool_hub;
+    data->empty_placeholder = sv.empty_placeholder;
+    data->error_indicator = sv.error_indicator;
 
     // Move badges and indicators to front so they render on top of the spool visualization
     // (badges are created by XML before spool canvas/rings are added in C++)

@@ -22,6 +22,7 @@
 #include "../ui_test_utils.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
+#include "config.h"
 #include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
@@ -61,6 +62,20 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: creates with valid structure",
     REQUIRE(spool_container != nullptr);
 
     lv_obj_delete(slot);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: flat style builds spool rings",
+                 "[ui][ams_slot][structure]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "flat");
+    ui_ams_slot_register();
+    lv_obj_t* slot = create_ams_slot(test_screen(), 0);
+    REQUIRE(slot != nullptr);
+    lv_obj_t* spool_container = UITest::find_by_name(slot, "spool_container");
+    REQUIRE(spool_container != nullptr);
+    REQUIRE(lv_obj_get_child_count(spool_container) >= 4); // outer/filament/hub + placeholder + error (+badges)
+    lv_obj_delete(slot);
+    // Restore default so sibling tests (which assume 3D) are not affected.
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: has material label", "[ui][ams_slot][structure]") {
