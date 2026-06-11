@@ -6,6 +6,8 @@
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 
+#include <lvgl.h> // lv_timer_t for the post-resume backstop handle
+
 #include <array>
 #include <memory>
 #include <string>
@@ -64,6 +66,10 @@ struct SnapmakerRfidInfo {
 class AmsBackendSnapmaker : public AmsSubscriptionBackend {
   public:
     AmsBackendSnapmaker(MoonrakerAPI* api, helix::MoonrakerClient* client);
+
+    // Tears down a pending post-resume backstop timer (UAF guard — the timer's
+    // ctx holds a pointer back into this backend).
+    ~AmsBackendSnapmaker() override;
 
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::SNAPMAKER;
@@ -225,13 +231,26 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // made (or only empty UIDs seen). All access under mutex_.
     std::unordered_map<int, std::string> last_rfid_uid_;
 
-    // Post-resume no-op backstop window. PROVISIONAL(prestonbrown/helixscreen#991):
-    // conservative fixed value; tune against observed U1 dirty-bed resume timing.
-    static constexpr uint32_t kResumeNoopBackstopMs = 15000;
+    // Post-resume no-op backstop tuning (#991). The backstop is a *repeating*
+    // sampling timer, not a single fixed window — a cold-nozzle resume can take
+    // 37s+ while M109 reheats, so a fixed 15s timeout false-fired the restart
+    // modal mid-reheat. We sample every tick and only declare a no-op once the
+    // nozzle is no longer heating (or we hit the max-wait ceiling).
+    static constexpr uint32_t kResumeBackstopTickMs = 3000;       // sample every 3s
+    static constexpr uint32_t kResumeBackstopMaxWaitMs = 150000;  // 150s give-up (cold reheat + moves)
+    static constexpr uint32_t kResumeBackstopSettleMs = 20000;    // min wait before declaring no-op
+    static constexpr int kResumeBackstopMinTargetC10 = 500;       // 50.0°C: ignore if no real target
+    static constexpr int kResumeBackstopTempMarginC10 = 50;       // 5.0°C below target == still heating
 
-    // Arm a single-shot timer that surfaces the restart modal if RESUME
-    // silently no-op'd (still paused + virtual_sdcard inactive after the
-    // window). Safety net for default-recoverable classification of an
-    // unrecognized terminal cause. No captured `this` (singletons only).
+    // Repeating, heating-aware timer that surfaces the restart modal only if
+    // RESUME silently no-op'd (still paused + virtual_sdcard inactive, nozzle
+    // not heating) after the settle floor — or after the max-wait ceiling.
+    // Safety net for default-recoverable classification of an unrecognized
+    // terminal cause. No captured `this` (ctx-with-self_slot pattern, [L051]).
     void arm_resume_noop_backstop();
+
+    // Live handle to the backstop timer (nullptr when not armed). Re-arming
+    // deletes any prior timer first (idempotency); the dtor tears it down so a
+    // pending timer can't outlive the backend.
+    lv_timer_t* resume_backstop_timer_ = nullptr;
 };

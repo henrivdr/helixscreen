@@ -731,6 +731,22 @@ class PrinterState {
         return print_domain_.get_print_message_subject();
     }
 
+    /// print_stats.exception id (Snapmaker U1 structured pause descriptor), -1
+    /// when no exception is latched. See PrinterPrintState getter docs (#991).
+    [[nodiscard]] int get_print_exception_id() const {
+        return print_domain_.get_print_exception_id();
+    }
+
+    /// print_stats.exception code, -1 when absent.
+    [[nodiscard]] int get_print_exception_code() const {
+        return print_domain_.get_print_exception_code();
+    }
+
+    /// print_stats.exception message — pause reason text (empty when no exception).
+    [[nodiscard]] const std::string& get_print_exception_message() const {
+        return print_domain_.get_print_exception_message();
+    }
+
     /**
      * @brief Check if currently in print start phase
      *

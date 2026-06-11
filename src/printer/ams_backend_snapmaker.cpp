@@ -283,35 +283,103 @@ bool AmsBackendSnapmaker::is_stuck_motion_sensor_runout(int slot_index) const {
     return !sensor_filament_present_[slot] && port_sensor_filament_present_[slot];
 }
 
+namespace {
+// Context for the repeating, heating-aware post-resume backstop timer. No
+// captured `this` ([L051]); self_slot points back at the backend's member so a
+// terminal verdict (or the dtor) can null it. api is the only backend pointer
+// needed (the modal/RPC target), and singletons are read directly.
+struct BackstopCtx {
+    MoonrakerAPI* api;
+    int elapsed_ms;
+    lv_timer_t** self_slot; // &resume_backstop_timer_; nulled on terminal verdict
+};
+} // namespace
+
 void AmsBackendSnapmaker::arm_resume_noop_backstop() {
     MoonrakerAPI* api_ptr = api_;
     if (!api_ptr) {
         return;
     }
-    struct BackstopCtx {
-        MoonrakerAPI* api;
-    };
-    auto* ctx = new BackstopCtx{api_ptr};
+
+    // Idempotency: tear down any timer from a prior arm before creating a new
+    // one (closes the #991 double-arm note). lv_timer_delete is safe here — we
+    // are on the main thread and the prior timer is not currently firing.
+    if (resume_backstop_timer_) {
+        auto* old = static_cast<BackstopCtx*>(lv_timer_get_user_data(resume_backstop_timer_));
+        lv_timer_delete(resume_backstop_timer_);
+        delete old;
+        resume_backstop_timer_ = nullptr;
+    }
+
+    auto* ctx = new BackstopCtx{api_ptr, 0, &resume_backstop_timer_};
     auto* t = lv_timer_create(
         [](lv_timer_t* timer) {
+            // C/C++ boundary (lv_timer_handler is C): an escaping exception would
+            // terminate the process. Work is non-throwing in practice; the
+            // terminal cleanup below still runs on every path that needs it.
             auto* c = static_cast<BackstopCtx*>(lv_timer_get_user_data(timer));
+            if (!c) {
+                lv_timer_delete(timer);
+                return;
+            }
+            c->elapsed_ms += static_cast<int>(kResumeBackstopTickMs);
+
             bool is_paused =
                 get_printer_state().get_print_job_state() == helix::PrintJobState::PAUSED;
             bool sd_active = get_printer_state().is_sdcard_active();
-            if (helix::snapmaker_resume_noop_detected(is_paused, sd_active)) {
+
+            // Active-extruder temp/target are centidegrees (°C×10). "Heating"
+            // means a real target is set and current is more than the margin
+            // below it — RESUME's M109 is still blocking.
+            int cur = lv_subject_get_int(get_printer_state().get_active_extruder_temp_subject());
+            int target =
+                lv_subject_get_int(get_printer_state().get_active_extruder_target_subject());
+            bool extruder_heating = target > kResumeBackstopMinTargetC10 &&
+                                    cur < target - kResumeBackstopTempMarginC10;
+
+            helix::ResumeBackstopVerdict verdict = helix::snapmaker_resume_backstop_verdict(
+                is_paused, sd_active, extruder_heating, c->elapsed_ms,
+                static_cast<int>(kResumeBackstopMaxWaitMs),
+                static_cast<int>(kResumeBackstopSettleMs));
+
+            if (verdict == helix::ResumeBackstopVerdict::KeepWaiting) {
+                return; // timer repeats; sample again next tick
+            }
+
+            if (verdict == helix::ResumeBackstopVerdict::NoOpRestart) {
                 std::string filename =
                     lv_subject_get_string(get_printer_state().get_print_filename_subject());
-                spdlog::warn("[AMS Snapmaker] post-resume backstop: RESUME no-op "
-                             "(still paused, SD inactive) — surfacing restart modal");
-                helix::ui::show_restart_required_modal(c ? c->api : nullptr, filename,
-                                                       "[Snapmaker backstop]", [] {});
-            } else {
-                spdlog::debug("[AMS Snapmaker] post-resume backstop: resume confirmed OK");
+                spdlog::warn("[AMS Snapmaker] post-resume backstop: RESUME no-op after {}ms "
+                             "(paused, SD inactive, not heating) — surfacing restart modal",
+                             c->elapsed_ms);
+                helix::ui::show_restart_required_modal(c->api, filename, "[Snapmaker backstop]",
+                                                       [] {});
+            } else { // ResumedOk
+                spdlog::debug("[AMS Snapmaker] post-resume backstop: resume confirmed OK after {}ms",
+                              c->elapsed_ms);
             }
+
+            // Terminal cleanup: detach from the backend and delete self.
+            if (c->self_slot) {
+                *c->self_slot = nullptr;
+            }
+            lv_timer_delete(timer);
             delete c;
         },
-        /*period_ms=*/kResumeNoopBackstopMs, ctx);
-    lv_timer_set_repeat_count(t, 1);
+        /*period_ms=*/kResumeBackstopTickMs, ctx);
+    lv_timer_set_repeat_count(t, -1); // repeating; deleted explicitly on terminal verdict
+    resume_backstop_timer_ = t;
+}
+
+AmsBackendSnapmaker::~AmsBackendSnapmaker() {
+    // Tear down a pending backstop timer so it can't outlive the backend (UAF
+    // guard — the ctx's self_slot points at our member).
+    if (resume_backstop_timer_) {
+        auto* c = static_cast<BackstopCtx*>(lv_timer_get_user_data(resume_backstop_timer_));
+        lv_timer_delete(resume_backstop_timer_);
+        delete c;
+        resume_backstop_timer_ = nullptr;
+    }
 }
 
 void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback on_ready) {
@@ -351,8 +419,14 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     // (default-recoverable), with the post-resume backstop catching any
     // unrecognized terminal cause. Replaces the old blunt virtual_sdcard gate.
     helix::PauseSignals sig;
-    sig.message = lv_subject_get_string(get_printer_state().get_print_message_subject());
-    sig.exception_id = -1; // PROVISIONAL(#991): no print_stats.exception getter yet
+    sig.exception_id = get_printer_state().get_print_exception_id();
+    // On these firmware pauses print_stats.message is empty — the reason text
+    // lives in exception.message. Fall back to print_stats.message when the
+    // exception carries no text (e.g. non-Snapmaker pause paths).
+    sig.message = get_printer_state().get_print_exception_message();
+    if (sig.message.empty()) {
+        sig.message = lv_subject_get_string(get_printer_state().get_print_message_subject());
+    }
     sig.sdcard_active = get_printer_state().is_sdcard_active();
     sig.runout_tripped = !sensor_present;
     if (helix::classify_pause(sig, helix::snapmaker_terminal_matchers()) ==

@@ -245,6 +245,24 @@ class PrinterPrintState {
         return &print_message_;
     }
 
+    /// print_stats.exception (Snapmaker U1 structured pause descriptor) id, or
+    /// -1 when no exception is latched. Hardware-verified ids: 523 = recoverable
+    /// runout, 532 = terminal dirty-bed (#991). Main-thread only.
+    [[nodiscard]] int get_print_exception_id() const {
+        return print_exception_id_;
+    }
+
+    /// print_stats.exception code, or -1 when absent. (Runout = 0, dirty-bed = 1.)
+    [[nodiscard]] int get_print_exception_code() const {
+        return print_exception_code_;
+    }
+
+    /// print_stats.exception message — the human-readable pause reason. On these
+    /// firmware pauses print_stats.message is EMPTY and the text lives here.
+    [[nodiscard]] const std::string& get_print_exception_message() const {
+        return print_exception_message_;
+    }
+
     // ========================================================================
     // Setters
     // ========================================================================
@@ -526,6 +544,15 @@ class PrinterPrintState {
     // print_stats.message from Klipper (set by firmware on pause/error to describe reason)
     lv_subject_t print_message_{};    // String: e.g. "Filament Sensor: Runout Detected"
     char print_message_buf_[256]{};   // Buffer for print_stats.message storage
+
+    // print_stats.exception — structured pause descriptor {id,index,code,message,
+    // level} sent by Snapmaker U1 firmware. On these pauses print_stats.message
+    // is empty and the reason text lives in exception.message. Plain members
+    // (not subjects): no XML binding, read on the main thread by the resume
+    // classifier. Default -1/"" means "no exception latched". (#991)
+    int print_exception_id_ = -1;
+    int print_exception_code_ = -1;
+    std::string print_exception_message_;
 
     // String buffers for subject storage
     char print_filename_buf_[256]{};
