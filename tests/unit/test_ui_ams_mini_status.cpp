@@ -10,6 +10,7 @@
 #include "ams_state.h"
 #include "config.h"
 #include "panel_widget_registry.h"
+#include "theme_manager.h"
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
@@ -160,6 +161,61 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: sync_from_ams_state fe
     REQUIRE(std::string(lv_label_get_text(pct0)) == "60%");
     REQUIRE(std::string(lv_label_get_text(mat1)) == "ABS");
     REQUIRE(std::string(lv_label_get_text(pct1)) == "25%");
+
+    lv_obj_delete(w);
+    mock_ptr->stop();
+    ams.clear_backends();
+    ams.deinit_subjects();
+}
+
+// The loaded (active) lane's badge must use the "success" accent color; non-active
+// lanes keep the neutral "ams_badge_bg". Drives the canonical AmsState path: the mock
+// starts with slot 0 loaded (current_slot=0), sync_from_backend() propagates that to
+// the current_slot subject, and rebuild_spools() colors the active badge.
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: active lane badge uses success color",
+                 "[ui][ams_mini][spool]") {
+    using namespace helix;
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    auto mock = std::make_unique<AmsBackendMock>(2);
+    auto* mock_ptr = mock.get();
+    ams.set_backend(std::move(mock));
+    mock_ptr->start();
+
+    // Mock initializes slot 0 LOADED with current_slot=0 -> lane 0 is the active lane.
+    SlotInfo s0 = mock_ptr->get_slot_info(0);
+    s0.material = "PETG";
+    s0.total_weight_g = 1000.0f;
+    s0.remaining_weight_g = 600.0f;
+    mock_ptr->set_slot_info(0, s0);
+
+    SlotInfo s1 = mock_ptr->get_slot_info(1);
+    s1.status = SlotStatus::AVAILABLE;
+    s1.material = "ABS";
+    s1.total_weight_g = 1000.0f;
+    s1.remaining_weight_g = 250.0f;
+    mock_ptr->set_slot_info(1, s1);
+
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    ui_ams_mini_status_set_width(w, 260, 2); // spool mode
+    helix::ui::UpdateQueue::instance().drain();
+
+    ams.sync_from_backend();
+    helix::ui::UpdateQueue::instance().drain();
+
+    REQUIRE(lv_subject_get_int(ams.get_current_slot_subject()) == 0);
+
+    lv_obj_t* b0 = UITest::find_by_name(w, "spool_badge_0");
+    lv_obj_t* b1 = UITest::find_by_name(w, "spool_badge_1");
+    REQUIRE(b0 != nullptr);
+    REQUIRE(b1 != nullptr);
+
+    lv_color_t success = theme_manager_get_color("success");
+    lv_color_t neutral = theme_manager_get_color("ams_badge_bg");
+    REQUIRE(lv_color_eq(lv_obj_get_style_bg_color(b0, LV_PART_MAIN), success)); // active lane
+    REQUIRE(lv_color_eq(lv_obj_get_style_bg_color(b1, LV_PART_MAIN), neutral)); // non-active lane
 
     lv_obj_delete(w);
     mock_ptr->stop();

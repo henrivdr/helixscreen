@@ -811,13 +811,15 @@ void spool_visual_set_error(const SpoolVisual& sv, bool has_error) {
     }
 }
 
-lv_obj_t* create_lane_badge(lv_obj_t* parent, int lane_number, int32_t size) {
+lv_obj_t* create_lane_badge(lv_obj_t* parent, int lane_number, int32_t size, bool active) {
     if (!parent)
         return nullptr;
     lv_obj_t* badge = lv_obj_create(parent);
     lv_obj_set_size(badge, size, size);
     lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(badge, theme_manager_get_color("ams_badge_bg"), LV_PART_MAIN);
+    lv_color_t bg = active ? theme_manager_get_color("success")
+                           : theme_manager_get_color("ams_badge_bg");
+    lv_obj_set_style_bg_color(badge, bg, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(badge, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(badge, theme_manager_get_color("card_bg"), LV_PART_MAIN);

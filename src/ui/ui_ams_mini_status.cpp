@@ -64,12 +64,13 @@ struct SpoolCellData {
     int remaining_pct = -1;  // actual % remaining; -1 = unknown (blank label)
     std::string material;    // "" => render "--"
     bool present = false;
-    int lane_number = 1; // 1-based, for the badge
+    int lane_number = 1;  // 1-based, for the badge
+    bool active = false;  // currently-loaded lane (success-colored badge)
 
     bool operator==(const SpoolCellData& o) const {
         return color_rgb == o.color_rgb && fill_level == o.fill_level &&
                remaining_pct == o.remaining_pct && material == o.material &&
-               present == o.present && lane_number == o.lane_number;
+               present == o.present && lane_number == o.lane_number && active == o.active;
     }
 };
 
@@ -618,7 +619,12 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         ams_draw::spool_visual_set_color(sv, lv_color_hex(cd.color_rgb));
         ams_draw::spool_visual_set_fill(sv, cd.fill_level);
         ams_draw::spool_visual_set_empty(sv, !cd.present);
-        ams_draw::create_lane_badge(wrap, cd.lane_number, spool_size * 2 / 5);
+        lv_obj_t* badge = ams_draw::create_lane_badge(wrap, cd.lane_number, spool_size * 2 / 5,
+                                                      cd.active);
+        if (badge) {
+            snprintf(nm, sizeof(nm), "spool_badge_%d", i);
+            lv_obj_set_name(badge, nm);
+        }
 
         // Text column (vertically centered), material over percent.
         lv_obj_t* col = lv_obj_create(cell);
@@ -1030,6 +1036,7 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
         c.material = slot.material;
         c.present = slot.is_present();
         c.lane_number = i + 1;
+        c.active = (i == current);
     }
 
     rebuild(data);
