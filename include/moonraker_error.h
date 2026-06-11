@@ -133,6 +133,19 @@ struct MoonrakerError {
                 return raw.substr(start, end - start);
             }
         }
+        // Creality/Klipper key-error envelope uses "msg" instead of "message":
+        //   {"code":"keyNNN","msg":"...","values":[...]}
+        // Checked last so an explicit "message" is preferred when both exist.
+        for (const char* msg_key : {"\"msg\": \"", "\"msg\":\""}) {
+            pos = raw.find(msg_key);
+            if (pos != std::string::npos) {
+                auto start = pos + std::char_traits<char>::length(msg_key);
+                auto end = raw.find('"', start);
+                if (end != std::string::npos && end > start) {
+                    return raw.substr(start, end - start);
+                }
+            }
+        }
         return raw;
     }
 

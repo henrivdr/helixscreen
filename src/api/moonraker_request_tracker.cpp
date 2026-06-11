@@ -196,10 +196,17 @@ bool MoonrakerRequestTracker::route_response(
         // Check if error toasts should be suppressed (e.g., during shutdown)
         bool suppress_toast = suppress_error_toast && suppress_error_toast();
 
-        if (!is_silent && !suppress_toast) {
+        // A caller that supplies its own error_cb is handling the error UI
+        // itself — exactly like a silent request. Emitting the generic
+        // "Printer command failed" toast on top would double-report a single
+        // Klipper rejection (the K2 chamber key69 produced three stacked
+        // toasts). Only surface the generic fallback when nobody else will.
+        bool caller_handles_ui = is_silent || (error_cb != nullptr);
+
+        if (!caller_handles_ui && !suppress_toast) {
             spdlog::error("[Request Tracker] Request {} failed: {}", method_name, error.message);
 
-            // Emit RPC error event (only for non-silent requests)
+            // Emit RPC error event only when no caller will surface it
             emit_event(MoonrakerEventType::RPC_ERROR,
                        fmt::format("Printer command '{}' failed: {}", method_name, error.message),
                        true, method_name);
@@ -207,13 +214,13 @@ bool MoonrakerRequestTracker::route_response(
             spdlog::debug("[Request Tracker] Request {} failed during shutdown (suppressed): {}",
                           method_name, error.message);
         } else {
-            spdlog::debug("[Request Tracker] Silent request {} failed: {}", method_name,
+            spdlog::debug("[Request Tracker] Request {} failed; caller handles UI: {}", method_name,
                           error.message);
-            // Silent caller has an error_cb that will surface this to the user
-            // itself. Record the exact Klipper-supplied error so the
-            // GcodeError `!!` broadcast for the same root cause (which arrives
-            // through a different transport channel) can suppress its
-            // independent toast — see include/rpc_error_correlation.h.
+            // Caller (silent or with its own error_cb) will surface this. Record
+            // the exact Klipper-supplied error so the GcodeError `!!` broadcast
+            // for the same root cause (which arrives through a different
+            // transport channel) can suppress its independent toast —
+            // see include/rpc_error_correlation.h.
             if (error_cb) {
                 helix::rpc_error_correlation::record_caller_handled(error.message);
             }
