@@ -584,6 +584,26 @@ void TempGraphOverlay::configure_control_strip() {
         preset_data_[i] = {this, preset_values[i]};
     }
 
+    // Chamber: clamp the overlay's own presets to the configured max_temp so a
+    // preset above the ceiling (e.g. 60°C on a 50°C chamber) is hidden — the
+    // overlay has its own preset grid separate from the chamber panel's.
+    if (mode_ == Mode::Chamber) {
+        temp_control_panel_->ensure_chamber_limits();
+        static const char* kChamberPresetNames[MAX_PRESETS] = {
+            "chamber_preset_off", "chamber_preset_1", "chamber_preset_2", "chamber_preset_3"};
+        for (int i = 0; i < MAX_PRESETS; ++i) {
+            lv_obj_t* btn = lv_obj_find_by_name(active_strip, kChamberPresetNames[i]);
+            if (!btn) {
+                continue;
+            }
+            if (helix::heater_preset_visible(preset_values[i], heater.max_temp)) {
+                lv_obj_remove_flag(btn, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+
     // Extruder selector: show only in nozzle mode with multiple extruders
     if (extruder_selector_row_) {
         auto& temp_state = printer_state_->temperature_state();
@@ -643,9 +663,9 @@ void TempGraphOverlay::on_temp_graph_preset_clicked(lv_event_t* e) {
 
     // Send the temperature command
     if (self->api_) {
-        auto& heater = self->temp_control_panel_->heater(type);
-        const std::string& klipper_name =
-            (type == helix::HeaterType::Nozzle) ? self->active_extruder_name_ : heater.klipper_name;
+        // Resolve the name centrally so the chamber never sends a stale
+        // HEATER=chamber (shared with TemperatureService::send_temperature).
+        const std::string& klipper_name = self->temp_control_panel_->resolved_klipper_name(type);
         self->api_->set_temperature(
             klipper_name, static_cast<double>(data.preset_value), []() {},
             [](const MoonrakerError& error) {
@@ -664,6 +684,11 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
     if (!mode_to_heater_type(overlay.mode_, type))
         return;
 
+    // Make sure the chamber's configured ceiling has been fetched so the keypad
+    // caps at the real max_temp (shared clamp with the chamber panel).
+    if (type == helix::HeaterType::Chamber) {
+        overlay.temp_control_panel_->ensure_chamber_limits();
+    }
     auto& heater = overlay.temp_control_panel_->heater(type);
 
     // Store context for keypad callback (static because keypad outlives this scope).
@@ -678,7 +703,8 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
     ui_keypad_config_t keypad_config = {
         .initial_value = static_cast<float>(heater.target / 10),
         .min_value = heater.config.keypad_range.min,
-        .max_value = heater.config.keypad_range.max,
+        .max_value =
+            helix::heater_effective_max_deg(heater.config.keypad_range.max, heater.max_temp),
         .title_label = heater.config.title,
         .unit_label = "°C",
         .allow_decimal = false,
@@ -700,10 +726,8 @@ void TempGraphOverlay::keypad_value_cb(float value, void* user_data) {
         return;
 
     int temp = static_cast<int>(value);
-    auto& heater = ctx->overlay->temp_control_panel_->heater(ctx->type);
-    const std::string& klipper_name = (ctx->type == helix::HeaterType::Nozzle)
-                                          ? ctx->overlay->active_extruder_name_
-                                          : heater.klipper_name;
+    const std::string& klipper_name =
+        ctx->overlay->temp_control_panel_->resolved_klipper_name(ctx->type);
 
     spdlog::debug("[TempGraphOverlay] Custom temperature: {}°C for {}", temp, klipper_name);
 

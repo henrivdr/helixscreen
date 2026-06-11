@@ -29,6 +29,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstring>
 #include <ctime>
@@ -325,9 +326,9 @@ void TemperatureService::send_temperature(HeaterType type, int target) {
     auto& h = heaters_[idx(type)];
     const char* label = heater_label(type);
 
-    // For nozzle, use the active extruder name (multi-extruder support)
-    const std::string& klipper_name =
-        (type == HeaterType::Nozzle) ? active_extruder_name_ : h.klipper_name;
+    // Always resolve the target name fresh — chamber's cached name can be a
+    // stale default if discovery lost the panel-setup race (#HEATER=chamber).
+    const std::string& klipper_name = resolved_klipper_name(type);
 
     spdlog::debug("[TempPanel] Sending {} temperature: {}°C to {}", label, target, klipper_name);
 
@@ -343,6 +344,121 @@ void TemperatureService::send_temperature(HeaterType type, int target) {
         },
         [label](const MoonrakerError& error) {
             NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), label, error.user_message());
+        });
+}
+
+// ============================================================================
+// Configured max_temp clamping (chamber)
+// ============================================================================
+
+void TemperatureService::apply_preset_limits(HeaterType type) {
+    auto& h = heaters_[idx(type)];
+    if (!h.panel) {
+        return;
+    }
+    lv_obj_t* overlay_content = lv_obj_find_by_name(h.panel, "overlay_content");
+    if (!overlay_content) {
+        return;
+    }
+
+    const char* preset_names[] = {"preset_off", "preset_pla", "preset_petg", "preset_abs"};
+    const int preset_values[] = {h.config.presets.off, h.config.presets.pla, h.config.presets.petg,
+                                 h.config.presets.abs};
+
+    for (int i = 0; i < PRESETS_PER_HEATER; ++i) {
+        lv_obj_t* btn = lv_obj_find_by_name(overlay_content, preset_names[i]);
+        if (!btn) {
+            continue;
+        }
+        // Set-or-clear so this is correct on reconnect to a printer with a
+        // different ceiling, not just one-directional hiding.
+        if (helix::heater_preset_visible(preset_values[i], h.max_temp)) {
+            lv_obj_clear_flag(btn, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
+            spdlog::debug("[TempPanel] {} preset {}°C hidden (> max {}°C)", heater_label(type),
+                          preset_values[i], h.max_temp);
+        }
+    }
+}
+
+void TemperatureService::refresh_chamber_klipper_name() {
+    auto& h = heaters_[idx(HeaterType::Chamber)];
+    const auto& resolved = printer_state_.temperature_state().chamber_heater_name();
+    if (!resolved.empty() && h.klipper_name != resolved) {
+        spdlog::debug("[TempPanel] Chamber klipper_name refresh: '{}' -> '{}'", h.klipper_name,
+                      resolved);
+        h.klipper_name = resolved;
+    }
+}
+
+const std::string& TemperatureService::resolved_klipper_name(HeaterType type) {
+    if (type == HeaterType::Nozzle) {
+        return active_extruder_name_;
+    }
+    if (type == HeaterType::Chamber) {
+        refresh_chamber_klipper_name();
+    }
+    return heaters_[idx(type)].klipper_name;
+}
+
+void TemperatureService::ensure_chamber_limits() {
+    auto& h = heaters_[idx(HeaterType::Chamber)];
+    if (h.read_only) {
+        return;
+    }
+    if (h.max_temp <= 0) {
+        query_chamber_max_temp(); // refreshes name + fetches configured ceiling
+    }
+}
+
+void TemperatureService::query_chamber_max_temp() {
+    refresh_chamber_klipper_name();
+    auto& h = heaters_[idx(HeaterType::Chamber)];
+    if (!api_ || h.read_only || h.klipper_name.empty()) {
+        return;
+    }
+
+    // configfile.config section headers are lower-cased by Moonraker; the
+    // discovered Klipper object name already is, but lower-case defensively.
+    std::string section = h.klipper_name;
+    std::transform(section.begin(), section.end(), section.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    auto tok = lifetime_.token();
+    api_->query_configfile(
+        [this, tok, section](const nlohmann::json& config) {
+            // Background (WS) thread: parse only, build a local value — no `this`.
+            int max_deg = 0;
+            if (config.contains(section)) {
+                const auto& sec = config[section];
+                if (sec.contains("max_temp")) {
+                    const auto& mt = sec["max_temp"];
+                    try {
+                        if (mt.is_string()) {
+                            max_deg = static_cast<int>(std::stof(mt.get<std::string>()));
+                        } else if (mt.is_number()) {
+                            max_deg = static_cast<int>(mt.get<double>());
+                        }
+                    } catch (const std::exception&) {
+                        max_deg = 0;
+                    }
+                }
+            }
+            if (max_deg <= 0) {
+                return; // no usable ceiling — keep the panel default
+            }
+            // Main thread: mutate state + refresh widgets.
+            tok.defer("TemperatureService::apply_chamber_max", [this, max_deg]() {
+                auto& hh = heaters_[idx(HeaterType::Chamber)];
+                hh.max_temp = max_deg; // degrees
+                spdlog::info("[TempPanel] Chamber max_temp from config: {}°C", max_deg);
+                apply_preset_limits(HeaterType::Chamber);
+            });
+        },
+        [](const MoonrakerError& err) {
+            spdlog::debug("[TempPanel] chamber max_temp configfile query failed: {}",
+                          err.user_message());
         });
 }
 
@@ -453,6 +569,17 @@ void TemperatureService::on_panel_activate(HeaterType type) {
 
     update_display(type);
     update_status(type);
+
+    // Keep the chamber name + limits current: setup_panel may have run before
+    // discovery resolved the chamber heater, leaving a stale name and no
+    // max_temp. Re-sync on activate and re-query the ceiling if still unknown.
+    if (type == HeaterType::Chamber && !h.read_only) {
+        refresh_chamber_klipper_name();
+        if (h.max_temp <= 0) {
+            query_chamber_max_temp();
+        }
+        apply_preset_limits(type);
+    }
 
     if (h.graph) {
         replay_history_to_graph(type);
@@ -614,6 +741,14 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
                 lv_obj_add_flag(action_button, LV_OBJ_FLAG_HIDDEN);
             }
         }
+    }
+
+    // Chamber: clamp keypad range + presets to the heater's Klipper-configured
+    // max_temp (e.g. a 60°C chamber must not offer 80°C). apply with whatever is
+    // known now, then refresh asynchronously from the configfile.
+    if (type == HeaterType::Chamber && !h.read_only) {
+        apply_preset_limits(type);
+        query_chamber_max_temp();
     }
 
     // Load theme-aware graph color
@@ -836,7 +971,8 @@ void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
 
     ui_keypad_config_t keypad_config = {.initial_value = static_cast<float>(h.target / 10),
                                         .min_value = h.config.keypad_range.min,
-                                        .max_value = h.config.keypad_range.max,
+                                        .max_value = helix::heater_effective_max_deg(
+                                            h.config.keypad_range.max, h.max_temp),
                                         .title_label = h.config.title,
                                         .unit_label = "°C",
                                         .allow_decimal = false,
