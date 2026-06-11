@@ -1146,15 +1146,18 @@ void AmsOverviewPanel::show_detail_context_menu(int slot_index, lv_obj_t* near_w
             break;
 
         case helix::ui::AmsContextMenu::MenuAction::UNLOAD:
-            if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
-                return;
-            }
-            {
+            // Route through the sidebar so start_operation(UNLOAD) builds the
+            // correct stepper (mirrors how LOAD routes via handle_load_with_preheat).
+            if (sidebar_) {
+                sidebar_->handle_unload(slot);
+            } else if (backend) {
                 AmsError error = backend->unload_filament(slot);
                 if (error.result != AmsResult::SUCCESS) {
                     NOTIFY_ERROR(lv_tr("Unload failed: {}"), error.user_msg);
                 }
+            } else {
+                NOTIFY_WARNING(lv_tr("AMS not available"));
+                return;
             }
             break;
 

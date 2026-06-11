@@ -705,7 +705,14 @@ void AmsOperationSidebar::refresh_heat_step_display() {
 // ============================================================================
 
 void AmsOperationSidebar::handle_unload() {
-    spdlog::info("[AmsSidebar] Unload requested");
+    // Active-slot unload (sidebar Unload button). Delegate to the slot overload
+    // with slot_index = -1 so the stepper-build + backend-call path lives in one
+    // place. IFS select_unload_command coerces -1 to the toolhead macro.
+    handle_unload(-1);
+}
+
+void AmsOperationSidebar::handle_unload(int slot_index) {
+    spdlog::info("[AmsSidebar] Unload requested (slot={})", slot_index);
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
@@ -713,12 +720,15 @@ void AmsOperationSidebar::handle_unload() {
         return;
     }
 
+    // Build the UNLOAD stepper first (HEATING + correct step list). Use the
+    // explicit slot when supplied, otherwise the firmware's active slot.
     AmsSystemInfo info = backend->get_system_info();
-    if (info.current_slot >= 0) {
-        start_operation(StepOperationType::UNLOAD, info.current_slot);
+    int target_slot = (slot_index >= 0) ? slot_index : info.current_slot;
+    if (target_slot >= 0) {
+        start_operation(StepOperationType::UNLOAD, target_slot);
     }
 
-    AmsError error = backend->unload_filament();
+    AmsError error = backend->unload_filament(slot_index);
     if (error.result != AmsResult::SUCCESS) {
         NOTIFY_ERROR(lv_tr("Unload failed: {}"), error.user_msg);
     }

@@ -83,6 +83,16 @@ class AmsOperationSidebar {
     void handle_load_with_preheat(int slot_index);
 
     /**
+     * @brief Handle unload of a specific slot from the context menu.
+     *
+     * Routes through start_operation(UNLOAD) so the vertical step widget is
+     * built correctly (mirrors how handle_load_with_preheat routes LOAD).
+     * Without this the context-menu UNLOAD path called the backend directly,
+     * leaving auto-detect to mis-build the stepper as LOAD_SWAP.
+     */
+    void handle_unload(int slot_index);
+
+    /**
      * @brief Update the loaded card swatch color and info
      */
     void update_current_loaded_display();

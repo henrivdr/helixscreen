@@ -361,6 +361,49 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     void detect_local_adventurer_json_path();
     void detect_load_unload_completion(bool head_detected);
 
+    // === Live load/unload progress phase tracker ===
+    //
+    // Between the moment WE start a load/unload (load_filament / unload_filament)
+    // and the moment the operation finalizes (head transition completes, or the
+    // action-timeout backstop fires), this tracker synthesizes the firmware's
+    // internal phases from primary signals (extruder temp/target + head sensor)
+    // and a secondary, corroborating parse of RESPOND lines. It overwrites
+    // system_info_.action so the UI's existing step mapping advances correctly,
+    // and sets a dynamic system_info_.operation_detail string.
+    //
+    // Sequences:
+    //   Unload: HEATING → (temp ≥ target) CUTTING → (head drop) UNLOADING → IDLE
+    //   Load:   HEATING → (temp ≥ target) LOADING → (head rise)  PURGING   → IDLE
+    //
+    // active gates the new behavior: when INACTIVE (legacy/external/firmware-
+    // initiated action changes), detect_load_unload_completion preserves the
+    // historical snap-to-IDLE on a head transition.
+    struct IfsPhaseTracker {
+        bool active = false;        // true between begin and finalize
+        bool is_unload = false;     // unload vs load direction
+        bool reached_target_once = false; // current temp ever within ~0.5°C of target
+        bool seen_head_drop = false;      // head sensor true→false (cut/retract started)
+        bool seen_head_rise = false;      // head sensor false→true (filament reached nozzle)
+        int target_deci = 0;              // heat target in deci-degrees (×10), 0 = unknown
+    };
+    IfsPhaseTracker phase_tracker_;
+    int last_extruder_temp_deci_ = 0;   // deci-degrees (×10)
+    int last_extruder_target_deci_ = 0; // deci-degrees (×10)
+
+    // Capture op-start state + set active. Caller must hold mutex_.
+    void begin_phase_tracking_locked(bool is_unload);
+    // Reset tracker (clears active). Caller must hold mutex_.
+    void end_phase_tracking_locked();
+    // Drive the phase machine on an extruder temp/target frame. Caller holds mutex_.
+    void on_extruder_temp_locked(int temp_deci, int target_deci);
+    // Drive the phase machine on a head-sensor transition. Caller holds mutex_.
+    void on_head_transition_locked(bool detected);
+    // Recompute system_info_.action + operation_detail from tracker state.
+    // Caller must hold mutex_.
+    void apply_phase_action_locked();
+    // Set system_info_.operation_detail. Caller must hold mutex_.
+    void set_operation_detail_locked(std::string detail);
+
     int find_first_tool_for_port(int port_1based) const;
 
   public:
@@ -459,8 +502,15 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     std::atomic<bool> json_poll_supported_{true};
     std::string last_json_content_; // protected by mutex_
 
-    // Action timeout tracking
+    // Action timeout tracking. action_start_time_ is reset on every phase
+    // transition (apply_phase_action_locked) so each phase gets its own window.
+    // HEATING needs a longer budget: a real AD5X cold-start unload heats
+    // ~26°C→230°C in ~158s (longer for high-temp materials approaching 300°C),
+    // which far exceeds the 90s general timeout. 300s is a UI backstop only —
+    // Klipper's own verify_heater aborts a genuinely stuck heater within ~1-2
+    // min and the macro errors out, so this never gates real functionality.
     static constexpr int ACTION_TIMEOUT_SECONDS = 90;
+    static constexpr int HEATING_TIMEOUT_SECONDS = 300;
     std::chrono::steady_clock::time_point action_start_time_;
 
     // Rate-limit gate for the JSON-content poll. handle_status_update kicks

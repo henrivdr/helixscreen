@@ -105,6 +105,10 @@ void AmsBackendAd5xIfs::on_started() {
                    {"filament_switch_sensor head_switch_sensor", nullptr},
                    // Native ZMOD IFS: single motion sensor (replaces per-port sensors)
                    {"filament_motion_sensor ifs_motion_sensor", nullptr},
+                   // Extruder temp/target — primary signal for the load/unload
+                   // phase tracker (HEATING completion). Without this the IFS
+                   // unload silently heats for ~2.5 min with no feedback.
+                   {"extruder", json::array({"target", "temperature"})},
                    // Klippy state — GET_ZCOLOR SILENT=1 only works once zmod is
                    // initialised, so we gate the initial query on webhooks.state == "ready".
                    {"webhooks", nullptr}}}},
@@ -296,7 +300,14 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         const auto& motion = (*status)["filament_motion_sensor ifs_motion_sensor"];
         if (motion.contains("filament_detected") && motion["filament_detected"].is_boolean()) {
             bool detected = motion["filament_detected"].get<bool>();
+            bool was = head_filament_;
             parse_head_sensor(detected);
+            // Phase tracker (active op WE started) advances the phase on a head
+            // transition. detect_load_unload_completion preserves legacy
+            // snap-to-IDLE when the tracker is inactive.
+            if (phase_tracker_.active && was != detected) {
+                on_head_transition_locked(detected);
+            }
             detect_load_unload_completion(detected);
             state_changed = true;
         }
@@ -307,9 +318,35 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         const auto& head = (*status)["filament_switch_sensor head_switch_sensor"];
         if (head.contains("filament_detected") && head["filament_detected"].is_boolean()) {
             bool detected = head["filament_detected"].get<bool>();
+            bool was = head_filament_;
             parse_head_sensor(detected);
+            if (phase_tracker_.active && was != detected) {
+                on_head_transition_locked(detected);
+            }
             detect_load_unload_completion(detected);
             state_changed = true;
+        }
+    }
+
+    // Parse extruder temp/target — primary HEATING-completion signal for the
+    // load/unload phase tracker. High-frequency, so only mark state_changed
+    // when the synthesized action actually moves (mirrors CFS).
+    if (status->contains("extruder")) {
+        const auto& extr = (*status)["extruder"];
+        if (extr.contains("target") && extr["target"].is_number()) {
+            last_extruder_target_deci_ = static_cast<int>(extr["target"].get<double>() * 10);
+        }
+        if (extr.contains("temperature") && extr["temperature"].is_number()) {
+            last_extruder_temp_deci_ = static_cast<int>(extr["temperature"].get<double>() * 10);
+        }
+        if (phase_tracker_.active) {
+            AmsAction before = system_info_.action;
+            std::string detail_before = system_info_.operation_detail;
+            on_extruder_temp_locked(last_extruder_temp_deci_, last_extruder_target_deci_);
+            if (system_info_.action != before ||
+                system_info_.operation_detail != detail_before) {
+                state_changed = true;
+            }
         }
     }
 
@@ -975,8 +1012,10 @@ AmsError AmsBackendAd5xIfs::load_filament(int slot_index) {
     int port = slot_index + 1;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        system_info_.action = AmsAction::LOADING;
+        system_info_.action = AmsAction::HEATING;
         action_start_time_ = std::chrono::steady_clock::now();
+        begin_phase_tracking_locked(/*is_unload=*/false);
+        apply_phase_action_locked();
     }
     spdlog::info("{} Loading filament from port {}", backend_log_tag(), port);
     return ensure_homed_then("INSERT_PRUTOK_IFS PRUTOK=" + std::to_string(port));
@@ -989,8 +1028,10 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        system_info_.action = AmsAction::UNLOADING;
+        system_info_.action = AmsAction::HEATING;
         action_start_time_ = std::chrono::steady_clock::now();
+        begin_phase_tracking_locked(/*is_unload=*/true);
+        apply_phase_action_locked();
     }
 
     int current_slot;
@@ -2077,6 +2118,38 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
         return true;
     }
 
+    // Phase-tracker corroboration (SECONDARY — never load-bearing). The
+    // firmware emits exact phase markers we parse for the heat target and the
+    // op direction *early*, before the extruder/sensor signals confirm them.
+    // The temp+sensor path alone drives the full sequence; these strings only
+    // refine the target number and disambiguate direction. English wording
+    // varies across forks, so a miss is harmless.
+    //
+    // NOTE: register_zcolor_listener()'s bg-side pre-filter must admit these
+    // tokens too (keep in sync — see the comment block there).
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (phase_tracker_.active) {
+            static const std::regex heat_re(R"(Heating the nozzle to\s+(\d+))");
+            std::smatch m;
+            if (std::regex_search(line, m, heat_re)) {
+                int degrees = std::atoi(m[1].str().c_str());
+                if (degrees > 0) {
+                    phase_tracker_.target_deci = degrees * 10;
+                    spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(),
+                                  degrees);
+                    apply_phase_action_locked();
+                }
+            } else if (line.find("Unloading filament") != std::string::npos) {
+                phase_tracker_.is_unload = true;
+                apply_phase_action_locked();
+            } else if (line.find("Loading filament") != std::string::npos) {
+                phase_tracker_.is_unload = false;
+                apply_phase_action_locked();
+            }
+        }
+    }
+
     // NOTE: register_zcolor_listener() has a bg-side pre-filter that drops
     // every line not containing one of these tokens (and not buffering for
     // an active query). If you add a new trigger here, update that filter
@@ -2165,7 +2238,15 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             // and Kalico's response framing.
             const bool is_unknown_ifs_vars =
                 (line.find("Unknown command:\"_IFS_VARS\"") != std::string::npos);
-            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars) {
+            // Phase-tracker corroboration tokens (target temp + op direction).
+            // String .find() on the LOCAL line only — no member access on the
+            // bg thread (L081/L072 safe). Must mirror the parse triggers in
+            // on_gcode_response_line.
+            const bool is_phase_token =
+                (line.find("Heating the nozzle to") != std::string::npos ||
+                 line.find("Unloading filament") != std::string::npos ||
+                 line.find("Loading filament") != std::string::npos);
+            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token) {
                 return;
             }
 
@@ -2725,7 +2806,155 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
     }
 }
 
+// === Live load/unload progress phase tracker ===
+
+void AmsBackendAd5xIfs::begin_phase_tracking_locked(bool is_unload) {
+    phase_tracker_ = IfsPhaseTracker{};
+    phase_tracker_.active = true;
+    phase_tracker_.is_unload = is_unload;
+    // Seed the heat target from the last-known extruder target if we have one;
+    // a RESPOND "Heating the nozzle to N degrees" line or an extruder frame can
+    // refine it. Fall back to the IFS firmware default (230°C) so the very
+    // first detail string has a sensible number before any signal arrives.
+    if (last_extruder_target_deci_ > 0) {
+        phase_tracker_.target_deci = last_extruder_target_deci_;
+    } else {
+        phase_tracker_.target_deci = 2300; // 230.0°C in deci-degrees
+    }
+}
+
+void AmsBackendAd5xIfs::end_phase_tracking_locked() {
+    phase_tracker_ = IfsPhaseTracker{};
+}
+
+void AmsBackendAd5xIfs::on_extruder_temp_locked(int temp_deci, int target_deci) {
+    if (!phase_tracker_.active) {
+        return;
+    }
+    // Track the live target if the firmware reports a positive one.
+    if (target_deci > 0) {
+        phase_tracker_.target_deci = target_deci;
+    }
+    // HEATING completes when current temp reaches within ~0.5°C of target.
+    // (CFS uses 5°C/50 deci-degrees; IFS heats from cold so we use a tighter
+    // 0.5°C window — the macro doesn't start cutting until it's truly at temp.)
+    const int tgt = phase_tracker_.target_deci;
+    if (tgt > 0 && temp_deci >= (tgt - 5 /* 0.5°C in deci-degrees */)) {
+        if (!phase_tracker_.reached_target_once) {
+            phase_tracker_.reached_target_once = true;
+            spdlog::info("{} Phase: reached target {}°C", backend_log_tag(), tgt / 10);
+        }
+    }
+    apply_phase_action_locked();
+}
+
+void AmsBackendAd5xIfs::on_head_transition_locked(bool detected) {
+    if (!phase_tracker_.active) {
+        return;
+    }
+    if (!detected) {
+        // Head sensor cleared: cut + retract underway (unload) — advance to the
+        // retract phase. Only meaningful after heating completed.
+        phase_tracker_.seen_head_drop = true;
+        spdlog::info("{} Phase: head sensor dropped (cut/retract started)", backend_log_tag());
+    } else {
+        // Head sensor tripped: filament reached the nozzle (load) — advance to
+        // the purge phase.
+        phase_tracker_.seen_head_rise = true;
+        spdlog::info("{} Phase: head sensor rose (filament at nozzle)", backend_log_tag());
+    }
+    apply_phase_action_locked();
+}
+
+void AmsBackendAd5xIfs::apply_phase_action_locked() {
+    if (!phase_tracker_.active) {
+        return;
+    }
+
+    AmsAction synth;
+    std::string detail;
+    const int tgt = phase_tracker_.target_deci;
+
+    if (phase_tracker_.is_unload) {
+        // HEATING → CUTTING → UNLOADING
+        if (!phase_tracker_.reached_target_once) {
+            synth = AmsAction::HEATING;
+        } else if (!phase_tracker_.seen_head_drop) {
+            synth = AmsAction::CUTTING;
+        } else {
+            synth = AmsAction::UNLOADING;
+        }
+    } else {
+        // HEATING → LOADING → PURGING
+        if (!phase_tracker_.reached_target_once) {
+            synth = AmsAction::HEATING;
+        } else if (!phase_tracker_.seen_head_rise) {
+            synth = AmsAction::LOADING;
+        } else {
+            synth = AmsAction::PURGING;
+        }
+    }
+
+    // Build the per-phase operation_detail. Dynamic (contains live temps), so it
+    // is NOT run through lv_tr() — matches recompute_action_detail's priority-1
+    // backend-supplied-string behavior in ams_state.cpp.
+    char buf[64];
+    switch (synth) {
+    case AmsAction::HEATING:
+        if (last_extruder_temp_deci_ > 0) {
+            std::snprintf(buf, sizeof(buf), "Heating nozzle to %d°C (%d°C)", tgt / 10,
+                          last_extruder_temp_deci_ / 10);
+            detail = buf;
+        } else {
+            std::snprintf(buf, sizeof(buf), "Heating nozzle to %d°C", tgt / 10);
+            detail = buf;
+        }
+        break;
+    case AmsAction::CUTTING:
+        detail = "Cutting filament";
+        break;
+    case AmsAction::UNLOADING:
+        detail = "Retracting filament from nozzle";
+        break;
+    case AmsAction::LOADING:
+        detail = "Feeding filament to nozzle";
+        break;
+    case AmsAction::PURGING:
+        detail = "Purging old filament";
+        break;
+    default:
+        break;
+    }
+
+    if (system_info_.action != synth) {
+        spdlog::info("{} Phase synth: {} -> {}", backend_log_tag(),
+                     ams_action_to_string(system_info_.action), ams_action_to_string(synth));
+        system_info_.action = synth;
+        // Reset the timeout clock on every phase transition so each post-heating
+        // phase (CUTTING/UNLOADING/LOADING/PURGING) gets its own fresh 90s window
+        // rather than inheriting elapsed time from the long heat-up.
+        action_start_time_ = std::chrono::steady_clock::now();
+    }
+    set_operation_detail_locked(std::move(detail));
+}
+
+void AmsBackendAd5xIfs::set_operation_detail_locked(std::string detail) {
+    system_info_.operation_detail = std::move(detail);
+}
+
 void AmsBackendAd5xIfs::detect_load_unload_completion(bool head_detected) {
+    // Phase-tracker-driven operations (load/unload WE started) advance phases
+    // via on_head_transition_locked rather than completing here — the head
+    // drop/rise is an intermediate signal (CUTTING→UNLOADING / LOADING→PURGING),
+    // not completion. Finalization happens via the action-timeout backstop +
+    // schedule_zcolor_query reconciliation. Skip the legacy snap so the phase
+    // sequence isn't short-circuited.
+    if (phase_tracker_.active) {
+        return;
+    }
+
+    // Legacy / external / firmware-initiated path: a head transition completes
+    // the operation directly. Preserved exactly for backward compatibility.
     if (system_info_.action == AmsAction::LOADING && head_detected) {
         system_info_.action = AmsAction::IDLE;
         spdlog::info("{} Load complete (head sensor triggered)", backend_log_tag());
@@ -2755,16 +2984,32 @@ bool AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {
 // ensure_homed_then() provided by AmsSubscriptionBackend
 
 void AmsBackendAd5xIfs::check_action_timeout() {
-    if (system_info_.action != AmsAction::LOADING && system_info_.action != AmsAction::UNLOADING) {
+    const AmsAction a = system_info_.action;
+    // Cover every non-idle operation phase: the legacy LOADING/UNLOADING plus
+    // the synthesized HEATING/CUTTING/PURGING the phase tracker drives. Without
+    // this, a phased op that finishes on an intermediate phase (e.g. an
+    // inactive-slot native-ZMOD unload that never produces a head transition)
+    // would never reset to IDLE.
+    if (a != AmsAction::LOADING && a != AmsAction::UNLOADING && a != AmsAction::HEATING &&
+        a != AmsAction::CUTTING && a != AmsAction::PURGING) {
         return;
     }
 
+    // HEATING from cold legitimately takes ~158s (longer for high-temp
+    // materials), so it gets a longer dedicated budget. Every other phase has
+    // its clock reset on transition (see apply_phase_action_locked) and keeps
+    // the short 90s window.
+    const int limit = (a == AmsAction::HEATING) ? HEATING_TIMEOUT_SECONDS : ACTION_TIMEOUT_SECONDS;
     auto elapsed = std::chrono::steady_clock::now() - action_start_time_;
-    if (elapsed >= std::chrono::seconds(ACTION_TIMEOUT_SECONDS)) {
+    if (elapsed >= std::chrono::seconds(limit)) {
         spdlog::warn("{} {} timed out after {}s, resetting to IDLE", backend_log_tag(),
                      ams_action_to_string(system_info_.action),
                      std::chrono::duration_cast<std::chrono::seconds>(elapsed).count());
         system_info_.action = AmsAction::IDLE;
+        if (phase_tracker_.active) {
+            end_phase_tracking_locked();
+            set_operation_detail_locked("");
+        }
     }
 }
 
