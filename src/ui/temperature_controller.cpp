@@ -151,8 +151,9 @@ void TemperatureController::apply_material(double nozzle, double bed, double cha
                                            SendOptions opts) {
     set_target(HeaterType::Nozzle, nozzle, opts);
     set_target(HeaterType::Bed, bed, opts);
-    if (chamber > 0 && !resolved_name(HeaterType::Chamber).empty()) {
-        set_target(HeaterType::Chamber, chamber, opts);
+    const std::string chamber_name = resolved_name(HeaterType::Chamber);
+    if (chamber > 0 && !chamber_name.empty()) {
+        set_target(chamber_name, chamber, opts);
     }
 }
 

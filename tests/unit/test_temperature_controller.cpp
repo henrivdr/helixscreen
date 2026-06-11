@@ -94,13 +94,18 @@ TEST_CASE("TemperatureController set_target routes to the resolved name", "[temp
     // Confirm resolution before we exercise set_target
     REQUIRE(f.controller.resolved_name(HeaterType::Chamber) == "heater_generic chamber_heater");
 
-    // execute_gcode gates on klippy state; default is SHUTDOWN — set to READY.
+    // execute_gcode gates on klippy state; the LVGL klippy_state subject defaults to
+    // SHUTDOWN, so drive it to READY before exercising the gcode path.
     f.state.set_klippy_state_sync(helix::KlippyState::READY);
 
-    // Approach: assert on_success fires (meaning the gcode went through without error)
-    // AND that the mock did NOT reject it (which it would if HEATER=heater_generic... was
-    // passed directly, since gcode_script returns 1 for that format). This proves the
-    // controller extracted the bare object name "chamber_heater" from the resolved name.
+    // End-to-end check: set_target(HeaterType::Chamber, ...) passes the *resolved* chamber
+    // name ("heater_generic chamber_heater", NOT the bare "chamber") down to
+    // api_->set_temperature. The controller does NOT manipulate the name itself — the gcode
+    // layer (build_heater_gcode inside MoonrakerAPI) strips the "heater_generic " prefix to
+    // produce a valid "HEATER=chamber_heater". We can only observe the result: on_success
+    // fires and on_error does not, which confirms the gcode layer received a usable
+    // resolved name and emitted a valid HEATER= value (the mock returns an error for a
+    // malformed one).
     bool success_fired = false;
     bool error_fired = false;
     f.controller.set_target(HeaterType::Chamber, 45.0,
