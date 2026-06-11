@@ -18,6 +18,14 @@ class MoonrakerAPI;
 
 namespace helix {
 
+/// Preset target temperatures (°C) for a single heater.
+struct HeaterPresets {
+    int off  = 0;
+    int pla  = 0;
+    int petg = 0;
+    int abs  = 0;
+};
+
 struct SendOptions {
     bool toast = true;
     bool silent = false;
@@ -56,6 +64,12 @@ class TemperatureController {
     /// No-op if api_ is null or the value is already populated.
     void ensure_limits(HeaterType type);
 
+    /// The heater's preset target values (°C).
+    const HeaterPresets& presets(HeaterType type) const;
+
+    /// Whether a preset value should be shown given the configured max (hidden if above it).
+    bool preset_visible(HeaterType type, int value_c) const;
+
   private:
     friend struct TemperatureControllerTestAccess;
     void set_configured_max(HeaterType type, int deg);
@@ -64,6 +78,7 @@ class TemperatureController {
         float keypad_min = 0.0f;
         float keypad_max_default = 0.0f; // 350 nozzle / 150 bed / 80 chamber
         int configured_max = 0;          // °C from configfile, 0 = unknown
+        HeaterPresets presets{};
     };
     std::array<HeaterModel, HEATER_TYPE_COUNT> model_{};
     AsyncLifetimeGuard lifetime_;

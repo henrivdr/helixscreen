@@ -67,3 +67,12 @@ TEST_CASE("TemperatureController clamps keypad range to configured max", "[temp_
         REQUIRE(f.controller.configured_max(HeaterType::Chamber) == 50);
     }
 }
+
+TEST_CASE("TemperatureController preset visibility honors configured max", "[temp_controller]") {
+    ControllerFixture f;
+    helix::TemperatureControllerTestAccess::set_max(f.controller, HeaterType::Chamber, 50);
+    REQUIRE(f.controller.preset_visible(HeaterType::Chamber, 40));
+    REQUIRE(f.controller.preset_visible(HeaterType::Chamber, 50));
+    REQUIRE_FALSE(f.controller.preset_visible(HeaterType::Chamber, 60));
+    REQUIRE(f.controller.presets(HeaterType::Chamber).abs == 60); // value still defined
+}
