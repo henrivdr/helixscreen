@@ -767,7 +767,6 @@ lv_obj_t* PrintStatusPanel::create(lv_obj_t* parent) {
 
     // Store button references for potential state queries (not event wiring - that's in XML)
     btn_timelapse_ = lv_obj_find_by_name(overlay_content, "btn_timelapse");
-    btn_pause_ = lv_obj_find_by_name(overlay_content, "btn_pause");
     btn_tune_ = lv_obj_find_by_name(overlay_content, "btn_tune");
     btn_cancel_ = lv_obj_find_by_name(overlay_content, "btn_cancel");
 
@@ -1070,7 +1069,6 @@ void PrintStatusPanel::on_ui_destroyed() {
     print_thumbnail_ = nullptr;
     gradient_background_ = nullptr;
     btn_timelapse_ = nullptr;
-    btn_pause_ = nullptr;
     btn_tune_ = nullptr;
     btn_cancel_ = nullptr;
     // Lazy fan control overlay — force re-creation on next click so we don't
