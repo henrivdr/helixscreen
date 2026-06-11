@@ -41,6 +41,9 @@ static constexpr int32_t MAX_BAR_WIDTH_PX = 16;
 /** Border radius for bar corners in pixels (very rounded appearance) */
 static constexpr int32_t BAR_BORDER_RADIUS_PX = 8;
 
+/** Minimum width of a spool cell in the wide spool view (px) */
+static constexpr int SPOOL_CELL_MIN_PX = 80;
+
 // ============================================================================
 // Per-widget user data
 // ============================================================================
@@ -494,20 +497,118 @@ static void rebuild_bars(AmsMiniStatusData* data) {
 static void rebuild_spools(AmsMiniStatusData* data) {
     if (!data || !data->container)
         return;
-    if (!lv_screen_active())
+    if (data->rebuilding)
         return;
+    if (!lv_screen_active())
+        return; // teardown guard (mirrors rebuild_bars)
+    data->rebuilding = true;
+    struct ResetGuard {
+        AmsMiniStatusData* d;
+        ~ResetGuard() {
+            d->rebuilding = false;
+        }
+    } rg{data};
+
     if (!data->spools_container) {
         lv_obj_t* sc = lv_obj_create(data->container);
         lv_obj_set_name(sc, "ams_spools_container");
         lv_obj_set_width(sc, lv_pct(100));
         lv_obj_set_height(sc, lv_pct(100));
+        lv_obj_set_flex_flow(sc, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(sc, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(sc, theme_manager_get_spacing("space_xs"), LV_PART_MAIN);
+        lv_obj_set_style_pad_all(sc, 0, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(sc, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(sc, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(sc, 0, LV_PART_MAIN);
+        lv_obj_add_flag(sc, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(sc, LV_DIR_HOR);
+        lv_obj_set_scrollbar_mode(sc, LV_SCROLLBAR_MODE_AUTO);
         data->spools_container = sc;
     }
-    lv_obj_remove_flag(data->spools_container, LV_OBJ_FLAG_HIDDEN);
-    // Cells are built in Task 7.
+    lv_obj_t* sc = data->spools_container;
+    lv_obj_remove_flag(sc, LV_OBJ_FLAG_HIDDEN);
+
+    // Safe teardown of previous cells (rebuild may run inside a queued callback).
+    helix::ui::safe_clean_children(sc);
+
+    int n = static_cast<int>(data->spool_cells.size());
+    if (n <= 0) {
+        lv_obj_add_flag(data->container, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_remove_flag(data->container, LV_OBJ_FLAG_HIDDEN);
+
+    // Fit tier: "target 4, else 2". cell_w = the 1x cell width.
+    int cell_w = (data->colspan > 0) ? (data->width_px / data->colspan) : data->width_px;
+    int two_x = 2 * cell_w;
+    int cell_px = (two_x / 4 >= SPOOL_CELL_MIN_PX) ? (two_x / 4) : (two_x / 2);
+    if (cell_px < SPOOL_CELL_MIN_PX)
+        cell_px = SPOOL_CELL_MIN_PX;
+    int spool_size = cell_px / 2; // spool graphic ~half the cell; text takes the rest
+
+    for (int i = 0; i < n; ++i) {
+        const SpoolCellData& cd = data->spool_cells[i];
+
+        lv_obj_t* cell = lv_obj_create(sc);
+        char nm[24];
+        snprintf(nm, sizeof(nm), "spool_cell_%d", i);
+        lv_obj_set_name(cell, nm);
+        lv_obj_set_size(cell, cell_px, lv_pct(100));
+        lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_column(cell, theme_manager_get_spacing("space_xxs"), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(cell, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(cell, 0, LV_PART_MAIN);
+        lv_obj_remove_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Spool wrap (square) holds spool visual + lane badge.
+        lv_obj_t* wrap = lv_obj_create(cell);
+        lv_obj_set_style_pad_all(wrap, 0, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(wrap, 0, LV_PART_MAIN);
+        lv_obj_remove_flag(wrap, LV_OBJ_FLAG_SCROLLABLE);
+        ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(wrap, spool_size);
+        ams_draw::spool_visual_set_color(sv, lv_color_hex(cd.color_rgb));
+        ams_draw::spool_visual_set_fill(sv, cd.fill_level);
+        ams_draw::spool_visual_set_empty(sv, !cd.present);
+        ams_draw::create_lane_badge(wrap, cd.lane_number, spool_size * 2 / 5);
+
+        // Text column (vertically centered), material over percent.
+        lv_obj_t* col = lv_obj_create(cell);
+        lv_obj_set_flex_grow(col, 1);
+        lv_obj_set_height(col, lv_pct(100));
+        lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_style_pad_all(col, 0, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(col, 0, LV_PART_MAIN);
+        lv_obj_remove_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* mat = lv_label_create(col);
+        snprintf(nm, sizeof(nm), "spool_material_%d", i);
+        lv_obj_set_name(mat, nm);
+        lv_label_set_text(mat, cd.material.empty() ? "--" : cd.material.c_str()); // material: no i18n
+        const lv_font_t* fs = theme_manager_get_font("font_small");
+        if (fs)
+            lv_obj_set_style_text_font(mat, fs, LV_PART_MAIN);
+        lv_obj_set_style_text_color(mat, theme_manager_get_color("text"), LV_PART_MAIN);
+
+        lv_obj_t* pct = lv_label_create(col);
+        snprintf(nm, sizeof(nm), "spool_pct_%d", i);
+        lv_obj_set_name(pct, nm);
+        if (cd.remaining_pct >= 0) {
+            char p[8];
+            snprintf(p, sizeof(p), "%d%%", cd.remaining_pct);
+            lv_label_set_text(pct, p);
+        } else {
+            lv_label_set_text(pct, "");
+        }
+        const lv_font_t* fxs = theme_manager_get_font("font_xs");
+        if (fxs)
+            lv_obj_set_style_text_font(pct, fxs, LV_PART_MAIN);
+        lv_obj_set_style_text_color(pct, theme_manager_get_color("text_muted"), LV_PART_MAIN);
+    }
 }
 
 /**
@@ -688,7 +789,7 @@ void ui_ams_mini_status_set_slot_count(lv_obj_t* obj, int slot_count) {
 
     data->slot_count = slot_count;
     data->spool_cells.resize(slot_count);
-    rebuild_bars(data);
+    rebuild(data);
 
     spdlog::debug("[AmsMiniStatus] slot_count={}", slot_count);
 }
@@ -703,7 +804,7 @@ void ui_ams_mini_status_set_max_visible(lv_obj_t* obj, int max_visible) {
         return;
 
     data->max_visible = max_visible;
-    rebuild_bars(data);
+    rebuild(data);
 }
 
 void ui_ams_mini_status_set_slot_full(lv_obj_t* obj, int slot_index, uint32_t color_rgb,
@@ -752,7 +853,7 @@ static void deferred_refresh_cb(lv_timer_t* timer) {
     // the entry before freeing data, so get_data() returns nullptr for dead widgets.
     auto* data = get_data(container);
     if (data) {
-        rebuild_bars(data);
+        rebuild(data);
         spdlog::debug("[AmsMiniStatus] Deferred refresh complete");
     }
     lv_timer_delete(timer);
@@ -769,7 +870,7 @@ void ui_ams_mini_status_refresh(lv_obj_t* obj) {
 
     if (width > 0) {
         // We have dimensions - rebuild immediately
-        rebuild_bars(data);
+        rebuild(data);
     } else {
         // Container still has zero width (likely just unhidden)
         // Defer refresh to next LVGL tick when layout will be recalculated
