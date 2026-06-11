@@ -159,8 +159,11 @@ void PrintControlButtons::handle_stop_button() {
 void PrintControlButtons::start_pending_action(PendingAction action) {
     clear_pending_action(); // supersede any in-flight action (also deletes prior timer)
     pending_action_ = action;
-    // 25s safety net: if the real state never arrives (RPC ack lost, backend
-    // wedged), clear the optimistic spinner so the button is usable again.
+    // Optimistic 25s timeout: a PAUSE/RESUME normally lands in <2s but can stretch
+    // to ~20s while buffered moves drain. After 25s assume the command was silently
+    // lost and revert the optimistic UI so the user can re-issue. Deliberately
+    // conservative — better to let a slow resume land than flash a spurious
+    // "timed out" toast on a command that actually succeeded.
     pending_action_timeout_ = lv_timer_create(
         [](lv_timer_t* t) {
             auto* self = static_cast<PrintControlButtons*>(lv_timer_get_user_data(t));

@@ -13,8 +13,10 @@
 
 #include "moonraker_request.h"
 #include "moonraker_request_tracker.h"
+#include "rpc_error_correlation.h"
 
 #include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 #include <atomic>
 #include <thread>
@@ -120,6 +122,86 @@ TEST_CASE("check_timeouts still emits REQUEST_TIMEOUT for non-silent requests",
     SECTION("error callback also fires") {
         REQUIRE(err_fired->load() == true);
     }
+}
+
+// ============================================================================
+// route_response() error dedup: a non-silent request that supplies its OWN
+// error_cb is a caller handling its own error UI, exactly like silent. It must
+// NOT also emit the generic "Printer command failed" toast, and it must record
+// correlation so the `!!` broadcast for the same error dedups. Without this, a
+// single Klipper rejection produced THREE stacked toasts (K2 chamber, #key69).
+// ============================================================================
+
+namespace {
+
+PendingRequest make_error_request(const std::string& method, bool silent, bool with_error_cb,
+                                  std::shared_ptr<std::atomic<bool>> error_cb_fired) {
+    PendingRequest req;
+    req.method = method;
+    req.silent = silent;
+    req.timeout_ms = 100000;
+    req.timestamp = std::chrono::steady_clock::now();
+    if (with_error_cb) {
+        req.error_callback = [error_cb_fired](const MoonrakerError&) { error_cb_fired->store(true); };
+    }
+    return req;
+}
+
+nlohmann::json make_error_response(uint64_t id, const std::string& message) {
+    return nlohmann::json{{"id", id}, {"error", {{"code", -32000}, {"message", message}}}};
+}
+
+} // namespace
+
+TEST_CASE("route_response suppresses generic RPC_ERROR toast when caller has an error_cb",
+          "[moonraker][tracker][dedup]") {
+    helix::rpc_error_correlation::clear_for_test();
+    MoonrakerRequestTracker tracker;
+    EventCapture capture;
+    auto err_fired = std::make_shared<std::atomic<bool>>(false);
+    const std::string msg = "The value 'chamber' is not valid for HEATER";
+
+    MoonrakerRequestTrackerTestAccess::inject_request(
+        tracker, /*id=*/100,
+        make_error_request("printer.gcode.script", /*silent=*/false, /*with_error_cb=*/true,
+                           err_fired));
+
+    tracker.route_response(make_error_response(100, msg), capture.as_lambda(), nullptr);
+
+    SECTION("no generic RPC_ERROR event is emitted — the caller owns the UI") {
+        for (const auto& r : capture.records) {
+            REQUIRE(r.type != MoonrakerEventType::RPC_ERROR);
+        }
+    }
+    SECTION("the caller's error_cb still fires") {
+        REQUIRE(err_fired->load() == true);
+    }
+    SECTION("correlation is recorded so the !! broadcast dedups") {
+        REQUIRE(helix::rpc_error_correlation::was_recently_handled(msg));
+    }
+}
+
+TEST_CASE("route_response still emits RPC_ERROR when there is no caller error_cb",
+          "[moonraker][tracker][dedup]") {
+    helix::rpc_error_correlation::clear_for_test();
+    MoonrakerRequestTracker tracker;
+    EventCapture capture;
+    auto unused = std::make_shared<std::atomic<bool>>(false);
+
+    MoonrakerRequestTrackerTestAccess::inject_request(
+        tracker, /*id=*/101,
+        make_error_request("printer.gcode.script", /*silent=*/false, /*with_error_cb=*/false,
+                           unused));
+
+    tracker.route_response(make_error_response(101, "Some failure"), capture.as_lambda(), nullptr);
+
+    bool saw_rpc_error = false;
+    for (const auto& r : capture.records) {
+        if (r.type == MoonrakerEventType::RPC_ERROR) {
+            saw_rpc_error = true;
+        }
+    }
+    REQUIRE(saw_rpc_error); // unhandled error must still surface a fallback toast
 }
 
 TEST_CASE("check_timeouts handles a mix of silent and non-silent timeouts in one sweep",

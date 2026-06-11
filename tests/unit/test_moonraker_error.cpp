@@ -53,6 +53,26 @@ TEST_CASE("extract_friendly_message parses Klipper error strings",
             "{'message': 'Timer too close'}");
         REQUIRE(result == "Timer too close");
     }
+
+    // Creality/Klipper key-error envelope uses "msg" (not "message"), e.g. the
+    // K2's SET_HEATER_TEMPERATURE rejection. Without this, toasts show raw JSON.
+    SECTION("extracts msg from Creality key-error envelope") {
+        auto result = MoonrakerError::extract_friendly_message(
+            R"({"code":"key69", "msg": "The value 'chamber' is not valid for HEATER", "values": ["chamber", "HEATER"]})");
+        REQUIRE(result == "The value 'chamber' is not valid for HEATER");
+    }
+
+    SECTION("extracts msg without space after colon") {
+        auto result = MoonrakerError::extract_friendly_message(
+            R"({"code":"key12","msg":"Heater extruder not heating at expected rate"})");
+        REQUIRE(result == "Heater extruder not heating at expected rate");
+    }
+
+    SECTION("prefers message over msg when both present") {
+        auto result = MoonrakerError::extract_friendly_message(
+            R"({"msg":"raw detail","message":"friendly summary"})");
+        REQUIRE(result == "friendly summary");
+    }
 }
 
 // ============================================================================
