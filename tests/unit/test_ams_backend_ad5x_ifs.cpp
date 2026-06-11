@@ -119,6 +119,12 @@ class Ad5xIfsTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.head_filament_ = detected;
     }
+    // Flag GET_ZCOLOR SILENT unsupported so schedule_zcolor_query() early-returns
+    // instead of spawning an HttpExecutor debounce task — keeps action dispatch
+    // tests fully synchronous and thread-free (avoids the [slow] tag, L052).
+    static void set_zcolor_supported(AmsBackendAd5xIfs& b, bool supported) {
+        b.zcolor_silent_supported_.store(supported);
+    }
     static void check_action_timeout(AmsBackendAd5xIfs& b, std::chrono::seconds elapsed) {
         b.action_start_time_ = std::chrono::steady_clock::now() - elapsed;
         b.check_action_timeout();
@@ -2011,70 +2017,6 @@ TEST_CASE("AD5X IFS set_slot_info updates port_presence", "[ams][ad5x_ifs]") {
 }
 
 // ==========================================================================
-// select_unload_command — bundle KKZ4XKD2 (prestonbrown/helixscreen)
-// ==========================================================================
-
-TEST_CASE("AD5X IFS select_unload_command", "[ams][ad5x_ifs]") {
-    using Cmd = std::string;
-
-    SECTION("slot_index < 0 → IFS_REMOVE_PRUTOK (current)") {
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(-1, 2, true) == "IFS_REMOVE_PRUTOK");
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(-1, -1, false) == "IFS_REMOVE_PRUTOK");
-    }
-
-    SECTION("active slot with head filament → IFS_REMOVE_PRUTOK (avoids per-port macro)") {
-        // Bundle KKZ4XKD2: slot_index=2 (port 3) is active and head sensor true.
-        // Per-port REMOVE_PRUTOK_IFS PRUTOK=3 errors when IFS state disagrees
-        // with our color-latched port_presence — switch to the "current" macro.
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, 2, true) == "IFS_REMOVE_PRUTOK");
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 0, true) == "IFS_REMOVE_PRUTOK");
-    }
-
-    SECTION("active slot, head empty (runout) → IFS_REMOVE_PRUTOK (#995)") {
-        // A filament runout clears the head sensor on the slot the firmware still
-        // reports as active. The per-port REMOVE_PRUTOK_IFS PRUTOK=N macro errors
-        // on the loaded slot, so the active slot must always resolve to the
-        // firmware-aware toolhead unload regardless of head sensor state.
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, 2, false) == "IFS_REMOVE_PRUTOK");
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 0, false) == "IFS_REMOVE_PRUTOK");
-    }
-
-    SECTION("non-active slot → per-port unload") {
-        // Unloading a different slot than the active one — must specify port.
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 2, true) ==
-                Cmd("REMOVE_PRUTOK_IFS PRUTOK=1"));
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(3, 0, true) ==
-                Cmd("REMOVE_PRUTOK_IFS PRUTOK=4"));
-    }
-
-    SECTION("no active slot (current_slot=-1), head empty → per-port unload") {
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, -1, false) ==
-                Cmd("REMOVE_PRUTOK_IFS PRUTOK=3"));
-    }
-
-    SECTION("toolhead loaded, firmware dropped active slot (current_slot=-1) → "
-            "IFS_REMOVE_PRUTOK (#995)") {
-        // head_filament true + current_slot < 0: the origin lane is unknown
-        // (stock-ZMOD "Extruder: None"), so unload the toolhead rather than
-        // issue the per-port macro (which would error on the loaded slot).
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, -1, true) == "IFS_REMOVE_PRUTOK");
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(2, -1, true) == "IFS_REMOVE_PRUTOK");
-    }
-
-    SECTION("non-active slot with a known active slot still uses per-port (head_filament true)") {
-        // head_filament must NOT override the per-port path when the firmware
-        // still reports a valid active slot (current_slot >= 0): only the
-        // current_slot < 0 "lost pointer" case reroutes to the toolhead unload.
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, 2, true) ==
-                Cmd("REMOVE_PRUTOK_IFS PRUTOK=1"));
-    }
-
-    SECTION("out-of-range slot_index → IFS_REMOVE_PRUTOK fallback") {
-        REQUIRE(AmsBackendAd5xIfs::select_unload_command(99, 0, true) == "IFS_REMOVE_PRUTOK");
-    }
-}
-
-// ==========================================================================
 // can_unload_from_toolhead — #995: active slot stays unloadable after runout
 // ==========================================================================
 //
@@ -2175,15 +2117,11 @@ TEST_CASE("AD5X IFS toolhead filament unloadable when firmware drops active slot
     REQUIRE(Ad5xIfsTestAccess::head_filament(backend));
 
     // The gate must open even though no slot is the active slot — filament is
-    // physically in the toolhead and must be removable.
+    // physically in the toolhead and must be removable. (The dispatched command,
+    // IFS_REMOVE_CURRENT_PRUTOK, is asserted by the unload_filament dispatch test;
+    // the firmware reads FFMInfo.channel, not our slot index, so the unknown
+    // origin lane is fine.)
     REQUIRE(backend.can_unload_from_toolhead(0));
-
-    // The command must route to the toolhead unload, NOT the per-port macro:
-    // the true origin lane is unknown and REMOVE_PRUTOK_IFS PRUTOK=1 errors on
-    // the loaded slot.
-    REQUIRE(AmsBackendAd5xIfs::select_unload_command(0, /*current_slot=*/-1,
-                                                     /*head_filament=*/true) ==
-            "IFS_REMOVE_PRUTOK");
 }
 
 TEST_CASE("AD5X IFS no toolhead filament leaves slot non-unloadable (#995 regression)",
@@ -4851,4 +4789,53 @@ TEST_CASE("AD5X IFS eject_lane rejects out-of-range slots", "[ams][ad5x_ifs]") {
         REQUIRE_FALSE(err.success());
         REQUIRE(backend.captured_gcodes.empty());
     }
+}
+
+// ==========================================================================
+// unload_filament dispatch — regression guard for raza616's
+// "printer homes and nothing happens" (bare IFS_REMOVE_PRUTOK is a ZMOD no-op).
+// ==========================================================================
+//
+// Verified against ZMOD v1.7.1 (../zmod, AD5X-zmod-1.7.1.tgz, mod/.shell/zmod_ifs.py):
+//   * bare IFS_REMOVE_PRUTOK defaults PRUTOK=0 and returns at cmd_IFS_REMOVE_PRUTOK:1104
+//     — a NO-OP. We homed (ensure_homed_then) and then did nothing.
+//   * REMOVE_PRUTOK_IFS PRUTOK=N unloads the *current* channel regardless of N — it
+//     never unloads "port N independently."
+//   * IFS_REMOVE_CURRENT_PRUTOK (cmd_..._CURRENT_PRUTOK:1144) auto-detects the active
+//     channel, heats ONLY when the extruder sensor reads filament present, and retracts.
+//     It is the correct, slot-independent toolhead Unload.
+// With a null client, ensure_homed_then() dispatches straight through the overridden
+// execute_gcode(), so captured_gcodes holds exactly what unload_filament() sends.
+
+TEST_CASE("AD5X IFS unload_filament dispatches IFS_REMOVE_CURRENT_PRUTOK, never the no-op",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // no async debounce task
+
+    // Normal case: active slot loaded at the toolhead.
+    Ad5xIfsTestAccess::set_current_slot(backend, 0, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    REQUIRE(backend.unload_filament(0).success());
+
+    REQUIRE(backend.has_gcode("IFS_REMOVE_CURRENT_PRUTOK"));
+    // Never the no-op, never the misleading per-port macro.
+    REQUIRE_FALSE(backend.has_gcode("IFS_REMOVE_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK_IFS"));
+}
+
+TEST_CASE("AD5X IFS unload_filament clears toolhead when firmware dropped the active slot (#995)",
+          "[ams][ad5x_ifs]") {
+    // current_slot == -1 (stock-ZMOD "Extruder: None") but filament is seated at
+    // the head: Unload must still dispatch the current-channel toolhead unload.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    Ad5xIfsTestAccess::set_current_slot(backend, -1, /*filament_loaded=*/false);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    REQUIRE(backend.unload_filament(2).success());
+    REQUIRE(backend.has_gcode("IFS_REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode("IFS_REMOVE_PRUTOK"));
 }

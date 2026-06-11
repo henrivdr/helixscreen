@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Several rare crashes fixed** — dashboard grid-layout heap walk-offs during widget rebuild (prestonbrown/helixscreen#983) and tool-switcher pill layout (prestonbrown/helixscreen#1006), an out-of-range grid cell walk-off (bundle P234RYCL), a crash when opening the AMS / Power / Timelapse overlays (bundle 29QTNSYL), and a sweep of background-thread use-after-free guards.
 - **Print thumbnails retry on failure** — a thumbnail that fails to load now retries with backoff and re-triggers on Moonraker events instead of staying blank.
 - **AD5X IFS load/unload settles reliably** — load and unload finalize to idle on firmware (`GET_ZCOLOR`) confirmation rather than waiting out a timeout.
+- **AD5X IFS Unload actually runs now** — the toolhead Unload was dispatching a firmware no-op, so the printer homed and then did nothing. It now sends the correct ZMOD command, which heats only when filament is present at the nozzle and then retracts. Selecting an idle lane no longer heats the hotend — those route to a cold eject.
 
 ## [0.99.75] - 2026-06-10
 

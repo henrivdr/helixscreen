@@ -406,16 +406,6 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
 
     int find_first_tool_for_port(int port_1based) const;
 
-  public:
-    // Selects the IFS unload G-code for a given UI request.
-    //
-    // When unloading the slot already loaded to the toolhead, the per-port
-    // command (REMOVE_PRUTOK_IFS PRUTOK=N) errors with "No filament N in IFS"
-    // on native ZMOD setups whose IFS state disagrees with our color-latched
-    // presence. IFS_REMOVE_PRUTOK targets the currently loaded filament and
-    // matches both the user's intent and firmware state.
-    static std::string select_unload_command(int slot_index, int current_slot, bool head_filament);
-
   private:
     bool validate_slot_index(int slot_index) const;
     void check_action_timeout();

@@ -707,7 +707,8 @@ void AmsOperationSidebar::refresh_heat_step_display() {
 void AmsOperationSidebar::handle_unload() {
     // Active-slot unload (sidebar Unload button). Delegate to the slot overload
     // with slot_index = -1 so the stepper-build + backend-call path lives in one
-    // place. IFS select_unload_command coerces -1 to the toolhead macro.
+    // place. The IFS backend's unload_filament() ignores the slot index and
+    // sends the current-channel toolhead unload (IFS_REMOVE_CURRENT_PRUTOK).
     handle_unload(-1);
 }
 

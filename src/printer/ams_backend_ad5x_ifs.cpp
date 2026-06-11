@@ -931,8 +931,9 @@ bool AmsBackendAd5xIfs::can_unload_from_toolhead(int slot_index) const {
     //      runout or print-end) while filament is still seated in the toolhead.
     //      Condition 1 then never matches, so without this the physically-present
     //      filament would be unremovable. Since the true origin lane is unknown,
-    //      every valid slot is reported unloadable and routes to the toolhead
-    //      unload (see select_unload_command) so the user can clear the nozzle.
+    //      every valid slot is reported unloadable; unload_filament() then sends
+    //      the current-channel toolhead unload (IFS_REMOVE_CURRENT_PRUTOK), which
+    //      the firmware resolves from FFMInfo.channel regardless of slot index.
     //      Gating on current_slot < 0 leaves the normal known-active-slot case
     //      untouched: when the firmware knows the active slot, only that slot is
     //      unloadable (condition 1), exactly as before.
@@ -940,7 +941,7 @@ bool AmsBackendAd5xIfs::can_unload_from_toolhead(int slot_index) const {
     // The slot_index >= 0 guard is load-bearing: when no filament is loaded
     // current_slot is -1, so a caller passing -1 would otherwise match it and
     // wrongly report the (nonexistent) active slot as unloadable. Note the
-    // opposite negative-index convention here vs. select_unload_command(), where
+    // opposite negative-index convention here vs. unload_filament(), where
     // slot_index < 0 deliberately means "unload whatever is active." This is a
     // per-slot capability query, so a negative index is simply out of range.
     {
@@ -1034,50 +1035,22 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
         apply_phase_action_locked();
     }
 
-    int current_slot;
-    bool head_filament;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        current_slot = system_info_.current_slot;
-        head_filament = head_filament_;
-    }
-
-    std::string unload_cmd = select_unload_command(slot_index, current_slot, head_filament);
-    if (unload_cmd == "IFS_REMOVE_PRUTOK") {
-        spdlog::info("{} Unloading current filament (slot {})", backend_log_tag(), slot_index);
-    } else {
-        spdlog::info("{} Unloading filament from port {}", backend_log_tag(), slot_index + 1);
-    }
-
-    auto result = ensure_homed_then(std::move(unload_cmd));
+    // The toolhead Unload always clears whatever filament is seated at the
+    // nozzle. IFS_REMOVE_CURRENT_PRUTOK auto-detects the active channel
+    // (FFMInfo.channel), heats only when the extruder filament sensor reads
+    // present, then retracts — verified against ZMOD v1.7.1 (zmod_ifs.py:1144).
+    // NOT bare IFS_REMOVE_PRUTOK: that no-ops on its PRUTOK=0 default
+    // (zmod_ifs.py:1104), so the printer homed (below) and nothing happened.
+    // Idle (non-toolhead) lanes never reach here — the UI routes those to
+    // eject_lane() (cold IFS_F11 ... CHECK=0), which performs no heating.
+    spdlog::info("{} Unloading filament from toolhead (slot {})", backend_log_tag(), slot_index);
+    auto result = ensure_homed_then("IFS_REMOVE_CURRENT_PRUTOK");
     // Backup re-query: for inactive-slot unloads on native ZMOD the head
     // sensor never changes, so detect_load_unload_completion() won't fire.
     // schedule_zcolor_query() coalesces with any trigger from the gcode
     // stream listener, so this is cheap when they overlap.
     schedule_zcolor_query();
     return result;
-}
-
-std::string AmsBackendAd5xIfs::select_unload_command(int slot_index, int current_slot,
-                                                     bool head_filament) {
-    // The active slot always uses the firmware-aware toolhead unload, regardless
-    // of the head sensor: a runout clears head_filament but the filament is still
-    // seated, and the per-port REMOVE_PRUTOK_IFS macro errors on the loaded slot.
-    const bool unload_active = (slot_index < 0) || (slot_index == current_slot);
-    if (unload_active) {
-        return "IFS_REMOVE_PRUTOK";
-    }
-    // Toolhead loaded but the firmware lost the active-slot pointer (e.g.
-    // stock-ZMOD "Extruder: None" after a runout/print-end, current_slot == -1):
-    // the true origin lane is unknown and the per-port macro errors on the
-    // loaded slot, so unload the toolhead rather than a specific lane.
-    if (head_filament && current_slot < 0) {
-        return "IFS_REMOVE_PRUTOK";
-    }
-    if (slot_index >= 0 && slot_index < NUM_PORTS) {
-        return "REMOVE_PRUTOK_IFS PRUTOK=" + std::to_string(slot_index + 1);
-    }
-    return "IFS_REMOVE_PRUTOK";
 }
 
 AmsError AmsBackendAd5xIfs::select_slot(int slot_index) {
