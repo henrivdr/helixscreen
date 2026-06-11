@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "moonraker_error.h"
 #include "ui_heater_config.h" // helix::HeaterType
 
