@@ -13,18 +13,22 @@
  * - Uses generation counter for stale callback detection
  */
 
+#include "../test_helpers/active_print_media_manager_test_access.h"
+#include "../test_helpers/moonraker_client_test_access.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "active_print_media_manager.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
 #include "moonraker_file_api.h"
+#include "moonraker_file_transfer_api.h"
 #include "printer_state.h"
 
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/spdlog.h>
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <string>
 
@@ -695,9 +699,9 @@ class CapturingFileAPI : public MoonrakerFileAPI {
     void get_file_metadata(const std::string& filename, FileMetadataCallback on_success,
                            ErrorCallback on_error, bool silent = false) override {
         (void)silent;
-        (void)on_error;
         last_filename_ = filename;
         pending_.push_back(std::move(on_success));
+        pending_errors_.push_back(std::move(on_error));
     }
 
     /// Number of captured (not-yet-fired) metadata callbacks.
@@ -722,22 +726,92 @@ class CapturingFileAPI : public MoonrakerFileAPI {
         fire_index(pending_.size() - 1, metadata);
     }
 
+    /// Fire the Nth captured ERROR callback (0-based) with the given error.
+    void fire_error_index(size_t index, const MoonrakerError& err) {
+        REQUIRE(index < pending_errors_.size());
+        auto cb = pending_errors_[index];
+        REQUIRE(cb);
+        cb(err);
+    }
+
+    /// Fire the most recently captured error callback.
+    void fire_error_last(const MoonrakerError& err) {
+        REQUIRE(!pending_errors_.empty());
+        fire_error_index(pending_errors_.size() - 1, err);
+    }
+
+    /// Filename of the most recent metadata request.
+    [[nodiscard]] const std::string& last_filename() const {
+        return last_filename_;
+    }
+
   private:
     std::vector<FileMetadataCallback> pending_;
+    std::vector<ErrorCallback> pending_errors_;
     std::string last_filename_;
 };
 
-/// MoonrakerAPI that installs the CapturingFileAPI in place of the real file API.
+/// Transfer API whose download_thumbnail synchronously "succeeds" without
+/// writing a file. ThumbnailCache::process_and_callback then fails to open the
+/// PNG and falls back to invoking on_success with the PNG path synchronously —
+/// giving tests a deterministic, thread-free path to a thumbnail load success.
+class StubTransferAPI : public MoonrakerFileTransferAPI {
+  public:
+    explicit StubTransferAPI(helix::MoonrakerClient& client)
+        : MoonrakerFileTransferAPI(client, base_url_storage()) {}
+
+    void download_thumbnail(const std::string& thumbnail_path, const std::string& cache_path,
+                            StringCallback on_success, ErrorCallback on_error) override {
+        (void)thumbnail_path;
+        download_count_++;
+        if (fail_downloads_) {
+            MoonrakerError err;
+            err.message = "stub download failure";
+            if (on_error) {
+                on_error(err);
+            }
+            return;
+        }
+        if (on_success) {
+            on_success(cache_path);
+        }
+    }
+
+    void set_fail_downloads(bool fail) {
+        fail_downloads_ = fail;
+    }
+    [[nodiscard]] int download_count() const {
+        return download_count_;
+    }
+
+  private:
+    // Ctor stores a reference to the URL string; keep storage with static duration.
+    static const std::string& base_url_storage() {
+        static const std::string url = "http://stub.invalid";
+        return url;
+    }
+
+    bool fail_downloads_ = false;
+    int download_count_ = 0;
+};
+
+/// MoonrakerAPI that installs the CapturingFileAPI in place of the real file API
+/// and a StubTransferAPI in place of the real HTTP transfer API.
 class CapturingMoonrakerAPI : public MoonrakerAPI {
   public:
     CapturingMoonrakerAPI(helix::MoonrakerClient& client, helix::PrinterState& state)
         : MoonrakerAPI(client, state) {
-        // file_api_ is protected; swap in the capturing implementation.
+        // file_api_ / file_transfer_api_ are protected; swap in test implementations.
         file_api_ = std::make_unique<CapturingFileAPI>(client);
+        file_transfer_api_ = std::make_unique<StubTransferAPI>(client);
     }
 
     CapturingFileAPI& capturing_files() {
         return static_cast<CapturingFileAPI&>(files());
+    }
+
+    StubTransferAPI& stub_transfers() {
+        return static_cast<StubTransferAPI&>(transfers());
     }
 };
 
@@ -805,6 +879,14 @@ class ActivePrintMediaAsyncFixture {
         return api_->capturing_files();
     }
 
+    StubTransferAPI& transfers_stub() {
+        return api_->stub_transfers();
+    }
+
+    MoonrakerClientMock& client() {
+        return mock_client_;
+    }
+
     /// Set the print filename WITHOUT draining the queue, so deferred applies
     /// stay pending until the test decides to drain.
     void set_print_filename_no_drain(const std::string& filename) {
@@ -820,11 +902,39 @@ class ActivePrintMediaAsyncFixture {
         return lv_subject_get_int(state_.get_print_layer_total_subject());
     }
 
+    std::string get_thumbnail_path() {
+        return lv_subject_get_string(state_.get_print_thumbnail_path_subject());
+    }
+
     static FileMetadata make_metadata(uint32_t layer_count) {
         FileMetadata m;
         m.layer_count = layer_count;
         m.estimated_time = 0; // no estimate -> exercises layer path cleanly
         return m;
+    }
+
+    /// Metadata that includes a thumbnail entry. Pass a unique relative path
+    /// per test so ThumbnailCache disk-cache hits from previous runs can't
+    /// short-circuit the download we want to observe.
+    static FileMetadata make_metadata_with_thumb(uint32_t layer_count,
+                                                 const std::string& thumb_path) {
+        FileMetadata m = make_metadata(layer_count);
+        m.thumbnails.push_back(ThumbnailInfo{thumb_path, 300, 300});
+        return m;
+    }
+
+    /// Unique thumbnail relative path (avoids cross-run ThumbnailCache hits).
+    static std::string unique_thumb_path(const char* stem) {
+        static std::atomic<uint64_t> counter{0};
+        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        return std::string(".thumbs/") + stem + "_" + std::to_string(now) + "_" +
+               std::to_string(counter.fetch_add(1)) + ".png";
+    }
+
+    /// Simulate a Moonraker notification arriving (fires the persistent method
+    /// callbacks the manager registered on the client).
+    void fire_notification(const std::string& method, const json& msg) {
+        MoonrakerClientTestAccess::fire_method_callbacks(mock_client_, method, msg);
     }
 
     std::unique_ptr<helix::ActivePrintMediaManager>& manager_ptr() {
@@ -910,4 +1020,464 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     drain();
 
     REQUIRE(get_layer_total() == 99);
+}
+
+// ============================================================================
+// Thumbnail Retry Tests (bounded backoff + Moonraker notification re-triggers)
+// ============================================================================
+// Field bug (recurring, v0.99.75): the print-status thumbnail stays blank for
+// an entire print because load_thumbnail_for_file() was strictly one-shot —
+// if Moonraker hadn't finished scanning a just-uploaded file (OrcaSlicer
+// upload-and-print), the metadata fetch failed once and nothing ever
+// re-queried. These tests cover the three retry legs:
+//   1. bounded lv_timer backoff retry on each failure path
+//   2. notify_filelist_changed re-trigger when the current file's metadata
+//      becomes available
+//   3. notify_klippy_ready re-trigger (WebSocket reconnect mid-print)
+
+using TestAccess = helix::ActivePrintMediaManagerTestAccess;
+
+namespace {
+MoonrakerError make_error(const std::string& message) {
+    MoonrakerError err;
+    err.code = -32601;
+    err.message = message;
+    return err;
+}
+} // namespace
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: retry backoff schedule is 2s/5s/10s/20s/30s",
+                 "[ActivePrintMediaManager][retry]") {
+    REQUIRE(TestAccess::retry_delay_ms(1) == 2000);
+    REQUIRE(TestAccess::retry_delay_ms(2) == 5000);
+    REQUIRE(TestAccess::retry_delay_ms(3) == 10000);
+    REQUIRE(TestAccess::retry_delay_ms(4) == 20000);
+    REQUIRE(TestAccess::retry_delay_ms(5) == 30000);
+    REQUIRE(TestAccess::retry_delay_ms(9) == 30000);
+    REQUIRE(TestAccess::max_attempts() == 10);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: metadata error schedules retry, retry success sets "
+                 "thumbnail path",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("just_uploaded.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+
+    // Attempt 1 fails: Moonraker hasn't scanned the file yet (bg thread error,
+    // marshalled to main on drain).
+    files().fire_error_last(make_error("Metadata not available for <just_uploaded.gcode>"));
+    drain();
+
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+    REQUIRE(TestAccess::retry_filename(manager()) == "just_uploaded.gcode");
+    REQUIRE_FALSE(TestAccess::thumbnail_loaded(manager()));
+
+    // Retry timer fires -> a NEW metadata request goes out.
+    REQUIRE(TestAccess::fire_pending_retry(manager()));
+    REQUIRE(files().pending_count() == 2);
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+
+    // This time the metadata is ready and has a thumbnail; the stub transfer
+    // API "downloads" it synchronously and the subject gets set.
+    files().fire_last(make_metadata_with_thumb(42, unique_thumb_path("retry_success")));
+    drain();
+
+    REQUIRE_FALSE(get_thumbnail_path().empty());
+    REQUIRE(TestAccess::thumbnail_loaded(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 0);
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(get_layer_total() == 42);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: metadata without thumbnails schedules retry",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("scanning.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    // Metadata record exists but thumbnails aren't extracted yet.
+    files().fire_last(make_metadata(/*layer_count=*/7));
+    drain();
+
+    REQUIRE(get_layer_total() == 7); // metadata fields still applied
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+    REQUIRE_FALSE(TestAccess::thumbnail_loaded(manager()));
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: thumbnail download failure schedules retry",
+                 "[ActivePrintMediaManager][retry]") {
+    transfers_stub().set_fail_downloads(true);
+
+    set_print_filename_no_drain("dl_fail.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_last(make_metadata_with_thumb(3, unique_thumb_path("dl_fail")));
+    drain();
+
+    REQUIRE(get_thumbnail_path().empty());
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+
+    // Recovery: downloads start working, retry fires, thumbnail loads.
+    transfers_stub().set_fail_downloads(false);
+    REQUIRE(TestAccess::fire_pending_retry(manager()));
+    REQUIRE(files().pending_count() == 2);
+    files().fire_last(make_metadata_with_thumb(3, unique_thumb_path("dl_recover")));
+    drain();
+
+    REQUIRE_FALSE(get_thumbnail_path().empty());
+    REQUIRE(TestAccess::thumbnail_loaded(manager()));
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: filelist_changed for current file triggers immediate "
+                 "reload",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("benchy.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+
+    // Moonraker finishes scanning and emits notify_filelist_changed for the
+    // file we're printing (fires on the WS thread in production; the handler
+    // marshals to main, hence the drain).
+    json msg = {{"jsonrpc", "2.0"},
+                {"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "create_file"},
+                               {"item", {{"path", "benchy.gcode"}, {"root", "gcodes"}}}}})}};
+    fire_notification("notify_filelist_changed", msg);
+    drain();
+
+    // Immediate reload: pending retry cancelled, counter reset, new request out.
+    REQUIRE(files().pending_count() == 2);
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 0);
+
+    files().fire_last(make_metadata_with_thumb(11, unique_thumb_path("filelist_reload")));
+    drain();
+    REQUIRE_FALSE(get_thumbnail_path().empty());
+    REQUIRE(TestAccess::thumbnail_loaded(manager()));
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: filelist_changed for unrelated file does not reload",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("benchy.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+
+    json msg = {{"jsonrpc", "2.0"},
+                {"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "create_file"},
+                               {"item", {{"path", "unrelated.gcode"}, {"root", "gcodes"}}}}})}};
+    fire_notification("notify_filelist_changed", msg);
+    drain();
+
+    // No new request; the scheduled backoff retry is untouched.
+    REQUIRE(files().pending_count() == 1);
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: filelist_changed with null/missing fields is ignored "
+                 "safely",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("benchy.gcode");
+    drain();
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+
+    // Moonraker notifications can carry null/missing fields — must not throw.
+    json null_item = {{"method", "notify_filelist_changed"},
+                      {"params", json::array({{{"action", nullptr}, {"item", nullptr}}})}};
+    REQUIRE_NOTHROW(fire_notification("notify_filelist_changed", null_item));
+    json no_params = {{"method", "notify_filelist_changed"}};
+    REQUIRE_NOTHROW(fire_notification("notify_filelist_changed", no_params));
+    drain();
+
+    REQUIRE(files().pending_count() == 1); // no reload triggered
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: klippy_ready re-triggers load while thumbnail missing",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("mid_print.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("connection reset"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+
+    // Klippy comes back (WebSocket reconnect mid-print) — filename subject
+    // never changes, so this is the only signal we get.
+    fire_notification("notify_klippy_ready", json{{"method", "notify_klippy_ready"}});
+    drain();
+
+    REQUIRE(files().pending_count() == 2);
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 0);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: klippy_ready does NOT reload when thumbnail loaded",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("loaded.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_last(make_metadata_with_thumb(5, unique_thumb_path("klippy_loaded")));
+    drain();
+    REQUIRE(TestAccess::thumbnail_loaded(manager()));
+
+    fire_notification("notify_klippy_ready", json{{"method", "notify_klippy_ready"}});
+    drain();
+
+    REQUIRE(files().pending_count() == 1); // no redundant reload
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: filename change cancels pending retry",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("first.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+
+    // A different print starts: the pending retry for first.gcode must be
+    // cancelled and retry state reset for the new filename.
+    set_print_filename_no_drain("second.gcode");
+    drain();
+
+    REQUIRE(files().pending_count() == 2); // fresh load for second.gcode
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 0);
+
+    // No stale load for first.gcode fires later: the (deleted) timer is gone,
+    // and even a stale-scheduled retry would no-op on the filename check.
+    REQUIRE(TestAccess::retry_filename(manager()).empty());
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: retries stop after max attempts",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("never_scans.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    const int max_attempts = TestAccess::max_attempts();
+
+    // Fail every attempt; pump the retry timer manually each round.
+    int requests = 1;
+    for (int i = 0; i < max_attempts + 3; i++) {
+        files().fire_error_last(make_error("Metadata not available"));
+        drain();
+        if (!TestAccess::has_pending_retry(manager())) {
+            break;
+        }
+        REQUIRE(TestAccess::fire_pending_retry(manager()));
+        requests++;
+        REQUIRE(static_cast<int>(files().pending_count()) == requests);
+    }
+
+    // Exactly max_attempts total requests went out, then it gave up.
+    REQUIRE(requests == max_attempts);
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+
+    // Further failures don't resurrect the timer.
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(static_cast<int>(files().pending_count()) == max_attempts);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: successful first load creates no retry timer",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("works_first_try.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_last(make_metadata_with_thumb(21, unique_thumb_path("first_try")));
+    drain();
+
+    REQUIRE_FALSE(get_thumbnail_path().empty());
+    REQUIRE(TestAccess::thumbnail_loaded(manager()));
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 0);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: empty-thumbnail metadata retries cap at 2",
+                 "[ActivePrintMediaManager][retry]") {
+    // A metadata record with no thumbnails is usually a PERMANENT condition
+    // (file sliced without thumbnails), so this leg uses a 2-retry cap instead
+    // of the full 10-attempt ladder reserved for transport failures.
+    set_print_filename_no_drain("no_thumbs_sliced.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    // Attempt 1: success, no thumbnails -> retry 1.
+    files().fire_last(make_metadata(/*layer_count=*/4));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+
+    // Attempt 2: still no thumbnails -> retry 2.
+    REQUIRE(TestAccess::fire_pending_retry(manager()));
+    REQUIRE(files().pending_count() == 2);
+    files().fire_last(make_metadata(/*layer_count=*/4));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 2);
+
+    // Attempt 3: still no thumbnails -> gives up (cap is 2 retries).
+    REQUIRE(TestAccess::fire_pending_retry(manager()));
+    REQUIRE(files().pending_count() == 3);
+    files().fire_last(make_metadata(/*layer_count=*/4));
+    drain();
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(files().pending_count() == 3);
+
+    // But a filelist_changed for the file still re-triggers (covers the
+    // genuinely-late-scan case beyond the cheap cap).
+    json msg = {{"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "modify_file"},
+                               {"item", {{"path", "no_thumbs_sliced.gcode"}}}}})}};
+    fire_notification("notify_filelist_changed", msg);
+    drain();
+    REQUIRE(files().pending_count() == 4);
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: delete_file for current file does not re-trigger",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("doomed_delete.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+    REQUIRE(TestAccess::retry_count(manager()) == 1);
+
+    // The printing file gets deleted — re-querying it is guaranteed to fail,
+    // so the notification must NOT kick off a fresh retry ladder.
+    json msg = {{"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "delete_file"},
+                               {"item", {{"path", "doomed_delete.gcode"}}}}})}};
+    fire_notification("notify_filelist_changed", msg);
+    drain();
+
+    REQUIRE(files().pending_count() == 1); // no immediate reload
+    REQUIRE(TestAccess::retry_count(manager()) == 1); // ladder not reset
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: move_file of current file reloads from destination",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("benchy.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+
+    // The printing file is renamed: source_item is the old (current) name,
+    // item is the destination. Metadata now lives under the destination.
+    json msg = {{"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "move_file"},
+                               {"source_item", {{"path", "benchy.gcode"}}},
+                               {"item", {{"path", "archive/benchy_v2.gcode"}}}}})}};
+    fire_notification("notify_filelist_changed", msg);
+    drain();
+
+    REQUIRE(files().pending_count() == 2);
+    REQUIRE(files().last_filename() == "archive/benchy_v2.gcode"); // dest, not stale name
+    REQUIRE_FALSE(TestAccess::has_pending_retry(manager()));
+
+    // Destination metadata resolves -> thumbnail loads.
+    files().fire_last(make_metadata_with_thumb(8, unique_thumb_path("moved_dest")));
+    drain();
+    REQUIRE_FALSE(get_thumbnail_path().empty());
+    REQUIRE(TestAccess::thumbnail_loaded(manager()));
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: move_file without destination path is skipped",
+                 "[ActivePrintMediaManager][retry]") {
+    set_print_filename_no_drain("benchy.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    files().fire_error_last(make_error("Metadata not available"));
+    drain();
+    REQUIRE(TestAccess::has_pending_retry(manager()));
+
+    // Malformed/partial move notification: source matches but no dest item.
+    json msg = {{"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "move_file"},
+                               {"source_item", {{"path", "benchy.gcode"}}}}})}};
+    fire_notification("notify_filelist_changed", msg);
+    drain();
+
+    REQUIRE(files().pending_count() == 1); // no reload from a missing dest
+    REQUIRE(TestAccess::has_pending_retry(manager())); // backoff ladder untouched
+}
+
+TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
+                 "ActivePrintMediaManager: notification after manager destroy is safe (expired "
+                 "token no-ops)",
+                 "[ActivePrintMediaManager][retry][lifetime]") {
+    // Regression guard for the registration-lifetime story: unregistration is
+    // skipped during teardown (get_moonraker_manager() is null by then), so the
+    // method callbacks stay registered on the client. Safety relies on the
+    // lifetime token captured at registration: bg-side parsing touches locals
+    // only, and the token.defer() apply must no-op once the manager is gone.
+    set_print_filename_no_drain("teardown.gcode");
+    drain();
+    REQUIRE(files().pending_count() == 1);
+
+    manager_ptr().reset(); // destroy the manager (lifetime invalidated)
+
+    json msg = {{"method", "notify_filelist_changed"},
+                {"params",
+                 json::array({{{"action", "create_file"},
+                               {"item", {{"path", "teardown.gcode"}}}}})}};
+    REQUIRE_NOTHROW(fire_notification("notify_filelist_changed", msg));
+    REQUIRE_NOTHROW(
+        fire_notification("notify_klippy_ready", json{{"method", "notify_klippy_ready"}}));
+    drain(); // expired-token defers must no-op, not UAF
+
+    REQUIRE(files().pending_count() == 1); // no reload fired against the dead manager
 }
