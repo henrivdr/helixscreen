@@ -2533,6 +2533,29 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             }
         }
 
+        // Phase-tracker quick-finish: GET_ZCOLOR's extruder_slot is zmod's
+        // fork-independent view of the toolhead — ABSENT after a successful
+        // unload, SET after a successful load. When a tracked op has physically
+        // progressed past the cut/feed (a head transition was seen) and this
+        // query confirms the end state, finalize to IDLE immediately rather than
+        // waiting for the 90s timeout backstop. The progressed-gate prevents the
+        // early post-dispatch query (unload_filament schedules one immediately)
+        // from finalizing before the op has even run.
+        if (phase_tracker_.active && result.saw_valid_response) {
+            const bool progressed = phase_tracker_.is_unload ? phase_tracker_.seen_head_drop
+                                                             : phase_tracker_.seen_head_rise;
+            const bool reached_end = phase_tracker_.is_unload ? !result.extruder_slot.has_value()
+                                                              : result.extruder_slot.has_value();
+            if (progressed && reached_end) {
+                spdlog::info("{} Phase: zcolor confirms {} complete -> IDLE", backend_log_tag(),
+                             phase_tracker_.is_unload ? "unload" : "load");
+                system_info_.action = AmsAction::IDLE;
+                end_phase_tracking_locked();
+                set_operation_detail_locked("");
+                changed = true;
+            }
+        }
+
         if (changed) {
             for (int i = 0; i < NUM_PORTS; ++i) {
                 update_slot_from_state(i);
@@ -2864,6 +2887,12 @@ void AmsBackendAd5xIfs::on_head_transition_locked(bool detected) {
         spdlog::info("{} Phase: head sensor rose (filament at nozzle)", backend_log_tag());
     }
     apply_phase_action_locked();
+    // Fire a confirming GET_ZCOLOR ~now: the macro finishes shortly after the
+    // cut/feed, and apply_zcolor_result's extruder_slot view is the early
+    // terminal signal that lets us finalize to IDLE within ~1s instead of
+    // waiting out the 90s timeout backstop. Safe under mutex_ —
+    // schedule_zcolor_query only touches atomics + HttpExecutor (no re-lock).
+    schedule_zcolor_query();
 }
 
 void AmsBackendAd5xIfs::apply_phase_action_locked() {
