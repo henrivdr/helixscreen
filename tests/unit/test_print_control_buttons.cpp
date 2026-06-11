@@ -100,3 +100,21 @@ TEST_CASE_METHOD(ControlButtonsFixture, "pending action publishes hourglass stat
     REQUIRE(read_int("print_pending_action") == static_cast<int>(helix::ui::PendingAction::None));
     REQUIRE(read_str("print_control_primary_label") == "Resume");
 }
+
+// While a pending action is in flight the primary button is disabled (you cannot
+// re-trigger Pause while a Pause is mid-flight); the real state arrival clears it.
+TEST_CASE_METHOD(ControlButtonsFixture, "pending action set then cleared on state arrival",
+                 "[print_control][slow]") {
+    using helix::ui::PendingAction;
+    using helix::ui::PrintControlButtonsTestAccess;
+
+    set_print_state(helix::PrintJobState::PRINTING);
+    PrintControlButtonsTestAccess::set_pending(PendingAction::Pausing);
+    REQUIRE(read_int("print_pending_action") == static_cast<int>(PendingAction::Pausing));
+    REQUIRE(read_str("print_control_primary_label") == "Pausing...");
+    REQUIRE(read_int("print_control_primary_enabled") == 0); // disabled in flight
+
+    set_print_state(helix::PrintJobState::PAUSED); // real state arrives -> observer clears pending
+    REQUIRE(read_int("print_pending_action") == static_cast<int>(PendingAction::None));
+    REQUIRE(read_str("print_control_primary_label") == "Resume");
+}
