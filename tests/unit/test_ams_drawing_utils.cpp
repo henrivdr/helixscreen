@@ -3,8 +3,10 @@
 #include "../lvgl_test_fixture.h"
 #include "ams_state.h"
 #include "ams_types.h"
+#include "config.h"
 #include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
+#include "ui_spool_canvas.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -403,4 +405,34 @@ TEST_CASE_METHOD(LVGLTestFixture, "ams_draw::apply_logo with unit fallback", "[a
     ams_draw::apply_logo(img, unit, info);
     // Both names unknown -> hidden
     REQUIRE(lv_obj_has_flag(img, LV_OBJ_FLAG_HIDDEN));
+}
+
+// ============================================================================
+// Spool Visual (shared overlay/widget spool drawing)
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture, "create_spool_visual: 3D produces a canvas",
+                 "[ui][ams][spool_visual]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
+    lv_obj_t* host = lv_obj_create(test_screen());
+    ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(host, 48);
+    REQUIRE(sv.container == host);
+    REQUIRE(sv.use_3d == true);
+    REQUIRE(sv.canvas != nullptr);
+    REQUIRE(sv.color_swatch == nullptr);      // flat-only handle
+    REQUIRE(sv.empty_placeholder != nullptr); // dashed-circle placeholder always built
+    lv_obj_delete(host);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "create_spool_visual: flat produces concentric rings",
+                 "[ui][ams][spool_visual]") {
+    helix::Config::get_instance()->set<std::string>("/ams/spool_style", "flat");
+    lv_obj_t* host = lv_obj_create(test_screen());
+    ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(host, 48);
+    REQUIRE(sv.use_3d == false);
+    REQUIRE(sv.canvas == nullptr);
+    REQUIRE(sv.spool_outer != nullptr);
+    REQUIRE(sv.color_swatch != nullptr);
+    REQUIRE(sv.spool_hub != nullptr);
+    lv_obj_delete(host);
 }

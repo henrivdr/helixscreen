@@ -71,6 +71,34 @@ std::string get_unit_display_name(const AmsUnit& unit, int unit_index);
 lv_obj_t* create_transparent_container(lv_obj_t* parent);
 
 // ============================================================================
+// Spool Visualization (shared by the AMS overlay slot and the home widget)
+// ============================================================================
+
+/** Widget handles produced by create_spool_visual() */
+struct SpoolVisual {
+    lv_obj_t* container = nullptr;
+    bool use_3d = true;
+    int32_t spool_size = 0;
+    lv_obj_t* canvas = nullptr;            ///< 3D-only: pseudo-3D spool canvas
+    lv_obj_t* spool_outer = nullptr;       ///< flat-only: outer flange ring
+    lv_obj_t* color_swatch = nullptr;      ///< flat-only: filament color ring
+    lv_obj_t* spool_hub = nullptr;         ///< flat-only: center hub
+    lv_obj_t* empty_placeholder = nullptr; ///< dashed-circle "empty" placeholder (hidden)
+    lv_obj_t* error_indicator = nullptr;   ///< error dot, top-right (hidden)
+};
+
+/**
+ * @brief Build a spool visualization into @p container, honoring /ams/spool_style.
+ * @param container Parent to populate (its size is set to spool_size + 8).
+ * @param spool_size Spool graphic size in px; <= 0 uses the "ams_slot_spool_size" token.
+ */
+SpoolVisual create_spool_visual(lv_obj_t* container, int32_t spool_size = 0);
+
+// Shared dashed-circle draw callback for the empty-slot placeholder (moved here from
+// ui_ams_slot.cpp so both the overlay and the home widget share it).
+void draw_dashed_circle_cb(lv_event_t* e);
+
+// ============================================================================
 // Pulse Animation
 // ============================================================================
 
