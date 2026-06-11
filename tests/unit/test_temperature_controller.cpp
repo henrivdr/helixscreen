@@ -3,7 +3,9 @@
 
 #include "../../include/moonraker_client_mock.h"
 #include "moonraker_api.h"
+#include "printer_discovery.h"
 #include "printer_state.h"
+#include "settings_manager.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -32,7 +34,15 @@ TEST_CASE("TemperatureController resolves heater names", "[temp_controller]") {
         REQUIRE(f.controller.resolved_name(HeaterType::Bed) == "heater_bed");
     }
     SECTION("chamber uses the resolved discovery name, never the bare default") {
-        f.state.temperature_state().set_chamber_heater_name("heater_generic chamber_heater");
+        // Drive the REAL resolution path: PrinterState::set_hardware() resolves the
+        // chamber heater from discovery into temperature_state_, exactly as it does
+        // in production. "auto" assignment makes resolution use the discovery name.
+        helix::SettingsManager::instance().set_chamber_heater_assignment("auto");
+        helix::PrinterDiscovery hardware;
+        nlohmann::json objects = {"heater_generic chamber_heater", "extruder", "heater_bed"};
+        hardware.parse_objects(objects);
+        f.state.set_hardware(hardware);
+
         REQUIRE(f.controller.resolved_name(HeaterType::Chamber) ==
                 "heater_generic chamber_heater");
     }
