@@ -166,3 +166,26 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: sync_from_ams_state fe
     ams.clear_backends();
     ams.deinit_subjects();
 }
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: 2x->1x restores bar view",
+                 "[ui][ams_mini][mode]") {
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    helix::ui::UpdateQueue::instance().drain();
+    ui_ams_mini_status_set_slot_count(w, 2);
+    ui_ams_mini_status_set_slot_full(w, 0, 0xFF0000, 70, true, "PLA", 70);
+    ui_ams_mini_status_set_slot_full(w, 1, 0x00FF00, 40, true, "PETG", 40);
+
+    ui_ams_mini_status_set_width(w, 260, 2); // -> SPOOL (hides bars_container)
+    helix::ui::UpdateQueue::instance().drain();
+    ui_ams_mini_status_set_width(w, 130, 1); // -> back to BAR
+    helix::ui::UpdateQueue::instance().drain();
+
+    lv_obj_t* spools = UITest::find_by_name(w, "ams_spools_container");
+    REQUIRE(spools != nullptr);
+    REQUIRE(lv_obj_has_flag(spools, LV_OBJ_FLAG_HIDDEN)); // spools hidden in bar mode
+    lv_obj_t* bars = UITest::find_by_name(w, "ams_bars_container");
+    REQUIRE(bars != nullptr);
+    REQUIRE_FALSE(lv_obj_has_flag(bars, LV_OBJ_FLAG_HIDDEN)); // bars visible again
+    lv_obj_delete(w);
+}
