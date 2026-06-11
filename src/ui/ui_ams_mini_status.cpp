@@ -920,6 +920,7 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
     if (!backend) {
         // No backend - hide widget
         data->slot_count = 0;
+        data->spool_cells.clear();
         rebuild(data);
         return;
     }
@@ -940,18 +941,38 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
         data->unit_rows[u].slot_count = 0;
     }
 
-    // Populate each slot from backend slot info
-    for (int i = 0; i < slot_count && i < AMS_MINI_STATUS_MAX_VISIBLE; ++i) {
+    // Populate both render-mode caches from backend slot info. The bar cache is
+    // capped at AMS_MINI_STATUS_MAX_VISIBLE; the spool cache is uncapped (sized to
+    // slot_count) so the wide spool view sees every lane on multi-unit systems.
+    data->spool_cells.assign(slot_count, SpoolCellData{});
+    int current = lv_subject_get_int(AmsState::instance().get_current_slot_subject());
+    for (int i = 0; i < slot_count; ++i) {
         SlotInfo slot = backend->get_slot_info(i);
+        int fill_pct = ams_draw::fill_percent_from_slot(slot, 0);
+        int rem = -1;
+        float p = slot.get_remaining_percent();
+        if (p >= 0.0f)
+            rem = static_cast<int>(p + 0.5f);
 
-        SlotBarData* slot_bar = &data->slots[i];
-        slot_bar->color_rgb = slot.color_rgb;
-        slot_bar->fill_pct = ams_draw::fill_percent_from_slot(slot, 0);
-        slot_bar->present = slot.is_present();
-        slot_bar->loaded =
-            (i == lv_subject_get_int(AmsState::instance().get_current_slot_subject()));
-        slot_bar->has_error = (slot.status == SlotStatus::BLOCKED || slot.error.has_value());
-        slot_bar->severity = slot.error.has_value() ? slot.error->severity : SlotError::INFO;
+        // Bar-mode cache (capped at MAX_VISIBLE).
+        if (i < AMS_MINI_STATUS_MAX_VISIBLE) {
+            SlotBarData* slot_bar = &data->slots[i];
+            slot_bar->color_rgb = slot.color_rgb;
+            slot_bar->fill_pct = fill_pct;
+            slot_bar->present = slot.is_present();
+            slot_bar->loaded = (i == current);
+            slot_bar->has_error = (slot.status == SlotStatus::BLOCKED || slot.error.has_value());
+            slot_bar->severity = slot.error.has_value() ? slot.error->severity : SlotError::INFO;
+        }
+
+        // Spool-mode cache (uncapped).
+        SpoolCellData& c = data->spool_cells[i];
+        c.color_rgb = slot.color_rgb;
+        c.fill_level = (fill_pct <= 0) ? 0.0f : (fill_pct >= 100 ? 1.0f : fill_pct / 100.0f);
+        c.remaining_pct = rem;
+        c.material = slot.material;
+        c.present = slot.is_present();
+        c.lane_number = i + 1;
     }
 
     rebuild(data);
