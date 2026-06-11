@@ -23,6 +23,7 @@
 // Forward declarations
 namespace helix {
 class PrinterState;
+class TemperatureController;
 }
 class MoonrakerAPI;
 class TemperatureService;
@@ -231,6 +232,13 @@ class TemperatureService {
         api_ = api;
     }
 
+    void set_controller(helix::TemperatureController* controller) {
+        controller_ = controller;
+    }
+    helix::TemperatureController* controller() {
+        return controller_;
+    }
+
     // ── Mini combined graph (filament panel) ────────────────────────────
     void setup_mini_combined_graph(lv_obj_t* container);
 
@@ -313,6 +321,7 @@ class TemperatureService {
 
     helix::PrinterState& printer_state_;
     MoonrakerAPI* api_;
+    helix::TemperatureController* controller_ = nullptr;
 
     // Guards async configfile callbacks (chamber max_temp) against use-after-free
     // if this service is torn down before the WS-thread response returns.
