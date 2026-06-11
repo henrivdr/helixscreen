@@ -5,8 +5,10 @@
 #include "filament_database.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
+#include "ui_error_reporting.h"
 
 #include "hv/json.hpp"
+#include "lvgl/src/others/translation/lv_translation.h"
 
 #include <algorithm>
 #include <cctype>
@@ -120,6 +122,38 @@ const HeaterPresets& TemperatureController::presets(HeaterType type) const {
 
 bool TemperatureController::preset_visible(HeaterType type, int value_c) const {
     return heater_preset_visible(value_c, model_[idx(type)].configured_max);
+}
+
+void TemperatureController::set_target(HeaterType type, double celsius, SendOptions opts) {
+    set_target(resolved_name(type), celsius, std::move(opts));
+}
+
+void TemperatureController::set_target(const std::string& klipper_name, double celsius,
+                                       SendOptions opts) {
+    if (!api_ || klipper_name.empty()) {
+        return;
+    }
+    auto on_ok = [opts]() {
+        if (opts.on_success)
+            opts.on_success();
+    };
+    auto on_err = [opts](const MoonrakerError& e) {
+        if (opts.on_error)
+            opts.on_error(e);
+        if (opts.toast) {
+            NOTIFY_ERROR(lv_tr("Failed to set temperature: {}"), e.user_message());
+        }
+    };
+    api_->set_temperature(klipper_name, celsius, std::move(on_ok), std::move(on_err));
+}
+
+void TemperatureController::apply_material(double nozzle, double bed, double chamber,
+                                           SendOptions opts) {
+    set_target(HeaterType::Nozzle, nozzle, opts);
+    set_target(HeaterType::Bed, bed, opts);
+    if (chamber > 0 && !resolved_name(HeaterType::Chamber).empty()) {
+        set_target(HeaterType::Chamber, chamber, opts);
+    }
 }
 
 } // namespace helix

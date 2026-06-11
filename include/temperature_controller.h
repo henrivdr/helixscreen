@@ -26,6 +26,10 @@ struct HeaterPresets {
     int abs  = 0;
 };
 
+/// Options for a heater set-target call.
+/// - toast: show the standard error toast on failure (default true).
+/// - on_success / on_error: optional caller hooks fired after the RPC completes.
+/// - silent: reserved for future caller-handled dedup (not yet wired; currently unused).
 struct SendOptions {
     bool toast = true;
     bool silent = false;
@@ -69,6 +73,17 @@ class TemperatureController {
 
     /// Whether a preset value should be shown given the configured max (hidden if above it).
     bool preset_visible(HeaterType type, int value_c) const;
+
+    /// Send a temperature target by heater type.  Resolves to the klipper object name first.
+    void set_target(HeaterType type, double celsius, SendOptions opts = {});
+
+    /// Send a temperature target by explicit klipper object name (e.g. "heater_generic
+    /// chamber_heater" or "extruder").  Returns immediately if api_ is null or name is empty.
+    void set_target(const std::string& klipper_name, double celsius, SendOptions opts = {});
+
+    /// Send nozzle/bed/chamber targets in a single call.  Chamber is skipped when its resolved
+    /// name is empty or chamber == 0.
+    void apply_material(double nozzle, double bed, double chamber, SendOptions opts = {});
 
   private:
     friend struct TemperatureControllerTestAccess;

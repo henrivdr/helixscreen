@@ -76,3 +76,43 @@ TEST_CASE("TemperatureController preset visibility honors configured max", "[tem
     REQUIRE_FALSE(f.controller.preset_visible(HeaterType::Chamber, 60));
     REQUIRE(f.controller.presets(HeaterType::Chamber).abs == 60); // value still defined
 }
+
+TEST_CASE("TemperatureController set_target routes to the resolved name", "[temp_controller]") {
+    // Verify that set_target(HeaterType::Chamber, ...) sends the RESOLVED heater name
+    // (e.g. "heater_generic chamber_heater" → bare object name "chamber_heater" in the
+    // gcode), never the bare klipper type prefix that would be rejected by the firmware.
+    ControllerFixture f;
+
+    // Resolve chamber via the production path: PrinterState::set_hardware resolves the
+    // chamber heater from discovery into temperature_state_, same as production.
+    helix::SettingsManager::instance().set_chamber_heater_assignment("auto");
+    helix::PrinterDiscovery hardware;
+    nlohmann::json objects = {"heater_generic chamber_heater", "extruder", "heater_bed"};
+    hardware.parse_objects(objects);
+    f.state.set_hardware(hardware);
+
+    // Confirm resolution before we exercise set_target
+    REQUIRE(f.controller.resolved_name(HeaterType::Chamber) == "heater_generic chamber_heater");
+
+    // execute_gcode gates on klippy state; default is SHUTDOWN — set to READY.
+    f.state.set_klippy_state_sync(helix::KlippyState::READY);
+
+    // Approach: assert on_success fires (meaning the gcode went through without error)
+    // AND that the mock did NOT reject it (which it would if HEATER=heater_generic... was
+    // passed directly, since gcode_script returns 1 for that format). This proves the
+    // controller extracted the bare object name "chamber_heater" from the resolved name.
+    bool success_fired = false;
+    bool error_fired = false;
+    f.controller.set_target(HeaterType::Chamber, 45.0,
+                            helix::SendOptions{.toast = false,
+                                              .on_success = [&] { success_fired = true; },
+                                              .on_error = [&](const MoonrakerError&) {
+                                                  error_fired = true;
+                                              }});
+
+    REQUIRE(success_fired);
+    REQUIRE_FALSE(error_fired);
+
+    // Verify the RPC method used was printer.gcode.script (confirms the gcode path ran)
+    REQUIRE(f.client.last_send_method() == "printer.gcode.script");
+}
