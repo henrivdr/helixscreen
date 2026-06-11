@@ -2,12 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "temperature_controller.h"
 
+#include "moonraker_api.h"
 #include "printer_state.h"
+
+#include "hv/json.hpp"
+
+#include <algorithm>
+#include <cctype>
 
 namespace helix {
 
 TemperatureController::TemperatureController(PrinterState& state, MoonrakerAPI* api)
-    : state_(state), api_(api) {}
+    : state_(state), api_(api) {
+    model_[idx(HeaterType::Nozzle)].keypad_max_default = 350.0f;
+    model_[idx(HeaterType::Bed)].keypad_max_default = 150.0f;
+    model_[idx(HeaterType::Chamber)].keypad_max_default = 80.0f;
+}
 
 std::string TemperatureController::resolved_name(HeaterType type) const {
     switch (type) {
@@ -19,6 +29,62 @@ std::string TemperatureController::resolved_name(HeaterType type) const {
         return state_.temperature_state().chamber_heater_name();
     }
     return "";
+}
+
+int TemperatureController::configured_max(HeaterType type) const {
+    return model_[idx(type)].configured_max;
+}
+
+void TemperatureController::set_configured_max(HeaterType type, int deg) {
+    model_[idx(type)].configured_max = deg;
+}
+
+KeypadRange TemperatureController::keypad_range(HeaterType type) const {
+    const auto& m = model_[idx(type)];
+    return {m.keypad_min, heater_effective_max_deg(m.keypad_max_default, m.configured_max)};
+}
+
+void TemperatureController::ensure_limits(HeaterType type) {
+    if (!api_ || model_[idx(type)].configured_max > 0) {
+        return;
+    }
+    std::string section = resolved_name(type);
+    if (section.empty()) {
+        return;
+    }
+    // configfile.config section headers are lower-cased by Moonraker; lower-case
+    // defensively to match regardless of how the discovery name was capitalised.
+    std::transform(section.begin(), section.end(), section.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    auto tok = lifetime_.token();
+    api_->query_configfile(
+        [this, tok, type, section](const nlohmann::json& config) {
+            // Background (WS) thread: parse only — no `this` member access.
+            int max_deg = 0;
+            if (config.contains(section)) {
+                const auto& sec = config[section];
+                if (sec.contains("max_temp")) {
+                    const auto& mt = sec["max_temp"];
+                    try {
+                        if (mt.is_string()) {
+                            max_deg = static_cast<int>(std::stof(mt.get<std::string>()));
+                        } else if (mt.is_number()) {
+                            max_deg = static_cast<int>(mt.get<double>());
+                        }
+                    } catch (const std::exception&) {
+                        max_deg = 0;
+                    }
+                }
+            }
+            if (max_deg <= 0) {
+                return; // no usable ceiling — keep the heater default
+            }
+            // Main thread: mutate state.
+            tok.defer("TemperatureController::apply_max",
+                      [this, type, max_deg]() { set_configured_max(type, max_deg); });
+        },
+        [](const MoonrakerError&) {});
 }
 
 } // namespace helix

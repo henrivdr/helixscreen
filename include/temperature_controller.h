@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "async_lifetime_guard.h"
+#include "heater_limits.h"
 #include "moonraker_error.h"
-#include "ui_heater_config.h" // helix::HeaterType
+#include "ui_heater_config.h" // helix::HeaterType, HEATER_TYPE_COUNT
 
+#include <array>
 #include <functional>
 #include <string>
 
@@ -42,7 +45,31 @@ class TemperatureController {
     /// "heater_bed"; Chamber -> resolved discovery name (never the bare default).
     std::string resolved_name(HeaterType type) const;
 
+    /// Klipper-configured max_temp in °C, or 0 if not yet fetched.
+    int configured_max(HeaterType type) const;
+
+    /// Keypad input range: min..effective ceiling (configured max if known,
+    /// otherwise the heater default).
+    KeypadRange keypad_range(HeaterType type) const;
+
+    /// Fetch the Klipper configfile max_temp for this heater if not yet known.
+    /// No-op if api_ is null or the value is already populated.
+    void ensure_limits(HeaterType type);
+
   private:
+    friend struct TemperatureControllerTestAccess;
+    void set_configured_max(HeaterType type, int deg);
+
+    struct HeaterModel {
+        float keypad_min = 0.0f;
+        float keypad_max_default = 0.0f; // 350 nozzle / 150 bed / 80 chamber
+        int configured_max = 0;          // °C from configfile, 0 = unknown
+    };
+    std::array<HeaterModel, HEATER_TYPE_COUNT> model_{};
+    AsyncLifetimeGuard lifetime_;
+
+    static int idx(HeaterType t) { return static_cast<int>(t); }
+
     PrinterState& state_;
     MoonrakerAPI* api_;
 };

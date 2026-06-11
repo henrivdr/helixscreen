@@ -7,6 +7,7 @@
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "settings_manager.h"
+#include "../test_helpers/temperature_controller_test_access.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -50,5 +51,19 @@ TEST_CASE("TemperatureController resolves heater names", "[temp_controller]") {
     SECTION("nozzle is the active extruder") {
         REQUIRE(f.controller.resolved_name(HeaterType::Nozzle) ==
                 f.state.active_extruder_name());
+    }
+}
+
+TEST_CASE("TemperatureController clamps keypad range to configured max", "[temp_controller]") {
+    ControllerFixture f;
+
+    SECTION("unknown configured max falls back to the heater default") {
+        // Nozzle default ceiling is 350; nothing fetched yet.
+        REQUIRE(f.controller.keypad_range(HeaterType::Nozzle).max == 350.0f);
+    }
+    SECTION("known configured max wins") {
+        helix::TemperatureControllerTestAccess::set_max(f.controller, HeaterType::Chamber, 50);
+        REQUIRE(f.controller.keypad_range(HeaterType::Chamber).max == 50.0f);
+        REQUIRE(f.controller.configured_max(HeaterType::Chamber) == 50);
     }
 }
