@@ -18,6 +18,31 @@ class MoonrakerClientTestAccess {
     static bool callbacks_installed(const MoonrakerClient& c) {
         return c.ws_callbacks_installed_;
     }
+
+    // Invoke all persistent method callbacks registered for `method`, as the
+    // WebSocket onmessage dispatch would (copy under lock, invoke outside it).
+    // Lets tests simulate Moonraker notifications (notify_filelist_changed,
+    // notify_klippy_ready, ...) without a live connection. Runs on the calling
+    // thread — production callbacks must already be thread-agnostic (they
+    // marshal member access to the main thread via token.defer()).
+    static void fire_method_callbacks(MoonrakerClient& c, const std::string& method,
+                                      const nlohmann::json& msg) {
+        std::vector<std::function<void(const nlohmann::json&)>> cbs;
+        {
+            std::lock_guard<std::mutex> lock(c.callbacks_mutex_);
+            auto it = c.method_callbacks_.find(method);
+            if (it != c.method_callbacks_.end()) {
+                for (auto& [name, cb] : it->second) {
+                    cbs.push_back(cb);
+                }
+            }
+        }
+        for (auto& cb : cbs) {
+            if (cb) {
+                cb(msg);
+            }
+        }
+    }
 };
 
 } // namespace helix

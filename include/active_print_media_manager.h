@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ui_observer_guard.h"
+#include "ui_timer_guard.h"
 
 #include "async_lifetime_guard.h"
 #include "moonraker_api.h"
@@ -43,7 +44,10 @@ class ActivePrintMediaManager {
     /**
      * @brief Set the MoonrakerAPI instance for thumbnail downloads
      *
-     * Must be called before thumbnail loading will work.
+     * Must be called before thumbnail loading will work. Also registers the
+     * persistent Moonraker method callbacks (notify_filelist_changed /
+     * notify_klippy_ready) used to re-trigger thumbnail loads that failed
+     * because Moonraker hadn't finished scanning the file yet.
      *
      * @param api Pointer to MoonrakerAPI (can be nullptr to disable)
      */
@@ -84,6 +88,40 @@ class ActivePrintMediaManager {
     void load_thumbnail_for_file(const std::string& filename);
     void clear_print_info();
 
+    // --- Bounded thumbnail retry (metadata/thumbnail fetch failures) ---
+    // Moonraker may not have finished scanning a just-uploaded file when the
+    // print starts (OrcaSlicer upload-and-print), so the first metadata query
+    // can fail or return no thumbnails. Each failure schedules a one-shot
+    // lv_timer retry with backoff (2s, 5s, 10s, 20s, then 30s) up to
+    // kMaxThumbnailAttempts total attempts per filename. If the print ends
+    // (empty filename) while a retry is pending, last_effective_filename_ is
+    // intentionally preserved (see process_filename), so the retry may still
+    // late-fill the preserved display info — intended, and bounded by the cap.
+
+    /// Backoff delay for the given retry number (1-based: first retry = 1).
+    static uint32_t retry_delay_ms(int retry_number);
+    /// Schedule a retry for @p filename (main thread only). No-ops if the
+    /// filename is no longer current, a retry is already pending, or
+    /// @p max_retries retries have already been scheduled.
+    void schedule_thumbnail_retry(const std::string& filename,
+                                  int max_retries = kMaxThumbnailAttempts - 1);
+    /// Cancel any pending retry timer and clear retry bookkeeping filename.
+    void cancel_thumbnail_retry();
+    /// Body of the retry timer: re-validates filename + generation, then reloads.
+    void on_retry_timer_fired();
+    static void retry_timer_cb(lv_timer_t* timer);
+
+    // --- External re-trigger (Moonraker notifications) ---
+    void register_moonraker_listeners();
+    void unregister_moonraker_listeners();
+    /// Main-thread handler for notify_filelist_changed (fields pre-parsed on
+    /// the WebSocket thread into plain strings).
+    void handle_filelist_changed(const std::string& action, const std::string& item_path,
+                                 const std::string& source_path);
+    /// Reset retry state and reload the thumbnail for the current filename
+    /// if one is set and the thumbnail hasn't successfully loaded yet.
+    void retrigger_thumbnail_load(const char* reason);
+
     PrinterState& printer_state_;
     MoonrakerAPI* api_ = nullptr;
     ObserverGuard print_filename_observer_;
@@ -91,6 +129,26 @@ class ActivePrintMediaManager {
     std::string last_effective_filename_;
     std::string last_loaded_thumbnail_filename_;
     bool last_was_empty_ = false; ///< Prevents repeated "empty filename" log spam
+
+    /// Max total metadata/thumbnail load attempts per filename (1 initial + 9 retries).
+    static constexpr int kMaxThumbnailAttempts = 10;
+
+    /// Lower retry cap for the success-with-empty-thumbnails leg: a metadata
+    /// record can briefly lack thumbnails mid-scan, but the common cause is a
+    /// file sliced WITHOUT thumbnails — a permanent condition where the full
+    /// ladder would just burn RPCs. Late-scan cases beyond this are covered by
+    /// the notify_filelist_changed / notify_klippy_ready re-triggers.
+    static constexpr int kMaxEmptyThumbnailRetries = 2;
+
+    helix::ui::LvglTimerGuard retry_timer_; ///< Pending one-shot retry (empty when none)
+    int thumbnail_retry_count_ = 0;         ///< Retries scheduled for the current filename
+    std::string retry_filename_;            ///< Filename the pending retry is for
+    uint32_t retry_generation_ = 0;         ///< Load generation the pending retry belongs to
+    bool thumbnail_loaded_ = false; ///< Thumbnail successfully loaded for current filename
+
+    MoonrakerAPI* listener_api_ = nullptr; ///< API the method callbacks are registered on
+    std::string filelist_handler_name_;
+    std::string klippy_ready_handler_name_;
 
     /// Generation counter for stale-callback detection. Bumped on the main thread
     /// each time a new load starts; read on the main thread inside deferred applies.
@@ -102,6 +160,8 @@ class ActivePrintMediaManager {
     /// background-thread callback that marshals back via tok.defer() no-ops if the
     /// manager has been torn down (soft restart / reconnect).
     helix::AsyncLifetimeGuard lifetime_;
+
+    friend class ActivePrintMediaManagerTestAccess;
 };
 
 /**
