@@ -7,6 +7,7 @@
 
 #include "ui_ams_mini_status.h"
 #include "panel_widget_registry.h"
+#include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../ui_test_utils.h"
@@ -26,5 +27,29 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: set_width accepts colspan", "[ui]
     REQUIRE(w != nullptr);
     ui_ams_mini_status_set_width(w, 260, 2); // new 3-arg signature
     SUCCEED("compiles and runs with colspan arg");
+    lv_obj_delete(w);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: colspan>=2 selects spool mode",
+                 "[ui][ams_mini][mode]") {
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    // Flush any initial AmsState auto-sync queued at create time (a prior test in
+    // the shard may have left AmsState with slots). The widget auto-binds to
+    // AmsState and sync_from_ams_state() would otherwise clobber slot_count below.
+    helix::ui::UpdateQueue::instance().drain();
+    ui_ams_mini_status_set_slot_count(w, 2);
+    ui_ams_mini_status_set_slot_full(w, 0, 0xFF0000, 70, true, "PLA", 70);
+    ui_ams_mini_status_set_slot_full(w, 1, 0x00FF00, 40, true, "PETG", 40);
+
+    ui_ams_mini_status_set_width(w, 130, 1); // 1x -> bar mode, no spools container
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(UITest::find_by_name(w, "ams_spools_container") == nullptr);
+
+    ui_ams_mini_status_set_width(w, 260, 2); // 2x -> spool mode
+    helix::ui::UpdateQueue::instance().drain();
+    lv_obj_t* spools = UITest::find_by_name(w, "ams_spools_container");
+    REQUIRE(spools != nullptr);
+    REQUIRE_FALSE(lv_obj_has_flag(spools, LV_OBJ_FLAG_HIDDEN));
     lv_obj_delete(w);
 }

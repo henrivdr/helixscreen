@@ -24,7 +24,9 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 // ============================================================================
 // Layout constants
@@ -45,6 +47,21 @@ static constexpr int32_t BAR_BORDER_RADIUS_PX = 8;
 
 /** Magic number to identify ams_mini_status widgets ("AMS1" as ASCII) */
 static constexpr uint32_t AMS_MINI_STATUS_MAGIC = 0x414D5331;
+
+/** Render mode: narrow bars vs. wide spool cells (selected by colspan) */
+enum class AmsMiniMode { BAR, SPOOL };
+
+/**
+ * @brief Per-slot data for the wide spool render mode
+ */
+struct SpoolCellData {
+    uint32_t color_rgb = 0x808080;
+    float fill_level = 1.0f; // 0.0-1.0 for the spool graphic
+    int remaining_pct = -1;  // actual % remaining; -1 = unknown (blank label)
+    std::string material;    // "" => render "--"
+    bool present = false;
+    int lane_number = 1; // 1-based, for the badge
+};
 
 /**
  * @brief Per-slot data stored for each bar
@@ -85,13 +102,20 @@ struct AmsMiniStatusData {
     int unit_count = 0;       // Number of AMS units (0 or 1 = single row, 2+ = stacked rows)
     UnitRowInfo unit_rows[8]; // Max 8 units
 
+    // Render mode selection (BAR for narrow, SPOOL for colspan >= 2)
+    AmsMiniMode mode = AmsMiniMode::BAR;
+
     // Child objects
-    lv_obj_t* container = nullptr;      // Main container
-    lv_obj_t* bars_container = nullptr; // Container for slot bars
-    lv_obj_t* overflow_label = nullptr; // "+N" overflow indicator
+    lv_obj_t* container = nullptr;        // Main container
+    lv_obj_t* bars_container = nullptr;   // Container for slot bars
+    lv_obj_t* spools_container = nullptr; // Container for wide spool cells
+    lv_obj_t* overflow_label = nullptr;   // "+N" overflow indicator
 
     // Per-slot data
     SlotBarData slots[AMS_MINI_STATUS_MAX_VISIBLE];
+
+    // Per-slot data for the spool render mode (sized to slot_count; uncapped for multi-unit)
+    std::vector<SpoolCellData> spool_cells;
 
     // Auto-binding observer (observe AmsState slots_version subject)
     // Uses ObserverGuard for RAII lifecycle management
@@ -115,6 +139,8 @@ static AmsMiniStatusData* get_data(lv_obj_t* obj) {
 
 // Forward declarations for internal functions
 static void rebuild_bars(AmsMiniStatusData* data);
+static void rebuild_spools(AmsMiniStatusData* data);
+static void rebuild(AmsMiniStatusData* data);
 static void sync_from_ams_state(AmsMiniStatusData* data);
 
 // ============================================================================
@@ -459,6 +485,52 @@ static void rebuild_bars(AmsMiniStatusData* data) {
     }
 }
 
+/**
+ * @brief Render the wide spool view (colspan >= 2).
+ *
+ * STUB (Task 6): lazily creates a named, empty scroll container and shows it so
+ * mode selection is testable. Per-slot spool cells are built in Task 7.
+ */
+static void rebuild_spools(AmsMiniStatusData* data) {
+    if (!data || !data->container)
+        return;
+    if (!lv_screen_active())
+        return;
+    if (!data->spools_container) {
+        lv_obj_t* sc = lv_obj_create(data->container);
+        lv_obj_set_name(sc, "ams_spools_container");
+        lv_obj_set_width(sc, lv_pct(100));
+        lv_obj_set_height(sc, lv_pct(100));
+        lv_obj_set_style_bg_opa(sc, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(sc, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(sc, 0, LV_PART_MAIN);
+        data->spools_container = sc;
+    }
+    lv_obj_remove_flag(data->spools_container, LV_OBJ_FLAG_HIDDEN);
+    // Cells are built in Task 7.
+}
+
+/**
+ * @brief Render dispatcher: select bar vs. spool mode by colspan.
+ *
+ * colspan >= 2 selects the wide spool view; otherwise the narrow bar view.
+ * The inactive mode's container is hidden so only one is visible at a time.
+ */
+static void rebuild(AmsMiniStatusData* data) {
+    if (!data)
+        return;
+    data->mode = (data->colspan >= 2) ? AmsMiniMode::SPOOL : AmsMiniMode::BAR;
+    if (data->mode == AmsMiniMode::SPOOL) {
+        if (data->bars_container)
+            lv_obj_add_flag(data->bars_container, LV_OBJ_FLAG_HIDDEN);
+        rebuild_spools(data);
+    } else {
+        if (data->spools_container)
+            lv_obj_add_flag(data->spools_container, LV_OBJ_FLAG_HIDDEN);
+        rebuild_bars(data);
+    }
+}
+
 /** Cleanup callback when widget is deleted */
 static void on_delete(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
@@ -479,7 +551,7 @@ static void on_size_changed(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
     auto* data = get_data(obj);
     if (data && data->slot_count > 0) {
-        rebuild_bars(data);
+        rebuild(data);
     }
 }
 
@@ -615,6 +687,7 @@ void ui_ams_mini_status_set_slot_count(lv_obj_t* obj, int slot_count) {
         return;
 
     data->slot_count = slot_count;
+    data->spool_cells.resize(slot_count);
     rebuild_bars(data);
 
     spdlog::debug("[AmsMiniStatus] slot_count={}", slot_count);
@@ -633,18 +706,38 @@ void ui_ams_mini_status_set_max_visible(lv_obj_t* obj, int max_visible) {
     rebuild_bars(data);
 }
 
-void ui_ams_mini_status_set_slot(lv_obj_t* obj, int slot_index, uint32_t color_rgb, int fill_pct,
-                                 bool present) {
+void ui_ams_mini_status_set_slot_full(lv_obj_t* obj, int slot_index, uint32_t color_rgb,
+                                      int fill_pct, bool present, const char* material,
+                                      int remaining_pct) {
     auto* data = get_data(obj);
-    if (!data || slot_index < 0 || slot_index >= AMS_MINI_STATUS_MAX_VISIBLE)
+    if (!data || slot_index < 0)
         return;
 
-    SlotBarData* slot = &data->slots[slot_index];
-    slot->color_rgb = color_rgb;
-    slot->fill_pct = std::clamp(fill_pct, 0, 100);
-    slot->present = present;
+    // Bar-mode cache (capped to the visible bar array). Preserve the existing
+    // immediate restyle so bar rendering is unchanged.
+    if (slot_index < AMS_MINI_STATUS_MAX_VISIBLE) {
+        SlotBarData* slot = &data->slots[slot_index];
+        slot->color_rgb = color_rgb;
+        slot->fill_pct = std::clamp(fill_pct, 0, 100);
+        slot->present = present;
+        apply_slot_style(slot);
+    }
 
-    apply_slot_style(slot);
+    // Spool-mode cache (uncapped; multi-unit safe).
+    if (static_cast<int>(data->spool_cells.size()) <= slot_index)
+        data->spool_cells.resize(slot_index + 1);
+    SpoolCellData& c = data->spool_cells[slot_index];
+    c.color_rgb = color_rgb;
+    c.fill_level = (fill_pct <= 0) ? 0.0f : (fill_pct >= 100 ? 1.0f : fill_pct / 100.0f);
+    c.remaining_pct = remaining_pct;
+    c.material = material ? material : "";
+    c.present = present;
+    c.lane_number = slot_index + 1;
+}
+
+void ui_ams_mini_status_set_slot(lv_obj_t* obj, int slot_index, uint32_t color_rgb, int fill_pct,
+                                 bool present) {
+    ui_ams_mini_status_set_slot_full(obj, slot_index, color_rgb, fill_pct, present, "", -1);
 }
 
 /** Timer callback for deferred refresh */
@@ -698,9 +791,9 @@ void ui_ams_mini_status_set_width(lv_obj_t* obj, int width_px, int colspan) {
     data->colspan = colspan;
     spdlog::debug("[AmsMiniStatus] Width set to {}px, colspan {}", width_px, colspan);
 
-    // Rebuild bars if we already have slots (width affects max bar width)
+    // Rebuild if we already have slots (width + colspan affect mode and bar width)
     if (data->slot_count > 0)
-        rebuild_bars(data); // NOTE: Task 6 replaces this with rebuild(data)
+        rebuild(data);
 }
 
 bool ui_ams_mini_status_is_valid(lv_obj_t* obj) {
@@ -726,7 +819,7 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
     if (!backend) {
         // No backend - hide widget
         data->slot_count = 0;
-        rebuild_bars(data);
+        rebuild(data);
         return;
     }
 
@@ -760,7 +853,7 @@ static void sync_from_ams_state(AmsMiniStatusData* data) {
         slot_bar->severity = slot.error.has_value() ? slot.error->severity : SlotError::INFO;
     }
 
-    rebuild_bars(data);
+    rebuild(data);
     spdlog::trace("[AmsMiniStatus] Synced from AmsState: {} slots", slot_count);
 }
 
