@@ -590,7 +590,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
     int cell_px = (two_x / 4 >= SPOOL_CELL_MIN_PX) ? (two_x / 4) : (two_x / 2);
     if (cell_px < SPOOL_CELL_MIN_PX)
         cell_px = SPOOL_CELL_MIN_PX;
-    int spool_size = cell_px / 2; // spool graphic ~half the cell; text takes the rest
+    int spool_size = cell_px * 2 / 5; // spool graphic ~40% of the cell; text takes the rest
 
     for (int i = 0; i < n; ++i) {
         const SpoolCellData& cd = data->spool_cells[i];
@@ -634,6 +634,8 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_t* mat = lv_label_create(col);
         snprintf(nm, sizeof(nm), "spool_material_%d", i);
         lv_obj_set_name(mat, nm);
+        lv_obj_set_width(mat, lv_pct(100));
+        lv_label_set_long_mode(mat, LV_LABEL_LONG_WRAP);
         lv_label_set_text(mat, cd.material.empty() ? "--" : cd.material.c_str()); // material: no i18n
         const lv_font_t* fs = theme_manager_get_font("font_small");
         if (fs)
