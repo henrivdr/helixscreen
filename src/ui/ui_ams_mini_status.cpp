@@ -500,8 +500,9 @@ static void rebuild_bars(AmsMiniStatusData* data) {
 /**
  * @brief Render the wide spool view (colspan >= 2).
  *
- * STUB (Task 6): lazily creates a named, empty scroll container and shows it so
- * mode selection is testable. Per-slot spool cells are built in Task 7.
+ * Lazily creates the horizontally-scrollable spool container, then renders one
+ * cell per entry in data->spool_cells (spool graphic with lane badge, material
+ * label, remaining percent), sizing cells to fit the available width.
  */
 static void rebuild_spools(AmsMiniStatusData* data) {
     if (!data || !data->container)
@@ -637,6 +638,8 @@ static void rebuild(AmsMiniStatusData* data) {
     } else {
         if (data->spools_container)
             lv_obj_add_flag(data->spools_container, LV_OBJ_FLAG_HIDDEN);
+        if (data->bars_container)
+            lv_obj_remove_flag(data->bars_container, LV_OBJ_FLAG_HIDDEN);
         rebuild_bars(data);
     }
 }
@@ -704,6 +707,7 @@ lv_obj_t* ui_ams_mini_status_create(lv_obj_t* parent, int32_t height) {
 
     // Create bars container (holds the slot bars)
     data_ptr->bars_container = lv_obj_create(container);
+    lv_obj_set_name(data_ptr->bars_container, "ams_bars_container");
     lv_obj_remove_flag(data_ptr->bars_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(data_ptr->bars_container, LV_OBJ_FLAG_EVENT_BUBBLE); // Pass clicks to parent
     lv_obj_set_style_bg_opa(data_ptr->bars_container, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -1023,6 +1027,7 @@ static void* ui_ams_mini_status_xml_create(lv_xml_parser_state_t* state, const c
 
     // Create bars container (holds the slot bars)
     data_ptr->bars_container = lv_obj_create(container);
+    lv_obj_set_name(data_ptr->bars_container, "ams_bars_container");
     lv_obj_remove_flag(data_ptr->bars_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(data_ptr->bars_container, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_style_bg_opa(data_ptr->bars_container, LV_OPA_TRANSP, LV_PART_MAIN);
