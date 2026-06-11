@@ -243,6 +243,20 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     // corrupt LVGL's event linked list (#776, #834).
     helix::ui::safe_clean_children(container);
 
+    // Deactivate grid layout for the duration of the rebuild. On a *rebuild* the
+    // container is reused and is still in LV_LAYOUT_GRID from the previous pass,
+    // its grid style holding a pointer into the old `dsc.col_dsc` buffer. The
+    // move-assignment at `dsc.col_dsc = make_col_dsc(...)` below frees that buffer,
+    // leaving the container's descriptor pointer dangling. Any child whose
+    // attach() synchronously forces a layout (e.g. PrintStatusWidget ->
+    // resize_and_publish -> lv_obj_update_layout) would then cascade grid_update
+    // -> count_tracks over the freed descriptor and walk off the heap end ->
+    // SIGSEGV (#983, bundle VDJ3J9UV). Turning the grid off here closes that
+    // window; it is re-activated with the fresh descriptor at the end of the
+    // build. The "activate grid last" guard alone is insufficient because it only
+    // covers the first build, where the container is not yet a grid.
+    lv_obj_set_layout(container, LV_LAYOUT_NONE);
+
     if (enabled_widgets.empty()) {
         populating_ = false;
         return {};

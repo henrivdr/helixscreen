@@ -393,3 +393,129 @@ TEST_CASE_METHOD(XMLTestFixture,
     helix::register_widget_factory("clock", original_clock_factory);
     mgr.clear_panel_config(panel_id);
 }
+
+namespace {
+
+// Spy PanelWidget for the grid *rebuild* race (#983, bundle VDJ3J9UV). Unlike
+// GridSpyWidget it actively FORCES a synchronous layout from inside attach() —
+// exactly what PrintStatusWidget does (resize_and_publish -> lv_obj_update_layout,
+// ui_progress_arc.cpp). On a rebuild the page container is reused and is still in
+// LV_LAYOUT_GRID from the previous pass, its grid style pointing at the old
+// dsc.col_dsc buffer; populate_widgets() move-reassigns that vector (freeing the
+// buffer) before reinstalling a fresh descriptor at the end. If the grid is still
+// active when this forced layout runs, grid_update -> count_tracks walks the freed
+// descriptor off the heap end -> SIGSEGV. The fix deactivates the grid
+// (LV_LAYOUT_NONE) at the start of every (re)build so the container is not a live
+// grid while children attach.
+struct GridRebuildSpyWidget : helix::PanelWidget {
+    static int s_layout_at_last_attach; // container layout when the most recent attach() ran
+    static int s_attach_count;
+
+    void attach(lv_obj_t* widget_obj, lv_obj_t* /*parent_screen*/) override {
+        ++s_attach_count;
+        lv_obj_t* parent = widget_obj ? lv_obj_get_parent(widget_obj) : nullptr;
+        s_layout_at_last_attach =
+            parent ? static_cast<int>(lv_obj_get_style_layout(parent, LV_PART_MAIN)) : -1;
+        // Force the synchronous layout that triggers the crash pre-fix. With the
+        // fix the parent is LV_LAYOUT_NONE here, so this is a harmless no-op walk.
+        if (parent)
+            lv_obj_update_layout(parent);
+    }
+    void detach() override {}
+    const char* id() const override {
+        return "clock";
+    }
+    std::string get_component_name() const override {
+        return "test_grid_rebuild_spy_widget";
+    }
+};
+
+int GridRebuildSpyWidget::s_layout_at_last_attach = -2;
+int GridRebuildSpyWidget::s_attach_count = 0;
+
+} // namespace
+
+// Regression test for #983 rebuild path (bundle VDJ3J9UV, v0.99.75, Pi): SIGSEGV
+// in grid_update -> count_tracks while REPOPULATING the home grid. The build-time
+// fix (#983, commit 69e9923dd) activates the grid last, which only covers the
+// first build — on a rebuild the reused container enters populate_widgets already
+// in LV_LAYOUT_GRID holding the previous build's descriptor pointer, which the
+// move-assignment `dsc.col_dsc = make_col_dsc(...)` then frees. A child whose
+// attach() forces a layout walks the freed descriptor and crashes.
+//
+// Invariant: on the SECOND populate_widgets (rebuild) of the same container, the
+// container's layout is NOT LV_LAYOUT_GRID at the moment a child attaches (the fix
+// deactivated it), and the process survives the attach-forced layout. FAILS
+// pre-fix (container still grid during rebuild) and PASSES after.
+TEST_CASE_METHOD(XMLTestFixture,
+                 "PanelWidgetManager deactivates grid before rebuilding a reused container",
+                 "[panel_widget][manager][regression]") {
+    helix::init_widget_registrations();
+
+    lv_xml_register_component_from_data(
+        "test_grid_rebuild_spy_widget",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+
+    const auto* clock_def = helix::find_widget_def("clock");
+    REQUIRE(clock_def != nullptr);
+    WidgetFactory original_clock_factory = clock_def->factory;
+    helix::register_widget_factory(
+        "clock", [](const std::string&) -> std::unique_ptr<PanelWidget> {
+            return std::make_unique<GridRebuildSpyWidget>();
+        });
+
+    const std::string panel_id = "test_grid_rebuild_race";
+
+    auto* cfg = Config::get_instance();
+    nlohmann::json widget_cfg = {{"main_page_index", 0},
+                                 {"next_page_id", 2},
+                                 {"pages",
+                                  {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
+                                   {{"id", "spy"},
+                                    {"widgets",
+                                     {{{"id", "clock"},
+                                       {"enabled", true},
+                                       {"col", 0},
+                                       {"row", 0},
+                                       {"colspan", 1},
+                                       {"rowspan", 1}}}}}}}};
+    cfg->set<nlohmann::json>(cfg->df() + "panel_widgets/" + panel_id, widget_cfg);
+
+    auto& mgr = PanelWidgetManager::instance();
+    mgr.get_widget_config(panel_id).mark_dirty();
+    mgr.clear_panel_config(panel_id);
+
+    // One reused container — the crux of the rebuild race.
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 400, 300);
+    process_lvgl(10);
+
+    // First build: leaves the container in LV_LAYOUT_GRID with a live descriptor.
+    auto widgets1 = mgr.populate_widgets(panel_id, container, /*page_index=*/1);
+    REQUIRE(GridRebuildSpyWidget::s_attach_count == 1);
+    REQUIRE(lv_obj_get_style_layout(container, LV_PART_MAIN) == LV_LAYOUT_GRID);
+
+    // Second build (rebuild) of the SAME container. clear_panel_config() is the
+    // production grid-edit rebuild sequence (GridEditMode): it erases this panel's
+    // active_configs_ (so populate_widgets does a full rebuild instead of taking
+    // the "widget list unchanged" early-out) AND erases grid_descriptors_, which
+    // *frees the descriptor buffer the reused container's grid style still points
+    // at* — exactly the dangling pointer that count_tracks walks off pre-fix.
+    GridRebuildSpyWidget::s_layout_at_last_attach = -2;
+    widgets1.clear(); // release the first build's widget instances
+    mgr.clear_panel_config(panel_id);
+    auto widgets2 = mgr.populate_widgets(panel_id, container, /*page_index=*/1);
+
+    REQUIRE(GridRebuildSpyWidget::s_attach_count == 2);
+    INFO("container layout at rebuild attach (LV_LAYOUT_GRID="
+         << static_cast<int>(LV_LAYOUT_GRID)
+         << ") was: " << GridRebuildSpyWidget::s_layout_at_last_attach);
+    REQUIRE(GridRebuildSpyWidget::s_layout_at_last_attach != static_cast<int>(LV_LAYOUT_GRID));
+
+    // After the rebuild the grid is active again with a fresh descriptor.
+    REQUIRE(lv_obj_get_style_layout(container, LV_PART_MAIN) == LV_LAYOUT_GRID);
+    REQUIRE(lv_obj_get_child_count(container) > 0);
+
+    helix::register_widget_factory("clock", original_clock_factory);
+    mgr.clear_panel_config(panel_id);
+}
