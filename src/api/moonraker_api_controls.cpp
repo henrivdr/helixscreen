@@ -87,7 +87,8 @@ void MoonrakerAPI::set_temperature(const std::string& heater, double temperature
         return;
     }
 
-    spdlog::info("[Moonraker API] Setting {} temperature to {}°C", heater, temperature);
+    spdlog::info("[Moonraker API] Setting {} temperature to {}°C{}", heater, temperature,
+                 use_m141 ? " (via M141)" : "");
 
     execute_gcode(gcode, on_success, on_error);
 }
