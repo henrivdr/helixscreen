@@ -697,6 +697,19 @@ TEST_CASE("build_heater_gcode generates correct gcode for all heater types", "[c
     }
 }
 
+TEST_CASE("chamber_effective_setpoint picks the active control", "[temperature][m141]") {
+    using helix::ui::temperature::chamber_effective_setpoint;
+    auto heating = chamber_effective_setpoint(600, 0); // heater 60° (×10)
+    REQUIRE(heating.centi == 600);
+    REQUIRE(std::string(heating.mode) == "Heating");
+    auto maint = chamber_effective_setpoint(0, 400); // fan 40° (×10)
+    REQUIRE(maint.centi == 400);
+    REQUIRE(std::string(maint.mode) == "Maintaining");
+    auto off = chamber_effective_setpoint(0, 0);
+    REQUIRE(off.centi == 0);
+    REQUIRE(std::string(off.mode) == "Off");
+}
+
 TEST_CASE("chamber_uses_m141 gates only the chamber heater + M141 present", "[temperature][m141]") {
     using helix::ui::temperature::chamber_uses_m141;
     const std::string chamber = "heater_generic chamber_heater";

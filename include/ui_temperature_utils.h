@@ -322,6 +322,26 @@ bool chamber_uses_m141(const std::string& heater_full_name,
                        const std::string& chamber_heater_name, bool m141_available);
 
 /**
+ * @brief Effective chamber setpoint and control mode from the two M141 targets.
+ *
+ * The K2's M141 macro splits the chamber setpoint across two Klipper objects:
+ * a HEATING setpoint (>40°C) lands on the heater target, while a MAINTAINING
+ * setpoint (≤40°C) lands on the cooling-fan target with the heater target at 0.
+ * On printers without a chamber cooling fan the fan target stays 0, so this
+ * reduces to the heater target (Heating/Off only) — safe and universal.
+ *
+ * @param heater_target_centi Chamber heater target (×10; 0 = not heating)
+ * @param fan_target_centi    Chamber cooling-fan target (×10; 0 = not maintaining)
+ * @return centi = effective setpoint (×10), mode = "Heating" | "Maintaining" | "Off"
+ */
+struct ChamberSetpoint {
+    int centi;
+    const char* mode; ///< "Heating" | "Maintaining" | "Off"
+};
+
+ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi);
+
+/**
  * @brief Build gcode to turn off a heater (target=0)
  *
  * Convenience wrapper for build_heater_gcode with target=0.

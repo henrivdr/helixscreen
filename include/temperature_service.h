@@ -89,6 +89,13 @@ struct HeaterState {
     SubjectLifetime target_lifetime;
     ObserverGuard temp_observer;
     ObserverGuard target_observer;
+
+    // Chamber-specific: the M141 cooling-fan target is a second setpoint source.
+    // The effective chamber setpoint is heater-or-fan (see chamber_effective_setpoint).
+    SubjectLifetime fan_target_lifetime;
+    ObserverGuard fan_target_observer;
+    // Control-mode word for the chamber status line ("Heating"/"Maintaining"/"Off").
+    const char* chamber_mode = "Off";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,6 +280,9 @@ class TemperatureService {
     // ── Generic instance methods ────────────────────────────────────────
     void on_temp_changed(helix::HeaterType type, int temp_centi);
     void on_target_changed(helix::HeaterType type, int target_centi);
+    // Chamber: combine the heater-target and cooling-fan-target subjects into a
+    // single effective setpoint + control-mode word, then refresh display/status.
+    void recompute_chamber_target();
     void update_display(helix::HeaterType type);
     void update_status(helix::HeaterType type);
     void send_temperature(helix::HeaterType type, int target);

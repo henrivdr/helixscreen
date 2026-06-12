@@ -195,6 +195,14 @@ bool chamber_uses_m141(const std::string& heater_full_name,
            heater_full_name == chamber_heater_name;
 }
 
+ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi) {
+    if (heater_target_centi > 0)
+        return {heater_target_centi, "Heating"};
+    if (fan_target_centi > 0)
+        return {fan_target_centi, "Maintaining"};
+    return {0, "Off"};
+}
+
 } // namespace temperature
 } // namespace ui
 } // namespace helix

@@ -167,6 +167,13 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
             self->on_target_changed(HeaterType::Chamber, target);
         },
         chamber.target_lifetime);
+    // M141 cooling mode parks the ≤40°C setpoint on the cooling-fan target while
+    // the heater target stays 0. Observe it too so the effective chamber setpoint
+    // reflects "Maintaining" sets. recompute_chamber_target() reads BOTH subjects.
+    chamber.fan_target_observer = observe_int_sync<TemperatureService>(
+        printer_state_.get_chamber_fan_target_subject(chamber.fan_target_lifetime), this,
+        [](TemperatureService* self, int /*fan_target*/) { self->recompute_chamber_target(); },
+        chamber.fan_target_lifetime);
 
     // Register XML event callbacks (BEFORE any lv_xml_create calls)
     // Generic callbacks (used by chamber + can be used by nozzle/bed after XML update)
@@ -235,6 +242,14 @@ void TemperatureService::on_temp_changed(HeaterType type, int temp_centi) {
 }
 
 void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
+    // Chamber's effective setpoint is heater-OR-fan (M141 splits the setpoint
+    // across two Klipper objects). Route through the combine path rather than
+    // taking the heater readback as gospel. Nozzle/Bed keep the direct write.
+    if (type == HeaterType::Chamber) {
+        recompute_chamber_target();
+        return;
+    }
+
     auto& h = heaters_[idx(type)];
     h.target = target_centi;
     update_display(type);
@@ -253,6 +268,31 @@ void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
         // historical trace.
         ui_temp_graph_set_series_target(h.graph, h.series_id, target_deg, true);
         spdlog::trace("[TempPanel] {} target line: {:.1f}°C", heater_label(type), target_deg);
+    }
+}
+
+void TemperatureService::recompute_chamber_target() {
+    auto& chamber = heaters_[idx(HeaterType::Chamber)];
+
+    int heater_centi = lv_subject_get_int(printer_state_.get_chamber_target_subject());
+    int fan_centi = lv_subject_get_int(printer_state_.get_chamber_fan_target_subject());
+
+    auto sp = helix::ui::temperature::chamber_effective_setpoint(heater_centi, fan_centi);
+    chamber.target = sp.centi;
+    chamber.chamber_mode = sp.mode;
+
+    update_display(HeaterType::Chamber);
+    update_status(HeaterType::Chamber);
+
+    if (!subjects_initialized_) {
+        return;
+    }
+
+    float target_deg = centi_to_degrees_f(chamber.target);
+    if (ui_temp_graph_is_valid(chamber.graph) && chamber.series_id >= 0) {
+        ui_temp_graph_set_series_target(chamber.graph, chamber.series_id, target_deg, true);
+        spdlog::trace("[TempPanel] Chamber target line: {:.1f}°C ({})", target_deg,
+                      chamber.chamber_mode);
     }
 }
 
@@ -304,6 +344,20 @@ void TemperatureService::update_status(HeaterType type) {
 
     if (h.read_only) {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", lv_tr("Monitoring"));
+    } else if (type == HeaterType::Chamber) {
+        // Lead with the M141 control mode (Heating via heater vs Maintaining via
+        // cooling fan vs Off), then append the thermal progress when it adds
+        // information ("Ready"/"Cooling"); "Off"/"Heating..." would just restate
+        // the mode word so they're dropped to avoid "Heating · Heating...".
+        const char* mode = lv_tr(h.chamber_mode);
+        const std::string& progress = result.status; // already localized
+        const std::string heating = lv_tr("Heating...");
+        const std::string off = lv_tr("Off");
+        if (h.target <= 0 || progress == heating || progress == off) {
+            snprintf(h.status_buf.data(), h.status_buf.size(), "%s", mode);
+        } else {
+            snprintf(h.status_buf.data(), h.status_buf.size(), "%s · %s", mode, progress.c_str());
+        }
     } else {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", result.status.c_str());
     }
@@ -572,7 +626,15 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
         h.target = lv_subject_get_int(printer_state_.get_bed_target_subject());
     } else if (type == HeaterType::Chamber) {
         h.current = lv_subject_get_int(printer_state_.get_chamber_temp_subject());
-        h.target = lv_subject_get_int(printer_state_.get_chamber_target_subject());
+        // Effective setpoint is heater-OR-fan (M141 splits the setpoint); seed both
+        // h.target and the mode word so the initial display matches live updates.
+        {
+            int heater_centi = lv_subject_get_int(printer_state_.get_chamber_target_subject());
+            int fan_centi = lv_subject_get_int(printer_state_.get_chamber_fan_target_subject());
+            auto sp = helix::ui::temperature::chamber_effective_setpoint(heater_centi, fan_centi);
+            h.target = sp.centi;
+            h.chamber_mode = sp.mode;
+        }
 
         // Update read_only from capability subject
         auto* cap_subj = printer_state_.get_printer_has_chamber_heater_subject();
