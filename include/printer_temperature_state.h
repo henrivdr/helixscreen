@@ -144,6 +144,17 @@ class PrinterTemperatureState {
         lifetime = chamber_target_lifetime_;
         return &chamber_target_;
     }
+    /// Chamber cooling-fan target (centidegrees). In COOLING mode the K2 M141
+    /// macro parks the setpoint on the temperature_fan target while the heater
+    /// target stays 0; this subject surfaces that fan target so it can be
+    /// combined with the heater target for display.
+    lv_subject_t* get_chamber_fan_target_subject() {
+        return &chamber_fan_target_;
+    }
+    lv_subject_t* get_chamber_fan_target_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_fan_target_lifetime_;
+        return &chamber_fan_target_;
+    }
 
     /// Number of tracked extruders
     int extruder_count() const {
@@ -174,6 +185,17 @@ class PrinterTemperatureState {
      */
     void set_chamber_heater_name(const std::string& name) {
         chamber_heater_name_ = name;
+    }
+
+    /**
+     * @brief Set the temperature_fan name carrying the chamber cooling setpoint
+     * @param name Klipper object name (e.g., "temperature_fan chamber_fan")
+     *
+     * In COOLING mode the K2 M141 macro writes the setpoint to this fan's
+     * `target`; surfaced via get_chamber_fan_target_subject().
+     */
+    void set_chamber_cooling_fan_name(const std::string& name) {
+        chamber_cooling_fan_name_ = name;
     }
 
     /**
@@ -223,8 +245,10 @@ class PrinterTemperatureState {
     SubjectLifetime bed_target_lifetime_;
     lv_subject_t chamber_temp_{};
     lv_subject_t chamber_target_{}; ///< 0 when sensor-only, actual target when heater present
+    lv_subject_t chamber_fan_target_{}; ///< Cooling-fan target (centidegrees); 0 when no cooling fan
     SubjectLifetime chamber_temp_lifetime_;
     SubjectLifetime chamber_target_lifetime_;
+    SubjectLifetime chamber_fan_target_lifetime_;
 
     // Dynamic per-extruder tracking
     std::unordered_map<std::string, ExtruderInfo> extruders_;
@@ -237,6 +261,8 @@ class PrinterTemperatureState {
     std::string chamber_sensor_name_; ///< Klipper sensor name (e.g., "temperature_sensor chamber")
     std::string chamber_heater_name_; ///< Klipper heater name (e.g., "heater_generic chamber"),
                                       ///< empty if sensor-only
+    std::string chamber_cooling_fan_name_; ///< temperature_fan carrying the chamber cooling
+                                           ///< setpoint (M141 target in cooling mode), empty if none
 };
 
 } // namespace helix

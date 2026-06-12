@@ -176,6 +176,27 @@ TEST_CASE("PrinterTemperatureState does not let sensor pollute chamber when heat
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 650);
 }
 
+// 5c. Task 4 (M141 cooling routing): in COOLING mode the K2 M141 macro puts the
+// setpoint on the temperature_fan target, not the heater. Surface that fan's
+// target as its own subject so a later step can combine heater+fan targets.
+TEST_CASE("PrinterTemperatureState surfaces the chamber cooling-fan target",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState temp_state;
+    temp_state.init_subjects(false);
+    temp_state.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+
+    // M141 in cooling mode drives the temperature_fan's target to 40°C while the
+    // heater target stays 0.
+    nlohmann::json status = {{"temperature_fan chamber_fan", {{"target", 40.0}}}};
+    temp_state.update_from_status(status);
+
+    // json_to_centidegrees scales by 10 in this codebase (e.g. heater 65C -> 650,
+    // see the issue947 test), so 40C -> 400 — matching the chamber_target_ unit.
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_fan_target_subject()) == 400);
+}
+
 // 6. Chamber assignment settings default to "auto"
 TEST_CASE("Chamber assignment settings default to auto", "[settings][chamber]") {
     LVGLTestFixture fixture;
@@ -554,6 +575,20 @@ TEST_CASE("PrinterDiscovery handles chamber with different naming conventions",
         REQUIRE(discovery.chamber_heater_name() == "heater_generic CHAMBER");
         REQUIRE(discovery.chamber_heater_object_name() == "CHAMBER");
     }
+}
+
+// 15b. Task 4 (M141 cooling routing): discovery must record the chamber cooling
+// fan distinct from the heater pick. On the K2 a heater_generic wins the heater
+// role, but the companion temperature_fan (where M141 parks the cooling setpoint)
+// must still be recorded independently.
+TEST_CASE("discovery records the chamber cooling fan distinct from the heater",
+          "[discovery][m141]") {
+    helix::PrinterDiscovery d;
+    nlohmann::json objects = {"heater_generic chamber_heater", "temperature_fan chamber_fan",
+                              "extruder", "heater_bed"};
+    d.parse_objects(objects);
+    REQUIRE(d.chamber_heater_name() == "heater_generic chamber_heater");
+    REQUIRE(d.chamber_cooling_fan_name() == "temperature_fan chamber_fan");
 }
 
 // 16. PrinterDiscovery chamber_heater_object_name is empty when no chamber heater

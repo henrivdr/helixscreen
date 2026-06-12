@@ -52,6 +52,8 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     chamber_temp_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_target, 0, subjects_, register_xml);
     chamber_target_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_fan_target, 0, subjects_, register_xml);
+    chamber_fan_target_lifetime_ = std::make_shared<bool>(true);
 
     // Extruder version subject (bumped when extruder list changes)
     INIT_SUBJECT_INT(extruder_version, 0, subjects_, register_xml);
@@ -78,6 +80,8 @@ void PrinterTemperatureState::deinit_subjects() {
     chamber_temp_lifetime_.reset();
     if (chamber_target_lifetime_) *chamber_target_lifetime_ = false;
     chamber_target_lifetime_.reset();
+    if (chamber_fan_target_lifetime_) *chamber_fan_target_lifetime_ = false;
+    chamber_fan_target_lifetime_.reset();
     for (auto& [name, info] : extruders_) {
         if (info.temp_lifetime) *info.temp_lifetime = false;
         info.temp_lifetime.reset();
@@ -116,6 +120,7 @@ void PrinterTemperatureState::register_xml_subjects() {
     lv_xml_register_subject(nullptr, "bed_target", &bed_target_);
     lv_xml_register_subject(nullptr, "chamber_temp", &chamber_temp_);
     lv_xml_register_subject(nullptr, "chamber_target", &chamber_target_);
+    lv_xml_register_subject(nullptr, "chamber_fan_target", &chamber_fan_target_);
     lv_xml_register_subject(nullptr, "extruder_version", &extruder_version_);
 }
 
@@ -381,6 +386,23 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
                 lv_subject_set_int(&chamber_temp_, temp_centi);
                 spdlog::trace("[PrinterTemperatureState] Chamber temp (sensor): {}.{}C",
                               temp_centi / 10, temp_centi % 10);
+            }
+        }
+    }
+
+    // Chamber cooling-fan target. In COOLING mode (<=40C) the K2 M141 macro parks
+    // the setpoint on the temperature_fan's target while the heater target stays
+    // 0; surface it as its own subject so a later step can combine heater+fan
+    // targets for display. Independent of the heater/sensor branches above —
+    // a printer can have both a chamber heater AND a separate cooling fan.
+    if (!chamber_cooling_fan_name_.empty() && status.contains(chamber_cooling_fan_name_)) {
+        const auto& fan = status[chamber_cooling_fan_name_];
+        if (fan.contains("target") && fan["target"].is_number()) {
+            int target_centi = helix::units::json_to_centidegrees(fan, "target");
+            if (lv_subject_get_int(&chamber_fan_target_) != target_centi) {
+                lv_subject_set_int(&chamber_fan_target_, target_centi);
+                spdlog::trace("[PrinterTemperatureState] Chamber cooling-fan target: {}.{}C",
+                              target_centi / 10, target_centi % 10);
             }
         }
     }
