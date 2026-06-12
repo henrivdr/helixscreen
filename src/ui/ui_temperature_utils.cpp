@@ -161,9 +161,14 @@ HeaterDisplayResult heater_display(int current_centi, int target_centi) {
 
 // Used by cooldown's multi-line gcode batch and MoonrakerAPI::set_temperature().
 const char* build_heater_gcode(const std::string& heater_full_name, int target_centi, char* buffer,
-                               size_t buffer_size) {
+                               size_t buffer_size, bool use_m141) {
     if (heater_full_name.empty()) {
         return nullptr;
+    }
+
+    if (use_m141) {
+        std::snprintf(buffer, buffer_size, "M141 S%d", target_centi / 10);
+        return buffer;
     }
 
     if (heater_full_name.rfind("temperature_fan ", 0) == 0) {
@@ -182,6 +187,12 @@ const char* build_heater_gcode(const std::string& heater_full_name, int target_c
     }
 
     return buffer;
+}
+
+bool chamber_uses_m141(const std::string& heater_full_name,
+                       const std::string& chamber_heater_name, bool m141_available) {
+    return m141_available && !heater_full_name.empty() && !chamber_heater_name.empty() &&
+           heater_full_name == chamber_heater_name;
 }
 
 } // namespace temperature

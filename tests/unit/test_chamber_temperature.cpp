@@ -659,6 +659,28 @@ TEST_CASE("build_heater_gcode generates correct gcode for all heater types", "[c
     }
 }
 
+TEST_CASE("chamber_uses_m141 gates only the chamber heater + M141 present", "[temperature][m141]") {
+    using helix::ui::temperature::chamber_uses_m141;
+    const std::string chamber = "heater_generic chamber_heater";
+    REQUIRE(chamber_uses_m141(chamber, chamber, /*m141_available=*/true));
+    REQUIRE_FALSE(chamber_uses_m141(chamber, chamber, /*m141_available=*/false));
+    REQUIRE_FALSE(chamber_uses_m141("extruder", chamber, true));
+    REQUIRE_FALSE(chamber_uses_m141("heater_bed", chamber, true));
+    REQUIRE_FALSE(chamber_uses_m141("", chamber, true));
+    REQUIRE_FALSE(chamber_uses_m141(chamber, "", true));
+}
+
+TEST_CASE("build_heater_gcode emits M141 when use_m141 is set", "[temperature][m141]") {
+    using helix::ui::temperature::build_heater_gcode;
+    char buf[128];
+    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf),
+                                           /*use_m141=*/true)) == "M141 S60");
+    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 0, buf, sizeof(buf),
+                                           true)) == "M141 S0");
+    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf))) ==
+            "SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=60");
+}
+
 // 20. build_heater_off_gcode convenience wrapper
 TEST_CASE("build_heater_off_gcode generates correct off gcode", "[chamber][gcode]") {
     char buf[128];

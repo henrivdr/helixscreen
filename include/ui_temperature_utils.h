@@ -304,10 +304,22 @@ HeaterDisplayResult heater_display(int current_centi, int target_centi);
  * @param target_centi     Target temperature in centidegrees (x10, e.g. 2100 = 210°C)
  * @param buffer           Output buffer
  * @param buffer_size      Size of buffer
+ * @param use_m141         When true, emit "M141 S{deg}" instead of a raw
+ *                         SET_HEATER_TEMPERATURE/SET_TEMPERATURE_FAN_TARGET command
  * @return Pointer to buffer, or nullptr if heater_full_name is empty
  */
 const char* build_heater_gcode(const std::string& heater_full_name, int target_centi, char* buffer,
-                               size_t buffer_size);
+                               size_t buffer_size, bool use_m141 = false);
+
+/**
+ * @brief Decide whether a chamber temperature command should route through M141.
+ *
+ * True when a chamber temperature command should route through the standard
+ * M141 macro instead of a raw SET_HEATER_TEMPERATURE: the target heater is the
+ * discovered chamber heater AND the printer defines an M141 macro.
+ */
+bool chamber_uses_m141(const std::string& heater_full_name,
+                       const std::string& chamber_heater_name, bool m141_available);
 
 /**
  * @brief Build gcode to turn off a heater (target=0)
