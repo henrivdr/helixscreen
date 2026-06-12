@@ -11,6 +11,7 @@ SPLASH_OBJ := $(BUILD_DIR)/splash/helix_splash.o
 SPLASH_BIN := $(BUILD_DIR)/bin/helix-splash
 
 # Splash needs LVGL, display library, project includes, and libhv (for config.h -> json.hpp)
+# lv_conf.h discovery (-I. + -DLV_CONF_INCLUDE_SIMPLE) rides along in $(LVGL_INC).
 SPLASH_CXXFLAGS := $(CXXFLAGS) -I$(INC_DIR) $(LVGL_INC) $(SPDLOG_INC) $(LIBHV_INC) -DHELIX_SPLASH_ONLY
 # Note: LVGL is compiled as objects, not a library - link directly against LVGL_OBJS
 # Include TARGET_LDFLAGS to inherit -static flag for AD5M (glibc 2.25 compatibility)
