@@ -1,8 +1,27 @@
 diff --git a/src/drivers/evdev/lv_evdev.c b/src/drivers/evdev/lv_evdev.c
-index 1b8319e04..1f6564993 100644
+index 1b8319e04..52dd8dca2 100644
 --- a/src/drivers/evdev/lv_evdev.c
 +++ b/src/drivers/evdev/lv_evdev.c
-@@ -251,10 +251,24 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
+@@ -221,6 +221,18 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
+                                     dsc->touch_count = i + 1;
+                                 }
+                             }
++                            /* The slot released this SYN cycle must remain within
++                             * touch_count so its RELEASED state is still fed to the
++                             * gesture recogniser (the SYN_REPORT loop below iterates
++                             * i < touch_count).  Without this, lifting the
++                             * highest-indexed finger first shrinks touch_count below
++                             * that slot's index, dropping its release: finger_cnt never
++                             * decrements and a pinch gesture stays stuck RECOGNIZED, so
++                             * a subsequent single-finger drag keeps zooming instead of
++                             * rotating. */
++                            if(dsc->current_slot + 1 > dsc->touch_count) {
++                                dsc->touch_count = dsc->current_slot + 1;
++                            }
+                         }
+                     }
+                     else {
+@@ -251,10 +263,24 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
          }
  #if LV_USE_GESTURE_RECOGNITION
          else if(in.type == EV_SYN && in.code == SYN_REPORT) {
@@ -29,7 +48,7 @@ index 1b8319e04..1f6564993 100644
                      if(dsc->touch_data[i].state == LV_INDEV_STATE_PRESSED || dsc->touch_data[i].state == LV_INDEV_STATE_RELEASED) {
                          LV_LOG_TRACE("Slot %d: state=%s, raw(%d, %d)",
                                       i,
-@@ -268,7 +282,7 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
+@@ -268,7 +294,7 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
  
                  int active_touches = 0;
  
@@ -38,7 +57,7 @@ index 1b8319e04..1f6564993 100644
                      if(dsc->touch_data[i].state == LV_INDEV_STATE_PRESSED || dsc->touch_data[i].state == LV_INDEV_STATE_RELEASED) {
                          calibrated_touch_data[active_touches] = dsc->touch_data[i];
  
-@@ -288,18 +302,10 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
+@@ -288,18 +314,10 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
                  lv_indev_gesture_recognizers_update(indev, calibrated_touch_data, active_touches);
                  lv_indev_gesture_recognizers_set_data(indev, data);
  
@@ -61,7 +80,7 @@ index 1b8319e04..1f6564993 100644
  
                  dsc->touch_data_changed = false;
              }
-@@ -342,6 +348,22 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
+@@ -342,6 +360,22 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
          default:
              break;
      }
