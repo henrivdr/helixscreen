@@ -6,8 +6,11 @@
 #include "../../include/moonraker_client_mock.h"
 #include "../lvgl_test_fixture.h"
 #include "lvgl.h"
+#include "macro_param_cache.h"
+#include "moonraker_api.h"
 #include "printer_capabilities_state.h"
 #include "printer_discovery.h"
+#include "printer_state.h"
 #include "printer_temperature_state.h"
 #include "settings_manager.h"
 #include "temperature_sensor_manager.h"
@@ -679,6 +682,67 @@ TEST_CASE("build_heater_gcode emits M141 when use_m141 is set", "[temperature][m
                                            true)) == "M141 S0");
     REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf))) ==
             "SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=60");
+}
+
+// API send chokepoint: a chamber set on an M141-capable printer routes through
+// `M141 S{temp}`, while a nozzle set on the same printer still uses
+// SET_HEATER_TEMPERATURE. Exercises the real MoonrakerAPI::set_temperature path
+// (safety validation → chamber_uses_m141 decision → build_heater_gcode →
+// execute_gcode → client.send_jsonrpc), capturing the exact script the mock
+// client received.
+TEST_CASE("MoonrakerAPI routes chamber sends through M141 when defined", "[api][chamber][m141]") {
+    LVGLTestFixture fixture;
+
+    auto& settings = helix::SettingsManager::instance();
+    settings.init_subjects();
+    // Default is "auto"; be explicit so a leaked override from another test
+    // can't reroute the resolved chamber heater name.
+    settings.set_chamber_heater_assignment("auto");
+    settings.set_chamber_sensor_assignment("auto");
+
+    helix::PrinterState state;
+    state.init_subjects(false);
+    // execute_gcode refuses to ship gcode unless Klipper is live.
+    state.set_klippy_state_sync(helix::KlippyState::READY);
+
+    // Resolve the chamber heater name through the real discovery path.
+    helix::PrinterDiscovery discovery;
+    nlohmann::json objects = {"heater_generic chamber_heater", "extruder", "heater_bed"};
+    discovery.parse_objects(objects);
+    state.set_hardware(discovery);
+    REQUIRE(state.temperature_state().chamber_heater_name() == "heater_generic chamber_heater");
+
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    MoonrakerAPI api(client, state);
+
+    // Seed the process-wide macro cache so the printer "defines" M141. Seed AFTER
+    // constructing the client + API: their setup (printer discovery) repopulates
+    // the cache and would otherwise wipe an earlier seed.
+    auto& macro_cache = helix::MacroParamCache::instance();
+    nlohmann::json config = {{"gcode_macro m141", {{"gcode", "M141 S{params.S|default(0)}"}}}};
+    macro_cache.populate_from_configfile(config, {"M141"});
+    REQUIRE(macro_cache.has_macro("m141"));
+
+    SECTION("chamber heater routes through M141") {
+        api.set_temperature("heater_generic chamber_heater", 60.0, nullptr, nullptr);
+        REQUIRE(client.last_send_method() == "printer.gcode.script");
+        REQUIRE(client.last_send_script().find("M141 S60") != std::string::npos);
+        REQUIRE(client.last_send_script().find("SET_HEATER_TEMPERATURE") == std::string::npos);
+    }
+
+    SECTION("nozzle still uses SET_HEATER_TEMPERATURE on the same printer") {
+        api.set_temperature("extruder", 230.0, nullptr, nullptr);
+        REQUIRE(client.last_send_method() == "printer.gcode.script");
+        REQUIRE(client.last_send_script().find(
+                    "SET_HEATER_TEMPERATURE HEATER=extruder TARGET=230") != std::string::npos);
+        REQUIRE(client.last_send_script().find("M141") == std::string::npos);
+    }
+
+    // Reset the singleton so leaked m141=true can't make unrelated chamber
+    // tests start emitting M141.
+    macro_cache.clear();
+    settings.set_chamber_heater_assignment("auto");
+    settings.set_chamber_sensor_assignment("auto");
 }
 
 // 20. build_heater_off_gcode convenience wrapper
