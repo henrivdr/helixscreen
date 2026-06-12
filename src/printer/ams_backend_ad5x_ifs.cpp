@@ -1027,6 +1027,25 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     if (!err.success())
         return err;
 
+    bool head_loaded;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        head_loaded = head_filament_;
+    }
+
+    // No filament seated at the nozzle: the toolhead unload would be a firmware
+    // no-op. IFS_REMOVE_CURRENT_PRUTOK — and the _IFS_REMOVE_CURRENT_PRUTOK macro
+    // that wraps it — early-returns when get_extruder_sensor() reads empty
+    // (zmod_ifs.py:1149), so ZMOD homes (_G28) and then does nothing: raza616's
+    // "homes and nothing happens." The filament is still in the lane, not the
+    // toolhead, so route to the cold per-lane retract instead of a guaranteed
+    // no-op (7AC4SDEX: head_switch_sensor empty, ifs_motion_sensor present).
+    if (!head_loaded) {
+        spdlog::info("{} Unload with empty toolhead sensor -> cold lane eject (slot {})",
+                     backend_log_tag(), slot_index);
+        return eject_lane(slot_index);
+    }
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
         system_info_.action = AmsAction::HEATING;
@@ -1035,16 +1054,17 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
         apply_phase_action_locked();
     }
 
-    // The toolhead Unload always clears whatever filament is seated at the
-    // nozzle. IFS_REMOVE_CURRENT_PRUTOK auto-detects the active channel
-    // (FFMInfo.channel), heats only when the extruder filament sensor reads
-    // present, then retracts — verified against ZMOD v1.7.1 (zmod_ifs.py:1144).
-    // NOT bare IFS_REMOVE_PRUTOK: that no-ops on its PRUTOK=0 default
-    // (zmod_ifs.py:1104), so the printer homed (below) and nothing happened.
-    // Idle (non-toolhead) lanes never reach here — the UI routes those to
-    // eject_lane() (cold IFS_F11 ... CHECK=0), which performs no heating.
+    // Dispatch ZMOD's own toolhead-unload macro rather than reconstructing it.
+    // _IFS_REMOVE_CURRENT_PRUTOK is the firmware's "Remove from extruder" button
+    // (observed working on raza616's device, bundle 7AC4SDEX): it homes itself
+    // (_G28), calls IFS_REMOVE_CURRENT_PRUTOK with NEED_TRASH=1
+    // BYPASS_TEMPERATURE_CHECK=1, then resets the hotend to 0 and refreshes
+    // color. Send it raw via execute_gcode() (NOT ensure_homed_then(), which
+    // would home a SECOND time), and never the bare Python command — that skips
+    // the trash drop and leaves the nozzle hot. Verified against the device cfg
+    // and ZMOD v1.7.1.
     spdlog::info("{} Unloading filament from toolhead (slot {})", backend_log_tag(), slot_index);
-    auto result = ensure_homed_then("IFS_REMOVE_CURRENT_PRUTOK");
+    auto result = execute_gcode("_IFS_REMOVE_CURRENT_PRUTOK");
     // Backup re-query: for inactive-slot unloads on native ZMOD the head
     // sensor never changes, so detect_load_unload_completion() won't fire.
     // schedule_zcolor_query() coalesces with any trigger from the gcode
