@@ -719,6 +719,20 @@ TEST_CASE("MoonrakerAPI routes chamber sends through M141 when defined", "[api][
     // constructing the client + API: their setup (printer discovery) repopulates
     // the cache and would otherwise wipe an earlier seed.
     auto& macro_cache = helix::MacroParamCache::instance();
+    // RAII cleanup so a leaked m141=true can't make unrelated chamber tests emit
+    // M141 — runs even if a REQUIRE below throws (a bare end-of-body clear would
+    // be skipped on assertion failure). Each Catch2 SECTION re-runs the body, so
+    // the guard is reconstructed + clears per section pass.
+    struct CacheReset {
+        helix::MacroParamCache& cache;
+        helix::SettingsManager& settings;
+        ~CacheReset() {
+            cache.clear();
+            settings.set_chamber_heater_assignment("auto");
+            settings.set_chamber_sensor_assignment("auto");
+        }
+    } cache_reset_guard{macro_cache, settings};
+
     nlohmann::json config = {{"gcode_macro m141", {{"gcode", "M141 S{params.S|default(0)}"}}}};
     macro_cache.populate_from_configfile(config, {"M141"});
     REQUIRE(macro_cache.has_macro("m141"));
@@ -738,11 +752,7 @@ TEST_CASE("MoonrakerAPI routes chamber sends through M141 when defined", "[api][
         REQUIRE(client.last_send_script().find("M141") == std::string::npos);
     }
 
-    // Reset the singleton so leaked m141=true can't make unrelated chamber
-    // tests start emitting M141.
-    macro_cache.clear();
-    settings.set_chamber_heater_assignment("auto");
-    settings.set_chamber_sensor_assignment("auto");
+    // Cleanup handled by cache_reset_guard (RAII) above.
 }
 
 // 20. build_heater_off_gcode convenience wrapper
