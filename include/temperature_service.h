@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
-#include "heater_limits.h"
 #include "ui_heater_config.h"
 #include "ui_heating_animator.h"
 #include "ui_observer_guard.h"
@@ -278,9 +276,10 @@ class TemperatureService {
     /// temp-graph overlay so neither sends a stale HEATER=chamber.
     const std::string& resolved_klipper_name(helix::HeaterType type);
 
-    /// Ensure the chamber's configured max_temp has been queried + applied to
-    /// keypad/preset limits. Idempotent (re-query only while unknown). Lets the
-    /// temp-graph overlay share the same clamp the chamber panel uses.
+    /// Ask the controller to fetch the chamber's configured ceiling (async,
+    /// idempotent while unknown) and re-clamp the preset buttons. The limits
+    /// themselves live in the controller now; this just drives the panel's
+    /// preset hide/show off them.
     void ensure_chamber_limits();
 
   private:
@@ -298,18 +297,6 @@ class TemperatureService {
     // panel isn't built or max_temp is unknown (0). Main thread only.
     void apply_preset_limits(helix::HeaterType type);
 
-    // Fetch the chamber heater's Klipper-configured max_temp from the printer
-    // configfile and clamp the keypad range + presets to it. Async (the result
-    // lands on the WS thread, deferred to the main thread via lifetime_).
-    void query_chamber_max_temp();
-
-    // Re-sync the chamber heater's Klipper object name from PrinterState. The
-    // panel captures klipper_name once at setup, which loses the race when
-    // hardware discovery hasn't resolved the chamber heater yet — leaving the
-    // hardcoded default "heater_generic chamber" and sending an invalid
-    // HEATER=chamber. Re-reading at use time fixes that.
-    void refresh_chamber_klipper_name();
-
     // ── Graph helpers ───────────────────────────────────────────────────
     ui_temp_graph_t* create_temp_graph(lv_obj_t* chart_area, const heater_config_t* config,
                                        int target_temp, int* series_id_out);
@@ -322,10 +309,6 @@ class TemperatureService {
     helix::PrinterState& printer_state_;
     MoonrakerAPI* api_;
     helix::TemperatureController* controller_ = nullptr;
-
-    // Guards async configfile callbacks (chamber max_temp) against use-after-free
-    // if this service is torn down before the WS-thread response returns.
-    helix::AsyncLifetimeGuard lifetime_;
 
     // ── Per-heater state (indexed by HeaterType) ────────────────────────
     std::array<HeaterState, helix::HEATER_TYPE_COUNT> heaters_;
