@@ -823,31 +823,42 @@ jobs:
       run: |
         chmod +x scripts/generate-manifest.sh
 
-        # Upload tarballs ONCE to releases/v{VERSION}/ (not per-channel)
-        echo "=== Uploading artifacts to releases/v${RELEASE_VERSION}/ ==="
-        for tarball in release-files/*.tar.gz release-files/*.zip; do
+        # Retry wrapper for transient R2 errors. A 504 Gateway Timeout on a large
+        # multipart upload exhausted the AWS CLI's own retries during v0.99.76 and
+        # aborted this step before the manifest uploaded, leaving every client
+        # pinned to the previous version's manifest (.github#952). All R2 puts go
+        # through this so a single transient failure no longer kills the release.
+        s3cp() {
+          local attempt=1 max=4
+          while true; do
+            if aws s3 cp "$@" --endpoint-url "$R2_ENDPOINT"; then
+              return 0
+            fi
+            if [ "$attempt" -ge "$max" ]; then
+              echo "::error::aws s3 cp failed after ${max} attempts: $*"
+              return 1
+            fi
+            echo "aws s3 cp attempt ${attempt} failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+            attempt=$((attempt + 1))
+          done
+        }
+
+        # 1. Upload the .tar.gz artifacts the manifest references. These MUST land
+        #    before the manifest goes live so clients never 404 mid-download.
+        echo "=== Uploading tarballs to releases/v${RELEASE_VERSION}/ ==="
+        for tarball in release-files/*.tar.gz; do
           [ -f "$tarball" ] || continue
           filename=$(basename "$tarball")
           echo "Uploading releases/v${RELEASE_VERSION}/${filename}..."
-          aws s3 cp "$tarball" \
-            "s3://${R2_BUCKET}/releases/v${RELEASE_VERSION}/${filename}" \
-            --endpoint-url "$R2_ENDPOINT"
+          s3cp "$tarball" "s3://${R2_BUCKET}/releases/v${RELEASE_VERSION}/${filename}"
         done
 
-        # Upload install.sh to R2 (served by dl-worker for HTTP install)
-        echo "Uploading install.sh..."
-        aws s3 cp scripts/install.sh "s3://${R2_BUCKET}/install.sh" \
-          --endpoint-url "$R2_ENDPOINT" \
-          --content-type "text/x-shellscript"
-
-        # generate-manifest.sh defaults to NOT advertising zip URLs so pre-v0.99.31
-        # in-app updaters (which gunzip -t every download regardless of format) don't
-        # try to verify a .zip and report 'Corrupt download'. The .zip files remain
-        # uploaded to R2 for Moonraker Update Manager (which fetches by direct path,
-        # not via our manifest). Re-enable with --include-zip once telemetry shows
-        # adoption past v0.99.30 is complete.
-
-        # Generate and upload per-channel manifests (pointing to shared artifacts)
+        # 2. Generate and upload the per-channel manifests. This is the artifact
+        #    that makes a release visible to in-app updaters, so it is published as
+        #    early as possible — right after its referenced tarballs and BEFORE the
+        #    large .zip / symbol uploads, whose transient failures must never be able
+        #    to suppress release visibility (the v0.99.76 failure mode, .github#952).
         for CHANNEL in $UPLOAD_CHANNELS; do
           echo "=== Generating ${CHANNEL} manifest ==="
 
@@ -863,13 +874,32 @@ jobs:
           cat "release-files/manifest-${CHANNEL}.json" | jq .
 
           echo "Uploading ${CHANNEL}/manifest.json..."
-          aws s3 cp "release-files/manifest-${CHANNEL}.json" \
+          s3cp "release-files/manifest-${CHANNEL}.json" \
             "s3://${R2_BUCKET}/${CHANNEL}/manifest.json" \
-            --endpoint-url "$R2_ENDPOINT" \
             --content-type "application/json"
 
           echo "=== ${CHANNEL} manifest uploaded ==="
         done
+
+        # 3. Upload the .zip artifacts and install.sh AFTER the manifest. The
+        #    manifest does not reference the .zip files — generate-manifest.sh omits
+        #    zip URLs so pre-v0.99.31 in-app updaters (which gunzip -t every download
+        #    regardless of format) don't report 'Corrupt download'. The .zip files
+        #    exist only for Moonraker Update Manager, which fetches them by direct
+        #    path. Re-enable manifest zip URLs with --include-zip once telemetry shows
+        #    adoption past v0.99.30 is complete.
+        echo "=== Uploading zip artifacts to releases/v${RELEASE_VERSION}/ ==="
+        for zip in release-files/*.zip; do
+          [ -f "$zip" ] || continue
+          filename=$(basename "$zip")
+          echo "Uploading releases/v${RELEASE_VERSION}/${filename}..."
+          s3cp "$zip" "s3://${R2_BUCKET}/releases/v${RELEASE_VERSION}/${filename}"
+        done
+
+        # Upload install.sh to R2 (served by dl-worker for HTTP install)
+        echo "Uploading install.sh..."
+        s3cp scripts/install.sh "s3://${R2_BUCKET}/install.sh" \
+          --content-type "text/x-shellscript"
 
         # Upload symbol maps and debug info (version-keyed, not channel-specific)
         # Symbol maps are zstd-compressed (.sym.zst) — nm output compresses ~25:1.
@@ -882,9 +912,8 @@ jobs:
           echo "Compressing ${platform}.sym..."
           zstd -19 --rm -q "$symfile"
           echo "Uploading symbols/v${RELEASE_VERSION}/${platform}.sym.zst..."
-          aws s3 cp "${symfile}.zst" \
+          s3cp "${symfile}.zst" \
             "s3://${R2_BUCKET}/symbols/v${RELEASE_VERSION}/${platform}.sym.zst" \
-            --endpoint-url "$R2_ENDPOINT" \
             --content-type "application/zstd"
         done
 
@@ -899,9 +928,8 @@ jobs:
           echo "Compressing ${platform}.debug..."
           zstd -9 --rm -q "$dbgfile"
           echo "Uploading symbols/v${RELEASE_VERSION}/${platform}.debug.zst..."
-          aws s3 cp "${dbgfile}.zst" \
+          s3cp "${dbgfile}.zst" \
             "s3://${R2_BUCKET}/symbols/v${RELEASE_VERSION}/${platform}.debug.zst" \
-            --endpoint-url "$R2_ENDPOINT" \
             --content-type "application/zstd"
           dbg_uploaded=$((dbg_uploaded + 1))
         done
