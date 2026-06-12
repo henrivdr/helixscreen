@@ -817,23 +817,20 @@ void TemperatureService::on_heater_confirm_clicked(lv_event_t* e) {
 
     h.pending = -1;
 
-    if (self->api_) {
-        const std::string& klipper_name =
-            (type == HeaterType::Nozzle) ? self->active_extruder_name_ : h.klipper_name;
-        const char* label = heater_label(type);
-
-        self->api_->set_temperature(
-            klipper_name, static_cast<double>(temp_target),
-            [label, temp_target]() {
-                if (temp_target == 0) {
-                    NOTIFY_SUCCESS(lv_tr("{} heater turned off"), label);
-                } else {
-                    NOTIFY_SUCCESS(lv_tr("{} target set to {}°C"), label, temp_target);
-                }
-            },
-            [label](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), label, error.user_message());
-            });
+    // Route through the controller so the klipper object name is resolved fresh
+    // (chamber → live discovery name, never the stale default that triggers a
+    // key69 HEATER=chamber error). Standard error toast via {.toast=true}; the
+    // success toast keeps the off/target distinction the confirm button shows.
+    const char* label = heater_label(type);
+    if (auto* c = self->controller_) {
+        c->set_target(type, static_cast<double>(temp_target),
+                      {.toast = true, .on_success = [label, temp_target]() {
+                           if (temp_target == 0) {
+                               NOTIFY_SUCCESS(lv_tr("{} heater turned off"), label);
+                           } else {
+                               NOTIFY_SUCCESS(lv_tr("{} target set to {}°C"), label, temp_target);
+                           }
+                       }});
     }
 
     NavigationManager::instance().go_back();
