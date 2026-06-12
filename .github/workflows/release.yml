@@ -878,7 +878,26 @@ jobs:
             "s3://${R2_BUCKET}/${CHANNEL}/manifest.json" \
             --content-type "application/json"
 
-          echo "=== ${CHANNEL} manifest uploaded ==="
+          # Verify the manifest is actually SERVED as this version. A successful
+          # upload is not enough: a wrong-key put, an upload aborted before this
+          # one, or stale edge content would all leave clients pinned to an old
+          # version with no error (the v0.99.76 failure mode, .github#952). R2 is
+          # strongly consistent and manifest.json is not edge-cached
+          # (cf-cache-status: DYNAMIC), so a mismatch after a few reads is real.
+          echo "Verifying ${CHANNEL}/manifest.json serves v${RELEASE_VERSION}..."
+          served=""
+          for attempt in 1 2 3 4; do
+            served=$(curl -fsS "${R2_PUBLIC_URL}/${CHANNEL}/manifest.json" | jq -r '.version // empty')
+            [ "$served" = "$RELEASE_VERSION" ] && break
+            echo "  attempt ${attempt}: served '${served:-<none>}', expected '${RELEASE_VERSION}'; retrying in 5s..."
+            sleep 5
+          done
+          if [ "$served" != "$RELEASE_VERSION" ]; then
+            echo "::error::${CHANNEL} manifest serves '${served:-<none>}', expected '${RELEASE_VERSION}' -- release would be invisible to in-app updaters"
+            exit 1
+          fi
+
+          echo "=== ${CHANNEL} manifest uploaded and verified (v${served}) ==="
         done
 
         # 3. Upload the .zip artifacts and install.sh AFTER the manifest. The
