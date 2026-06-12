@@ -95,16 +95,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;
     AmsError change_tool(int tool_number) override;
-
-    // Unload gating. The U1 is a 4-toolhead machine where every tool can hold
-    // filament independently, so the base rule ("only the single active/LOADED
-    // tool is unloadable") wrongly hides the per-slot Unload action for every
-    // non-active toolhead — leaving the sidebar's active-slot Unload button as
-    // the only reachable control, which always unloads toolhead 0. Offer Unload
-    // for any slot that currently holds filament so all four toolheads can be
-    // unloaded individually; unload_filament(slot) then sends
-    // AUTO_FEEDING EXTRUDER={slot} UNLOAD=1 and the firmware picks that toolhead.
-    [[nodiscard]] bool can_unload_from_toolhead(int slot_index) const override;
+    // can_unload_from_toolhead is intentionally NOT overridden: the U1 reports
+    // PARALLEL topology, so the topology-aware base correctly offers per-tool
+    // Unload for every toolhead holding filament (is_present()).
 
     // Recovery (not supported)
     AmsError recover() override;

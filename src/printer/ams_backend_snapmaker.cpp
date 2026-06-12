@@ -225,20 +225,6 @@ AmsError AmsBackendSnapmaker::unload_filament(int slot_index) {
     return execute_gcode(fmt::format("AUTO_FEEDING EXTRUDER={} UNLOAD=1", extruder));
 }
 
-bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
-    // The U1 has four independent toolheads, each able to hold filament at the
-    // same time. The base implementation reports only the single active
-    // (SlotStatus::LOADED) tool as unloadable, so the per-slot Unload action
-    // never appeared for the other toolheads — the user could only unload
-    // toolhead 0 via the sidebar's active-slot Unload button. Offer Unload for
-    // any slot that currently holds filament. The parse path sets AVAILABLE
-    // only when filament is actually present (print_task_config.filament_exist,
-    // filament_detect.state, or the port sensor), and EMPTY/UNKNOWN otherwise,
-    // so this never offers Unload on a genuinely empty toolhead.
-    auto status = get_slot_info(slot_index).status;
-    return status == SlotStatus::LOADED || status == SlotStatus::AVAILABLE;
-}
-
 AmsError AmsBackendSnapmaker::select_slot(int slot_index) {
     return change_tool(slot_index);
 }
