@@ -25,3 +25,24 @@ setup() {
     run grep -rn '_for_testing' src/ --include='*.cpp'
     [ "$status" -eq 1 ]  # grep returns 1 when no matches found
 }
+
+# --- Migrated temperature VIEW files must route sends through the controller ---
+# ui_overlay_temp_graph.cpp and ui_panel_controls.cpp were migrated to delegate
+# temperature commands to helix::TemperatureController. They must NOT call the
+# raw send API directly again — that would reintroduce the duplication the
+# refactor removed. A direct send is either `api_->set_temperature(` or any
+# `->set_temperature(` whose receiver is not a `controller`. (temperature_service.cpp
+# legitimately retains other send paths and is intentionally NOT covered here.)
+
+@test "migrated temp view files do not call the raw set_temperature send API" {
+    local files="src/ui/ui_overlay_temp_graph.cpp src/ui/ui_panel_controls.cpp"
+
+    # Direct API send on the cached MoonrakerAPI pointer.
+    run grep -n 'api_->set_temperature' $files
+    [ "$status" -eq 1 ]  # grep returns 1 when no matches found
+
+    # Any ->set_temperature( call whose receiver is not `controller`. The
+    # controller's own ->set_temperature() is the sanctioned path, so exclude it.
+    run bash -c "grep -nE '\->set_temperature\(' $files | grep -v 'controller'"
+    [ "$status" -ne 0 ]  # non-zero == no disallowed direct send found
+}

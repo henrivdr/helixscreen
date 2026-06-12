@@ -269,19 +269,6 @@ class TemperatureService {
     }
     const char* xml_component_name(helix::HeaterType type) const;
 
-    /// Resolve the Klipper object name to target for a temperature command,
-    /// always current. Nozzle → active extruder; Chamber → re-synced from
-    /// PrinterState (the cached HeaterState name can be a stale default if
-    /// discovery lost the panel-setup race). Used by BOTH this panel and the
-    /// temp-graph overlay so neither sends a stale HEATER=chamber.
-    const std::string& resolved_klipper_name(helix::HeaterType type);
-
-    /// Ask the controller to fetch the chamber's configured ceiling (async,
-    /// idempotent while unknown) and re-clamp the preset buttons. The limits
-    /// themselves live in the controller now; this just drives the panel's
-    /// preset hide/show off them.
-    void ensure_chamber_limits();
-
   private:
     // ── Generic instance methods ────────────────────────────────────────
     void on_temp_changed(helix::HeaterType type, int temp_centi);

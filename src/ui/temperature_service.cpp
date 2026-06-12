@@ -375,33 +375,6 @@ void TemperatureService::apply_preset_limits(HeaterType type) {
     }
 }
 
-const std::string& TemperatureService::resolved_klipper_name(HeaterType type) {
-    // The controller resolves the live klipper object name (Nozzle → active
-    // extruder; Chamber → discovery name re-synced fresh, never a stale
-    // default). It returns by value, so cache into the stable per-heater
-    // member and return a reference to that — the temp-graph overlay binds a
-    // `const std::string&` and uses it past this call, so the storage must
-    // outlive the return.
-    auto& h = heaters_[idx(type)];
-    if (controller_) {
-        h.klipper_name = controller_->resolved_name(type);
-    }
-    return h.klipper_name;
-}
-
-void TemperatureService::ensure_chamber_limits() {
-    if (heaters_[idx(HeaterType::Chamber)].read_only) {
-        return;
-    }
-    // The controller owns the configured-max fetch (async configfile query,
-    // idempotent while unknown). Re-clamp presets with whatever is known now;
-    // the fresh value re-clamps on the next panel activate.
-    if (controller_) {
-        controller_->ensure_limits(HeaterType::Chamber);
-    }
-    apply_preset_limits(HeaterType::Chamber);
-}
-
 // ============================================================================
 // Graph updates (generic)
 // ============================================================================

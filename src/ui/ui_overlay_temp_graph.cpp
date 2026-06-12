@@ -11,7 +11,6 @@
 
 #include "app_globals.h"
 #include "lvgl/src/others/translation/lv_translation.h"
-#include "moonraker_api.h"
 #include "panel_widget_manager.h"
 #include "printer_state.h"
 #include "printer_temperature_state.h"
@@ -146,7 +145,6 @@ void TempGraphOverlay::on_activate() {
 
     // Resolve dependencies
     printer_state_ = &get_printer_state();
-    api_ = get_moonraker_api();
     temp_control_panel_ =
         helix::PanelWidgetManager::instance().shared_resource<TemperatureService>();
 
