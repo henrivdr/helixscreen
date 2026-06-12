@@ -155,6 +155,18 @@ class PrinterTemperatureState {
         lifetime = chamber_fan_target_lifetime_;
         return &chamber_fan_target_;
     }
+    /// Effective chamber setpoint (centidegrees): the heater target when heating
+    /// (target > 0), otherwise the cooling-fan target. In COOLING mode the heater
+    /// target is 0 and the real M141 setpoint lives on the fan; this subject
+    /// surfaces whichever is active so temp_display shows the maintain setpoint
+    /// instead of "--".
+    lv_subject_t* get_chamber_effective_target_subject() {
+        return &chamber_effective_target_;
+    }
+    lv_subject_t* get_chamber_effective_target_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_effective_target_lifetime_;
+        return &chamber_effective_target_;
+    }
 
     /// Number of tracked extruders
     int extruder_count() const {
@@ -246,9 +258,11 @@ class PrinterTemperatureState {
     lv_subject_t chamber_temp_{};
     lv_subject_t chamber_target_{}; ///< 0 when sensor-only, actual target when heater present
     lv_subject_t chamber_fan_target_{}; ///< Cooling-fan target (centidegrees); 0 when no cooling fan
+    lv_subject_t chamber_effective_target_{}; ///< heater target when >0, else fan target (centidegrees)
     SubjectLifetime chamber_temp_lifetime_;
     SubjectLifetime chamber_target_lifetime_;
     SubjectLifetime chamber_fan_target_lifetime_;
+    SubjectLifetime chamber_effective_target_lifetime_;
 
     // Dynamic per-extruder tracking
     std::unordered_map<std::string, ExtruderInfo> extruders_;

@@ -197,6 +197,29 @@ TEST_CASE("PrinterTemperatureState surfaces the chamber cooling-fan target",
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_fan_target_subject()) == 400);
 }
 
+TEST_CASE("PrinterTemperatureState surfaces the chamber effective target (heater-or-fan)",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState temp_state;
+    temp_state.init_subjects(false);
+    temp_state.set_chamber_heater_name("heater_generic chamber_heater");
+    temp_state.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+
+    // Heating: heater target > 0 wins.
+    temp_state.update_from_status({{"heater_generic chamber_heater", {{"target", 60.0}}}});
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_effective_target_subject()) == 600); // ×10
+
+    // Maintaining: heater 0, fan target is the setpoint.
+    temp_state.update_from_status({{"heater_generic chamber_heater", {{"target", 0.0}}},
+                                   {"temperature_fan chamber_fan", {{"target", 30.0}}}});
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_effective_target_subject()) == 300);
+
+    // Off: both 0.
+    temp_state.update_from_status({{"temperature_fan chamber_fan", {{"target", 0.0}}}});
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_effective_target_subject()) == 0);
+}
+
 // 6. Chamber assignment settings default to "auto"
 TEST_CASE("Chamber assignment settings default to auto", "[settings][chamber]") {
     LVGLTestFixture fixture;
