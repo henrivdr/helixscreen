@@ -2191,103 +2191,96 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 }
 
 // ============================================================================
-// Snapmaker U1 silent-phase progression — the U1 runs cleaning + purge as
-// silent macros (no gcode response between temps-ready and first layer).
-// The profile's silent_progression entries time-advance the displayed phase
-// after temps_ready so the user sees motion instead of "Preparing Print..."
-// frozen for ~25s.
+// Snapmaker U1 pre-print phase reconciliation (issue #991-adjacent)
+//
+// The U1's firmware sets print_stats.state="printing" the instant the SD job
+// opens, then idles for ~90s before emitting its first real action code. The
+// real PRINT_START sequence is fully signalled via "// Success: Set action
+// code X" lines (PRINT_SWITCH_CHECKING → DETECT_PLATE → BED_PREHEATING →
+// BED_PRESCANNING → BED_LEVELING → ... → PRINT_PREEXTRUDING). It does NOT run
+// silent cleaning/purge macros, and temps-ready fires unreliably mid-sequence
+// (heater targets are set and cleared throughout). So:
+//   1. The profile must carry NO silent_progression entries — a temps-ready
+//      timer would announce "Purging..." ~45s before the printer homes.
+//   2. Once a real firmware signal has been seen, the proactive temperature
+//      heuristic must not regress the displayed phase back to the generic
+//      "Preparing Print..." (INITIALIZING) — the firmware is authoritative.
+// Verified against live capture on U1 @ 192.168.30.103, 2026-06-11.
 // ============================================================================
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
-                 "Snapmaker U1: silent_progression advances phase after temps ready",
-                 "[print][collector][snapmaker][silent_progression]") {
+                 "Snapmaker U1: no premature Cleaning/Purging before real firmware signals",
+                 "[print][collector][snapmaker][preprint]") {
     collector().start();
     drain_async_updates();
     collector().enable_fallbacks();
 
-    // Mark temps as ready by setting current == target. The collector's
-    // proactive-detection path sets phase=INITIALIZING when temps just hit
-    // target from a previously-heating state, so seed via HEATING_NOZZLE
-    // first. Bed at target, ext still ramping — that's the
-    // !bed_heating && nozzle_heating branch.
+    // Reproduce the idle-gap: Moonraker says "printing", the bed sits near a
+    // low standby target (so temps_ready is trivially true) and no print
+    // nozzle temp is commanded yet (ext target 0). NO action code has arrived.
+    set_all_temps(/*bed*/ 600, 600, /*ext*/ 0, 0);
+
+    // Let time pass as if the firmware were idling before its real sequence.
+    PrintStartCollectorTestAccess::set_temps_ready_elapsed_seconds(collector(), 30);
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+
+    // The display must NOT have jumped to the last pre-print steps before the
+    // printer has done anything. (Old behavior: silent_progression announced
+    // "Cleaning Nozzle..." then "Purging..." here.)
+    INFO("phase=" << static_cast<int>(get_current_phase()) << " msg=" << get_current_message());
+    REQUIRE(get_current_phase() != PrintStartPhase::CLEANING);
+    REQUIRE(get_current_phase() != PrintStartPhase::PURGING);
+}
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: proactive temps-ready does not regress phase after a real signal",
+                 "[print][collector][snapmaker][preprint]") {
+    collector().start();
+    drain_async_updates();
+    collector().enable_fallbacks();
+
+    // A real firmware signal lands — the firmware is now authoritative.
+    feed_gcode("// Success: Set action code PRINT_SWITCH_CHECKING");
+    REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
+
+    // Nozzle ramps toward a probe temperature with no action code — the
+    // proactive heater detector legitimately surfaces "Heating Nozzle...".
     set_all_temps(/*bed*/ 600, 600, /*ext*/ 1000, 2000);
     collector().check_fallback_completion();
     drain_async_updates();
     drain_async_updates();
     REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
 
-    // Now temps reach target — proactive detection sets INITIALIZING.
+    // Nozzle reaches target. On the old code the proactive
+    // "temps ready → INITIALIZING" branch fired here, bouncing the displayed
+    // phase backward to the generic "Preparing Print...". Once a real signal
+    // has been seen, that branch must be suppressed — the more-specific phase
+    // stands until the next firmware signal.
     set_all_temps(600, 600, 2000, 2000);
     collector().check_fallback_completion();
     drain_async_updates();
     drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
-
-    // Wind temps_ready_time_ back so 0s and 12s thresholds both fire.
-    PrintStartCollectorTestAccess::set_temps_ready_elapsed_seconds(collector(), 0);
-    collector().check_fallback_completion();
-    drain_async_updates();
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::CLEANING);
-    REQUIRE(get_current_message() == "Cleaning Nozzle...");
-
-    // Advance to +12s — PURGING entry fires.
-    PrintStartCollectorTestAccess::set_temps_ready_elapsed_seconds(collector(), 12);
-    collector().check_fallback_completion();
-    drain_async_updates();
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
-    REQUIRE(get_current_message() == "Purging...");
+    INFO("phase=" << static_cast<int>(get_current_phase()) << " msg=" << get_current_message());
+    REQUIRE(get_current_phase() != PrintStartPhase::INITIALIZING);
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
 }
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
-                 "Snapmaker U1: silent_progression skips entries that would regress phase",
-                 "[print][collector][snapmaker][silent_progression]") {
-    collector().start();
-    drain_async_updates();
-    collector().enable_fallbacks();
-
-    // Force phase to PURGING (e.g. real PRINT_PREEXTRUDING signal landed
-    // before silent_progression armed).
-    feed_gcode("// Success: Set action code PRINT_PREEXTRUDING");
-    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
-
-    // Now temps ready arrives later. silent_progression entries (CLEANING,
-    // PURGING) must NOT clobber the already-active PURGING phase with
-    // CLEANING.
-    set_all_temps(600, 600, 2000, 2000);
-    PrintStartCollectorTestAccess::set_temps_ready_elapsed_seconds(collector(), 20);
-    collector().check_fallback_completion();
-    drain_async_updates();
-    drain_async_updates();
-
-    // Phase must stay at PURGING (or later) — silent_progression skip rule.
-    REQUIRE(static_cast<int>(get_current_phase()) >= static_cast<int>(PrintStartPhase::PURGING));
-}
-
-TEST_CASE_METHOD(SnapmakerCollectorFixture,
-                 "Snapmaker U1: silent_progression does not fire before temps ready",
-                 "[print][collector][snapmaker][silent_progression]") {
-    collector().start();
-    drain_async_updates();
-    collector().enable_fallbacks();
-
-    // Heaters still ramping — proactive detection sets HEATING_NOZZLE.
-    set_all_temps(600, 600, 1000, 2000); // bed at target, ext halfway
-    collector().check_fallback_completion();
-    drain_async_updates();
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
-
-    // Even with bad luck where temps_ready_time_ got accidentally set,
-    // the check_fallback_completion path requires temps_ready==true on the
-    // current tick. Without temps actually being at target, silent
-    // entries must not fire.
-    PrintStartCollectorTestAccess::set_temps_ready_elapsed_seconds(collector(), 30);
-    collector().check_fallback_completion();
-    drain_async_updates();
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
+                 "Snapmaker U1: profile carries no silent_progression entries",
+                 "[print][collector][snapmaker][preprint]") {
+    auto profile = PrintStartProfile::load("snapmaker_u1");
+    REQUIRE(profile != nullptr);
+    if (profile->name() != "Snapmaker U1") {
+        SKIP("snapmaker_u1.json not available");
+    }
+    // The U1 fully signals its sequence; a temps-ready timer is wrong on this
+    // firmware. Guard against a future edit re-introducing it.
+    REQUIRE(profile->silent_progression().empty());
 }
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,

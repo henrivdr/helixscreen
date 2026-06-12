@@ -120,6 +120,7 @@ void PrintStartCollector::start() {
         current_mesh_message_.clear();
         temps_ready_time_ = {};
         silent_progression_idx_ = 0;
+        real_signal_seen_.store(false, std::memory_order_relaxed);
         // Snapshot stale subject values so fallbacks only trigger on real changes
         baseline_layer_ = lv_subject_get_int(state_.get_print_layer_current_subject());
         baseline_progress_ = lv_subject_get_int(state_.get_print_progress_subject());
@@ -322,6 +323,7 @@ void PrintStartCollector::reset() {
         current_mesh_message_.clear();
         temps_ready_time_ = {};
         silent_progression_idx_ = 0;
+        real_signal_seen_.store(false, std::memory_order_relaxed);
     }
     fallbacks_enabled_.store(false);
 
@@ -437,10 +439,17 @@ void PrintStartCollector::check_fallback_completion() {
             update_phase(PrintStartPhase::HEATING_NOZZLE, lv_tr("Heating Nozzle..."));
             return;
         }
-        if (temps_ready && !bed_heating && !nozzle_heating &&
+        if (!real_signal_seen_.load(std::memory_order_relaxed) && temps_ready && !bed_heating &&
+            !nozzle_heating &&
             (current == PrintStartPhase::HEATING_BED ||
              current == PrintStartPhase::HEATING_NOZZLE)) {
-            // Both heaters at target — preparation continues (homing, mesh, purge, etc.)
+            // Both heaters at target — preparation continues (homing, mesh, purge, etc.).
+            // Only relevant before the firmware starts narrating its sequence: once a
+            // real signal has been seen the firmware is authoritative, and bouncing the
+            // displayed phase back to the generic "Preparing Print..." here would thrash
+            // the UI (the Snapmaker U1 interleaves heating with DETECT_PLATE / BED_MESH
+            // action codes, so temps repeatedly settle mid-sequence). See the
+            // "proactive temps-ready does not regress phase after a real signal" test.
             spdlog::info("[PrintStartCollector] Proactive: temps ready, waiting for print start");
             update_phase(PrintStartPhase::INITIALIZING, lv_tr("Preparing Print..."));
             return;
@@ -621,6 +630,7 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
     // This fires before Moonraker's state transition and is a definitive end-of-preprint signal.
     if (is_respond_completion(line)) {
         spdlog::info("[PrintStartCollector] RESPOND completion detected: {}", line);
+        real_signal_seen_.store(true, std::memory_order_relaxed);
         update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
         return;
     }
@@ -629,6 +639,7 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
     if (profile_) {
         PrintStartProfile::MatchResult match;
         if (profile_->try_match_signal(line, match)) {
+            real_signal_seen_.store(true, std::memory_order_relaxed);
             if (profile_->progress_mode() == PrintStartProfile::ProgressMode::SEQUENTIAL) {
                 update_phase(match.phase, match.message, match.progress);
             } else {
@@ -648,6 +659,7 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
         }
     }
     if (should_set_initializing) {
+        real_signal_seen_.store(true, std::memory_order_relaxed);
         update_phase(PrintStartPhase::INITIALIZING, lv_tr("Starting Print..."));
         spdlog::info("[PrintStartCollector] PRINT_START detected");
         return;
@@ -903,6 +915,7 @@ void PrintStartCollector::check_phase_patterns(const std::string& line) {
 
     PrintStartProfile::MatchResult match;
     if (profile_->try_match_pattern(line, match)) {
+        real_signal_seen_.store(true, std::memory_order_relaxed);
         // Only update if this is a new phase
         bool is_new_phase = false;
         {
@@ -934,6 +947,7 @@ bool PrintStartCollector::check_helix_phase_signal(const std::string& line) {
     if (pos == std::string::npos) {
         return false;
     }
+    real_signal_seen_.store(true, std::memory_order_relaxed);
 
     // Extract the phase name
     std::string phase_name = line.substr(pos + PREFIX_LEN);
@@ -1022,6 +1036,7 @@ bool PrintStartCollector::check_k2_cfs_signal(const std::string& line) {
 
             char msg[32];
             std::snprintf(msg, sizeof(msg), "%s — %d%%", lv_tr("Purging"), percent);
+            real_signal_seen_.store(true, std::memory_order_relaxed);
             update_phase(PrintStartPhase::PURGING, std::string(msg), percent);
             return true;
         }
@@ -1036,6 +1051,7 @@ bool PrintStartCollector::check_k2_cfs_signal(const std::string& line) {
         line.find("BOX_LOAD_MATERIAL") != std::string::npos) {
         // No dedicated PrintStartPhase value — INITIALIZING is the closest
         // non-terminal neighbor; the message carries the human-facing label.
+        real_signal_seen_.store(true, std::memory_order_relaxed);
         update_phase(PrintStartPhase::INITIALIZING, lv_tr("Loading Filament..."));
         return true;
     }
