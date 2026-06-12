@@ -415,16 +415,36 @@ void PrintStartCollector::check_fallback_completion() {
     bool temps_ready = !bed_heating && !nozzle_heating;
 
     // =========================================================================
-    // PROACTIVE DETECTION: Track preparation phases from temperature state
-    // Continuously updates as heaters change, not just on first detection.
-    // Only fires when no gcode_response patterns have been matched recently.
-    // =========================================================================
-    // Allow proactive temperature detection from any non-terminal phase.
-    // On printers like the K1C where gcode responses are sparse, the proactive
-    // detector is the primary way to advance through heating phases.
+    // PROACTIVE DETECTION: Track preparation phases from temperature state.
+    // This is a FALLBACK for printers whose firmware emits sparse/no
+    // gcode_response signals (e.g. K1C) — it advances heating phases from
+    // temperature alone. It is GATED OFF the moment any real firmware signal is
+    // observed (real_signal_seen_): on signal-rich firmwares like the Snapmaker
+    // U1 the bed/nozzle sit below target for almost all of preparation while the
+    // firmware narrates Homing → DETECT_PLATE → BED_PREHEATING → ... via action
+    // codes, so an ungated proactive detector fires "Heating Bed"/"Heating
+    // Nozzle" on nearly every tick and stomps the real, ordered phases. Once the
+    // firmware is talking it is authoritative; proactive must stay silent.
     bool is_temp_detected_phase =
-        (current != PrintStartPhase::COMPLETE && current != PrintStartPhase::PURGING);
+        !real_signal_seen_.load(std::memory_order_relaxed) &&
+        current != PrintStartPhase::COMPLETE && current != PrintStartPhase::PURGING;
     if (is_temp_detected_phase) {
+        // If the toolhead is actively mid-home (G28 underway — some but not all
+        // axes homed), show "Homing" rather than mislabeling the concurrent bed
+        // warm-up as "Heating Bed". We require a NON-empty, partial homed_axes so
+        // that a bed-first-heat macro (homed_axes still "" before G28 starts)
+        // correctly shows "Heating Bed", and so the proactive heating unit tests
+        // (which don't set homed_axes) are unaffected.
+        const char* homed = lv_subject_get_string(state_.get_homed_axes_subject());
+        bool fully_homed = homed != nullptr && strchr(homed, 'x') != nullptr &&
+                           strchr(homed, 'y') != nullptr && strchr(homed, 'z') != nullptr;
+        bool homing_active =
+            homed != nullptr && homed[0] != '\0' && !fully_homed && (bed_heating || nozzle_heating);
+        if (homing_active && current != PrintStartPhase::HOMING) {
+            spdlog::info("[PrintStartCollector] Proactive: homing (axes='{}')", homed);
+            update_phase(PrintStartPhase::HOMING, lv_tr("Homing..."));
+            return;
+        }
         if (bed_heating && (current != PrintStartPhase::HEATING_BED)) {
             // Bed still heating — show bed phase
             spdlog::info("[PrintStartCollector] Proactive: bed heating ({}/{})", bed_temp / 10,
@@ -437,21 +457,6 @@ void PrintStartCollector::check_fallback_completion() {
             spdlog::info("[PrintStartCollector] Proactive: nozzle heating ({}/{})", ext_temp / 10,
                          ext_target / 10);
             update_phase(PrintStartPhase::HEATING_NOZZLE, lv_tr("Heating Nozzle..."));
-            return;
-        }
-        if (!real_signal_seen_.load(std::memory_order_relaxed) && temps_ready && !bed_heating &&
-            !nozzle_heating &&
-            (current == PrintStartPhase::HEATING_BED ||
-             current == PrintStartPhase::HEATING_NOZZLE)) {
-            // Both heaters at target — preparation continues (homing, mesh, purge, etc.).
-            // Only relevant before the firmware starts narrating its sequence: once a
-            // real signal has been seen the firmware is authoritative, and bouncing the
-            // displayed phase back to the generic "Preparing Print..." here would thrash
-            // the UI (the Snapmaker U1 interleaves heating with DETECT_PLATE / BED_MESH
-            // action codes, so temps repeatedly settle mid-sequence). See the
-            // "proactive temps-ready does not regress phase after a real signal" test.
-            spdlog::info("[PrintStartCollector] Proactive: temps ready, waiting for print start");
-            update_phase(PrintStartPhase::INITIALIZING, lv_tr("Preparing Print..."));
             return;
         }
         if ((bed_heating || nozzle_heating) && current == PrintStartPhase::IDLE) {
@@ -1463,6 +1468,20 @@ void PrintStartCollector::update_eta_display() {
                       last_remaining_);
         remaining = last_remaining_;
     }
+    // Downward rate limit: a phase change recomputes `remaining` from per-phase
+    // weights, which can collapse the estimate in a single tick (e.g. 111→57→31)
+    // — that reads as broken on screen. Cap each tick's decrease (proportional,
+    // so a large estimate still converges from an overestimate while a small one
+    // glides) so the number eases down instead of snapping. The COMPLETE
+    // transition snaps to the print view, so a brief tail-end overshoot is fine.
+    if (last_remaining_ > 0 && remaining < last_remaining_) {
+        int max_drop = std::max(15, last_remaining_ / 6);
+        if (last_remaining_ - remaining > max_drop) {
+            spdlog::debug("[PrintStartCollector] Easing remaining {}s→{}s (cap {}s/tick, target {}s)",
+                          last_remaining_, last_remaining_ - max_drop, max_drop, remaining);
+            remaining = last_remaining_ - max_drop;
+        }
+    }
     last_remaining_ = remaining;
 
     state_.set_preprint_remaining_seconds(remaining);
@@ -1669,24 +1688,35 @@ void PrintStartCollector::query_mesh_probe_count() {
             int total = 0;
             const char* source = "";
 
-            // Prefer probed_matrix dimensions from last completed mesh. For printers
-            // with adaptive/reduced probing (Snapmaker U1, KAMP), this reflects what
-            // will actually be probed; probe_count config overstates by 5x on U1.
-            try {
-                const auto& status = response["result"]["status"];
-                if (status.contains("bed_mesh") && status["bed_mesh"].contains("probed_matrix")) {
-                    const auto& pm = status["bed_mesh"]["probed_matrix"];
-                    if (pm.is_array() && !pm.empty() && pm[0].is_array()) {
-                        int rows = static_cast<int>(pm.size());
-                        int cols = static_cast<int>(pm[0].size());
-                        if (rows > 0 && cols > 0) {
-                            total = rows * cols;
-                            source = "probed_matrix";
+            // Printers using adaptive bed-mesh probing (Snapmaker U1, KAMP) probe a
+            // variable, slicer-determined number of points — and on the U1 the mesh
+            // is split across several sub-phases (Detecting Plate, Pre-scanning,
+            // Levelling), none of which matches a stored grid. Neither a prior
+            // probed_matrix nor the configfile probe_count predicts the live count,
+            // so we set NO total and show "Bed Mesh (N)" — a denominator here just
+            // lies (e.g. "(3/16)" when the U1 never probes 16). Skip both sources.
+            const bool adaptive = self->profile_ && self->profile_->adaptive_meshing();
+
+            // Prefer probed_matrix dimensions from last completed mesh (fixed-grid
+            // printers only). probe_count config overstates on adaptive printers.
+            if (!adaptive) {
+                try {
+                    const auto& status = response["result"]["status"];
+                    if (status.contains("bed_mesh") &&
+                        status["bed_mesh"].contains("probed_matrix")) {
+                        const auto& pm = status["bed_mesh"]["probed_matrix"];
+                        if (pm.is_array() && !pm.empty() && pm[0].is_array()) {
+                            int rows = static_cast<int>(pm.size());
+                            int cols = static_cast<int>(pm[0].size());
+                            if (rows > 0 && cols > 0) {
+                                total = rows * cols;
+                                source = "probed_matrix";
+                            }
                         }
                     }
+                } catch (...) {
+                    // fall through to config
                 }
-            } catch (...) {
-                // fall through to config
             }
 
             // Skip configfile probe_count fallback for printers using adaptive
@@ -1694,8 +1724,7 @@ void PrintStartCollector::query_mesh_probe_count() {
             // and the configured grid (e.g. 13x13 = 169) overstates the actual
             // probe count by ~5x. Better to show "Bed Mesh (N)" without total
             // than "Bed Mesh (5/169)" lying.
-            const bool skip_config_fallback =
-                self->profile_ && self->profile_->adaptive_meshing();
+            const bool skip_config_fallback = adaptive;
             if (total == 0 && !skip_config_fallback) {
                 try {
                     const auto& settings = response["result"]["status"]["configfile"]["settings"];

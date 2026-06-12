@@ -2238,36 +2238,66 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 }
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
-                 "Snapmaker U1: proactive temps-ready does not regress phase after a real signal",
+                 "Snapmaker U1: proactive detection is fully suppressed after a real signal",
                  "[print][collector][snapmaker][preprint]") {
     collector().start();
     drain_async_updates();
     collector().enable_fallbacks();
 
-    // A real firmware signal lands — the firmware is now authoritative.
+    // A real firmware signal lands — the firmware is now authoritative for the
+    // displayed phase. On the U1 the bed and nozzle sit below target for almost
+    // all of preparation while the firmware narrates its real sequence, so an
+    // ungated proactive detector would fire Heating Bed/Heating Nozzle on nearly
+    // every tick and stomp the firmware phases (the "bouncing" bug). Once a
+    // signal is seen, proactive must stay completely silent.
     feed_gcode("// Success: Set action code PRINT_SWITCH_CHECKING");
     REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
 
-    // Nozzle ramps toward a probe temperature with no action code — the
-    // proactive heater detector legitimately surfaces "Heating Nozzle...".
-    set_all_temps(/*bed*/ 600, 600, /*ext*/ 1000, 2000);
-    collector().check_fallback_completion();
-    drain_async_updates();
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
-
-    // Nozzle reaches target. On the old code the proactive
-    // "temps ready → INITIALIZING" branch fired here, bouncing the displayed
-    // phase backward to the generic "Preparing Print...". Once a real signal
-    // has been seen, that branch must be suppressed — the more-specific phase
-    // stands until the next firmware signal.
-    set_all_temps(600, 600, 2000, 2000);
+    // Bed and nozzle both well below target — pre-fix this would have driven
+    // the phase to HEATING_BED. It must NOT: the firmware phase stands.
+    set_all_temps(/*bed*/ 200, 600, /*ext*/ 1000, 2000);
     collector().check_fallback_completion();
     drain_async_updates();
     drain_async_updates();
     INFO("phase=" << static_cast<int>(get_current_phase()) << " msg=" << get_current_message());
-    REQUIRE(get_current_phase() != PrintStartPhase::INITIALIZING);
-    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
+    REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
+
+    // A later real signal advances the phase normally (firmware in control).
+    feed_gcode("// Success: Set action code DETECT_PLATE");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+
+    // Still no proactive override even as temps keep changing.
+    set_all_temps(600, 600, 1500, 2000);
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+}
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: proactive shows Homing (not Heating Bed) while mid-home pre-signal",
+                 "[print][collector][snapmaker][preprint]") {
+    collector().start();
+    drain_async_updates();
+    collector().enable_fallbacks();
+
+    // Before any firmware signal, the bed warms (25/55) while G28 runs. The
+    // homed_axes string is partial during homing ("xy" = z not yet homed). The
+    // proactive detector must show "Homing", not mislabel the concurrent warm-up
+    // as "Heating Bed".
+    lv_subject_copy_string(state().get_homed_axes_subject(), "xy");
+    set_all_temps(/*bed*/ 250, 550, /*ext*/ 0, 0);
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
+
+    // Once fully homed, proactive may surface the bed heating (still pre-signal).
+    lv_subject_copy_string(state().get_homed_axes_subject(), "xyz");
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
 }
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
