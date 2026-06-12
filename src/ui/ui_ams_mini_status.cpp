@@ -144,6 +144,7 @@ struct AmsMiniStatusData {
     int rendered_width_px = -1;
     int rendered_colspan = -1;
     bool rendered_3d = true;
+    int rendered_height = -1;
 
     // Auto-binding observer (observe AmsState slots_version subject)
     // Uses ObserverGuard for RAII lifecycle management
@@ -546,7 +547,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_height(sc, lv_pct(100));
         lv_obj_set_flex_flow(sc, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(sc, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_column(sc, theme_manager_get_spacing("space_xs"), LV_PART_MAIN);
+        lv_obj_set_style_pad_column(sc, theme_manager_get_spacing("space_xxs"), LV_PART_MAIN);
         lv_obj_set_style_pad_all(sc, 0, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(sc, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(sc, 0, LV_PART_MAIN);
@@ -558,6 +559,18 @@ static void rebuild_spools(AmsMiniStatusData* data) {
     lv_obj_t* sc = data->spools_container;
     lv_obj_remove_flag(sc, LV_OBJ_FLAG_HIDDEN);
 
+    // Size the spool to the row height; cells are content-tight so spools pack
+    // together and N spools fit N-wide without a horizontal scrollbar.
+    lv_obj_update_layout(sc);
+    int avail_h = lv_obj_get_content_height(sc);
+    if (avail_h <= 0)
+        avail_h = data->height; // before layout resolves
+    int spool_size = avail_h * 3 / 4;
+    if (spool_size < 24)
+        spool_size = 24;
+    if (spool_size > 44)
+        spool_size = 44;
+
     // Dirty-check: the render is fully determined by the cell data, available
     // width, colspan, and spool style. If none changed since the last real render
     // and the cells already exist on screen, skip the costly clean+recreate (and
@@ -566,6 +579,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
     bool unchanged = (data->rendered_width_px == data->width_px) &&
                      (data->rendered_colspan == data->colspan) &&
                      (data->rendered_3d == cur_3d) &&
+                     (data->rendered_height == avail_h) &&
                      (data->rendered_cells == data->spool_cells) &&
                      (lv_obj_get_child_count(sc) > 0);
     if (unchanged)
@@ -581,17 +595,10 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         // render with otherwise-matching inputs isn't wrongly skipped.
         data->rendered_cells.clear();
         data->rendered_width_px = -1;
+        data->rendered_height = -1;
         return;
     }
     lv_obj_remove_flag(data->container, LV_OBJ_FLAG_HIDDEN);
-
-    // Fit tier: "target 4, else 2". cell_w = the 1x cell width.
-    int cell_w = (data->colspan > 0) ? (data->width_px / data->colspan) : data->width_px;
-    int two_x = 2 * cell_w;
-    int cell_px = (two_x / 4 >= SPOOL_CELL_MIN_PX) ? (two_x / 4) : (two_x / 2);
-    if (cell_px < SPOOL_CELL_MIN_PX)
-        cell_px = SPOOL_CELL_MIN_PX;
-    int spool_size = cell_px * 2 / 5; // spool graphic ~40% of the cell; text takes the rest
 
     for (int i = 0; i < n; ++i) {
         const SpoolCellData& cd = data->spool_cells[i];
@@ -600,7 +607,8 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         char nm[32];
         snprintf(nm, sizeof(nm), "spool_cell_%d", i);
         lv_obj_set_name(cell, nm);
-        lv_obj_set_size(cell, cell_px, lv_pct(100));
+        lv_obj_set_width(cell, LV_SIZE_CONTENT);
+        lv_obj_set_height(cell, lv_pct(100));
         lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
@@ -628,7 +636,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
 
         // Text column (vertically centered), material over percent.
         lv_obj_t* col = lv_obj_create(cell);
-        lv_obj_set_flex_grow(col, 1);
+        lv_obj_set_width(col, LV_SIZE_CONTENT);
         lv_obj_set_height(col, lv_pct(100));
         lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -640,8 +648,6 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_t* mat = lv_label_create(col);
         snprintf(nm, sizeof(nm), "spool_material_%d", i);
         lv_obj_set_name(mat, nm);
-        lv_obj_set_width(mat, lv_pct(100));
-        lv_label_set_long_mode(mat, LV_LABEL_LONG_WRAP);
         lv_label_set_text(mat, cd.material.empty() ? "--" : cd.material.c_str()); // material: no i18n
         const lv_font_t* fs = theme_manager_get_font("font_small");
         if (fs)
@@ -669,6 +675,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
     data->rendered_width_px = data->width_px;
     data->rendered_colspan = data->colspan;
     data->rendered_3d = cur_3d;
+    data->rendered_height = avail_h;
 }
 
 /**
