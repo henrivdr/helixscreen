@@ -339,6 +339,18 @@ class PrinterState {
     lv_subject_t* get_chamber_fan_target_subject(SubjectLifetime& lifetime) {
         return temperature_state_.get_chamber_fan_target_subject(lifetime);
     }
+    lv_subject_t* get_chamber_effective_target_subject() {
+        return temperature_state_.get_chamber_effective_target_subject();
+    }
+    lv_subject_t* get_chamber_effective_target_subject(SubjectLifetime& lifetime) {
+        return temperature_state_.get_chamber_effective_target_subject(lifetime);
+    }
+    lv_subject_t* get_chamber_mode_subject() {
+        return temperature_state_.get_chamber_mode_subject();
+    }
+    lv_subject_t* get_chamber_mode_subject(SubjectLifetime& lifetime) {
+        return temperature_state_.get_chamber_mode_subject(lifetime);
+    }
 
     // Print progress subjects - delegated to PrinterPrintState component
     lv_subject_t* get_print_progress_subject() {

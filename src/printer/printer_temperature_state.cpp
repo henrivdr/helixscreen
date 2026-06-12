@@ -56,6 +56,8 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     chamber_fan_target_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_effective_target, 0, subjects_, register_xml);
     chamber_effective_target_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_mode, helix::ChamberMode::Off, subjects_, register_xml);
+    chamber_mode_lifetime_ = std::make_shared<bool>(true);
 
     // Extruder version subject (bumped when extruder list changes)
     INIT_SUBJECT_INT(extruder_version, 0, subjects_, register_xml);
@@ -86,6 +88,8 @@ void PrinterTemperatureState::deinit_subjects() {
     chamber_fan_target_lifetime_.reset();
     if (chamber_effective_target_lifetime_) *chamber_effective_target_lifetime_ = false;
     chamber_effective_target_lifetime_.reset();
+    if (chamber_mode_lifetime_) *chamber_mode_lifetime_ = false;
+    chamber_mode_lifetime_.reset();
     for (auto& [name, info] : extruders_) {
         if (info.temp_lifetime) *info.temp_lifetime = false;
         info.temp_lifetime.reset();
@@ -126,6 +130,7 @@ void PrinterTemperatureState::register_xml_subjects() {
     lv_xml_register_subject(nullptr, "chamber_target", &chamber_target_);
     lv_xml_register_subject(nullptr, "chamber_fan_target", &chamber_fan_target_);
     lv_xml_register_subject(nullptr, "chamber_effective_target", &chamber_effective_target_);
+    lv_xml_register_subject(nullptr, "chamber_mode", &chamber_mode_);
     lv_xml_register_subject(nullptr, "extruder_version", &extruder_version_);
 }
 
@@ -412,17 +417,31 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         }
     }
 
-    // Effective chamber setpoint: in COOLING mode (<=40C) the M141 macro leaves
-    // the heater target at 0 and parks the real setpoint on the cooling-fan
-    // target, so prefer the heater target when heating (>0) and fall back to the
-    // fan target otherwise. Recomputed on EVERY status update so external sets
-    // (Mainsail/startup, partial subscription updates that touch only one of the
-    // two source subjects) are reflected. Same ternary as the UI-layer
-    // chamber_effective_setpoint value branch, inlined to keep this data-layer
-    // file free of ui_temperature_utils.h.
+    // Effective chamber setpoint + control mode: in COOLING mode (<=40C) the M141
+    // macro leaves the heater target at 0 and parks the real setpoint on the
+    // cooling-fan target. `M141 S0` ("Off") instead resets the cooling fan to its
+    // CONFIGURED RESTING target (35°C on the K2) with the heater at 0 — so a fan
+    // target equal to the resting value means Off, NOT a deliberate maintain set.
+    //   heater > 0                         -> Heating,     effective = heater target
+    //   heater 0, fan > 0, fan != resting  -> Maintaining, effective = fan target
+    //   else                               -> Off,         effective = 0
+    // Recomputed on EVERY status update so external sets (Mainsail/startup, partial
+    // subscription updates that touch only one source subject) are reflected.
     int heater_t = lv_subject_get_int(&chamber_target_);
     int fan_t = lv_subject_get_int(&chamber_fan_target_);
-    lv_subject_set_int(&chamber_effective_target_, heater_t > 0 ? heater_t : fan_t);
+    int eff, mode;
+    if (heater_t > 0) {
+        mode = helix::ChamberMode::Heating;
+        eff = heater_t;
+    } else if (fan_t > 0 && fan_t != chamber_fan_resting_centi_) {
+        mode = helix::ChamberMode::Maintaining;
+        eff = fan_t;
+    } else {
+        mode = helix::ChamberMode::Off;
+        eff = 0;
+    }
+    lv_subject_set_int(&chamber_effective_target_, eff);
+    lv_subject_set_int(&chamber_mode_, mode);
 }
 
 } // namespace helix

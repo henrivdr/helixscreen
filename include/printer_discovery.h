@@ -666,6 +666,7 @@ class PrinterDiscovery {
         chamber_heater_name_.clear();
         chamber_heater_object_name_.clear();
         chamber_cooling_fan_name_.clear();
+        chamber_fan_resting_centi_ = 0;
         has_led_ = false;
         led_effects_.clear();
         has_led_effects_ = false;
@@ -781,6 +782,17 @@ class PrinterDiscovery {
     /// Recorded independent of the heater pick — see chamber_cooling_fan_name_.
     [[nodiscard]] const std::string& chamber_cooling_fan_name() const {
         return chamber_cooling_fan_name_;
+    }
+
+    /// Cooling fan's configured resting/off target in centidegrees (×10), or 0 if
+    /// unknown. Read from configfile.settings[<fan>].target_temp during discovery.
+    /// `M141 S0` resets the cooling fan to this value, so recognizing it lets the
+    /// chamber report Off instead of misreading the resting target as Maintaining.
+    void set_chamber_fan_resting_centi(int centi) {
+        chamber_fan_resting_centi_ = centi;
+    }
+    [[nodiscard]] int chamber_fan_resting_centi() const {
+        return chamber_fan_resting_centi_;
     }
 
     [[nodiscard]] bool has_led() const {
@@ -1315,6 +1327,9 @@ class PrinterDiscovery {
                                              ///< independent of the heater pick: in COOLING mode
                                              ///< the K2 M141 macro parks the setpoint on this fan's
                                              ///< target, not the heater's.
+    int chamber_fan_resting_centi_ = 0;      ///< Cooling fan's configured resting/off target
+                                             ///< (centidegrees), from configfile.settings
+                                             ///< target_temp. 0 = unknown. M141 S0 returns here.
     bool has_led_ = false;
     std::vector<std::string> led_effects_;
     bool has_led_effects_ = false;

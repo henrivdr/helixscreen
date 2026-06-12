@@ -271,15 +271,29 @@ void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
     }
 }
 
+// Map the resting-aware ChamberMode subject int to its (untranslated) status word.
+// Translated at the display site via lv_tr() in update_status().
+static const char* chamber_mode_word(int mode) {
+    switch (mode) {
+    case helix::ChamberMode::Heating:
+        return "Heating";
+    case helix::ChamberMode::Maintaining:
+        return "Maintaining";
+    default:
+        return "Off";
+    }
+}
+
 void TemperatureService::recompute_chamber_target() {
     auto& chamber = heaters_[idx(HeaterType::Chamber)];
 
-    int heater_centi = lv_subject_get_int(printer_state_.get_chamber_target_subject());
-    int fan_centi = lv_subject_get_int(printer_state_.get_chamber_fan_target_subject());
-
-    auto sp = helix::ui::temperature::chamber_effective_setpoint(heater_centi, fan_centi);
-    chamber.target = sp.centi;
-    chamber.chamber_mode = sp.mode;
+    // Derive both the effective target and the control mode from the data-layer
+    // subjects, which fold in the cooling-fan resting target so M141 S0 reads as
+    // Off (effective 0) rather than a deliberate "Maintaining" set at the resting
+    // temperature. The graph target line then matches the displayed value.
+    chamber.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
+    chamber.chamber_mode =
+        chamber_mode_word(lv_subject_get_int(printer_state_.get_chamber_mode_subject()));
 
     update_display(HeaterType::Chamber);
     update_status(HeaterType::Chamber);
@@ -626,15 +640,12 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
         h.target = lv_subject_get_int(printer_state_.get_bed_target_subject());
     } else if (type == HeaterType::Chamber) {
         h.current = lv_subject_get_int(printer_state_.get_chamber_temp_subject());
-        // Effective setpoint is heater-OR-fan (M141 splits the setpoint); seed both
+        // Effective setpoint + mode come from the data-layer subjects, which fold in
+        // the cooling-fan resting target (M141 S0 → fan at resting → Off). Seed both
         // h.target and the mode word so the initial display matches live updates.
-        {
-            int heater_centi = lv_subject_get_int(printer_state_.get_chamber_target_subject());
-            int fan_centi = lv_subject_get_int(printer_state_.get_chamber_fan_target_subject());
-            auto sp = helix::ui::temperature::chamber_effective_setpoint(heater_centi, fan_centi);
-            h.target = sp.centi;
-            h.chamber_mode = sp.mode;
-        }
+        h.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
+        h.chamber_mode =
+            chamber_mode_word(lv_subject_get_int(printer_state_.get_chamber_mode_subject()));
 
         // Update read_only from capability subject
         auto* cap_subj = printer_state_.get_printer_has_chamber_heater_subject();

@@ -720,6 +720,57 @@ TEST_CASE("build_heater_gcode generates correct gcode for all heater types", "[c
     }
 }
 
+// Resting-aware chamber mode + effective target. `M141 S0` ("Off") resets the
+// cooling fan to its CONFIGURED RESTING target (35°C on the K2) with the heater
+// at 0; without resting-awareness the fan target of 35 reads back as a deliberate
+// "Maintaining 35°" set (and reddens the display). The mode subject is computed
+// WITH the resting value so the resting state is recognized as Off → effective 0.
+TEST_CASE("chamber mode + effective target treat the cooling-fan resting target as Off",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    helix::PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_heater_name("heater_generic chamber_heater");
+    ts.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+    ts.set_chamber_fan_resting(350); // 35°C ×10 (resting/off value from config)
+
+    // Off: M141 S0 → heater 0, fan at resting 35 → Off, effective 0
+    ts.update_from_status({{"heater_generic chamber_heater", {{"target", 0.0}}},
+                           {"temperature_fan chamber_fan", {{"target", 35.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 0);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Off);
+
+    // Maintaining: deliberate 30 (≠ resting) → Maintaining, effective 300
+    ts.update_from_status({{"temperature_fan chamber_fan", {{"target", 30.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 300);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Maintaining);
+
+    // Heating: heater 60 wins → Heating, effective 600
+    ts.update_from_status({{"heater_generic chamber_heater", {{"target", 60.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 600);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Heating);
+}
+
+// Pre-config-fetch fallback: when the resting target hasn't been read from config
+// yet (stays 0), a real maintain set (fan 35 != 0) must still read as Maintaining.
+// This is the safe default before discovery populates set_chamber_fan_resting().
+TEST_CASE("chamber mode without resting config treats any fan target as Maintaining",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    helix::PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_heater_name("heater_generic chamber_heater");
+    ts.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+    // set_chamber_fan_resting() intentionally NOT called → resting stays 0.
+
+    ts.update_from_status({{"heater_generic chamber_heater", {{"target", 0.0}}},
+                           {"temperature_fan chamber_fan", {{"target", 35.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 350);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Maintaining);
+}
+
 TEST_CASE("chamber_effective_setpoint picks the active control", "[temperature][m141]") {
     using helix::ui::temperature::chamber_effective_setpoint;
     auto heating = chamber_effective_setpoint(600, 0); // heater 60° (×10)

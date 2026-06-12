@@ -588,6 +588,10 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
     // Cooling-fan name has no manual override — it's read straight from discovery.
     // In COOLING mode the K2 M141 macro parks the setpoint on this fan's target.
     temperature_state_.set_chamber_cooling_fan_name(discovery_.chamber_cooling_fan_name());
+    // Cooling fan's configured resting/off target (from configfile.settings). M141
+    // S0 returns the fan here, so the chamber mode treats this value as Off rather
+    // than a deliberate "Maintaining" set.
+    temperature_state_.set_chamber_fan_resting(discovery_.chamber_fan_resting_centi());
 
     // Update capability flags based on resolved chamber assignments
     // (set_hardware above used discovery flags which miss manual overrides)

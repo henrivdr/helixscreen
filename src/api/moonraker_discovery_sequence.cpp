@@ -624,6 +624,34 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                 helix::MacroFanAnalyzer analyzer;
                                 auto macro_result = analyzer.analyze(settings);
 
+                                // Record the chamber cooling fan's configured resting/off
+                                // target. M141 S0 resets the cooling fan to this value (35°C
+                                // on the K2); recognizing it lets the chamber report Off
+                                // instead of misreading the resting fan target as a deliberate
+                                // "Maintaining" set. Klipper lowercases section names in
+                                // configfile.settings, so lowercase the fan's object name for
+                                // the lookup. Stored on hardware_ and read in
+                                // PrinterState::set_hardware (same path as the cooling-fan name).
+                                {
+                                    std::lock_guard<std::mutex> lock(hardware_mutex_);
+                                    std::string fan = hardware_.chamber_cooling_fan_name();
+                                    if (!fan.empty()) {
+                                        std::string key = fan;
+                                        std::transform(key.begin(), key.end(), key.begin(),
+                                                       ::tolower);
+                                        if (settings.contains(key) &&
+                                            settings[key].contains("target_temp") &&
+                                            settings[key]["target_temp"].is_number()) {
+                                            int resting_centi = static_cast<int>(
+                                                settings[key]["target_temp"].get<double>() * 10);
+                                            hardware_.set_chamber_fan_resting_centi(resting_centi);
+                                            spdlog::debug("[Discovery] Chamber cooling fan '{}' "
+                                                          "resting target: {} centi",
+                                                          fan, resting_centi);
+                                        }
+                                    }
+                                }
+
                                 auto* config = Config::get_instance();
                                 if (config && !macro_result.role_hints.empty()) {
                                     for (const auto& [obj_name, role] : macro_result.role_hints) {
