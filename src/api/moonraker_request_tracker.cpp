@@ -351,14 +351,38 @@ void MoonrakerRequestTracker::check_timeouts(
     // age, escalated to warn if a single request has been pending longer than
     // 30 s (well past the 60 s default but a leading indicator that the
     // timer isn't draining and the queue is stuck — #909).
+    //
+    // Throttled to log on change: a single stuck request previously logged on
+    // every monitor tick (~4 lines/sec) for its whole lifetime. Emit only when
+    // the pending signature (count + oldest method + warn level) changes;
+    // re-emit a still-stuck warn at most once per 10 s so the queue-stuck
+    // indicator stays visible without flooding.
     if (pending_count > 0) {
-        if (oldest_age_ms > 30000) {
-            spdlog::warn("[Request Tracker] {} pending request(s); oldest '{}' age {}ms",
-                         pending_count, oldest_method, oldest_age_ms);
-        } else {
-            spdlog::debug("[Request Tracker] {} pending request(s); oldest '{}' age {}ms",
-                          pending_count, oldest_method, oldest_age_ms);
+        const bool warn = oldest_age_ms > 30000;
+        const auto now = std::chrono::steady_clock::now();
+        const bool signature_changed = pending_count != last_logged_pending_count_ ||
+                                        oldest_method != last_logged_oldest_method_ ||
+                                        warn != last_logged_was_warn_;
+        const bool warn_refresh =
+            warn && now - last_warn_log_ >= std::chrono::seconds(10);
+
+        if (signature_changed || warn_refresh) {
+            if (warn) {
+                spdlog::warn("[Request Tracker] {} pending request(s); oldest '{}' age {}ms",
+                             pending_count, oldest_method, oldest_age_ms);
+                last_warn_log_ = now;
+            } else {
+                spdlog::debug("[Request Tracker] {} pending request(s); oldest '{}' age {}ms",
+                              pending_count, oldest_method, oldest_age_ms);
+            }
+            last_logged_pending_count_ = pending_count;
+            last_logged_oldest_method_ = oldest_method;
+            last_logged_was_warn_ = warn;
         }
+    } else {
+        last_logged_pending_count_ = 0;
+        last_logged_oldest_method_.clear();
+        last_logged_was_warn_ = false;
     }
 
     // Phase 2: Emit events and invoke callbacks outside lock
