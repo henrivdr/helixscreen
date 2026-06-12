@@ -4527,6 +4527,17 @@ extract_release() {
         done
         # themes/defaults moved out of themes/; keep user themes (sibling files).
         $(file_sudo "${INSTALL_BACKUP}/config/themes") rm -rf "${INSTALL_BACKUP}/config/themes/defaults" 2>/dev/null || true
+        # Transient crash/watchdog state must never be restored. A fresh install
+        # ships no crash.txt, so the restore loop below would otherwise copy the
+        # old one back on EVERY update — resurrecting the "previously crashed"
+        # dialog the user already dismissed (dismiss only rotates crash.txt to
+        # crash_1.txt; it does not survive the .old round-trip). crash_history.json
+        # is intentionally NOT pruned — it is the dedup store and should persist.
+        $(file_sudo "${INSTALL_BACKUP}/config") rm -f \
+            "${INSTALL_BACKUP}/config/crash.txt" \
+            "${INSTALL_BACKUP}/config/"crash_*.txt \
+            "${INSTALL_BACKUP}/config/crash_report.txt" \
+            "${INSTALL_BACKUP}/config/.crash_restart_count" 2>/dev/null || true
     fi
 
     # Restore any remaining user data from previous config/ (custom_images/,
