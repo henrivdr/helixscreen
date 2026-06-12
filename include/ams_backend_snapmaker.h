@@ -249,6 +249,15 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // terminal cause. No captured `this` (ctx-with-self_slot pattern, [L051]).
     void arm_resume_noop_backstop();
 
+    // Tear down a pending backstop timer if armed: delete its heap BackstopCtx
+    // (via lv_timer_get_user_data), delete the timer, and null the member.
+    // Idempotent (no-op when not armed). Single source of truth for the teardown
+    // shared by the dtor, arm_resume_noop_backstop's re-arm idempotency path, and
+    // the #991 prepare_for_resume failure paths — a prepare failure means no
+    // RESUME was dispatched, so there is nothing for the backstop to watch and
+    // the "restart required" modal would be spurious. Main-thread only.
+    void cancel_resume_noop_backstop();
+
     // Live handle to the backstop timer (nullptr when not armed). Re-arming
     // deletes any prior timer first (idempotency); the dtor tears it down so a
     // pending timer can't outlive the backend.

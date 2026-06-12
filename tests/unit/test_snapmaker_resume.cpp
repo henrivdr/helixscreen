@@ -46,25 +46,42 @@ TEST_CASE("snapmaker_terminal_matchers: user pause (empty signals) => Unknown",
 
 TEST_CASE("snapmaker_filament_config_gcode: builds command for populated slot",
           "[pause][snapmaker]") {
-    REQUIRE(
-        snapmaker_filament_config_gcode(0, "PLA", "Snapmaker") ==
-        "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='0' FILAMENT_TYPE='PLA' VENDOR='Snapmaker'\n");
+    // #991: FILAMENT_SUBTYPE is now required and follows VENDOR. The firmware's own
+    // caller orders CONFIG_EXTRUDER / VENDOR / FILAMENT_TYPE / FILAMENT_SUBTYPE; we
+    // keep the device-confirmed ='...' quoting that parses fine on the U1.
+    const std::string gc = snapmaker_filament_config_gcode(0, "PLA", "Snapmaker", "SnapSpeed");
+    REQUIRE(gc ==
+            "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='0' FILAMENT_TYPE='PLA' VENDOR='Snapmaker' "
+            "FILAMENT_SUBTYPE='SnapSpeed'\n");
+    // Spot-check each required token is present.
+    REQUIRE(gc.find("CONFIG_EXTRUDER='0'") != std::string::npos);
+    REQUIRE(gc.find("FILAMENT_TYPE='PLA'") != std::string::npos);
+    REQUIRE(gc.find("VENDOR='Snapmaker'") != std::string::npos);
+    REQUIRE(gc.find("FILAMENT_SUBTYPE='SnapSpeed'") != std::string::npos);
 }
 
 TEST_CASE("snapmaker_filament_config_gcode: empty material => skip (empty string)",
           "[pause][snapmaker]") {
-    REQUIRE(snapmaker_filament_config_gcode(0, "", "Snapmaker").empty());
+    REQUIRE(snapmaker_filament_config_gcode(0, "", "Snapmaker", "SnapSpeed").empty());
 }
 
 TEST_CASE("snapmaker_filament_config_gcode: empty brand => skip (empty string)",
           "[pause][snapmaker]") {
-    REQUIRE(snapmaker_filament_config_gcode(1, "PETG", "").empty());
+    REQUIRE(snapmaker_filament_config_gcode(1, "PETG", "", "Basic").empty());
+}
+
+TEST_CASE("snapmaker_filament_config_gcode: empty sub_type => skip (empty string)",
+          "[pause][snapmaker]") {
+    // #991: firmware requires FILAMENT_SUBTYPE present whenever FILAMENT_TYPE is set,
+    // so a missing sub-type must skip the whole re-assert rather than emit a partial.
+    REQUIRE(snapmaker_filament_config_gcode(0, "PLA", "Snapmaker", "").empty());
 }
 
 TEST_CASE("snapmaker_filament_config_gcode: uses the given non-zero extruder index",
           "[pause][snapmaker]") {
-    REQUIRE(snapmaker_filament_config_gcode(2, "ABS", "eSUN") ==
-            "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='2' FILAMENT_TYPE='ABS' VENDOR='eSUN'\n");
+    REQUIRE(snapmaker_filament_config_gcode(2, "ABS", "eSUN", "Basic") ==
+            "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='2' FILAMENT_TYPE='ABS' VENDOR='eSUN' "
+            "FILAMENT_SUBTYPE='Basic'\n");
 }
 
 TEST_CASE("snapmaker_resume_noop_detected: paused + SD inactive => true", "[pause][snapmaker]") {

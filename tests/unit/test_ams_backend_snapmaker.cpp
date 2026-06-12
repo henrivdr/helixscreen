@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../test_helpers/printer_state_test_access.h"
+#include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_types.h"
@@ -75,6 +76,14 @@ class SnapmakerTestAccess {
     static void set_sensor_present(AmsBackendSnapmaker& b, int slot_index, bool present) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.sensor_filament_present_[slot_index] = present;
+    }
+    static void set_current_slot(AmsBackendSnapmaker& b, int slot_index) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.system_info_.current_slot = slot_index;
+    }
+    // True iff the post-resume no-op backstop timer is currently armed.
+    static bool backstop_armed(const AmsBackendSnapmaker& b) {
+        return b.resume_backstop_timer_ != nullptr;
     }
 };
 
@@ -1111,4 +1120,173 @@ TEST_CASE(
 
     REQUIRE(callback_fired);
     REQUIRE(captured.result == AmsResult::NOT_CONNECTED);
+}
+
+// ---------------------------------------------------------------------------
+// #991 FIX 2 — the filament-config re-assert is sent as its OWN gcode and is
+// best-effort: a config rejection must NOT abort the heat/feed/extrude chain.
+// FIX 3 — when prepare_for_resume reports FAILURE after the backstop was armed,
+// the backstop is cancelled (a failed prepare never dispatches RESUME, so the
+// "restart required" modal would be spurious).
+// ---------------------------------------------------------------------------
+
+namespace {
+// Wire up a full mock stack + Snapmaker backend with slot 0 populated from a
+// known sub-type ("Basic"), the runout sensor latched absent, and slot 0 as the
+// active tool — i.e. the post-runout recovery branch of prepare_for_resume.
+struct ResumeRecoveryHarness {
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
+    helix::PrinterState api_state;
+    MoonrakerAPIMock api;
+    AmsBackendSnapmaker backend;
+
+    ResumeRecoveryHarness() : api(client, api_state), backend(&api, nullptr) {
+        api_state.init_subjects(false);
+        // The MoonrakerAPIMock's execute_gcode halt gate reads ITS OWN state
+        // (api_state). Mark Klipper ready there so recovery gcode isn't refused.
+        api_state.update_from_status(json{{"webhooks", {{"state", "ready"}}}});
+
+        // Global printer state (read by prepare_for_resume's classify_pause +
+        // backstop): paused, SD inactive (no-op-shaped), no terminal exception
+        // (empty message + id -1 => classify Unknown => recoverable).
+        PrinterState& ps = get_printer_state();
+        PrinterStateTestAccess::reset(ps);
+        ps.init_subjects(false);
+        ps.update_from_status(json{{"webhooks", {{"state", "ready"}}},
+                                   {"print_stats", {{"state", "paused"}}},
+                                   {"virtual_sdcard", {{"is_active", false}}}});
+
+        // Populate slot 0: MAIN_TYPE=PLA, MANUFACTURER=Polymaker, SUB_TYPE=Basic
+        // (a recognized product line, so it round-trips into the config gcode).
+        SnapmakerTestAccess::handle_status(
+            backend,
+            make_filament_detect_status(0, "PLA", 0xFF112233u, "Polymaker",
+                                        json::array({1, 2, 3, 4})));
+
+        SnapmakerTestAccess::set_sensor_present(backend, 0, false); // runout latched
+        SnapmakerTestAccess::set_current_slot(backend, 0);
+        client.clear_gcode_script_history();
+    }
+
+    static void drain() {
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+    }
+};
+
+// True if any recorded gcode script contains `needle`.
+bool any_script_contains(const std::vector<std::string>& history, const std::string& needle) {
+    for (const auto& s : history) {
+        if (s.find(needle) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+TEST_CASE("Snapmaker prepare_for_resume issues config re-assert then heat/feed chain",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    helix::ui::UpdateQueue::instance().init();
+
+    ResumeRecoveryHarness h;
+
+    bool callback_fired = false;
+    AmsError captured{AmsResult::RESUME_REQUIRES_RESTART}; // poison
+    h.backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+    ResumeRecoveryHarness::drain();
+
+    const auto& hist = h.client.gcode_script_history();
+
+    // (a) The SET_PRINT_FILAMENT_CONFIG re-assert was issued, carrying the
+    // required FILAMENT_SUBTYPE (#991) from the known sub-type "Basic".
+    REQUIRE(any_script_contains(hist, "SET_PRINT_FILAMENT_CONFIG"));
+    REQUIRE(any_script_contains(hist, "FILAMENT_SUBTYPE='Basic'"));
+    REQUIRE(any_script_contains(hist, "FILAMENT_TYPE='PLA'"));
+    REQUIRE(any_script_contains(hist, "VENDOR='Polymaker'"));
+
+    // (b) The heat/feed/extrude chain was STILL issued (separate gcode).
+    REQUIRE(any_script_contains(hist, "M109 S190"));
+    REQUIRE(any_script_contains(hist, "AUTO_FEEDING EXTRUDER=0 LOAD=1"));
+
+    // The config re-assert precedes the heat chain.
+    auto idx_of = [&](const std::string& needle) -> int {
+        for (size_t i = 0; i < hist.size(); ++i)
+            if (hist[i].find(needle) != std::string::npos)
+                return static_cast<int>(i);
+        return -1;
+    };
+    REQUIRE(idx_of("SET_PRINT_FILAMENT_CONFIG") < idx_of("AUTO_FEEDING EXTRUDER=0 LOAD=1"));
+
+    // Recovery succeeded => on_ready(success). RESUME will be dispatched, so the
+    // backstop must REMAIN armed.
+    REQUIRE(callback_fired);
+    REQUIRE(captured.success());
+    REQUIRE(SnapmakerTestAccess::backstop_armed(h.backend));
+}
+
+TEST_CASE("Snapmaker prepare_for_resume: config re-assert rejection does NOT abort recovery",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    helix::ui::UpdateQueue::instance().init();
+
+    ResumeRecoveryHarness h;
+
+    // Simulate the firmware rejecting the config re-assert (e.g. OFFICIAL RFID
+    // filament: "official filament, not configurable!"). One-shot, matched by the
+    // SET_PRINT_FILAMENT_CONFIG substring so the heat/feed chain is unaffected.
+    h.client.force_next_gcode_error(MoonrakerErrorType::JSON_RPC_ERROR,
+                                    "official filament, not configurable!",
+                                    "SET_PRINT_FILAMENT_CONFIG");
+
+    bool callback_fired = false;
+    AmsError captured{AmsResult::RESUME_REQUIRES_RESTART}; // poison
+    h.backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+    ResumeRecoveryHarness::drain();
+
+    const auto& hist = h.client.gcode_script_history();
+
+    // The config re-assert was attempted AND, despite its rejection, the
+    // heat/feed/extrude chain still ran (FIX 2: best-effort, non-fatal).
+    REQUIRE(any_script_contains(hist, "SET_PRINT_FILAMENT_CONFIG"));
+    REQUIRE(any_script_contains(hist, "M109 S190"));
+    REQUIRE(any_script_contains(hist, "AUTO_FEEDING EXTRUDER=0 LOAD=1"));
+
+    // The chain itself succeeded, so prepare reports success and RESUME proceeds:
+    // backstop stays armed.
+    REQUIRE(callback_fired);
+    REQUIRE(captured.success());
+    REQUIRE(SnapmakerTestAccess::backstop_armed(h.backend));
+}
+
+TEST_CASE("Snapmaker prepare_for_resume: heat/feed chain failure cancels the backstop (FIX 3)",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    helix::ui::UpdateQueue::instance().init();
+
+    ResumeRecoveryHarness h;
+
+    // Force the heat/feed chain (matched by AUTO_FEEDING) to fail — the config
+    // re-assert still succeeds. prepare_for_resume must report FAILURE and tear
+    // down the just-armed backstop so no spurious "restart required" modal fires.
+    h.client.force_next_gcode_error(MoonrakerErrorType::JSON_RPC_ERROR,
+                                    "simulated heat/feed chain failure", "AUTO_FEEDING");
+
+    bool callback_fired = false;
+    AmsError captured{AmsResult::SUCCESS}; // poison
+    h.backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+    ResumeRecoveryHarness::drain();
+
+    REQUIRE(callback_fired);
+    REQUIRE(captured.result == AmsResult::COMMAND_FAILED);
+    // FIX 3: failure path cancelled the backstop.
+    REQUIRE_FALSE(SnapmakerTestAccess::backstop_armed(h.backend));
 }

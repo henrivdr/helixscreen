@@ -18,12 +18,20 @@ std::vector<TerminalMatcher> snapmaker_terminal_matchers() {
 }
 
 std::string snapmaker_filament_config_gcode(int extruder, const std::string& material,
-                                            const std::string& brand) {
-    if (material.empty() || brand.empty()) {
+                                            const std::string& brand,
+                                            const std::string& sub_type) {
+    // #991: the firmware's cmd_SET_PRINT_FILAMENT_CONFIG REQUIRES FILAMENT_SUBTYPE
+    // (and VENDOR) whenever FILAMENT_TYPE is given — omitting it raises
+    // "[print_task_config] filament_config, incomplete parameters" and aborts the
+    // post-runout recovery chain. All three must be present together, so skip
+    // (return "") if any is empty; the caller logs a warning and the re-assert is
+    // simply not sent (it is best-effort, not required for the rest of recovery).
+    if (material.empty() || brand.empty() || sub_type.empty()) {
         return "";
     }
     return "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='" + std::to_string(extruder) +
-           "' FILAMENT_TYPE='" + material + "' VENDOR='" + brand + "'\n";
+           "' FILAMENT_TYPE='" + material + "' VENDOR='" + brand + "' FILAMENT_SUBTYPE='" +
+           sub_type + "'\n";
 }
 
 bool snapmaker_resume_noop_detected(bool is_paused, bool sdcard_active) {

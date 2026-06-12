@@ -20,15 +20,23 @@ std::vector<TerminalMatcher> snapmaker_terminal_matchers();
 
 /// Build the per-extruder filament-config re-assertion gcode line emitted
 /// before RESUME (Snapmaker firmware drops FILAMENT_TYPE/VENDOR on sensor
-/// loss). Returns "" when material or brand is empty, so we never emit a
-/// half-populated SET_PRINT_FILAMENT_CONFIG; the caller logs a warning.
+/// loss). Returns "" when material, brand, OR sub_type is empty, so we never
+/// emit a half-populated SET_PRINT_FILAMENT_CONFIG; the caller logs a warning.
 /// Trailing newline included for chain concatenation.
 ///
-/// NOTE (prestonbrown/helixscreen#991): uses the confirmed manual gcode arg
-/// names FILAMENT_TYPE / VENDOR (Discord 2026-06). The REST /filament_detect/set
-/// path uses MAIN_TYPE — a different interface; verify casing on-device.
+/// NOTE (prestonbrown/helixscreen#991): the firmware command
+/// cmd_SET_PRINT_FILAMENT_CONFIG (print_task_config.py) REQUIRES FILAMENT_SUBTYPE
+/// (and VENDOR) whenever FILAMENT_TYPE is given — otherwise it raises
+/// "[print_task_config] filament_config, incomplete parameters" and the whole
+/// post-runout recovery chain aborts. The firmware's own caller emits:
+///   SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER=N VENDOR=v FILAMENT_TYPE=t \
+///       FILAMENT_SUBTYPE=st FILAMENT_COLOR_RGBA=rgba
+/// so material/brand/sub_type must all be present together. Uses the confirmed
+/// manual gcode arg names FILAMENT_TYPE / VENDOR / FILAMENT_SUBTYPE (the REST
+/// /filament_detect/set path uses MAIN_TYPE / SUB_TYPE — a different interface).
 [[nodiscard]] std::string snapmaker_filament_config_gcode(int extruder, const std::string& material,
-                                                          const std::string& brand);
+                                                          const std::string& brand,
+                                                          const std::string& sub_type);
 
 /// Post-resume no-op backstop predicate: true => RESUME silently no-op'd
 /// (print still paused with SD playback inactive) => offer restart.

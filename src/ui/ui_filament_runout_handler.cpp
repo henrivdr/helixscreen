@@ -106,6 +106,12 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
 
     // Configure callbacks for the six options
     runout_modal_.set_on_load_filament([token]() {
+        // #991 diagnostic: the Load press was observed to close the modal but
+        // perform no action. Log entry + token state BEFORE the guard so the
+        // next on-device repro disambiguates "callback never ran" vs
+        // "token expired and swallowed the action".
+        spdlog::info("[FilamentRunoutHandler] Load callback entered (token expired={})",
+                     token.expired());
         if (token.expired()) return;
         spdlog::info("[FilamentRunoutHandler] User chose to load filament after runout");
         // Navigate to filament panel for loading

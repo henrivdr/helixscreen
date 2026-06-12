@@ -925,8 +925,32 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         return err;
     }
 
+    /// Test inspection: every gcode script string passed through the
+    /// printer.gcode.script handler, in order. Lets tests assert multi-step
+    /// gcode sequences (e.g. the #991 split config-reassert + heat/feed chain).
+    const std::vector<std::string>& gcode_script_history() const {
+        std::lock_guard<std::mutex> lock(gcode_history_mutex_);
+        return gcode_script_history_;
+    }
+
+    /// Test helper: clear the recorded gcode-script history.
+    void clear_gcode_script_history() {
+        std::lock_guard<std::mutex> lock(gcode_history_mutex_);
+        gcode_script_history_.clear();
+    }
+
+    /// Record a gcode script for test inspection. Called by gcode_script().
+    void record_gcode_script(const std::string& script) {
+        std::lock_guard<std::mutex> lock(gcode_history_mutex_);
+        gcode_script_history_.push_back(script);
+    }
+
   private:
     PrinterType printer_type_;
+
+    // Test inspection: ordered history of every gcode script handled.
+    std::vector<std::string> gcode_script_history_;
+    mutable std::mutex gcode_history_mutex_;
 
     // Mock bed mesh storage (Client no longer stores this; mock simulates it)
     BedMeshProfile active_bed_mesh_;

@@ -26,7 +26,38 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
         if (params.contains("script")) {
             script = params["script"].get<std::string>();
         }
-        int result = self->gcode_script(script); // Process G-code (updates LED state, etc.)
+
+        // Real Klipper executes a multi-line script line-by-line; the per-command
+        // parsers in gcode_script() assume a SINGLE command (e.g. they `find('S')`
+        // globally, which a multi-line script would point at the wrong token and
+        // throw std::stod). Split on newlines and process each non-empty line
+        // independently. Each line's std::stod/std::stoi is guarded so a parse
+        // quirk surfaces as an error result, never a C++ exception escaping the
+        // RPC layer (real Moonraker returns an error string, it doesn't crash).
+        int result = 0;
+        size_t line_start = 0;
+        while (line_start <= script.size()) {
+            size_t nl = script.find('\n', line_start);
+            std::string line = (nl == std::string::npos)
+                                   ? script.substr(line_start)
+                                   : script.substr(line_start, nl - line_start);
+            // Trim trailing CR / surrounding spaces so blank lines are skipped.
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+                line.pop_back();
+            size_t first = line.find_first_not_of(' ');
+            if (first != std::string::npos) {
+                try {
+                    if (self->gcode_script(line.substr(first)) != 0)
+                        result = 1;
+                } catch (const std::exception& ex) {
+                    spdlog::debug("[MoonrakerClientMock] gcode_script parse skipped for '{}': {}",
+                                  line, ex.what());
+                }
+            }
+            if (nl == std::string::npos)
+                break;
+            line_start = nl + 1;
+        }
 
         // Test injection: simulate an RPC-layer failure (e.g. timeout) for this command
         // while Klipper still processed the gcode above. The collector-based APIs rely on
