@@ -554,6 +554,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_add_flag(sc, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scroll_dir(sc, LV_DIR_HOR);
         lv_obj_set_scrollbar_mode(sc, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_add_flag(sc, LV_OBJ_FLAG_EVENT_BUBBLE); // tap/long-press bubble to widget root
         data->spools_container = sc;
     }
     lv_obj_t* sc = data->spools_container;
@@ -639,6 +640,9 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_style_bg_opa(cell, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 0, LV_PART_MAIN);
         lv_obj_remove_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+        // Bubble taps/long-presses to the widget root: tap -> AMS overlay,
+        // long-press -> grid edit mode (matches the bar view).
+        lv_obj_add_flag(cell, LV_OBJ_FLAG_EVENT_BUBBLE);
 
         // Spool wrap (square) holds spool visual + lane badge.
         lv_obj_t* wrap = lv_obj_create(cell);
@@ -646,6 +650,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(wrap, 0, LV_PART_MAIN);
         lv_obj_remove_flag(wrap, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(wrap, LV_OBJ_FLAG_EVENT_BUBBLE);
         ams_draw::SpoolVisual sv = ams_draw::create_spool_visual(wrap, spool_size);
         ams_draw::spool_visual_set_color(sv, lv_color_hex(cd.color_rgb));
         ams_draw::spool_visual_set_fill(sv, cd.fill_level);
@@ -667,6 +672,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(col, 0, LV_PART_MAIN);
         lv_obj_remove_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(col, LV_OBJ_FLAG_EVENT_BUBBLE);
 
         lv_obj_t* mat = lv_label_create(col);
         snprintf(nm, sizeof(nm), "spool_material_%d", i);
@@ -674,6 +680,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_width(mat, text_w);
         lv_label_set_long_mode(mat, LV_LABEL_LONG_WRAP);
         lv_obj_set_style_text_align(mat, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_add_flag(mat, LV_OBJ_FLAG_EVENT_BUBBLE);
         lv_label_set_text(mat, cd.material.empty() ? "--" : cd.material.c_str()); // material: no i18n
         const lv_font_t* fs = theme_manager_get_font("font_small");
         if (fs)
@@ -685,6 +692,7 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_name(pct, nm);
         lv_obj_set_width(pct, text_w);
         lv_obj_set_style_text_align(pct, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_add_flag(pct, LV_OBJ_FLAG_EVENT_BUBBLE);
         if (cd.remaining_pct >= 0) {
             char p[16];
             snprintf(p, sizeof(p), "%d%%", cd.remaining_pct);
