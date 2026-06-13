@@ -1134,8 +1134,11 @@ void ControlsPanel::handle_chamber_target_edit() {
         c->ensure_limits(helix::HeaterType::Chamber);
         max_temp = static_cast<int>(c->keypad_range(helix::HeaterType::Chamber).max);
     }
+    // Seed from the effective target (heater target when Heating, fan target when
+    // Maintaining) so the keypad pre-fills the value the card already shows. The
+    // raw heater target reads 0 during M141 maintain mode and would otherwise seed 0.
     show_temperature_keypad<&ControlsPanel::handle_custom_chamber_confirmed>(
-        "Chamber Temperature", cached_chamber_target_, 50, max_temp);
+        "Chamber Temperature", cached_chamber_effective_target_, 50, max_temp);
 }
 
 void ControlsPanel::handle_custom_nozzle_confirmed(float value) {
