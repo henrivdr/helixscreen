@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -88,6 +89,15 @@ AmsBackendQidi::AmsBackendQidi(MoonrakerAPI* api, helix::MoonrakerClient* client
         spdlog::info("{} Write-path ENABLED via HELIX_QIDI_BOX_WRITE", backend_log_tag());
     }
 
+    // Box PTC dryer capabilities (issue #1019). max_temp_c is the settable ceiling
+    // (target_max_temp_heater_generic=90); refined from configfile in on_started().
+    dryer_info_.supported = true;
+    dryer_info_.allows_during_print = true; // box heater is independent of the toolhead
+    dryer_info_.min_temp_c = 35.0f;
+    dryer_info_.max_temp_c = 90.0f;
+    dryer_info_.max_duration_min = 720;
+    dryer_info_.supports_fan_control = false;
+
     spdlog::debug("{} Backend constructed ({} slots, write_enabled={})",
                   backend_log_tag(), NUM_SLOTS, write_enabled_);
 }
@@ -128,6 +138,35 @@ void AmsBackendQidi::on_started() {
         });
     spdlog::info("{} Bootstrap query issued for save_variables + box_extras",
                  backend_log_tag());
+
+    // Query printer.configfile.settings to refine dryer_info_.max_temp_c from
+    // the real Klipper settable ceiling (max_temp or target_max_temp_heater_generic).
+    {
+        nlohmann::json cfg_params = {
+            {"objects", nlohmann::json::object({{"configfile", {"settings"}}})}};
+        auto cfg_token = lifetime_.token();
+        client_->send_jsonrpc(
+            "printer.objects.query", cfg_params,
+            [this, cfg_token](nlohmann::json response) {
+                cfg_token.defer("AmsBackendQidi::apply_config_settings",
+                                [this, response = std::move(response)]() {
+                                    try {
+                                        const auto& settings =
+                                            response["result"]["status"]["configfile"]
+                                                    ["settings"];
+                                        apply_config_settings(settings);
+                                        emit_event(EVENT_STATE_CHANGED);
+                                    } catch (const nlohmann::json::exception& e) {
+                                        spdlog::warn("{} configfile parse failed: {}",
+                                                     backend_log_tag(), e.what());
+                                    }
+                                });
+            },
+            [this](const MoonrakerError& err) {
+                spdlog::warn("{} configfile query failed: {}", backend_log_tag(),
+                             err.message);
+            });
+    }
 
     // Also fetch officiall_filas_list.cfg so the temperature profile cache
     // is ready by the time filament_slot<N> entries arrive. The path is the
@@ -190,6 +229,71 @@ void AmsBackendQidi::handle_status_update(const nlohmann::json& notification) {
     // boxes onto AmsUnit::environment so the UI can show "drying" when
     // ANY box is active.
     apply_heater_status(notification);
+
+    // box_extras carries box_drying_state.box<N>.{dry_state, end_time}
+    // which drives the countdown timer shown in the dryer UI.
+    if (auto be_it = notification.find("box_extras");
+        be_it != notification.end() && be_it->is_object()) {
+        apply_box_extras(*be_it);
+    }
+}
+
+void AmsBackendQidi::apply_box_extras(const nlohmann::json& box_extras) {
+    auto ds_it = box_extras.find("box_drying_state");
+    if (ds_it == box_extras.end() || !ds_it->is_object()) {
+        return;
+    }
+    std::time_t latest_end = 0;
+    for (auto it = ds_it->begin(); it != ds_it->end(); ++it) {
+        if (!it->is_object()) {
+            continue;
+        }
+        if (auto et = it->find("end_time"); et != it->end() && et->is_number()) {
+            const std::time_t v = et->get<std::int64_t>();
+            if (v > latest_end) {
+                latest_end = v;
+            }
+        }
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    drying_timer_supported_ = true;
+    const std::time_t now = now_fn_();
+    // A drying cycle started outside HelixScreen (e.g. the QIDI stock UI) carries no
+    // commanded duration, so the progress ring would be inert. When a NEW end_time
+    // appears, derive the total from the first observed remaining so the ring renders;
+    // our own start_drying() already set duration_min for UI-started cycles (this just
+    // re-derives the same value once the firmware echoes the end_time back).
+    if (latest_end > now && latest_end != dry_end_epoch_) {
+        dryer_info_.duration_min = static_cast<int>((latest_end - now) / 60);
+    }
+    dry_end_epoch_ = latest_end;
+    dryer_info_.active = (dry_end_epoch_ > now);
+}
+
+void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {
+    std::optional<float> settable_max;
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
+        const std::string& key = it.key();
+        if (!it->is_object()) {
+            continue;
+        }
+        if (key.rfind("heater_generic heater_box", 0) == 0) {
+            if (auto m = it->find("max_temp"); m != it->end() && m->is_number()) {
+                settable_max = m->get<float>();
+            }
+        } else if (key.rfind("box_config box", 0) == 0) {
+            if (auto m = it->find("target_max_temp_heater_generic");
+                m != it->end() && m->is_number()) {
+                settable_max = m->get<float>();
+            }
+        }
+    }
+    if (settable_max) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dryer_info_.max_temp_c = *settable_max;
+        spdlog::info("{} Box dryer max temp from config: {}°C", backend_log_tag(),
+                     *settable_max);
+    }
 }
 
 void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
@@ -207,6 +311,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
 
     std::optional<float> max_temp;
     std::optional<float> max_humidity;
+    std::optional<float> max_target;
 
     for (auto it = notification.begin(); it != notification.end(); ++it) {
         if (!it->is_object()) {
@@ -225,6 +330,15 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
                 max_temp = v;
             }
         }
+        if (is_heater) {
+            if (auto tgt_it = it->find("target");
+                tgt_it != it->end() && tgt_it->is_number()) {
+                const float v = tgt_it->get<float>();
+                if (!max_target || v > *max_target) {
+                    max_target = v;
+                }
+            }
+        }
         if (is_aht) {
             if (auto h_it = it->find("humidity");
                 h_it != it->end() && h_it->is_number()) {
@@ -236,7 +350,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
         }
     }
 
-    if (!max_temp && !max_humidity) {
+    if (!max_temp && !max_humidity && !max_target) {
         return;
     }
 
@@ -254,6 +368,12 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
     if (max_humidity) {
         env->humidity_pct = *max_humidity;
         env->has_humidity = true;
+    }
+    if (max_temp) {
+        dryer_info_.current_temp_c = *max_temp;
+    }
+    if (max_target) {
+        dryer_info_.target_temp_c = *max_target;
     }
 }
 
@@ -694,4 +814,97 @@ AmsError AmsBackendQidi::enable_bypass() {
 AmsError AmsBackendQidi::disable_bypass() {
     spdlog::warn("{} {} not yet implemented", backend_log_tag(), __func__);
     return AmsErrorHelper::not_supported("QIDI Box disable_bypass");
+}
+
+// --- Dryer / box-heater control (issue #1019) ---
+
+DryerInfo AmsBackendQidi::get_dryer_info() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    DryerInfo out = dryer_info_;
+    if (dry_end_epoch_ > 0) {
+        const std::time_t now = now_fn_();
+        const int remaining = static_cast<int>((dry_end_epoch_ - now) / 60);
+        out.remaining_min = remaining > 0 ? remaining : 0;
+        out.active = remaining > 0;
+    }
+    return out;
+}
+
+AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
+    (void)fan_pct;
+    const int box = unit + 1; // status objects are 1-indexed (heater_box1)
+
+    if (!write_enabled_) {
+        return AmsError(AmsResult::NOT_SUPPORTED,
+                        "QIDI Box write-path disabled",
+                        "Box drying disabled",
+                        "Set HELIX_QIDI_BOX_WRITE=1 for field testing");
+    }
+
+    float min_temp, max_temp;
+    int max_duration;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        min_temp = dryer_info_.min_temp_c;
+        max_temp = dryer_info_.max_temp_c;
+        max_duration = dryer_info_.max_duration_min;
+    }
+    if (temp_c < min_temp || temp_c > max_temp) {
+        return AmsError(AmsResult::COMMAND_FAILED,
+                        "Temperature out of range: " + std::to_string(temp_c),
+                        "Invalid temperature",
+                        "Set temperature between " + std::to_string(static_cast<int>(min_temp)) +
+                            "°C and " + std::to_string(static_cast<int>(max_temp)) + "°C");
+    }
+    if (duration_min <= 0 || duration_min > max_duration) {
+        return AmsError(AmsResult::COMMAND_FAILED,
+                        "Duration out of range: " + std::to_string(duration_min),
+                        "Invalid duration",
+                        "Set duration between 1 and " + std::to_string(max_duration) + " minutes");
+    }
+
+    const int temp_i = static_cast<int>(temp_c);
+    bool timer;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dryer_info_.target_temp_c = temp_c;
+        dryer_info_.duration_min = duration_min;
+        timer = drying_timer_supported_;
+    }
+    if (timer) {
+        int hours = duration_min / 60;
+        if (hours < 1) {
+            hours = 1;
+        }
+        return execute_gcode("ENABLE_BOX_DRY BOX=" + std::to_string(box) +
+                             " TEMP=" + std::to_string(temp_i) +
+                             " END_TIME=" + std::to_string(hours));
+    }
+    return execute_gcode("SET_HEATER_TEMPERATURE HEATER=heater_box" + std::to_string(box) +
+                         " TARGET=" + std::to_string(temp_i));
+}
+
+AmsError AmsBackendQidi::stop_drying(int unit) {
+    const int box = unit + 1;
+    if (!write_enabled_) {
+        return AmsError(AmsResult::NOT_SUPPORTED,
+                        "QIDI Box write-path disabled",
+                        "Box drying disabled",
+                        "Set HELIX_QIDI_BOX_WRITE=1 for field testing");
+    }
+    bool timer;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dry_end_epoch_ = 0;
+        dryer_info_.active = false;
+        dryer_info_.target_temp_c = 0.0f;
+        dryer_info_.remaining_min = 0;
+        dryer_info_.duration_min = 0;
+        timer = drying_timer_supported_;
+    }
+    if (timer) {
+        return execute_gcode("DISABLE_BOX_DRY BOX=" + std::to_string(box));
+    }
+    return execute_gcode("SET_HEATER_TEMPERATURE HEATER=heater_box" + std::to_string(box) +
+                         " TARGET=0");
 }

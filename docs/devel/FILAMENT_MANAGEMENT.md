@@ -1078,6 +1078,74 @@ No dedicated unit tests yet — adding them is blocked on having real protocol b
 
 ---
 
+## Dryer / Box-Heater Control
+
+Some AMS backends include an integrated filament dryer — a heated chamber that removes moisture from hygroscopic filaments (Nylon, PA-CF, TPU, PETG, etc.) before or during a print. HelixScreen exposes a common dryer control UI across all backends that support it.
+
+### Data Flow
+
+```
+AmsBackend::get_dryer_info()       populates DryerInfo (ams_types.h)
+        │
+        ▼
+AmsState::sync_dryer_from_backend()  bridges to LVGL subjects
+        │
+        ▼
+AmsEnvironmentOverlay              control UI (ui_ams_environment_overlay.cpp
+  + ui_xml/ams_environment_overlay.xml)  target temp, duration, start/stop
+```
+
+`DryerInfo` (declared in `include/ams_types.h`) carries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `supported` | bool | Whether this backend has a dryer at all |
+| `active` | bool | Dryer is currently running |
+| `current_temp` | float | Current chamber temperature (°C) |
+| `target_temp` | float | Target setpoint (°C) |
+| `humidity` | float | Relative humidity (%) — if sensor present |
+| `remaining_minutes` | int | Countdown to end of session (-1 = no timer) |
+| `max_temp` | float | Hardware maximum for the target slider |
+
+### Backend Virtual Interface
+
+Declared in `include/ams_backend.h`. Default implementations return `supported=false` / `not_supported` so existing backends that don't have a dryer need no changes.
+
+| Virtual | Default | Description |
+|---------|---------|-------------|
+| `get_dryer_info()` | `DryerInfo{.supported=false}` | Read current dryer state |
+| `start_drying(temp, minutes)` | NOT_SUPPORTED | Begin a drying session |
+| `stop_drying()` | NOT_SUPPORTED | End the active session |
+| `update_drying(temp, minutes)` | NOT_SUPPORTED | Change temp/time mid-session |
+| `get_drying_presets()` | empty vector | Return material-preset list |
+
+### Backend Support Matrix
+
+| Backend | Drying | Command |
+|---------|--------|---------|
+| ACE (Anycubic ACE Pro) | ✅ | `ACE_START_DRYING TEMP=<t> DURATION=<m>` / `ACE_STOP_DRYING` |
+| Happy Hare | ✅ | `MMU_HEATER DRY=1 TEMP=<t>` / `MMU_HEATER DRY=0` |
+| QIDI Box | ✅ | `ENABLE_BOX_DRY BOX=<n> TEMP=<t> END_TIME=<h>` / `DISABLE_BOX_DRY BOX=<n>`, with `SET_HEATER_TEMPERATURE` fallback when `box_extras` is absent. Write-path gated by `HELIX_QIDI_BOX_WRITE=1`. |
+| CFS (Creality K2) | ❌ | Not supported — CFS has no drying hardware |
+| AFC (Box Turtle / OpenAMS) | ❌ | Not supported |
+| AD5X IFS | ❌ | Not supported |
+| Snapmaker U1 (SnapSwap) | ❌ | Not supported |
+| Tool Changer | ❌ | Not applicable |
+
+### QIDI Box Specifics
+
+The QIDI Box dryer uses the printer's standard `heater_generic heater_box<N>` Klipper object — the same safety system (temperature limits, watchdog) that applies to any Klipper heater. The active session timer is tracked via `box_extras.box_drying_state.box<N>` (fields `dry_state` and `end_time`). Remaining time is computed as `(end_time - now) / 60` since there is no native remaining-minutes field.
+
+See [QIDI_BOX_HEATER.md](QIDI_BOX_HEATER.md) for full reverse-engineering details: Klipper object schema, firmware command variants, config key spellings, per-material drying tables, and the `HELIX_QIDI_BOX_WRITE` field-safety gate.
+
+### Adding Dryer Support to a New Backend
+
+Override the five dryer virtuals in your `AmsBackend` subclass. At minimum implement `get_dryer_info()` — the UI polls this to drive the display. Implement `start_drying()` and `stop_drying()` to make the controls functional. `update_drying()` and `get_drying_presets()` are optional enhancements.
+
+Dryer status flows into `AmsState::sync_dryer_from_backend()` the same way slot state does — no additional wiring is required in `AmsState`.
+
+---
+
 ## Context Menu Actions
 
 The `AmsContextMenu` (`ui_ams_context_menu.h`) provides per-slot operations:

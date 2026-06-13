@@ -351,15 +351,59 @@ The wizard creates all records (vendor, filament, spool) atomically in Spoolman.
 
 ---
 
-## Dryer Control
+## Filament Drying
 
-If your filament system has an integrated dryer (AMS, CFS, etc.):
+Many filament materials absorb moisture from the air over time. Wet filament prints poorly — you may see popping, stringing, reduced layer adhesion, or a rough surface finish. Drying the filament before or during a print removes that moisture and restores print quality. Hygroscopic materials that benefit most include Nylon, PA-CF, TPU, and PETG; PLA is less sensitive but still benefits after long storage.
 
-- Temperature display and current humidity reading
-- Timer settings for drying duration
-- Enable/disable drying cycle
+### Supported Systems
 
-**Multi-unit setups:** Each unit has its own dryer with independent controls. The dryer panel shows which unit you're controlling — tap to switch between units. You can run dryers on multiple units simultaneously.
+Dryer control is available on hardware that includes an integrated heated chamber:
+
+| System | Notes |
+|--------|-------|
+| **Anycubic ACE Pro** | Built-in drying chamber with fan |
+| **Happy Hare** | On MMU setups where a heater is configured |
+| **QIDI Box** | PTC heater in the filament storage unit (QIDI PLUS4, Q2, MAX4) |
+
+Systems without a dedicated drying chamber (AFC Box Turtle, Creality CFS, AD5X IFS, Snapmaker U1, tool changers) do not have dryer controls — the option won't appear for those.
+
+### Using the Dryer
+
+Open the dryer controls from the **multi-filament panel**:
+
+1. Open the **Filament** panel from the sidebar.
+2. Tap **Settings** to open the AMS Management overlay.
+3. The dryer controls appear if your hardware supports drying.
+
+From the dryer panel you can:
+
+- **Set target temperature** — Use the slider or tap the value to type a temperature. The target is automatically clamped to the safe maximum for your unit (typically 65–90 °C depending on firmware).
+- **Set duration** — Choose how long to dry, in hours. Some systems accept a custom duration; others offer material-based presets.
+- **Pick a material preset** — If presets are available, tap a material name (PLA, PETG, Nylon, etc.) to fill in the recommended temperature and time automatically.
+- **Start drying** — Tap **Start** to begin. The heater activates and the chamber temperature climbs to your target.
+- **Watch the countdown** — While drying, the panel shows the current chamber temperature, humidity (when a sensor is present), and the time remaining.
+- **Stop early** — Tap **Stop** at any time to turn off the heater. Remaining time is discarded; it is safe to stop mid-session.
+
+> **QIDI Box note:** QIDI Box drying control requires recent QIDI firmware that exposes the `box_extras` Klipper plugin. On older firmware, the heater still works but the session timer won't be tracked — the heater runs until you tap Stop.
+
+### Typical Drying Parameters
+
+These are general-purpose starting points. Your filament manufacturer's guidance takes priority.
+
+| Material | Temperature | Time |
+|----------|-------------|------|
+| PLA | 45 °C | 4–6 h |
+| PETG | 55 °C | 4–6 h |
+| ABS / ASA | 60 °C | 4 h |
+| TPU / TPE | 50 °C | 4–8 h |
+| Nylon (PA) | 60 °C | 8–12 h |
+| PA-CF / PA-GF | 60 °C | 8–12 h |
+
+Filament that has been stored open for a long time may need the longer end of the range.
+
+### Multi-Unit Setups
+
+If you have multiple Box units connected, each unit has its own dryer with independent controls. The panel shows which unit you are controlling. You can run dryers on multiple units at the same time — each unit heats independently.
 
 ---
 

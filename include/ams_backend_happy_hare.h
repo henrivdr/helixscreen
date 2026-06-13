@@ -7,6 +7,8 @@
 #include "async_lifetime_guard.h"
 #include "slot_registry.h"
 
+#include <ctime>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -149,6 +151,9 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     [[nodiscard]] DryerInfo get_dryer_info() const override;
     AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
+    [[nodiscard]] bool has_environment_sensors() const override {
+        return true; // Live temp/target read from heater_generic via Moonraker subscriptions
+    }
 
     [[nodiscard]] bool has_firmware_spool_persistence() const override {
         return true; // Happy Hare persists via MMU_GATE_MAP SPOOLID
@@ -244,6 +249,32 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     void query_selector_type_from_config();
 
     /**
+     * @brief Query configfile.settings.mmu_machine + mmu for heater name + max_temp
+     *
+     * Reads filament_heater from [mmu_machine] and heater_max_temp from [mmu].
+     * Called once during on_started().
+     */
+    void query_heater_config_from_config();
+
+    /**
+     * @brief Parse heater config settings into dryer_info_
+     *
+     * Factored out of query_heater_config_from_config() for testability.
+     * @param settings The configfile.settings JSON object
+     */
+    void apply_heater_config(const nlohmann::json& settings);
+
+    /**
+     * @brief Parse live heater_generic temperature/target from a status update
+     *
+     * Scans the params object for the key matching filament_heater_name_ and
+     * updates dryer_info_.current_temp_c / target_temp_c.
+     * @param params The top-level params object from notify_status_update
+     * @return true if the filament-heater key was present and parsed
+     */
+    bool apply_filament_heater_status(const nlohmann::json& params);
+
+    /**
      * @brief Check if this is a Type B MMU (hub topology)
      * @return true if selector_type is VirtualSelector
      */
@@ -272,6 +303,9 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
 
     // Dryer state (v4 - KMS/EMU hardware)
     DryerInfo dryer_info_;
+    std::time_t dry_end_epoch_ = 0; ///< HelixScreen-initiated drying end (epoch s), 0 = none
+    std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
+    std::string filament_heater_name_; ///< Klipper object name, e.g. "heater_generic box1_heater"
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)

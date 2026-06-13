@@ -55,6 +55,9 @@ void AmsBackendHappyHare::on_started() {
     // Query selector type to determine topology (Type A=LINEAR vs Type B=HUB)
     query_selector_type_from_config();
 
+    // Query filament_heater name and heater_max_temp for dryer support
+    query_heater_config_from_config();
+
     // Query configfile.settings.mmu for speed/distance defaults
     query_config_defaults();
 }
@@ -246,24 +249,25 @@ void AmsBackendHappyHare::handle_status_update(const nlohmann::json& notificatio
         return;
     }
 
-    // Check if this notification contains MMU data
-    if (!params.contains("mmu")) {
-        return;
-    }
+    spdlog::trace("[AMS HappyHare] Received status update");
 
-    const auto& mmu_data = params["mmu"];
-    if (!mmu_data.is_object()) {
-        return;
-    }
-
-    spdlog::trace("[AMS HappyHare] Received MMU status update");
-
-    {
+    // Parse MMU core state if present.
+    const bool mmu_present = params.contains("mmu") && params["mmu"].is_object();
+    if (mmu_present) {
         std::lock_guard<std::mutex> lock(mutex_);
-        parse_mmu_state(mmu_data);
+        parse_mmu_state(params["mmu"]);
     }
 
-    emit_event(EVENT_STATE_CHANGED);
+    // Parse live heater_generic temp/target even when mmu key is absent —
+    // Moonraker sends heater updates as sibling keys in the same notification.
+    const bool heater_updated = apply_filament_heater_status(params);
+
+    // Only re-pump downstream sync when this frame actually carried AMS-relevant
+    // data; notify_status_update fires for every Klipper object (toolhead, temps,
+    // ...), so an unconditional emit here would be a per-frame event storm.
+    if (mmu_present || heater_updated) {
+        emit_event(EVENT_STATE_CHANGED);
+    }
 }
 
 void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
@@ -904,13 +908,17 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
             spdlog::trace("[AMS HappyHare] Dryer state (object): active={}, temp={:.1f}°C",
                           dryer_info_.active, dryer_info_.current_temp_c);
         } else if (drying.is_array()) {
-            // EMU per-gate array format: ["", "", ...] (empty = inactive)
+            // EMU per-gate array format: ["", "", ...] or ["active", "", ...]
+            // Values: "active", "queued" = heater on; "complete", "canceled", "" = off.
             dryer_info_.supported = true;
             bool any_active = false;
             for (const auto& entry : drying) {
-                if (entry.is_string() && !entry.get<std::string>().empty()) {
-                    any_active = true;
-                    break;
+                if (entry.is_string()) {
+                    const std::string s = entry.get<std::string>();
+                    if (s == "active" || s == "queued") {
+                        any_active = true;
+                        break;
+                    }
                 }
             }
             dryer_info_.active = any_active;
@@ -1157,6 +1165,116 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS HappyHare] Failed to query configfile for selector type: {}",
+                         err.message);
+        });
+}
+
+// ============================================================================
+// Heater Config Query
+// ============================================================================
+
+bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& params) {
+    // Determine which Moonraker status key to look up.
+    std::string status_key;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (filament_heater_name_.empty()) {
+            return false;
+        }
+        // Normalize: ensure the key starts with "heater_generic " as Moonraker uses.
+        if (filament_heater_name_.rfind("heater_generic ", 0) == 0) {
+            status_key = filament_heater_name_;
+        } else {
+            status_key = "heater_generic " + filament_heater_name_;
+        }
+    }
+
+    auto h_it = params.find(status_key);
+    if (h_it == params.end() || !h_it->is_object()) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (auto t = h_it->find("temperature"); t != h_it->end() && t->is_number()) {
+        dryer_info_.current_temp_c = t->get<float>();
+    }
+    if (auto tg = h_it->find("target"); tg != h_it->end() && tg->is_number()) {
+        dryer_info_.target_temp_c = tg->get<float>();
+    }
+    return true;
+}
+
+void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
+    // Parse [mmu_machine] filament_heater — the Klipper heater_generic object name.
+    if (settings.contains("mmu_machine") && settings["mmu_machine"].is_object()) {
+        const auto& mmu_machine = settings["mmu_machine"];
+        if (mmu_machine.contains("filament_heater") &&
+            mmu_machine["filament_heater"].is_string()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            filament_heater_name_ = mmu_machine["filament_heater"].get<std::string>();
+            spdlog::info("[AMS HappyHare] Filament heater: {}", filament_heater_name_);
+        }
+    }
+
+    // Parse [mmu] heater_max_temp — can be a number or a numeric string.
+    if (settings.contains("mmu") && settings["mmu"].is_object()) {
+        const auto& mmu = settings["mmu"];
+        if (mmu.contains("heater_max_temp")) {
+            float max_temp = 0.0f;
+            bool parsed = false;
+            if (mmu["heater_max_temp"].is_number()) {
+                max_temp = mmu["heater_max_temp"].get<float>();
+                parsed = true;
+            } else if (mmu["heater_max_temp"].is_string()) {
+                try {
+                    max_temp = std::stof(mmu["heater_max_temp"].get<std::string>());
+                    parsed = true;
+                } catch (...) {
+                    spdlog::warn("[AMS HappyHare] Could not parse heater_max_temp string");
+                }
+            }
+            if (parsed) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                dryer_info_.max_temp_c = max_temp;
+                dryer_info_.supported = true;
+                spdlog::info("[AMS HappyHare] Heater max temp: {:.1f}°C", max_temp);
+            }
+        }
+    }
+}
+
+void AmsBackendHappyHare::query_heater_config_from_config() {
+    if (!client_) {
+        return;
+    }
+
+    // Query configfile.settings for [mmu_machine] filament_heater and [mmu] heater_max_temp.
+    // filament_heater names the heater_generic object driven by MMU_HEATER.
+    // heater_max_temp is the hardware safety ceiling for the dryer UI.
+    nlohmann::json params = {{"objects", nlohmann::json::object({{"configfile", {"settings"}}})}};
+
+    auto token = lifetime_.token();
+    client_->send_jsonrpc(
+        "printer.objects.query", params,
+        [this, token](nlohmann::json response) {
+            // L081 Mechanism C: defer member access (filament_heater_name_, dryer_info_)
+            // to main thread.
+            token.defer("AmsBackendHappyHare::heater_config_apply",
+                        [this, response = std::move(response)]() {
+                            try {
+                                const auto& settings =
+                                    response["result"]["status"]["configfile"]["settings"];
+                                apply_heater_config(settings);
+                                emit_event(EVENT_STATE_CHANGED);
+                            } catch (const nlohmann::json::exception& e) {
+                                spdlog::warn(
+                                    "[AMS HappyHare] Failed to parse configfile for heater: {}",
+                                    e.what());
+                            }
+                        });
+        },
+        [](const MoonrakerError& err) {
+            spdlog::warn("[AMS HappyHare] Failed to query configfile for heater: {}",
                          err.message);
         });
 }
@@ -2060,11 +2178,17 @@ std::vector<int> AmsBackendHappyHare::get_tool_mapping() const {
 
 DryerInfo AmsBackendHappyHare::get_dryer_info() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return dryer_info_;
+    DryerInfo out = dryer_info_;
+    if (dry_end_epoch_ > 0) {
+        const int remaining = static_cast<int>((dry_end_epoch_ - now_fn_()) / 60);
+        out.remaining_min = remaining > 0 ? remaining : 0;
+    }
+    return out;
 }
 
 AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
     (void)unit;
+    (void)fan_pct; // Happy Hare MMU_HEATER does not accept a FAN parameter
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!dryer_info_.supported) {
@@ -2072,9 +2196,13 @@ AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int f
         }
     }
 
-    std::string cmd = fmt::format("MMU_HEATER DRY=1 TEMP={:.0f} DURATION={}", temp_c, duration_min);
-    if (fan_pct >= 0) {
-        cmd += fmt::format(" FAN={}", fan_pct);
+    // Happy Hare uses TIMER= (minutes) not DURATION=, and has no FAN parameter.
+    std::string cmd = fmt::format("MMU_HEATER DRY=1 TEMP={:.0f} TIMER={}", temp_c, duration_min);
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dryer_info_.duration_min = duration_min;
+        dry_end_epoch_ = now_fn_() + static_cast<std::time_t>(duration_min) * 60;
     }
 
     spdlog::info("[AMS HappyHare] Starting dryer: {:.0f}°C for {} min", temp_c, duration_min);
@@ -2088,10 +2216,14 @@ AmsError AmsBackendHappyHare::stop_drying(int unit) {
         if (!dryer_info_.supported) {
             return AmsErrorHelper::not_supported("Dryer not available on this hardware");
         }
+        dry_end_epoch_ = 0;
+        dryer_info_.active = false;
+        dryer_info_.remaining_min = 0;
+        dryer_info_.duration_min = 0;
     }
 
     spdlog::info("[AMS HappyHare] Stopping dryer");
-    return execute_gcode("MMU_HEATER DRY=0");
+    return execute_gcode("MMU_HEATER STOP=1");
 }
 
 // ============================================================================

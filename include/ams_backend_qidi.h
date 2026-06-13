@@ -4,6 +4,9 @@
 
 #include "ams_subscription_backend.h"
 
+#include <cstdint>
+#include <ctime>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -82,6 +85,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     AmsError enable_bypass() override;
     AmsError disable_bypass() override;
 
+    // --- Dryer / box-heater control (issue #1019) ---
+    [[nodiscard]] DryerInfo get_dryer_info() const override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
+                          int unit = 0) override;
+    AmsError stop_drying(int unit = 0) override;
+
   protected:
     void on_started() override;
     void handle_status_update(const nlohmann::json& notification) override;
@@ -101,6 +110,17 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// `aht20_f heater_box<N>` entries; update unit environment with the
     /// max temperature and max humidity observed across all boxes.
     void apply_heater_status(const nlohmann::json& notification);
+
+    /// Refine dryer_info_.max_temp_c from the Klipper configfile settings
+    /// object (`printer.configfile.settings`). Handles two section spellings:
+    ///   "heater_generic heater_box<N>" → key `max_temp`
+    ///   "box_config box<N>"            → key `target_max_temp_heater_generic`
+    void apply_config_settings(const nlohmann::json& settings);
+
+    /// Parse `box_extras` object from a status notification, extracting
+    /// `box_drying_state.box<N>.{dry_state, end_time}` to update the
+    /// drying countdown in dryer_info_.
+    void apply_box_extras(const nlohmann::json& box_extras);
 
     /// Unwrap a printer.objects.query response (`result.status.{...}`)
     /// and feed the inner object through handle_status_update so the
@@ -125,6 +145,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// not_supported responses so the read-only mirror can ship without
     /// emitting unvalidated gcode to live hardware.
     bool write_enabled_ = false;
+
+    // Dryer state for the box PTC heater (issue #1019).
+    DryerInfo dryer_info_;
+    std::time_t dry_end_epoch_ = 0;      ///< Absolute drying end time (epoch s), 0 = none
+    bool drying_timer_supported_ = false; ///< box_extras drying timer seen -> use ENABLE_BOX_DRY
+    std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
 
   public:
     /// Temperature profile for a single fila entry from

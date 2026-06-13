@@ -52,6 +52,21 @@ class QidiBoxTestAccess {
             return std::nullopt;
         return it->second;
     }
+    static DryerInfo get_dryer(const AmsBackendQidi& b) {
+        return b.get_dryer_info();
+    }
+    static void set_clock(AmsBackendQidi& b, std::function<std::time_t()> fn) {
+        b.now_fn_ = std::move(fn);
+    }
+    static void apply_box_extras(AmsBackendQidi& b, const json& e) {
+        b.apply_box_extras(e);
+    }
+    static void set_drying_timer_supported(AmsBackendQidi& b, bool v) {
+        b.drying_timer_supported_ = v;
+    }
+    static void apply_config_settings(AmsBackendQidi& b, const json& s) {
+        b.apply_config_settings(s);
+    }
 };
 
 // Subclass that captures execute_gcode() invocations so write-path tests
@@ -831,4 +846,159 @@ TEST_CASE("QIDI Box parse_save_variables applies cached profile to SlotInfo temp
     auto info = backend.get_system_info();
     REQUIRE(info.units[0].slots[0].nozzle_temp_min == 205);
     REQUIRE(info.units[0].slots[0].nozzle_temp_max == 225);
+}
+
+// =====================================================================
+// Dryer capabilities (issue #1019)
+// =====================================================================
+// The QIDI Box has a PTC box heater that acts as a filament dryer.
+// The backend must advertise dryer support with sane defaults so the
+// UI shows the dryer control panel.
+
+TEST_CASE("QIDI Box advertises dryer support with sane capability defaults",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    DryerInfo d = backend.get_dryer_info();
+    REQUIRE(d.supported);
+    REQUIRE(d.min_temp_c == Catch::Approx(35.0f));
+    REQUIRE(d.max_temp_c == Catch::Approx(90.0f));   // settable ceiling, pre-config-query
+    REQUIRE(d.max_duration_min == 720);
+}
+
+TEST_CASE("QIDI Box heater status populates dryer current/target temp",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::handle_status(
+        backend, json{{"heater_generic heater_box1",
+                       json{{"temperature", 48.0}, {"target", 55.0}}}});
+
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE(d.current_temp_c == Catch::Approx(48.0f).epsilon(0.01));
+    REQUIRE(d.target_temp_c == Catch::Approx(55.0f).epsilon(0.01));
+}
+
+TEST_CASE("QIDI Box drying_state end_time drives remaining minutes",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::set_clock(backend, [] { return std::time_t{1000}; });
+    QidiBoxTestAccess::apply_box_extras(
+        backend, json{{"box_drying_state",
+                       json{{"box1", json{{"dry_state", 1}, {"end_time", 2800}}}}}});
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE(d.active);
+    REQUIRE(d.remaining_min == 30);
+}
+
+TEST_CASE("QIDI Box drying_state past end_time means not drying",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::set_clock(backend, [] { return std::time_t{5000}; });
+    QidiBoxTestAccess::apply_box_extras(
+        backend, json{{"box_drying_state",
+                       json{{"box1", json{{"dry_state", 0}, {"end_time", 2800}}}}}});
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE_FALSE(d.active);
+    REQUIRE(d.remaining_min == 0);
+}
+
+TEST_CASE("QIDI Box derives duration for externally-started drying (progress ring)",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::set_clock(backend, [] { return std::time_t{1000}; });
+    // 60 min remaining, started outside HelixScreen (no commanded duration).
+    QidiBoxTestAccess::apply_box_extras(
+        backend, json{{"box_drying_state",
+                       json{{"box1", json{{"dry_state", 1}, {"end_time", 4600}}}}}});
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE(d.duration_min == 60);
+    REQUIRE(d.get_progress_pct() == 0); // just started: 60/60 remaining
+}
+
+TEST_CASE("QIDI Box config query refines max temp (heater_generic section)",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"heater_generic heater_box1", json{{"max_temp", 80.0}}}});
+    REQUIRE(QidiBoxTestAccess::get_dryer(backend).max_temp_c == Catch::Approx(80.0f));
+}
+
+TEST_CASE("QIDI Box config query refines max temp (box_config section)",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_config_settings(
+        backend,
+        json{{"box_config box0", json{{"target_max_temp_heater_generic", 90.0}}}});
+    REQUIRE(QidiBoxTestAccess::get_dryer(backend).max_temp_c == Catch::Approx(90.0f));
+}
+
+// =====================================================================
+// Dryer write-path: start_drying / stop_drying (issue #1019)
+// =====================================================================
+
+TEST_CASE("QIDI Box start_drying uses ENABLE_BOX_DRY when timer supported",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, true);
+    auto err = backend.start_drying(55.0f, 240);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "ENABLE_BOX_DRY BOX=1 TEMP=55 END_TIME=4");
+}
+
+TEST_CASE("QIDI Box start_drying falls back to SET_HEATER_TEMPERATURE",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, false);
+    auto err = backend.start_drying(55.0f, 240);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "SET_HEATER_TEMPERATURE HEATER=heater_box1 TARGET=55");
+}
+
+TEST_CASE("QIDI Box start_drying rejects out-of-range temp",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    auto err = backend.start_drying(150.0f, 240);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box start_drying blocked when write-path disabled",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    auto err = backend.start_drying(55.0f, 240);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box stop_drying uses DISABLE_BOX_DRY when timer supported",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, true);
+    auto err = backend.stop_drying(0);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "DISABLE_BOX_DRY BOX=1");
+}
+
+TEST_CASE("QIDI Box stop_drying falls back to TARGET=0",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, false);
+    auto err = backend.stop_drying(0);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent[0] == "SET_HEATER_TEMPERATURE HEATER=heater_box1 TARGET=0");
+}
+
+TEST_CASE("QIDI Box stop_drying blocked when write-path disabled",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    auto err = backend.stop_drying(0);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
 }
