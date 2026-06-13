@@ -125,7 +125,26 @@ bool TemperatureController::preset_visible(HeaterType type, int value_c) const {
 }
 
 void TemperatureController::set_target(HeaterType type, double celsius, SendOptions opts) {
-    set_target(resolved_name(type), celsius, std::move(opts));
+    const std::string name = resolved_name(type);
+    if (name.empty()) {
+        // Only the chamber resolves empty in practice (nozzle -> active extruder,
+        // bed -> "heater_bed" are always present). Surface the not-found condition
+        // only when the caller wants user-visible feedback; silent sends
+        // (toast=false, e.g. AMS slot-preheat / cooldown) stay a clean no-op.
+        // Mirrors the gcode-send error path: fire on_error if provided, then toast.
+        if (opts.toast) {
+            MoonrakerError err;
+            err.type = MoonrakerErrorType::VALIDATION_ERROR;
+            err.message = (type == HeaterType::Chamber) ? "Chamber heater not found"
+                                                        : "Heater not found";
+            if (opts.on_error) {
+                opts.on_error(err);
+            }
+            NOTIFY_ERROR("{}", lv_tr(err.message.c_str()));
+        }
+        return;
+    }
+    set_target(name, celsius, std::move(opts));
 }
 
 void TemperatureController::set_target(const std::string& klipper_name, double celsius,

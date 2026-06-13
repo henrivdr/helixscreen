@@ -124,6 +124,59 @@ TEST_CASE("TemperatureController set_target routes to the resolved name", "[temp
     REQUIRE(f.client.last_send_method() == "printer.gcode.script");
 }
 
+TEST_CASE("TemperatureController reports an error when the chamber heater is not found",
+          "[temp_controller]") {
+    // A Voron 2.4 with NO chamber heater configured: the chamber resolves to an empty
+    // name. Setting a chamber target must NOT silently no-op — it must surface the
+    // not-found condition (toast + on_error) so the user knows nothing happened.
+    ControllerFixture f;
+
+    // No chamber heater in discovery → resolved chamber name is empty.
+    helix::SettingsManager::instance().set_chamber_heater_assignment("auto");
+    helix::PrinterDiscovery hardware;
+    nlohmann::json objects = {"extruder", "heater_bed"};
+    hardware.parse_objects(objects);
+    f.state.set_hardware(hardware);
+    f.state.set_klippy_state_sync(helix::KlippyState::READY);
+
+    REQUIRE(f.controller.resolved_name(HeaterType::Chamber).empty());
+
+    SECTION("toast=true: on_error fires and no gcode is sent") {
+        f.client.clear_gcode_script_history();
+        bool error_fired = false;
+        bool success_fired = false;
+        f.controller.set_target(HeaterType::Chamber, 50.0,
+                                helix::SendOptions{.toast = true,
+                                                  .on_success = [&] { success_fired = true; },
+                                                  .on_error = [&](const MoonrakerError&) {
+                                                      error_fired = true;
+                                                  }});
+
+        REQUIRE(error_fired);
+        REQUIRE_FALSE(success_fired);
+        // No temperature gcode was sent to the printer.
+        REQUIRE(f.client.gcode_script_history().empty());
+        REQUIRE(f.client.last_send_method().empty());
+    }
+
+    SECTION("toast=false: stays a clean no-op (on_error not invoked, no gcode)") {
+        f.client.clear_gcode_script_history();
+        bool error_fired = false;
+        bool success_fired = false;
+        f.controller.set_target(HeaterType::Chamber, 50.0,
+                                helix::SendOptions{.toast = false,
+                                                  .on_success = [&] { success_fired = true; },
+                                                  .on_error = [&](const MoonrakerError&) {
+                                                      error_fired = true;
+                                                  }});
+
+        REQUIRE_FALSE(error_fired);
+        REQUIRE_FALSE(success_fired);
+        REQUIRE(f.client.gcode_script_history().empty());
+        REQUIRE(f.client.last_send_method().empty());
+    }
+}
+
 TEST_CASE("get_temperature_controller returns the registered shared resource",
           "[temp_controller][globals]") {
     helix::TemperatureController ctrl(get_printer_state(), nullptr);
