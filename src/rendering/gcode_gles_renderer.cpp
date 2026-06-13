@@ -5,6 +5,7 @@
 
 #ifdef ENABLE_GLES_3D
 
+#include "gcode_gl_fallback.h"
 #include "runtime_config.h"
 
 #include <spdlog/spdlog.h>
@@ -1324,6 +1325,20 @@ void GCodeGLESRenderer::draw_layers(const std::vector<LayerVBO>& vbos, int layer
         glDisableVertexAttribArray(static_cast<GLuint>(a_color_));
     }
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // One glGetError() per draw batch — NOT per primitive (a per-glDrawArrays
+    // check would stall the GPU pipeline). On constrained Mali/Panfrost GPUs
+    // (e.g. Allwinner CB1) the driver can fault under memory pressure with the
+    // phong shader + ribbon VBOs; a fatal error here means we must abandon GPU
+    // rendering. The viewer polls render_failed() after render() and falls back
+    // to the pure-CPU 2D renderer for the rest of the session.
+    GLenum draw_err = glGetError();
+    if (gl_draw_error_is_fatal(draw_err)) {
+        spdlog::error("[GCode GLES] Fatal GL error after glDrawArrays: 0x{:04X} — disabling GPU "
+                      "rendering, falling back to 2D",
+                      draw_err);
+        gl_render_failed_ = true;
+    }
 }
 
 // ============================================================

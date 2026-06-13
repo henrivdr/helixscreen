@@ -675,6 +675,36 @@ static void gcode_viewer_draw_cb(lv_event_t* e) {
         st->renderer_->render(layer, *st->gcode_file, *st->camera_, &widget_coords);
 
 #ifdef ENABLE_3D_RENDERER
+        // A fatal GL draw error (out-of-memory / invalid-operation) means the
+        // GPU path is unsafe on this device — degrade to the pure-CPU 2D
+        // renderer for the rest of the session rather than risk a driver crash.
+        // Reuse the existing budget_forced_2d_ sticky fallback so subsequent
+        // is_using_2d_mode() queries route to the 2D path. We run on the main
+        // LVGL thread here (draw callback), so no cross-thread marshaling is
+        // needed — same context in which budget_forced_2d_ is normally set.
+        if (st->renderer_->render_failed() && !st->budget_forced_2d_) {
+            spdlog::warn("[GCode Viewer] GLES renderer reported a fatal GL error — switching to "
+                         "2D for this session");
+            st->budget_forced_2d_ = true;
+            // Seed the 2D renderer now so the next frame renders immediately.
+            // (Lazy init in the 2D branch also covers this, but doing it here
+            // keeps colors/palette consistent with the loaded file.)
+            if (!st->layer_renderer_2d_ && st->gcode_file) {
+                st->layer_renderer_2d_ = std::make_unique<helix::gcode::GCodeLayerRenderer>();
+                st->layer_renderer_2d_->set_gcode(st->gcode_file.get());
+                if (!st->gcode_file->tool_color_palette.empty()) {
+                    st->layer_renderer_2d_->set_tool_color_palette(
+                        st->gcode_file->tool_color_palette);
+                }
+                st->layer_renderer_2d_->auto_fit();
+            }
+            // Repaint on the next tick now that the mode has flipped. Cannot
+            // invalidate synchronously inside the draw callback.
+            helix::ui::async_call(
+                obj, [](void* data) { lv_obj_invalidate(static_cast<lv_obj_t*>(data)); }, obj);
+            return;
+        }
+
         // During chunked VBO upload, renderer returns early without drawing.
         // After the first real GPU render, force one extra frame so the
         // cached-buffer path (no GL context switch) blits cleanly.
