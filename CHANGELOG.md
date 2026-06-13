@@ -5,19 +5,39 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.99.77] - 2026-06-13
+
+A large release. Headlines: filament-drying control for the QIDI Box and Happy Hare / MMU systems, a new chamber-heating system with an on-home chamber temperature widget and a centralized temperature controller, a redesigned AMS spool widget with on-home print controls, and a deep round of Snapmaker U1 runout/pause-recovery fixes — plus new printer support (Anycubic Kobra/Rinkhals with native ACE, Creality Hi, Creality K2 Pro).
 
 ### Added
 
+- **Filament drying control for QIDI Box and Happy Hare / MMU** (prestonbrown/helixscreen#1019) — start and stop drying from the UI with a live countdown, the box/heater target and current temperature, and capability advertisement so the control only appears where it works. QIDI stock routes through `ENABLE_BOX_DRY` / `box_extras`; Happy Hare routes through the MMU heater gcode with the heater name and max temp queried from the Klipper config.
+- **Chamber heating support** — a chamber temperature widget on the home screen showing the effective setpoint (heater **or** fan) with heating / maintaining / off states. Sends route through `M141` on printers that define it, and the keypad and presets clamp to the configured chamber `max_temp`.
 - **Anycubic Kobra support (Rinkhals firmware)** — adds the Anycubic Kobra 2 Pro, Kobra 3, Kobra 3 V2, Kobra 3 Max, Kobra S1, and Kobra S1 Max to the printer database, fingerprinted on confirmed GoKlipper objects so they auto-detect under [Rinkhals](https://github.com/jbatonnet/Rinkhals). Kobra 3 was corrected from CoreXY to Cartesian. Native Anycubic ACE is now supported for real: the firmware registers the multi-material hub as the `filament_hub` Klipper object (not `ace`), and the ACE backend now detects, queries, and parses `filament_hub` — including dryer status/target/duration and the loaded slot — with the old `ace` object kept as a dormant fallback. Untested on our hardware (we own no Kobra); presets are conservative and gaps are documented.
 - **Preliminary Creality Hi support** — adds the Creality Hi (260×260×300 Cartesian bedslinger, Prtouch V3, dual-Z, optional CFS) to the printer database with a stock-config preset and product image. Auto-detection keys on the Hi's real Klipper config (Cartesian kinematics — unique among supported Creality printers, which are otherwise CoreXY). A CFS dialect fix routes a Hi with CFS to the K1-style `BOX_*` macros it actually ships, not the K2 `CR_BOX_*` primitives. Preliminary and untested — we own no Hi hardware.
 - **Creality K2 Pro support** — adds the K2 Pro (300 mm build volume) to the printer database. It reuses the existing K2 preset, so it inherits CFS, the active chamber heater, and the K2 macro set; auto-detection distinguishes it from the K2 Plus by build volume and hostname.
+- **On-home print controls** — a 2×1 control-buttons widget (pause / resume / stop) with optimistic pending state, usable directly from the home screen.
+- **Redesigned AMS home widget** — a wide spool view (up to 4× width) grouped by the active spool, with a lane badge marking it, content-sized cells, and rebuilds skipped when the render is unchanged.
+- **Per-sink log patterns with a thread id** on every log line, for clearer diagnosis of cross-thread timing issues.
 
 ### Fixed
 
-- **Cura print metadata now reads correctly** (prestonbrown/helixscreen#942) — Cura emits `M73` progress markers in the header *before* its metadata comments, and the header scan was stopping at the first `M`-code — so Cura-sliced files lost their slicer name, layer height, and bounding-box extents. The scan now stops only at the first motion command, and Cura's feature-type dialect is covered by a real-file regression test.
+- **Snapmaker U1 runout & pause recovery overhaul** (prestonbrown/helixscreen#991) — a minimal, port-gated runout dialog with a unified Resume; recovery driven through `AUTO_FEEDING`; the resume classifier wired to `print_stats.exception` with a heating-aware backstop; per-slot unload offered for every loaded toolhead; and corrected pre-print phase and ETA reporting.
+- **3D viewer falls back to 2D on fatal GLES draw errors** (prestonbrown/helixscreen#966) instead of crashing.
+- **Touch calibration** — calibration session state now resets on every overlay show (prestonbrown/helixscreen#943), and a released finger correctly ends a pinch gesture.
+- **Home edit mode now requires a deliberate stationary hold** (prestonbrown/helixscreen#1003), no longer triggering on incidental drags.
+- **gcode preview rendering** — solid ghost surfaces render visibly while sparse infill stays see-through, the 2D ghost preview is translucent rather than near-black, and a blank-panel / stuck layer-slider regression is fixed. Cura metadata after header `M73` markers now reads correctly (prestonbrown/helixscreen#942): the header scan stops only at the first motion command, restoring the slicer name, layer height, and bounding-box extents for Cura-sliced files.
+- **Input-shaper firmware-halt faults are surfaced clearly** in the calibration wizard (prestonbrown/helixscreen#1021).
 - **Clearer K2 fan names** — the K2 fan list no longer shows two indistinguishable "Chamber Fan" entries. Fans now carry function-based labels (Part Cooling, Auxiliary, Chamber Heater Fan, Chamber Circulation), and the auxiliary fan's role mapping was corrected.
 - **AD5X IFS Unload no longer homes and stalls** (bundle 7AC4SDEX) — the v0.99.76 unload could still home and then do nothing when no filament was seated at the nozzle. Unload now dispatches the firmware's own toolhead-unload sequence when filament is at the head, and pulls the filament back from the lane with a cold eject when it isn't — instead of issuing a command the firmware treats as a no-op.
+- **Moonraker Creality key-error envelopes are decoded** into readable messages, and caller-handled error toasts are deduped.
+- **Snapmaker U1 boot reliability** — autostart on Paxx 1.4 (via `S99fb-http`), boot-time SIGTERM self-heal, WiFi decoupled from the helix lifetime, and `helixscreen.init` guaranteed executable.
+- **Empty `bind_value` no longer cross-talks** — arcs declared with an empty `bind_value` no longer share the global noop subject (which made unrelated arcs move together).
+- **Cross-compiling from git worktrees** now works.
+
+### Changed
+
+- **Centralized temperature control** — nozzle, bed, and chamber sends now route through a single `TemperatureController` with consistent "heater not found" toasts and unified preset and limit handling.
 
 ## [0.99.76] - 2026-06-11
 
@@ -4004,6 +4024,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.77]: https://github.com/prestonbrown/helixscreen/compare/v0.99.76...v0.99.77
 [0.99.76]: https://github.com/prestonbrown/helixscreen/compare/v0.99.75...v0.99.76
 [0.99.75]: https://github.com/prestonbrown/helixscreen/compare/v0.99.74...v0.99.75
 [0.99.74]: https://github.com/prestonbrown/helixscreen/compare/v0.99.73...v0.99.74
