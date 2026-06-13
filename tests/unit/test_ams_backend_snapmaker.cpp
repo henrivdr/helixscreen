@@ -77,6 +77,10 @@ class SnapmakerTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.sensor_filament_present_[slot_index] = present;
     }
+    static void set_port_sensor_present(AmsBackendSnapmaker& b, int slot_index, bool present) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.port_sensor_filament_present_[slot_index] = present;
+    }
     static void set_current_slot(AmsBackendSnapmaker& b, int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.system_info_.current_slot = slot_index;
@@ -374,11 +378,24 @@ TEST_CASE("Snapmaker get_slot_filament_segment renders NOZZLE for every present 
     SECTION("empty tool renders no filament line") {
         CHECK(backend.get_slot_filament_segment(2) == PathSegment::NONE);
     }
-    SECTION("a tool whose motion sensor reads runout renders no line") {
-        // Sensor false short-circuits to NONE regardless of slot status —
-        // the runout break in the spool->toolhead line still wins.
+    SECTION("a tool with neither sensor present (real runout) renders no line") {
+        // Both the toolhead motion sensor AND the buffer/port sensor read empty
+        // → genuine runout / no filament. The port sensor defaults false in this
+        // status (no filament_feed object), so clearing the motion sensor alone
+        // is the both-false case and must still render nothing.
         SnapmakerTestAccess::set_sensor_present(backend, 1, false);
         CHECK(backend.get_slot_filament_segment(1) == PathSegment::NONE);
+    }
+    SECTION("filament staged in the bowden (motion empty, port present) renders to the dot") {
+        // U1 post-unload state: filament retracted out of the toolhead but left
+        // in the feed tube. Toolhead motion sensor reads empty, buffer/port
+        // sensor still present → draw the line down to the toolhead entry sensor
+        // but no farther (OUTPUT), not nothing. (Hardware capture 2026-06-13:
+        // tool T2 e2_filament motion=false, filament_feed right.extruder2
+        // detected=true, channel_state=preload_finish.)
+        SnapmakerTestAccess::set_sensor_present(backend, 1, false);
+        SnapmakerTestAccess::set_port_sensor_present(backend, 1, true);
+        CHECK(backend.get_slot_filament_segment(1) == PathSegment::OUTPUT);
     }
 }
 

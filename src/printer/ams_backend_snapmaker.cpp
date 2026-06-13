@@ -162,9 +162,20 @@ PathSegment AmsBackendSnapmaker::get_slot_filament_segment(int slot_index) const
     if (!slot)
         return PathSegment::NONE;
 
-    // If the slot's runout sensor is tripped, the physical filament is gone
-    // even if the spool/extruder still "thinks" it's loaded. Render no line.
+    // Toolhead motion sensor empty for this tool. That alone does NOT mean
+    // "no filament" — on the U1 an unload retracts filament out of the toolhead
+    // but leaves it staged in the bowden/buffer (channel_state preload_finish),
+    // where the buffer-side port sensor still reads present. Distinguish the
+    // two cases with the port sensor (hardware capture 2026-06-13, tool T2:
+    // e2_filament motion=false, filament_feed right.extruder2 detected=true):
+    //   - port present  → filament threaded through the bowden but short of the
+    //                      toolhead sensor: draw the line down to the toolhead
+    //                      entry sensor dot but no farther (OUTPUT). The dot
+    //                      stays hollow because the toolhead sensor reads empty.
+    //   - port empty too → genuine runout / no filament: draw nothing (NONE).
     if (slot_index >= 0 && slot_index < NUM_TOOLS && !sensor_filament_present_[slot_index]) {
+        if (port_sensor_filament_present_[slot_index])
+            return PathSegment::OUTPUT;
         return PathSegment::NONE;
     }
 
