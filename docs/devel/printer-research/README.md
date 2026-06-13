@@ -73,6 +73,7 @@ This directory contains research documentation on various 3D printers for HelixS
 | [FLASHFORGE_AD5X_RESEARCH.md](FLASHFORGE_AD5X_RESEARCH.md) | AD5X, IFS multi-color, ZMOD |
 | [QIDI_PLUS_4_RESEARCH.md](QIDI_PLUS_4_RESEARCH.md) | QIDI Plus 4 (modded Pi 4 + Kalico + Happy Hare + QIDI Box), real-device analysis |
 | [SNAPMAKER_U1_RESEARCH.md](SNAPMAKER_U1_RESEARCH.md) | U1 toolchanger, SnapSwap |
+| [KLIPPER_FORKS_AND_PORTS.md](KLIPPER_FORKS_AND_PORTS.md) | Vendor Klipper reimplementations (Anycubic Go→C++, Elegoo C++), GPL/clean-room analysis, how vendors skip Moonraker (SDCP/gkapi/Creality), MQTT-vs-Moonraker future-transport notes |
 
 ## Competitor Devices (Add-on Touchscreens)
 

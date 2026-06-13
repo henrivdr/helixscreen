@@ -62,7 +62,11 @@ The most relevant AnyCubic CoreXY printers are the **Kobra S1 Combo** and **Kobr
 ## 2. Stock Firmware: KobraOS
 
 ### What KobraOS Is
-- **Based on Klipper** but rewritten in **Golang** ("klipper-go")
+- **Based on Klipper** but rewritten in **Golang** ("klipper-go") — this is the
+  **"K3" software base**. The newer Kobra X moved to a **"K4" base that is a C++
+  Klipper port** with mandatory RSA-signed firmware (Rinkhals-blocked). See
+  [KLIPPER_FORKS_AND_PORTS.md](KLIPPER_FORKS_AND_PORTS.md) for the full Go→C++
+  story and the GPL/clean-room analysis.
 - **Closed source** with locked configs
 - **LVGL-based UI** for touchscreen
 - Configs in `/userdata/app/gk/config/`
