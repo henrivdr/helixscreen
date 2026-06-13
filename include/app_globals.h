@@ -12,6 +12,7 @@
 // Forward declarations
 namespace helix {
 class MoonrakerClient;
+class TemperatureController;
 }
 class MoonrakerAPI;
 class MoonrakerManager;
@@ -45,6 +46,12 @@ MoonrakerAPI* get_moonraker_api();
  * @param api Pointer to MoonrakerAPI instance
  */
 void set_moonraker_api(MoonrakerAPI* api);
+
+/**
+ * @brief Get the global TemperatureController (shared resource registered by SubjectInitializer)
+ * @return Pointer to the controller, or nullptr if not yet initialized
+ */
+helix::TemperatureController* get_temperature_controller();
 
 /**
  * @brief Get global MoonrakerManager instance

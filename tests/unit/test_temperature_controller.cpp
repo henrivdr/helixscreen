@@ -3,7 +3,9 @@
 #include "temperature_controller.h"
 
 #include "../../include/moonraker_client_mock.h"
+#include "app_globals.h"
 #include "moonraker_api.h"
+#include "panel_widget_manager.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "settings_manager.h"
@@ -120,4 +122,11 @@ TEST_CASE("TemperatureController set_target routes to the resolved name", "[temp
 
     // Verify the RPC method used was printer.gcode.script (confirms the gcode path ran)
     REQUIRE(f.client.last_send_method() == "printer.gcode.script");
+}
+
+TEST_CASE("get_temperature_controller returns the registered shared resource",
+          "[temp_controller][globals]") {
+    helix::TemperatureController ctrl(get_printer_state(), nullptr);
+    helix::PanelWidgetManager::instance().register_shared_resource<helix::TemperatureController>(&ctrl);
+    REQUIRE(get_temperature_controller() == &ctrl);
 }

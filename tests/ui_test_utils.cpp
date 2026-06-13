@@ -406,7 +406,9 @@ int count_children_with_marker(lv_obj_t* parent, const char* marker) {
 #include "app_globals.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
+#include "panel_widget_manager.h"
 #include "printer_state.h"
+#include "temperature_controller.h"
 
 MoonrakerClient* get_moonraker_client() {
     return nullptr;
@@ -419,6 +421,10 @@ MoonrakerAPI* get_moonraker_api() {
 PrinterState& get_printer_state() {
     static PrinterState instance;
     return instance;
+}
+
+helix::TemperatureController* get_temperature_controller() {
+    return helix::PanelWidgetManager::instance().shared_resource<helix::TemperatureController>();
 }
 
 // Stub implementations for notification functions (tests don't display UI)

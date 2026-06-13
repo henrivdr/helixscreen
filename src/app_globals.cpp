@@ -24,8 +24,10 @@
 #include "data_root_resolver.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
+#include "panel_widget_manager.h"
 #include "printer_state.h"
 #include "static_subject_registry.h"
+#include "temperature_controller.h"
 
 #include <spdlog/spdlog.h>
 
@@ -91,6 +93,10 @@ MoonrakerAPI* get_moonraker_api() {
 
 void set_moonraker_api(MoonrakerAPI* api) {
     g_moonraker_api = api;
+}
+
+TemperatureController* get_temperature_controller() {
+    return PanelWidgetManager::instance().shared_resource<TemperatureController>();
 }
 
 MoonrakerManager* get_moonraker_manager() {
