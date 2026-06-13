@@ -86,6 +86,72 @@ make compile_commands  # Generate compile_commands.json for IDE/LSP
 
 **Test mode keyboard shortcuts:** S=screenshot, P=test prompt, N=test notification, Q/Esc=quit
 
+### Wizard Flags
+
+| Flag | Effect |
+|------|--------|
+| `-w`, `--wizard` | Force the first-run configuration wizard |
+| `--wizard-step <step>` | Jump to a specific wizard step (0-12) for testing |
+
+`--wizard` is **destructive to wizard-managed config** — it is meant to fully re-run setup, not just re-open it. On startup with `--wizard`, the app clears all wizard-managed state in `settings.json` so a stale or wrong install-time seed is recoverable:
+
+- Clears the **preset marker** via `Config::clear_preset()` (erases the top-level `"preset"` key). Because `has_preset()` is then false, the re-run becomes a *full* wizard — the identify and hardware pages reappear instead of being skipped.
+- Clears the active printer's `moonraker_host` (set to `""`), so the connection step is re-entered.
+- Clears the cached hardware snapshot and the wizard's heater/sensor/fan/LED/filament-sensor selections, so stale hardware choices don't trigger false hardware-health warnings.
+
+This is the recovery path when an install-time auto-seed (see [INSTALLER.md](INSTALLER.md)) picked the wrong printer: re-run with `--wizard` to drop the seed and reconfigure from scratch.
+
+### Printer Detection (`--detect-printer`)
+
+A headless one-shot that queries a running Moonraker over its REST API, runs the same detection logic the wizard uses, prints a JSON verdict to stdout, and exits. No UI is started. Useful for debugging which preset a given printer matches, or for scripting install-time detection.
+
+| Flag | Argument | Default | Effect |
+|------|----------|---------|--------|
+| `--detect-printer` | (none) | — | Run headless detection, print JSON, exit |
+| `--host <addr>` | host/IP | `127.0.0.1` | Moonraker host to query |
+| `--port <n>` | 1-65535 | `7125` | Moonraker port to query |
+
+```bash
+# Detect the local printer
+./build/bin/helix-screen --detect-printer
+
+# Detect a printer on another host
+./build/bin/helix-screen --detect-printer --host 192.168.1.74 --port 7125
+```
+
+Internally it does three REST GETs against `http://HOST:PORT` (3-second timeout each):
+`/printer/objects/list`, `/printer/info` (hostname), and
+`/printer/objects/query?configfile=settings` (kinematics + build volume from the
+`stepper_x/y/z` config). The resulting hardware profile is fed to
+`PrinterDetector::auto_detect()`.
+
+**Exit codes:** `0` on success (verdict printed). `1` if Moonraker's object list is
+unavailable at the given host/port (a warning is logged; no JSON is printed).
+
+**JSON output shape** — one compact line, terminated by a newline:
+
+```json
+{"model":"Creality K1 Max","preset":"k1_max","confidence":92,"runner_up_preset":"qidi_q2","runner_up_confidence":43}
+```
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `model` | string | Human-readable detected printer name (`PrinterDetectionResult::type_name`) |
+| `preset` | string or `null` | Platform preset id for the match; `null` when the result has no preset |
+| `confidence` | integer (0-100) | Detection confidence for the top match |
+| `runner_up_preset` | string or `null` | Preset id of the second-place candidate; `null` when there is none |
+| `runner_up_confidence` | integer (0-100) | Confidence score of the runner-up |
+
+When there is no credible second candidate, the runner-up fields collapse:
+
+```json
+{"model":"FlashForge AD5M","preset":"ad5m","confidence":88,"runner_up_preset":null,"runner_up_confidence":0}
+```
+
+The installer's Tier-2 detection (see [INSTALLER.md](INSTALLER.md)) parses exactly this
+output and applies its confidence gate to `confidence` and the
+`confidence - runner_up_confidence` margin.
+
 For cross-compilation, patches, and advanced options, see **[BUILD_SYSTEM.md](BUILD_SYSTEM.md)**.
 
 ## Logging

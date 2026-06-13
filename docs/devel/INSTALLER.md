@@ -126,9 +126,100 @@ The `main()` function orchestrates this sequence:
 12. **Install service** -- systemd unit or SysV init script (templated with `@@HELIX_USER@@`, etc.)
 13. **Moonraker integration** -- Adds `[update_manager helixscreen]` section, writes `release_info.json`
 14. **KIAUH extension** -- Auto-installs if KIAUH detected. **Note:** The `kiauh.sh` module exists but is not currently integrated into the installer flow. KIAUH extension files are installed manually or via the KIAUH UI.
-15. **Config symlink** -- `printer_data/config/helixscreen` symlink for Mainsail/Fluidd access
-16. **Start service** -- Waits up to 5 seconds for startup confirmation
-17. **Cleanup** -- Remove temp files, remove `.old` backup
+15. **Install-time printer detection** -- Tier-1 model fingerprint, falling back to Tier-2 Moonraker detection with a B/C confidence gate. Seeds device defaults (and, when confident, a full preset) into `settings.json` before first launch. See [Install-Time Printer Detection](#install-time-printer-detection) below.
+16. **Config symlink** -- `printer_data/config/helixscreen` symlink for Mainsail/Fluidd access
+17. **Start service** -- Waits up to 5 seconds for startup confirmation
+18. **Cleanup** -- Remove temp files, remove `.old` backup
+
+### Install-Time Printer Detection
+
+After the release is in place but **before** the service starts, the installer tries to
+recognize the printer and pre-seed `settings.json` so the first launch lands on (or near)
+the right configuration without the user driving the whole wizard. The logic lives in
+`scripts/lib/installer/printer_seed.sh`, orchestrated from `main.sh`:
+
+```sh
+seed_pid=$(detect_printer_model)          # Tier-1
+if [ -n "$seed_pid" ]; then
+    seed_settings_for_printer "$seed_pid"          # device-level seed
+    install_klipper_include_for_printer "$seed_pid"
+else
+    seed_from_moonraker_detection || true # Tier-2
+fi
+```
+
+It runs in two tiers, Tier-1 first and Tier-2 only as a fallback:
+
+**Tier-1 — model fingerprint (`detect_printer_model`).** A filesystem-based binary
+fingerprint: it looks for a stock-firmware artifact at a known path that uniquely
+identifies a model. Currently the only fingerprint shipped is the Sovol SV06 Ace, keyed on
+the presence of the stock `mksclient` binary (e.g. `/home/sovol/printer_data/build/mksclient`).
+On a match it seeds the printer's **device-level** blocks (display/input) directly and
+installs any Klipper include for that printer. This tier is intentionally narrow — it only
+fires for signals strong enough to avoid false positives — so most installs fall through to
+Tier-2.
+
+**Tier-2 — Moonraker detection (`seed_from_moonraker_detection`).** When Tier-1 finds
+nothing, the installer shells out to the freshly-installed binary:
+
+```sh
+helix-screen --detect-printer --host 127.0.0.1 --port 7125
+```
+
+That one-shot queries the local Moonraker over REST and prints a JSON verdict (see
+[`--detect-printer`](DEVELOPMENT.md#printer-detection---detect-printer) in DEVELOPMENT.md for
+the exact shape). Tier-2 parses `preset`, `confidence`, and `runner_up_confidence` from that
+verdict. It is a no-op (returns success without seeding) when Moonraker is unreachable, the
+verdict carries no `preset`, or the JSON is malformed.
+
+#### The B/C confidence gate
+
+Tier-2 decides what to seed using two numeric thresholds (overridable via environment):
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `HELIX_DETECT_MIN_CONFIDENCE` | `85` | Minimum top-match confidence to auto-apply a full preset |
+| `HELIX_DETECT_MIN_MARGIN` | `10` | Minimum lead over the runner-up (`confidence - runner_up_confidence`) |
+
+```sh
+margin=$(( conf - rconf ))
+if [ "$conf" -ge "$HELIX_DETECT_MIN_CONFIDENCE" ] && [ "$margin" -ge "$HELIX_DETECT_MIN_MARGIN" ]; then
+    # Detection B -> full preset
+    seed_full_preset_for_printer "$preset"
+else
+    # Detection C -> device-level seed + localhost host
+    seed_settings_for_printer "$preset"
+    _seed_moonraker_host_localhost
+fi
+```
+
+Note these are **not** lettered confidence levels (there is no A/D). Confidence is a
+continuous 0-100 score; "B" and "C" are simply the two seeding *paths* the gate selects:
+
+- **Path B (confident: `confidence >= 85` AND `margin >= 10`).** Auto-apply the full preset
+  via `seed_full_preset_for_printer`. This writes the preset's `display` block, merges its
+  `printer` block (heaters, fans, LEDs, filament sensors) into `printers["default"]`, sets
+  the top-level `"preset"` marker so the app knows a preset is already applied, and sets
+  `printers["default"]["wizard_completed"] = false` so the wizard still runs once for the
+  user to verify rather than silently trusting the seed.
+
+- **Path C (ambiguous: `confidence < 85` OR `margin < 10`).** Seed only the safe
+  **device-level** blocks (`input`, `display`) via `seed_settings_for_printer`, then
+  pre-fill `printers["default"]["moonraker_host"] = "127.0.0.1"` so the app can reach
+  Moonraker on first launch. Crucially it does **not** write the `"preset"` marker — the app
+  re-runs its own detection at startup and asks the user to confirm, rather than committing
+  to an uncertain guess.
+
+- **Skip (no-op).** Moonraker unreachable, no `preset` in the verdict, or malformed JSON:
+  nothing is seeded and the installer continues.
+
+Seeded printer ids are recorded to `${INSTALL_DIR}/config/.seeded_settings` (idempotently)
+so uninstall can be seed-aware.
+
+Because Path B's seed can be wrong on an ambiguous-but-just-over-threshold match, it is
+recoverable: re-running the app with `--wizard` (see
+[DEVELOPMENT.md](DEVELOPMENT.md#wizard-flags)) clears the `"preset"` marker and host, turning
+the next launch back into a full wizard.
 
 ### Error Handling
 
