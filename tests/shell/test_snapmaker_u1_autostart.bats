@@ -127,6 +127,17 @@ run_autostart() {
     [ -f "$MOCK_ROOT/oem/.debug" ]
 }
 
+@test "autostart ensures helixscreen.init is executable (delegate -x guard)" {
+    # A deploy that bypassed the installer can leave the init non-executable,
+    # which makes the S99screen/S99fb-http delegates silently skip HelixScreen.
+    chmod a-x "$DEPLOY_DIR/config/helixscreen.init"
+    [ ! -x "$DEPLOY_DIR/config/helixscreen.init" ]
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+    [ -x "$DEPLOY_DIR/config/helixscreen.init" ]
+}
+
 @test "autostart: gui already disabled is reported, not re-enabled" {
     chmod a-x "$MOCK_ROOT/usr/bin/gui"
     run run_autostart

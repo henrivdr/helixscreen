@@ -54,6 +54,13 @@ if [ ! -f "$INIT_SCRIPT" ]; then
     exit 1
 fi
 
+# Belt-and-suspenders: the S99screen / S99fb-http delegates only start HelixScreen
+# if helixscreen.init is executable ([ -x ... ]); otherwise they silently fall
+# through to the (disabled) stock UI and nothing comes up at boot. The installer
+# normally chmods it, but a deploy that bypassed the installer can leave it
+# non-executable — so guarantee it here.
+chmod +x "$INIT_SCRIPT" 2>/dev/null || true
+
 # Step 1: Create /oem/.debug to prevent overlay wipe on boot
 # Without this, S01aoverlayfs runs: rm -rf /oem/overlay/*
 if [ ! -f "${SYSROOT}/oem/.debug" ]; then

@@ -72,6 +72,27 @@ tail -f /var/log/messages | grep helix    # AD5M / non-systemd
 
 ## Startup Issues
 
+### Snapmaker U1: blank screen and off the network after a reboot
+
+**Symptoms:**
+- HelixScreen installed and worked, but after a reboot the screen is blank and the printer is unreachable over WiFi (Mainsail/Fluidd won't load).
+- Most often seen right after upgrading the PAXX Extended Firmware, or on a fresh install of an older HelixScreen version on Extended Firmware 1.4.
+
+**What happened:** A firmware upgrade clears HelixScreen's files (they live in a layer the upgrade resets), so it isn't installed anymore — and because HelixScreen manages the WiFi connection, nothing brings WiFi up. Older HelixScreen builds also failed to auto-start on Extended Firmware 1.4 specifically. Current HelixScreen auto-starts correctly on 1.2/1.3/1.4; the fix is to (re)install the current version.
+
+**Fix:** Recover over a wired connection, then reinstall:
+
+1. Plug a **USB-Ethernet adapter** into the printer and connect it to your router. The printer gets a wired IP automatically (check your router's client list).
+2. `ssh root@<wired-ip>` (password `snapmaker`).
+3. Reinstall HelixScreen:
+   ```bash
+   curl -sSL https://releases.helixscreen.org/install.sh | sh
+   reboot
+   ```
+4. To instead go back to the stock screen, run the uninstaller: `curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall && reboot`.
+
+See [INSTALL.md → Recovery](INSTALL.md#recovery-screen-is-blank-or-the-printer-is-off-the-network) for the full procedure and the manual reset fallback.
+
 ### Update failed in Mainsail — screen won't start after update (AD5X)
 
 **Symptoms:**

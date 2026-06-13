@@ -344,7 +344,7 @@ The Snapmaker U1 is an all-in-one printer with a built-in touchscreen. HelixScre
   - Network connection
 
 - **Software:**
-  - [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) installed (required for SSH access). Developed and tested on **1.3.x**; **1.4.x** should also work. Stock Snapmaker firmware is not supported.
+  - [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) installed (required for SSH access). Tested on **1.2.x, 1.3.x, and 1.4.x**. Stock Snapmaker firmware is not supported.
   - SSH access (`root@<printer-ip>` or `lava@<printer-ip>`, password: `snapmaker`)
 
 ---
@@ -571,7 +571,7 @@ Use the touchscreen to complete the setup wizard. The printer should auto-detect
 
 > **Requires [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware).** Stock firmware does not provide SSH access. Install Extended Firmware first before proceeding.
 >
-> **Firmware versions:** HelixScreen is developed and tested on Extended Firmware **1.3.x**. **1.4.x** should also work. After you update the Extended Firmware, **reinstall HelixScreen** — a firmware update resets the printer's system files and the stock screen will return until you reinstall.
+> **Firmware versions:** HelixScreen is tested on Extended Firmware **1.2.x, 1.3.x, and 1.4.x**. After you update the Extended Firmware, **reinstall HelixScreen** — a firmware update resets the printer's system files and the stock screen will return until you reinstall (see [Upgrading the Extended Firmware](#upgrading-the-extended-firmware-with-helixscreen-installed)).
 
 SSH into the printer:
 
@@ -640,6 +640,31 @@ reboot
 - Extended firmware is required — stock firmware does not provide SSH access
 - Display resolution may need manual configuration if the screen appears stretched or misaligned (see [Display Configuration](#display-configuration))
 - A firmware update resets the printer's system files and brings the stock screen back — reinstall HelixScreen afterward
+
+### Upgrading the Extended Firmware with HelixScreen installed
+
+A firmware upgrade is safe to run with HelixScreen installed — it does **not** brick the printer. HelixScreen's files live in a layer that the upgrade clears, so after upgrading you simply **reinstall HelixScreen**.
+
+Because HelixScreen replaces the stock touchscreen, the stock screen's on-device **"Local Update"** button is gone. Upgrade over the network instead:
+
+1. In a web browser on the same network, open **`http://<printer-ip>/firmware-config`**.
+2. Choose **Firmware Upgrade**, upload the new `U1_extended_<version>_upgrade.bin`, and let it complete. The printer reboots into the new firmware.
+3. The stock screen comes back (HelixScreen was cleared by the upgrade). **Reinstall HelixScreen** with the [Quick Install](#quick-install-recommended) one-liner. Your settings, WiFi, and printer config are preserved (they live on a separate partition the upgrade keeps).
+
+### Recovery: screen is blank or the printer is off the network
+
+If something goes wrong and the printer comes up with a blank screen and is unreachable over WiFi, recover over a wired connection:
+
+1. Plug a **USB-Ethernet adapter** into the printer and connect it to your router. The printer auto-configures the wired link and gets an IP from your router (check the router's client list).
+2. SSH in over that wired IP: `ssh root@<wired-ip>` (password `snapmaker`).
+3. Run the uninstaller to return to the stock UI, then reboot:
+   ```bash
+   curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall
+   reboot
+   ```
+4. Once the stock screen is back and the printer is on WiFi again, you can reinstall HelixScreen.
+
+> If the uninstaller can't run, reset HelixScreen's persistence flag and files manually, then reboot: `rm -f /oem/.debug && rm -rf /oem/overlay/* && rm -rf /userdata/helixscreen && sync && reboot`. This returns the printer to a clean stock state.
 
 ---
 
