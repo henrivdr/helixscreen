@@ -8,7 +8,7 @@ All developer documentation lives here. When working on features, look up the re
 |-----|-------------|
 | `DEVELOPMENT.md` | Build setup, dev environment, contributing |
 | `ARCHITECTURE.md` | System design, component relationships, extended systems |
-| `BUILD_SYSTEM.md` | Makefile internals, cross-compilation, patches |
+| `BUILD_SYSTEM.md` | Makefile internals, make target reference, cross-compilation, worktree workflow, ccache, patches |
 | `TESTING.md` | Catch2 test infrastructure, test patterns |
 | `LOGGING.md` | spdlog levels, when to use info vs debug vs trace |
 | `COPYRIGHT_HEADERS.md` | SPDX license headers |

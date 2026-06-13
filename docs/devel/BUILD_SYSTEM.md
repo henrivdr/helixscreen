@@ -287,10 +287,10 @@ GCC 8 requires `-lstdc++fs` for std::filesystem. This is already configured in `
 make pi-test
 
 # Deploy only (after building)
-make deploy-pi                    # Deploy binaries + assets
-make deploy-pi-run                # Deploy and run
+make deploy-pi                    # Deploy binaries + assets, restart in background
+make deploy-pi-fg                 # Deploy and run in foreground (debug)
 
-# Customize target
+# Customize target (default PI_HOST is 192.168.1.113, NOT helixpi.local — which doesn't resolve)
 make deploy-pi PI_HOST=192.168.1.50 PI_USER=pi
 ```
 
@@ -462,13 +462,70 @@ cd .worktrees/my-feature
 
 The script optimizes for **fast builds** by sharing artifacts from the main tree:
 
-1. **Symlinks lib/** - All submodules symlinked (no clone/configure time)
-2. **Symlinks compiled libraries** - `libhv.a` from main tree
-3. **Symlinks precompiled header** - `lvgl_pch.h.gch` (22MB saved)
-4. **Symlinks tools** - `node_modules/`, `.venv/`
-5. **Configures git** - Uses `--skip-worktree` for clean `git status`
+1. **Symlinks lib/** — all submodules symlinked (no clone/configure time)
+2. **Symlinks compiled libraries** — `libhv.a`, `libwpa_client.a` from main tree
+3. **Symlinks precompiled header** — `lvgl_pch.h.gch` (22MB saved)
+4. **Symlinks tools** — `node_modules/`, `.venv/`
+5. **Clones build objects** — copies `build/obj/` from the main tree (APFS clonefile on macOS; plain copy on Linux)
+6. **Configures ccache for cross-worktree reuse** — so the worktree builds against the *same* ccache the main tree populated (see below)
+7. **Validates architecture** — wrong-arch `.o`/`.a` files (left by a prior cross-compile) are detected and cleared so `make` rebuilds them correctly
+8. **Configures git** — `.git/info/exclude` + `--skip-worktree` keep `git status` clean despite the symlinks
 
-**Trade-off**: If you need to modify library code (`lib/`), un-symlink that specific directory first.
+**Trade-off**: If you need to modify library code (`lib/`), un-symlink that specific directory first (`rm lib/<name> && cp -a $MAIN/lib/<name> lib/`).
+
+### Why worktree builds are fast (and the ccache config the script sets)
+
+A fresh `git worktree add` stamps **every** source file with the current mtime, so `make` sees all sources as newer than the cloned objects and wants to recompile the whole tree. The cloned `build/obj/` therefore does *not*, by itself, save you on Linux — the real speedup comes from **ccache**: those "recompiles" become near-instant cache hits instead of cold compiles.
+
+But ccache only helps across worktrees if it's configured for it. The native build compiles with `-g` (debug info), and ccache's default `hash_dir=true` folds the absolute working directory into the cache key — so an object cached while building in the main tree never matches the same source compiled under `.worktrees/<name>/`. Every worktree would start stone cold.
+
+`setup-worktree.sh` fixes this once, by writing global ccache config (only when unset, so it never clobbers a value you chose):
+
+| ccache setting | Set to | Why |
+|----------------|--------|-----|
+| `base_dir` | `$HOME` | Rewrites absolute paths under `$HOME` to relative before hashing, so main-tree and worktree paths collapse to the same key |
+| `hash_dir` | `false` | Stops folding the cwd (the `-g` debug-path component) into the key |
+| `max_size` | `25G` (raised, never lowered) | The default 5 GiB thrashes once several worktrees + cross-compile caches share it, re-causing cold misses |
+
+For the script's own initial build it also exports `CCACHE_BASEDIR` (the longest common ancestor of the main tree and the worktree, so it works even for out-of-tree paths like `/tmp/foo`) and `CCACHE_NOHASHDIR=1`.
+
+> **Caveat:** `hash_dir=false` is global, so cached objects carry whichever `DW_AT_comp_dir` (debug source path) compiled them first. For throwaway dev worktrees this is cosmetic, but gdb inside a worktree may point at the main-tree paths. If you do serious in-worktree debugging, build that target with `CCACHE_DISABLE=1`.
+
+Verify the cache is actually being shared after a build:
+
+```bash
+ccache -s        # "Hits" should climb sharply on the 2nd+ worktree build
+ccache -p | grep -E 'base_dir|hash_dir|max_size'
+```
+
+### Typical worktree workflow
+
+```bash
+# 1. Spin up an isolated workspace for a feature (builds automatically)
+./scripts/setup-worktree.sh feature/my-feature
+cd .worktrees/my-feature
+
+# 2. Iterate — XML-only changes need no rebuild (loaded at runtime)
+HELIX_HOT_RELOAD=1 ./build/bin/helix-screen --test -vv
+# ...C++ changes:
+make -j && ./build/bin/helix-screen --test -vv
+
+# 3. Run the relevant tests before committing
+make test-run
+
+# 4. Commit in the worktree (it's a normal checkout on its own branch)
+git add -A && git commit -m "feat(scope): ..."
+
+# 5. When done, merge/push from the worktree, then tear it down (see Cleanup)
+```
+
+If a worktree already exists but its symlinks/objects drifted (e.g. after a `git submodule update` in the main tree), re-run setup in place — it's idempotent:
+
+```bash
+cd .worktrees/my-feature && ../../scripts/setup-worktree.sh --setup-only --no-build .
+# (or just `../../scripts/setup-worktree.sh` with no args from inside the worktree —
+#  it auto-detects the branch and path)
+```
 
 ### Managing Worktrees
 
@@ -1117,38 +1174,107 @@ sudo dnf install librsvg2-tools
 
 ---
 
-## Build Targets
+## Make Target Reference
 
-### Primary Targets
+The Makefile is **self-documenting** — these help targets are the authoritative, always-current list (the tables below are a curated tour of the typical ones):
 
-- **`all`** (default) - Build the main binary with dependency checks
-- **`build`** - Clean parallel build with progress and timing
-- **`clean`** - Remove all build artifacts
-- **`run`** - Build and run the prototype
-- **`help`** - Show comprehensive help with all targets and options
+| Command | Shows |
+|---------|-------|
+| `make help` | The common build/dependency/quality targets |
+| `make help-build` | Build, dependency, and patch targets |
+| `make help-test` | Test targets and test discovery |
+| `make help-cross` | Cross-compilation + per-device deployment targets and options |
+| `make help-remote` | Remote build system (build on a fast host, fetch binaries) |
+| `make help-images` / `help-splash` / `help-watchdog` | Asset/splash/watchdog targets |
+| `make help-all` | **Everything**, all topics combined |
+| `make cross-info` | Current cross-compile configuration (platform, backend) |
 
-### Development Targets
+### Native build & run
 
-- **`compile_commands`** - Merge compile command fragments into `compile_commands.json` (~1-2s)
-- **`compile_commands_full`** - Full regeneration via compiledb/bear (slow, use if fragments corrupted)
-- **`check-deps`** - Verify all build dependencies are installed
-- **`apply-patches`** - Manually apply submodule patches (usually automatic)
-- **`icon`** - Generate macOS .icns icon from logo (requires `imagemagick`, `iconutil`)
+| Target | What it does |
+|--------|--------------|
+| `make -j` (`all`) | Build the main binary (default), `-O2`, auto-parallel |
+| `make dev` | Fast build at `-O0` (~2× faster compile; larger/slower binary) |
+| `make OPT=1 -j` | `-O1` middle ground |
+| `make build` | Clean build with progress + timing |
+| `make run` | Build and run the UI |
+| `make clean` | Remove build artifacts (keeps deps) |
+| `make distclean` | Deep clean to fresh-checkout state |
+| `make V=1 …` | Verbose (show full compiler commands) |
+| `make JOBS=N …` | Cap parallel job count |
 
-### Test Targets
+Run flags worth knowing: `./build/bin/helix-screen --test -vv` (mock printer + DEBUG), `HELIX_HOT_RELOAD=1 …` (live XML reload).
 
-The build system includes 30+ test targets organized by feature area. For the complete list with tag taxonomy and usage examples, see **[TESTING.md](TESTING.md)**.
+### Tests
 
-**Quick reference:**
-```bash
-make test-run              # Run all tests in parallel (recommended)
-make test-quick            # Fast subset for rapid iteration
-./build/bin/helix-tests "[tag]"  # Run tests by tag (e.g., [printing], [ams])
-```
+The build system has 30+ test targets by feature area; see **[TESTING.md](TESTING.md)** for the tag taxonomy. Most-used:
 
-### Demo Target
+| Target | What it does |
+|--------|--------------|
+| `make test` | Build tests (does **not** run them) |
+| `make test-run` | Build **and** run tests in parallel (recommended, ~4–8× faster) |
+| `make test-serial` | Run sequentially (debugging thread issues) |
+| `make test-smoke` | Quick smoke subset (~30s) for rapid iteration |
+| `make test-all` | All tests incl. `[slow]` |
+| `make test-asan` / `test-tsan` | Run under Address/Thread sanitizer |
+| `make test-list-tags` | List available tags |
+| `./build/bin/helix-tests "[tag]"` | Run a specific tag (e.g. `[ams]`, `[gcode]`) |
 
-- **`demo`** - Build LVGL demo widgets (for LVGL API testing)
+### Code quality & IDE
+
+| Target | What it does |
+|--------|--------------|
+| `make format` | clang-format all C/C++ + xmllint XML |
+| `make format-staged` | Format only staged files (pre-commit) |
+| `make quality` | All quality checks (formatting, headers, conflicts) |
+| `make setup-hooks` | Enable the git pre-commit hook |
+| `make compile_commands` | Merge `compile_commands.json` for clangd (~1–2s) |
+| `make compile_commands_full` | Full regen via bear/compiledb (slow; use if fragments corrupt) |
+
+### Dependencies & patches
+
+| Target | What it does |
+|--------|--------------|
+| `make check-deps` | Verify build dependencies (see below) |
+| `make install-deps` | Interactively install missing deps |
+| `make venv-setup` | Create `.venv` with Python asset/telemetry deps |
+| `make libs-clean` | Clean all built library artifacts |
+| `make apply-patches` | Apply LVGL/libhv patches (idempotent; auto-run before builds) |
+| `make reapply-patches` | Force re-apply (repair manually-edited patched files) |
+
+### Asset regeneration
+
+Usually invoked after editing icons/images. See **[Font Generation](#font-generation)** and **[Icon Generation](#icon-generation)** for the full pipeline.
+
+| Target | What it does |
+|--------|--------------|
+| `make regen-fonts` | Regenerate MDI icon fonts from `codepoints.h` |
+| `make regen-text-fonts` | Regenerate Noto Sans text fonts (incl. CJK) |
+| `make regen-icon-consts` | Regenerate icon string constants in `globals.xml` |
+| `make validate-fonts` | Verify every codepoint is present in the compiled fonts |
+| `make regen-images` | Regenerate pre-rendered splash images (all sizes) |
+| `make gen-printer-images` | Pre-render printer DB images |
+| `make translations` | Regenerate translation tables from YAML |
+| `make translation-coverage` | Show per-language translation coverage |
+
+### Cross-compile, deploy & remote build
+
+These get their own deep section above — see **[Cross-Compilation](#cross-compilation-embedded-targets)**. Shape of it:
+
+- **Build:** `make <target>-docker` (recommended, no local toolchain) or `make <target>` (needs host toolchain). Targets: `pi`, `pi32`, `ad5m`, `ad5x`, `cc1`, `k1`, `k1-dynamic`, `k2`, `snapmaker-u1`, `x86`.
+- **Deploy + run on device:** `make <target>-test` (build + deploy + run fg), `make deploy-<target>` (background), `deploy-<target>-fg` (foreground), `deploy-<target>-bin` (binaries only, fast iteration), `<target>-ssh`.
+- **Host override:** `make deploy-pi PI_HOST=192.168.1.50`. Defaults live in `mk/cross.mk` — note `PI_HOST` actually defaults to `192.168.1.113` (the `make help-cross` text saying `helixpi.local` is stale, and `helixpi.local` does not resolve). `K2_HOST` has **no** default and must be supplied.
+- **Remote build:** `make remote-pi` / `remote-ad5m` / `remote-native` build on a fast Linux host (`REMOTE_HOST`, default `thelio.local`) and fetch the binaries back. `make remote-status` checks readiness.
+
+### Utilities
+
+| Target | What it does |
+|--------|--------------|
+| `make demo` | Build LVGL demo widgets (LVGL API testing) |
+| `make symbols` | Extract `.sym` + `.debug` (crash-backtrace resolution) |
+| `make strip` | Strip the binary for release |
+| `make screenshots` | Generate documentation screenshots |
+| `make print-cxxflags` / `print-ldflags` | Dump resolved flags (build debugging) |
 
 ## Dependency Checking
 
@@ -1351,6 +1477,23 @@ The build compiles ~566 app source files. The dominant cost is **template instan
 With ccache installed, touching these headers without content changes costs ~8s (direct cache hit). Actual content changes recompile all dependents (~2 min at `-O2`, ~1 min at `-O0`).
 
 **Precompiled header** (`include/lvgl_pch.h`): Covers LVGL, helix-xml, spdlog, nlohmann JSON, and common STL headers. These are precompiled once and reused across all translation units. Don't add project headers to the PCH — only stable external libraries.
+
+#### ccache across worktrees and Docker cross-builds
+
+ccache (`~/.ccache`) is shared per-user, but two things stop it from being reused as widely as you'd expect:
+
+**1. Worktree path mismatch (native builds).** Because the native build compiles with `-g` and ccache defaults to `hash_dir=true`, the absolute working directory is part of the cache key — so the same source in `.worktrees/foo/` misses everything the main tree cached. `setup-worktree.sh` configures ccache (`base_dir=$HOME`, `hash_dir=false`, `max_size=25G`) so worktree builds reuse the main tree's objects. See **[Git Worktrees → Why worktree builds are fast](#why-worktree-builds-are-fast-and-the-ccache-config-the-script-sets)** for the full rationale and caveats. If you build outside `$HOME` (e.g. `/tmp`), set `CCACHE_BASEDIR` to a common ancestor yourself.
+
+**2. Docker cross-builds use a separate, per-target cache.** Containers can't see `~/.ccache`, so each `*-docker` target bind-mounts its own persistent cache directory (`mk/cross.mk`):
+
+```makefile
+DOCKER_CCACHE_BASE ?= $(HOME)/.cache/helixscreen-ccache
+docker-ccache-args = -v "$(DOCKER_CCACHE_BASE)/$(1)":/ccache -e CCACHE_DIR=/ccache
+```
+
+So `make pi-docker` caches into `~/.cache/helixscreen-ccache/pi/`, `make ad5m-docker` into `.../ad5m/`, etc. — one cache per architecture (they must stay separate; a Pi aarch64 object is meaningless to an AD5M armv7-a build). First cross-build of a target is cold; subsequent ones hit ~98%. Override the base location with `DOCKER_CCACHE_BASE=/path make pi-docker`. To wipe a single target's cache, `rm -rf ~/.cache/helixscreen-ccache/<target>`.
+
+Concurrent Docker cross-builds are serialized by `scripts/cross-compile-lock.sh` to avoid thrashing the machine — this is automatic.
 
 ### Clang Standard Library Issues (Arch Linux)
 
