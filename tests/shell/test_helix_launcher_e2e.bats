@@ -370,3 +370,37 @@ WDEOF
         [ "$splash_before_sep" = "true" ]
     fi
 }
+
+# =============================================================================
+# Splash heartbeat seed: the launcher writes one status-file heartbeat right
+# before launching so the boot splash stays visible (no blank gap) and shows a
+# counting "Starting HelixScreen…" until helix-screen signals it. This brings
+# the gap-free handoff to gate-less platforms (Pi, K1, CC1, AD5X, …).
+# =============================================================================
+
+@test "e2e: launcher seeds splash heartbeat when a splash is active" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    status_file="$BATS_TEST_TMPDIR/splash-status"
+    rm -f "$status_file"
+    unset HELIX_DEBUG HELIX_NO_SPLASH
+
+    HELIX_SPLASH_PID=4242 HELIX_SPLASH_STATUS_FILE="$status_file" \
+        MOCK_INSTALL="$MOCK_INSTALL" \
+        sh "$MOCK_INSTALL/bin/helix-launcher.sh" 2>/dev/null || true
+
+    [ -f "$status_file" ]
+    grep -q "HelixScreen" "$status_file"
+}
+
+@test "e2e: launcher does NOT seed splash heartbeat when HELIX_NO_SPLASH=1" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    status_file="$BATS_TEST_TMPDIR/splash-status-nosplash"
+    rm -f "$status_file"
+    unset HELIX_DEBUG
+
+    HELIX_NO_SPLASH=1 HELIX_SPLASH_PID=4242 HELIX_SPLASH_STATUS_FILE="$status_file" \
+        MOCK_INSTALL="$MOCK_INSTALL" \
+        sh "$MOCK_INSTALL/bin/helix-launcher.sh" 2>/dev/null || true
+
+    [ ! -f "$status_file" ]
+}

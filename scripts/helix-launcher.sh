@@ -446,6 +446,23 @@ RESPAWN_WINDOW="${HELIX_BOOT_RESPAWN_WINDOW:-25}"
 RESPAWN_DELAY="${HELIX_BOOT_RESPAWN_DELAY:-3}"
 RESPAWN_COUNT=0
 
+# Seed the boot-splash heartbeat right before launching helix-screen. The splash
+# treats the status file as a heartbeat and, once it has seen one, stays visible
+# until helix-screen signals it (SIGUSR1) when the UI is ready — covering slow
+# helix-screen startup with no blank gap and a live "Starting HelixScreen… Ns"
+# counter (the splash owns the elapsed count). Without a heartbeat the splash
+# self-caps at 30s and can blank on a slow device whose startup exceeds it.
+#
+# Platforms with a Moonraker wait gate (K2, AD5M-forgex) already wrote heartbeats
+# during the gate; this is the universal fallback that brings the same gap-free
+# handoff to gate-less platforms (Pi, K1, CC1, AD5X, …). Re-writing the same
+# "ready" line where the gate ran is harmless. Skipped when the splash is
+# disabled or unavailable. Path matches splash_status_path() in helix_splash.cpp.
+if [ "${HELIX_NO_SPLASH:-0}" != "1" ] && [ -n "${SPLASH_ARGS}" ]; then
+    echo "Starting HelixScreen…" > "${HELIX_SPLASH_STATUS_FILE:-/tmp/helix-splash-status}" \
+        2>/dev/null || true
+fi
+
 # Run main application (via watchdog if available for crash recovery)
 # Note: PASSTHROUGH_ARGS is unquoted to allow word splitting (POSIX compatible)
 # Use "cmd || EXIT_CODE=$?" to capture non-zero exit codes under set -e,
