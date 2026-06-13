@@ -277,7 +277,6 @@ void ControlsPanel::init_subjects() {
 
         // Card click handlers (navigation to full overlay panels)
         {"on_controls_quick_actions", on_quick_actions_clicked},
-        {"on_controls_temperatures", on_temperatures_clicked},
         {"on_nozzle_temp_clicked", on_nozzle_temp_clicked},
         {"on_bed_temp_clicked", on_bed_temp_clicked},
         {"on_chamber_temp_clicked", on_chamber_temp_clicked},
@@ -451,7 +450,13 @@ void ControlsPanel::refresh_all_displays() {
         cached_chamber_temp_ = lv_subject_get_int(subj);
     }
     if (auto* subj = printer_state_.get_chamber_target_subject()) {
-        cached_chamber_target_ = lv_subject_get_int(subj);
+        cached_chamber_target_ = lv_subject_get_int(subj); // keypad seed
+    }
+    if (auto* subj = printer_state_.get_chamber_effective_target_subject()) {
+        cached_chamber_effective_target_ = lv_subject_get_int(subj); // status display
+    }
+    if (auto* subj = printer_state_.get_chamber_mode_subject()) {
+        cached_chamber_mode_ = lv_subject_get_int(subj); // M141 control mode
     }
     update_nozzle_temp_display();
     update_bed_temp_display();
@@ -541,7 +546,7 @@ void ControlsPanel::register_observers() {
                 self->update_bed_temp_display();
         });
 
-    // Subscribe to chamber temperature (current and target)
+    // Subscribe to chamber temperature (current, raw heater target, and effective target).
     // Note: We check are_subjects_initialized() because observers may fire immediately
     // upon registration, but subjects aren't initialized until init_subjects() is called.
     chamber_temp_observer_ = observe_int_sync<ControlsPanel>(
@@ -552,14 +557,36 @@ void ControlsPanel::register_observers() {
                 self->update_chamber_temp_display();
         },
         chamber_temp_lifetime_);
+    // Raw heater target is kept for keypad seed only (shows the currently entered
+    // heater setpoint when the user opens the keypad to edit the chamber target).
     chamber_target_observer_ = observe_int_sync<ControlsPanel>(
         printer_state_.get_chamber_target_subject(chamber_target_lifetime_), this,
         [](ControlsPanel* self, int value) {
             self->cached_chamber_target_ = value;
+            // Status display uses cached_chamber_effective_target_, not this value.
+        },
+        chamber_target_lifetime_);
+    // Effective target is the canonical display value: heater target when heating,
+    // cooling-fan ceiling when maintaining, 0 when off — drives the status string.
+    chamber_effective_target_observer_ = observe_int_sync<ControlsPanel>(
+        printer_state_.get_chamber_effective_target_subject(chamber_effective_target_lifetime_),
+        this,
+        [](ControlsPanel* self, int value) {
+            self->cached_chamber_effective_target_ = value;
             if (self->are_subjects_initialized() && self->active_)
                 self->update_chamber_temp_display();
         },
-        chamber_target_lifetime_);
+        chamber_effective_target_lifetime_);
+    // M141 control mode (Off/Heating/Maintaining) — needed so the status string
+    // leads with the correct mode word rather than the raw thermal state.
+    chamber_mode_observer_ = observe_int_sync<ControlsPanel>(
+        printer_state_.get_chamber_mode_subject(chamber_mode_lifetime_), this,
+        [](ControlsPanel* self, int value) {
+            self->cached_chamber_mode_ = value;
+            if (self->are_subjects_initialized() && self->active_)
+                self->update_chamber_temp_display();
+        },
+        chamber_mode_lifetime_);
 
     // Subscribe to fan updates (skip formatting when hidden)
     fan_observer_ = observe_int_sync<ControlsPanel>(printer_state_.get_fan_speed_subject(), this,
@@ -710,10 +737,14 @@ void ControlsPanel::update_bed_temp_display() {
 }
 
 void ControlsPanel::update_chamber_temp_display() {
-    auto result =
-        helix::ui::temperature::heater_display(cached_chamber_temp_, cached_chamber_target_);
-
-    std::snprintf(chamber_status_buf_, sizeof(chamber_status_buf_), "%s", result.status.c_str());
+    // Delegate to the shared helper so this panel and the temp-graph overlay
+    // always produce identical output (single source of truth).  The mode drives
+    // the leading word (Off/Heating/Maintaining); thermal progress ("Ready"/
+    // "Cooling") is appended only when it adds information.
+    auto status = helix::ui::temperature::chamber_status_text(
+        cached_chamber_temp_, cached_chamber_effective_target_,
+        static_cast<helix::ChamberMode>(cached_chamber_mode_));
+    std::snprintf(chamber_status_buf_, sizeof(chamber_status_buf_), "%s", status.c_str());
     lv_subject_copy_string(&chamber_status_subject_, chamber_status_buf_);
 }
 
@@ -1065,11 +1096,6 @@ void ControlsPanel::handle_save_z_offset_cancel() {
 void ControlsPanel::handle_quick_actions_clicked() {
     helix::ui::lazy_create_and_push_overlay<MotionPanel>(get_global_motion_panel, motion_panel_,
                                                          parent_screen_, "Motion", get_name());
-}
-
-void ControlsPanel::handle_temperatures_clicked() {
-    spdlog::debug("[{}] Temperatures card clicked - opening temperature graph", get_name());
-    get_global_temp_graph_overlay().open(TempGraphOverlay::Mode::Nozzle, parent_screen_);
 }
 
 void ControlsPanel::handle_nozzle_temp_clicked() {
@@ -1705,7 +1731,6 @@ void ControlsPanel::handle_calibration_motors() {
 // ============================================================================
 
 PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, quick_actions_clicked)
-PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, temperatures_clicked)
 PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, nozzle_temp_clicked)
 PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, bed_temp_clicked)
 PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, chamber_temp_clicked)

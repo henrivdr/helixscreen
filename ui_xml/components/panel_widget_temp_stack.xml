@@ -45,7 +45,7 @@
       <event_cb trigger="clicked" callback="temp_stack_chamber_cb"/>
       <icon src="fridge_industrial" size="xs" variant="secondary"
             clickable="false" event_bubble="true"/>
-      <temp_display size="xs" show_target="false" bind_current="chamber_temp" bind_target="chamber_target"
+      <temp_display size="xs" show_target="false" bind_current="chamber_temp" bind_target="chamber_effective_target" bind_mode="chamber_mode"
                     clickable="false" event_bubble="true"/>
     </lv_obj>
   </view>

@@ -12,6 +12,7 @@
 
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "state/subject_macros.h"
+#include "ui_temperature_utils.h"
 #include "unit_conversions.h"
 
 #include <spdlog/spdlog.h>
@@ -50,9 +51,11 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     bed_target_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_temp, 0, subjects_, register_xml);
     chamber_temp_lifetime_ = std::make_shared<bool>(true);
-    INIT_SUBJECT_INT(chamber_target, 0, subjects_, register_xml);
+    // chamber_target / chamber_fan_target: internal inputs only — intentionally NOT
+    // XML-registered. Bind chamber_effective_target + chamber_mode instead (#display-canon).
+    INIT_SUBJECT_INT(chamber_target, 0, subjects_, false);
     chamber_target_lifetime_ = std::make_shared<bool>(true);
-    INIT_SUBJECT_INT(chamber_fan_target, 0, subjects_, register_xml);
+    INIT_SUBJECT_INT(chamber_fan_target, 0, subjects_, false);
     chamber_fan_target_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_effective_target, 0, subjects_, register_xml);
     chamber_effective_target_lifetime_ = std::make_shared<bool>(true);
@@ -127,8 +130,7 @@ void PrinterTemperatureState::register_xml_subjects() {
     lv_xml_register_subject(nullptr, "bed_temp", &bed_temp_);
     lv_xml_register_subject(nullptr, "bed_target", &bed_target_);
     lv_xml_register_subject(nullptr, "chamber_temp", &chamber_temp_);
-    lv_xml_register_subject(nullptr, "chamber_target", &chamber_target_);
-    lv_xml_register_subject(nullptr, "chamber_fan_target", &chamber_fan_target_);
+    // chamber_target / chamber_fan_target intentionally omitted — internal inputs only.
     lv_xml_register_subject(nullptr, "chamber_effective_target", &chamber_effective_target_);
     lv_xml_register_subject(nullptr, "chamber_mode", &chamber_mode_);
     lv_xml_register_subject(nullptr, "extruder_version", &extruder_version_);
@@ -417,31 +419,16 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         }
     }
 
-    // Effective chamber setpoint + control mode: in COOLING mode (<=40C) the M141
-    // macro leaves the heater target at 0 and parks the real setpoint on the
-    // cooling-fan target. `M141 S0` ("Off") instead resets the cooling fan to its
-    // CONFIGURED RESTING target (35°C on the K2) with the heater at 0 — so a fan
-    // target equal to the resting value means Off, NOT a deliberate maintain set.
-    //   heater > 0                         -> Heating,     effective = heater target
-    //   heater 0, fan > 0, fan != resting  -> Maintaining, effective = fan target
-    //   else                               -> Off,         effective = 0
-    // Recomputed on EVERY status update so external sets (Mainsail/startup, partial
-    // subscription updates that touch only one source subject) are reflected.
-    int heater_t = lv_subject_get_int(&chamber_target_);
-    int fan_t = lv_subject_get_int(&chamber_fan_target_);
-    int eff, mode;
-    if (heater_t > 0) {
-        mode = helix::ChamberMode::Heating;
-        eff = heater_t;
-    } else if (fan_t > 0 && fan_t != chamber_fan_resting_centi_) {
-        mode = helix::ChamberMode::Maintaining;
-        eff = fan_t;
-    } else {
-        mode = helix::ChamberMode::Off;
-        eff = 0;
-    }
-    lv_subject_set_int(&chamber_effective_target_, eff);
-    lv_subject_set_int(&chamber_mode_, mode);
+    // Effective chamber setpoint + control mode: delegate to the single source of
+    // truth in ui_temperature_utils so the display and data layers can never
+    // diverge. Recomputed on EVERY status update so external sets (Mainsail/
+    // startup, partial subscription updates touching only one source subject) are
+    // always reflected. See chamber_effective_setpoint() for the full rule set.
+    auto sp = helix::ui::temperature::chamber_effective_setpoint(
+        lv_subject_get_int(&chamber_target_), lv_subject_get_int(&chamber_fan_target_),
+        chamber_fan_resting_centi_);
+    lv_subject_set_int(&chamber_effective_target_, sp.centi);
+    lv_subject_set_int(&chamber_mode_, sp.mode);
 }
 
 } // namespace helix

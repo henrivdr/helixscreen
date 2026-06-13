@@ -335,6 +335,7 @@ External filament rack (non-CFS) state:
 | `filament_switch_sensor filament_sensor` | Filament runout sensor state |
 | `load_ai` | AI print quality monitoring (waste detection) |
 | `heater_generic chamber_heater` | Chamber heater control |
+| `temperature_fan chamber_fan` | Chamber cooling fan (carries the M141 maintain ceiling) |
 | `temperature_sensor chamber_temp` | Chamber temperature sensor |
 | `motor_control` | Motor ready state, cutter position |
 | `belt_mdl mdlx` / `belt_mdl mdly` | Belt tension measurement |
@@ -342,6 +343,16 @@ External filament rack (non-CFS) state:
 | `z_align` / `z_tilt` | Z axis alignment |
 | `custom_macro` | Custom macro management |
 | `fan_feedback` | RPM feedback for all fans |
+
+#### Chamber Heating (M141)
+
+The K2 chamber is controlled by the `M141` macro, which coordinates two objects: `heater_generic chamber_heater` and `temperature_fan chamber_fan`. HelixScreen routes chamber sets through `M141 S{temp}` (rather than a raw `SET_HEATER_TEMPERATURE`), and the macro's behavior depends on the setpoint:
+
+- `M141 S0` → **Off** (heater target 0; cooling fan reset to its configured resting target, e.g. 35°C)
+- `M141 S{≤40}` → **Maintaining** — holds a cooling ceiling via `temperature_fan chamber_fan`; the heater target stays 0
+- `M141 S{>40}` → **Heating** — sets the `heater_generic chamber_heater` target
+
+Because the heater target reads 0 while maintaining, HelixScreen synthesizes a canonical display target and mode rather than displaying the raw heater target. See [MULTI_EXTRUDER_TEMPERATURE.md § Chamber Heating (M141)](../MULTI_EXTRUDER_TEMPERATURE.md#chamber-heating-m141) for the subject/binding details.
 
 ### GCode Commands (from `box_wrapper.so` decompilation)
 

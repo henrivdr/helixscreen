@@ -269,19 +269,6 @@ void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
     }
 }
 
-// Map the resting-aware ChamberMode subject int to its (untranslated) status word.
-// Translated at the display site via lv_tr() in update_status().
-static const char* chamber_mode_word(int mode) {
-    switch (mode) {
-    case helix::ChamberMode::Heating:
-        return "Heating";
-    case helix::ChamberMode::Maintaining:
-        return "Maintaining";
-    default:
-        return "Off";
-    }
-}
-
 void TemperatureService::recompute_chamber_target() {
     auto& chamber = heaters_[idx(HeaterType::Chamber)];
 
@@ -290,8 +277,8 @@ void TemperatureService::recompute_chamber_target() {
     // Off (effective 0) rather than a deliberate "Maintaining" set at the resting
     // temperature. The graph target line then matches the displayed value.
     chamber.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
-    chamber.chamber_mode =
-        chamber_mode_word(lv_subject_get_int(printer_state_.get_chamber_mode_subject()));
+    chamber.chamber_mode = helix::ui::temperature::chamber_mode_word(
+        static_cast<helix::ChamberMode>(lv_subject_get_int(printer_state_.get_chamber_mode_subject())));
 
     update_display(HeaterType::Chamber);
     update_status(HeaterType::Chamber);
@@ -357,19 +344,13 @@ void TemperatureService::update_status(HeaterType type) {
     if (h.read_only) {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", lv_tr("Monitoring"));
     } else if (type == HeaterType::Chamber) {
-        // Lead with the M141 control mode (Heating via heater vs Maintaining via
-        // cooling fan vs Off), then append the thermal progress when it adds
-        // information ("Ready"/"Cooling"); "Off"/"Heating..." would just restate
-        // the mode word so they're dropped to avoid "Heating · Heating...".
-        const char* mode = lv_tr(h.chamber_mode);
-        const std::string& progress = result.status; // already localized
-        const std::string heating = lv_tr("Heating...");
-        const std::string off = lv_tr("Off");
-        if (h.target <= 0 || progress == heating || progress == off) {
-            snprintf(h.status_buf.data(), h.status_buf.size(), "%s", mode);
-        } else {
-            snprintf(h.status_buf.data(), h.status_buf.size(), "%s · %s", mode, progress.c_str());
-        }
+        // Delegate to the shared helper so the controls panel and the temp-graph
+        // overlay always produce identical output (single source of truth).
+        auto mode_int = lv_subject_get_int(printer_state_.get_chamber_mode_subject());
+        auto status =
+            helix::ui::temperature::chamber_status_text(h.current, h.target,
+                                                        static_cast<helix::ChamberMode>(mode_int));
+        snprintf(h.status_buf.data(), h.status_buf.size(), "%s", status.c_str());
     } else {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", result.status.c_str());
     }
@@ -642,8 +623,8 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
         // the cooling-fan resting target (M141 S0 → fan at resting → Off). Seed both
         // h.target and the mode word so the initial display matches live updates.
         h.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
-        h.chamber_mode =
-            chamber_mode_word(lv_subject_get_int(printer_state_.get_chamber_mode_subject()));
+        h.chamber_mode = helix::ui::temperature::chamber_mode_word(
+            static_cast<helix::ChamberMode>(lv_subject_get_int(printer_state_.get_chamber_mode_subject())));
 
         // Update read_only from capability subject
         auto* cap_subj = printer_state_.get_printer_has_chamber_heater_subject();

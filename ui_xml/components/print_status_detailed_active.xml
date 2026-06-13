@@ -115,7 +115,7 @@
              for sensor-only chambers (passive enclosure). Mutually exclusive on
              printer_has_chamber_heater. -->
         <temp_display size="xs" show_target="true"
-                      bind_current="chamber_temp" bind_target="chamber_target"
+                      bind_current="chamber_temp" bind_target="chamber_effective_target" bind_mode="chamber_mode"
                       hide_target_below_bp="small"
                       event_cb="on_print_status_chamber_temp_clicked">
           <bind_flag_if_eq subject="printer_has_chamber_heater" flag="hidden" ref_value="0"/>

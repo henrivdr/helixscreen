@@ -107,7 +107,11 @@ These are always available and registered with the LVGL XML system at startup:
 | `bed_temp` | int | Bed current temp (centidegrees) |
 | `bed_target` | int | Bed target temp (centidegrees) |
 | `chamber_temp` | int | Chamber current temp (centidegrees) |
+| `chamber_effective_target` | int | **Canonical** chamber display target (centidegrees): heater target when Heating, cooling-fan ceiling when Maintaining, 0 when Off |
+| `chamber_mode` | int | Chamber control mode (`helix::ChamberMode`: Off=0 / Heating=1 / Maintaining=2) |
 | `extruder_version` | int | Bumped when extruder list changes |
+
+> **Chamber binding convention (IMPORTANT):** For any chamber *target* display, XML/UI must bind the canonical `chamber_effective_target` (plus `chamber_mode` via `temp_display`'s `bind_mode`) — **never** the raw heater target. The raw `chamber_target` (heater target) and `chamber_fan_target` (cooling-fan target) subjects exist as **internal synthesis inputs only** and are *intentionally NOT XML-registered* — they are not even resolvable from XML. A lint gate (`tests/shell/test_code_lint.bats`) forbids `bind_target="chamber_target"`. See [Chamber Heating (M141)](#chamber-heating-m141) below.
 
 ### Dynamic Per-Extruder Subjects
 
@@ -209,6 +213,69 @@ The chamber temperature sensor name is configurable via `set_chamber_sensor_name
 
 ---
 
+## Chamber Heating (M141)
+
+On printers that define an `M141` macro (e.g., the Creality K2), the chamber setpoint is not a single heater target. The `M141` macro splits control across **two Klipper objects** to coordinate a `heater_generic` and a `temperature_fan`:
+
+| Command | Mode | Effect |
+|---------|------|--------|
+| `M141 S0` | **Off** | Heater target 0; cooling fan reset to its configured resting target |
+| `M141 S{≤40}` | **Maintaining** | Sets a cooling-fan *ceiling* via the `temperature_fan`; heater target stays **0** |
+| `M141 S{>40}` | **Heating** | Sets the chamber `heater_generic` target |
+
+Because the heater target reads `0` while Maintaining, the raw chamber heater target is **not** a usable display value. The codebase therefore synthesizes a single canonical display target plus a control mode.
+
+### Canonical subjects vs. internal inputs
+
+| Subject | XML-registered? | Role |
+|---------|-----------------|------|
+| `chamber_temp` | yes | Current chamber temperature (centidegrees) |
+| `chamber_effective_target` | **yes** | **Canonical display target**: heater target (Heating), cooling-fan ceiling (Maintaining), or 0 (Off) |
+| `chamber_mode` | **yes** | `helix::ChamberMode` int — Off=0 / Heating=1 / Maintaining=2 |
+| `chamber_target` | **no — internal** | Raw heater target (reads 0 in Maintaining); feeds the synthesis only |
+| `chamber_fan_target` | **no — internal** | Raw cooling-fan target; feeds the synthesis only |
+
+**Binding convention (lint-enforced):** UI/XML must bind `chamber_effective_target` (+ `chamber_mode` via `temp_display`'s `bind_mode`) for any chamber target display — **never** the raw `chamber_target`. The raw subjects aren't XML-registered, so they can't be resolved from XML; `tests/shell/test_code_lint.bats` additionally fails the build on any `bind_target="chamber_target"`.
+
+`helix::ChamberMode` is declared in `include/printer_temperature_state.h`:
+
+```cpp
+enum ChamberMode {
+    Off = 0,        // Heater 0 AND (fan 0 OR fan == resting): effective target 0
+    Heating = 1,    // Heater target > 0: effective target = heater target
+    Maintaining = 2 // Heater 0, fan > 0 and fan != resting: effective target = fan target
+};
+```
+
+### Single-source helpers
+
+All chamber synthesis and display text live in **one place** (`src/ui/ui_temperature_utils.{h,cpp}`, namespace `helix::ui::temperature`) so the controls panel and the temp-graph overlay can never diverge:
+
+```cpp
+struct ChamberSetpoint { int centi; helix::ChamberMode mode; };
+
+// THE computation of effective target + mode from the two raw M141 targets.
+// Used by PrinterTemperatureState to populate chamber_effective_target + chamber_mode.
+// A fan target equal to fan_resting_centi means "not a deliberate maintain" -> Off.
+ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi,
+                                           int fan_resting_centi = 0);
+
+// Single mode -> word mapping: "Heating" / "Maintaining" / "Off" (untranslated key).
+const char* chamber_mode_word(helix::ChamberMode mode);
+
+// THE status line, shared by the controls panel and the temp-graph overlay:
+// "Maintaining", "Heating", "Maintaining · Cooling", etc.
+std::string chamber_status_text(int current_centi, int target_centi, helix::ChamberMode mode);
+```
+
+The `fan_resting_centi` parameter matters: `M141 S0` parks the cooling fan at its configured resting target (e.g. 35°C on the K2) rather than 0. A fan target equal to that resting value is therefore read as **Off**, not as a deliberate Maintaining set. The resting value is read from `configfile.settings[<fan>].target_temp` at discovery (`set_chamber_fan_resting()`); it defaults to 0 before config fetch, where the `fan != resting` test still distinguishes a real maintain (fan > 0) from off.
+
+### Send routing
+
+Chamber temperature **sends** go through `TemperatureController::set_target(HeaterType::Chamber, ...)` (`include/temperature_controller.h`). That resolves to the discovered chamber heater name and calls `MoonrakerAPI::set_temperature()`, which gates on `chamber_uses_m141()` (chamber heater + an `M141` macro defined) and emits `M141 S{deg}` via `build_heater_gcode(..., use_m141=true)` (`src/api/moonraker_api_controls.cpp`). On printers without an `M141` macro, the same path falls back to the raw heater target (`SET_HEATER_TEMPERATURE` / `SET_TEMPERATURE_FAN_TARGET`). Klipper-side safety-limit validation still bounds the target; `M141` only changes the firmware coordination, not the clamp.
+
+---
+
 ## PrinterState Delegation
 
 `PrinterTemperatureState` is a member of `PrinterState`, accessed via:
@@ -263,8 +330,11 @@ During a print, shows each tool's temperature with its tool name prefix. Uses `T
 
 | File | Purpose |
 |------|---------|
-| `include/printer_temperature_state.h` | ExtruderInfo struct, PrinterTemperatureState class |
-| `src/printer/printer_temperature_state.cpp` | Discovery, status parsing, subject management |
+| `include/printer_temperature_state.h` | ExtruderInfo struct, PrinterTemperatureState class, `ChamberMode` enum |
+| `src/printer/printer_temperature_state.cpp` | Discovery, status parsing, subject management, chamber setpoint synthesis |
+| `include/ui_temperature_utils.h` / `src/ui/ui_temperature_utils.cpp` | `chamber_effective_setpoint()`, `chamber_mode_word()`, `chamber_status_text()` single-source helpers; `build_heater_gcode()` / `chamber_uses_m141()` |
+| `include/temperature_controller.h` / `src/ui/temperature_controller.cpp` | `TemperatureController::set_target(HeaterType::Chamber, ...)` send path |
+| `src/api/moonraker_api_controls.cpp` | `MoonrakerAPI::set_temperature()` — M141 routing gate |
 | `include/unit_conversions.h` | `json_to_centidegrees()` conversion helper |
 | `include/printer_discovery.h` | Heater discovery: `heaters()` list |
 | `include/tool_state.h` | Tool-to-extruder name mapping |

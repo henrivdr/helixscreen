@@ -294,11 +294,14 @@ class PrinterTemperatureState {
     lv_subject_t bed_target_{};
     SubjectLifetime bed_temp_lifetime_;
     SubjectLifetime bed_target_lifetime_;
+    // XML display subjects: chamber_effective_target + chamber_mode are THE canonical
+    // chamber display bindings (XML-registered). chamber_target / chamber_fan_target are
+    // internal synthesis inputs only — intentionally NOT XML-registered.
     lv_subject_t chamber_temp_{};
-    lv_subject_t chamber_target_{}; ///< 0 when sensor-only, actual target when heater present
-    lv_subject_t chamber_fan_target_{}; ///< Cooling-fan target (centidegrees); 0 when no cooling fan
-    lv_subject_t chamber_effective_target_{}; ///< heater target when >0, else fan target (centidegrees)
-    lv_subject_t chamber_mode_{}; ///< ChamberMode int: Off/Heating/Maintaining (resting-aware)
+    lv_subject_t chamber_target_{}; ///< Internal: raw heater target (0 in Maintaining mode) — NOT XML
+    lv_subject_t chamber_fan_target_{}; ///< Internal: cooling-fan target — NOT XML
+    lv_subject_t chamber_effective_target_{}; ///< XML display: heater target (Heating) or fan target (Maintaining) or 0 (Off)
+    lv_subject_t chamber_mode_{}; ///< XML display: ChamberMode int Off/Heating/Maintaining (resting-aware)
     SubjectLifetime chamber_temp_lifetime_;
     SubjectLifetime chamber_target_lifetime_;
     SubjectLifetime chamber_fan_target_lifetime_;

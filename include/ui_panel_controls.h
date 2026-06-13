@@ -213,9 +213,12 @@ class ControlsPanel : public PanelBase {
     int cached_extruder_target_ = 0;
     int cached_bed_temp_ = 0;
     int cached_bed_target_ = 0;
-    int cached_chamber_temp_ = 0; ///< Chamber current temperature (degrees, observer converts)
+    int cached_chamber_temp_ = 0; ///< Chamber current temperature (centidegrees)
     int cached_chamber_target_ =
-        0; ///< Chamber target temperature (centidegrees, matches PrinterState)
+        0; ///< Raw chamber heater target (centidegrees) — used for keypad seed only
+    int cached_chamber_effective_target_ =
+        0; ///< Canonical display target (centidegrees): effective target per chamber_mode
+    int cached_chamber_mode_ = 0; ///< ChamberMode int (Off=0/Heating=1/Maintaining=2)
 
     // Temperature limits for keypad
     int nozzle_max_temp_ = 500;  ///< Nozzle max temperature (°C) from heater_generic config
@@ -231,10 +234,14 @@ class ControlsPanel : public PanelBase {
     ObserverGuard fan_observer_;
     ObserverGuard fans_version_observer_;      // Multi-fan list changes
     ObserverGuard temp_sensor_count_observer_; // Temp sensor list changes
-    SubjectLifetime chamber_temp_lifetime_;    // Lifetime token for chamber subject (#734)
-    SubjectLifetime chamber_target_lifetime_;  // Lifetime token for chamber subject (#734)
-    ObserverGuard chamber_temp_observer_;      // Chamber temperature observer
-    ObserverGuard chamber_target_observer_;    // Chamber target temperature observer
+    SubjectLifetime chamber_temp_lifetime_;              // Lifetime token for chamber temp subject
+    SubjectLifetime chamber_target_lifetime_;            // Lifetime token for raw heater target subject
+    SubjectLifetime chamber_effective_target_lifetime_;  // Lifetime token for effective target subject
+    SubjectLifetime chamber_mode_lifetime_;              // Lifetime token for chamber mode subject
+    ObserverGuard chamber_temp_observer_;                // Chamber temperature observer
+    ObserverGuard chamber_target_observer_;              // Chamber raw heater target observer (keypad seed)
+    ObserverGuard chamber_effective_target_observer_;    // Chamber effective target observer (status)
+    ObserverGuard chamber_mode_observer_;                // Chamber M141 control mode observer
 
     bool fans_rebuild_pending_ = false; ///< Coalesces rapid fans_version observer notifications
     bool temps_rebuild_pending_ =
@@ -385,7 +392,6 @@ class ControlsPanel : public PanelBase {
     //
 
     void handle_quick_actions_clicked();
-    void handle_temperatures_clicked();
     void handle_nozzle_temp_clicked();
     void handle_bed_temp_clicked();
     void handle_chamber_temp_clicked();
@@ -492,7 +498,6 @@ class ControlsPanel : public PanelBase {
     //
 
     static void on_quick_actions_clicked(lv_event_t* e);
-    static void on_temperatures_clicked(lv_event_t* e);
     static void on_nozzle_temp_clicked(lv_event_t* e);
     static void on_bed_temp_clicked(lv_event_t* e);
     static void on_chamber_temp_clicked(lv_event_t* e);

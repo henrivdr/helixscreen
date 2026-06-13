@@ -3,6 +3,7 @@
 #pragma once
 
 #include "lvgl/lvgl.h"
+#include "printer_temperature_state.h"
 #include "unit_conversions.h"
 
 #include <cstddef>
@@ -330,16 +331,32 @@ bool chamber_uses_m141(const std::string& heater_full_name,
  * On printers without a chamber cooling fan the fan target stays 0, so this
  * reduces to the heater target (Heating/Off only) — safe and universal.
  *
+ * `fan_resting_centi` is the printer-configured cooling-fan resting value (e.g.
+ * 350 = 35°C on the K2).  M141 S0 resets the cooling fan to this resting target
+ * while leaving the heater at 0; a fan target equal to resting therefore means
+ * Off, not a deliberate Maintaining set.
+ *
  * @param heater_target_centi Chamber heater target (×10; 0 = not heating)
  * @param fan_target_centi    Chamber cooling-fan target (×10; 0 = not maintaining)
- * @return centi = effective setpoint (×10), mode = "Heating" | "Maintaining" | "Off"
+ * @param fan_resting_centi   Configured cooling-fan resting target (×10); 0 if not set
+ * @return centi = effective setpoint (×10), mode = ChamberMode enum value
  */
 struct ChamberSetpoint {
     int centi;
-    const char* mode; ///< "Heating" | "Maintaining" | "Off"
+    helix::ChamberMode mode;
 };
 
-ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi);
+ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi,
+                                           int fan_resting_centi = 0);
+
+/**
+ * @brief Map a ChamberMode enum value to its untranslated status word.
+ *
+ * Returns "Heating", "Maintaining", or "Off".  Callers that display the string
+ * must localise it at the call site via lv_tr().  Single source of truth shared
+ * by the temperature-service display path and the chamber_status_text composer.
+ */
+const char* chamber_mode_word(helix::ChamberMode mode);
 
 /**
  * @brief Build gcode to turn off a heater (target=0)
@@ -350,6 +367,23 @@ inline const char* build_heater_off_gcode(const std::string& heater_full_name, c
                                           size_t buffer_size) {
     return build_heater_gcode(heater_full_name, 0, buffer, buffer_size);
 }
+
+/**
+ * @brief Compose the chamber status string from mode + thermal progress.
+ *
+ * Single source of truth used by both the controls panel and the temp-graph
+ * overlay so they can never diverge.  Leads with the M141 control mode word
+ * (Off / Maintaining / Heating), then appends thermal progress ("Ready" /
+ * "Cooling") only when it adds information beyond the mode word — suppresses
+ * "Heating · Heating..." and "Off · Off".
+ *
+ * @param current_centi  Current chamber temperature in centidegrees
+ * @param target_centi   Effective chamber target in centidegrees (heater target
+ *                       when Heating, fan ceiling when Maintaining, 0 when Off)
+ * @param mode           ChamberMode enum value (Off / Heating / Maintaining)
+ * @return Localised status string, e.g. "Maintaining", "Heating", "Maintaining · Cooling"
+ */
+std::string chamber_status_text(int current_centi, int target_centi, helix::ChamberMode mode);
 
 } // namespace temperature
 } // namespace ui

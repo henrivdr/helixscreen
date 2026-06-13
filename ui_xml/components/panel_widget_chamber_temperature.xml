@@ -15,7 +15,7 @@
             clickable="false" event_bubble="true"/>
       <temp_display name="chamber_temp_text_label"
                     size="sm" show_target="false" bind_current="chamber_temp"
-                    bind_target="chamber_target" align="center"/>
+                    bind_target="chamber_effective_target" bind_mode="chamber_mode" align="center"/>
     </ui_button>
   </view>
 </component>

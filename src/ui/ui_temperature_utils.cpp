@@ -195,12 +195,42 @@ bool chamber_uses_m141(const std::string& heater_full_name,
            heater_full_name == chamber_heater_name;
 }
 
-ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi) {
+ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi,
+                                           int fan_resting_centi) {
+    // Mirrors the live computation in PrinterTemperatureState::update_chamber_setpoint()
+    // exactly: heater wins; fan wins only when it is above 0 and not at the
+    // configured resting target (which M141 S0 parks the fan at on the K2).
     if (heater_target_centi > 0)
-        return {heater_target_centi, "Heating"};
-    if (fan_target_centi > 0)
-        return {fan_target_centi, "Maintaining"};
-    return {0, "Off"};
+        return {heater_target_centi, helix::ChamberMode::Heating};
+    if (fan_target_centi > 0 && fan_target_centi != fan_resting_centi)
+        return {fan_target_centi, helix::ChamberMode::Maintaining};
+    return {0, helix::ChamberMode::Off};
+}
+
+const char* chamber_mode_word(helix::ChamberMode mode) {
+    switch (mode) {
+    case helix::ChamberMode::Heating:
+        return "Heating";
+    case helix::ChamberMode::Maintaining:
+        return "Maintaining";
+    default:
+        return "Off";
+    }
+}
+
+std::string chamber_status_text(int current_centi, int target_centi, helix::ChamberMode mode) {
+    // Resolve the mode word (untranslated key), then localise at the call site.
+    std::string mode_str = lv_tr(chamber_mode_word(mode));
+
+    // Append thermal progress ("Ready" / "Cooling") only when it adds information
+    // beyond the mode word.  Suppress "Heating · Heating..." and the Off cases.
+    auto result = heater_display(current_centi, target_centi);
+    const std::string& progress = result.status; // already localised
+    if (target_centi <= 0 || progress == std::string(lv_tr("Heating...")) ||
+        progress == std::string(lv_tr("Off"))) {
+        return mode_str;
+    }
+    return mode_str + " \xc2\xb7 " + progress; // " · " UTF-8 middle dot
 }
 
 } // namespace temperature
