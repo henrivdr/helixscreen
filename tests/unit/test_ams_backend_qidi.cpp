@@ -855,3 +855,15 @@ TEST_CASE("QIDI Box advertises dryer support with sane capability defaults",
     REQUIRE(d.max_temp_c == Catch::Approx(90.0f));   // settable ceiling, pre-config-query
     REQUIRE(d.max_duration_min == 720);
 }
+
+TEST_CASE("QIDI Box heater status populates dryer current/target temp",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::handle_status(
+        backend, json{{"heater_generic heater_box1",
+                       json{{"temperature", 48.0}, {"target", 55.0}}}});
+
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE(d.current_temp_c == Catch::Approx(48.0f).epsilon(0.01));
+    REQUIRE(d.target_temp_c == Catch::Approx(55.0f).epsilon(0.01));
+}

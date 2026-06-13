@@ -217,6 +217,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
 
     std::optional<float> max_temp;
     std::optional<float> max_humidity;
+    std::optional<float> max_target;
 
     for (auto it = notification.begin(); it != notification.end(); ++it) {
         if (!it->is_object()) {
@@ -235,6 +236,15 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
                 max_temp = v;
             }
         }
+        if (is_heater) {
+            if (auto tgt_it = it->find("target");
+                tgt_it != it->end() && tgt_it->is_number()) {
+                const float v = tgt_it->get<float>();
+                if (!max_target || v > *max_target) {
+                    max_target = v;
+                }
+            }
+        }
         if (is_aht) {
             if (auto h_it = it->find("humidity");
                 h_it != it->end() && h_it->is_number()) {
@@ -246,7 +256,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
         }
     }
 
-    if (!max_temp && !max_humidity) {
+    if (!max_temp && !max_humidity && !max_target) {
         return;
     }
 
@@ -264,6 +274,12 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
     if (max_humidity) {
         env->humidity_pct = *max_humidity;
         env->has_humidity = true;
+    }
+    if (max_temp) {
+        dryer_info_.current_temp_c = *max_temp;
+    }
+    if (max_target) {
+        dryer_info_.target_temp_c = *max_target;
     }
 }
 
