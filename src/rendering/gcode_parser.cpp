@@ -1930,8 +1930,13 @@ GCodeHeaderMetadata extract_header_metadata(const std::string& filepath) {
 
         // Skip non-comment lines
         if (line.empty() || line[0] != ';') {
-            // Check if we've hit actual G-code
-            if (!line.empty() && (line[0] == 'G' || line[0] == 'M' || line[0] == 'T')) {
+            // Stop once the toolpath proper begins (a motion command). Only G
+            // moves count: Cura emits M-code progress markers (M73) and temp
+            // commands (M104/M140) in the header *before* its metadata comments
+            // (;Generated with, ;TIME:, ;Layer height:), so breaking on M would
+            // abort the scan before those are read. The first G command appears
+            // after the comment header in every slicer dialect we support.
+            if (!line.empty() && line[0] == 'G') {
                 break;
             }
             continue;
@@ -1969,7 +1974,10 @@ GCodeHeaderMetadata extract_header_metadata_from_content(const std::string& cont
         lines_read++;
 
         if (line.empty() || line[0] != ';') {
-            if (!line.empty() && (line[0] == 'G' || line[0] == 'M' || line[0] == 'T')) {
+            // Break only on motion (G) commands — see extract_header_metadata.
+            // M-code setup lines (Cura's M73 progress markers) precede the
+            // metadata comments and must not abort the scan.
+            if (!line.empty() && line[0] == 'G') {
                 break;
             }
             continue;

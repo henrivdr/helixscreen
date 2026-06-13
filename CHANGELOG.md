@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Cura print metadata now reads correctly** (prestonbrown/helixscreen#942) — Cura emits `M73` progress markers in the header *before* its metadata comments, and the header scan was stopping at the first `M`-code — so Cura-sliced files lost their slicer name, layer height, and bounding-box extents. The scan now stops only at the first motion command, and Cura's feature-type dialect is covered by a real-file regression test.
 - **Clearer K2 fan names** — the K2 fan list no longer shows two indistinguishable "Chamber Fan" entries. Fans now carry function-based labels (Part Cooling, Auxiliary, Chamber Heater Fan, Chamber Circulation), and the auxiliary fan's role mapping was corrected.
 - **AD5X IFS Unload no longer homes and stalls** (bundle 7AC4SDEX) — the v0.99.76 unload could still home and then do nothing when no filament was seated at the nozzle. Unload now dispatches the firmware's own toolhead-unload sequence when filament is at the head, and pulls the filament back from the lane with a cold eject when it isn't — instead of issuing a command the firmware treats as a no-op.
 

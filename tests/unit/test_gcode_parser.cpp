@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <unistd.h>
 
@@ -1425,4 +1426,64 @@ TEST_CASE("GCodeParser - FeatureType bounds filter classification",
     REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::OverhangWall));
     REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::GapInfill));
     REQUIRE_FALSE(is_excluded_from_bounds(FeatureType::Support));
+}
+
+TEST_CASE("GCodeParser - Real Cura file FeatureType distribution",
+          "[gcode][parser][feature_type][integration]") {
+    // Regression guard for #942. The Cura `;TYPE:` dialect (hyphenated
+    // UPPERCASE: WALL-OUTER, WALL-INNER, SKIRT, FILL, SKIN, …) was normalized
+    // from spec only, with no real Cura file in the repo to confirm the strings
+    // match. This parses an actual Cura 5.3.1 file end-to-end and asserts its
+    // markers resolve to real FeatureType values instead of silently falling
+    // back to Unknown (which would re-include purge/skirt in the auto-fit bbox).
+    std::string test_file = "assets/test_gcodes/SimpleCuraTest.gcode";
+
+    std::ifstream check(test_file);
+    if (!check.good()) {
+        SKIP("Test G-code file not found: " << test_file);
+    }
+    check.close();
+
+    // Sanity: the standalone metadata extractor should recognize this as Cura.
+    auto metadata = extract_header_metadata(test_file);
+    REQUIRE(metadata.slicer.find("Cura") != std::string::npos);
+
+    GCodeParser parser;
+    std::ifstream file_stream(test_file);
+    std::string line;
+    while (std::getline(file_stream, line)) {
+        parser.parse_line(line);
+    }
+    auto file = parser.finalize();
+
+    // Tally feature types across every segment in every layer.
+    std::map<FeatureType, size_t> counts;
+    for (const auto& layer : file.layers) {
+        for (const auto& seg : layer.segments) {
+            counts[seg.feature_type]++;
+        }
+    }
+
+    INFO("OuterWall=" << counts[FeatureType::OuterWall] << " InnerWall="
+                      << counts[FeatureType::InnerWall] << " Skirt="
+                      << counts[FeatureType::Skirt] << " SparseInfill="
+                      << counts[FeatureType::SparseInfill] << " SolidInfill="
+                      << counts[FeatureType::SolidInfill] << " Unknown="
+                      << counts[FeatureType::Unknown] << " total=" << file.total_segments);
+
+    // Every ;TYPE: value present in this file must have normalized to a real
+    // enum. If Cura's emitted strings diverged from the table they would land
+    // in Unknown and these counts would be zero.
+    REQUIRE(counts[FeatureType::OuterWall] > 0);    // WALL-OUTER
+    REQUIRE(counts[FeatureType::InnerWall] > 0);    // WALL-INNER
+    REQUIRE(counts[FeatureType::Skirt] > 0);        // SKIRT
+    REQUIRE(counts[FeatureType::SparseInfill] > 0); // FILL
+    REQUIRE(counts[FeatureType::SolidInfill] > 0);  // SKIN
+
+    // Recognized physical-feature segments should dominate — a regression that
+    // broke Cura normalization would push the bulk of extrusions into Unknown.
+    size_t recognized = counts[FeatureType::OuterWall] + counts[FeatureType::InnerWall] +
+                        counts[FeatureType::Skirt] + counts[FeatureType::SparseInfill] +
+                        counts[FeatureType::SolidInfill];
+    REQUIRE(recognized > counts[FeatureType::Unknown]);
 }
