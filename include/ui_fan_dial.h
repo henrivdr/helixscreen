@@ -98,14 +98,6 @@ class FanDial {
     }
 
     /**
-     * @brief Make the dial read-only (for auto-controlled fans)
-     *
-     * Disables arc interaction, hides the knob, changes indicator to muted color,
-     * and replaces the Off/On switch with an "Auto" label.
-     */
-    void set_read_only(bool read_only);
-
-    /**
      * @brief Refresh fan icon spin animation based on current speed and animation setting
      *
      * Call when the global animations_enabled setting changes.

@@ -12,6 +12,7 @@
 #include "ui_settings_fans.h"
 #include "ui_utils.h"
 
+#include "app_constants.h"
 #include "app_globals.h"
 #include "config.h"
 #include "display_settings_manager.h"
@@ -37,12 +38,75 @@ namespace {
 struct FanRenameData {
     std::string object_name;
     std::string display_name;
+    lv_point_t press_start_point{};
+    bool press_point_valid = false;
 };
+
+/// True when the active press landed on (or bubbled up from) an arc or slider —
+/// the fan speed dial. Its events bubble to the card root where the rename
+/// handler lives, so a hold spent dragging the dial must never read as a rename.
+/// Mirrors HomePanel::should_suppress_edit_mode.
+bool press_consumed_by_value_widget(lv_event_t* e) {
+    lv_indev_t* indev = lv_indev_active();
+    if (indev && lv_indev_get_scroll_obj(indev))
+        return true;
+
+    lv_obj_t* target = lv_event_get_target_obj(e);
+    lv_obj_t* current = lv_event_get_current_target_obj(e);
+    while (target) {
+        if (lv_obj_has_class(target, &lv_arc_class) || lv_obj_has_class(target, &lv_slider_class))
+            return true;
+        if (target == current)
+            break;
+        target = lv_obj_get_parent(target);
+    }
+    return false;
+}
+
+/// True when the finger drifted past the deliberate-hold threshold since the
+/// press began. LVGL fires LONG_PRESSED on hold duration alone, so a press that
+/// slid across the card is a drag, not a rename gesture. Mirrors
+/// HomePanel::finger_drifted_since_press.
+bool finger_drifted_since_press(const FanRenameData* data) {
+    if (!data->press_point_valid)
+        return false;
+    lv_indev_t* indev = lv_indev_active();
+    if (!indev)
+        return false;
+    lv_point_t now;
+    lv_indev_get_point(indev, &now);
+    const int dx = now.x - data->press_start_point.x;
+    const int dy = now.y - data->press_start_point.y;
+    const int limit = lv_dpx(AppConstants::Input::EDIT_MODE_MOVE_CANCEL_DPX);
+    return (dx * dx + dy * dy) > (limit * limit);
+}
+
+void on_fan_pressed(lv_event_t* e) {
+    auto* data = static_cast<FanRenameData*>(lv_event_get_user_data(e));
+    if (!data)
+        return;
+    lv_indev_t* indev = lv_indev_active();
+    if (indev) {
+        lv_indev_get_point(indev, &data->press_start_point);
+        data->press_point_valid = true;
+    } else {
+        data->press_point_valid = false;
+    }
+}
 
 void on_fan_long_pressed(lv_event_t* e) {
     auto* data = static_cast<FanRenameData*>(lv_event_get_user_data(e));
     if (!data)
         return;
+    // Renaming requires a deliberate, stationary hold. A hold that landed on the
+    // speed dial, or one that drifted from its press point, is the user adjusting
+    // fan speed — surfacing the rename modal there is the accidental trigger we
+    // are guarding against.
+    if (press_consumed_by_value_widget(e) || finger_drifted_since_press(data)) {
+        spdlog::trace("[FanControlOverlay] long-press on '{}' ignored (dial drag / drift)",
+                      data->object_name);
+        return;
+    }
     spdlog::debug("[FanControlOverlay] Long press on '{}'", data->object_name);
     helix::settings::get_fan_settings_overlay().handle_fan_rename(data->object_name,
                                                                   data->display_name);
@@ -56,6 +120,7 @@ void attach_long_press_rename(lv_obj_t* widget, const std::string& object_name,
                               const std::string& display_name) {
     auto* data = new FanRenameData{object_name, display_name};
     lv_obj_add_flag(widget, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(widget, on_fan_pressed, LV_EVENT_PRESSED, data);
     lv_obj_add_event_cb(widget, on_fan_long_pressed, LV_EVENT_LONG_PRESSED, data);
     lv_obj_add_event_cb(widget, on_fan_rename_data_delete, LV_EVENT_DELETE, data);
 }

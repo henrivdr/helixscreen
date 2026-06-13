@@ -85,6 +85,20 @@ FanDial::FanDial(lv_obj_t* parent, const std::string& name, const std::string& f
     lv_obj_add_event_cb(arc_, on_arc_released, LV_EVENT_PRESS_LOST, this);
     lv_obj_add_event_cb(onoff_switch_, on_switch_changed, LV_EVENT_VALUE_CHANGED, this);
 
+    // The shared helix_progress_arc is tuned for read-only progress displays: it
+    // strips LV_OBJ_FLAG_CLICKABLE and hides the knob (transparent fill, zero
+    // size). A fan dial is interactive, so restore drag input and a visible,
+    // grabbable thumb — a filled circle with a thin border, matching the app's
+    // slider knobs. Without this the arc swallows no input (presses bubble to the
+    // card and trip the long-press rename) and shows no handle to drag.
+    lv_obj_add_flag(arc_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_opa(arc_, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(arc_, theme_manager_get_color("primary"), LV_PART_KNOB);
+    lv_obj_set_style_radius(arc_, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_border_color(arc_, theme_manager_get_color("border"), LV_PART_KNOB);
+    lv_obj_set_style_border_width(arc_, 1, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(arc_, lv_dpx(4), LV_PART_KNOB);
+
     // Attach auto-resize callback for dynamic arc scaling
     helix::ui::fan_arc_attach_auto_resize(root_);
 
@@ -489,55 +503,6 @@ void FanDial::handle_switch_changed() {
     }
 
     spdlog::debug("[FanDial] '{}' switch toggled -> {}%", name_, new_speed);
-}
-
-void FanDial::set_read_only(bool read_only) {
-    if (!arc_)
-        return;
-
-    if (read_only) {
-        // Disable arc interaction
-        lv_obj_remove_flag(arc_, LV_OBJ_FLAG_CLICKABLE);
-
-        // Hide the knob
-        lv_obj_set_style_bg_opa(arc_, LV_OPA_TRANSP, LV_PART_KNOB);
-        lv_obj_set_style_shadow_opa(arc_, LV_OPA_TRANSP, LV_PART_KNOB);
-
-        // Primary indicator color (matches fan_status_card.xml)
-        lv_color_t primary = theme_manager_get_color("primary");
-        lv_obj_set_style_arc_color(arc_, primary, LV_PART_INDICATOR);
-
-        // Hide the Off/On switch + state label, show "Auto" indicator instead
-        if (onoff_switch_)
-            lv_obj_add_flag(onoff_switch_, LV_OBJ_FLAG_HIDDEN);
-        if (onoff_label_)
-            lv_obj_add_flag(onoff_label_, LV_OBJ_FLAG_HIDDEN);
-
-        // Add "Auto" indicator in the button row
-        lv_obj_t* btn_row = lv_obj_find_by_name(root_, "button_row");
-        if (btn_row) {
-            lv_obj_t* auto_label = lv_label_create(btn_row);
-            lv_label_set_text(auto_label, lv_tr("Auto"));
-            lv_obj_set_style_text_color(auto_label, theme_manager_get_color("text_muted"), 0);
-            const lv_font_t* font = theme_manager_get_font("font_xs");
-            if (font)
-                lv_obj_set_style_text_font(auto_label, font, 0);
-        }
-
-        // Clear the speed callback so no commands are sent
-        on_speed_changed_ = nullptr;
-    } else {
-        lv_obj_add_flag(arc_, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_opa(arc_, LV_OPA_COVER, LV_PART_KNOB);
-        lv_color_t primary = theme_manager_get_color("primary");
-        lv_obj_set_style_arc_color(arc_, primary, LV_PART_INDICATOR);
-        if (onoff_switch_)
-            lv_obj_remove_flag(onoff_switch_, LV_OBJ_FLAG_HIDDEN);
-        if (onoff_label_)
-            lv_obj_remove_flag(onoff_label_, LV_OBJ_FLAG_HIDDEN);
-    }
-
-    spdlog::debug("[FanDial] '{}' set_read_only({})", name_, read_only);
 }
 
 void FanDial::refresh_animation() {
