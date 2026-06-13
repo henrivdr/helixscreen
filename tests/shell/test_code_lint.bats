@@ -35,7 +35,7 @@ setup() {
 # legitimately retains other send paths and is intentionally NOT covered here.)
 
 @test "migrated temp view files do not call the raw set_temperature send API" {
-    local files="src/ui/ui_overlay_temp_graph.cpp src/ui/ui_panel_controls.cpp src/system/post_op_cooldown_manager.cpp"
+    local files="src/ui/ui_overlay_temp_graph.cpp src/ui/ui_panel_controls.cpp src/system/post_op_cooldown_manager.cpp src/ui/panel_widgets/preheat_widget.cpp"
 
     # Direct API send on the cached MoonrakerAPI pointer.
     run grep -n 'api_->set_temperature' $files

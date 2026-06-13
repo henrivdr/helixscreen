@@ -10,6 +10,7 @@
 
 #include "app_globals.h"
 #include "config.h"
+#include "temperature_controller.h"
 #include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "macro_executor.h"
@@ -234,19 +235,18 @@ void PreheatWidget::handle_selection_changed() {
     }
 }
 
-void PreheatWidget::set_temperatures(MoonrakerAPI* api, int nozzle, int bed) {
-    api->set_temperature(
-        printer_state_.active_extruder_name(), static_cast<double>(nozzle),
-        [nozzle]() { NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), nozzle); },
-        [](const MoonrakerError& error) {
-            NOTIFY_ERROR(lv_tr("Failed to set nozzle temp: {}"), error.user_message());
-        });
-    api->set_temperature(
-        "heater_bed", static_cast<double>(bed),
-        [bed]() { NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), bed); },
-        [](const MoonrakerError& error) {
-            NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), error.user_message());
-        });
+void PreheatWidget::set_temperatures(int nozzle, int bed) {
+    auto* c = get_temperature_controller();
+    if (!c)
+        return;
+    c->set_target(helix::HeaterType::Nozzle, static_cast<double>(nozzle),
+                  {.toast = true, .on_success = [nozzle]() {
+                       NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), nozzle);
+                   }});
+    c->set_target(helix::HeaterType::Bed, static_cast<double>(bed),
+                  {.toast = true, .on_success = [bed]() {
+                       NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), bed);
+                   }});
 }
 
 void PreheatWidget::handle_apply() {
@@ -275,7 +275,7 @@ void PreheatWidget::handle_apply() {
 
         if (!handles_heating) {
             // Macro is additive — set temps first
-            set_temperatures(api, mat->nozzle_recommended(), mat->bed_temp);
+            set_temperatures(mat->nozzle_recommended(), mat->bed_temp);
         }
 
         // Execute the macro
@@ -292,9 +292,9 @@ void PreheatWidget::handle_apply() {
     int bed = mat->bed_temp;
 
     if (ToolState::instance().is_multi_tool()) {
-        set_temperatures_multi(api, nozzle, bed);
+        set_temperatures_multi(nozzle, bed);
     } else {
-        set_temperatures(api, nozzle, bed);
+        set_temperatures(nozzle, bed);
     }
 
     spdlog::info("[PreheatWidget] Preheat {} applied (nozzle={}°C, bed={}°C, tool_target={})",
@@ -358,29 +358,30 @@ std::vector<std::string> PreheatWidget::collect_preheat_heaters(const std::vecto
     return heaters;
 }
 
-void PreheatWidget::set_temperatures_multi(MoonrakerAPI* api, int nozzle, int bed) {
+void PreheatWidget::set_temperatures_multi(int nozzle, int bed) {
+    auto* c = get_temperature_controller();
+    if (!c)
+        return;
     const auto& tools = ToolState::instance().tools();
     auto heaters = collect_preheat_heaters(tools, tool_target_);
 
     for (const auto& heater : heaters) {
         spdlog::debug("[PreheatWidget] Setting {} to {}°C", heater, nozzle);
-        api->set_temperature(
+        c->set_target(
             heater, static_cast<double>(nozzle),
-            [heater, nozzle]() {
-                spdlog::info("[PreheatWidget] {} target set to {}°C", heater, nozzle);
-            },
-            [heater](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), heater, error.user_message());
-            });
+            {.toast = false,
+             .on_success = [heater, nozzle]() {
+                 spdlog::info("[PreheatWidget] {} target set to {}°C", heater, nozzle);
+             },
+             .on_error = [heater](const MoonrakerError& error) {
+                 NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), heater, error.user_message());
+             }});
     }
 
-    // Always set bed temperature once
-    api->set_temperature(
-        "heater_bed", static_cast<double>(bed),
-        [bed]() { NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), bed); },
-        [](const MoonrakerError& error) {
-            NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), error.user_message());
-        });
+    c->set_target(helix::HeaterType::Bed, static_cast<double>(bed),
+                  {.toast = true, .on_success = [bed]() {
+                       NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), bed);
+                   }});
 
     int tool_count = static_cast<int>(heaters.size());
     if (tool_target_ == -1) {
