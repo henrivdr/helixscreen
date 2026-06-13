@@ -33,6 +33,7 @@ usage() {
     echo "  $0 --setup-only feature/i18n   # Just set up existing worktree"
     echo ""
     echo "Strategy:"
+    echo "  - Configures ccache for cross-worktree reuse (no cold rebuild per worktree)"
     echo "  - Clones build/obj/ from main tree (APFS copy-on-write — instant, zero disk)"
     echo "  - Symlinks lib/ from main tree (all submodule sources + generated headers)"
     echo "  - Symlinks compiled libraries (libhv.a) and PCH"
@@ -433,6 +434,75 @@ touch "$WORKTREE_PATH/build/.patches-applied"
 echo "native" > "$WORKTREE_PATH/build/.build-target"
 touch "$WORKTREE_PATH/.fonts.stamp"
 echo -e "${GREEN}✓ Build markers created${RESET}"
+
+# Step 9b: Configure ccache for cross-worktree reuse
+#
+# The native build compiles with -g (debug info). With ccache's default
+# hash_dir=true, the absolute working directory is folded into the cache key,
+# so an object compiled in the main tree NEVER matches the same source compiled
+# under .worktrees/<name>/ — every worktree starts cold and recompiles from
+# scratch. Two settings fix this:
+#   - base_dir: rewrite absolute paths under it to relative before hashing
+#   - hash_dir=false: stop hashing the cwd (the -g debug-path component)
+# With both, a worktree build reuses the main tree's cached objects, so the
+# "rebuild everything" make does after a fresh checkout becomes cache hits
+# instead of real compiles.
+CCACHE_BIN="$(command -v ccache 2>/dev/null || true)"
+if [[ -n "$CCACHE_BIN" ]]; then
+    echo -e "${CYAN}Configuring ccache for cross-worktree reuse...${RESET}"
+
+    # Longest common ancestor of the main tree and this worktree — covers both
+    # the default .worktrees/<name> layout and out-of-tree paths like /tmp/foo.
+    common_ancestor() {
+        local p1="$1" p2="$2"
+        while [[ "$p1" != "$p2" ]]; do
+            if [[ ${#p1} -gt ${#p2} ]]; then p1="$(dirname "$p1")"; else p2="$(dirname "$p2")"; fi
+        done
+        echo "$p1"
+    }
+    BUILD_BASEDIR="$(common_ancestor "$MAIN_TREE" "$WORKTREE_PATH")"
+
+    # Persist global ccache config so later manual `make` runs in the worktree
+    # hit the shared cache too — not just this script's initial build. base_dir
+    # defaults to $HOME (the standard broad choice covering all in-home worktrees);
+    # only set when unset so we never override an intentional user value.
+    CUR_BASEDIR="$(ccache --get-config base_dir 2>/dev/null || true)"
+    if [[ -z "$CUR_BASEDIR" ]]; then
+        ccache --set-config "base_dir=$HOME" 2>/dev/null \
+            && echo -e "  base_dir: ${GREEN}set to $HOME${RESET}"
+    else
+        echo -e "  base_dir: ${GREEN}already set ($CUR_BASEDIR)${RESET}"
+    fi
+    if [[ "$(ccache --get-config hash_dir 2>/dev/null || true)" == "true" ]]; then
+        ccache --set-config hash_dir=false 2>/dev/null \
+            && echo -e "  hash_dir: ${GREEN}disabled (paths no longer in cache key)${RESET}"
+    else
+        echo -e "  hash_dir: ${GREEN}already disabled${RESET}"
+    fi
+
+    # The shared cache thrashes hard once a couple of worktrees + cross-compiles
+    # pile in (default 5 GiB fills and evicts constantly, re-causing cold misses).
+    # Raise the ceiling so objects survive between builds. Only ever raise it.
+    CUR_MAX="$(ccache --get-config max_size 2>/dev/null || true)"
+    MAX_NUM="$(echo "$CUR_MAX" | grep -oE '[0-9]+' | head -1)"
+    MAX_UNIT="$(echo "$CUR_MAX" | grep -oiE '[KMGT]i?B' | head -1)"
+    if [[ "$MAX_UNIT" =~ ^[Kk] || "$MAX_UNIT" =~ ^[Mm] ]] || \
+       { [[ "$MAX_UNIT" =~ ^[Gg] ]] && [[ -n "$MAX_NUM" ]] && [[ "$MAX_NUM" -lt 25 ]]; }; then
+        ccache --max-size=25G >/dev/null 2>&1 \
+            && echo -e "  max_size: ${GREEN}raised to 25G (was $CUR_MAX)${RESET}"
+    else
+        echo -e "  max_size: ${GREEN}already ample ($CUR_MAX)${RESET}"
+    fi
+
+    # Export for this script's own build below. base_dir must be a prefix of the
+    # worktree path; use the precise common ancestor in case the worktree lives
+    # outside $HOME (e.g. /tmp/foo), which the global $HOME base_dir wouldn't cover.
+    export CCACHE_BASEDIR="$BUILD_BASEDIR"
+    export CCACHE_NOHASHDIR=1
+    echo -e "  this build: ${GREEN}CCACHE_BASEDIR=$BUILD_BASEDIR CCACHE_NOHASHDIR=1${RESET}"
+else
+    echo -e "${YELLOW}ccache not found — worktree builds will not reuse the main tree cache${RESET}"
+fi
 
 # Step 10: Build (optional)
 if [[ "$NO_BUILD" == "false" ]]; then
