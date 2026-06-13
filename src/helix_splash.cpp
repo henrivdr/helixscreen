@@ -23,6 +23,7 @@
 #include "data_root_resolver.h"
 #include "display_backend.h"
 #include "helix_version.h"
+#include "splash_status.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -64,8 +65,38 @@ static constexpr int FRAME_DELAY_US = 16000;  // ~60 FPS
 // discovery completes (or its 8s timeout fires); the watchdog also reaps us
 // on exit. If both paths fail (e.g. helix-screen never received --splash-pid
 // because the watchdog skipped adoption on DRM), splash would otherwise spin
-// forever at ~60% CPU. Cap our own lifetime so any upstream failure is bounded.
+// forever. Cap our own lifetime so any upstream failure is bounded.
+//
+// On slow devices the init-script Moonraker gate runs BEFORE helix-screen
+// launches and can exceed this cap, so the gate writes a heartbeat/status file
+// that extends our lifetime while it is actively progressing (see
+// include/splash_status.h). Absent that file we keep the legacy fixed cap.
 static constexpr int MAX_LIFETIME_SEC = 30;
+
+// Path of the boot-status file the launcher/init gate writes while it waits.
+// Each rewrite is a heartbeat; the first line is the message we display.
+static std::string splash_status_path() {
+    if (const char* p = getenv("HELIX_SPLASH_STATUS_FILE")) {
+        if (*p != '\0') {
+            return p;
+        }
+    }
+    return "/tmp/helix-splash-status";
+}
+
+// Free-memory floor (KiB) below which the splash voluntarily exits so it can
+// never be the process that tips a tight-RAM device into OOM. Overridable per
+// platform via HELIX_SPLASH_MIN_FREE_KB; 0 disables the valve.
+static long splash_min_free_kb() {
+    if (const char* p = getenv("HELIX_SPLASH_MIN_FREE_KB")) {
+        char* end = nullptr;
+        const long v = strtol(p, &end, 10);
+        if (end != p && v >= 0) {
+            return v;
+        }
+    }
+    return 8192; // ~8 MiB
+}
 
 // Read brightness from config file (simple parsing, no JSON library)
 // Returns configured brightness (10-100) or default_value on failure
@@ -491,36 +522,104 @@ int main(int argc, char** argv) {
     lv_obj_align(version_label, LV_ALIGN_BOTTOM_RIGHT, -8, -6);
     (void)version_label;
 
+    // Boot-status line (e.g. "Starting Klipper… 40s"), centered near the bottom.
+    // Stays empty until the init gate writes the status file; updated in the
+    // main loop below as the file changes.
+    lv_obj_t* status_label = lv_label_create(screen);
+    lv_label_set_text(status_label, "");
+    lv_obj_set_style_text_color(
+        status_label, dark_mode ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_text_opa(status_label, LV_OPA_70, LV_PART_MAIN);
+    lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -28);
+
     // On fbdev, other processes can write directly to /dev/fb0 behind LVGL's back
     // (e.g., ForgeX S99root boot messages). DRM/SDL are not susceptible since DRM
     // requires master access and SDL is windowed. Periodic full invalidation on fbdev
     // forces LVGL to repaint the entire screen, self-healing any stomped pixels.
-    bool needs_fb_self_heal = (backend->type() == DisplayBackendType::FBDEV);
+    const bool needs_fb_self_heal = (backend->type() == DisplayBackendType::FBDEV);
+
+    // fbdev shows a static image (the fade-in animation runs on DRM/SDL only),
+    // so there we idle at ~10 FPS to avoid the ~60% CPU a 60 FPS spin would
+    // cost while the boot gate runs. DRM/SDL keep 60 FPS for the fade.
+    const int frame_delay_us = needs_fb_self_heal ? 100000 : FRAME_DELAY_US;
+
+    // Boot-status heartbeat: the init gate rewrites the status file while it
+    // waits for Moonraker. We treat each observed change (mtime or size) as a
+    // heartbeat — recorded in the MONOTONIC clock so an NTP jump mid-boot can't
+    // make a live heartbeat look stale — and extend our lifetime accordingly.
+    const std::string status_path = splash_status_path();
+    const helix::splash::SplashLifetimePolicy life_policy{MAX_LIFETIME_SEC, 5, 180};
+    struct stat status_prev{};
+    bool have_status_prev = false;
+    long last_heartbeat_mono = -1;
+    const long mem_floor_kb = splash_min_free_kb();
 
     // Main loop - run until signaled to quit
     // Exit signals: SIGTERM, SIGINT (shutdown), SIGUSR1 (main app ready)
-    // Self-timeout: bail after MAX_LIFETIME_SEC if no signal arrives. Uses
-    // wall-clock (CLOCK_MONOTONIC) rather than frame counting so a slow or
-    // stuttering render loop still trips the safety net.
-    int frame_count = 0;
+    // Lifetime is bounded by splash_should_continue() using CLOCK_MONOTONIC, so
+    // a slow or stuttering render loop still trips the safety net.
     struct timespec start_ts;
     clock_gettime(CLOCK_MONOTONIC, &start_ts);
+    struct timespec last_heal_ts = start_ts;
     while (!g_quit) {
         lv_timer_handler();
-        usleep(FRAME_DELAY_US);
-
-        // Force full redraw every ~500ms (30 frames at 60fps) on fbdev only
-        if (needs_fb_self_heal && ++frame_count >= 30) {
-            lv_obj_invalidate(screen);
-            frame_count = 0;
-        }
+        usleep(frame_delay_us);
 
         struct timespec now_ts;
         clock_gettime(CLOCK_MONOTONIC, &now_ts);
-        if ((now_ts.tv_sec - start_ts.tv_sec) >= MAX_LIFETIME_SEC) {
-            fprintf(stderr,
-                    "helix-splash: self-timeout after %ds with no SIGUSR1/SIGTERM, exiting\n",
-                    MAX_LIFETIME_SEC);
+        const long now_mono = now_ts.tv_sec;
+
+        // Poll the status file: cheap stat() every loop, read contents only when
+        // it changes. A change is a heartbeat and refreshes the status message.
+        struct stat status_now{};
+        if (stat(status_path.c_str(), &status_now) == 0) {
+            const bool changed = !have_status_prev ||
+                                 status_now.st_mtime != status_prev.st_mtime ||
+                                 status_now.st_size != status_prev.st_size;
+            if (changed) {
+                status_prev = status_now;
+                have_status_prev = true;
+                last_heartbeat_mono = now_mono;
+
+                std::ifstream f(status_path);
+                std::string content((std::istreambuf_iterator<char>(f)),
+                                    std::istreambuf_iterator<char>());
+                const std::string msg = helix::splash::sanitize_splash_message(content);
+                lv_label_set_text(status_label, msg.c_str());
+                lv_obj_invalidate(screen);
+            }
+        }
+
+        // Force full redraw ~every 1s on fbdev to self-heal pixels stomped by
+        // other processes writing /dev/fb0 (e.g. ForgeX boot messages).
+        if (needs_fb_self_heal && (now_ts.tv_sec - last_heal_ts.tv_sec) > 0) {
+            lv_obj_invalidate(screen);
+            last_heal_ts = now_ts;
+        }
+
+        // Memory safety valve: the splash must never be the process that tips a
+        // tight-RAM device into OOM. If free memory drops below the floor, exit
+        // now to free our ~10-15 MB — a brief blank screen beats an OOM kill.
+        if (mem_floor_kb > 0) {
+            std::ifstream meminfo("/proc/meminfo");
+            if (meminfo.is_open()) {
+                std::string mic((std::istreambuf_iterator<char>(meminfo)),
+                                std::istreambuf_iterator<char>());
+                const long avail = helix::splash::parse_meminfo_available_kb(mic);
+                if (!helix::splash::splash_memory_ok(avail, mem_floor_kb)) {
+                    fprintf(stderr,
+                            "helix-splash: low memory (%ld KiB avail < %ld floor), exiting to "
+                            "free RAM\n",
+                            avail, mem_floor_kb);
+                    break;
+                }
+            }
+        }
+
+        if (!helix::splash::splash_should_continue(life_policy, start_ts.tv_sec, now_mono,
+                                                   last_heartbeat_mono)) {
+            fprintf(stderr, "helix-splash: lifetime ended after %lds (no SIGUSR1), exiting\n",
+                    (long)(now_mono - start_ts.tv_sec));
             break;
         }
     }

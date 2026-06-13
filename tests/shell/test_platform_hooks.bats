@@ -6,7 +6,7 @@
 # shellcheck compliance, and basic syntax validity.
 
 HOOKS_DIR="assets/config/platform"
-HOOK_FILES="hooks-ad5m-forgex.sh hooks-ad5m-kmod.sh hooks-ad5m-zmod.sh hooks-pi.sh hooks-k1.sh"
+HOOK_FILES="hooks-ad5m-forgex.sh hooks-ad5m-kmod.sh hooks-ad5m-zmod.sh hooks-pi.sh hooks-k1.sh hooks-k2.sh"
 REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platform_wait_for_services platform_pre_start platform_post_stop"
 
 # --- Hook contract tests: every hook file must define all 5 functions ---
@@ -88,6 +88,75 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
 
 @test "k1 hooks have valid sh syntax" {
     sh -n "$HOOKS_DIR/hooks-k1.sh"
+}
+
+@test "k2 hooks define all required functions" {
+    ( . "$HOOKS_DIR/hooks-k2.sh"
+      for func in $REQUIRED_FUNCTIONS; do
+          type "$func" >/dev/null 2>&1
+      done )
+}
+
+@test "k2 hooks pass shellcheck" {
+    shellcheck -s sh "$HOOKS_DIR/hooks-k2.sh"
+}
+
+@test "k2 hooks have valid sh syntax" {
+    sh -n "$HOOKS_DIR/hooks-k2.sh"
+}
+
+@test "k2 gate writes splash heartbeat and detects a ready Moonraker fast" {
+    # Behavioral check of the Moonraker gate: against an already-ready endpoint
+    # it must return 0 quickly and leave the splash status file in the
+    # "ready/handing off" state. Uses a local mock HTTP server so the test
+    # never touches a real printer.
+    command -v python3 >/dev/null 2>&1 || skip "python3 not available"
+
+    local tmp port status_file
+    tmp="$(mktemp -d)"
+    status_file="$tmp/splash-status"
+    port=7191
+
+    # Minimal mock Moonraker /server/info on 127.0.0.1:$port
+    python3 -c "
+import http.server, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self): self.send_response(200); self.end_headers(); self.wfile.write(b'{}')
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', $port), H).serve_forever()
+" &
+    local server_pid=$!
+    sleep 1
+
+    HELIX_MOONRAKER_READY_URL="http://127.0.0.1:$port/server/info" \
+        HELIX_MOONRAKER_WAIT_TIMEOUT=10 \
+        HELIX_SPLASH_STATUS_FILE="$status_file" \
+        bash -c ". '$HOOKS_DIR/hooks-k2.sh'; platform_wait_for_services"
+    local rc=$?
+
+    kill "$server_pid" 2>/dev/null || true
+    [ "$rc" -eq 0 ]
+    grep -q "HelixScreen" "$status_file"
+    rm -rf "$tmp"
+}
+
+@test "k2 gate times out cleanly and marks splash 'no printer'" {
+    command -v python3 >/dev/null 2>&1 || skip "python3 not available"
+
+    local tmp status_file
+    tmp="$(mktemp -d)"
+    status_file="$tmp/splash-status"
+
+    # Point at a closed port with a short timeout: gate must return non-zero
+    # and leave the "starting without printer" message for the splash.
+    run env HELIX_MOONRAKER_READY_URL="http://127.0.0.1:1/server/info" \
+        HELIX_MOONRAKER_WAIT_TIMEOUT=2 \
+        HELIX_SPLASH_STATUS_FILE="$status_file" \
+        bash -c ". '$HOOKS_DIR/hooks-k2.sh'; platform_wait_for_services"
+
+    [ "$status" -ne 0 ]
+    grep -q "without printer" "$status_file"
+    rm -rf "$tmp"
 }
 
 # --- Init script integration tests ---

@@ -7,6 +7,8 @@
 # Stock UI is managed by /etc/init.d/app (procd service).
 # Processes: display-server, web-server, Monitor, master-server, etc.
 
+# shellcheck disable=SC3043  # local is supported by the K2 shell (bash/ash)
+
 platform_stop_competing_uis() {
     # Stop the stock Creality UI via procd (clean shutdown)
     if [ -f /etc/init.d/app ]; then
@@ -35,35 +37,60 @@ platform_enable_backlight() {
 
 platform_wait_for_services() {
     # Wait for Moonraker to be ready (K2 Moonraker is on port 7125).
-    # Track elapsed seconds via `date +%s` so the timeout reflects actual wall
-    # time, with a 1s urlopen timeout for quick retries. K2's dual Cortex-A7 is
-    # slow; Moonraker+Klipper cold-boot init routinely exceeds 30s, so allow up
-    # to 120s (matching hooks-ad5m-forgex) and log progress every ~10s so the
-    # launcher log doesn't look hung. On timeout the UI launches anyway —
-    # MoonrakerClient auto-reconnects indefinitely (~2s backoff), so a late
-    # Moonraker just shows a brief disconnected state then connects.
+    # K2's dual Cortex-A7 is slow; Moonraker+Klipper cold-boot init routinely
+    # exceeds 30s, so allow up to 120s (matching hooks-ad5m-forgex). On timeout
+    # the UI launches anyway — MoonrakerClient auto-reconnects indefinitely
+    # (~2s backoff), so a late Moonraker just shows a brief disconnected state.
+    #
+    # A SINGLE long-lived python3 process does the polling rather than spawning
+    # python3 once per second (cold-start cost adds up on the dual-A7 and can
+    # mask an already-ready server). It also:
+    #   - uses CLOCK_MONOTONIC so the timeout is immune to NTP jumps mid-boot,
+    #   - writes a heartbeat/status line to the splash status file each second
+    #     (keeps the boot splash alive — no blank screen — and shows progress),
+    #   - logs how long detection actually took, so launcher.log reveals whether
+    #     a ready Moonraker is being detected promptly (warm-restart diagnosis).
     # Use 127.0.0.1 (not localhost): K2 has no /etc/hosts entry for localhost.
-    local timeout_sec=120
-    local start_sec elapsed
-    start_sec=$(date +%s)
-    while :; do
-        elapsed=$(( $(date +%s) - start_sec ))
-        [ "$elapsed" -ge "$timeout_sec" ] && break
-        if python3 -c "
-import urllib.request
-try:
-    urllib.request.urlopen('http://127.0.0.1:7125/server/info', timeout=1)
-    exit(0)
-except:
-    exit(1)
-" 2>/dev/null; then
-            return 0
-        fi
-        [ $((elapsed % 10)) -eq 0 ] && echo "[hooks-k2] Waiting for Moonraker... (${elapsed}s)"
-        sleep 1
-    done
-    echo "[hooks-k2] Warning: Moonraker not ready after ${timeout_sec}s (UI will start; it auto-reconnects)"
-    return 1
+    # Timeout and endpoint are overridable (non-standard Moonraker host/port, or
+    # tests); production defaults match the stock K2 layout.
+    local timeout_sec="${HELIX_MOONRAKER_WAIT_TIMEOUT:-120}"
+    local ready_url="${HELIX_MOONRAKER_READY_URL:-http://127.0.0.1:7125/server/info}"
+    local status_file="${HELIX_SPLASH_STATUS_FILE:-/tmp/helix-splash-status}"
+    python3 - "$timeout_sec" "$status_file" "$ready_url" <<'PY'
+import sys, time, urllib.request
+
+timeout = int(sys.argv[1])
+status_file = sys.argv[2]
+ready_url = sys.argv[3]
+start = time.monotonic()
+
+def write_status(msg):
+    try:
+        with open(status_file, "w") as f:
+            f.write(msg + "\n")
+    except OSError:
+        pass
+
+while True:
+    elapsed = int(time.monotonic() - start)
+    if elapsed >= timeout:
+        write_status("Starting without printer…")
+        print("[hooks-k2] Warning: Moonraker not ready after %ds "
+              "(UI will start; it auto-reconnects)" % timeout, flush=True)
+        sys.exit(1)
+    try:
+        urllib.request.urlopen(ready_url, timeout=2)
+        print("[hooks-k2] Moonraker ready after %ds" % elapsed, flush=True)
+        write_status("Starting HelixScreen…")
+        sys.exit(0)
+    except Exception:
+        pass
+    if elapsed % 10 == 0:
+        print("[hooks-k2] Waiting for Moonraker... (%ds)" % elapsed, flush=True)
+    write_status("Starting Klipper… %ds" % elapsed)
+    time.sleep(1)
+PY
+    return $?
 }
 
 platform_pre_start() {
