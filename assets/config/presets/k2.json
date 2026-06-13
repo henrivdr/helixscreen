@@ -23,8 +23,14 @@
       "chamber": "temperature_fan chamber_fan",
       "hotend": "heater_fan hotend_fan",
       "part": "output_pin fan0",
-      "aux": "output_pin fan1",
-      "exhaust": "output_pin fan2"
+      "aux": "output_pin fan2",
+      "names": {
+        "output_pin fan0": "Part Cooling",
+        "output_pin fan1": "Chamber (manual)",
+        "output_pin fan2": "Auxiliary",
+        "heater_fan chamber_fan": "Chamber Heater Fan",
+        "temperature_fan chamber_fan": "Chamber Circulation"
+      }
     },
     "leds": {
       "strip": "output_pin LED"
