@@ -562,7 +562,8 @@ void ControlsPanel::show_temperature_keypad(const char* title, int cached_target
                                             int default_initial, int max_temp) {
     spdlog::debug("[{}] Opening {} keypad", get_name(), title);
 
-    int initial_deci = cached_target > 0 ? cached_target : default_initial * 10;
+    int initial_deci =
+        cached_target > 0 ? cached_target : helix::ui::temperature::degrees_to_deci(default_initial);
     ui_keypad_config_t config = {.initial_value = static_cast<float>(
                                      helix::ui::temperature::deci_to_degrees(initial_deci)),
                                  .min_value = 0.0f,

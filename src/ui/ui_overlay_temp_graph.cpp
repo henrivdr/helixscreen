@@ -20,6 +20,7 @@
 #include "temperature_sensor_types.h"
 #include "temperature_service.h"
 #include "theme_manager.h"
+#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -664,7 +665,7 @@ void TempGraphOverlay::on_temp_graph_preset_clicked(lv_event_t* e) {
 
     // Update local state
     self->temp_control_panel_->set_heater(type, self->temp_control_panel_->heater(type).current,
-                                          data.preset_value * 10);
+                                          helix::ui::temperature::degrees_to_deci(data.preset_value));
 
     // Send via the controller — it resolves the klipper name internally (chamber
     // never sends a stale HEATER=chamber) and shows the standard error toast.
@@ -716,7 +717,7 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
     }
 
     ui_keypad_config_t keypad_config = {
-        .initial_value = static_cast<float>(seed_deci / 10),
+        .initial_value = static_cast<float>(helix::ui::temperature::deci_to_degrees(seed_deci)),
         .min_value = heater.config.keypad_range.min,
         .max_value = max_value,
         .title_label = heater.config.title,

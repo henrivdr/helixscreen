@@ -414,11 +414,13 @@ void NozzleTempsWidget::update_row_display(lv_obj_t* temp_label, lv_obj_t* targe
     auto result = helix::ui::temperature::heater_display(temp_deci, target_deci);
 
     // Current temp with color coding (green=at-temp, red=heating, blue=cooling, gray=off)
-    lv_label_set_text_fmt(temp_label, "%d\xC2\xB0", temp_deci / 10);
+    lv_label_set_text_fmt(temp_label, "%d\xC2\xB0",
+                          helix::ui::temperature::deci_to_degrees(temp_deci));
     lv_obj_set_style_text_color(temp_label, result.color, LV_PART_MAIN);
 
     if (target_deci > 0) {
-        lv_label_set_text_fmt(target_label, "/ %d\xC2\xB0", target_deci / 10);
+        lv_label_set_text_fmt(target_label, "/ %d\xC2\xB0",
+                              helix::ui::temperature::deci_to_degrees(target_deci));
     } else {
         lv_label_set_text(target_label, lv_tr("off"));
     }

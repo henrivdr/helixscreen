@@ -121,9 +121,9 @@ lv_color_t get_heating_state_color(int current_deg, int target_deg, int toleranc
 HeaterDisplayResult heater_display(int current_deci, int target_deci) {
     HeaterDisplayResult result;
 
-    // Convert decidegrees to degrees (integer division is fine for display)
-    int current_deg = current_deci / 10;
-    int target_deg = target_deci / 10;
+    // Convert decidegrees to degrees (integer truncation is fine for display)
+    int current_deg = deci_to_degrees(current_deci);
+    int target_deg = deci_to_degrees(target_deci);
 
     // Format temperature string
     char buf[32];
@@ -167,7 +167,7 @@ const char* build_heater_gcode(const std::string& heater_full_name, int target_d
     }
 
     if (use_m141) {
-        std::snprintf(buffer, buffer_size, "M141 S%d", target_deci / 10);
+        std::snprintf(buffer, buffer_size, "M141 S%d", deci_to_degrees(target_deci));
         return buffer;
     }
 
@@ -175,15 +175,15 @@ const char* build_heater_gcode(const std::string& heater_full_name, int target_d
         std::string fan_name = heater_full_name.substr(16);
         std::snprintf(buffer, buffer_size,
                       "SET_TEMPERATURE_FAN_TARGET TEMPERATURE_FAN=%s TARGET=%d", fan_name.c_str(),
-                      target_deci / 10);
+                      deci_to_degrees(target_deci));
     } else if (heater_full_name.rfind("heater_generic ", 0) == 0) {
         std::string object_name = heater_full_name.substr(15);
         std::snprintf(buffer, buffer_size, "SET_HEATER_TEMPERATURE HEATER=%s TARGET=%d",
-                      object_name.c_str(), target_deci / 10);
+                      object_name.c_str(), deci_to_degrees(target_deci));
     } else {
         // Bare heater names (extruder, heater_bed, etc.)
         std::snprintf(buffer, buffer_size, "SET_HEATER_TEMPERATURE HEATER=%s TARGET=%d",
-                      heater_full_name.c_str(), target_deci / 10);
+                      heater_full_name.c_str(), deci_to_degrees(target_deci));
     }
 
     return buffer;

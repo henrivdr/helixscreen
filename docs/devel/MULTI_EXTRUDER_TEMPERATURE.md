@@ -127,7 +127,7 @@ lv_subject_t* target = pts.get_extruder_target_subject("extruder1");
 // Returns nullptr if extruder not found
 if (temp) {
     int decidegrees = lv_subject_get_int(temp);
-    float degrees = decidegrees / 10.0f;
+    float degrees = helix::ui::temperature::deci_to_degrees_f(decidegrees);
 }
 ```
 

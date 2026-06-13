@@ -7,6 +7,7 @@
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
 #include "ui_nav_manager.h"
+#include "ui_temperature_utils.h"
 #include "ui_z_offset_indicator.h"
 
 #include "app_globals.h"
@@ -391,7 +392,8 @@ void ZOffsetCalibrationPanel::start_calibration() {
     if (warm_bed) {
         auto* cfg = Config::get_instance();
         int temp = cfg->get<int>("/calibration/warm_bed_temp", DEFAULT_WARM_BED_TEMP);
-        warm_bed_target_deci_ = temp * 10; // Convert °C to decidegrees
+        warm_bed_target_deci_ =
+            helix::ui::temperature::degrees_to_deci(temp); // Convert °C to decidegrees
 
         // Send non-blocking M140 to start heating
         char cmd[32];
@@ -421,7 +423,8 @@ void ZOffsetCalibrationPanel::start_calibration() {
                     return;
 
                 spdlog::trace("[ZOffsetCal] Bed temp: {}.{}°C (target: {}°C)", temp_deci / 10,
-                              temp_deci % 10, self->warm_bed_target_deci_ / 10);
+                              temp_deci % 10,
+                              helix::ui::temperature::deci_to_degrees(self->warm_bed_target_deci_));
 
                 if (temp_deci >= self->warm_bed_target_deci_) {
                     spdlog::info("[ZOffsetCal] Bed reached target temperature, proceeding");

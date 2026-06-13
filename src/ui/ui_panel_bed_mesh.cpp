@@ -22,6 +22,7 @@
 #include "ui_nav_manager.h"
 #include "ui_panel_common.h"
 #include "ui_subject_registry.h"
+#include "ui_temperature_utils.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
@@ -897,7 +898,7 @@ void BedMeshPanel::preheat_for_probing() {
         set_temp(state.active_extruder_name(), PROBE_NOZZLE_TEMP, "nozzle");
     } else {
         spdlog::info("[BedMeshPanel] Nozzle already heating (target={}°C), skipping",
-                     nozzle_target / 10.0);
+                     helix::units::from_decidegrees(nozzle_target));
     }
 
     if (bed_target == 0) {
@@ -906,7 +907,7 @@ void BedMeshPanel::preheat_for_probing() {
         set_temp("heater_bed", PROBE_BED_TEMP, "bed");
     } else {
         spdlog::info("[BedMeshPanel] Bed already heating (target={}°C), skipping",
-                     bed_target / 10.0);
+                     helix::units::from_decidegrees(bed_target));
     }
 }
 

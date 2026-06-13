@@ -1146,7 +1146,7 @@ void ControlsPanel::handle_custom_nozzle_confirmed(float value) {
                  static_cast<int>(value));
 
     // Convert degrees to decidegrees for storage (matches PrinterState internal format)
-    cached_extruder_target_ = static_cast<int>(value * 10);
+    cached_extruder_target_ = helix::units::to_decidegrees(value);
 
     if (auto* c = controller()) {
         c->set_target(helix::HeaterType::Nozzle, value,
@@ -1161,7 +1161,7 @@ void ControlsPanel::handle_custom_bed_confirmed(float value) {
                  static_cast<int>(value));
 
     // Convert degrees to decidegrees for storage (matches PrinterState internal format)
-    cached_bed_target_ = static_cast<int>(value * 10);
+    cached_bed_target_ = helix::units::to_decidegrees(value);
 
     if (auto* c = controller()) {
         c->set_target(helix::HeaterType::Bed, value,
@@ -1175,7 +1175,7 @@ void ControlsPanel::handle_custom_chamber_confirmed(float value) {
     spdlog::info("[{}] Custom chamber temperature confirmed: {}°C", get_name(),
                  static_cast<int>(value));
 
-    cached_chamber_target_ = static_cast<int>(value * 10);
+    cached_chamber_target_ = helix::units::to_decidegrees(value);
 
     if (auto* c = controller()) {
         c->set_target(helix::HeaterType::Chamber, value,

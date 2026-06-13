@@ -6,6 +6,7 @@
 #include "ui_busy_overlay.h"
 #include "ui_error_reporting.h"
 #include "ui_panel_print_status.h"
+#include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
 
 #include "active_print_media_manager.h"
@@ -152,16 +153,14 @@ void PrintPreparationManager::recalculate_estimate() {
     auto& mgr = ThermalRateManager::instance();
 
     // Current temps (decidegrees -> degrees)
-    float ext_temp =
-        static_cast<float>(lv_subject_get_int(printer_state_->get_active_extruder_temp_subject())) /
-        10.0f;
-    float ext_target = static_cast<float>(lv_subject_get_int(
-                           printer_state_->get_active_extruder_target_subject())) /
-                       10.0f;
-    float bed_temp =
-        static_cast<float>(lv_subject_get_int(printer_state_->get_bed_temp_subject())) / 10.0f;
-    float bed_target =
-        static_cast<float>(lv_subject_get_int(printer_state_->get_bed_target_subject())) / 10.0f;
+    float ext_temp = helix::ui::temperature::deci_to_degrees_f(
+        lv_subject_get_int(printer_state_->get_active_extruder_temp_subject()));
+    float ext_target = helix::ui::temperature::deci_to_degrees_f(
+        lv_subject_get_int(printer_state_->get_active_extruder_target_subject()));
+    float bed_temp = helix::ui::temperature::deci_to_degrees_f(
+        lv_subject_get_int(printer_state_->get_bed_temp_subject()));
+    float bed_target = helix::ui::temperature::deci_to_degrees_f(
+        lv_subject_get_int(printer_state_->get_bed_target_subject()));
 
     float total = 0.0f;
 

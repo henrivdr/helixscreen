@@ -18,6 +18,7 @@
 #include "printer_state.h"
 #include "probe_sensor_manager.h"
 #include "sensor_state.h"
+#include "unit_conversions.h"
 
 #include <algorithm>
 #include <thread>
@@ -642,8 +643,8 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                         if (settings.contains(key) &&
                                             settings[key].contains("target_temp") &&
                                             settings[key]["target_temp"].is_number()) {
-                                            int resting_deci = static_cast<int>(
-                                                settings[key]["target_temp"].get<double>() * 10);
+                                            int resting_deci = helix::units::to_decidegrees(
+                                                settings[key]["target_temp"].get<double>());
                                             hardware_.set_chamber_fan_resting_deci(resting_deci);
                                             spdlog::debug("[Discovery] Chamber cooling fan '{}' "
                                                           "resting target: {} deci",

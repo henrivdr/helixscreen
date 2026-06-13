@@ -32,6 +32,7 @@
 #include "theme_loader.h"
 #include "theme_manager.h"
 #include "tool_state.h"
+#include "ui_temperature_utils.h"
 #include "version.h"
 
 #include <spdlog/spdlog.h>
@@ -2990,8 +2991,8 @@ void on_print_state_changed_for_telemetry(lv_observer_t* observer, lv_subject_t*
         // Temperatures: subjects store decidegrees (value * 10), divide by 10
         int nozzle_temp_deci = lv_subject_get_int(ps.get_active_extruder_target_subject());
         int bed_temp_deci = lv_subject_get_int(ps.get_bed_target_subject());
-        int nozzle_temp = nozzle_temp_deci / 10;
-        int bed_temp = bed_temp_deci / 10;
+        int nozzle_temp = helix::ui::temperature::deci_to_degrees(nozzle_temp_deci);
+        int bed_temp = helix::ui::temperature::deci_to_degrees(bed_temp_deci);
 
         // Use filament data cached at print start from file metadata
         float filament_used_mm = s_telemetry_filament_used_mm;

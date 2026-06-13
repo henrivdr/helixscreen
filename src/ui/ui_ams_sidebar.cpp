@@ -674,7 +674,8 @@ void AmsOperationSidebar::update_step_progress(AmsAction action) {
         int current_deci = lv_subject_get_int(printer_state_.get_active_extruder_temp_subject());
         int target_deci = lv_subject_get_int(printer_state_.get_active_extruder_target_subject());
         char temp_buf[32];
-        temperature::format_temperature_pair(current_deci / 10, target_deci / 10, temp_buf,
+        temperature::format_temperature_pair(temperature::deci_to_degrees(current_deci),
+                                             temperature::deci_to_degrees(target_deci), temp_buf,
                                              sizeof(temp_buf));
         char label_buf[64];
         snprintf(label_buf, sizeof(label_buf), "%s %s", lv_tr("Heat nozzle"), temp_buf);
@@ -909,7 +910,7 @@ void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
     int target = get_load_temp_for_slot(slot_index);
 
     int current_deci = lv_subject_get_int(printer_state_.get_active_extruder_temp_subject());
-    int current = current_deci / 10;
+    int current = temperature::deci_to_degrees(current_deci);
 
     constexpr int TEMP_THRESHOLD = 5;
     if (current >= (target - TEMP_THRESHOLD)) {
@@ -938,7 +939,7 @@ void AmsOperationSidebar::check_pending_load() {
     }
 
     int current_deci = lv_subject_get_int(printer_state_.get_active_extruder_temp_subject());
-    int current = current_deci / 10;
+    int current = temperature::deci_to_degrees(current_deci);
 
     // Update display with current temperature while waiting
     char temp_buf[32];
@@ -990,7 +991,7 @@ void AmsOperationSidebar::show_preheat_feedback(int slot_index, int target_temp)
     LV_UNUSED(slot_index);
 
     int current_deci = lv_subject_get_int(printer_state_.get_active_extruder_temp_subject());
-    int current_temp = current_deci / 10;
+    int current_temp = temperature::deci_to_degrees(current_deci);
 
     char temp_buf[32];
     temperature::format_temperature_pair(current_temp, target_temp, temp_buf, sizeof(temp_buf));

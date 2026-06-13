@@ -8,6 +8,7 @@
 #include "moonraker_error.h"
 #include "post_op_cooldown_manager.h"
 #include "printer_detector.h"
+#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -827,11 +828,12 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (extr.contains("target") && extr["target"].is_number()) {
-                last_extruder_target_deci_ = static_cast<int>(extr["target"].get<double>() * 10);
+                last_extruder_target_deci_ =
+                    helix::units::to_decidegrees(extr["target"].get<double>());
             }
             if (extr.contains("temperature") && extr["temperature"].is_number()) {
                 last_extruder_temp_deci_ =
-                    static_cast<int>(extr["temperature"].get<double>() * 10);
+                    helix::units::to_decidegrees(extr["temperature"].get<double>());
             }
             AmsAction before = system_info_.action;
             on_extruder_temp_change_locked(last_extruder_temp_deci_, last_extruder_target_deci_);
@@ -1586,7 +1588,7 @@ void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_deci, int new_ta
             phase_tracker_.reached_target_once = true;
             phase_tracker_.baseline_target_deci = new_target_deci;
             spdlog::debug("[AMS CFS] Phase: reached target {}°C, baseline latched",
-                          new_target_deci / 10);
+                          helix::ui::temperature::deci_to_degrees(new_target_deci));
         }
     }
 
@@ -1604,7 +1606,8 @@ void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_deci, int new_ta
         phase_tracker_.pending_purge_target = true;
         spdlog::debug(
             "[AMS CFS] Phase: purge target jump latched (target {}°C > baseline {}°C + 10)",
-            new_target_deci / 10, phase_tracker_.baseline_target_deci / 10);
+            helix::ui::temperature::deci_to_degrees(new_target_deci),
+            helix::ui::temperature::deci_to_degrees(phase_tracker_.baseline_target_deci));
     }
     if (phase_tracker_.pending_purge_target && phase_tracker_.seen_filament_rise &&
         !phase_tracker_.seen_purge_signal) {

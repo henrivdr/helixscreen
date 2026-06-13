@@ -563,7 +563,8 @@ void ui_temp_display_set(lv_obj_t* obj, int current, int target) {
         return;
     }
 
-    data->current_deci = current * 10; // Approximate from whole degrees
+    data->current_deci =
+        helix::ui::temperature::degrees_to_deci(current); // Approximate from whole degrees
     data->current_temp = current;
     data->target_temp = target;
     update_display(data);

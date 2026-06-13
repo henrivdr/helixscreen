@@ -10,6 +10,7 @@
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "post_op_cooldown_manager.h"
+#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -334,10 +335,11 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
     if (status->contains("extruder")) {
         const auto& extr = (*status)["extruder"];
         if (extr.contains("target") && extr["target"].is_number()) {
-            last_extruder_target_deci_ = static_cast<int>(extr["target"].get<double>() * 10);
+            last_extruder_target_deci_ = helix::units::to_decidegrees(extr["target"].get<double>());
         }
         if (extr.contains("temperature") && extr["temperature"].is_number()) {
-            last_extruder_temp_deci_ = static_cast<int>(extr["temperature"].get<double>() * 10);
+            last_extruder_temp_deci_ =
+                helix::units::to_decidegrees(extr["temperature"].get<double>());
         }
         if (phase_tracker_.active) {
             AmsAction before = system_info_.action;
@@ -2128,7 +2130,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
             if (std::regex_search(line, m, heat_re)) {
                 int degrees = std::atoi(m[1].str().c_str());
                 if (degrees > 0) {
-                    phase_tracker_.target_deci = degrees * 10;
+                    phase_tracker_.target_deci = helix::ui::temperature::degrees_to_deci(degrees);
                     spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(),
                                   degrees);
                     apply_phase_action_locked();
@@ -2858,7 +2860,8 @@ void AmsBackendAd5xIfs::on_extruder_temp_locked(int temp_deci, int target_deci) 
     if (tgt > 0 && temp_deci >= (tgt - 5 /* 0.5°C in deci-degrees */)) {
         if (!phase_tracker_.reached_target_once) {
             phase_tracker_.reached_target_once = true;
-            spdlog::info("{} Phase: reached target {}°C", backend_log_tag(), tgt / 10);
+            spdlog::info("{} Phase: reached target {}°C", backend_log_tag(),
+                         helix::ui::temperature::deci_to_degrees(tgt));
         }
     }
     apply_phase_action_locked();
@@ -2924,11 +2927,13 @@ void AmsBackendAd5xIfs::apply_phase_action_locked() {
     switch (synth) {
     case AmsAction::HEATING:
         if (last_extruder_temp_deci_ > 0) {
-            std::snprintf(buf, sizeof(buf), "Heating nozzle to %d°C (%d°C)", tgt / 10,
-                          last_extruder_temp_deci_ / 10);
+            std::snprintf(buf, sizeof(buf), "Heating nozzle to %d°C (%d°C)",
+                          helix::ui::temperature::deci_to_degrees(tgt),
+                          helix::ui::temperature::deci_to_degrees(last_extruder_temp_deci_));
             detail = buf;
         } else {
-            std::snprintf(buf, sizeof(buf), "Heating nozzle to %d°C", tgt / 10);
+            std::snprintf(buf, sizeof(buf), "Heating nozzle to %d°C",
+                          helix::ui::temperature::deci_to_degrees(tgt));
             detail = buf;
         }
         break;

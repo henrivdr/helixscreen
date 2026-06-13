@@ -7,6 +7,7 @@
 #include "ui_emergency_stop.h"
 #include "ui_event_safety.h"
 #include "ui_nav_manager.h"
+#include "ui_temperature_utils.h"
 
 #include "app_globals.h"
 #include "config.h"
@@ -1014,7 +1015,7 @@ void PIDCalibrationPanel::start_progress_tracking() {
         return;
     }
 
-    float current_temp = static_cast<float>(lv_subject_get_int(temp_subj)) / 10.0f;
+    float current_temp = helix::ui::temperature::deci_to_degrees_f(lv_subject_get_int(temp_subj));
     progress_tracker_.start(heater_type, target_temp_, current_temp);
 
     // Load historical data if available
@@ -1069,7 +1070,7 @@ void PIDCalibrationPanel::on_progress_temperature(int temp_tenths) {
     if (state_ != State::CALIBRATING)
         return;
 
-    float temp = static_cast<float>(temp_tenths) / 10.0f;
+    float temp = helix::ui::temperature::deci_to_degrees_f(temp_tenths);
     uint32_t now = lv_tick_get();
 
     progress_tracker_.on_temperature(temp, now);

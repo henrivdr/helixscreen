@@ -811,8 +811,9 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
 
 void TemperatureService::set_heater(HeaterType type, int current, int target) {
     auto& h = heaters_[idx(type)];
-    helix::ui::temperature::validate_and_clamp_pair(current, target, h.min_temp * 10,
-                                                    h.max_temp * 10, heater_label(type));
+    helix::ui::temperature::validate_and_clamp_pair(
+        current, target, helix::ui::temperature::degrees_to_deci(h.min_temp),
+        helix::ui::temperature::degrees_to_deci(h.max_temp), heater_label(type));
     h.current = current;
     h.target = target;
     update_display(type);
@@ -942,7 +943,9 @@ void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
         max_value = self->controller_->keypad_range(type).max;
     }
 
-    ui_keypad_config_t keypad_config = {.initial_value = static_cast<float>(h.target / 10),
+    ui_keypad_config_t keypad_config = {.initial_value =
+                                            static_cast<float>(
+                                                helix::ui::temperature::deci_to_degrees(h.target)),
                                         .min_value = h.config.keypad_range.min,
                                         .max_value = max_value,
                                         .title_label = h.config.title,
@@ -1091,7 +1094,9 @@ void TemperatureService::on_nozzle_custom_clicked(lv_event_t* e) {
     auto& h = self->heaters_[idx(HeaterType::Nozzle)];
     s_keypad_data[idx(HeaterType::Nozzle)] = {self, HeaterType::Nozzle};
 
-    ui_keypad_config_t keypad_config = {.initial_value = static_cast<float>(h.target / 10),
+    ui_keypad_config_t keypad_config = {.initial_value =
+                                            static_cast<float>(
+                                                helix::ui::temperature::deci_to_degrees(h.target)),
                                         .min_value = h.config.keypad_range.min,
                                         .max_value = h.config.keypad_range.max,
                                         .title_label = "Nozzle Temp",
@@ -1112,7 +1117,9 @@ void TemperatureService::on_bed_custom_clicked(lv_event_t* e) {
     auto& h = self->heaters_[idx(HeaterType::Bed)];
     s_keypad_data[idx(HeaterType::Bed)] = {self, HeaterType::Bed};
 
-    ui_keypad_config_t keypad_config = {.initial_value = static_cast<float>(h.target / 10),
+    ui_keypad_config_t keypad_config = {.initial_value =
+                                            static_cast<float>(
+                                                helix::ui::temperature::deci_to_degrees(h.target)),
                                         .min_value = h.config.keypad_range.min,
                                         .max_value = h.config.keypad_range.max,
                                         .title_label = "Heat Bed Temp",
@@ -1324,7 +1331,7 @@ void TemperatureService::replay_history_from_manager(ui_temp_graph_t* graph, int
 
     int replayed = 0;
     for (const auto& sample : samples) {
-        float temp = static_cast<float>(sample.temp_deci) / 10.0f;
+        float temp = helix::ui::temperature::deci_to_degrees_f(sample.temp_deci);
         ui_temp_graph_update_series_with_time(graph, series_id, temp, sample.timestamp_ms);
         replayed++;
     }

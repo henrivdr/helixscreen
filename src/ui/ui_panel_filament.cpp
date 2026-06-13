@@ -718,7 +718,7 @@ void FilamentPanel::handle_custom_chamber_confirmed(float value) {
     spdlog::info("[{}] Custom chamber temperature confirmed: {}°C", get_name(),
                  static_cast<int>(value));
 
-    chamber_target_ = static_cast<int>(value * 10);
+    chamber_target_ = helix::units::to_decidegrees(value);
     update_chamber_temp_display();
 
     int target = static_cast<int>(value);
@@ -1720,8 +1720,9 @@ void FilamentPanel::handle_cooldown() {
 
 void FilamentPanel::set_temp(int current, int target) {
     // Validate temperature ranges
-    helix::ui::temperature::validate_and_clamp_pair(current, target, nozzle_min_temp_ * 10,
-                                                    nozzle_max_temp_ * 10, "Filament");
+    helix::ui::temperature::validate_and_clamp_pair(
+        current, target, helix::ui::temperature::degrees_to_deci(nozzle_min_temp_),
+        helix::ui::temperature::degrees_to_deci(nozzle_max_temp_), "Filament");
 
     nozzle_current_ = current;
     nozzle_target_ = target;
