@@ -257,8 +257,6 @@ class TemperatureService {
     static void on_heater_custom_clicked(lv_event_t* e);
 
     // Backward-compat callbacks (still registered for old XML files during transition)
-    static void on_nozzle_confirm_clicked(lv_event_t* e);
-    static void on_bed_confirm_clicked(lv_event_t* e);
     static void on_nozzle_preset_off_clicked(lv_event_t* e);
     static void on_nozzle_preset_pla_clicked(lv_event_t* e);
     static void on_nozzle_preset_petg_clicked(lv_event_t* e);

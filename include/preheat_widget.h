@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-class MoonrakerAPI;
-
 namespace helix {
 
 struct ToolInfo;
@@ -58,8 +56,8 @@ class PreheatWidget : public PanelWidget {
     void update_button_label();
     void update_heater_state();
     void update_tool_target_label();
-    void set_temperatures(MoonrakerAPI* api, int nozzle, int bed);
-    void set_temperatures_multi(MoonrakerAPI* api, int nozzle, int bed);
+    void set_temperatures(int nozzle, int bed);
+    void set_temperatures_multi(int nozzle, int bed);
     void cycle_tool_target();
 
     void handle_nozzle_tap();

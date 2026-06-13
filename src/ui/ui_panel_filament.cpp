@@ -36,6 +36,7 @@
 #include "settings_manager.h"
 #include "standard_macros.h"
 #include "static_panel_registry.h"
+#include "temperature_controller.h"
 #include "temperature_service.h"
 #include "theme_manager.h"
 #include "tool_state.h"
@@ -288,10 +289,10 @@ void FilamentPanel::deinit_subjects() {
         pending_preheat_op_ = PreheatOp::NONE;
         pending_preheat_target_ = 0;
         // Don't schedule delayed cooldown during teardown — just cool down immediately
-        if (prior_nozzle_target_ == 0 && api_) {
-            api_->set_temperature(
-                printer_state_.active_extruder_name(), 0, []() {},
-                [](const MoonrakerError& /*err*/) {});
+        if (prior_nozzle_target_ == 0) {
+            if (auto* c = get_temperature_controller()) {
+                c->set_target(helix::HeaterType::Nozzle, 0.0, {.toast = false});
+            }
         }
         prior_nozzle_target_ = 0;
     }
@@ -633,33 +634,24 @@ void FilamentPanel::handle_preset_button(int material_id) {
     set_material(material_id);
 
     // Send temperature commands to printer (nozzle, bed, and chamber if applicable)
-    if (api_ && selected_material_ == material_id) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), static_cast<double>(nozzle_target_),
-            [target = nozzle_target_]() {
-                NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
-            },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set nozzle temp: {}"), error.user_message());
-            });
-        api_->set_temperature(
-            "heater_bed", static_cast<double>(bed_target_),
-            [target = bed_target_]() { NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target); },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), error.user_message());
-            });
+    if (selected_material_ == material_id) {
+        if (auto* c = get_temperature_controller()) {
+            c->set_target(helix::HeaterType::Nozzle, static_cast<double>(nozzle_target_),
+                          {.toast = true, .on_success = [target = nozzle_target_]() {
+                               NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
+                           }});
+            c->set_target(helix::HeaterType::Bed, static_cast<double>(bed_target_),
+                          {.toast = true, .on_success = [target = bed_target_]() {
+                               NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target);
+                           }});
 
-        // Set chamber temperature if preset specifies one and printer has a chamber heater
-        if (chamber_target_ > 0) {
-            const auto& heater_name = printer_state_.get_discovery().chamber_heater_name();
-            if (!heater_name.empty()) {
+            // Set chamber temperature if preset specifies one
+            if (chamber_target_ > 0) {
                 int target = centi_to_degrees(chamber_target_);
-                api_->set_temperature(
-                    heater_name, static_cast<double>(target),
-                    [target]() { NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target); },
-                    [](const MoonrakerError& err) {
-                        NOTIFY_ERROR(lv_tr("Failed to set chamber temp: {}"), err.user_message());
-                    });
+                c->set_target(helix::HeaterType::Chamber, static_cast<double>(target),
+                              {.toast = true, .on_success = [target]() {
+                                   NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target);
+                               }});
             }
         }
     }
@@ -729,20 +721,12 @@ void FilamentPanel::handle_custom_chamber_confirmed(float value) {
     chamber_target_ = static_cast<int>(value * 10);
     update_chamber_temp_display();
 
-    if (api_) {
-        const auto& heater_name = printer_state_.get_discovery().chamber_heater_name();
-        if (heater_name.empty()) {
-            NOTIFY_ERROR(lv_tr("Chamber heater not found in printer configuration"));
-            return;
-        }
-
-        int target = static_cast<int>(value);
-        api_->set_temperature(
-            heater_name, static_cast<double>(target),
-            [target]() { NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target); },
-            [](const MoonrakerError& err) {
-                NOTIFY_ERROR(lv_tr("Failed to set chamber temp: {}"), err.user_message());
-            });
+    int target = static_cast<int>(value);
+    if (auto* c = get_temperature_controller()) {
+        c->set_target(helix::HeaterType::Chamber, static_cast<double>(target),
+                      {.toast = true, .on_success = [target]() {
+                           NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target);
+                       }});
     }
 }
 
@@ -760,15 +744,11 @@ void FilamentPanel::handle_custom_nozzle_confirmed(float value) {
     update_status();
 
     // Send temperature command to printer
-    if (api_) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), static_cast<double>(nozzle_target_),
-            [target = nozzle_target_]() {
-                NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
-            },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set nozzle temp: {}"), error.user_message());
-            });
+    if (auto* c = get_temperature_controller()) {
+        c->set_target(helix::HeaterType::Nozzle, static_cast<double>(nozzle_target_),
+                      {.toast = true, .on_success = [target = nozzle_target_]() {
+                           NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
+                       }});
     }
 }
 
@@ -784,13 +764,11 @@ void FilamentPanel::handle_custom_bed_confirmed(float value) {
     update_material_temp_display();
 
     // Send temperature command to printer
-    if (api_) {
-        api_->set_temperature(
-            "heater_bed", static_cast<double>(bed_target_),
-            [target = bed_target_]() { NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target); },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), error.user_message());
-            });
+    if (auto* c = get_temperature_controller()) {
+        c->set_target(helix::HeaterType::Bed, static_cast<double>(bed_target_),
+                      {.toast = true, .on_success = [target = bed_target_]() {
+                           NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target);
+                       }});
     }
 }
 
@@ -1555,19 +1533,15 @@ void FilamentPanel::handle_spool_preset_button() {
     update_status();
 
     // Send temperature commands
-    if (api_) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), static_cast<double>(nozzle_target_),
-            [t = nozzle_target_]() { NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), t); },
-            [](const MoonrakerError& err) {
-                NOTIFY_ERROR(lv_tr("Failed to set nozzle temp: {}"), err.user_message());
-            });
-        api_->set_temperature(
-            "heater_bed", static_cast<double>(bed_target_),
-            [t = bed_target_]() { NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), t); },
-            [](const MoonrakerError& err) {
-                NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), err.user_message());
-            });
+    if (auto* c = get_temperature_controller()) {
+        c->set_target(helix::HeaterType::Nozzle, static_cast<double>(nozzle_target_),
+                      {.toast = true, .on_success = [t = nozzle_target_]() {
+                           NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), t);
+                       }});
+        c->set_target(helix::HeaterType::Bed, static_cast<double>(bed_target_),
+                      {.toast = true, .on_success = [t = bed_target_]() {
+                           NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), t);
+                       }});
     }
 
     spdlog::info("[{}] Spool preset applied: {} (nozzle={}°C, bed={}°C)", get_name(),
@@ -1916,10 +1890,10 @@ void FilamentPanel::start_preheat_for_op(PreheatOp op) {
     // through Klipper, while the prior_nozzle_target_ snapshot guarantees
     // the heater isn't turned off when the op completes.
     const int real_target = current_extruder_target();
-    if (api_ && real_target < target) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), static_cast<double>(target), []() {},
-            [](const MoonrakerError& /*err*/) {});
+    if (real_target < target) {
+        if (auto* c = get_temperature_controller()) {
+            c->set_target(helix::HeaterType::Nozzle, static_cast<double>(target), {.toast = false});
+        }
     }
 
     if (material_name.empty()) {
@@ -1983,10 +1957,10 @@ void FilamentPanel::cancel_pending_preheat() {
     PostOpCooldownManager::instance().cancel();
 
     // Restore heater to prior state immediately (no delay for cancel)
-    if (prior_nozzle_target_ == 0 && api_) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), 0, []() {},
-            [](const MoonrakerError& /*err*/) {});
+    if (prior_nozzle_target_ == 0) {
+        if (auto* c = get_temperature_controller()) {
+            c->set_target(helix::HeaterType::Nozzle, 0.0, {.toast = false});
+        }
     }
     prior_nozzle_target_ = 0;
 

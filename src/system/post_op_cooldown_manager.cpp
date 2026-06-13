@@ -7,6 +7,7 @@
 #include "config.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
+#include "temperature_controller.h"
 #include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
@@ -65,9 +66,9 @@ void PostOpCooldownManager::schedule() {
 
                 spdlog::info("[PostOpCooldown] Turning off extruder heater ({})",
                              state.active_extruder_name());
-                self.api_->set_temperature(
-                    state.active_extruder_name(), 0, []() {},
-                    [](const MoonrakerError& /*err*/) {});
+                if (auto* c = get_temperature_controller()) {
+                    c->set_target(helix::HeaterType::Nozzle, 0, {.toast = false});
+                }
             },
             static_cast<uint32_t>(delay_seconds) * 1000, nullptr);
         lv_timer_set_repeat_count(timer_, 1);
