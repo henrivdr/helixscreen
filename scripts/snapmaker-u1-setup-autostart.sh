@@ -54,6 +54,13 @@ if [ ! -f "$INIT_SCRIPT" ]; then
     exit 1
 fi
 
+# Belt-and-suspenders: the S99screen / S99fb-http delegates only start HelixScreen
+# if helixscreen.init is executable ([ -x ... ]); otherwise they silently fall
+# through to the (disabled) stock UI and nothing comes up at boot. The installer
+# normally chmods it, but a deploy that bypassed the installer can leave it
+# non-executable — so guarantee it here.
+chmod +x "$INIT_SCRIPT" 2>/dev/null || true
+
 # Step 1: Create /oem/.debug to prevent overlay wipe on boot
 # Without this, S01aoverlayfs runs: rm -rf /oem/overlay/*
 if [ ! -f "${SYSROOT}/oem/.debug" ]; then
@@ -66,7 +73,8 @@ fi
 # Step 2: Render desired S99screen patch into a temp file
 S99_TARGET="${SYSROOT}/etc/init.d/S99screen"
 TMP_PATCH=$(mktemp)
-trap 'rm -f "$TMP_PATCH"' EXIT
+TMP_FB=""
+trap 'rm -f "$TMP_PATCH" "$TMP_FB"' EXIT
 
 cat > "$TMP_PATCH" << 'PATCH'
 #!/bin/sh
@@ -149,6 +157,69 @@ else
     cp "$TMP_PATCH" "$S99_TARGET"
     chmod +x "$S99_TARGET"
     echo "S99screen patched — HelixScreen will auto-start on boot"
+fi
+
+# Step 4b: Firmware 1.4 boot-glob hook — S99fb-http.
+#
+# CRITICAL (1.4 only): busybox init runs /etc/init.d/rcS from the read-only
+# squashfs and expands its `for i in /etc/init.d/S??*` boot glob ONCE, *before*
+# S01aoverlayfs pivot_roots onto the .debug-persisted overlay. 1.4 deleted
+# S99screen from the squashfs, so our overlay-created S99screen is NOT in that
+# frozen glob and never runs at boot (it only runs at *shutdown*, via rcK, once
+# the overlay is active). The stock display launcher S99fb-http DOES ship in the
+# 1.4 squashfs, so it IS in the boot glob and rcS executes the overlay copy of
+# it after the pivot. We therefore install the same HelixScreen launcher
+# delegate over S99fb-http, preserving the stock fb-http behavior (exec'd from
+# the saved .stock) for the helix-not-installed case.
+#
+# 1.2/1.3 have no S99fb-http (they boot the UI via S99screen, hooked above), so
+# this step is a no-op there — preserving 1.2/1.3 compatibility.
+S99FB_TARGET="${SYSROOT}/etc/init.d/S99fb-http"
+if [ -f "$S99FB_TARGET" ]; then
+    TMP_FB=$(mktemp)
+    # The wrapper body runs ON-DEVICE, so it uses absolute device paths (no
+    # SYSROOT). Quoted heredoc — nothing here is expanded at render time.
+    cat > "$TMP_FB" << 'FBPATCH'
+#!/bin/sh
+#
+# Start/stop the on-device screen.
+# Modified by HelixScreen: when HelixScreen is installed, launch it instead of
+# the stock framebuffer-HTTP screen; otherwise fall back to the original
+# behavior, preserved as /etc/init.d/S99fb-http.stock.
+#
+for helix_init in /userdata/helixscreen/config/helixscreen.init /opt/helixscreen/config/helixscreen.init; do
+    if [ -x "$helix_init" ]; then
+        case "$1" in
+          start)   "$helix_init" start ;;
+          stop)    "$helix_init" stop ;;
+          restart) "$helix_init" stop; sleep 1; "$helix_init" start ;;
+          *) echo "Usage: $0 {start|stop|restart}"; exit 1 ;;
+        esac
+        exit 0
+    fi
+done
+# HelixScreen not installed — run the original fb-http behavior.
+if [ -x /etc/init.d/S99fb-http.stock ]; then
+    exec /etc/init.d/S99fb-http.stock "$@"
+fi
+exit 0
+FBPATCH
+    if cmp -s "$TMP_FB" "$S99FB_TARGET"; then
+        echo "S99fb-http already patched (current version)"
+    else
+        # Preserve the stock S99fb-http the first time we replace it (detected by
+        # absence of a HelixScreen marker), so the uninstaller can restore it.
+        if [ ! -f "$S99FB_TARGET.stock" ] && \
+           ! grep -q HelixScreen "$S99FB_TARGET" 2>/dev/null; then
+            cp "$S99FB_TARGET" "$S99FB_TARGET.stock"
+            echo "Saved stock S99fb-http backup to $S99FB_TARGET.stock"
+        fi
+        cp "$TMP_FB" "$S99FB_TARGET"
+        chmod +x "$S99FB_TARGET"
+        echo "S99fb-http patched — HelixScreen will auto-start on boot (firmware 1.4)"
+    fi
+else
+    echo "No S99fb-http present (firmware 1.2/1.3) — S99screen hook handles boot"
 fi
 
 # Step 5: Neutralize the stock on-device UI so HelixScreen owns the display.

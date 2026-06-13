@@ -56,6 +56,20 @@ EOF
     chmod +x "$MOCK_ROOT/etc/init.d/S99screen"
 }
 
+# Pre-create a stock S99fb-http (no HelixScreen marker, the 1.4 framebuffer-HTTP
+# screen launcher). 1.4 ships this in the squashfs (so it IS in the boot glob);
+# 1.2/1.3 do NOT have it.
+seed_stock_s99fbhttp() {
+    cat > "$MOCK_ROOT/etc/init.d/S99fb-http" <<'EOF'
+#!/bin/sh
+# Stock fb-http remote-screen launcher
+NAME="fb-http"
+DAEMON="/usr/local/bin/fb-http.py"
+start-stop-daemon -S -b -x "$DAEMON" -m -p /var/run/$NAME.pid
+EOF
+    chmod +x "$MOCK_ROOT/etc/init.d/S99fb-http"
+}
+
 run_autostart() {
     HELIX_SETUP_ROOT="$MOCK_ROOT" bash "$AUTOSTART" "$DEPLOY_DIR"
 }
@@ -113,12 +127,76 @@ run_autostart() {
     [ -f "$MOCK_ROOT/oem/.debug" ]
 }
 
+@test "autostart ensures helixscreen.init is executable (delegate -x guard)" {
+    # A deploy that bypassed the installer can leave the init non-executable,
+    # which makes the S99screen/S99fb-http delegates silently skip HelixScreen.
+    chmod a-x "$DEPLOY_DIR/config/helixscreen.init"
+    [ ! -x "$DEPLOY_DIR/config/helixscreen.init" ]
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+    [ -x "$DEPLOY_DIR/config/helixscreen.init" ]
+}
+
 @test "autostart: gui already disabled is reported, not re-enabled" {
     chmod a-x "$MOCK_ROOT/usr/bin/gui"
     run run_autostart
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "already disabled"
     [ ! -x "$MOCK_ROOT/usr/bin/gui" ]
+}
+
+# --- Firmware 1.4 boot-glob hook: S99fb-http -------------------------------
+# On 1.4 the squashfs deleted S99screen and our overlay-created S99screen is not
+# in the boot-time rcS glob (rcS runs from squashfs, expands S?? before the
+# overlay pivot), so it never starts helix at boot. The stock display launcher
+# S99fb-http IS in the squashfs glob, so we hook it too.
+
+@test "autostart 1.4: hooks S99fb-http — saves .stock, writes helix delegate" {
+    seed_stock_s99fbhttp   # 1.4: fb-http present, no S99screen seeded
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+
+    # Stock fb-http preserved.
+    [ -f "$MOCK_ROOT/etc/init.d/S99fb-http.stock" ]
+    grep -q "fb-http.py" "$MOCK_ROOT/etc/init.d/S99fb-http.stock"
+    ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99fb-http.stock"
+
+    # Live S99fb-http now delegates to HelixScreen's init and falls back to .stock.
+    grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99fb-http"
+    grep -q "helixscreen.init" "$MOCK_ROOT/etc/init.d/S99fb-http"
+    grep -q "S99fb-http.stock" "$MOCK_ROOT/etc/init.d/S99fb-http"
+    [ -x "$MOCK_ROOT/etc/init.d/S99fb-http" ]
+}
+
+@test "autostart 1.2/1.3: no S99fb-http present — S99screen hooked, fb-http skipped (compat)" {
+    seed_stock_s99screen   # 1.3: S99screen present, NO S99fb-http
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+
+    # 1.3 boot launcher (S99screen) still hooked — compatibility preserved.
+    grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99screen"
+    [ -f "$MOCK_ROOT/etc/init.d/S99screen.stock" ]
+
+    # We must NOT fabricate an S99fb-http where the firmware has none.
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99fb-http" ]
+    echo "$output" | grep -qi "1.2/1.3"
+}
+
+@test "autostart 1.4 idempotent: second run keeps S99fb-http patched, .stock intact" {
+    seed_stock_s99fbhttp
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+    run run_autostart
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "S99fb-http already patched"
+    grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99fb-http"
+    # .stock must still be the stock (not overwritten with our delegate).
+    grep -q "fb-http.py" "$MOCK_ROOT/etc/init.d/S99fb-http.stock"
+    ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99fb-http.stock"
 }
 
 # --- Uninstall restore block -------------------------------------------------
@@ -139,6 +217,7 @@ SH_EOF
     # GNU sed does not — sidestep both by writing through a temp file).
     sed \
         -e "s|/usr/bin/gui|$MOCK_ROOT/usr/bin/gui|g" \
+        -e "s|/etc/init.d/S99fb-http|$MOCK_ROOT/etc/init.d/S99fb-http|g" \
         -e "s|/etc/init.d/S99screen|$MOCK_ROOT/etc/init.d/S99screen|g" \
         "$BATS_TEST_TMPDIR/u1_restore.sh" > "$BATS_TEST_TMPDIR/u1_restore.sh.tmp"
     mv "$BATS_TEST_TMPDIR/u1_restore.sh.tmp" "$BATS_TEST_TMPDIR/u1_restore.sh"
@@ -171,6 +250,32 @@ EOF
     # gui re-enabled, our launcher removed (1.4 had none to restore).
     [ -x "$MOCK_ROOT/usr/bin/gui" ]
     [ ! -e "$MOCK_ROOT/etc/init.d/S99screen" ]
+}
+
+@test "uninstall u1 (1.4): re-enables gui and restores stock S99fb-http from .stock" {
+    chmod a-x "$MOCK_ROOT/usr/bin/gui"
+    # Post-install 1.4 state: our delegate is live, stock fb-http saved as .stock.
+    cat > "$MOCK_ROOT/etc/init.d/S99fb-http" <<'EOF'
+#!/bin/sh
+# Modified by HelixScreen
+exec /userdata/helixscreen/config/helixscreen.init "$@"
+EOF
+    chmod +x "$MOCK_ROOT/etc/init.d/S99fb-http"
+    cat > "$MOCK_ROOT/etc/init.d/S99fb-http.stock" <<'EOF'
+#!/bin/sh
+start-stop-daemon -S -b -x /usr/local/bin/fb-http.py -m -p /var/run/fb-http.pid
+EOF
+    chmod +x "$MOCK_ROOT/etc/init.d/S99fb-http.stock"
+
+    extract_u1_restore
+    run u1_restore
+    [ "$status" -eq 0 ]
+
+    [ -x "$MOCK_ROOT/usr/bin/gui" ]
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99fb-http.stock" ]
+    [ -f "$MOCK_ROOT/etc/init.d/S99fb-http" ]
+    grep -q "fb-http.py" "$MOCK_ROOT/etc/init.d/S99fb-http"
+    ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99fb-http"
 }
 
 @test "uninstall u1 (1.3): re-enables gui and restores stock S99screen from .stock" {

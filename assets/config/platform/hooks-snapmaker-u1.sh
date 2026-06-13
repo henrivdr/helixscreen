@@ -1,10 +1,17 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Platform hooks: Snapmaker U1 (Extended Firmware)
+# Platform hooks: Snapmaker U1 (Paxx Extended Firmware)
 #
-# The Snapmaker U1 runs Debian Trixie with its own touchscreen UI application.
+# The Snapmaker U1 runs Buildroot 2024.02 (Rockchip RK3562) with busybox SysV
+# init — NOT Debian/systemd. Its stock touchscreen UI is /usr/bin/gui.
 # HelixScreen uses the DRM backend for double-buffered page flipping.
+#
+# The build ships NO helix-watchdog, and busybox SysV init does not respawn S99
+# children — so a boot-time SIGTERM to helix-screen would be permanent without a
+# supervisor. We opt into the launcher's boot-time respawn self-heal below, and
+# decouple WiFi bring-up from helix-screen's lifetime so a momentary UI death
+# never strands the device off-network.
 #
 # DRM CRTC keepalive: The U1's display is driven by a Rockchip DRM/KMS
 # pipeline (rockchipdrmfb). When the stock UI process exits, the kernel's
@@ -25,6 +32,22 @@
 
 # PID of the background keepalive process
 DRM_KEEPALIVE_PID=""
+
+# Opt into the launcher's boot-time respawn self-heal. The U1 ships no
+# helix-watchdog and busybox init does not respawn S99 children, so a single
+# boot-time SIGTERM to helix-screen (handled as _exit(0)) would otherwise be
+# permanent. The launcher (helix-launcher.sh) reads HELIX_BOOT_RESPAWN_MAX and
+# respawns a fast-exiting helix-screen up to this many times. Respect any value
+# the user pinned in helixscreen.env.
+export HELIX_BOOT_RESPAWN_MAX="${HELIX_BOOT_RESPAWN_MAX:-3}"
+
+# WiFi restore configuration. The stock Snapmaker app saves the user's network
+# to HELIX_SAVED_WPA and loads it into wpa_supplicant at runtime; since we
+# replaced the stock app, we do it ourselves (see ensure_wifi_associated).
+# Overridable for tests via the environment.
+HELIX_SAVED_WPA="${HELIX_SAVED_WPA:-/oem/printer_data/gui/wpa_supplicant.conf}"
+HELIX_WIFI_FLAG="${HELIX_WIFI_FLAG:-/tmp/helix-wifi-restore.active}"
+HELIX_WIFI_IFACE="${HELIX_WIFI_IFACE:-wlan0}"
 
 # Stop Snapmaker's stock touchscreen UI so HelixScreen can access the display.
 #
@@ -97,8 +120,8 @@ platform_enable_backlight() {
     return 0
 }
 
-# Debian Trixie manages services via systemd - Klipper/Moonraker should be
-# available by the time HelixScreen starts.
+# The U1's SysV init starts Klipper/Moonraker (S60klipper/S61moonraker) before
+# our S99 launcher, so they should be available by the time HelixScreen starts.
 platform_wait_for_services() {
     return 0
 }
@@ -134,6 +157,89 @@ ensure_lmd_running() {
     )
 }
 
+# True (0) if the WiFi interface reports an associated/completed state.
+_helix_wifi_connected() {
+    wpa_cli -i "$HELIX_WIFI_IFACE" status 2>/dev/null | grep -q '^wpa_state=COMPLETED'
+}
+
+# Synchronously push the saved network into wpa_supplicant. Idempotent and safe
+# to call repeatedly: returns 0 if it applied (or the link was already up), 1 if
+# there was nothing to apply (no saved config, no wpa_cli, or empty credentials).
+_helix_wifi_apply_saved() {
+    [ -f "$HELIX_SAVED_WPA" ] || return 1
+    command -v wpa_cli >/dev/null 2>&1 || return 1
+
+    _ssid=$(grep 'ssid=' "$HELIX_SAVED_WPA" | head -1 | sed 's/.*ssid="\(.*\)"/\1/')
+    _psk=$(grep 'psk=' "$HELIX_SAVED_WPA" | head -1 | sed 's/.*psk="\(.*\)"/\1/')
+    [ -n "$_ssid" ] && [ -n "$_psk" ] || return 1
+
+    # Already connected — don't churn an up link.
+    if _helix_wifi_connected; then
+        return 0
+    fi
+
+    _netid=$(wpa_cli -i "$HELIX_WIFI_IFACE" add_network 2>/dev/null | tail -1)
+    if [ -n "$_netid" ] && [ "$_netid" != "FAIL" ]; then
+        wpa_cli -i "$HELIX_WIFI_IFACE" set_network "$_netid" ssid "\"$_ssid\"" >/dev/null 2>&1
+        wpa_cli -i "$HELIX_WIFI_IFACE" set_network "$_netid" psk "\"$_psk\"" >/dev/null 2>&1
+        wpa_cli -i "$HELIX_WIFI_IFACE" enable_network "$_netid" >/dev/null 2>&1
+        wpa_cli -i "$HELIX_WIFI_IFACE" select_network "$_netid" >/dev/null 2>&1
+        echo "WiFi: restoring saved network '$_ssid' (id=$_netid)"
+    fi
+    return 0
+}
+
+# Bring WiFi up INDEPENDENTLY of helix-screen's lifetime.
+#
+# The stock Snapmaker UI (which we replace) is what loads the user's saved WiFi
+# credentials into wpa_supplicant at runtime. With the stock UI disabled, only
+# we restore WiFi — and the old approach (one synchronous attempt in
+# platform_pre_start) both raced wpa_supplicant/wlan0 at early boot AND coupled
+# network recovery to helix's start path, so a momentary helix death stranded
+# the device off-network and unreachable.
+#
+# So we spawn a DETACHED, idempotent worker that waits for the interface, then
+# applies the saved network and retries until it associates. The worker outlives
+# helix-screen (a `( ) &` grandchild reparented to init; the launcher's cleanup
+# trap only killalls helix-* by name, not this sh worker), so the device stays
+# reachable even if the UI dies. Returns immediately — never blocks boot.
+ensure_wifi_associated() {
+    [ -f "$HELIX_SAVED_WPA" ] || return 0
+    command -v wpa_cli >/dev/null 2>&1 || return 0
+
+    # Already up — nothing to do.
+    if _helix_wifi_connected; then
+        return 0
+    fi
+
+    # Single-flight: don't stack workers across the init + launcher pre_start
+    # calls (both run platform_pre_start). A live worker owns HELIX_WIFI_FLAG.
+    if [ -f "$HELIX_WIFI_FLAG" ] && kill -0 "$(cat "$HELIX_WIFI_FLAG" 2>/dev/null)" 2>/dev/null; then
+        return 0
+    fi
+
+    (
+        trap 'rm -f "$HELIX_WIFI_FLAG" 2>/dev/null || true' EXIT
+        # Wait for wpa_supplicant's control interface (up to ~30s).
+        _w=0
+        while [ "$_w" -lt 30 ]; do
+            wpa_cli -i "$HELIX_WIFI_IFACE" status >/dev/null 2>&1 && break
+            sleep 1
+            _w=$((_w + 1))
+        done
+        # Apply + verify, a few attempts.
+        _try=0
+        while [ "$_try" -lt 6 ]; do
+            _helix_wifi_connected && break
+            _helix_wifi_apply_saved
+            sleep 3
+            _try=$((_try + 1))
+        done
+    ) &
+    echo $! > "$HELIX_WIFI_FLAG" 2>/dev/null || true
+    return 0
+}
+
 platform_pre_start() {
     export HELIX_CACHE_DIR="/userdata/helixscreen/cache"
     # Force DRM device — skip auto-detection which may race with connector state
@@ -143,27 +249,9 @@ platform_pre_start() {
     # Idempotent: no-op when lmd is already alive.
     ensure_lmd_running
 
-    # Restore saved WiFi credentials into wpa_supplicant.
-    # The stock Snapmaker app saves WiFi config to /oem/printer_data/gui/
-    # and loads it into wpa_supplicant at runtime. Since we replaced the stock
-    # app, we need to do this ourselves.
-    SAVED_WPA="/oem/printer_data/gui/wpa_supplicant.conf"
-    if [ -f "$SAVED_WPA" ] && command -v wpa_cli >/dev/null 2>&1; then
-        # Extract network blocks and configure wpa_supplicant
-        SSID=$(grep 'ssid=' "$SAVED_WPA" | head -1 | sed 's/.*ssid="\(.*\)"/\1/')
-        PSK=$(grep 'psk=' "$SAVED_WPA" | head -1 | sed 's/.*psk="\(.*\)"/\1/')
-        if [ -n "$SSID" ] && [ -n "$PSK" ]; then
-            echo "WiFi: restoring saved network '$SSID'"
-            NETID=$(wpa_cli -i wlan0 add_network 2>/dev/null | tail -1)
-            if [ -n "$NETID" ] && [ "$NETID" != "FAIL" ]; then
-                wpa_cli -i wlan0 set_network "$NETID" ssid "\"$SSID\"" >/dev/null 2>&1
-                wpa_cli -i wlan0 set_network "$NETID" psk "\"$PSK\"" >/dev/null 2>&1
-                wpa_cli -i wlan0 enable_network "$NETID" >/dev/null 2>&1
-                wpa_cli -i wlan0 select_network "$NETID" >/dev/null 2>&1
-                echo "WiFi: network '$SSID' configured (id=$NETID)"
-            fi
-        fi
-    fi
+    # Bring WiFi up independently of helix-screen's lifetime (detached worker).
+    # Must NOT block boot or strand the device if helix later dies.
+    ensure_wifi_associated
 
     return 0
 }

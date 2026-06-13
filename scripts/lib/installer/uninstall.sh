@@ -380,6 +380,13 @@ uninstall() {
             log_info "Removing HelixScreen-created /etc/init.d/S99screen (firmware 1.4)"
             $SUDO rm -f /etc/init.d/S99screen 2>/dev/null || true
         fi
+        # Firmware 1.4: restore the stock framebuffer-HTTP screen launcher we
+        # took over for boot-time autostart (1.2/1.3 have no .stock — no-op).
+        if [ -f /etc/init.d/S99fb-http.stock ]; then
+            log_info "Restoring stock /etc/init.d/S99fb-http (firmware 1.4)"
+            $SUDO mv /etc/init.d/S99fb-http.stock /etc/init.d/S99fb-http \
+                || log_warn "Could not restore /etc/init.d/S99fb-http — stock screen launcher may be missing"
+        fi
         restored_ui="Snapmaker stock UI (/usr/bin/gui re-enabled)"
     fi
 

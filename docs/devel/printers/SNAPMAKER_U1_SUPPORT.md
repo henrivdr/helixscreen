@@ -35,23 +35,24 @@ HelixScreen targets the community **PAXX Extended Firmware** for the U1 — it p
 
 | Extended Firmware | Status | Notes |
 |-------------------|--------|-------|
+| 1.2.x | **Supported** | Ships `/etc/init.d/S99screen` (launches the stock UI binary `/usr/bin/gui`). Hooked like 1.3. |
 | 1.3.x | **Tested** — primary development target | Ships `/etc/init.d/S99screen`, which launches the stock UI binary `/usr/bin/gui`. |
-| 1.4.x | **Supported, untested** — expected to work | `S99screen` was removed; the stock UI is launched from a relocated path. HelixScreen no longer depends on that script name (see below). |
+| 1.4.x | **Tested + hardware-validated** | `S99screen` was deleted from the SquashFS; the stock screen is `S99fb-http`. HelixScreen hooks `S99fb-http` for boot autostart (see below). |
 
 Source: [paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware).
 
 ### How HelixScreen takes over the display
 
-The U1 root filesystem is a read-only SquashFS with a writable OverlayFS upper on `/oem`. `/etc/init.d/S01aoverlayfs` wipes that upper on every boot **unless `/oem/.debug` exists**, so the installer touches `/oem/.debug` to make its changes persist. (This overlay/`.debug` mechanism is byte-identical between firmware 1.3 and 1.4.)
+The U1 root filesystem is a read-only SquashFS with a writable OverlayFS upper on `/oem`. `/etc/init.d/S01aoverlayfs` wipes that upper on every boot **unless `/oem/.debug` exists**, so the installer touches `/oem/.debug` to make its changes persist. (This overlay/`.debug` mechanism is byte-identical across firmware 1.2/1.3/1.4.)
 
-To own the display, the installer:
+To own the display and auto-start at boot, the installer:
 
-1. Installs a HelixScreen launcher at `/etc/init.d/S99screen` — patching the stock script on 1.3, creating it on 1.4 — that starts HelixScreen at boot.
-2. **Disables the stock UI binary itself** with `chmod -x /usr/bin/gui`. This is launcher-independent: it does not matter whether the stock UI is started by 1.3's `S99screen` or by 1.4's relocated launcher — with the binary non-executable, nothing can start the stock screen, so HelixScreen owns `/dev/fb0` / DRM. The uninstaller restores the exec bit.
+1. **Hooks a boot-time launcher** — installs a HelixScreen delegate (`if [ -x .../helixscreen.init ]; then helixscreen.init "$@"; else <stock>; fi`) into the firmware's display-launcher init script. On **1.2/1.3** that script is `/etc/init.d/S99screen`. On **1.4** that script is `/etc/init.d/S99fb-http` (see the boot-glob note below). The original is preserved as `*.stock` for the helix-not-installed fallback and for uninstall.
+2. **Disables the stock UI binary itself** with `chmod -x /usr/bin/gui` (launcher-independent belt-and-suspenders so nothing can re-grab the framebuffer/DRM). The uninstaller restores the exec bit.
 
 Both changes live in the persistent overlay upper and survive reboot via `/oem/.debug`. A **firmware upgrade** re-flashes the rootfs and removes `/oem/.debug`, so HelixScreen must be reinstalled after upgrading the Extended Firmware.
 
-> **Why the binary kill switch?** Firmware 1.3 launched `/usr/bin/gui` only from `/etc/init.d/S99screen`, so HelixScreen originally took over by hijacking that one script. Firmware 1.4 removed `S99screen` and starts the stock UI from a runtime-generated path that is absent from the flashed image and cannot be patched by name. Disabling the binary is the version-independent fix.
+> **CRITICAL — the boot-glob trap that breaks overlay-only init scripts on 1.4.** busybox `init` runs `/etc/init.d/rcS` **from the read-only SquashFS** and expands its `for i in /etc/init.d/S??*` boot loop **once**, *before* `S01aoverlayfs` does its `pivot_root` onto the `.debug` overlay. 1.4 **deleted `S99screen` from the SquashFS**, so an installer-created `/etc/init.d/S99screen` exists only in the overlay upper → it is **not** in that frozen boot glob → it **never runs at boot** (it only runs at *shutdown*, via `rcK`, once the overlay is active — a boot/shutdown asymmetry). This was the root cause of the "HelixScreen doesn't run after reboot on 1.4" reports. The fix is to hook a script that **does** ship in the 1.4 SquashFS and is therefore in the boot glob: `S99fb-http` (the stock framebuffer-HTTP screen launcher). rcS runs the *overlay copy* of `S99fb-http` because by the time it executes it (after `S01aoverlayfs`), the pivot has happened. 1.2/1.3 still boot via `S99screen` (present in their SquashFS); the `S99fb-http` hook is conditional and a no-op there, preserving 1.2/1.3 compatibility.
 
 ## Cross-Compilation
 
@@ -306,28 +307,10 @@ These are resolution-specific issues, not Snapmaker-specific. Any 480x320 device
 
 - **480x320 UI needs work** -- Multiple panels have layout issues at this resolution (see above).
 - **Extended firmware required** -- SSH access (needed for deployment) requires the community [Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware). Stock firmware does not provide SSH.
-- **Auto-start requires `/oem/.debug`** -- The overlay filesystem is wiped on boot unless `/oem/.debug` exists. This flag must be created once during installation to persist the S99screen patch.
+- **Auto-start requires `/oem/.debug`** -- The overlay filesystem is wiped on boot unless `/oem/.debug` exists. This flag must be created once during installation to persist the boot-launcher hook (see [How HelixScreen takes over the display](#how-helixscreen-takes-over-the-display)).
 - **WiFi management** -- Stopping `unisrv` (stock UI) does not affect WiFi — the U1 uses standard `wpa_supplicant` managed by the OS. HelixScreen has its own WiFi manager with `wpa_supplicant` support.
 
 ## Future Work
-
-### Auto-Start on Boot
-
-The overlay filesystem is wiped on every reboot by `S01aoverlayfs` (`rm -rf /oem/overlay/*`) **unless** the debug flag `/oem/.debug` exists. With this flag, overlay modifications persist across reboots.
-
-To enable auto-start:
-
-```bash
-# 1. Create debug flag to prevent overlay wipe
-ssh root@<ip> "touch /oem/.debug"
-
-# 2. Patch S99screen to delegate to HelixScreen when installed
-# (The deploy target handles this automatically)
-```
-
-The patched `S99screen` checks for `/userdata/helixscreen/helixscreen.init` on boot. If present, it starts HelixScreen instead of the stock GUI. If HelixScreen is removed, S99screen falls back to the stock GUI automatically.
-
-**Important**: The platform hooks must NOT call `/etc/init.d/S99screen stop` — since S99screen delegates to HelixScreen, this causes infinite recursion. The hooks kill `gui` directly instead.
 
 ### Extended Firmware Overlay
 

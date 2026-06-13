@@ -344,8 +344,13 @@ elif [ -x "${SPLASH_BIN}" ]; then
     log "Splash binary: ${SPLASH_BIN}"
 fi
 
+# Set when we are intentionally tearing down (a caught signal or normal exit),
+# so the boot-time respawn loop below never fights a deliberate `init stop`.
+HELIX_SHUTTING_DOWN=0
+
 # Cleanup function for signal handling
 cleanup() {
+    HELIX_SHUTTING_DOWN=1
     log "Shutting down..."
     # Kill watchdog/helix-screen if we started them
     killall helix-watchdog helix-screen helix-screen-fbdev helix-splash 2>/dev/null || true
@@ -410,25 +415,8 @@ if helix_klipper_co_hosted; then
     unset _helix_nice
 fi
 
-# Run main application (via watchdog if available for crash recovery)
-# Note: PASSTHROUGH_ARGS is unquoted to allow word splitting (POSIX compatible)
-# Use "cmd || EXIT_CODE=$?" to capture non-zero exit codes under set -e,
-# allowing the crash fallback logic below to run instead of aborting the script.
-EXIT_CODE=0
-if [ "${USE_WATCHDOG}" = "1" ]; then
-    # Watchdog supervises helix-screen and manages splash lifecycle
-    # Watchdog and splash auto-detect resolution from display hardware
-    log "Starting via watchdog supervisor"
-    # shellcheck disable=SC2086
-    "${WATCHDOG_BIN}" ${SPLASH_ARGS} -- \
-        "${MAIN_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS} || EXIT_CODE=$?
-else
-    # Direct launch (development, or watchdog not built)
-    # shellcheck disable=SC2086
-    "${MAIN_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS} || EXIT_CODE=$?
-fi
-
-# Runtime crash fallback: if DRM binary crashed and fbdev fallback exists, retry.
+# Runtime crash fallback predicate. Defined before the run loop so it is
+# available on every iteration.
 # Only retry on genuine crashes, NOT on signal-based exits (SIGTERM=143 from systemctl stop,
 # SIGKILL=137, SIGINT=130, SIGHUP=129). Crash signals: SIGABRT=134, SIGFPE=136, SIGBUS=138, SIGSEGV=139.
 _is_crash_exit() {
@@ -438,22 +426,79 @@ _is_crash_exit() {
     # Non-signal exits (1-127) are also worth retrying (e.g., GL init failure)
     [ "$1" -gt 0 ] && [ "$1" -lt 128 ]
 }
-if _is_crash_exit ${EXIT_CODE} && [ "$(basename "${MAIN_BIN}")" = "helix-screen" ] \
-   && [ -x "${FALLBACK_BIN}" ]; then
-    log "DRM binary exited with code ${EXIT_CODE}, retrying with fbdev fallback..."
-    export HELIX_DISPLAY_BACKEND=fbdev
+
+# Boot-time SIGTERM self-heal (disabled by default; the Snapmaker U1 platform
+# hook opts in via HELIX_BOOT_RESPAWN_MAX). Some firmwares send helix-screen a
+# single SIGTERM during the busy boot sequence; helix-screen handles SIGTERM
+# with a fast _exit(0) (see graceful_quit_signal_handler), expecting a
+# supervisor to respawn it. On an unsupervised SysV boot (no helix-watchdog,
+# busybox init does not respawn S99 children) that one signal is permanent — and
+# because helix-screen owns the WiFi association on the U1, its death leaves the
+# device dark AND off-network (unreachable). We cannot tell a boot-time SIGTERM
+# (exit 0) from a deliberate user quit (also exit 0) by exit code, so we
+# discriminate by UPTIME: a process that dies within RESPAWN_WINDOW seconds of
+# launch lost the boot race (the UI never became interactive), whereas a real
+# quit happens long after boot. Respawn up to RESPAWN_MAX times. A real
+# `init stop` kills THIS launcher (the cleanup trap sets HELIX_SHUTTING_DOWN), so
+# the loop never fires for an intentional stop.
+RESPAWN_MAX="${HELIX_BOOT_RESPAWN_MAX:-0}"
+RESPAWN_WINDOW="${HELIX_BOOT_RESPAWN_WINDOW:-25}"
+RESPAWN_DELAY="${HELIX_BOOT_RESPAWN_DELAY:-3}"
+RESPAWN_COUNT=0
+
+# Run main application (via watchdog if available for crash recovery)
+# Note: PASSTHROUGH_ARGS is unquoted to allow word splitting (POSIX compatible)
+# Use "cmd || EXIT_CODE=$?" to capture non-zero exit codes under set -e,
+# allowing the crash fallback logic below to run instead of aborting the script.
+while :; do
+    _run_start=$(date +%s 2>/dev/null || echo 0)
+    EXIT_CODE=0
     if [ "${USE_WATCHDOG}" = "1" ]; then
+        # Watchdog supervises helix-screen and manages splash lifecycle
+        # Watchdog and splash auto-detect resolution from display hardware
+        log "Starting via watchdog supervisor"
         # shellcheck disable=SC2086
         "${WATCHDOG_BIN}" ${SPLASH_ARGS} -- \
-            "${FALLBACK_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS}
-        EXIT_CODE=$?
+            "${MAIN_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS} || EXIT_CODE=$?
     else
+        # Direct launch (development, or watchdog not built)
         # shellcheck disable=SC2086
-        "${FALLBACK_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS}
-        EXIT_CODE=$?
+        "${MAIN_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS} || EXIT_CODE=$?
     fi
-    log "fbdev fallback exited with code ${EXIT_CODE}"
-fi
+
+    # Runtime crash fallback: if DRM binary crashed and fbdev fallback exists, retry.
+    if _is_crash_exit ${EXIT_CODE} && [ "$(basename "${MAIN_BIN}")" = "helix-screen" ] \
+       && [ -x "${FALLBACK_BIN}" ]; then
+        log "DRM binary exited with code ${EXIT_CODE}, retrying with fbdev fallback..."
+        export HELIX_DISPLAY_BACKEND=fbdev
+        if [ "${USE_WATCHDOG}" = "1" ]; then
+            # shellcheck disable=SC2086
+            "${WATCHDOG_BIN}" ${SPLASH_ARGS} -- \
+                "${FALLBACK_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS}
+            EXIT_CODE=$?
+        else
+            # shellcheck disable=SC2086
+            "${FALLBACK_BIN}" ${EXTRA_FLAGS} ${PASSTHROUGH_ARGS}
+            EXIT_CODE=$?
+        fi
+        log "fbdev fallback exited with code ${EXIT_CODE}"
+    fi
+
+    _run_end=$(date +%s 2>/dev/null || echo 0)
+    _run_uptime=$(( _run_end - _run_start ))
+    if [ "${HELIX_SHUTTING_DOWN:-0}" != "1" ] \
+       && [ "${RESPAWN_COUNT}" -lt "${RESPAWN_MAX}" ] \
+       && [ "${_run_uptime}" -ge 0 ] \
+       && [ "${_run_uptime}" -lt "${RESPAWN_WINDOW}" ]; then
+        RESPAWN_COUNT=$((RESPAWN_COUNT + 1))
+        log "helix-screen exited (code ${EXIT_CODE}) after ${_run_uptime}s — likely a boot-time kill; respawning (${RESPAWN_COUNT}/${RESPAWN_MAX})"
+        if [ "${RESPAWN_DELAY}" -gt 0 ]; then
+            sleep "${RESPAWN_DELAY}"
+        fi
+        continue
+    fi
+    break
+done
 
 log "Exiting with code ${EXIT_CODE}"
 exit ${EXIT_CODE}
