@@ -294,11 +294,16 @@ class PrinterDiscovery {
                         "enabling CFS backend with K1 macro dialect (BOX_*).");
                 }
             }
-            // ACE detection (Anycubic ACE Pro — ValgACE/BunnyACE/DuckACE Klipper drivers)
-            else if (name == "ace" && !has_mmu_) {
+            // ACE detection (Anycubic ACE Pro). Native Anycubic GoKlipper
+            // (as shipped by Rinkhals firmware) registers the status object as
+            // `filament_hub` even though the config section is `[ace]`. The
+            // community drivers (ValgACE/BunnyACE/DuckACE) register it as `ace`.
+            // Match both so real Anycubic hardware is detected.
+            else if ((name == "ace" || name == "filament_hub") && !has_mmu_) {
                 has_mmu_ = true;
                 mmu_type_ = AmsType::ACE;
-                spdlog::info("[PrinterDiscovery] Detected ACE (Anycubic ACE Pro)");
+                spdlog::info("[PrinterDiscovery] Detected ACE (Anycubic ACE Pro) via '{}' object",
+                             name);
             }
             // MMU encoder discovery (Happy Hare)
             else if (name.rfind("mmu_encoder ", 0) == 0) {

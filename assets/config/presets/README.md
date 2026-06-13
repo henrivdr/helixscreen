@@ -21,6 +21,13 @@ The preset sets `wizard_completed: false` so the abbreviated wizard runs on firs
 | `artillery-m1-pro.json` | Artillery M1 Pro | Touch calibration, hardware mappings, sound disabled (CPU overload) |
 | `voron-v2-afc.json` | Voron V2 with AFC | Reference config, not auto-baked |
 | `qidi_q2.json` | Qidi Q2 + QIDI Box (Happy Hare) | Network-detected (applied by the wizard, not baked); hardware mappings + Happy Hare filament-sensor roles |
+| `anycubic_kobra_2_pro.json` | Anycubic Kobra 2 Pro (Rinkhals) | Network-detected. Conservative: heaters/sensors only — fan/LED/filament-sensor object names unverified (no on-device build yet) |
+| `anycubic_kobra_3.json` | Anycubic Kobra 3 / Kobra 3 V2 (Rinkhals) | Network-detected. Shared by both (identical hardware). ACE handled by AMS backend, not this preset |
+| `anycubic_kobra_3_max.json` | Anycubic Kobra 3 Max (Rinkhals) | Network-detected. Conservative mappings; dual-Y + ACE printer |
+| `anycubic_kobra_s1.json` | Anycubic Kobra S1 (Rinkhals) | Network-detected. Enclosed CoreXY; conservative mappings |
+| `anycubic_kobra_s1_max.json` | Anycubic Kobra S1 Max (Rinkhals) | Network-detected. Heated chamber present but object name unverified — not mapped yet |
+
+> **Anycubic/Rinkhals presets are intentionally minimal.** [Rinkhals](https://github.com/rinkhals-community/Rinkhals) overlays real Klipper+Moonraker on the Kobra series, so these printers are network-detected (no on-device HelixScreen build exists for the Rockchip RV1106 host). The presets map only the universal `heater_bed`/`extruder` objects plus a `cooldown` macro; fan, LED, heated-chamber, and ACE/filament-tracker object names need confirmation against a live Rinkhals device before they can be added (otherwise they would raise false missing-hardware warnings). The setup wizard still configures anything the preset omits.
 
 ## What's in a Preset
 
