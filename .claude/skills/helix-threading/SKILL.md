@@ -77,8 +77,12 @@ and `register_overlay_close_callback()` lambdas.
 tick — still a batch. The generation guard protects `this`, not event-list integrity.
 
 **True escape routes** (outside UpdateQueue batches): `safe_delete_deferred()`,
-`safe_delete_deferred_raw()`, `helix::ui::safe_clean_children()`, `lv_obj_delete_async()`,
-raw `lv_async_call()` (LVGL native, NOT our wrapper).
+`safe_delete_deferred_raw()`, `helix::ui::safe_clean_children()`,
+`helix::ui::safe_delete_subtree()` (teardown-safe deletion of a whole grid/flex subtree
+before a rebuild — detaches it into an off-tree layout-less condemned container +
+`LV_LAYOUT_NONE`, then async-deletes; makes `grid_update`/`flex_update` over a
+being-torn-down grid structurally impossible, #983 teardown counterpart),
+`lv_obj_delete_async()`, raw `lv_async_call()` (LVGL native, NOT our wrapper).
 
 ## CRITICAL: AsyncLifetimeGuard for Background Callbacks
 

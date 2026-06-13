@@ -413,6 +413,29 @@ struct ToolInfo {
 
 ---
 
+### Centralized Temperature Sends: TemperatureController
+
+**Every nozzle / bed / chamber target update routes through one `helix::TemperatureController` (`include/temperature_controller.h`, `src/ui/temperature_controller.cpp`).** It is the single authority for heater target control, so the heater-send logic lives in exactly one place instead of being copy-pasted across every panel, overlay, and widget that can set a temperature.
+
+The controller:
+
+- **Resolves Klipper heater object names** — `Nozzle` → the active extruder, `Bed` → `"heater_bed"`, `Chamber` → the discovered chamber heater name (never the bare default). Callers pass a `HeaterType`, not a raw object name.
+- **Applies configured-max limits** — fetches `configfile` `max_temp` per heater via `ensure_limits()` and exposes the effective keypad input range (`keypad_range()`) and preset visibility (`preset_visible()`).
+- **Owns the preset model** — Off / PLA / PETG / ABS targets derived from the filament database (same derivation as `temperature_service.cpp`), so views reading presets from the controller match what the service produced.
+- **Provides standard error toasts** — on a failed RPC (or a heater that resolves empty), it emits the standard `NOTIFY_ERROR` toast and fires optional `on_success` / `on_error` hooks. Toasts are suppressible (`SendOptions{.toast = false}`) for silent sends like AMS slot-preheat / cooldown. It holds no LVGL widgets or subjects — it uses the `NOTIFY_*` notification system, so the logic is unit-testable.
+
+**The one send:** `set_target(HeaterType, celsius, opts)` (or the explicit-name overload), plus `apply_material(nozzle, bed, chamber, opts)` for a material profile in a single call.
+
+**Accessor and ownership:** Reach the controller via `get_temperature_controller()` (`include/app_globals.h`). It is **not** a classic `::instance()` singleton — `SubjectInitializer` owns the `unique_ptr` and registers a raw pointer as a shared resource on `PanelWidgetManager`; the accessor looks it up via `PanelWidgetManager::shared_resource<TemperatureController>()` and returns `nullptr` before init.
+
+> **⚠️ MANDATORY:** New temperature-setting UI must call `TemperatureController::set_target()` — **never** the raw `MoonrakerAPI::set_temperature()`. The migrated view files (`ui_overlay_temp_graph.cpp`, `ui_panel_controls.cpp`, and others) are **lint-enforced** by `tests/shell/test_code_lint.bats`: the gate fails the build on any `api_->set_temperature(` call, or any `->set_temperature(` call whose receiver is not a `controller`. The controller's own `->set_temperature()` is the sole sanctioned send.
+
+For the chamber-specific details — M141 routing, decidegree precision, and the `chamber_effective_target` / `chamber_mode` synthesis — see **[MULTI_EXTRUDER_TEMPERATURE.md](MULTI_EXTRUDER_TEMPERATURE.md)** § "Chamber Heating (M141)".
+
+**Files:** `include/temperature_controller.h`, `src/ui/temperature_controller.cpp`, `src/application/subject_initializer.cpp` (ownership), `src/app_globals.cpp` (accessor)
+
+---
+
 ## Panel Widget System
 
 The home panel exposes a row of modular "widgets" — small cards that each display one aspect of printer state: fan speeds, temperatures, LED, power, network, thermistors, and more. Each widget is a self-contained C++ object that owns its own XML component and observer lifecycle.
@@ -1158,6 +1181,7 @@ void on_done_clicked(lv_event_t* e) {
 **Escape routes (truly outside UpdateQueue batches):**
 - `safe_delete_deferred()` / `safe_delete_deferred_raw()` (`include/ui_utils.h`)
 - `helix::ui::safe_clean_children()` (`include/ui_utils.h`)
+- `helix::ui::safe_delete_subtree(obj)` (`include/ui_utils.h`) — teardown-safe deletion of a whole grid/flex subtree before a rebuild. Synchronously detaches `obj` into an off-tree, layout-less condemned container (so an ancestor relayout of the original parent can no longer iterate it), sets `LV_LAYOUT_NONE` on `obj`, then async-deletes the condemned subtree. Makes a `grid_update` / `flex_update` pass over a being-deleted subtree *structurally impossible* rather than merely time-shifted (#983 teardown counterpart — relayout racing the TEARDOWN of a grid during a modal close / panel rebuild).
 - `lv_obj_delete_async(obj)` (raw LVGL)
 - `lv_async_call(cb, ud)` (raw LVGL — *not* our wrapper `helix::ui::async_call`)
 

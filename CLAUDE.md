@@ -169,7 +169,7 @@ Multiple sync deletions in the same `UpdateQueue::process_pending()` batch corru
 
 **`lifetime_.defer` / `tok.defer` do NOT escape the batch.** They are thin wrappers around `queue_update` — the callback fires in the *next* `process_pending` tick, which is still a UpdateQueue batch that may contain other sync deletions. The generation guard protects against use-after-free of `this`, NOT against event-list corruption. If you see a comment claiming `lifetime_.defer` "runs outside process_pending", it's wrong — fix it.
 
-**Safe escape routes (truly outside UpdateQueue batches):** `safe_delete_deferred()`, `safe_delete_deferred_raw()`, `helix::ui::safe_clean_children()`, `lv_obj_delete_async()`, and raw `lv_async_call(cb, ud)`. Note: our wrapper `helix::ui::async_call` does NOT escape — it routes through `queue_update`. See `include/ui_utils.h` and `ARCHITECTURE.md` § "No safe_delete() Inside UpdateQueue Callbacks".
+**Safe escape routes (truly outside UpdateQueue batches):** `safe_delete_deferred()`, `safe_delete_deferred_raw()`, `helix::ui::safe_clean_children()`, `helix::ui::safe_delete_subtree()` (teardown-safe deletion of a whole grid/flex subtree before a rebuild — synchronously detaches the subtree into an off-tree layout-less condemned container + `LV_LAYOUT_NONE`, then async-deletes; makes a `grid_update`/`flex_update` pass over a being-torn-down grid structurally impossible, #983 teardown counterpart), `lv_obj_delete_async()`, and raw `lv_async_call(cb, ud)`. Note: our wrapper `helix::ui::async_call` does NOT escape — it routes through `queue_update`. See `include/ui_utils.h` and `ARCHITECTURE.md` § "No safe_delete() Inside UpdateQueue Callbacks".
 
 **Subject shutdown safety (MANDATORY):** Any class creating LVGL subjects MUST self-register its cleanup inside `init_subjects()` via `StaticSubjectRegistry::instance().register_deinit(name, deinit_fn)`. Prevents observer removal on freed subjects during `lv_deinit`. **Never** register externally (e.g., in `SubjectInitializer`) — co-locating init+cleanup prevents forgotten registrations. See `static_subject_registry.h`.
 
@@ -229,6 +229,8 @@ std::vector<SubjectLifetime>   carousel_lifetimes_;   // MUST clear before obser
 
 **Singletons** (all `::instance()`):
 `PrinterState` (all printer data/subjects), `SettingsManager` (persistent settings), `NavigationManager` (panel/overlay stack), `UpdateQueue` (thread-safe UI updates), `SoundManager`, `DisplayManager`, `ModalStack`, `PrinterDetector` (printer DB + capabilities), `ToolState` (multi-tool tracking), `AmsState` (multi-backend filament systems)
+
+`TemperatureController` — single authority for ALL nozzle/bed/chamber target sends (NOT a `::instance()` singleton: owned by `SubjectInitializer`, reached via `get_temperature_controller()` in `app_globals.h`). New temp-setting UI MUST call `TemperatureController::set_target()`, never raw `MoonrakerAPI::set_temperature()` — lint-enforced by `tests/shell/test_code_lint.bats`. See `ARCHITECTURE.md` § "Centralized Temperature Sends".
 
 **Entry flow**: `main.cpp` → `Application` → `DisplayManager` → panels via `NavigationManager`
 
