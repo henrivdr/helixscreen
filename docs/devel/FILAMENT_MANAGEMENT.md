@@ -939,7 +939,7 @@ Two distinct firmware dialects share the `box` Klipper object. HelixScreen route
 
 | Printer family | Stock firmware path | Macro dialect | Detection signal |
 |----------------|--------------------|---------------|-----------------|
-| K2, K2 Plus, K2 Max (built-in CFS) | Creality K2 firmware | `CR_BOX_*` primitives + `BOX_SAVE_FAN`/`BOX_MODE_WAIT` envelope | `PrinterDetector::is_creality_k1() == false` |
+| K2, K2 Pro, K2 Plus, K2 Max (built-in CFS) | Creality K2 firmware | `CR_BOX_*` primitives + `BOX_SAVE_FAN`/`BOX_MODE_WAIT` envelope | `PrinterDetector::is_creality_k1() == false` |
 | K1, K1C, K1 Max (official CFS upgrade ≥ v2.3.5.33) | Creality K1 CFS upgrade firmware | Plain `BOX_*` primitives, no fan-save/mode-wait | `PrinterDetector::is_creality_k1() == true` |
 
 ### Firmware requirements

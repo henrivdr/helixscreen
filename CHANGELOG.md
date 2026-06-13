@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Creality K2 Pro support** — adds the K2 Pro (300 mm build volume) to the printer database. It reuses the existing K2 preset, so it inherits CFS, the active chamber heater, and the K2 macro set; auto-detection distinguishes it from the K2 Plus by build volume and hostname.
+
 ### Fixed
 
+- **Clearer K2 fan names** — the K2 fan list no longer shows two indistinguishable "Chamber Fan" entries. Fans now carry function-based labels (Part Cooling, Auxiliary, Chamber Heater Fan, Chamber Circulation), and the auxiliary fan's role mapping was corrected.
 - **AD5X IFS Unload no longer homes and stalls** (bundle 7AC4SDEX) — the v0.99.76 unload could still home and then do nothing when no filament was seated at the nozzle. Unload now dispatches the firmware's own toolhead-unload sequence when filament is at the head, and pulls the filament back from the lane with a cold eject when it isn't — instead of issuing a command the firmware treats as a no-op.
 
 ## [0.99.76] - 2026-06-11
