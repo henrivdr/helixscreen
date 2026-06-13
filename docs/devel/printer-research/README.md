@@ -52,7 +52,7 @@ This directory contains research documentation on various 3D printers for HelixS
 
 | System | Type | Colors | Protocol | HelixScreen Support |
 |--------|------|--------|----------|---------------------|
-| **ACE Pro** | Filament switcher | 4-8 | USB serial + REST | **AmsBackendAce** |
+| **ACE Pro** | Filament switcher | 4-8 | USB serial; Klipper `filament_hub` (native) / `ace` (community) | **AmsBackendAce** |
 | **CFS** | Filament switcher | 4-16 | RS-485 | Via G-code macros |
 | **IFS** | Filament switcher | 4 | Serial | Needs investigation |
 | **SnapSwap** | Toolchanger | 4 | Unknown | Needs open source |
@@ -65,7 +65,7 @@ This directory contains research documentation on various 3D printers for HelixS
 |----------|--------|
 | [AD5M_BOOT_NOTES.md](AD5M_BOOT_NOTES.md) | AD5M boot process, backlight, ForgeX integration |
 | [AD5M_TOOLCHAIN_NOTES.md](AD5M_TOOLCHAIN_NOTES.md) | AD5M cross-compilation, static linking |
-| [ANYCUBIC_KOBRA_COREXY_RESEARCH.md](ANYCUBIC_KOBRA_COREXY_RESEARCH.md) | Kobra S1/3 series, ACE Pro, Rinkhals |
+| [ANYCUBIC_KOBRA_COREXY_RESEARCH.md](ANYCUBIC_KOBRA_COREXY_RESEARCH.md) | Kobra S1/3 series, ACE Pro, Rinkhals (kinematics corrected; native ACE `filament_hub` interface) |
 | [CREALITY_K1_SERIES_RESEARCH.md](CREALITY_K1_SERIES_RESEARCH.md) | K1C, K1 Max, GuppyScreen |
 | [CREALITY_K2_PLUS_RESEARCH.md](CREALITY_K2_PLUS_RESEARCH.md) | K2 Plus, CFS multi-material |
 | [CREALITY_K1_VS_K2_COMMUNITY.md](CREALITY_K1_VS_K2_COMMUNITY.md) | K1 vs K2 enthusiast/aftermarket ecosystem comparison |

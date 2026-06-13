@@ -7,6 +7,15 @@
 
 The most relevant AnyCubic CoreXY printers are the **Kobra S1 Combo** and **Kobra 3 Combo** series. They run **KobraOS** (Klipper rewritten in Golang) and can be extended with **Rinkhals** custom firmware for standard Moonraker. **HelixScreen already has ACE backend support** for the ACE Pro multi-material system.
 
+> ### Correction (2026-06-13)
+>
+> This document's original title lumped the entire Kobra family under "CoreXY". That is **wrong** and was the likely origin of a kinematics bug fixed on 2026-06-13.
+>
+> - **CoreXY (enclosed):** Kobra S1, Kobra S1 Max — *only these two*.
+> - **Cartesian bedslingers:** Kobra 2 Pro, Kobra 3, Kobra 3 V2, Kobra 3 Max.
+>
+> The printer database previously mislabeled **Kobra 3 as corexy**; it is a cartesian bedslinger (verified against the official Anycubic Klipper-go `printer_*.cfg` files). This is now fixed in the DB. See the verified fingerprint table appended at the end of this document.
+
 ---
 
 ## 1. Hardware Specifications
@@ -327,3 +336,42 @@ AnyCubic Kobra S1 Combo is a good HelixScreen target:
 - Rinkhals provides Moonraker
 - ACE Pro **already supported** via ACE backend
 - Best approach: external HelixScreen device connecting to printer's Moonraker
+
+---
+
+## Verified Detection Fingerprints & ACE Interface (2026-06-13)
+
+The facts below were verified from the official Anycubic Klipper-go `printer_*.cfg` files, GoKlipper `extras_ace.go`, and Rinkhals `mmu_ace.py`, and are the basis for the printer-database entries landed 2026-06-13. They supersede any kinematics or ACE-object claims earlier in this document.
+
+### Per-model kinematics, build volume, and distinguishing Klipper objects
+
+| Model | Kinematics | Build volume (`pos_max`, mm) | Distinguishing Klipper object(s) |
+|-------|-----------|------------------------------|----------------------------------|
+| Kobra 2 Pro | cartesian (bedslinger) | — | — |
+| Kobra 3 | cartesian (bedslinger) | 278.5 × 260 × 262 | `cs1237` (load cell) |
+| Kobra 3 V2 | cartesian (bedslinger) | 278.5 × 260 × 262 | `cs1237` (load cell) |
+| Kobra 3 Max | cartesian (bedslinger) | 478 × 440 × 502 | `stepper_y1` (dual-Y), `filament_tracker` (gpio) |
+| Kobra S1 | corexy (enclosed) | 265 × 277 × 253 | `filament_tracker` (adc) |
+| Kobra S1 Max | corexy (enclosed) | ~350 (unpublished) | — |
+
+`filament_hub` (the ACE hub object — see below) is present on any Combo-equipped model regardless of kinematics, so it distinguishes "has ACE" but not the printer model.
+
+### Native ACE = `filament_hub` (not `ace`)
+
+The native Anycubic GoKlipper ACE registers the Klipper object **`filament_hub`** (config section `[ace]`), confirmed in `extras_ace.go` and Rinkhals `mmu_ace.py`. The earlier assumption that real Anycubic ACE registers an object named `ace` was wrong — only the **community** ValgACE/BunnyACE/DuckACE drivers use `ace`, and **ValgACE is niche** (it targets ACE Pro hardware on a *non-Anycubic* DIY printer; DuckACE is abandoned). Community drivers integrate via Moonraker macros/REST endpoints rather than a native Klipper object.
+
+**Native `filament_hub.get_status()` schema** (flat, single hub, 4 slots):
+
+- `status`
+- `dryer{status, target_temp, duration, remain_time}`
+- `temp`
+- `slots[]{index, status(empty/ready/preload/running/runout), sku, type, color[r,g,b]}`
+- `current_filament` = `"<unitId>-<localIndex>"` (e.g. `"0-2"`); empty/absent = nothing loaded
+
+Multi-unit "Combo" (8 slots) is a Rinkhals-layer abstraction stacked above the single-hub GoKlipper object.
+
+**Native G-code verbs** (real, from `extras_ace.go`):
+
+`ACE_CHANGE_TOOL TOOL={n|-1}`, `ACE_FEED INDEX= LENGTH= SPEED=`, `ACE_RETRACT INDEX= LENGTH= SPEED=`, `ACE_ENABLE_FEED_ASSIST INDEX=`, `ACE_DISABLE_FEED_ASSIST INDEX=`, `ACE_START_DRYING TEMP= DURATION=`, `ACE_STOP_DRYING`. (`ACE_RECOVER` / `ACE_RESET` are **not** native.)
+
+> For the full backend detail — detection order, REST community fallback, threading model, and capability/dryer tables — see **`docs/devel/FILAMENT_MANAGEMENT.md` § "ACE (Anycubic ACE Pro)"**.
