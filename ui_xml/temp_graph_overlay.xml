@@ -169,7 +169,7 @@
                       style_pad_gap="#space_xxs">
                 <text_small text="Current / Target" translation_tag="Current / Target"/>
                 <temp_display name="chamber_temp_display"
-                              size="lg" show_target="true" bind_current="chamber_temp" bind_target="chamber_effective_target"/>
+                              size="lg" show_target="true" bind_current="chamber_temp" bind_target="chamber_effective_target" bind_mode="chamber_mode"/>
               </lv_obj>
               <text_small name="chamber_status_msg" bind_text="chamber_status" style_text_align="left"/>
             </lv_obj>

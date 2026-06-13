@@ -2292,6 +2292,15 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     drain_async_updates();
     REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
 
+    // Klipper clears homed_axes to "" as each axis re-homes during G28. That
+    // empty-string blip must NOT flip the label to "Heating Bed" — the HOMING
+    // latch holds until the toolhead is actually fully homed.
+    lv_subject_copy_string(state().get_homed_axes_subject(), "");
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
+
     // Once fully homed, proactive may surface the bed heating (still pre-signal).
     lv_subject_copy_string(state().get_homed_axes_subject(), "xyz");
     collector().check_fallback_completion();

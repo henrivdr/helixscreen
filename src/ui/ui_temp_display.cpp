@@ -12,6 +12,7 @@
 #include "helix-xml/src/xml/lv_xml_widget.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
 #include "lvgl/lvgl.h"
+#include "printer_temperature_state.h" // helix::ChamberMode
 #include "theme_manager.h"
 #include "ui_breakpoint.h"
 
@@ -48,6 +49,10 @@ struct TempDisplayData {
     bool show_target = false;                 // Default: hide target (opt-in via prop)
     bool has_target_binding = false;          // True if bind_target was set (heater mode)
     bool target_subjects_initialized = false; // True if target subject was created
+    // Chamber-mode awareness (opt-in via bind_mode). In Maintaining mode the
+    // target is a cooling CEILING, not a heat goal, so heating-red is wrong.
+    int current_mode = helix::ChamberMode::Heating; // Default: existing heating behavior
+    bool has_mode_binding = false;                  // True if bind_mode was set
     // Responsive hide of separator+target labels below this breakpoint (-1 = never).
     int hide_target_below_bp = -1;
 
@@ -146,6 +151,22 @@ static void update_heating_color(TempDisplayData* data) {
         return;
     }
 
+    // Maintaining: target is a cooling CEILING, not a heat goal — never show
+    // heating-red. Above the ceiling means actively cooling (blue); at/below the
+    // ceiling is idle/ok (neutral).
+    if (data->has_mode_binding && data->current_mode == helix::ChamberMode::Maintaining) {
+        lv_color_t color;
+        if (data->current_temp > data->target_temp + AT_TEMP_TOLERANCE) {
+            color = theme_manager_get_color("info"); // above ceiling → actively cooling (blue)
+        } else {
+            color = theme_manager_get_color("text"); // at/below ceiling → idle/ok (neutral)
+        }
+        lv_obj_set_style_text_color(data->current_label, color, LV_PART_MAIN);
+        return;
+    }
+
+    // Heating (or no mode binding): existing 4-state behavior. In Off mode the
+    // effective target is 0, so get_heating_state_color(current, 0) → muted/gray.
     lv_color_t color =
         get_heating_state_color(data->current_temp, data->target_temp, AT_TEMP_TOLERANCE);
     lv_obj_set_style_text_color(data->current_label, color, LV_PART_MAIN);
@@ -304,6 +325,31 @@ static void target_temp_observer_cb(lv_observer_t* observer, lv_subject_t* subje
     format_target_text(data);
 
     // Update color based on 4-state logic
+    update_heating_color(data);
+}
+
+/** Observer callback for chamber-mode subject (plain ChamberMode int) */
+static void mode_observer_cb(lv_observer_t* observer, lv_subject_t* subject) {
+    lv_obj_t* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
+    if (!label) {
+        spdlog::debug("[temp_display] mode cb: null label (subject={}, value={})",
+                      static_cast<void*>(subject),
+                      subject ? lv_subject_get_int(subject) : -1);
+        return;
+    }
+
+    // Get the parent container and its data
+    lv_obj_t* container = lv_obj_get_parent(label);
+    auto* data = get_data(container);
+    if (!data) {
+        spdlog::debug("[temp_display] mode cb: no data for container (subject={}, value={})",
+                      static_cast<void*>(subject), lv_subject_get_int(subject));
+        return;
+    }
+
+    data->current_mode = lv_subject_get_int(subject);
+
+    // Mode changes affect the heating color semantics (heat goal vs cooling ceiling)
     update_heating_color(data);
 }
 
@@ -466,6 +512,24 @@ static void ui_temp_display_apply_cb(lv_xml_parser_state_t* state, const char** 
                               data->target_temp);
             } else if (!subject) {
                 spdlog::warn("[temp_display] Subject '{}' not found for bind_target", value);
+            }
+        } else if (strcmp(name, "bind_mode") == 0) {
+            // Bind chamber mode to a subject (NULL = global scope). In Maintaining
+            // mode the target is a cooling ceiling, so update_heating_color must
+            // not show heating-red. Observer target is current_label (always
+            // detached in on_delete via lv_obj_remove_from_subject), mirroring the
+            // bind_target cleanup so no observer leaks/UAFs on widget delete.
+            lv_subject_t* subject = lv_xml_get_subject(nullptr, value);
+            if (subject && data && data->current_label) {
+                data->has_mode_binding = true;
+                lv_subject_add_observer_obj(subject, mode_observer_cb, data->current_label, nullptr);
+                // Set initial value and recolor
+                data->current_mode = lv_subject_get_int(subject);
+                update_heating_color(data);
+                spdlog::trace("[temp_display] Bound mode to subject '{}' (mode={})", value,
+                              data->current_mode);
+            } else if (!subject) {
+                spdlog::warn("[temp_display] Subject '{}' not found for bind_mode", value);
             }
         } else if (strcmp(name, "event_cb") == 0) {
             // Store callback name and make widget clickable
