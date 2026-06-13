@@ -898,6 +898,8 @@ AmsError AmsBackendQidi::stop_drying(int unit) {
         dry_end_epoch_ = 0;
         dryer_info_.active = false;
         dryer_info_.target_temp_c = 0.0f;
+        dryer_info_.remaining_min = 0;
+        dryer_info_.duration_min = 0;
         timer = drying_timer_supported_;
     }
     if (timer) {

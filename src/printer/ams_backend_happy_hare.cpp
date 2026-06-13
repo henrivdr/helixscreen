@@ -2218,6 +2218,8 @@ AmsError AmsBackendHappyHare::stop_drying(int unit) {
         }
         dry_end_epoch_ = 0;
         dryer_info_.active = false;
+        dryer_info_.remaining_min = 0;
+        dryer_info_.duration_min = 0;
     }
 
     spdlog::info("[AMS HappyHare] Stopping dryer");
