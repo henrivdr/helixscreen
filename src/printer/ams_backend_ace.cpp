@@ -58,7 +58,7 @@ AmsBackendAce::~AmsBackendAce() {
 // ============================================================================
 
 void AmsBackendAce::on_started() {
-    spdlog::info("[ACE] Backend started — querying initial ace state via WebSocket");
+    spdlog::info("[ACE] Backend started — querying initial filament_hub/ace state via WebSocket");
 
     // Load persisted per-slot overrides from the shared FilamentSlotOverrideStore
     // BEFORE issuing the initial status query — otherwise the first status
@@ -85,8 +85,11 @@ void AmsBackendAce::on_started() {
 
     auto token = lifetime_.token();
 
-    // Query the ace Klipper object directly (works if driver has get_status())
+    // Query both Klipper object names directly (works if driver has
+    // get_status()). Native Anycubic GoKlipper registers the object as
+    // `filament_hub`; community ValgACE/BunnyACE/DuckACE register it as `ace`.
     json objects_to_query = json::object();
+    objects_to_query["filament_hub"] = nullptr;
     objects_to_query["ace"] = nullptr;
 
     json params = {{"objects", objects_to_query}};
@@ -100,24 +103,38 @@ void AmsBackendAce::on_started() {
             // and skips if the owner has been destroyed.
             token.defer("AmsBackendAce::on_started_query",
                         [this, response]() {
+                // Prefer the native `filament_hub` key; fall back to the
+                // community `ace` key. Pick whichever is a non-empty object.
+                const json* ace_data = nullptr;
+                const char* matched_key = nullptr;
                 if (response.contains("result") &&
-                    response["result"].contains("status") &&
-                    response["result"]["status"].contains("ace") &&
-                    response["result"]["status"]["ace"].is_object() &&
-                    !response["result"]["status"]["ace"].empty()) {
+                    response["result"].contains("status")) {
+                    const auto& status = response["result"]["status"];
+                    if (status.contains("filament_hub") &&
+                        status["filament_hub"].is_object() &&
+                        !status["filament_hub"].empty()) {
+                        ace_data = &status["filament_hub"];
+                        matched_key = "filament_hub";
+                    } else if (status.contains("ace") && status["ace"].is_object() &&
+                               !status["ace"].empty()) {
+                        ace_data = &status["ace"];
+                        matched_key = "ace";
+                    }
+                }
 
-                    // ValgACE path: got real data from get_status()
-                    spdlog::info("[ACE] Klipper ace object has status data — "
-                                 "using native WebSocket subscription");
+                if (ace_data) {
+                    // Native/ValgACE path: got real data from get_status()
+                    spdlog::info("[ACE] Klipper '{}' object has status data — "
+                                 "using native WebSocket subscription",
+                                 matched_key);
 
-                    const auto& ace_data = response["result"]["status"]["ace"];
-                    parse_ace_object(ace_data);
+                    parse_ace_object(*ace_data);
                     info_fetched_.store(true);
                     emit_event(EVENT_STATE_CHANGED);
 
                 } else {
                     // BunnyACE/DuckACE path: no get_status(), try REST fallback
-                    spdlog::info("[ACE] Klipper ace object has no status data — "
+                    spdlog::info("[ACE] Klipper filament_hub/ace object has no status data — "
                                  "trying REST bridge fallback (/server/ace/*)");
                     start_rest_fallback();
                 }
@@ -125,7 +142,8 @@ void AmsBackendAce::on_started() {
         },
         [this, token](const MoonrakerError& err) {
             token.defer("AmsBackendAce::on_started_query_err", [this, err]() {
-                spdlog::warn("[ACE] Initial ace query failed: {} — trying REST fallback",
+                spdlog::warn("[ACE] Initial filament_hub/ace query failed: {} — "
+                             "trying REST fallback",
                              err.message);
                 start_rest_fallback();
             });
@@ -150,11 +168,19 @@ void AmsBackendAce::handle_status_update(const json& notification) {
     }
     if (!status->is_object()) return;
 
-    if (!status->contains("ace")) return;
-    const auto& ace_data = (*status)["ace"];
-    if (!ace_data.is_object() || ace_data.empty()) return;
+    // Native Anycubic GoKlipper publishes under `filament_hub`; community
+    // ValgACE under `ace`. Prefer filament_hub, fall back to ace.
+    const json* ace_data = nullptr;
+    if (status->contains("filament_hub") && (*status)["filament_hub"].is_object() &&
+        !(*status)["filament_hub"].empty()) {
+        ace_data = &(*status)["filament_hub"];
+    } else if (status->contains("ace") && (*status)["ace"].is_object() &&
+               !(*status)["ace"].empty()) {
+        ace_data = &(*status)["ace"];
+    }
+    if (!ace_data) return;
 
-    parse_ace_object(ace_data);
+    parse_ace_object(*ace_data);
     emit_event(EVENT_STATE_CHANGED);
 }
 
@@ -697,12 +723,17 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                 slot.slot_index = static_cast<int>(i);
                 slot.global_index = static_cast<int>(i);
 
-                // Parse status
+                // Parse status. Community ValgACE uses
+                // available/loaded/ready; native Anycubic GoKlipper uses
+                // empty/ready/preload/running/runout. "runout" means the slot
+                // ran dry mid-print — present-but-empty; map to EMPTY since
+                // SlotStatus has no dedicated RUNOUT value.
                 if (slot_json.contains("status") && slot_json["status"].is_string()) {
                     std::string ss = slot_json["status"].get<std::string>();
-                    if (ss == "empty") {
+                    if (ss == "empty" || ss == "runout") {
                         slot.status = SlotStatus::EMPTY;
-                    } else if (ss == "available" || ss == "loaded" || ss == "ready") {
+                    } else if (ss == "available" || ss == "loaded" || ss == "ready" ||
+                               ss == "preload" || ss == "running") {
                         slot.status = SlotStatus::AVAILABLE;
                     } else {
                         slot.status = SlotStatus::UNKNOWN;
@@ -838,6 +869,29 @@ void AmsBackendAce::parse_ace_object(const json& data) {
         system_info_.current_tool = slot;
         system_info_.filament_loaded = (slot >= 0);
         found_loaded = (slot >= 0);
+    }
+
+    // Native Anycubic GoKlipper reports the loaded slot as a
+    // "current_filament" string of the form "<unitId>-<localIndex>" (e.g.
+    // "0-2" = local slot 2). An empty string or absent field means nothing is
+    // loaded — in that case leave current_slot as managed by load/unload logic
+    // (do NOT force -1 here).
+    if (data.contains("current_filament") && data["current_filament"].is_string()) {
+        const std::string cf = data["current_filament"].get<std::string>();
+        auto dash = cf.find('-');
+        if (!cf.empty() && dash != std::string::npos && dash + 1 < cf.size()) {
+            try {
+                int local_index = std::stoi(cf.substr(dash + 1));
+                if (local_index >= 0) {
+                    system_info_.current_slot = local_index;
+                    system_info_.current_tool = local_index;
+                    system_info_.filament_loaded = true;
+                    found_loaded = true;
+                }
+            } catch (const std::exception& e) {
+                spdlog::debug("[ACE] Failed to parse current_filament '{}': {}", cf, e.what());
+            }
+        }
     }
 
     if (!found_loaded && !data.contains("loaded_slot")) {

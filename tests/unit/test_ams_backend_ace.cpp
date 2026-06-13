@@ -98,6 +98,38 @@ json make_ace_slot_payload(const std::string& status_str, uint32_t color_rgb,
     };
 }
 
+// Build a native Anycubic GoKlipper `filament_hub` get_status() payload (the
+// FLAT, single-hub schema Rinkhals firmware exposes): 4 slots, one "ready"
+// PLA slot with an RGB color, the rest "empty"; a live "dryer" object in the
+// "drying" state; and current_filament "0-1" (local slot 1 loaded).
+json make_native_filament_hub_payload() {
+    return json{
+        {"status", "ready"},
+        {"temp", 28},
+        {"enable_rfid", 1},
+        {"fan_speed", 0},
+        {"feed_assist_count", 0},
+        {"cont_assist_time", 0.0},
+        {"dryer", json{
+            {"status", "drying"},
+            {"target_temp", 55},
+            {"duration", 240},
+            {"remain_time", 180},
+        }},
+        {"slots", json::array({
+            json{{"index", 0}, {"status", "empty"}, {"sku", ""}, {"type", ""},
+                 {"color", json::array({0, 0, 0})}},
+            json{{"index", 1}, {"status", "ready"}, {"sku", ""}, {"type", "PLA"},
+                 {"color", json::array({255, 85, 0})}},
+            json{{"index", 2}, {"status", "empty"}, {"sku", ""}, {"type", ""},
+                 {"color", json::array({0, 0, 0})}},
+            json{{"index", 3}, {"status", "empty"}, {"sku", ""}, {"type", ""},
+                 {"color", json::array({0, 0, 0})}},
+        })},
+        {"current_filament", "0-1"},
+    };
+}
+
 } // namespace
 
 /**
@@ -121,6 +153,12 @@ class AmsBackendAceTestHelper : public AmsBackendAce {
 
     bool test_parse_slots_response(const json& data) {
         return parse_slots_response(data);
+    }
+
+    // Drive the WebSocket status-update path (protected hook) so tests can
+    // exercise the filament_hub/ace key-picking logic, not just parse_ace_object.
+    void test_handle_status_update(const json& notification) {
+        handle_status_update(notification);
     }
 
     // State accessors for verification
@@ -959,4 +997,127 @@ TEST_CASE("ACE clear_slot_override is a no-op when no override is present",
     auto info = backend.get_slot_info(0);
     CHECK(info.color_rgb == 0xAA55FFu);
     CHECK(info.material == "PETG");
+}
+
+// ============================================================================
+// Native Anycubic GoKlipper (filament_hub) schema parsing.
+//
+// Rinkhals firmware ships native Anycubic GoKlipper, which registers the
+// status object as `filament_hub` (singular) and exposes a FLAT, single-hub
+// get_status() schema with live dryer state and a "current_filament"
+// "<unitId>-<localIndex>" string. These tests lock the parse behavior for that
+// schema.
+// ============================================================================
+
+TEST_CASE("ACE parses native filament_hub schema (slots, dryer, current_filament)",
+          "[ams][ace][native][parse]") {
+    AmsBackendAce backend(nullptr, nullptr);
+
+    AceTestAccess::parse_ace(backend, make_native_filament_hub_payload());
+
+    auto info = backend.get_system_info();
+    REQUIRE(info.total_slots == 4);
+    REQUIRE(info.units.size() == 1);
+    REQUIRE(info.units[0].slots.size() == 4);
+
+    // Slot 0/2/3 are empty; slot 1 is "ready" PLA with color #FF5500.
+    CHECK(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+    CHECK(backend.get_slot_info(2).status == SlotStatus::EMPTY);
+    CHECK(backend.get_slot_info(3).status == SlotStatus::EMPTY);
+
+    auto slot1 = backend.get_slot_info(1);
+    CHECK(slot1.status == SlotStatus::AVAILABLE); // native "ready" -> AVAILABLE
+    CHECK(slot1.material == "PLA");
+    CHECK(slot1.color_rgb == 0xFF5500u); // [255,85,0] -> 0xFF5500
+
+    // Dryer reflects the native "drying" state.
+    auto dryer = backend.get_dryer_info();
+    CHECK(dryer.active == true);
+    CHECK(dryer.target_temp_c == Catch::Approx(55.0f));
+    CHECK(dryer.duration_min == 240);
+    CHECK(dryer.remaining_min == 180); // native remain_time -> remaining_min
+
+    // current_filament "0-1" => local slot 1 loaded.
+    CHECK(info.current_slot == 1);
+    CHECK(info.current_tool == 1);
+    CHECK(info.filament_loaded == true);
+}
+
+TEST_CASE("ACE status-update path prefers filament_hub over ace key",
+          "[ams][ace][native][parse]") {
+    AmsBackendAceTestHelper helper;
+
+    // Notification envelope: {"params": [ {status...}, timestamp ]}. The status
+    // object carries BOTH keys; filament_hub must win.
+    json filament_hub = make_native_filament_hub_payload();
+    json ace_obj = make_ace_slot_payload("empty", 0x000000, ""); // would yield 1 slot
+
+    json status = json::object();
+    status["filament_hub"] = filament_hub;
+    status["ace"] = ace_obj;
+
+    json notification = {{"params", json::array({status, 12345.0})}};
+
+    helper.test_handle_status_update(notification);
+
+    auto info = helper.get_system_info();
+    // 4 slots from filament_hub, not 1 from the ace fallback.
+    CHECK(info.total_slots == 4);
+    CHECK(info.current_slot == 1);
+    CHECK(helper.get_slot_info(1).material == "PLA");
+}
+
+TEST_CASE("ACE status-update path falls back to ace key when filament_hub absent",
+          "[ams][ace][native][parse]") {
+    AmsBackendAceTestHelper helper;
+
+    json ace_obj = json{
+        {"model", "ACE Pro"},
+        {"status", "ready"},
+        {"slots", json::array({
+            json{{"status", "available"}, {"type", "PETG"},
+                 {"color", json::array({0, 85, 255})}},
+            json{{"status", "empty"}},
+        })},
+    };
+
+    json status = json::object();
+    status["ace"] = ace_obj;
+
+    json notification = {{"params", json::array({status, 999.0})}};
+
+    helper.test_handle_status_update(notification);
+
+    auto info = helper.get_system_info();
+    CHECK(info.total_slots == 2);
+    CHECK(helper.get_slot_info(0).material == "PETG");
+    CHECK(helper.get_slot_info(0).color_rgb == 0x0055FFu);
+}
+
+TEST_CASE("ACE native current_filament empty leaves loaded state unmanaged",
+          "[ams][ace][native][parse]") {
+    AmsBackendAce backend(nullptr, nullptr);
+
+    // First load slot 2 via a payload that says current_filament "0-2".
+    json p = make_native_filament_hub_payload();
+    p["current_filament"] = "0-2";
+    AceTestAccess::parse_ace(backend, p);
+    CHECK(backend.get_system_info().current_slot == 2);
+
+    // Now an empty current_filament must NOT force current_slot to -1 — the
+    // backend's load/unload bookkeeping owns that transition.
+    p["current_filament"] = "";
+    AceTestAccess::parse_ace(backend, p);
+    CHECK(backend.get_system_info().current_slot == 2);
+}
+
+TEST_CASE("ACE maps native runout slot status to EMPTY", "[ams][ace][native][parse]") {
+    AmsBackendAce backend(nullptr, nullptr);
+
+    json p = make_native_filament_hub_payload();
+    p["slots"][1]["status"] = "runout";
+    AceTestAccess::parse_ace(backend, p);
+
+    // runout = ran dry mid-print; mapped to EMPTY (no dedicated RUNOUT status).
+    CHECK(backend.get_slot_info(1).status == SlotStatus::EMPTY);
 }

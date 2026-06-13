@@ -2461,6 +2461,188 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
 }
 
 // ============================================================================
+// Anycubic Kobra 2/3 Series - Extended Coverage (cartesian bedslingers + ACE)
+// ============================================================================
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra 2 Pro by hostname + build volume",
+                 "[printer][real_world][anycubic]") {
+    // Kobra 2 Pro: cartesian bedslinger, LeviQ probe, ~220mm bed.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "anycubic-kobra2pro",
+        .printer_objects = {"probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 220, .y_min = 0, .y_max = 220, .z_max = 250}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Anycubic Kobra 2 Pro");
+    // hostname "kobra2pro" (96) dominates; probe + bv + cartesian add bonus
+    REQUIRE(result.confidence >= 90);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra 3 by ACE + CS1237 (cartesian, no hostname)",
+                 "[printer][real_world][anycubic]") {
+    // Kobra 3 is a CARTESIAN bedslinger (confirmed via Anycubic's official
+    // printer_k3c_k3v2c.cfg), NOT corexy. The ACE multi-material unit and the
+    // CS1237 nozzle-load cell are its hardware discriminators. With no hostname
+    // it must still resolve to the Kobra 3 over any other cartesian bedslinger.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "mainsailos", // generic - no Anycubic hint
+        .printer_objects = {"filament_hub", "cs1237", "probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 250, .y_min = 0, .y_max = 250, .z_max = 260}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    // Must be the cartesian Kobra 3, NOT the corexy Kobra S1 and NOT a Kobra 2.
+    REQUIRE(result.type_name == "Anycubic Kobra 3");
+    // filament_hub (55) + cs1237 (50) + cartesian (40) + build volume (55) combined.
+    REQUIRE(result.confidence >= 60);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra 3 with hostname",
+                 "[printer][real_world][anycubic]") {
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "anycubic-kobra3",
+        .printer_objects = {"filament_hub", "cs1237"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 250, .y_min = 0, .y_max = 250, .z_max = 260}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Anycubic Kobra 3");
+    // hostname "kobra3" (95) + ACE/CS1237/cartesian/bv bonus
+    REQUIRE(result.confidence >= 90);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra 3 V2 disambiguated by hostname",
+                 "[printer][real_world][anycubic]") {
+    // Kobra 3 V2 shares hardware with the Kobra 3 (same ACE + CS1237 cartesian
+    // platform). The hostname is the only discriminator.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "anycubic-kobra3v2",
+        .printer_objects = {"filament_hub", "cs1237"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 250, .y_min = 0, .y_max = 250, .z_max = 260}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    // "kobra3v2" (97) must out-rank the plain Kobra 3 "kobra3" (95) match.
+    REQUIRE(result.type_name == "Anycubic Kobra 3 V2");
+    REQUIRE(result.confidence >= 90);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra 3 Max by dual-Y + ACE (beats Kobra 2 Max)",
+                 "[printer][real_world][anycubic]") {
+    // Kobra 3 Max: large cartesian bedslinger with dual-Y steppers (stepper_y1),
+    // ACE, and a GPIO filament_tracker. Its build volume (~420mm) overlaps the
+    // Kobra 2 Max, so stepper_y1 + ACE + filament_tracker are the discriminators
+    // that must let it out-score the Kobra 2 Max with NO hostname hint.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "mainsailos", // generic - force hardware discrimination
+        .printer_objects = {"stepper_y1", "filament_hub", "filament_tracker", "probe"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_y1", "stepper_z"},
+        .kinematics = "cartesian",
+        .build_volume = {.x_min = 0, .x_max = 420, .y_min = 0, .y_max = 420, .z_max = 500}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    // Must beat the Kobra 2 Max (also cartesian + ~420mm) via dual-Y + ACE.
+    REQUIRE(result.type_name == "Anycubic Kobra 3 Max");
+    // stepper_y1 (60) + filament_hub (50) + filament_tracker (45) + cartesian (40) +
+    // build volume (70) -> base 70 + max bonus.
+    REQUIRE(result.confidence >= 75);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra S1 by corexy + ACE + filament_tracker",
+                 "[printer][real_world][anycubic]") {
+    // Kobra S1 is an ENCLOSED CoreXY (confirmed via Anycubic printer_s1c.cfg)
+    // with the ACE unit and an ADC filament_tracker. With no hostname it must
+    // resolve to the S1, not the cartesian Kobra 3 (which shares the ~250mm bed).
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "mainsailos", // generic - no Anycubic hint
+        .printer_objects = {"filament_hub", "filament_tracker"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "corexy",
+        .mcu = "HC32F460",
+        .mcu_list = {"HC32F460"},
+        .build_volume = {.x_min = 0, .x_max = 250, .y_min = 0, .y_max = 250, .z_max = 250}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    // CoreXY kinematics rules out the cartesian Kobra 3; ACE + filament_tracker
+    // + HC32F460 confirm the S1 over the S1 Max (which needs a chamber).
+    REQUIRE(result.type_name == "Anycubic Kobra S1");
+    REQUIRE(result.confidence >= 60);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Anycubic Kobra S1 Max by chamber + ACE",
+                 "[printer][real_world][anycubic]") {
+    // Kobra S1 Max: enclosed CoreXY with a heated chamber (its exclusive
+    // discriminator over the S1) plus ACE, on the HC32F460.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "heater_bed"},
+        .sensors = {},
+        .fans = {"fan", "heater_fan hotend_fan"},
+        .leds = {},
+        .hostname = "anycubic-kobra-s1-max",
+        .printer_objects = {"chamber", "filament_hub"},
+        .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+        .kinematics = "corexy",
+        .mcu = "HC32F460",
+        .mcu_list = {"HC32F460"},
+        .build_volume = {.x_min = 0, .x_max = 350, .y_min = 0, .y_max = 350, .z_max = 350}};
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "Anycubic Kobra S1 Max");
+    // hostname "kobra-s1-max" (97) + chamber + ace + corexy + bv + mcu
+    REQUIRE(result.confidence >= 90);
+}
+
+// ============================================================================
 // Case Sensitivity Tests - MCU Matching
 // ============================================================================
 
