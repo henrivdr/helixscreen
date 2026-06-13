@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include "static_subject_registry.h"
 #include "ui_modal.h"
+
+#include <spdlog/spdlog.h>
 
 #include <functional>
 
@@ -38,12 +41,34 @@ class RunoutGuidanceModal : public Modal {
   public:
     using Callback = std::function<void()>;
 
+    RunoutGuidanceModal() {
+        init_subjects();
+    }
+
     /**
      * @brief Get human-readable name for logging
      * @return "Runout Guidance"
      */
     const char* get_name() const override {
         return "Runout Guidance";
+    }
+
+    /**
+     * @brief Set whether the active backend recovers filament on resume.
+     *
+     * Drives the capability-aware layout: when true (e.g. Snapmaker U1, where
+     * Resume runs AUTO_FEEDING), the message reads "Refill the spool, then
+     * Resume.", the manual Load/Unload/Purge row is demoted (muted + "Manual"
+     * label), and Resume is emphasized. When false (basic runout sensor), Load
+     * stays prominent and the message reads "Load filament, then Resume."
+     *
+     * Safe to call only on the main thread (the modal is shown from the main
+     * thread). Updates the C++-owned, component-scoped subject the XML binds to.
+     *
+     * @param autofeed_capable true if Resume alone recovers a runout
+     */
+    void set_autofeed_capable(bool autofeed_capable) {
+        lv_subject_set_int(&autofeed_capable_subject_, autofeed_capable ? 1 : 0);
     }
 
     /**
@@ -113,13 +138,14 @@ class RunoutGuidanceModal : public Modal {
     /**
      * @brief Called when user clicks Load Filament button
      *
-     * Invokes the load filament callback if set, then hides the modal.
+     * Invokes the load filament callback if set and keeps the modal open
+     * (like Unload/Purge) so the user can purge after loading before resuming.
      */
     void on_ok() override {
         if (on_load_filament_) {
             on_load_filament_();
         }
-        hide();
+        // Don't hide - user may want to purge after loading before resuming
     }
 
     /**
@@ -191,4 +217,35 @@ class RunoutGuidanceModal : public Modal {
     Callback on_resume_;
     Callback on_cancel_print_;
     Callback on_ok_dismiss_;
+
+    // Capability subject driving the capable-aware layout (0 = manual Load
+    // prominent, 1 = autofeed: Resume-first, manual row demoted). C++-owned and
+    // registered into the modal's component scope — NOT an XML <subjects> block.
+    // XML <subjects> are heap-freed before modal callbacks fire; a component-
+    // scoped, statically-stored subject survives across show/hide cycles and
+    // multiple instantiations. Pattern mirrors ShutdownModal::view_state_subject_.
+    static inline lv_subject_t autofeed_capable_subject_{};
+    static inline bool subjects_initialized_ = false;
+
+    static void init_subjects() {
+        if (subjects_initialized_) return;
+        subjects_initialized_ = true;
+
+        lv_subject_init_int(&autofeed_capable_subject_, 0);
+
+        auto* scope = lv_xml_component_get_scope("runout_guidance_modal");
+        if (scope) {
+            lv_xml_register_subject(scope, "runout_autofeed_capable",
+                                    &autofeed_capable_subject_);
+        } else {
+            spdlog::warn("[RunoutGuidanceModal] Component scope not found — "
+                         "ensure runout_guidance_modal.xml is registered first");
+        }
+
+        StaticSubjectRegistry::instance().register_deinit("RunoutGuidanceModal", []() {
+            if (!subjects_initialized_) return;
+            lv_subject_deinit(&autofeed_capable_subject_);
+            subjects_initialized_ = false;
+        });
+    }
 };

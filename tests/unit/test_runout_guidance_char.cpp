@@ -48,6 +48,7 @@ class RunoutGuidanceStateMachine {
         bool cancel_macro_available = true; // StandardMacros Cancel slot not empty
         bool unload_macro_available = true; // StandardMacros UnloadFilament slot not empty
         bool purge_macro_available = true;  // StandardMacros Purge slot not empty
+        bool ams_backend_present = true;    // AmsState::instance().get_backend() != nullptr
     };
 
     enum class PrintState { Idle, Preparing, Printing, Paused, Complete, Cancelled, Error };
@@ -68,6 +69,7 @@ class RunoutGuidanceStateMachine {
 
         if (new_state == PrintState::Printing) {
             runout_modal_shown_for_pause_ = false;
+            user_took_manual_action_ = false;
             modal_visible_ = false;
         }
 
@@ -107,6 +109,8 @@ class RunoutGuidanceStateMachine {
         if (modal_visible_) {
             return; // Already showing
         }
+        user_took_manual_action_ = false; // fresh modal re-arms auto-close
+        runout_confirmed_active_ = false; // #991: latch re-armed per fresh modal
         modal_visible_ = true;
     }
 
@@ -117,6 +121,39 @@ class RunoutGuidanceStateMachine {
         modal_visible_ = false;
     }
 
+    /**
+     * @brief Mirror the get_any_runout_subject() auto-close observer (#991).
+     *
+     * Called when the runout-cleared subject fires. Auto-closes the modal only
+     * on a GENUINE confirmed-runout→clear transition observed while the modal is
+     * up, and only when the runout cleared EXTERNALLY (no in-dialog action).
+     *
+     * Guards (matching the real observer):
+     *  - value==1: latch runout_confirmed_active_ (never closes).
+     *  - in_startup_grace: a transient 0 during sensor stabilization is ignored.
+     *  - require runout_confirmed_active_: the observer's initial read / any
+     *    startup-transient 0 BEFORE a confirmed 1 cannot close the modal.
+     *  - user_took_manual_action_: in-dialog action keeps the dialog open.
+     *
+     * @param any_runout New subject value (1=runout, 0=clear)
+     * @param in_startup_grace True if the sensor is still within its grace window
+     */
+    void on_any_runout_changed(int any_runout, bool in_startup_grace = false) {
+        if (any_runout != 0) {
+            runout_confirmed_active_ = true; // confirmed active runout — arm close
+            return;
+        }
+        if (in_startup_grace)
+            return; // transient 0 during sensor stabilization
+        if (!runout_confirmed_active_)
+            return; // never saw a confirmed runout for this modal
+        if (user_took_manual_action_)
+            return; // user is managing it in-dialog
+        if (!modal_visible_)
+            return;
+        modal_visible_ = false; // runout cleared externally — auto-close
+    }
+
     // ========================================================================
     // Action Handlers (mirror show_runout_guidance_modal() callbacks)
     // ========================================================================
@@ -124,19 +161,27 @@ class RunoutGuidanceStateMachine {
     /**
      * @brief Handle "Load Filament" button
      *
-     * Navigates to filament panel for loading.
-     * Modal hides (handled by on_ok in modal).
+     * #991: Loads filament in place (via the AMS backend) and KEEPS the modal
+     * open so the user can purge before resuming. Marks a manual action so the
+     * external-resolution auto-close is suppressed (the load itself makes the
+     * sensor read present). With no AMS backend, falls back to navigating to the
+     * filament panel.
      *
-     * @return true if navigation succeeded
+     * @return true if the action started
      */
     bool handle_load_filament() {
         if (!modal_visible_)
             return false;
 
-        // Navigate to filament panel (always succeeds)
-        navigated_to_panel_ = "filament";
-        // Modal hides
-        modal_visible_ = false;
+        user_took_manual_action_ = true;
+        if (external_state_.ams_backend_present) {
+            // Load in place via the backend.
+            macro_executed_ = "LoadFilament";
+        } else {
+            // No AMS backend — fall back to navigating to the filament panel.
+            navigated_to_panel_ = "filament";
+        }
+        // Modal stays open - user may want to purge after loading before resuming
         return true;
     }
 
@@ -157,6 +202,7 @@ class RunoutGuidanceStateMachine {
         }
 
         // Execute macro
+        user_took_manual_action_ = true;
         macro_executed_ = "UnloadFilament";
         // Modal stays open
         return ActionResult::SUCCESS;
@@ -179,6 +225,7 @@ class RunoutGuidanceStateMachine {
         }
 
         // Execute macro
+        user_took_manual_action_ = true;
         macro_executed_ = "Purge";
         // Modal stays open
         return ActionResult::SUCCESS;
@@ -270,6 +317,9 @@ class RunoutGuidanceStateMachine {
     const std::string& navigated_panel() const {
         return navigated_to_panel_;
     }
+    bool user_took_manual_action() const {
+        return user_took_manual_action_;
+    }
 
     // External state control for testing
     ExternalState& external_state() {
@@ -278,6 +328,8 @@ class RunoutGuidanceStateMachine {
 
     void reset() {
         runout_modal_shown_for_pause_ = false;
+        user_took_manual_action_ = false;
+        runout_confirmed_active_ = false;
         modal_visible_ = false;
         current_state_ = PrintState::Idle;
         macro_executed_.clear();
@@ -288,6 +340,8 @@ class RunoutGuidanceStateMachine {
 
   private:
     bool runout_modal_shown_for_pause_ = false;
+    bool user_took_manual_action_ = false;
+    bool runout_confirmed_active_ = false;
     bool modal_visible_ = false;
     PrintState current_state_ = PrintState::Idle;
     std::string macro_executed_;
@@ -604,7 +658,8 @@ TEST_CASE("CHAR: Purge blocked if macro empty", "[runout_guidance][char]") {
 // CHARACTERIZATION: Load Filament Button
 // ============================================================================
 
-TEST_CASE("CHAR: Load Filament navigates to filament panel", "[runout_guidance][char]") {
+TEST_CASE("CHAR: Load Filament loads in place and keeps modal open",
+          "[runout_guidance][char]") {
     RunoutGuidanceStateMachine state;
     state.external_state().has_any_runout = true;
 
@@ -612,12 +667,25 @@ TEST_CASE("CHAR: Load Filament navigates to filament panel", "[runout_guidance][
     state.on_state_changed(RunoutGuidanceStateMachine::PrintState::Printing,
                            RunoutGuidanceStateMachine::PrintState::Paused);
 
-    SECTION("Load Filament navigates and hides modal") {
+    SECTION("With AMS backend: loads in place, modal stays open, manual flag set") {
+        state.external_state().ams_backend_present = true;
+        bool result = state.handle_load_filament();
+
+        REQUIRE(result == true);
+        REQUIRE(state.last_macro_executed() == "LoadFilament");
+        REQUIRE(state.navigated_panel().empty());
+        REQUIRE(state.is_modal_visible() == true); // #991: stays open for follow-up purge
+        REQUIRE(state.user_took_manual_action() == true);
+    }
+
+    SECTION("Without AMS backend: falls back to navigating, modal stays open") {
+        state.external_state().ams_backend_present = false;
         bool result = state.handle_load_filament();
 
         REQUIRE(result == true);
         REQUIRE(state.navigated_panel() == "filament");
-        REQUIRE(state.is_modal_visible() == false);
+        REQUIRE(state.is_modal_visible() == true);
+        REQUIRE(state.user_took_manual_action() == true);
     }
 }
 
@@ -732,22 +800,91 @@ TEST_CASE("CHAR: Complete runout workflow - load and resume", "[runout_guidance]
                            RunoutGuidanceStateMachine::PrintState::Paused);
     REQUIRE(state.is_modal_visible() == true);
 
-    // Step 2: User clicks Load Filament, navigates to filament panel
+    // Step 2: User clicks Load Filament. #991: loads in place via the backend,
+    // marks a manual action, and the modal STAYS OPEN for a follow-up purge.
     state.handle_load_filament();
-    REQUIRE(state.navigated_panel() == "filament");
-    REQUIRE(state.is_modal_visible() == false);
+    REQUIRE(state.last_macro_executed() == "LoadFilament");
+    REQUIRE(state.is_modal_visible() == true);
+    REQUIRE(state.user_took_manual_action() == true);
 
-    // Step 3: User loads filament, sensor detects it
+    // Step 3: The load makes the sensor read present. The auto-close observer
+    // fires, but because the user took an in-dialog action it does NOT close.
     state.external_state().has_any_runout = false;
+    state.on_any_runout_changed(0);
+    REQUIRE(state.is_modal_visible() == true); // suppressed by manual-action flag
 
-    // Step 4: User returns and tries to resume (modal shows again on panel change?)
-    // Actually, the modal won't show again because runout_modal_shown_for_pause_ is still true
-    state.check_and_show_runout_guidance();
+    // Step 4: User resumes from the still-open dialog.
+    auto result = state.handle_resume();
+    REQUIRE(result == RunoutGuidanceStateMachine::ActionResult::SUCCESS);
+    REQUIRE(state.last_macro_executed() == "Resume");
     REQUIRE(state.is_modal_visible() == false);
-    REQUIRE(state.was_shown_for_pause() == true);
+}
 
-    // User would need to manually trigger resume from elsewhere
-    // In real code, they'd use the pause/resume button on the print status panel
+TEST_CASE("CHAR: Runout cleared externally auto-closes modal", "[runout_guidance][char]") {
+    RunoutGuidanceStateMachine state;
+
+    // Step 1: Runout detected, modal shown.
+    state.external_state().has_any_runout = true;
+    state.on_state_changed(RunoutGuidanceStateMachine::PrintState::Printing,
+                           RunoutGuidanceStateMachine::PrintState::Paused);
+    REQUIRE(state.is_modal_visible() == true);
+    REQUIRE(state.user_took_manual_action() == false);
+
+    SECTION("External resolution (no in-dialog action) auto-closes") {
+        // Observer confirms the active runout (value==1) while the modal is up,
+        // then the user loads filament via some OTHER path; sensor reads present.
+        state.on_any_runout_changed(1);
+        state.external_state().has_any_runout = false;
+        state.on_any_runout_changed(0);
+        REQUIRE(state.is_modal_visible() == false);
+    }
+
+    SECTION("Still-in-runout subject value does not close") {
+        state.on_any_runout_changed(1);
+        REQUIRE(state.is_modal_visible() == true);
+    }
+
+    SECTION("In-dialog action suppresses auto-close") {
+        state.on_any_runout_changed(1); // confirmed active runout
+        state.handle_purge();
+        REQUIRE(state.user_took_manual_action() == true);
+        state.external_state().has_any_runout = false;
+        state.on_any_runout_changed(0);
+        REQUIRE(state.is_modal_visible() == true); // stays open
+    }
+}
+
+// ============================================================================
+// CHARACTERIZATION: Auto-close latch (#991) — startup-grace misfire guard
+// ============================================================================
+
+TEST_CASE("CHAR: Initial-read 0 does not close modal without a confirmed runout",
+          "[runout_guidance][char]") {
+    RunoutGuidanceStateMachine state;
+
+    // Runout detected, modal shown.
+    state.external_state().has_any_runout = true;
+    state.on_state_changed(RunoutGuidanceStateMachine::PrintState::Printing,
+                           RunoutGuidanceStateMachine::PrintState::Paused);
+    REQUIRE(state.is_modal_visible() == true);
+
+    SECTION("Observer's initial 0 read (before any confirmed runout) is ignored") {
+        // This is the Phase 2 bug: observer fires its initial read as 0 right
+        // after install (UI restart / startup transient) and used to close the
+        // modal immediately. The latch requires a confirmed runout first.
+        state.on_any_runout_changed(0);
+        REQUIRE(state.is_modal_visible() == true);
+    }
+
+    SECTION("Transient 0 during startup-grace window is ignored even after confirm") {
+        state.on_any_runout_changed(1); // confirmed active runout
+        // A grace-window transient 0 must not close (sensor not yet stabilized).
+        state.on_any_runout_changed(0, /*in_startup_grace=*/true);
+        REQUIRE(state.is_modal_visible() == true);
+        // Once grace ends, a genuine clear DOES close.
+        state.on_any_runout_changed(0, /*in_startup_grace=*/false);
+        REQUIRE(state.is_modal_visible() == false);
+    }
 }
 
 TEST_CASE("CHAR: Complete runout workflow - purge multiple times then resume",

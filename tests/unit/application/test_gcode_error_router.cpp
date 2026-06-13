@@ -119,3 +119,55 @@ TEST_CASE_METHOD(GcodeErrorRouterTest,
     // Text is unmodified because parse threw before the friendly rewrite.
     REQUIRE(text.find("Internal error") != std::string::npos);
 }
+
+// Replay age gate (#991). On (re)connect we replay the last latched `!!`
+// from the gcode_store, but a stale error (e.g. surfaced 287s after a UI
+// restart mid-paused-print) must NOT be re-shown as a blocking modal.
+// should_surface_replay encodes the decision: fresh -> surface, stale ->
+// suppress, unknown age -> surface (never suppress on missing data).
+
+TEST_CASE_METHOD(GcodeErrorRouterTest,
+                 "should_surface_replay surfaces a fresh error",
+                 "[gcode_error_router]") {
+    const double now = 1'000'000.0;
+    // 5s old — well within the 30s window; the brief-reconnect case.
+    REQUIRE(GcodeErrorRouter::should_surface_replay(now - 5.0, now));
+}
+
+TEST_CASE_METHOD(GcodeErrorRouterTest,
+                 "should_surface_replay surfaces an error exactly at the threshold",
+                 "[gcode_error_router]") {
+    const double now = 1'000'000.0;
+    // age == 30s is still considered fresh (<=, not <).
+    REQUIRE(GcodeErrorRouter::should_surface_replay(now - 30.0, now));
+}
+
+TEST_CASE_METHOD(GcodeErrorRouterTest,
+                 "should_surface_replay suppresses a stale error",
+                 "[gcode_error_router]") {
+    const double now = 1'000'000.0;
+    // 287s old — the exact #991 stale-after-restart case. Must suppress.
+    REQUIRE_FALSE(GcodeErrorRouter::should_surface_replay(now - 287.0, now));
+    // And anything just past the boundary.
+    REQUIRE_FALSE(GcodeErrorRouter::should_surface_replay(now - 30.001, now));
+}
+
+TEST_CASE_METHOD(GcodeErrorRouterTest,
+                 "should_surface_replay surfaces when the timestamp is unavailable",
+                 "[gcode_error_router]") {
+    const double now = 1'000'000.0;
+    // entry_time == 0 (GcodeStoreEntry default / absent timestamp): age is
+    // not positively determinable, so we must NOT suppress — a real fresh
+    // error with a missing stamp would otherwise be silently swallowed.
+    REQUIRE(GcodeErrorRouter::should_surface_replay(0.0, now));
+    REQUIRE(GcodeErrorRouter::should_surface_replay(-1.0, now));
+}
+
+TEST_CASE_METHOD(GcodeErrorRouterTest,
+                 "should_surface_replay treats negative age (clock skew) as fresh",
+                 "[gcode_error_router]") {
+    const double now = 1'000'000.0;
+    // Entry stamped slightly in the future (NTP step / skew): negative age
+    // must not be mistaken for stale.
+    REQUIRE(GcodeErrorRouter::should_surface_replay(now + 10.0, now));
+}

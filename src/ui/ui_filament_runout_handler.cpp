@@ -9,8 +9,11 @@
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "ui_update_queue.h"
 
+#include "ams_backend.h"
+#include "ams_state.h"
 #include "filament_sensor_manager.h"
 #include "moonraker_api.h"
+#include "observer_factory.h"
 #include "print_lifecycle_state.h" // For PrintState enum
 #include "runtime_config.h"
 #include "standard_macros.h"
@@ -52,6 +55,7 @@ void FilamentRunoutHandler::on_print_state_changed(::PrintState old_state, ::Pri
         new_state == ::PrintState::Complete || new_state == ::PrintState::Cancelled ||
         new_state == ::PrintState::Error) {
         runout_modal_shown_for_pause_ = false;
+        user_took_manual_action_ = false;
         hide_runout_guidance_modal();
     }
 }
@@ -99,13 +103,32 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
         return;
     }
 
+    // Fresh modal: re-arm the sensor-driven auto-close. Any in-dialog
+    // Load/Unload/Purge will set this true to suppress auto-close.
+    user_took_manual_action_ = false;
+    // Re-arm the auto-close latch (#991): the observer must observe a confirmed
+    // runout (value==1) on THIS modal before a clear (value==0) can auto-close,
+    // so the observer's initial read / startup-grace transient cannot close it.
+    runout_confirmed_active_ = false;
+
     spdlog::info("[FilamentRunoutHandler] Showing runout guidance modal");
+
+    // Capability-aware layout: backends that feed filament to the nozzle as part
+    // of resume (e.g. Snapmaker U1's AUTO_FEEDING) present Resume as the primary
+    // action and demote manual Load/Unload/Purge. Set on the main thread (show
+    // happens on the main thread), so a direct subject set is safe here.
+    {
+        AmsBackend* backend = AmsState::instance().get_backend();
+        bool autofeed = backend && backend->recovers_filament_on_resume();
+        runout_modal_.set_autofeed_capable(autofeed);
+        spdlog::debug("[FilamentRunoutHandler] Runout dialog autofeed_capable={}", autofeed);
+    }
 
     // Capture token for async callback safety
     auto token = lifetime_.token();
 
     // Configure callbacks for the six options
-    runout_modal_.set_on_load_filament([token]() {
+    runout_modal_.set_on_load_filament([this, token]() {
         // #991 diagnostic: the Load press was observed to close the modal but
         // perform no action. Log entry + token state BEFORE the guard so the
         // next on-device repro disambiguates "callback never ran" vs
@@ -113,9 +136,22 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
         spdlog::info("[FilamentRunoutHandler] Load callback entered (token expired={})",
                      token.expired());
         if (token.expired()) return;
-        spdlog::info("[FilamentRunoutHandler] User chose to load filament after runout");
-        // Navigate to filament panel for loading
-        NavigationManager::instance().set_active(PanelId::Filament);
+        user_took_manual_action_ = true; // keep dialog open; suppress auto-close
+        AmsBackend* backend = AmsState::instance().get_backend();
+        if (backend) {
+            int slot = backend->get_current_slot();
+            spdlog::info("[FilamentRunoutHandler] User chose to load filament after runout (tool {})",
+                         slot);
+            AmsError err = backend->load_filament(slot);
+            if (!err.success()) {
+                spdlog::error("[FilamentRunoutHandler] Load filament failed: {}", err.technical_msg);
+                NOTIFY_ERROR(lv_tr("Failed to load filament: {}"), err.user_msg);
+            }
+        } else {
+            // No AMS backend — fall back to navigating to the Filament panel.
+            spdlog::info("[FilamentRunoutHandler] No AMS backend; navigating to Filament panel to load");
+            NavigationManager::instance().set_active(PanelId::Filament);
+        }
     });
 
     runout_modal_.set_on_resume([this, token]() {
@@ -183,6 +219,7 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
 
     runout_modal_.set_on_unload_filament([this, token]() {
         if (token.expired()) return;
+        user_took_manual_action_ = true; // in-dialog action suppresses auto-close
 
         spdlog::info("[FilamentRunoutHandler] User chose to unload filament after runout");
 
@@ -209,6 +246,7 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
 
     runout_modal_.set_on_purge([this, token]() {
         if (token.expired()) return;
+        user_took_manual_action_ = true; // in-dialog action suppresses auto-close
 
         spdlog::info("[FilamentRunoutHandler] User chose to purge after runout");
 
@@ -240,7 +278,41 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
 
     if (!runout_modal_.show(lv_screen_active())) {
         spdlog::error("[FilamentRunoutHandler] Failed to create runout guidance modal");
+        return;
     }
+
+    // Auto-close when the runout resolves EXTERNALLY. get_any_runout_subject() is
+    // int: 1=runout, 0=clear. observe_int_sync fires its INITIAL read the moment
+    // it's installed and again on every change — and the sensor can momentarily
+    // read 0 during its startup-grace window (e.g. right after a UI restart),
+    // which previously closed the modal immediately (#991). Guards, in order:
+    //   - value==1: latch a confirmed active runout for THIS modal (never closes)
+    //   - startup-grace window: ignore (sensor not yet stabilized)
+    //   - require runout_confirmed_active_: only a genuine confirmed runout→clear
+    //     transition observed while this modal is up may auto-close
+    //   - !user_took_manual_action_: user managing it in-dialog suppresses close
+    // observe_int_sync defers to the main thread; hiding here mirrors the
+    // existing on_print_state_changed close path (precedent-safe).
+    runout_cleared_observer_ = helix::ui::observe_int_sync<FilamentRunoutHandler>(
+        helix::FilamentSensorManager::instance().get_any_runout_subject(), this,
+        [](FilamentRunoutHandler* self, int any_runout) {
+            if (any_runout != 0) {
+                // Confirmed active runout while the modal is up — arm auto-close.
+                self->runout_confirmed_active_ = true;
+                return;
+            }
+            // value == 0 (clear): only close on a genuine confirmed runout→clear.
+            if (helix::FilamentSensorManager::instance().is_in_startup_grace_period()) {
+                // Transient 0 during sensor stabilization — not a real resolution.
+                return;
+            }
+            if (!self->runout_confirmed_active_) return; // never saw a confirmed runout
+            if (self->user_took_manual_action_) return;  // user is managing it in-dialog
+            if (!self->runout_modal_.is_visible()) return;
+            spdlog::info(
+                "[FilamentRunoutHandler] Runout cleared externally — auto-closing guidance modal");
+            self->hide_runout_guidance_modal();
+        });
 }
 
 void FilamentRunoutHandler::hide_modal() {
@@ -254,6 +326,8 @@ void FilamentRunoutHandler::hide_runout_guidance_modal() {
 
     spdlog::debug("[FilamentRunoutHandler] Hiding runout guidance modal");
     runout_modal_.hide();
+    // Stop observing the runout-cleared subject so it doesn't linger across pauses.
+    runout_cleared_observer_.reset();
 }
 
 } // namespace helix::ui

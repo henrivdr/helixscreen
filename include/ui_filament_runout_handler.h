@@ -22,6 +22,7 @@
  */
 
 #include "async_lifetime_guard.h"
+#include "ui_observer_guard.h"
 #include "ui_runout_guidance_modal.h"
 
 // Forward declarations
@@ -134,6 +135,26 @@ class FilamentRunoutHandler {
     /// Flag to track if runout modal was shown for current pause
     /// Reset when print resumes or ends, prevents repeated modal popups
     bool runout_modal_shown_for_pause_{false};
+
+    /// Set when the user triggers Load/Unload/Purge from within the modal. While
+    /// true, the sensor-driven auto-close is suppressed so a user-initiated load
+    /// (which itself makes the sensor read present) keeps the dialog open for a
+    /// follow-up purge. An EXTERNAL resolution (no in-dialog action) still closes.
+    bool user_took_manual_action_{false};
+
+    /// Latch for the auto-close observer (#991). The observer on the any-runout
+    /// subject fires its initial read (and any startup-grace transient 0) the
+    /// moment it's installed — which used to close the modal immediately after a
+    /// UI restart. We only auto-close on a GENUINE runout→clear transition, so we
+    /// require having first observed a confirmed runout (value==1) while the modal
+    /// is open. Reset to false in show_runout_guidance_modal() so each fresh modal
+    /// must re-confirm an active runout before auto-close can fire.
+    bool runout_confirmed_active_{false};
+
+    /// Observes FilamentSensorManager::get_any_runout_subject(); auto-closes the
+    /// modal when the runout clears externally. Static singleton subject, so a
+    /// plain ObserverGuard (no SubjectLifetime token) is correct.
+    ObserverGuard runout_cleared_observer_;
 
     /// Async callback safety guard
     helix::AsyncLifetimeGuard lifetime_;

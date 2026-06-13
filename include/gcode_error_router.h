@@ -54,6 +54,21 @@ class GcodeErrorRouter {
     /// cover both the pure-JSON and embedded-JSON shapes K2 emits.
     static void clean_error_text(std::string& text, std::string& out_code);
 
+    /// Replay age gate. Decides whether a latched `!!` line from the
+    /// gcode_store should be re-surfaced on (re)connect, given its
+    /// Moonraker timestamp `entry_time` and the current `now` (both Unix
+    /// seconds). Static + side-effect free so it is unit-testable without
+    /// time mocking or router state.
+    ///
+    /// Returns `true` (surface) when:
+    ///   - the age cannot be positively determined (`entry_time <= 0`, an
+    ///     absent/zero timestamp) — we never suppress a possibly-fresh
+    ///     error on missing data, or
+    ///   - the error is recent (age <= kReplayMaxAgeSeconds).
+    /// Returns `false` (suppress, log at debug) only when age is positively
+    /// known to exceed the threshold — the stale-after-restart case.
+    static bool should_surface_replay(double entry_time, double now);
+
   private:
     /// Live `notify_gcode_response` handler — runs on the WS thread.
     void on_notify_gcode_response(const nlohmann::json& msg);
