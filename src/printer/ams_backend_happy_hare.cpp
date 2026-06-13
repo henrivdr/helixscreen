@@ -249,22 +249,17 @@ void AmsBackendHappyHare::handle_status_update(const nlohmann::json& notificatio
         return;
     }
 
-    // Check if this notification contains MMU data
-    if (!params.contains("mmu")) {
-        return;
-    }
+    spdlog::trace("[AMS HappyHare] Received status update");
 
-    const auto& mmu_data = params["mmu"];
-    if (!mmu_data.is_object()) {
-        return;
-    }
-
-    spdlog::trace("[AMS HappyHare] Received MMU status update");
-
-    {
+    // Parse MMU core state if present.
+    if (params.contains("mmu") && params["mmu"].is_object()) {
         std::lock_guard<std::mutex> lock(mutex_);
-        parse_mmu_state(mmu_data);
+        parse_mmu_state(params["mmu"]);
     }
+
+    // Parse live heater_generic temp/target even when mmu key is absent —
+    // Moonraker sends heater updates as sibling keys in the same notification.
+    apply_filament_heater_status(params);
 
     emit_event(EVENT_STATE_CHANGED);
 }
@@ -907,13 +902,17 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
             spdlog::trace("[AMS HappyHare] Dryer state (object): active={}, temp={:.1f}°C",
                           dryer_info_.active, dryer_info_.current_temp_c);
         } else if (drying.is_array()) {
-            // EMU per-gate array format: ["", "", ...] (empty = inactive)
+            // EMU per-gate array format: ["", "", ...] or ["active", "", ...]
+            // Values: "active", "queued" = heater on; "complete", "canceled", "" = off.
             dryer_info_.supported = true;
             bool any_active = false;
             for (const auto& entry : drying) {
-                if (entry.is_string() && !entry.get<std::string>().empty()) {
-                    any_active = true;
-                    break;
+                if (entry.is_string()) {
+                    const std::string s = entry.get<std::string>();
+                    if (s == "active" || s == "queued") {
+                        any_active = true;
+                        break;
+                    }
                 }
             }
             dryer_info_.active = any_active;
@@ -1167,6 +1166,36 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
 // ============================================================================
 // Heater Config Query
 // ============================================================================
+
+void AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& params) {
+    // Determine which Moonraker status key to look up.
+    std::string status_key;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (filament_heater_name_.empty()) {
+            return;
+        }
+        // Normalize: ensure the key starts with "heater_generic " as Moonraker uses.
+        if (filament_heater_name_.rfind("heater_generic ", 0) == 0) {
+            status_key = filament_heater_name_;
+        } else {
+            status_key = "heater_generic " + filament_heater_name_;
+        }
+    }
+
+    auto h_it = params.find(status_key);
+    if (h_it == params.end() || !h_it->is_object()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (auto t = h_it->find("temperature"); t != h_it->end() && t->is_number()) {
+        dryer_info_.current_temp_c = t->get<float>();
+    }
+    if (auto tg = h_it->find("target"); tg != h_it->end() && tg->is_number()) {
+        dryer_info_.target_temp_c = tg->get<float>();
+    }
+}
 
 void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
     // Parse [mmu_machine] filament_heater — the Klipper heater_generic object name.

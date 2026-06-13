@@ -180,6 +180,11 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
         apply_heater_config(settings);
     }
 
+    /// Expose apply_filament_heater_status for testing
+    void test_apply_filament_heater_status(const nlohmann::json& params) {
+        apply_filament_heater_status(params);
+    }
+
     /**
      * @brief Check if exact G-code was captured
      * @param expected Exact G-code string to find
@@ -1668,6 +1673,35 @@ TEST_CASE("Happy Hare manages_active_spool=true when spoolman enabled",
 }
 
 // ============================================================================
+// Live heater temp/target from Moonraker status
+// ============================================================================
+
+TEST_CASE("Happy Hare parses live filament_heater temp/target", "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.test_apply_heater_config(nlohmann::json{
+        {"mmu_machine", {{"filament_heater", "heater_generic box1_heater"}}},
+        {"mmu", {{"heater_max_temp", 65.0}}}});
+    nlohmann::json params = {
+        {"heater_generic box1_heater", {{"temperature", 48.5}, {"target", 55.0}}}};
+    helper.test_apply_filament_heater_status(params);
+    auto d = helper.get_dryer_info();
+    REQUIRE(d.current_temp_c == Catch::Approx(48.5f).epsilon(0.01));
+    REQUIRE(d.target_temp_c == Catch::Approx(55.0f).epsilon(0.01));
+}
+
+TEST_CASE("Happy Hare array drying_state: complete is not active",
+          "[ams][happy_hare][emu]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.test_parse_mmu_state(nlohmann::json{{"drying_state", {"complete", "", "", ""}}});
+    REQUIRE(helper.get_dryer_info().supported);
+    REQUIRE_FALSE(helper.get_dryer_info().active);
+    helper.test_parse_mmu_state(nlohmann::json{{"drying_state", {"", "active", "", ""}}});
+    REQUIRE(helper.get_dryer_info().active);
+}
+
+// ============================================================================
 // EMU drying_state array format
 // ============================================================================
 
@@ -1700,8 +1734,8 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "EMU drying_state as array",
         REQUIRE(dryer.current_temp_c == Catch::Approx(55.0));
     }
 
-    SECTION("array with non-empty entry means active") {
-        nlohmann::json mmu_data = {{"drying_state", {"", "drying", "", ""}}};
+    SECTION("array with active entry means active") {
+        nlohmann::json mmu_data = {{"drying_state", {"", "active", "", ""}}};
         test_parse_mmu_state(mmu_data);
 
         auto dryer = get_dryer_info();

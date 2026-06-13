@@ -151,6 +151,9 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     [[nodiscard]] DryerInfo get_dryer_info() const override;
     AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
+    [[nodiscard]] bool has_environment_sensors() const override {
+        return true; // Live temp/target read from heater_generic via Moonraker subscriptions
+    }
 
     [[nodiscard]] bool has_firmware_spool_persistence() const override {
         return true; // Happy Hare persists via MMU_GATE_MAP SPOOLID
@@ -260,6 +263,15 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
      * @param settings The configfile.settings JSON object
      */
     void apply_heater_config(const nlohmann::json& settings);
+
+    /**
+     * @brief Parse live heater_generic temperature/target from a status update
+     *
+     * Scans the params object for the key matching filament_heater_name_ and
+     * updates dryer_info_.current_temp_c / target_temp_c.
+     * @param params The top-level params object from notify_status_update
+     */
+    void apply_filament_heater_status(const nlohmann::json& params);
 
     /**
      * @brief Check if this is a Type B MMU (hub topology)
