@@ -175,6 +175,11 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
         now_fn_ = std::move(fn);
     }
 
+    /// Expose apply_heater_config for testing (simulates the async configfile query result)
+    void test_apply_heater_config(const nlohmann::json& settings) {
+        apply_heater_config(settings);
+    }
+
     /**
      * @brief Check if exact G-code was captured
      * @param expected Exact G-code string to find
@@ -1057,6 +1062,18 @@ TEST_CASE("Happy Hare dryer start/stop send MMU_HEATER commands", "[ams][happy_h
     result = helper.stop_drying();
     REQUIRE(result.success());
     REQUIRE(helper.has_gcode("MMU_HEATER STOP=1"));
+}
+
+TEST_CASE("Happy Hare reads filament_heater + heater_max_temp from config",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    nlohmann::json settings = {
+        {"mmu_machine", {{"filament_heater", "heater_generic box1_heater"}}},
+        {"mmu", {{"heater_max_temp", 65.0}}}};
+    helper.test_apply_heater_config(settings);
+    auto d = helper.get_dryer_info();
+    REQUIRE(d.supported);
+    REQUIRE(d.max_temp_c == Catch::Approx(65.0f));
 }
 
 TEST_CASE("Happy Hare dryer computes remaining from commanded TIMER", "[ams][happy_hare][v4]") {

@@ -246,6 +246,22 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     void query_selector_type_from_config();
 
     /**
+     * @brief Query configfile.settings.mmu_machine + mmu for heater name + max_temp
+     *
+     * Reads filament_heater from [mmu_machine] and heater_max_temp from [mmu].
+     * Called once during on_started().
+     */
+    void query_heater_config_from_config();
+
+    /**
+     * @brief Parse heater config settings into dryer_info_
+     *
+     * Factored out of query_heater_config_from_config() for testability.
+     * @param settings The configfile.settings JSON object
+     */
+    void apply_heater_config(const nlohmann::json& settings);
+
+    /**
      * @brief Check if this is a Type B MMU (hub topology)
      * @return true if selector_type is VirtualSelector
      */
@@ -276,6 +292,7 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     DryerInfo dryer_info_;
     std::time_t dry_end_epoch_ = 0; ///< HelixScreen-initiated drying end (epoch s), 0 = none
     std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
+    std::string filament_heater_name_; ///< Klipper object name, e.g. "heater_generic box1_heater"
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)

@@ -55,6 +55,9 @@ void AmsBackendHappyHare::on_started() {
     // Query selector type to determine topology (Type A=LINEAR vs Type B=HUB)
     query_selector_type_from_config();
 
+    // Query filament_heater name and heater_max_temp for dryer support
+    query_heater_config_from_config();
+
     // Query configfile.settings.mmu for speed/distance defaults
     query_config_defaults();
 }
@@ -1157,6 +1160,85 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
         },
         [](const MoonrakerError& err) {
             spdlog::warn("[AMS HappyHare] Failed to query configfile for selector type: {}",
+                         err.message);
+        });
+}
+
+// ============================================================================
+// Heater Config Query
+// ============================================================================
+
+void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
+    // Parse [mmu_machine] filament_heater — the Klipper heater_generic object name.
+    if (settings.contains("mmu_machine") && settings["mmu_machine"].is_object()) {
+        const auto& mmu_machine = settings["mmu_machine"];
+        if (mmu_machine.contains("filament_heater") &&
+            mmu_machine["filament_heater"].is_string()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            filament_heater_name_ = mmu_machine["filament_heater"].get<std::string>();
+            spdlog::info("[AMS HappyHare] Filament heater: {}", filament_heater_name_);
+        }
+    }
+
+    // Parse [mmu] heater_max_temp — can be a number or a numeric string.
+    if (settings.contains("mmu") && settings["mmu"].is_object()) {
+        const auto& mmu = settings["mmu"];
+        if (mmu.contains("heater_max_temp")) {
+            float max_temp = 0.0f;
+            bool parsed = false;
+            if (mmu["heater_max_temp"].is_number()) {
+                max_temp = mmu["heater_max_temp"].get<float>();
+                parsed = true;
+            } else if (mmu["heater_max_temp"].is_string()) {
+                try {
+                    max_temp = std::stof(mmu["heater_max_temp"].get<std::string>());
+                    parsed = true;
+                } catch (...) {
+                    spdlog::warn("[AMS HappyHare] Could not parse heater_max_temp string");
+                }
+            }
+            if (parsed) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                dryer_info_.max_temp_c = max_temp;
+                dryer_info_.supported = true;
+                spdlog::info("[AMS HappyHare] Heater max temp: {:.1f}°C", max_temp);
+            }
+        }
+    }
+}
+
+void AmsBackendHappyHare::query_heater_config_from_config() {
+    if (!client_) {
+        return;
+    }
+
+    // Query configfile.settings for [mmu_machine] filament_heater and [mmu] heater_max_temp.
+    // filament_heater names the heater_generic object driven by MMU_HEATER.
+    // heater_max_temp is the hardware safety ceiling for the dryer UI.
+    nlohmann::json params = {{"objects", nlohmann::json::object({{"configfile", {"settings"}}})}};
+
+    auto token = lifetime_.token();
+    client_->send_jsonrpc(
+        "printer.objects.query", params,
+        [this, token](nlohmann::json response) {
+            // L081 Mechanism C: defer member access (filament_heater_name_, dryer_info_)
+            // to main thread.
+            token.defer("AmsBackendHappyHare::heater_config_apply",
+                        [this, response = std::move(response)]() {
+                            try {
+                                const auto& settings =
+                                    response["result"]["status"]["configfile"]["settings"];
+                                apply_heater_config(settings);
+                                emit_event(EVENT_STATE_CHANGED);
+                            } catch (const nlohmann::json::exception& e) {
+                                spdlog::warn(
+                                    "[AMS HappyHare] Failed to parse configfile for heater: {}",
+                                    e.what());
+                            }
+                        });
+        },
+        [](const MoonrakerError& err) {
+            spdlog::warn("[AMS HappyHare] Failed to query configfile for heater: {}",
                          err.message);
         });
 }
