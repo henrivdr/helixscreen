@@ -13,7 +13,7 @@ using helix::splash::splash_should_continue;
 using helix::splash::SplashLifetimePolicy;
 
 TEST_CASE("splash lifetime: no heartbeat preserves legacy 30s cap", "[splash][lifetime]") {
-    SplashLifetimePolicy p; // default 30 / 5 / 180
+    SplashLifetimePolicy p; // default 30 / 180
     const long start = 1000;
 
     // No heartbeat ever observed (-1).
@@ -24,25 +24,29 @@ TEST_CASE("splash lifetime: no heartbeat preserves legacy 30s cap", "[splash][li
     REQUIRE(splash_should_continue(p, start, start + 31, -1) == false);
 }
 
-TEST_CASE("splash lifetime: fresh heartbeat extends past the legacy cap", "[splash][lifetime]") {
+TEST_CASE("splash lifetime: a heartbeat keeps it alive past the legacy cap",
+          "[splash][lifetime]") {
     SplashLifetimePolicy p;
     const long start = 1000;
 
-    // Gate still writing: heartbeat seen "now" the whole time.
+    // Any observed heartbeat means a gate is driving us — stay up well past 30s.
     REQUIRE(splash_should_continue(p, start, start + 45, start + 45) == true);
     REQUIRE(splash_should_continue(p, start, start + 100, start + 99) == true);
-    // Heartbeat exactly at the stale boundary (age == stale_sec) is still fresh.
-    REQUIRE(splash_should_continue(p, start, start + 100, start + 95) == true);
 }
 
-TEST_CASE("splash lifetime: stale heartbeat falls back to legacy cap", "[splash][lifetime]") {
-    SplashLifetimePolicy p; // stale after 5s
+TEST_CASE("splash lifetime: stays up after heartbeats stop, until the backstop "
+          "(covers gate-end -> UI first paint)", "[splash][lifetime]") {
+    SplashLifetimePolicy p; // 30 / 180
     const long start = 1000;
 
-    // Heartbeat 6s old at age 40 -> stale -> fall back -> age >= 30 -> stop.
-    REQUIRE(splash_should_continue(p, start, start + 40, start + 34) == false);
-    // Stale heartbeat but still within the legacy 30s window -> stay alive.
-    REQUIRE(splash_should_continue(p, start, start + 20, start + 5) == true);
+    // The gate finished heart­beating at start+56; helix-screen has not yet sent
+    // SIGUSR1 and suppresses its own rendering until the splash exits. Exiting at
+    // the 30s cap here would blank the screen for the UI's ~20s startup, so once
+    // a heartbeat has been seen we keep going regardless of how stale it is...
+    REQUIRE(splash_should_continue(p, start, start + 80, start + 56) == true);
+    REQUIRE(splash_should_continue(p, start, start + 150, start + 56) == true);
+    // ...bounded only by the absolute backstop.
+    REQUIRE(splash_should_continue(p, start, start + 180, start + 56) == false);
 }
 
 TEST_CASE("splash lifetime: absolute backstop overrides a live heartbeat", "[splash][lifetime]") {

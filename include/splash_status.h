@@ -20,25 +20,34 @@
 namespace helix::splash {
 
 struct SplashLifetimePolicy {
-    int default_cap_sec = 30;     // no-heartbeat behavior (unchanged legacy cap)
-    int heartbeat_stale_sec = 5;  // a heartbeat older than this is "stale"
-    int absolute_max_sec = 180;   // hard backstop regardless of heartbeats
+    int default_cap_sec = 30;   // no-heartbeat behavior (unchanged legacy cap)
+    int absolute_max_sec = 180; // hard backstop regardless of heartbeats
 };
 
 // Should the splash keep running?
 //   start_mono / now_mono       monotonic seconds
 //   last_heartbeat_mono         monotonic time of the last observed heartbeat,
 //                               or < 0 if no heartbeat has ever been seen.
+//
+// Once the gate has driven us at least once (a heartbeat was seen), we stay up
+// until helix-screen sends SIGUSR1 (it does so when discovery completes / it is
+// ready to paint) or the absolute backstop trips. We deliberately do NOT fall
+// back to the short default cap after the heartbeats stop: the gap between the
+// gate finishing and helix-screen's first paint is ~20s on a cold K2, and
+// helix-screen suppresses its own rendering until the splash exits — so exiting
+// early there leaves a blank screen. The default cap applies ONLY when no
+// heartbeat was ever seen (gate-less platforms with no SIGUSR1 driver writing
+// the status file).
 inline bool splash_should_continue(const SplashLifetimePolicy& p, long start_mono, long now_mono,
                                    long last_heartbeat_mono) {
     const long age = now_mono - start_mono;
     if (age >= p.absolute_max_sec) {
         return false; // hard backstop wins over everything
     }
-    if (last_heartbeat_mono >= 0 && (now_mono - last_heartbeat_mono) <= p.heartbeat_stale_sec) {
-        return true; // gate is actively progressing
+    if (last_heartbeat_mono >= 0) {
+        return true; // gate drove us; wait for SIGUSR1 (or the backstop)
     }
-    return age < p.default_cap_sec; // no fresh heartbeat: original behavior
+    return age < p.default_cap_sec; // no heartbeat ever: original behavior
 }
 
 // Parse `MemAvailable` (in KiB) from the contents of /proc/meminfo.

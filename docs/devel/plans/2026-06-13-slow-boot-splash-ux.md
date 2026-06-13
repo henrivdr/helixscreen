@@ -83,8 +83,46 @@ file → fall back to default cap).
 - [x] Bats gate test (`test_platform_hooks.bats`: added k2 contract/shellcheck/syntax + 2 behavioral gate tests; 40/40 green)
 - [x] Native build + tests green (Catch2 [splash] + bats hooks)
 - [x] Cross-build K2 (helix_splash.cpp compiles clean; fixed a real %ld/64-bit time_t varargs bug)
-- [x] Deploy K2 + cold reboot validated: splash alive through a 37s gate showing "Starting Klipper… Ns" → "Starting HelixScreen…"; `Moonraker ready after 37s` latency log; clean SIGUSR1 handoff; no bail msgs; MemAvailable ~360 MB (valve never near tripping). Panel-pixel confirmation pending user glance on next reboot.
-- [ ] Review + commit
+- [x] Deploy K2 + cold reboot validated (mechanism): boot-play killed, single disp layer, splash alive through the gate AND through helix-screen startup (no blank gap), status pill in the upper-right corner (fb capture). `Moonraker ready after Ns` latency log working.
+- [x] Commit (feature branch; not merged to main — Preston has parallel main work)
+
+## SESSION STATE — PAUSED 2026-06-13 (resume here)
+
+### What this turned into
+Started as "splash shows blank during the slow Moonraker gate." The blank-gate
+fixes (lifetime/status/CPU/valve + gate robustify) are done. But the REAL K2
+visibility bug was **boot-play** (see section below) — the splash was rendering
+to fb0 the whole time but hidden under Creality's z5 video overlay. Killing
+boot-play is the single highest-impact fix.
+
+### Done + validated on K2 hardware (192.168.1.74, root/creality_2024)
+- **`killall boot-play`** in `platform_stop_competing_uis` (hooks-k2.sh) — removes the z5 Creality overlay so our splash/UI are actually visible. Verified via `/sys/class/disp/disp/attr/sys` (2 layers → 1) and a live kill.
+- **Blank-gap fix** (`splash_should_continue` in `include/splash_status.h`): once a heartbeat is seen, stay alive until helix-screen's SIGUSR1 (or 180s backstop) — do NOT fall back to the 30s cap. helix-screen suppresses its own paint until the splash exits, so exiting early (old bug, at gate-end) blanked the screen for ~20s. Verified: splash + helix-screen co-own fb0 during the ~28s UI startup, no blank.
+- **Status label** moved to `LV_ALIGN_TOP_RIGHT` (was BOTTOM_MID, over the logo). User's position words map directly to LVGL: bottom-center=BOTTOM_MID, version=BOTTOM_RIGHT, "upper right"=TOP_RIGHT. Subtle pill bg shown only when text present.
+- **Paint speed**: reverted my 10 FPS fbdev throttle (it spaced the PARTIAL-render 60-line stripes 100ms apart → visible line-by-line wipe) back to 60 FPS; added one synchronous `lv_refr_now(display)` before the loop; self-heal 1s→3s.
+
+### OPEN — needs user's eyes on next reboot (could not verify remotely)
+1. **Is the count actually in the upper-right, clear of the logo?** (fb capture is 180° rotated from the physical panel, so capture orientation is unreliable for placement — trust the user, not the capture.)
+2. **Is the logo paint still line-by-line?** If YES after the throttle revert, the cause is the **compressed** splash image decode on the slow K2 (`splash-3d-dark-small.bin` = 530 KB for 384k px → compressed). FIX: give the splash a **full-screen draw buffer + RENDER_MODE_FULL** (override after `lv_linux_fbdev_create`) so it decodes once and flushes the whole screen in one shot, OR ship an uncompressed `.bin` for K2. The global `LV_LINUX_FBDEV_RENDER_MODE` is PARTIAL/60-line/double-buffer (lv_conf.h:1103) — do NOT change globally; do it splash-only. Check `lv_linux_fbdev.c` flush_cb handles a full-screen area (it should).
+
+### Deployment / repo state
+- Manually deployed to the K2 device: `bin/helix-splash` + `platform/hooks.sh` (NOT a release; not in the installer/tarball yet). Boot flow: `S99helixscreen` (real init) pre-starts splash → sources `platform/hooks.sh` `platform_wait_for_services` (the gate) → launcher → helix-screen.
+- K2 boot is slow (this session: 37–54s Moonraker gate + ~28s discovery = home panel at ~uptime 70–91s). That total is Moonraker/Klipper cold-init, not us; the splash now covers all of it.
+- Build: `make k2-docker` (incremental, ccache). Deploy splash: scp to `/mnt/UDISK/helixscreen/bin/helix-splash`; hook to `/mnt/UDISK/helixscreen/platform/hooks.sh`. No `make deploy-k2` used (it deploys everything + uses key-auth ssh; device is password creality_2024 → use sshpass scp -O).
+- Branch `feature/slow-boot-splash-ux`. Not merged. The `killall boot-play` fix is K2-specific and should also be considered for the installer so it ships to users (it's only in the runtime hook now).
+
+## boot-play overlay (the real K2 visibility bug — found 2026-06-13 via on-device layer dump)
+The splash/UI rendered correctly to `/dev/fb0` but was **invisible on the panel**:
+Creality's boot animation `/sbin/boot-play` (init `S01play`) does NOT draw to fb0 —
+it puts a **YUV video layer on the Allwinner display engine at z-order 5**,
+composited ON TOP of the fbdev UI layer (z0). `/sys/class/disp/disp/attr/sys`
+during the gate showed two layers (`ch0 z5 fmt72` over `ch1 z0 fmt0`); a live
+`killall boot-play` removed the z5 layer, leaving only z0 (our UI). `desc.txt`
+loops part1 forever (`p 0 0 part1`) and nothing stops it (we replaced the stock
+UI that signals `bootanimation_exit`), so it covered our splash AND the UI for
+the whole ~70s boot. Fix: `killall boot-play` in `platform_stop_competing_uis`
+(SIGTERM → clean `de_disp_uninit`; procd does not respawn it). K2-only (Creality
+mechanism); AD5M/AD5X boot animations differ.
 
 ## Notes
 - Status-file path: `${HELIX_SPLASH_STATUS_FILE:-/tmp/helix-splash-status}`. tmpfs on K2 (cleared on reboot). On a warm helix restart an old file may linger <1s until the gate overwrites — harmless (still a valid heartbeat; gate writes immediately).

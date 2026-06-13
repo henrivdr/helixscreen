@@ -21,6 +21,17 @@ platform_stop_competing_uis() {
         killall "$proc" 2>/dev/null || true
     done
 
+    # Kill the Creality boot animation (/etc/init.d/S01play -> /sbin/boot-play).
+    # It does NOT draw to /dev/fb0 — it puts a YUV *video layer* on the Allwinner
+    # display engine at z-order 5, composited ON TOP of the fbdev UI layer (z0)
+    # that our splash and helix-screen render to. Stock firmware signals it to
+    # exit (bootanimation_exit) once the Creality UI is ready; we replaced that
+    # UI, so nothing ever stops it and the animation covers our splash AND the UI
+    # for the entire Moonraker gate (~70s) until it finally dies. SIGTERM lets it
+    # run its de_disp_uninit cleanup so the z5 layer is released. procd does not
+    # respawn it (no respawn param), so a one-shot kill here is sufficient.
+    killall boot-play 2>/dev/null || true
+
     # Note: web-server is intentionally NOT killed — it serves the
     # Creality Cloud integration and camera stream (webrtc_local).
     # Stopping it would break remote monitoring via Creality app.

@@ -527,10 +527,17 @@ int main(int argc, char** argv) {
     // main loop below as the file changes.
     lv_obj_t* status_label = lv_label_create(screen);
     lv_label_set_text(status_label, "");
-    lv_obj_set_style_text_color(
-        status_label, dark_mode ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_text_opa(status_label, LV_OPA_70, LV_PART_MAIN);
-    lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -28);
+    lv_obj_set_style_text_color(status_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_opa(status_label, LV_OPA_90, LV_PART_MAIN);
+    // Readable pill behind the text so it never blends into the logo art; the
+    // background is shown only once a status message is set (see loop below).
+    lv_obj_set_style_bg_color(status_label, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(status_label, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_radius(status_label, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(status_label, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(status_label, 4, LV_PART_MAIN);
+    // Upper-right, clear of the centered logo (BOTTOM_MID overlapped it).
+    lv_obj_align(status_label, LV_ALIGN_TOP_RIGHT, -8, 8);
 
     // On fbdev, other processes can write directly to /dev/fb0 behind LVGL's back
     // (e.g., ForgeX S99root boot messages). DRM/SDL are not susceptible since DRM
@@ -538,17 +545,19 @@ int main(int argc, char** argv) {
     // forces LVGL to repaint the entire screen, self-healing any stomped pixels.
     const bool needs_fb_self_heal = (backend->type() == DisplayBackendType::FBDEV);
 
-    // fbdev shows a static image (the fade-in animation runs on DRM/SDL only),
-    // so there we idle at ~10 FPS to avoid the ~60% CPU a 60 FPS spin would
-    // cost while the boot gate runs. DRM/SDL keep 60 FPS for the fade.
-    const int frame_delay_us = needs_fb_self_heal ? 100000 : FRAME_DELAY_US;
+    // Run the loop at full speed. LVGL's fbdev driver renders PARTIAL (60-line
+    // stripes), flushing one stripe per refresh; throttling the loop spaces
+    // those stripes out and the logo visibly wipes down the screen "line by
+    // line". The splash now exits promptly (splash_should_continue + SIGUSR1),
+    // so it is not running long enough for loop CPU to matter.
+    const int frame_delay_us = FRAME_DELAY_US;
 
     // Boot-status heartbeat: the init gate rewrites the status file while it
     // waits for Moonraker. We treat each observed change (mtime or size) as a
     // heartbeat — recorded in the MONOTONIC clock so an NTP jump mid-boot can't
     // make a live heartbeat look stale — and extend our lifetime accordingly.
     const std::string status_path = splash_status_path();
-    const helix::splash::SplashLifetimePolicy life_policy{MAX_LIFETIME_SEC, 5, 180};
+    const helix::splash::SplashLifetimePolicy life_policy{MAX_LIFETIME_SEC, 180};
     struct stat status_prev{};
     bool have_status_prev = false;
     long last_heartbeat_mono = -1;
@@ -561,6 +570,13 @@ int main(int argc, char** argv) {
     struct timespec start_ts;
     clock_gettime(CLOCK_MONOTONIC, &start_ts);
     struct timespec last_heal_ts = start_ts;
+
+    // Paint the whole logo up front in one synchronous pass. lv_refr_now()
+    // renders every invalidated stripe back-to-back (no inter-frame sleep), so
+    // the splash appears as one quick fill instead of the throttled loop
+    // revealing it stripe by stripe.
+    lv_refr_now(display);
+
     while (!g_quit) {
         lv_timer_handler();
         usleep(frame_delay_us);
@@ -586,13 +602,17 @@ int main(int argc, char** argv) {
                                     std::istreambuf_iterator<char>());
                 const std::string msg = helix::splash::sanitize_splash_message(content);
                 lv_label_set_text(status_label, msg.c_str());
+                lv_obj_set_style_bg_opa(status_label, msg.empty() ? LV_OPA_TRANSP : LV_OPA_50,
+                                        LV_PART_MAIN);
                 lv_obj_invalidate(screen);
             }
         }
 
-        // Force full redraw ~every 1s on fbdev to self-heal pixels stomped by
-        // other processes writing /dev/fb0 (e.g. ForgeX boot messages).
-        if (needs_fb_self_heal && (now_ts.tv_sec - last_heal_ts.tv_sec) > 0) {
+        // Periodic full redraw on fbdev to self-heal pixels stomped by other
+        // processes writing /dev/fb0 (e.g. ForgeX boot messages). Every ~3s —
+        // a full re-render re-runs the partial stripes, so doing it too often
+        // produces a visible re-wipe for no benefit once boot UIs are gone.
+        if (needs_fb_self_heal && (now_ts.tv_sec - last_heal_ts.tv_sec) >= 3) {
             lv_obj_invalidate(screen);
             last_heal_ts = now_ts;
         }
