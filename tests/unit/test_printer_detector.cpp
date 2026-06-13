@@ -936,6 +936,51 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
 }
 
 TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: build_volume_range heuristic - K2 Plus vs K2 Pro",
+                 "[printer][build_volume]") {
+    // K2 Plus and K2 Pro share the same K2 platform (CFS box, motor_control,
+    // fan_feedback, active chamber heater) and the same "k2" preset. They are
+    // disambiguated only by build volume (350mm vs 300mm) and hostname
+    // (k2plus vs k2pro). This test fails if the creality_k2_pro database entry
+    // is removed — a K2 Pro would then fall back to the K2 Plus entry.
+    PrinterHardwareData k2_common{
+        .heaters = {"extruder", "heater_bed", "heater_generic chamber_heater"},
+        .sensors = {"chamber_temp"},
+        .fans = {"chamber_fan"},
+        .leds = {},
+        .hostname = "",
+        .printer_objects = {"box", "motor_control", "fan_feedback", "load_ai",
+                            "filament_rack", "heater_generic chamber_heater"},
+        .steppers = {},
+        .kinematics = "corexy",
+        .build_volume = {}};
+
+    SECTION("K2 Plus (~350mm, k2plus hostname)") {
+        PrinterHardwareData hardware = k2_common;
+        hardware.hostname = "creality-k2plus";
+        hardware.build_volume = {.x_min = 0, .x_max = 350, .y_min = 0, .y_max = 350, .z_max = 350};
+
+        auto result = PrinterDetector::detect(hardware);
+
+        REQUIRE(result.detected());
+        REQUIRE(result.type_name == "Creality K2 Plus");
+        REQUIRE(result.confidence >= 70);
+    }
+
+    SECTION("K2 Pro (~300mm, k2pro hostname)") {
+        PrinterHardwareData hardware = k2_common;
+        hardware.hostname = "creality-k2pro";
+        hardware.build_volume = {.x_min = 0, .x_max = 300, .y_min = 0, .y_max = 300, .z_max = 300};
+
+        auto result = PrinterDetector::detect(hardware);
+
+        REQUIRE(result.detected());
+        REQUIRE(result.type_name == "Creality K2 Pro");
+        REQUIRE(result.confidence >= 70);
+    }
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
                  "PrinterDetector: build_volume_range heuristic - Large (Ender 5 Max)",
                  "[printer][build_volume]") {
     PrinterHardwareData hardware{

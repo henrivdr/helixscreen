@@ -1388,6 +1388,151 @@
       ]
     },
     {
+      "id": "creality_k2_pro",
+      "name": "Creality K2 Pro",
+      "manufacturer": "Creality",
+      "toolhead_style": "creality_k2",
+      "image": "creality-k2-pro.png",
+      "probe_type": "prtouch_v3",
+      "preset": "k2",
+      "print_start_profile": "creality_k2",
+      "console_filter_patterns": [
+        "prefix:// data_send:",
+        "prefix:// recv_result:",
+        "prefix:// send float_bytes:",
+        "prefix:// sys参数操作",
+        "prefix:// MDL_NAME:",
+        "prefix:// ACK_mdl_",
+        "prefix:// halversion:",
+        "prefix:// softversion:",
+        "prefix:// reset:start error",
+        "prefix:// reset:comfun error",
+        "regex:^// times:[0-9]",
+        "prefix:// config_ioRemap",
+        "prefix:// operation_ioRemap",
+        "prefix:// ai_switch =",
+        "substring:WILL LOAD_AI_DEAL",
+        "prefix:// LOAD_AI_DEAL"
+      ],
+      "pre_print_options": {
+        "macro_name": "START_PRINT",
+        "setup_gcode": "PRINT_PREPARED",
+        "options": [
+          {
+            "id": "bed_mesh",
+            "category": "mechanical",
+            "order": 10,
+            "default_enabled": true,
+            "strategy": "macro_param",
+            "param_name": "PREPARE",
+            "enable_value": "0",
+            "skip_value": "1",
+            "default_value": "0"
+          },
+          {
+            "id": "ai_detect",
+            "category": "monitoring",
+            "order": 10,
+            "default_enabled": false,
+            "label_key": "pre_print_option.ai_detect.label",
+            "description_key": "pre_print_option.ai_detect.description",
+            "strategy": "pre_start_gcode",
+            "gcode_template": "LOAD_AI_RUN SWITCH={value}",
+            "requires_macro": "LOAD_AI_RUN"
+          }
+        ]
+      },
+      "heuristics": [
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "corexy",
+          "confidence": 40,
+          "reason": "CoreXY kinematics"
+        },
+        {
+          "type": "sensor_match",
+          "field": "sensors",
+          "pattern": "chamber_temp",
+          "confidence": 70,
+          "reason": "Chamber temperature sensor"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "^box$",
+          "confidence": 95,
+          "reason": "CFS filament system detected"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "motor_control",
+          "confidence": 75,
+          "reason": "K2-specific motor control module"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "fan_feedback",
+          "confidence": 65,
+          "reason": "K2-specific fan RPM feedback"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "creality",
+          "confidence": 60,
+          "reason": "Hostname contains 'creality'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "k2",
+          "confidence": 85,
+          "reason": "Hostname contains 'k2'"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "load_ai",
+          "confidence": 60,
+          "reason": "K2 AI print monitoring"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "filament_rack",
+          "confidence": 65,
+          "reason": "K2 filament rack module"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "heater_generic chamber_heater",
+          "confidence": 70,
+          "reason": "Active chamber heater"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "k2pro",
+          "confidence": 90,
+          "reason": "Hostname contains 'K2Pro'"
+        },
+        {
+          "type": "build_volume_range",
+          "field": "bed_mesh",
+          "min_x": 290,
+          "max_x": 310,
+          "min_y": 290,
+          "max_y": 310,
+          "confidence": 55,
+          "reason": "Build volume ~300mm (K2 Pro size)"
+        }
+      ]
+    },
+    {
       "id": "creality_k1c",
       "name": "Creality K1C",
       "manufacturer": "Creality",
