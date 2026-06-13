@@ -901,6 +901,19 @@ TEST_CASE("QIDI Box drying_state past end_time means not drying",
     REQUIRE(d.remaining_min == 0);
 }
 
+TEST_CASE("QIDI Box derives duration for externally-started drying (progress ring)",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::set_clock(backend, [] { return std::time_t{1000}; });
+    // 60 min remaining, started outside HelixScreen (no commanded duration).
+    QidiBoxTestAccess::apply_box_extras(
+        backend, json{{"box_drying_state",
+                       json{{"box1", json{{"dry_state", 1}, {"end_time", 4600}}}}}});
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE(d.duration_min == 60);
+    REQUIRE(d.get_progress_pct() == 0); // just started: 60/60 remaining
+}
+
 TEST_CASE("QIDI Box config query refines max temp (heater_generic section)",
           "[ams][qidi_box][dryer]") {
     AmsBackendQidi backend(nullptr, nullptr);

@@ -243,13 +243,13 @@ void AmsBackendQidi::apply_box_extras(const nlohmann::json& box_extras) {
     if (ds_it == box_extras.end() || !ds_it->is_object()) {
         return;
     }
-    int latest_end = 0;
+    std::time_t latest_end = 0;
     for (auto it = ds_it->begin(); it != ds_it->end(); ++it) {
         if (!it->is_object()) {
             continue;
         }
         if (auto et = it->find("end_time"); et != it->end() && et->is_number()) {
-            const int v = et->get<int>();
+            const std::time_t v = et->get<std::int64_t>();
             if (v > latest_end) {
                 latest_end = v;
             }
@@ -257,8 +257,17 @@ void AmsBackendQidi::apply_box_extras(const nlohmann::json& box_extras) {
     }
     std::lock_guard<std::mutex> lock(mutex_);
     drying_timer_supported_ = true;
+    const std::time_t now = now_fn_();
+    // A drying cycle started outside HelixScreen (e.g. the QIDI stock UI) carries no
+    // commanded duration, so the progress ring would be inert. When a NEW end_time
+    // appears, derive the total from the first observed remaining so the ring renders;
+    // our own start_drying() already set duration_min for UI-started cycles (this just
+    // re-derives the same value once the firmware echoes the end_time back).
+    if (latest_end > now && latest_end != dry_end_epoch_) {
+        dryer_info_.duration_min = static_cast<int>((latest_end - now) / 60);
+    }
     dry_end_epoch_ = latest_end;
-    dryer_info_.active = (dry_end_epoch_ > now_fn_());
+    dryer_info_.active = (dry_end_epoch_ > now);
 }
 
 void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {

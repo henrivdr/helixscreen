@@ -4,6 +4,7 @@
 
 #include "ams_subscription_backend.h"
 
+#include <cstdint>
 #include <ctime>
 #include <functional>
 #include <map>
@@ -147,7 +148,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     // Dryer state for the box PTC heater (issue #1019).
     DryerInfo dryer_info_;
-    int dry_end_epoch_ = 0;              ///< Absolute drying end time (epoch s), 0 = none
+    std::time_t dry_end_epoch_ = 0;      ///< Absolute drying end time (epoch s), 0 = none
     bool drying_timer_supported_ = false; ///< box_extras drying timer seen -> use ENABLE_BOX_DRY
     std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
 
