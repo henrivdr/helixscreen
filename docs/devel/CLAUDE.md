@@ -34,6 +34,7 @@ All developer documentation lives here. When working on features, look up the re
 | `UI_TESTING.md` | Headless LVGL testing, UITest utilities |
 | `GCODE_VIEWER_CONFIG.md` | GCode viewer configuration |
 | `BED_MESH_RENDERING_INTERNALS.md` | Bed mesh 3D rendering internals |
+| `FILAMENT_PATH_CANVAS.md` | Filament-path canvas: 3-layer model, pathgeo arc-fillet routing, shared tube stroker, RenderCtx phases, topology renderers (linear/hub/parallel/mixed) |
 | `PRE_RENDERED_IMAGES.md` | Pre-rendered image pipeline |
 
 ## Feature Systems
@@ -51,6 +52,7 @@ All developer documentation lives here. When working on features, look up the re
 | `PREPRINT_PREDICTION.md` | ETA prediction engine, phase timing, weighted history |
 | `EXCLUDE_OBJECTS.md` | Object exclusion, per-object thumbnails, slicer setup |
 | `PRINT_STATE_MACHINE.md` | Print lifecycle state machine: states, transitions, guards, resource lifecycle |
+| `PRINT_CONTROL_BUTTONS.md` | PrintControlButtons controller: owned subjects, pure view function, optimistic pending-action machine, 2x1 home widget, panel delegation |
 | `PRINT_START_PROFILES.md` | Print start phase detection, JSON profiles |
 | `PRINT_START_INTEGRATION.md` | User-facing macro setup for print start tracking |
 | `UPDATE_SYSTEM.md` | Update channels (stable/beta/dev), R2 CDN, Moonraker updater |
@@ -94,6 +96,7 @@ All developer documentation lives here. When working on features, look up the re
 | `IDEAS.md` | Feature ideas and brainstorming |
 | `plans/` | Active implementation plans |
 | `plans/2026-02-23-xml-hot-reload.md` | XML hot reload: status, design decisions, Phase 3 stretch goal |
+| `plans/2026-06-13-slow-boot-splash-ux.md` | Slow-boot splash UX: 30s splash cap + blank-screen gap on slow devices (K2, AD5M Forge-X), handoff timing |
 | `printer-research/` | Printer-specific research notes |
 | `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md` | AD5X IFS protocol reverse engineering |
 | `KLIPPERSCREEN_RESEARCH.md` | KlipperScreen competitive analysis |
