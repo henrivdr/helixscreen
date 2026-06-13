@@ -105,12 +105,21 @@ platform_wait_for_services() {
     echo "Waiting for Moonraker (reduces memory pressure)..."
     local timeout=120
     local waited=0
+    # Heartbeat/status file for the boot splash. Each rewrite keeps the splash
+    # alive (no blank screen during the wait) and updates its status line.
+    local status_file="${HELIX_SPLASH_STATUS_FILE:-/tmp/helix-splash-status}"
     while [ "$waited" -lt "$timeout" ]; do
-        # Use wget since curl may not be available on BusyBox base system
-        if wget -q -O /dev/null --timeout=1 http://localhost:7125/server/info 2>/dev/null; then
+        # Use wget since curl may not be available on BusyBox base system.
+        # 2s per-request timeout tolerates load better than 1s.
+        if wget -q -O /dev/null --timeout=2 http://localhost:7125/server/info 2>/dev/null; then
             echo "Moonraker ready after ${waited}s"
+            echo "Starting HelixScreen…" >"$status_file" 2>/dev/null || true
             return 0
         fi
+        # Label only — helix-splash owns the elapsed-seconds counter (from its own
+        # monotonic start), so the count keeps climbing through helix-screen's
+        # startup too. The rewrite still refreshes the file mtime = the heartbeat.
+        echo "Starting Klipper…" >"$status_file" 2>/dev/null || true
         sleep 1
         waited=$((waited + 1))
         # Progress indicator every 10 seconds
@@ -119,6 +128,7 @@ platform_wait_for_services() {
         fi
     done
 
+    echo "Starting without printer…" >"$status_file" 2>/dev/null || true
     echo "Warning: Moonraker not ready after ${timeout}s, starting anyway"
     return 1
 }

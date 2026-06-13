@@ -23,6 +23,7 @@
 #include "data_root_resolver.h"
 #include "display_backend.h"
 #include "helix_version.h"
+#include "splash_status.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -64,8 +65,38 @@ static constexpr int FRAME_DELAY_US = 16000;  // ~60 FPS
 // discovery completes (or its 8s timeout fires); the watchdog also reaps us
 // on exit. If both paths fail (e.g. helix-screen never received --splash-pid
 // because the watchdog skipped adoption on DRM), splash would otherwise spin
-// forever at ~60% CPU. Cap our own lifetime so any upstream failure is bounded.
+// forever. Cap our own lifetime so any upstream failure is bounded.
+//
+// On slow devices the init-script Moonraker gate runs BEFORE helix-screen
+// launches and can exceed this cap, so the gate writes a heartbeat/status file
+// that extends our lifetime while it is actively progressing (see
+// include/splash_status.h). Absent that file we keep the legacy fixed cap.
 static constexpr int MAX_LIFETIME_SEC = 30;
+
+// Path of the boot-status file the launcher/init gate writes while it waits.
+// Each rewrite is a heartbeat; the first line is the message we display.
+static std::string splash_status_path() {
+    if (const char* p = getenv("HELIX_SPLASH_STATUS_FILE")) {
+        if (*p != '\0') {
+            return p;
+        }
+    }
+    return "/tmp/helix-splash-status";
+}
+
+// Free-memory floor (KiB) below which the splash voluntarily exits so it can
+// never be the process that tips a tight-RAM device into OOM. Overridable per
+// platform via HELIX_SPLASH_MIN_FREE_KB; 0 disables the valve.
+static long splash_min_free_kb() {
+    if (const char* p = getenv("HELIX_SPLASH_MIN_FREE_KB")) {
+        char* end = nullptr;
+        const long v = strtol(p, &end, 10);
+        if (end != p && v >= 0) {
+            return v;
+        }
+    }
+    return 8192; // ~8 MiB
+}
 
 // Read brightness from config file (simple parsing, no JSON library)
 // Returns configured brightness (10-100) or default_value on failure
@@ -454,6 +485,40 @@ int main(int argc, char** argv) {
                 rotation, width, height);
     }
 
+    // Splash-only: force FULL render mode. lv_linux_fbdev_create() defaults to
+    // the compile-time global LV_LINUX_FBDEV_RENDER_MODE (PARTIAL — 60-line
+    // stripes), which on a slow panel (e.g. the K2's Allwinner fb) makes the
+    // logo visibly wipe down the screen one stripe at a time, even rendered
+    // back-to-back via lv_refr_now(). A full-screen off-screen buffer +
+    // RENDER_MODE_FULL renders the whole frame, then flushes it to /dev/fb0 in a
+    // single pass — one clean fill, no striping. This replaces only THIS
+    // display's buffers (the partial ones lv_linux_fbdev_create just allocated);
+    // the global render mode that helix-screen shares is untouched. Sized to the
+    // post-rotation resolution so a rotated panel still gets a correctly-sized
+    // buffer (fbdev's flush_cb software-rotates a FULL frame in one shot).
+    if (backend->type() == DisplayBackendType::FBDEV) {
+        const lv_color_format_t cf = lv_display_get_color_format(display);
+        const uint32_t px_size = lv_color_format_get_size(cf);
+        const int32_t hor = lv_display_get_horizontal_resolution(display);
+        const int32_t ver = lv_display_get_vertical_resolution(display);
+        const size_t full_buf_size = (size_t)hor * (size_t)ver * px_size;
+        // Over-allocate by LV_DRAW_BUF_ALIGN-1 and hand LVGL the aligned pointer,
+        // mirroring lv_linux_fbdev_create()'s own allocation. Intentionally never
+        // freed: the splash is a short-lived process that exits wholesale.
+        void* raw = malloc(full_buf_size + LV_DRAW_BUF_ALIGN - 1);
+        if (raw != nullptr) {
+            uint8_t* aligned = static_cast<uint8_t*>(lv_draw_buf_align(raw, cf));
+            lv_display_set_buffers(display, aligned, nullptr, full_buf_size,
+                                   LV_DISPLAY_RENDER_MODE_FULL);
+            fprintf(stderr,
+                    "helix-splash: FULL render mode (%dx%d, %ubpp, %zu KiB) — single-flush "
+                    "paint\n",
+                    hor, ver, px_size * 8, full_buf_size / 1024);
+        } else {
+            fprintf(stderr, "helix-splash: FULL-mode buffer alloc failed; keeping PARTIAL\n");
+        }
+    }
+
     // Read dark mode preference from config (before framebuffer clear so we use the right color)
     bool dark_mode = read_config_dark_mode(true);
 
@@ -491,36 +556,134 @@ int main(int argc, char** argv) {
     lv_obj_align(version_label, LV_ALIGN_BOTTOM_RIGHT, -8, -6);
     (void)version_label;
 
+    // Boot-status line (e.g. "Starting Klipper… 40s"), centered near the bottom.
+    // Stays empty until the init gate writes the status file; updated in the
+    // main loop below as the file changes.
+    lv_obj_t* status_label = lv_label_create(screen);
+    lv_label_set_text(status_label, "");
+    // Theme-aware text color, matching the version label (white on dark, black on
+    // light) so it reads cleanly over the logo's gray art. Transparent
+    // background — no backing pill; let the logo show through.
+    lv_obj_set_style_text_color(status_label,
+                                dark_mode ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x000000),
+                                LV_PART_MAIN);
+    lv_obj_set_style_text_opa(status_label, LV_OPA_80, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(status_label, LV_OPA_TRANSP, LV_PART_MAIN);
+    // Upper-right, clear of the centered logo (BOTTOM_MID overlapped it).
+    lv_obj_align(status_label, LV_ALIGN_TOP_RIGHT, -8, 8);
+
     // On fbdev, other processes can write directly to /dev/fb0 behind LVGL's back
     // (e.g., ForgeX S99root boot messages). DRM/SDL are not susceptible since DRM
     // requires master access and SDL is windowed. Periodic full invalidation on fbdev
     // forces LVGL to repaint the entire screen, self-healing any stomped pixels.
-    bool needs_fb_self_heal = (backend->type() == DisplayBackendType::FBDEV);
+    const bool needs_fb_self_heal = (backend->type() == DisplayBackendType::FBDEV);
+
+    // Run the loop at full speed. LVGL's fbdev driver renders PARTIAL (60-line
+    // stripes), flushing one stripe per refresh; throttling the loop spaces
+    // those stripes out and the logo visibly wipes down the screen "line by
+    // line". The splash now exits promptly (splash_should_continue + SIGUSR1),
+    // so it is not running long enough for loop CPU to matter.
+    const int frame_delay_us = FRAME_DELAY_US;
+
+    // Boot-status heartbeat: the init gate rewrites the status file while it
+    // waits for Moonraker. We treat each observed change (mtime or size) as a
+    // heartbeat — recorded in the MONOTONIC clock so an NTP jump mid-boot can't
+    // make a live heartbeat look stale — and extend our lifetime accordingly.
+    const std::string status_path = splash_status_path();
+    const helix::splash::SplashLifetimePolicy life_policy{MAX_LIFETIME_SEC, 180};
+    struct stat status_prev{};
+    bool have_status_prev = false;
+    long last_heartbeat_mono = -1;
+    std::string current_label; // gate-provided message, without the counter
+    std::string shown_status;  // last string pushed to the label (label + counter)
+    const long mem_floor_kb = splash_min_free_kb();
 
     // Main loop - run until signaled to quit
     // Exit signals: SIGTERM, SIGINT (shutdown), SIGUSR1 (main app ready)
-    // Self-timeout: bail after MAX_LIFETIME_SEC if no signal arrives. Uses
-    // wall-clock (CLOCK_MONOTONIC) rather than frame counting so a slow or
-    // stuttering render loop still trips the safety net.
-    int frame_count = 0;
+    // Lifetime is bounded by splash_should_continue() using CLOCK_MONOTONIC, so
+    // a slow or stuttering render loop still trips the safety net.
     struct timespec start_ts;
     clock_gettime(CLOCK_MONOTONIC, &start_ts);
+    struct timespec last_heal_ts = start_ts;
+
+    // Paint the whole logo up front in one synchronous pass. lv_refr_now()
+    // renders every invalidated stripe back-to-back (no inter-frame sleep), so
+    // the splash appears as one quick fill instead of the throttled loop
+    // revealing it stripe by stripe.
+    lv_refr_now(display);
+
     while (!g_quit) {
         lv_timer_handler();
-        usleep(FRAME_DELAY_US);
-
-        // Force full redraw every ~500ms (30 frames at 60fps) on fbdev only
-        if (needs_fb_self_heal && ++frame_count >= 30) {
-            lv_obj_invalidate(screen);
-            frame_count = 0;
-        }
+        usleep(frame_delay_us);
 
         struct timespec now_ts;
         clock_gettime(CLOCK_MONOTONIC, &now_ts);
-        if ((now_ts.tv_sec - start_ts.tv_sec) >= MAX_LIFETIME_SEC) {
-            fprintf(stderr,
-                    "helix-splash: self-timeout after %ds with no SIGUSR1/SIGTERM, exiting\n",
-                    MAX_LIFETIME_SEC);
+        const long now_mono = now_ts.tv_sec;
+
+        // Poll the status file: cheap stat() every loop, read contents only when
+        // it changes. A change is a heartbeat and refreshes the status message.
+        struct stat status_now{};
+        if (stat(status_path.c_str(), &status_now) == 0) {
+            const bool changed = !have_status_prev ||
+                                 status_now.st_mtime != status_prev.st_mtime ||
+                                 status_now.st_size != status_prev.st_size;
+            if (changed) {
+                status_prev = status_now;
+                have_status_prev = true;
+                last_heartbeat_mono = now_mono;
+
+                std::ifstream f(status_path);
+                std::string content((std::istreambuf_iterator<char>(f)),
+                                    std::istreambuf_iterator<char>());
+                current_label = helix::splash::sanitize_splash_message(content);
+            }
+        }
+
+        // Render "<label> <elapsed>s", recomputed every loop so the counter keeps
+        // climbing even after the gate hands off and stops rewriting the file —
+        // the splash owns the count from its own monotonic start. Only touch the
+        // label when the visible string actually changes (at most once per second)
+        // to avoid invalidating the screen every frame.
+        const std::string status_text =
+            helix::splash::compose_splash_status(current_label, now_mono - start_ts.tv_sec);
+        if (status_text != shown_status) {
+            shown_status = status_text;
+            lv_label_set_text(status_label, status_text.c_str());
+            lv_obj_invalidate(screen);
+        }
+
+        // Periodic full redraw on fbdev to self-heal pixels stomped by other
+        // processes writing /dev/fb0 (e.g. ForgeX boot messages). Every ~3s —
+        // a full re-render re-runs the partial stripes, so doing it too often
+        // produces a visible re-wipe for no benefit once boot UIs are gone.
+        if (needs_fb_self_heal && (now_ts.tv_sec - last_heal_ts.tv_sec) >= 3) {
+            lv_obj_invalidate(screen);
+            last_heal_ts = now_ts;
+        }
+
+        // Memory safety valve: the splash must never be the process that tips a
+        // tight-RAM device into OOM. If free memory drops below the floor, exit
+        // now to free our ~10-15 MB — a brief blank screen beats an OOM kill.
+        if (mem_floor_kb > 0) {
+            std::ifstream meminfo("/proc/meminfo");
+            if (meminfo.is_open()) {
+                std::string mic((std::istreambuf_iterator<char>(meminfo)),
+                                std::istreambuf_iterator<char>());
+                const long avail = helix::splash::parse_meminfo_available_kb(mic);
+                if (!helix::splash::splash_memory_ok(avail, mem_floor_kb)) {
+                    fprintf(stderr,
+                            "helix-splash: low memory (%ld KiB avail < %ld floor), exiting to "
+                            "free RAM\n",
+                            avail, mem_floor_kb);
+                    break;
+                }
+            }
+        }
+
+        if (!helix::splash::splash_should_continue(life_policy, start_ts.tv_sec, now_mono,
+                                                   last_heartbeat_mono)) {
+            fprintf(stderr, "helix-splash: lifetime ended after %lds (no SIGUSR1), exiting\n",
+                    (long)(now_mono - start_ts.tv_sec));
             break;
         }
     }
