@@ -35,7 +35,9 @@
 #include "standard_macros.h"
 #include "static_panel_registry.h"
 #include "subject_managed_panel.h"
+#include "temperature_controller.h"
 #include "temperature_sensor_manager.h"
+#include "temperature_service.h"
 #include "theme_manager.h"
 #include "tool_state.h"
 #include "ui/ui_cleanup_helpers.h"
@@ -96,6 +98,10 @@ ControlsPanel::~ControlsPanel() {
 void ControlsPanel::set_temp_control_panel(TemperatureService* temp_panel) {
     temp_control_panel_ = temp_panel;
     spdlog::trace("[{}] TemperatureService reference set", get_name());
+}
+
+helix::TemperatureController* ControlsPanel::controller() const {
+    return temp_control_panel_ ? temp_control_panel_->controller() : nullptr;
 }
 
 // ============================================================================
@@ -1077,18 +1083,33 @@ void ControlsPanel::handle_bed_temp_clicked() {
 }
 
 void ControlsPanel::handle_nozzle_target_edit() {
+    int max_temp = nozzle_max_temp_;
+    if (auto* c = controller()) {
+        c->ensure_limits(helix::HeaterType::Nozzle);
+        max_temp = static_cast<int>(c->keypad_range(helix::HeaterType::Nozzle).max);
+    }
     show_temperature_keypad<&ControlsPanel::handle_custom_nozzle_confirmed>(
-        "Nozzle Temperature", cached_extruder_target_, 200, nozzle_max_temp_);
+        "Nozzle Temperature", cached_extruder_target_, 200, max_temp);
 }
 
 void ControlsPanel::handle_bed_target_edit() {
+    int max_temp = bed_max_temp_;
+    if (auto* c = controller()) {
+        c->ensure_limits(helix::HeaterType::Bed);
+        max_temp = static_cast<int>(c->keypad_range(helix::HeaterType::Bed).max);
+    }
     show_temperature_keypad<&ControlsPanel::handle_custom_bed_confirmed>(
-        "Bed Temperature", cached_bed_target_, 60, bed_max_temp_);
+        "Bed Temperature", cached_bed_target_, 60, max_temp);
 }
 
 void ControlsPanel::handle_chamber_target_edit() {
+    int max_temp = chamber_max_temp_;
+    if (auto* c = controller()) {
+        c->ensure_limits(helix::HeaterType::Chamber);
+        max_temp = static_cast<int>(c->keypad_range(helix::HeaterType::Chamber).max);
+    }
     show_temperature_keypad<&ControlsPanel::handle_custom_chamber_confirmed>(
-        "Chamber Temperature", cached_chamber_target_, 50, chamber_max_temp_);
+        "Chamber Temperature", cached_chamber_target_, 50, max_temp);
 }
 
 void ControlsPanel::handle_custom_nozzle_confirmed(float value) {
@@ -1098,16 +1119,11 @@ void ControlsPanel::handle_custom_nozzle_confirmed(float value) {
     // Convert degrees to centidegrees for storage (matches PrinterState internal format)
     cached_extruder_target_ = static_cast<int>(value * 10);
 
-    // Send temperature command to printer (api_->set_temperature expects degrees)
-    if (api_) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), value,
-            [target = static_cast<int>(value)]() {
-                NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
-            },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set nozzle temp: {}"), error.user_message());
-            });
+    if (auto* c = controller()) {
+        c->set_target(helix::HeaterType::Nozzle, value,
+                      {.toast = true, .on_success = [target = static_cast<int>(value)]() {
+                           NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
+                       }});
     }
 }
 
@@ -1118,16 +1134,11 @@ void ControlsPanel::handle_custom_bed_confirmed(float value) {
     // Convert degrees to centidegrees for storage (matches PrinterState internal format)
     cached_bed_target_ = static_cast<int>(value * 10);
 
-    // Send temperature command to printer (api_->set_temperature expects degrees)
-    if (api_) {
-        api_->set_temperature(
-            "heater_bed", value,
-            [target = static_cast<int>(value)]() {
-                NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target);
-            },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), error.user_message());
-            });
+    if (auto* c = controller()) {
+        c->set_target(helix::HeaterType::Bed, value,
+                      {.toast = true, .on_success = [target = static_cast<int>(value)]() {
+                           NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target);
+                       }});
     }
 }
 
@@ -1137,20 +1148,11 @@ void ControlsPanel::handle_custom_chamber_confirmed(float value) {
 
     cached_chamber_target_ = static_cast<int>(value * 10);
 
-    if (api_) {
-        const auto& heater_name = printer_state_.get_discovery().chamber_heater_name();
-        if (heater_name.empty()) {
-            NOTIFY_ERROR(lv_tr("Chamber heater not found in printer configuration"));
-            return;
-        }
-
-        int target = static_cast<int>(value);
-        api_->set_temperature(
-            heater_name, static_cast<double>(target),
-            [target]() { NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target); },
-            [](const MoonrakerError& err) {
-                NOTIFY_ERROR(lv_tr("Failed to set chamber temp: {}"), err.user_message());
-            });
+    if (auto* c = controller()) {
+        c->set_target(helix::HeaterType::Chamber, value,
+                      {.toast = true, .on_success = [target = static_cast<int>(value)]() {
+                           NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target);
+                       }});
     }
 }
 

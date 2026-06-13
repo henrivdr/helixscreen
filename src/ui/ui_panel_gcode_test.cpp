@@ -771,6 +771,17 @@ void GcodeTestPanel::update_layer_slider_range() {
     int max_layer = ui_gcode_viewer_get_max_layer(gcode_viewer_);
     spdlog::info("[{}] ui_gcode_viewer_get_max_layer returned: {}", get_name(), max_layer);
 
+    // At load-complete the 2D layer renderer may not be initialized yet (it's set up
+    // lazily on the first render pass), so get_max_layer() can report 0 even though the
+    // file parsed fine. Fall back to the parsed-file layer count, which is the source of
+    // truth and available immediately — otherwise the slider is stuck at 0/0 in 2D mode.
+    if (max_layer <= 0) {
+        int layer_count = ui_gcode_viewer_get_layer_count(gcode_viewer_);
+        if (layer_count > 0) {
+            max_layer = layer_count - 1;
+        }
+    }
+
     if (max_layer < 0) {
         max_layer = 0;
     }

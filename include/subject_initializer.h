@@ -19,6 +19,9 @@ class MotionPanel;
 class BedMeshPanel;
 class TemperatureService;
 class UsbManager;
+namespace helix {
+class TemperatureController;
+}
 
 /**
  * @brief Initializes all reactive subjects for LVGL data binding
@@ -135,6 +138,7 @@ class SubjectInitializer {
 
     // Owned resources
     std::unique_ptr<UsbManager> m_usb_manager;
+    std::unique_ptr<helix::TemperatureController> m_temp_controller;
     std::unique_ptr<TemperatureService> m_temp_control_panel;
 
     // Alive guard for USB callback — invalidated on destruction to prevent

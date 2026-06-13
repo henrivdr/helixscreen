@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "runtime_config.h"
 #include "ui_panel_base.h"
 
 #include <string>
@@ -142,8 +143,11 @@ class GcodeTestPanel : public PanelBase {
     // === Constants ===
     //
 
-    static constexpr const char* ASSETS_DIR = "assets/gcode";
-    static constexpr const char* DEFAULT_TEST_FILE = "OrcaCube AD5M.gcode";
+    // Reuse the canonical test-gcode location so the panel can't drift out of sync
+    // with the rest of the app (the old hardcoded "assets/gcode" dir didn't exist,
+    // which made the panel auto-load a missing file and render blank).
+    static constexpr const char* ASSETS_DIR = RuntimeConfig::TEST_GCODE_DIR;
+    static constexpr const char* DEFAULT_TEST_FILE = RuntimeConfig::DEFAULT_TEST_FILE;
 
     //
     // === Internal Methods ===

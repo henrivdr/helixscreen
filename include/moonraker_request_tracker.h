@@ -9,6 +9,7 @@
 #include "moonraker_request.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -141,6 +142,16 @@ class MoonrakerRequestTracker {
     std::mutex requests_mutex_;
     std::atomic_uint64_t request_id_{0};
     uint32_t default_request_timeout_ms_{DEFAULT_REQUEST_TIMEOUT_MS};
+
+    // Log-throttle state for the periodic pending-count line in check_timeouts()
+    // (timer thread only). Without it a single stuck request logs ~4x/sec for
+    // its whole lifetime. Emit only when the pending signature changes; re-emit
+    // a still-stuck warn at most once per 10 s so the #909 leading indicator
+    // stays visible without flooding.
+    size_t last_logged_pending_count_{0};
+    std::string last_logged_oldest_method_;
+    bool last_logged_was_warn_{false};
+    std::chrono::steady_clock::time_point last_warn_log_{};
 
     friend class ::MoonrakerRequestTrackerTestAccess;
 };

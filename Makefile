@@ -252,8 +252,18 @@ OBJ_DIR ?= $(BUILD_DIR)/obj
 
 # LVGL
 LVGL_DIR := lib/lvgl
+# LVGL config discovery. Defined here (not further down) so it can travel inside
+# $(LVGL_INC): every flag set that compiles LVGL-dependent code then reaches
+# lv_conf.h via -I. (project root) + -DLV_CONF_INCLUDE_SIMPLE, instead of LVGL's
+# fragile '#include "../../lv_conf.h"' fallback. That fallback only resolves by
+# accident in a normal checkout and BREAKS when lib/lvgl is a symlink (git
+# worktrees — see scripts/setup-worktree.sh), which silently broke every
+# cross-compile from a worktree (splash + display-backend + watchdog sub-builds).
+# Carrying it in LVGL_INC means new LVGL sub-builds inherit correct discovery
+# automatically rather than each having to remember to append $(LV_CONF).
+LV_CONF := -DLV_CONF_INCLUDE_SIMPLE
 # Use -isystem to suppress warnings from third-party headers in strict mode
-LVGL_INC := -isystem $(LVGL_DIR) -isystem $(LVGL_DIR)/src
+LVGL_INC := -isystem $(LVGL_DIR) -isystem $(LVGL_DIR)/src -I. $(LV_CONF)
 # Add GLAD include path for desktop OpenGL ES (SDL) builds only.
 # DRM+EGL builds use system EGL/GLES2 headers directly — GLAD's stub headers
 # shadow them (define include guards but emit no types when LV_USE_OPENGLES=0).
@@ -799,9 +809,6 @@ endif
 # Binaries
 TARGET := $(BIN_DIR)/helix-screen
 MOONRAKER_INSPECTOR := $(BIN_DIR)/moonraker-inspector
-
-# LVGL configuration
-LV_CONF := -DLV_CONF_INCLUDE_SIMPLE
 
 # Test configuration
 TEST_DIR := tests

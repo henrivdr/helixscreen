@@ -13,7 +13,7 @@ This guide walks you through installing HelixScreen on your 3D printer's touchsc
 - [MainsailOS Installation](#mainsailos-installation)
 - [Flashforge Adventurer 5M Installation](#flashforge-adventurer-5m-installation)
 - [Creality K1 Installation](#creality-k1-series)
-- [Creality K2 Series](#creality-k2-series-untested)
+- [Creality K2 Series](#creality-k2-series)
 - [FlashForge Adventurer 5X](#flashforge-adventurer-5x)
 - [Elegoo Centauri Carbon 1](#elegoo-centauri-carbon)
 - [Creality Sonic Pad](#creality-sonic-pad)
@@ -192,14 +192,14 @@ Installs to `/usr/data/helixscreen/`, boot service at `/etc/init.d/S99helixscree
 
 **Install:**
 ```bash
-python3 -c "import urllib.request as u; open('/tmp/install.sh','wb').write(u.urlopen(u.Request('http://dl.helixscreen.org/install.sh', headers={'User-Agent':'helixscreen-installer/1.0'}), timeout=30).read())" && sh /tmp/install.sh
+python3 -c "import urllib.request as u;u.urlretrieve('https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh','/tmp/install.sh')" && sh /tmp/install.sh
 ```
 
 > **Why not `wget`?** Recent K2 firmware (Tina/OpenWrt) ships neither `wget` nor `curl` on the
 > `PATH` — even the BusyBox `wget` applet has been compiled out. Every K2 does include `python3`
-> (Klipper and Moonraker need it), so the command above uses Python to fetch the installer; the
-> installer then uses Python for the rest of the download and extraction. If your firmware still
-> has `wget` (older builds did), `wget -O - http://dl.helixscreen.org/install.sh | sh` also works.
+> (Klipper and Moonraker need it) with working SSL, so the command above uses Python to fetch the
+> installer over HTTPS; the installer then uses Python for the rest of the download and extraction.
+> If your firmware still has `wget` (older builds did), `wget -O - http://dl.helixscreen.org/install.sh | sh` also works.
 
 **What's different from K1:**
 - ARM processor (Allwinner, not MIPS) — standard cross-compilation

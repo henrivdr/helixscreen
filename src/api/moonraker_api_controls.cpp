@@ -9,6 +9,7 @@
 #include "fan_gcode.h"
 #include "http_executor.h"
 #include "hv/requests.h"
+#include "macro_param_cache.h"
 #include "moonraker_api.h"
 #include "moonraker_api_internal.h"
 #include "printer_state.h"
@@ -64,9 +65,16 @@ void MoonrakerAPI::set_temperature(const std::string& heater, double temperature
         return;
     }
 
+    // Route a chamber set through M141 S{temp} when the printer defines that macro.
+    // The safety-limit validation above still bounds the target — M141 is just an
+    // alternate transport for the same already-validated temperature.
+    const bool use_m141 = helix::ui::temperature::chamber_uses_m141(
+        heater, state_.temperature_state().chamber_heater_name(),
+        helix::MacroParamCache::instance().has_macro("m141"));
+
     char gcode_buf[128];
     const char* gcode = helix::ui::temperature::build_heater_gcode(
-        heater, static_cast<int>(temperature * 10), gcode_buf, sizeof(gcode_buf));
+        heater, static_cast<int>(temperature * 10), gcode_buf, sizeof(gcode_buf), use_m141);
     if (!gcode) {
         spdlog::error("[Moonraker API] Cannot build gcode for empty heater name");
         if (on_error) {
@@ -79,7 +87,8 @@ void MoonrakerAPI::set_temperature(const std::string& heater, double temperature
         return;
     }
 
-    spdlog::info("[Moonraker API] Setting {} temperature to {}°C", heater, temperature);
+    spdlog::info("[Moonraker API] Setting {} temperature to {}°C{}", heater, temperature,
+                 use_m141 ? " (via M141)" : "");
 
     execute_gcode(gcode, on_success, on_error);
 }

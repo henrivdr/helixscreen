@@ -2118,9 +2118,9 @@ TEST_CASE("AD5X IFS toolhead filament unloadable when firmware drops active slot
 
     // The gate must open even though no slot is the active slot — filament is
     // physically in the toolhead and must be removable. (The dispatched command,
-    // IFS_REMOVE_CURRENT_PRUTOK, is asserted by the unload_filament dispatch test;
-    // the firmware reads FFMInfo.channel, not our slot index, so the unknown
-    // origin lane is fine.)
+    // the _IFS_REMOVE_CURRENT_PRUTOK macro, is asserted by the unload_filament
+    // dispatch test; the firmware reads FFMInfo.channel, not our slot index, so
+    // the unknown origin lane is fine.)
     REQUIRE(backend.can_unload_from_toolhead(0));
 }
 
@@ -4796,33 +4796,64 @@ TEST_CASE("AD5X IFS eject_lane rejects out-of-range slots", "[ams][ad5x_ifs]") {
 // "printer homes and nothing happens" (bare IFS_REMOVE_PRUTOK is a ZMOD no-op).
 // ==========================================================================
 //
-// Verified against ZMOD v1.7.1 (../zmod, AD5X-zmod-1.7.1.tgz, mod/.shell/zmod_ifs.py):
+// Verified against raza616's on-device cfg (bundle 7AC4SDEX) and ZMOD v1.7.1
+// (../zmod, AD5X-zmod-1.7.1.tgz, mod/.shell/zmod_ifs.py):
 //   * bare IFS_REMOVE_PRUTOK defaults PRUTOK=0 and returns at cmd_IFS_REMOVE_PRUTOK:1104
 //     — a NO-OP. We homed (ensure_homed_then) and then did nothing.
 //   * REMOVE_PRUTOK_IFS PRUTOK=N unloads the *current* channel regardless of N — it
 //     never unloads "port N independently."
-//   * IFS_REMOVE_CURRENT_PRUTOK (cmd_..._CURRENT_PRUTOK:1144) auto-detects the active
-//     channel, heats ONLY when the extruder sensor reads filament present, and retracts.
-//     It is the correct, slot-independent toolhead Unload.
-// With a null client, ensure_homed_then() dispatches straight through the overridden
-// execute_gcode(), so captured_gcodes holds exactly what unload_filament() sends.
+//   * IFS_REMOVE_CURRENT_PRUTOK (cmd_..._CURRENT_PRUTOK:1144) early-returns when the
+//     extruder sensor reads EMPTY (zmod_ifs.py:1149) — so when nothing is seated at
+//     the nozzle it is *also* a no-op after homing. raza616 hit exactly this on .76.
+//   * _IFS_REMOVE_CURRENT_PRUTOK is the firmware's own "Remove from extruder" button:
+//     it self-homes, calls IFS_REMOVE_CURRENT_PRUTOK NEED_TRASH=1
+//     BYPASS_TEMPERATURE_CHECK=1, resets the hotend, and refreshes color. This is what
+//     we dispatch for a loaded toolhead — raw, so we don't home a second time.
+// With a null client, execute_gcode() is overridden, so captured_gcodes holds exactly
+// what unload_filament() sends.
 
-TEST_CASE("AD5X IFS unload_filament dispatches IFS_REMOVE_CURRENT_PRUTOK, never the no-op",
+TEST_CASE("AD5X IFS unload_filament dispatches the firmware _IFS_REMOVE_CURRENT_PRUTOK macro",
           "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
     Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // no async debounce task
 
-    // Normal case: active slot loaded at the toolhead.
+    // Normal case: active slot loaded AND filament seated at the toolhead.
     Ad5xIfsTestAccess::set_current_slot(backend, 0, /*filament_loaded=*/true);
     Ad5xIfsTestAccess::set_head_filament(backend, true);
 
     REQUIRE(backend.unload_filament(0).success());
 
-    REQUIRE(backend.has_gcode("IFS_REMOVE_CURRENT_PRUTOK"));
-    // Never the no-op, never the misleading per-port macro.
+    // The firmware's own macro — not the bare Python command (which skips the
+    // trash drop and leaves the nozzle hot), never the no-op, never per-port.
+    REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode("IFS_REMOVE_CURRENT_PRUTOK")); // bare, no underscore
     REQUIRE_FALSE(backend.has_gcode("IFS_REMOVE_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK_IFS"));
+    // The macro self-homes; we must not double-home with our own G28.
+    REQUIRE_FALSE(backend.has_gcode_containing("G28"));
+}
+
+TEST_CASE("AD5X IFS unload_filament with empty toolhead routes to cold lane eject (7AC4SDEX)",
+          "[ams][ad5x_ifs]") {
+    // raza616's actual state: filament is in the lane (ifs_motion_sensor present)
+    // but NOT at the extruder (head_switch_sensor empty). The toolhead unload
+    // would early-return in firmware after homing — "homes and nothing happens."
+    // Unload must instead pull the lane back cold via IFS_F11.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    Ad5xIfsTestAccess::set_current_slot(backend, 2, /*filament_loaded=*/false);
+    Ad5xIfsTestAccess::set_head_filament(backend, false);
+
+    REQUIRE(backend.unload_filament(2).success());
+
+    // 0-based slot 2 -> 1-based port 3, cold retract, no heat, no homing.
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("G28"));
+    REQUIRE_FALSE(backend.has_gcode_containing("M104"));
+    REQUIRE_FALSE(backend.has_gcode_containing("M109"));
 }
 
 TEST_CASE("AD5X IFS unload_filament clears toolhead when firmware dropped the active slot (#995)",
@@ -4836,6 +4867,6 @@ TEST_CASE("AD5X IFS unload_filament clears toolhead when firmware dropped the ac
     Ad5xIfsTestAccess::set_head_filament(backend, true);
 
     REQUIRE(backend.unload_filament(2).success());
-    REQUIRE(backend.has_gcode("IFS_REMOVE_CURRENT_PRUTOK"));
+    REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode("IFS_REMOVE_PRUTOK"));
 }

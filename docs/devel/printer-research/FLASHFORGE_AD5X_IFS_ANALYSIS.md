@@ -340,16 +340,19 @@ Zmod has an option to rename slots from 0-indexed (0,1,2,3) to 1-indexed (1,2,3,
 
 ---
 
-## 12. Unload Semantics — VERIFIED against ZMOD v1.7.1 source (2026-06-11)
+## 12. Unload Semantics — VERIFIED against ZMOD v1.7.1 source + on-device cfg (2026-06-12)
 
-Re-verified line-by-line against the extracted firmware (`mod/.shell/zmod_ifs.py` + `translate/en/ad5x_display_off.cfg`). This supersedes the earlier empirical-only notes. The `_`-prefixed names are gcode macros; the no-underscore names are Python commands in `zmod_ifs.py`.
+Re-verified line-by-line against the extracted firmware (`mod/.shell/zmod_ifs.py` + `translate/en/ad5x_display_off.cfg`) **and against raza616's actual on-device config** (bundle `7AC4SDEX`, v0.99.76). This supersedes the earlier empirical-only notes. The `_`-prefixed names are gcode macros; the no-underscore names are Python commands in `zmod_ifs.py`.
+
+> ⚠ **The 2026-06-11 fix (send bare `IFS_REMOVE_CURRENT_PRUTOK`) was incomplete** — corrected 2026-06-12. It missed that the Python command *itself* early-returns on an empty extruder sensor, and that the firmware's own working button is the `_IFS_REMOVE_CURRENT_PRUTOK` **macro** (with `NEED_TRASH=1 BYPASS_TEMPERATURE_CHECK=1`), not the bare command. See the corrected dispatch below.
 
 ### Per-command truth table (what each command our backend can send actually does)
 
 | Command (as sent by HelixScreen) | Homes? | Heats? | Acts on | Net effect |
 |---|---|---|---|---|
 | **`IFS_REMOVE_PRUTOK`** (bare, no `PRUTOK=`) | no | no | nothing | **NO-OP.** `cmd_IFS_REMOVE_PRUTOK` defaults `PRUTOK=0` and `return`s at `:1113` on `prutok == 0`. Does nothing at all. |
-| **`IFS_REMOVE_CURRENT_PRUTOK`** (no args) | no (caller homes) | yes, if extruder loaded & nozzle cold | the **active** channel (`FFMInfo.channel`) | Early-returns if extruder sensor empty (`:1149`). Else `M104 S{config.temp}` + `TEMPERATURE_WAIT` when `temp < config.temp` (`:1159`), then `IFS_REMOVE_PRUTOK PRUTOK={active} FORCE=0`. **Correct "unload the toolhead" entry.** |
+| **`IFS_REMOVE_CURRENT_PRUTOK`** (bare Python cmd, no args) | no (caller homes) | yes *only if extruder loaded* | the **active** channel (`FFMInfo.channel`) | **Early-returns (NO-OP) if the extruder sensor reads empty (`:1149`).** Else, with the bare call (`TEMP=0`, `BYPASS=0`, `NEED_TRASH=0`): `M104 S{config.temp}` + `TEMPERATURE_WAIT` (`:1159`), then `IFS_REMOVE_PRUTOK PRUTOK={active} FORCE=0 NEED_TRASH=0` — **retracts but skips the trash drop and leaves the nozzle hot.** |
+| **`_IFS_REMOVE_CURRENT_PRUTOK`** (the firmware's "Remove from extruder" **macro**) | **yes** (`_G28`) | yes *only if extruder loaded* (same empty-sensor early-return) | the **active** channel | Firmware's own UI button. Self-homes, calls `IFS_REMOVE_CURRENT_PRUTOK NEED_TRASH=1 BYPASS_TEMPERATURE_CHECK=1` (trash drop, no pre-heat wait), then `SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0` + `COLOR`. **This is what HelixScreen dispatches for a loaded toolhead.** |
 | **`REMOVE_PRUTOK_IFS PRUTOK=N`** | **yes** (`_G28`) | yes (via `IFS_REMOVE_CURRENT_PRUTOK`, same rule as above) | **active** channel for the toolhead unload + cold-jogs **lane N** | Homes, unloads the *currently-loaded* filament (ignores N for the heated part), then cold-jogs lane N (`IFS_F24`/`IFS_F11`/`IFS_F39`). |
 | **`IFS_F11 PRUTOK=N … CHECK=0`** | no | no | **lane N** only | Unconditional cold per-lane retract (no presence guard). Used by `eject_lane()`. |
 
@@ -357,17 +360,23 @@ Re-verified line-by-line against the extracted firmware (`mod/.shell/zmod_ifs.py
 
 ### ⚠ HelixScreen bug this exposes (root cause of "homes and then nothing happens")
 
-Until 2026-06-11 `unload_filament()` (`ams_backend_ad5x_ifs.cpp`) dispatched **bare `IFS_REMOVE_PRUTOK`** for the active/current/unknown-origin toolhead unload via `ensure_homed_then()` (which issues `G28` first). Result: **the printer homed (our G28), then the firmware command was an immediate no-op** → exactly the reported "homes and nothing happens." The 2026-06-10 phase-tracker work (`4ebfd4135`/`2a7cff44e`) only added UI progress synthesis and did not change which command we dispatch, so the behavior was unchanged — as expected.
+The symptom has had **two distinct firmware no-op preconditions**, both producing "homes (our G28) then nothing":
 
-- **✅ Fixed 2026-06-11:** `unload_filament()` now sends **`IFS_REMOVE_CURRENT_PRUTOK`** (no args). It auto-detects the active channel, heats only when there's filament at the toolhead and the nozzle is cold, and unloads. The slot-state-branching `select_unload_command()` helper was removed (the answer is slot-independent). Regression-guarded by `tests/unit/test_ams_backend_ad5x_ifs.cpp` ("unload_filament dispatches IFS_REMOVE_CURRENT_PRUTOK, never the no-op"). Idle-lane recovery stays on `IFS_F11 … CHECK=0` (`eject_lane()`).
-- **The "heats even for filament not loaded" complaint** was the old `REMOVE_PRUTOK_IFS PRUTOK=N` path (its `IFS_REMOVE_CURRENT_PRUTOK` step heats+unloads the *currently active* channel regardless of N). The new command can't heat an empty toolhead — `cmd_IFS_REMOVE_CURRENT_PRUTOK` returns early when the extruder sensor reads no filament. The UI already routes idle lanes to cold `eject_lane()`, never `REMOVE_PRUTOK_IFS`.
+1. **Until 2026-06-11:** `unload_filament()` dispatched **bare `IFS_REMOVE_PRUTOK`** via `ensure_homed_then()`. That command no-ops on its `PRUTOK=0` default (`:1113`). The 2026-06-10 phase-tracker work (`4ebfd4135`/`2a7cff44e`) only added UI progress synthesis and did not change the dispatch.
+2. **The 2026-06-11 fix (bare `IFS_REMOVE_CURRENT_PRUTOK`) did not resolve it** — bundle `7AC4SDEX` (v0.99.76) shows `head_switch_sensor` **empty** while `ifs_motion_sensor` reads present: filament is in the lane, not the toolhead. `cmd_IFS_REMOVE_CURRENT_PRUTOK` early-returns on the empty extruder sensor (`:1149`), so after our G28 it still did nothing. We swapped one no-op precondition (PRUTOK=0) for another (empty extruder sensor).
+
+- **✅ Fixed 2026-06-12:** `unload_filament()` now **branches on the toolhead sensor (`head_filament_`)**:
+  - **Toolhead loaded** → dispatch the firmware's own macro **`_IFS_REMOVE_CURRENT_PRUTOK`** raw via `execute_gcode()` (the macro self-homes — we must NOT wrap it in `ensure_homed_then()`, which would home twice). This matches the "Remove from extruder" button observed working on raza616's device, and gets the trash drop + post-unload nozzle cool-down the bare command skipped.
+  - **Toolhead empty** → route to **`eject_lane()`** (cold `IFS_F11 PRUTOK=N CHECK=0`) to pull the filament back from the lane, instead of homing into a guaranteed no-op.
+  - Regression-guarded by `tests/unit/test_ams_backend_ad5x_ifs.cpp`: "unload_filament dispatches the firmware `_IFS_REMOVE_CURRENT_PRUTOK` macro" and "unload_filament with empty toolhead routes to cold lane eject (7AC4SDEX)".
+- **The "heats even for filament not loaded" complaint** was the old `REMOVE_PRUTOK_IFS PRUTOK=N` path (its `IFS_REMOVE_CURRENT_PRUTOK` step heats+unloads the *currently active* channel regardless of N). Neither current path can heat an empty toolhead — the loaded-head macro early-returns on an empty extruder sensor, and the empty-head branch is a cold lane eject.
 
 ### `SAVE_ZMOD_DATA REMOVE_FILAMENT=…` (raza616's config question)
 
 `REMOVE_FILAMENT` is **persisted config, not a heat toggle.** `SAVE_ZMOD_DATA` only does `SAVE_VARIABLE VARIABLE=remove_filament VALUE={0|1}` (`ad5x_config_native.cfg:106`). Setting `REMOVE_FILAMENT=0` will **not** stop the heat-before-unload — that heating is in `cmd_IFS_REMOVE_CURRENT_PRUTOK`, gated only by `temp < config.temp` and `BYPASS_TEMPERATURE_CHECK`.
 
-### Caveat — ZMOD version
-The bare-`IFS_REMOVE_PRUTOK` `prutok == 0 → return` guard is confirmed in **v1.7.1**. If an older ZMOD lacked that guard the bare call may have behaved differently; the user's ZMOD version is unconfirmed. The fix (use `IFS_REMOVE_CURRENT_PRUTOK`) is correct on current firmware regardless.
+### Caveat — ZMOD version + head-sensor dependency
+The `prutok == 0 → return` and empty-extruder-sensor early-returns are confirmed in **v1.7.1** and in raza616's on-device cfg. Older ZMOD may differ; the fix is correct on current firmware regardless. The 2026-06-12 routing depends on our `head_filament_` (from `filament_switch_sensor head_switch_sensor`) tracking the same physical state the firmware reads via `get_extruder_sensor()`. A head-sensor false-negative would route a genuinely-loaded toolhead to a cold lane eject — but firmware's toolhead unload would itself no-op in that same state, so cold eject remains the best available action. **Needs raza616 field re-test** (we ship AD5X blind — no test device).
 
 ### Other consequences (unchanged, still valid)
 - A cold per-lane reverse-jog **IS available at the gcode layer** via `IFS_F11 PRUTOK={n} LEN={mm} SPEED={s} CHECK=0` — a thin wrapper over raw serial `F11 C{port}…` with zero heating logic.

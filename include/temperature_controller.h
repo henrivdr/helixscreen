@@ -3,9 +3,11 @@
 #pragma once
 
 #include "async_lifetime_guard.h"
+#include "heater_limits.h"
 #include "moonraker_error.h"
-#include "ui_heater_config.h" // helix::HeaterType
+#include "ui_heater_config.h" // helix::HeaterType, HEATER_TYPE_COUNT
 
+#include <array>
 #include <functional>
 #include <string>
 
@@ -16,6 +18,18 @@ class MoonrakerAPI;
 
 namespace helix {
 
+/// Preset target temperatures (°C) for a single heater.
+struct HeaterPresets {
+    int off  = 0;
+    int pla  = 0;
+    int petg = 0;
+    int abs  = 0;
+};
+
+/// Options for a heater set-target call.
+/// - toast: show the standard error toast on failure (default true).
+/// - on_success / on_error: optional caller hooks fired after the RPC completes.
+/// - silent: reserved for future caller-handled dedup (not yet wired; currently unused).
 struct SendOptions {
     bool toast = true;
     bool silent = false;
@@ -43,7 +57,49 @@ class TemperatureController {
     /// "heater_bed"; Chamber -> resolved discovery name (never the bare default).
     std::string resolved_name(HeaterType type) const;
 
+    /// Klipper-configured max_temp in °C, or 0 if not yet fetched.
+    int configured_max(HeaterType type) const;
+
+    /// Keypad input range: min..effective ceiling (configured max if known,
+    /// otherwise the heater default).
+    KeypadRange keypad_range(HeaterType type) const;
+
+    /// Fetch the Klipper configfile max_temp for this heater if not yet known.
+    /// No-op if api_ is null or the value is already populated.
+    void ensure_limits(HeaterType type);
+
+    /// The heater's preset target values (°C).
+    const HeaterPresets& presets(HeaterType type) const;
+
+    /// Whether a preset value should be shown given the configured max (hidden if above it).
+    bool preset_visible(HeaterType type, int value_c) const;
+
+    /// Send a temperature target by heater type.  Resolves to the klipper object name first.
+    void set_target(HeaterType type, double celsius, SendOptions opts = {});
+
+    /// Send a temperature target by explicit klipper object name (e.g. "heater_generic
+    /// chamber_heater" or "extruder").  Returns immediately if api_ is null or name is empty.
+    void set_target(const std::string& klipper_name, double celsius, SendOptions opts = {});
+
+    /// Send nozzle/bed/chamber targets in a single call.  Chamber is skipped when its resolved
+    /// name is empty or chamber == 0.
+    void apply_material(double nozzle, double bed, double chamber, SendOptions opts = {});
+
   private:
+    friend struct TemperatureControllerTestAccess;
+    void set_configured_max(HeaterType type, int deg);
+
+    struct HeaterModel {
+        float keypad_min = 0.0f;
+        float keypad_max_default = 0.0f; // 350 nozzle / 150 bed / 80 chamber
+        int configured_max = 0;          // °C from configfile, 0 = unknown
+        HeaterPresets presets{};
+    };
+    std::array<HeaterModel, HEATER_TYPE_COUNT> model_{};
+    AsyncLifetimeGuard lifetime_;
+
+    static int idx(HeaterType t) { return static_cast<int>(t); }
+
     PrinterState& state_;
     MoonrakerAPI* api_;
 };

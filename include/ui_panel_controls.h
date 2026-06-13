@@ -23,6 +23,9 @@
 
 // Forward declaration
 class TemperatureService;
+namespace helix {
+class TemperatureController;
+} // namespace helix
 
 /**
  * @file ui_panel_controls.h
@@ -131,6 +134,11 @@ class ControlsPanel : public PanelBase {
     //
 
     TemperatureService* temp_control_panel_ = nullptr;
+
+    /// Convenience accessor: the temp controller via the temp service, or
+    /// nullptr if no service is wired up. Centralizes the null-guard the
+    /// temperature command sites share.
+    helix::TemperatureController* controller() const;
 
     //
     // === Configurable Macro Buttons (StandardMacros integration) ===

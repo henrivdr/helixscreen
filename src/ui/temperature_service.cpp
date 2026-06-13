@@ -21,6 +21,7 @@
 #include "moonraker_api.h"
 #include "observer_factory.h"
 #include "printer_state.h"
+#include "temperature_controller.h"
 #include "temperature_history_manager.h"
 #include "theme_manager.h"
 #include "ui_breakpoint.h"
@@ -166,6 +167,13 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
             self->on_target_changed(HeaterType::Chamber, target);
         },
         chamber.target_lifetime);
+    // M141 cooling mode parks the ≤40°C setpoint on the cooling-fan target while
+    // the heater target stays 0. Observe it too so the effective chamber setpoint
+    // reflects "Maintaining" sets. recompute_chamber_target() reads BOTH subjects.
+    chamber.fan_target_observer = observe_int_sync<TemperatureService>(
+        printer_state_.get_chamber_fan_target_subject(chamber.fan_target_lifetime), this,
+        [](TemperatureService* self, int /*fan_target*/) { self->recompute_chamber_target(); },
+        chamber.fan_target_lifetime);
 
     // Register XML event callbacks (BEFORE any lv_xml_create calls)
     // Generic callbacks (used by chamber + can be used by nozzle/bed after XML update)
@@ -234,6 +242,14 @@ void TemperatureService::on_temp_changed(HeaterType type, int temp_centi) {
 }
 
 void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
+    // Chamber's effective setpoint is heater-OR-fan (M141 splits the setpoint
+    // across two Klipper objects). Route through the combine path rather than
+    // taking the heater readback as gospel. Nozzle/Bed keep the direct write.
+    if (type == HeaterType::Chamber) {
+        recompute_chamber_target();
+        return;
+    }
+
     auto& h = heaters_[idx(type)];
     h.target = target_centi;
     update_display(type);
@@ -252,6 +268,45 @@ void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
         // historical trace.
         ui_temp_graph_set_series_target(h.graph, h.series_id, target_deg, true);
         spdlog::trace("[TempPanel] {} target line: {:.1f}°C", heater_label(type), target_deg);
+    }
+}
+
+// Map the resting-aware ChamberMode subject int to its (untranslated) status word.
+// Translated at the display site via lv_tr() in update_status().
+static const char* chamber_mode_word(int mode) {
+    switch (mode) {
+    case helix::ChamberMode::Heating:
+        return "Heating";
+    case helix::ChamberMode::Maintaining:
+        return "Maintaining";
+    default:
+        return "Off";
+    }
+}
+
+void TemperatureService::recompute_chamber_target() {
+    auto& chamber = heaters_[idx(HeaterType::Chamber)];
+
+    // Derive both the effective target and the control mode from the data-layer
+    // subjects, which fold in the cooling-fan resting target so M141 S0 reads as
+    // Off (effective 0) rather than a deliberate "Maintaining" set at the resting
+    // temperature. The graph target line then matches the displayed value.
+    chamber.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
+    chamber.chamber_mode =
+        chamber_mode_word(lv_subject_get_int(printer_state_.get_chamber_mode_subject()));
+
+    update_display(HeaterType::Chamber);
+    update_status(HeaterType::Chamber);
+
+    if (!subjects_initialized_) {
+        return;
+    }
+
+    float target_deg = centi_to_degrees_f(chamber.target);
+    if (ui_temp_graph_is_valid(chamber.graph) && chamber.series_id >= 0) {
+        ui_temp_graph_set_series_target(chamber.graph, chamber.series_id, target_deg, true);
+        spdlog::trace("[TempPanel] Chamber target line: {:.1f}°C ({})", target_deg,
+                      chamber.chamber_mode);
     }
 }
 
@@ -303,6 +358,20 @@ void TemperatureService::update_status(HeaterType type) {
 
     if (h.read_only) {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", lv_tr("Monitoring"));
+    } else if (type == HeaterType::Chamber) {
+        // Lead with the M141 control mode (Heating via heater vs Maintaining via
+        // cooling fan vs Off), then append the thermal progress when it adds
+        // information ("Ready"/"Cooling"); "Off"/"Heating..." would just restate
+        // the mode word so they're dropped to avoid "Heating · Heating...".
+        const char* mode = lv_tr(h.chamber_mode);
+        const std::string& progress = result.status; // already localized
+        const std::string heating = lv_tr("Heating...");
+        const std::string off = lv_tr("Off");
+        if (h.target <= 0 || progress == heating || progress == off) {
+            snprintf(h.status_buf.data(), h.status_buf.size(), "%s", mode);
+        } else {
+            snprintf(h.status_buf.data(), h.status_buf.size(), "%s · %s", mode, progress.c_str());
+        }
     } else {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", result.status.c_str());
     }
@@ -323,28 +392,18 @@ void TemperatureService::update_status(HeaterType type) {
 // ============================================================================
 
 void TemperatureService::send_temperature(HeaterType type, int target) {
-    auto& h = heaters_[idx(type)];
     const char* label = heater_label(type);
 
-    // Always resolve the target name fresh — chamber's cached name can be a
-    // stale default if discovery lost the panel-setup race (#HEATER=chamber).
-    const std::string& klipper_name = resolved_klipper_name(type);
-
-    spdlog::debug("[TempPanel] Sending {} temperature: {}°C to {}", label, target, klipper_name);
-
-    if (!api_) {
-        spdlog::warn("[TempPanel] Cannot set {} temp: no API connection", label);
+    // `target` is in degrees at this layer (presets and the keypad both pass
+    // degrees). The controller resolves the klipper object name fresh, sends
+    // the single set_target, and shows the standard error toast on failure.
+    if (!controller_) {
+        spdlog::warn("[TempPanel] Cannot set {} temp: no controller", label);
         return;
     }
 
-    api_->set_temperature(
-        klipper_name, static_cast<double>(target),
-        []() {
-            // No toast on success - immediate visual feedback is sufficient
-        },
-        [label](const MoonrakerError& error) {
-            NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), label, error.user_message());
-        });
+    spdlog::debug("[TempPanel] Sending {} temperature: {}°C", label, target);
+    controller_->set_target(type, static_cast<double>(target), {.toast = true});
 }
 
 // ============================================================================
@@ -371,95 +430,17 @@ void TemperatureService::apply_preset_limits(HeaterType type) {
             continue;
         }
         // Set-or-clear so this is correct on reconnect to a printer with a
-        // different ceiling, not just one-directional hiding.
-        if (helix::heater_preset_visible(preset_values[i], h.max_temp)) {
+        // different ceiling, not just one-directional hiding. The controller
+        // owns the configured-max ceiling (0 = unknown → all presets shown).
+        bool visible = controller_ ? controller_->preset_visible(type, preset_values[i]) : true;
+        if (visible) {
             lv_obj_clear_flag(btn, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
-            spdlog::debug("[TempPanel] {} preset {}°C hidden (> max {}°C)", heater_label(type),
-                          preset_values[i], h.max_temp);
+            spdlog::debug("[TempPanel] {} preset {}°C hidden (> configured max)",
+                          heater_label(type), preset_values[i]);
         }
     }
-}
-
-void TemperatureService::refresh_chamber_klipper_name() {
-    auto& h = heaters_[idx(HeaterType::Chamber)];
-    const auto& resolved = printer_state_.temperature_state().chamber_heater_name();
-    if (!resolved.empty() && h.klipper_name != resolved) {
-        spdlog::debug("[TempPanel] Chamber klipper_name refresh: '{}' -> '{}'", h.klipper_name,
-                      resolved);
-        h.klipper_name = resolved;
-    }
-}
-
-const std::string& TemperatureService::resolved_klipper_name(HeaterType type) {
-    if (type == HeaterType::Nozzle) {
-        return active_extruder_name_;
-    }
-    if (type == HeaterType::Chamber) {
-        refresh_chamber_klipper_name();
-    }
-    return heaters_[idx(type)].klipper_name;
-}
-
-void TemperatureService::ensure_chamber_limits() {
-    auto& h = heaters_[idx(HeaterType::Chamber)];
-    if (h.read_only) {
-        return;
-    }
-    if (h.max_temp <= 0) {
-        query_chamber_max_temp(); // refreshes name + fetches configured ceiling
-    }
-}
-
-void TemperatureService::query_chamber_max_temp() {
-    refresh_chamber_klipper_name();
-    auto& h = heaters_[idx(HeaterType::Chamber)];
-    if (!api_ || h.read_only || h.klipper_name.empty()) {
-        return;
-    }
-
-    // configfile.config section headers are lower-cased by Moonraker; the
-    // discovered Klipper object name already is, but lower-case defensively.
-    std::string section = h.klipper_name;
-    std::transform(section.begin(), section.end(), section.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-    auto tok = lifetime_.token();
-    api_->query_configfile(
-        [this, tok, section](const nlohmann::json& config) {
-            // Background (WS) thread: parse only, build a local value — no `this`.
-            int max_deg = 0;
-            if (config.contains(section)) {
-                const auto& sec = config[section];
-                if (sec.contains("max_temp")) {
-                    const auto& mt = sec["max_temp"];
-                    try {
-                        if (mt.is_string()) {
-                            max_deg = static_cast<int>(std::stof(mt.get<std::string>()));
-                        } else if (mt.is_number()) {
-                            max_deg = static_cast<int>(mt.get<double>());
-                        }
-                    } catch (const std::exception&) {
-                        max_deg = 0;
-                    }
-                }
-            }
-            if (max_deg <= 0) {
-                return; // no usable ceiling — keep the panel default
-            }
-            // Main thread: mutate state + refresh widgets.
-            tok.defer("TemperatureService::apply_chamber_max", [this, max_deg]() {
-                auto& hh = heaters_[idx(HeaterType::Chamber)];
-                hh.max_temp = max_deg; // degrees
-                spdlog::info("[TempPanel] Chamber max_temp from config: {}°C", max_deg);
-                apply_preset_limits(HeaterType::Chamber);
-            });
-        },
-        [](const MoonrakerError& err) {
-            spdlog::debug("[TempPanel] chamber max_temp configfile query failed: {}",
-                          err.user_message());
-        });
 }
 
 // ============================================================================
@@ -570,13 +551,13 @@ void TemperatureService::on_panel_activate(HeaterType type) {
     update_display(type);
     update_status(type);
 
-    // Keep the chamber name + limits current: setup_panel may have run before
-    // discovery resolved the chamber heater, leaving a stale name and no
-    // max_temp. Re-sync on activate and re-query the ceiling if still unknown.
+    // Keep the chamber limits current: setup_panel may have run before
+    // discovery resolved the chamber heater, leaving the ceiling unknown.
+    // The controller re-syncs the name + (re-)fetches the configured max if
+    // still unknown; re-clamp presets with whatever is known now.
     if (type == HeaterType::Chamber && !h.read_only) {
-        refresh_chamber_klipper_name();
-        if (h.max_temp <= 0) {
-            query_chamber_max_temp();
+        if (controller_) {
+            controller_->ensure_limits(HeaterType::Chamber);
         }
         apply_preset_limits(type);
     }
@@ -659,7 +640,12 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
         h.target = lv_subject_get_int(printer_state_.get_bed_target_subject());
     } else if (type == HeaterType::Chamber) {
         h.current = lv_subject_get_int(printer_state_.get_chamber_temp_subject());
-        h.target = lv_subject_get_int(printer_state_.get_chamber_target_subject());
+        // Effective setpoint + mode come from the data-layer subjects, which fold in
+        // the cooling-fan resting target (M141 S0 → fan at resting → Off). Seed both
+        // h.target and the mode word so the initial display matches live updates.
+        h.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
+        h.chamber_mode =
+            chamber_mode_word(lv_subject_get_int(printer_state_.get_chamber_mode_subject()));
 
         // Update read_only from capability subject
         auto* cap_subj = printer_state_.get_printer_has_chamber_heater_subject();
@@ -744,11 +730,13 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
     }
 
     // Chamber: clamp keypad range + presets to the heater's Klipper-configured
-    // max_temp (e.g. a 60°C chamber must not offer 80°C). apply with whatever is
-    // known now, then refresh asynchronously from the configfile.
+    // max_temp (e.g. a 60°C chamber must not offer 80°C). Apply with whatever is
+    // known now; the controller fetches the configfile ceiling asynchronously.
     if (type == HeaterType::Chamber && !h.read_only) {
         apply_preset_limits(type);
-        query_chamber_max_temp();
+        if (controller_) {
+            controller_->ensure_limits(HeaterType::Chamber);
+        }
     }
 
     // Load theme-aware graph color
@@ -902,23 +890,20 @@ void TemperatureService::on_heater_confirm_clicked(lv_event_t* e) {
 
     h.pending = -1;
 
-    if (self->api_) {
-        const std::string& klipper_name =
-            (type == HeaterType::Nozzle) ? self->active_extruder_name_ : h.klipper_name;
-        const char* label = heater_label(type);
-
-        self->api_->set_temperature(
-            klipper_name, static_cast<double>(temp_target),
-            [label, temp_target]() {
-                if (temp_target == 0) {
-                    NOTIFY_SUCCESS(lv_tr("{} heater turned off"), label);
-                } else {
-                    NOTIFY_SUCCESS(lv_tr("{} target set to {}°C"), label, temp_target);
-                }
-            },
-            [label](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), label, error.user_message());
-            });
+    // Route through the controller so the klipper object name is resolved fresh
+    // (chamber → live discovery name, never the stale default that triggers a
+    // key69 HEATER=chamber error). Standard error toast via {.toast=true}; the
+    // success toast keeps the off/target distinction the confirm button shows.
+    const char* label = heater_label(type);
+    if (auto* c = self->controller_) {
+        c->set_target(type, static_cast<double>(temp_target),
+                      {.toast = true, .on_success = [label, temp_target]() {
+                           if (temp_target == 0) {
+                               NOTIFY_SUCCESS(lv_tr("{} heater turned off"), label);
+                           } else {
+                               NOTIFY_SUCCESS(lv_tr("{} target set to {}°C"), label, temp_target);
+                           }
+                       }});
     }
 
     NavigationManager::instance().go_back();
@@ -969,10 +954,18 @@ void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
     auto& h = self->heaters_[idx(type)];
     s_keypad_data[idx(type)] = {self, type};
 
+    // Ensure the chamber's configured ceiling is being fetched before reading
+    // the keypad range (no-op once known / non-chamber). The controller owns
+    // the effective ceiling (configured max clamped to the heater default).
+    float max_value = h.config.keypad_range.max;
+    if (self->controller_) {
+        self->controller_->ensure_limits(type);
+        max_value = self->controller_->keypad_range(type).max;
+    }
+
     ui_keypad_config_t keypad_config = {.initial_value = static_cast<float>(h.target / 10),
                                         .min_value = h.config.keypad_range.min,
-                                        .max_value = helix::heater_effective_max_deg(
-                                            h.config.keypad_range.max, h.max_temp),
+                                        .max_value = max_value,
                                         .title_label = h.config.title,
                                         .unit_label = "°C",
                                         .allow_decimal = false,

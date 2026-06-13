@@ -16,6 +16,20 @@
 namespace helix {
 
 /**
+ * @brief Chamber control mode derived from the M141 heater/cooling-fan split.
+ *
+ * Stored as the int value of the `chamber_mode` subject. Computed WITH the
+ * cooling fan's configured resting target so the "Off" state (M141 S0 resets the
+ * cooling fan to its resting target, e.g. 35°C on the K2) is recognized as Off
+ * rather than misread as a deliberate "Maintaining" set.
+ */
+enum ChamberMode {
+    Off = 0,        ///< Heater 0 AND (fan 0 OR fan == resting): effective target 0
+    Heating = 1,    ///< Heater target > 0: effective target = heater target
+    Maintaining = 2 ///< Heater 0, fan > 0 and fan != resting: effective target = fan target
+};
+
+/**
  * @brief Per-extruder temperature data with reactive subjects
  *
  * Each extruder discovered via init_extruders() gets its own ExtruderInfo
@@ -144,6 +158,39 @@ class PrinterTemperatureState {
         lifetime = chamber_target_lifetime_;
         return &chamber_target_;
     }
+    /// Chamber cooling-fan target (centidegrees). In COOLING mode the K2 M141
+    /// macro parks the setpoint on the temperature_fan target while the heater
+    /// target stays 0; this subject surfaces that fan target so it can be
+    /// combined with the heater target for display.
+    lv_subject_t* get_chamber_fan_target_subject() {
+        return &chamber_fan_target_;
+    }
+    lv_subject_t* get_chamber_fan_target_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_fan_target_lifetime_;
+        return &chamber_fan_target_;
+    }
+    /// Effective chamber setpoint (centidegrees): the heater target when heating
+    /// (target > 0), otherwise the cooling-fan target. In COOLING mode the heater
+    /// target is 0 and the real M141 setpoint lives on the fan; this subject
+    /// surfaces whichever is active so temp_display shows the maintain setpoint
+    /// instead of "--".
+    lv_subject_t* get_chamber_effective_target_subject() {
+        return &chamber_effective_target_;
+    }
+    lv_subject_t* get_chamber_effective_target_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_effective_target_lifetime_;
+        return &chamber_effective_target_;
+    }
+    /// Chamber control mode (ChamberMode int): Off/Heating/Maintaining. Computed
+    /// WITH the cooling-fan resting target so M141 S0 (which parks the fan at its
+    /// resting target, e.g. 35°C) reads as Off, not Maintaining.
+    lv_subject_t* get_chamber_mode_subject() {
+        return &chamber_mode_;
+    }
+    lv_subject_t* get_chamber_mode_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_mode_lifetime_;
+        return &chamber_mode_;
+    }
 
     /// Number of tracked extruders
     int extruder_count() const {
@@ -174,6 +221,32 @@ class PrinterTemperatureState {
      */
     void set_chamber_heater_name(const std::string& name) {
         chamber_heater_name_ = name;
+    }
+
+    /**
+     * @brief Set the temperature_fan name carrying the chamber cooling setpoint
+     * @param name Klipper object name (e.g., "temperature_fan chamber_fan")
+     *
+     * In COOLING mode the K2 M141 macro writes the setpoint to this fan's
+     * `target`; surfaced via get_chamber_fan_target_subject().
+     */
+    void set_chamber_cooling_fan_name(const std::string& name) {
+        chamber_cooling_fan_name_ = name;
+    }
+
+    /**
+     * @brief Set the cooling fan's configured resting/off target (centidegrees)
+     * @param centi Resting target ×10 (e.g. 350 for 35°C on the K2)
+     *
+     * `M141 S0` ("Off") resets the cooling fan to this configured resting target
+     * with the heater at 0. Recognizing the resting value lets the chamber mode
+     * report Off instead of misreading the resting fan target as a deliberate
+     * "Maintaining" set. Read from configfile.settings[<fan>].target_temp at
+     * discovery; defaults to 0 (pre-config-fetch), where the `fan != resting`
+     * test still distinguishes a real maintain set (fan > 0) from off.
+     */
+    void set_chamber_fan_resting(int centi) {
+        chamber_fan_resting_centi_ = centi;
     }
 
     /**
@@ -223,8 +296,14 @@ class PrinterTemperatureState {
     SubjectLifetime bed_target_lifetime_;
     lv_subject_t chamber_temp_{};
     lv_subject_t chamber_target_{}; ///< 0 when sensor-only, actual target when heater present
+    lv_subject_t chamber_fan_target_{}; ///< Cooling-fan target (centidegrees); 0 when no cooling fan
+    lv_subject_t chamber_effective_target_{}; ///< heater target when >0, else fan target (centidegrees)
+    lv_subject_t chamber_mode_{}; ///< ChamberMode int: Off/Heating/Maintaining (resting-aware)
     SubjectLifetime chamber_temp_lifetime_;
     SubjectLifetime chamber_target_lifetime_;
+    SubjectLifetime chamber_fan_target_lifetime_;
+    SubjectLifetime chamber_effective_target_lifetime_;
+    SubjectLifetime chamber_mode_lifetime_;
 
     // Dynamic per-extruder tracking
     std::unordered_map<std::string, ExtruderInfo> extruders_;
@@ -237,6 +316,10 @@ class PrinterTemperatureState {
     std::string chamber_sensor_name_; ///< Klipper sensor name (e.g., "temperature_sensor chamber")
     std::string chamber_heater_name_; ///< Klipper heater name (e.g., "heater_generic chamber"),
                                       ///< empty if sensor-only
+    std::string chamber_cooling_fan_name_; ///< temperature_fan carrying the chamber cooling
+                                           ///< setpoint (M141 target in cooling mode), empty if none
+    int chamber_fan_resting_centi_ = 0;    ///< Cooling fan's configured resting/off target
+                                           ///< (centidegrees); M141 S0 returns the fan here. 0 = unknown.
 };
 
 } // namespace helix

@@ -895,6 +895,13 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         return last_send_method_;
     }
 
+    /// Test inspection: the `script` param of the most recent printer.gcode.script RPC
+    /// passed to the 5-arg send_jsonrpc(). Empty until the first such call. Used by
+    /// tests that verify the exact G-code a caller routes through the send chokepoint.
+    const std::string& last_send_script() const {
+        return last_send_script_;
+    }
+
     /// Test helper: force the next matching printer.gcode.script RPC to invoke its
     /// error callback (instead of success) with the given error type/message. This
     /// simulates an RPC-layer timeout while Klipper still processes the gcode — the
@@ -962,6 +969,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
 
     // Test inspection: last send_jsonrpc(method,params,succ,err,timeout_ms,silent) args.
     std::string last_send_method_;
+    std::string last_send_script_; // `script` param when method == printer.gcode.script
     uint32_t last_send_timeout_ms_{0};
     bool last_send_silent_{false};
 

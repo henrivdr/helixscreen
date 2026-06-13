@@ -1146,6 +1146,10 @@ RequestId MoonrakerClientMock::send_jsonrpc(const std::string& method, const jso
     last_send_method_ = method;
     last_send_timeout_ms_ = timeout_ms;
     last_send_silent_ = silent;
+    if (method == "printer.gcode.script" && params.contains("script") &&
+        params["script"].is_string()) {
+        last_send_script_ = params["script"].get<std::string>();
+    }
 
     // Dispatch to method handler registry
     auto it = method_handlers_.find(method);

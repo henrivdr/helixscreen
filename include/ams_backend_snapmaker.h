@@ -97,6 +97,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;
     AmsError change_tool(int tool_number) override;
+    // can_unload_from_toolhead is intentionally NOT overridden: the U1 reports
+    // PARALLEL topology, so the topology-aware base correctly offers per-tool
+    // Unload for every toolhead holding filament (is_present()).
 
     // Recovery (not supported)
     AmsError recover() override;

@@ -6,8 +6,11 @@
 #include "../../include/moonraker_client_mock.h"
 #include "../lvgl_test_fixture.h"
 #include "lvgl.h"
+#include "macro_param_cache.h"
+#include "moonraker_api.h"
 #include "printer_capabilities_state.h"
 #include "printer_discovery.h"
+#include "printer_state.h"
 #include "printer_temperature_state.h"
 #include "settings_manager.h"
 #include "temperature_sensor_manager.h"
@@ -171,6 +174,50 @@ TEST_CASE("PrinterTemperatureState does not let sensor pollute chamber when heat
     // heater is configured, it is the only valid source for chamber_temp_.
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 272);
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 650);
+}
+
+// 5c. Task 4 (M141 cooling routing): in COOLING mode the K2 M141 macro puts the
+// setpoint on the temperature_fan target, not the heater. Surface that fan's
+// target as its own subject so a later step can combine heater+fan targets.
+TEST_CASE("PrinterTemperatureState surfaces the chamber cooling-fan target",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState temp_state;
+    temp_state.init_subjects(false);
+    temp_state.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+
+    // M141 in cooling mode drives the temperature_fan's target to 40°C while the
+    // heater target stays 0.
+    nlohmann::json status = {{"temperature_fan chamber_fan", {{"target", 40.0}}}};
+    temp_state.update_from_status(status);
+
+    // json_to_centidegrees scales by 10 in this codebase (e.g. heater 65C -> 650,
+    // see the issue947 test), so 40C -> 400 — matching the chamber_target_ unit.
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_fan_target_subject()) == 400);
+}
+
+TEST_CASE("PrinterTemperatureState surfaces the chamber effective target (heater-or-fan)",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState temp_state;
+    temp_state.init_subjects(false);
+    temp_state.set_chamber_heater_name("heater_generic chamber_heater");
+    temp_state.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+
+    // Heating: heater target > 0 wins.
+    temp_state.update_from_status({{"heater_generic chamber_heater", {{"target", 60.0}}}});
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_effective_target_subject()) == 600); // ×10
+
+    // Maintaining: heater 0, fan target is the setpoint.
+    temp_state.update_from_status({{"heater_generic chamber_heater", {{"target", 0.0}}},
+                                   {"temperature_fan chamber_fan", {{"target", 30.0}}}});
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_effective_target_subject()) == 300);
+
+    // Off: both 0.
+    temp_state.update_from_status({{"temperature_fan chamber_fan", {{"target", 0.0}}}});
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_effective_target_subject()) == 0);
 }
 
 // 6. Chamber assignment settings default to "auto"
@@ -553,6 +600,20 @@ TEST_CASE("PrinterDiscovery handles chamber with different naming conventions",
     }
 }
 
+// 15b. Task 4 (M141 cooling routing): discovery must record the chamber cooling
+// fan distinct from the heater pick. On the K2 a heater_generic wins the heater
+// role, but the companion temperature_fan (where M141 parks the cooling setpoint)
+// must still be recorded independently.
+TEST_CASE("discovery records the chamber cooling fan distinct from the heater",
+          "[discovery][m141]") {
+    helix::PrinterDiscovery d;
+    nlohmann::json objects = {"heater_generic chamber_heater", "temperature_fan chamber_fan",
+                              "extruder", "heater_bed"};
+    d.parse_objects(objects);
+    REQUIRE(d.chamber_heater_name() == "heater_generic chamber_heater");
+    REQUIRE(d.chamber_cooling_fan_name() == "temperature_fan chamber_fan");
+}
+
 // 16. PrinterDiscovery chamber_heater_object_name is empty when no chamber heater
 TEST_CASE("PrinterDiscovery chamber_heater_object_name is empty when no chamber heater",
           "[discovery][chamber]") {
@@ -657,6 +718,163 @@ TEST_CASE("build_heater_gcode generates correct gcode for all heater types", "[c
         const char* result = build_heater_gcode("", 450, buf, sizeof(buf));
         REQUIRE(result == nullptr);
     }
+}
+
+// Resting-aware chamber mode + effective target. `M141 S0` ("Off") resets the
+// cooling fan to its CONFIGURED RESTING target (35°C on the K2) with the heater
+// at 0; without resting-awareness the fan target of 35 reads back as a deliberate
+// "Maintaining 35°" set (and reddens the display). The mode subject is computed
+// WITH the resting value so the resting state is recognized as Off → effective 0.
+TEST_CASE("chamber mode + effective target treat the cooling-fan resting target as Off",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    helix::PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_heater_name("heater_generic chamber_heater");
+    ts.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+    ts.set_chamber_fan_resting(350); // 35°C ×10 (resting/off value from config)
+
+    // Off: M141 S0 → heater 0, fan at resting 35 → Off, effective 0
+    ts.update_from_status({{"heater_generic chamber_heater", {{"target", 0.0}}},
+                           {"temperature_fan chamber_fan", {{"target", 35.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 0);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Off);
+
+    // Maintaining: deliberate 30 (≠ resting) → Maintaining, effective 300
+    ts.update_from_status({{"temperature_fan chamber_fan", {{"target", 30.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 300);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Maintaining);
+
+    // Heating: heater 60 wins → Heating, effective 600
+    ts.update_from_status({{"heater_generic chamber_heater", {{"target", 60.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 600);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Heating);
+}
+
+// Pre-config-fetch fallback: when the resting target hasn't been read from config
+// yet (stays 0), a real maintain set (fan 35 != 0) must still read as Maintaining.
+// This is the safe default before discovery populates set_chamber_fan_resting().
+TEST_CASE("chamber mode without resting config treats any fan target as Maintaining",
+          "[temperature][m141]") {
+    LVGLTestFixture fixture;
+
+    helix::PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_heater_name("heater_generic chamber_heater");
+    ts.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
+    // set_chamber_fan_resting() intentionally NOT called → resting stays 0.
+
+    ts.update_from_status({{"heater_generic chamber_heater", {{"target", 0.0}}},
+                           {"temperature_fan chamber_fan", {{"target", 35.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_effective_target_subject()) == 350);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_mode_subject()) == helix::ChamberMode::Maintaining);
+}
+
+TEST_CASE("chamber_effective_setpoint picks the active control", "[temperature][m141]") {
+    using helix::ui::temperature::chamber_effective_setpoint;
+    auto heating = chamber_effective_setpoint(600, 0); // heater 60° (×10)
+    REQUIRE(heating.centi == 600);
+    REQUIRE(std::string(heating.mode) == "Heating");
+    auto maint = chamber_effective_setpoint(0, 400); // fan 40° (×10)
+    REQUIRE(maint.centi == 400);
+    REQUIRE(std::string(maint.mode) == "Maintaining");
+    auto off = chamber_effective_setpoint(0, 0);
+    REQUIRE(off.centi == 0);
+    REQUIRE(std::string(off.mode) == "Off");
+}
+
+TEST_CASE("chamber_uses_m141 gates only the chamber heater + M141 present", "[temperature][m141]") {
+    using helix::ui::temperature::chamber_uses_m141;
+    const std::string chamber = "heater_generic chamber_heater";
+    REQUIRE(chamber_uses_m141(chamber, chamber, /*m141_available=*/true));
+    REQUIRE_FALSE(chamber_uses_m141(chamber, chamber, /*m141_available=*/false));
+    REQUIRE_FALSE(chamber_uses_m141("extruder", chamber, true));
+    REQUIRE_FALSE(chamber_uses_m141("heater_bed", chamber, true));
+    REQUIRE_FALSE(chamber_uses_m141("", chamber, true));
+    REQUIRE_FALSE(chamber_uses_m141(chamber, "", true));
+}
+
+TEST_CASE("build_heater_gcode emits M141 when use_m141 is set", "[temperature][m141]") {
+    using helix::ui::temperature::build_heater_gcode;
+    char buf[128];
+    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf),
+                                           /*use_m141=*/true)) == "M141 S60");
+    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 0, buf, sizeof(buf),
+                                           true)) == "M141 S0");
+    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf))) ==
+            "SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=60");
+}
+
+// API send chokepoint: a chamber set on an M141-capable printer routes through
+// `M141 S{temp}`, while a nozzle set on the same printer still uses
+// SET_HEATER_TEMPERATURE. Exercises the real MoonrakerAPI::set_temperature path
+// (safety validation → chamber_uses_m141 decision → build_heater_gcode →
+// execute_gcode → client.send_jsonrpc), capturing the exact script the mock
+// client received.
+TEST_CASE("MoonrakerAPI routes chamber sends through M141 when defined", "[api][chamber][m141]") {
+    LVGLTestFixture fixture;
+
+    auto& settings = helix::SettingsManager::instance();
+    settings.init_subjects();
+    // Default is "auto"; be explicit so a leaked override from another test
+    // can't reroute the resolved chamber heater name.
+    settings.set_chamber_heater_assignment("auto");
+    settings.set_chamber_sensor_assignment("auto");
+
+    helix::PrinterState state;
+    state.init_subjects(false);
+    // execute_gcode refuses to ship gcode unless Klipper is live.
+    state.set_klippy_state_sync(helix::KlippyState::READY);
+
+    // Resolve the chamber heater name through the real discovery path.
+    helix::PrinterDiscovery discovery;
+    nlohmann::json objects = {"heater_generic chamber_heater", "extruder", "heater_bed"};
+    discovery.parse_objects(objects);
+    state.set_hardware(discovery);
+    REQUIRE(state.temperature_state().chamber_heater_name() == "heater_generic chamber_heater");
+
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    MoonrakerAPI api(client, state);
+
+    // Seed the process-wide macro cache so the printer "defines" M141. Seed AFTER
+    // constructing the client + API: their setup (printer discovery) repopulates
+    // the cache and would otherwise wipe an earlier seed.
+    auto& macro_cache = helix::MacroParamCache::instance();
+    // RAII cleanup so a leaked m141=true can't make unrelated chamber tests emit
+    // M141 — runs even if a REQUIRE below throws (a bare end-of-body clear would
+    // be skipped on assertion failure). Each Catch2 SECTION re-runs the body, so
+    // the guard is reconstructed + clears per section pass.
+    struct CacheReset {
+        helix::MacroParamCache& cache;
+        helix::SettingsManager& settings;
+        ~CacheReset() {
+            cache.clear();
+            settings.set_chamber_heater_assignment("auto");
+            settings.set_chamber_sensor_assignment("auto");
+        }
+    } cache_reset_guard{macro_cache, settings};
+
+    nlohmann::json config = {{"gcode_macro m141", {{"gcode", "M141 S{params.S|default(0)}"}}}};
+    macro_cache.populate_from_configfile(config, {"M141"});
+    REQUIRE(macro_cache.has_macro("m141"));
+
+    SECTION("chamber heater routes through M141") {
+        api.set_temperature("heater_generic chamber_heater", 60.0, nullptr, nullptr);
+        REQUIRE(client.last_send_method() == "printer.gcode.script");
+        REQUIRE(client.last_send_script().find("M141 S60") != std::string::npos);
+        REQUIRE(client.last_send_script().find("SET_HEATER_TEMPERATURE") == std::string::npos);
+    }
+
+    SECTION("nozzle still uses SET_HEATER_TEMPERATURE on the same printer") {
+        api.set_temperature("extruder", 230.0, nullptr, nullptr);
+        REQUIRE(client.last_send_method() == "printer.gcode.script");
+        REQUIRE(client.last_send_script().find(
+                    "SET_HEATER_TEMPERATURE HEATER=extruder TARGET=230") != std::string::npos);
+        REQUIRE(client.last_send_script().find("M141") == std::string::npos);
+    }
+
+    // Cleanup handled by cache_reset_guard (RAII) above.
 }
 
 // 20. build_heater_off_gcode convenience wrapper

@@ -48,12 +48,47 @@ constexpr float kPickThresholdPx = 15.0f;
 /// Alpha value for excluded objects (60%)
 constexpr uint8_t kExcludedAlpha = 153;
 
-/// Ghost darkening factor (40% brightness)
-constexpr int kGhostDarkenPercent = 40;
+/// Ghost-look tuning. The goal is a faint, translucent, see-through apparition — NOT a
+/// dimmer solid copy and NOT a washed-out gray. The transparency cue comes from letting
+/// the black canvas show THROUGH the shell: the sparse internal infill is rendered nearly
+/// invisible so you see past it, while the solid/visible surfaces (walls, top/bottom skins,
+/// solid infill — see is_ghost_solid_surface()) stay a faint washed teal so the exterior
+/// reads clearly. Hue is kept (low wash) so it still reads as the object's color.
+/// Combined with the reduced blit opacity in blit_ghost_cache(), this gives the ghostly
+/// look. Dial these to taste: lower infill/opacity = fainter, higher wash = paler.
+constexpr int kGhostInfillBrightPercent = 12; // sparse infill nearly vanishes → see-through
+constexpr int kGhostWallBrightPercent = 100;  // solid surfaces = visible washed shell
 
-/// Ghost wall darkening factor (10% brightness — outer walls render darker
-/// than infill so the silhouette outline reads against the background).
-constexpr int kGhostWallDarkenPercent = 10;
+/// Ghost wash factor: % blend of the base/tool color toward white. Kept low so the ghost
+/// keeps its hue (teal stays teal) rather than graying out — just a touch of lift.
+constexpr int kGhostWashPercent = 15;
+
+/// Lerp a single 8-bit channel toward white (255) by pct%.
+inline uint8_t wash_to_white(uint8_t c, int pct) {
+    return static_cast<uint8_t>(c + (255 - c) * pct / 100);
+}
+
+/// Ghost classification: solid/visible surfaces (perimeters, top/bottom skins, solid
+/// infill, bridges, skirt/brim/support) render at full washed brightness so the object's
+/// exterior reads clearly. Only the SPARSE internal infill is dimmed to near-invisible,
+/// so the eye sees THROUGH the shell rather than at black-filled solid surfaces.
+inline bool is_ghost_solid_surface(FeatureType t) {
+    switch (t) {
+    case FeatureType::OuterWall:
+    case FeatureType::InnerWall:
+    case FeatureType::OverhangWall:
+    case FeatureType::SolidInfill:
+    case FeatureType::TopSurface:
+    case FeatureType::BottomSurface:
+    case FeatureType::Bridge:
+    case FeatureType::Skirt:
+    case FeatureType::Brim:
+    case FeatureType::Support:
+        return true;
+    default: // SparseInfill, GapInfill, Unknown, Custom, WipeTower
+        return false;
+    }
+}
 
 /// Default extrusion width when metadata is unavailable (mm)
 constexpr float kDefaultExtrusionWidthMm = 0.4f;
@@ -971,7 +1006,7 @@ void GCodeLayerRenderer::blit_ghost_cache(lv_layer_t* target) {
     lv_draw_image_dsc_t dsc;
     lv_draw_image_dsc_init(&dsc);
     dsc.src = ghost_buf_;
-    dsc.opa = LV_OPA_40; // 40% opacity for ghost
+    dsc.opa = LV_OPA_30; // translucent ghost overlay (see-through)
 
     lv_area_t coords = {widget_offset_x_, widget_offset_y_,
                         widget_offset_x_ + ghost_cached_width_ - 1,
@@ -1215,13 +1250,17 @@ void GCodeLayerRenderer::render_segment(lv_layer_t* layer, const ToolpathSegment
 
     lv_color_t base_color;
     if (ghost) {
-        // Ghost mode: use darkened version of the model's extrusion color
-        // This provides visual continuity between ghost and solid layers
+        // Ghost mode: outer walls keep full base brightness (the silhouette outline);
+        // infill is dimmed so it sits faintly behind the walls. The translucency comes
+        // from the 40% ghost-cache blit, not from darkening the color toward black.
         lv_color_t model_color = color_extrusion_;
-        // Darken for ghost effect
-        base_color = lv_color_make(model_color.red * kGhostDarkenPercent / 100,
-                                   model_color.green * kGhostDarkenPercent / 100,
-                                   model_color.blue * kGhostDarkenPercent / 100);
+        const int bright_pct = is_ghost_solid_surface(seg.feature_type)
+                                   ? kGhostWallBrightPercent
+                                   : kGhostInfillBrightPercent;
+        base_color = lv_color_make(
+            wash_to_white(model_color.red, kGhostWashPercent) * bright_pct / 100,
+            wash_to_white(model_color.green, kGhostWashPercent) * bright_pct / 100,
+            wash_to_white(model_color.blue, kGhostWashPercent) * bright_pct / 100);
     } else {
         base_color = get_segment_color(seg);
     }
@@ -1634,17 +1673,24 @@ void GCodeLayerRenderer::background_ghost_render_thread() {
         return local_show_travels;
     };
 
-    // Compute ghost color once (darkened extrusion color from captured value)
-    // ARGB8888: A in high byte, R, G, B in lower bytes
-    uint8_t ghost_r = local_color_extrusion.red * kGhostDarkenPercent / 100;
-    uint8_t ghost_g = local_color_extrusion.green * kGhostDarkenPercent / 100;
-    uint8_t ghost_b = local_color_extrusion.blue * kGhostDarkenPercent / 100;
+    // Compute ghost colors once from the captured base color. First wash the base
+    // toward white (pale/faded preview, distinct from the saturated printed layers),
+    // then apply per-feature brightness. ARGB8888: A in high byte, RGB lower. Full
+    // alpha here — the translucency is applied at blit time. Infill is dimmed;
+    // walls keep full washed brightness (silhouette).
+    const uint8_t wash_r = wash_to_white(local_color_extrusion.red, kGhostWashPercent);
+    const uint8_t wash_g = wash_to_white(local_color_extrusion.green, kGhostWashPercent);
+    const uint8_t wash_b = wash_to_white(local_color_extrusion.blue, kGhostWashPercent);
+
+    uint8_t ghost_r = wash_r * kGhostInfillBrightPercent / 100;
+    uint8_t ghost_g = wash_g * kGhostInfillBrightPercent / 100;
+    uint8_t ghost_b = wash_b * kGhostInfillBrightPercent / 100;
     uint8_t ghost_a = 255; // Full alpha, we'll apply 40% when blitting
     uint32_t ghost_color = (ghost_a << 24) | (ghost_r << 16) | (ghost_g << 8) | ghost_b;
 
-    uint8_t wall_r = local_color_extrusion.red * kGhostWallDarkenPercent / 100;
-    uint8_t wall_g = local_color_extrusion.green * kGhostWallDarkenPercent / 100;
-    uint8_t wall_b = local_color_extrusion.blue * kGhostWallDarkenPercent / 100;
+    uint8_t wall_r = wash_r * kGhostWallBrightPercent / 100;
+    uint8_t wall_g = wash_g * kGhostWallBrightPercent / 100;
+    uint8_t wall_b = wash_b * kGhostWallBrightPercent / 100;
     uint32_t ghost_wall_color = (255u << 24) | (wall_r << 16) | (wall_g << 8) | wall_b;
 
     // Render all layers to raw buffer
@@ -1690,24 +1736,25 @@ void GCodeLayerRenderer::background_ghost_render_thread() {
             if (p1.x == p2.x && p1.y == p2.y)
                 continue;
 
-            // Outer walls render darker to give the ghost a readable silhouette.
-            const bool is_wall = (seg.feature_type == FeatureType::OuterWall);
-            const int darken_pct = is_wall ? kGhostWallDarkenPercent : kGhostDarkenPercent;
+            // Solid/visible surfaces stay at full washed brightness; only sparse infill
+            // is dimmed to near-invisible so the shell reads as see-through.
+            const bool is_solid = is_ghost_solid_surface(seg.feature_type);
+            const int bright_pct = is_solid ? kGhostWallBrightPercent : kGhostInfillBrightPercent;
 
             // Per-segment ghost color (tool palette or single color)
-            uint32_t seg_color = is_wall ? ghost_wall_color : ghost_color;
+            uint32_t seg_color = is_solid ? ghost_wall_color : ghost_color;
             if (local_tool_palette.has_tool_colors()) {
                 lv_color_t tc = local_tool_palette.resolve(seg.tool_index, local_color_extrusion);
-                uint8_t tr = tc.red * darken_pct / 100;
-                uint8_t tg = tc.green * darken_pct / 100;
-                uint8_t tb = tc.blue * darken_pct / 100;
+                uint8_t tr = wash_to_white(tc.red, kGhostWashPercent) * bright_pct / 100;
+                uint8_t tg = wash_to_white(tc.green, kGhostWashPercent) * bright_pct / 100;
+                uint8_t tb = wash_to_white(tc.blue, kGhostWashPercent) * bright_pct / 100;
                 seg_color = (255u << 24) | (tr << 16) | (tg << 8) | tb;
             }
             if (!obj_name.empty() && local_excluded.count(obj_name) > 0) {
                 // Excluded: dim orange-red
-                uint8_t ex_r = kExcludedR * kGhostDarkenPercent / 100;
-                uint8_t ex_g = kExcludedG * kGhostDarkenPercent / 100;
-                uint8_t ex_b = kExcludedB * kGhostDarkenPercent / 100;
+                uint8_t ex_r = kExcludedR * kGhostInfillBrightPercent / 100;
+                uint8_t ex_g = kExcludedG * kGhostInfillBrightPercent / 100;
+                uint8_t ex_b = kExcludedB * kGhostInfillBrightPercent / 100;
                 seg_color = (255u << 24) | (ex_r << 16) | (ex_g << 8) | ex_b;
             }
 

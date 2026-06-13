@@ -73,6 +73,7 @@ class PrinterDiscovery {
         // never promotes a weaker keyword over a stronger one.
         int best_chamber_heater_conf = 0;
         int best_chamber_sensor_conf = 0;
+        int best_chamber_cooling_fan_conf = 0;
 
         constexpr int kChamberHeaterGenericWeight = 2; // settable heater — preferred
         constexpr int kChamberTemperatureFanWeight = 1; // fan — only wins if no heater_generic
@@ -101,6 +102,18 @@ class PrinterDiscovery {
                 has_chamber_sensor_ = true;
                 chamber_sensor_name_ = full_name;
                 best_chamber_sensor_conf = conf;
+            }
+        };
+        // Record the chamber cooling fan independent of the heater pick. A
+        // temperature_fan loses the heater role to a settable heater_generic, but
+        // in COOLING mode (<=40C) the K2 M141 macro parks the setpoint on this
+        // fan's target — so we must remember it separately to read that target.
+        auto try_set_chamber_cooling_fan = [&](const std::string& full_name,
+                                               const std::string& object_name) {
+            int conf = chamber_keyword_confidence(object_name);
+            if (conf > best_chamber_cooling_fan_conf) {
+                chamber_cooling_fan_name_ = full_name;
+                best_chamber_cooling_fan_conf = conf;
             }
         };
 
@@ -158,6 +171,7 @@ class PrinterDiscovery {
                 fans_.push_back(name); // Also add to fans for control
                 std::string fan_name = name.substr(16); // Remove "temperature_fan " prefix
                 try_set_chamber_heater(name, fan_name, kChamberTemperatureFanWeight);
+                try_set_chamber_cooling_fan(name, fan_name);
             }
             // TMC stepper drivers with built-in temperature (tmc2240, tmc5160)
             else if (name.rfind("tmc2240 ", 0) == 0 || name.rfind("tmc5160 ", 0) == 0) {
@@ -651,6 +665,8 @@ class PrinterDiscovery {
         chamber_sensor_name_.clear();
         chamber_heater_name_.clear();
         chamber_heater_object_name_.clear();
+        chamber_cooling_fan_name_.clear();
+        chamber_fan_resting_centi_ = 0;
         has_led_ = false;
         led_effects_.clear();
         has_led_effects_ = false;
@@ -760,6 +776,23 @@ class PrinterDiscovery {
 
     [[nodiscard]] const std::string& chamber_heater_object_name() const {
         return chamber_heater_object_name_;
+    }
+
+    /// Full object name of the chamber cooling temperature_fan (empty if none).
+    /// Recorded independent of the heater pick — see chamber_cooling_fan_name_.
+    [[nodiscard]] const std::string& chamber_cooling_fan_name() const {
+        return chamber_cooling_fan_name_;
+    }
+
+    /// Cooling fan's configured resting/off target in centidegrees (×10), or 0 if
+    /// unknown. Read from configfile.settings[<fan>].target_temp during discovery.
+    /// `M141 S0` resets the cooling fan to this value, so recognizing it lets the
+    /// chamber report Off instead of misreading the resting target as Maintaining.
+    void set_chamber_fan_resting_centi(int centi) {
+        chamber_fan_resting_centi_ = centi;
+    }
+    [[nodiscard]] int chamber_fan_resting_centi() const {
+        return chamber_fan_resting_centi_;
     }
 
     [[nodiscard]] bool has_led() const {
@@ -1289,6 +1322,14 @@ class PrinterDiscovery {
     std::string chamber_sensor_name_;
     std::string chamber_heater_name_;        ///< Full object name (e.g., "heater_generic chamber")
     std::string chamber_heater_object_name_; ///< Object name only (e.g., "chamber")
+    std::string chamber_cooling_fan_name_;   ///< Full object name of the chamber temperature_fan
+                                             ///< (e.g., "temperature_fan chamber_fan"). Recorded
+                                             ///< independent of the heater pick: in COOLING mode
+                                             ///< the K2 M141 macro parks the setpoint on this fan's
+                                             ///< target, not the heater's.
+    int chamber_fan_resting_centi_ = 0;      ///< Cooling fan's configured resting/off target
+                                             ///< (centidegrees), from configfile.settings
+                                             ///< target_temp. 0 = unknown. M141 S0 returns here.
     bool has_led_ = false;
     std::vector<std::string> led_effects_;
     bool has_led_effects_ = false;

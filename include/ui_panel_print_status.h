@@ -456,6 +456,17 @@ class PrintStatusPanel : public OverlayBase {
     bool gcode_loaded_ = false;
     bool complete_view_mode_ = false;
 
+    // Tracks whether the panel was already in the preparing (pre-print) state on
+    // the previous phase change. The pre-print phase number changes many times
+    // during a single preparation (homing → heating → mesh → ...), and on some
+    // firmwares (Snapmaker U1) it legitimately oscillates between phase enums as
+    // the firmware interleaves operations. The heavy reset side-effects (zeroing
+    // the progress bar / elapsed / remaining) must fire only once, on the
+    // Idle→Preparing edge — not on every sub-phase — or the progress display
+    // flickers back to 0% repeatedly. Message/progress observers keep the
+    // display live during preparation.
+    bool was_preparing_ = false;
+
     // Track whether panel is currently active (visible and receiving updates)
     // Used to load gcode immediately if already active when print starts
     bool is_active_ = false;

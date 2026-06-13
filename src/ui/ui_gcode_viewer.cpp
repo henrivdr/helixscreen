@@ -217,9 +217,11 @@ class GCodeViewerState {
     bool is_dragging{false};
     lv_point_t drag_start{0, 0};
     lv_point_t last_drag_pos{0, 0};
+    bool gesture_moved{false}; ///< True once movement exceeded threshold anywhere in this touch
 #if LV_USE_GESTURE_RECOGNITION
     float last_pinch_scale{0.0f}; ///< Previous cumulative pinch scale (0 = no reference yet)
     bool is_pinching{false};      ///< True during active pinch gesture (suppresses drag rotation)
+    bool pinch_occurred{false};   ///< True if a pinch engaged at any point this touch sequence
 #endif
 
     // Selection and exclusion state
@@ -791,6 +793,20 @@ static void gcode_viewer_press_cb(lv_event_t* e) {
     lv_point_t point;
     lv_indev_get_point(indev, &point);
 
+    // Fresh interaction (all fingers were up): clear per-sequence gesture state.
+    // The pinch latch is otherwise cleared only by the recognizer's ENDED/CANCELED
+    // event, which is not reliably delivered when both fingers lift in one input
+    // poll (finger_cnt 2->0). Resetting here guarantees a stuck latch can't
+    // permanently suppress single-finger rotation.
+    if (!st->is_dragging) {
+        st->gesture_moved = false;
+#if LV_USE_GESTURE_RECOGNITION
+        st->is_pinching = false;
+        st->last_pinch_scale = 0.0f;
+        st->pinch_occurred = false;
+#endif
+    }
+
     st->is_dragging = true;
     st->drag_start = point;
     st->last_drag_pos = point;
@@ -860,6 +876,14 @@ static void gcode_viewer_pressing_cb(lv_event_t* e) {
     // Check if movement exceeds threshold - cancel long-press timer
     int total_dx = abs(point.x - st->drag_start.x);
     int total_dy = abs(point.y - st->drag_start.y);
+
+    // Latch "moved" once movement exceeds the tap threshold anywhere in the
+    // sequence. Unlike the net displacement checked at release, this catches
+    // rotate-and-return motions that settle back near the start point and must
+    // NOT be treated as an object tap.
+    if (total_dx >= CLICK_DISTANCE_THRESHOLD || total_dy >= CLICK_DISTANCE_THRESHOLD) {
+        st->gesture_moved = true;
+    }
 
     if ((total_dx >= LONG_PRESS_MOVE_THRESHOLD || total_dy >= LONG_PRESS_MOVE_THRESHOLD) &&
         st->long_press_timer_) {
@@ -941,16 +965,20 @@ static void gcode_viewer_release_cb(lv_event_t* e) {
     }
 
 #if LV_USE_GESTURE_RECOGNITION
-    // Skip tap handling after pinch gesture
-    if (st->is_pinching) {
+    // Skip tap handling if a pinch occurred at any point this sequence - not just
+    // if one is still active. A pinch that ends as a single-finger lift would
+    // otherwise land as a low-movement release and be misread as an object tap.
+    if (st->is_pinching || st->pinch_occurred) {
         spdlog::trace("[GCode Viewer] Release after pinch - skipping tap handling");
         st->is_dragging = false;
         return;
     }
 #endif
 
-    // If movement was minimal, treat as click and try to pick object
-    if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD && has_gcode_data(st)) {
+    // If movement was minimal, treat as click and try to pick object.
+    // gesture_moved guards against rotate-and-return motions whose net
+    // displacement is small but which clearly manipulated the view.
+    if (!st->gesture_moved && dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD && has_gcode_data(st)) {
         spdlog::debug("[GCode Viewer] Click detected at ({}, {})", point.x, point.y);
         const char* picked = ui_gcode_viewer_pick_object(obj, point.x, point.y);
 
@@ -1024,6 +1052,7 @@ static void gcode_viewer_gesture_cb(lv_event_t* e) {
 
     if (state == LV_INDEV_GESTURE_STATE_ONGOING || state == LV_INDEV_GESTURE_STATE_RECOGNIZED) {
         st->is_pinching = true;
+        st->pinch_occurred = true; // sticky for this touch sequence; gates tap at release
     }
 
     if (state == LV_INDEV_GESTURE_STATE_RECOGNIZED) {

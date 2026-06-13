@@ -11,11 +11,11 @@
 
 #include "app_globals.h"
 #include "lvgl/src/others/translation/lv_translation.h"
-#include "moonraker_api.h"
 #include "panel_widget_manager.h"
 #include "printer_state.h"
 #include "printer_temperature_state.h"
 #include "static_panel_registry.h"
+#include "temperature_controller.h"
 #include "temperature_sensor_manager.h"
 #include "temperature_sensor_types.h"
 #include "temperature_service.h"
@@ -145,7 +145,6 @@ void TempGraphOverlay::on_activate() {
 
     // Resolve dependencies
     printer_state_ = &get_printer_state();
-    api_ = get_moonraker_api();
     temp_control_panel_ =
         helix::PanelWidgetManager::instance().shared_resource<TemperatureService>();
 
@@ -588,7 +587,11 @@ void TempGraphOverlay::configure_control_strip() {
     // preset above the ceiling (e.g. 60°C on a 50°C chamber) is hidden — the
     // overlay has its own preset grid separate from the chamber panel's.
     if (mode_ == Mode::Chamber) {
-        temp_control_panel_->ensure_chamber_limits();
+        // The controller owns the chamber's configured ceiling. Trigger its async
+        // fetch (no-op once known), then clamp each preset against it.
+        helix::TemperatureController* c = temp_control_panel_->controller();
+        if (c)
+            c->ensure_limits(helix::HeaterType::Chamber);
         static const char* kChamberPresetNames[MAX_PRESETS] = {
             "chamber_preset_off", "chamber_preset_1", "chamber_preset_2", "chamber_preset_3"};
         for (int i = 0; i < MAX_PRESETS; ++i) {
@@ -596,7 +599,9 @@ void TempGraphOverlay::configure_control_strip() {
             if (!btn) {
                 continue;
             }
-            if (helix::heater_preset_visible(preset_values[i], heater.max_temp)) {
+            // No controller → default to showing all presets.
+            bool show = !c || c->preset_visible(heater_type, preset_values[i]);
+            if (show) {
                 lv_obj_remove_flag(btn, LV_OBJ_FLAG_HIDDEN);
             } else {
                 lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
@@ -661,16 +666,10 @@ void TempGraphOverlay::on_temp_graph_preset_clicked(lv_event_t* e) {
     self->temp_control_panel_->set_heater(type, self->temp_control_panel_->heater(type).current,
                                           data.preset_value * 10);
 
-    // Send the temperature command
-    if (self->api_) {
-        // Resolve the name centrally so the chamber never sends a stale
-        // HEATER=chamber (shared with TemperatureService::send_temperature).
-        const std::string& klipper_name = self->temp_control_panel_->resolved_klipper_name(type);
-        self->api_->set_temperature(
-            klipper_name, static_cast<double>(data.preset_value), []() {},
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set temperature: {}"), error.user_message());
-            });
+    // Send via the controller — it resolves the klipper name internally (chamber
+    // never sends a stale HEATER=chamber) and shows the standard error toast.
+    if (helix::TemperatureController* c = self->temp_control_panel_->controller()) {
+        c->set_target(type, static_cast<double>(data.preset_value), {.toast = true});
     }
 }
 
@@ -684,12 +683,17 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
     if (!mode_to_heater_type(overlay.mode_, type))
         return;
 
-    // Make sure the chamber's configured ceiling has been fetched so the keypad
-    // caps at the real max_temp (shared clamp with the chamber panel).
-    if (type == helix::HeaterType::Chamber) {
-        overlay.temp_control_panel_->ensure_chamber_limits();
-    }
     auto& heater = overlay.temp_control_panel_->heater(type);
+
+    // The controller owns the effective keypad ceiling (configured max clamped to
+    // the heater default). Trigger its async limit fetch (no-op once known /
+    // non-chamber), then read the range from it. No controller → fall back to the
+    // heater's static config range.
+    float max_value = heater.config.keypad_range.max;
+    if (helix::TemperatureController* c = overlay.temp_control_panel_->controller()) {
+        c->ensure_limits(type);
+        max_value = c->keypad_range(type).max;
+    }
 
     // Store context for keypad callback (static because keypad outlives this scope).
     // No lifetime token needed — the overlay is a global singleton that outlives the keypad.
@@ -703,8 +707,7 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
     ui_keypad_config_t keypad_config = {
         .initial_value = static_cast<float>(heater.target / 10),
         .min_value = heater.config.keypad_range.min,
-        .max_value =
-            helix::heater_effective_max_deg(heater.config.keypad_range.max, heater.max_temp),
+        .max_value = max_value,
         .title_label = heater.config.title,
         .unit_label = "°C",
         .allow_decimal = false,
@@ -722,20 +725,19 @@ void TempGraphOverlay::keypad_value_cb(float value, void* user_data) {
         helix::HeaterType type;
     };
     auto* ctx = static_cast<KeypadCtx*>(user_data);
-    if (!ctx || !ctx->overlay || !ctx->overlay->api_)
+    if (!ctx || !ctx->overlay || !ctx->overlay->temp_control_panel_)
         return;
 
     int temp = static_cast<int>(value);
-    const std::string& klipper_name =
-        ctx->overlay->temp_control_panel_->resolved_klipper_name(ctx->type);
 
-    spdlog::debug("[TempGraphOverlay] Custom temperature: {}°C for {}", temp, klipper_name);
+    spdlog::debug("[TempGraphOverlay] Custom temperature: {}°C for heater {}", temp,
+                  static_cast<int>(ctx->type));
 
-    ctx->overlay->api_->set_temperature(
-        klipper_name, static_cast<double>(temp), []() {},
-        [](const MoonrakerError& error) {
-            NOTIFY_ERROR(lv_tr("Failed to set temperature: {}"), error.user_message());
-        });
+    // Send via the controller — resolves the klipper name internally and shows
+    // the standard error toast on failure.
+    if (helix::TemperatureController* c = ctx->overlay->temp_control_panel_->controller()) {
+        c->set_target(ctx->type, static_cast<double>(temp), {.toast = true});
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

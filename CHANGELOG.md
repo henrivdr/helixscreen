@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **AD5X IFS Unload no longer homes and stalls** (bundle 7AC4SDEX) — the v0.99.76 unload could still home and then do nothing when no filament was seated at the nozzle. Unload now dispatches the firmware's own toolhead-unload sequence when filament is at the head, and pulls the filament back from the lane with a cold eject when it isn't — instead of issuing a command the firmware treats as a no-op.
+
 ## [0.99.76] - 2026-06-11
 
 ### Added

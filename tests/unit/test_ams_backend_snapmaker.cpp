@@ -270,6 +270,40 @@ TEST_CASE("Snapmaker unload routes through AUTO_FEEDING UNLOAD=1", "[ams][snapma
     }
 }
 
+// can_unload_from_toolhead — the U1 is a 4-toolhead machine; every tool that
+// holds filament must offer per-slot Unload, not just the single active one.
+// The base AmsBackend gates Unload on SlotStatus::LOADED (one active tool),
+// which hid the per-slot Unload action for toolheads 2/3/4 and forced users
+// onto the sidebar's active-slot Unload button — which always unloads toolhead
+// 0. (U1 multi-toolhead field report.)
+TEST_CASE("Snapmaker can_unload_from_toolhead offers unload for every loaded toolhead",
+          "[ams][snapmaker][unload]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Slot 0 active (LOADED), slots 1 & 3 hold filament (AVAILABLE), slot 2 empty.
+    json status = json{
+        {"toolhead", json{{"extruder", "extruder"}}}, // active tool = slot 0
+        {"print_task_config", json{{"filament_exist", json::array({true, true, false, true})}}}};
+    SnapmakerTestAccess::handle_status(backend, status);
+
+    // Sanity: the status drove the slot states the gate keys on.
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::LOADED);
+    REQUIRE(backend.get_slot_info(1).status == SlotStatus::AVAILABLE);
+    REQUIRE(backend.get_slot_info(2).status == SlotStatus::EMPTY);
+    REQUIRE(backend.get_slot_info(3).status == SlotStatus::AVAILABLE);
+
+    SECTION("active (LOADED) toolhead is unloadable") {
+        CHECK(backend.can_unload_from_toolhead(0));
+    }
+    SECTION("non-active toolheads holding filament are unloadable (the fix)") {
+        CHECK(backend.can_unload_from_toolhead(1));
+        CHECK(backend.can_unload_from_toolhead(3));
+    }
+    SECTION("empty toolhead offers no unload") {
+        CHECK_FALSE(backend.can_unload_from_toolhead(2));
+    }
+}
+
 // ============================================================================
 // Extruder State Parser Tests
 // ============================================================================

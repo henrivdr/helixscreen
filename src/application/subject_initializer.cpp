@@ -60,6 +60,7 @@
 #include "spoolman_manager.h"
 #include "system/telemetry_manager.h"
 #include "temperature_sensor_manager.h"
+#include "temperature_controller.h"
 #include "temperature_service.h"
 #include "timelapse_state.h"
 #include "tool_state.h"
@@ -275,8 +276,14 @@ void SubjectInitializer::init_panel_subjects(MoonrakerAPI* api) {
 
     get_global_zoffset_cal_panel().init_subjects();
 
+    // TemperatureController (owned by SubjectInitializer — stateless wiring, no subjects)
+    m_temp_controller = std::make_unique<helix::TemperatureController>(get_printer_state(), api);
+    helix::PanelWidgetManager::instance().register_shared_resource<helix::TemperatureController>(
+        m_temp_controller.get());
+
     // TemperatureService (owned by SubjectInitializer - destructor handles deinit_subjects)
     m_temp_control_panel = std::make_unique<TemperatureService>(get_printer_state(), api);
+    m_temp_control_panel->set_controller(m_temp_controller.get());
     m_temp_control_panel->init_subjects();
 
     // Inject TemperatureService into dependent panels

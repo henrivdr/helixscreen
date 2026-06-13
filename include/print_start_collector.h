@@ -366,6 +366,17 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     std::chrono::steady_clock::time_point temps_ready_time_; // {} = not yet ready
     size_t silent_progression_idx_ = 0;
 
+    // Set true the moment any real firmware signal is observed for this print
+    // (HELIX:PHASE, K2/CFS tag, profile signal/pattern match, PRINT_START
+    // marker, or RESPOND completion). Gates the proactive temperature
+    // heuristic: once the firmware is actively narrating its PRINT_START
+    // sequence it is authoritative, so the "temps ready → INITIALIZING"
+    // fallback must not bounce the displayed phase back to the generic
+    // "Preparing Print...". Atomic — written from the WebSocket background
+    // thread (on_gcode_response) and read from the main thread
+    // (check_fallback_completion).
+    std::atomic<bool> real_signal_seen_{false};
+
     // LVGL timer for periodic ETA updates (main thread only)
     lv_timer_t* eta_timer_ = nullptr;
     static constexpr uint32_t ETA_UPDATE_INTERVAL_MS = 5000;

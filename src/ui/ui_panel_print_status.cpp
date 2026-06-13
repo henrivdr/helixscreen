@@ -2594,7 +2594,13 @@ void PrintStatusPanel::on_print_start_phase_changed(int phase) {
     // Update preparing visibility subject
     lv_subject_set_int(&preparing_visible_subject_, preparing ? 1 : 0);
 
-    if (preparing) {
+    if (preparing && !was_preparing_) {
+        // Idle→Preparing edge ONLY. The pre-print phase number changes many
+        // times during one preparation, so these one-time resets must not
+        // re-run on every sub-phase or the progress bar / elapsed flicker back
+        // to zero repeatedly. The message and progress observers keep the
+        // display live for the remainder of preparation.
+        //
         // Preserve the thumbnail — it was loaded for the current print by the
         // filename observer or ActivePrintMediaManager. The preparing phase
         // fires concurrently with thumbnail loading, so clearing here would
@@ -2621,7 +2627,7 @@ void PrintStatusPanel::on_print_start_phase_changed(int phase) {
             format_time(total_remaining, remaining_buf_, sizeof(remaining_buf_));
             lv_subject_copy_string(&remaining_subject_, remaining_buf_);
         }
-    } else if (state_changed) {
+    } else if (!preparing && state_changed) {
         // Preparation complete - lifecycle restored state from current job state
         update_all_displays();
         update_button_states();
@@ -2635,6 +2641,7 @@ void PrintStatusPanel::on_print_start_phase_changed(int phase) {
         spdlog::debug("[{}] Restored state to {} after preparation complete", get_name(),
                       static_cast<int>(lifecycle_.state()));
     }
+    was_preparing_ = preparing;
     spdlog::debug("[{}] Print start phase changed: {} (visible={})", get_name(), phase, preparing);
 }
 

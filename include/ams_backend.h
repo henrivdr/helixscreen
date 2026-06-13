@@ -526,11 +526,24 @@ class AmsBackend {
      *
      * Gates the context-menu "Unload" action, and (inverted) also suppresses the
      * "Load" action for the same slot: a slot the firmware still considers
-     * seated/active should not offer Load. By default this tracks the display
-     * LOADED status, but that status is derived from the head-filament sensor on
-     * some backends. AD5X IFS overrides this so a runout that clears the head
-     * sensor doesn't disable Unload on the slot the firmware still reports as
-     * active — the exact moment the user needs to recover (#995).
+     * seated/active should not offer Load.
+     *
+     * The default rule is topology-aware so every backend behaves consistently
+     * without per-backend duplication:
+     *
+     *  - PARALLEL toolchangers (Snapmaker U1, generic ToolChanger) give each tool
+     *    its own independent toolhead, so any tool that currently holds filament
+     *    is independently unloadable. We key on is_present() — the same presence
+     *    signal the menu's Load button uses — so Load and Unload always agree.
+     *  - Selector / hub MMUs (Happy Hare, AFC, ACE, CFS, AD5X, QIDI) share one
+     *    extruder, so only the slot actually seated at the toolhead (LOADED) can
+     *    be unloaded.
+     *
+     * AD5X IFS still overrides this so a runout that clears the head sensor
+     * doesn't disable Unload on the slot the firmware reports as active — the
+     * exact moment the user needs to recover (#995). Its base fallback is
+     * unchanged: AD5X is a serial topology, so the rule below still yields
+     * status == LOADED for it.
      *
      * Action gating only — display status is unaffected.
      *
@@ -538,7 +551,11 @@ class AmsBackend {
      * @return true if Unload should be offered (and Load suppressed) for this slot
      */
     [[nodiscard]] virtual bool can_unload_from_toolhead(int slot_index) const {
-        return get_slot_info(slot_index).status == SlotStatus::LOADED;
+        const SlotInfo slot = get_slot_info(slot_index);
+        if (get_topology() == PathTopology::PARALLEL) {
+            return slot.is_present();
+        }
+        return slot.status == SlotStatus::LOADED;
     }
 
     /**
