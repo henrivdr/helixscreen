@@ -17,9 +17,10 @@
 #include "ams_types.h"
 #include "app_constants.h"
 #include "filament_database.h"
+#include "app_globals.h"
 #include "lvgl/src/others/translation/lv_translation.h"
-#include "moonraker_api.h"
 #include "observer_factory.h"
+#include "temperature_controller.h"
 #include "post_op_cooldown_manager.h"
 #include "printer_state.h"
 #include "ui/ui_cleanup_helpers.h"
@@ -32,8 +33,7 @@ namespace helix::ui {
 // Construction / Destruction
 // ============================================================================
 
-AmsOperationSidebar::AmsOperationSidebar(PrinterState& ps, MoonrakerAPI* api)
-    : printer_state_(ps), api_(api) {
+AmsOperationSidebar::AmsOperationSidebar(PrinterState& ps) : printer_state_(ps) {
     spdlog::debug("[AmsSidebar] Constructed");
 }
 
@@ -923,10 +923,8 @@ void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
     pending_load_target_temp_ = target;
     ui_initiated_heat_ = true;
 
-    if (api_) {
-        api_->set_temperature(
-            printer_state_.active_extruder_name(), target, []() {},
-            [](const MoonrakerError& /*err*/) {});
+    if (auto* c = get_temperature_controller()) {
+        c->set_target(helix::HeaterType::Nozzle, static_cast<double>(target), {.toast = false});
     }
 
     show_preheat_feedback(slot_index, target);

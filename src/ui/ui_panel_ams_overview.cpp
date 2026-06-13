@@ -220,7 +220,7 @@ void AmsOverviewPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     g_overview_panel_instance.store(this);
 
     // Set up the shared sidebar component
-    sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(printer_state_, api_);
+    sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(printer_state_);
     sidebar_->setup(panel_);
     sidebar_->init_observers();
 

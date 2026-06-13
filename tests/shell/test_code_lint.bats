@@ -34,7 +34,7 @@ setup() {
 # `->set_temperature(` whose receiver is not a `controller`.
 
 @test "migrated temp view files do not call the raw set_temperature send API" {
-    local files="src/ui/ui_overlay_temp_graph.cpp src/ui/ui_panel_controls.cpp src/system/post_op_cooldown_manager.cpp src/ui/panel_widgets/preheat_widget.cpp src/ui/ui_panel_bed_mesh.cpp src/ui/ui_panel_filament.cpp src/ui/temperature_service.cpp"
+    local files="src/ui/ui_overlay_temp_graph.cpp src/ui/ui_panel_controls.cpp src/system/post_op_cooldown_manager.cpp src/ui/panel_widgets/preheat_widget.cpp src/ui/ui_panel_bed_mesh.cpp src/ui/ui_panel_filament.cpp src/ui/temperature_service.cpp src/ui/ui_ams_sidebar.cpp"
 
     # Direct API send on the cached MoonrakerAPI pointer.
     run grep -n 'api_->set_temperature' $files

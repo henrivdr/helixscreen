@@ -16,7 +16,6 @@ struct _lv_obj_t;
 typedef struct _lv_obj_t lv_obj_t;
 struct _lv_event_t;
 typedef struct _lv_event_t lv_event_t;
-class MoonrakerAPI;
 
 namespace helix {
 class PrinterState;
@@ -36,7 +35,7 @@ namespace helix::ui {
  */
 class AmsOperationSidebar {
   public:
-    AmsOperationSidebar(PrinterState& ps, MoonrakerAPI* api);
+    explicit AmsOperationSidebar(PrinterState& ps);
     ~AmsOperationSidebar();
 
     // Non-copyable, non-movable
@@ -120,7 +119,6 @@ class AmsOperationSidebar {
   private:
     // Dependencies
     PrinterState& printer_state_;
-    MoonrakerAPI* api_;
 
     // Widget references
     lv_obj_t* sidebar_root_ = nullptr;

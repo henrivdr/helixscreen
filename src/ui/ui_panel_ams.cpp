@@ -343,7 +343,7 @@ void AmsPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     setup_endless_arrows();
 
     // Setup shared sidebar component
-    sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(printer_state_, api_);
+    sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(printer_state_);
     sidebar_->setup(panel_);
     sidebar_->init_observers();
 
