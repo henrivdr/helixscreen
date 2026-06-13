@@ -29,10 +29,8 @@ struct HeaterPresets {
 /// Options for a heater set-target call.
 /// - toast: show the standard error toast on failure (default true).
 /// - on_success / on_error: optional caller hooks fired after the RPC completes.
-/// - silent: reserved for future caller-handled dedup (not yet wired; currently unused).
 struct SendOptions {
     bool toast = true;
-    bool silent = false;
     std::function<void()> on_success = nullptr;
     std::function<void(const MoonrakerError&)> on_error = nullptr;
 };

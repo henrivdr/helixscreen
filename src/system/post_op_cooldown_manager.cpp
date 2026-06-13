@@ -5,7 +5,6 @@
 
 #include "app_globals.h"
 #include "config.h"
-#include "moonraker_api.h"
 #include "printer_state.h"
 #include "temperature_controller.h"
 #include "ui_update_queue.h"
@@ -17,8 +16,7 @@ PostOpCooldownManager& PostOpCooldownManager::instance() {
     return inst;
 }
 
-void PostOpCooldownManager::init(MoonrakerAPI* api) {
-    api_ = api;
+void PostOpCooldownManager::init() {
     initialized_ = true;
     spdlog::info("[PostOpCooldown] Initialized");
 }
@@ -99,6 +97,5 @@ void PostOpCooldownManager::shutdown() {
         timer_ = nullptr;
     }
 
-    api_ = nullptr;
     initialized_ = false;
 }

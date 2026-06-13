@@ -656,7 +656,7 @@ int Application::run(int argc, char** argv) {
     }
 
     // Initialize PostOpCooldownManager (unified filament operation cooldown)
-    PostOpCooldownManager::instance().init(get_moonraker_api());
+    PostOpCooldownManager::instance().init();
 
     // Begin tracking external-spool consumption across prints.
     helix::FilamentConsumptionTracker::instance().start();

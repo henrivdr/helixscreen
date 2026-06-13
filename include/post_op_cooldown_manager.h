@@ -7,9 +7,6 @@
 
 #include <atomic>
 
-// Forward declarations
-class MoonrakerAPI;
-
 /**
  * @brief Singleton manager for post-filament-operation heater cooldown
  *
@@ -30,8 +27,8 @@ class PostOpCooldownManager {
   public:
     static PostOpCooldownManager& instance();
 
-    /// Initialize with API reference. Call once during startup.
-    void init(MoonrakerAPI* api);
+    /// Initialize the manager. Call once during startup.
+    void init();
 
     /// Schedule a cooldown after the configured delay.
     /// Resets any existing pending timer. Safe to call from any thread.
@@ -50,7 +47,6 @@ class PostOpCooldownManager {
     PostOpCooldownManager(const PostOpCooldownManager&) = delete;
     PostOpCooldownManager& operator=(const PostOpCooldownManager&) = delete;
 
-    MoonrakerAPI* api_ = nullptr;
     lv_timer_t* timer_ = nullptr;
     std::atomic<bool> initialized_{false};
 };
