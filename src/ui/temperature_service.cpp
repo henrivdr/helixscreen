@@ -185,13 +185,11 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
 
     // Legacy callbacks (still needed for existing nozzle/bed XML until they're updated)
     register_xml_callbacks({
-        {"on_nozzle_confirm_clicked", on_nozzle_confirm_clicked},
         {"on_nozzle_preset_off_clicked", on_nozzle_preset_off_clicked},
         {"on_nozzle_preset_pla_clicked", on_nozzle_preset_pla_clicked},
         {"on_nozzle_preset_petg_clicked", on_nozzle_preset_petg_clicked},
         {"on_nozzle_preset_abs_clicked", on_nozzle_preset_abs_clicked},
         {"on_nozzle_custom_clicked", on_nozzle_custom_clicked},
-        {"on_bed_confirm_clicked", on_bed_confirm_clicked},
         {"on_bed_preset_off_clicked", on_bed_preset_off_clicked},
         {"on_bed_preset_pla_clicked", on_bed_preset_pla_clicked},
         {"on_bed_preset_petg_clicked", on_bed_preset_petg_clicked},
@@ -979,65 +977,6 @@ void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
 // ============================================================================
 // XML event callbacks — LEGACY (delegate to generic)
 // ============================================================================
-
-// Legacy nozzle callbacks: still use old user_data pattern (this pointer on button)
-void TemperatureService::on_nozzle_confirm_clicked(lv_event_t* e) {
-    auto* self = static_cast<TemperatureService*>(lv_event_get_user_data(e));
-    if (!self)
-        return;
-
-    auto& h = self->heaters_[idx(HeaterType::Nozzle)];
-    int target = (h.pending >= 0) ? h.pending : h.target;
-
-    spdlog::debug("[TempPanel] Nozzle temperature confirmed: {}°C (pending={})", target, h.pending);
-    h.pending = -1;
-
-    if (self->api_) {
-        self->api_->set_temperature(
-            self->active_extruder_name_, static_cast<double>(target),
-            [target]() {
-                if (target == 0) {
-                    NOTIFY_SUCCESS(lv_tr("Nozzle heater turned off"));
-                } else {
-                    NOTIFY_SUCCESS(lv_tr("Nozzle target set to {}°C"), target);
-                }
-            },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set nozzle temp: {}"), error.user_message());
-            });
-    }
-
-    NavigationManager::instance().go_back();
-}
-
-void TemperatureService::on_bed_confirm_clicked(lv_event_t* e) {
-    auto* self = static_cast<TemperatureService*>(lv_event_get_user_data(e));
-    if (!self)
-        return;
-
-    auto& h = self->heaters_[idx(HeaterType::Bed)];
-    int target = (h.pending >= 0) ? h.pending : h.target;
-
-    spdlog::debug("[TempPanel] Bed temperature confirmed: {}°C (pending={})", target, h.pending);
-    h.pending = -1;
-
-    if (self->api_) {
-        self->api_->set_temperature(
-            "heater_bed", static_cast<double>(target),
-            [target]() {
-                if (target == 0) {
-                    NOTIFY_SUCCESS(lv_tr("Bed heater turned off"));
-                } else {
-                    NOTIFY_SUCCESS(lv_tr("Bed target set to {}°C"), target);
-                }
-            },
-            [](const MoonrakerError& error) {
-                NOTIFY_ERROR(lv_tr("Failed to set bed temp: {}"), error.user_message());
-            });
-    }
-
-    NavigationManager::instance().go_back();
-}
 
 // Legacy preset callbacks: delegate to generic handler via lv_event_get_user_data(e).
 // XML event_cb passes NULL user_data, so these return early. The actual work is done
