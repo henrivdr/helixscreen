@@ -200,6 +200,36 @@ void AmsBackendQidi::handle_status_update(const nlohmann::json& notification) {
     // boxes onto AmsUnit::environment so the UI can show "drying" when
     // ANY box is active.
     apply_heater_status(notification);
+
+    // box_extras carries box_drying_state.box<N>.{dry_state, end_time}
+    // which drives the countdown timer shown in the dryer UI.
+    if (auto be_it = notification.find("box_extras");
+        be_it != notification.end() && be_it->is_object()) {
+        apply_box_extras(*be_it);
+    }
+}
+
+void AmsBackendQidi::apply_box_extras(const nlohmann::json& box_extras) {
+    auto ds_it = box_extras.find("box_drying_state");
+    if (ds_it == box_extras.end() || !ds_it->is_object()) {
+        return;
+    }
+    int latest_end = 0;
+    for (auto it = ds_it->begin(); it != ds_it->end(); ++it) {
+        if (!it->is_object()) {
+            continue;
+        }
+        if (auto et = it->find("end_time"); et != it->end() && et->is_number()) {
+            const int v = et->get<int>();
+            if (v > latest_end) {
+                latest_end = v;
+            }
+        }
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    drying_timer_supported_ = true;
+    dry_end_epoch_ = latest_end;
+    dryer_info_.active = (dry_end_epoch_ > now_fn_());
 }
 
 void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {

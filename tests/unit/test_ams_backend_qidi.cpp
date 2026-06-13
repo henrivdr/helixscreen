@@ -58,6 +58,12 @@ class QidiBoxTestAccess {
     static void set_clock(AmsBackendQidi& b, std::function<std::time_t()> fn) {
         b.now_fn_ = std::move(fn);
     }
+    static void apply_box_extras(AmsBackendQidi& b, const json& e) {
+        b.apply_box_extras(e);
+    }
+    static void set_drying_timer_supported(AmsBackendQidi& b, bool v) {
+        b.drying_timer_supported_ = v;
+    }
 };
 
 // Subclass that captures execute_gcode() invocations so write-path tests
@@ -866,4 +872,28 @@ TEST_CASE("QIDI Box heater status populates dryer current/target temp",
     DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
     REQUIRE(d.current_temp_c == Catch::Approx(48.0f).epsilon(0.01));
     REQUIRE(d.target_temp_c == Catch::Approx(55.0f).epsilon(0.01));
+}
+
+TEST_CASE("QIDI Box drying_state end_time drives remaining minutes",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::set_clock(backend, [] { return std::time_t{1000}; });
+    QidiBoxTestAccess::apply_box_extras(
+        backend, json{{"box_drying_state",
+                       json{{"box1", json{{"dry_state", 1}, {"end_time", 2800}}}}}});
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE(d.active);
+    REQUIRE(d.remaining_min == 30);
+}
+
+TEST_CASE("QIDI Box drying_state past end_time means not drying",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::set_clock(backend, [] { return std::time_t{5000}; });
+    QidiBoxTestAccess::apply_box_extras(
+        backend, json{{"box_drying_state",
+                       json{{"box1", json{{"dry_state", 0}, {"end_time", 2800}}}}}});
+    DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
+    REQUIRE_FALSE(d.active);
+    REQUIRE(d.remaining_min == 0);
 }

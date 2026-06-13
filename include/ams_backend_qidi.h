@@ -110,6 +110,11 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// max temperature and max humidity observed across all boxes.
     void apply_heater_status(const nlohmann::json& notification);
 
+    /// Parse `box_extras` object from a status notification, extracting
+    /// `box_drying_state.box<N>.{dry_state, end_time}` to update the
+    /// drying countdown in dryer_info_.
+    void apply_box_extras(const nlohmann::json& box_extras);
+
     /// Unwrap a printer.objects.query response (`result.status.{...}`)
     /// and feed the inner object through handle_status_update so the
     /// bootstrap fetch reuses every parser already exercised by the
