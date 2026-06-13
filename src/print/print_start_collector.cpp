@@ -438,12 +438,23 @@ void PrintStartCollector::check_fallback_completion() {
         const char* homed = lv_subject_get_string(state_.get_homed_axes_subject());
         bool fully_homed = homed != nullptr && strchr(homed, 'x') != nullptr &&
                            strchr(homed, 'y') != nullptr && strchr(homed, 'z') != nullptr;
-        bool homing_active =
-            homed != nullptr && homed[0] != '\0' && !fully_homed && (bed_heating || nozzle_heating);
-        if (homing_active && current != PrintStartPhase::HOMING) {
-            spdlog::info("[PrintStartCollector] Proactive: homing (axes='{}')", homed);
-            update_phase(PrintStartPhase::HOMING, lv_tr("Homing..."));
-            return;
+        // Enter HOMING when axes are partially homed (G28 mid-flight). STAY in
+        // HOMING until fully homed even if homed_axes momentarily reads "":
+        // Klipper clears homed_axes to "" as each axis re-homes, which would
+        // otherwise flicker the label Homing→Heating Bed→Homing. The
+        // current==HOMING latch absorbs that blip. It does NOT affect
+        // bed-first-heat printers — they sit in INITIALIZING with homed_axes ""
+        // and never ENTER homing from an empty string alone (the partial-axes
+        // entry condition gates that).
+        bool homing_active = homed != nullptr && !fully_homed &&
+                             (bed_heating || nozzle_heating) &&
+                             (homed[0] != '\0' || current == PrintStartPhase::HOMING);
+        if (homing_active) {
+            if (current != PrintStartPhase::HOMING) {
+                spdlog::info("[PrintStartCollector] Proactive: homing (axes='{}')", homed);
+                update_phase(PrintStartPhase::HOMING, lv_tr("Homing..."));
+            }
+            return; // homing in progress — don't let the heating branches override
         }
         if (bed_heating && (current != PrintStartPhase::HEATING_BED)) {
             // Bed still heating — show bed phase
@@ -1622,15 +1633,22 @@ void PrintStartCollector::compute_predicted_weights() {
             }
         }
 
-        // Use the max of our built-up sum and the predictor's wall-clock
-        // weighted average. On printers where the phase-matching regexes
-        // miss PURGING/CLEANING/etc., durations_sum systematically under-
-        // estimates total pre-print time while history's total_seconds
-        // captured the real wall-clock duration. Taking the max folds that
-        // unmapped time back into the display estimate without double-
-        // counting the current thermal estimate.
+        // Absolute total: prefer the recorded wall-clock history whenever we
+        // have it. The recorded total_seconds is the honest empirical
+        // end-to-end duration (it captures heating + any gcode the phase
+        // regexes never mapped). durations_sum is a *theoretical* estimate that
+        // swings in BOTH directions: it under-counts when regexes miss phases,
+        // but it also grossly OVER-counts when the thermal model overshoots
+        // heating time — on the Snapmaker U1 it computed ~900s against a true
+        // ~300s pre-print whose clean history sits at 295-375s. The old max()
+        // assumed only under-counting and so latched onto the 900s overshoot.
+        // durations_sum still drives the per-phase WEIGHTS (relative shape)
+        // above; only the absolute total comes from history. No history → fall
+        // back to the theoretical sum.
         int wall_clock_estimate = predictor_.predicted_total();
-        predicted_total_seconds_ = std::max(durations_sum, static_cast<float>(wall_clock_estimate));
+        predicted_total_seconds_ = predictor_.has_predictions()
+                                       ? static_cast<float>(wall_clock_estimate)
+                                       : durations_sum;
     }
 
     // Track targets used so we can detect changes and recompute
