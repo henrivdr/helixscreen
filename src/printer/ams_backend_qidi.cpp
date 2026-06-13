@@ -876,5 +876,24 @@ AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pc
 }
 
 AmsError AmsBackendQidi::stop_drying(int unit) {
-    return AmsBackend::stop_drying(unit);
+    const int box = unit + 1;
+    if (!write_enabled_) {
+        return AmsError(AmsResult::NOT_SUPPORTED,
+                        "QIDI Box write-path disabled",
+                        "Box drying disabled",
+                        "Set HELIX_QIDI_BOX_WRITE=1 for field testing");
+    }
+    bool timer;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dry_end_epoch_ = 0;
+        dryer_info_.active = false;
+        dryer_info_.target_temp_c = 0.0f;
+        timer = drying_timer_supported_;
+    }
+    if (timer) {
+        return execute_gcode("DISABLE_BOX_DRY BOX=" + std::to_string(box));
+    }
+    return execute_gcode("SET_HEATER_TEMPERATURE HEATER=heater_box" + std::to_string(box) +
+                         " TARGET=0");
 }

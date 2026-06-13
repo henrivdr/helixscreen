@@ -960,3 +960,32 @@ TEST_CASE("QIDI Box start_drying blocked when write-path disabled",
     REQUIRE_FALSE(err.success());
     REQUIRE(backend.sent.empty());
 }
+
+TEST_CASE("QIDI Box stop_drying uses DISABLE_BOX_DRY when timer supported",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, true);
+    auto err = backend.stop_drying(0);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "DISABLE_BOX_DRY BOX=1");
+}
+
+TEST_CASE("QIDI Box stop_drying falls back to TARGET=0",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, false);
+    auto err = backend.stop_drying(0);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent[0] == "SET_HEATER_TEMPERATURE HEATER=heater_box1 TARGET=0");
+}
+
+TEST_CASE("QIDI Box stop_drying blocked when write-path disabled",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    auto err = backend.stop_drying(0);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
