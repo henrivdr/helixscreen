@@ -21,6 +21,13 @@
 # Use bash for all shell commands (needed for [[ ]] and read -n)
 SHELL := /bin/bash
 
+# Delete a target if its recipe fails. Without this, a failed link can leave a
+# truncated/0-byte output (e.g. helix-tests) on disk with a newer mtime than its
+# prerequisites — the next `make` then treats the broken artifact as up-to-date
+# and never rebuilds it, so the only recovery is a manual `rm`. Deleting the
+# half-written target on failure makes the next invocation retry cleanly.
+.DELETE_ON_ERROR:
+
 # Build verbosity control
 # Use 'make V=1' to see full compiler commands
 V ?= 0
