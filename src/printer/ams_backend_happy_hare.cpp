@@ -252,16 +252,22 @@ void AmsBackendHappyHare::handle_status_update(const nlohmann::json& notificatio
     spdlog::trace("[AMS HappyHare] Received status update");
 
     // Parse MMU core state if present.
-    if (params.contains("mmu") && params["mmu"].is_object()) {
+    const bool mmu_present = params.contains("mmu") && params["mmu"].is_object();
+    if (mmu_present) {
         std::lock_guard<std::mutex> lock(mutex_);
         parse_mmu_state(params["mmu"]);
     }
 
     // Parse live heater_generic temp/target even when mmu key is absent —
     // Moonraker sends heater updates as sibling keys in the same notification.
-    apply_filament_heater_status(params);
+    const bool heater_updated = apply_filament_heater_status(params);
 
-    emit_event(EVENT_STATE_CHANGED);
+    // Only re-pump downstream sync when this frame actually carried AMS-relevant
+    // data; notify_status_update fires for every Klipper object (toolhead, temps,
+    // ...), so an unconditional emit here would be a per-frame event storm.
+    if (mmu_present || heater_updated) {
+        emit_event(EVENT_STATE_CHANGED);
+    }
 }
 
 void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
@@ -1167,13 +1173,13 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
 // Heater Config Query
 // ============================================================================
 
-void AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& params) {
+bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& params) {
     // Determine which Moonraker status key to look up.
     std::string status_key;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (filament_heater_name_.empty()) {
-            return;
+            return false;
         }
         // Normalize: ensure the key starts with "heater_generic " as Moonraker uses.
         if (filament_heater_name_.rfind("heater_generic ", 0) == 0) {
@@ -1185,7 +1191,7 @@ void AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& par
 
     auto h_it = params.find(status_key);
     if (h_it == params.end() || !h_it->is_object()) {
-        return;
+        return false;
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -1195,6 +1201,7 @@ void AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& par
     if (auto tg = h_it->find("target"); tg != h_it->end() && tg->is_number()) {
         dryer_info_.target_temp_c = tg->get<float>();
     }
+    return true;
 }
 
 void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {

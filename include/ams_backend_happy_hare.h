@@ -270,8 +270,9 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
      * Scans the params object for the key matching filament_heater_name_ and
      * updates dryer_info_.current_temp_c / target_temp_c.
      * @param params The top-level params object from notify_status_update
+     * @return true if the filament-heater key was present and parsed
      */
-    void apply_filament_heater_status(const nlohmann::json& params);
+    bool apply_filament_heater_status(const nlohmann::json& params);
 
     /**
      * @brief Check if this is a Type B MMU (hub topology)
