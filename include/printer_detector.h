@@ -472,6 +472,16 @@ class PrinterDetector {
     static bool is_creality_k2();
 
     /**
+     * @brief Check if connected printer is a Creality Hi
+     * @return true if printer type contains both "creality" and "hi"
+     *
+     * The Hi is a Cartesian bedslinger whose optional CFS uses the
+     * non-prefixed BOX_* macro dialect (same family as the K1, not the K2
+     * CR_BOX_* primitives). AmsBackendCfs keys its macro variant off this.
+     */
+    static bool is_creality_hi();
+
+    /**
      * @brief Declared physical tightening direction for bed screws
      *
      * Printer database entries may set `"screws_tilt_direction": "cw"` or

@@ -391,7 +391,16 @@ AmsBackendCfs::AmsBackendCfs(MoonrakerAPI* api, helix::MoonrakerClient* client)
     // the resolved printer database entry, which is settled by the time the
     // AMS backend is constructed (printer discovery → detector → backend
     // create). #968.
-    macro_variant_ = PrinterDetector::is_creality_k1() ? CfsMacroVariant::K1 : CfsMacroVariant::K2;
+    //
+    // The Creality Hi ships the non-prefixed BOX_* dialect in its box.cfg
+    // (BOX_CUT_MATERIAL / BOX_EXTRUDE_MATERIAL / BOX_RETRUDE_MATERIAL /
+    // BOX_GO_TO_EXTRUDE_POS / BOX_SAVE_FAN / BOX_RESTORE_FAN), i.e. the K1
+    // family — NOT the K2 CR_BOX_* primitives. Route it to the K1 variant so
+    // load/unload/swap dispatch resolves to macros the firmware actually
+    // defines.
+    macro_variant_ = (PrinterDetector::is_creality_k1() || PrinterDetector::is_creality_hi())
+                         ? CfsMacroVariant::K1
+                         : CfsMacroVariant::K2;
 
     spdlog::info("[AMS CFS] Backend created — macro variant: {}",
                  macro_variant_ == CfsMacroVariant::K1 ? "K1 (BOX_*)" : "K2 (CR_BOX_*)");
