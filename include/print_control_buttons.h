@@ -39,6 +39,14 @@ class PrintControlButtons {
     void handle_primary_button();
     void handle_stop_button();
 
+    /// Resume the paused print: validates the Resume macro is configured, marks
+    /// a Resuming pending action (optimistic spinner), and runs the shared
+    /// prepare_for_resume → Resume dispatch with a clear-on-failure callback.
+    /// The single code path behind BOTH the panel's primary Resume button and
+    /// the runout guidance dialog's Resume button (#991), so both produce the
+    /// same pending-UI + recovery behavior. Safe to call only on the main thread.
+    void request_resume();
+
   private:
     PrintControlButtons() = default;
 

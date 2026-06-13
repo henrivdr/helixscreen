@@ -72,6 +72,31 @@ class RunoutGuidanceModal : public Modal {
     }
 
     /**
+     * @brief Gate the Resume button on first-gate (port) filament presence (#991).
+     *
+     * Drives the component-scoped `runout_resume_blocked` subject the XML binds
+     * to btn_resume's disabled state. When true, Resume is greyed/disabled —
+     * used on auto-feed backends while no filament is present at the active
+     * tool's port. When false, Resume is enabled (the default for non-auto-feed
+     * or unknown backends, which must never be gated).
+     *
+     * Safe to call only on the main thread. The FilamentRunoutHandler maintains
+     * this from an observer on AmsState's active-tool port-present subject.
+     *
+     * @param blocked true to disable Resume, false to enable it
+     */
+    void set_resume_blocked(bool blocked) {
+        lv_subject_set_int(&resume_blocked_subject_, blocked ? 1 : 0);
+    }
+
+    /// Subject the handler observes/binds; exposed so the handler can read the
+    /// current gate state. Component-scoped, statically stored (survives
+    /// show/hide). Never null after construction (init_subjects runs in ctor).
+    static lv_subject_t* resume_blocked_subject() {
+        return &resume_blocked_subject_;
+    }
+
+    /**
      * @brief Get XML component name for lv_xml_create()
      * @return "runout_guidance_modal"
      */
@@ -225,6 +250,10 @@ class RunoutGuidanceModal : public Modal {
     // scoped, statically-stored subject survives across show/hide cycles and
     // multiple instantiations. Pattern mirrors ShutdownModal::view_state_subject_.
     static inline lv_subject_t autofeed_capable_subject_{};
+    // Resume-gate subject (#991): 1 = block (disable Resume), 0 = allow.
+    // Default 0 so non-auto-feed / unknown backends are never gated.
+    // Component-scoped like autofeed_capable_subject_.
+    static inline lv_subject_t resume_blocked_subject_{};
     static inline bool subjects_initialized_ = false;
 
     static void init_subjects() {
@@ -232,11 +261,14 @@ class RunoutGuidanceModal : public Modal {
         subjects_initialized_ = true;
 
         lv_subject_init_int(&autofeed_capable_subject_, 0);
+        lv_subject_init_int(&resume_blocked_subject_, 0);
 
         auto* scope = lv_xml_component_get_scope("runout_guidance_modal");
         if (scope) {
             lv_xml_register_subject(scope, "runout_autofeed_capable",
                                     &autofeed_capable_subject_);
+            lv_xml_register_subject(scope, "runout_resume_blocked",
+                                    &resume_blocked_subject_);
         } else {
             spdlog::warn("[RunoutGuidanceModal] Component scope not found — "
                          "ensure runout_guidance_modal.xml is registered first");
@@ -245,6 +277,7 @@ class RunoutGuidanceModal : public Modal {
         StaticSubjectRegistry::instance().register_deinit("RunoutGuidanceModal", []() {
             if (!subjects_initialized_) return;
             lv_subject_deinit(&autofeed_capable_subject_);
+            lv_subject_deinit(&resume_blocked_subject_);
             subjects_initialized_ = false;
         });
     }

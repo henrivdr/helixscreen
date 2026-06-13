@@ -235,6 +235,8 @@ void AmsState::init_subjects(bool register_xml) {
     INIT_SUBJECT_INT(ams_slot_count, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(slots_version, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(tool_map_version, 0, subjects_, register_xml);
+    // Default 1 (present) so non-auto-feed / unknown backends never gate Resume (#991).
+    INIT_SUBJECT_INT(active_tool_port_present, 1, subjects_, register_xml);
 
     // String subjects (buffer names don't match macro convention)
     lv_subject_init_string(&ams_action_detail_, action_detail_buf_, nullptr,
@@ -1829,6 +1831,16 @@ void AmsState::set_pending_target_slot(int slot) {
     helix::ui::queue_update([this, slot]() {
         if (lv_subject_get_int(&pending_target_slot_) != slot) {
             lv_subject_set_int(&pending_target_slot_, slot);
+        }
+    });
+}
+
+void AmsState::set_active_tool_port_present(bool present) {
+    // Marshal to the main thread — callable from the backend's WS status handler.
+    helix::ui::queue_update([this, present]() {
+        int v = present ? 1 : 0;
+        if (lv_subject_get_int(&active_tool_port_present_) != v) {
+            lv_subject_set_int(&active_tool_port_present_, v);
         }
     });
 }

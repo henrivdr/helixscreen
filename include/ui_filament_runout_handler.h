@@ -156,6 +156,19 @@ class FilamentRunoutHandler {
     /// plain ObserverGuard (no SubjectLifetime token) is correct.
     ObserverGuard runout_cleared_observer_;
 
+    /// Observes AmsState::get_active_tool_port_present_subject() to gate the
+    /// Resume button on first-gate (port) filament presence (#991). On auto-feed
+    /// backends, Resume is disabled until filament is present at the active
+    /// tool's port sensor. Static singleton subject — plain ObserverGuard, no
+    /// SubjectLifetime token. Only installed while the modal is up on an
+    /// auto-feed backend; reset in hide_runout_guidance_modal().
+    ObserverGuard port_present_observer_;
+
+    /// True while the current modal is on an auto-feed backend (Snapmaker U1),
+    /// captured at show time. Gates whether the port-present observer drives the
+    /// Resume block — non-auto-feed backends never gate Resume.
+    bool autofeed_context_{false};
+
     /// Async callback safety guard
     helix::AsyncLifetimeGuard lifetime_;
 

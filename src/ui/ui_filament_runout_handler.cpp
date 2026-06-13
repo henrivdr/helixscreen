@@ -14,10 +14,10 @@
 #include "filament_sensor_manager.h"
 #include "moonraker_api.h"
 #include "observer_factory.h"
+#include "print_control_buttons.h"
 #include "print_lifecycle_state.h" // For PrintState enum
 #include "runtime_config.h"
 #include "standard_macros.h"
-#include "ui_resume_dispatch.h"
 
 #include <spdlog/spdlog.h>
 
@@ -120,8 +120,34 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
     {
         AmsBackend* backend = AmsState::instance().get_backend();
         bool autofeed = backend && backend->recovers_filament_on_resume();
+        autofeed_context_ = autofeed;
         runout_modal_.set_autofeed_capable(autofeed);
         spdlog::debug("[FilamentRunoutHandler] Runout dialog autofeed_capable={}", autofeed);
+
+        // Gate Resume on first-gate (port) filament presence (#991). On auto-feed
+        // backends Resume is disabled until filament is present at the active
+        // tool's PORT sensor (AmsState::active_tool_port_present, fed from
+        // port_sensor_filament_present_ — NOT the toolhead motion sensor, which
+        // stays "runout" until extrusion). On non-auto-feed backends the gate is
+        // never applied: clear the block and skip the observer.
+        if (autofeed) {
+            // Seed the block from the current port value so a stale spool gates
+            // immediately on show, then keep it in sync via the observer.
+            int present = lv_subject_get_int(
+                AmsState::instance().get_active_tool_port_present_subject());
+            runout_modal_.set_resume_blocked(present == 0);
+            // Static singleton subject → plain ObserverGuard, no SubjectLifetime.
+            port_present_observer_ = helix::ui::observe_int_sync<FilamentRunoutHandler>(
+                AmsState::instance().get_active_tool_port_present_subject(), this,
+                [](FilamentRunoutHandler* self, int port_present) {
+                    // Only gate while still on an auto-feed runout modal.
+                    if (!self->autofeed_context_) return;
+                    if (!self->runout_modal_.is_visible()) return;
+                    self->runout_modal_.set_resume_blocked(port_present == 0);
+                });
+        } else {
+            runout_modal_.set_resume_blocked(false);
+        }
     }
 
     // Capture token for async callback safety
@@ -169,24 +195,16 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
         // its own CHECK_FILAMENT_RUNOUT, and any rejection now surfaces as a
         // single contextual error toast via the suppress_auto_toast path.
 
-        // Check if resume slot is available
-        const auto& resume_info = StandardMacros::instance().get(StandardMacroSlot::Resume);
-        if (resume_info.is_empty()) {
-            spdlog::warn("[FilamentRunoutHandler] Resume macro slot is empty");
-            NOTIFY_WARNING(lv_tr("Resume macro not configured"));
-            return;
-        }
-
         spdlog::info("[FilamentRunoutHandler] User chose to resume print after runout");
 
-        // Resume via the shared prep+dispatch helper. The AMS backend gets
-        // a chance to run any recovery gcode it needs (e.g., Snapmaker U1's
-        // post-runout extrude) before the Resume StandardMacro fires.
-        // Backends with no prep invoke the dispatch immediately. There's no
-        // optimistic-UI state to clean up here, so on_failure is omitted.
-        spdlog::info("[FilamentRunoutHandler] Using StandardMacros resume: {}",
-                     resume_info.get_macro());
-        dispatch_prepared_resume(api_, "[FilamentRunoutHandler]");
+        // Route through the SAME path as the panel's primary Resume button so
+        // both buttons produce identical behavior (#991): pending-action UI +
+        // start_pending_action(Resuming) + the shared prepare_for_resume →
+        // Resume dispatch with clear-on-failure. request_resume() does the
+        // macro-empty check and the dispatch itself, so we don't duplicate it
+        // here. The AMS backend still gets its prepare_for_resume recovery
+        // chance via dispatch_prepared_resume.
+        PrintControlButtons::instance().request_resume();
     });
 
     runout_modal_.set_on_cancel_print([this, token]() {
@@ -328,6 +346,11 @@ void FilamentRunoutHandler::hide_runout_guidance_modal() {
     runout_modal_.hide();
     // Stop observing the runout-cleared subject so it doesn't linger across pauses.
     runout_cleared_observer_.reset();
+    // Stop gating Resume; clear the block so a future non-auto-feed modal starts
+    // ungated (the subject is component-scoped and persists across show/hide).
+    port_present_observer_.reset();
+    autofeed_context_ = false;
+    runout_modal_.set_resume_blocked(false);
 }
 
 } // namespace helix::ui

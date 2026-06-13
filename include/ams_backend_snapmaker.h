@@ -199,6 +199,12 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// to explicitly report present.
     std::array<bool, NUM_TOOLS> port_sensor_filament_present_{{false, false, false, false}};
 
+    /// Last value published to AmsState::set_active_tool_port_present for the
+    /// active tool (#991). Tracks the active-tool port flag so we only push to
+    /// the UI subject on an actual change. -1 = nothing published yet. Written
+    /// only from handle_status_update (the single WS-thread writer).
+    int last_published_port_present_ = -1;
+
     /// Validate slot index is within range
     AmsError validate_slot_index(int slot_index) const;
 
