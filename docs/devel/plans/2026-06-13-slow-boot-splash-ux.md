@@ -86,6 +86,59 @@ file → fall back to default cap).
 - [x] Deploy K2 + cold reboot validated (mechanism): boot-play killed, single disp layer, splash alive through the gate AND through helix-screen startup (no blank gap), status pill in the upper-right corner (fb capture). `Moonraker ready after Ns` latency log working.
 - [x] Commit (feature branch; not merged to main — Preston has parallel main work)
 
+## ROUND 2 — all open items RESOLVED on K2 hardware 2026-06-13 (commit `4ad3ea287`)
+
+Second on-device pass closed the two open visual items plus two new bits of
+Preston feedback. Validated on the K2 panel: **fast single-flush paint, counter
+climbs continuously through both phases, transparent theme-aware status text,
+~57s to home.**
+
+1. **Logo paint (line-by-line → one fill).** `lv_refr_now` alone did NOT fix it —
+   the logo still wiped stripe-by-stripe. Root cause was the fbdev PARTIAL render
+   mode (60-line stripes flushed straight to the live framebuffer). Fix: **splash-
+   only FULL render mode** — after `backend->create_display()`, override the
+   display's buffers with a full-screen off-screen buffer + `LV_DISPLAY_RENDER_MODE_FULL`
+   (`src/helix_splash.cpp`, the `backend->type()==FBDEV` block). Allocation mirrors
+   `lv_linux_fbdev_create`'s own (`malloc(size + LV_DRAW_BUF_ALIGN - 1)` +
+   `lv_draw_buf_align`), sized to post-rotation resolution, never freed (process
+   exits). The shared compile-time `LV_LINUX_FBDEV_RENDER_MODE` is untouched.
+   fbdev `flush_cb` keys `wait_for_last_flush` off the global macro (still PARTIAL)
+   but that's harmless — FULL emits a single full-screen flush, `skip_flush`
+   stays false, the one flush writes the whole frame.
+2. **Counter froze for ~20s during "Starting HelixScreen…".** The gate baked the
+   seconds into the file and stopped writing once it handed off, so the count
+   stalled. Fix: **the splash owns the counter.** `compose_splash_status(label,
+   elapsed)` in `include/splash_status.h` appends rising seconds from the splash's
+   own monotonic start; the loop recomputes it every iteration (label touched only
+   when the visible string changes). Gates now write **plain labels only**
+   (`hooks-k2.sh`, `hooks-ad5m-forgex.sh`) so the counter isn't doubled — the
+   per-second rewrite still refreshes mtime = the heartbeat.
+3. **Black pill behind status text → transparent + theme-aware.** Dropped the
+   pill bg; status text now uses the version label's light/dark-aware color
+   (`dark_mode ? white : black`) at `OPA_80`, transparent bg, so the logo art
+   shows through. Still `LV_ALIGN_TOP_RIGHT`.
+4. Position (item 1 from round 1) confirmed fine — no complaint, upper-right.
+
+**Tests:** added a `compose_splash_status` Catch2 case; `helix-tests [splash]`
+= 80 assertions / 18 cases green. K2 cross-build clean (EXIT=0).
+
+**Build gotcha hit this session:** `make k2-docker` failed at the `strip` target
+with `nm: helix-screen: no symbols` (exit 1) even though the splash compiled +
+linked fine. Cause: the `strip` target strips `$(TARGET)` (helix-screen) **in
+place**, and the `symbols` step (`nm -nC $(TARGET) > .sym`) is **not idempotent**
+— on an incremental build that rebuilds only the splash, helix-screen is the
+already-stripped prior binary, so `nm` finds no symbols and exits 1. Fix: `rm
+build/k2/bin/helix-screen{,.sym,.debug}` to force a relink-with-symbols from
+cached objects, then rebuild → EXIT=0. Not a code issue. (Candidate build-system
+follow-up: guard the `nm` recipe against symbol-less binaries, or make `symbols`
+depend on a fresh link.)
+
+### STILL OPEN (non-code, carried from round 1)
+- **Installer:** the `killall boot-play` fix lives only in the runtime hook on
+  the device — still needs adding to the installer so it ships to K2 users.
+- **Merge decision:** branch `feature/slow-boot-splash-ux` is still not merged
+  (Preston had parallel main work). Decide whether to merge.
+
 ## SESSION STATE — PAUSED 2026-06-13 (resume here)
 
 ### What this turned into
