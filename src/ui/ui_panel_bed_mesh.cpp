@@ -26,6 +26,7 @@
 #include "ui_update_queue.h"
 
 #include "app_globals.h"
+#include "temperature_controller.h"
 #include "display_settings_manager.h"
 #include "format_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -874,21 +875,20 @@ void BedMeshPanel::preheat_for_probing() {
     preheat_turned_on_nozzle_ = false;
     preheat_turned_on_bed_ = false;
 
-    MoonrakerAPI* api = get_moonraker_api();
-    if (!api) return;
-
     auto& state = get_printer_state();
 
     // Subject values are centidegrees (value * 10) — target of 0 means heater is off
     int nozzle_target = lv_subject_get_int(state.get_active_extruder_target_subject());
     int bed_target = lv_subject_get_int(state.get_bed_target_subject());
 
-    auto set_temp = [api](const std::string& heater, double temp, const char* label) {
-        api->set_temperature(
-            heater, temp, []() {},
-            [label](const MoonrakerError& err) {
-                spdlog::warn("[BedMeshPanel] Failed to preheat {}: {}", label, err.message);
-            });
+    auto set_temp = [](const std::string& heater, double temp, const char* label) {
+        if (auto* c = get_temperature_controller()) {
+            c->set_target(heater, temp,
+                          {.toast = false, .on_error = [label](const MoonrakerError& err) {
+                               spdlog::warn("[BedMeshPanel] Failed to preheat {}: {}", label,
+                                            err.message);
+                           }});
+        }
     };
 
     if (nozzle_target == 0) {
@@ -913,16 +913,15 @@ void BedMeshPanel::preheat_for_probing() {
 void BedMeshPanel::cooldown_after_probing() {
     if (!preheat_turned_on_nozzle_ && !preheat_turned_on_bed_) return;
 
-    MoonrakerAPI* api = get_moonraker_api();
-    if (!api) return;
-
-    auto turn_off = [api](const std::string& heater, const char* label) {
+    auto turn_off = [](const std::string& heater, const char* label) {
         spdlog::info("[BedMeshPanel] Turning off {} (was off before probing)", label);
-        api->set_temperature(
-            heater, 0.0, []() {},
-            [label](const MoonrakerError& err) {
-                spdlog::warn("[BedMeshPanel] Failed to turn off {}: {}", label, err.message);
-            });
+        if (auto* c = get_temperature_controller()) {
+            c->set_target(heater, 0.0,
+                          {.toast = false, .on_error = [label](const MoonrakerError& err) {
+                               spdlog::warn("[BedMeshPanel] Failed to turn off {}: {}", label,
+                                            err.message);
+                           }});
+        }
     };
 
     if (preheat_turned_on_nozzle_) {
