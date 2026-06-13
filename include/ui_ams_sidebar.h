@@ -159,6 +159,11 @@ class AmsOperationSidebar {
     int current_step_count_ = 4;
     int target_load_slot_ = -1;
     bool heat_label_showing_temp_ = false;
+    // Whether the current LOAD_SWAP/UNLOAD stepper includes a discrete tip
+    // (cut / tip-form) step. False for backends with TipMethod::NONE (e.g. the
+    // Snapmaker U1, which only heats + retracts). Drives the step-index map in
+    // get_step_index_for_action so the trailing steps don't shift out of place.
+    bool current_op_has_tip_step_ = true;
 
     // Step progress methods
     void setup_step_progress();

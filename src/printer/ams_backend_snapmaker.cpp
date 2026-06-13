@@ -32,6 +32,11 @@ AmsBackendSnapmaker::AmsBackendSnapmaker(MoonrakerAPI* api, helix::MoonrakerClie
     system_info_.supports_tool_mapping = false;
     system_info_.supports_bypass = false;
     system_info_.has_hardware_bypass_sensor = false;
+    // The U1 has no filament cutter and forms no discrete tip — unload is just
+    // heat + retract. Leaving tip_method at its CUT default mislabels the unload
+    // stepper's middle phase "Cut & retract"; NONE drives the 2-step
+    // "Heat nozzle -> Retract" stepper (see recreate_step_progress_for_operation).
+    system_info_.tip_method = TipMethod::NONE;
 
     // Initialize 1 unit with 4 slots
     AmsUnit unit;
@@ -140,15 +145,19 @@ PathSegment AmsBackendSnapmaker::get_slot_filament_segment(int slot_index) const
         return PathSegment::NONE;
     }
 
-    if (slot->status == SlotStatus::LOADED) {
+    // PARALLEL multi-toolhead machine: each tool feeds its own dedicated
+    // nozzle. Reaching here means this tool's motion sensor reads filament
+    // present (the runout early-return above didn't fire), so filament is
+    // threaded all the way into THIS tool's toolhead — render NOZZLE.
+    //
+    // The firmware marks only the *active* tool LOADED; every other
+    // physically-loaded toolhead reports AVAILABLE. Previously AVAILABLE
+    // (when not the active slot) rendered HUB, so the line stopped short at
+    // the sensor dot for loaded-but-parked tools. On this topology a present
+    // tool always has filament at its own nozzle, so both LOADED and
+    // AVAILABLE render NOZZLE.
+    if (slot->status == SlotStatus::LOADED || slot->status == SlotStatus::AVAILABLE) {
         return PathSegment::NOZZLE;
-    }
-    if (slot->status == SlotStatus::AVAILABLE) {
-        bool is_active = (system_info_.current_slot == slot_index);
-        if (is_active && system_info_.filament_loaded) {
-            return PathSegment::NOZZLE;
-        }
-        return PathSegment::HUB;
     }
     return PathSegment::NONE;
 }
@@ -223,6 +232,24 @@ AmsError AmsBackendSnapmaker::unload_filament(int slot_index) {
         return err;
 
     return execute_gcode(fmt::format("AUTO_FEEDING EXTRUDER={} UNLOAD=1", extruder));
+}
+
+bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (slot_index < 0 || slot_index >= NUM_TOOLS) {
+        return false;
+    }
+    const auto* slot = system_info_.get_slot_global(slot_index);
+    if (!slot || !slot->is_present()) {
+        return false;
+    }
+    // Filament must be at THIS toolhead, not merely parked in the buffer. The
+    // per-tool motion sensor (e{N}_filament) reads true only while filament is
+    // loaded to the toolhead; after an unload it retracts to the buffer and the
+    // sensor drops to false even though filament_exist (and thus is_present())
+    // stays true. Without this the menu kept offering Unload for an
+    // already-unloaded tool. See the header note + 2026-06-12 hardware capture.
+    return sensor_filament_present_[slot_index];
 }
 
 AmsError AmsBackendSnapmaker::select_slot(int slot_index) {

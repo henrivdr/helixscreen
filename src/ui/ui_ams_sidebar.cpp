@@ -465,6 +465,12 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     }
     const char* tip_step_label = tip_method_step_label(tip_method);
 
+    // Backends that neither cut nor form a tip (TipMethod::NONE — e.g. the
+    // Snapmaker U1) have no discrete tip phase; omit that step from the
+    // LOAD_SWAP / UNLOAD steppers so the labels match the firmware sequence.
+    const bool has_tip_step = (tip_method != TipMethod::NONE);
+    current_op_has_tip_step_ = has_tip_step;
+
     switch (op_type) {
     case StepOperationType::LOAD_FRESH: {
         if (supports_purge) {
@@ -488,37 +494,29 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
         break;
     }
     case StepOperationType::LOAD_SWAP: {
-        if (supports_purge) {
-            ui_step_t steps[] = {
-                {"Heat nozzle", StepState::Pending},
-                {tip_step_label, StepState::Pending},
-                {"Feed filament", StepState::Pending},
-                {"Purge", StepState::Pending},
-            };
-            current_step_count_ = 4;
-            step_progress_ = ui_step_progress_create(step_progress_container_, steps, 4, false,
-                                                     "ams_step_progress");
-        } else {
-            ui_step_t steps[] = {
-                {"Heat nozzle", StepState::Pending},
-                {tip_step_label, StepState::Pending},
-                {"Feed filament", StepState::Pending},
-            };
-            current_step_count_ = 3;
-            step_progress_ = ui_step_progress_create(step_progress_container_, steps, 3, false,
-                                                     "ams_step_progress");
-        }
+        ui_step_t steps[4];
+        int n = 0;
+        steps[n++] = {"Heat nozzle", StepState::Pending};
+        if (has_tip_step)
+            steps[n++] = {tip_step_label, StepState::Pending};
+        steps[n++] = {"Feed filament", StepState::Pending};
+        if (supports_purge)
+            steps[n++] = {"Purge", StepState::Pending};
+        current_step_count_ = n;
+        step_progress_ = ui_step_progress_create(step_progress_container_, steps, n, false,
+                                                 "ams_step_progress");
         break;
     }
     case StepOperationType::UNLOAD: {
-        ui_step_t steps[] = {
-            {"Heat nozzle", StepState::Pending},
-            {tip_step_label, StepState::Pending},
-            {"Retract", StepState::Pending},
-        };
-        current_step_count_ = 3;
-        step_progress_ =
-            ui_step_progress_create(step_progress_container_, steps, 3, false, "ams_step_progress");
+        ui_step_t steps[3];
+        int n = 0;
+        steps[n++] = {"Heat nozzle", StepState::Pending};
+        if (has_tip_step)
+            steps[n++] = {tip_step_label, StepState::Pending};
+        steps[n++] = {"Retract", StepState::Pending};
+        current_step_count_ = n;
+        step_progress_ = ui_step_progress_create(step_progress_container_, steps, n, false,
+                                                 "ams_step_progress");
         break;
     }
     }
@@ -548,38 +546,49 @@ int AmsOperationSidebar::get_step_index_for_action(AmsAction action, StepOperati
             return -1;
         }
 
-    case StepOperationType::LOAD_SWAP:
+    case StepOperationType::LOAD_SWAP: {
+        // With no tip step the trailing steps shift up by one
+        // (Heat=0, Feed=1, [Purge=2] vs Heat=0, Tip=1, Feed=2, [Purge=3]).
+        const int feed_idx = current_op_has_tip_step_ ? 2 : 1;
+        const int purge_idx = current_op_has_tip_step_ ? 3 : 2;
         switch (action) {
         case AmsAction::HEATING:
             return 0;
         case AmsAction::CUTTING:
         case AmsAction::FORMING_TIP:
         case AmsAction::UNLOADING:
-            return 1;
+            // No discrete tip step → keep the Heat step active through the
+            // brief retract-old phase rather than pointing at a step that
+            // doesn't exist.
+            return current_op_has_tip_step_ ? 1 : 0;
         case AmsAction::LOADING:
-            return 2;
+            return feed_idx;
         case AmsAction::PURGING:
-            return 3;
+            return purge_idx;
         case AmsAction::IDLE:
             return -1;
         default:
             return -1;
         }
+    }
 
-    case StepOperationType::UNLOAD:
+    case StepOperationType::UNLOAD: {
+        // Without a tip step the Retract step moves from index 2 to index 1.
+        const int retract_idx = current_op_has_tip_step_ ? 2 : 1;
         switch (action) {
         case AmsAction::HEATING:
             return 0;
         case AmsAction::CUTTING:
         case AmsAction::FORMING_TIP:
-            return 1;
+            return current_op_has_tip_step_ ? 1 : retract_idx;
         case AmsAction::UNLOADING:
-            return 2;
+            return retract_idx;
         case AmsAction::IDLE:
             return -1;
         default:
             return -1;
         }
+    }
     }
     return -1;
 }

@@ -95,9 +95,16 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;
     AmsError change_tool(int tool_number) override;
-    // can_unload_from_toolhead is intentionally NOT overridden: the U1 reports
-    // PARALLEL topology, so the topology-aware base correctly offers per-tool
-    // Unload for every toolhead holding filament (is_present()).
+    // The base PARALLEL gate offers Unload for any tool with filament in its
+    // buffer (is_present()). On the U1 that keeps offering Unload after a tool
+    // is already unloaded — the firmware retracts the filament to the buffer
+    // (channel_state preload_finish) but filament_exist stays true, so the slot
+    // remains AVAILABLE. Override to additionally require the per-tool motion
+    // sensor (e{N}_filament), which reads true only while filament is loaded at
+    // the toolhead (load_finish) and drops to false once it parks in the buffer.
+    // Verified on hardware 2026-06-12. Still offers Unload for every toolhead
+    // physically loaded (active or parked), preserving the per-tool unload fix.
+    [[nodiscard]] bool can_unload_from_toolhead(int slot_index) const override;
 
     // Recovery (not supported)
     AmsError recover() override;

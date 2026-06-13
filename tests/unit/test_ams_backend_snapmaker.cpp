@@ -226,6 +226,14 @@ TEST_CASE("AmsBackendSnapmaker construction", "[ams][snapmaker]") {
         REQUIRE(info.tool_to_slot_map[2] == 2);
         REQUIRE(info.tool_to_slot_map[3] == 3);
     }
+
+    SECTION("tip_method is NONE (U1 has no cutter; unload is heat + retract)") {
+        // Drives the unload/swap stepper to omit the "Cut & retract" tip step.
+        // Default TipMethod is CUT; the backend must override it to NONE.
+        AmsBackendSnapmaker backend(nullptr, nullptr);
+        auto info = backend.get_system_info();
+        REQUIRE(info.tip_method == TipMethod::NONE);
+    }
 }
 
 // ============================================================================
@@ -296,6 +304,76 @@ TEST_CASE("Snapmaker can_unload_from_toolhead offers unload for every loaded too
     }
     SECTION("empty toolhead offers no unload") {
         CHECK_FALSE(backend.can_unload_from_toolhead(2));
+    }
+}
+
+// can_unload_from_toolhead must require filament AT the toolhead (per-tool
+// motion sensor), not merely present in the buffer. After an unload the U1
+// retracts filament to the buffer: filament_exist stays true (slot AVAILABLE)
+// but e{N}_filament drops to filament_detected:false. Gating on is_present()
+// alone kept offering Unload for an already-unloaded tool. (Hardware capture
+// 2026-06-12: unloaded tool reports motion sensor false, loaded tools true.)
+TEST_CASE("Snapmaker can_unload_from_toolhead requires filament at the toolhead, not just buffer",
+          "[ams][snapmaker][unload]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // All four tools hold filament; slot 0 is active (LOADED), 1-3 AVAILABLE.
+    json status = json{
+        {"toolhead", json{{"extruder", "extruder"}}},
+        {"print_task_config", json{{"filament_exist", json::array({true, true, true, true})}}}};
+    SnapmakerTestAccess::handle_status(backend, status);
+
+    // Default motion sensors all read present → every loaded tool is unloadable.
+    REQUIRE(backend.can_unload_from_toolhead(2));
+
+    SECTION("a tool unloaded to the buffer (motion sensor false) is NOT unloadable") {
+        // Simulate the post-unload state: filament parked in the buffer, so the
+        // slot stays AVAILABLE but the toolhead motion sensor reads runout.
+        SnapmakerTestAccess::set_sensor_present(backend, 2, false);
+        CHECK_FALSE(backend.can_unload_from_toolhead(2));
+        // Tools still loaded at their toolhead remain unloadable.
+        CHECK(backend.can_unload_from_toolhead(1));
+        CHECK(backend.can_unload_from_toolhead(3));
+    }
+}
+
+// get_slot_filament_segment — on the U1's PARALLEL multi-toolhead topology
+// every present tool feeds its own dedicated nozzle, so its filament must
+// render all the way into the toolhead (NOZZLE). The firmware marks only the
+// active tool LOADED; the rest are AVAILABLE. Previously AVAILABLE non-active
+// tools rendered HUB and the line stopped short at the sensor dot. (U1
+// multi-toolhead field report, 2026-06-12.)
+TEST_CASE("Snapmaker get_slot_filament_segment renders NOZZLE for every present tool",
+          "[ams][snapmaker][path]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Slot 0 active (LOADED), slots 1 & 3 hold filament (AVAILABLE), slot 2 empty.
+    json status = json{
+        {"toolhead", json{{"extruder", "extruder"}}}, // active tool = slot 0
+        {"print_task_config", json{{"filament_exist", json::array({true, true, false, true})}}}};
+    SnapmakerTestAccess::handle_status(backend, status);
+
+    // Sanity: status drove the slot states.
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::LOADED);
+    REQUIRE(backend.get_slot_info(1).status == SlotStatus::AVAILABLE);
+    REQUIRE(backend.get_slot_info(2).status == SlotStatus::EMPTY);
+    REQUIRE(backend.get_slot_info(3).status == SlotStatus::AVAILABLE);
+
+    SECTION("active LOADED tool renders into the toolhead") {
+        CHECK(backend.get_slot_filament_segment(0) == PathSegment::NOZZLE);
+    }
+    SECTION("non-active loaded (AVAILABLE) tools render into their toolhead (the fix)") {
+        CHECK(backend.get_slot_filament_segment(1) == PathSegment::NOZZLE);
+        CHECK(backend.get_slot_filament_segment(3) == PathSegment::NOZZLE);
+    }
+    SECTION("empty tool renders no filament line") {
+        CHECK(backend.get_slot_filament_segment(2) == PathSegment::NONE);
+    }
+    SECTION("a tool whose motion sensor reads runout renders no line") {
+        // Sensor false short-circuits to NONE regardless of slot status —
+        // the runout break in the spool->toolhead line still wins.
+        SnapmakerTestAccess::set_sensor_present(backend, 1, false);
+        CHECK(backend.get_slot_filament_segment(1) == PathSegment::NONE);
     }
 }
 
