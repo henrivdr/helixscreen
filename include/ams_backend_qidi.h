@@ -4,6 +4,8 @@
 
 #include "ams_subscription_backend.h"
 
+#include <ctime>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -82,6 +84,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     AmsError enable_bypass() override;
     AmsError disable_bypass() override;
 
+    // --- Dryer / box-heater control (issue #1019) ---
+    [[nodiscard]] DryerInfo get_dryer_info() const override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
+                          int unit = 0) override;
+    AmsError stop_drying(int unit = 0) override;
+
   protected:
     void on_started() override;
     void handle_status_update(const nlohmann::json& notification) override;
@@ -125,6 +133,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// not_supported responses so the read-only mirror can ship without
     /// emitting unvalidated gcode to live hardware.
     bool write_enabled_ = false;
+
+    // Dryer state for the box PTC heater (issue #1019).
+    DryerInfo dryer_info_;
+    int dry_end_epoch_ = 0;              ///< Absolute drying end time (epoch s), 0 = none
+    bool drying_timer_supported_ = false; ///< box_extras drying timer seen -> use ENABLE_BOX_DRY
+    std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
 
   public:
     /// Temperature profile for a single fila entry from

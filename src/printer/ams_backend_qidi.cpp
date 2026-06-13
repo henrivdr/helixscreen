@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -87,6 +88,15 @@ AmsBackendQidi::AmsBackendQidi(MoonrakerAPI* api, helix::MoonrakerClient* client
         write_enabled_ = true;
         spdlog::info("{} Write-path ENABLED via HELIX_QIDI_BOX_WRITE", backend_log_tag());
     }
+
+    // Box PTC dryer capabilities (issue #1019). max_temp_c is the settable ceiling
+    // (target_max_temp_heater_generic=90); refined from configfile in on_started().
+    dryer_info_.supported = true;
+    dryer_info_.allows_during_print = true; // box heater is independent of the toolhead
+    dryer_info_.min_temp_c = 35.0f;
+    dryer_info_.max_temp_c = 90.0f;
+    dryer_info_.max_duration_min = 720;
+    dryer_info_.supports_fan_control = false;
 
     spdlog::debug("{} Backend constructed ({} slots, write_enabled={})",
                   backend_log_tag(), NUM_SLOTS, write_enabled_);
@@ -694,4 +704,26 @@ AmsError AmsBackendQidi::enable_bypass() {
 AmsError AmsBackendQidi::disable_bypass() {
     spdlog::warn("{} {} not yet implemented", backend_log_tag(), __func__);
     return AmsErrorHelper::not_supported("QIDI Box disable_bypass");
+}
+
+// --- Dryer / box-heater control (issue #1019) ---
+
+DryerInfo AmsBackendQidi::get_dryer_info() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    DryerInfo out = dryer_info_;
+    if (dry_end_epoch_ > 0) {
+        const std::time_t now = now_fn_();
+        const int remaining = static_cast<int>((dry_end_epoch_ - now) / 60);
+        out.remaining_min = remaining > 0 ? remaining : 0;
+        out.active = remaining > 0;
+    }
+    return out;
+}
+
+AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
+    return AmsBackend::start_drying(temp_c, duration_min, fan_pct, unit);
+}
+
+AmsError AmsBackendQidi::stop_drying(int unit) {
+    return AmsBackend::stop_drying(unit);
 }

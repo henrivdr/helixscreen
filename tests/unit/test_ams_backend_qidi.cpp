@@ -52,6 +52,12 @@ class QidiBoxTestAccess {
             return std::nullopt;
         return it->second;
     }
+    static DryerInfo get_dryer(const AmsBackendQidi& b) {
+        return b.get_dryer_info();
+    }
+    static void set_clock(AmsBackendQidi& b, std::function<std::time_t()> fn) {
+        b.now_fn_ = std::move(fn);
+    }
 };
 
 // Subclass that captures execute_gcode() invocations so write-path tests
@@ -831,4 +837,21 @@ TEST_CASE("QIDI Box parse_save_variables applies cached profile to SlotInfo temp
     auto info = backend.get_system_info();
     REQUIRE(info.units[0].slots[0].nozzle_temp_min == 205);
     REQUIRE(info.units[0].slots[0].nozzle_temp_max == 225);
+}
+
+// =====================================================================
+// Dryer capabilities (issue #1019)
+// =====================================================================
+// The QIDI Box has a PTC box heater that acts as a filament dryer.
+// The backend must advertise dryer support with sane defaults so the
+// UI shows the dryer control panel.
+
+TEST_CASE("QIDI Box advertises dryer support with sane capability defaults",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    DryerInfo d = backend.get_dryer_info();
+    REQUIRE(d.supported);
+    REQUIRE(d.min_temp_c == Catch::Approx(35.0f));
+    REQUIRE(d.max_temp_c == Catch::Approx(90.0f));   // settable ceiling, pre-config-query
+    REQUIRE(d.max_duration_min == 720);
 }
