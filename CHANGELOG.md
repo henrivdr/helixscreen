@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Anycubic Kobra support (Rinkhals firmware)** — adds the Anycubic Kobra 2 Pro, Kobra 3, Kobra 3 V2, Kobra 3 Max, Kobra S1, and Kobra S1 Max to the printer database, fingerprinted on confirmed GoKlipper objects so they auto-detect under [Rinkhals](https://github.com/jbatonnet/Rinkhals). Kobra 3 was corrected from CoreXY to Cartesian. Native Anycubic ACE is now supported for real: the firmware registers the multi-material hub as the `filament_hub` Klipper object (not `ace`), and the ACE backend now detects, queries, and parses `filament_hub` — including dryer status/target/duration and the loaded slot — with the old `ace` object kept as a dormant fallback. Untested on our hardware (we own no Kobra); presets are conservative and gaps are documented.
+- **Preliminary Creality Hi support** — adds the Creality Hi (260×260×300 Cartesian bedslinger, Prtouch V3, dual-Z, optional CFS) to the printer database with a stock-config preset and product image. Auto-detection keys on the Hi's real Klipper config (Cartesian kinematics — unique among supported Creality printers, which are otherwise CoreXY). A CFS dialect fix routes a Hi with CFS to the K1-style `BOX_*` macros it actually ships, not the K2 `CR_BOX_*` primitives. Preliminary and untested — we own no Hi hardware.
 - **Creality K2 Pro support** — adds the K2 Pro (300 mm build volume) to the printer database. It reuses the existing K2 preset, so it inherits CFS, the active chamber heater, and the K2 macro set; auto-detection distinguishes it from the K2 Plus by build volume and hostname.
 
 ### Fixed
