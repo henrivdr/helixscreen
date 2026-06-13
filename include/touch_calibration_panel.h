@@ -181,13 +181,31 @@ class TouchCalibrationPanel {
     void add_sample(Point raw);
 
     /**
-     * @brief Notify the panel that the physical touch contact was released
+     * @brief Handle a press edge (LV_EVENT_PRESSED) for the current step
+     * @param raw Raw touch coordinates from the touch controller
      *
-     * Clears the press-debounce gate so the next press may record a sample.
-     * No-op when debounce is disabled (the default). Wired to LV_EVENT_RELEASED
-     * by the Settings overlay and first-boot wizard. See issue #943.
+     * Capture-on-press, commit-on-release model (issue #943). Capacitive panels
+     * (Goodix/Q2) emit multiple press/release cycles per single physical contact;
+     * sampling on every press inflated one tap into several samples and cascaded
+     * the state machine. Instead of sampling here, we capture the press point and
+     * defer committing it to on_release() (or the stall timer). A release-IMMUNE
+     * time refractory (REFRACTORY_MS since the last committed sample) drops bounce.
+     *
+     * When debounce is disabled (HELIX_TOUCH_CAL_DEBOUNCE=0) this samples
+     * immediately, preserving the exact legacy sample-on-press behavior for A/B
+     * testing. Wired to LV_EVENT_PRESSED by the Settings overlay and first-boot
+     * wizard.
      */
-    void notify_release();
+    void on_press(Point raw);
+
+    /**
+     * @brief Handle a release edge (LV_EVENT_RELEASED)
+     *
+     * Commits the pending press captured by on_press(), subject to the refractory
+     * window. No-op when debounce is disabled (legacy: release does nothing).
+     * Wired to LV_EVENT_RELEASED by the Settings overlay and first-boot wizard.
+     */
+    void on_release();
 
     /**
      * @brief Accept the computed calibration
@@ -292,27 +310,51 @@ class TouchCalibrationPanel {
     RawSample sample_buffer_[SAMPLES_REQUIRED]{};
     int sample_count_ = 0;
 
-    // Press-debounce (issue #943): gate sample collection so one physical
-    // contact contributes at most one sample. Opt-in via HELIX_TOUCH_CAL_DEBOUNCE.
+    // Press-debounce (issue #943): capture-on-press, commit-on-release model with
+    // a release-IMMUNE time refractory. Capacitive panels emit several
+    // press/release cycles per physical contact; committing on every press
+    // inflated one tap into multiple samples. ON by default; opt out with
+    // HELIX_TOUCH_CAL_DEBOUNCE=0.
     //
     // `debounce_enabled_` is seeded once from RuntimeConfig::touch_cal_debounce()
-    // in the constructor. When false, the entire gate is skipped and behavior is
-    // byte-for-byte identical to the pre-#943 collection path.
-    bool debounce_enabled_ = false;
-    bool awaiting_release_ = false; ///< true while waiting for finger-lift after a recorded press
-    uint32_t release_deadline_ms_ = 0; ///< stall-guard: now()+RELEASE_TIMEOUT_MS when gate armed
+    // in the constructor (and re-read in reset()). When false, on_press() samples
+    // immediately and on_release() is a no-op — byte-for-byte the pre-#943 path.
+    bool debounce_enabled_ = true;
+    bool press_pending_ = false;  ///< a press is captured, awaiting commit
+    Point pending_press_point_{}; ///< point captured at press time
+    uint32_t press_time_ms_ = 0;  ///< now() when the pending press started
+    uint32_t last_sample_ms_ = 0; ///< now() of last COMMITTED sample (refractory anchor)
+    bool has_committed_ = false;  ///< a sample committed this session (arms the refractory)
 
-    /// Stall-guard window: auto-clear the gate if no RELEASED arrives within this
-    /// many ms. Long enough that rapid bursts (resolve <100ms) are still collapsed,
-    /// short enough that a deliberate tapper never feels stuck.
-    static constexpr uint32_t RELEASE_TIMEOUT_MS = 1500;
+    /// Release-immune refractory: a commit within this many ms of the previous
+    /// committed sample is treated as bounce and dropped. Capacitive bounce
+    /// resolves in <50ms; deliberate taps are >200ms apart.
+    static constexpr uint32_t REFRACTORY_MS = 150;
 
-    /// Monotonic-ms clock used ONLY for the debounce stall-guard. Defaults to
+    /// Commit the pending press if no release has arrived within this many ms.
+    /// Panels that never deliver a clean release would otherwise be
+    /// uncalibratable; the stall timer fires this fallback.
+    static constexpr uint32_t STALL_COMMIT_MS = 600;
+
+    /// Monotonic-ms clock used for the refractory + stall logic. Defaults to
     /// lv_tick_get(); tests inject a deterministic source via the test-access class.
     std::function<uint32_t()> now_fn_ = []() { return static_cast<uint32_t>(lv_tick_get()); };
 
-    /// Arm the press-debounce gate (set awaiting_release_ + stall-guard deadline).
-    void arm_release_gate();
+    /// One-shot LVGL timer: commits a pending press for panels that never send a
+    /// clean RELEASED. Armed in on_press(), cancelled on commit/release/reset.
+    lv_timer_t* stall_timer_ = nullptr;
+
+    /// Commit the pending press (if any), dropping it as bounce when the
+    /// refractory window has not elapsed since the last committed sample.
+    void commit_pending(uint32_t now);
+
+    /// Commit the pending press only if it has been outstanding >= STALL_COMMIT_MS
+    /// (the stall-timer fallback, also driven directly by tests).
+    void commit_pending_if_stale(uint32_t now);
+
+    void start_stall_timer();
+    void stop_stall_timer();
+    static void stall_timer_cb(lv_timer_t* timer);
 
     friend class TouchCalibrationPanelTestAccess;
 

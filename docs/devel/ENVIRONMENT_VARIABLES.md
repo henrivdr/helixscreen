@@ -445,23 +445,23 @@ echo "HELIX_TOUCH_CALIBRATE=1" >> ~/helixscreen/config/helixscreen.env
 
 ### `HELIX_TOUCH_CAL_DEBOUNCE`
 
-Press-debounce for the calibration wizard. When enabled, the calibration state machine records **at most one sample per physical contact** — a burst of `LV_EVENT_PRESSED` events from a single tap (some controllers, e.g. the Qidi Q2, emit several) contributes only one sample instead of filling a target (or all targets) from one finger touch. See [issue #943](https://github.com/prestonbrown/helixscreen/issues/943).
+Press-debounce for the calibration wizard. **On by default.** The calibration state machine uses **capture-on-press / commit-on-release**: it captures the press point on `LV_EVENT_PRESSED` and commits it as a sample on the matching `LV_EVENT_RELEASED`, gated by a release-immune time refractory. A burst of press/release cycles from a single tap (capacitive controllers — e.g. the Qidi Q2 and Goodix panels — emit several per physical contact) contributes only **one** sample instead of filling a target (or cascading through all targets) from one finger touch. See [issue #943](https://github.com/prestonbrown/helixscreen/issues/943).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `HELIX_TOUCH_CAL_DEBOUNCE` | Gate calibration sampling on touch release (`1` = enable) | Disabled |
+| `HELIX_TOUCH_CAL_DEBOUNCE` | Capture-on-press / commit-on-release debounce. Set to `0` to opt out to the legacy sample-on-press path. | Enabled |
 
-**How it works:** After a sample is recorded, further presses are ignored until a `LV_EVENT_RELEASED` (genuine finger-lift) arrives. A ~1500 ms stall-guard auto-clears the gate if a controller emits no matching release, so calibration can never wedge. Default **off** so devices that calibrate correctly today are unaffected until the fix is hardware-validated.
+**How it works:** `on_press()` captures the press point without sampling; `on_release()` commits it. A commit within **150 ms** (`REFRACTORY_MS`) of the previous committed sample is treated as bounce and dropped. A **600 ms** (`STALL_COMMIT_MS`) stall timer commits a pending press for controllers that never deliver a clean release, so calibration can never wedge. Setting `HELIX_TOUCH_CAL_DEBOUNCE=0` restores the exact legacy behavior — sample on every press, release is a no-op — for A/B testing on real hardware.
 
-**Composes with `HELIX_DEBUG_TOUCH`:** set both to capture the validation evidence in a debug bundle — `HELIX_DEBUG_TOUCH=1` logs one `[TouchDebug] sample N/3 …` line per recorded sample, and with debounce on you also get `[TouchDebug] ignored press (awaiting release)` for each collapsed burst press.
+**Composes with `HELIX_DEBUG_TOUCH`:** set both to capture the validation evidence in a debug bundle — `HELIX_DEBUG_TOUCH=1` logs one `[TouchDebug] sample N/3 …` line per recorded sample, and with debounce on you also get `[TouchDebug] dropped bounce sample, dt=…ms` for each collapsed burst press.
 
 **Example:**
 ```bash
-# Enable the debounce gate plus per-press debug logging
-HELIX_TOUCH_CAL_DEBOUNCE=1 HELIX_DEBUG_TOUCH=1 ./build/bin/helix-screen
+# Opt out to the legacy sample-on-press path, with per-press debug logging
+HELIX_TOUCH_CAL_DEBOUNCE=0 HELIX_DEBUG_TOUCH=1 ./build/bin/helix-screen
 
-# Or persist on the affected device
-echo "HELIX_TOUCH_CAL_DEBOUNCE=1" >> ~/helixscreen/config/helixscreen.env
+# Or persist on a device that needs the legacy path
+echo "HELIX_TOUCH_CAL_DEBOUNCE=0" >> ~/helixscreen/config/helixscreen.env
 ```
 
 ### `HELIX_DEBUG_TOUCH`

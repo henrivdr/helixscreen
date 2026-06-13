@@ -814,10 +814,15 @@ TEST_CASE_METHOD(TouchCalibrationPanelFailureFixture,
 // ============================================================================
 // Press-Debounce Tests (issue #943)
 //
-// A burst of LV_EVENT_PRESSED from a single physical contact must contribute
-// at most one calibration sample. Gate is opt-in (HELIX_TOUCH_CAL_DEBOUNCE);
-// tests toggle it deterministically via TouchCalibrationPanelTestAccess rather
-// than the process-global env cache.
+// Capacitive panels emit multiple press/release cycles per single physical
+// contact. The capture-on-press / commit-on-release model with a release-immune
+// time refractory collapses each contact to at most one committed sample. The
+// gate is ON by default; tests toggle it deterministically via
+// TouchCalibrationPanelTestAccess rather than the process-global env cache.
+//
+// NOTE: the comprehensive behavioral suite lives in
+// test_touch_calibration_debounce.cpp ([debounce] tag). The cases here cover
+// the panel-level integration of on_press/on_release with the state machine.
 // ============================================================================
 
 /**
@@ -829,20 +834,23 @@ class TouchCalibrationPanelDebounceFixture {
         panel_ = std::make_unique<TouchCalibrationPanel>();
         panel_->set_screen_size(800, 480);
 
-        // Deterministic monotonic-ms clock for the stall-guard. Tests advance
-        // `fake_now_ms_` directly instead of spinning a real timer.
+        // Deterministic monotonic-ms clock. Tests advance `fake_now_ms_` directly
+        // instead of spinning a real timer.
         TouchCalibrationPanelTestAccess::set_now_fn(*panel_, [this]() { return fake_now_ms_; });
+        TouchCalibrationPanelTestAccess::set_debounce_enabled(*panel_, true);
     }
 
   protected:
     std::unique_ptr<TouchCalibrationPanel> panel_;
     uint32_t fake_now_ms_ = 0;
 
-    void enable_debounce() {
-        TouchCalibrationPanelTestAccess::set_debounce_enabled(*panel_, true);
-    }
     void disable_debounce() {
         TouchCalibrationPanelTestAccess::set_debounce_enabled(*panel_, false);
+    }
+
+    /// Advance the clock past the refractory window so the next commit lands.
+    void clear_refractory() {
+        fake_now_ms_ += TouchCalibrationPanelTestAccess::refractory_ms() + 1;
     }
 
     int current_sample_count() const {
@@ -851,19 +859,23 @@ class TouchCalibrationPanelDebounceFixture {
 };
 
 TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
-                 "TouchCalibrationPanel: debounce collapses a press burst to one sample",
+                 "TouchCalibrationPanel: one contact burst commits exactly one sample",
                  "[touch-calibration][debounce]") {
-    enable_debounce();
     panel_->start(); // POINT_1, no auto-start tap involved
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
 
-    // Five presses from one physical contact (no release between them).
-    for (int i = 0; i < 5; ++i) {
-        panel_->add_sample(Point{100, 120});
-    }
+    // One physical contact = a burst of press/release cycles within the
+    // refractory window. Only the first commits; the rest are dropped as bounce.
+    fake_now_ms_ = 0;
+    panel_->on_press(Point{100, 120}); // t=0
+    panel_->on_release();              // commits sample 1
+    fake_now_ms_ = 5;
+    panel_->on_press(Point{100, 120}); // t=5  (bounce)
+    panel_->on_release();
+    fake_now_ms_ = 12;
+    panel_->on_press(Point{100, 120}); // t=12 (bounce)
+    panel_->on_release();
 
-    // Exactly one sample recorded for the current point; the rest were ignored
-    // because awaiting_release_ was set after the first.
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
     REQUIRE(current_sample_count() == 1);
 }
@@ -871,17 +883,17 @@ TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
 TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
                  "TouchCalibrationPanel: debounce normal flow with releases completes 3 points",
                  "[touch-calibration][debounce]") {
-    enable_debounce();
     panel_->start();
 
-    // Well-distributed triangle, one sample per point, releasing between each.
+    // Well-distributed triangle, one sample per point, spacing taps past the
+    // refractory window so each commits.
     const Point taps[3] = {{100, 120}, {380, 390}, {660, 60}};
     for (const auto& tap : taps) {
         for (int s = 0; s < 3; ++s) {
-            // Burst within one contact — only the first should record.
-            panel_->add_sample(tap);
-            panel_->add_sample(tap);
-            panel_->notify_release(); // finger lifts, clears the gate
+            clear_refractory();
+            panel_->on_press(tap);
+            panel_->on_press(tap); // burst within one contact — overwrites pending
+            panel_->on_release();  // single commit
         }
     }
 
@@ -893,39 +905,38 @@ TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
 }
 
 TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
-                 "TouchCalibrationPanel: stall-guard clears gate after release timeout",
+                 "TouchCalibrationPanel: stall-timeout commits a press with no release",
                  "[touch-calibration][debounce]") {
-    enable_debounce();
     panel_->start();
 
     fake_now_ms_ = 1000;
-    panel_->add_sample(Point{100, 120}); // records, arms deadline at 1000+timeout
+    panel_->on_press(Point{100, 120}); // captured, NO release
+    REQUIRE(current_sample_count() == 0);
+    REQUIRE(TouchCalibrationPanelTestAccess::press_pending(*panel_) == true);
+
+    // Too early — stall window not yet elapsed.
+    TouchCalibrationPanelTestAccess::commit_pending_if_stale(
+        *panel_, 1000 + TouchCalibrationPanelTestAccess::stall_commit_ms() - 1);
+    REQUIRE(current_sample_count() == 0);
+
+    // Past the stall window — the fallback commits the pending press.
+    TouchCalibrationPanelTestAccess::commit_pending_if_stale(
+        *panel_, 1000 + TouchCalibrationPanelTestAccess::stall_commit_ms());
     REQUIRE(current_sample_count() == 1);
-    REQUIRE(TouchCalibrationPanelTestAccess::awaiting_release(*panel_) == true);
-
-    // A second press while still awaiting release is ignored.
-    panel_->add_sample(Point{101, 121});
-    REQUIRE(current_sample_count() == 1);
-
-    // Advance the clock past the stall-guard timeout WITHOUT a release.
-    fake_now_ms_ = 1000 + TouchCalibrationPanelTestAccess::release_timeout_ms() + 1;
-
-    // Next press now records (stall-guard auto-cleared the gate).
-    panel_->add_sample(Point{102, 119});
-    REQUIRE(current_sample_count() == 2);
+    REQUIRE(TouchCalibrationPanelTestAccess::press_pending(*panel_) == false);
 }
 
 TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
-                 "TouchCalibrationPanel: debounce OFF preserves legacy multi-sample behavior",
+                 "TouchCalibrationPanel: debounce OFF preserves legacy sample-on-press behavior",
                  "[touch-calibration][debounce]") {
     disable_debounce();
     panel_->start();
 
-    // Three presses, NO releases — today's behavior records all three and
-    // advances to the next point.
-    panel_->add_sample(Point{98, 118});
-    panel_->add_sample(Point{100, 121});
-    panel_->add_sample(Point{102, 119});
+    // With debounce OFF, on_press samples immediately and release is a no-op.
+    // Three presses record all three and advance to the next point.
+    panel_->on_press(Point{98, 118});
+    panel_->on_press(Point{100, 121});
+    panel_->on_press(Point{102, 119});
 
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_2);
 }

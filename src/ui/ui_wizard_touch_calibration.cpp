@@ -483,8 +483,9 @@ void WizardTouchCalibrationStep::handle_screen_touched(lv_event_t* e) {
     spdlog::debug("[{}] Screen touched at ({}, {}) during state {}", get_name(), point.x, point.y,
                   static_cast<int>(state_before));
 
-    // add_sample() handles IDLE→POINT_1 auto-start and sample collection
-    panel_->add_sample({point.x, point.y});
+    // on_press() captures the press; commit happens on release / stall (#943).
+    // Handles IDLE→POINT_1 auto-start and sample collection.
+    panel_->on_press({point.x, point.y});
 
     // Flash crosshair for visual tap feedback (only during calibration points,
     // not on the initial "tap anywhere to begin" transition from IDLE)
@@ -509,10 +510,10 @@ void WizardTouchCalibrationStep::handle_screen_touched(lv_event_t* e) {
 }
 
 void WizardTouchCalibrationStep::handle_screen_released() {
-    // Forward finger-lift to the panel so the press-debounce gate clears
+    // Forward finger-lift to the panel so the pending press commits
     // (issue #943). No-op when debounce is disabled. Main-thread input only.
     if (panel_) {
-        panel_->notify_release();
+        panel_->on_release();
     }
 }
 
