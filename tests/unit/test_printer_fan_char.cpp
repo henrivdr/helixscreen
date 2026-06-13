@@ -1261,6 +1261,65 @@ TEST_CASE("Fan characterization: fan_feedback RPM updates",
     }
 }
 
+TEST_CASE("Fan characterization: duplicate chamber_fan disambiguated by role",
+          "[characterization][fan][names][chamber]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    // A Creality K2 Plus exposes TWO distinct Klipper objects that share the
+    // suffix "chamber_fan": the PTC heater element's cooling fan and the chamber
+    // cooling fan. Both must read as distinct, role-specific names rather than
+    // colliding on a flat "Chamber Fan".
+    state.init_fans({"heater_fan chamber_fan", "temperature_fan chamber_fan"});
+
+    const auto& fans = state.get_fans();
+
+    SECTION("heater_fan chamber_fan reads as 'Chamber Heater Fan'") {
+        REQUIRE(fans[0].display_name == "Chamber Heater Fan");
+    }
+
+    SECTION("temperature_fan chamber_fan reads as 'Chamber Cooling Fan'") {
+        REQUIRE(fans[1].display_name == "Chamber Cooling Fan");
+    }
+
+    SECTION("the two chamber fans have distinct names") {
+        REQUIRE(fans[0].display_name != fans[1].display_name);
+    }
+}
+
+TEST_CASE("Fan characterization: single chamber fan still reads sensibly",
+          "[characterization][fan][names][chamber]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    SECTION("lone heater_fan chamber_fan reads as 'Chamber Heater Fan'") {
+        state.init_fans({"heater_fan chamber_fan"});
+        REQUIRE(state.get_fans()[0].display_name == "Chamber Heater Fan");
+    }
+
+    SECTION("lone temperature_fan chamber_fan reads as 'Chamber Cooling Fan'") {
+        state.init_fans({"temperature_fan chamber_fan"});
+        REQUIRE(state.get_fans()[0].display_name == "Chamber Cooling Fan");
+    }
+
+    SECTION("a user-set custom name still wins over role disambiguation") {
+        auto* config = Config::get_instance();
+        config->set(config->df() + "fans/names/heater_fan chamber_fan",
+                    std::string("My Fan"));
+
+        state.init_fans({"heater_fan chamber_fan"});
+        REQUIRE(state.get_fans()[0].display_name == "My Fan");
+
+        config->set(config->df() + "fans/names/heater_fan chamber_fan", std::string(""));
+    }
+}
+
 TEST_CASE("Fan characterization: custom display names from config",
           "[characterization][fan][names]") {
     lv_init_safe();

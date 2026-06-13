@@ -204,6 +204,27 @@ std::string PrinterFanState::get_role_display_name(const std::string& object_nam
     return {};
 }
 
+std::string PrinterFanState::disambiguate_chamber_fan_name(const std::string& object_name,
+                                                           FanType type,
+                                                           const std::string& base_name) const {
+    // Some printers (e.g. Creality K2 Plus) expose two distinct Klipper objects
+    // that share the "chamber_fan" suffix: the PTC heater element's cooling fan
+    // (heater_fan chamber_fan) and the chamber cooling fan (temperature_fan
+    // chamber_fan). Both otherwise resolve to a flat "Chamber Fan", which is
+    // ambiguous. Refine the label by role so each reads distinctly.
+    if (extract_device_suffix(object_name) != "chamber_fan") {
+        return base_name;
+    }
+    switch (type) {
+    case FanType::HEATER_FAN:
+        return "Chamber Heater Fan";
+    case FanType::TEMPERATURE_FAN:
+        return "Chamber Cooling Fan";
+    default:
+        return base_name;
+    }
+}
+
 bool PrinterFanState::is_fan_controllable(FanType type) {
     return type == FanType::PART_COOLING || type == FanType::GENERIC_FAN ||
            type == FanType::OUTPUT_PIN_FAN;
@@ -256,6 +277,9 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
 
         FanInfo info;
         info.object_name = obj_name;
+        info.type = classify_fan_type(obj_name);
+        info.is_controllable = is_fan_controllable(info.type);
+        info.speed_percent = 0;
 
         // Name priority: custom name > role name > auto-generated
         auto* config = Config::get_instance();
@@ -270,11 +294,8 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
             std::string role_name = get_role_display_name(obj_name);
             info.display_name =
                 role_name.empty() ? get_display_name(obj_name, DeviceType::FAN) : role_name;
+            info.display_name = disambiguate_chamber_fan_name(obj_name, info.type, info.display_name);
         }
-
-        info.type = classify_fan_type(obj_name);
-        info.is_controllable = is_fan_controllable(info.type);
-        info.speed_percent = 0;
 
         spdlog::trace("[PrinterFanState] Registered fan: {} -> \"{}\" (type={}, controllable={})",
                       obj_name, info.display_name, static_cast<int>(info.type),
@@ -406,6 +427,8 @@ void PrinterFanState::rename_fan(const std::string& object_name, const std::stri
                 std::string role_name = get_role_display_name(object_name);
                 fan.display_name =
                     role_name.empty() ? get_display_name(object_name, DeviceType::FAN) : role_name;
+                fan.display_name =
+                    disambiguate_chamber_fan_name(object_name, fan.type, fan.display_name);
             } else {
                 fan.display_name = new_name;
             }

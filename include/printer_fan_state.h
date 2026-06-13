@@ -180,6 +180,12 @@ class PrinterFanState {
     /// Get role-based display name override, or empty string if none
     std::string get_role_display_name(const std::string& object_name) const;
 
+    /// Disambiguate fans sharing the "chamber_fan" suffix by role: a HEATER_FAN
+    /// becomes "Chamber Heater Fan" and a TEMPERATURE_FAN "Chamber Cooling Fan".
+    /// Returns base_name unchanged for any other object or type.
+    std::string disambiguate_chamber_fan_name(const std::string& object_name, FanType type,
+                                              const std::string& base_name) const;
+
     SubjectManager subjects_;
     bool subjects_initialized_ = false;
 
