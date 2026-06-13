@@ -42,6 +42,10 @@ class TouchCalibrationPanelTestAccess {
     static uint32_t release_timeout_ms() {
         return TouchCalibrationPanel::RELEASE_TIMEOUT_MS;
     }
+
+    static int samples_required() {
+        return TouchCalibrationPanel::SAMPLES_REQUIRED;
+    }
 };
 
 } // namespace helix

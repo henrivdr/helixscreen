@@ -303,9 +303,15 @@ void TouchCalibrationOverlay::show(CompletionCallback callback) {
         }
     }
 
-    // Start in IDLE — first tap anywhere begins calibration
+    // Reset ALL per-session state to a fresh-constructed baseline so the
+    // singleton overlay behaves like the first-run wizard, which builds a brand
+    // new panel each time (#943). cancel() alone only set IDLE + invalidated
+    // the calibration — it left the press-debounce gate armed, a half-filled
+    // sample buffer, and stale verify counters from the previous show, so the
+    // SECOND Settings -> Touch Calibration session misbehaved. reset() also
+    // re-reads the debounce setting and is silent (no completion callback).
     if (panel_) {
-        panel_->cancel(); // Reset to IDLE
+        panel_->reset();
     }
 
     // Disable affine calibration so we capture raw coordinates

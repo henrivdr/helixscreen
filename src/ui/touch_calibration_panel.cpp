@@ -377,6 +377,34 @@ void TouchCalibrationPanel::cancel() {
     }
 }
 
+void TouchCalibrationPanel::reset() {
+    // Silent fresh-start for the singleton overlay's show() path (#943). This
+    // mirrors a freshly constructed panel; it deliberately does NOT invoke the
+    // completion callback the way cancel() does.
+    stop_countdown_timer();
+    stop_fast_revert_timer();
+
+    state_ = State::IDLE;
+    calibration_.valid = false;
+
+    // Sample buffer + per-point capture progress.
+    reset_samples();
+
+    // Press-debounce gate: a session that ended mid-press could leave the gate
+    // armed, swallowing the next session's taps until the stall-guard expired.
+    awaiting_release_ = false;
+    release_deadline_ms_ = 0;
+
+    // Re-read the debounce setting so a value that changed since construction
+    // (or was unset when the singleton was built early in startup) applies to
+    // this session. RuntimeConfig caches the env read, so this is cheap.
+    debounce_enabled_ = RuntimeConfig::touch_cal_debounce();
+
+    // VERIFY-state broken-matrix detection counters.
+    verify_raw_touch_count_ = 0;
+    verify_onscreen_touch_count_ = 0;
+}
+
 TouchCalibrationPanel::State TouchCalibrationPanel::get_state() const {
     return state_;
 }

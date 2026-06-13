@@ -213,6 +213,24 @@ class TouchCalibrationPanel {
     void cancel();
 
     /**
+     * @brief Reset ALL per-session state to a fresh-constructed baseline (#943)
+     *
+     * Unlike cancel(), reset() is a SILENT fresh-start: it does NOT invoke the
+     * completion callback. The Settings-launched overlay reuses a persistent
+     * singleton panel, so it must reset on every show to behave like the
+     * first-run wizard (which builds a brand-new panel each time). Without this,
+     * stale state — an armed press-debounce gate, a half-filled sample buffer, a
+     * non-IDLE state-machine position, verify touch counters — carried into the
+     * next show and made the second calibration misbehave.
+     *
+     * Returns the panel to: IDLE state, no computed calibration, empty sample
+     * buffer, cleared debounce gate, zeroed verify counters, stopped timers.
+     * Re-reads the debounce setting from RuntimeConfig so a value that changed
+     * (or was unset at construction) takes effect on the next session.
+     */
+    void reset();
+
+    /**
      * @brief Get current state
      * @return Current state machine state
      */

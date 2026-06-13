@@ -1,0 +1,150 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_touch_calibration_reset.cpp
+ * @brief Per-session reset of TouchCalibrationPanel (issue #943)
+ *
+ * The Settings-launched calibration overlay reuses a persistent singleton
+ * TouchCalibrationPanel across invocations. The first-run wizard builds a
+ * fresh panel each time, so it always starts clean. The Settings path did not
+ * reset per-session state on re-show, so the SECOND time a user opened
+ * Settings -> Touch Calibration, stale state (an armed press-debounce gate, a
+ * half-filled sample buffer, a non-IDLE state-machine position) made the
+ * calibration misbehave.
+ *
+ * TouchCalibrationPanel::reset() returns ALL per-session mutable state to its
+ * fresh-constructed baseline. The overlay's show() calls it so every show
+ * starts clean — exactly like a freshly built wizard panel.
+ *
+ * These tests drive a panel into a dirty mid-session state, call reset(), and
+ * assert the panel is back to a clean start.
+ */
+
+#include "../test_helpers/touch_calibration_panel_test_access.h"
+#include "touch_calibration.h"
+#include "touch_calibration_panel.h"
+
+#include <cstdint>
+#include <memory>
+
+#include "../catch_amalgamated.hpp"
+
+using namespace helix;
+
+namespace {
+
+/**
+ * @brief Fixture providing a panel with a deterministic injected clock and a
+ *        controllable debounce gate (so we exercise the stale-gate path).
+ */
+class TouchCalibrationResetFixture {
+  public:
+    TouchCalibrationResetFixture() {
+        panel_ = std::make_unique<TouchCalibrationPanel>();
+        panel_->set_screen_size(800, 480);
+        TouchCalibrationPanelTestAccess::set_now_fn(*panel_, [this]() { return fake_now_ms_; });
+        TouchCalibrationPanelTestAccess::set_debounce_enabled(*panel_, true);
+    }
+
+  protected:
+    std::unique_ptr<TouchCalibrationPanel> panel_;
+    uint32_t fake_now_ms_ = 0;
+
+    int current_sample_count() const {
+        return panel_->get_progress().current_sample;
+    }
+    bool gate_armed() const {
+        return TouchCalibrationPanelTestAccess::awaiting_release(*panel_);
+    }
+};
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// reset() from a half-captured point with the debounce gate armed
+// ---------------------------------------------------------------------------
+TEST_CASE_METHOD(TouchCalibrationResetFixture,
+                 "TouchCalibrationPanel::reset clears mid-point session state",
+                 "[touch][calibration][reset]") {
+    // Advance the state machine past point 0 (POINT_1 -> POINT_2) by capturing
+    // a full point, then partially fill the next point's sample buffer.
+    panel_->start();
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
+
+    // One sample for POINT_1 arms the debounce gate (no release follows).
+    panel_->add_sample(Point{100, 120});
+    REQUIRE(current_sample_count() == 1);
+    REQUIRE(gate_armed());
+
+    // The gate is armed, so subsequent presses are swallowed — exactly the
+    // stale state that would carry into the next Settings show.
+    panel_->add_sample(Point{100, 120});
+    REQUIRE(current_sample_count() == 1);
+
+    // Sanity: we are genuinely mid-session (not IDLE, sample buffered, gate up).
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
+
+    // The fix under test.
+    panel_->reset();
+
+    // Back to a clean start: IDLE, no buffered samples, gate cleared.
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::IDLE);
+    REQUIRE(current_sample_count() == 0);
+    REQUIRE_FALSE(gate_armed());
+}
+
+// ---------------------------------------------------------------------------
+// reset() from VERIFY (a completed-but-not-accepted session)
+// ---------------------------------------------------------------------------
+TEST_CASE_METHOD(TouchCalibrationResetFixture,
+                 "TouchCalibrationPanel::reset returns to clean start from VERIFY",
+                 "[touch][calibration][reset]") {
+    // Drive a full 3-point calibration to VERIFY, releasing between taps so the
+    // debounce gate lets each sample through.
+    panel_->start();
+    const Point taps[3] = {{100, 120}, {380, 390}, {660, 60}};
+    for (const auto& tap : taps) {
+        for (int s = 0; s < TouchCalibrationPanelTestAccess::samples_required(); ++s) {
+            panel_->add_sample(tap);
+            panel_->notify_release();
+        }
+    }
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::VERIFY);
+    REQUIRE(panel_->get_calibration() != nullptr);
+
+    panel_->reset();
+
+    // Fresh start: IDLE, no calibration exposed, no buffered samples, gate down.
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::IDLE);
+    REQUIRE(panel_->get_calibration() == nullptr);
+    REQUIRE(current_sample_count() == 0);
+    REQUIRE_FALSE(gate_armed());
+
+    // And the panel is fully usable again after reset (the whole point of #943):
+    // a brand-new run reaches POINT_1 and accepts a fresh sample.
+    panel_->add_sample(Point{100, 120}); // IDLE -> POINT_1 auto-start (gate armed, no sample)
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
+    REQUIRE(current_sample_count() == 0);
+    panel_->notify_release();
+    panel_->add_sample(Point{100, 120});
+    REQUIRE(current_sample_count() == 1);
+}
+
+// ---------------------------------------------------------------------------
+// reset() does not fire the completion callback (unlike cancel())
+// ---------------------------------------------------------------------------
+TEST_CASE_METHOD(TouchCalibrationResetFixture,
+                 "TouchCalibrationPanel::reset does not invoke completion callback",
+                 "[touch][calibration][reset]") {
+    bool callback_fired = false;
+    panel_->set_completion_callback([&](const TouchCalibration*) { callback_fired = true; });
+
+    panel_->start();
+    panel_->add_sample(Point{100, 120});
+
+    panel_->reset();
+
+    // reset() is a silent fresh-start; it must NOT report a cancellation the way
+    // cancel() does (the overlay show() path has no completion to report yet).
+    REQUIRE_FALSE(callback_fired);
+}
