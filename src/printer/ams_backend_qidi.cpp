@@ -139,6 +139,35 @@ void AmsBackendQidi::on_started() {
     spdlog::info("{} Bootstrap query issued for save_variables + box_extras",
                  backend_log_tag());
 
+    // Query printer.configfile.settings to refine dryer_info_.max_temp_c from
+    // the real Klipper settable ceiling (max_temp or target_max_temp_heater_generic).
+    {
+        nlohmann::json cfg_params = {
+            {"objects", nlohmann::json::object({{"configfile", {"settings"}}})}};
+        auto cfg_token = lifetime_.token();
+        client_->send_jsonrpc(
+            "printer.objects.query", cfg_params,
+            [this, cfg_token](nlohmann::json response) {
+                cfg_token.defer("AmsBackendQidi::apply_config_settings",
+                                [this, response = std::move(response)]() {
+                                    try {
+                                        const auto& settings =
+                                            response["result"]["status"]["configfile"]
+                                                    ["settings"];
+                                        apply_config_settings(settings);
+                                        emit_event(EVENT_STATE_CHANGED);
+                                    } catch (const nlohmann::json::exception& e) {
+                                        spdlog::warn("{} configfile parse failed: {}",
+                                                     backend_log_tag(), e.what());
+                                    }
+                                });
+            },
+            [this](const MoonrakerError& err) {
+                spdlog::warn("{} configfile query failed: {}", backend_log_tag(),
+                             err.message);
+            });
+    }
+
     // Also fetch officiall_filas_list.cfg so the temperature profile cache
     // is ready by the time filament_slot<N> entries arrive. The path is the
     // canonical Klipper config location used by box_extras.py.
@@ -230,6 +259,32 @@ void AmsBackendQidi::apply_box_extras(const nlohmann::json& box_extras) {
     drying_timer_supported_ = true;
     dry_end_epoch_ = latest_end;
     dryer_info_.active = (dry_end_epoch_ > now_fn_());
+}
+
+void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {
+    std::optional<float> settable_max;
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
+        const std::string& key = it.key();
+        if (!it->is_object()) {
+            continue;
+        }
+        if (key.rfind("heater_generic heater_box", 0) == 0) {
+            if (auto m = it->find("max_temp"); m != it->end() && m->is_number()) {
+                settable_max = m->get<float>();
+            }
+        } else if (key.rfind("box_config box", 0) == 0) {
+            if (auto m = it->find("target_max_temp_heater_generic");
+                m != it->end() && m->is_number()) {
+                settable_max = m->get<float>();
+            }
+        }
+    }
+    if (settable_max) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dryer_info_.max_temp_c = *settable_max;
+        spdlog::info("{} Box dryer max temp from config: {}°C", backend_log_tag(),
+                     *settable_max);
+    }
 }
 
 void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {

@@ -64,6 +64,9 @@ class QidiBoxTestAccess {
     static void set_drying_timer_supported(AmsBackendQidi& b, bool v) {
         b.drying_timer_supported_ = v;
     }
+    static void apply_config_settings(AmsBackendQidi& b, const json& s) {
+        b.apply_config_settings(s);
+    }
 };
 
 // Subclass that captures execute_gcode() invocations so write-path tests
@@ -896,4 +899,21 @@ TEST_CASE("QIDI Box drying_state past end_time means not drying",
     DryerInfo d = QidiBoxTestAccess::get_dryer(backend);
     REQUIRE_FALSE(d.active);
     REQUIRE(d.remaining_min == 0);
+}
+
+TEST_CASE("QIDI Box config query refines max temp (heater_generic section)",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"heater_generic heater_box1", json{{"max_temp", 80.0}}}});
+    REQUIRE(QidiBoxTestAccess::get_dryer(backend).max_temp_c == Catch::Approx(80.0f));
+}
+
+TEST_CASE("QIDI Box config query refines max temp (box_config section)",
+          "[ams][qidi_box][dryer]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_config_settings(
+        backend,
+        json{{"box_config box0", json{{"target_max_temp_heater_generic", 90.0}}}});
+    REQUIRE(QidiBoxTestAccess::get_dryer(backend).max_temp_c == Catch::Approx(90.0f));
 }

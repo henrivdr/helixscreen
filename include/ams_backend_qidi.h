@@ -110,6 +110,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// max temperature and max humidity observed across all boxes.
     void apply_heater_status(const nlohmann::json& notification);
 
+    /// Refine dryer_info_.max_temp_c from the Klipper configfile settings
+    /// object (`printer.configfile.settings`). Handles two section spellings:
+    ///   "heater_generic heater_box<N>" → key `max_temp`
+    ///   "box_config box<N>"            → key `target_max_temp_heater_generic`
+    void apply_config_settings(const nlohmann::json& settings);
+
     /// Parse `box_extras` object from a status notification, extracting
     /// `box_drying_state.box<N>.{dry_state, end_time}` to update the
     /// drying countdown in dryer_info_.
