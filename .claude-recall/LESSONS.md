@@ -32,8 +32,8 @@
 - **Uses**: 1 | **Velocity**: 0 | **Learned**: 2025-12-14 | **Last**: 2025-12-31 | **Category**: pattern | **Type**: informational
 > Centidegrees (int) for temp subjects to keep 0.1°C resolution. Float subjects lose precision in LVGL bindings.
 
-### [L025] [*----|-----] Button content centering
-- **Uses**: 3 | **Velocity**: 0 | **Learned**: 2025-12-21 | **Last**: 2026-03-13 | **Category**: pattern | **Type**: constraint
+### [L025] [*----|***--] Button content centering
+- **Uses**: 4 | **Velocity**: 1 | **Learned**: 2025-12-21 | **Last**: 2026-06-12 | **Category**: pattern | **Type**: constraint
 > Text-only buttons: `align="center"` on child. Icon+text with `flex_flow="row"` need all three: `style_flex_main_place="center"` (horiz), `style_flex_cross_place="center"` (cross), `style_flex_track_place="center"` (row position). Without track_place content sits at top.
 
 ### [L031] [*****|*****] XML no recompile
@@ -60,8 +60,8 @@
 - **Uses**: 1 | **Velocity**: 0.03125 | **Learned**: 2026-01-06 | **Last**: 2026-04-20 | **Category**: correction | **Type**: constraint
 > An XML `<subjects>` declaration shadows a same-named C++ subject (UI_SUBJECT_INIT_AND_REGISTER_*) — the local one wins, bindings stick at default. Don't declare XML subjects for values C++ owns.
 
-### [L048] [**---|***--] Async tests need queue drain
-- **Uses**: 9 | **Velocity**: 1.65625 | **Learned**: 2026-01-08 | **Last**: 2026-05-21 | **Category**: pattern | **Type**: constraint
+### [L048] [***--|****-] Async tests need queue drain
+- **Uses**: 10 | **Velocity**: 2.65625 | **Learned**: 2026-01-08 | **Last**: 2026-06-11 | **Category**: pattern | **Type**: constraint
 > Tests calling async setters (helix::async::invoke / ui_queue_update) must `UpdateQueue::instance().drain_queue_for_testing()` before assertions, else the update is still queued and the subject reads stale. Pattern: test_printer_state.cpp.
 
 ### [L051] [**---|***--] LVGL timer lifetime safety
@@ -80,8 +80,8 @@
 - **Uses**: 1 | **Velocity**: 0.015625 | **Learned**: 2026-01-10 | **Last**: 2026-02-25 | **Category**: gotcha | **Type**: constraint
 > Singleton queues (UpdateQueue) MUST clear pending callbacks in shutdown(), not just null the timer — stale entries fire on next init() against destroyed pointers → UAF. Pattern: `std::queue<T>().swap(pending_)`, then null the timer.
 
-### [L055] [**---|**---] LVGL pad_all excludes flex gaps
-- **Uses**: 7 | **Velocity**: 0.796875 | **Learned**: 2026-01-10 | **Last**: 2026-05-17 | **Category**: gotcha | **Type**: constraint
+### [L055] [**---|***--] LVGL pad_all excludes flex gaps
+- **Uses**: 8 | **Velocity**: 1.796875 | **Learned**: 2026-01-10 | **Last**: 2026-06-12 | **Category**: gotcha | **Type**: constraint
 > `style_pad_all` only sets edge padding (top/bottom/left/right), NOT inter-item spacing. For zero-gap flex layouts, also need `style_pad_row="0"` (column) or `style_pad_column="0"` (row), or `style_pad_gap="0"` for both.
 
 ### [L056] [*----|-----] lv_subject_t no shallow copy
@@ -92,8 +92,8 @@
 - **Uses**: 1 | **Velocity**: 0 | **Learned**: 2026-01-14 | **Last**: 2026-01-16 | **Category**: gotcha | **Type**: constraint
 > Classes owning `lv_subject_t` members must call `lv_subject_deinit()` in dtor. Else observers leak and fire on freed subject → UAF.
 
-### [L059] [*----|*----] LVGL object deletion: pick the RIGHT strategy
-- **Uses**: 4 | **Velocity**: 0.0703125 | **Learned**: 2026-01-20 | **Last**: 2026-04-15 | **Category**: pattern | **Type**: constraint
+### [L059] [**---|**---] LVGL object deletion: pick the RIGHT strategy
+- **Uses**: 6 | **Velocity**: 0.5703125 | **Learned**: 2026-01-20 | **Last**: 2026-05-23 | **Category**: pattern | **Type**: constraint
 > Pick by scenario:
 > 1. `safe_delete(obj)` — sync, shutdown-safe, auto-nulls. Use in dtors/teardown when NOT inside an UpdateQueue/async batch.
 > 2. `safe_delete_deferred(obj)` — UpdateQueue-deferred. Use inside async cbs (timers, network responses). Nulls now, deletes next drain.
@@ -102,7 +102,7 @@
 > NEVER `lv_async_call(..., lv_obj_delete)` — uncancellable. NEVER `safe_delete()` inside `queue_update`/`async_call` lambdas — multiple sync deletes in one batch corrupt LVGL's event list (#356). ALWAYS cancel anims first ([L068]).
 
 ### [L060] [*****|*****] Interactive UI testing requires user
-- **Uses**: 100 | **Velocity**: 8.609453125 | **Learned**: 2026-02-01 | **Last**: 2026-05-21 | **Category**: correction | **Type**: constraint
+- **Uses**: 100 | **Velocity**: 10.609453125 | **Learned**: 2026-02-01 | **Last**: 2026-06-11 | **Category**: correction | **Type**: constraint
 > Don't fake automation with timed delays. Pattern:
 > 1. `Bash` with `run_in_background: true`: `./build/bin/helix-screen --test -vv -p panel_name 2>&1 | tee /tmp/test.log` — NOT shell `&` or `timeout`.
 > 2. Tell user exactly what to click.
@@ -118,8 +118,8 @@
 - **Uses**: 13 | **Velocity**: 0.7109375 | **Learned**: 2026-02-07 | **Last**: 2026-05-19 | **Category**: build
 > AD5M build: `make ad5m-docker` (Docker ARM cross), NOT `make pi-test` (Pi). Deploy: `AD5M_HOST=192.168.1.67 make ad5m-deploy`.
 
-### [L064] [***--|***--] Commit generated translation artifacts
-- **Uses**: 30 | **Velocity**: 1.953125 | **Learned**: 2026-02-10 | **Last**: 2026-06-06 | **Category**: i18n
+### [L064] [***--|*****] Commit generated translation artifacts
+- **Uses**: 33 | **Velocity**: 4.953125 | **Learned**: 2026-02-10 | **Last**: 2026-06-10 | **Category**: i18n
 > After syncing translation YAMLs, also stage the compiled artifacts: `src/generated/lv_i18n_translations.{c,h}` and `ui_xml/translations/translations.xml`. Tracked (not gitignored) for cross-compile, regenerated by build, but not auto-staged.
 
 ### [L065] [***--|****-] No test-only methods on production classes
@@ -138,8 +138,8 @@
 - **Uses**: 1 | **Velocity**: 0.0390625 | **Learned**: 2026-02-15 | **Last**: 2026-03-25 | **Category**: lvgl
 > Cancel animations BEFORE deleting their object — `lv_anim_delete` may fire the completion cb synchronously, UAF if obj is freed. Order: (1) null member ptr, (2) clear state flags, (3) `lv_anim_delete`, (4) `lv_obj_delete`. For anims with `this` as var: set guard flags false BEFORE lv_anim_delete so cbs no-op.
 
-### [L069] [***--|*----] Never assume lv_obj user_data ownership — it may already be set
-- **Uses**: 13 | **Velocity**: 0.453125 | **Learned**: 2026-02-15 | **Last**: 2026-05-16 | **Category**: architecture
+### [L069] [***--|***--] Never assume lv_obj user_data ownership — it may already be set
+- **Uses**: 14 | **Velocity**: 1.453125 | **Learned**: 2026-02-15 | **Last**: 2026-06-13 | **Category**: architecture
 > `lv_obj_set_user_data()` is a single shared slot. Custom XML widgets, component handlers, and LVGL internals may set it during construction (ui_button stores button_data_t*, severity_card stores a string). NEVER `delete/free` `lv_obj_get_user_data()` unless you set it on that exact object. NEVER use it as general storage on objects you didn't fully create. **CRITICAL**: NEVER walk the parent chain looking for any non-null user_data — ui_button etc. set their own; you'll find the wrong data and miscast (SEGV in AmsOperationSidebar/AmsDryerCard). Walk by `lv_obj_get_name()` for a known name, then read user_data from THAT named object. For per-item data: (1) per-callback event user_data, (2) C++-side map keyed by obj ptr, or (3) `lv_obj_find_by_name` to a hidden child label.
 
 ### [L071] [***--|*----] XML child click passthrough
@@ -150,16 +150,16 @@
 - **Uses**: 25 | **Velocity**: 0.6171875 | **Learned**: 2026-02-17 | **Last**: 2026-05-19 | **Category**: i18n
 > Don't `lv_tr()`: product names (Spoolman, Klipper, Moonraker, HelixScreen), URLs/domains, standalone tech abbreviations (AMS, QGL, ADXL), universal terms (OK, WiFi). Mark with `// i18n: do not translate`. Sentences containing product names ARE translatable ("Restarting HelixScreen…" — "Restarting" translates). Material names (PLA, PETG, ABS, TPU, PA) are also not translated, no translation_tag in XML.
 
-### [L072] [***--|****-] Never capture bare this in async/WebSocket callbacks
-- **Uses**: 23 | **Velocity**: 2.515625 | **Learned**: 2026-02-22 | **Last**: 2026-05-21 | **Category**: gotcha | **Type**: constraint
+### [L072] [***--|*****] Never capture bare this in async/WebSocket callbacks
+- **Uses**: 28 | **Velocity**: 5.015625 | **Learned**: 2026-02-22 | **Last**: 2026-05-24 | **Category**: gotcha | **Type**: constraint
 > Callbacks to `execute_gcode()` / `send_jsonrpc()` / Moonraker fire from the WS thread, possibly after the widget is gone. Never capture raw `[this]`. Use `AsyncLifetimeGuard::token()` + `tok.defer(...)` (CLAUDE.md § Threading). Older `weak_ptr<bool>` / `shared_ptr<atomic<bool>>` patterns are deprecated.
 
 ### [L073] [**---|*----] ObserverGuard release vs reset
 - **Uses**: 8 | **Velocity**: 0.1875 | **Learned**: 2026-02-22 | **Last**: 2026-04-22 | **Category**: gotcha | **Type**: constraint
 > `obs.reset()` when subjects are ALIVE (normal cleanup, repopulate) — unsubs and frees the LambdaObserverContext, expires weak_alive so deferred cbs skip. `obs.release()` ONLY when subjects may be DESTROYED (shutdown, pre-deinit) — avoids double-free. Wrong pick: reset on dead = double-free; release on live = zombie observer (context lives, weak_alive never expires, deferred cbs fire on stale `this`). Caused 17× #579: release() in unregister_slot_data left zombies → NEON blend SIGSEGV. Fixed by switching to reset() during normal widget delete; pre-deinit `cleanup_all_slot_data()` correctly uses release().
 
-### [L074] [**---|*----] Generation counter for deferred observer callbacks
-- **Uses**: 9 | **Velocity**: 0.15625 | **Learned**: 2026-02-22 | **Last**: 2026-03-28 | **Category**: pattern | **Type**: informational
+### [L074] [***--|***--] Generation counter for deferred observer callbacks
+- **Uses**: 10 | **Velocity**: 1.15625 | **Learned**: 2026-02-22 | **Last**: 2026-06-10 | **Category**: pattern | **Type**: informational
 > When repopulating dynamic widget lists with observers, bump a generation counter BEFORE cleanup. Capture in cbs: `if (gen != self->gen_) return;`. Skips stale deferred cbs from `observe_int_sync` that fire after old widgets are gone (UAF guard).
 
 ### [L075] [**---|**---] Validate lv_obj before accessing children
@@ -183,7 +183,7 @@
 > LVGL 9.5: `DRAW_TASK_ADDED` cbs fire AFTER `DRAW_MAIN_END/DRAW_POST` — `lv_draw_rect/_triangle/_fill` from there draws nothing. Broke chart gradient fills that worked in 9.4-pre. Fix: do custom fills in `DRAW_MAIN_END`, compute positions via `lv_chart_get_y_array()` + `lv_map()`. Gotcha: `lv_draw_fill` VER gradient `frac=0` is BOTTOM, `frac=255` is TOP. Use `lv_draw_fill` (not `lv_draw_rect`) for gradient-only fills to avoid bg_color bleed.
 
 ### [L080] [***--|*****] Verify deployment chain before user interaction
-- **Uses**: 29 | **Velocity**: 4.125 | **Learned**: 2026-04-16 | **Last**: 2026-05-18 | **Category**: gotcha
+- **Uses**: 31 | **Velocity**: 6.125 | **Learned**: 2026-04-16 | **Last**: 2026-06-13 | **Category**: gotcha
 > Before asking user to interact on-device, verify in one pass: (1) NEW binary running (PID start time / version in log), (2) logs land where you expect (journalctl/file/console), (3) required state on (telemetry, debug level in helixscreen.env), (4) logs reachable via SSH. Each failed round-trip burns user patience. Pi: systemctl → journalctl; `deploy-pi-fg` uses `ssh -t` (console only); nohup drops output. Production log capture: systemd + journalctl.
 
 ### [L081] [***--|***--] lifetime_.defer does NOT escape UpdateQueue batch
@@ -218,8 +218,8 @@
 > Only correct uses of `release()`: (a) `StaticSubjectRegistry::register_deinit()` cbs (pre-`lv_deinit`), (b) explicit shutdown paths where the subject is already destroyed. Widget `LV_EVENT_DELETE` during normal runtime is NOT one of those — use `reset()`.
 > If you reason "release() seems safer because it skips the observer-remove" — that's the misconception that caused 17× #579. The remove call IS the point; skipping it leaks context and corrupts rendering state. Companion to [L073]. Audit 2026-04-22 fixed `ui_ams_current_tool.cpp`, `ui_heating_animator.cpp`, `ui_ams_mini_status.cpp`.
 
-### [L086] [*----|**---] OpenWrt/procd silently skips plain SysV init scripts at boot
-- **Uses**: 2 | **Velocity**: 0.625 | **Learned**: 2026-04-28 | **Last**: 2026-06-03 | **Category**: gotcha | **Type**: constraint
+### [L086] [***--|*****] OpenWrt/procd silently skips plain SysV init scripts at boot
+- **Uses**: 13 | **Velocity**: 6.125 | **Learned**: 2026-04-28 | **Last**: 2026-06-03 | **Category**: gotcha | **Type**: constraint
 > On OpenWrt-derived firmware (Tina Linux on K2 series, possibly future Creality/Allwinner), procd's boot iterator only invokes `/etc/init.d/<name>` scripts that have BOTH `#!/bin/sh /etc/rc.common` shebang AND a `DEPEND=...` directive. Plain SysV (`#!/bin/sh` + `case "$1" in start)`) is silently skipped — even when symlinked from `/etc/rc.d/SXXname`. No log, no error.
 > Symptom: device hangs at boot animation; no UI; SSH in → no `/tmp/helixscreen.log`, no helix-screen procs, no syslog entries. Manual `/etc/init.d/S99helixscreen start` works.
 > Fix: install a procd shim at `/etc/init.d/<name>` with `#!/bin/sh /etc/rc.common`, `START=99 STOP=01 DEPEND=done`, and `boot()/start()/stop()/restart()/status()` that delegate to the SysV `/etc/init.d/SXX<name>`. Then `<shim> enable` for rc.d symlinks. See `install_procd_shim_k2()` in `scripts/lib/installer/service.sh`. Diag: `head -1 /etc/init.d/<name>` must show `/etc/rc.common`; `<script> boot; echo $?` must succeed; post-reboot `grep <tag> /var/log/messages` must show boot invocation.
@@ -233,7 +233,19 @@
 - **Uses**: 2 | **Velocity**: 1 | **Learned**: 2026-05-22 | **Last**: 2026-06-03 | **Category**: pattern
 > tests/shell/test_code_lint.bats forbids _for_testing suffix methods in include/*.h or src/*.cpp. Pattern: declare 'friend class FooTestAccess;' on the production class, define FooTestAccess in tests/test_helpers/foo_test_access.h with static methods that access private members (e.g., 'static void apply_sample(PerformanceState& ps, const PerfSample& s) { ps.apply_sample(s); }'). Mocks (*_mock.h) are exempt — whole file is test infra. Template: tests/test_helpers/update_queue_test_access.h.
 
-### [L089] [-----|-----] Regen XML linter schema after adding C++ widget
-- **Uses**: 0 | **Velocity**: 0 | **Learned**: 2026-05-22 | **Last**: 2026-05-22 | **Category**: gotcha
+### [L089] [*----|***--] Regen XML linter schema after adding C++ widget
+- **Uses**: 1 | **Velocity**: 1 | **Learned**: 2026-05-22 | **Last**: 2026-06-11 | **Category**: gotcha
 > After registering a new widget via lv_xml_register_widget() in src/ui/*.cpp (custom widgets like helix_sparkline, ui_card, helix_3d_viewer), run 'make regen-xml-schema' and commit tools/xml-linter/schema/schema.json. The linter auto-discovers from C++ source at schema-generation time but reads the *committed* schema in CI — forgetting this fails the XML Lint workflow with 'unknown-widget'. Analogous to L064 (translation artifacts).
+
+### [L090] [*----|***--] resolve-backtrace.sh orphans addr2line against the big pi DWARF
+- **Uses**: 1 | **Velocity**: 1 | **Learned**: 2026-06-12 | **Last**: 2026-06-12 | **Category**: gotcha
+> scripts/resolve-backtrace.sh forks one aarch64-linux-gnu-addr2line PER backtrace address against the multi-GB DWARF (pi.debug ~2.6G). addr2line loads DWARF lazily so each child GROWS over time (4G->8G+). If the harness auto-backgrounds the resolver and you 'kill' it, the script's subshell+addr2line children ORPHAN and keep grinding -> RAM erodes with ever-new PIDs invisible to 'pkill -f addr2line' / 'ps -C addr2line' (binary name truncates to 'aarch64-linux-g'). Three parallel YA2GVVXT resolves once ate ~26G+ while a build ran, nearly OOMing the box. RULES: (1) run resolve-backtrace.sh with run_in_background:true from the START so the harness owns the whole process tree; (2) NEVER hand-fork addr2line in a chained shell that can be backgrounded; (3) let ONE resolver finish, don't launch parallel retries; (4) to clean up, kill the PARENT resolve-backtrace.sh PIDs (find via 'pgrep -af resolve-backtrace'), not just children; identify the big procs via /proc/PID/cmdline since the name truncates. The resolver's reliable-frames block prints quickly; the slow part is the stack-scan over all addresses.
+
+### [L091] [-----|-----] Stale-but-200 R2 manifest silently suppresses updates fleet-wide
+- **Uses**: 0 | **Velocity**: 0 | **Learned**: 2026-06-12 | **Last**: 2026-06-12 | **Category**: gotcha
+> If 'new version not showing in check-for-updates on ANY device', it's the source of truth, not per-device: the in-app updater fetches https://releases.helixscreen.org/<channel>/manifest.json FIRST and trusts any HTTP-200 unconditionally (update_checker.cpp fetch_stable_release) -- it only falls back to GitHub on FETCH FAILURE, never on staleness. Root cause of v0.99.76 not appearing: the release.yml 'Upload to R2' job is non-blocking AND its monolithic set -e upload step put the manifest AFTER the large .zip artifacts; a transient 504 on k2.zip aborted the step before the manifest uploaded, so R2 stayed pinned at .75 while the run still showed green. Diagnose: curl the live manifest .version vs the tag; check the 'Upload to R2' job (not just run status). Fix shipped (942bcbd51,d0034b282): upload referenced .tar.gz -> publish manifest -> then zips/symbols, all via s3cp() retry wrapper, then read the manifest back and assert .version==tag so a bad publish fails the release loudly. Lesson: verify the SERVED artifact, never trust upload success; a non-blocking CI job that publishes the source-of-truth is a silent-failure trap.
+
+### [L092] [*----|****-] make | tail masks exit code; -j hides the real build error
+- **Uses**: 3 | **Velocity**: 3 | **Learned**: 2026-06-12 | **Last**: 2026-06-13 | **Category**: gotcha
+> Piping make through tail/head makes the Bash step report exit 0 even when make failed (the exit code is tail's). Capture it separately: 'make ...; echo $? > /tmp/exit'. When a (cross-)build dies with NO 'error:' line and a DIFFERENT failure point each run, suspect interleaved parallel output hiding the real first error OR resource contention (check 'free -h' and 'pgrep -af cc1plus' for a sibling session building on the same box) — drop to -j2 to serialize and surface the true first error before concluding root cause. Bit me triaging a worktree snapmaker-u1 cross-build; real cause was missing $(LV_CONF) in the splash/display/watchdog sub-builds, invisible under -j.
 
