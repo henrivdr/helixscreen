@@ -6,7 +6,7 @@
 # shellcheck compliance, and basic syntax validity.
 
 HOOKS_DIR="assets/config/platform"
-HOOK_FILES="hooks-ad5m-forgex.sh hooks-ad5m-kmod.sh hooks-ad5m-zmod.sh hooks-pi.sh hooks-k1.sh"
+HOOK_FILES="hooks-ad5m-forgex.sh hooks-ad5m-kmod.sh hooks-ad5m-zmod.sh hooks-pi.sh hooks-k1.sh hooks-snapmaker-u1.sh"
 REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platform_wait_for_services platform_pre_start platform_post_stop"
 
 # --- Hook contract tests: every hook file must define all 5 functions ---
@@ -46,6 +46,13 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
       done )
 }
 
+@test "snapmaker-u1 hooks define all required functions" {
+    ( . "$HOOKS_DIR/hooks-snapmaker-u1.sh"
+      for func in $REQUIRED_FUNCTIONS; do
+          type "$func" >/dev/null 2>&1
+      done )
+}
+
 # --- Shellcheck compliance ---
 
 @test "forgex hooks pass shellcheck" {
@@ -68,6 +75,10 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
     shellcheck -s sh "$HOOKS_DIR/hooks-k1.sh"
 }
 
+@test "snapmaker-u1 hooks pass shellcheck" {
+    shellcheck -s sh "$HOOKS_DIR/hooks-snapmaker-u1.sh"
+}
+
 # --- Syntax validity ---
 
 @test "forgex hooks have valid sh syntax" {
@@ -88,6 +99,10 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
 
 @test "k1 hooks have valid sh syntax" {
     sh -n "$HOOKS_DIR/hooks-k1.sh"
+}
+
+@test "snapmaker-u1 hooks have valid sh syntax" {
+    sh -n "$HOOKS_DIR/hooks-snapmaker-u1.sh"
 }
 
 # --- Init script integration tests ---
