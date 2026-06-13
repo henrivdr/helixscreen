@@ -1749,6 +1749,10 @@ bool PrinterDetector::is_creality_k2() {
     return printer_type_contains("creality") && printer_type_contains("k2");
 }
 
+bool PrinterDetector::is_creality_hi() {
+    return printer_type_contains("creality") && printer_type_contains("hi");
+}
+
 std::string PrinterDetector::screws_tilt_direction_override() {
     Config* config = Config::get_instance();
     if (!config) {

@@ -3739,6 +3739,27 @@ TEST_CASE("Creality K1 printer detection", "[printer_detector]") {
         REQUIRE(PrinterDetector::is_creality_k2() == false);
     }
 
+    SECTION("Hi detected from Creality Hi type") {
+        config->set<std::string>(type_path, "Creality Hi");
+        REQUIRE(PrinterDetector::is_creality_hi() == true);
+        // The Hi must NOT masquerade as a K1/K2 — its CFS dialect routing in
+        // AmsBackendCfs depends on these staying mutually exclusive.
+        REQUIRE(PrinterDetector::is_creality_k1() == false);
+        REQUIRE(PrinterDetector::is_creality_k2() == false);
+    }
+
+    SECTION("K-series printers are not detected as Hi") {
+        config->set<std::string>(type_path, "Creality K1C");
+        REQUIRE(PrinterDetector::is_creality_hi() == false);
+        config->set<std::string>(type_path, "Creality K2 Plus");
+        REQUIRE(PrinterDetector::is_creality_hi() == false);
+    }
+
+    SECTION("Non-Creality printer not detected as Hi") {
+        config->set<std::string>(type_path, "Voron 2.4");
+        REQUIRE(PrinterDetector::is_creality_hi() == false);
+    }
+
     // Clean up
     config->set<std::string>(type_path, "");
 }

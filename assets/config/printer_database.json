@@ -1752,6 +1752,73 @@
       ]
     },
     {
+      "id": "creality_hi",
+      "name": "Creality Hi",
+      "manufacturer": "Creality",
+      "toolhead_style": "creality_k1",
+      "image": "creality-hi.png",
+      "probe_type": "prtouch_v3",
+      "preset": "hi",
+      "display": {
+        "resolution": "320x240",
+        "notes": "Stock 3.2\" foldable color LCD; HelixScreen runs on a companion display"
+      },
+      "heuristics": [
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "cartesian",
+          "confidence": 45,
+          "reason": "Cartesian kinematics (Creality Hi is a bedslinger — unique among supported Creality Klipper printers, which are otherwise CoreXY)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "z_align",
+          "confidence": 85,
+          "reason": "Creality Hi dual-Z optical alignment module ([z_align])"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "prtouch_v3",
+          "confidence": 45,
+          "reason": "Prtouch V3 pressure probe"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "bed_mcu",
+          "confidence": 55,
+          "reason": "Dedicated bed MCU (Creality Hi three-MCU architecture)"
+        },
+        {
+          "type": "build_volume_range",
+          "field": "bed_mesh",
+          "min_x": 250,
+          "max_x": 275,
+          "min_y": 250,
+          "max_y": 275,
+          "confidence": 50,
+          "reason": "260mm bed (Creality Hi size)"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "creality",
+          "confidence": 60,
+          "reason": "Hostname contains 'creality'"
+        },
+        {
+          "type": "mcu_match",
+          "field": "mcu",
+          "pattern": "GD32F303",
+          "confidence": 30,
+          "reason": "GD32F303 main MCU (Creality CR4NU board)"
+        }
+      ]
+    },
+    {
       "id": "creality_ender_3_v3",
       "name": "Creality Ender-3 V3",
       "manufacturer": "Creality",
