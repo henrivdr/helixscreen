@@ -133,11 +133,25 @@ cached objects, then rebuild → EXIT=0. Not a code issue. (Candidate build-syst
 follow-up: guard the `nm` recipe against symbol-less binaries, or make `symbols`
 depend on a fresh link.)
 
-### STILL OPEN (non-code, carried from round 1)
-- **Installer:** the `killall boot-play` fix lives only in the runtime hook on
-  the device — still needs adding to the installer so it ships to K2 users.
-- **Merge decision:** branch `feature/slow-boot-splash-ux` is still not merged
-  (Preston had parallel main work). Decide whether to merge.
+### Merged + universal rollout (round 3, 2026-06-13)
+- **Merged to main** `2e886f18d` (over a dirty main checkout — no overlap with
+  parallel logging WIP; one additive bats conflict in `test_platform_hooks.bats`
+  resolved keeping both snapmaker-u1 + k2 tests). Not yet pushed.
+- **boot-play / installer:** no separate installer change needed — the
+  `killall boot-play` lives in `platform_stop_competing_uis` (`hooks-k2.sh`), a
+  committed asset the installer already wires up. Ships with the next release.
+- **Universal rollout** `304fcf074`: extend the technique to every shipped
+  package. FULL-mode paint was already universal (splash forces fbdev; override
+  gated on FBDEV; PARTIAL fallback if a full-screen buffer can't allocate). The
+  missing piece for gate-less platforms (Pi, K1, CC1, AD5X, ad5m-kmod,
+  snapmaker-u1) was the heartbeat — so `scripts/helix-launcher.sh` now writes one
+  `Starting HelixScreen…` heartbeat right before launch (when a splash is
+  active), flipping the splash into the validated "stay until SIGUSR1 / show
+  counter" mode instead of self-capping at 30s and blanking on a slow startup.
+  Safe: helix-screen always signals the splash when ready
+  (`SplashScreenManager`). POSIX-sh; 2 new e2e bats tests.
+- **Open:** push main; optional hardware-validate the launcher seed on K2 + a
+  gate-less device (bats-tested, not yet on hardware).
 
 ## SESSION STATE — PAUSED 2026-06-13 (resume here)
 
