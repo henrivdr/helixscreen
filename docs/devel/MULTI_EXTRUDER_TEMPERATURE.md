@@ -13,7 +13,7 @@ Dynamic per-extruder temperature tracking with reactive LVGL subjects. Supports 
 - **Dynamic multi-extruder discovery** from Klipper heater objects
 - **Per-extruder subjects** for independent temperature/target binding
 - **Legacy compatibility** with single-extruder XML bindings
-- **Centidegree precision** (0.1C resolution via integer subjects)
+- **Decidegree precision** (0.1C resolution via integer subjects)
 - **Bed and chamber** temperature tracking
 
 ```
@@ -47,8 +47,8 @@ struct ExtruderInfo {
     std::string display_name; // Human-readable: "Nozzle", "Nozzle 1"
     float temperature = 0.0f; // Raw float for internal tracking
     float target = 0.0f;
-    std::unique_ptr<lv_subject_t> temp_subject;   // Centidegrees (value * 10)
-    std::unique_ptr<lv_subject_t> target_subject; // Centidegrees
+    std::unique_ptr<lv_subject_t> temp_subject;   // Decidegrees (value * 10)
+    std::unique_ptr<lv_subject_t> target_subject; // Decidegrees
 };
 ```
 
@@ -102,12 +102,12 @@ These are always available and registered with the LVGL XML system at startup:
 
 | Subject Name | Type | Description |
 |--------------|------|-------------|
-| `extruder_temp` | int | First extruder current temp (centidegrees) |
-| `extruder_target` | int | First extruder target temp (centidegrees) |
-| `bed_temp` | int | Bed current temp (centidegrees) |
-| `bed_target` | int | Bed target temp (centidegrees) |
-| `chamber_temp` | int | Chamber current temp (centidegrees) |
-| `chamber_effective_target` | int | **Canonical** chamber display target (centidegrees): heater target when Heating, cooling-fan ceiling when Maintaining, 0 when Off |
+| `extruder_temp` | int | First extruder current temp (decidegrees) |
+| `extruder_target` | int | First extruder target temp (decidegrees) |
+| `bed_temp` | int | Bed current temp (decidegrees) |
+| `bed_target` | int | Bed target temp (decidegrees) |
+| `chamber_temp` | int | Chamber current temp (decidegrees) |
+| `chamber_effective_target` | int | **Canonical** chamber display target (decidegrees): heater target when Heating, cooling-fan ceiling when Maintaining, 0 when Off |
 | `chamber_mode` | int | Chamber control mode (`helix::ChamberMode`: Off=0 / Heating=1 / Maintaining=2) |
 | `extruder_version` | int | Bumped when extruder list changes |
 
@@ -126,8 +126,8 @@ lv_subject_t* target = pts.get_extruder_target_subject("extruder1");
 
 // Returns nullptr if extruder not found
 if (temp) {
-    int centidegrees = lv_subject_get_int(temp);
-    float degrees = centidegrees / 10.0f;
+    int decidegrees = lv_subject_get_int(temp);
+    float degrees = decidegrees / 10.0f;
 }
 ```
 
@@ -166,7 +166,7 @@ In `update_from_status()`, the `"extruder"` key updates both:
 
 ## Temperature Precision
 
-All temperature subjects store **centidegrees** (value multiplied by 10):
+All temperature subjects store **decidegrees** (value multiplied by 10):
 
 | Actual Temp | Subject Value | Calculation |
 |-------------|---------------|-------------|
@@ -174,7 +174,7 @@ All temperature subjects store **centidegrees** (value multiplied by 10):
 | 60.0 C | 600 | `60.0 * 10` |
 | 0.0 C | 0 | `0.0 * 10` |
 
-This provides 0.1C resolution using integer subjects (LVGL subjects don't support float). Conversion uses `helix::units::json_to_centidegrees()` from `unit_conversions.h`.
+This provides 0.1C resolution using integer subjects (LVGL subjects don't support float). Conversion uses `helix::units::json_to_decidegrees()` from `unit_conversions.h`.
 
 **Display formatting:** UI code divides by 10 for display: `"{}.{}C", value/10, value%10`.
 
@@ -198,7 +198,7 @@ PrinterTemperatureState::update_from_status(status)
         │
         ├── For each extruder in extruders_ map:
         │     Check status[extruder_name] for "temperature" and "target"
-        │     Convert to centidegrees, set per-extruder subjects
+        │     Convert to decidegrees, set per-extruder subjects
         │
         ├── Legacy: status["extruder"] -> extruder_temp_, extruder_target_
         │
@@ -229,7 +229,7 @@ Because the heater target reads `0` while Maintaining, the raw chamber heater ta
 
 | Subject | XML-registered? | Role |
 |---------|-----------------|------|
-| `chamber_temp` | yes | Current chamber temperature (centidegrees) |
+| `chamber_temp` | yes | Current chamber temperature (decidegrees) |
 | `chamber_effective_target` | **yes** | **Canonical display target**: heater target (Heating), cooling-fan ceiling (Maintaining), or 0 (Off) |
 | `chamber_mode` | **yes** | `helix::ChamberMode` int — Off=0 / Heating=1 / Maintaining=2 |
 | `chamber_target` | **no — internal** | Raw heater target (reads 0 in Maintaining); feeds the synthesis only |
@@ -252,23 +252,23 @@ enum ChamberMode {
 All chamber synthesis and display text live in **one place** (`src/ui/ui_temperature_utils.{h,cpp}`, namespace `helix::ui::temperature`) so the controls panel and the temp-graph overlay can never diverge:
 
 ```cpp
-struct ChamberSetpoint { int centi; helix::ChamberMode mode; };
+struct ChamberSetpoint { int deci; helix::ChamberMode mode; };
 
 // THE computation of effective target + mode from the two raw M141 targets.
 // Used by PrinterTemperatureState to populate chamber_effective_target + chamber_mode.
-// A fan target equal to fan_resting_centi means "not a deliberate maintain" -> Off.
-ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi,
-                                           int fan_resting_centi = 0);
+// A fan target equal to fan_resting_deci means "not a deliberate maintain" -> Off.
+ChamberSetpoint chamber_effective_setpoint(int heater_target_deci, int fan_target_deci,
+                                           int fan_resting_deci = 0);
 
 // Single mode -> word mapping: "Heating" / "Maintaining" / "Off" (untranslated key).
 const char* chamber_mode_word(helix::ChamberMode mode);
 
 // THE status line, shared by the controls panel and the temp-graph overlay:
 // "Maintaining", "Heating", "Maintaining · Cooling", etc.
-std::string chamber_status_text(int current_centi, int target_centi, helix::ChamberMode mode);
+std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode);
 ```
 
-The `fan_resting_centi` parameter matters: `M141 S0` parks the cooling fan at its configured resting target (e.g. 35°C on the K2) rather than 0. A fan target equal to that resting value is therefore read as **Off**, not as a deliberate Maintaining set. The resting value is read from `configfile.settings[<fan>].target_temp` at discovery (`set_chamber_fan_resting()`); it defaults to 0 before config fetch, where the `fan != resting` test still distinguishes a real maintain (fan > 0) from off.
+The `fan_resting_deci` parameter matters: `M141 S0` parks the cooling fan at its configured resting target (e.g. 35°C on the K2) rather than 0. A fan target equal to that resting value is therefore read as **Off**, not as a deliberate Maintaining set. The resting value is read from `configfile.settings[<fan>].target_temp` at discovery (`set_chamber_fan_resting()`); it defaults to 0 before config fetch, where the `fan != resting` test still distinguishes a real maintain (fan > 0) from off.
 
 ### Send routing
 
@@ -335,7 +335,7 @@ During a print, shows each tool's temperature with its tool name prefix. Uses `T
 | `include/ui_temperature_utils.h` / `src/ui/ui_temperature_utils.cpp` | `chamber_effective_setpoint()`, `chamber_mode_word()`, `chamber_status_text()` single-source helpers; `build_heater_gcode()` / `chamber_uses_m141()` |
 | `include/temperature_controller.h` / `src/ui/temperature_controller.cpp` | `TemperatureController::set_target(HeaterType::Chamber, ...)` send path |
 | `src/api/moonraker_api_controls.cpp` | `MoonrakerAPI::set_temperature()` — M141 routing gate |
-| `include/unit_conversions.h` | `json_to_centidegrees()` conversion helper |
+| `include/unit_conversions.h` | `json_to_decidegrees()` conversion helper |
 | `include/printer_discovery.h` | Heater discovery: `heaters()` list |
 | `include/tool_state.h` | Tool-to-extruder name mapping |
 

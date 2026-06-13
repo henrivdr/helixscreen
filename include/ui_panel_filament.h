@@ -240,7 +240,7 @@ class FilamentPanel : public PanelBase {
     int bed_current_ = 25;
     int bed_target_ = 0;
     int chamber_current_ = 25; ///< Chamber current temperature (degrees, observer converts)
-    int chamber_target_ = 0;   ///< Chamber target temperature (centidegrees, matches PrinterState)
+    int chamber_target_ = 0;   ///< Chamber target temperature (decidegrees, matches PrinterState)
     int prev_nozzle_target_ = -1; ///< Previous target for change detection in update_all_temps
     int prev_bed_target_ = -1;    ///< Previous target for change detection in update_all_temps
     int selected_material_ = -1;  // -1=none, 0=PLA, 1=PETG, 2=ABS, 3=TPU

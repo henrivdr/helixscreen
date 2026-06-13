@@ -7,9 +7,9 @@
     <prop name="size" type="string" default="md"/>
     <!-- Show the "/ target" portion (opt-in, hidden by default) -->
     <prop name="show_target" type="string" default="false"/>
-    <!-- Subject name for current temperature (int, centidegrees) -->
+    <!-- Subject name for current temperature (int, decidegrees) -->
     <prop name="bind_current" type="string" default=""/>
-    <!-- Subject name for target temperature (int, centidegrees) -->
+    <!-- Subject name for target temperature (int, decidegrees) -->
     <prop name="bind_target" type="string" default=""/>
     <!-- Optional click callback name (makes widget clickable when set) -->
     <prop name="event_cb" type="string" default=""/>

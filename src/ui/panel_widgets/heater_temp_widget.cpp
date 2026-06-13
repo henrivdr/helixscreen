@@ -19,7 +19,7 @@
 #include <spdlog/spdlog.h>
 
 using namespace helix;
-using helix::ui::temperature::centi_to_degrees;
+using helix::ui::temperature::deci_to_degrees;
 
 namespace helix {
 
@@ -145,16 +145,16 @@ void HeaterTempWidget::detach() {
     spdlog::debug("{} Detached", cfg_.log_tag);
 }
 
-void HeaterTempWidget::on_temp_changed(int temp_centi) {
-    cached_temp_ = temp_centi;
+void HeaterTempWidget::on_temp_changed(int temp_deci) {
+    cached_temp_ = temp_deci;
     update_temp_icon_animation();
-    spdlog::trace("{} Temp: {}°C", cfg_.log_tag, centi_to_degrees(temp_centi));
+    spdlog::trace("{} Temp: {}°C", cfg_.log_tag, deci_to_degrees(temp_deci));
 }
 
-void HeaterTempWidget::on_target_changed(int target_centi) {
-    cached_target_ = target_centi;
+void HeaterTempWidget::on_target_changed(int target_deci) {
+    cached_target_ = target_deci;
     update_temp_icon_animation();
-    spdlog::trace("{} Target: {}°C", cfg_.log_tag, centi_to_degrees(target_centi));
+    spdlog::trace("{} Target: {}°C", cfg_.log_tag, deci_to_degrees(target_deci));
 }
 
 void HeaterTempWidget::update_temp_icon_animation() {

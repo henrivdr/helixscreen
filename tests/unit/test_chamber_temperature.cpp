@@ -79,7 +79,7 @@ TEST_CASE("PrinterTemperatureState updates chamber temp from status", "[temperat
     nlohmann::json status = {{"temperature_sensor chamber", {{"temperature", 45.3}}}};
     temp_state.update_from_status(status);
 
-    REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 453); // centidegrees
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 453); // decidegrees
 }
 
 // 3. PrinterCapabilitiesState sets chamber sensor capability
@@ -192,7 +192,7 @@ TEST_CASE("PrinterTemperatureState surfaces the chamber cooling-fan target",
     nlohmann::json status = {{"temperature_fan chamber_fan", {{"target", 40.0}}}};
     temp_state.update_from_status(status);
 
-    // json_to_centidegrees scales by 10 in this codebase (e.g. heater 65C -> 650,
+    // json_to_decidegrees scales by 10 in this codebase (e.g. heater 65C -> 650,
     // see the issue947 test), so 40C -> 400 — matching the chamber_target_ unit.
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_fan_target_subject()) == 400);
 }
@@ -776,28 +776,28 @@ TEST_CASE("chamber_effective_setpoint picks the active control", "[temperature][
 
     // Basic cases with no resting target (default = 0).
     auto heating = chamber_effective_setpoint(600, 0); // heater 60° (×10)
-    REQUIRE(heating.centi == 600);
+    REQUIRE(heating.deci == 600);
     REQUIRE(heating.mode == helix::ChamberMode::Heating);
     auto maint = chamber_effective_setpoint(0, 400); // fan 40° (×10), no resting
-    REQUIRE(maint.centi == 400);
+    REQUIRE(maint.deci == 400);
     REQUIRE(maint.mode == helix::ChamberMode::Maintaining);
     auto off = chamber_effective_setpoint(0, 0);
-    REQUIRE(off.centi == 0);
+    REQUIRE(off.deci == 0);
     REQUIRE(off.mode == helix::ChamberMode::Off);
 
     // Resting-edge: fan == resting → Off (M141 S0 parks fan here, not a deliberate set).
     auto at_resting = chamber_effective_setpoint(0, 350, 350);
-    REQUIRE(at_resting.centi == 0);
+    REQUIRE(at_resting.deci == 0);
     REQUIRE(at_resting.mode == helix::ChamberMode::Off);
 
     // Fan above resting → Maintaining.
     auto above_resting = chamber_effective_setpoint(0, 360, 350);
-    REQUIRE(above_resting.centi == 360);
+    REQUIRE(above_resting.deci == 360);
     REQUIRE(above_resting.mode == helix::ChamberMode::Maintaining);
 
     // Heater takes priority over fan (even when both are set).
     auto heater_wins = chamber_effective_setpoint(550, 360, 350);
-    REQUIRE(heater_wins.centi == 550);
+    REQUIRE(heater_wins.deci == 550);
     REQUIRE(heater_wins.mode == helix::ChamberMode::Heating);
 }
 
@@ -816,7 +816,7 @@ TEST_CASE("PrinterTemperatureState chamber subjects match chamber_effective_setp
     ts.init_subjects(false);
     ts.set_chamber_heater_name("heater_generic chamber_heater");
     ts.set_chamber_cooling_fan_name("temperature_fan chamber_fan");
-    ts.set_chamber_fan_resting(350); // 35°C in centidegrees
+    ts.set_chamber_fan_resting(350); // 35°C in decidegrees
 
     // Case 1: heater > 0 → Heating at heater target.
     ts.update_from_status({{"heater_generic chamber_heater", {{"target", 55.0}}},
@@ -1029,18 +1029,18 @@ TEST_CASE("chamber status uses effective target — Maintaining shows non-Off st
           "[chamber][controls][status]") {
     using helix::ui::temperature::heater_display;
 
-    // Simulate Maintaining state: heater target = 0, fan target = 360 centi (36°C)
+    // Simulate Maintaining state: heater target = 0, fan target = 360 deci (36°C)
     // chamber_effective_target = 360, chamber_mode = Maintaining
-    int cached_chamber_temp_centi  = 380; // 38°C — current
+    int cached_chamber_temp_deci  = 380; // 38°C — current
     int cached_chamber_target_raw  = 0;   // raw heater target (WRONG to display)
     int cached_effective_target    = 360; // chamber_effective_target (CORRECT)
 
     // The old (buggy) path: heater_display with raw heater target → "Off"
-    auto bad_result = heater_display(cached_chamber_temp_centi, cached_chamber_target_raw);
+    auto bad_result = heater_display(cached_chamber_temp_deci, cached_chamber_target_raw);
     REQUIRE(bad_result.status == std::string(lv_tr("Off")));
 
     // The correct path: heater_display with effective target → not "Off"
-    auto good_result = heater_display(cached_chamber_temp_centi, cached_effective_target);
+    auto good_result = heater_display(cached_chamber_temp_deci, cached_effective_target);
     REQUIRE(good_result.status != std::string(lv_tr("Off")));
     // At 38°C current vs 36°C target (within tolerance → "Cooling" since above target)
     // Either way it must not say "Off"
@@ -1062,7 +1062,7 @@ TEST_CASE("chamber_status_text: Maintaining mode leads with Maintaining word",
     using helix::ui::temperature::chamber_status_text;
     using helix::ui::temperature::heater_display;
 
-    // Maintaining state: heater=0, fan target=360 centi (36°C), current=265 centi (26.5°C)
+    // Maintaining state: heater=0, fan target=360 deci (36°C), current=265 deci (26.5°C)
     // → mode=Maintaining, effective=360, current is below target → heater_display → "Heating..."
     int current = 265;
     int effective = 360;
@@ -1086,7 +1086,7 @@ TEST_CASE("chamber_status_text: Heating mode leads with Heating word",
     using helix::ChamberMode;
     using helix::ui::temperature::chamber_status_text;
 
-    // Heating state: heater target = 600 centi (60°C), current = 250 centi (25°C)
+    // Heating state: heater target = 600 deci (60°C), current = 250 deci (25°C)
     int current = 250;
     int target = 600;
 
@@ -1115,8 +1115,8 @@ TEST_CASE("chamber_status_text: Maintaining appends thermal progress when at-tem
     using helix::ChamberMode;
     using helix::ui::temperature::chamber_status_text;
 
-    // At-temp: current ~= target (within 2°C tolerance in degrees, i.e. 20 centi)
-    // 360 centi target, 360 centi current → "Ready"
+    // At-temp: current ~= target (within 2°C tolerance in degrees, i.e. 20 deci)
+    // 360 deci target, 360 deci current → "Ready"
     {
         auto status = chamber_status_text(360, 360, ChamberMode::Maintaining);
         // Should be "Maintaining · Ready" (progress adds info beyond the mode word)
@@ -1125,7 +1125,7 @@ TEST_CASE("chamber_status_text: Maintaining appends thermal progress when at-tem
     }
 
     // Cooling: current well above target
-    // 500 centi current (50°C), 360 centi target (36°C) → "Cooling"
+    // 500 deci current (50°C), 360 deci target (36°C) → "Cooling"
     {
         auto status = chamber_status_text(500, 360, ChamberMode::Maintaining);
         REQUIRE(status.find(lv_tr("Maintaining")) != std::string::npos);

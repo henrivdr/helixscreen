@@ -28,7 +28,7 @@ namespace helix::sensors {
  * - Auto-discovery of temperature sensors from Klipper objects list
  * - Auto-categorization by role (CHAMBER, MCU, HOST, AUXILIARY)
  * - Real-time state tracking from Moonraker updates
- * - Per-sensor dynamic LVGL subjects for reactive UI binding (centidegrees)
+ * - Per-sensor dynamic LVGL subjects for reactive UI binding (decidegrees)
  *
  * Thread-safe for state updates from Moonraker callbacks.
  *
@@ -59,7 +59,7 @@ class TemperatureSensorManager : public ISensorManager {
      *
      * Wraps an lv_subject_t with lifecycle management. These are NOT registered
      * with the XML system since they are created dynamically per-sensor.
-     * Values stored as centidegrees (temperature * 100).
+     * Values stored as decidegrees (temperature * 100).
      */
     struct DynamicIntSubject {
         lv_subject_t subject{};
@@ -215,7 +215,7 @@ class TemperatureSensorManager : public ISensorManager {
      *
      * @param klipper_name Full Klipper object name
      * @param[out] lifetime Receives the subject's lifetime token
-     * @return Subject (int: centidegrees), or nullptr if sensor unknown
+     * @return Subject (int: decidegrees), or nullptr if sensor unknown
      */
     [[nodiscard]] lv_subject_t* get_temp_subject(const std::string& klipper_name,
                                                  SubjectLifetime& lifetime);
@@ -290,7 +290,7 @@ class TemperatureSensorManager : public ISensorManager {
     // Runtime state (keyed by klipper_name)
     std::map<std::string, TemperatureSensorState> states_;
 
-    // Per-sensor dynamic subjects (keyed by klipper_name, value in centidegrees)
+    // Per-sensor dynamic subjects (keyed by klipper_name, value in decidegrees)
     std::map<std::string, std::unique_ptr<DynamicIntSubject>> temp_subjects_;
 
     // Test mode: when true, update_from_status() calls update_subjects() synchronously

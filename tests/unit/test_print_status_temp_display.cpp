@@ -5,11 +5,11 @@
  * @file test_print_status_temp_display.cpp
  * @brief Tests for PrintStatusPanel temperature display formatting
  *
- * PrinterState stores temperatures in centi-degrees (×10) for precision.
+ * PrinterState stores temperatures in decidegrees (×10) for precision.
  * These tests verify the display correctly converts to whole degrees.
  *
  * Bug context: Previously displayed "2100 / 2200°C" instead of "210 / 220°C"
- * because the centi-degree values weren't divided by 10 before display.
+ * because the decidegree values weren't divided by 10 before display.
  */
 
 #include <cstdio>
@@ -22,19 +22,19 @@
 // ============================================================================
 
 /**
- * @brief Format temperature display string from centi-degree values
+ * @brief Format temperature display string from decidegree values
  *
  * Mirrors the logic in PrintStatusPanel::update_all_displays():
- * - Takes current and target temps in centi-degrees (×10)
+ * - Takes current and target temps in decidegrees (×10)
  * - Returns formatted string like "210 / 220°C"
  *
- * @param current_centi Current temperature in centi-degrees
- * @param target_centi Target temperature in centi-degrees
+ * @param current_deci Current temperature in decidegrees
+ * @param target_deci Target temperature in decidegrees
  * @return Formatted temperature string
  */
-static std::string format_temp_display(int current_centi, int target_centi) {
+static std::string format_temp_display(int current_deci, int target_deci) {
     char buf[32];
-    std::snprintf(buf, sizeof(buf), "%d / %d°C", current_centi / 10, target_centi / 10);
+    std::snprintf(buf, sizeof(buf), "%d / %d°C", current_deci / 10, target_deci / 10);
     return std::string(buf);
 }
 
@@ -42,62 +42,62 @@ static std::string format_temp_display(int current_centi, int target_centi) {
 // Temperature Display Conversion Tests
 // ============================================================================
 
-TEST_CASE("Temperature display converts centi-degrees to degrees", "[print_status][temperature]") {
+TEST_CASE("Temperature display converts decidegrees to degrees", "[print_status][temperature]") {
     SECTION("Typical PLA nozzle temperature") {
-        // 210°C stored as 2100 centi-degrees
-        int current_centi = 2100;
-        int target_centi = 2150; // 215°C target
+        // 210°C stored as 2100 decidegrees
+        int current_deci = 2100;
+        int target_deci = 2150; // 215°C target
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "210 / 215°C");
     }
 
     SECTION("Typical PLA bed temperature") {
-        // 60°C stored as 600 centi-degrees
-        int current_centi = 580; // 58°C current
-        int target_centi = 600;  // 60°C target
+        // 60°C stored as 600 decidegrees
+        int current_deci = 580; // 58°C current
+        int target_deci = 600;  // 60°C target
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "58 / 60°C");
     }
 
     SECTION("High temperature ABS nozzle") {
-        // 250°C stored as 2500 centi-degrees
-        int current_centi = 2480; // 248°C heating up
-        int target_centi = 2500;  // 250°C target
+        // 250°C stored as 2500 decidegrees
+        int current_deci = 2480; // 248°C heating up
+        int target_deci = 2500;  // 250°C target
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "248 / 250°C");
     }
 
     SECTION("High temperature ABS bed") {
-        // 110°C stored as 1100 centi-degrees
-        int current_centi = 1050; // 105°C heating up
-        int target_centi = 1100;  // 110°C target
+        // 110°C stored as 1100 decidegrees
+        int current_deci = 1050; // 105°C heating up
+        int target_deci = 1100;  // 110°C target
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "105 / 110°C");
     }
 
     SECTION("Room temperature (heater off)") {
-        // 25°C stored as 250 centi-degrees, target 0
-        int current_centi = 250;
-        int target_centi = 0;
+        // 25°C stored as 250 decidegrees, target 0
+        int current_deci = 250;
+        int target_deci = 0;
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "25 / 0°C");
     }
 
     SECTION("Zero temperature") {
-        int current_centi = 0;
-        int target_centi = 0;
+        int current_deci = 0;
+        int target_deci = 0;
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "0 / 0°C");
     }
@@ -128,32 +128,32 @@ TEST_CASE("Temperature display converts centi-degrees to degrees", "[print_statu
 
 TEST_CASE("Temperature display edge cases", "[print_status][temperature][edge]") {
     SECTION("Negative temperature (should not happen but handle gracefully)") {
-        int current_centi = -100; // -10°C (impossible for heater)
-        int target_centi = 0;
+        int current_deci = -100; // -10°C (impossible for heater)
+        int target_deci = 0;
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         // Integer division of negative numbers: -100/10 = -10
         REQUIRE(result == "-10 / 0°C");
     }
 
     SECTION("Very high temperature (chamber heater)") {
-        // 80°C chamber = 800 centi-degrees
-        int current_centi = 750;
-        int target_centi = 800;
+        // 80°C chamber = 800 decidegrees
+        int current_deci = 750;
+        int target_deci = 800;
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "75 / 80°C");
     }
 
     SECTION("Fractional degrees are truncated (integer division)") {
-        // 215.5°C stored as 2155 centi-degrees
+        // 215.5°C stored as 2155 decidegrees
         // Integer division: 2155/10 = 215 (truncated, not rounded)
-        int current_centi = 2155;
-        int target_centi = 2200;
+        int current_deci = 2155;
+        int target_deci = 2200;
 
-        std::string result = format_temp_display(current_centi, target_centi);
+        std::string result = format_temp_display(current_deci, target_deci);
 
         REQUIRE(result == "215 / 220°C");
     }

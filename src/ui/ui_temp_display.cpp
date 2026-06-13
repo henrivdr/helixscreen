@@ -23,8 +23,8 @@
 #include <memory>
 #include <unordered_map>
 
-using helix::ui::temperature::centi_to_degrees;
-using helix::ui::temperature::centi_to_degrees_f;
+using helix::ui::temperature::deci_to_degrees;
+using helix::ui::temperature::deci_to_degrees_f;
 using helix::ui::temperature::get_heating_state_color;
 
 // ============================================================================
@@ -43,7 +43,7 @@ static constexpr uint32_t TEMP_DISPLAY_MAGIC = 0x544D5031;
  */
 struct TempDisplayData {
     uint32_t magic = TEMP_DISPLAY_MAGIC;
-    int current_centi = 0; // Centidegrees for precision formatting
+    int current_deci = 0; // Decidegrees for precision formatting
     int current_temp = 0;  // Whole degrees (for heating color logic)
     int target_temp = 0;
     bool show_target = false;                 // Default: hide target (opt-in via prop)
@@ -191,9 +191,9 @@ static void format_target_text(TempDisplayData* data) {
     lv_subject_copy_string(&data->target_text_subject, data->target_text_buf);
 }
 
-/** Format centidegrees as "XX.X" with one decimal place */
-static void format_centi_temp(char* buf, size_t buf_size, int centi) {
-    float deg = centi_to_degrees_f(centi);
+/** Format decidegrees as "XX.X" with one decimal place */
+static void format_deci_temp(char* buf, size_t buf_size, int deci) {
+    float deg = deci_to_degrees_f(deci);
     snprintf(buf, buf_size, "%.1f", deg);
 }
 
@@ -203,7 +203,7 @@ static void update_display(TempDisplayData* data) {
         return;
 
     // Update current temp via subject
-    format_centi_temp(data->current_text_buf, sizeof(data->current_text_buf), data->current_centi);
+    format_deci_temp(data->current_text_buf, sizeof(data->current_text_buf), data->current_deci);
     lv_subject_copy_string(&data->current_text_subject, data->current_text_buf);
 
     // Update target temp via subject (shows "--" when heater off)
@@ -284,15 +284,15 @@ static void current_temp_observer_cb(lv_observer_t* observer, lv_subject_t* subj
         return;
     }
 
-    int centi = lv_subject_get_int(subject);
-    data->current_centi = centi;
-    data->current_temp = centi_to_degrees(centi);
+    int deci = lv_subject_get_int(subject);
+    data->current_deci = deci;
+    data->current_temp = deci_to_degrees(deci);
 
     // Update color since it depends on current vs target comparison
     update_heating_color(data);
 
     // Update the text subject (which automatically updates the label via binding)
-    format_centi_temp(data->current_text_buf, sizeof(data->current_text_buf), centi);
+    format_deci_temp(data->current_text_buf, sizeof(data->current_text_buf), deci);
     lv_subject_copy_string(&data->current_text_subject, data->current_text_buf);
 }
 
@@ -317,7 +317,7 @@ static void target_temp_observer_cb(lv_observer_t* observer, lv_subject_t* subje
         return;
     }
 
-    int temp_deg = centi_to_degrees(lv_subject_get_int(subject));
+    int temp_deg = deci_to_degrees(lv_subject_get_int(subject));
 
     data->target_temp = temp_deg;
 
@@ -482,10 +482,10 @@ static void ui_temp_display_apply_cb(lv_xml_parser_state_t* state, const char** 
                 lv_subject_add_observer_obj(subject, current_temp_observer_cb, data->current_label,
                                             nullptr);
                 // Set initial value
-                int centi = lv_subject_get_int(subject);
-                data->current_centi = centi;
-                data->current_temp = centi_to_degrees(centi);
-                format_centi_temp(data->current_text_buf, sizeof(data->current_text_buf), centi);
+                int deci = lv_subject_get_int(subject);
+                data->current_deci = deci;
+                data->current_temp = deci_to_degrees(deci);
+                format_deci_temp(data->current_text_buf, sizeof(data->current_text_buf), deci);
                 lv_subject_copy_string(&data->current_text_subject, data->current_text_buf);
                 spdlog::trace("[temp_display] Bound current to subject '{}' ({}°C)", value,
                               data->current_temp);
@@ -503,7 +503,7 @@ static void ui_temp_display_apply_cb(lv_xml_parser_state_t* state, const char** 
                     data->target_label ? data->target_label : data->current_label;
                 lv_subject_add_observer_obj(subject, target_temp_observer_cb, obs_target, nullptr);
                 // Set initial value
-                data->target_temp = centi_to_degrees(lv_subject_get_int(subject));
+                data->target_temp = deci_to_degrees(lv_subject_get_int(subject));
                 // Update target label text if it exists
                 format_target_text(data);
                 // Apply initial heating color
@@ -563,7 +563,7 @@ void ui_temp_display_set(lv_obj_t* obj, int current, int target) {
         return;
     }
 
-    data->current_centi = current * 10; // Approximate from whole degrees
+    data->current_deci = current * 10; // Approximate from whole degrees
     data->current_temp = current;
     data->target_temp = target;
     update_display(data);

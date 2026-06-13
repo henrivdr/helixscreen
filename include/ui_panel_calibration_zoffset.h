@@ -207,7 +207,7 @@ class ZOffsetCalibrationPanel : public OverlayBase {
 
     // Warm bed for calibration
     bool bed_was_warmed_ = false;       ///< True if we sent M140 to warm bed this session
-    int warm_bed_target_centi_ = 0;     ///< Target temp in centidegrees during WARMING
+    int warm_bed_target_deci_ = 0;     ///< Target temp in decidegrees during WARMING
     SubjectLifetime bed_temp_lifetime_; ///< Lifetime token for bed temp subject (#734)
     ObserverGuard bed_temp_observer_;   ///< Watches bed temp during WARMING phase
 

@@ -256,7 +256,7 @@ class PrinterState {
     // Subject accessors for XML binding
     //
 
-    // Temperature subjects (centidegrees: value * 10 for 0.1C resolution)
+    // Temperature subjects (decidegrees: value * 10 for 0.1C resolution)
     // Example: 205.3C is stored as 2053. Divide by 10 for display.
     // Delegated to PrinterTemperatureState component.
 

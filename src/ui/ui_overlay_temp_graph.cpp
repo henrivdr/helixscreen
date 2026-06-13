@@ -708,15 +708,15 @@ void TempGraphOverlay::on_temp_graph_custom_clicked(lv_event_t* e) {
     // Heating, fan target when Maintaining) so the keypad pre-fills the value the
     // overlay already shows. The raw heater target reads 0 during M141 maintain
     // mode and would otherwise seed 0. Other heaters seed from their raw target.
-    int seed_centi = heater.target;
+    int seed_deci = heater.target;
     if (type == helix::HeaterType::Chamber && overlay.printer_state_) {
         if (auto* subj = overlay.printer_state_->get_chamber_effective_target_subject()) {
-            seed_centi = lv_subject_get_int(subj);
+            seed_deci = lv_subject_get_int(subj);
         }
     }
 
     ui_keypad_config_t keypad_config = {
-        .initial_value = static_cast<float>(seed_centi / 10),
+        .initial_value = static_cast<float>(seed_deci / 10),
         .min_value = heater.config.keypad_range.min,
         .max_value = max_value,
         .title_label = heater.config.title,

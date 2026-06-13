@@ -1602,9 +1602,9 @@ void PrintStatusWidget::library_queue_cb(lv_event_t* e) {
 // ============================================================================
 
 namespace {
-// "Centidegrees" in this codebase is a long-standing misnomer — temperature
+// "Decidegrees" in this codebase is a long-standing misnomer — temperature
 // subjects actually store decidegrees (1 unit = 0.1°C; see L021 + the
-// helix::units::to_centidegrees implementation in unit_conversions.h). Convert
+// helix::units::to_decidegrees implementation in unit_conversions.h). Convert
 // to rounded °C by dividing by 10.
 int cd_to_c(int cd) {
     if (cd >= 0)

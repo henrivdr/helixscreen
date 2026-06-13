@@ -431,12 +431,12 @@ void PrintStatusPanel::format_time(int seconds, char* buf, size_t buf_size) {
 
 | Subject Name | Current Format | Formula Requirement | Feasibility |
 |--------------|----------------|---------------------|-------------|
-| `nozzle_temp_text` | `"%d / %d°C"` or `"%d / --"` | Conditional + centidegree division | ⚠️ MEDIUM |
-| `bed_temp_text` | `"%d / %d°C"` or `"%d / --"` | Conditional + centidegree division | ⚠️ MEDIUM |
+| `nozzle_temp_text` | `"%d / %d°C"` or `"%d / --"` | Conditional + decidegree division | ⚠️ MEDIUM |
+| `bed_temp_text` | `"%d / %d°C"` or `"%d / --"` | Conditional + decidegree division | ⚠️ MEDIUM |
 
 **C++ Code** (`ui_panel_print_status.cpp:729-742`):
 ```cpp
-// Note: Temps stored as centidegrees, divided by 100 for display
+// Note: Temps stored as decidegrees, divided by 100 for display
 if (target > 0) {
     std::snprintf(nozzle_temp_buf_, sizeof(nozzle_temp_buf_), "%d / %d°C",
                   current / 100, target / 100);
@@ -488,7 +488,7 @@ if (target > 0) {
 - Use formula for hour/minute calculation
 
 **Phase 3: Temperature** (If conditionals supported)
-- Expose `extruder_temp` and `extruder_target` as raw centidegree subjects
+- Expose `extruder_temp` and `extruder_target` as raw decidegree subjects
 - Use formula with conditional for target display
 
 ### Observer Callbacks to Remove (If Formulas Work)

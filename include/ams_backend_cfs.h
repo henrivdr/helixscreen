@@ -323,11 +323,11 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
         bool reached_target_once = false; // current_temp ever within 5°C of target this op
         bool pending_purge_target = false; // target rose >10°C above baseline (waits for rise)
         bool seen_purge_signal = false;    // pending_purge_target gated by seen_filament_rise
-        int baseline_target_centi = 0;     // extruder target when heating first completed
+        int baseline_target_deci = 0;     // extruder target when heating first completed
     };
     PhaseTracker phase_tracker_;
-    int last_extruder_target_centi_ = 0;
-    int last_extruder_temp_centi_ = 0;
+    int last_extruder_target_deci_ = 0;
+    int last_extruder_temp_deci_ = 0;
     bool last_filament_detected_ = false;
 
     // Capture op-start state (filament + extruder target). Sets phase_tracker_.active.
@@ -339,7 +339,7 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
 
     // Drive phase machine on signal changes. Caller must hold mutex_.
     void on_filament_transition_locked(bool new_detected);
-    void on_extruder_temp_change_locked(int new_temp_centi, int new_target_centi);
+    void on_extruder_temp_change_locked(int new_temp_deci, int new_target_deci);
 
     // Recompute system_info_.action from phase_tracker_ state.
     // Caller must hold mutex_.

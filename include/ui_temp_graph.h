@@ -88,7 +88,7 @@ struct ui_temp_series_meta_t {
     bool show_target;                // Show/hide target temperature line
     float target_temp;               // Latest target temperature (current setpoint).
                                      //   In TARGET_HISTORY mode: drawn as accent tick at right
-                                     //   edge; also the value pushed into target_centi_buf on
+                                     //   edge; also the value pushed into target_deci_buf on
                                      //   each actuals sample.
                                      //   In legacy mode: drawn as a single horizontal line.
     lv_opa_t gradient_bottom_opa;    // Bottom gradient opacity
@@ -96,11 +96,11 @@ struct ui_temp_series_meta_t {
     bool first_value_received;       // True after first real data point (for backfill)
 
     // Target history (parallel to chart series buffer):
-    //   target_centi_buf[i] holds the target × 10 at the time chart sample i was pushed.
+    //   target_deci_buf[i] holds the target × 10 at the time chart sample i was pushed.
     //   0 sentinel = "no target / heater off" (segment break in draw).
     //   Must be (re)allocated to graph->point_count entries by add_series /
     //   set_point_count; freed by remove_series / destroy.
-    int16_t* target_centi_buf = nullptr;
+    int16_t* target_deci_buf = nullptr;
     int target_head = 0; // Count of valid samples in [0, target_head).
                          //   Caps at point_count; shift-left on overflow.
 };

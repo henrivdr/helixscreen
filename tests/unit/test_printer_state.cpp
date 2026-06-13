@@ -230,7 +230,7 @@ TEST_CASE("PrinterState: Initialization sets default values", "[state][init]") {
 // ============================================================================
 // Temperature Update Tests
 // ============================================================================
-// Note: Subjects store temperatures in centidegrees (temp * 10) for 0.1°C resolution.
+// Note: Subjects store temperatures in decidegrees (temp * 10) for 0.1°C resolution.
 // Tests use update_from_status() directly since update_from_notification() uses
 // lv_async_call() which requires pumping the LVGL timer.
 
@@ -243,7 +243,7 @@ TEST_CASE("PrinterState: Update extruder temperature from status", "[state][temp
     json status = {{"extruder", {{"temperature", 205.3}, {"target", 210.0}}}};
     state.update_from_status(status);
 
-    // Subjects store centidegrees (temp * 10)
+    // Subjects store decidegrees (temp * 10)
     REQUIRE(lv_subject_get_int(state.get_active_extruder_temp_subject()) == 2053);
     REQUIRE(lv_subject_get_int(state.get_active_extruder_target_subject()) == 2100);
 }
@@ -257,30 +257,30 @@ TEST_CASE("PrinterState: Update bed temperature from status", "[state][temp]") {
     json status = {{"heater_bed", {{"temperature", 60.5}, {"target", 60.0}}}};
     state.update_from_status(status);
 
-    // Subjects store centidegrees (temp * 10)
+    // Subjects store decidegrees (temp * 10)
     REQUIRE(lv_subject_get_int(state.get_bed_temp_subject()) == 605);
     REQUIRE(lv_subject_get_int(state.get_bed_target_subject()) == 600);
 }
 
-TEST_CASE("PrinterState: Temperature centidegree storage", "[state][temp][edge]") {
+TEST_CASE("PrinterState: Temperature decidegree storage", "[state][temp][edge]") {
     lv_init_safe();
     PrinterState& state = get_printer_state();
     PrinterStateTestAccess::reset(state);
     state.init_subjects(false);
 
-    SECTION("205.4°C stored as 2054 centidegrees") {
+    SECTION("205.4°C stored as 2054 decidegrees") {
         json status = {{"extruder", {{"temperature", 205.4}}}};
         state.update_from_status(status);
         REQUIRE(lv_subject_get_int(state.get_active_extruder_temp_subject()) == 2054);
     }
 
-    SECTION("205.6°C stored as 2056 centidegrees") {
+    SECTION("205.6°C stored as 2056 decidegrees") {
         json status = {{"extruder", {{"temperature", 205.6}}}};
         state.update_from_status(status);
         REQUIRE(lv_subject_get_int(state.get_active_extruder_temp_subject()) == 2056);
     }
 
-    SECTION("210.0°C stored as 2100 centidegrees") {
+    SECTION("210.0°C stored as 2100 decidegrees") {
         json status = {{"extruder", {{"temperature", 210.0}}}};
         state.update_from_status(status);
         REQUIRE(lv_subject_get_int(state.get_active_extruder_temp_subject()) == 2100);
@@ -891,7 +891,7 @@ TEST_CASE("PrinterState: Complete printing state update", "[state][integration]"
 
     state.update_from_status(notification["params"][0]);
 
-    // Verify all values updated correctly (temps stored as centidegrees)
+    // Verify all values updated correctly (temps stored as decidegrees)
     REQUIRE(lv_subject_get_int(state.get_active_extruder_temp_subject()) == 2105);
     REQUIRE(lv_subject_get_int(state.get_active_extruder_target_subject()) == 2100);
     REQUIRE(lv_subject_get_int(state.get_bed_temp_subject()) == 602);

@@ -188,8 +188,8 @@ void TemperatureHistoryManager::notify_observers(const std::string& heater_name)
 // Internal Methods
 // ============================================================================
 
-bool TemperatureHistoryManager::add_sample_internal(const std::string& heater_name, int temp_centi,
-                                                    int target_centi, int64_t timestamp_ms) {
+bool TemperatureHistoryManager::add_sample_internal(const std::string& heater_name, int temp_deci,
+                                                    int target_deci, int64_t timestamp_ms) {
     // Get or create heater history
     HeaterHistory& history = heaters_[heater_name];
 
@@ -201,8 +201,8 @@ bool TemperatureHistoryManager::add_sample_internal(const std::string& heater_na
 
     // Store sample in circular buffer
     TempSample sample;
-    sample.temp_centi = temp_centi;
-    sample.target_centi = target_centi;
+    sample.temp_deci = temp_deci;
+    sample.target_deci = target_deci;
     sample.timestamp_ms = timestamp_ms;
 
     history.samples[static_cast<size_t>(history.write_index)] = sample;
@@ -250,15 +250,15 @@ void TemperatureHistoryManager::temp_observer_callback(lv_observer_t* observer,
         return;
     }
 
-    int temp_centi = lv_subject_get_int(subject);
+    int temp_deci = lv_subject_get_int(subject);
     // Read target from the manager's cached value
-    int target_centi = ctx->manager->get_cached_target(ctx->heater_name);
+    int target_deci = ctx->manager->get_cached_target(ctx->heater_name);
 
     bool stored;
     {
         std::lock_guard<std::mutex> lock(ctx->manager->mutex_);
         stored =
-            ctx->manager->add_sample_internal(ctx->heater_name, temp_centi, target_centi, now_ms());
+            ctx->manager->add_sample_internal(ctx->heater_name, temp_deci, target_deci, now_ms());
     }
     if (stored) {
         ctx->manager->notify_observers(ctx->heater_name);
@@ -272,12 +272,12 @@ void TemperatureHistoryManager::target_observer_callback(lv_observer_t* observer
         return;
     }
 
-    int target_centi = lv_subject_get_int(subject);
+    int target_deci = lv_subject_get_int(subject);
 
-    ctx->manager->set_cached_target(ctx->heater_name, target_centi);
+    ctx->manager->set_cached_target(ctx->heater_name, target_deci);
 
     // Update the most recent sample if it was stored very recently
-    ctx->manager->update_recent_sample_target(ctx->heater_name, target_centi);
+    ctx->manager->update_recent_sample_target(ctx->heater_name, target_deci);
 }
 
 void TemperatureHistoryManager::subscribe_to_subjects() {
@@ -347,16 +347,16 @@ int TemperatureHistoryManager::get_cached_target(const std::string& heater_name)
 }
 
 void TemperatureHistoryManager::set_cached_target(const std::string& heater_name,
-                                                  int target_centi) {
+                                                  int target_deci) {
     if (heater_name == "extruder") {
-        cached_extruder_target_ = target_centi;
+        cached_extruder_target_ = target_deci;
     } else if (heater_name == "heater_bed") {
-        cached_bed_target_ = target_centi;
+        cached_bed_target_ = target_deci;
     }
 }
 
 void TemperatureHistoryManager::update_recent_sample_target(const std::string& heater_name,
-                                                            int target_centi) {
+                                                            int target_deci) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     auto it = heaters_.find(heater_name);
@@ -379,6 +379,6 @@ void TemperatureHistoryManager::update_recent_sample_target(const std::string& h
     // Always update if sample was stored very recently
     // Use a generous window since temp and target are typically set together
     if (age_ms <= RECENT_SAMPLE_WINDOW_MS) {
-        recent.target_centi = target_centi;
+        recent.target_deci = target_deci;
     }
 }

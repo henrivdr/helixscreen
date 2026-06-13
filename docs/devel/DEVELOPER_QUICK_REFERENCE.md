@@ -610,14 +610,14 @@ auto& ps = helix::PrinterState::instance();
 auto& pts = ps.temperature();
 
 // Legacy: first extruder (backward compatible)
-lv_subject_t* temp = pts.get_extruder_temp_subject();     // centidegrees
+lv_subject_t* temp = pts.get_extruder_temp_subject();     // decidegrees
 lv_subject_t* target = pts.get_extruder_target_subject();
 
 // Per-extruder by Klipper name
 lv_subject_t* t1_temp = pts.get_extruder_temp_subject("extruder1");
 if (t1_temp) {
-    int centi = lv_subject_get_int(t1_temp);   // 2053 = 205.3C
-    float degrees = centi / 10.0f;
+    int deci = lv_subject_get_int(t1_temp);   // 2053 = 205.3C
+    float degrees = deci / 10.0f;
 }
 
 // Enumerate all extruders

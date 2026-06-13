@@ -827,14 +827,14 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (extr.contains("target") && extr["target"].is_number()) {
-                last_extruder_target_centi_ = static_cast<int>(extr["target"].get<double>() * 10);
+                last_extruder_target_deci_ = static_cast<int>(extr["target"].get<double>() * 10);
             }
             if (extr.contains("temperature") && extr["temperature"].is_number()) {
-                last_extruder_temp_centi_ =
+                last_extruder_temp_deci_ =
                     static_cast<int>(extr["temperature"].get<double>() * 10);
             }
             AmsAction before = system_info_.action;
-            on_extruder_temp_change_locked(last_extruder_temp_centi_, last_extruder_target_centi_);
+            on_extruder_temp_change_locked(last_extruder_temp_deci_, last_extruder_target_deci_);
             action_transitioned = (system_info_.action != before);
         }
         // Extruder telemetry is high-frequency; only emit when action
@@ -1577,16 +1577,16 @@ void AmsBackendCfs::on_filament_transition_locked(bool new_detected) {
     apply_synthesized_action_locked();
 }
 
-void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_centi, int new_target_centi) {
+void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_deci, int new_target_deci) {
     if (!phase_tracker_.active)
         return;
 
-    if (new_target_centi > 0 && new_temp_centi >= (new_target_centi - 50 /* 5°C centi */)) {
+    if (new_target_deci > 0 && new_temp_deci >= (new_target_deci - 50 /* 5°C deci */)) {
         if (!phase_tracker_.reached_target_once) {
             phase_tracker_.reached_target_once = true;
-            phase_tracker_.baseline_target_centi = new_target_centi;
+            phase_tracker_.baseline_target_deci = new_target_deci;
             spdlog::debug("[AMS CFS] Phase: reached target {}°C, baseline latched",
-                          new_target_centi / 10);
+                          new_target_deci / 10);
         }
     }
 
@@ -1598,13 +1598,13 @@ void AmsBackendCfs::on_extruder_temp_change_locked(int new_temp_centi, int new_t
     // of filament state, then promote to seen_purge_signal once the feed
     // physically completes (seen_filament_rise = true). UNLOAD has no rise,
     // so promotion never happens and purge correctly stays off.
-    if (phase_tracker_.reached_target_once && phase_tracker_.baseline_target_centi > 0 &&
-        new_target_centi > phase_tracker_.baseline_target_centi + 100 /* 10°C centi */ &&
+    if (phase_tracker_.reached_target_once && phase_tracker_.baseline_target_deci > 0 &&
+        new_target_deci > phase_tracker_.baseline_target_deci + 100 /* 10°C deci */ &&
         !phase_tracker_.pending_purge_target) {
         phase_tracker_.pending_purge_target = true;
         spdlog::debug(
             "[AMS CFS] Phase: purge target jump latched (target {}°C > baseline {}°C + 10)",
-            new_target_centi / 10, phase_tracker_.baseline_target_centi / 10);
+            new_target_deci / 10, phase_tracker_.baseline_target_deci / 10);
     }
     if (phase_tracker_.pending_purge_target && phase_tracker_.seen_filament_rise &&
         !phase_tracker_.seen_purge_signal) {

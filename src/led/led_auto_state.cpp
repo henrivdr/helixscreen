@@ -144,8 +144,8 @@ std::string LedAutoState::compute_state_key() const {
     // Check if heating (extruder target > 0 and not printing)
     auto* ext_target_subj = printer_state_->get_active_extruder_target_subject();
     if (ext_target_subj) {
-        int target_centi = lv_subject_get_int(ext_target_subj);
-        if (target_centi > 0) {
+        int target_deci = lv_subject_get_int(ext_target_subj);
+        if (target_deci > 0) {
             return "heating";
         }
     }

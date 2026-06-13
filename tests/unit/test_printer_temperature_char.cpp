@@ -9,12 +9,12 @@
  * in PrinterState before extraction to a dedicated PrinterTemperatureState class.
  *
  * Temperature subjects (4 total):
- * - extruder_temp_ (int, centidegrees - 205.3C stored as 2053)
- * - extruder_target_ (int, centidegrees)
- * - bed_temp_ (int, centidegrees)
- * - bed_target_ (int, centidegrees)
+ * - extruder_temp_ (int, decidegrees - 205.3C stored as 2053)
+ * - extruder_target_ (int, decidegrees)
+ * - bed_temp_ (int, decidegrees)
+ * - bed_target_ (int, decidegrees)
  *
- * Centidegrees format: value * 10 for 0.1C resolution (divide by 10 for display)
+ * Decidegrees format: value * 10 for 0.1C resolution (divide by 10 for display)
  */
 
 #include "../test_helpers/printer_state_test_access.h"
@@ -53,9 +53,9 @@ TEST_CASE("Temperature characterization: observer fires when extruder_temp chang
 
     // LVGL auto-notifies observers when first added (fires immediately with current value)
     REQUIRE(user_data[0] == 1);
-    REQUIRE(user_data[1] == 0); // Initial value is 0 centidegrees
+    REQUIRE(user_data[1] == 0); // Initial value is 0 decidegrees
 
-    // Update temperature via status update (205.3C = 2053 centidegrees)
+    // Update temperature via status update (205.3C = 2053 decidegrees)
     // When value changes, lv_subject_set_int fires once (no redundant notify)
     json status = {{"extruder", {{"temperature", 205.3}}}};
     state.update_from_status(status);
@@ -133,7 +133,7 @@ TEST_CASE("Temperature characterization: observer fires when bed_temp changes",
     REQUIRE(user_data[0] == 1);
     REQUIRE(user_data[1] == 0);
 
-    // Update bed temp via status update (60.5C = 605 centidegrees)
+    // Update bed temp via status update (60.5C = 605 decidegrees)
     // When value changes, lv_subject_set_int fires once (no redundant notify)
     json status = {{"heater_bed", {{"temperature", 60.5}}}};
     state.update_from_status(status);
@@ -299,10 +299,10 @@ TEST_CASE("Temperature characterization: simultaneous updates work correctly",
 }
 
 // ============================================================================
-// Centidegree Storage Tests - Verify precision handling
+// Decidegree Storage Tests - Verify precision handling
 // ============================================================================
 
-TEST_CASE("Temperature characterization: centidegree storage precision",
+TEST_CASE("Temperature characterization: decidegree storage precision",
           "[characterization][temperature][precision]") {
     lv_init_safe();
 

@@ -17,29 +17,29 @@
 
 #include "../catch_amalgamated.hpp"
 
-using helix::ui::temperature::centi_to_degrees;
-using helix::ui::temperature::centi_to_degrees_f;
+using helix::ui::temperature::deci_to_degrees;
+using helix::ui::temperature::deci_to_degrees_f;
 
 // ============================================================================
-// CHARACTERIZATION: Temperature Unit Conversion (centidegrees -> degrees)
+// CHARACTERIZATION: Temperature Unit Conversion (decidegrees -> degrees)
 // ============================================================================
 
-TEST_CASE("CHAR: centi_to_degrees converts centidegrees to degrees",
+TEST_CASE("CHAR: deci_to_degrees converts decidegrees to degrees",
           "[characterization][observer][temperature]") {
-    // Note: centi_to_degrees divides by 10 (decidegrees), not 100
-    REQUIRE(centi_to_degrees(2100) == 210); // 210.0C
-    REQUIRE(centi_to_degrees(2105) == 210); // 210.5C truncates
-    REQUIRE(centi_to_degrees(2450) == 245); // 245.0C
-    REQUIRE(centi_to_degrees(600) == 60);   // 60.0C bed temp
-    REQUIRE(centi_to_degrees(0) == 0);      // Off
-    REQUIRE(centi_to_degrees(5) == 0);      // 0.5C truncates to 0
+    // Note: deci_to_degrees divides by 10 (decidegrees), not 100
+    REQUIRE(deci_to_degrees(2100) == 210); // 210.0C
+    REQUIRE(deci_to_degrees(2105) == 210); // 210.5C truncates
+    REQUIRE(deci_to_degrees(2450) == 245); // 245.0C
+    REQUIRE(deci_to_degrees(600) == 60);   // 60.0C bed temp
+    REQUIRE(deci_to_degrees(0) == 0);      // Off
+    REQUIRE(deci_to_degrees(5) == 0);      // 0.5C truncates to 0
 }
 
-TEST_CASE("CHAR: centi_to_degrees_f preserves decimals",
+TEST_CASE("CHAR: deci_to_degrees_f preserves decimals",
           "[characterization][observer][temperature]") {
-    REQUIRE(centi_to_degrees_f(2100) == Catch::Approx(210.0f));
-    REQUIRE(centi_to_degrees_f(2105) == Catch::Approx(210.5f));
-    REQUIRE(centi_to_degrees_f(2109) == Catch::Approx(210.9f));
+    REQUIRE(deci_to_degrees_f(2100) == Catch::Approx(210.0f));
+    REQUIRE(deci_to_degrees_f(2105) == Catch::Approx(210.5f));
+    REQUIRE(deci_to_degrees_f(2109) == Catch::Approx(210.9f));
 }
 
 // ============================================================================
@@ -47,17 +47,17 @@ TEST_CASE("CHAR: centi_to_degrees_f preserves decimals",
 // ============================================================================
 
 /**
- * FilamentPanel pattern: transforms centidegrees to degrees in callback
+ * FilamentPanel pattern: transforms decidegrees to degrees in callback
  *
  * extruder_temp_observer_ = ObserverGuard(
  *     printer_state_.get_active_extruder_temp_subject(),
  *     [](lv_observer_t* observer, lv_subject_t* subject) {
  *         auto* self = static_cast<FilamentPanel*>(lv_observer_get_user_data(observer));
- *         self->nozzle_current_ = centi_to_degrees(lv_subject_get_int(subject));
+ *         self->nozzle_current_ = deci_to_degrees(lv_subject_get_int(subject));
  *         helix::ui::async_call(...);  // Queue UI updates
  *     }, this);
  */
-TEST_CASE_METHOD(LVGLTestFixture, "CHAR: FilamentPanel transforms centidegrees in callback",
+TEST_CASE_METHOD(LVGLTestFixture, "CHAR: FilamentPanel transforms decidegrees in callback",
                  "[characterization][observer][filament]") {
     // LVGLTestFixture handles initialization
 
@@ -72,12 +72,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "CHAR: FilamentPanel transforms centidegrees i
     auto cb = [](lv_observer_t* obs, lv_subject_t* subj) {
         auto* s = static_cast<State*>(lv_observer_get_user_data(obs));
         s->raw_value = lv_subject_get_int(subj);
-        s->transformed_value = centi_to_degrees(s->raw_value);
+        s->transformed_value = deci_to_degrees(s->raw_value);
     };
 
     ObserverGuard guard(&temp_subject, cb, &state);
 
-    // Set to 210C (centidegrees = 2100)
+    // Set to 210C (decidegrees = 2100)
     lv_subject_set_int(&temp_subject, 2100);
     REQUIRE(state.raw_value == 2100);
     REQUIRE(state.transformed_value == 210);
@@ -96,14 +96,14 @@ TEST_CASE_METHOD(LVGLTestFixture, "CHAR: FilamentPanel transforms centidegrees i
 // ============================================================================
 
 /**
- * ControlsPanel pattern: caches RAW centidegrees, transforms in display method
+ * ControlsPanel pattern: caches RAW decidegrees, transforms in display method
  *
  * void ControlsPanel::on_extruder_temp_changed(...) {
  *     self->cached_extruder_temp_ = lv_subject_get_int(subject);  // Raw!
  *     self->update_nozzle_temp_display();  // Transforms later
  * }
  */
-TEST_CASE_METHOD(LVGLTestFixture, "CHAR: ControlsPanel caches raw centidegrees value",
+TEST_CASE_METHOD(LVGLTestFixture, "CHAR: ControlsPanel caches raw decidegrees value",
                  "[characterization][observer][controls]") {
     // LVGLTestFixture handles initialization
 
@@ -120,10 +120,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "CHAR: ControlsPanel caches raw centidegrees v
     ObserverGuard guard(&temp_subject, cb, &cached_raw);
 
     lv_subject_set_int(&temp_subject, 2100);
-    REQUIRE(cached_raw == 2100); // Raw centidegrees, not 210
+    REQUIRE(cached_raw == 2100); // Raw decidegrees, not 210
 
     // Transform happens separately in display update
-    int display_degrees = centi_to_degrees(cached_raw);
+    int display_degrees = deci_to_degrees(cached_raw);
     REQUIRE(display_degrees == 210);
 
     guard.release();
@@ -292,12 +292,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "CHAR: Speed factor used directly as percentag
  * SUMMARY OF OBSERVER PATTERNS:
  *
  * 1. FilamentPanel (TRANSFORM IN CALLBACK):
- *    - Converts centidegrees→degrees in the callback
+ *    - Converts decidegrees→degrees in the callback
  *    - Stores transformed value
  *    - Uses ui_async_call for UI updates
  *
  * 2. ControlsPanel (CACHE RAW):
- *    - Stores raw centidegrees in callback
+ *    - Stores raw decidegrees in callback
  *    - Transforms in display update method
  *    - Direct method calls (no async)
  *

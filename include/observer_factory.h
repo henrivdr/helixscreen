@@ -46,7 +46,7 @@ template <> inline int get_subject_value<int>(lv_subject_t* subject) {
 }
 
 template <> inline float get_subject_value<float>(lv_subject_t* subject) {
-    // Float subjects store centidegrees; convert to degrees
+    // Float subjects store decidegrees; convert to degrees
     return static_cast<float>(lv_subject_get_int(subject)) / 10.0f;
 }
 
@@ -209,7 +209,7 @@ ObserverGuard create_value_observer(lv_subject_t* subject, T Panel::*member,
 /**
  * @brief Create observer that transforms value before storing
  *
- * Use when subject value needs transformation (e.g., centidegrees to degrees)
+ * Use when subject value needs transformation (e.g., decidegrees to degrees)
  * before storing in member variable.
  *
  * @tparam T Member variable type after transformation
@@ -225,7 +225,7 @@ ObserverGuard create_value_observer(lv_subject_t* subject, T Panel::*member,
  * @code{.cpp}
  * observer_ = create_transform_observer(
  *     state.get_temp_subject(),
- *     [](int centi) { return centi_to_degrees(centi); },
+ *     [](int deci) { return deci_to_degrees(deci); },
  *     &FilamentPanel::nozzle_temp_,
  *     &FilamentPanel::update_temps,
  *     this);
@@ -264,7 +264,7 @@ ObserverGuard create_transform_observer(lv_subject_t* subject, Transform&& trans
  * @code{.cpp}
  * observer_ = create_raw_observer(
  *     state.get_temp_subject(),
- *     &ControlsPanel::cached_temp_centi_,
+ *     &ControlsPanel::cached_temp_deci_,
  *     this);
  * @endcode
  */

@@ -208,7 +208,7 @@ TEST_CASE("INIT_SUBJECT macros work together", "[state][subject][macro][integrat
     char status_text_buf_[64];
 
     // Initialize all subjects
-    INIT_SUBJECT_INT(temp_value, 2500, subjects, true);   // 250.0 degrees in centidegrees
+    INIT_SUBJECT_INT(temp_value, 2500, subjects, true);   // 250.0 degrees in decidegrees
     INIT_SUBJECT_INT(target_value, 2100, subjects, true); // 210.0 degrees target
     INIT_SUBJECT_STRING(status_text, "Heating...", subjects, true);
 

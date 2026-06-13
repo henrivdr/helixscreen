@@ -74,7 +74,7 @@ static lv_obj_t* s_cached_panel = nullptr;
 // panel-destroy callback to prevent calls into a destroyed singleton.
 static helix::MemoryMonitor::PressureResponderId s_memory_responder_id = 0;
 
-using helix::ui::temperature::centi_to_degrees;
+using helix::ui::temperature::deci_to_degrees;
 using helix::ui::temperature::format_temperature_pair;
 
 // Observer factory pattern
@@ -1506,13 +1506,13 @@ void PrintStatusPanel::update_all_displays() {
     }
 
     // Use centralized temperature formatting with em dash for heater-off state
-    format_temperature_pair(centi_to_degrees(lifecycle_.nozzle_current()),
-                            centi_to_degrees(lifecycle_.nozzle_target()), nozzle_temp_buf_,
+    format_temperature_pair(deci_to_degrees(lifecycle_.nozzle_current()),
+                            deci_to_degrees(lifecycle_.nozzle_target()), nozzle_temp_buf_,
                             sizeof(nozzle_temp_buf_));
     lv_subject_copy_string(&nozzle_temp_subject_, nozzle_temp_buf_);
 
-    format_temperature_pair(centi_to_degrees(lifecycle_.bed_current()),
-                            centi_to_degrees(lifecycle_.bed_target()), bed_temp_buf_,
+    format_temperature_pair(deci_to_degrees(lifecycle_.bed_current()),
+                            deci_to_degrees(lifecycle_.bed_target()), bed_temp_buf_,
                             sizeof(bed_temp_buf_));
     lv_subject_copy_string(&bed_temp_subject_, bed_temp_buf_);
 
@@ -1761,19 +1761,19 @@ void PrintStatusPanel::on_temperature_changed() {
     if (ts.is_multi_tool() && ts.active_tool()) {
         size_t prefix_len = std::snprintf(nozzle_temp_buf_, sizeof(nozzle_temp_buf_),
                                           "%s: ", ts.active_tool()->name.c_str());
-        format_temperature_pair(centi_to_degrees(lifecycle_.nozzle_current()),
-                                centi_to_degrees(lifecycle_.nozzle_target()),
+        format_temperature_pair(deci_to_degrees(lifecycle_.nozzle_current()),
+                                deci_to_degrees(lifecycle_.nozzle_target()),
                                 nozzle_temp_buf_ + prefix_len,
                                 sizeof(nozzle_temp_buf_) - prefix_len);
     } else {
-        format_temperature_pair(centi_to_degrees(lifecycle_.nozzle_current()),
-                                centi_to_degrees(lifecycle_.nozzle_target()), nozzle_temp_buf_,
+        format_temperature_pair(deci_to_degrees(lifecycle_.nozzle_current()),
+                                deci_to_degrees(lifecycle_.nozzle_target()), nozzle_temp_buf_,
                                 sizeof(nozzle_temp_buf_));
     }
     lv_subject_copy_string(&nozzle_temp_subject_, nozzle_temp_buf_);
 
-    format_temperature_pair(centi_to_degrees(lifecycle_.bed_current()),
-                            centi_to_degrees(lifecycle_.bed_target()), bed_temp_buf_,
+    format_temperature_pair(deci_to_degrees(lifecycle_.bed_current()),
+                            deci_to_degrees(lifecycle_.bed_target()), bed_temp_buf_,
                             sizeof(bed_temp_buf_));
     lv_subject_copy_string(&bed_temp_subject_, bed_temp_buf_);
 

@@ -98,7 +98,7 @@ class ThermistorWidget : public PanelWidget {
     void show_configure_picker();
     void apply_sensor_selection(const std::vector<std::string>& selected);
     void resolve_display_name();
-    void on_temp_changed(int centidegrees);
+    void on_temp_changed(int decidegrees);
     void update_display();
     void save_config();
     void show_sensor_picker();

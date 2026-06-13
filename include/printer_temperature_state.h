@@ -40,8 +40,8 @@ struct ExtruderInfo {
     std::string display_name; ///< Human-readable: "Nozzle", "Nozzle 1"
     float temperature = 0.0f; ///< Raw float for internal tracking
     float target = 0.0f;
-    std::unique_ptr<lv_subject_t> temp_subject;   ///< Centidegrees (value * 10)
-    std::unique_ptr<lv_subject_t> target_subject; ///< Centidegrees
+    std::unique_ptr<lv_subject_t> temp_subject;   ///< Decidegrees (value * 10)
+    std::unique_ptr<lv_subject_t> target_subject; ///< Decidegrees
     SubjectLifetime temp_lifetime;   ///< Lifetime token for temp_subject (for ObserverGuard safety)
     SubjectLifetime target_lifetime; ///< Lifetime token for target_subject
 };
@@ -50,7 +50,7 @@ struct ExtruderInfo {
  * @brief Manages temperature-related subjects for printer state
  *
  * Extracted from PrinterState as part of god class decomposition.
- * All temperatures stored in centidegrees (value * 10 for 0.1C precision).
+ * All temperatures stored in decidegrees (value * 10 for 0.1C precision).
  *
  * Supports multiple extruders via a dynamic ExtruderInfo map. The "active extruder"
  * subjects track whichever extruder is currently selected (via set_active_extruder),
@@ -108,7 +108,7 @@ class PrinterTemperatureState {
      */
     void init_extruders(const std::vector<std::string>& heaters);
 
-    // Active extruder subjects (centidegrees: value * 10)
+    // Active extruder subjects (decidegrees: value * 10)
     // These track whichever extruder is currently active (set via set_active_extruder)
     lv_subject_t* get_active_extruder_temp_subject() {
         return &active_extruder_temp_;
@@ -158,7 +158,7 @@ class PrinterTemperatureState {
         lifetime = chamber_target_lifetime_;
         return &chamber_target_;
     }
-    /// Chamber cooling-fan target (centidegrees). In COOLING mode the K2 M141
+    /// Chamber cooling-fan target (decidegrees). In COOLING mode the K2 M141
     /// macro parks the setpoint on the temperature_fan target while the heater
     /// target stays 0; this subject surfaces that fan target so it can be
     /// combined with the heater target for display.
@@ -169,7 +169,7 @@ class PrinterTemperatureState {
         lifetime = chamber_fan_target_lifetime_;
         return &chamber_fan_target_;
     }
-    /// Effective chamber setpoint (centidegrees): the heater target when heating
+    /// Effective chamber setpoint (decidegrees): the heater target when heating
     /// (target > 0), otherwise the cooling-fan target. In COOLING mode the heater
     /// target is 0 and the real M141 setpoint lives on the fan; this subject
     /// surfaces whichever is active so temp_display shows the maintain setpoint
@@ -235,8 +235,8 @@ class PrinterTemperatureState {
     }
 
     /**
-     * @brief Set the cooling fan's configured resting/off target (centidegrees)
-     * @param centi Resting target ×10 (e.g. 350 for 35°C on the K2)
+     * @brief Set the cooling fan's configured resting/off target (decidegrees)
+     * @param deci Resting target ×10 (e.g. 350 for 35°C on the K2)
      *
      * `M141 S0` ("Off") resets the cooling fan to this configured resting target
      * with the heater at 0. Recognizing the resting value lets the chamber mode
@@ -245,8 +245,8 @@ class PrinterTemperatureState {
      * discovery; defaults to 0 (pre-config-fetch), where the `fan != resting`
      * test still distinguishes a real maintain set (fan > 0) from off.
      */
-    void set_chamber_fan_resting(int centi) {
-        chamber_fan_resting_centi_ = centi;
+    void set_chamber_fan_resting(int deci) {
+        chamber_fan_resting_deci_ = deci;
     }
 
     /**
@@ -285,7 +285,7 @@ class PrinterTemperatureState {
     SubjectManager subjects_;
     bool subjects_initialized_ = false;
 
-    // Active extruder subjects (centidegrees: 205.3C stored as 2053)
+    // Active extruder subjects (decidegrees: 205.3C stored as 2053)
     // These track whichever extruder is currently active, defaulting to "extruder".
     // Registered in XML as "extruder_temp"/"extruder_target" for binding compatibility.
     lv_subject_t active_extruder_temp_{};
@@ -321,8 +321,8 @@ class PrinterTemperatureState {
                                       ///< empty if sensor-only
     std::string chamber_cooling_fan_name_; ///< temperature_fan carrying the chamber cooling
                                            ///< setpoint (M141 target in cooling mode), empty if none
-    int chamber_fan_resting_centi_ = 0;    ///< Cooling fan's configured resting/off target
-                                           ///< (centidegrees); M141 S0 returns the fan here. 0 = unknown.
+    int chamber_fan_resting_deci_ = 0;    ///< Cooling fan's configured resting/off target
+                                           ///< (decidegrees); M141 S0 returns the fan here. 0 = unknown.
 };
 
 } // namespace helix

@@ -41,40 +41,40 @@ namespace temperature {
 // ============================================================================
 
 /**
- * @brief Converts centidegrees to degrees (integer)
+ * @brief Converts decidegrees to degrees (integer)
  *
- * PrinterState stores temperatures as centidegrees (×10) for 0.1°C resolution.
+ * PrinterState stores temperatures as decidegrees (×10) for 0.1°C resolution.
  * Use this function for integer display (e.g., "210°C").
  *
- * @param centi Temperature in centidegrees (e.g., 2100 for 210°C)
+ * @param deci Temperature in decidegrees (e.g., 2100 for 210°C)
  * @return Temperature in degrees (e.g., 210)
  */
-inline int centi_to_degrees(int centi) {
-    return static_cast<int>(helix::units::from_centidegrees(centi));
+inline int deci_to_degrees(int deci) {
+    return static_cast<int>(helix::units::from_decidegrees(deci));
 }
 
 /**
- * @brief Converts centidegrees to degrees (float for precision display)
+ * @brief Converts decidegrees to degrees (float for precision display)
  *
  * Use this function when 0.1°C precision is needed (e.g., graph data points).
  *
- * @param centi Temperature in centidegrees (e.g., 2105 for 210.5°C)
+ * @param deci Temperature in decidegrees (e.g., 2105 for 210.5°C)
  * @return Temperature in degrees (e.g., 210.5f)
  */
-inline float centi_to_degrees_f(int centi) {
-    return static_cast<float>(helix::units::from_centidegrees(centi));
+inline float deci_to_degrees_f(int deci) {
+    return static_cast<float>(helix::units::from_decidegrees(deci));
 }
 
 /**
- * @brief Converts degrees to centidegrees
+ * @brief Converts degrees to decidegrees
  *
  * Use when setting temperatures from user input (e.g., keyboard entry).
  *
  * @param degrees Temperature in degrees (e.g., 210)
- * @return Temperature in centidegrees (e.g., 2100)
+ * @return Temperature in decidegrees (e.g., 2100)
  */
-inline int degrees_to_centi(int degrees) {
-    return helix::units::to_centidegrees(static_cast<double>(degrees));
+inline int degrees_to_deci(int degrees) {
+    return helix::units::to_decidegrees(static_cast<double>(degrees));
 }
 
 // ============================================================================
@@ -142,7 +142,7 @@ const char* get_extrusion_safety_status(int current_temp, int min_extrusion_temp
  *
  * Formats as "210°C" for consistent display across the UI.
  *
- * @param temp Temperature in degrees (not centidegrees)
+ * @param temp Temperature in degrees (not decidegrees)
  * @param buffer Output buffer
  * @param buffer_size Size of buffer (recommended: 16)
  * @return Pointer to buffer for chaining convenience
@@ -270,9 +270,9 @@ struct HeaterDisplayResult {
 };
 
 /**
- * @brief Format heater display information from centi-degree values
+ * @brief Format heater display information from decidegree values
  *
- * Takes current and target temperatures in centi-degrees (100 = 1°C) and
+ * Takes current and target temperatures in decidegrees (10 = 1°C) and
  * produces a consistent display result used across all heater displays.
  * Includes a color field from get_heating_state_color() for one-call convenience.
  *
@@ -282,11 +282,11 @@ struct HeaterDisplayResult {
  * - current > target + tolerance: "Cooling"
  * - within +/- tolerance: "Ready"
  *
- * @param current_centi Current temperature in centi-degrees
- * @param target_centi Target temperature in centi-degrees (0 = off)
+ * @param current_deci Current temperature in decidegrees
+ * @param target_deci Target temperature in decidegrees (0 = off)
  * @return HeaterDisplayResult with formatted temp, status, percentage, and color
  */
-HeaterDisplayResult heater_display(int current_centi, int target_centi);
+HeaterDisplayResult heater_display(int current_deci, int target_deci);
 
 // ============================================================================
 // Heater GCode
@@ -302,14 +302,14 @@ HeaterDisplayResult heater_display(int current_centi, int target_centi);
  * - "heater_bed"        → SET_HEATER_TEMPERATURE HEATER=heater_bed
  *
  * @param heater_full_name Full Klipper heater name
- * @param target_centi     Target temperature in centidegrees (x10, e.g. 2100 = 210°C)
+ * @param target_deci     Target temperature in decidegrees (x10, e.g. 2100 = 210°C)
  * @param buffer           Output buffer
  * @param buffer_size      Size of buffer
  * @param use_m141         When true, emit "M141 S{deg}" instead of a raw
  *                         SET_HEATER_TEMPERATURE/SET_TEMPERATURE_FAN_TARGET command
  * @return Pointer to buffer, or nullptr if heater_full_name is empty
  */
-const char* build_heater_gcode(const std::string& heater_full_name, int target_centi, char* buffer,
+const char* build_heater_gcode(const std::string& heater_full_name, int target_deci, char* buffer,
                                size_t buffer_size, bool use_m141 = false);
 
 /**
@@ -331,23 +331,23 @@ bool chamber_uses_m141(const std::string& heater_full_name,
  * On printers without a chamber cooling fan the fan target stays 0, so this
  * reduces to the heater target (Heating/Off only) — safe and universal.
  *
- * `fan_resting_centi` is the printer-configured cooling-fan resting value (e.g.
+ * `fan_resting_deci` is the printer-configured cooling-fan resting value (e.g.
  * 350 = 35°C on the K2).  M141 S0 resets the cooling fan to this resting target
  * while leaving the heater at 0; a fan target equal to resting therefore means
  * Off, not a deliberate Maintaining set.
  *
- * @param heater_target_centi Chamber heater target (×10; 0 = not heating)
- * @param fan_target_centi    Chamber cooling-fan target (×10; 0 = not maintaining)
- * @param fan_resting_centi   Configured cooling-fan resting target (×10); 0 if not set
- * @return centi = effective setpoint (×10), mode = ChamberMode enum value
+ * @param heater_target_deci Chamber heater target (×10; 0 = not heating)
+ * @param fan_target_deci    Chamber cooling-fan target (×10; 0 = not maintaining)
+ * @param fan_resting_deci   Configured cooling-fan resting target (×10); 0 if not set
+ * @return deci = effective setpoint (×10), mode = ChamberMode enum value
  */
 struct ChamberSetpoint {
-    int centi;
+    int deci;
     helix::ChamberMode mode;
 };
 
-ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi,
-                                           int fan_resting_centi = 0);
+ChamberSetpoint chamber_effective_setpoint(int heater_target_deci, int fan_target_deci,
+                                           int fan_resting_deci = 0);
 
 /**
  * @brief Map a ChamberMode enum value to its untranslated status word.
@@ -377,13 +377,13 @@ inline const char* build_heater_off_gcode(const std::string& heater_full_name, c
  * "Cooling") only when it adds information beyond the mode word — suppresses
  * "Heating · Heating..." and "Off · Off".
  *
- * @param current_centi  Current chamber temperature in centidegrees
- * @param target_centi   Effective chamber target in centidegrees (heater target
+ * @param current_deci  Current chamber temperature in decidegrees
+ * @param target_deci   Effective chamber target in decidegrees (heater target
  *                       when Heating, fan ceiling when Maintaining, 0 when Off)
  * @param mode           ChamberMode enum value (Off / Heating / Maintaining)
  * @return Localised status string, e.g. "Maintaining", "Heating", "Maintaining · Cooling"
  */
-std::string chamber_status_text(int current_centi, int target_centi, helix::ChamberMode mode);
+std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode);
 
 } // namespace temperature
 } // namespace ui

@@ -213,11 +213,11 @@ class ControlsPanel : public PanelBase {
     int cached_extruder_target_ = 0;
     int cached_bed_temp_ = 0;
     int cached_bed_target_ = 0;
-    int cached_chamber_temp_ = 0; ///< Chamber current temperature (centidegrees)
+    int cached_chamber_temp_ = 0; ///< Chamber current temperature (decidegrees)
     int cached_chamber_target_ =
-        0; ///< Raw chamber heater target (centidegrees) — used for keypad seed only
+        0; ///< Raw chamber heater target (decidegrees) — used for keypad seed only
     int cached_chamber_effective_target_ =
-        0; ///< Canonical display target (centidegrees): effective target per chamber_mode
+        0; ///< Canonical display target (decidegrees): effective target per chamber_mode
     int cached_chamber_mode_ = 0; ///< ChamberMode int (Off=0/Heating=1/Maintaining=2)
 
     // Temperature limits for keypad
@@ -410,7 +410,7 @@ class ControlsPanel : public PanelBase {
      *
      * @tparam Handler  Pointer-to-member for confirmed callback
      * @param title     Title shown in the keypad
-     * @param cached_target   Current target in centidegrees
+     * @param cached_target   Current target in decidegrees
      * @param default_initial Default initial °C when target is 0
      * @param max_temp        Maximum allowed temperature in °C
      */
@@ -550,7 +550,7 @@ class ControlsPanel : public PanelBase {
     void update_secondary_fan_speed(const std::string& object_name, int speed_pct);
 
     void subscribe_to_secondary_temp_subjects();
-    void update_secondary_temp(const std::string& klipper_name, int centidegrees);
+    void update_secondary_temp(const std::string& klipper_name, int decidegrees);
 };
 
 // ============================================================================
@@ -562,9 +562,9 @@ void ControlsPanel::show_temperature_keypad(const char* title, int cached_target
                                             int default_initial, int max_temp) {
     spdlog::debug("[{}] Opening {} keypad", get_name(), title);
 
-    int initial_centi = cached_target > 0 ? cached_target : default_initial * 10;
+    int initial_deci = cached_target > 0 ? cached_target : default_initial * 10;
     ui_keypad_config_t config = {.initial_value = static_cast<float>(
-                                     helix::ui::temperature::centi_to_degrees(initial_centi)),
+                                     helix::ui::temperature::deci_to_degrees(initial_deci)),
                                  .min_value = 0.0f,
                                  .max_value = static_cast<float>(max_temp),
                                  .title_label = lv_tr(title),

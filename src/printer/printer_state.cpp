@@ -6,7 +6,7 @@
  *
  * @pattern Singleton with set_*() -> set_*_internal() for thread-safe updates
  * @threading Public setters called from WebSocket; internal setters run on main thread
- * @gotchas Static string buffers; init subjects before XML; temps in centidegrees
+ * @gotchas Static string buffers; init subjects before XML; temps in decidegrees
  *
  * @see moonraker_client.cpp, ui_update_queue.h
  */
@@ -591,7 +591,7 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
     // Cooling fan's configured resting/off target (from configfile.settings). M141
     // S0 returns the fan here, so the chamber mode treats this value as Off rather
     // than a deliberate "Maintaining" set.
-    temperature_state_.set_chamber_fan_resting(discovery_.chamber_fan_resting_centi());
+    temperature_state_.set_chamber_fan_resting(discovery_.chamber_fan_resting_deci());
 
     // Update capability flags based on resolved chamber assignments
     // (set_hardware above used discovery flags which miss manual overrides)

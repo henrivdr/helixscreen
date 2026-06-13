@@ -21,7 +21,7 @@
 
 using namespace helix::ui;
 using namespace helix::ui;
-using helix::ui::temperature::centi_to_degrees;
+using helix::ui::temperature::deci_to_degrees;
 
 // Helper to drain the update queue after subject changes.
 // observe_int_sync and observe_string defer callbacks via ui_queue_update.
@@ -93,9 +93,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "Factory: observe_int_sync with transformation
 
     // Use transformation inside lambda
     auto guard = observe_int_sync<TestPanel>(
-        &subject, &panel, [](TestPanel* p, int raw) { p->int_value = centi_to_degrees(raw); });
+        &subject, &panel, [](TestPanel* p, int raw) { p->int_value = deci_to_degrees(raw); });
 
-    // Set to 210C (centidegrees = 2100)
+    // Set to 210C (decidegrees = 2100)
     lv_subject_set_int(&subject, 2100);
     drain();
     REQUIRE(panel.int_value == 210);
@@ -194,10 +194,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "Factory: observe_int_async with temperature t
     TestPanel panel;
 
     auto guard = observe_int_async<TestPanel>(
-        &subject, &panel, [](TestPanel* p, int raw) { p->int_value = centi_to_degrees(raw); },
+        &subject, &panel, [](TestPanel* p, int raw) { p->int_value = deci_to_degrees(raw); },
         [](TestPanel* p) { p->on_value_update(); });
 
-    // Set to 210C (centidegrees = 2100)
+    // Set to 210C (decidegrees = 2100)
     lv_subject_set_int(&subject, 2100);
     REQUIRE(panel.int_value == 210);
 

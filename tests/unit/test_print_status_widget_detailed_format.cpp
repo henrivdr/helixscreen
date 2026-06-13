@@ -133,7 +133,7 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter nozzle text (decidegree ro
 
     FormatterScope fs;
     // Temp subjects store decidegrees (1 unit = 0.1°C; see L021 +
-    // helix::units::to_centidegrees which multiplies by 10, not 100).
+    // helix::units::to_decidegrees which multiplies by 10, not 100).
     lv_subject_set_int(ps.get_active_extruder_temp_subject(), 2157);    // 215.7°C → 216
     lv_subject_set_int(ps.get_active_extruder_target_subject(), 2200);  // 220°C
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());

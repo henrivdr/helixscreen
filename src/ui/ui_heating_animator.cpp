@@ -12,7 +12,7 @@
 
 #include <algorithm>
 
-using helix::ui::temperature::centi_to_degrees_f;
+using helix::ui::temperature::deci_to_degrees_f;
 
 // Gradient colors now use theme tokens: temp_gradient_cold, temp_gradient_warm, temp_gradient_hot
 
@@ -140,7 +140,7 @@ void HeatingIconAnimator::update(int current_temp, int target_temp) {
                 // Fresh heating start - capture current temp as ambient
                 ambient_temp_ = current_temp;
                 spdlog::debug("[HeatingIconAnimator] Captured ambient: {:.1f}°C, target: {:.1f}°C",
-                              centi_to_degrees_f(ambient_temp_), centi_to_degrees_f(target_temp));
+                              deci_to_degrees_f(ambient_temp_), deci_to_degrees_f(target_temp));
             }
             // Start or continue pulse animation
             if (!pulse_active_) {

@@ -26,11 +26,11 @@
 class TemperatureHistoryManagerTestAccess {
   public:
     static bool add_sample(TemperatureHistoryManager& m, const std::string& heater_name,
-                           int temp_centi, int target_centi, int64_t timestamp_ms) {
+                           int temp_deci, int target_deci, int64_t timestamp_ms) {
         bool stored;
         {
             std::lock_guard<std::mutex> lock(m.mutex_);
-            stored = m.add_sample_internal(heater_name, temp_centi, target_centi, timestamp_ms);
+            stored = m.add_sample_internal(heater_name, temp_deci, target_deci, timestamp_ms);
         }
         if (stored) {
             m.notify_observers(heater_name);
@@ -114,34 +114,34 @@ class TemperatureHistoryManagerTestFixture {
      * @brief Set extruder temperature via PrinterState subject
      *
      * Simulates a temperature update from Moonraker notification.
-     * Value is in centidegrees (temp * 10).
+     * Value is in decidegrees (temp * 10).
      */
-    void set_extruder_temp(int centidegrees) {
-        lv_subject_set_int(printer_state_.get_active_extruder_temp_subject(), centidegrees);
+    void set_extruder_temp(int decidegrees) {
+        lv_subject_set_int(printer_state_.get_active_extruder_temp_subject(), decidegrees);
         UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     }
 
     /**
      * @brief Set extruder target temperature
      */
-    void set_extruder_target(int centidegrees) {
-        lv_subject_set_int(printer_state_.get_active_extruder_target_subject(), centidegrees);
+    void set_extruder_target(int decidegrees) {
+        lv_subject_set_int(printer_state_.get_active_extruder_target_subject(), decidegrees);
         UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     }
 
     /**
      * @brief Set bed temperature via PrinterState subject
      */
-    void set_bed_temp(int centidegrees) {
-        lv_subject_set_int(printer_state_.get_bed_temp_subject(), centidegrees);
+    void set_bed_temp(int decidegrees) {
+        lv_subject_set_int(printer_state_.get_bed_temp_subject(), decidegrees);
         UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     }
 
     /**
      * @brief Set bed target temperature
      */
-    void set_bed_target(int centidegrees) {
-        lv_subject_set_int(printer_state_.get_bed_target_subject(), centidegrees);
+    void set_bed_target(int decidegrees) {
+        lv_subject_set_int(printer_state_.get_bed_target_subject(), decidegrees);
         UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     }
 
@@ -238,8 +238,8 @@ TEST_CASE_METHOD(TemperatureHistoryManagerTestFixture,
 
     auto samples = manager_->get_samples("extruder");
     REQUIRE(samples.size() == 1);
-    REQUIRE(samples[0].temp_centi == 2053);
-    REQUIRE(samples[0].target_centi == 2100);
+    REQUIRE(samples[0].temp_deci == 2053);
+    REQUIRE(samples[0].target_deci == 2100);
     REQUIRE(samples[0].timestamp_ms >= before_ms);
     REQUIRE(samples[0].timestamp_ms <= now_ms());
 }
@@ -310,11 +310,11 @@ TEST_CASE_METHOD(TemperatureHistoryManagerTestFixture,
 
     // And: newest sample is present
     auto samples = manager_->get_samples("extruder");
-    REQUIRE(samples.back().temp_centi == 9999);
+    REQUIRE(samples.back().temp_deci == 9999);
 
     // And: original first sample (2000) is gone
-    REQUIRE(samples.front().temp_centi != 2000);
-    REQUIRE(samples.front().temp_centi == 2001); // Second sample is now first
+    REQUIRE(samples.front().temp_deci != 2000);
+    REQUIRE(samples.front().temp_deci == 2001); // Second sample is now first
 }
 
 // ============================================================================
@@ -341,9 +341,9 @@ TEST_CASE_METHOD(TemperatureHistoryManagerTestFixture,
     auto extruder_samples = manager_->get_samples("extruder");
     auto bed_samples = manager_->get_samples("heater_bed");
 
-    REQUIRE(extruder_samples[0].temp_centi == 2000);
-    REQUIRE(extruder_samples[1].temp_centi == 2050);
-    REQUIRE(bed_samples[0].temp_centi == 600);
+    REQUIRE(extruder_samples[0].temp_deci == 2000);
+    REQUIRE(extruder_samples[1].temp_deci == 2050);
+    REQUIRE(bed_samples[0].temp_deci == 600);
 }
 
 // ============================================================================
@@ -439,9 +439,9 @@ TEST_CASE_METHOD(TemperatureHistoryManagerTestFixture,
 
     // Then: only samples after ts2 are returned (ts3 and ts4)
     REQUIRE(filtered.size() == 2);
-    REQUIRE(filtered[0].temp_centi == 2020);
+    REQUIRE(filtered[0].temp_deci == 2020);
     REQUIRE(filtered[0].timestamp_ms == ts3);
-    REQUIRE(filtered[1].temp_centi == 2030);
+    REQUIRE(filtered[1].temp_deci == 2030);
     REQUIRE(filtered[1].timestamp_ms == ts4);
 
     // And: query with future timestamp returns empty

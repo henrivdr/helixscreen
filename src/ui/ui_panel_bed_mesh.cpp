@@ -877,7 +877,7 @@ void BedMeshPanel::preheat_for_probing() {
 
     auto& state = get_printer_state();
 
-    // Subject values are centidegrees (value * 10) — target of 0 means heater is off
+    // Subject values are decidegrees (value * 10) — target of 0 means heater is off
     int nozzle_target = lv_subject_get_int(state.get_active_extruder_target_subject());
     int bed_target = lv_subject_get_int(state.get_bed_target_subject());
 

@@ -63,7 +63,7 @@ template <typename Panel> class TemperatureObserverBundle {
      * @brief Setup synchronous temperature observers with individual callbacks
      *
      * Use when handlers run on UI thread and each temperature update needs
-     * its own handler logic. Callbacks receive raw centidegree values.
+     * its own handler logic. Callbacks receive raw decidegree values.
      *
      * @param panel Panel instance (must outlive observers)
      * @param state PrinterState reference for temperature subjects

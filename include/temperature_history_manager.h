@@ -19,12 +19,12 @@
 /**
  * @brief Single temperature sample with timestamp
  *
- * Uses centidegrees (x10) for precision without floating point.
+ * Uses decidegrees (x10) for precision without floating point.
  * Example: 2053 = 205.3°C
  */
 struct TempSample {
-    int temp_centi = 0;       ///< Temperature × 10 (e.g., 2053 = 205.3°C)
-    int target_centi = 0;     ///< Target temperature × 10
+    int temp_deci = 0;       ///< Temperature × 10 (e.g., 2053 = 205.3°C)
+    int target_deci = 0;     ///< Target temperature × 10
     int64_t timestamp_ms = 0; ///< Unix timestamp in milliseconds
 };
 
@@ -161,16 +161,16 @@ class TemperatureHistoryManager {
     /**
      * @brief Get cached target temperature for a heater
      * @param heater_name Heater name
-     * @return Target in centidegrees
+     * @return Target in decidegrees
      */
     [[nodiscard]] int get_cached_target(const std::string& heater_name) const;
 
     /**
      * @brief Set cached target temperature for a heater
      * @param heater_name Heater name
-     * @param target_centi Target in centidegrees
+     * @param target_deci Target in decidegrees
      */
-    void set_cached_target(const std::string& heater_name, int target_centi);
+    void set_cached_target(const std::string& heater_name, int target_deci);
 
     /**
      * @brief Update target in the most recent sample if stored recently
@@ -180,9 +180,9 @@ class TemperatureHistoryManager {
      * RECENT_SAMPLE_WINDOW_MS milliseconds.
      *
      * @param heater_name Heater name
-     * @param target_centi New target value
+     * @param target_deci New target value
      */
-    void update_recent_sample_target(const std::string& heater_name, int target_centi);
+    void update_recent_sample_target(const std::string& heater_name, int target_deci);
 
   private:
     friend class TemperatureHistoryManagerTestAccess;
@@ -201,12 +201,12 @@ class TemperatureHistoryManager {
      * @brief Add a sample to heater history (internal, must hold mutex)
      *
      * @param heater_name Heater name
-     * @param temp_centi Temperature in centidegrees
-     * @param target_centi Target in centidegrees
+     * @param temp_deci Temperature in decidegrees
+     * @param target_deci Target in decidegrees
      * @param timestamp_ms Timestamp in milliseconds
      * @return true if sample was stored, false if throttled
      */
-    bool add_sample_internal(const std::string& heater_name, int temp_centi, int target_centi,
+    bool add_sample_internal(const std::string& heater_name, int temp_deci, int target_deci,
                              int64_t timestamp_ms);
 
     /**

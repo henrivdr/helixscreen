@@ -46,7 +46,7 @@ class TempStackWidget : public PanelWidget {
     HeatingIconAnimator nozzle_animator_;
     HeatingIconAnimator bed_animator_;
 
-    // Cached temps (centidegrees)
+    // Cached temps (decidegrees)
     int cached_nozzle_temp_ = 25;
     int cached_nozzle_target_ = 0;
     int cached_bed_temp_ = 25;
@@ -77,10 +77,10 @@ class TempStackWidget : public PanelWidget {
     void attach_stack(lv_obj_t* widget_obj);
     void attach_carousel(lv_obj_t* widget_obj);
 
-    void on_nozzle_temp_changed(int temp_centi);
-    void on_nozzle_target_changed(int target_centi);
-    void on_bed_temp_changed(int temp_centi);
-    void on_bed_target_changed(int target_centi);
+    void on_nozzle_temp_changed(int temp_deci);
+    void on_nozzle_target_changed(int target_deci);
+    void on_bed_temp_changed(int temp_deci);
+    void on_bed_target_changed(int target_deci);
 
     void handle_nozzle_clicked();
     void handle_bed_clicked();

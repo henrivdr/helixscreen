@@ -391,7 +391,7 @@ void ZOffsetCalibrationPanel::start_calibration() {
     if (warm_bed) {
         auto* cfg = Config::get_instance();
         int temp = cfg->get<int>("/calibration/warm_bed_temp", DEFAULT_WARM_BED_TEMP);
-        warm_bed_target_centi_ = temp * 10; // Convert °C to centidegrees
+        warm_bed_target_deci_ = temp * 10; // Convert °C to decidegrees
 
         // Send non-blocking M140 to start heating
         char cmd[32];
@@ -416,14 +416,14 @@ void ZOffsetCalibrationPanel::start_calibration() {
         PrinterState& ps = get_printer_state();
         bed_temp_observer_ = observe_int_sync<ZOffsetCalibrationPanel>(
             ps.get_bed_temp_subject(bed_temp_lifetime_), this,
-            [](ZOffsetCalibrationPanel* self, int temp_centi) {
+            [](ZOffsetCalibrationPanel* self, int temp_deci) {
                 if (self->state_ != State::WARMING)
                     return;
 
-                spdlog::trace("[ZOffsetCal] Bed temp: {}.{}°C (target: {}°C)", temp_centi / 10,
-                              temp_centi % 10, self->warm_bed_target_centi_ / 10);
+                spdlog::trace("[ZOffsetCal] Bed temp: {}.{}°C (target: {}°C)", temp_deci / 10,
+                              temp_deci % 10, self->warm_bed_target_deci_ / 10);
 
-                if (temp_centi >= self->warm_bed_target_centi_) {
+                if (temp_deci >= self->warm_bed_target_deci_) {
                     spdlog::info("[ZOffsetCal] Bed reached target temperature, proceeding");
                     self->bed_temp_observer_.reset();
                     self->begin_probe_sequence();

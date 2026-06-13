@@ -60,7 +60,7 @@ TEST_CASE_METHOD(XMLTestFixture, "temp_display: binds to extruder temperature su
     // and displays the expected values.
 
     // 1. Set temperature values BEFORE creating component using XML-registered subjects
-    // Temperature is in centidegrees (200.0°C = 2000, 210.0°C = 2100)
+    // Temperature is in decidegrees (200.0°C = 2000, 210.0°C = 2100)
     set_xml_subject("extruder_temp", 2000);   // 200.0°C
     set_xml_subject("extruder_target", 2100); // 210.0°C
 
@@ -73,7 +73,7 @@ TEST_CASE_METHOD(XMLTestFixture, "temp_display: binds to extruder temperature su
     REQUIRE(ui_temp_display_is_valid(temp));
 
     // 3. Verify initial values are bound correctly
-    // temp_display converts centidegrees to degrees (2000 -> 200)
+    // temp_display converts decidegrees to degrees (2000 -> 200)
     int displayed_current = ui_temp_display_get_current(temp);
     int displayed_target = ui_temp_display_get_target(temp);
 
@@ -145,7 +145,7 @@ TEST_CASE_METHOD(XMLTestFixture, "nozzle_temp_panel: temp_display shows current 
     // lv_obj_t* temp_display = UITest::find_by_name(panel, "nozzle_temp_display");
     // REQUIRE(temp_display != nullptr);
     // int displayed_current = ui_temp_display_get_current(temp_display);
-    // REQUIRE(displayed_current == 200); // 20000 centidegrees = 200C
+    // REQUIRE(displayed_current == 200); // 20000 decidegrees = 200C
 }
 
 TEST_CASE_METHOD(XMLTestFixture, "temp_display: binds to bed temperature subjects",

@@ -612,7 +612,7 @@ void TemperatureSensorManager::update_subjects() {
         return;
     }
 
-    // Update per-sensor dynamic subjects with centidegrees values
+    // Update per-sensor dynamic subjects with decidegrees values
     for (const auto& sensor : sensors_) {
         auto subj_it = temp_subjects_.find(sensor.klipper_name);
         if (subj_it == temp_subjects_.end() || !subj_it->second->initialized) {
@@ -624,10 +624,10 @@ void TemperatureSensorManager::update_subjects() {
             continue;
         }
 
-        // Convert temperature to centidegrees (×10 for 0.1°C resolution)
-        int centidegrees = helix::units::to_centidegrees(state_it->second.temperature);
-        if (lv_subject_get_int(&subj_it->second->subject) != centidegrees)
-            lv_subject_set_int(&subj_it->second->subject, centidegrees);
+        // Convert temperature to decidegrees (×10 for 0.1°C resolution)
+        int decidegrees = helix::units::to_decidegrees(state_it->second.temperature);
+        if (lv_subject_get_int(&subj_it->second->subject) != decidegrees)
+            lv_subject_set_int(&subj_it->second->subject, decidegrees);
     }
 
     spdlog::trace("[TemperatureSensorManager] Subjects updated: {} sensors", sensors_.size());

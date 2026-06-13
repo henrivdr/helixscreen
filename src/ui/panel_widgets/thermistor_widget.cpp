@@ -44,7 +44,7 @@ void register_thermistor_widget() {
 } // namespace helix
 
 using namespace helix;
-using helix::ui::temperature::centi_to_degrees_f;
+using helix::ui::temperature::deci_to_degrees_f;
 using helix::ui::temperature::format_temperature_f;
 
 /// Strip redundant " Temperature" suffix — the widget context already implies it
@@ -442,13 +442,13 @@ void ThermistorWidget::bind_carousel_sensors() {
         if (subject) {
             auto obs = helix::ui::observe_int_sync<ThermistorWidget>(
                 subject, this,
-                [token, page_idx](ThermistorWidget* self, int centidegrees) {
+                [token, page_idx](ThermistorWidget* self, int decidegrees) {
                     if (token.expired())
                         return;
                     if (page_idx >= self->carousel_pages_.size())
                         return;
                     auto& cp = self->carousel_pages_[page_idx];
-                    float deg = centi_to_degrees_f(centidegrees);
+                    float deg = deci_to_degrees_f(decidegrees);
                     format_temperature_f(deg, cp.temp_buffer, sizeof(cp.temp_buffer));
                     if (cp.temp_label)
                         lv_label_set_text(cp.temp_label, cp.temp_buffer);
@@ -457,7 +457,7 @@ void ThermistorWidget::bind_carousel_sensors() {
 
             // Read current value immediately
             int current = lv_subject_get_int(subject);
-            float deg = centi_to_degrees_f(current);
+            float deg = deci_to_degrees_f(current);
             format_temperature_f(deg, carousel_pages_.back().temp_buffer,
                                  sizeof(carousel_pages_.back().temp_buffer));
             lv_label_set_text(temp_lbl, carousel_pages_.back().temp_buffer);
@@ -598,8 +598,8 @@ void ThermistorWidget::select_icon(const std::string& name) {
                  icon_name_.empty() ? "thermometer (default)" : icon_name_);
 }
 
-void ThermistorWidget::on_temp_changed(int centidegrees) {
-    float deg = centi_to_degrees_f(centidegrees);
+void ThermistorWidget::on_temp_changed(int decidegrees) {
+    float deg = deci_to_degrees_f(decidegrees);
     format_temperature_f(deg, temp_buffer_, sizeof(temp_buffer_));
 
     if (temp_label_) {
@@ -619,7 +619,7 @@ void ThermistorWidget::update_display() {
             auto& tsm = helix::sensors::TemperatureSensorManager::instance();
             lv_subject_t* subject = tsm.get_temp_subject(selected_sensor_);
             if (subject) {
-                float deg = centi_to_degrees_f(lv_subject_get_int(subject));
+                float deg = deci_to_degrees_f(lv_subject_get_int(subject));
                 format_temperature_f(deg, temp_buffer_, sizeof(temp_buffer_));
                 lv_label_set_text(temp_label_, temp_buffer_);
             } else {

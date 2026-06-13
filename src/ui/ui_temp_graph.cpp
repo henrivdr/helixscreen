@@ -730,9 +730,9 @@ static void draw_target_lines_cb(lv_event_t* e) {
         }
 
         // -----------------------------------------------------------------
-        // History mode — polyline of target_centi_buf samples with breaks
+        // History mode — polyline of target_deci_buf samples with breaks
         // -----------------------------------------------------------------
-        if (!meta->target_centi_buf || meta->target_head <= 0)
+        if (!meta->target_deci_buf || meta->target_head <= 0)
             continue;
 
         // Project buffer index → pixel X. The chart in shift-mode renders the
@@ -750,9 +750,9 @@ static void draw_target_lines_cb(lv_event_t* e) {
             return cx1 + (visual_idx * (chart_width - 1)) / (graph->point_count - 1);
         };
 
-        auto y_for_centi = [&](int16_t centi) -> int32_t {
+        auto y_for_deci = [&](int16_t deci) -> int32_t {
             int32_t content_y =
-                chart_height - lv_map(static_cast<int32_t>(centi),
+                chart_height - lv_map(static_cast<int32_t>(deci),
                                       static_cast<int32_t>(graph->min_temp * TEMP_SCALE),
                                       static_cast<int32_t>(graph->max_temp * TEMP_SCALE), 0,
                                       chart_height);
@@ -768,7 +768,7 @@ static void draw_target_lines_cb(lv_event_t* e) {
         seg_dsc.dash_width = 6;
         seg_dsc.dash_gap = 4;
 
-        auto segments = helix::temp_graph_internal::segment_target_buf(meta->target_centi_buf,
+        auto segments = helix::temp_graph_internal::segment_target_buf(meta->target_deci_buf,
                                                                        meta->target_head);
 
         for (const auto& seg : segments) {
@@ -778,8 +778,8 @@ static void draw_target_lines_cb(lv_event_t* e) {
             // the visible window started. Drawing a riser there would be a lie.
             if (seg.first > 0) {
                 int32_t riser_x = x_for_index(seg.first);
-                int32_t riser_y_top = y_for_centi(meta->target_centi_buf[seg.first]);
-                int32_t riser_y_bottom = y_for_centi(0); // baseline at 0°C
+                int32_t riser_y_top = y_for_deci(meta->target_deci_buf[seg.first]);
+                int32_t riser_y_bottom = y_for_deci(0); // baseline at 0°C
                 if (riser_y_bottom > cy2)
                     riser_y_bottom = cy2;
                 if (riser_y_top < cy1)
@@ -795,13 +795,13 @@ static void draw_target_lines_cb(lv_event_t* e) {
             // single line so a held setpoint draws one dashed line instead of
             // one sub-pixel line per sample (#979 — the per-frame cost that
             // froze the touch UI on slow 32-bit boards). Geometry is identical.
-            auto runs = helix::temp_graph_internal::coalesce_target_runs(meta->target_centi_buf,
+            auto runs = helix::temp_graph_internal::coalesce_target_runs(meta->target_deci_buf,
                                                                          seg.first, seg.second);
             for (const auto& run : runs) {
                 seg_dsc.p1.x = x_for_index(run.first);
-                seg_dsc.p1.y = y_for_centi(meta->target_centi_buf[run.first]);
+                seg_dsc.p1.y = y_for_deci(meta->target_deci_buf[run.first]);
                 seg_dsc.p2.x = x_for_index(run.second);
-                seg_dsc.p2.y = y_for_centi(meta->target_centi_buf[run.second]);
+                seg_dsc.p2.y = y_for_deci(meta->target_deci_buf[run.second]);
                 lv_draw_line(layer, &seg_dsc);
             }
         }
@@ -811,8 +811,8 @@ static void draw_target_lines_cb(lv_event_t* e) {
         // current setpoint" without re-introducing a full-width horizontal line.
         if (!segments.empty()) {
             int last_idx = segments.back().second - 1;
-            int16_t last_centi = meta->target_centi_buf[last_idx];
-            int32_t tick_y = y_for_centi(last_centi);
+            int16_t last_deci = meta->target_deci_buf[last_idx];
+            int32_t tick_y = y_for_deci(last_deci);
             int32_t tick_x = x_for_index(last_idx);
             if (tick_y >= cy1 && tick_y <= cy2) {
                 lv_draw_line_dsc_t tick_dsc;
@@ -1375,8 +1375,8 @@ void ui_temp_graph_destroy(ui_temp_graph_t* graph) {
     // graph->chart, so the if-block above is skipped). Without this the buffers
     // leak in the rebuild() path used by TempGraphController on reconnect.
     for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
-        delete[] graph_ptr->series_meta[i].target_centi_buf;
-        graph_ptr->series_meta[i].target_centi_buf = nullptr;
+        delete[] graph_ptr->series_meta[i].target_deci_buf;
+        graph_ptr->series_meta[i].target_deci_buf = nullptr;
     }
 
     // Defensive: free the gradient cache buffer if it somehow survived both the
@@ -1448,9 +1448,9 @@ int ui_temp_graph_add_series(ui_temp_graph_t* graph, const char* name, lv_color_
     meta->first_value_received = false;
 
     // Allocate target history buffer (zero-init = heater off sentinel)
-    meta->target_centi_buf = new (std::nothrow) int16_t[static_cast<size_t>(graph->point_count)]();
+    meta->target_deci_buf = new (std::nothrow) int16_t[static_cast<size_t>(graph->point_count)]();
     meta->target_head = 0;
-    if (!meta->target_centi_buf) {
+    if (!meta->target_deci_buf) {
         spdlog::error("[TempGraph] Failed to allocate target buffer for series '{}'", name);
         lv_chart_remove_series(graph->chart, ser);
         memset(meta, 0, sizeof(ui_temp_series_meta_t));
@@ -1481,9 +1481,9 @@ void ui_temp_graph_remove_series(ui_temp_graph_t* graph, int series_id) {
     lv_chart_remove_series(graph->chart, meta->chart_series);
 
     // Free target history buffer
-    delete[] meta->target_centi_buf;
+    delete[] meta->target_deci_buf;
 
-    // Clear metadata (also zeros target_centi_buf and target_head)
+    // Clear metadata (also zeros target_deci_buf and target_head)
     memset(meta, 0, sizeof(ui_temp_series_meta_t));
     meta->chart_series = nullptr;
 
@@ -1519,19 +1519,19 @@ void ui_temp_graph_show_series(ui_temp_graph_t* graph, int series_id, bool visib
 
 // Helper: push current target into the parallel buffer in lockstep with the LVGL
 // chart's actuals push. Uses a shift-left store (NOT LVGL's ring buffer) so the
-// draw callback can walk target_centi_buf[0..target_head-1] linearly, oldest-to-newest,
+// draw callback can walk target_deci_buf[0..target_head-1] linearly, oldest-to-newest,
 // without tracking the chart's start_point offset. Called from update_series*
 // immediately after lv_chart_set_next_value.
 static void push_target_sample(ui_temp_graph_t* graph, ui_temp_series_meta_t* meta) {
-    if (!meta->target_centi_buf || graph->point_count <= 0)
+    if (!meta->target_deci_buf || graph->point_count <= 0)
         return;
     int16_t v = static_cast<int16_t>(meta->target_temp * TEMP_SCALE);
     if (meta->target_head < graph->point_count) {
-        meta->target_centi_buf[meta->target_head++] = v;
+        meta->target_deci_buf[meta->target_head++] = v;
     } else {
-        memmove(meta->target_centi_buf, meta->target_centi_buf + 1,
+        memmove(meta->target_deci_buf, meta->target_deci_buf + 1,
                 static_cast<size_t>(graph->point_count - 1) * sizeof(int16_t));
-        meta->target_centi_buf[graph->point_count - 1] = v;
+        meta->target_deci_buf[graph->point_count - 1] = v;
     }
 }
 
@@ -1672,12 +1672,12 @@ void ui_temp_graph_set_series_data_with_targets(ui_temp_graph_t* graph, int seri
     int points_to_copy = count > graph->point_count ? graph->point_count : count;
 
     // Populate target buffer in lockstep. Zero-init any tail we don't fill.
-    if (meta->target_centi_buf) {
+    if (meta->target_deci_buf) {
         for (int i = 0; i < points_to_copy; i++) {
-            meta->target_centi_buf[i] = static_cast<int16_t>(targets[i] * TEMP_SCALE);
+            meta->target_deci_buf[i] = static_cast<int16_t>(targets[i] * TEMP_SCALE);
         }
         if (points_to_copy < graph->point_count) {
-            memset(meta->target_centi_buf + points_to_copy, 0,
+            memset(meta->target_deci_buf + points_to_copy, 0,
                    static_cast<size_t>(graph->point_count - points_to_copy) * sizeof(int16_t));
         }
         meta->target_head = points_to_copy;
@@ -1726,8 +1726,8 @@ void ui_temp_graph_clear(ui_temp_graph_t* graph) {
         if (meta->chart_series) {
             lv_chart_set_all_values(graph->chart, meta->chart_series, LV_CHART_POINT_NONE);
             // Also wipe target history.
-            if (meta->target_centi_buf) {
-                memset(meta->target_centi_buf, 0,
+            if (meta->target_deci_buf) {
+                memset(meta->target_deci_buf, 0,
                        static_cast<size_t>(graph->point_count) * sizeof(int16_t));
             }
             meta->target_head = 0;
@@ -1753,8 +1753,8 @@ void ui_temp_graph_clear_series(ui_temp_graph_t* graph, int series_id) {
     lv_chart_set_all_values(graph->chart, meta->chart_series, LV_CHART_POINT_NONE);
 
     // Wipe target history too.
-    if (meta->target_centi_buf) {
-        memset(meta->target_centi_buf, 0,
+    if (meta->target_deci_buf) {
+        memset(meta->target_deci_buf, 0,
                static_cast<size_t>(graph->point_count) * sizeof(int16_t));
     }
     meta->target_head = 0;
@@ -1856,10 +1856,10 @@ void ui_temp_graph_set_point_count(ui_temp_graph_t* graph, int count) {
         auto& m = graph->series_meta[i];
         if (!m.chart_series)
             continue;
-        delete[] m.target_centi_buf;
-        m.target_centi_buf = new (std::nothrow) int16_t[static_cast<size_t>(count)]();
+        delete[] m.target_deci_buf;
+        m.target_deci_buf = new (std::nothrow) int16_t[static_cast<size_t>(count)]();
         m.target_head = 0;
-        if (!m.target_centi_buf) {
+        if (!m.target_deci_buf) {
             spdlog::error("[TempGraph] Failed to realloc target buffer for series '{}'", m.name);
         }
     }

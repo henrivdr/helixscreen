@@ -38,7 +38,7 @@
 
 using namespace helix;
 using helix::ui::observe_int_sync;
-using helix::ui::temperature::centi_to_degrees_f;
+using helix::ui::temperature::deci_to_degrees_f;
 
 // ============================================================================
 // Helper: heater type index
@@ -90,7 +90,7 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
                      .y_axis_increment = 80,
                      .presets = {0, nozzle_pla, nozzle_petg, nozzle_abs},
                      .keypad_range = {0.0f, 350.0f}};
-    nozzle.cooling_threshold_centi = 400; // 40°C
+    nozzle.cooling_threshold_deci = 400; // 40°C
     nozzle.klipper_name = "extruder";     // Updated dynamically for multi-extruder
     nozzle.min_temp = AppConstants::Temperature::DEFAULT_MIN_TEMP;
     nozzle.max_temp = AppConstants::Temperature::DEFAULT_NOZZLE_MAX;
@@ -105,7 +105,7 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
                   .y_axis_increment = 35,
                   .presets = {0, bed_pla, bed_petg, bed_abs},
                   .keypad_range = {0.0f, 150.0f}};
-    bed.cooling_threshold_centi = 350; // 35°C
+    bed.cooling_threshold_deci = 350; // 35°C
     bed.klipper_name = "heater_bed";
     bed.min_temp = AppConstants::Temperature::DEFAULT_MIN_TEMP;
     bed.max_temp = AppConstants::Temperature::DEFAULT_BED_MAX;
@@ -120,7 +120,7 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
                       .y_axis_increment = 20,
                       .presets = {0, 40, 50, 60}, // Off, 40°C, 50°C, 60°C
                       .keypad_range = {0.0f, 80.0f}};
-    chamber.cooling_threshold_centi = 300;           // 30°C
+    chamber.cooling_threshold_deci = 300;           // 30°C
     chamber.klipper_name = "heater_generic chamber"; // Updated from discovery
     chamber.read_only = true; // Default sensor-only; updated at runtime from capability subject
     chamber.min_temp = 0;
@@ -208,16 +208,16 @@ TemperatureService::~TemperatureService() {
 // Generic temperature/target change handlers
 // ============================================================================
 
-void TemperatureService::on_temp_changed(HeaterType type, int temp_centi) {
+void TemperatureService::on_temp_changed(HeaterType type, int temp_deci) {
     auto& h = heaters_[idx(type)];
 
     // Filter garbage data at the source
     int max_valid = (type == HeaterType::Nozzle) ? 4000 : (type == HeaterType::Bed) ? 2000 : 1500;
-    if (temp_centi <= 0 || temp_centi > max_valid) {
+    if (temp_deci <= 0 || temp_deci > max_valid) {
         return;
     }
 
-    h.current = temp_centi;
+    h.current = temp_deci;
     update_display(type);
     update_status(type);
 
@@ -235,11 +235,11 @@ void TemperatureService::on_temp_changed(HeaterType type, int temp_centi) {
     }
     h.last_graph_update_ms = now_ms;
 
-    float temp_deg = centi_to_degrees_f(temp_centi);
+    float temp_deg = deci_to_degrees_f(temp_deci);
     update_graphs(type, temp_deg, now_ms);
 }
 
-void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
+void TemperatureService::on_target_changed(HeaterType type, int target_deci) {
     // Chamber's effective setpoint is heater-OR-fan (M141 splits the setpoint
     // across two Klipper objects). Route through the combine path rather than
     // taking the heater readback as gospel. Nozzle/Bed keep the direct write.
@@ -249,7 +249,7 @@ void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
     }
 
     auto& h = heaters_[idx(type)];
-    h.target = target_centi;
+    h.target = target_deci;
     update_display(type);
     update_status(type);
 
@@ -257,7 +257,7 @@ void TemperatureService::on_target_changed(HeaterType type, int target_centi) {
         return;
     }
 
-    float target_deg = centi_to_degrees_f(target_centi);
+    float target_deg = deci_to_degrees_f(target_deci);
 
     if (ui_temp_graph_is_valid(h.graph) && h.series_id >= 0) {
         // Always pass show=true: the series HAS a target capability (it's a heater).
@@ -287,7 +287,7 @@ void TemperatureService::recompute_chamber_target() {
         return;
     }
 
-    float target_deg = centi_to_degrees_f(chamber.target);
+    float target_deg = deci_to_degrees_f(chamber.target);
     if (ui_temp_graph_is_valid(chamber.graph) && chamber.series_id >= 0) {
         ui_temp_graph_set_series_target(chamber.graph, chamber.series_id, target_deg, true);
         spdlog::trace("[TempPanel] Chamber target line: {:.1f}°C ({})", target_deg,
@@ -305,8 +305,8 @@ void TemperatureService::update_display(HeaterType type) {
     }
 
     auto& h = heaters_[idx(type)];
-    int current_deg = centi_to_degrees_f(h.current);
-    int target_deg = centi_to_degrees_f(h.target);
+    int current_deg = deci_to_degrees_f(h.current);
+    int target_deg = deci_to_degrees_f(h.target);
     int display_target = (h.pending >= 0) ? h.pending : target_deg;
 
     if (h.pending >= 0) {
@@ -468,8 +468,8 @@ void TemperatureService::init_subjects() {
         auto& h = heaters_[i];
 
         // Format initial display string
-        int current_deg = centi_to_degrees_f(h.current);
-        int target_deg = centi_to_degrees_f(h.target);
+        int current_deg = deci_to_degrees_f(h.current);
+        int target_deg = deci_to_degrees_f(h.target);
         snprintf(h.display_buf.data(), h.display_buf.size(), "%d / %d°C", current_deg, target_deg);
 
         // Initialize subjects
@@ -1324,7 +1324,7 @@ void TemperatureService::replay_history_from_manager(ui_temp_graph_t* graph, int
 
     int replayed = 0;
     for (const auto& sample : samples) {
-        float temp = static_cast<float>(sample.temp_centi) / 10.0f;
+        float temp = static_cast<float>(sample.temp_deci) / 10.0f;
         ui_temp_graph_update_series_with_time(graph, series_id, temp, sample.timestamp_ms);
         replayed++;
     }

@@ -2987,11 +2987,11 @@ void on_print_state_changed_for_telemetry(lv_observer_t* observer, lv_subject_t*
         int duration_sec = lv_subject_get_int(ps.get_print_elapsed_subject());
         int phases_completed = s_telemetry_max_phase;
 
-        // Temperatures: subjects store centidegrees (value * 10), divide by 10
-        int nozzle_temp_centi = lv_subject_get_int(ps.get_active_extruder_target_subject());
-        int bed_temp_centi = lv_subject_get_int(ps.get_bed_target_subject());
-        int nozzle_temp = nozzle_temp_centi / 10;
-        int bed_temp = bed_temp_centi / 10;
+        // Temperatures: subjects store decidegrees (value * 10), divide by 10
+        int nozzle_temp_deci = lv_subject_get_int(ps.get_active_extruder_target_subject());
+        int bed_temp_deci = lv_subject_get_int(ps.get_bed_target_subject());
+        int nozzle_temp = nozzle_temp_deci / 10;
+        int bed_temp = bed_temp_deci / 10;
 
         // Use filament data cached at print start from file metadata
         float filament_used_mm = s_telemetry_filament_used_mm;

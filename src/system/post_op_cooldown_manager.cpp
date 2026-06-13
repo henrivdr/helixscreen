@@ -55,7 +55,7 @@ void PostOpCooldownManager::schedule() {
                     return;
                 }
 
-                // Check extruder target (centidegrees, > 0 means heater is on)
+                // Check extruder target (decidegrees, > 0 means heater is on)
                 auto* target_subj = state.get_active_extruder_target_subject();
                 if (!target_subj || lv_subject_get_int(target_subj) == 0) {
                     spdlog::debug("[PostOpCooldown] Skipping cooldown — extruder already off");

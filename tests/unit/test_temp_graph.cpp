@@ -865,10 +865,10 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: target buffer allocated o
     bool found = false;
     for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
         if (g->series_meta[i].chart_series && g->series_meta[i].id == id) {
-            REQUIRE(g->series_meta[i].target_centi_buf != nullptr);
+            REQUIRE(g->series_meta[i].target_deci_buf != nullptr);
             REQUIRE(g->series_meta[i].target_head == 0);
             for (int j = 0; j < g->point_count; j++) {
-                REQUIRE(g->series_meta[i].target_centi_buf[j] == 0);
+                REQUIRE(g->series_meta[i].target_deci_buf[j] == 0);
             }
             found = true;
             break;
@@ -890,7 +890,7 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: target buffer freed on re
     ui_temp_graph_remove_series(g, id);
 
     for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
-        REQUIRE(g->series_meta[i].target_centi_buf == nullptr);
+        REQUIRE(g->series_meta[i].target_deci_buf == nullptr);
     }
 
     ui_temp_graph_destroy(g);
@@ -912,9 +912,9 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: set_point_count reallocs 
     for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
         if (g->series_meta[i].chart_series) {
             if (g->series_meta[i].id == id_a)
-                orig_a = g->series_meta[i].target_centi_buf;
+                orig_a = g->series_meta[i].target_deci_buf;
             if (g->series_meta[i].id == id_b)
-                orig_b = g->series_meta[i].target_centi_buf;
+                orig_b = g->series_meta[i].target_deci_buf;
         }
     }
     REQUIRE(orig_a != nullptr);
@@ -926,7 +926,7 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: set_point_count reallocs 
 
     for (int i = 0; i < UI_TEMP_GRAPH_MAX_SERIES; i++) {
         if (g->series_meta[i].chart_series) {
-            REQUIRE(g->series_meta[i].target_centi_buf != nullptr);
+            REQUIRE(g->series_meta[i].target_deci_buf != nullptr);
             REQUIRE(g->series_meta[i].target_head == 0);
 
             // The buffer pointer MUST have changed — set_point_count must free
@@ -934,15 +934,15 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: set_point_count reallocs 
             // the test trivially passes even on a no-op implementation, since
             // the default 1200-element buffer is also zero-initialized.
             if (g->series_meta[i].id == id_a) {
-                REQUIRE(g->series_meta[i].target_centi_buf != orig_a);
+                REQUIRE(g->series_meta[i].target_deci_buf != orig_a);
             }
             if (g->series_meta[i].id == id_b) {
-                REQUIRE(g->series_meta[i].target_centi_buf != orig_b);
+                REQUIRE(g->series_meta[i].target_deci_buf != orig_b);
             }
 
             // First `count` entries are accessible and zeroed.
             for (int j = 0; j < 100; j++) {
-                REQUIRE(g->series_meta[i].target_centi_buf[j] == 0);
+                REQUIRE(g->series_meta[i].target_deci_buf[j] == 0);
             }
         }
     }
@@ -975,26 +975,26 @@ TEST_CASE_METHOD(TempGraphTestFixture,
     auto* m = get_meta();
     REQUIRE(m != nullptr);
     REQUIRE(m->target_head == 3);
-    REQUIRE(m->target_centi_buf[0] == 0);
-    REQUIRE(m->target_centi_buf[1] == 0);
-    REQUIRE(m->target_centi_buf[2] == 0);
+    REQUIRE(m->target_deci_buf[0] == 0);
+    REQUIRE(m->target_deci_buf[1] == 0);
+    REQUIRE(m->target_deci_buf[2] == 0);
 
-    // Set target then push two more — those slots should record 220.0 (centi = 2200)
+    // Set target then push two more — those slots should record 220.0 (deci = 2200)
     m->target_temp = 220.0f;
     m->show_target = true;
     ui_temp_graph_update_series(g, id, 100.0f);
     ui_temp_graph_update_series(g, id, 150.0f);
 
     REQUIRE(m->target_head == 5);
-    REQUIRE(m->target_centi_buf[3] == 2200);
-    REQUIRE(m->target_centi_buf[4] == 2200);
+    REQUIRE(m->target_deci_buf[3] == 2200);
+    REQUIRE(m->target_deci_buf[4] == 2200);
 
     // Turn heater off → next push records 0 (segment break sentinel)
     m->target_temp = 0.0f;
     ui_temp_graph_update_series(g, id, 145.0f);
 
     REQUIRE(m->target_head == 6);
-    REQUIRE(m->target_centi_buf[5] == 0);
+    REQUIRE(m->target_deci_buf[5] == 0);
 
     ui_temp_graph_destroy(g);
 }
@@ -1033,18 +1033,18 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: target buffer shifts left
     ui_temp_graph_update_series(g, id, 4.0f);
 
     REQUIRE(m->target_head == 4);
-    REQUIRE(m->target_centi_buf[0] == 100);
-    REQUIRE(m->target_centi_buf[3] == 400);
+    REQUIRE(m->target_deci_buf[0] == 100);
+    REQUIRE(m->target_deci_buf[3] == 400);
 
     // Push 5th → oldest shifts off
     m->target_temp = 50.0f;
     ui_temp_graph_update_series(g, id, 5.0f);
 
     REQUIRE(m->target_head == 4);           // capped
-    REQUIRE(m->target_centi_buf[0] == 200); // was 100, shifted off
-    REQUIRE(m->target_centi_buf[1] == 300);
-    REQUIRE(m->target_centi_buf[2] == 400);
-    REQUIRE(m->target_centi_buf[3] == 500);
+    REQUIRE(m->target_deci_buf[0] == 200); // was 100, shifted off
+    REQUIRE(m->target_deci_buf[1] == 300);
+    REQUIRE(m->target_deci_buf[2] == 400);
+    REQUIRE(m->target_deci_buf[3] == 500);
 
     ui_temp_graph_destroy(g);
 }
@@ -1081,7 +1081,7 @@ TEST_CASE_METHOD(TempGraphTestFixture,
     // Now one actuals push should capture the latest (220), not any intermediate.
     ui_temp_graph_update_series(g, id, 50.0f);
     REQUIRE(m->target_head == 1);
-    REQUIRE(m->target_centi_buf[0] == 2200);
+    REQUIRE(m->target_deci_buf[0] == 2200);
 
     ui_temp_graph_destroy(g);
 }
@@ -1110,11 +1110,11 @@ TEST_CASE_METHOD(TempGraphTestFixture,
     auto* m = get_meta();
     REQUIRE(m != nullptr);
     REQUIRE(m->target_head == 5);
-    REQUIRE(m->target_centi_buf[0] == 0);
-    REQUIRE(m->target_centi_buf[1] == 0);
-    REQUIRE(m->target_centi_buf[2] == 2200);
-    REQUIRE(m->target_centi_buf[3] == 2200);
-    REQUIRE(m->target_centi_buf[4] == 2200);
+    REQUIRE(m->target_deci_buf[0] == 0);
+    REQUIRE(m->target_deci_buf[1] == 0);
+    REQUIRE(m->target_deci_buf[2] == 2200);
+    REQUIRE(m->target_deci_buf[3] == 2200);
+    REQUIRE(m->target_deci_buf[4] == 2200);
 
     ui_temp_graph_destroy(g);
 }
@@ -1141,13 +1141,13 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: clear_series zeroes targe
     ui_temp_graph_update_series(g, id, 100.0f);
     ui_temp_graph_update_series(g, id, 110.0f);
     REQUIRE(m->target_head == 2);
-    REQUIRE(m->target_centi_buf[0] == 2000);
+    REQUIRE(m->target_deci_buf[0] == 2000);
 
     ui_temp_graph_clear_series(g, id);
 
     REQUIRE(m->target_head == 0);
     for (int i = 0; i < g->point_count; i++) {
-        REQUIRE(m->target_centi_buf[i] == 0);
+        REQUIRE(m->target_deci_buf[i] == 0);
     }
 
     ui_temp_graph_destroy(g);

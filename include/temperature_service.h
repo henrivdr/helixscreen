@@ -39,7 +39,7 @@ class TemperatureService;
 struct HeaterState {
     heater_config_t config{};
 
-    // Temperature state (centidegrees)
+    // Temperature state (decidegrees)
     int current = 25;
     int target = 0;
     int pending = -1; // -1 = no pending selection (user picked but not confirmed)
@@ -47,7 +47,7 @@ struct HeaterState {
     int max_temp = 0;
 
     // Status thresholds
-    int cooling_threshold_centi = 0; ///< Above this when target=0 → "Cooling down"
+    int cooling_threshold_deci = 0; ///< Above this when target=0 → "Cooling down"
 
     // Chamber-specific: read-only when sensor-only (no heater present)
     bool read_only = false;
@@ -201,7 +201,7 @@ class TemperatureService {
     void init_subjects();
     void deinit_subjects();
 
-    // ── Setters (centidegrees, used by tests and PrinterState observers) ──
+    // ── Setters (decidegrees, used by tests and PrinterState observers) ──
     void set_heater(helix::HeaterType type, int current, int target);
     void set_heater_limits(helix::HeaterType type, int min_temp, int max_temp);
 
@@ -219,7 +219,7 @@ class TemperatureService {
         set_heater_limits(helix::HeaterType::Bed, min_temp, max_temp);
     }
 
-    // Getters (centidegrees)
+    // Getters (decidegrees)
     int get_nozzle_target() const {
         return heaters_[static_cast<int>(helix::HeaterType::Nozzle)].target;
     }
@@ -276,8 +276,8 @@ class TemperatureService {
 
   private:
     // ── Generic instance methods ────────────────────────────────────────
-    void on_temp_changed(helix::HeaterType type, int temp_centi);
-    void on_target_changed(helix::HeaterType type, int target_centi);
+    void on_temp_changed(helix::HeaterType type, int temp_deci);
+    void on_target_changed(helix::HeaterType type, int target_deci);
     // Chamber: combine the heater-target and cooling-fan-target subjects into a
     // single effective setpoint + control-mode word, then refresh display/status.
     void recompute_chamber_target();

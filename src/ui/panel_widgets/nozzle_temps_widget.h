@@ -91,7 +91,7 @@ class NozzleTempsWidget : public PanelWidget {
     void create_extruder_row(lv_obj_t* container, ExtruderRow& row);
     void create_bed_row(lv_obj_t* container);
     void update_row_display(lv_obj_t* temp_label, lv_obj_t* target_label, lv_obj_t* progress_bar,
-                            int temp_centi, int target_centi, bool is_bed);
+                            int temp_deci, int target_deci, bool is_bed);
 };
 
 void register_nozzle_temps_widget();

@@ -22,8 +22,8 @@
  *   void setup() {
  *       animated_temp_.bind(
  *           printer_state_.get_active_extruder_temp_subject(),
- *           [this](int centi) {
- *               int deg = centi / 10;
+ *           [this](int deci) {
+ *               int deg = deci / 10;
  *               snprintf(buf_, sizeof(buf_), "%d°", deg);
  *               lv_label_set_text(label_, buf_);
  *           },

@@ -9,45 +9,45 @@
 namespace helix::units {
 
 // ============================================================================
-// Temperature Conversions (centidegrees = degrees × 10)
+// Temperature Conversions (decidegrees = degrees × 10)
 // ============================================================================
 
 /**
- * @brief Convert Celsius to centidegrees (for UI display with 0.1° precision)
+ * @brief Convert Celsius to decidegrees (for UI display with 0.1° precision)
  * @param celsius Temperature in degrees Celsius
- * @return Temperature in centidegrees (1 centidegree = 0.1°C)
+ * @return Temperature in decidegrees (1 decidegree = 0.1°C)
  *
- * Example: 25.5°C → 255 centidegrees
+ * Example: 25.5°C → 255 decidegrees
  */
-inline int to_centidegrees(double celsius) {
+inline int to_decidegrees(double celsius) {
     if (!std::isfinite(celsius))
         return 0;
     return static_cast<int>(celsius * 10.0);
 }
 
 /**
- * @brief Convert centidegrees back to Celsius
- * @param centidegrees Temperature in centidegrees
+ * @brief Convert decidegrees back to Celsius
+ * @param decidegrees Temperature in decidegrees
  * @return Temperature in degrees Celsius
  */
-inline double from_centidegrees(int centidegrees) {
-    return static_cast<double>(centidegrees) / 10.0;
+inline double from_decidegrees(int decidegrees) {
+    return static_cast<double>(decidegrees) / 10.0;
 }
 
 /**
- * @brief Extract temperature from JSON and convert to centidegrees
+ * @brief Extract temperature from JSON and convert to decidegrees
  * @param obj JSON object containing the temperature field
  * @param key Key name for the temperature value
  * @param default_value Value to return if key is missing or not a number
- * @return Temperature in centidegrees
+ * @return Temperature in decidegrees
  *
  * @note Returns default_value if obj is not a JSON object (e.g., array, primitive, null)
  */
-inline int json_to_centidegrees(const nlohmann::json& obj, const char* key, int default_value = 0) {
+inline int json_to_decidegrees(const nlohmann::json& obj, const char* key, int default_value = 0) {
     if (!obj.is_object())
         return default_value;
     if (obj.contains(key) && obj[key].is_number()) {
-        return to_centidegrees(obj[key].get<double>());
+        return to_decidegrees(obj[key].get<double>());
     }
     return default_value;
 }

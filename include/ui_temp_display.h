@@ -50,14 +50,14 @@
  * |----------------|---------|---------|--------------------------------------------------|
  * | size           | string  | "md"    | Font size: "sm", "md", or "lg"                   |
  * | show_target    | bool    | "false" | Show "/ target" portion (opt-in)                 |
- * | bind_current   | subject | -       | Subject name for current temp (centidegrees×10) |
- * | bind_target    | subject | -       | Subject name for target temp (centidegrees×10)  |
+ * | bind_current   | subject | -       | Subject name for current temp (decidegrees×10) |
+ * | bind_target    | subject | -       | Subject name for target temp (decidegrees×10)  |
  * | bind_mode      | subject | -       | Subject name for ChamberMode int (cooling-ceiling color in Maintaining) |
  * | event_cb       | string  | ""      | Click callback name (makes widget clickable)     |
  *
  * @note When show_target="true" and target=0, displays "--" instead of "0"
  *
- * @note The widget expects temperature subjects in **centidegrees** (value×10),
+ * @note The widget expects temperature subjects in **decidegrees** (value×10),
  *       which matches PrinterState's format. The widget converts internally:
  *       - Subject value 2050 → displays as "205°C"
  *       - Subject value 600  → displays as "60°C"

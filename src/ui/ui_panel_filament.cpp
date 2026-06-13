@@ -60,7 +60,7 @@ static constexpr const char* SAFETY_WARNING_FMT = "Heat to at least %d°C for fi
 
 using helix::ui::observe_int_async;
 using helix::ui::observe_int_sync;
-using helix::ui::temperature::centi_to_degrees;
+using helix::ui::temperature::deci_to_degrees;
 using helix::ui::temperature::format_target_or_off;
 using helix::ui::temperature::get_heating_state_color;
 
@@ -128,10 +128,10 @@ FilamentPanel::FilamentPanel(PrinterState& printer_state, MoonrakerAPI* api)
     // [L029]
     temp_observers_.setup_async(
         this, printer_state_,
-        [](FilamentPanel* self, int raw) { self->nozzle_current_ = centi_to_degrees(raw); },
-        [](FilamentPanel* self, int raw) { self->nozzle_target_ = centi_to_degrees(raw); },
-        [](FilamentPanel* self, int raw) { self->bed_current_ = centi_to_degrees(raw); },
-        [](FilamentPanel* self, int raw) { self->bed_target_ = centi_to_degrees(raw); },
+        [](FilamentPanel* self, int raw) { self->nozzle_current_ = deci_to_degrees(raw); },
+        [](FilamentPanel* self, int raw) { self->nozzle_target_ = deci_to_degrees(raw); },
+        [](FilamentPanel* self, int raw) { self->bed_current_ = deci_to_degrees(raw); },
+        [](FilamentPanel* self, int raw) { self->bed_target_ = deci_to_degrees(raw); },
         [](FilamentPanel* self) { self->update_all_temps(); });
 
     // Subscribe to chamber temperature (optional - only if printer has chamber)
@@ -139,7 +139,7 @@ FilamentPanel::FilamentPanel(PrinterState& printer_state, MoonrakerAPI* api)
     // upon registration, but subjects aren't initialized until init_subjects() is called.
     chamber_temp_observer_ = observe_int_sync<FilamentPanel>(
         printer_state_.get_chamber_temp_subject(), this, [](FilamentPanel* self, int raw) {
-            self->chamber_current_ = centi_to_degrees(raw);
+            self->chamber_current_ = deci_to_degrees(raw);
             if (self->are_subjects_initialized()) {
                 self->update_chamber_temp_display();
                 self->update_status();
@@ -147,7 +147,7 @@ FilamentPanel::FilamentPanel(PrinterState& printer_state, MoonrakerAPI* api)
         });
     chamber_target_observer_ = observe_int_sync<FilamentPanel>(
         printer_state_.get_chamber_target_subject(), this, [](FilamentPanel* self, int raw) {
-            self->chamber_target_ = raw; // Store centidegrees (matches PrinterState format)
+            self->chamber_target_ = raw; // Store decidegrees (matches PrinterState format)
             if (self->are_subjects_initialized()) {
                 self->update_chamber_temp_display();
             }
@@ -490,18 +490,18 @@ void FilamentPanel::update_status() {
         lv_subject_copy_string(&status_subject_, status_buf_);
         update_status_icon("flash", "warning");
         return; // Already updated, exit early
-    } else if (chamber_target_ > 0 && chamber_current_ < centi_to_degrees(chamber_target_) - 5) {
+    } else if (chamber_target_ > 0 && chamber_current_ < deci_to_degrees(chamber_target_) - 5) {
         // Chamber is heating (show only if nozzle is cold)
         std::snprintf(status_buf_, sizeof(status_buf_), lv_tr("Chamber heating to %d°C..."),
-                      centi_to_degrees(chamber_target_));
+                      deci_to_degrees(chamber_target_));
         lv_subject_copy_string(&status_subject_, status_buf_);
         update_status_icon("fire", "warning");
         return;
-    } else if (chamber_target_ > 0 && chamber_current_ >= centi_to_degrees(chamber_target_) - 5 &&
-               chamber_current_ <= centi_to_degrees(chamber_target_) + 2) {
+    } else if (chamber_target_ > 0 && chamber_current_ >= deci_to_degrees(chamber_target_) - 5 &&
+               chamber_current_ <= deci_to_degrees(chamber_target_) + 2) {
         // Chamber at target (show only if nozzle is cold)
         std::snprintf(status_buf_, sizeof(status_buf_), lv_tr("Chamber at %d°C"),
-                      centi_to_degrees(chamber_target_));
+                      deci_to_degrees(chamber_target_));
         lv_subject_copy_string(&status_subject_, status_buf_);
         update_status_icon("check", "success");
         return;
@@ -647,7 +647,7 @@ void FilamentPanel::handle_preset_button(int material_id) {
 
             // Set chamber temperature if preset specifies one
             if (chamber_target_ > 0) {
-                int target = centi_to_degrees(chamber_target_);
+                int target = deci_to_degrees(chamber_target_);
                 c->set_target(helix::HeaterType::Chamber, static_cast<double>(target),
                               {.toast = true, .on_success = [target]() {
                                    NOTIFY_SUCCESS(lv_tr("Chamber target set to {}°C"), target);
@@ -695,7 +695,7 @@ void FilamentPanel::handle_chamber_temp_tap() {
     spdlog::debug("[{}] Opening custom chamber temperature keypad", get_name());
 
     ui_keypad_config_t config = {.initial_value = static_cast<float>(
-                                     chamber_target_ > 0 ? centi_to_degrees(chamber_target_) : 50),
+                                     chamber_target_ > 0 ? deci_to_degrees(chamber_target_) : 50),
                                  .min_value = 0.0f,
                                  .max_value = static_cast<float>(chamber_max_temp_),
                                  .title_label = lv_tr("Chamber Temperature"),
@@ -781,16 +781,16 @@ void FilamentPanel::update_material_temp_display() {
 }
 
 void FilamentPanel::update_chamber_temp_display() {
-    // chamber_current_ is already in degrees (observer converts), chamber_target_ is centidegrees
+    // chamber_current_ is already in degrees (observer converts), chamber_target_ is decidegrees
     std::snprintf(chamber_current_buf_, sizeof(chamber_current_buf_), "%d°C", chamber_current_);
-    format_target_or_off(centi_to_degrees(chamber_target_), chamber_target_buf_,
+    format_target_or_off(deci_to_degrees(chamber_target_), chamber_target_buf_,
                          sizeof(chamber_target_buf_));
     lv_subject_copy_string(&chamber_current_subject_, chamber_current_buf_);
     lv_subject_copy_string(&chamber_target_subject_, chamber_target_buf_);
 
     // Apply 4-state heating color (matches nozzle/bed)
     if (chamber_current_label_) {
-        int target_deg = centi_to_degrees(chamber_target_);
+        int target_deg = deci_to_degrees(chamber_target_);
         lv_color_t color = get_heating_state_color(chamber_current_, target_deg);
         lv_obj_set_style_text_color(chamber_current_label_, color, LV_PART_MAIN);
     }
@@ -1760,7 +1760,7 @@ void FilamentPanel::set_material(int material_id) {
     // Set chamber target from material preset (clear if material has no chamber requirement)
     if (printer_state_.get_discovery().has_chamber_heater()) {
         chamber_target_ = mat->chamber_temp_c > 0
-                              ? helix::ui::temperature::degrees_to_centi(mat->chamber_temp_c)
+                              ? helix::ui::temperature::degrees_to_deci(mat->chamber_temp_c)
                               : 0;
         update_chamber_temp_display();
     }
@@ -1868,7 +1868,7 @@ const char* FilamentPanel::preheat_op_name(PreheatOp op) {
 // the preset's preview temperature, so it's unreliable here.
 int FilamentPanel::current_extruder_target() const {
     auto* subj = printer_state_.get_active_extruder_target_subject();
-    return subj ? centi_to_degrees(lv_subject_get_int(subj)) : 0;
+    return subj ? deci_to_degrees(lv_subject_get_int(subj)) : 0;
 }
 
 // Called at op-handler entry (not inside start_preheat_for_op) so the

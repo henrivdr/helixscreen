@@ -642,12 +642,12 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                         if (settings.contains(key) &&
                                             settings[key].contains("target_temp") &&
                                             settings[key]["target_temp"].is_number()) {
-                                            int resting_centi = static_cast<int>(
+                                            int resting_deci = static_cast<int>(
                                                 settings[key]["target_temp"].get<double>() * 10);
-                                            hardware_.set_chamber_fan_resting_centi(resting_centi);
+                                            hardware_.set_chamber_fan_resting_deci(resting_deci);
                                             spdlog::debug("[Discovery] Chamber cooling fan '{}' "
-                                                          "resting target: {} centi",
-                                                          fan, resting_centi);
+                                                          "resting target: {} deci",
+                                                          fan, resting_deci);
                                         }
                                     }
                                 }

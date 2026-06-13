@@ -12,56 +12,56 @@ using json = nlohmann::json;
 // Temperature Conversion Tests
 // ============================================================================
 
-TEST_CASE("to_centidegrees converts correctly", "[unit_conversions][temperature]") {
+TEST_CASE("to_decidegrees converts correctly", "[unit_conversions][temperature]") {
     SECTION("zero degrees") {
-        REQUIRE(to_centidegrees(0.0) == 0);
+        REQUIRE(to_decidegrees(0.0) == 0);
     }
 
     SECTION("positive temperatures") {
-        REQUIRE(to_centidegrees(25.0) == 250);
-        REQUIRE(to_centidegrees(25.5) == 255);
-        REQUIRE(to_centidegrees(200.0) == 2000);
-        REQUIRE(to_centidegrees(210.7) == 2107);
+        REQUIRE(to_decidegrees(25.0) == 250);
+        REQUIRE(to_decidegrees(25.5) == 255);
+        REQUIRE(to_decidegrees(200.0) == 2000);
+        REQUIRE(to_decidegrees(210.7) == 2107);
     }
 
     SECTION("decimal precision") {
-        REQUIRE(to_centidegrees(25.15) == 251); // Truncates to int
-        REQUIRE(to_centidegrees(25.99) == 259); // Truncates, not rounds
+        REQUIRE(to_decidegrees(25.15) == 251); // Truncates to int
+        REQUIRE(to_decidegrees(25.99) == 259); // Truncates, not rounds
     }
 
     SECTION("negative temperatures") {
-        REQUIRE(to_centidegrees(-10.0) == -100);
-        REQUIRE(to_centidegrees(-0.5) == -5);
+        REQUIRE(to_decidegrees(-10.0) == -100);
+        REQUIRE(to_decidegrees(-0.5) == -5);
     }
 }
 
-TEST_CASE("from_centidegrees converts correctly", "[unit_conversions][temperature]") {
-    REQUIRE(from_centidegrees(0) == 0.0);
-    REQUIRE(from_centidegrees(250) == 25.0);
-    REQUIRE(from_centidegrees(255) == 25.5);
-    REQUIRE(from_centidegrees(-100) == -10.0);
+TEST_CASE("from_decidegrees converts correctly", "[unit_conversions][temperature]") {
+    REQUIRE(from_decidegrees(0) == 0.0);
+    REQUIRE(from_decidegrees(250) == 25.0);
+    REQUIRE(from_decidegrees(255) == 25.5);
+    REQUIRE(from_decidegrees(-100) == -10.0);
 }
 
-TEST_CASE("json_to_centidegrees extracts correctly", "[unit_conversions][temperature]") {
+TEST_CASE("json_to_decidegrees extracts correctly", "[unit_conversions][temperature]") {
     SECTION("valid temperature") {
         json obj = {{"temperature", 25.5}};
-        REQUIRE(json_to_centidegrees(obj, "temperature") == 255);
+        REQUIRE(json_to_decidegrees(obj, "temperature") == 255);
     }
 
     SECTION("missing key returns default") {
         json obj = {{"other", 100}};
-        REQUIRE(json_to_centidegrees(obj, "temperature") == 0);
-        REQUIRE(json_to_centidegrees(obj, "temperature", -1) == -1);
+        REQUIRE(json_to_decidegrees(obj, "temperature") == 0);
+        REQUIRE(json_to_decidegrees(obj, "temperature", -1) == -1);
     }
 
     SECTION("non-number value returns default") {
         json obj = {{"temperature", "hot"}};
-        REQUIRE(json_to_centidegrees(obj, "temperature") == 0);
+        REQUIRE(json_to_decidegrees(obj, "temperature") == 0);
     }
 
     SECTION("null value returns default") {
         json obj = {{"temperature", nullptr}};
-        REQUIRE(json_to_centidegrees(obj, "temperature") == 0);
+        REQUIRE(json_to_decidegrees(obj, "temperature") == 0);
     }
 
     SECTION("non-object JSON returns default") {
@@ -69,11 +69,11 @@ TEST_CASE("json_to_centidegrees extracts correctly", "[unit_conversions][tempera
         json num = 42;
         json null_json = nullptr;
         json str = "hello";
-        REQUIRE(json_to_centidegrees(arr, "temp") == 0);
-        REQUIRE(json_to_centidegrees(num, "temp") == 0);
-        REQUIRE(json_to_centidegrees(null_json, "temp") == 0);
-        REQUIRE(json_to_centidegrees(str, "temp") == 0);
-        REQUIRE(json_to_centidegrees(arr, "temp", -999) == -999);
+        REQUIRE(json_to_decidegrees(arr, "temp") == 0);
+        REQUIRE(json_to_decidegrees(num, "temp") == 0);
+        REQUIRE(json_to_decidegrees(null_json, "temp") == 0);
+        REQUIRE(json_to_decidegrees(str, "temp") == 0);
+        REQUIRE(json_to_decidegrees(arr, "temp", -999) == -999);
     }
 }
 
@@ -212,8 +212,8 @@ TEST_CASE("mm_per_sec_to_mm_per_min converts correctly", "[unit_conversions][spe
 TEST_CASE("round-trip conversions maintain precision", "[unit_conversions][roundtrip]") {
     SECTION("temperature round-trip") {
         double original = 25.5;
-        int centi = to_centidegrees(original);
-        double recovered = from_centidegrees(centi);
+        int deci = to_decidegrees(original);
+        double recovered = from_decidegrees(deci);
         REQUIRE(recovered == original);
     }
 

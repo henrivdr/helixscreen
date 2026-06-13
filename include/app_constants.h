@@ -111,9 +111,9 @@ constexpr uint32_t DEFAULT_DURATION_MS = 300;
 /// to complete between updates. Using 80ms for smooth but achievable transitions.
 constexpr uint32_t TEMPERATURE_DURATION_MS = 80;
 
-/// Threshold in centidegrees to skip animation (avoids jitter on tiny fluctuations)
-/// 5 centidegrees = 0.5°C
-constexpr int TEMPERATURE_THRESHOLD_CENTI = 5;
+/// Threshold in decidegrees to skip animation (avoids jitter on tiny fluctuations)
+/// 5 decidegrees = 0.5°C
+constexpr int TEMPERATURE_THRESHOLD_DECI = 5;
 
 /// Fast animation for quick feedback (button presses, toggles)
 constexpr uint32_t FAST_DURATION_MS = 150;

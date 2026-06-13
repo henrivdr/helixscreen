@@ -414,23 +414,23 @@ void TempStackWidget::detach() {
     spdlog::debug("[TempStackWidget] Detached");
 }
 
-void TempStackWidget::on_nozzle_temp_changed(int temp_centi) {
-    cached_nozzle_temp_ = temp_centi;
+void TempStackWidget::on_nozzle_temp_changed(int temp_deci) {
+    cached_nozzle_temp_ = temp_deci;
     nozzle_animator_.update(cached_nozzle_temp_, cached_nozzle_target_);
 }
 
-void TempStackWidget::on_nozzle_target_changed(int target_centi) {
-    cached_nozzle_target_ = target_centi;
+void TempStackWidget::on_nozzle_target_changed(int target_deci) {
+    cached_nozzle_target_ = target_deci;
     nozzle_animator_.update(cached_nozzle_temp_, cached_nozzle_target_);
 }
 
-void TempStackWidget::on_bed_temp_changed(int temp_centi) {
-    cached_bed_temp_ = temp_centi;
+void TempStackWidget::on_bed_temp_changed(int temp_deci) {
+    cached_bed_temp_ = temp_deci;
     bed_animator_.update(cached_bed_temp_, cached_bed_target_);
 }
 
-void TempStackWidget::on_bed_target_changed(int target_centi) {
-    cached_bed_target_ = target_centi;
+void TempStackWidget::on_bed_target_changed(int target_deci) {
+    cached_bed_target_ = target_deci;
     bed_animator_.update(cached_bed_temp_, cached_bed_target_);
 }
 

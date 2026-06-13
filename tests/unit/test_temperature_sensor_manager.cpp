@@ -10,7 +10,7 @@
  * - Sensor discovery from Klipper object names (temperature_sensor, temperature_fan)
  * - Auto-categorization (CHAMBER, MCU, HOST, AUXILIARY)
  * - State updates from Moonraker status JSON
- * - Subject value correctness (centidegrees) for UI binding
+ * - Subject value correctness (decidegrees) for UI binding
  * - Config persistence
  * - Sorted output by priority
  */
@@ -368,7 +368,7 @@ TEST_CASE_METHOD(TemperatureSensorTestFixture, "TemperatureSensorManager - state
         REQUIRE(state->temperature == Catch::Approx(45.2f));
     }
 
-    SECTION("Temperature stored as centidegrees in subject (25.5C -> 255)") {
+    SECTION("Temperature stored as decidegrees in subject (25.5C -> 255)") {
         lv_subject_t* subj = mgr().get_temp_subject("temperature_sensor mcu_temp");
         REQUIRE(subj != nullptr);
 

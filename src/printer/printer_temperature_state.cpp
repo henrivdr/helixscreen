@@ -3,7 +3,7 @@
  * @file printer_temperature_state.cpp
  * @brief Temperature state management extracted from PrinterState
  *
- * Manages extruder and bed temperature subjects with centidegree precision.
+ * Manages extruder and bed temperature subjects with decidegree precision.
  * Supports multiple extruders via dynamic ExtruderInfo map. The "active extruder"
  * subjects track whichever extruder is currently selected, defaulting to "extruder".
  */
@@ -296,20 +296,20 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         const auto& data = status[name];
 
         if (data.contains("temperature") && data["temperature"].is_number()) {
-            int temp_centi = helix::units::json_to_centidegrees(data, "temperature");
+            int temp_deci = helix::units::json_to_decidegrees(data, "temperature");
             info.temperature = data["temperature"].get<float>();
             int old_temp = lv_subject_get_int(info.temp_subject.get());
-            lv_subject_set_int(info.temp_subject.get(), temp_centi);
-            if (old_temp == temp_centi) {
+            lv_subject_set_int(info.temp_subject.get(), temp_deci);
+            if (old_temp == temp_deci) {
                 lv_subject_notify(info.temp_subject.get());
             }
         }
 
         if (data.contains("target") && data["target"].is_number()) {
-            int target_centi = helix::units::json_to_centidegrees(data, "target");
+            int target_deci = helix::units::json_to_decidegrees(data, "target");
             info.target = data["target"].get<float>();
-            if (lv_subject_get_int(info.target_subject.get()) != target_centi) {
-                lv_subject_set_int(info.target_subject.get(), target_centi);
+            if (lv_subject_get_int(info.target_subject.get()) != target_deci) {
+                lv_subject_set_int(info.target_subject.get(), target_deci);
             }
         }
     }
@@ -319,43 +319,43 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         const auto& active = status[active_extruder_name_];
 
         if (active.contains("temperature") && active["temperature"].is_number()) {
-            int temp_centi = helix::units::json_to_centidegrees(active, "temperature");
+            int temp_deci = helix::units::json_to_decidegrees(active, "temperature");
             int old_temp = lv_subject_get_int(&active_extruder_temp_);
-            lv_subject_set_int(&active_extruder_temp_, temp_centi);
-            if (old_temp == temp_centi) {
+            lv_subject_set_int(&active_extruder_temp_, temp_deci);
+            if (old_temp == temp_deci) {
                 lv_subject_notify(&active_extruder_temp_);
             }
         }
 
         if (active.contains("target") && active["target"].is_number()) {
-            int target_centi = helix::units::json_to_centidegrees(active, "target");
-            if (lv_subject_get_int(&active_extruder_target_) != target_centi) {
-                lv_subject_set_int(&active_extruder_target_, target_centi);
+            int target_deci = helix::units::json_to_decidegrees(active, "target");
+            if (lv_subject_get_int(&active_extruder_target_) != target_deci) {
+                lv_subject_set_int(&active_extruder_target_, target_deci);
             }
         }
     }
 
-    // Update bed temperature (stored as centidegrees for 0.1C resolution)
+    // Update bed temperature (stored as decidegrees for 0.1C resolution)
     if (status.contains("heater_bed")) {
         const auto& bed = status["heater_bed"];
 
         if (bed.contains("temperature") && bed["temperature"].is_number()) {
-            int temp_centi = helix::units::json_to_centidegrees(bed, "temperature");
+            int temp_deci = helix::units::json_to_decidegrees(bed, "temperature");
             int old_temp = lv_subject_get_int(&bed_temp_);
-            lv_subject_set_int(&bed_temp_, temp_centi);
-            if (old_temp == temp_centi) {
+            lv_subject_set_int(&bed_temp_, temp_deci);
+            if (old_temp == temp_deci) {
                 lv_subject_notify(&bed_temp_);
             }
-            spdlog::trace("[PrinterTemperatureState] Bed temp: {}.{}C", temp_centi / 10,
-                          temp_centi % 10);
+            spdlog::trace("[PrinterTemperatureState] Bed temp: {}.{}C", temp_deci / 10,
+                          temp_deci % 10);
         }
 
         if (bed.contains("target") && bed["target"].is_number()) {
-            int target_centi = helix::units::json_to_centidegrees(bed, "target");
-            if (lv_subject_get_int(&bed_target_) != target_centi) {
-                lv_subject_set_int(&bed_target_, target_centi);
-                spdlog::trace("[PrinterTemperatureState] Bed target: {}.{}C", target_centi / 10,
-                              target_centi % 10);
+            int target_deci = helix::units::json_to_decidegrees(bed, "target");
+            if (lv_subject_get_int(&bed_target_) != target_deci) {
+                lv_subject_set_int(&bed_target_, target_deci);
+                spdlog::trace("[PrinterTemperatureState] Bed target: {}.{}C", target_deci / 10,
+                              target_deci % 10);
             }
         }
     }
@@ -372,20 +372,20 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
             const auto& chamber = status[chamber_heater_name_];
 
             if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
-                int temp_centi = helix::units::json_to_centidegrees(chamber, "temperature");
-                if (lv_subject_get_int(&chamber_temp_) != temp_centi) {
-                    lv_subject_set_int(&chamber_temp_, temp_centi);
+                int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
+                if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
+                    lv_subject_set_int(&chamber_temp_, temp_deci);
                     spdlog::trace("[PrinterTemperatureState] Chamber temp (heater): {}.{}C",
-                                  temp_centi / 10, temp_centi % 10);
+                                  temp_deci / 10, temp_deci % 10);
                 }
             }
 
             if (chamber.contains("target") && chamber["target"].is_number()) {
-                int target_centi = helix::units::json_to_centidegrees(chamber, "target");
-                if (lv_subject_get_int(&chamber_target_) != target_centi) {
-                    lv_subject_set_int(&chamber_target_, target_centi);
+                int target_deci = helix::units::json_to_decidegrees(chamber, "target");
+                if (lv_subject_get_int(&chamber_target_) != target_deci) {
+                    lv_subject_set_int(&chamber_target_, target_deci);
                     spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C",
-                                  target_centi / 10, target_centi % 10);
+                                  target_deci / 10, target_deci % 10);
                 }
             }
         }
@@ -393,11 +393,11 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         const auto& chamber = status[chamber_sensor_name_];
 
         if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
-            int temp_centi = helix::units::json_to_centidegrees(chamber, "temperature");
-            if (lv_subject_get_int(&chamber_temp_) != temp_centi) {
-                lv_subject_set_int(&chamber_temp_, temp_centi);
+            int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
+            if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
+                lv_subject_set_int(&chamber_temp_, temp_deci);
                 spdlog::trace("[PrinterTemperatureState] Chamber temp (sensor): {}.{}C",
-                              temp_centi / 10, temp_centi % 10);
+                              temp_deci / 10, temp_deci % 10);
             }
         }
     }
@@ -410,11 +410,11 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
     if (!chamber_cooling_fan_name_.empty() && status.contains(chamber_cooling_fan_name_)) {
         const auto& fan = status[chamber_cooling_fan_name_];
         if (fan.contains("target") && fan["target"].is_number()) {
-            int target_centi = helix::units::json_to_centidegrees(fan, "target");
-            if (lv_subject_get_int(&chamber_fan_target_) != target_centi) {
-                lv_subject_set_int(&chamber_fan_target_, target_centi);
+            int target_deci = helix::units::json_to_decidegrees(fan, "target");
+            if (lv_subject_get_int(&chamber_fan_target_) != target_deci) {
+                lv_subject_set_int(&chamber_fan_target_, target_deci);
                 spdlog::trace("[PrinterTemperatureState] Chamber cooling-fan target: {}.{}C",
-                              target_centi / 10, target_centi % 10);
+                              target_deci / 10, target_deci % 10);
             }
         }
     }
@@ -426,8 +426,8 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
     // always reflected. See chamber_effective_setpoint() for the full rule set.
     auto sp = helix::ui::temperature::chamber_effective_setpoint(
         lv_subject_get_int(&chamber_target_), lv_subject_get_int(&chamber_fan_target_),
-        chamber_fan_resting_centi_);
-    lv_subject_set_int(&chamber_effective_target_, sp.centi);
+        chamber_fan_resting_deci_);
+    lv_subject_set_int(&chamber_effective_target_, sp.deci);
     lv_subject_set_int(&chamber_mode_, sp.mode);
 }
 

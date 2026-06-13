@@ -58,7 +58,7 @@
 using namespace helix;
 using helix::ui::observe_int_sync;
 using helix::ui::observe_string;
-using helix::ui::temperature::centi_to_degrees;
+using helix::ui::temperature::deci_to_degrees;
 
 // Forward declarations for class-based API
 class MotionPanel;
@@ -1145,7 +1145,7 @@ void ControlsPanel::handle_custom_nozzle_confirmed(float value) {
     spdlog::info("[{}] Custom nozzle temperature confirmed: {}°C", get_name(),
                  static_cast<int>(value));
 
-    // Convert degrees to centidegrees for storage (matches PrinterState internal format)
+    // Convert degrees to decidegrees for storage (matches PrinterState internal format)
     cached_extruder_target_ = static_cast<int>(value * 10);
 
     if (auto* c = controller()) {
@@ -1160,7 +1160,7 @@ void ControlsPanel::handle_custom_bed_confirmed(float value) {
     spdlog::info("[{}] Custom bed temperature confirmed: {}°C", get_name(),
                  static_cast<int>(value));
 
-    // Convert degrees to centidegrees for storage (matches PrinterState internal format)
+    // Convert degrees to decidegrees for storage (matches PrinterState internal format)
     cached_bed_target_ = static_cast<int>(value * 10);
 
     if (auto* c = controller()) {
@@ -1915,8 +1915,8 @@ void ControlsPanel::populate_secondary_temps() {
         // SubjectLifetime is local — valid for one-shot read only, not observation.
         SubjectLifetime lt;
         auto* subj = tsm.get_temp_subject(sensor.klipper_name, lt);
-        int centidegrees = subj ? lv_subject_get_int(subj) : 0;
-        int temp_c = centidegrees / 100;
+        int decidegrees = subj ? lv_subject_get_int(subj) : 0;
+        int temp_c = decidegrees / 100;
         char temp_buf[16];
         std::snprintf(temp_buf, sizeof(temp_buf), "%d\u00B0C", temp_c);
         lv_obj_t* temp_label = lv_label_create(row);
@@ -1994,12 +1994,12 @@ void ControlsPanel::subscribe_to_secondary_temp_subjects() {
         if (auto* subject = tsm.get_temp_subject(row.klipper_name, lifetime)) {
             secondary_temp_observers_.push_back(observe_int_sync<ControlsPanel>(
                 subject, this,
-                [name = row.klipper_name, gen](ControlsPanel* self, int centidegrees) {
+                [name = row.klipper_name, gen](ControlsPanel* self, int decidegrees) {
                     if (gen != self->temp_populate_gen_)
                         return; // stale callback — widgets gone
                     if (!self->active_)
                         return; // skip label update when hidden
-                    self->update_secondary_temp(name, centidegrees);
+                    self->update_secondary_temp(name, decidegrees);
                 },
                 lifetime));
             spdlog::trace("[{}] Subscribed to temp subject for sensor '{}'", get_name(),
@@ -2011,11 +2011,11 @@ void ControlsPanel::subscribe_to_secondary_temp_subjects() {
                   secondary_temp_observers_.size());
 }
 
-void ControlsPanel::update_secondary_temp(const std::string& klipper_name, int centidegrees) {
+void ControlsPanel::update_secondary_temp(const std::string& klipper_name, int decidegrees) {
     for (const auto& row : secondary_temp_rows_) {
         if (row.klipper_name == klipper_name && row.temp_label) {
             char temp_buf[16];
-            int temp_c = centidegrees / 100;
+            int temp_c = decidegrees / 100;
             std::snprintf(temp_buf, sizeof(temp_buf), "%d\u00B0C", temp_c);
             lv_label_set_text(row.temp_label, temp_buf);
             spdlog::trace("[{}] Updated secondary temp '{}' to {}", get_name(), klipper_name,

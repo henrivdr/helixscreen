@@ -71,7 +71,7 @@ std::vector<int> decimate_indices(const std::vector<int64_t>& timestamps_ms, int
 namespace helix {
 
 using helix::ui::observe_int_sync;
-using helix::ui::temperature::centi_to_degrees_f;
+using helix::ui::temperature::deci_to_degrees_f;
 
 // ============================================================================
 // Shared color palette
@@ -328,7 +328,7 @@ void TempGraphController::setup_observers() {
             size_t idx = i;
             s.temp_obs = observe_int_sync<TempGraphController>(
                 temp_subj, this,
-                [token, gen, idx](TempGraphController* self, int temp_centi) {
+                [token, gen, idx](TempGraphController* self, int temp_deci) {
                     if (token.expired() || gen != self->generation_)
                         return;
                     if (self->paused_ || !self->graph_)
@@ -349,7 +349,7 @@ void TempGraphController::setup_observers() {
                         return;
                     si.last_update_ms = now_ms;
 
-                    float temp_deg = centi_to_degrees_f(temp_centi);
+                    float temp_deg = deci_to_degrees_f(temp_deci);
                     ui_temp_graph_update_series_with_time(self->graph_, si.series_id, temp_deg,
                                                           now_ms);
                     self->apply_auto_range();
@@ -361,7 +361,7 @@ void TempGraphController::setup_observers() {
             size_t idx = i;
             s.target_obs = observe_int_sync<TempGraphController>(
                 target_subj, this,
-                [token, gen, idx](TempGraphController* self, int target_centi) {
+                [token, gen, idx](TempGraphController* self, int target_deci) {
                     if (token.expired() || gen != self->generation_)
                         return;
                     if (!self->graph_)
@@ -371,7 +371,7 @@ void TempGraphController::setup_observers() {
                     if (si.series_id < 0)
                         return;
 
-                    float target_deg = centi_to_degrees_f(target_centi);
+                    float target_deg = deci_to_degrees_f(target_deci);
                     // Stage the new setpoint — the buffer push happens on the
                     // next actuals sample, so multiple target updates between
                     // samples collapse to "latest target wins" naturally.
@@ -467,8 +467,8 @@ void TempGraphController::backfill_history() {
         targets.reserve(kept.size());
         for (int idx : kept) {
             const auto& sample = samples[idx];
-            temps.push_back(centi_to_degrees_f(sample.temp_centi));
-            targets.push_back(s.show_target ? centi_to_degrees_f(sample.target_centi) : 0.0f);
+            temps.push_back(deci_to_degrees_f(sample.temp_deci));
+            targets.push_back(s.show_target ? deci_to_degrees_f(sample.target_deci) : 0.0f);
         }
 
         // Replay both buffers via the dedicated parallel-array API. This also
@@ -490,7 +490,7 @@ void TempGraphController::backfill_history() {
 
         // Stage the latest target for the accent tick + next-sample push.
         if (s.show_target) {
-            float target_deg = centi_to_degrees_f(last.target_centi);
+            float target_deg = deci_to_degrees_f(last.target_deci);
             // Pass show=true unconditionally — see live-observer comment above for
             // why we don't gate on (target_deg > 0): the buffer's 0-sentinel handles
             // the off-period gap via the segmenter.

@@ -118,16 +118,16 @@ lv_color_t get_heating_state_color(int current_deg, int target_deg, int toleranc
 // Heater Display
 // ============================================================================
 
-HeaterDisplayResult heater_display(int current_centi, int target_centi) {
+HeaterDisplayResult heater_display(int current_deci, int target_deci) {
     HeaterDisplayResult result;
 
-    // Convert centi-degrees to degrees (integer division is fine for display)
-    int current_deg = current_centi / 10;
-    int target_deg = target_centi / 10;
+    // Convert decidegrees to degrees (integer division is fine for display)
+    int current_deg = current_deci / 10;
+    int target_deg = target_deci / 10;
 
     // Format temperature string
     char buf[32];
-    if (target_centi > 0) {
+    if (target_deci > 0) {
         std::snprintf(buf, sizeof(buf), "%d / %d°C", current_deg, target_deg);
     } else {
         std::snprintf(buf, sizeof(buf), "%d°C", current_deg);
@@ -135,15 +135,15 @@ HeaterDisplayResult heater_display(int current_centi, int target_centi) {
     result.temp = buf;
 
     // Calculate percentage (clamped to 0-100)
-    if (target_centi <= 0) {
+    if (target_deci <= 0) {
         result.pct = 0;
     } else {
-        int pct = (current_centi * 100) / target_centi;
+        int pct = (current_deci * 100) / target_deci;
         result.pct = std::clamp(pct, 0, 100);
     }
 
     // Determine status using shared tolerance constant
-    if (target_centi <= 0) {
+    if (target_deci <= 0) {
         result.status = lv_tr("Off");
     } else if (current_deg < target_deg - DEFAULT_AT_TEMP_TOLERANCE) {
         result.status = lv_tr("Heating...");
@@ -160,14 +160,14 @@ HeaterDisplayResult heater_display(int current_centi, int target_centi) {
 }
 
 // Used by cooldown's multi-line gcode batch and MoonrakerAPI::set_temperature().
-const char* build_heater_gcode(const std::string& heater_full_name, int target_centi, char* buffer,
+const char* build_heater_gcode(const std::string& heater_full_name, int target_deci, char* buffer,
                                size_t buffer_size, bool use_m141) {
     if (heater_full_name.empty()) {
         return nullptr;
     }
 
     if (use_m141) {
-        std::snprintf(buffer, buffer_size, "M141 S%d", target_centi / 10);
+        std::snprintf(buffer, buffer_size, "M141 S%d", target_deci / 10);
         return buffer;
     }
 
@@ -175,15 +175,15 @@ const char* build_heater_gcode(const std::string& heater_full_name, int target_c
         std::string fan_name = heater_full_name.substr(16);
         std::snprintf(buffer, buffer_size,
                       "SET_TEMPERATURE_FAN_TARGET TEMPERATURE_FAN=%s TARGET=%d", fan_name.c_str(),
-                      target_centi / 10);
+                      target_deci / 10);
     } else if (heater_full_name.rfind("heater_generic ", 0) == 0) {
         std::string object_name = heater_full_name.substr(15);
         std::snprintf(buffer, buffer_size, "SET_HEATER_TEMPERATURE HEATER=%s TARGET=%d",
-                      object_name.c_str(), target_centi / 10);
+                      object_name.c_str(), target_deci / 10);
     } else {
         // Bare heater names (extruder, heater_bed, etc.)
         std::snprintf(buffer, buffer_size, "SET_HEATER_TEMPERATURE HEATER=%s TARGET=%d",
-                      heater_full_name.c_str(), target_centi / 10);
+                      heater_full_name.c_str(), target_deci / 10);
     }
 
     return buffer;
@@ -195,15 +195,15 @@ bool chamber_uses_m141(const std::string& heater_full_name,
            heater_full_name == chamber_heater_name;
 }
 
-ChamberSetpoint chamber_effective_setpoint(int heater_target_centi, int fan_target_centi,
-                                           int fan_resting_centi) {
+ChamberSetpoint chamber_effective_setpoint(int heater_target_deci, int fan_target_deci,
+                                           int fan_resting_deci) {
     // Mirrors the live computation in PrinterTemperatureState::update_chamber_setpoint()
     // exactly: heater wins; fan wins only when it is above 0 and not at the
     // configured resting target (which M141 S0 parks the fan at on the K2).
-    if (heater_target_centi > 0)
-        return {heater_target_centi, helix::ChamberMode::Heating};
-    if (fan_target_centi > 0 && fan_target_centi != fan_resting_centi)
-        return {fan_target_centi, helix::ChamberMode::Maintaining};
+    if (heater_target_deci > 0)
+        return {heater_target_deci, helix::ChamberMode::Heating};
+    if (fan_target_deci > 0 && fan_target_deci != fan_resting_deci)
+        return {fan_target_deci, helix::ChamberMode::Maintaining};
     return {0, helix::ChamberMode::Off};
 }
 
@@ -218,15 +218,15 @@ const char* chamber_mode_word(helix::ChamberMode mode) {
     }
 }
 
-std::string chamber_status_text(int current_centi, int target_centi, helix::ChamberMode mode) {
+std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode) {
     // Resolve the mode word (untranslated key), then localise at the call site.
     std::string mode_str = lv_tr(chamber_mode_word(mode));
 
     // Append thermal progress ("Ready" / "Cooling") only when it adds information
     // beyond the mode word.  Suppress "Heating · Heating..." and the Off cases.
-    auto result = heater_display(current_centi, target_centi);
+    auto result = heater_display(current_deci, target_deci);
     const std::string& progress = result.status; // already localised
-    if (target_centi <= 0 || progress == std::string(lv_tr("Heating...")) ||
+    if (target_deci <= 0 || progress == std::string(lv_tr("Heating...")) ||
         progress == std::string(lv_tr("Off"))) {
         return mode_str;
     }

@@ -83,8 +83,8 @@ class HeaterTempWidget : public PanelWidget {
     // (commit 45abc8c2a, bundle AX3CKAKB).
     helix::AsyncLifetimeGuard lifetime_;
 
-    void on_temp_changed(int temp_centi);
-    void on_target_changed(int target_centi);
+    void on_temp_changed(int temp_deci);
+    void on_target_changed(int target_deci);
     void update_temp_icon_animation();
     void handle_temp_clicked();
 };
