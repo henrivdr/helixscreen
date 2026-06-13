@@ -159,7 +159,7 @@ spdlog::trace("[Moonraker Client] Registered request {} for method {}", id, meth
 ## Implementation Notes
 
 - Use `spdlog` exclusively (not `printf`, `std::cout`, or `LV_LOG_*`)
-- Include timestamps automatically via spdlog configuration
+- Every log line carries the emitting **thread id** and (on console/file) an ms timestamp — see "Per-Sink Log Patterns" below
 - For errors that should notify the user, use `NOTIFY_ERROR()` macro
 
 ---
@@ -191,6 +191,27 @@ The runtime target is set by precedence (highest → lowest):
    - **macOS/other** → `Console` (`stdout_color_sink_mt`)
 
 Valid `LogTarget` values: `auto`, `journal`, `syslog`, `file`, `console`, `android`.
+
+### Per-Sink Log Patterns
+
+Each sink gets its **own** spdlog pattern (applied via `sink->set_pattern()` right after construction — not a global `spdlog::set_pattern()`, since the formats differ). The pattern strings come from the pure helper `helix::logging::pattern_for_sink(SinkKind)` in `logging_init.h`, so the format decision is unit-testable without constructing real sinks (`tests/unit/test_log_pattern.cpp`, tag `[logging][pattern]`).
+
+| Sink (`SinkKind`) | Pattern | Notes |
+|---|---|---|
+| Console (`stdout_color_sink`) | `[%H:%M:%S.%e] [%^%l%$] [%t] %v` | ms timestamp, colored level, thread id |
+| File (`rotating_file_sink`) | `[%H:%M:%S.%e] [%^%l%$] [%t] %v` | same string — `%^…%$` are no-ops on the non-color file sink |
+| journald (`systemd_sink`) | `[%l] [%t] %v` | **no time token** — journald stamps its own time |
+| syslog (`syslog_sink`) | `[%l] [%t] %v` | **no time token** — syslog stamps its own; `%l` kept for grep-ability of `/var/log/messages` |
+| Android (`android_sink`) | `[%t] %v` | logcat adds its own timestamp/level/tag metadata |
+| Crash breadcrumb (`CrashErrorLogSink`) | `[%H:%M:%S.%e] [%l] [%t] %v` | feeds crash context; the ring actually stores `msg.payload`, so this pattern is for any other consumer of the stream |
+
+**Why the thread id (`%t`) is on every sink:** the worst crash family in this codebase (L081 / async-delete) is about main-thread-vs-background-thread (WebSocket / HTTP worker) confusion. Knowing which thread emitted a line is the single highest-value field for diagnosing it. The `[logging][pattern]` test fails if `%t` is dropped from any sink or if a time token is added to the system sinks (which would double-stamp the journal/syslog clock).
+
+A console/file line now looks like:
+
+```
+[14:32:07.918] [debug] [140351827234560] [PrinterState] Initialized 6 fans (version 1)
+```
 
 ### Console Sink (Stdout) — When It's Attached
 

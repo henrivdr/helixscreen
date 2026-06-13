@@ -10,6 +10,42 @@ namespace helix {
 namespace logging {
 
 /**
+ * @brief Identifies which spdlog sink a pattern is being chosen for
+ *
+ * Each sink gets its own format: console/file carry an ms-precision timestamp
+ * because nothing else stamps them, while journald/syslog/android rely on the
+ * system clock and would double-stamp if we added our own time token. Every
+ * sink includes the thread id (%t) — the single highest-value field for
+ * diagnosing the main-thread-vs-background-thread confusion behind the
+ * async-delete crash family.
+ */
+enum class SinkKind {
+    Console,        ///< stdout color sink — ms timestamp + colored level + thread id
+    File,           ///< rotating file sink — ms timestamp + level + thread id
+    Journald,       ///< systemd journal — level + thread id (journal stamps time)
+    Syslog,         ///< syslog — level + thread id (syslog stamps time)
+    Android,        ///< Android logcat — thread id only (logcat adds metadata)
+    CrashBreadcrumb ///< crash error-log ring — ms timestamp + level + thread id
+};
+
+/**
+ * @brief Return the spdlog pattern string for a given sink kind
+ *
+ * Pure function (no spdlog/sink dependency) so the per-sink format decision is
+ * unit-testable without constructing real sinks. Called once per sink right
+ * after construction in init()/init_early(), via sink->set_pattern().
+ *
+ * Invariants enforced by tests/unit/test_log_pattern.cpp:
+ *   - every pattern contains %t (thread id)
+ *   - Console and File contain a time token; the system sinks do not
+ *   - Console keeps the colored-level tokens %^ / %$
+ *
+ * @param kind Which sink the pattern is for
+ * @return A static pattern string (valid for process lifetime)
+ */
+const char* pattern_for_sink(SinkKind kind);
+
+/**
  * @brief Log destination targets
  *
  * On Linux, the system will auto-detect the best available target:

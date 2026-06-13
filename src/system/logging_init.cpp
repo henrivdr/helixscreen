@@ -38,6 +38,30 @@ helix_assert_callback_t g_helix_assert_cpp_callback = nullptr;
 namespace helix {
 namespace logging {
 
+const char* pattern_for_sink(SinkKind kind) {
+    switch (kind) {
+    case SinkKind::Console:
+    case SinkKind::File:
+        // ms timestamp, colored level (%^…%$ are no-ops on the non-color file
+        // sink, so the same string is safe for both), thread id, message.
+        return "[%H:%M:%S.%e] [%^%l%$] [%t] %v";
+    case SinkKind::Journald:
+    case SinkKind::Syslog:
+        // No time token — journald/syslog stamp their own time. Keep the level
+        // text (grep-ability of /var/log/messages) and the thread id.
+        return "[%l] [%t] %v";
+    case SinkKind::Android:
+        // logcat already prefixes its own timestamp/level/tag metadata.
+        return "[%t] %v";
+    case SinkKind::CrashBreadcrumb:
+        // Feeds crash context — keep a full line with thread id. The crash
+        // ring reads msg.payload (the raw message), not this formatted output,
+        // so the pattern is for any other consumer of this sink's stream.
+        return "[%H:%M:%S.%e] [%l] [%t] %v";
+    }
+    return "[%t] %v";
+}
+
 namespace {
 
 // Snapshot of the resolved log destination after init(), used by
@@ -76,7 +100,9 @@ bool is_path_writable(const std::string& path) {
 /// can join a logger's sink list without the logger ever freeing it (the sink
 /// outlives every logger swap, keeping the crash-handler pointers valid).
 spdlog::sink_ptr crash_error_log_sink() {
-    return spdlog::sink_ptr(&CrashErrorLogSink::instance(), [](spdlog::sinks::sink*) {});
+    auto& sink = CrashErrorLogSink::instance();
+    sink.set_pattern(pattern_for_sink(SinkKind::CrashBreadcrumb));
+    return spdlog::sink_ptr(&sink, [](spdlog::sinks::sink*) {});
 }
 #endif
 
@@ -142,14 +168,20 @@ void add_system_sink(std::vector<spdlog::sink_ptr>& sinks, LogTarget target,
     switch (target) {
 #ifdef __linux__
 #ifdef HELIX_HAS_SYSTEMD
-    case LogTarget::Journal:
-        sinks.push_back(std::make_shared<spdlog::sinks::systemd_sink_mt>("helix-screen"));
+    case LogTarget::Journal: {
+        auto sink = std::make_shared<spdlog::sinks::systemd_sink_mt>("helix-screen");
+        sink->set_pattern(pattern_for_sink(SinkKind::Journald));
+        sinks.push_back(std::move(sink));
         break;
+    }
 #endif
-    case LogTarget::Syslog:
-        sinks.push_back(std::make_shared<spdlog::sinks::syslog_sink_mt>("helix-screen", LOG_PID,
-                                                                        LOG_USER, false));
+    case LogTarget::Syslog: {
+        auto sink = std::make_shared<spdlog::sinks::syslog_sink_mt>("helix-screen", LOG_PID,
+                                                                    LOG_USER, false);
+        sink->set_pattern(pattern_for_sink(SinkKind::Syslog));
+        sinks.push_back(std::move(sink));
         break;
+    }
 #endif
     case LogTarget::File: {
         std::string path = resolve_log_file_path(file_path);
@@ -172,14 +204,19 @@ void add_system_sink(std::vector<spdlog::sink_ptr>& sinks, LogTarget target,
                 max_files = static_cast<size_t>(v);
             }
         }
-        sinks.push_back(
-            std::make_shared<spdlog::sinks::rotating_file_sink_mt>(path, max_bytes, max_files));
+        auto sink =
+            std::make_shared<spdlog::sinks::rotating_file_sink_mt>(path, max_bytes, max_files);
+        sink->set_pattern(pattern_for_sink(SinkKind::File));
+        sinks.push_back(std::move(sink));
         break;
     }
 #ifdef HELIX_PLATFORM_ANDROID
-    case LogTarget::Android:
-        sinks.push_back(std::make_shared<spdlog::sinks::android_sink_mt>("HelixScreen"));
+    case LogTarget::Android: {
+        auto sink = std::make_shared<spdlog::sinks::android_sink_mt>("HelixScreen");
+        sink->set_pattern(pattern_for_sink(SinkKind::Android));
+        sinks.push_back(std::move(sink));
         break;
+    }
 #endif
     case LogTarget::Console:
     case LogTarget::Auto:
@@ -191,8 +228,10 @@ void add_system_sink(std::vector<spdlog::sink_ptr>& sinks, LogTarget target,
         // Handle Journal case when HELIX_HAS_SYSTEMD is not defined
         // Fall back to syslog
         if (target == LogTarget::Journal) {
-            sinks.push_back(std::make_shared<spdlog::sinks::syslog_sink_mt>("helix-screen", LOG_PID,
-                                                                            LOG_USER, false));
+            auto sink = std::make_shared<spdlog::sinks::syslog_sink_mt>("helix-screen", LOG_PID,
+                                                                        LOG_USER, false);
+            sink->set_pattern(pattern_for_sink(SinkKind::Syslog));
+            sinks.push_back(std::move(sink));
         }
         break;
 #else
@@ -235,7 +274,11 @@ void init_early() {
     // without crashing. Attach the crash error-log sink too, so errors during
     // boot (before init()) are still captured for crash diagnostics (#987).
     std::vector<spdlog::sink_ptr> sinks;
-    sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+    {
+        auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        console->set_pattern(pattern_for_sink(SinkKind::Console));
+        sinks.push_back(std::move(console));
+    }
 #ifndef HELIX_WATCHDOG
     sinks.push_back(crash_error_log_sink());
 #endif
@@ -284,7 +327,9 @@ void init(const LogConfig& config) {
         }
     }
     if (add_console) {
-        sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+        auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        console->set_pattern(pattern_for_sink(SinkKind::Console));
+        sinks.push_back(std::move(console));
     }
 
     // Add system sink

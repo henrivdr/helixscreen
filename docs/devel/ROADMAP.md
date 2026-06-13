@@ -111,7 +111,7 @@ The plugin system launched with version checking, UI injection points, and async
 **1.0 hardening audit completed 2026-03-28.** 22 items fixed across crash safety, network resilience, config robustness, SHA256 update verification, comprehensive i18n (218 strings wrapped in lv_tr()), UI consistency, and test quality. See git history for details.
 
 Remaining items for production readiness:
-- [ ] Structured logging with log rotation
+- [x] Structured logging with log rotation
 - [ ] Streaming file operations verified on AD5M with 50MB+ G-code files
 
 ---
