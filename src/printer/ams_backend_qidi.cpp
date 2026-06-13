@@ -822,7 +822,57 @@ DryerInfo AmsBackendQidi::get_dryer_info() const {
 }
 
 AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
-    return AmsBackend::start_drying(temp_c, duration_min, fan_pct, unit);
+    (void)fan_pct;
+    const int box = unit + 1; // status objects are 1-indexed (heater_box1)
+
+    if (!write_enabled_) {
+        return AmsError(AmsResult::NOT_SUPPORTED,
+                        "QIDI Box write-path disabled",
+                        "Box drying disabled",
+                        "Set HELIX_QIDI_BOX_WRITE=1 for field testing");
+    }
+
+    float min_temp, max_temp;
+    int max_duration;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        min_temp = dryer_info_.min_temp_c;
+        max_temp = dryer_info_.max_temp_c;
+        max_duration = dryer_info_.max_duration_min;
+    }
+    if (temp_c < min_temp || temp_c > max_temp) {
+        return AmsError(AmsResult::COMMAND_FAILED,
+                        "Temperature out of range: " + std::to_string(temp_c),
+                        "Invalid temperature",
+                        "Set temperature between " + std::to_string(static_cast<int>(min_temp)) +
+                            "°C and " + std::to_string(static_cast<int>(max_temp)) + "°C");
+    }
+    if (duration_min <= 0 || duration_min > max_duration) {
+        return AmsError(AmsResult::COMMAND_FAILED,
+                        "Duration out of range: " + std::to_string(duration_min),
+                        "Invalid duration",
+                        "Set duration between 1 and " + std::to_string(max_duration) + " minutes");
+    }
+
+    const int temp_i = static_cast<int>(temp_c);
+    bool timer;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dryer_info_.target_temp_c = temp_c;
+        dryer_info_.duration_min = duration_min;
+        timer = drying_timer_supported_;
+    }
+    if (timer) {
+        int hours = duration_min / 60;
+        if (hours < 1) {
+            hours = 1;
+        }
+        return execute_gcode("ENABLE_BOX_DRY BOX=" + std::to_string(box) +
+                             " TEMP=" + std::to_string(temp_i) +
+                             " END_TIME=" + std::to_string(hours));
+    }
+    return execute_gcode("SET_HEATER_TEMPERATURE HEATER=heater_box" + std::to_string(box) +
+                         " TARGET=" + std::to_string(temp_i));
 }
 
 AmsError AmsBackendQidi::stop_drying(int unit) {

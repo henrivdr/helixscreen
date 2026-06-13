@@ -917,3 +917,46 @@ TEST_CASE("QIDI Box config query refines max temp (box_config section)",
         json{{"box_config box0", json{{"target_max_temp_heater_generic", 90.0}}}});
     REQUIRE(QidiBoxTestAccess::get_dryer(backend).max_temp_c == Catch::Approx(90.0f));
 }
+
+// =====================================================================
+// Dryer write-path: start_drying / stop_drying (issue #1019)
+// =====================================================================
+
+TEST_CASE("QIDI Box start_drying uses ENABLE_BOX_DRY when timer supported",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, true);
+    auto err = backend.start_drying(55.0f, 240);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "ENABLE_BOX_DRY BOX=1 TEMP=55 END_TIME=4");
+}
+
+TEST_CASE("QIDI Box start_drying falls back to SET_HEATER_TEMPERATURE",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    QidiBoxTestAccess::set_drying_timer_supported(backend, false);
+    auto err = backend.start_drying(55.0f, 240);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "SET_HEATER_TEMPERATURE HEATER=heater_box1 TARGET=55");
+}
+
+TEST_CASE("QIDI Box start_drying rejects out-of-range temp",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_write_enabled(backend, true);
+    auto err = backend.start_drying(150.0f, 240);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box start_drying blocked when write-path disabled",
+          "[ams][qidi_box][dryer][write_path]") {
+    RecordingQidiBackend backend;
+    auto err = backend.start_drying(55.0f, 240);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
