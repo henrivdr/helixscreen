@@ -3,6 +3,7 @@
 #include "ams_backend_snapmaker.h"
 
 #include "ams_error.h"
+#include "ams_state.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
@@ -787,6 +788,9 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
         return;
 
     bool changed = false;
+    // Set when the active-tool port-present flag changed this parse (#991), so
+    // we publish to AmsState exactly once after releasing the mutex.
+    bool port_present_changed = false;
 
     // Per-slot UID observed THIS parse. Empty string means no RFID info in
     // this notification (incremental update, or slot not included). Only
@@ -1225,7 +1229,29 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
             apply_overrides(*slot, i);
         }
 
+        // First-gate (port) filament presence for the ACTIVE tool (#991). The
+        // runout dialog gates Resume on THIS signal — the port/buffer sensor that
+        // flips true the moment a user re-feeds a spool — NOT the toolhead motion
+        // sensor (sensor_filament_present_), which stays "runout" until extrusion.
+        // No active tool → treat as present (1) so Resume is never gated. Computed
+        // under mutex_ (reads current_tool + the port array); published after the
+        // mutex is released. Only publish on an actual change to avoid spamming
+        // the UpdateQueue on every incremental notify.
+        int active_tool = system_info_.current_tool;
+        bool active_port_present =
+            !(active_tool >= 0 && active_tool < NUM_TOOLS) ||
+            port_sensor_filament_present_[active_tool];
+        int port_val = active_port_present ? 1 : 0;
+        if (port_val != last_published_port_present_) {
+            last_published_port_present_ = port_val;
+            port_present_changed = true;
+        }
+
     } // Release mutex_ before emitting event
+
+    if (port_present_changed) {
+        AmsState::instance().set_active_tool_port_present(last_published_port_present_ != 0);
+    }
 
     if (changed) {
         emit_event(EVENT_STATE_CHANGED);

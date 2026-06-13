@@ -412,6 +412,30 @@ class AmsState {
         return &tool_map_version_;
     }
 
+    /**
+     * @brief Get active-tool first-gate (port) filament-present subject (#991)
+     *
+     * 1 = filament present at the active tool's port/buffer sensor, 0 = absent.
+     * The runout dialog observes this to gate Resume on auto-feed backends.
+     * Static-lifetime subject — no SubjectLifetime token needed to observe it.
+     *
+     * @return Subject holding 1 (present) or 0 (absent)
+     */
+    lv_subject_t* get_active_tool_port_present_subject() {
+        return &active_tool_port_present_;
+    }
+
+    /**
+     * @brief Set the active-tool port-present flag (#991)
+     *
+     * Thread-safe: marshals the subject write to the main thread via
+     * queue_update, so backends may call this from their WebSocket/background
+     * status-update handler. Coalesces no-op writes.
+     *
+     * @param present true if filament is present at the active tool's port sensor
+     */
+    void set_active_tool_port_present(bool present);
+
     // ========================================================================
     // Filament Path Visualization Subjects
     // ========================================================================
@@ -1049,6 +1073,14 @@ class AmsState {
     lv_subject_t ams_slot_count_;
     lv_subject_t slots_version_;
     lv_subject_t tool_map_version_;
+    /// First-gate (port) filament-present flag for the ACTIVE tool (#991).
+    /// 1 = filament present at the active tool's port/buffer sensor, 0 = absent.
+    /// Auto-feed backends (Snapmaker U1) update this from the port sensor — NOT
+    /// the toolhead motion sensor — so the runout dialog can gate Resume on the
+    /// signal that flips true the moment a fresh spool is re-fed. Static-lifetime
+    /// singleton subject (no SubjectLifetime token needed). Defaults to 1 so
+    /// non-auto-feed / unknown backends never gate Resume.
+    lv_subject_t active_tool_port_present_;
     std::vector<int> last_tool_map_; ///< Cached for change detection in sync_from_backend
 
     /// Most recent backend-supplied operation detail (cached so the print-state

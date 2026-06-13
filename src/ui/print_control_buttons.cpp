@@ -127,19 +127,29 @@ void PrintControlButtons::handle_primary_button() {
             },
             /*timeout_ms=*/0, /*suppress_auto_toast=*/true);
     } else if (state == helix::PrintJobState::PAUSED) {
-        if (macros.get(StandardMacroSlot::Resume).is_empty()) {
-            NOTIFY_WARNING(lv_tr("Resume macro not configured"));
-            return;
-        }
-        spdlog::info("[PrintControl] Resuming print");
-        start_pending_action(PendingAction::Resuming);
-        // dispatch_prepared_resume runs the backend prepare_for_resume → Resume
-        // chain. The optimistic spinner spans the whole window; only clear on
-        // failure (success waits on the PrinterState observer confirmation).
-        helix::ui::dispatch_prepared_resume(
-            api_, "[PrintControl]",
-            []() { PrintControlButtons::instance().clear_pending_action(); });
+        request_resume();
     }
+}
+
+void PrintControlButtons::request_resume() {
+    if (!api_) {
+        spdlog::warn("[PrintControl] No API - cannot resume");
+        return;
+    }
+    auto& macros = StandardMacros::instance();
+    if (macros.get(StandardMacroSlot::Resume).is_empty()) {
+        NOTIFY_WARNING(lv_tr("Resume macro not configured"));
+        return;
+    }
+    spdlog::info("[PrintControl] Resuming print");
+    start_pending_action(PendingAction::Resuming);
+    // dispatch_prepared_resume runs the backend prepare_for_resume → Resume
+    // chain. The optimistic spinner spans the whole window; only clear on
+    // failure (success waits on the PrinterState observer confirmation, which
+    // clears the pending action when state transitions to Printing).
+    helix::ui::dispatch_prepared_resume(
+        api_, "[PrintControl]",
+        []() { PrintControlButtons::instance().clear_pending_action(); });
 }
 
 void PrintControlButtons::handle_stop_button() {
@@ -159,11 +169,19 @@ void PrintControlButtons::handle_stop_button() {
 void PrintControlButtons::start_pending_action(PendingAction action) {
     clear_pending_action(); // supersede any in-flight action (also deletes prior timer)
     pending_action_ = action;
-    // Optimistic 25s timeout: a PAUSE/RESUME normally lands in <2s but can stretch
-    // to ~20s while buffered moves drain. After 25s assume the command was silently
-    // lost and revert the optimistic UI so the user can re-issue. Deliberately
-    // conservative — better to let a slow resume land than flash a spurious
-    // "timed out" toast on a command that actually succeeded.
+    // The authoritative clear is the print_state_observer_ above: when the real
+    // print state transitions (paused→printing for Resume, printing→paused for
+    // Pause) it clears the pending action. This timer is only a last-resort
+    // backstop for a silently-lost command.
+    //
+    // Pause normally lands in <2s (can stretch to ~20s while buffered moves
+    // drain) → 25s backstop. Resume on an auto-feed backend (Snapmaker U1) runs
+    // AUTO_FEEDING heat+feed+flush + reheat, which takes 40-90s before the
+    // paused→printing transition fires — a 25s backstop false-fired a spurious
+    // "Resume command timed out" toast on a resume that actually succeeded
+    // (#991). Use a 150s ceiling for Resume so the observer wins for any normal
+    // recovery and the timer only trips on a genuinely lost command.
+    const uint32_t timeout_ms = (action == PendingAction::Resuming) ? 150000u : 25000u;
     pending_action_timeout_ = lv_timer_create(
         [](lv_timer_t* t) {
             auto* self = static_cast<PrintControlButtons*>(lv_timer_get_user_data(t));
@@ -175,7 +193,7 @@ void PrintControlButtons::start_pending_action(PendingAction action) {
             NOTIFY_WARNING(lv_tr("{} command timed out"), verb);
             self->clear_pending_action();
         },
-        25000, this);
+        timeout_ms, this);
     lv_timer_set_repeat_count(pending_action_timeout_, 1);
     recompute();
 }
