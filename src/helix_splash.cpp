@@ -485,6 +485,40 @@ int main(int argc, char** argv) {
                 rotation, width, height);
     }
 
+    // Splash-only: force FULL render mode. lv_linux_fbdev_create() defaults to
+    // the compile-time global LV_LINUX_FBDEV_RENDER_MODE (PARTIAL — 60-line
+    // stripes), which on a slow panel (e.g. the K2's Allwinner fb) makes the
+    // logo visibly wipe down the screen one stripe at a time, even rendered
+    // back-to-back via lv_refr_now(). A full-screen off-screen buffer +
+    // RENDER_MODE_FULL renders the whole frame, then flushes it to /dev/fb0 in a
+    // single pass — one clean fill, no striping. This replaces only THIS
+    // display's buffers (the partial ones lv_linux_fbdev_create just allocated);
+    // the global render mode that helix-screen shares is untouched. Sized to the
+    // post-rotation resolution so a rotated panel still gets a correctly-sized
+    // buffer (fbdev's flush_cb software-rotates a FULL frame in one shot).
+    if (backend->type() == DisplayBackendType::FBDEV) {
+        const lv_color_format_t cf = lv_display_get_color_format(display);
+        const uint32_t px_size = lv_color_format_get_size(cf);
+        const int32_t hor = lv_display_get_horizontal_resolution(display);
+        const int32_t ver = lv_display_get_vertical_resolution(display);
+        const size_t full_buf_size = (size_t)hor * (size_t)ver * px_size;
+        // Over-allocate by LV_DRAW_BUF_ALIGN-1 and hand LVGL the aligned pointer,
+        // mirroring lv_linux_fbdev_create()'s own allocation. Intentionally never
+        // freed: the splash is a short-lived process that exits wholesale.
+        void* raw = malloc(full_buf_size + LV_DRAW_BUF_ALIGN - 1);
+        if (raw != nullptr) {
+            uint8_t* aligned = static_cast<uint8_t*>(lv_draw_buf_align(raw, cf));
+            lv_display_set_buffers(display, aligned, nullptr, full_buf_size,
+                                   LV_DISPLAY_RENDER_MODE_FULL);
+            fprintf(stderr,
+                    "helix-splash: FULL render mode (%dx%d, %ubpp, %zu KiB) — single-flush "
+                    "paint\n",
+                    hor, ver, px_size * 8, full_buf_size / 1024);
+        } else {
+            fprintf(stderr, "helix-splash: FULL-mode buffer alloc failed; keeping PARTIAL\n");
+        }
+    }
+
     // Read dark mode preference from config (before framebuffer clear so we use the right color)
     bool dark_mode = read_config_dark_mode(true);
 
@@ -527,15 +561,14 @@ int main(int argc, char** argv) {
     // main loop below as the file changes.
     lv_obj_t* status_label = lv_label_create(screen);
     lv_label_set_text(status_label, "");
-    lv_obj_set_style_text_color(status_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_text_opa(status_label, LV_OPA_90, LV_PART_MAIN);
-    // Readable pill behind the text so it never blends into the logo art; the
-    // background is shown only once a status message is set (see loop below).
-    lv_obj_set_style_bg_color(status_label, lv_color_hex(0x000000), LV_PART_MAIN);
+    // Theme-aware text color, matching the version label (white on dark, black on
+    // light) so it reads cleanly over the logo's gray art. Transparent
+    // background — no backing pill; let the logo show through.
+    lv_obj_set_style_text_color(status_label,
+                                dark_mode ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x000000),
+                                LV_PART_MAIN);
+    lv_obj_set_style_text_opa(status_label, LV_OPA_80, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(status_label, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_radius(status_label, 8, LV_PART_MAIN);
-    lv_obj_set_style_pad_hor(status_label, 10, LV_PART_MAIN);
-    lv_obj_set_style_pad_ver(status_label, 4, LV_PART_MAIN);
     // Upper-right, clear of the centered logo (BOTTOM_MID overlapped it).
     lv_obj_align(status_label, LV_ALIGN_TOP_RIGHT, -8, 8);
 
@@ -561,6 +594,8 @@ int main(int argc, char** argv) {
     struct stat status_prev{};
     bool have_status_prev = false;
     long last_heartbeat_mono = -1;
+    std::string current_label; // gate-provided message, without the counter
+    std::string shown_status;  // last string pushed to the label (label + counter)
     const long mem_floor_kb = splash_min_free_kb();
 
     // Main loop - run until signaled to quit
@@ -600,12 +635,21 @@ int main(int argc, char** argv) {
                 std::ifstream f(status_path);
                 std::string content((std::istreambuf_iterator<char>(f)),
                                     std::istreambuf_iterator<char>());
-                const std::string msg = helix::splash::sanitize_splash_message(content);
-                lv_label_set_text(status_label, msg.c_str());
-                lv_obj_set_style_bg_opa(status_label, msg.empty() ? LV_OPA_TRANSP : LV_OPA_50,
-                                        LV_PART_MAIN);
-                lv_obj_invalidate(screen);
+                current_label = helix::splash::sanitize_splash_message(content);
             }
+        }
+
+        // Render "<label> <elapsed>s", recomputed every loop so the counter keeps
+        // climbing even after the gate hands off and stops rewriting the file —
+        // the splash owns the count from its own monotonic start. Only touch the
+        // label when the visible string actually changes (at most once per second)
+        // to avoid invalidating the screen every frame.
+        const std::string status_text =
+            helix::splash::compose_splash_status(current_label, now_mono - start_ts.tv_sec);
+        if (status_text != shown_status) {
+            shown_status = status_text;
+            lv_label_set_text(status_label, status_text.c_str());
+            lv_obj_invalidate(screen);
         }
 
         // Periodic full redraw on fbdev to self-heal pixels stomped by other

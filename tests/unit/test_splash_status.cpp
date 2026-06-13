@@ -6,6 +6,7 @@
 #include "catch_amalgamated.hpp"
 #include "splash_status.h"
 
+using helix::splash::compose_splash_status;
 using helix::splash::parse_meminfo_available_kb;
 using helix::splash::sanitize_splash_message;
 using helix::splash::splash_memory_ok;
@@ -107,4 +108,18 @@ TEST_CASE("sanitize_splash_message trims and clamps", "[splash][status]") {
 
     std::string long_msg(200, 'x');
     REQUIRE(sanitize_splash_message(long_msg).size() == 96);
+}
+
+TEST_CASE("compose_splash_status appends the splash-owned counter", "[splash][status]") {
+    // Label + rising seconds: the splash owns the count so it keeps climbing
+    // even after the gate hands off and stops writing the file.
+    REQUIRE(compose_splash_status("Starting Klipper…", 0) == "Starting Klipper… 0s");
+    REQUIRE(compose_splash_status("Starting Klipper…", 28) == "Starting Klipper… 28s");
+    REQUIRE(compose_splash_status("Starting HelixScreen…", 45) == "Starting HelixScreen… 45s");
+
+    // Empty label -> empty line (no bare counter before there's any status).
+    REQUIRE(compose_splash_status("", 12) == "");
+
+    // Negative elapsed is clamped to 0 (defensive; clock should never go back).
+    REQUIRE(compose_splash_status("Starting Klipper…", -5) == "Starting Klipper… 0s");
 }

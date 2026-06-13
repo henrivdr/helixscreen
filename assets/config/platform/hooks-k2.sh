@@ -98,7 +98,11 @@ while True:
         pass
     if elapsed % 10 == 0:
         print("[hooks-k2] Waiting for Moonraker... (%ds)" % elapsed, flush=True)
-    write_status("Starting Klipper… %ds" % elapsed)
+    # Write only the label — helix-splash owns the elapsed-seconds counter (from
+    # its own monotonic start) so the count keeps climbing through helix-screen's
+    # startup too, after this gate exits. The per-second rewrite still refreshes
+    # the file mtime, which is the splash's heartbeat.
+    write_status("Starting Klipper…")
     time.sleep(1)
 PY
     return $?

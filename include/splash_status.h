@@ -106,4 +106,21 @@ inline std::string sanitize_splash_message(std::string msg, size_t max_len = 96)
     return msg;
 }
 
+// Compose the status line actually shown on the splash: the gate-provided label
+// plus a continuously-rising elapsed-seconds counter that the splash owns from
+// its own monotonic start. The gates write only the label (e.g. "Starting
+// Klipper…") — the seconds are appended here so the count keeps climbing through
+// helix-screen's own startup phase too, after the gate has handed off and
+// stopped rewriting the file. An empty label yields an empty line (the splash
+// shows no bare counter before it has any status to report).
+inline std::string compose_splash_status(const std::string& label, long elapsed_sec) {
+    if (label.empty()) {
+        return std::string();
+    }
+    if (elapsed_sec < 0) {
+        elapsed_sec = 0;
+    }
+    return label + " " + std::to_string(elapsed_sec) + "s";
+}
+
 } // namespace helix::splash

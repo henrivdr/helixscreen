@@ -116,7 +116,10 @@ platform_wait_for_services() {
             echo "Starting HelixScreen…" >"$status_file" 2>/dev/null || true
             return 0
         fi
-        echo "Starting Klipper… ${waited}s" >"$status_file" 2>/dev/null || true
+        # Label only — helix-splash owns the elapsed-seconds counter (from its own
+        # monotonic start), so the count keeps climbing through helix-screen's
+        # startup too. The rewrite still refreshes the file mtime = the heartbeat.
+        echo "Starting Klipper…" >"$status_file" 2>/dev/null || true
         sleep 1
         waited=$((waited + 1))
         # Progress indicator every 10 seconds
