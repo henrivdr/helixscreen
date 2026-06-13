@@ -12,6 +12,7 @@
 
 #include "app_globals.h"
 #include "moonraker_api.h"
+#include "moonraker_error.h"
 #include "printer_state.h"
 #include "spdlog/spdlog.h"
 
@@ -30,6 +31,44 @@ InputShaperCalibrator::InputShaperCalibrator() : api_(nullptr) {
 
 InputShaperCalibrator::InputShaperCalibrator(MoonrakerAPI* api) : api_(api) {
     spdlog::debug("[InputShaperCalibrator] Created with API");
+}
+
+// ============================================================================
+// firmware_halt_message()
+// ============================================================================
+
+std::string InputShaperCalibrator::firmware_halt_message(const MoonrakerError& err) {
+    // A NOT_READY error is the execute_gcode() preflight guard refusing to
+    // send while Klipper is already halted ("Klipper is halted — restart
+    // firmware to continue") — unambiguously a firmware halt.
+    bool halted = err.type == MoonrakerErrorType::NOT_READY;
+
+    if (!halted) {
+        // Otherwise look for Klipper shutdown / internal-error signatures in
+        // the raw envelope. extract_friendly_message() pulls the "msg"/
+        // "message" field out of a {"code":"keyNNN","msg":"..."} envelope so a
+        // raw JSON-RPC string still matches; we also scan the original in case
+        // the signature lives outside the extracted field.
+        const std::string friendly = MoonrakerError::extract_friendly_message(err.message);
+        auto signals_halt = [](const std::string& s) {
+            return s.find("Internal error on command") != std::string::npos ||
+                   s.find("shutdown") != std::string::npos ||
+                   s.find("Klipper is halted") != std::string::npos ||
+                   s.find("halted") != std::string::npos;
+        };
+        halted = signals_halt(friendly) || signals_halt(err.message);
+    }
+
+    if (!halted) {
+        return {};
+    }
+
+    // The printer is now halted. The global EmergencyStopOverlay recovery
+    // dialog auto-pops on SHUTDOWN and offers the firmware restart, so we point
+    // the user there rather than adding a redundant control to the wizard.
+    return "Printer firmware error — the printer halted. This is a firmware/config "
+           "problem on the printer, not HelixScreen. Restart the firmware (use the "
+           "recovery prompt), then try calibration again.";
 }
 
 // ============================================================================
@@ -63,10 +102,20 @@ void InputShaperCalibrator::ensure_homed_then(std::function<void()> then, ErrorC
                 if (on_error) {
                     on_error("Homing timed out — printer may still be homing");
                 }
+            } else if (std::string halt = firmware_halt_message(err); !halt.empty()) {
+                // Klipper aborted the homing move and shut down (e.g. the K2
+                // record_z_pos crash, #1021). Surface the firmware-fault
+                // message instead of dumping the raw JSON-RPC envelope.
+                spdlog::error("[InputShaperCalibrator] Homing aborted (firmware halt): {}",
+                              err.message);
+                if (on_error) {
+                    on_error(halt);
+                }
             } else {
                 spdlog::error("[InputShaperCalibrator] Homing failed: {}", err.message);
                 if (on_error) {
-                    on_error("Homing failed: " + err.message);
+                    on_error("Homing failed: " +
+                             MoonrakerError::extract_friendly_message(err.message));
                 }
             }
             state_ = State::IDLE;
@@ -116,7 +165,10 @@ void InputShaperCalibrator::check_accelerometer(AccelCheckCallback on_complete,
                                   err.message);
 
                     if (on_error) {
-                        on_error(err.message);
+                        std::string halt = firmware_halt_message(err);
+                        on_error(!halt.empty()
+                                     ? halt
+                                     : MoonrakerError::extract_friendly_message(err.message));
                     }
                 });
         },
@@ -201,7 +253,10 @@ void InputShaperCalibrator::run_calibration(char axis, ProgressCallback on_progr
                     state_ = State::IDLE;
                     spdlog::error("[InputShaperCalibrator] Calibration failed: {}", err.message);
                     if (on_error) {
-                        on_error(err.message);
+                        std::string halt = firmware_halt_message(err);
+                        on_error(!halt.empty()
+                                     ? halt
+                                     : MoonrakerError::extract_friendly_message(err.message));
                     }
                 });
         },

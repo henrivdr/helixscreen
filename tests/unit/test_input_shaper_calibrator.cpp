@@ -18,6 +18,7 @@
 
 #include "../../include/calibration_types.h"
 #include "../../include/input_shaper_calibrator.h"
+#include "../../include/moonraker_error.h"
 
 #include <atomic>
 #include <chrono>
@@ -734,4 +735,74 @@ TEST_CASE_METHOD(InputShaperCalibratorTestFixture, "ApplyConfig with very high f
     // Should not crash - validation is implementation-dependent
     REQUIRE_NOTHROW(calibrator_.apply_settings(
         config, [this]() { on_success(); }, [this](const std::string& err) { on_error(err); }));
+}
+
+// ============================================================================
+// firmware_halt_message() — classify firmware-halt faults (#1021)
+// ============================================================================
+//
+// When a calibration command (G28, MEASURE_AXES_NOISE, SHAPER_CALIBRATE)
+// trips a Klipper "Internal error on command" / shutdown — e.g. the Creality
+// record_z_pos crash on a K2 with a missing z_pos.json (bundle 5LSSSKPX) —
+// the printer halts. firmware_halt_message() recognizes that and returns a
+// clear, actionable string so the wizard can say "firmware fault, restart and
+// retry" instead of dumping a raw {"code":"key60",...} JSON envelope.
+
+TEST_CASE("firmware_halt_message detects NOT_READY (Klipper halted preflight)",
+          "[calibrator][input_shaper][error_handling][1021]") {
+    MoonrakerError err;
+    err.type = MoonrakerErrorType::NOT_READY;
+    err.message = "Klipper is halted — restart firmware to continue";
+
+    std::string msg = InputShaperCalibrator::firmware_halt_message(err);
+    REQUIRE_FALSE(msg.empty());
+    // Should mention firmware/restart so the user knows the recovery path.
+    REQUIRE(msg.find("firmware") != std::string::npos);
+}
+
+TEST_CASE("firmware_halt_message detects Klipper 'Internal error on command' envelope",
+          "[calibrator][input_shaper][error_handling][1021]") {
+    // The exact shape that halted the K2 in bundle 5LSSSKPX, delivered as a
+    // raw JSON-RPC envelope string (no friendly extraction upstream).
+    MoonrakerError err;
+    err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+    err.message =
+        R"({"code":"key60", "msg":"Internal error on command:G1 Z-10 F600", "values": ["G1 Z-10 F600"]})";
+
+    std::string msg = InputShaperCalibrator::firmware_halt_message(err);
+    REQUIRE_FALSE(msg.empty());
+    REQUIRE(msg.find("firmware") != std::string::npos);
+    // The raw JSON envelope must NOT leak into the user-facing string.
+    REQUIRE(msg.find("\"code\"") == std::string::npos);
+    REQUIRE(msg.find("key60") == std::string::npos);
+}
+
+TEST_CASE("firmware_halt_message detects generic Klipper shutdown text",
+          "[calibrator][input_shaper][error_handling][1021]") {
+    MoonrakerError err;
+    err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+    err.message = "Lost communication with MCU 'mcu' — Klipper shutdown";
+
+    REQUIRE_FALSE(InputShaperCalibrator::firmware_halt_message(err).empty());
+}
+
+TEST_CASE("firmware_halt_message returns empty for ordinary calibration errors",
+          "[calibrator][input_shaper][error_handling][1021]") {
+    // A normal "missing accelerometer" error must NOT be reclassified as a
+    // firmware halt — the wizard keeps its existing specific message.
+    MoonrakerError err;
+    err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+    err.message = "MEASURE_AXES_NOISE requires [adxl345] accelerometer in printer.cfg";
+
+    REQUIRE(InputShaperCalibrator::firmware_halt_message(err).empty());
+}
+
+TEST_CASE("firmware_halt_message returns empty for timeouts",
+          "[calibrator][input_shaper][error_handling][1021]") {
+    // Timeouts have their own "may still be homing" handling; not a halt.
+    MoonrakerError err;
+    err.type = MoonrakerErrorType::TIMEOUT;
+    err.message = "Request timed out after 30s";
+
+    REQUIRE(InputShaperCalibrator::firmware_halt_message(err).empty());
 }

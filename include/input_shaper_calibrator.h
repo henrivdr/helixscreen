@@ -24,6 +24,7 @@
 
 // Forward declaration
 class MoonrakerAPI;
+struct MoonrakerError;
 
 namespace helix {
 namespace calibration {
@@ -146,6 +147,26 @@ class InputShaperCalibrator {
     [[nodiscard]] State get_state() const {
         return state_;
     }
+
+    /**
+     * @brief Classify a calibration command failure as a printer-firmware halt.
+     *
+     * Klipper "Internal error on command" / shutdown faults halt the printer
+     * mid-command. A real-world example is the Creality K2 `record_z_pos`
+     * crash on a unit with a missing `z_pos.json`, which aborts any Z move
+     * (including the one inside G28) and shuts Klipper down (#1021, bundle
+     * 5LSSSKPX). These are printer firmware/config problems, not HelixScreen
+     * issues; the user must restart the firmware — which the global
+     * EmergencyStopOverlay recovery dialog already offers — before any
+     * calibration can proceed.
+     *
+     * Detecting them lets the wizard show a clear, actionable message instead
+     * of a raw `{"code":"key60", ...}` JSON-RPC envelope.
+     *
+     * @return A user-facing message when @p err indicates a firmware halt;
+     *         an empty string otherwise (caller keeps its normal message).
+     */
+    static std::string firmware_halt_message(const MoonrakerError& err);
 
     /**
      * @brief Check accelerometer connectivity and measure noise level
