@@ -2,6 +2,18 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- NOTE: Backdrop created programmatically by Modal system -->
+<!--
+  Capability-aware layout (#991), driven by the C++-owned, component-scoped
+  subject `runout_autofeed_capable` (0/1) set at show time from the active
+  backend's recovers_filament_on_resume():
+    - 0 (basic runout sensor): Load is required before resume, so the manual
+      Load/Unload/Purge row stays prominent and the message reads
+      "Load filament, then Resume."
+    - 1 (autofeed, e.g. Snapmaker U1): Resume runs AUTO_FEEDING then RESUME, so
+      Resume alone recovers the runout. The manual row is demoted (a muted
+      "Manual" header + reduced opacity), Resume is emphasized, and the message
+      reads "Refill the spool, then Resume."
+-->
 <component>
   <api>
     <prop name="title" type="string" default="Filament Runout"/>
@@ -9,6 +21,15 @@
           type="string"
           default="The printer isn't detecting that any filament is currently loaded. What would you like to do?"/>
   </api>
+  <styles>
+    <!-- Demoted manual row when the backend autofeeds on resume: reduced
+         opacity signals it is a secondary, optional path. -->
+    <style name="manual_row_muted" opa="160"/>
+    <style name="manual_row_normal" opa="255"/>
+    <!-- Resume emphasis when autofeed-capable: an accent outline lifts it above
+         the danger Cancel without hardcoding a fill color. -->
+    <style name="resume_accent" border_color="#primary" border_width="2" border_opa="255"/>
+  </styles>
   <!-- Dialog card (backdrop created programmatically) -->
   <view name="runout_guidance_modal"
         extends="ui_dialog" width="80%" height="content" align="center" flex_flow="column" style_flex_main_place="start"
@@ -25,13 +46,38 @@
     <!-- Message content area -->
     <lv_obj name="content_container"
             width="100%" height="content" style_min_height="40" style_max_height="200" style_pad_left="#space_lg"
-            style_pad_right="#space_lg" style_pad_top="0" style_pad_bottom="#space_sm">
-      <text_body name="dialog_message" width="100%" text="$message" style_text_align="left" long_mode="wrap"/>
+            style_pad_right="#space_lg" style_pad_top="0" style_pad_bottom="#space_sm" flex_flow="column"
+            style_pad_gap="0">
+      <!-- Default message (prop-driven), shown only on basic-sensor backends.
+           Hidden when autofeed-capable (runout_autofeed_capable == 1). -->
+      <text_body name="dialog_message" width="100%" text="$message" style_text_align="left" long_mode="wrap">
+        <bind_flag_if_eq subject="runout_autofeed_capable" flag="hidden" ref_value="1"/>
+      </text_body>
+      <!-- Autofeed message: Resume alone reloads, so just refill the spool.
+           Shown only when runout_autofeed_capable == 1. -->
+      <text_body name="dialog_message_autofeed" width="100%"
+                 text="Refill the spool, then Resume." translation_tag="Refill the spool, then Resume."
+                 style_text_align="left" long_mode="wrap">
+        <bind_flag_if_not_eq subject="runout_autofeed_capable" flag="hidden" ref_value="1"/>
+      </text_body>
     </lv_obj>
-    <!-- ACTION BUTTONS ROW - horizontal, beneath message -->
-    <lv_obj width="100%"
-            height="content" style_pad_all="#space_lg" flex_flow="row" style_flex_main_place="space_between"
-            style_pad_gap="#space_sm">
+    <!-- "Manual" section header — only shown when the manual row is demoted
+         (autofeed-capable). Hidden on basic-sensor backends where the row is
+         the primary action. -->
+    <lv_obj name="manual_section_header" width="100%" height="content"
+            style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="0" style_pad_bottom="0"
+            style_pad_gap="0" flex_flow="column">
+      <bind_flag_if_not_eq subject="runout_autofeed_capable" flag="hidden" ref_value="1"/>
+      <text_small name="manual_label" text="Manual" translation_tag="Manual"
+                  style_text_color="#text_muted" style_text_align="left"/>
+    </lv_obj>
+    <!-- ACTION BUTTONS ROW - horizontal, beneath message. The SAME row in both
+         modes: prominent on basic sensors, demoted (muted) when autofeed-capable. -->
+    <lv_obj name="manual_action_row" width="100%"
+            height="content" style_pad_all="#space_lg" style_pad_top="#space_sm" flex_flow="row"
+            style_flex_main_place="space_between" style_pad_gap="#space_sm">
+      <bind_style name="manual_row_normal" subject="runout_autofeed_capable" ref_value="0"/>
+      <bind_style name="manual_row_muted" subject="runout_autofeed_capable" ref_value="1"/>
       <!-- Load button (wired programmatically by RunoutGuidanceModal::on_show → wire_ok_button) -->
       <ui_button name="btn_load_filament" flex_grow="1" icon="arrow_down" text="Load" translation_tag="Load"/>
       <!-- Unload button (wired programmatically by RunoutGuidanceModal::on_show → wire_quaternary_button) -->
@@ -55,8 +101,12 @@
                  height="100%" flex_grow="1" style_radius="0" variant="danger" text="Cancel Print" translation_tag="Cancel Print"/>
       <!-- Vertical divider -->
       <divider_vertical/>
-      <!-- Resume Print button (wired programmatically by RunoutGuidanceModal::on_show → wire_cancel_button) -->
-      <ui_button name="btn_resume" height="100%" flex_grow="1" style_radius="0" text="Resume Print" translation_tag="Resume Print"/>
+      <!-- Resume Print button (wired programmatically by RunoutGuidanceModal::on_show → wire_cancel_button).
+           Accent outline added when the backend autofeeds on resume — Resume is
+           then the primary recovery action. -->
+      <ui_button name="btn_resume" height="100%" flex_grow="1" style_radius="0" text="Resume Print" translation_tag="Resume Print">
+        <bind_style name="resume_accent" subject="runout_autofeed_capable" ref_value="1"/>
+      </ui_button>
     </lv_obj>
   </view>
 </component>

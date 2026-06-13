@@ -1120,6 +1120,20 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether this backend feeds filament to the nozzle as part of resume
+     *
+     * True when this backend feeds filament to the nozzle as part of resume (e.g.
+     * Snapmaker U1: Resume runs AUTO_FEEDING then RESUME). Drives the runout dialog:
+     * such backends present Resume as the primary action and demote manual
+     * Load/Unload/Purge to a secondary row, because Resume alone recovers a runout.
+     * Backends without this (basic runout sensors, most MMUs) need a manual Load
+     * before resume, so they keep Load prominent. Default false (conservative).
+     */
+    [[nodiscard]] virtual bool recovers_filament_on_resume() const {
+        return false;
+    }
+
+    /**
      * @brief Check if backend provides per-unit environment sensors (temp/humidity)
      *
      * CFS units have built-in temperature and humidity sensors. Other backends

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../test_helpers/printer_state_test_access.h"
+#include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_types.h"
@@ -75,6 +76,10 @@ class SnapmakerTestAccess {
     static void set_sensor_present(AmsBackendSnapmaker& b, int slot_index, bool present) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.sensor_filament_present_[slot_index] = present;
+    }
+    static void set_current_slot(AmsBackendSnapmaker& b, int slot_index) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.system_info_.current_slot = slot_index;
     }
 };
 
@@ -1105,9 +1110,9 @@ TEST_CASE("Snapmaker auto-mirror uses OverwriteAlways policy after firmware writ
 // classifier returns Recoverable. The resume path proceeds, and with sensor
 // reporting present the "skipping recovery" fast path returns SUCCESS.
 //
-// When terminal matchers are added (dirty-bed message, exception_id=532, etc.)
-// this scenario will again produce RESUME_REQUIRES_RESTART. Until then, the
-// post-resume backstop (task 6) catches the silent no-op after RESUME fires.
+// Terminal matchers (dirty-bed message, exception_id=532) produce
+// RESUME_REQUIRES_RESTART up front; a RESUME that truly no-ops returns an ERROR
+// through the RESUME gcode callback, handled by the dispatch layer.
 // ============================================================================
 
 TEST_CASE(
@@ -1223,4 +1228,123 @@ TEST_CASE(
 
     REQUIRE(callback_fired);
     REQUIRE(captured.result == AmsResult::NOT_CONNECTED);
+}
+
+// ---------------------------------------------------------------------------
+// #991 FIX 2 — the filament-config re-assert is sent as its OWN gcode and is
+// best-effort: a config rejection must NOT abort the heat/feed/extrude chain.
+// FIX 3 — when the AMS load fails, prepare_for_resume reports COMMAND_FAILED so
+// the caller never dispatches RESUME.
+// ---------------------------------------------------------------------------
+
+namespace {
+// Wire up a full mock stack + Snapmaker backend with slot 0 populated from a
+// known sub-type ("Basic"), the runout sensor latched absent, and slot 0 as the
+// active tool — i.e. the post-runout recovery branch of prepare_for_resume.
+struct ResumeRecoveryHarness {
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
+    helix::PrinterState api_state;
+    MoonrakerAPIMock api;
+    AmsBackendSnapmaker backend;
+
+    ResumeRecoveryHarness() : api(client, api_state), backend(&api, nullptr) {
+        api_state.init_subjects(false);
+        // The MoonrakerAPIMock's execute_gcode halt gate reads ITS OWN state
+        // (api_state). Mark Klipper ready there so recovery gcode isn't refused.
+        api_state.update_from_status(json{{"webhooks", {{"state", "ready"}}}});
+
+        // Global printer state (read by prepare_for_resume's classify_pause):
+        // paused, SD inactive (no-op-shaped), no terminal exception
+        // (empty message + id -1 => classify Unknown => recoverable).
+        PrinterState& ps = get_printer_state();
+        PrinterStateTestAccess::reset(ps);
+        ps.init_subjects(false);
+        ps.update_from_status(json{{"webhooks", {{"state", "ready"}}},
+                                   {"print_stats", {{"state", "paused"}}},
+                                   {"virtual_sdcard", {{"is_active", false}}}});
+
+        // Populate slot 0: MAIN_TYPE=PLA, MANUFACTURER=Polymaker, SUB_TYPE=Basic
+        // (a recognized product line, so it round-trips into the config gcode).
+        SnapmakerTestAccess::handle_status(
+            backend,
+            make_filament_detect_status(0, "PLA", 0xFF112233u, "Polymaker",
+                                        json::array({1, 2, 3, 4})));
+
+        SnapmakerTestAccess::set_sensor_present(backend, 0, false); // runout latched
+        SnapmakerTestAccess::set_current_slot(backend, 0);
+        client.clear_gcode_script_history();
+    }
+
+    static void drain() {
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+    }
+};
+
+// True if any recorded gcode script contains `needle`.
+bool any_script_contains(const std::vector<std::string>& history, const std::string& needle) {
+    for (const auto& s : history) {
+        if (s.find(needle) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+TEST_CASE("Snapmaker prepare_for_resume drives AUTO_FEEDING load before RESUME",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    helix::ui::UpdateQueue::instance().init();
+
+    ResumeRecoveryHarness h;
+
+    bool callback_fired = false;
+    AmsError captured{AmsResult::RESUME_REQUIRES_RESTART}; // poison
+    h.backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+    ResumeRecoveryHarness::drain();
+
+    const auto& hist = h.client.gcode_script_history();
+
+    // (a) The single firmware load call was issued: AUTO_FEEDING with LOAD=1
+    // PRINTING=1 (#991) — homes, switches tool, feeds, heats, extrudes, flushes.
+    REQUIRE(any_script_contains(hist, "AUTO_FEEDING EXTRUDER=0 LOAD=1 PRINTING=1"));
+
+    // (b) None of the old hand-rolled chain pieces survive — the sensor is NOT
+    // disabled (that silently neutered FEED_AUTO), config is NOT re-asserted
+    // (INNER_RESUME restores it), and there is no manual M109 heat (AUTO_FEEDING
+    // does the heat itself).
+    REQUIRE_FALSE(any_script_contains(hist, "SET_FILAMENT_SENSOR"));
+    REQUIRE_FALSE(any_script_contains(hist, "SET_PRINT_FILAMENT_CONFIG"));
+    REQUIRE_FALSE(any_script_contains(hist, "M109"));
+
+    // Recovery succeeded => on_ready(success). RESUME will be dispatched by caller.
+    REQUIRE(callback_fired);
+    REQUIRE(captured.success());
+}
+
+TEST_CASE("Snapmaker prepare_for_resume: AMS load failure reports COMMAND_FAILED",
+          "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    helix::ui::UpdateQueue::instance().init();
+
+    ResumeRecoveryHarness h;
+
+    // Force the AMS load (matched by AUTO_FEEDING) to fail. prepare_for_resume must
+    // report COMMAND_FAILED so the caller never dispatches RESUME.
+    h.client.force_next_gcode_error(MoonrakerErrorType::JSON_RPC_ERROR,
+                                    "simulated AMS load failure", "AUTO_FEEDING");
+
+    bool callback_fired = false;
+    AmsError captured{AmsResult::SUCCESS}; // poison
+    h.backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+    ResumeRecoveryHarness::drain();
+
+    REQUIRE(callback_fired);
+    REQUIRE_FALSE(captured.success());
+    REQUIRE(captured.result == AmsResult::COMMAND_FAILED);
 }

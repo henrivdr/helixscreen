@@ -323,6 +323,75 @@ TEST_CASE("PrinterState: Update print state and filename", "[state][progress]") 
     REQUIRE(std::string(filename) == "benchy.gcode");
 }
 
+TEST_CASE("PrinterState: parses print_stats.exception structured object", "[state][progress][pause]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    SECTION("Populated exception object sets all three fields") {
+        // Hardware-verified runout shape from a physical Snapmaker U1 (#991).
+        json status = {{"print_stats",
+                        {{"state", "paused"},
+                         {"exception",
+                          {{"id", 523},
+                           {"index", 1},
+                           {"code", 0},
+                           {"message", "e1_filament runout"},
+                           {"level", 2}}}}}};
+        state.update_from_status(status);
+
+        REQUIRE(state.get_print_exception_id() == 523);
+        REQUIRE(state.get_print_exception_code() == 0);
+        REQUIRE(state.get_print_exception_message() == "e1_filament runout");
+    }
+
+    SECTION("Empty exception object resets fields to cleared state") {
+        // First populate, then clear with an empty object (user pause / cleared).
+        json populate = {{"print_stats",
+                          {{"exception",
+                            {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
+        state.update_from_status(populate);
+        REQUIRE(state.get_print_exception_id() == 532);
+
+        json clear = {{"print_stats", {{"exception", json::object()}}}};
+        state.update_from_status(clear);
+
+        REQUIRE(state.get_print_exception_id() == -1);
+        REQUIRE(state.get_print_exception_code() == -1);
+        REQUIRE(state.get_print_exception_message().empty());
+    }
+
+    SECTION("Absent exception key leaves fields unchanged") {
+        json populate = {{"print_stats",
+                          {{"exception",
+                            {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
+        state.update_from_status(populate);
+
+        // A subsequent update with no exception key must not disturb the values.
+        json no_exc = {{"print_stats", {{"state", "paused"}}}};
+        state.update_from_status(no_exc);
+
+        REQUIRE(state.get_print_exception_id() == 532);
+        REQUIRE(state.get_print_exception_code() == 1);
+        REQUIRE(state.get_print_exception_message() == "detected dirty bed");
+    }
+
+    SECTION("Null exception (subscription null) leaves fields unchanged") {
+        json populate = {{"print_stats",
+                          {{"exception",
+                            {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
+        state.update_from_status(populate);
+
+        json null_exc = {{"print_stats", {{"exception", nullptr}}}};
+        state.update_from_status(null_exc);
+
+        REQUIRE(state.get_print_exception_id() == 532);
+        REQUIRE(state.get_print_exception_code() == 1);
+        REQUIRE(state.get_print_exception_message() == "detected dirty bed");
+    }
+}
+
 TEST_CASE("PrinterState: Progress percentage edge cases", "[state][progress][edge]") {
     lv_init_safe();
     PrinterState& state = get_printer_state();

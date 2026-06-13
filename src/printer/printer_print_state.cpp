@@ -340,6 +340,42 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
             }
         }
 
+        // print_stats.exception — Snapmaker U1 structured pause descriptor
+        // {id, index, code, message, level}. On these firmware pauses
+        // print_stats.message is empty and the reason text lives here (#991).
+        // Subscribed-field updates may send null; parse defensively (find() +
+        // is_object(), never .at()). Empty object {} = user pause / cleared
+        // exception → reset. Absent key → leave members unchanged.
+        if (auto exc_it = stats.find("exception"); exc_it != stats.end()) {
+            if (exc_it->is_object() && !exc_it->empty()) {
+                const auto& exc = *exc_it;
+                if (auto id_it = exc.find("id");
+                    id_it != exc.end() && id_it->is_number_integer()) {
+                    print_exception_id_ = id_it->get<int>();
+                } else {
+                    print_exception_id_ = -1;
+                }
+                if (auto code_it = exc.find("code");
+                    code_it != exc.end() && code_it->is_number_integer()) {
+                    print_exception_code_ = code_it->get<int>();
+                } else {
+                    print_exception_code_ = -1;
+                }
+                if (auto emsg_it = exc.find("message");
+                    emsg_it != exc.end() && emsg_it->is_string()) {
+                    print_exception_message_ = emsg_it->get<std::string>();
+                } else {
+                    print_exception_message_.clear();
+                }
+            } else if (exc_it->is_object()) {
+                // Empty object {} — user pause or cleared exception. Reset.
+                print_exception_id_ = -1;
+                print_exception_code_ = -1;
+                print_exception_message_.clear();
+            }
+            // null or non-object: leave members unchanged.
+        }
+
         // Update layer info from print_stats.info (sent by Moonraker/mock client)
         // Note: Moonraker can send null values for layer fields when not available
         if (stats.contains("info") && stats["info"].is_object()) {

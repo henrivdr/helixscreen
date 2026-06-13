@@ -2,8 +2,6 @@
 
 #include "ams_backend_snapmaker.h"
 
-#include "ui_resume_dispatch.h"
-
 #include "ams_error.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
@@ -17,7 +15,31 @@
 #include <spdlog/spdlog.h>
 
 #include <lvgl.h>
+#include <string_view>
 #include <utility>
+
+namespace {
+
+// Snapmaker's recognized filament SUB_TYPE product lines. The RFID read path
+// stores SUB_TYPE into SlotInfo::spool_name (see handle_status_update), but a
+// user can edit spool_name to a free-form string ("My Custom Spool"). Both the
+// set_slot_info firmware round-trip (POST /printer/filament_detect/set) and the
+// #991 post-runout SET_PRINT_FILAMENT_CONFIG re-assert must only treat
+// spool_name as a SUB_TYPE when it matches one of these — a single source of
+// truth for "is this a real product line?".
+constexpr std::array<std::string_view, 8> kKnownSubTypes = {
+    "Basic", "Matte", "SnapSpeed", "Silk", "Support", "HF", "95A", "95A HF"};
+
+[[nodiscard]] bool is_known_subtype(const std::string& s) {
+    for (const auto& st : kKnownSubTypes) {
+        if (s == st) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 // ============================================================================
 // Construction
@@ -310,36 +332,7 @@ bool AmsBackendSnapmaker::is_stuck_motion_sensor_runout(int slot_index) const {
     return !sensor_filament_present_[slot] && port_sensor_filament_present_[slot];
 }
 
-void AmsBackendSnapmaker::arm_resume_noop_backstop() {
-    MoonrakerAPI* api_ptr = api_;
-    if (!api_ptr) {
-        return;
-    }
-    struct BackstopCtx {
-        MoonrakerAPI* api;
-    };
-    auto* ctx = new BackstopCtx{api_ptr};
-    auto* t = lv_timer_create(
-        [](lv_timer_t* timer) {
-            auto* c = static_cast<BackstopCtx*>(lv_timer_get_user_data(timer));
-            bool is_paused =
-                get_printer_state().get_print_job_state() == helix::PrintJobState::PAUSED;
-            bool sd_active = get_printer_state().is_sdcard_active();
-            if (helix::snapmaker_resume_noop_detected(is_paused, sd_active)) {
-                std::string filename =
-                    lv_subject_get_string(get_printer_state().get_print_filename_subject());
-                spdlog::warn("[AMS Snapmaker] post-resume backstop: RESUME no-op "
-                             "(still paused, SD inactive) — surfacing restart modal");
-                helix::ui::show_restart_required_modal(c ? c->api : nullptr, filename,
-                                                       "[Snapmaker backstop]", [] {});
-            } else {
-                spdlog::debug("[AMS Snapmaker] post-resume backstop: resume confirmed OK");
-            }
-            delete c;
-        },
-        /*period_ms=*/kResumeNoopBackstopMs, ctx);
-    lv_timer_set_repeat_count(t, 1);
-}
+AmsBackendSnapmaker::~AmsBackendSnapmaker() = default;
 
 void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback on_ready) {
     // Resolve target slot. Caller passes -1 when they don't know which tool
@@ -347,7 +340,6 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     // active tool means there's nothing to prep; just unblock the caller.
     int slot = slot_index;
     bool sensor_present = true;
-    SlotInfo slot_copy;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (slot < 0) {
@@ -358,10 +350,6 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
         }
         if (slot >= 0 && slot < NUM_TOOLS) {
             sensor_present = sensor_filament_present_[slot];
-            const auto* slot_ptr = system_info_.units[0].get_slot(slot);
-            if (slot_ptr) {
-                slot_copy = *slot_ptr;
-            }
         }
     }
 
@@ -375,11 +363,18 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
 
     // Classify why the print paused. Terminal causes (confirmed under #991)
     // get the restart modal up front; everything else attempts RESUME
-    // (default-recoverable), with the post-resume backstop catching any
-    // unrecognized terminal cause. Replaces the old blunt virtual_sdcard gate.
+    // (default-recoverable). A RESUME that truly no-ops returns an ERROR through
+    // the RESUME gcode callback, which the dispatch layer handles. Replaces the
+    // old blunt virtual_sdcard gate.
     helix::PauseSignals sig;
-    sig.message = lv_subject_get_string(get_printer_state().get_print_message_subject());
-    sig.exception_id = -1; // PROVISIONAL(#991): no print_stats.exception getter yet
+    sig.exception_id = get_printer_state().get_print_exception_id();
+    // On these firmware pauses print_stats.message is empty — the reason text
+    // lives in exception.message. Fall back to print_stats.message when the
+    // exception carries no text (e.g. non-Snapmaker pause paths).
+    sig.message = get_printer_state().get_print_exception_message();
+    if (sig.message.empty()) {
+        sig.message = lv_subject_get_string(get_printer_state().get_print_message_subject());
+    }
     sig.sdcard_active = get_printer_state().is_sdcard_active();
     sig.runout_tripped = !sensor_present;
     if (helix::classify_pause(sig, helix::snapmaker_terminal_matchers()) ==
@@ -391,11 +386,6 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
         }
         return;
     }
-
-    // Default-recoverable: we will attempt RESUME on every path below. Arm the
-    // no-op backstop now so an unrecognized terminal cause can't strand the
-    // user on a silent no-op.
-    arm_resume_noop_backstop();
 
     if (sensor_present) {
         // Klipper's motion sensor reads filament — RESUME can clear its own
@@ -409,61 +399,20 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
         return;
     }
 
-    // Sensor reads runout. Klipper has latched print_stats.exception (id=523)
-    // and INNER_RESUME's auto-feed path is a no-op when extruders_used is
-    // empty, so the exception never clears on its own. Disable the sensor,
-    // heat to the slot's recorded nozzle min temp (PLA=200, PETG=230, etc.;
-    // fallback 200°C), engage the assist motor, extrude 15 mm to seat
-    // filament in the gear, then leave the sensor disabled across RESUME
-    // (re-armed by the deferred lv_timer below).
-    int target_temp = slot_copy.nozzle_temp_min > 0 ? slot_copy.nozzle_temp_min : 200;
-
-    // Sequence reasoning: after a runout-cut, the filament often sits with
-    // a gap of several inches BEFORE the extruder gear — the buffer's assist
-    // motor pre-feeds it part of the way but stops short of the toolhead.
-    // In that state plain `G1 E` commands spin the extruder gear with nothing
-    // to grip, so no encoder pulses fire and `filament_detected` stays false.
-    // We must engage the assist motor first (AUTO_FEEDING LOAD=1) to push
-    // filament across the gap to the extruder before any G1 E becomes useful.
-    //
-    // Sensor stays DISABLED across the whole window — RESUME's
-    // CHECK_FILAMENT_RUNOUT would re-pause immediately if it ran with the
-    // sensor latched false, and we can't reliably get the sensor to read
-    // true before RESUME starts the actual print extrusion. Re-enable is
-    // scheduled by the on_ready path below as a single-shot lv_timer 20s
-    // after this chain completes; by then INNER_RESUME has issued real
-    // print extrusion and the encoder has seen pulses while the sensor is
-    // enabled, latching filament_detected:true. Proven path matches the
-    // 2026-05-13 manual recovery curl that successfully resumed a stuck
-    // print on this same printer.
-    // Snapmaker firmware drops per-extruder FILAMENT_TYPE/VENDOR when the
-    // sensor loses filament; without it RESUME errors "e0 not set filament".
-    // Re-assert from the slot record before the recovery chain. Skipped (with
-    // a warning) when we don't have both values, to avoid a malformed command.
-    std::string config_line =
-        helix::snapmaker_filament_config_gcode(slot, slot_copy.material, slot_copy.brand);
-    if (config_line.empty()) {
-        spdlog::warn("{} prepare_for_resume: tool {} missing material/brand — skipping "
-                     "SET_PRINT_FILAMENT_CONFIG re-assert",
-                     backend_log_tag(), slot);
-    }
-
-    std::string chain =
-        config_line + fmt::format("SET_FILAMENT_SENSOR SENSOR=e{0}_filament ENABLE=0\n"
-                                  "M104 S{1} T{0}\n"
-                                  "M109 S{1} T{0}\n"
-                                  "AUTO_FEEDING EXTRUDER={0} LOAD=1\n"
-                                  "M400\n"
-                                  "M83\n"
-                                  "G1 E15 F60\n"
-                                  "M400\n"
-                                  "M82",
-                                  slot, target_temp);
-
-    spdlog::info("{} prepare_for_resume: tool {} runout latched, running recovery "
-                 "chain (target {}°C)",
-                 backend_log_tag(), slot, target_temp);
-
+    // Sensor reads runout. The firmware's own INNER_RESUME auto-feed
+    // (SM_PRINT_AUTO_FEED) is gated on print_task_config.extruders_used[slot],
+    // which the firmware freezes False for the duration of a print — so a plain
+    // RESUME no-ops the feed and immediately re-pauses at CHECK_FILAMENT_RUNOUT.
+    // AUTO_FEEDING calls FEED_AUTO directly (no extruders_used gate): it homes,
+    // switches to the tool, feeds filament from the AMS port across the gap to
+    // the toolhead sensor, heats to the slot's filament temp, then extrudes and
+    // flushes — leaving the channel at load_finish with the runout sensor reading
+    // present, so the subsequent RESUME's CHECK_FILAMENT_RUNOUT passes. The gcode
+    // blocks until load_finish (success) or raises (error), and is idempotent
+    // (FEED_AUTO returns early if already loaded). Verified live on a physical U1
+    // (#991); replaces the old chain whose SET_FILAMENT_SENSOR ENABLE=0 silently
+    // neutered FEED_AUTO and whose SET_PRINT_FILAMENT_CONFIG / manual extrude were
+    // both unnecessary (INNER_RESUME restores config; AUTO_FEEDING does the heat).
     if (!api_) {
         spdlog::warn("{} prepare_for_resume: MoonrakerAPI unavailable", backend_log_tag());
         if (on_ready) {
@@ -472,102 +421,47 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
         return;
     }
 
+    std::string chain = fmt::format("AUTO_FEEDING EXTRUDER={0} LOAD=1 PRINTING=1", slot);
+    spdlog::info("{} prepare_for_resume: tool {} runout latched — driving AMS load "
+                 "(AUTO_FEEDING) before RESUME",
+                 backend_log_tag(), slot);
+
     auto tok = lifetime_.token();
     const char* tag = backend_log_tag();
     MoonrakerAPI* api_ptr = api_;
-    api_->execute_gcode(
+    api_ptr->execute_gcode(
         chain,
-        [tok, on_ready, tag, slot, api_ptr]() mutable {
-            // MoonrakerAPI callbacks fire on the libhv WebSocket thread; defer
-            // to main so on_ready runs on the UI thread where the caller's
-            // RESUME dispatch and pending-action UI updates live.
-            tok.defer("AmsBackendSnapmaker::prepare_for_resume.ok", [on_ready = std::move(on_ready),
-                                                                     tag, slot, api_ptr]() {
-                spdlog::info("{} prepare_for_resume: tool {} recovery chain complete", tag, slot);
-                if (on_ready) {
-                    on_ready(AmsErrorHelper::success());
-                }
-                // Re-arm the runout sensor a safe interval after
-                // the caller has dispatched RESUME. By the time
-                // this fires Klipper's INNER_RESUME has finished
-                // running CHECK_FILAMENT_RUNOUT (sensor still off
-                // here, so it passes) and the print is back to
-                // actual extrusion — encoder pulses will land
-                // while the sensor is enabled and filament_detected
-                // latches true. Single-shot lv_timer, no captured
-                // `this` so backend destruction doesn't UAF.
-                //
-                // Lifetime notes:
-                //  - MoonrakerAPI is a process-lifetime singleton,
-                //    so api_ptr stays valid across backend destruction.
-                //  - ReArmCtx is heap-allocated and deleted by the
-                //    timer cb. KNOWN MINOR LEAK: if helix-screen
-                //    shuts down within the 20s window, lv_deinit
-                //    destroys the timer without firing the cb,
-                //    leaking ~16 bytes per pending re-arm. Acceptable
-                //    trade-off versus the complexity of a robust
-                //    backend-tracked registry; revisit if telemetry
-                //    surfaces a measurable accumulation.
-                struct ReArmCtx {
-                    MoonrakerAPI* api;
-                    int slot;
-                };
-                auto* ctx = new ReArmCtx{api_ptr, slot};
-                auto* t = lv_timer_create(
-                    [](lv_timer_t* timer) {
-                        // Guard the C/C++ boundary: this lambda runs from lv_timer_handler()
-                        // (C). An exception escaping it would terminate the process. The work
-                        // here is non-throwing in practice, but the timer always deletes its
-                        // context, so swallow-and-log keeps the boundary safe.
-                        auto* c = static_cast<ReArmCtx*>(lv_timer_get_user_data(timer));
-                        try {
-                            if (c && c->api) {
-                                std::string gc =
-                                    fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament "
-                                                "ENABLE=1",
-                                                c->slot);
-                                spdlog::info("[AMS Snapmaker] post-resume re-arm: "
-                                             "tool {} runout sensor ENABLE=1",
-                                             c->slot);
-                                c->api->execute_gcode(
-                                    gc, []() {}, [](const MoonrakerError&) {}, 0,
-                                    /*silent=*/true);
-                            }
-                        } catch (const std::exception& ex) {
-                            spdlog::error("[AMS Snapmaker] re-arm timer exception: {}", ex.what());
-                        }
-                        delete c;
-                    },
-                    /*period_ms=*/20000, ctx);
-                lv_timer_set_repeat_count(t, 1);
-            });
+        [this, tok, on_ready, tag, slot]() mutable {
+            // MoonrakerAPI callbacks fire on the libhv WebSocket thread; defer to
+            // main so on_ready (and the backstop arm) run on the UI thread.
+            tok.defer("AmsBackendSnapmaker::prepare_for_resume.ok",
+                      [this, cb = std::move(on_ready), tag, slot]() {
+                          spdlog::info("{} prepare_for_resume: tool {} AMS load complete "
+                                       "(load_finish)",
+                                       tag, slot);
+                          // Hand control back so the caller dispatches RESUME.
+                          if (cb) {
+                              cb(AmsErrorHelper::success());
+                          }
+                      });
         },
-        [tok, on_ready, tag, slot, api_ptr](const MoonrakerError& err) mutable {
+        [this, tok, on_ready, tag, slot](const MoonrakerError& err) mutable {
             std::string msg = err.message;
-            tok.defer(
-                "AmsBackendSnapmaker::prepare_for_resume.err",
-                [on_ready = std::move(on_ready), tag, slot, msg, api_ptr]() {
-                    spdlog::error("{} prepare_for_resume: tool {} recovery chain failed: {}", tag,
-                                  slot, msg);
-                    // Recovery chain disabled the sensor before failing —
-                    // re-enable it now so the printer doesn't run with
-                    // runout protection silently off. Best-effort; ignore
-                    // result.
-                    if (api_ptr) {
-                        api_ptr->execute_gcode(
-                            fmt::format("SET_FILAMENT_SENSOR SENSOR=e{}_filament ENABLE=1", slot),
-                            []() {}, [](const MoonrakerError&) {}, 0, /*silent=*/true);
-                    }
-                    if (on_ready) {
-                        on_ready(AmsError(AmsResult::COMMAND_FAILED,
-                                          "prepare_for_resume gcode failed: " + msg,
-                                          "Recovery before resume failed"));
-                    }
-                });
+            tok.defer("AmsBackendSnapmaker::prepare_for_resume.err",
+                      [this, cb = std::move(on_ready), tag, slot, msg]() {
+                          spdlog::error("{} prepare_for_resume: tool {} AMS load failed: {}",
+                                        tag, slot, msg);
+                          // Load failed → RESUME is never dispatched; report failure.
+                          if (cb) {
+                              cb(AmsError(AmsResult::COMMAND_FAILED,
+                                          "prepare_for_resume AMS load failed: " + msg,
+                                          "Filament reload before resume failed"));
+                          }
+                      });
         },
-        // 60s — M109 wait for heat from cold can take ~45s on Snapmaker;
-        // AUTO_FEEDING + 15mm G1 E at 60mm/min adds ~20s on top.
-        /*timeout_ms=*/60000,
+        // AUTO_FEEDING heats from cold + feeds + flushes; measured ~86s live, so
+        // give generous headroom.
+        /*timeout_ms=*/150000,
         /*silent=*/true);
 }
 
@@ -694,14 +588,10 @@ AmsError AmsBackendSnapmaker::set_slot_info(int slot_index, const SlotInfo& info
         // (see handle_status_update), but UI-edited spool_name may be a free-
         // form string ("My Custom Spool"). Only round-trip when it matches a
         // known sub_type — otherwise omit and let firmware preserve whatever
-        // it had. The free-form string still lives in lane_data.
-        static const std::array<const char*, 8> kKnownSubTypes = {
-            "Basic", "Matte", "SnapSpeed", "Silk", "Support", "HF", "95A", "95A HF"};
-        for (const auto* st : kKnownSubTypes) {
-            if (info.spool_name == st) {
-                info_obj["SUB_TYPE"] = info.spool_name;
-                break;
-            }
+        // it had. The free-form string still lives in lane_data. Shares the
+        // is_known_subtype() helper with the #991 resume re-assert path.
+        if (is_known_subtype(info.spool_name)) {
+            info_obj["SUB_TYPE"] = info.spool_name;
         }
         info_obj["RGB_1"] = info.color_rgb;
         info_obj["ALPHA"] = 255;

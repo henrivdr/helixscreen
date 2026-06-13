@@ -64,10 +64,18 @@ const RecoveryAction* find_recovery(const std::string& code) {
     return nullptr;
 }
 
-/// Replay age gate: errors older than this in the gcode_store are
-/// considered stale (probably already acknowledged by the user) and
-/// not re-surfaced on reconnect.
-constexpr double kReplayMaxAgeSeconds = 600.0;
+/// Replay age gate: a latched `!!` older than this in the gcode_store is
+/// considered stale and is NOT re-surfaced on reconnect.
+///
+/// Sized to cover the legitimate case — an error fired during a brief
+/// WebSocket bounce or boot-autostart hiccup that the user genuinely
+/// missed — while killing the stale-after-restart case (#991): a UI
+/// restart on a paused print replayed a 287s-old `[print_task_config]`
+/// error as a blocking modal that sat over the print panel and blocked
+/// Resume. 30s comfortably spans a reconnect blip but is far below the
+/// multi-minute gap a manual restart leaves. (Was 600s, which let the
+/// 287s error through.)
+constexpr double kReplayMaxAgeSeconds = 30.0;
 
 /// gcode_store fetch depth on reconnect. The K2's box driver is chatty
 /// (status polls every ~3s) so we need headroom to find a `!!` line.
@@ -122,6 +130,22 @@ GcodeErrorRouter::~GcodeErrorRouter() {
         client_->unregister_method_callback("notify_gcode_response", kNotifyHandlerName);
         client_->remove_connected_observer(kReplayObserverName);
     }
+}
+
+bool GcodeErrorRouter::should_surface_replay(double entry_time, double now) {
+    // Unavailable/zero timestamp: age cannot be positively determined.
+    // Never suppress a possibly-fresh error on missing data — preserve the
+    // legacy surface-it behavior (the live `!!` path is unaffected by this
+    // gate regardless).
+    if (entry_time <= 0.0) return true;
+
+    const double age = now - entry_time;
+    // Clock skew or an entry stamped in the (apparent) future reads as a
+    // negative age; treat as fresh rather than silently suppressing.
+    if (age <= kReplayMaxAgeSeconds) return true;
+
+    spdlog::debug("[GcodeError replay] Skipping stale `!!` (age {:.0f}s)", age);
+    return false;
 }
 
 void GcodeErrorRouter::clean_error_text(std::string& text, std::string& out_code) {
@@ -443,12 +467,12 @@ void GcodeErrorRouter::on_connected() {
                 const std::string& raw = it->message;
                 if (raw.size() < 3 || raw[0] != '!' || raw[1] != '!') continue;
 
-                const double age = now_unix_seconds() - it->time;
-                if (age > kReplayMaxAgeSeconds) {
-                    spdlog::debug("[GcodeError replay] Skipping stale `!!` (age {:.0f}s)",
-                                  age);
+                const double now = now_unix_seconds();
+                if (!should_surface_replay(it->time, now)) {
+                    // should_surface_replay logs the stale skip at debug.
                     return;
                 }
+                const double age = now - it->time;
 
                 {
                     std::lock_guard<std::mutex> lock(replay_mutex_);

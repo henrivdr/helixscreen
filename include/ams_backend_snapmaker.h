@@ -65,6 +65,8 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
   public:
     AmsBackendSnapmaker(MoonrakerAPI* api, helix::MoonrakerClient* client);
 
+    ~AmsBackendSnapmaker() override;
+
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::SNAPMAKER;
     }
@@ -127,6 +129,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Callers (FilamentRunoutHandler) auto-recover silently instead of
     // showing the modal.
     [[nodiscard]] bool is_stuck_motion_sensor_runout(int slot_index) const override;
+
+    // Snapmaker U1's Resume runs AUTO_FEEDING (loads filament to the nozzle)
+    // before RESUME, so Resume alone recovers a runout. The runout dialog uses
+    // this to present Resume as primary and demote manual Load/Unload/Purge.
+    [[nodiscard]] bool recovers_filament_on_resume() const override {
+        return true;
+    }
 
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
@@ -234,14 +243,4 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Per-slot last-observed RFID CARD_UID. Empty = first observation not yet
     // made (or only empty UIDs seen). All access under mutex_.
     std::unordered_map<int, std::string> last_rfid_uid_;
-
-    // Post-resume no-op backstop window. PROVISIONAL(prestonbrown/helixscreen#991):
-    // conservative fixed value; tune against observed U1 dirty-bed resume timing.
-    static constexpr uint32_t kResumeNoopBackstopMs = 15000;
-
-    // Arm a single-shot timer that surfaces the restart modal if RESUME
-    // silently no-op'd (still paused + virtual_sdcard inactive after the
-    // window). Safety net for default-recoverable classification of an
-    // unrecognized terminal cause. No captured `this` (singletons only).
-    void arm_resume_noop_backstop();
 };

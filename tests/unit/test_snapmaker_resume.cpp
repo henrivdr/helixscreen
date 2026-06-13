@@ -1,45 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "../../include/pause_cause.h"
 #include "../../include/snapmaker_resume.h"
 
 #include "../catch_amalgamated.hpp"
 
-using helix::snapmaker_filament_config_gcode;
-using helix::snapmaker_resume_noop_detected;
+using helix::classify_pause;
+using helix::PauseCause;
+using helix::PauseSignals;
 using helix::snapmaker_terminal_matchers;
 
-TEST_CASE("snapmaker_terminal_matchers: empty until #991 device capture", "[pause][snapmaker]") {
-    REQUIRE(snapmaker_terminal_matchers().empty());
+TEST_CASE("snapmaker_terminal_matchers: dirty-bed by id 532 => Terminal", "[pause][snapmaker]") {
+    PauseSignals s;
+    s.exception_id = 532;
+    s.message = "detected dirty bed";
+    REQUIRE(classify_pause(s, snapmaker_terminal_matchers()) == PauseCause::Terminal);
 }
 
-TEST_CASE("snapmaker_filament_config_gcode: builds command for populated slot",
+TEST_CASE("snapmaker_terminal_matchers: dirty-bed by message => Terminal", "[pause][snapmaker]") {
+    PauseSignals s;
+    s.exception_id = -1; // id missing, only message present
+    s.message = "detected dirty bed";
+    REQUIRE(classify_pause(s, snapmaker_terminal_matchers()) == PauseCause::Terminal);
+}
+
+TEST_CASE("snapmaker_terminal_matchers: runout (id 523) => Recoverable", "[pause][snapmaker]") {
+    // Runout also deactivates virtual_sdcard, so the matchers must NOT key on
+    // sdcard state — id 523 / "runout" must classify Recoverable.
+    PauseSignals s;
+    s.exception_id = 523;
+    s.message = "e1_filament runout";
+    s.sdcard_active = false;
+    s.runout_tripped = true;
+    REQUIRE(classify_pause(s, snapmaker_terminal_matchers()) == PauseCause::Recoverable);
+}
+
+TEST_CASE("snapmaker_terminal_matchers: user pause (empty signals) => Unknown",
           "[pause][snapmaker]") {
-    REQUIRE(
-        snapmaker_filament_config_gcode(0, "PLA", "Snapmaker") ==
-        "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='0' FILAMENT_TYPE='PLA' VENDOR='Snapmaker'\n");
-}
-
-TEST_CASE("snapmaker_filament_config_gcode: empty material => skip (empty string)",
-          "[pause][snapmaker]") {
-    REQUIRE(snapmaker_filament_config_gcode(0, "", "Snapmaker").empty());
-}
-
-TEST_CASE("snapmaker_filament_config_gcode: empty brand => skip (empty string)",
-          "[pause][snapmaker]") {
-    REQUIRE(snapmaker_filament_config_gcode(1, "PETG", "").empty());
-}
-
-TEST_CASE("snapmaker_filament_config_gcode: uses the given non-zero extruder index",
-          "[pause][snapmaker]") {
-    REQUIRE(snapmaker_filament_config_gcode(2, "ABS", "eSUN") ==
-            "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='2' FILAMENT_TYPE='ABS' VENDOR='eSUN'\n");
-}
-
-TEST_CASE("snapmaker_resume_noop_detected: paused + SD inactive => true", "[pause][snapmaker]") {
-    REQUIRE(snapmaker_resume_noop_detected(/*is_paused=*/true, /*sdcard_active=*/false));
-}
-
-TEST_CASE("snapmaker_resume_noop_detected: otherwise => false", "[pause][snapmaker]") {
-    REQUIRE_FALSE(snapmaker_resume_noop_detected(false, false));
-    REQUIRE_FALSE(snapmaker_resume_noop_detected(true, true));
-    REQUIRE_FALSE(snapmaker_resume_noop_detected(false, true));
+    PauseSignals s; // empty message, exception -1, sdcard active, no runout
+    REQUIRE(classify_pause(s, snapmaker_terminal_matchers()) == PauseCause::Unknown);
 }

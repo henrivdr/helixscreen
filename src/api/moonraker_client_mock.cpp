@@ -1186,6 +1186,9 @@ std::string MoonrakerClientMock::get_last_gcode_error() const {
 int MoonrakerClientMock::gcode_script(const std::string& gcode) {
     spdlog::trace("[MoonrakerClientMock] Mock gcode_script: {}", gcode);
 
+    // Record for test inspection (ordered history of every script handled).
+    record_gcode_script(gcode);
+
     // Clear previous error at start
     {
         std::lock_guard<std::mutex> lock(gcode_error_mutex_);

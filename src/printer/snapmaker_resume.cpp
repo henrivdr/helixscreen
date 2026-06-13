@@ -4,21 +4,17 @@
 namespace helix {
 
 std::vector<TerminalMatcher> snapmaker_terminal_matchers() {
-    // PROVISIONAL(#991): empty until real U1 dirty-bed strings/ids are captured.
-    return {};
-}
-
-std::string snapmaker_filament_config_gcode(int extruder, const std::string& material,
-                                            const std::string& brand) {
-    if (material.empty() || brand.empty()) {
-        return "";
-    }
-    return "SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='" + std::to_string(extruder) +
-           "' FILAMENT_TYPE='" + material + "' VENDOR='" + brand + "'\n";
-}
-
-bool snapmaker_resume_noop_detected(bool is_paused, bool sdcard_active) {
-    return is_paused && !sdcard_active;
+    // Hardware-verified on a physical Snapmaker U1 (#991): dirty-bed aborts with
+    // exception {id:532, code:1, message:"detected dirty bed"} — Terminal. Match
+    // by message substring OR by exception id so either signal alone suffices.
+    // NOT gated on sdcard-inactive: runout (id 523) also deactivates the SD, so
+    // sdcard state cannot discriminate terminal-vs-recoverable here.
+    return {
+        TerminalMatcher{/*message_substr=*/"dirty bed", /*exception_id=*/-1,
+                        /*require_sdcard_inactive=*/false},
+        TerminalMatcher{/*message_substr=*/"", /*exception_id=*/532,
+                        /*require_sdcard_inactive=*/false},
+    };
 }
 
 } // namespace helix
