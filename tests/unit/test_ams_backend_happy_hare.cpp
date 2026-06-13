@@ -170,6 +170,11 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
         reapply_overrides();
     }
 
+    /// Override the clock function for deterministic countdown tests
+    void test_set_clock(std::function<std::time_t()> fn) {
+        now_fn_ = std::move(fn);
+    }
+
     /**
      * @brief Check if exact G-code was captured
      * @param expected Exact G-code string to find
@@ -1046,12 +1051,22 @@ TEST_CASE("Happy Hare dryer start/stop send MMU_HEATER commands", "[ams][happy_h
 
     auto result = helper.start_drying(55.0f, 240, 50);
     REQUIRE(result.success());
-    REQUIRE(helper.has_gcode("MMU_HEATER DRY=1 TEMP=55 DURATION=240 FAN=50"));
+    REQUIRE(helper.has_gcode("MMU_HEATER DRY=1 TEMP=55 TIMER=240"));
 
     helper.clear_captured_gcodes();
     result = helper.stop_drying();
     REQUIRE(result.success());
-    REQUIRE(helper.has_gcode("MMU_HEATER DRY=0"));
+    REQUIRE(helper.has_gcode("MMU_HEATER STOP=1"));
+}
+
+TEST_CASE("Happy Hare dryer computes remaining from commanded TIMER", "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    helper.test_set_clock([] { return std::time_t{1000}; });
+    helper.test_parse_mmu_state(nlohmann::json{{"drying_state", {{"active", false}}}});
+    helper.start_drying(55.0f, 60, -1); // 60 min
+    auto d = helper.get_dryer_info();
+    REQUIRE(d.remaining_min == 60);
 }
 
 TEST_CASE("Happy Hare dryer start without dryer returns not_supported", "[ams][happy_hare][v4]") {
@@ -1385,7 +1400,7 @@ TEST_CASE("Happy Hare dryer stop also returns not_supported without dryer hardwa
     REQUIRE(result.result == AmsResult::NOT_SUPPORTED);
 }
 
-TEST_CASE("Happy Hare dryer start without fan_pct omits FAN param", "[ams][happy_hare][v4][edge]") {
+TEST_CASE("Happy Hare dryer start never sends FAN param", "[ams][happy_hare][v4][edge]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
@@ -1395,8 +1410,8 @@ TEST_CASE("Happy Hare dryer start without fan_pct omits FAN param", "[ams][happy
 
     auto result = helper.start_drying(45.0f, 120); // No fan_pct (-1 default)
     REQUIRE(result.success());
-    REQUIRE(helper.has_gcode("MMU_HEATER DRY=1 TEMP=45 DURATION=120"));
-    // Should NOT have FAN= parameter
+    // Happy Hare MMU_HEATER uses TIMER= (minutes), not DURATION=; never sends FAN=
+    REQUIRE(helper.has_gcode_containing("TIMER="));
     REQUIRE_FALSE(helper.has_gcode_containing("FAN="));
 }
 

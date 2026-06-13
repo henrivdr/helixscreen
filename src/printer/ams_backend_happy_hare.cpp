@@ -2060,11 +2060,17 @@ std::vector<int> AmsBackendHappyHare::get_tool_mapping() const {
 
 DryerInfo AmsBackendHappyHare::get_dryer_info() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return dryer_info_;
+    DryerInfo out = dryer_info_;
+    if (dry_end_epoch_ > 0) {
+        const int remaining = static_cast<int>((dry_end_epoch_ - now_fn_()) / 60);
+        out.remaining_min = remaining > 0 ? remaining : 0;
+    }
+    return out;
 }
 
 AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
     (void)unit;
+    (void)fan_pct; // Happy Hare MMU_HEATER does not accept a FAN parameter
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!dryer_info_.supported) {
@@ -2072,9 +2078,13 @@ AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int f
         }
     }
 
-    std::string cmd = fmt::format("MMU_HEATER DRY=1 TEMP={:.0f} DURATION={}", temp_c, duration_min);
-    if (fan_pct >= 0) {
-        cmd += fmt::format(" FAN={}", fan_pct);
+    // Happy Hare uses TIMER= (minutes) not DURATION=, and has no FAN parameter.
+    std::string cmd = fmt::format("MMU_HEATER DRY=1 TEMP={:.0f} TIMER={}", temp_c, duration_min);
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        dryer_info_.duration_min = duration_min;
+        dry_end_epoch_ = now_fn_() + static_cast<std::time_t>(duration_min) * 60;
     }
 
     spdlog::info("[AMS HappyHare] Starting dryer: {:.0f}°C for {} min", temp_c, duration_min);
@@ -2088,10 +2098,12 @@ AmsError AmsBackendHappyHare::stop_drying(int unit) {
         if (!dryer_info_.supported) {
             return AmsErrorHelper::not_supported("Dryer not available on this hardware");
         }
+        dry_end_epoch_ = 0;
+        dryer_info_.active = false;
     }
 
     spdlog::info("[AMS HappyHare] Stopping dryer");
-    return execute_gcode("MMU_HEATER DRY=0");
+    return execute_gcode("MMU_HEATER STOP=1");
 }
 
 // ============================================================================

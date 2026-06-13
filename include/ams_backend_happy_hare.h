@@ -7,6 +7,8 @@
 #include "async_lifetime_guard.h"
 #include "slot_registry.h"
 
+#include <ctime>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -272,6 +274,8 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
 
     // Dryer state (v4 - KMS/EMU hardware)
     DryerInfo dryer_info_;
+    std::time_t dry_end_epoch_ = 0; ///< HelixScreen-initiated drying end (epoch s), 0 = none
+    std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)
