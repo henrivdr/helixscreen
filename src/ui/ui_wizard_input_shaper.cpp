@@ -8,6 +8,7 @@
 
 #include "app_globals.h"
 #include "calibration_types.h"
+#include "config.h"
 #include "input_shaper_calibrator.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -443,6 +444,32 @@ bool WizardInputShaperStep::should_skip() const {
     }
 
     return !has_accel;
+}
+
+bool WizardInputShaperStep::should_skip(const helix::wizard::StepContext& ctx) const {
+    // Preset printers normally skip hardware calibration — but a factory image
+    // can force a one-time resonance run by setting the per-printer flag
+    // `initial_resonance_compensation_run` to false. When the flag is true or
+    // absent (the default), honor the preset skip. When explicitly false, show
+    // the step even under a preset so calibration runs once.
+    if (ctx.preset.skip_hardware) {
+        helix::Config* cfg = ctx.config ? ctx.config : helix::Config::get_instance();
+        bool run_resonance =
+            cfg ? cfg->get<bool>(cfg->df() + "initial_resonance_compensation_run", true) : true;
+        if (run_resonance) {
+            spdlog::debug("[{}] Preset skip_hardware and resonance run already done/default — "
+                          "skipping step",
+                          get_name());
+            return true;
+        }
+        spdlog::info("[{}] Preset skip_hardware but initial_resonance_compensation_run=false — "
+                     "forcing calibration step",
+                     get_name());
+        return false;
+    }
+
+    // No preset: fall back to the accelerometer-presence check.
+    return should_skip();
 }
 
 // ============================================================================

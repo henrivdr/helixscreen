@@ -8,11 +8,36 @@
  */
 
 #include "platform_info.h"
+#include "wizard_step.h"
 #include "wizard_step_logic.h"
 
 #include "../catch_amalgamated.hpp"
 
+#include <vector>
+
 using namespace helix;
+using helix::wizard::StepId;
+
+// ----------------------------------------------------------------------------
+// Id-based navigation test helpers. The wizard uses a StepId registry; these
+// tests build a full 13-entry skip vector and flip named steps off, mirroring
+// what the registry produces. `id()` is shorthand for StepId(int) so the
+// step-index comments below still read clearly.
+// ----------------------------------------------------------------------------
+static StepId id(int i) { return static_cast<StepId>(i); }
+
+static std::vector<StepSkip> all_steps() {
+    std::vector<StepSkip> v;
+    for (int i = 0; i < wizard::kStepCount; ++i)
+        v.push_back({id(i), false});
+    return v;
+}
+
+static void skip(std::vector<StepSkip>& v, StepId s) {
+    for (auto& e : v)
+        if (e.id == s)
+            e.skipped = true;
+}
 
 // ============================================================================
 // Platform Detection Tests
@@ -55,147 +80,149 @@ TEST_CASE("Platform override reset to -1 restores compile-time default", "[andro
 }
 
 // ============================================================================
-// Wizard Step Logic -- Total Steps
+// Wizard Step Logic -- Total Steps (id-based registry navigation)
 // ============================================================================
 
 TEST_CASE("Wizard total steps with no skips is 13", "[android][wizard]") {
-    WizardSkipFlags no_skips{};
-    REQUIRE(wizard_calculate_display_total(no_skips) == 13);
+    REQUIRE(wizard_visible_count(all_steps()) == 13);
 }
 
 TEST_CASE("Wizard total steps with wifi skipped is 12", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    REQUIRE(wizard_calculate_display_total(skips) == 12);
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    REQUIRE(wizard_visible_count(v) == 12);
 }
 
-TEST_CASE("Wizard total steps with wifi + touch_cal + language skipped is 11",
+TEST_CASE("Wizard total steps with wifi + touch_cal + language skipped is 10",
           "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    skips.touch_cal = true;
-    skips.language = true;
-    REQUIRE(wizard_calculate_display_total(skips) == 10);
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    skip(v, StepId::TouchCalibration);
+    skip(v, StepId::Language);
+    REQUIRE(wizard_visible_count(v) == 10);
 }
 
 // ============================================================================
 // Wizard Step Logic -- Display Step Numbers
 //
-// wizard_calculate_display_step() returns a 1-based display number.
-// It counts non-skipped steps before the given internal step, plus 1.
+// wizard_display_number() returns a 1-based display number: 1 + the number of
+// visible entries strictly before the given step.
 // ============================================================================
 
 TEST_CASE("Display step calculation with wifi skipped", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
 
-    // Step 0 (touch_cal): first step -> display 1
-    REQUIRE(wizard_calculate_display_step(0, skips) == 1);
-    // Step 1 (language): step 0 not skipped -> display 2
-    REQUIRE(wizard_calculate_display_step(1, skips) == 2);
-    // Step 3 (connection): steps 0,1 not skipped, step 2 skipped -> display 3
-    REQUIRE(wizard_calculate_display_step(3, skips) == 3);
-    // Step 4: steps 0,1,3 not skipped -> display 4
-    REQUIRE(wizard_calculate_display_step(4, skips) == 4);
+    // touch_cal: first step -> display 1
+    REQUIRE(wizard_display_number(StepId::TouchCalibration, v) == 1);
+    // language: touch_cal not skipped -> display 2
+    REQUIRE(wizard_display_number(StepId::Language, v) == 2);
+    // connection: touch_cal,language not skipped, wifi skipped -> display 3
+    REQUIRE(wizard_display_number(StepId::Connection, v) == 3);
+    // printer_identify: touch_cal,language,connection not skipped -> display 4
+    REQUIRE(wizard_display_number(StepId::PrinterIdentify, v) == 4);
 }
 
-TEST_CASE("Display step at summary (step 12) with wifi skipped is 12", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    // 12 steps before step 12, one skipped (wifi) -> 11 non-skipped + 1 = 12
-    REQUIRE(wizard_calculate_display_step(12, skips) == 12);
+TEST_CASE("Display step at telemetry (last) with wifi skipped is 12", "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    // 12 steps before telemetry, one skipped (wifi) -> 11 non-skipped + 1 = 12
+    REQUIRE(wizard_display_number(StepId::Telemetry, v) == 12);
 }
 
 // ============================================================================
 // Wizard Step Logic -- Navigation Forward
 // ============================================================================
 
-TEST_CASE("wizard_next_step(1, wifi=true) returns 3", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    REQUIRE(wizard_next_step(1, skips) == 3);
+TEST_CASE("wizard_next(Language, wifi skipped) returns Connection", "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    REQUIRE(wizard_next(StepId::Language, v) == StepId::Connection);
 }
 
-TEST_CASE("wizard_next_step(2, wifi=true) returns 3", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    // Even if somehow on step 2, next non-skipped is 3
-    REQUIRE(wizard_next_step(2, skips) == 3);
+TEST_CASE("wizard_next(Wifi, wifi skipped) returns Connection", "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    // Even if somehow on the skipped wifi step, next non-skipped is connection
+    REQUIRE(wizard_next(StepId::Wifi, v) == StepId::Connection);
 }
 
 TEST_CASE("Navigation forward skips all disabled steps correctly", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    skips.ams = true;
-    skips.led = true;
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    skip(v, StepId::AmsIdentify);
+    skip(v, StepId::LedSelect);
 
-    // Forward from step 6: next non-skipped should skip 7 (ams) and 8 (led) -> 9
-    REQUIRE(wizard_next_step(6, skips) == 9);
+    // Forward from FanSelect: next non-skipped skips Ams + Led -> FilamentSensor
+    REQUIRE(wizard_next(StepId::FanSelect, v) == StepId::FilamentSensor);
 }
 
-TEST_CASE("wizard_next_step returns -1 at end", "[android][wizard]") {
-    WizardSkipFlags no_skips{};
-    REQUIRE(wizard_next_step(13, no_skips) == -1);
+TEST_CASE("wizard_next reports done at end", "[android][wizard]") {
+    auto v = all_steps();
+    REQUIRE(wizard_is_last(StepId::Telemetry, v));
+    REQUIRE_FALSE(wizard_next(StepId::Telemetry, v).has_value());
 }
 
 // ============================================================================
 // Wizard Step Logic -- Navigation Backward
 // ============================================================================
 
-TEST_CASE("wizard_prev_step(3, wifi=true) returns 1", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    REQUIRE(wizard_prev_step(3, skips) == 1);
+TEST_CASE("wizard_prev(Connection, wifi skipped) returns Language", "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    REQUIRE(wizard_prev(StepId::Connection, v) == StepId::Language);
 }
 
-TEST_CASE("wizard_prev_step(3, wifi+language=true) returns 0", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    skips.language = true;
-    REQUIRE(wizard_prev_step(3, skips) == 0);
+TEST_CASE("wizard_prev(Connection, wifi+language skipped) returns TouchCalibration",
+          "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    skip(v, StepId::Language);
+    REQUIRE(wizard_prev(StepId::Connection, v) == StepId::TouchCalibration);
 }
 
-TEST_CASE("wizard_prev_step(3, wifi+language+touch_cal=true) returns -1", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    skips.language = true;
-    skips.touch_cal = true;
-    REQUIRE(wizard_prev_step(3, skips) == -1);
+TEST_CASE("wizard_prev(Connection, wifi+language+touch_cal skipped) returns none",
+          "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    skip(v, StepId::Language);
+    skip(v, StepId::TouchCalibration);
+    REQUIRE_FALSE(wizard_prev(StepId::Connection, v).has_value());
 }
 
 TEST_CASE("Navigation backward skips all disabled steps correctly", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    skips.ams = true;
-    skips.led = true;
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    skip(v, StepId::AmsIdentify);
+    skip(v, StepId::LedSelect);
 
-    // Backward from step 9: should skip 8 (led) and 7 (ams) -> 6
-    REQUIRE(wizard_prev_step(9, skips) == 6);
+    // Backward from FilamentSensor: should skip Led and Ams -> FanSelect
+    REQUIRE(wizard_prev(StepId::FilamentSensor, v) == StepId::FanSelect);
 }
 
-TEST_CASE("wizard_prev_step returns -1 at beginning", "[android][wizard]") {
-    WizardSkipFlags no_skips{};
-    REQUIRE(wizard_prev_step(0, no_skips) == -1);
+TEST_CASE("wizard_prev reports none at beginning", "[android][wizard]") {
+    auto v = all_steps();
+    REQUIRE_FALSE(wizard_prev(StepId::TouchCalibration, v).has_value());
 }
 
 // ============================================================================
 // Multiple Skips -- Display Step Verification
 // ============================================================================
 
-TEST_CASE("Multiple skips: wifi + ams + led, display_step at step 9", "[android][wizard]") {
-    WizardSkipFlags skips{};
-    skips.wifi = true;
-    skips.ams = true;
-    skips.led = true;
+TEST_CASE("Multiple skips: wifi + ams + led, display number at FilamentSensor",
+          "[android][wizard]") {
+    auto v = all_steps();
+    skip(v, StepId::Wifi);
+    skip(v, StepId::AmsIdentify);
+    skip(v, StepId::LedSelect);
 
-    // Steps before 9: 0,1,2,3,4,5,6,7,8
-    // Skipped: 2 (wifi), 7 (ams), 8 (led) = 3 skipped
-    // Non-skipped before step 9: 6
-    // Display step = 1 + 6 = 7
-    REQUIRE(wizard_calculate_display_step(9, skips) == 7);
+    // Steps before FilamentSensor (idx 9): 0..8
+    // Skipped: wifi(2), ams(7), led(8) = 3 skipped
+    // Non-skipped before FilamentSensor: 6 -> display = 1 + 6 = 7
+    REQUIRE(wizard_display_number(StepId::FilamentSensor, v) == 7);
 
     // Total: 13 - 3 = 10
-    REQUIRE(wizard_calculate_display_total(skips) == 10);
+    REQUIRE(wizard_visible_count(v) == 10);
 }
 
 // ============================================================================
@@ -209,14 +236,16 @@ TEST_CASE("Android scenario: wifi skipped when platform is Android",
     REQUIRE(is_android_platform() == true);
 
     // On Android, wifi step should be skipped
-    WizardSkipFlags android_skips{};
-    android_skips.wifi = is_android_platform();
+    auto v = all_steps();
+    bool android_skips_wifi = is_android_platform();
+    if (android_skips_wifi)
+        skip(v, StepId::Wifi);
 
-    REQUIRE(android_skips.wifi == true);
-    REQUIRE(wizard_calculate_display_total(android_skips) == 12);
+    REQUIRE(android_skips_wifi == true);
+    REQUIRE(wizard_visible_count(v) == 12);
 
-    // Step after language (1) should be connection (3), not wifi (2)
-    REQUIRE(wizard_next_step(1, android_skips) == 3);
+    // Step after language should be connection, not wifi
+    REQUIRE(wizard_next(StepId::Language, v) == StepId::Connection);
 
     // Clean up
     set_platform_override(-1);

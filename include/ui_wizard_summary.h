@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "lvgl/lvgl.h"
 
 #include <memory>
@@ -47,8 +49,14 @@
  * Displays a read-only summary of all configuration choices made during
  * the wizard. No user interaction - Next button is always enabled.
  */
-class WizardSummaryStep {
+class WizardSummaryStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::Summary; }
+    const char* component_name() const override { return "wizard_summary"; }
+    const char* log_name() const override { return "Wizard Summary"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.first_run; }
+
     WizardSummaryStep();
     ~WizardSummaryStep();
 
@@ -65,14 +73,14 @@ class WizardSummaryStep {
      * Loads values from Config and initializes all 12 subjects.
      * Safe to call multiple times - refreshes from config each time.
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks (none for summary)
      *
      * Summary step is read-only, so this is a no-op.
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the summary UI from XML
@@ -80,7 +88,7 @@ class WizardSummaryStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
@@ -88,14 +96,14 @@ class WizardSummaryStep {
      * Resets UI references. Does NOT call lv_obj_del() - wizard
      * framework handles widget deletion.
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Check if step is validated
      *
      * @return true (always validated - no user input required)
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Get step name for logging

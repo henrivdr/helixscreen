@@ -48,9 +48,8 @@ class WizardConnectionUIFixture : public LVGLUITestFixture {
             return;
         }
 
-        // Navigate to step 3 (Moonraker Connection screen)
-        // NOTE: Step indices: 0=Touch Cal, 1=Language, 2=WiFi, 3=Connection
-        ui_wizard_navigate_to_step(3);
+        // Navigate to the Moonraker Connection screen
+        ui_wizard_navigate_to_step(helix::wizard::StepId::Connection);
 
         // Verify that connection step loaded by checking for a key widget
         ready_ = (lv_obj_find_by_name(wizard, "ip_input") != nullptr);

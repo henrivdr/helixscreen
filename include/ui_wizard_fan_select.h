@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "lvgl/lvgl.h"
 
 #include <memory>
@@ -34,8 +36,14 @@
  * @class WizardFanSelectStep
  * @brief Fan configuration step for the first-run wizard
  */
-class WizardFanSelectStep {
+class WizardFanSelectStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::FanSelect; }
+    const char* component_name() const override { return "wizard_fan_select"; }
+    const char* log_name() const override { return "Wizard Fan"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware; }
+
     WizardFanSelectStep();
     ~WizardFanSelectStep();
 
@@ -49,12 +57,12 @@ class WizardFanSelectStep {
     /**
      * @brief Initialize reactive subjects
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the fan selection UI from XML
@@ -62,19 +70,19 @@ class WizardFanSelectStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources and save selections to config
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Check if step is validated
      *
      * @return true (always validated for baseline)
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Get step name for logging

@@ -4,6 +4,7 @@
 #pragma once
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
+#include "wizard_step.h" // helix::wizard::StepId
 
 // Forward declaration: SubjectManager for wizard subjects (defined in ui_wizard.cpp)
 // Wizard is function-based rather than class-based, so we use a static manager
@@ -96,9 +97,9 @@ lv_obj_t* ui_wizard_create(lv_obj_t* parent);
  * Updates all wizard subjects (title, progress, button text).
  * Handles back button visibility (hidden on step 1).
  *
- * @param step Step number (1-based, e.g. 1 = first step, 7 = last step)
+ * @param step Wizard step id from the step registry.
  */
-void ui_wizard_navigate_to_step(int step);
+void ui_wizard_navigate_to_step(helix::wizard::StepId step);
 
 /**
  * Set wizard title

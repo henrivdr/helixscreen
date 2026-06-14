@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "filament_sensor_types.h"
 #include "lvgl/lvgl.h"
 
@@ -35,8 +37,14 @@
  * @class WizardFilamentSensorSelectStep
  * @brief Filament sensor configuration step for the first-run wizard
  */
-class WizardFilamentSensorSelectStep {
+class WizardFilamentSensorSelectStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::FilamentSensor; }
+    const char* component_name() const override { return "wizard_filament_sensor_select"; }
+    const char* log_name() const override { return "Wizard Filament Sensor"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+
     WizardFilamentSensorSelectStep();
     ~WizardFilamentSensorSelectStep();
 
@@ -49,12 +57,12 @@ class WizardFilamentSensorSelectStep {
     /**
      * @brief Initialize reactive subjects
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the filament sensor selection UI from XML
@@ -62,12 +70,12 @@ class WizardFilamentSensorSelectStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources and save role assignments to config
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Refresh sensor list and auto-selection
@@ -92,7 +100,7 @@ class WizardFilamentSensorSelectStep {
      *
      * @return true (always validated for baseline)
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Get step name for logging

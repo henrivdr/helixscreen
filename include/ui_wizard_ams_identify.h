@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
 
@@ -30,8 +32,14 @@
  * @class WizardAmsIdentifyStep
  * @brief AMS identification step for the first-run wizard
  */
-class WizardAmsIdentifyStep {
+class WizardAmsIdentifyStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::AmsIdentify; }
+    const char* component_name() const override { return "wizard_ams_identify"; }
+    const char* log_name() const override { return "Wizard AMS Identify"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+
     WizardAmsIdentifyStep();
     ~WizardAmsIdentifyStep();
 
@@ -45,12 +53,12 @@ class WizardAmsIdentifyStep {
     /**
      * @brief Initialize reactive subjects (no-op for this step)
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks (no-op for this step)
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the AMS identification UI from XML
@@ -58,19 +66,19 @@ class WizardAmsIdentifyStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    [[nodiscard]] lv_obj_t* create(lv_obj_t* parent);
+    [[nodiscard]] lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Check if step is validated
      *
      * @return true (always validated - display only step)
      */
-    [[nodiscard]] bool is_validated() const;
+    [[nodiscard]] bool is_validated() const override;
 
     /**
      * @brief Check if this step should be skipped
