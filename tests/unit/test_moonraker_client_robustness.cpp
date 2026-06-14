@@ -574,12 +574,25 @@ TEST_CASE_METHOD(MoonrakerRobustnessFixture, "MoonrakerClient state machine tran
 
         client_->connect("ws://192.0.2.1:7125/websocket", []() {}, []() {});
 
-        // Wait for connection to fail
-        std::this_thread::sleep_for(milliseconds(2000));
+        // Poll for the connection to fail rather than assuming a fixed 2s is
+        // enough. The connect targets 192.0.2.1 (TEST-NET-1, a guaranteed black
+        // hole), and on a loaded CI runner the TCP connect can take well over 2s
+        // to surface DISCONNECTED. The old fixed `sleep_for(2000ms)` occasionally
+        // observed only CONNECTING and tripped `REQUIRE(states.size() >= 2)`,
+        // flaking the nightly [slow] job. Adaptive polling keeps the same intent
+        // (CONNECTING -> DISCONNECTED) without racing the connect timeout.
+        auto reached_disconnected = [&]() {
+            std::lock_guard<std::mutex> lock(states_mutex);
+            return !states.empty() && states.back() == ConnectionState::DISCONNECTED;
+        };
+        auto deadline = steady_clock::now() + milliseconds(15000);
+        while (steady_clock::now() < deadline && !reached_disconnected()) {
+            std::this_thread::sleep_for(milliseconds(50));
+        }
 
         std::lock_guard<std::mutex> lock(states_mutex);
 
-        // Should see: CONNECTING -> DISCONNECTED
+        // Should see: CONNECTING -> ... -> DISCONNECTED
         REQUIRE(states.size() >= 2);
         CHECK(states[0] == ConnectionState::CONNECTING);
         CHECK(states[states.size() - 1] == ConnectionState::DISCONNECTED);

@@ -21,6 +21,13 @@ struct PrintControlButtonsTestAccess {
         s.subjects_initialized_ = false;
     }
 
+    /// True if the singleton currently holds a live observer on the global
+    /// print_state_enum subject. Used by the nightly-crash regression test to
+    /// assert reset_all() detaches the controller before subjects are torn down.
+    static bool has_observer() {
+        return static_cast<bool>(PrintControlButtons::instance().print_state_observer_);
+    }
+
     static void set_pending(PendingAction a) {
         PrintControlButtons::instance().start_pending_action(a);
     }

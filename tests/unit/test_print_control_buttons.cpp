@@ -118,3 +118,44 @@ TEST_CASE_METHOD(ControlButtonsFixture, "pending action set then cleared on stat
     REQUIRE(read_int("print_pending_action") == static_cast<int>(PendingAction::None));
     REQUIRE(read_str("print_control_primary_label") == "Resume");
 }
+
+// Regression test for the nightly [slow] crash (segfault in lv_observer_remove
+// during ~PrintControlButtons at process exit, plus mid-run
+// "malloc(): unaligned tcache chunk detected" aborts).
+//
+// PrintControlButtons is a process-lifetime singleton that observes the GLOBAL
+// print_state_enum subject, which is owned by PrinterState and gets torn down
+// per-test (PrinterStateTestAccess::reset) and at process exit. If the singleton
+// is left observing a subject that is then deinited, lv_subject_deinit frees the
+// observer node and the singleton's ObserverGuard is left with a dangling
+// lv_observer_t*; the next teardown that walks it calls lv_observer_remove() on
+// freed memory.
+//
+// The fix: reset_all() (run at every test boundary, while subjects are still
+// alive) detaches the controller's observer. This test asserts that invariant.
+// Deliberately does NOT use ControlButtonsFixture — it drives the lifecycle by
+// hand so the assertion targets reset_all() directly. Pre-fix, has_observer()
+// stays true after reset_all() and the REQUIRE_FALSE fails (and the follow-on
+// deinit_subjects() walks freed memory).
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "reset_all detaches PrintControlButtons observer before subject teardown",
+                 "[print_control][slow]") {
+    using helix::ui::PrintControlButtons;
+    using helix::ui::PrintControlButtonsTestAccess;
+
+    // Stand up fresh PrinterState subjects and the controller observing them,
+    // mirroring what a ControlButtonsFixture-based test leaves behind.
+    helix::PrinterStateTestAccess::reset(get_printer_state());
+    get_printer_state().init_subjects(false);
+    PrintControlButtons::instance().init_subjects();
+    REQUIRE(PrintControlButtonsTestAccess::has_observer()); // precondition: observer is live
+
+    // reset_all() must detach the controller while print_state_enum is alive.
+    HelixTestFixture::reset_all();
+    REQUIRE_FALSE(PrintControlButtonsTestAccess::has_observer());
+
+    // With the observer detached, tearing the subject down (what a later test or
+    // process exit does) no longer walks a dangling lv_observer_t*. Pre-fix this
+    // is where the SIGSEGV / heap corruption happened.
+    REQUIRE_NOTHROW(get_printer_state().deinit_subjects());
+}

@@ -36,9 +36,16 @@ TEST_CASE("SnapshotQrScanner lifecycle", "[qr]") {
 // Run separately: ./build/bin/helix-tests "[slow]"
 TEST_CASE("SnapshotQrScanner destructor stops cleanly", "[qr][slow]") {
     auto scanner = std::make_unique<SnapshotQrScanner>();
-    // RFC 5737 TEST-NET: guaranteed non-routable
-    scanner->start("http://192.0.2.1/snapshot", [](lv_draw_buf_t*) {},
-                   [](int) {}, nullptr);
+    // Target localhost on a closed port so the HTTP GET fails *fast* and
+    // deterministically (instant ECONNREFUSED) on every host. The previous
+    // RFC 5737 TEST-NET address (192.0.2.1) is non-routable, but networks that
+    // black-hole it (drop the SYN rather than reject it) make the poll thread's
+    // connect block for the full kHttpTimeoutSec — the destructor join then
+    // stalls up to 10s. CI happens to reject it quickly; a closed localhost port
+    // guarantees the fast path everywhere. The test still exercises what matters:
+    // the scanner starts, reports running, and the destructor joins the poll
+    // thread cleanly even with a fetch in flight.
+    scanner->start("http://127.0.0.1:1/snapshot", [](lv_draw_buf_t*) {}, [](int) {}, nullptr);
     REQUIRE(scanner->is_running());
     scanner.reset(); // destructor should join the poll thread promptly
 }
