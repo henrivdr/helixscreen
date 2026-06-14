@@ -5,6 +5,32 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.78] - 2026-06-14
+
+### Added
+
+- **Per-unit filament drying for Happy Hare multi-MMU / EMU** (prestonbrown/helixscreen#1022) — each MMU or EMU unit now reports its own box humidity and temperature, with the dryer heater and a minute-based drying duration controlled per unit.
+- **AFC "Unloads After Print" toggle** — a per-printer setting controlling whether AFC unloads filament when a print finishes.
+- **Adaptive bed mesh and load-cell probe support** — print start can request an adaptive bed mesh, load-cell probes are supported, and the active bed-mesh profile is highlighted.
+
+### Fixed
+
+- **CC1 survives COSMOS firmware upgrades** — a three-sibling gui-switcher hijack plus boot-time self-heal keeps HelixScreen installed across a COSMOS firmware update.
+- **Several rare navigation crashes fixed** — overlay pushes are guarded against a target freed before the deferred push drains and against an empty panel stack, and deleted widgets are scrubbed from the panel stack to close a use-after-free (bundle ZW6ATWSL).
+- **Touch calibration reliability** (prestonbrown/helixscreen#943, prestonbrown/helixscreen#986) — capture-on-press / commit-on-release debouncing is now on by default, affine calibration re-enables when entering the verify step, the manual-recalibration button stays available, and the manual calibration row is hidden on devices that don't need it.
+- **AD5X IFS respects external color changes** (prestonbrown/helixscreen#981) — an external `CHANGE_ZCOLOR` now releases a stale locked override so the firmware's color and type win, and unload ejects non-active lanes instead of yanking the loaded channel (with a longer action-prompt timeout).
+- **CFS no longer shows a false pre-print runout warning** — CFS unloads the toolhead after a print, which was being misread as a runout.
+- **QIDI Box dryer temperature shown for Happy Hare**, and Happy Hare drying presets are clamped to the heater's limits.
+- **Home screen no longer stalls on the printer image** (prestonbrown/helixscreen#1025) — the printer-image refresh is deferred out of panel attach/activation.
+- **Home edit mode ignores widget taps** (prestonbrown/helixscreen#1003) — tapping a widget while rearranging the home screen no longer launches it.
+- **On-machine updates work on static-glibc printers** (AD5M and similar) — the libhv DNS resolver wiring now reaches the shipped binary.
+
+### Changed
+
+- **"AMS" / "Multi-Material" is now "Multi-Filament System"** throughout the UI.
+- **Removed the broken load-cell calibration screen** — the mock printer is authoritative for probe behavior; logging docs updated.
+- **Filament Environment overlay** now has a responsive landscape layout, and the wide multi-cell spool view gets a card background.
+
 ## [0.99.77] - 2026-06-13
 
 A large release. Headlines: filament-drying control for the QIDI Box and Happy Hare / MMU systems, a new chamber-heating system with an on-home chamber temperature widget and a centralized temperature controller, a redesigned AMS spool widget with on-home print controls, and a deep round of Snapmaker U1 runout/pause-recovery fixes — plus new printer support (Anycubic Kobra/Rinkhals with native ACE, Creality Hi, Creality K2 Pro).
@@ -4024,6 +4050,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.78]: https://github.com/prestonbrown/helixscreen/compare/v0.99.77...v0.99.78
 [0.99.77]: https://github.com/prestonbrown/helixscreen/compare/v0.99.76...v0.99.77
 [0.99.76]: https://github.com/prestonbrown/helixscreen/compare/v0.99.75...v0.99.76
 [0.99.75]: https://github.com/prestonbrown/helixscreen/compare/v0.99.74...v0.99.75
