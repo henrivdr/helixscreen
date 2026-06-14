@@ -79,16 +79,16 @@ TEST_CASE_METHOD(WizardStressFixture, "Wizard stress: bounce step 2 <-> 3",
     spdlog::info("[wizard-stress] bouncing 2<->3 for {} iterations", iterations);
 
     // Settle one full nav before the loop so we start from a known state.
-    ui_wizard_navigate_to_step(2);
+    ui_wizard_navigate_to_step(helix::wizard::StepId::Wifi);
     process_lvgl(120);
 
     for (int i = 0; i < iterations; ++i) {
-        ui_wizard_navigate_to_step(3);
+        ui_wizard_navigate_to_step(helix::wizard::StepId::Connection);
         // Long enough to let the slide-out animation start, the async delete
         // pipeline drain, and any observer-driven rebuild fire.
         process_lvgl(80);
 
-        ui_wizard_navigate_to_step(2);
+        ui_wizard_navigate_to_step(helix::wizard::StepId::Wifi);
         process_lvgl(80);
 
         if ((i + 1) % 10 == 0) {
@@ -112,7 +112,7 @@ TEST_CASE_METHOD(WizardStressFixture, "Wizard stress: full sweep 1..N",
     constexpr int max_probe = 12;
     int last_valid = 1;
     for (int s = 1; s <= max_probe; ++s) {
-        ui_wizard_navigate_to_step(s);
+        ui_wizard_navigate_to_step(static_cast<helix::wizard::StepId>(s));
         process_lvgl(40);
         if (lv_obj_find_by_name(wizard_, "wizard_content") == nullptr) break;
         last_valid = s;
@@ -122,11 +122,11 @@ TEST_CASE_METHOD(WizardStressFixture, "Wizard stress: full sweep 1..N",
     const int iterations = env_iterations(20);
     for (int i = 0; i < iterations; ++i) {
         for (int s = 1; s <= last_valid; ++s) {
-            ui_wizard_navigate_to_step(s);
+            ui_wizard_navigate_to_step(static_cast<helix::wizard::StepId>(s));
             process_lvgl(60);
         }
         for (int s = last_valid; s >= 1; --s) {
-            ui_wizard_navigate_to_step(s);
+            ui_wizard_navigate_to_step(static_cast<helix::wizard::StepId>(s));
             process_lvgl(60);
         }
     }

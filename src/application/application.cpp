@@ -1969,7 +1969,9 @@ bool Application::run_wizard() {
         force_language_chooser_step(true);
     }
 
-    ui_wizard_navigate_to_step(initial_step);
+    // initial_step is a raw CLI/config int (--wizard-step) — a genuine int seam.
+    // Map it to a StepId for the registry-driven wizard.
+    ui_wizard_navigate_to_step(static_cast<helix::wizard::StepId>(initial_step));
 
     // Move keyboard above wizard
     lv_obj_t* keyboard = KeyboardManager::instance().get_instance();

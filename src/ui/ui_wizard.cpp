@@ -43,11 +43,14 @@
 #include "system/crash_handler.h"
 #include "theme_manager.h"
 #include "wizard_config_paths.h"
+#include "wizard_step.h"
 #include "wizard_step_logic.h"
+#include "wizard_step_registry.h"
 
 #include <spdlog/spdlog.h>
 
 #include <cstdio>
+#include <optional>
 
 using namespace helix;
 
@@ -77,74 +80,8 @@ static char wizard_subtitle_buffer[128];
 // Wizard container instance
 static lv_obj_t* wizard_container = nullptr;
 
-// Track current screen for proper cleanup (-1 = no screen loaded yet)
-static int current_screen_step = -1;
-
-// Track if touch calibration step (0) is being skipped - not fbdev or already calibrated
-static bool touch_cal_step_skipped = false;
-
-// Track if language step (1) is being skipped - language already set
-static bool language_step_skipped = false;
-
-// Track if WiFi step (2) is being skipped - Android manages WiFi natively
-static bool wifi_step_skipped = false;
-
-// Track if connection step (3) is being skipped - preset mode, already connected
-static bool connection_step_skipped = false;
-
-// Track if AMS step (7) is being skipped - no AMS detected
-static bool ams_step_skipped = false;
-
-// Track if LED step (8) is being skipped - no LEDs discovered
-static bool led_step_skipped = false;
-
-// Track if filament sensor step (9) is being skipped - <2 standalone sensors
-static bool filament_step_skipped = false;
-
-// Track if input shaper step (10) is being skipped - no accelerometer
-static bool input_shaper_step_skipped = false;
-
-// Track if printer identify step (4) is being skipped - preset mode
-static bool printer_identify_step_skipped = false;
-
-// Track if heater select step (5) is being skipped - preset mode
-static bool heater_select_step_skipped = false;
-
-// Track if fan select step (6) is being skipped - preset mode
-static bool fan_select_step_skipped = false;
-
-// Track if summary step (11) is being skipped - preset mode
-static bool summary_step_skipped = false;
-
-// Track if telemetry step (12) is being skipped - enabled in preset mode only
-static bool telemetry_step_skipped = true;
-
-// Track if we've calculated the actual step total (happens after connection step)
-static bool skips_precalculated = false;
-
-// Preset mode: skip hardware steps and show telemetry instead of summary
-static bool preset_mode = false;
-
-/// Preset-driven skip plan for the active config. Thin Config-aware wrapper over
-/// the pure helix::wizard_preset_plan() policy (tested in test_wizard_step_logic)
-/// so the LVGL wizard and the unit tests share one source of truth.
-static helix::WizardPresetPlan wizard_preset_plan_for(Config* cfg) {
-    if (!cfg)
-        return {};
-    return helix::wizard_preset_plan(cfg->has_preset(),
-                                     static_cast<int>(cfg->get_printer_ids().size()));
-}
-
-/// "Preset mode" is the first-run fast path: a preset is applied AND this is the
-/// initial-printer setup, so the wizard skips the hardware pickers and the
-/// summary and shows the one-time telemetry opt-in. Subsequent printers still
-/// skip the (preset-covered) hardware steps — see ui_wizard_precalculate_skips()
-/// — but are not "preset mode" because telemetry must not re-fire.
-/// All three sites that update preset_mode (init_subjects, on_next_clicked,
-/// precalculate_skips) call this single helper to avoid polarity drift.
-static bool wizard_preset_mode_eligible(Config* cfg) {
-    return wizard_preset_plan_for(cfg).first_run;
-}
+// Track current screen for proper cleanup (nullopt = no screen loaded yet)
+static std::optional<helix::wizard::StepId> current_screen_step;
 
 // Guard against rapid double-clicks during navigation
 static bool navigating = false;
@@ -152,11 +89,10 @@ static bool navigating = false;
 // Forward declarations
 static void on_back_clicked(lv_event_t* e);
 static void on_next_clicked(lv_event_t* e);
-static void ui_wizard_load_screen(int step);
+static void ui_wizard_load_screen(helix::wizard::StepId step);
 static void ui_wizard_cleanup_current_screen();
-static const char* get_step_title_from_xml(int step);
-static const char* get_step_subtitle_from_xml(int step);
-static void ui_wizard_precalculate_skips();
+static const char* get_step_title_from_xml(const char* comp_name);
+static const char* get_step_subtitle_from_xml(const char* comp_name);
 static void ui_wizard_purge_subtree_anims(lv_obj_t* root);
 
 // Recursively cancel every pending/in-flight animation targeting the subtree
@@ -215,39 +151,18 @@ static void ui_wizard_purge_subtree_anims(lv_obj_t* root) {
 // The caller sets navigating=true first; the callback path clears it when
 // navigate_to_step finishes.
 static void navigate_to_step_async_cb(void* data) {
-    int step = static_cast<int>(reinterpret_cast<intptr_t>(data));
+    auto step = static_cast<helix::wizard::StepId>(static_cast<int>(reinterpret_cast<intptr_t>(data)));
     ui_wizard_navigate_to_step(step);
 }
 
-static void schedule_navigate_to_step(int step) {
+static void schedule_navigate_to_step(helix::wizard::StepId step) {
     lv_async_call(navigate_to_step_async_cb,
-                  reinterpret_cast<void*>(static_cast<intptr_t>(step)));
+                  reinterpret_cast<void*>(static_cast<intptr_t>(static_cast<int>(step))));
 }
 
 // ============================================================================
 // Step Metadata (read from XML <consts>)
 // ============================================================================
-
-/**
- * Map step number to XML component name
- * Each component defines its own step_title in its <consts> block
- */
-static const char* const STEP_COMPONENT_NAMES[] = {
-    "wizard_touch_calibration",      // 0 (may be skipped on non-fbdev)
-    "wizard_language_chooser",       // 1 (may be skipped if language already set)
-    "wizard_wifi_setup",             // 2
-    "wizard_connection",             // 3
-    "wizard_printer_identify",       // 4
-    "wizard_heater_select",          // 5
-    "wizard_fan_select",             // 6
-    "wizard_ams_identify",           // 7 (may be skipped if no AMS)
-    "wizard_led_select",             // 8 (may be skipped if no LEDs)
-    "wizard_filament_sensor_select", // 9 (may be skipped if <2 sensors)
-    "wizard_input_shaper",           // 10 (may be skipped if no accelerometer)
-    "wizard_summary",                // 11
-    "wizard_telemetry"               // 12 (preset mode only)
-};
-static constexpr int STEP_COMPONENT_COUNT = 12; // Last step number (telemetry at step 12)
 
 /**
  * Get step title from XML component's <consts> block
@@ -259,15 +174,14 @@ static constexpr int STEP_COMPONENT_COUNT = 12; // Last step number (telemetry a
  *   </consts>
  *
  * This function reads step_title from the component's scope at runtime,
- * eliminating hardcoded title strings in C++.
+ * eliminating hardcoded title strings in C++. The component name comes from
+ * the step registry (Step::component_name()).
  */
-static const char* get_step_title_from_xml(int step) {
-    if (step < 0 || step > STEP_COMPONENT_COUNT) {
-        spdlog::warn("[Wizard] Invalid step {} for title lookup", step);
+static const char* get_step_title_from_xml(const char* comp_name) {
+    if (!comp_name) {
         return "Unknown Step";
     }
 
-    const char* comp_name = STEP_COMPONENT_NAMES[step];
     lv_xml_component_scope_t* scope = lv_xml_component_get_scope(comp_name);
     if (!scope) {
         spdlog::warn("[Wizard] Component scope not found for '{}'", comp_name);
@@ -289,12 +203,11 @@ static const char* get_step_title_from_xml(int step) {
  * Subtitles provide contextual hints (e.g., "Skip if using Ethernet")
  * that appear below the title in the wizard header.
  */
-static const char* get_step_subtitle_from_xml(int step) {
-    if (step < 0 || step > STEP_COMPONENT_COUNT) {
+static const char* get_step_subtitle_from_xml(const char* comp_name) {
+    if (!comp_name) {
         return "";
     }
 
-    const char* comp_name = STEP_COMPONENT_NAMES[step];
     lv_xml_component_scope_t* scope = lv_xml_component_get_scope(comp_name);
     if (!scope) {
         return "";
@@ -310,18 +223,18 @@ static bool wizard_subjects_initialized = false;
 void ui_wizard_init_subjects() {
     spdlog::debug("[Wizard] Initializing subjects");
 
-    // Check the preset-driven skip plan (pre-configured printer package).
-    // Single source of truth is wizard_preset_plan_for() — the three refresh
-    // sites all share it.
+    // Log the preset-driven skip plan (pre-configured printer package). The
+    // actual skip decisions are recomputed at every navigation point from the
+    // step registry's per-step should_skip(ctx) (see helix::wizard::build_context
+    // / skip_vector), so there is no persistent skip state to seed here.
     auto* cfg = Config::get_instance();
-    helix::WizardPresetPlan preset_plan = wizard_preset_plan_for(cfg);
-    preset_mode = preset_plan.first_run;
-    if (preset_mode) {
-        spdlog::info("[Wizard] Preset mode active (preset: {})", cfg->get_preset());
-    } else if (preset_plan.skip_hardware) {
+    helix::wizard::StepContext init_ctx = helix::wizard::build_context();
+    if (init_ctx.preset.first_run) {
+        spdlog::info("[Wizard] Preset mode active (preset: {})", cfg ? cfg->get_preset() : "");
+    } else if (init_ctx.preset.skip_hardware) {
         spdlog::info("[Wizard] Subsequent printer with preset '{}': hardware steps will be "
                      "skipped, summary shown",
-                     cfg->get_preset());
+                     cfg ? cfg->get_preset() : "");
     }
 
     // Initialize subjects with defaults using managed macros for RAII cleanup
@@ -372,7 +285,7 @@ void ui_wizard_deinit_subjects() {
     // order. If cleanup calls their getters, the getter re-creates the object and calls
     // register_destroy(), invalidating the destroy_all() iterator → crash.
     // The step destructors already handled their own cleanup when their unique_ptrs were reset.
-    current_screen_step = -1;
+    current_screen_step.reset();
 
     // Delete wizard container BEFORE deinitializing subjects
     // This triggers proper widget cleanup: DELETE callbacks fire
@@ -383,7 +296,7 @@ void ui_wizard_deinit_subjects() {
     if (wizard_container && lv_is_initialized()) {
         spdlog::debug("[Wizard] Deleting wizard container during deinit");
         helix::ui::safe_delete(wizard_container);
-        current_screen_step = -1;
+        current_screen_step.reset();
     }
 
     // Use SubjectManager for RAII cleanup - handles all registered subjects
@@ -507,123 +420,57 @@ lv_obj_t* ui_wizard_create(lv_obj_t* parent) {
     return wizard_container;
 }
 
-/**
- * Build WizardSkipFlags from current static skip state
- */
-static helix::WizardSkipFlags get_current_skip_flags() {
-    return helix::WizardSkipFlags{
-        .touch_cal = touch_cal_step_skipped,
-        .language = language_step_skipped,
-        .wifi = wifi_step_skipped,
-        .connection = connection_step_skipped,
-        .printer_identify = printer_identify_step_skipped,
-        .heater_select = heater_select_step_skipped,
-        .fan_select = fan_select_step_skipped,
-        .ams = ams_step_skipped,
-        .led = led_step_skipped,
-        .filament = filament_step_skipped,
-        .input_shaper = input_shaper_step_skipped,
-        .summary = summary_step_skipped,
-        .telemetry = telemetry_step_skipped,
-    };
-}
+void ui_wizard_navigate_to_step(helix::wizard::StepId step) {
+    using helix::wizard::StepId;
+    spdlog::debug("[Wizard] Navigating to step {}", helix::wizard::to_string(step));
 
-/**
- * Calculate display step number and total, accounting for skipped steps
- * Delegates to tested wizard_step_logic functions
- */
-static void calculate_display_step(int internal_step, int& out_display_step,
-                                   int& out_display_total) {
-    auto skips = get_current_skip_flags();
-    out_display_step = helix::wizard_calculate_display_step(internal_step, skips);
-    out_display_total = helix::wizard_calculate_display_total(skips);
-}
-
-void ui_wizard_navigate_to_step(int step) {
-    spdlog::debug("[Wizard] Navigating to step {}", step);
-
-    // Clamp step to valid range (internal steps are 0-9)
-    if (step < 0)
-        step = 0;
-    if (step > STEP_COMPONENT_COUNT)
-        step = STEP_COMPONENT_COUNT;
-
-    // Reset skip flags when starting wizard from the beginning
-    // This ensures correct behavior if wizard is restarted after hardware changes
-    if (step == 0) {
-        touch_cal_step_skipped = false;
-        language_step_skipped = false;
-        wifi_step_skipped = false;
-        connection_step_skipped = false;
-        printer_identify_step_skipped = false;
-        heater_select_step_skipped = false;
-        fan_select_step_skipped = false;
-        ams_step_skipped = false;
-        led_step_skipped = false;
-        filament_step_skipped = false;
-        input_shaper_step_skipped = false;
-        summary_step_skipped = false;
-        telemetry_step_skipped = !preset_mode; // Enable telemetry step only in preset mode
-        skips_precalculated = false;
-
-        // Auto-skip touch calibration step if not needed
-        if (get_wizard_touch_calibration_step()->should_skip()) {
-            touch_cal_step_skipped = true;
-            step = 1;
-            spdlog::info("[Wizard] Skipping touch calibration step");
-        }
-
-        // Auto-skip language step if language already set
-        if (step == 1 && get_wizard_language_chooser_step()->should_skip()) {
-            language_step_skipped = true;
-            step = 2;
-            spdlog::info("[Wizard] Skipping language step (already configured)");
-        }
-
-        // Auto-skip WiFi step on Android (WiFi managed by OS)
-        if (step == 2 && helix::is_android_platform()) {
-            wifi_step_skipped = true;
-            step = 3;
-            spdlog::info("[Wizard] Skipping WiFi step (Android platform)");
-        }
-
-        // Auto-skip WiFi step when adding a subsequent printer (WiFi already configured)
-        if (step == 2) {
-            auto* cfg = Config::get_instance();
-            if (cfg && cfg->get_printer_ids().size() > 1) {
-                wifi_step_skipped = true;
-                step = 3;
-                spdlog::info("[Wizard] Skipping WiFi step (subsequent printer)");
+    // When starting the wizard from the very first step, forward past any of the
+    // leading steps (touch calibration, language, WiFi) that should be skipped.
+    // Per-step should_skip(ctx) already folds in fbdev/already-calibrated,
+    // language-already-set, Android, and subsequent-printer logic, so a single
+    // wizard_next() over the live skip vector replaces the old hand-rolled
+    // cascade.
+    if (step == StepId::TouchCalibration) {
+        auto ctx = helix::wizard::build_context();
+        auto skips = helix::wizard::skip_vector(ctx);
+        // If the first step itself is skipped, advance to the first visible one.
+        if (!skips.empty() && skips.front().id == StepId::TouchCalibration &&
+            skips.front().skipped) {
+            auto nxt = helix::wizard_next(StepId::TouchCalibration, skips);
+            if (nxt) {
+                spdlog::info("[Wizard] First step skipped; starting at {}",
+                             helix::wizard::to_string(*nxt));
+                step = *nxt;
             }
         }
     }
 
-    // Calculate display step and total for progress indicator
-    int display_step, display_total;
-    calculate_display_step(step, display_step, display_total);
+    const int step_idx = static_cast<int>(step);
 
-    // Update current_step subject (internal step number for UI bindings)
-    crash_handler::breadcrumb::note("wiz", "notify_current", static_cast<long>(step));
-    lv_subject_set_int(&current_step, step);
+    // Recompute the skip vector for progress + button state. should_skip(ctx)
+    // queries live hardware/config state, so the vector is always current.
+    auto ctx = helix::wizard::build_context();
+    auto skips = helix::wizard::skip_vector(ctx);
 
-    // Update Back button visibility based on whether we can go back
-    // Find the first non-skipped step
-    int min_step = 0;
-    if (touch_cal_step_skipped)
-        min_step = 1;
-    if (min_step == 1 && language_step_skipped)
-        min_step = 2;
-    if (min_step == 2 && wifi_step_skipped)
-        min_step = 3;
+    int display_step = helix::wizard_display_number(step, skips);
+    int display_total = helix::wizard_visible_count(skips);
+
+    // Update current_step subject (internal step index for UI bindings)
+    crash_handler::breadcrumb::note("wiz", "notify_current", static_cast<long>(step_idx));
+    lv_subject_set_int(&current_step, step_idx);
+
+    // Back button: visible when there is a previous non-skipped step, or when an
+    // add-printer cancel callback is registered (shown as "Cancel" on step one).
+    bool at_first_visible = !helix::wizard_prev(step, skips).has_value();
     bool has_cancel = (get_wizard_cancel_callback() != nullptr);
-    crash_handler::breadcrumb::note("wiz", "notify_back_vis", static_cast<long>(step));
-    lv_subject_set_int(&wizard_back_visible, (step > min_step || has_cancel) ? 1 : 0);
+    crash_handler::breadcrumb::note("wiz", "notify_back_vis", static_cast<long>(step_idx));
+    lv_subject_set_int(&wizard_back_visible, (!at_first_visible || has_cancel) ? 1 : 0);
 
     // Show "Cancel" instead of "Back" on the first step when add-printer cancel is available
     if (wizard_container) {
         lv_obj_t* btn_back = lv_obj_find_by_name(wizard_container, "btn_back");
         if (btn_back) {
-            bool is_first_step = (step <= min_step);
+            bool is_first_step = at_first_visible;
             const char* btn_label_text = (is_first_step && has_cancel) ? "Cancel" : "Back";
             // ui_button stores label as lv_label child — find it by type
             lv_obj_t* lbl = nullptr;
@@ -642,25 +489,22 @@ void ui_wizard_navigate_to_step(int step) {
     }
 
     // Determine if this is the last step (no more non-skipped steps after this)
-    auto skips = get_current_skip_flags();
-    bool is_last_step = (helix::wizard_next_step(step, skips) == -1);
+    bool is_last_step = helix::wizard_is_last(step, skips);
 
     // Update final step flag for button visibility binding
-    crash_handler::breadcrumb::note("wiz", "notify_final", static_cast<long>(step));
+    crash_handler::breadcrumb::note("wiz", "notify_final", static_cast<long>(step_idx));
     lv_subject_set_int(&wizard_is_final_step, is_last_step ? 1 : 0);
 
     // Update progress display - step numbers as strings for bind_text
     snprintf(wizard_step_current_buffer, sizeof(wizard_step_current_buffer), "%d", display_step);
-    crash_handler::breadcrumb::note("wiz", "notify_step_cur", static_cast<long>(step));
+    crash_handler::breadcrumb::note("wiz", "notify_step_cur", static_cast<long>(step_idx));
     lv_subject_copy_string(&wizard_step_current, wizard_step_current_buffer);
 
-    if (skips_precalculated) {
-        snprintf(wizard_step_total_buffer, sizeof(wizard_step_total_buffer), "%d", display_total);
-        crash_handler::breadcrumb::note("wiz", "notify_step_tot", static_cast<long>(step));
-        lv_subject_copy_string(&wizard_step_total, wizard_step_total_buffer);
-    }
+    snprintf(wizard_step_total_buffer, sizeof(wizard_step_total_buffer), "%d", display_total);
+    crash_handler::breadcrumb::note("wiz", "notify_step_tot", static_cast<long>(step_idx));
+    lv_subject_copy_string(&wizard_step_total, wizard_step_total_buffer);
 
-    // Load screen content (uses internal step number)
+    // Load screen content
     ui_wizard_load_screen(step);
 
     // Force layout update on entire wizard after screen is loaded
@@ -672,7 +516,7 @@ void ui_wizard_navigate_to_step(int step) {
     navigating = false;
 
     spdlog::debug("[Wizard] Updated to step {} of {} (internal: {}), final: {}", display_step,
-                  display_total, step, is_last_step);
+                  display_total, step_idx, is_last_step);
 }
 
 void ui_wizard_set_title(const char* title) {
@@ -692,110 +536,34 @@ void ui_wizard_refresh_header_translations() {
     // Note: Progress text ("Step X of Y") and buttons (Next/Finish) now use
     // translation_tag in XML, so they auto-refresh. Only title/subtitle need
     // manual refresh since they're step-specific and loaded from XML consts.
-    int step = lv_subject_get_int(&current_step);
-    const char* title = get_step_title_from_xml(step);
-    const char* subtitle = get_step_subtitle_from_xml(step);
+    int step_idx = lv_subject_get_int(&current_step);
+    helix::wizard::Step* s =
+        helix::wizard::step_by_id(static_cast<helix::wizard::StepId>(step_idx));
+    const char* comp_name = s ? s->component_name() : nullptr;
+    const char* title = get_step_title_from_xml(comp_name);
+    const char* subtitle = get_step_subtitle_from_xml(comp_name);
 
     lv_subject_copy_string(&wizard_title, lv_tr(title));
     lv_subject_copy_string(&wizard_subtitle, lv_tr(subtitle));
 
-    spdlog::debug("[Wizard] Refreshed header translations for step {}", step);
+    spdlog::debug("[Wizard] Refreshed header translations for step {}", step_idx);
 }
 
-/**
- * Pre-calculate which steps will be skipped based on hardware data
- *
- * Called after the connection step (step 3) completes so hardware data is available.
- * This ensures the step counter shows consistent totals from step 4 onwards.
- */
-static void ui_wizard_precalculate_skips() {
-    spdlog::info("[Wizard] Pre-calculating step skips based on hardware data");
-
-    // Refresh preset_mode from config every time we precalc — the printer-identify
-    // step (#4) can apply a preset on cleanup, so the value captured at wizard init
-    // (in init_subjects) is stale if a fresh-install detection just landed a preset
-    // file. Without this re-read the wizard runs every hardware step on a known
-    // printer.
-    helix::WizardPresetPlan plan = wizard_preset_plan_for(Config::get_instance());
-    if (plan.first_run != preset_mode) {
-        spdlog::info("[Wizard] preset_mode refreshed: {} -> {}", preset_mode, plan.first_run);
-        preset_mode = plan.first_run;
+/// Ensure the FilamentSensorManager is populated before any filament-sensor
+/// skip decision. The filament step's should_skip(ctx) reads the manager, which
+/// is empty until discovery runs; the connection step's post-success burst
+/// normally fills it, but jumping directly to the filament step (tests, resume)
+/// can outrun that. Idempotent.
+static void ui_wizard_ensure_filament_sensors_discovered() {
+    auto& fsm = helix::FilamentSensorManager::instance();
+    if (!fsm.get_sensors().empty()) {
+        return;
     }
-
-    if (plan.skip_hardware) {
-        // A complete preset configures the hardware — skip the redundant pickers
-        // for ANY printer it applies to (first or subsequent).
-        printer_identify_step_skipped = true;
-        heater_select_step_skipped = true;
-        fan_select_step_skipped = true;
-        ams_step_skipped = true;
-        led_step_skipped = true;
-        filament_step_skipped = true;
-        input_shaper_step_skipped = true;
-
-        if (plan.first_run) {
-            // First-run fast path: also skip the summary and show the one-time
-            // telemetry opt-in instead.
-            summary_step_skipped = true;
-            telemetry_step_skipped = false;
-            spdlog::info("[Wizard] Preset mode (first run): skipping hardware steps and "
-                         "summary, showing telemetry");
-        } else {
-            // Subsequent printer: keep the summary as a confirmation, leave
-            // telemetry skipped (it is a one-time global prompt).
-            spdlog::info("[Wizard] Preset applied for subsequent printer: skipping hardware "
-                         "steps, showing summary");
-        }
-    } else {
-        // Touch calibration (step 0) and language (step 1) handled at navigation time
-
-        // AMS skip (step 7)
-        if (!ams_step_skipped && get_wizard_ams_identify_step()->should_skip()) {
-            ams_step_skipped = true;
-            spdlog::info("[Wizard] Pre-skip: AMS step will be skipped");
-        }
-
-        // LED skip (step 8)
-        if (!led_step_skipped && get_wizard_led_select_step()->should_skip()) {
-            led_step_skipped = true;
-            spdlog::info("[Wizard] Pre-skip: LED step will be skipped");
-        }
-
-        // Ensure FilamentSensorManager is populated before skip checks
-        auto& fsm = helix::FilamentSensorManager::instance();
-        if (fsm.get_sensors().empty()) {
-            MoonrakerAPI* api = get_moonraker_api();
-            if (api && api->hardware().has_filament_sensors()) {
-                fsm.discover_sensors(api->hardware().filament_sensor_names());
-                spdlog::debug("[Wizard] Populated FilamentSensorManager for skip calculation");
-            }
-        }
-
-        // Filament sensor skip (step 9)
-        if (!filament_step_skipped && get_wizard_filament_sensor_select_step()->should_skip()) {
-            filament_step_skipped = true;
-            spdlog::info("[Wizard] Pre-skip: Filament sensor step will be skipped");
-        }
-
-        // Input shaper skip (step 10)
-        if (!input_shaper_step_skipped && get_wizard_input_shaper_step()->should_skip()) {
-            input_shaper_step_skipped = true;
-            spdlog::info("[Wizard] Pre-skip: Input shaper step will be skipped");
-        }
+    MoonrakerAPI* api = get_moonraker_api();
+    if (api && api->hardware().has_filament_sensors()) {
+        fsm.discover_sensors(api->hardware().filament_sensor_names());
+        spdlog::debug("[Wizard] Populated FilamentSensorManager for skip calculation");
     }
-
-    int total_skipped = (touch_cal_step_skipped ? 1 : 0) + (language_step_skipped ? 1 : 0) +
-                        (wifi_step_skipped ? 1 : 0) + (connection_step_skipped ? 1 : 0) +
-                        (printer_identify_step_skipped ? 1 : 0) +
-                        (heater_select_step_skipped ? 1 : 0) + (fan_select_step_skipped ? 1 : 0) +
-                        (ams_step_skipped ? 1 : 0) + (led_step_skipped ? 1 : 0) +
-                        (filament_step_skipped ? 1 : 0) + (input_shaper_step_skipped ? 1 : 0) +
-                        (summary_step_skipped ? 1 : 0) + (telemetry_step_skipped ? 1 : 0);
-    spdlog::info("[Wizard] Pre-calculated skips: {} steps will be skipped, {} total steps",
-                 total_skipped, 13 - total_skipped);
-
-    // Mark that we now know the true step count
-    skips_precalculated = true;
 }
 
 // ============================================================================
@@ -809,64 +577,34 @@ static void ui_wizard_precalculate_skips() {
  * This ensures resources are properly released and screen pointers are reset.
  */
 static void ui_wizard_cleanup_current_screen() {
-    if (current_screen_step < 0) {
+    if (!current_screen_step) {
         return; // No screen loaded yet
     }
 
-    spdlog::debug("[Wizard] Cleaning up screen for step {}", current_screen_step);
-
-    switch (current_screen_step) {
-    case 0: // Touch Calibration
-        get_wizard_touch_calibration_step()->cleanup();
-        break;
-    case 1: // Language Chooser
-        get_wizard_language_chooser_step()->cleanup();
-        break;
-    case 2: // WiFi Setup
-        get_wizard_wifi_step()->cleanup();
-        break;
-    case 3: // Moonraker Connection
-        get_wizard_connection_step()->cleanup();
-        break;
-    case 4: // Printer Identification
-        get_wizard_printer_identify_step()->cleanup();
-        break;
-    case 5: // Heater Select (combined bed + hotend)
-        get_wizard_heater_select_step()->cleanup();
-        break;
-    case 6: // Fan Select
-        get_wizard_fan_select_step()->cleanup();
-        break;
-    case 7: // AMS Identify
-        get_wizard_ams_identify_step()->cleanup();
-        break;
-    case 8: // LED Select
-        get_wizard_led_select_step()->cleanup();
-        break;
-    case 9: // Filament Sensor Select
-        get_wizard_filament_sensor_select_step()->cleanup();
-        break;
-    case 10: // Input Shaper
-        get_wizard_input_shaper_step()->cleanup();
-        break;
-    case 11: // Summary
-        get_wizard_summary_step()->cleanup();
-        break;
-    case 12: // Telemetry
-        get_wizard_telemetry_step()->cleanup();
-        break;
-    default:
-        spdlog::warn("[Wizard] Unknown screen step {} during cleanup", current_screen_step);
-        break;
+    helix::wizard::Step* s = helix::wizard::step_by_id(*current_screen_step);
+    if (!s) {
+        spdlog::warn("[Wizard] Unknown screen step {} during cleanup",
+                     static_cast<int>(*current_screen_step));
+        return;
     }
+    spdlog::debug("[Wizard] Cleaning up screen for step {}", s->log_name());
+    s->cleanup();
 }
 
 // ============================================================================
 // Screen Loading
 // ============================================================================
 
-static void ui_wizard_load_screen(int step) {
-    spdlog::debug("[Wizard] Loading screen for step {}", step);
+static void ui_wizard_load_screen(helix::wizard::StepId step) {
+    using helix::wizard::StepId;
+    const int step_idx = static_cast<int>(step);
+    spdlog::debug("[Wizard] Loading screen for step {}", helix::wizard::to_string(step));
+
+    helix::wizard::Step* s = helix::wizard::step_by_id(step);
+    if (!s) {
+        spdlog::warn("[Wizard] Invalid step {}, ignoring", step_idx);
+        return;
+    }
 
     // Find wizard_content container
     lv_obj_t* content = lv_obj_find_by_name(wizard_container, "wizard_content");
@@ -874,6 +612,8 @@ static void ui_wizard_load_screen(int step) {
         spdlog::error("[Wizard] wizard_content container not found");
         return;
     }
+
+    const int prev_idx = current_screen_step ? static_cast<int>(*current_screen_step) : -1;
 
     // Cleanup previous screen resources BEFORE clearing widgets. Freeze the
     // update queue around cleanup + drain + destroy so background-thread
@@ -886,10 +626,9 @@ static void ui_wizard_load_screen(int step) {
     // connection → printer-identify transition).
     {
         auto freeze = helix::ui::UpdateQueue::instance().scoped_freeze();
-        crash_handler::breadcrumb::note("wiz", "cleanup_begin",
-                                        static_cast<long>(current_screen_step));
+        crash_handler::breadcrumb::note("wiz", "cleanup_begin", static_cast<long>(prev_idx));
         ui_wizard_cleanup_current_screen();
-        crash_handler::breadcrumb::note("wiz", "drain_begin", static_cast<long>(step));
+        crash_handler::breadcrumb::note("wiz", "drain_begin", static_cast<long>(step_idx));
         helix::ui::UpdateQueue::instance().drain();
         // Cancel every pending animation targeting any descendant of the wizard
         // content container before deletion. Style transitions (lv_obj_set_style_*
@@ -898,45 +637,46 @@ static void ui_wizard_load_screen(int step) {
         // catch them, so a delayed `trans_anim_start_cb` can fire on a freed
         // widget after the next step has rebuilt the tree at the same address
         // (#871).
-        crash_handler::breadcrumb::note("wiz", "anim_purge", static_cast<long>(step));
+        crash_handler::breadcrumb::note("wiz", "anim_purge", static_cast<long>(step_idx));
         ui_wizard_purge_subtree_anims(content);
-        crash_handler::breadcrumb::note("wiz", "clean_begin", static_cast<long>(step));
+        crash_handler::breadcrumb::note("wiz", "clean_begin", static_cast<long>(step_idx));
         lv_obj_clean(content);
-        crash_handler::breadcrumb::note("wiz", "clean_end", static_cast<long>(step));
+        crash_handler::breadcrumb::note("wiz", "clean_end", static_cast<long>(step_idx));
     }
     spdlog::debug("[Wizard] Cleared wizard_content container");
 
-    // Printer-identify step (#4) applies a preset on cleanup based on the user's
-    // pick (or the auto-detection result). On a fresh install this is the first
-    // moment a preset can possibly be applied — at the time we left step 3 and
-    // pre-calculated skips, no preset existed yet. Re-precalc here so newly
-    // skippable hardware steps (heater, fan, AMS, LED, filament, input shaper,
-    // summary) collapse, then forward to the next non-skipped step if our
-    // requested destination is now in that skip set.
-    if (current_screen_step == 4 && step >= 5) {
-        ui_wizard_precalculate_skips();
-        auto skips = get_current_skip_flags();
-        int redirected = step;
-        while (redirected >= 0 && redirected < 13 &&
-               ((redirected == 5 && skips.heater_select) ||
-                (redirected == 6 && skips.fan_select) ||
-                (redirected == 7 && skips.ams) ||
-                (redirected == 8 && skips.led) ||
-                (redirected == 9 && skips.filament) ||
-                (redirected == 10 && skips.input_shaper) ||
-                (redirected == 11 && skips.summary))) {
-            redirected = helix::wizard_next_step(redirected, skips);
-            if (redirected == -1)
+    // Printer-identify step applies a preset on cleanup based on the user's pick
+    // (or the auto-detection result). On a fresh install this is the first moment
+    // a preset can possibly be applied — when we left the connection step no
+    // preset existed yet. Rebuild the context + skip vector now (it reads the
+    // freshly-written preset via Config::has_preset()) so newly-skippable
+    // hardware steps collapse, then forward to the next non-skipped step if our
+    // requested destination is now skipped.
+    if (prev_idx == static_cast<int>(StepId::PrinterIdentify) &&
+        step_idx > static_cast<int>(StepId::PrinterIdentify)) {
+        auto ctx = helix::wizard::build_context();
+        auto skips = helix::wizard::skip_vector(ctx);
+        StepId redirected = step;
+        // If the requested step is now skipped, walk forward to the first visible.
+        for (const auto& entry : skips) {
+            if (entry.id == redirected && entry.skipped) {
+                auto nxt = helix::wizard_next(redirected, skips);
+                if (!nxt) {
+                    spdlog::info("[Wizard] Preset applied during printer-identify cleanup; "
+                                 "no further steps, completing");
+                    current_screen_step.reset(); // suppress double-cleanup
+                    ui_wizard_complete();
+                    return;
+                }
+                redirected = *nxt;
                 break;
+            }
         }
         if (redirected != step) {
-            spdlog::info("[Wizard] Preset applied during step 4 cleanup; redirecting "
-                         "step {} -> {}", step, redirected);
-            current_screen_step = -1; // suppress double-cleanup
-            if (redirected == -1) {
-                ui_wizard_complete();
-                return;
-            }
+            spdlog::info("[Wizard] Preset applied during printer-identify cleanup; redirecting "
+                         "{} -> {}",
+                         helix::wizard::to_string(step), helix::wizard::to_string(redirected));
+            current_screen_step.reset(); // suppress double-cleanup
             ui_wizard_navigate_to_step(redirected);
             return;
         }
@@ -945,151 +685,61 @@ static void ui_wizard_load_screen(int step) {
     // Set title and subtitle from XML metadata (no more hardcoded strings!)
     // Use lv_tr() to translate the title/subtitle dynamically based on current language
     // Per-notify breadcrumbs pin which subject observer is faulty if #848/#843 recurs.
-    const char* title = get_step_title_from_xml(step);
-    crash_handler::breadcrumb::note("wiz", "notify_title", static_cast<long>(step));
+    const char* comp_name = s->component_name();
+    const char* title = get_step_title_from_xml(comp_name);
+    crash_handler::breadcrumb::note("wiz", "notify_title", static_cast<long>(step_idx));
     ui_wizard_set_title(lv_tr(title));
-    const char* subtitle = get_step_subtitle_from_xml(step);
-    crash_handler::breadcrumb::note("wiz", "notify_subtitle", static_cast<long>(step));
+    const char* subtitle = get_step_subtitle_from_xml(comp_name);
+    crash_handler::breadcrumb::note("wiz", "notify_subtitle", static_cast<long>(step_idx));
     lv_subject_copy_string(&wizard_subtitle, lv_tr(subtitle));
 
     // Default Next button to enabled - steps that gate on validation (language,
     // connection, printer identify, fan select) will set it to 0 in their init
-    crash_handler::breadcrumb::note("wiz", "notify_test_passed", static_cast<long>(step));
+    crash_handler::breadcrumb::note("wiz", "notify_test_passed", static_cast<long>(step_idx));
     lv_subject_set_int(&connection_test_passed, 1);
 
-    // Create appropriate screen based on step
-    // Note: Step-specific initialization remains in switch because each step
-    // has unique logic (WiFi needs init_wifi_manager, etc.)
-    crash_handler::breadcrumb::note("wiz", "create_begin", static_cast<long>(step));
-    switch (step) {
-    case 0: // Touch Calibration
-        spdlog::debug("[Wizard] Creating touch calibration screen");
-        get_wizard_touch_calibration_step()->init_subjects();
-        get_wizard_touch_calibration_step()->register_callbacks();
-        get_wizard_touch_calibration_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 1: // Language Chooser
-        spdlog::debug("[Wizard] Creating language chooser screen");
-        // Disable Next until a language is selected
+    // Language step: disable Next until a language is selected (must happen before
+    // create() so the gated state is set when widgets bind).
+    if (step == StepId::Language) {
         lv_subject_set_int(&connection_test_passed, 0);
-        get_wizard_language_chooser_step()->init_subjects();
-        get_wizard_language_chooser_step()->register_callbacks();
-        get_wizard_language_chooser_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
+    }
 
-    case 2: // WiFi Setup
-        spdlog::debug("[Wizard] Creating WiFi setup screen");
-        get_wizard_wifi_step()->init_subjects();
-        get_wizard_wifi_step()->register_callbacks();
-        get_wizard_wifi_step()->create(content);
-        lv_obj_update_layout(content);
+    // Generic create path — every step exposes the same lifecycle via the registry.
+    crash_handler::breadcrumb::note("wiz", "create_begin", static_cast<long>(step_idx));
+    spdlog::debug("[Wizard] Creating screen for {}", s->log_name());
+    s->init_subjects();
+    s->register_callbacks();
+    s->create(content);
+    lv_obj_update_layout(content);
+
+    // Step-specific post-create hooks that the generic path can't express.
+    switch (step) {
+    case StepId::Wifi:
         get_wizard_wifi_step()->init_wifi_manager();
         break;
-
-    case 3: // Moonraker Connection
-        spdlog::debug("[Wizard] Creating Moonraker connection screen");
-        get_wizard_connection_step()->init_subjects();
-        get_wizard_connection_step()->register_callbacks();
-        get_wizard_connection_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 4: // Printer Identification
-        spdlog::debug("[Wizard] Creating printer identification screen");
-        get_wizard_printer_identify_step()->init_subjects();
-        get_wizard_printer_identify_step()->register_callbacks();
-        get_wizard_printer_identify_step()->create(content);
-        lv_obj_update_layout(content);
+    case StepId::PrinterIdentify:
         // Override subtitle with dynamic detection status
         lv_subject_copy_string(&wizard_subtitle,
                                get_wizard_printer_identify_step()->get_detection_status());
         break;
-
-    case 5: // Heater Select (combined bed + hotend)
-        spdlog::debug("[Wizard] Creating heater select screen");
-        get_wizard_heater_select_step()->init_subjects();
-        get_wizard_heater_select_step()->register_callbacks();
-        get_wizard_heater_select_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 6: // Fan Select
-        spdlog::debug("[Wizard] Creating fan select screen");
-        get_wizard_fan_select_step()->init_subjects();
-        get_wizard_fan_select_step()->register_callbacks();
-        get_wizard_fan_select_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 7: // AMS Identify
-        spdlog::debug("[Wizard] Creating AMS identify screen");
-        get_wizard_ams_identify_step()->init_subjects();
-        get_wizard_ams_identify_step()->register_callbacks();
-        (void)get_wizard_ams_identify_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 8: // LED Select
-        spdlog::debug("[Wizard] Creating LED select screen");
-        get_wizard_led_select_step()->init_subjects();
-        get_wizard_led_select_step()->register_callbacks();
-        get_wizard_led_select_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 9: // Filament Sensor Select
-        spdlog::debug("[Wizard] Creating filament sensor select screen");
-        get_wizard_filament_sensor_select_step()->init_subjects();
-        get_wizard_filament_sensor_select_step()->register_callbacks();
-        get_wizard_filament_sensor_select_step()->create(content);
-        lv_obj_update_layout(content);
+    case StepId::FilamentSensor: {
         // Schedule refresh in case sensors are discovered after screen creation
-        // (handles race condition when jumping directly to step 9)
-        {
-            auto* step = get_wizard_filament_sensor_select_step();
-            step->refresh_timer_ = lv_timer_create(
-                [](lv_timer_t*) {
-                    auto* s = get_wizard_filament_sensor_select_step();
-                    s->refresh_timer_ = nullptr;
-                    s->refresh();
-                },
-                1500, nullptr);
-            lv_timer_set_repeat_count(step->refresh_timer_, 1);
-        }
-        break;
-
-    case 10: // Input Shaper Calibration
-        spdlog::debug("[Wizard] Creating input shaper calibration screen");
-        get_wizard_input_shaper_step()->init_subjects();
-        get_wizard_input_shaper_step()->register_callbacks();
-        get_wizard_input_shaper_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 11: // Summary
-        spdlog::debug("[Wizard] Creating summary screen");
-        get_wizard_summary_step()->init_subjects();
-        get_wizard_summary_step()->register_callbacks();
-        get_wizard_summary_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    case 12: // Telemetry (preset mode only)
-        spdlog::debug("[Wizard] Creating telemetry screen");
-        get_wizard_telemetry_step()->init_subjects();
-        get_wizard_telemetry_step()->register_callbacks();
-        get_wizard_telemetry_step()->create(content);
-        lv_obj_update_layout(content);
-        break;
-
-    default:
-        spdlog::warn("[Wizard] Invalid step {}, ignoring", step);
+        // (handles race condition when jumping directly to the filament step).
+        auto* fstep = get_wizard_filament_sensor_select_step();
+        fstep->refresh_timer_ = lv_timer_create(
+            [](lv_timer_t*) {
+                auto* fs = get_wizard_filament_sensor_select_step();
+                fs->refresh_timer_ = nullptr;
+                fs->refresh();
+            },
+            1500, nullptr);
+        lv_timer_set_repeat_count(fstep->refresh_timer_, 1);
         break;
     }
-    crash_handler::breadcrumb::note("wiz", "create_end", static_cast<long>(step));
+    default:
+        break;
+    }
+    crash_handler::breadcrumb::note("wiz", "create_end", static_cast<long>(step_idx));
 
     // Update current screen step tracking
     current_screen_step = step;
@@ -1143,9 +793,12 @@ void ui_wizard_complete() {
             }
         }
 
-        // 1d. Add AMS to expected hardware if detected (step wasn't skipped)
-        // This allows the hardware validator to warn if AMS disappears between sessions
-        if (!ams_step_skipped) {
+        // 1d. Add AMS to expected hardware if detected.
+        // This allows the hardware validator to warn if AMS disappears between
+        // sessions. Gate on the AMS step's hardware check (no-arg should_skip()
+        // == "no AMS detected") rather than a tracked skip flag — a preset
+        // printer that physically has an AMS still has hardware worth recording.
+        if (!get_wizard_ams_identify_step()->should_skip()) {
             auto& ams = AmsState::instance();
             AmsBackend* backend = ams.get_backend();
             if (backend) {
@@ -1259,207 +912,124 @@ void ui_wizard_complete() {
 // ============================================================================
 
 static void on_back_clicked(lv_event_t* e) {
+    using helix::wizard::StepId;
     (void)e;
     if (navigating)
         return;
     navigating = true;
-    int current = lv_subject_get_int(&current_step);
+    auto current = static_cast<StepId>(lv_subject_get_int(&current_step));
 
-    // Find minimum step (first non-skipped step)
-    int min_step = 0;
-    if (touch_cal_step_skipped)
-        min_step = 1;
-    if (min_step == 1 && language_step_skipped)
-        min_step = 2;
-    if (min_step == 2 && wifi_step_skipped)
-        min_step = 3;
+    auto ctx = helix::wizard::build_context();
+    auto skips = helix::wizard::skip_vector(ctx);
+    auto prev = helix::wizard_prev(current, skips);
 
-    if (current > min_step) {
-        auto flags = get_current_skip_flags();
-        int prev_step = helix::wizard_prev_step(current, flags);
-        if (prev_step >= 0) {
-            schedule_navigate_to_step(prev_step);
-            spdlog::debug("[Wizard] Back button clicked, step: {}", prev_step);
-        } else {
-            // At first step — invoke cancel callback if registered (add-printer mode)
-            auto cancel_cb = get_wizard_cancel_callback();
-            if (cancel_cb) {
-                spdlog::info("[Wizard] Back from first step — invoking cancel callback");
-                cancel_cb();
-            }
-            navigating = false;
-        }
-    } else {
-        // Already at first step — invoke cancel callback if registered (add-printer mode)
-        auto cancel_cb = get_wizard_cancel_callback();
-        if (cancel_cb) {
-            spdlog::info("[Wizard] Back from first step — invoking cancel callback");
-            cancel_cb();
-        }
-        navigating = false;
+    if (prev) {
+        schedule_navigate_to_step(*prev);
+        spdlog::debug("[Wizard] Back button clicked, step: {}", helix::wizard::to_string(*prev));
+        return;
+    }
+
+    // At first visible step — invoke cancel callback if registered (add-printer mode)
+    auto cancel_cb = get_wizard_cancel_callback();
+    if (cancel_cb) {
+        spdlog::info("[Wizard] Back from first step — invoking cancel callback");
+        cancel_cb();
+    }
+    navigating = false;
+}
+
+/// True if the filament-sensor step is being skipped purely because of sparse
+/// standalone sensors (not because a preset covers the hardware). Task 16: when
+/// exactly one standalone sensor exists in that case, auto-configure it as the
+/// runout sensor before we pass over the step.
+static void ui_wizard_maybe_auto_configure_single_sensor(const helix::wizard::StepContext& ctx) {
+    if (ctx.preset.skip_hardware) {
+        return; // Skipped due to preset, not sparse sensors — do not auto-configure.
+    }
+    ui_wizard_ensure_filament_sensors_discovered();
+    auto* fstep = get_wizard_filament_sensor_select_step();
+    if (!fstep->should_skip()) {
+        return; // Not sparse — the step will be shown, nothing to auto-configure.
+    }
+    if (fstep->get_standalone_sensor_count() == 1) {
+        fstep->auto_configure_single_sensor();
+        spdlog::info("[Wizard] Auto-configured single filament sensor as RUNOUT");
     }
 }
 
 static void on_next_clicked(lv_event_t* e) {
+    using helix::wizard::StepId;
     (void)e;
     if (navigating)
         return;
     navigating = true;
-    int current = lv_subject_get_int(&current_step);
+    auto current = static_cast<StepId>(lv_subject_get_int(&current_step));
+
+    // Ensure the filament manager is populated so the filament step's skip
+    // decision (and the single-sensor auto-config side effect) is accurate.
+    ui_wizard_ensure_filament_sensors_discovered();
+
+    auto ctx = helix::wizard::build_context();
+    auto skips = helix::wizard::skip_vector(ctx);
 
     // Check if this is the last step (no more non-skipped steps after this)
-    auto skip_flags = get_current_skip_flags();
-    if (helix::wizard_next_step(current, skip_flags) == -1) {
+    if (helix::wizard_is_last(current, skips)) {
         spdlog::info("[Wizard] Finish button clicked, completing wizard");
         ui_wizard_complete();
         navigating = false;
         return;
     }
 
-    // Commit touch calibration when leaving step 0 (only saves if user completed calibration)
-    if (current == 0) {
+    // Commit touch calibration when leaving it (only saves if user completed calibration)
+    if (current == StepId::TouchCalibration) {
         get_wizard_touch_calibration_step()->commit_calibration();
     }
 
-    int next_step = current + 1;
-
-    // Skip language step (1) if language already set
-    if (next_step == 1 && get_wizard_language_chooser_step()->should_skip()) {
-        language_step_skipped = true;
-        next_step = 2;
-        spdlog::debug("[Wizard] Skipping language step (language already set)");
+    auto next = helix::wizard_next(current, skips);
+    if (!next) {
+        // Defensive: wizard_is_last already returned false, so this should not
+        // happen, but treat a missing next as completion.
+        ui_wizard_complete();
+        navigating = false;
+        return;
     }
 
-    // Skip WiFi step (2) on Android
-    if (next_step == 2 && helix::is_android_platform()) {
-        wifi_step_skipped = true;
-        next_step = 3;
-        spdlog::debug("[Wizard] Skipping WiFi step (Android platform)");
-    }
-
-    // Skip WiFi step (2) when adding a subsequent printer (WiFi already configured)
-    if (next_step == 2) {
-        auto* cfg = Config::get_instance();
-        if (cfg && cfg->get_printer_ids().size() > 1) {
-            wifi_step_skipped = true;
-            next_step = 3;
-            spdlog::debug("[Wizard] Skipping WiFi step (subsequent printer)");
-        }
-    }
-
-    // Preset mode: auto-validate connection before showing step 3.
-    // Refresh preset_mode here too — auto-detection on Moonraker discovery may have
-    // applied a preset between wizard init (where preset_mode was first captured)
-    // and now. Without this, a fresh install of a preset printer (ForgeX AD5M Pro,
-    // CC1, etc.) would still show the connection step even though the preset is
-    // already in config.
-    if (next_step == 3 && wizard_preset_mode_eligible(Config::get_instance())) {
-        preset_mode = true;
-    }
-    if (preset_mode && next_step == 3) {
+    // Preset first-run fast path: auto-validate the connection step. If the
+    // printer is already connected and a complete preset is applied, the
+    // connection step has nothing for the user to do — skip straight past it.
+    // build_context() reads Config::has_preset() live, so a preset applied by
+    // auto-detection between wizard init and now is honored here.
+    if (*next == StepId::Connection && ctx.preset.first_run) {
         MoonrakerClient* client = get_moonraker_client();
         if (client && client->get_connection_state() == ConnectionState::CONNECTED) {
             spdlog::info("[Wizard] Preset mode: already connected, skipping connection step");
-            connection_step_skipped = true;
-            // Trigger precalculate since we're skipping step 3's exit
-            ui_wizard_precalculate_skips();
-            auto flags = get_current_skip_flags();
-            int skip_to = helix::wizard_next_step(3, flags);
-            if (skip_to == -1) {
+            auto after_conn = helix::wizard_next(StepId::Connection, skips);
+            if (!after_conn) {
                 ui_wizard_complete();
+                navigating = false;
                 return;
             }
-            schedule_navigate_to_step(skip_to);
+            // The filament step may be among the steps we jump over; honor the
+            // single-sensor auto-config side effect if applicable.
+            ui_wizard_maybe_auto_configure_single_sensor(ctx);
+            schedule_navigate_to_step(*after_conn);
             return;
         }
     }
 
-    // Pre-calculate all skip flags when leaving connection step (step 3)
-    // This ensures consistent step totals from step 4 onwards
-    if (current == 3) {
-        spdlog::info("[Wizard] Leaving connection step, pre-calculating skips...");
-        ui_wizard_precalculate_skips();
-    }
-
-    // Skip printer identify step (4) if skipped (preset mode)
-    if (next_step == 4 && printer_identify_step_skipped) {
-        next_step = 5;
-        spdlog::debug("[Wizard] Skipping printer identify step");
-    }
-
-    // Skip heater select step (5) if skipped (preset mode)
-    if (next_step == 5 && heater_select_step_skipped) {
-        next_step = 6;
-        spdlog::debug("[Wizard] Skipping heater select step");
-    }
-
-    // Skip fan select step (6) if skipped (preset mode)
-    if (next_step == 6 && fan_select_step_skipped) {
-        next_step = 7;
-        spdlog::debug("[Wizard] Skipping fan select step");
-    }
-
-    // Skip AMS step (7) per the precalculated flag. precalculate_skips() already
-    // folded in both the preset-covers-hardware decision and the no-AMS
-    // should_skip() check, so consult the flag here (do NOT re-run should_skip,
-    // which ignores the preset and re-shows the step on preset printers that
-    // physically have an AMS — e.g. a Creality K2 Plus with CFS).
-    if (next_step == 7 && ams_step_skipped) {
-        next_step = 8;
-        spdlog::debug("[Wizard] Skipping AMS step");
-    }
-
-    // Skip LED step (8) per the precalculated flag (see AMS note above).
-    if (next_step == 8 && led_step_skipped) {
-        next_step = 9;
-        spdlog::debug("[Wizard] Skipping LED step");
-    }
-
-    // Ensure FilamentSensorManager is populated before skip check
-    if (next_step == 9) {
-        auto& fsm = helix::FilamentSensorManager::instance();
-        if (fsm.get_sensors().empty()) {
-            MoonrakerAPI* api = get_moonraker_api();
-            if (api && api->hardware().has_filament_sensors()) {
-                fsm.discover_sensors(api->hardware().filament_sensor_names());
-                spdlog::debug("[Wizard] Populated FilamentSensorManager before skip check");
-            }
+    // Task 16: if the forward jump passes OVER a sparse-skipped filament step,
+    // auto-configure a lone standalone sensor as RUNOUT before we move on.
+    // wizard_next already excluded the (skipped) filament step from *next, so
+    // detect the pass-over by index range [current, next).
+    {
+        int cur_idx = static_cast<int>(current);
+        int next_idx = static_cast<int>(*next);
+        int fil_idx = static_cast<int>(StepId::FilamentSensor);
+        if (fil_idx > cur_idx && fil_idx < next_idx) {
+            ui_wizard_maybe_auto_configure_single_sensor(ctx);
         }
     }
 
-    // Skip filament sensor step (9) if <2 standalone sensors
-    if (next_step == 9 && get_wizard_filament_sensor_select_step()->should_skip()) {
-        filament_step_skipped = true;
-
-        // Auto-configure single sensor if exactly 1 detected
-        auto* step = get_wizard_filament_sensor_select_step();
-        if (step->get_standalone_sensor_count() == 1) {
-            step->auto_configure_single_sensor();
-            spdlog::info("[Wizard] Auto-configured single filament sensor as RUNOUT");
-        }
-        next_step = 10;
-        spdlog::debug("[Wizard] Skipping filament sensor step (<2 sensors)");
-    }
-
-    // Skip input shaper step (10) per the precalculated flag (see AMS note above).
-    if (next_step == 10 && input_shaper_step_skipped) {
-        next_step = 11;
-        spdlog::debug("[Wizard] Skipping input shaper step");
-    }
-
-    // Skip summary step (11) in preset mode
-    if (next_step == 11 && summary_step_skipped) {
-        next_step = 12;
-        spdlog::debug("[Wizard] Skipping summary step");
-    }
-
-    // Skip telemetry step (12) if not in preset mode
-    if (next_step == 12 && telemetry_step_skipped) {
-        spdlog::debug("[Wizard] Skipping telemetry step");
-        ui_wizard_complete();
-        return;
-    }
-
-    schedule_navigate_to_step(next_step);
-    spdlog::debug("[Wizard] Next button clicked, step: {}", next_step);
+    schedule_navigate_to_step(*next);
+    spdlog::debug("[Wizard] Next button clicked, step: {}", helix::wizard::to_string(*next));
 }

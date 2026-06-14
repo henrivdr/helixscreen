@@ -54,7 +54,7 @@ class WizardInputShaperStep : public helix::wizard::Step {
     helix::wizard::StepId id() const override { return helix::wizard::StepId::InputShaper; }
     const char* component_name() const override { return "wizard_input_shaper"; }
     const char* log_name() const override { return "Wizard Input Shaper"; }
-    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override;
 
     WizardInputShaperStep();
     ~WizardInputShaperStep();
