@@ -12,11 +12,13 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 class Ad5xIfsTestAccess;
@@ -238,6 +240,19 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // material types beyond the AD5X firmware whitelist (e.g., PLA+, RPLA,
     // HELIX). 404 → no-op (not a zmod printer or no user.cfg present).
     void fetch_user_cfg_materials();
+    // One-shot fetch of /mod_data/filament.json — zmod's per-filament-type
+    // table holding the unload tube length (filament_tube_length) and feed
+    // speed (filament_ifs_speed) that eject_lane() needs for a real, full lane
+    // retract. Mirrors read_adventurer_json's download_file + tok.defer
+    // threading discipline. 404 → flip filament_json_supported_ false for the
+    // session (not a zmod printer). filament.json changes rarely so this is a
+    // one-shot fetch at startup/reconnect, NOT a periodic poll.
+    void fetch_filament_json();
+    // Pure parse helper (no IO) — populates filament_eject_params_ +
+    // filament_eject_default_ from a filament.json body. Static-shaped but
+    // mutates members under mutex_; exposed to tests via Ad5xIfsTestAccess.
+    // Tolerant of malformed JSON (logs + leaves cache untouched).
+    void parse_filament_json(const std::string& content);
     void update_slot_from_state(int slot_index);
     // Layer any configured FilamentSlotOverride for `slot_index` over `slot`,
     // mutating `slot` in place. Override wins for every non-default field;
@@ -416,6 +431,19 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     std::string var_prefix_ = "less_waste";
     std::array<std::string, NUM_PORTS> colors_;    // Hex strings: "FF0000"
     std::array<std::string, NUM_PORTS> materials_; // Material names: "PLA"
+
+    // Per-filament-type eject parameters parsed from /mod_data/filament.json:
+    // material name -> {filament_tube_length (LEN), filament_ifs_speed (SPEED)}.
+    // Consumed by eject_lane() to drive a full per-material lane retract via
+    // IFS_F11 LEN=.. SPEED=.. instead of the firmware default. Guarded by
+    // mutex_. filament_eject_default_ holds the file's "default" entry (or the
+    // hardcoded {1000, 1200} when absent) used when a lane's material is empty
+    // or not present in the table.
+    std::map<std::string, std::pair<int, int>> filament_eject_params_;
+    std::pair<int, int> filament_eject_default_{1000, 1200};
+    // filament.json availability latch (mirrors json_poll_supported_): starts
+    // true, flips false permanently on a 404 so non-zmod printers stop fetching.
+    std::atomic<bool> filament_json_supported_{true};
     // User-defined material types extending the firmware whitelist. Two
     // sources, both surfaced via get_supported_materials():
     //   - bambufy_custom_types in save_variables (when bambufy is/was active);

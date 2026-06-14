@@ -217,6 +217,12 @@ void AmsBackendAd5xIfs::on_started() {
                             // the json/gcode pipelines — best-effort, 404 on
                             // non-zmod printers is silent.
                             fetch_user_cfg_materials();
+                            // One-shot fetch of zmod's per-filament-type
+                            // unload table (/mod_data/filament.json) so
+                            // eject_lane() retracts the full tube length at the
+                            // configured speed. Best-effort; 404 on non-zmod
+                            // printers is silent and falls back to 1000/1200.
+                            fetch_filament_json();
                             register_zcolor_listener();
                             // notify_klippy_ready catches startup and
                             // FIRMWARE_RESTART; it's the point at which zmod
@@ -1138,6 +1144,9 @@ AmsError AmsBackendAd5xIfs::change_tool(int tool_number) {
 }
 
 AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
+    int len = filament_eject_default_.first;
+    int speed = filament_eject_default_.second;
+    std::string material;
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -1158,14 +1167,45 @@ AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
             return AmsError(AmsResult::WRONG_STATE, "Lane is loaded in toolhead",
                             "Unload from toolhead first", "Use Unload before Eject");
         }
+
+        // Resolve the cold-retract LEN/SPEED from filament.json keyed by the
+        // lane's material, falling back to the file's "default" entry (already
+        // captured in filament_eject_default_), then to the hardcoded 1000/1200
+        // the default pair is initialized to. An empty material or an
+        // un-fetched/404 filament.json simply leaves the defaults in place.
+        material = materials_[slot_index];
+        if (!material.empty()) {
+            auto it = filament_eject_params_.find(material);
+            if (it != filament_eject_params_.end()) {
+                len = it->second.first;
+                speed = it->second.second;
+            }
+        }
     }
 
     int port = slot_index + 1;
-    spdlog::info("{} Cold eject (recover) lane {} -> IFS_F11 PRUTOK={} CHECK=0", backend_log_tag(),
-                 slot_index, port);
-    // Cold retract: no heat, no homing. Use the plain execute_gcode() helper
-    // (NOT ensure_homed_then(), which is for toolhead moves like load/unload).
-    return execute_gcode("IFS_F11 PRUTOK=" + std::to_string(port) + " CHECK=0");
+    spdlog::info("{} Cold eject lane {} (port {}, material '{}') -> IFS_F24 / IFS_F11 LEN={} "
+                 "SPEED={} / IFS_F39",
+                 backend_log_tag(), slot_index, port, material, len, speed);
+
+    // Full per-lane eject mirroring zmod's _REMOVE_PRUTOK_IFS macro: clamp the
+    // lane (F24) so the gear actually grips, cold-retract the full tube length
+    // at the configured speed (F11 — no heat, no homing), then unclamp (F39) so
+    // the filament is free to pull out by hand. Three separate execute_gcode()
+    // calls in order, propagating the first error. Use the plain
+    // execute_gcode() helper (NOT ensure_homed_then(), which is for toolhead
+    // moves like load/unload).
+    const std::string port_str = std::to_string(port);
+    AmsError err = execute_gcode("IFS_F24 PRUTOK=" + port_str);
+    if (!err.success()) {
+        return err;
+    }
+    err = execute_gcode("IFS_F11 PRUTOK=" + port_str + " LEN=" + std::to_string(len) +
+                        " SPEED=" + std::to_string(speed));
+    if (!err.success()) {
+        return err;
+    }
+    return execute_gcode("IFS_F39 PRUTOK=" + port_str);
 }
 
 // --- Recovery ---
@@ -2059,6 +2099,103 @@ void AmsBackendAd5xIfs::read_adventurer_json() {
                              err.message);
             }
         });
+}
+
+void AmsBackendAd5xIfs::fetch_filament_json() {
+    if (!api_ || !filament_json_supported_.load())
+        return;
+
+    auto token = lifetime_.token();
+    api_->transfers().download_file(
+        "config", "mod_data/filament.json",
+        [this, token](const std::string& content) {
+            // BG THREAD: no member access here — parse_filament_json takes
+            // mutex_ and mutates the cache, so defer it to the main thread.
+            spdlog::trace("[AMS AD5X-IFS] Downloaded filament.json ({} bytes)", content.size());
+            token.defer("Ad5xIfsBackend::filament_json_apply",
+                        [this, content]() mutable { parse_filament_json(content); });
+        },
+        [this, token](const MoonrakerError& err) {
+            // BG THREAD: defer the atomic store + 404 logging (touches a member
+            // atomic). filament.json is zmod-specific; absence is expected on
+            // non-zmod printers and must not retry.
+            if (err.type == MoonrakerErrorType::FILE_NOT_FOUND || err.code == 404) {
+                token.defer("Ad5xIfsBackend::filament_json_404", [this]() {
+                    filament_json_supported_.store(false);
+                    spdlog::info("{} filament.json not found — using default eject LEN/SPEED",
+                                 backend_log_tag());
+                });
+            } else {
+                spdlog::debug("[AMS AD5X-IFS] filament.json fetch failed: {}", err.message);
+            }
+        });
+}
+
+void AmsBackendAd5xIfs::parse_filament_json(const std::string& content) {
+    // filament.json is a JSON object keyed by filament TYPE name plus a
+    // "default" entry. Each value carries filament_tube_length (the unload
+    // retract distance, our IFS_F11 LEN) and filament_ifs_speed (IFS_F11
+    // SPEED), among many fields we don't use. Build a {tube_length, ifs_speed}
+    // pair per material; resolve missing fields against the "default" entry,
+    // and missing "default" against the literal 1000/1200.
+    json root;
+    try {
+        root = json::parse(content);
+    } catch (const std::exception& e) {
+        spdlog::warn("[AMS AD5X-IFS] filament.json parse failed: {}", e.what());
+        return;
+    }
+    if (!root.is_object()) {
+        spdlog::warn("[AMS AD5X-IFS] filament.json is not a JSON object — ignoring");
+        return;
+    }
+
+    // int field reader with a fallback, tolerant of numeric-as-string values.
+    auto read_int = [](const json& obj, const char* key, int fallback) -> int {
+        auto it = obj.find(key);
+        if (it == obj.end())
+            return fallback;
+        if (it->is_number_integer() || it->is_number_unsigned())
+            return it->get<int>();
+        if (it->is_number_float())
+            return static_cast<int>(it->get<double>());
+        if (it->is_string()) {
+            try {
+                return std::stoi(it->get<std::string>());
+            } catch (...) {
+                return fallback;
+            }
+        }
+        return fallback;
+    };
+
+    // Resolve the "default" pair first so per-material fallbacks key off it.
+    int default_len = 1000;
+    int default_speed = 1200;
+    auto def_it = root.find("default");
+    if (def_it != root.end() && def_it->is_object()) {
+        default_len = read_int(*def_it, "filament_tube_length", 1000);
+        default_speed = read_int(*def_it, "filament_ifs_speed", 1200);
+    }
+
+    std::map<std::string, std::pair<int, int>> parsed;
+    for (auto it = root.begin(); it != root.end(); ++it) {
+        if (it.key() == "default" || !it.value().is_object())
+            continue;
+        int len = read_int(it.value(), "filament_tube_length", default_len);
+        int speed = read_int(it.value(), "filament_ifs_speed", default_speed);
+        parsed[it.key()] = {len, speed};
+    }
+
+    size_t cached_count;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        filament_eject_default_ = {default_len, default_speed};
+        filament_eject_params_ = std::move(parsed);
+        cached_count = filament_eject_params_.size();
+    }
+    spdlog::info("{} filament.json: cached eject LEN/SPEED for {} material(s); default {}/{}",
+                 backend_log_tag(), cached_count, default_len, default_speed);
 }
 
 bool AmsBackendAd5xIfs::note_json_content(const std::string& content) {

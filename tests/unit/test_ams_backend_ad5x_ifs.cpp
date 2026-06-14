@@ -299,6 +299,36 @@ class Ad5xIfsTestAccess {
         return b.custom_material_types_;
     }
 
+    // --- filament.json eject-parameter cache (LEN/SPEED per material) ---
+
+    // Drive the pure parse helper directly (no IO).
+    static void parse_filament_json(AmsBackendAd5xIfs& b, const std::string& content) {
+        b.parse_filament_json(content);
+    }
+    // Seed the per-material eject-parameter cache directly (mirrors what
+    // fetch_filament_json applies on the main thread). Material key, tube
+    // length (LEN), ifs speed (SPEED).
+    static void seed_filament_eject_params(AmsBackendAd5xIfs& b, const std::string& material,
+                                           int tube_length, int ifs_speed) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.filament_eject_params_[material] = {tube_length, ifs_speed};
+    }
+    // Read a cached pair back (returns nullopt when the material isn't cached).
+    static std::optional<std::pair<int, int>> filament_eject_params(const AmsBackendAd5xIfs& b,
+                                                                    const std::string& material) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        auto it = b.filament_eject_params_.find(material);
+        if (it == b.filament_eject_params_.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+    // Read the parsed "default" pair (tube length, ifs speed).
+    static std::pair<int, int> filament_eject_default(const AmsBackendAd5xIfs& b) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        return b.filament_eject_default_;
+    }
+
     // --- Phase tracker hooks (live load/unload progress feedback) ---
 
     // Read the dynamic operation_detail string the phase machine produced.
@@ -4821,12 +4851,66 @@ TEST_CASE("AD5X IFS #904 PLA+ round-trips through set_slot_info after custom_typ
 // ==========================================================================
 // Cold per-lane eject / recover (#996)
 //
-// IFS_F11 PRUTOK={port} CHECK=0 is a cold per-lane retract that drives ONE
-// idle lane's feed motor backward toward the spool. It does NOT heat the
-// hotend and (CHECK=0) ignores the lane presence/runout sensor, so it can
-// recover a snapped chunk stuck in an idle lane. Ports are 1-based; HelixScreen
-// slot_index is 0-based, so PRUTOK = slot_index + 1.
+// eject_lane fires zmod's clamp / cold-retract / unclamp trio for one idle
+// lane: IFS_F24 (clamp), IFS_F11 LEN=<tube> SPEED=<ifs_speed> (cold retract),
+// IFS_F39 (unclamp) — mirroring zmod's _REMOVE_PRUTOK_IFS macro. LEN/SPEED come
+// from /mod_data/filament.json keyed by the lane's material, falling back to
+// the file's "default" entry, then to a hardcoded 1000/1200. Ports are 1-based;
+// HelixScreen slot_index is 0-based, so PRUTOK = slot_index + 1.
 // ==========================================================================
+
+TEST_CASE("AD5X IFS parse_filament_json populates per-material LEN/SPEED with fallback",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // default + PETG (explicit 650 tube) + PLA (no tube field → default tube).
+    const std::string json = R"({
+        "default": {"filament_tube_length": 1000, "filament_ifs_speed": 1200},
+        "PETG":    {"filament_tube_length": 650,  "filament_ifs_speed": 1100},
+        "PLA":     {"filament_ifs_speed": 900}
+    })";
+    Ad5xIfsTestAccess::parse_filament_json(backend, json);
+
+    // PETG: both fields present.
+    auto petg = Ad5xIfsTestAccess::filament_eject_params(backend, "PETG");
+    REQUIRE(petg.has_value());
+    CHECK(petg->first == 650);
+    CHECK(petg->second == 1100);
+
+    // PLA: missing tube length falls back to the default's tube length (1000),
+    // but its own ifs speed (900) is honored.
+    auto pla = Ad5xIfsTestAccess::filament_eject_params(backend, "PLA");
+    REQUIRE(pla.has_value());
+    CHECK(pla->first == 1000);
+    CHECK(pla->second == 900);
+
+    // Parsed default pair is available for unknown materials.
+    auto def = Ad5xIfsTestAccess::filament_eject_default(backend);
+    CHECK(def.first == 1000);
+    CHECK(def.second == 1200);
+}
+
+TEST_CASE("AD5X IFS parse_filament_json with no default uses 1000/1200 literal fallback",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // No "default" entry and the one material lacks both fields → everything
+    // resolves to the literal 1000/1200.
+    const std::string json = R"({"ABS": {}})";
+    Ad5xIfsTestAccess::parse_filament_json(backend, json);
+
+    auto def = Ad5xIfsTestAccess::filament_eject_default(backend);
+    CHECK(def.first == 1000);
+    CHECK(def.second == 1200);
+
+    auto abs = Ad5xIfsTestAccess::filament_eject_params(backend, "ABS");
+    REQUIRE(abs.has_value());
+    CHECK(abs->first == 1000);
+    CHECK(abs->second == 1200);
+
+    // Unknown material isn't cached → eject_lane falls back to the default pair.
+    CHECK_FALSE(Ad5xIfsTestAccess::filament_eject_params(backend, "TPU").has_value());
+}
 
 namespace {
 // Captures issued G-code without a live Moonraker connection by overriding the
@@ -4866,17 +4950,20 @@ TEST_CASE("AD5X IFS reports lane-eject and force-eject support", "[ams][ad5x_ifs
     REQUIRE(backend.supports_force_eject());
 }
 
-TEST_CASE("AD5X IFS eject_lane issues cold IFS_F11 retract", "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS eject_lane issues clamp / retract / unclamp sequence", "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
 
-    // 0-based slot 2 -> 1-based port 3.
+    // Empty cache → default 1000/1200 LEN/SPEED. 0-based slot 2 -> 1-based port 3.
     AmsError err = backend.eject_lane(2);
     REQUIRE(err.success());
 
-    // Exactly the cold retract, with CHECK=0 spelled out to document intent.
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
-    REQUIRE(backend.captured_gcodes.size() == 1);
+    // Three separate calls, in order: clamp, retract (config-sourced LEN/SPEED),
+    // unclamp — mirroring zmod's _REMOVE_PRUTOK_IFS macro.
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=3");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=3 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=3");
 
     // No heating and no homing — this is a cold idle-lane retract.
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
@@ -4892,10 +4979,51 @@ TEST_CASE("AD5X IFS eject_lane port mapping is 1-based", "[ams][ad5x_ifs]") {
     Ad5xIfsTestAccess::set_running(backend, true);
 
     REQUIRE(backend.eject_lane(0).success());
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 CHECK=0"));
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=1");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=1 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=1");
 
+    backend.captured_gcodes.clear();
     REQUIRE(backend.eject_lane(3).success());
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=4 CHECK=0"));
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=4");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=4 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=4");
+}
+
+TEST_CASE("AD5X IFS eject_lane uses the lane material's tube length / ifs speed", "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    // Slot 2's material is PETG; cache says PETG retracts 650mm at 1200.
+    Ad5xIfsTestAccess::set_material(backend, 2, "PETG");
+    Ad5xIfsTestAccess::seed_filament_eject_params(backend, "PETG", 650, 1200);
+
+    REQUIRE(backend.eject_lane(2).success());
+
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=3");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=3 LEN=650 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=3");
+}
+
+TEST_CASE("AD5X IFS eject_lane falls back to 1000/1200 when filament.json absent",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    // No filament.json fetched (empty cache) and a lane material that isn't
+    // cached anyway — eject must still fire the full 3-command sequence using
+    // the hardcoded 1000/1200 fallback.
+    Ad5xIfsTestAccess::set_material(backend, 1, "PLA");
+
+    REQUIRE(backend.eject_lane(1).success());
+
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=2");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=2 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=2");
 }
 
 TEST_CASE("AD5X IFS eject_lane refuses the slot loaded in toolhead", "[ams][ad5x_ifs]") {
@@ -4914,7 +5042,9 @@ TEST_CASE("AD5X IFS eject_lane refuses the slot loaded in toolhead", "[ams][ad5x
 
     // A DIFFERENT idle lane is still ejectable while slot 1 is loaded.
     REQUIRE(backend.eject_lane(2).success());
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=3"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=3"));
 }
 
 TEST_CASE("AD5X IFS eject_lane rejects out-of-range slots", "[ams][ad5x_ifs]") {
@@ -4991,8 +5121,10 @@ TEST_CASE("AD5X IFS unload_filament with empty toolhead routes to cold lane ejec
 
     REQUIRE(backend.unload_filament(2).success());
 
-    // 0-based slot 2 -> 1-based port 3, cold retract, no heat, no homing.
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+    // 0-based slot 2 -> 1-based port 3, cold clamp/retract/unclamp, no heat, no homing.
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=3"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=3"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
     REQUIRE_FALSE(backend.has_gcode_containing("M104"));
@@ -5032,9 +5164,11 @@ TEST_CASE("AD5X IFS unload_filament on a non-active slot ejects that lane, not t
 
     REQUIRE(backend.unload_filament(0).success());
 
-    // 0-based slot 0 -> 1-based port 1, cold retract. Crucially NOT the toolhead
-    // unload, which would back out the loaded channel 3.
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 CHECK=0"));
+    // 0-based slot 0 -> 1-based port 1, cold clamp/retract/unclamp. Crucially NOT
+    // the toolhead unload, which would back out the loaded channel 3.
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=1"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=1"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
