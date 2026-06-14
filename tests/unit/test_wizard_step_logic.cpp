@@ -10,38 +10,53 @@
 
 using helix::wizard::StepId;
 
-// ============================================================================
-// Default flags (no skips) — baseline behavior
-// ============================================================================
-
-TEST_CASE("Default flags: all 13 steps shown", "[wizard][step_logic]") {
-    helix::WizardSkipFlags flags{};
-    REQUIRE(helix::wizard_calculate_display_total(flags) == 13);
+// ----------------------------------------------------------------------------
+// Id-based skip-vector helpers. The wizard navigates a StepId registry; these
+// build the full 13-entry vector and flip named steps off.
+// ----------------------------------------------------------------------------
+static std::vector<helix::StepSkip> full_vec() {
+    std::vector<helix::StepSkip> v;
+    for (int i = 0; i < helix::wizard::kStepCount; ++i)
+        v.push_back({static_cast<StepId>(i), false});
+    return v;
 }
 
-TEST_CASE("Default flags: display step numbering is 1-based sequential",
+static void skip_step(std::vector<helix::StepSkip>& v, StepId s) {
+    for (auto& e : v)
+        if (e.id == s)
+            e.skipped = true;
+}
+
+// ============================================================================
+// Default vector (no skips) — baseline behavior
+// ============================================================================
+
+TEST_CASE("Default: all 13 steps shown", "[wizard][step_logic]") {
+    REQUIRE(helix::wizard_visible_count(full_vec()) == 13);
+}
+
+TEST_CASE("Default: display step numbering is 1-based sequential",
           "[wizard][step_logic]") {
-    helix::WizardSkipFlags flags{};
+    auto v = full_vec();
     for (int i = 0; i < 13; ++i) {
-        REQUIRE(helix::wizard_calculate_display_step(i, flags) == i + 1);
+        REQUIRE(helix::wizard_display_number(static_cast<StepId>(i), v) == i + 1);
     }
 }
 
-TEST_CASE("Default flags: next_step walks all steps", "[wizard][step_logic]") {
-    helix::WizardSkipFlags flags{};
+TEST_CASE("Default: next walks all steps", "[wizard][step_logic]") {
+    auto v = full_vec();
     for (int i = 0; i < 12; ++i) {
-        REQUIRE(helix::wizard_next_step(i, flags) == i + 1);
+        REQUIRE(helix::wizard_next(static_cast<StepId>(i), v) == static_cast<StepId>(i + 1));
     }
-    REQUIRE(helix::wizard_next_step(12, flags) == -1);
+    REQUIRE(helix::wizard_is_last(StepId::Telemetry, v));
 }
 
-TEST_CASE("Default flags: prev_step walks all steps backward",
-          "[wizard][step_logic]") {
-    helix::WizardSkipFlags flags{};
+TEST_CASE("Default: prev walks all steps backward", "[wizard][step_logic]") {
+    auto v = full_vec();
     for (int i = 12; i > 0; --i) {
-        REQUIRE(helix::wizard_prev_step(i, flags) == i - 1);
+        REQUIRE(helix::wizard_prev(static_cast<StepId>(i), v) == static_cast<StepId>(i - 1));
     }
-    REQUIRE(helix::wizard_prev_step(0, flags) == -1);
+    REQUIRE_FALSE(helix::wizard_prev(StepId::TouchCalibration, v).has_value());
 }
 
 // ============================================================================
@@ -49,90 +64,89 @@ TEST_CASE("Default flags: prev_step walks all steps backward",
 // ============================================================================
 
 TEST_CASE("Preset mode: skip hardware steps", "[wizard][step_logic][preset]") {
-    helix::WizardSkipFlags flags{};
-    flags.wifi = true;
-    flags.printer_identify = true;
-    flags.heater_select = true;
-    flags.fan_select = true;
-    flags.ams = true;
-    flags.led = true;
-    flags.filament = true;
-    flags.input_shaper = true;
-    flags.summary = true;
+    auto v = full_vec();
+    skip_step(v, StepId::Wifi);
+    skip_step(v, StepId::PrinterIdentify);
+    skip_step(v, StepId::HeaterSelect);
+    skip_step(v, StepId::FanSelect);
+    skip_step(v, StepId::AmsIdentify);
+    skip_step(v, StepId::LedSelect);
+    skip_step(v, StepId::FilamentSensor);
+    skip_step(v, StepId::InputShaper);
+    skip_step(v, StepId::Summary);
     // telemetry NOT skipped (shown in preset mode)
 
-    // Steps shown: 0(touch), 1(lang), 3(conn), 12(telemetry) = 4
-    REQUIRE(helix::wizard_calculate_display_total(flags) == 4);
-    REQUIRE(helix::wizard_calculate_display_step(0, flags) == 1);
-    REQUIRE(helix::wizard_calculate_display_step(1, flags) == 2);
-    REQUIRE(helix::wizard_calculate_display_step(3, flags) == 3);
-    REQUIRE(helix::wizard_calculate_display_step(12, flags) == 4);
+    // Steps shown: TouchCalibration, Language, Connection, Telemetry = 4
+    REQUIRE(helix::wizard_visible_count(v) == 4);
+    REQUIRE(helix::wizard_display_number(StepId::TouchCalibration, v) == 1);
+    REQUIRE(helix::wizard_display_number(StepId::Language, v) == 2);
+    REQUIRE(helix::wizard_display_number(StepId::Connection, v) == 3);
+    REQUIRE(helix::wizard_display_number(StepId::Telemetry, v) == 4);
 }
 
-TEST_CASE("Preset mode: next_step skips hardware",
-          "[wizard][step_logic][preset]") {
-    helix::WizardSkipFlags flags{};
-    flags.wifi = true;
-    flags.printer_identify = true;
-    flags.heater_select = true;
-    flags.fan_select = true;
-    flags.ams = true;
-    flags.led = true;
-    flags.filament = true;
-    flags.input_shaper = true;
-    flags.summary = true;
+TEST_CASE("Preset mode: next skips hardware", "[wizard][step_logic][preset]") {
+    auto v = full_vec();
+    skip_step(v, StepId::Wifi);
+    skip_step(v, StepId::PrinterIdentify);
+    skip_step(v, StepId::HeaterSelect);
+    skip_step(v, StepId::FanSelect);
+    skip_step(v, StepId::AmsIdentify);
+    skip_step(v, StepId::LedSelect);
+    skip_step(v, StepId::FilamentSensor);
+    skip_step(v, StepId::InputShaper);
+    skip_step(v, StepId::Summary);
 
-    REQUIRE(helix::wizard_next_step(0, flags) == 1);
-    REQUIRE(helix::wizard_next_step(1, flags) == 3);
-    REQUIRE(helix::wizard_next_step(3, flags) == 12);
-    REQUIRE(helix::wizard_next_step(12, flags) == -1);
+    REQUIRE(helix::wizard_next(StepId::TouchCalibration, v) == StepId::Language);
+    REQUIRE(helix::wizard_next(StepId::Language, v) == StepId::Connection);
+    REQUIRE(helix::wizard_next(StepId::Connection, v) == StepId::Telemetry);
+    REQUIRE(helix::wizard_is_last(StepId::Telemetry, v));
 }
 
-TEST_CASE("Normal mode: telemetry skipped by default",
-          "[wizard][step_logic]") {
-    helix::WizardSkipFlags flags{};
-    flags.telemetry = true;
+TEST_CASE("Normal mode: telemetry skipped by default", "[wizard][step_logic]") {
+    auto v = full_vec();
+    skip_step(v, StepId::Telemetry);
 
-    // 12 steps shown (0-11, telemetry skipped)
-    REQUIRE(helix::wizard_calculate_display_total(flags) == 12);
-    REQUIRE(helix::wizard_next_step(11, flags) == -1); // Summary is last
+    // 12 steps shown (telemetry skipped)
+    REQUIRE(helix::wizard_visible_count(v) == 12);
+    REQUIRE(helix::wizard_is_last(StepId::Summary, v)); // Summary is last
 }
 
-TEST_CASE("Preset mode: prev_step works", "[wizard][step_logic][preset]") {
-    helix::WizardSkipFlags flags{};
-    flags.wifi = true;
-    flags.printer_identify = true;
-    flags.heater_select = true;
-    flags.fan_select = true;
-    flags.ams = true;
-    flags.led = true;
-    flags.filament = true;
-    flags.input_shaper = true;
-    flags.summary = true;
+TEST_CASE("Preset mode: prev works", "[wizard][step_logic][preset]") {
+    auto v = full_vec();
+    skip_step(v, StepId::Wifi);
+    skip_step(v, StepId::PrinterIdentify);
+    skip_step(v, StepId::HeaterSelect);
+    skip_step(v, StepId::FanSelect);
+    skip_step(v, StepId::AmsIdentify);
+    skip_step(v, StepId::LedSelect);
+    skip_step(v, StepId::FilamentSensor);
+    skip_step(v, StepId::InputShaper);
+    skip_step(v, StepId::Summary);
 
-    REQUIRE(helix::wizard_prev_step(12, flags) == 3);
-    REQUIRE(helix::wizard_prev_step(3, flags) == 1);
-    REQUIRE(helix::wizard_prev_step(1, flags) == 0);
-    REQUIRE(helix::wizard_prev_step(0, flags) == -1);
+    REQUIRE(helix::wizard_prev(StepId::Telemetry, v) == StepId::Connection);
+    REQUIRE(helix::wizard_prev(StepId::Connection, v) == StepId::Language);
+    REQUIRE(helix::wizard_prev(StepId::Language, v) == StepId::TouchCalibration);
+    REQUIRE_FALSE(helix::wizard_prev(StepId::TouchCalibration, v).has_value());
 }
 
 TEST_CASE("Preset mode: connection also skipped", "[wizard][step_logic][preset]") {
-    helix::WizardSkipFlags flags{};
-    flags.wifi = true;
-    flags.connection = true;  // auto-validated
-    flags.printer_identify = true;
-    flags.heater_select = true;
-    flags.fan_select = true;
-    flags.ams = true;
-    flags.led = true;
-    flags.filament = true;
-    flags.input_shaper = true;
-    flags.summary = true;
+    auto v = full_vec();
+    skip_step(v, StepId::Wifi);
+    skip_step(v, StepId::Connection); // auto-validated
+    skip_step(v, StepId::PrinterIdentify);
+    skip_step(v, StepId::HeaterSelect);
+    skip_step(v, StepId::FanSelect);
+    skip_step(v, StepId::AmsIdentify);
+    skip_step(v, StepId::LedSelect);
+    skip_step(v, StepId::FilamentSensor);
+    skip_step(v, StepId::InputShaper);
+    skip_step(v, StepId::Summary);
     // telemetry NOT skipped
 
-    // Steps: 0(touch), 1(lang), 12(telemetry) = 3
-    REQUIRE(helix::wizard_calculate_display_total(flags) == 3);
-    REQUIRE(helix::wizard_next_step(1, flags) == 12);  // lang -> telemetry (skip conn + all hw)
+    // Steps: TouchCalibration, Language, Telemetry = 3
+    REQUIRE(helix::wizard_visible_count(v) == 3);
+    // lang -> telemetry (skip conn + all hw)
+    REQUIRE(helix::wizard_next(StepId::Language, v) == StepId::Telemetry);
 }
 
 // ============================================================================
@@ -184,32 +198,36 @@ TEST_CASE("Preset plan: SECOND printer with preset skips hardware but NOT first-
 
 TEST_CASE("Preset plan: secondary-printer flags navigate connection -> summary -> done",
           "[wizard][step_logic][preset]") {
-    // Build the skip flags a secondary preset printer produces and confirm the
+    // Build the skip vector a secondary preset printer produces and confirm the
     // wizard walks straight to the summary, then finishes (no telemetry).
     auto plan = helix::wizard_preset_plan(true, 2);
     REQUIRE(plan.skip_hardware);
     REQUIRE_FALSE(plan.first_run);
 
-    helix::WizardSkipFlags flags{};
+    auto v = full_vec();
     // first three steps are skipped for any subsequent printer
-    flags.touch_cal = true;
-    flags.language = true;
-    flags.wifi = true;
-    // preset covers hardware (steps 4-10)
-    flags.printer_identify = plan.skip_hardware;
-    flags.heater_select = plan.skip_hardware;
-    flags.fan_select = plan.skip_hardware;
-    flags.ams = plan.skip_hardware;
-    flags.led = plan.skip_hardware;
-    flags.filament = plan.skip_hardware;
-    flags.input_shaper = plan.skip_hardware;
+    skip_step(v, StepId::TouchCalibration);
+    skip_step(v, StepId::Language);
+    skip_step(v, StepId::Wifi);
+    // preset covers hardware (PrinterIdentify..InputShaper)
+    if (plan.skip_hardware) {
+        skip_step(v, StepId::PrinterIdentify);
+        skip_step(v, StepId::HeaterSelect);
+        skip_step(v, StepId::FanSelect);
+        skip_step(v, StepId::AmsIdentify);
+        skip_step(v, StepId::LedSelect);
+        skip_step(v, StepId::FilamentSensor);
+        skip_step(v, StepId::InputShaper);
+    }
     // not first-run: summary shown, telemetry skipped
-    flags.summary = plan.first_run;
-    flags.telemetry = !plan.first_run;
+    if (plan.first_run)
+        skip_step(v, StepId::Summary);
+    else
+        skip_step(v, StepId::Telemetry);
 
-    REQUIRE(helix::wizard_next_step(3, flags) == 11); // connection -> summary
-    REQUIRE(helix::wizard_next_step(11, flags) == -1); // summary -> done (telemetry skipped)
-    REQUIRE(helix::wizard_calculate_display_total(flags) == 2); // connection + summary
+    REQUIRE(helix::wizard_next(StepId::Connection, v) == StepId::Summary); // connection -> summary
+    REQUIRE(helix::wizard_is_last(StepId::Summary, v)); // summary -> done (telemetry skipped)
+    REQUIRE(helix::wizard_visible_count(v) == 2);       // connection + summary
 }
 
 // ============================================================================
