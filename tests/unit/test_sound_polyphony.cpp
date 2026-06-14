@@ -13,6 +13,11 @@ using Catch::Approx;
 // MockBackend — minimal SoundBackend for voice interface testing
 // ============================================================================
 
+// Anonymous namespace gives this MockBackend internal linkage so it cannot be
+// merged with the differently-laid-out MockBackend in test_sound_sequencer.cpp
+// (an ODR violation that corrupted that test's std::mutex — see the note there).
+namespace {
+
 class MockBackend : public SoundBackend {
   public:
     int tone_calls = 0;
@@ -27,6 +32,8 @@ class MockBackend : public SoundBackend {
     }
     void silence() override { silence_calls++; }
 };
+
+} // namespace
 
 // ============================================================================
 // Helper: load a theme from a JSON string via a temp file

@@ -19,6 +19,13 @@ using Catch::Approx;
 // MockBackend: records all set_tone() and silence() calls with timestamps
 // ============================================================================
 
+// Anonymous namespace gives this MockBackend internal linkage. Without it, the
+// linker would merge this definition with the differently-laid-out MockBackend
+// in test_sound_polyphony.cpp (an ODR violation): the virtual set_tone()
+// dispatched through SoundSequencer would run the wrong class's body and write
+// floats over this object's std::mutex, deadlocking get_tones() forever.
+namespace {
+
 class MockBackend : public SoundBackend {
   public:
     struct ToneEvent {
@@ -78,6 +85,8 @@ class MockBackend : public SoundBackend {
         silence_events.clear();
     }
 };
+
+} // namespace
 
 // ============================================================================
 // Helpers
@@ -165,6 +174,12 @@ TEST_CASE("SoundSequencer: single tone step plays correct freq", "[sound][sequen
 
     auto tones = backend->get_tones();
     REQUIRE(tones.size() > 0);
+
+    // Pacing guard: a 100ms tone ticked at the backend's ~1ms min interval
+    // yields ~100-200 events. A runaway spin (sleep computed as ~0) would flood
+    // the backend with orders of magnitude more. Bound generously so slow CI
+    // runners pass, but tight enough to catch a real pacing regression.
+    CHECK(tones.size() < 5000);
 
     // All tone events should be at ~1000 Hz
     for (auto& t : tones) {
