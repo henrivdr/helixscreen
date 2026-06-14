@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "touch_calibration_panel.h"
 
 #include <lvgl.h>
@@ -42,8 +44,14 @@
  * Wraps TouchCalibrationPanel for wizard integration. Only shown on fbdev
  * displays that need touchscreen calibration.
  */
-class WizardTouchCalibrationStep {
+class WizardTouchCalibrationStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::TouchCalibration; }
+    const char* component_name() const override { return "wizard_touch_calibration"; }
+    const char* log_name() const override { return "Touch Calibration"; }
+    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override { return should_skip(); }
+
     WizardTouchCalibrationStep();
     ~WizardTouchCalibrationStep();
 
@@ -59,7 +67,7 @@ class WizardTouchCalibrationStep {
      *
      * Creates and registers 3 subjects with defaults.
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks with lv_xml system
@@ -69,7 +77,7 @@ class WizardTouchCalibrationStep {
      * - on_touch_cal_retry_clicked
      * - on_touch_cal_screen_touched
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the touch calibration UI from XML
@@ -77,7 +85,7 @@ class WizardTouchCalibrationStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
@@ -85,7 +93,7 @@ class WizardTouchCalibrationStep {
      * Resets UI references. Does NOT call lv_obj_del() - wizard
      * framework handles widget deletion.
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Commit pending calibration to config

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "async_lifetime_guard.h"
 #include "input_shaper_calibrator.h"
 #include "lvgl/lvgl.h"
@@ -46,8 +48,14 @@ class InputShaperCalibrator;
  * @class WizardInputShaperStep
  * @brief Input shaper calibration step for the first-run wizard
  */
-class WizardInputShaperStep {
+class WizardInputShaperStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::InputShaper; }
+    const char* component_name() const override { return "wizard_input_shaper"; }
+    const char* log_name() const override { return "Wizard Input Shaper"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+
     WizardInputShaperStep();
     ~WizardInputShaperStep();
 
@@ -61,12 +69,12 @@ class WizardInputShaperStep {
     /**
      * @brief Initialize reactive subjects
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the input shaper calibration UI from XML
@@ -74,12 +82,12 @@ class WizardInputShaperStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Abort an in-progress calibration via M112 + firmware_restart.
@@ -101,7 +109,7 @@ class WizardInputShaperStep {
      *
      * @return true if calibration complete or user explicitly skipped
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Check if this step should be skipped

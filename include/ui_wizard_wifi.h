@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "wizard_step.h"
+#include "platform_info.h"
+
 #include "async_lifetime_guard.h"
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
@@ -62,8 +65,14 @@ struct WiFiNetwork;
  * Manages WiFi network discovery, selection, and connection.
  * Handles password entry via modal dialog for secured networks.
  */
-class WizardWifiStep {
+class WizardWifiStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::Wifi; }
+    const char* component_name() const override { return "wizard_wifi_setup"; }
+    const char* log_name() const override { return "WiFi Screen"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return helix::is_android_platform() || ctx.is_subsequent_printer; }
+
     WizardWifiStep();
     ~WizardWifiStep();
 
@@ -79,7 +88,7 @@ class WizardWifiStep {
      *
      * Creates and registers 8 subjects with defaults.
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks with lv_xml system
@@ -90,7 +99,7 @@ class WizardWifiStep {
      * - on_wifi_password_cancel
      * - on_wifi_password_connect
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the WiFi setup UI from XML
@@ -98,7 +107,7 @@ class WizardWifiStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Initialize WiFi and Ethernet managers
@@ -112,7 +121,7 @@ class WizardWifiStep {
      *
      * Stops scanning, destroys managers, and resets UI references.
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Show password entry modal for secured network

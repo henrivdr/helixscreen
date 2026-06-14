@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "lvgl/lvgl.h"
 
 #include <memory>
@@ -49,8 +51,14 @@
  * Allows user to enter printer name and select printer type.
  * Supports auto-detection via hardware fingerprinting.
  */
-class WizardPrinterIdentifyStep {
+class WizardPrinterIdentifyStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::PrinterIdentify; }
+    const char* component_name() const override { return "wizard_printer_identify"; }
+    const char* log_name() const override { return "Wizard Printer"; }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware; }
+
     WizardPrinterIdentifyStep();
     ~WizardPrinterIdentifyStep();
 
@@ -67,7 +75,7 @@ class WizardPrinterIdentifyStep {
      * Creates and registers 3 subjects. Loads existing values from config.
      * Runs auto-detection if no saved type.
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks with lv_xml system
@@ -76,7 +84,7 @@ class WizardPrinterIdentifyStep {
      * - on_printer_name_changed
      * - on_printer_type_changed
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the printer identification UI from XML
@@ -84,21 +92,21 @@ class WizardPrinterIdentifyStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
      *
      * Saves current values to config and resets UI references.
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Check if printer identification is complete
      *
      * @return true if printer name is entered
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Get step name for logging

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "ui_timer_guard.h"
 
 #include "lvgl/lvgl.h"
@@ -35,8 +37,14 @@
  * @class WizardLanguageChooserStep
  * @brief Language selection step for the first-run wizard
  */
-class WizardLanguageChooserStep {
+class WizardLanguageChooserStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::Language; }
+    const char* component_name() const override { return "wizard_language_chooser"; }
+    const char* log_name() const override { return "Wizard Language Chooser"; }
+    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override { return should_skip(); }
+
     WizardLanguageChooserStep();
     ~WizardLanguageChooserStep();
 
@@ -50,12 +58,12 @@ class WizardLanguageChooserStep {
     /**
      * @brief Initialize reactive subjects
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the language chooser UI from XML
@@ -63,19 +71,19 @@ class WizardLanguageChooserStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Check if step is validated
      *
      * @return true if a language has been selected
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Check if this step should be skipped

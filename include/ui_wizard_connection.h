@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "wizard_step.h"
+
 #include "async_lifetime_guard.h"
 #include "lvgl/lvgl.h"
 #include "mdns_discovery.h"
@@ -59,8 +61,14 @@
  * Allows user to enter Moonraker IP/port and test the connection.
  * On success, triggers hardware discovery for subsequent wizard steps.
  */
-class WizardConnectionStep {
+class WizardConnectionStep : public helix::wizard::Step {
   public:
+    // helix::wizard::Step interface
+    helix::wizard::StepId id() const override { return helix::wizard::StepId::Connection; }
+    const char* component_name() const override { return "wizard_connection"; }
+    const char* log_name() const override { return "Wizard Connection"; }
+    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override { return false; }
+
     /// Auto-probe state for localhost detection
     enum class AutoProbeState {
         IDLE,        ///< Never probed or probe complete
@@ -86,7 +94,7 @@ class WizardConnectionStep {
      * Creates and registers 5 subjects. Loads existing values from config.
      * Sets connection_test_passed to 0 (disabled) for this step.
      */
-    void init_subjects();
+    void init_subjects() override;
 
     /**
      * @brief Register event callbacks with lv_xml system
@@ -96,7 +104,7 @@ class WizardConnectionStep {
      * - on_ip_input_changed
      * - on_port_input_changed
      */
-    void register_callbacks();
+    void register_callbacks() override;
 
     /**
      * @brief Create the connection UI from XML
@@ -104,14 +112,14 @@ class WizardConnectionStep {
      * @param parent Parent container (wizard_content)
      * @return Root object of the step, or nullptr on failure
      */
-    lv_obj_t* create(lv_obj_t* parent);
+    lv_obj_t* create(lv_obj_t* parent) override;
 
     /**
      * @brief Cleanup resources
      *
      * Cancels any ongoing connection test and resets UI references.
      */
-    void cleanup();
+    void cleanup() override;
 
     /**
      * @brief Get the configured Moonraker URL
@@ -127,7 +135,7 @@ class WizardConnectionStep {
      *
      * @return true if a successful connection test has been performed
      */
-    bool is_validated() const;
+    bool is_validated() const override;
 
     /**
      * @brief Get step name for logging
