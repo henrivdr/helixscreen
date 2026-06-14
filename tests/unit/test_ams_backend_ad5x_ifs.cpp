@@ -299,6 +299,36 @@ class Ad5xIfsTestAccess {
         return b.custom_material_types_;
     }
 
+    // --- filament.json eject-parameter cache (LEN/SPEED per material) ---
+
+    // Drive the pure parse helper directly (no IO).
+    static void parse_filament_json(AmsBackendAd5xIfs& b, const std::string& content) {
+        b.parse_filament_json(content);
+    }
+    // Seed the per-material eject-parameter cache directly (mirrors what
+    // fetch_filament_json applies on the main thread). Material key, tube
+    // length (LEN), ifs speed (SPEED).
+    static void seed_filament_eject_params(AmsBackendAd5xIfs& b, const std::string& material,
+                                           int tube_length, int ifs_speed) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.filament_eject_params_[material] = {tube_length, ifs_speed};
+    }
+    // Read a cached pair back (returns nullopt when the material isn't cached).
+    static std::optional<std::pair<int, int>> filament_eject_params(const AmsBackendAd5xIfs& b,
+                                                                    const std::string& material) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        auto it = b.filament_eject_params_.find(material);
+        if (it == b.filament_eject_params_.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+    // Read the parsed "default" pair (tube length, ifs speed).
+    static std::pair<int, int> filament_eject_default(const AmsBackendAd5xIfs& b) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        return b.filament_eject_default_;
+    }
+
     // --- Phase tracker hooks (live load/unload progress feedback) ---
 
     // Read the dynamic operation_detail string the phase machine produced.
@@ -1864,16 +1894,27 @@ TEST_CASE("AD5X IFS dirty flag protects against both parse paths", "[ams][ad5x_i
 }
 
 // ==========================================================================
-// Native ZMOD: parse_adventurer_json infers filament presence (#716)
+// Native ZMOD: parse_adventurer_json does NOT own presence (GET_ZCOLOR does)
 // ==========================================================================
+//
+// History (#716): parse_adventurer_json used to *infer* presence from the
+// persisted ffmColorN field — "non-empty color means filament present". That
+// inference is wrong on native ZMOD: zmod persists the colour/material
+// assignment across unload/eject and never writes an empty colour, so a
+// previously-emptied channel got resurrected to "present" on the next
+// content-changed poll (external unload not reflected; an edit to one channel
+// resurrecting another). Presence is now owned solely by GET_ZCOLOR
+// (apply_zcolor_result) — the RS-485 silk sensor — and the JSON parse must not
+// touch port_presence_. It still refreshes colors_/materials_ for clean slots.
 
-TEST_CASE("AD5X IFS parse_adventurer_json infers presence for native ZMOD", "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS parse_adventurer_json does not own presence on native ZMOD",
+          "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
     // No per-port sensors — this is native ZMOD
     REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
 
-    SECTION("slots with non-empty color are marked AVAILABLE") {
+    SECTION("non-empty colour does NOT set presence — only GET_ZCOLOR can") {
         std::string content = R"({
             "FFMInfo": {
                 "ffmColor1": "#161616",
@@ -1889,55 +1930,180 @@ TEST_CASE("AD5X IFS parse_adventurer_json infers presence for native ZMOD", "[am
 
         Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
 
+        // Presence is untouched by the parse (default false). The colour/material
+        // refresh still happened — but the slot is not "present" until GET_ZCOLOR
+        // (the silk sensor) confirms it.
         for (int i = 0; i < 4; ++i) {
-            auto info = backend.get_slot_info(i);
-            REQUIRE(info.is_present());
-            REQUIRE(info.status == SlotStatus::AVAILABLE);
-            REQUIRE(Ad5xIfsTestAccess::port_presence(backend, i));
+            REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, i));
+            REQUIRE(backend.get_slot_info(i).status == SlotStatus::EMPTY);
         }
     }
 
-    SECTION("slot with empty color is NOT marked present") {
+    SECTION("colour/material refresh survives even though presence does not flip") {
         std::string content = R"({
             "FFMInfo": {
-                "ffmColor1": "",
-                "ffmType1": "?",
                 "ffmColor2": "#FF0000",
                 "ffmType2": "PLA"
             }
         })";
-
         Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
 
-        // Slot 0 (port 1): empty color → not present
-        auto info0 = backend.get_slot_info(0);
-        REQUIRE(info0.status == SlotStatus::EMPTY);
-        REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+        // Parse must not have set presence...
+        REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 1));
 
-        // Slot 1 (port 2): has color → present
-        auto info1 = backend.get_slot_info(1);
-        REQUIRE(info1.is_present());
+        // ...but once GET_ZCOLOR marks the slot present, the colour/material the
+        // parse refreshed is visible. (apply_zcolor_result with an empty HEX in
+        // the slot keeps the JSON colour via the old-format / empty-hex guard, so
+        // assert presence only here.)
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.slots[1] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "FF0000"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
         REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 1));
+        REQUIRE(backend.get_slot_info(1).is_present());
     }
+}
 
-    SECTION("per-port sensors take precedence over JSON inference") {
-        // Simulate a per-port sensor detecting filament on port 1
-        Ad5xIfsTestAccess::handle_status(backend, make_port_sensor(1, true));
-        REQUIRE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+// ==========================================================================
+// Native ZMOD presence resurrection regression (the bug this branch fixes)
+// ==========================================================================
+//
+// Repro: channel 0 is LOADED (GET_ZCOLOR), then physically unloaded so the next
+// GET_ZCOLOR reports it ABSENT (presence cleared). zmod keeps ffmColor1 in
+// Adventurer5M.json. A subsequent edit to a DIFFERENT channel triggers a
+// content-changed JSON poll. Pre-fix, parse_adventurer_json saw the persisted
+// non-empty ffmColor1 and resurrected channel 0 to present. Post-fix, the parse
+// never touches presence, so channel 0 stays EMPTY.
 
-        // Now parse JSON for a slot with empty color
-        std::string content = R"({
-            "FFMInfo": {
-                "ffmColor2": "",
-                "ffmType2": "PLA"
-            }
-        })";
+TEST_CASE("AD5X IFS emptied channel is not resurrected by a JSON edit to another channel",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // 1. Establish channel 0 LOADED via GET_ZCOLOR (the silk sensor's truth).
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.ifs_active = true;
+        r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "161616"};
+        r.slots[1] = AmsBackendAd5xIfs::ZColorSlot{"PETG", "FFFFFF"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE(backend.get_slot_info(0).is_present());
+
+    // 2. Channel 0 physically unloaded — GET_ZCOLOR now reports it ABSENT.
+    //    Channel 1 stays present.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.ifs_active = true;
+        r.slots[1] = AmsBackendAd5xIfs::ZColorSlot{"PETG", "FFFFFF"};
+        // slots[0] left empty → channel 0 absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+
+    // 3. A content-changed JSON poll edits a DIFFERENT channel (channel 1's
+    //    colour) while zmod still persists channel 0's stale non-empty colour.
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "#161616",
+            "ffmType1": "PLA",
+            "ffmColor2": "#00AAFF",
+            "ffmType2": "PETG"
+        }
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+
+    // 4. Channel 0 must STAY empty — the persisted non-empty ffmColor1 must not
+    //    resurrect it. (Pre-fix this failed: parse inferred present from colour.)
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+}
+
+// ==========================================================================
+// Pre-SILENT zmod fallback: JSON inference is the ONLY presence source when
+// GET_ZCOLOR SILENT=1 is unsupported (latched false on a prompt-dialog reply)
+// ==========================================================================
+//
+// The resurrection fix makes GET_ZCOLOR the sole presence authority — but that
+// authority only exists on modern zmod. On pre-SILENT zmod, GET_ZCOLOR returns
+// a prompt dialog, zcolor_silent_supported_ latches false, and schedule_zcolor_
+// query()/query_zcolor_silent() no-op forever. Without the gated fallback below
+// there would be NO presence source at all (every channel stuck EMPTY). So when
+// SILENT is unsupported, parse_adventurer_json must resume the legacy inference.
+
+TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "#161616", "ffmType1": "PLA",
+            "ffmColor2": "#FF0000", "ffmType2": "PETG"
+        }
+    })";
+
+    SECTION("SILENT supported (modern zmod): parse does NOT set presence") {
+        REQUIRE(Ad5xIfsTestAccess::zcolor_silent_supported(backend)); // default
         Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
-
-        // Slot 1 (port 2): has_per_port_sensors is true, so JSON inference is skipped.
-        // port_presence stays false (no sensor for port 2 reported detected).
+        REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
         REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 1));
     }
+
+    SECTION("SILENT unsupported (pre-SILENT zmod): parse infers presence") {
+        Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+        Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+        // Non-empty colours → present; this is the only presence source here.
+        REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+        REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 1));
+        REQUIRE(backend.get_slot_info(0).is_present());
+    }
+}
+
+// ==========================================================================
+// Override-clear is driven by GET_ZCOLOR's present->absent transition (Change 2)
+// ==========================================================================
+//
+// When a spool is removed, its brand/spool_name/spoolman_id override must be
+// cleared so it doesn't haunt the now-empty slot or get re-applied to whatever
+// loads next. That cleanup used to ride on parse_adventurer_json's presence
+// inference; it now rides on apply_zcolor_result's present->absent transition.
+
+TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // Slot 0 present with a user override staged.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "161616"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.spool_name = "PolyTerra Charcoal";
+    ovr.spoolman_id = 42;
+    Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
+    REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+
+    // GET_ZCOLOR now reports slot 0 ABSENT → present->absent transition must
+    // clear the override.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        // slots[0] left empty → absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 }
 
 // NOTE: tests previously here exercised parse_save_variables's color/type
@@ -3353,6 +3519,11 @@ TEST_CASE("AD5X IFS external color change syncs lane_data, preserves brand metad
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // Seed a lane_data entry in the mock DB plus a matching in-memory override
     // — what the override store load would produce after a Helix-initiated edit.
     api.mock_set_db_value("lane_data", "lane1",
@@ -3435,6 +3606,11 @@ TEST_CASE("AD5X IFS external color change with no override creates minimal lane_
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // No seeded override. lane_data starts empty.
     REQUIRE(api.mock_get_db_value("lane_data", "lane1").is_null());
 
@@ -3467,11 +3643,17 @@ TEST_CASE("AD5X IFS external color change with no override creates minimal lane_
     CHECK_FALSE(db.contains("vendor"));
 }
 
-TEST_CASE("AD5X IFS eject (empty Adventurer5M.json color) clears the override",
+TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
           "[ams][ad5x_ifs][filament_slot_override][slow]") {
-    // Genuine spool removal: zmod sets ffmColor to "" when the user ejects.
-    // parse_adventurer_json must clear the override (brand/spool_name/spoolman
-    // describe the gone spool) and delete the lane_data entry.
+    // Genuine spool removal. presence is owned solely by GET_ZCOLOR now: when
+    // apply_zcolor_result reports a slot present->absent it must clear the
+    // override (brand/spool_name/spoolman describe the gone spool) AND delete
+    // the lane_data entry via clear_override_locked's store->clear_async path.
+    // (This used to ride on parse_adventurer_json's empty-color eject branch.)
+    //
+    // The sibling test "GET_ZCOLOR present->absent clears the slot override"
+    // covers the override-only clear without a store; this case additionally
+    // verifies the MR DB lane_data row is deleted.
     Ad5xIfsTmpCacheDir tmp("eject_clears_override");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -3495,17 +3677,22 @@ TEST_CASE("AD5X IFS eject (empty Adventurer5M.json color) clears the override",
     ovr.color_rgb = 0xFF5500;
     Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
 
-    // Loaded state: presence becomes true via the non-empty color.
+    // Loaded state: slot 0 present. (Establish presence explicitly — parse no
+    // longer infers it.) Baseline color comes from the JSON parse.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
     })");
     REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 
-    // Eject: ffmColor1 empty. parse_adventurer_json's eject branch clears
-    // the override (and the MR DB lane_data entry) directly.
-    Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
-        "FFMInfo": {"ffmColor1": "", "ffmType1": ""}
-    })");
+    // Eject: GET_ZCOLOR reports slot 0 ABSENT. The present->absent transition
+    // in apply_zcolor_result clears the override and the MR DB lane_data entry.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        // slots[0] left empty => absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
 
     {
         auto info = backend.get_slot_info(0);
@@ -3561,6 +3748,11 @@ TEST_CASE("AD5X IFS external color change mirrors colors+types into _IFS_VARS",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // First parse establishes baseline — no sync, no mirror.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
@@ -3612,6 +3804,11 @@ TEST_CASE("AD5X IFS bambufy prefix gets SHOW=0 to suppress _IFS_VARS echo",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // Establish baseline + drive an external change.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
@@ -3652,6 +3849,11 @@ TEST_CASE("AD5X IFS mirror skipped when has_ifs_vars_ is false (stock zmod)",
     auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
 
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
@@ -3759,6 +3961,13 @@ TEST_CASE("AD5X IFS empty colors_[] on boot does NOT establish phantom baseline"
     }
     CHECK(!api.mock_get_db_value("lane_data", "lane1").is_null());
     CHECK(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0x898989u);
+
+    // The slot is now loaded (firmware reported a real color). parse_adventurer_json
+    // no longer owns presence — in production the post-parse GET_ZCOLOR establishes
+    // it. Seed it here so the SUBSEQUENT external-edit parse below takes the sync
+    // path. (Seeding only now preserves the phantom-baseline guard checked above:
+    // the empty-colors_ parse_vars in step 1 still must not clear the override.)
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
 
     // Boot path step 3: a SUBSEQUENT firmware parse with a different color
     // is an external edit — sync override + lane_data, KEEP brand metadata.
@@ -3996,6 +4205,11 @@ TEST_CASE("AD5X IFS firmware color change with no override creates a minimal one
     // the helper is null-safe and that lane_data publication doesn't gate
     // the in-memory sync.
     AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR. (Baseline parse never syncs — first observation.)
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
 
     // First parse establishes baseline only — no sync.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
@@ -4271,6 +4485,93 @@ TEST_CASE("AD5X IFS listener ignores unrelated gcode lines", "[ams][ad5x_ifs][zc
     Ad5xIfsTestAccess::on_gcode_response_line(backend, "// 2: PETG/00FF00");
 
     CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before);
+}
+
+// ==========================================================================
+// External-unload presence resurrection (zmod's own color macro)
+// ==========================================================================
+//
+// When the user unloads a lane via zmod's native macro (AD5X LCD / Mainsail),
+// the console stream contains NO RUN_ZCOLOR / CHANGE_ZCOLOR token, so the old
+// listener never re-read presence and the emptied lane kept showing loaded.
+// zmod's `_SET_EXTRUDER_SLOT` emits a bare, non-localized `Extruder: <N>` line
+// (zmod_color.py cmd_SET_EXTRUDER_SLOT) at the channel-commit step near the end
+// of the operation — we key off that to schedule one GET_ZCOLOR refresh.
+//
+// The match is deliberately strict (bare "Extruder: <int>" only): GET_ZCOLOR
+// SILENT responses and the interactive prompt both carry a " | IFS:" suffix,
+// and the per-slot rows look like "1: PLA/FFFFFF" — none match the bare form,
+// so neither our own in-flight query echo nor a dialog render re-triggers.
+
+TEST_CASE("AD5X IFS listener fires schedule_zcolor_query on external unload completion",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    // No in-flight query: this is the genuine post-unload channel-commit line.
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    // zmod's _SET_EXTRUDER_SLOT respond_raw form, exactly as captured live
+    // (raza616 AD5X, unloading lane 3 while lane 4 active).
+    bool buffered = Ad5xIfsTestAccess::on_gcode_response_line(backend, "Extruder: 3");
+
+    CHECK_FALSE(buffered); // Treated as external trigger, not buffered.
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
+}
+
+TEST_CASE("AD5X IFS external-unload trigger tolerates the // console prefix",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    // Same line, but framed with Klipper's "// " comment prefix.
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: 2");
+
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
+}
+
+TEST_CASE("AD5X IFS dialog button-definition with IN_ZCOLOR does NOT re-read",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    // The unload dialog DEFINITION echoes IN_ZCOLOR when the prompt renders —
+    // NOT when the unload executes. It must NOT schedule a query (IN_ZCOLOR is
+    // not a watched token, and the line carries no bare "Extruder: N").
+    Ad5xIfsTestAccess::on_gcode_response_line(
+        backend, "// action:prompt_button Unload|IN_ZCOLOR SLOT=3 NAPR=1|primary|");
+
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before);
+}
+
+TEST_CASE("AD5X IFS GET_ZCOLOR SILENT extruder line does NOT re-trigger (spam guard)",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Our own GET_ZCOLOR SILENT=1 is in flight: every response line (incl. the
+    // "Extruder: ... | IFS:" header) must be buffered, not re-armed.
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, true);
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    bool b1 =
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: None (1) | IFS: True");
+    bool b2 = Ad5xIfsTestAccess::on_gcode_response_line(backend, "// 2: PLA/2750E0");
+
+    CHECK(b1);
+    CHECK(b2);
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before);
+
+    // Even with no in-flight query, the SILENT header form (" | IFS:" suffix,
+    // non-bare) must NOT match the strict external-unload trigger.
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+    uint32_t before2 = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: None (1) | IFS: True");
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: 3: PLA/2750E0 | IFS: True");
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before2);
 }
 
 // ==========================================================================
@@ -4678,12 +4979,66 @@ TEST_CASE("AD5X IFS #904 PLA+ round-trips through set_slot_info after custom_typ
 // ==========================================================================
 // Cold per-lane eject / recover (#996)
 //
-// IFS_F11 PRUTOK={port} CHECK=0 is a cold per-lane retract that drives ONE
-// idle lane's feed motor backward toward the spool. It does NOT heat the
-// hotend and (CHECK=0) ignores the lane presence/runout sensor, so it can
-// recover a snapped chunk stuck in an idle lane. Ports are 1-based; HelixScreen
-// slot_index is 0-based, so PRUTOK = slot_index + 1.
+// eject_lane fires zmod's clamp / cold-retract / unclamp trio for one idle
+// lane: IFS_F24 (clamp), IFS_F11 LEN=<tube> SPEED=<ifs_speed> (cold retract),
+// IFS_F39 (unclamp) — mirroring zmod's _REMOVE_PRUTOK_IFS macro. LEN/SPEED come
+// from /mod_data/filament.json keyed by the lane's material, falling back to
+// the file's "default" entry, then to a hardcoded 1000/1200. Ports are 1-based;
+// HelixScreen slot_index is 0-based, so PRUTOK = slot_index + 1.
 // ==========================================================================
+
+TEST_CASE("AD5X IFS parse_filament_json populates per-material LEN/SPEED with fallback",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // default + PETG (explicit 650 tube) + PLA (no tube field → default tube).
+    const std::string json = R"({
+        "default": {"filament_tube_length": 1000, "filament_ifs_speed": 1200},
+        "PETG":    {"filament_tube_length": 650,  "filament_ifs_speed": 1100},
+        "PLA":     {"filament_ifs_speed": 900}
+    })";
+    Ad5xIfsTestAccess::parse_filament_json(backend, json);
+
+    // PETG: both fields present.
+    auto petg = Ad5xIfsTestAccess::filament_eject_params(backend, "PETG");
+    REQUIRE(petg.has_value());
+    CHECK(petg->first == 650);
+    CHECK(petg->second == 1100);
+
+    // PLA: missing tube length falls back to the default's tube length (1000),
+    // but its own ifs speed (900) is honored.
+    auto pla = Ad5xIfsTestAccess::filament_eject_params(backend, "PLA");
+    REQUIRE(pla.has_value());
+    CHECK(pla->first == 1000);
+    CHECK(pla->second == 900);
+
+    // Parsed default pair is available for unknown materials.
+    auto def = Ad5xIfsTestAccess::filament_eject_default(backend);
+    CHECK(def.first == 1000);
+    CHECK(def.second == 1200);
+}
+
+TEST_CASE("AD5X IFS parse_filament_json with no default uses 1000/1200 literal fallback",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // No "default" entry and the one material lacks both fields → everything
+    // resolves to the literal 1000/1200.
+    const std::string json = R"({"ABS": {}})";
+    Ad5xIfsTestAccess::parse_filament_json(backend, json);
+
+    auto def = Ad5xIfsTestAccess::filament_eject_default(backend);
+    CHECK(def.first == 1000);
+    CHECK(def.second == 1200);
+
+    auto abs = Ad5xIfsTestAccess::filament_eject_params(backend, "ABS");
+    REQUIRE(abs.has_value());
+    CHECK(abs->first == 1000);
+    CHECK(abs->second == 1200);
+
+    // Unknown material isn't cached → eject_lane falls back to the default pair.
+    CHECK_FALSE(Ad5xIfsTestAccess::filament_eject_params(backend, "TPU").has_value());
+}
 
 namespace {
 // Captures issued G-code without a live Moonraker connection by overriding the
@@ -4723,17 +5078,20 @@ TEST_CASE("AD5X IFS reports lane-eject and force-eject support", "[ams][ad5x_ifs
     REQUIRE(backend.supports_force_eject());
 }
 
-TEST_CASE("AD5X IFS eject_lane issues cold IFS_F11 retract", "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS eject_lane issues clamp / retract / unclamp sequence", "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
 
-    // 0-based slot 2 -> 1-based port 3.
+    // Empty cache → default 1000/1200 LEN/SPEED. 0-based slot 2 -> 1-based port 3.
     AmsError err = backend.eject_lane(2);
     REQUIRE(err.success());
 
-    // Exactly the cold retract, with CHECK=0 spelled out to document intent.
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
-    REQUIRE(backend.captured_gcodes.size() == 1);
+    // Three separate calls, in order: clamp, retract (config-sourced LEN/SPEED),
+    // unclamp — mirroring zmod's _REMOVE_PRUTOK_IFS macro.
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=3");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=3 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=3");
 
     // No heating and no homing — this is a cold idle-lane retract.
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
@@ -4749,10 +5107,51 @@ TEST_CASE("AD5X IFS eject_lane port mapping is 1-based", "[ams][ad5x_ifs]") {
     Ad5xIfsTestAccess::set_running(backend, true);
 
     REQUIRE(backend.eject_lane(0).success());
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 CHECK=0"));
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=1");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=1 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=1");
 
+    backend.captured_gcodes.clear();
     REQUIRE(backend.eject_lane(3).success());
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=4 CHECK=0"));
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=4");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=4 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=4");
+}
+
+TEST_CASE("AD5X IFS eject_lane uses the lane material's tube length / ifs speed", "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    // Slot 2's material is PETG; cache says PETG retracts 650mm at 1200.
+    Ad5xIfsTestAccess::set_material(backend, 2, "PETG");
+    Ad5xIfsTestAccess::seed_filament_eject_params(backend, "PETG", 650, 1200);
+
+    REQUIRE(backend.eject_lane(2).success());
+
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=3");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=3 LEN=650 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=3");
+}
+
+TEST_CASE("AD5X IFS eject_lane falls back to 1000/1200 when filament.json absent",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+
+    // No filament.json fetched (empty cache) and a lane material that isn't
+    // cached anyway — eject must still fire the full 3-command sequence using
+    // the hardcoded 1000/1200 fallback.
+    Ad5xIfsTestAccess::set_material(backend, 1, "PLA");
+
+    REQUIRE(backend.eject_lane(1).success());
+
+    REQUIRE(backend.captured_gcodes.size() == 3);
+    REQUIRE(backend.captured_gcodes[0] == "IFS_F24 PRUTOK=2");
+    REQUIRE(backend.captured_gcodes[1] == "IFS_F11 PRUTOK=2 LEN=1000 SPEED=1200");
+    REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=2");
 }
 
 TEST_CASE("AD5X IFS eject_lane refuses the slot loaded in toolhead", "[ams][ad5x_ifs]") {
@@ -4771,7 +5170,9 @@ TEST_CASE("AD5X IFS eject_lane refuses the slot loaded in toolhead", "[ams][ad5x
 
     // A DIFFERENT idle lane is still ejectable while slot 1 is loaded.
     REQUIRE(backend.eject_lane(2).success());
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=3"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=3"));
 }
 
 TEST_CASE("AD5X IFS eject_lane rejects out-of-range slots", "[ams][ad5x_ifs]") {
@@ -4848,8 +5249,10 @@ TEST_CASE("AD5X IFS unload_filament with empty toolhead routes to cold lane ejec
 
     REQUIRE(backend.unload_filament(2).success());
 
-    // 0-based slot 2 -> 1-based port 3, cold retract, no heat, no homing.
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 CHECK=0"));
+    // 0-based slot 2 -> 1-based port 3, cold clamp/retract/unclamp, no heat, no homing.
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=3"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=3 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=3"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
     REQUIRE_FALSE(backend.has_gcode_containing("M104"));
@@ -4889,9 +5292,11 @@ TEST_CASE("AD5X IFS unload_filament on a non-active slot ejects that lane, not t
 
     REQUIRE(backend.unload_filament(0).success());
 
-    // 0-based slot 0 -> 1-based port 1, cold retract. Crucially NOT the toolhead
-    // unload, which would back out the loaded channel 3.
-    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 CHECK=0"));
+    // 0-based slot 0 -> 1-based port 1, cold clamp/retract/unclamp. Crucially NOT
+    // the toolhead unload, which would back out the loaded channel 3.
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=1"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=1"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));

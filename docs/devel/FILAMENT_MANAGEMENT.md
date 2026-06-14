@@ -887,6 +887,54 @@ Prefix is `less_waste` (lessWaste / zmod) or `bambufy` (bambufy); the schema is 
 
 > **Sensor-location correction:** the `ifs_motion_sensor` sits **inside the IFS immediately after the hub**, not at the toolhead. The current backend routes it through `parse_head_sensor()` as a simplification; a proper fix would map it to `PathSegment::OUTPUT` and require the toolhead switch for `filament_loaded` / load-complete detection.
 
+#### The two data sources, and which one owns what
+
+On native ZMOD (no lessWaste / bambufy plugin) the backend reconciles **two** independent reads. They answer different questions and must not be confused — conflating them is the root of the resurrection bug documented below.
+
+| Source | Transport | Question it answers | Code |
+|--------|-----------|---------------------|------|
+| `Adventurer5M.json` `FFMInfo` | Moonraker `download_file("config", "Adventurer5M.json")`, 5s content-compare poll | What **color / material** is *assigned* to each channel (persisted metadata) | `parse_adventurer_json()`, `poll_adventurer_json()`, `note_json_content()` |
+| `GET_ZCOLOR SILENT=1` (and, future, `IFS_STATUS`) | gcode console, on-demand | Which lanes **physically have filament** (RS-485 silk sensor) + the active lane | `query_zcolor_silent()`, `parse_zcolor_silent()`, `apply_zcolor_result()` |
+
+**`Adventurer5M.json` `FFMInfo` has NO per-channel presence field.** It carries `ffmColor{1-4}` / `ffmType{1-4}` plus an active `channel`, and those colors **persist across unload/eject** — zmod never blanks `ffmColorN` when a lane is emptied. So a non-empty `ffmColorN` means "this channel was *assigned* this color", **not** "filament is loaded here". (Field-proven on raza616's hardware: he ejected *and* unloaded channel 1, yet `ffmColor1` stayed populated; a live `IFS_STATUS` reported `Ports:[F,T,T,T]` while the JSON still had `ffmColor1` set — the JSON simply does not track presence.)
+
+**`GET_ZCOLOR SILENT=1`** is the silk-sensor truth. Text format (every line `// `-prefixed), parsed by `parse_zcolor_silent()`:
+
+```
+// Extruder: 3: PLA/2750E0 | IFS: True   <- summary: active lane, its mat/hex, IFS-mode flag
+// 1: PLA/FFFFFF                          <- one row per LOADED slot (silk-detected)
+// 3: PLA/2750E0
+```
+
+- Summary `Extruder: None (N)` = nothing at the hotend; `Extruder: N: MAT/HEX` = slot N is feeding the head. The `(N)` paren form carries the current channel.
+- A **missing slot number = empty** — zmod filters slot rows by `hasFilament` from the RS-485 `silk_state` bitmask, so an absent row is the presence signal for "this lane is physically empty".
+- Slot body is `MATERIAL`, `MATERIAL/HEX`, or `MATERIAL/NAME/HEX`. Material is everything before the first `/`; hex is everything after the **last** `/`. A response with slot rows but no `/HEX` is flagged `is_old_format` (pre-zmod-`ad2802ab`, Apr 2026) — presence only, colors still come from JSON.
+- A response whose lines contain `action:prompt_` means **old zmod returned the interactive dialog instead of silent text** → `is_prompt_fallback` (see presence-ownership rule below).
+
+**`IFS_STATUS`** (`zmod_ifs.py` `cmd_IFS_STATUS` → `ifs_data.get_values()`) is a cleaner, structured alternative that ships in zmod 1.7.1 but is **not yet consumed** by HelixScreen. It returns clean JSON:
+
+```json
+{"State": 4, "Ports": [false, true, true, true], "Silk": 14,
+ "Chan": 4, "Insert": 0, "NeedInsert": false, "Stall": false, "stall_state": 0}
+```
+
+`Ports[i]` is `(silk_state >> i) & 1` — the same RS-485 bits `GET_ZCOLOR` filters on, but already decoded to booleans. `Chan` is the active port. **This is the future presence source**: it would let the backend drop both the `GET_ZCOLOR` text-scrape *and* the 5s JSON poll. Tracked as the firmware-integration headline; the upstream wishlist below (`get_status()` on `zmod_ifs`) would close the gap entirely.
+
+#### Presence ownership rule (and the resurrection bug)
+
+> **Presence is owned SOLELY by `GET_ZCOLOR` on modern zmod.** `parse_adventurer_json()` must NOT infer presence from `ffmColorN`. This is the fix for the channel-resurrection bug (commits `35dfcb765`, `2081e5757`).
+
+**The bug.** Earlier code in `parse_adventurer_json()` treated a non-empty `ffmColorN` as `port_presence_[idx] = true` with no guard. Because zmod persists `ffmColorN` across unload/eject, an emptied lane was **resurrected as loaded on every content-changed poll**. The exact field report (raza616, v0.99.78): he externally unloaded channel 1 (Helix failed to clear it), then a `FIRMWARE_RESTART` fixed it (a fresh `GET_ZCOLOR` set `port_presence_[0]=false`), but then **editing channel 4's color in zmod changed the JSON content → triggered a reparse → the persisted `ffmColor1` resurrected channel 1 with its stale color**. One edit resurrected an unrelated emptied lane.
+
+**The fix.** On modern zmod (where `GET_ZCOLOR SILENT=1` works), `parse_adventurer_json()` refreshes `colors_[]` / `materials_[]` only and leaves `port_presence_` untouched. `apply_zcolor_result()` (the silk-sensor read) is the sole presence authority, and it now also drives the `present→absent` override-clear (`clear_override_locked`) that used to ride on the JSON inference. Every JSON content change already schedules a `GET_ZCOLOR` immediately after the parse (`poll_adventurer_json()` calls `schedule_zcolor_query()`), so silk-truth presence re-establishes on the same event — the JSON setting presence was both **wrong and redundant**.
+
+**The pre-SILENT regression (caught in review → commit `2081e5757`).** Making `GET_ZCOLOR` the sole authority breaks presence *entirely* on **old zmod**, where `GET_ZCOLOR SILENT=1` returns a prompt dialog instead of silent text. There, `apply_zcolor_result()` sees `is_prompt_fallback`, latches `zcolor_silent_supported_ = false`, and every subsequent `schedule_zcolor_query()` / `query_zcolor_silent()` no-ops forever. With JSON inference removed, every channel would be stuck EMPTY. The fix **gates the legacy `ffmColorN` inference on `!zcolor_silent_supported_`** (`parse_adventurer_json()`, the `if (!has_per_port_sensors_ && !zcolor_silent_supported_.load())` block):
+
+- **Modern zmod** (`SILENT` works): `GET_ZCOLOR` owns presence; JSON never touches it → resurrection fixed.
+- **Pre-SILENT zmod** (`zcolor_silent_supported_` latched false): no silk query exists, so JSON inference is the only fallback — `non-empty color == present`, `empty color while IDLE == eject + override-clear`. The resurrection bug can't bite here because no `GET_ZCOLOR` competes for ownership.
+
+> **Known minor edge (accepted):** on modern zmod, an external color edit that arrives via the JSON poll *before* `GET_ZCOLOR` has confirmed presence won't sync to `lane_data` (the baseline moves without syncing). Rare, and far preferable to the constant resurrection. Confirmed acceptable in review.
+
 **save_variables keys** (all prefixed `less_waste_`):
 
 | Key | Type | Example |
@@ -918,6 +966,59 @@ Tool mapping: array index = tool number (T0-T15), value = physical port (1-4, 5=
 
 **Unload is toolhead-oriented, not per-lane**: Both `REMOVE_PRUTOK_IFS PRUTOK={port}` and `IFS_REMOVE_PRUTOK` run the toolhead unload sequence — they heat the hotend and retract whatever filament is currently loaded to the toolhead. The `PRUTOK={port}` argument does **not** select an idle lane to jog independently; observed on a real AD5X (native ZMOD), `REMOVE_PRUTOK_IFS PRUTOK=N` unloaded the currently-loaded filament (in a different slot) and ignored port N, and can error `No filament N in IFS` when IFS state disagrees with presence. A cold per-lane retract, by contrast, **is** available at the gcode layer via `IFS_F11 PRUTOK={n} LEN={mm} SPEED={s} CHECK=0` (core ZMOD — a thin wrapper over raw serial `F11 C{port}…` with no heating and, with `CHECK=0`, no presence guard). This is why HelixScreen keeps the currently-loaded slot unloadable after runout (#995); and #996 implements HelixScreen calling `IFS_F11` directly for idle-lane recovery (e.g. a snapped chunk stuck in a lane's feed path — no hot nozzle involved). See `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md` §12.
 
+#### Per-lane eject (`eject_lane()`)
+
+A real per-lane eject — pulling a whole spool's worth of filament back out of an idle lane so the user can remove it by hand — is **not** a single `IFS_F11`. A bare `IFS_F11` defaults to `LEN=90` (`zmod_ifs.py` `cmd_IFS_F11`, `gcmd.get_int('LEN', 90)`), which barely moves the filament, and an **unclamped** gear doesn't grip at all. `eject_lane()` (commit `dfcc83c0f`) mirrors zmod's own `_REMOVE_PRUTOK_IFS` macro with a three-command sequence:
+
+```
+IFS_F24 PRUTOK={port}                          # clamp — the gear now grips
+IFS_F11 PRUTOK={port} LEN={tube} SPEED={speed} # cold retract the FULL tube length (no heat, no home)
+IFS_F39 PRUTOK={port}                          # unclamp — filament is free to pull out by hand
+```
+
+- **`LEN` / `SPEED` are per-material**, resolved from zmod's `/mod_data/filament.json` keyed by the lane's material type. Fetched once at startup by `fetch_filament_json()` (mirrors `read_adventurer_json` threading; 404 on non-zmod is silent), parsed by `parse_filament_json()` into `filament_eject_params_`. Structure:
+
+  ```json
+  { "default": { "filament_tube_length": 1000, "filament_ifs_speed": 1200, ... },
+    "PLA":     { "filament_tube_length": 1000, "filament_ifs_speed": 1200, ... },
+    "PETG":    { "filament_tube_length": 650,  "filament_ifs_speed": 1200, ... } }
+  ```
+
+  Resolution order: per-material entry → file's `default` entry → hardcoded **1000 / 1200** (`filament_eject_default_`). `filament_tube_length` is the PTFE-tube length from the IFS module to the extruder (zmod default 1000 mm) — users with non-stock tubes get the right distance automatically. (Field-confirmed on raza616: `LEN=1000` ran the full retract and ended free after `F39`; his PETG tube is 650.)
+
+- **Eject refuses the toolhead-loaded active lane.** If `system_info_.current_slot == slot_index && head_filament_`, `eject_lane()` returns `WRONG_STATE` ("Lane is loaded in toolhead / Unload from toolhead first") — a cold backward retract would fight the loaded filament. Unload it from the toolhead first.
+
+#### External-change triggers (the gcode-response listener)
+
+`register_zcolor_listener()` subscribes to `notify_gcode_response`; `on_gcode_response_line()` schedules a `GET_ZCOLOR` re-read when it sees an externally-driven change (commit `cafcff3ad` added the bare-`Extruder:` trigger). The watched signals:
+
+| Token in stream | Why it fires | Notes |
+|-----------------|--------------|-------|
+| `RUN_ZCOLOR` / `CHANGE_ZCOLOR` | Deliberate external color/material edit (AD5X LCD, Mainsail, zmod COLOR macro). HelixScreen persists colors by writing `Adventurer5M.json` directly and **never** emits these — so they can only be external. | `CHANGE_ZCOLOR SLOT=N` carrying a real locked override also clears that stale override so the new firmware color wins (#981). |
+| bare `Extruder: <N>` | zmod's `_SET_EXTRUDER_SLOT` (`zmod_color.py` `cmd_SET_EXTRUDER_SLOT`) emits `Extruder: {zslot}` via `respond_raw` at the channel-commit step near the **end** of an operation. This is the marker that catches **external unloads/loads done via zmod's own color macro**, where the stream carries no `RUN_ZCOLOR`/`CHANGE_ZCOLOR`. | Matched by a **strict** regex (`^\s*(?://\s*)?Extruder:\s*\d+\s*$`). |
+
+**Why `IN_ZCOLOR` is NOT watched.** An external unload via zmod's color macro emits `IN_ZCOLOR SLOT=N NAPR=0/1` (load/unload) — but the literal `IN_ZCOLOR` token only appears in the **dialog button *definition* echo** (`action:prompt_button Unload|IN_ZCOLOR SLOT=N NAPR=1…`) at *prompt-render* time, **not** when the unload actually runs. Watching it would false-fire on dialog-open and still miss the real unload. The bare `Extruder: <N>` channel-commit marker is the reliable terminal signal instead.
+
+**Why the bare-`Extruder:` regex is strict.** It must NOT match the `GET_ZCOLOR SILENT` summary (`Extruder: ... | IFS: True`), the interactive prompt (`action:prompt_text Extruder: ... | IFS:`), or per-slot rows (`3: PLA/HEX`) — all of which carry a ` | IFS:` suffix or a different shape. Combined with the `zcolor_query_active_` early-return guard (which buffers our own in-flight `GET_ZCOLOR` response echoes), this keeps the v0.99.51 **self-feedback spam loop** closed: `GET_ZCOLOR` never emits a bare `Extruder: N`, so a re-read can't re-trigger itself. (HelixScreen's own `SET_EXTRUDER_SLOT` *does* emit a bare `Extruder: N`, but a re-read after a Helix-initiated tool change is harmless — `schedule_zcolor_query()` is debounced + idempotent.) The bg-side pre-filter in `register_zcolor_listener()` admits the cheap `Extruder:` substring; the strict regex runs on the main thread in `on_gcode_response_line()`. **If you add a new trigger, update both the bg-side admit filter and the main-thread branch** — otherwise the new token is silently dropped on busy print streams.
+
+#### zmod IFS command reference
+
+The raw IFS commands (`zmod_ifs.py` registrations + `docs/en/AD5X.md`). `F##` numbers are thin wrappers over raw serial `F## C{port}…`. Not every raw `F##` the IFS firmware accepts is exposed as a zmod gcode macro — e.g. `F19` is used at the raw-serial layer but has no `IFS_F19` command (community knowledge, ninjamida's multi-IFS project); only the subset ZMOD actually drives is wrapped:
+
+| Command | Action |
+|---------|--------|
+| `IFS_F10` | Insert filament (`F10 C{port} L{len} S{speed}`) |
+| `IFS_F11 [LEN=mm] [SPEED=s] [CHECK=0/1]` | Remove/retract filament. **`LEN` defaults to 90** (barely moves) — pass the tube length for a full eject |
+| `IFS_F13` | Query IFS state |
+| `IFS_F24 PRUTOK=N` | Clamp the lane (gear grips) |
+| `IFS_F39 PRUTOK=N` | Unclamp one lane (filament free to pull) |
+| `IFS_F18` | Unclamp **all** lanes at once — no `PRUTOK` needed. ⚠️ zmod's `docs/en/AD5X.md` mistranslates this as "Filament purge everywhere"; the actual handler (`cmd_IFS_F18`) responds *"Unlocking all filaments"*. Handy for recovery when you don't know which lane is clamped (community tip, ninjamida) |
+| `IFS_F112` | Stop filament feed |
+| `IFS_STATUS` | Structured JSON state (`State`/`Ports`/`Silk`/`Chan`/…) — clean future presence source |
+| `GET_ZCOLOR SILENT=1` | Per-slot loaded state + active lane as `// `-prefixed text (silk-sensor truth) |
+| `REMOVE_PRUTOK_IFS PRUTOK=N` | Toolhead unload (heat + retract); **not** a per-lane jog |
+| `IN_ZCOLOR SLOT=N NAPR=0/1` | zmod color-macro load (`NAPR=0`) / unload (`NAPR=1`) — emitted on the AD5X LCD / Mainsail path |
+
 ### Path Topology
 
 ```
@@ -941,6 +1042,24 @@ Tool mapping: array index = tool number (T0-T15), value = physical port (1-4, 5=
 | Auto-Heat on Load | No | -- |
 | Dryer | No | -- |
 | Device Actions | No | -- |
+
+### Open Issues & Debugging Notes
+
+> **No AD5X test device.** HelixScreen ships IFS support **blind** — there is no AD5X in the test fleet. Every IFS fix is field-validated through users, primarily **raza616** (the most active AD5X/IFS reporter). Treat live Discord console pastes and freshly-captured debug bundles as the ground truth, and prefer regression tests + the mock backend (`HELIX_MOCK_AMS=ifs`) for anything that can't be exercised on hardware.
+
+**Stuck-purge on load — KNOWN OPEN, UNRESOLVED.** Loading a lane via the multi-filament screen can leave HelixScreen stuck displaying "purging" indefinitely. **No confirmed cause; do not ship a speculative fix.** Dead ends already ruled out:
+
+- *Head-sensor-clobber theory* — **disproved.** raza's live `QUERY_FILAMENT_SENSOR` showed both `head_switch_sensor` and `ifs_motion_sensor` detecting filament when loaded. (Bundle snapshots show `head_switch=false` in all three captures, but that reconciles to "nothing at the head *at capture time*" — raza had already unloaded — not a sensor inversion.)
+- *`BlockingIOError [Errno 11]` at `gcode.py:459 _respond_raw`* — **red herring.** It's present in the *not*-stuck bundle too, in a bed-mesh-dump context. It's console-flood backpressure (drops echoed text, not state).
+
+To actually crack it, capture — **while stuck**:
+
+1. A debug bundle whose `log_tail` is **verified fresh** (its last timestamp == the bundle timestamp; see caveat below).
+2. A simultaneous live `QUERY_FILAMENT_SENSOR` for both `head_switch_sensor` and `ifs_motion_sensor`.
+3. A live `IFS_STATUS`.
+4. zmod's own `/var/log/messages` — **the "did the load actually finish inside zmod" answer lives here, NOT in the bundle.**
+
+> **Debug-bundle caveat (cost a whole investigation):** the bundle's `log_tail` can be a **stale ring buffer that predates the incident**. In the stuck-purge bundles the `log_tail` ended *before* the reported event, so the `RUN_ZCOLOR` / `IN_ZCOLOR` / `ActionPrompt` lines "read from the log" were an **old session**, and `klipper_log` was just a 74-second idle window (config dump + bed-mesh table). **Always confirm the `log_tail`'s last timestamp matches the bundle timestamp before trusting any "from the log" claim.** When the bundle is stale, the only valid runtime evidence is live console pastes.
 
 ### Key Files
 

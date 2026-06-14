@@ -217,6 +217,12 @@ void AmsBackendAd5xIfs::on_started() {
                             // the json/gcode pipelines — best-effort, 404 on
                             // non-zmod printers is silent.
                             fetch_user_cfg_materials();
+                            // One-shot fetch of zmod's per-filament-type
+                            // unload table (/mod_data/filament.json) so
+                            // eject_lane() retracts the full tube length at the
+                            // configured speed. Best-effort; 404 on non-zmod
+                            // printers is silent and falls back to 1000/1200.
+                            fetch_filament_json();
                             register_zcolor_listener();
                             // notify_klippy_ready catches startup and
                             // FIRMWARE_RESTART; it's the point at which zmod
@@ -1138,6 +1144,9 @@ AmsError AmsBackendAd5xIfs::change_tool(int tool_number) {
 }
 
 AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
+    int len = filament_eject_default_.first;
+    int speed = filament_eject_default_.second;
+    std::string material;
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -1158,14 +1167,45 @@ AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
             return AmsError(AmsResult::WRONG_STATE, "Lane is loaded in toolhead",
                             "Unload from toolhead first", "Use Unload before Eject");
         }
+
+        // Resolve the cold-retract LEN/SPEED from filament.json keyed by the
+        // lane's material, falling back to the file's "default" entry (already
+        // captured in filament_eject_default_), then to the hardcoded 1000/1200
+        // the default pair is initialized to. An empty material or an
+        // un-fetched/404 filament.json simply leaves the defaults in place.
+        material = materials_[slot_index];
+        if (!material.empty()) {
+            auto it = filament_eject_params_.find(material);
+            if (it != filament_eject_params_.end()) {
+                len = it->second.first;
+                speed = it->second.second;
+            }
+        }
     }
 
     int port = slot_index + 1;
-    spdlog::info("{} Cold eject (recover) lane {} -> IFS_F11 PRUTOK={} CHECK=0", backend_log_tag(),
-                 slot_index, port);
-    // Cold retract: no heat, no homing. Use the plain execute_gcode() helper
-    // (NOT ensure_homed_then(), which is for toolhead moves like load/unload).
-    return execute_gcode("IFS_F11 PRUTOK=" + std::to_string(port) + " CHECK=0");
+    spdlog::info("{} Cold eject lane {} (port {}, material '{}') -> IFS_F24 / IFS_F11 LEN={} "
+                 "SPEED={} / IFS_F39",
+                 backend_log_tag(), slot_index, port, material, len, speed);
+
+    // Full per-lane eject mirroring zmod's _REMOVE_PRUTOK_IFS macro: clamp the
+    // lane (F24) so the gear actually grips, cold-retract the full tube length
+    // at the configured speed (F11 — no heat, no homing), then unclamp (F39) so
+    // the filament is free to pull out by hand. Three separate execute_gcode()
+    // calls in order, propagating the first error. Use the plain
+    // execute_gcode() helper (NOT ensure_homed_then(), which is for toolhead
+    // moves like load/unload).
+    const std::string port_str = std::to_string(port);
+    AmsError err = execute_gcode("IFS_F24 PRUTOK=" + port_str);
+    if (!err.success()) {
+        return err;
+    }
+    err = execute_gcode("IFS_F11 PRUTOK=" + port_str + " LEN=" + std::to_string(len) +
+                        " SPEED=" + std::to_string(speed));
+    if (!err.success()) {
+        return err;
+    }
+    return execute_gcode("IFS_F39 PRUTOK=" + port_str);
 }
 
 // --- Recovery ---
@@ -2061,6 +2101,103 @@ void AmsBackendAd5xIfs::read_adventurer_json() {
         });
 }
 
+void AmsBackendAd5xIfs::fetch_filament_json() {
+    if (!api_ || !filament_json_supported_.load())
+        return;
+
+    auto token = lifetime_.token();
+    api_->transfers().download_file(
+        "config", "mod_data/filament.json",
+        [this, token](const std::string& content) {
+            // BG THREAD: no member access here — parse_filament_json takes
+            // mutex_ and mutates the cache, so defer it to the main thread.
+            spdlog::trace("[AMS AD5X-IFS] Downloaded filament.json ({} bytes)", content.size());
+            token.defer("Ad5xIfsBackend::filament_json_apply",
+                        [this, content]() mutable { parse_filament_json(content); });
+        },
+        [this, token](const MoonrakerError& err) {
+            // BG THREAD: defer the atomic store + 404 logging (touches a member
+            // atomic). filament.json is zmod-specific; absence is expected on
+            // non-zmod printers and must not retry.
+            if (err.type == MoonrakerErrorType::FILE_NOT_FOUND || err.code == 404) {
+                token.defer("Ad5xIfsBackend::filament_json_404", [this]() {
+                    filament_json_supported_.store(false);
+                    spdlog::info("{} filament.json not found — using default eject LEN/SPEED",
+                                 backend_log_tag());
+                });
+            } else {
+                spdlog::debug("[AMS AD5X-IFS] filament.json fetch failed: {}", err.message);
+            }
+        });
+}
+
+void AmsBackendAd5xIfs::parse_filament_json(const std::string& content) {
+    // filament.json is a JSON object keyed by filament TYPE name plus a
+    // "default" entry. Each value carries filament_tube_length (the unload
+    // retract distance, our IFS_F11 LEN) and filament_ifs_speed (IFS_F11
+    // SPEED), among many fields we don't use. Build a {tube_length, ifs_speed}
+    // pair per material; resolve missing fields against the "default" entry,
+    // and missing "default" against the literal 1000/1200.
+    json root;
+    try {
+        root = json::parse(content);
+    } catch (const std::exception& e) {
+        spdlog::warn("[AMS AD5X-IFS] filament.json parse failed: {}", e.what());
+        return;
+    }
+    if (!root.is_object()) {
+        spdlog::warn("[AMS AD5X-IFS] filament.json is not a JSON object — ignoring");
+        return;
+    }
+
+    // int field reader with a fallback, tolerant of numeric-as-string values.
+    auto read_int = [](const json& obj, const char* key, int fallback) -> int {
+        auto it = obj.find(key);
+        if (it == obj.end())
+            return fallback;
+        if (it->is_number_integer() || it->is_number_unsigned())
+            return it->get<int>();
+        if (it->is_number_float())
+            return static_cast<int>(it->get<double>());
+        if (it->is_string()) {
+            try {
+                return std::stoi(it->get<std::string>());
+            } catch (...) {
+                return fallback;
+            }
+        }
+        return fallback;
+    };
+
+    // Resolve the "default" pair first so per-material fallbacks key off it.
+    int default_len = 1000;
+    int default_speed = 1200;
+    auto def_it = root.find("default");
+    if (def_it != root.end() && def_it->is_object()) {
+        default_len = read_int(*def_it, "filament_tube_length", 1000);
+        default_speed = read_int(*def_it, "filament_ifs_speed", 1200);
+    }
+
+    std::map<std::string, std::pair<int, int>> parsed;
+    for (auto it = root.begin(); it != root.end(); ++it) {
+        if (it.key() == "default" || !it.value().is_object())
+            continue;
+        int len = read_int(it.value(), "filament_tube_length", default_len);
+        int speed = read_int(it.value(), "filament_ifs_speed", default_speed);
+        parsed[it.key()] = {len, speed};
+    }
+
+    size_t cached_count;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        filament_eject_default_ = {default_len, default_speed};
+        filament_eject_params_ = std::move(parsed);
+        cached_count = filament_eject_params_.size();
+    }
+    spdlog::info("{} filament.json: cached eject LEN/SPEED for {} material(s); default {}/{}",
+                 backend_log_tag(), cached_count, default_len, default_speed);
+}
+
 bool AmsBackendAd5xIfs::note_json_content(const std::string& content) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (content == last_json_content_) {
@@ -2164,6 +2301,52 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                 apply_phase_action_locked();
             }
         }
+    }
+
+    // External-unload presence resurrection. When the user unloads (or loads)
+    // a lane via zmod's OWN color macro (AD5X LCD / Mainsail), the console
+    // stream carries NO RUN_ZCOLOR / CHANGE_ZCOLOR token, so the branch below
+    // never fires and the emptied lane keeps showing loaded. zmod's
+    // _SET_EXTRUDER_SLOT (zmod_color.py cmd_SET_EXTRUDER_SLOT) emits a bare
+    //     Extruder: <N>
+    // via respond_raw at the channel-commit step near the END of the
+    // operation — the captured live sequence (raza616 AD5X) ends with
+    // "Extruder: 3" / "Setting active filament T99" / "Enable IFS". We key off
+    // that line to schedule one GET_ZCOLOR refresh so the now-empty lane
+    // updates.
+    //
+    // Why THIS token and not the others in the sequence:
+    //   - "Setting active filament T", "Enable IFS", "Filament ABSENT in
+    //     extruder" are all LOCALIZED by zmod (ru: "Включаю IFS", "Указываю
+    //     активный пруток T", "Пруток ОТСУСТВУЕТ в экструдере") — a ru user
+    //     would never hit them.
+    //   - "Extruder: <N>" is an un-localized f-string and is the channel-commit
+    //     marker, so it doubles as a clean terminal signal.
+    //   - The literal IN_ZCOLOR token only appears in the dialog button
+    //     DEFINITION echo ("action:prompt_button Unload|IN_ZCOLOR ...") at
+    //     prompt-render time, NOT when the unload runs — watching it would
+    //     false-fire on dialog-open and still miss the real unload.
+    //
+    // The match is STRICT — bare "Extruder: <int>" only. Both the GET_ZCOLOR
+    // SILENT header ("Extruder: ... | IFS: True") and the interactive prompt
+    // ("action:prompt_text Extruder: ... | IFS:") carry a " | IFS:" suffix, and
+    // per-slot rows look like "3: PLA/HEX"; none match the bare form. Combined
+    // with the zcolor_query_active_ early-return guard above (which buffers our
+    // own in-flight query echoes), this keeps the v0.99.51 self-feedback spam
+    // loop closed: GET_ZCOLOR never emits a bare "Extruder: N", so a re-read
+    // can't re-trigger itself.
+    //
+    // Self-trigger note: HelixScreen's own SET_EXTRUDER_SLOT (set_active_tool)
+    // also produces a bare "Extruder: N". Re-reading after a Helix-initiated
+    // tool change is harmless and desirable (fresh state); schedule_zcolor_query
+    // is debounced + idempotent, so it collapses to one query either way.
+    static const std::regex extruder_commit_re(R"(^\s*(?://\s*)?Extruder:\s*\d+\s*$)");
+    if (std::regex_search(line, extruder_commit_re)) {
+        spdlog::debug("{} Detected external channel commit ('{}') in gcode stream — "
+                      "scheduling GET_ZCOLOR to resurrect presence",
+                      backend_log_tag(), line);
+        schedule_zcolor_query();
+        return false;
     }
 
     // NOTE: register_zcolor_listener() has a bg-side pre-filter that drops
@@ -2304,6 +2487,14 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             const bool query_active = zcolor_query_active_.load(std::memory_order_acquire);
             const bool is_zcolor_token = (line.find("RUN_ZCOLOR") != std::string::npos ||
                                           line.find("CHANGE_ZCOLOR") != std::string::npos);
+            // External-unload presence resurrection: zmod's _SET_EXTRUDER_SLOT
+            // emits a bare "Extruder: <N>" at the channel-commit step (no
+            // RUN_ZCOLOR/CHANGE_ZCOLOR in the stream). Cheap substring admit
+            // here; on_gcode_response_line applies the STRICT bare-form regex
+            // so SILENT-response "Extruder: ... | IFS:" headers and per-slot
+            // rows don't actually schedule. Keep this admit in sync with the
+            // extruder_commit_re branch in on_gcode_response_line.
+            const bool is_extruder_commit = (line.find("Extruder:") != std::string::npos);
             // Self-heal: if our _IFS_VARS mirror writes come back as
             // "Unknown command", the lessWaste/bambufy macro isn't actually
             // loaded — demote has_ifs_vars_ so we stop spamming the console.
@@ -2319,7 +2510,8 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
                 (line.find("Heating the nozzle to") != std::string::npos ||
                  line.find("Unloading filament") != std::string::npos ||
                  line.find("Loading filament") != std::string::npos);
-            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token) {
+            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token &&
+                !is_extruder_commit) {
                 return;
             }
 
@@ -2569,8 +2761,21 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // presence — don't let zmod's view race against them. Native ZMOD
             // has no exposed per-port sensor, so we must use zmod's view.
             if (!has_per_port_sensors_ && port_presence_[idx] != loaded) {
+                const bool was_present = port_presence_[idx];
                 port_presence_[idx] = loaded;
                 changed = true;
+
+                // present->absent: the spool was physically removed. Clear the
+                // user override so brand/spool_name/spoolman_id from the now-gone
+                // spool don't haunt the empty slot or get re-applied to whatever
+                // loads next. (This cleanup used to ride on parse_adventurer_json's
+                // presence inference; GET_ZCOLOR is now the sole presence
+                // authority, so it drives the override-clear too. mutex_ is held.)
+                if (was_present && !loaded) {
+                    if (auto* eject_entry = slots_.get_mut(i)) {
+                        clear_override_locked(i, eject_entry->info);
+                    }
+                }
             }
 
             // Fill in color/material if we got them and the slot isn't locally
@@ -2781,7 +2986,8 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             if (!hex.empty() && hex[0] == '#') {
                 hex = hex.substr(1);
             }
-            // Non-empty color means filament was loaded into this port
+            // Non-empty color means filament was loaded into this port (only used
+            // as a presence signal on pre-SILENT zmod — see the gated block below).
             bool has_filament_data = !hex.empty();
             if (hex.empty()) {
                 hex = "808080";
@@ -2813,27 +3019,35 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             signature.append(type);
             signature.push_back(';');
 
-            // Native ZMOD has no per-port switch sensors — infer presence from
-            // Adventurer5M.json data. A non-empty color means filament is present;
-            // an empty color means the spool has been fully ejected. Only act on
-            // eject when the system is IDLE so a transient read mid-unload cannot
-            // wipe presence (#631 follow-up).
-            if (!has_per_port_sensors_) {
+            // Presence ownership depends on whether GET_ZCOLOR SILENT=1 works:
+            //
+            //   * Modern zmod (SILENT supported): presence is owned SOLELY by
+            //     GET_ZCOLOR (apply_zcolor_result, the RS-485 silk sensor). We must
+            //     NOT infer it from ffmColorN here — zmod persists the
+            //     colour/material assignment across unload/eject and never blanks
+            //     the colour, so "non-empty colour == present" would resurrect a
+            //     previously-emptied channel on every content-changed poll (the
+            //     external-unload-not-reflected / one-edit-resurrects-another bug).
+            //     Every JSON change schedules a GET_ZCOLOR right after this parse,
+            //     so silk-truth presence re-establishes immediately, and its
+            //     present->absent transition drives clear_override_locked.
+            //
+            //   * Pre-SILENT zmod (GET_ZCOLOR returns a prompt dialog →
+            //     zcolor_silent_supported_ latched false): there is NO silk-truth
+            //     query at all, so Adventurer5M.json is the only presence source we
+            //     have. Fall back to the legacy inference (non-empty colour ==
+            //     present; empty colour while IDLE == eject + override-clear). The
+            //     resurrection bug can't bite here because no GET_ZCOLOR ever
+            //     competes for ownership.
+            if (!has_per_port_sensors_ && !zcolor_silent_supported_.load()) {
                 auto& presence = port_presence_[static_cast<size_t>(idx)];
                 if (has_filament_data) {
                     presence = true;
                 } else if (presence && system_info_.action == AmsAction::IDLE) {
                     spdlog::info("{} Slot {} eject detected (empty color in "
-                                 "Adventurer5M.json)",
+                                 "Adventurer5M.json, pre-SILENT zmod)",
                                  backend_log_tag(), idx);
                     presence = false;
-                    // Spool was physically removed: clear the user override
-                    // so brand/spool_name/spoolman_id from the now-gone spool
-                    // don't haunt the empty slot or get re-applied to whatever
-                    // is loaded next. update_slot_from_state below would
-                    // otherwise see the placeholder #808080 read and create a
-                    // phantom override — sync_override_to_firmware_locked
-                    // skips slots where port_presence is false.
                     if (auto* eject_entry = slots_.get_mut(idx)) {
                         clear_override_locked(idx, eject_entry->info);
                     }
