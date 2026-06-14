@@ -125,3 +125,21 @@ TEST_CASE_METHOD(MockSensorObjectsFixture,
                  "[mock][sensors][filament]") {
     REQUIRE(has_object_matching(objects(), "filament_switch_sensor ", ""));
 }
+
+// ============================================================================
+// exclude_object Capability
+// ============================================================================
+
+TEST_CASE_METHOD(MockSensorObjectsFixture,
+                 "Mock backend exposes exclude_object for capability discovery",
+                 "[mock][sensors][exclude_object]") {
+    SECTION("exclude_object object is present in the list") {
+        REQUIRE(has_object(objects(), "exclude_object"));
+    }
+
+    SECTION("PrinterDiscovery flags has_exclude_object from the mock objects") {
+        // The fixture's hardware() already parsed the mock object list, so the
+        // capability flag (which gates adaptive bed mesh) must be set.
+        REQUIRE(hw_.has_exclude_object());
+    }
+}

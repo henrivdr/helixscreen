@@ -558,6 +558,14 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
     // Delegate capability subject updates to capabilities_state_ component
     capabilities_state_.set_hardware(discovery_, capability_overrides_);
 
+    // Re-synthesize dynamic pre-print options now that hardware capabilities are
+    // known. The bed_mesh option's adaptive_active flag (which relabels it to
+    // "Adaptive Bed Mesh" and enables the adaptive param) depends on
+    // discovery_.has_exclude_object(), which only becomes true here —
+    // set_printer_type_internal() ran earlier (before hardware), so the option
+    // would otherwise stay "Auto Bed Mesh".
+    apply_dynamic_options();
+
     // Set kinematics from hardware discovery (configfile.config.printer.kinematics)
     // This is more reliable than toolhead status, which returns null on some printers
     if (!discovery_.kinematics().empty()) {
@@ -903,6 +911,32 @@ void PrinterState::apply_dynamic_options() {
                        [](const PrePrintOption& opt) { return opt.id == "timelapse"; }),
         pre_print_option_set_.options.end());
 
+    // Adaptive bed mesh: a property of the SINGLE bed_mesh toggle, not a separate
+    // row. When ALL hold, the bed_mesh option is relabeled "Adaptive Bed Mesh"
+    // and emits its adaptive token (e.g. ADAPTIVE=1) alongside the enable param
+    // when ON; otherwise it stays the plain "Auto Bed Mesh" with unchanged
+    // behavior. Conditions (so it's never a silent no-op):
+    //   1. the bed_mesh option is a MacroParam declaring an adaptive_param (the
+    //      START_PRINT forwarding signal — the macro passes the token into
+    //      BED_MESH_CALIBRATE),
+    //   2. the firmware exposes [exclude_object] (adaptive maps printed objects),
+    //   3. no custom calibration.bed_mesh_gcode template is in use (that path
+    //      runs verbatim and ignores ADAPTIVE).
+    // Recomputed each run (idempotent, non-destructive) so it tracks capability
+    // changes — e.g. exclude_object only becomes known once hardware arrives.
+    for (auto& opt : pre_print_option_set_.options) {
+        if (opt.id != "bed_mesh") {
+            continue;
+        }
+        const auto* mp = std::get_if<PrePrintStrategyMacroParam>(&opt.strategy);
+        const bool has_adaptive_param = mp && !mp->adaptive_param.empty();
+        const bool firmware_forwards = discovery_.has_exclude_object();
+        const bool custom_template =
+            !PrinterDetector::get_bed_mesh_calibrate_gcode(printer_type_).empty();
+        opt.adaptive_active = has_adaptive_param && firmware_forwards && !custom_template;
+        break;
+    }
+
     // Timelapse: append when the moonraker-timelapse plugin reports available.
     // Strategy is RuntimeCommand with sentinel values that
     // PrintPreparationManager::start_print() recognizes (see the dispatch
@@ -922,18 +956,18 @@ void PrinterState::apply_dynamic_options() {
         cmd.command_disabled = "timelapse:off";
         tl.strategy = cmd;
         pre_print_option_set_.options.push_back(std::move(tl));
-
-        // Maintain the (category, order) sort guarantee from
-        // parse_pre_print_option_set so renderers still see options in their
-        // documented order.
-        std::sort(pre_print_option_set_.options.begin(), pre_print_option_set_.options.end(),
-                  [](const PrePrintOption& a, const PrePrintOption& b) {
-                      if (a.category != b.category) {
-                          return static_cast<int>(a.category) < static_cast<int>(b.category);
-                      }
-                      return a.order < b.order;
-                  });
     }
+
+    // Maintain the (category, order) sort guarantee from
+    // parse_pre_print_option_set so renderers still see options in their
+    // documented order (covers both synthesized options above).
+    std::sort(pre_print_option_set_.options.begin(), pre_print_option_set_.options.end(),
+              [](const PrePrintOption& a, const PrePrintOption& b) {
+                  if (a.category != b.category) {
+                      return static_cast<int>(a.category) < static_cast<int>(b.category);
+                  }
+                  return a.order < b.order;
+              });
 }
 
 const std::string& PrinterState::get_printer_type() const {

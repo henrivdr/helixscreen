@@ -383,6 +383,11 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_objects.push_back("led_effect rainbow");
     mock_objects.push_back("led_effect static_white");
 
+    // [exclude_object] — present on modern Klipper/Kalico configs. Trips
+    // has_exclude_object_ in PrinterDiscovery so capability-gated features
+    // (e.g. adaptive bed mesh) light up under --test.
+    mock_objects.push_back("exclude_object");
+
     // Add common macros for all printer types (for testing macro panel)
     mock_objects.push_back("gcode_macro START_PRINT");
     mock_objects.push_back("gcode_macro END_PRINT");

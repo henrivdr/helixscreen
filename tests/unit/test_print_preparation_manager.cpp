@@ -2006,6 +2006,10 @@ TEST_CASE("PrintPreparationManager: collect_macro_skip_params drives off provide
     SECTION("Provider says ENABLED -> no skip param emitted") {
         manager.set_option_state_provider([](const std::string&) { return 1; });
         auto params = PrintPreparationManagerTestAccess::get_skip_params(manager);
+        // bed_mesh ENABLED emits no param. The AD5M Pro entry declares an
+        // adaptive_param, but adaptive_active is only set when exclude_object is
+        // present — not in this headless set_printer_type_sync path — so no
+        // ADAPTIVE token is emitted here either.
         REQUIRE(params.empty());
     }
 

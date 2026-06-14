@@ -306,6 +306,23 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         spdlog::info("[MoonrakerManager] Creating MOCK client ({}, {}x speed)",
                      type_name, speedup);
         auto mock = std::make_unique<MoonrakerClientMock>(type, speedup);
+
+        // HELIX_MOCK_AUTO_PRINT=1 — boot straight into an active mock print so
+        // print-gated features (e.g. adaptive bed mesh) are exercisable under
+        // --test without driving the UI through a print-start flow. Sets the
+        // existing mock_auto_start_print flag the mock consumes on connect().
+        // Additive + env-gated: default --test behavior is unchanged.
+        const char* auto_print_env = std::getenv("HELIX_MOCK_AUTO_PRINT");
+        if (auto_print_env && auto_print_env[0] && std::string(auto_print_env) != "0") {
+            get_runtime_config()->mock_auto_start_print = true;
+            if (!get_runtime_config()->gcode_test_file) {
+                get_runtime_config()->gcode_test_file =
+                    RuntimeConfig::get_default_test_file_path();
+            }
+            spdlog::info("[MoonrakerManager] HELIX_MOCK_AUTO_PRINT set — mock will "
+                         "auto-start a print on connect");
+        }
+
         // Disable MMU if AMS is explicitly disabled via CLI or env var
         const char* mock_ams_env = std::getenv("HELIX_MOCK_AMS");
         bool ams_disabled = runtime_config.disable_mock_ams ||

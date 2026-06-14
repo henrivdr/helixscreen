@@ -245,6 +245,9 @@ class PrinterDiscovery {
                 has_probe_ = true;
             } else if (name.rfind("probe_eddy_current ", 0) == 0) {
                 has_probe_ = true;
+            } else if (name == "load_cell" || name == "load_cell_probe" ||
+                       name.rfind("load_cell ", 0) == 0) {
+                has_probe_ = true;
             } else if (name == "firmware_retraction") {
                 has_firmware_retraction_ = true;
             } else if (name == "timelapse") {

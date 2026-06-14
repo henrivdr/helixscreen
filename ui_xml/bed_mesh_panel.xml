@@ -21,6 +21,14 @@
     <px name="bed_mesh_info_column_width_medium" value="280"/>
     <px name="bed_mesh_info_column_width_large" value="280"/>
   </consts>
+  <styles>
+    <!-- Highlight for the currently loaded/active profile row. Applied via
+         bind_style_if_eq on each row's bed_mesh_profile_N_active subject so the
+         loaded profile reads as "selected" (raised surface + subtle accent
+         border), matching the elevated-surface convention used elsewhere. -->
+    <style name="profile_row_active" bg_opa="255" bg_color="#elevated_bg"
+           border_width="1" border_color="#primary" border_opa="180"/>
+  </styles>
   <view name="bed_mesh_panel"
         extends="lv_obj" width="#overlay_panel_width" height="100%" align="right_mid" style_bg_opa="255"
         style_bg_color="#card_bg" style_pad_all="0" style_border_width="0" scrollable="false" flex_flow="column">
@@ -132,6 +140,7 @@
                      style_pad_left="#space_sm" style_pad_right="#space_sm" style_pad_top="0" style_pad_bottom="0"
                      style_pad_gap="#space_xs" clickable="true" scrollable="false">
               <bind_flag_if_lt subject="bed_mesh_profile_count" flag="hidden" ref_value="1"/>
+              <bind_style_if_eq name="profile_row_active" subject="bed_mesh_profile_0_active" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_profile_0_clicked"/>
               <!-- Name -->
               <text_small name="profile_0_name"
@@ -165,6 +174,7 @@
                      style_pad_left="#space_sm" style_pad_right="#space_sm" style_pad_top="0" style_pad_bottom="0"
                      style_pad_gap="#space_xs" clickable="true" scrollable="false">
               <bind_flag_if_lt subject="bed_mesh_profile_count" flag="hidden" ref_value="2"/>
+              <bind_style_if_eq name="profile_row_active" subject="bed_mesh_profile_1_active" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_profile_1_clicked"/>
               <text_small name="profile_1_name"
                           bind_text="bed_mesh_profile_1_name" flex_grow="1" style_text_color="#text"
@@ -193,6 +203,7 @@
                      style_pad_left="#space_sm" style_pad_right="#space_sm" style_pad_top="0" style_pad_bottom="0"
                      style_pad_gap="#space_xs" clickable="true" scrollable="false">
               <bind_flag_if_lt subject="bed_mesh_profile_count" flag="hidden" ref_value="3"/>
+              <bind_style_if_eq name="profile_row_active" subject="bed_mesh_profile_2_active" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_profile_2_clicked"/>
               <text_small name="profile_2_name"
                           bind_text="bed_mesh_profile_2_name" flex_grow="1" style_text_color="#text"
@@ -221,6 +232,7 @@
                      style_pad_left="#space_sm" style_pad_right="#space_sm" style_pad_top="0" style_pad_bottom="0"
                      style_pad_gap="#space_xs" clickable="true" scrollable="false">
               <bind_flag_if_lt subject="bed_mesh_profile_count" flag="hidden" ref_value="4"/>
+              <bind_style_if_eq name="profile_row_active" subject="bed_mesh_profile_3_active" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_profile_3_clicked"/>
               <text_small name="profile_3_name"
                           bind_text="bed_mesh_profile_3_name" flex_grow="1" style_text_color="#text"
@@ -249,6 +261,7 @@
                      style_pad_left="#space_sm" style_pad_right="#space_sm" style_pad_top="0" style_pad_bottom="0"
                      style_pad_gap="#space_xs" clickable="true" scrollable="false">
               <bind_flag_if_lt subject="bed_mesh_profile_count" flag="hidden" ref_value="5"/>
+              <bind_style_if_eq name="profile_row_active" subject="bed_mesh_profile_4_active" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_profile_4_clicked"/>
               <text_small name="profile_4_name"
                           bind_text="bed_mesh_profile_4_name" flex_grow="1" style_text_color="#text"

@@ -366,6 +366,17 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     }
 
     /**
+     * @brief Get the simulated printer type.
+     *
+     * Used by mock RPC handlers (e.g. printer.info) to report a printer-type
+     * specific identity so PrinterDetector's fingerprint heuristics resolve the
+     * mock to the matching printer_database.json entry.
+     */
+    PrinterType get_printer_type() const {
+        return printer_type_;
+    }
+
+    /**
      * @brief Start temperature simulation loop
      *
      * Begins a background thread that simulates temperature changes

@@ -163,6 +163,8 @@ class PrePrintOptionsRenderer {
     [[nodiscard]] lv_obj_t* get_switch(const std::string& id) const;
 
   private:
+    friend class PrePrintOptionsRendererTestAccess;
+
     struct OptionRow {
         std::string id;
         lv_obj_t* row = nullptr;

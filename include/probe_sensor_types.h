@@ -173,4 +173,24 @@ struct ProbeSensorState {
     return ProbeSensorType::STANDARD;
 }
 
+/// @brief Build a load-cell calibration gcode command.
+///
+/// Klipper's load-cell commands (LOAD_CELL_TARE / LOAD_CELL_CALIBRATE /
+/// LOAD_CELL_DIAGNOSTIC) take an optional LOAD_CELL=<name> selector. The bare
+/// "[load_cell]" / "[load_cell_probe]" sections register without a name, so no
+/// selector is emitted for those; a named "[load_cell my_cell]" section needs
+/// LOAD_CELL=my_cell appended.
+///
+/// @param base_command  The command verb (e.g. "LOAD_CELL_CALIBRATE")
+/// @param sensor_name    The detected sensor name (from ProbeSensorConfig)
+/// @return The full gcode command string
+[[nodiscard]] inline std::string build_loadcell_command(const std::string& base_command,
+                                                        const std::string& sensor_name) {
+    // Unnamed load cells carry the section keyword as their sensor name.
+    if (sensor_name.empty() || sensor_name == "load_cell" || sensor_name == "load_cell_probe") {
+        return base_command;
+    }
+    return base_command + " LOAD_CELL=" + sensor_name;
+}
+
 } // namespace helix::sensors

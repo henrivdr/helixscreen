@@ -562,6 +562,7 @@ void register_xml_components() {
     register_xml("probe_cartographer_panel.xml");
     register_xml("probe_beacon_panel.xml");
     register_xml("probe_eddy_panel.xml");
+    register_xml("probe_loadcell_panel.xml");
     register_xml("probe_generic_panel.xml");
     register_xml("probe_config_edit_modal.xml");
     register_xml("probe_accuracy_modal.xml");

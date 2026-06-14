@@ -37,6 +37,41 @@ Each slot can be in one of four states:
 - **Fallback**: Using HELIX_* macro (installed by HelixScreen)
 - **Empty**: No macro available; functionality is disabled
 
+### Adaptive bed mesh: `ADAPTIVE` parameter forwarding
+
+`HELIX_START_PRINT` (in `assets/config/helix_macros.cfg`) accepts an optional
+`ADAPTIVE` parameter and forwards it into its `BED_MESH_CALIBRATE` call:
+
+```gcode
+{% set adaptive = params.ADAPTIVE|default(0)|int %}
+...
+{% if perform_bed_mesh == 1 %}
+    {% if adaptive == 1 %}
+        BED_MESH_CALIBRATE ADAPTIVE=1
+    {% else %}
+        BED_MESH_CALIBRATE
+    {% endif %}
+{% endif %}
+```
+
+This is the forwarding contract behind the adaptive bed mesh behavior. It is a
+property of the **single** Bed Mesh pre-print toggle — there is no separate
+sub-row. When the printer's `pre_print_options.bed_mesh` entry declares an
+`adaptive_param`, the firmware exposes `[exclude_object]`, and there is no custom
+`calibration.bed_mesh_gcode` template, `PrinterState::apply_dynamic_options()`
+sets `PrePrintOption::adaptive_active` on the bed_mesh option. That single flag:
+
+- **relabels** the toggle from "Auto Bed Mesh" to **"Adaptive Bed Mesh"**
+  (`PrePrintOptionsRenderer::label_for`), and
+- when the toggle is **ENABLED**, makes the print-start emit BOTH the enable
+  param and the adaptive token, e.g. `SKIP_LEVELING=0 ADAPTIVE=1`.
+
+The param name is per-printer (`ADAPTIVE`, `ADAPTIVE_MESH`, …; see
+`pre_print_option.h` → `PrePrintStrategyMacroParam::adaptive_param`); the
+HelixScreen standard macro uses `ADAPTIVE`. Printers whose `START_PRINT` does NOT
+forward such a param simply omit `adaptive_param`, so the toggle stays "Auto Bed
+Mesh" with unchanged behavior — adaptive can never be a silent no-op.
+
 ---
 
 ## Architecture

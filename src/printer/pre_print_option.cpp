@@ -112,6 +112,9 @@ std::optional<PrePrintOption> parse_pre_print_option(const nlohmann::json& j) {
         p.enable_value = j.value("enable_value", "");
         p.skip_value = j.value("skip_value", "");
         p.default_value = j.value("default_value", "");
+        // Optional adaptive-mesh modifier (see PrePrintStrategyMacroParam doc).
+        p.adaptive_param = j.value("adaptive_param", "");
+        p.adaptive_value = j.value("adaptive_value", "1");
         if (p.param_name.empty()) {
             spdlog::warn("[PrePrintOption] Skipping option '{}': MacroParam strategy requires "
                          "non-empty 'param_name'",
