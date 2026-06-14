@@ -197,21 +197,25 @@ detect_platform() {
     # Artillery M1 Pro (systemd Debian SBC running stock Artillery firmware).
     # MUST come before the generic Debian SBC fallback since M1 is Debian-based
     # and would otherwise be misdetected as plain "pi" — which would skip the
-    # M1-specific competing-UI shutdown (algo_app.service + makerbase-client).
-    # Fingerprints: the two stock services live under systemd; either physical
-    # unit files or systemctl listing them is enough.
+    # M1 platform hook that stops the stock UIs (algo_app + makerbase-client).
+    #
+    # Discriminate ONLY on algo_app.service — Artillery's proprietary "AI"
+    # service, which is unique to the M1. Do NOT key off
+    # makerbase-client.services: that is the generic MKS-board LCD client and
+    # is shipped by other MakerBase-class SBCs too — notably the QIDI Q2
+    # (hostname linaro-alip, user mks), which was misdetected as m1 because of
+    # it (prestonbrown/helixscreen#1027). The M1 hook still stops both services
+    # regardless of which fingerprint triggered detection.
     if [ "$arch" = "aarch64" ] || [ "$arch" = "armv7l" ]; then
-        local m1_markers=0
-        [ -f /etc/systemd/system/algo_app.service ] && m1_markers=$((m1_markers + 1))
-        [ -f /etc/systemd/system/makerbase-client.services ] && m1_markers=$((m1_markers + 1))
-        [ -f /lib/systemd/system/algo_app.service ] && m1_markers=$((m1_markers + 1))
-        [ -f /lib/systemd/system/makerbase-client.services ] && m1_markers=$((m1_markers + 1))
-        if [ "$m1_markers" = 0 ] && command -v systemctl >/dev/null 2>&1; then
-            if systemctl list-unit-files 2>/dev/null | grep -qE '^(algo_app\.service|makerbase-client\.services)\b'; then
-                m1_markers=1
-            fi
+        local is_m1=false
+        if [ -f /etc/systemd/system/algo_app.service ] || \
+           [ -f /lib/systemd/system/algo_app.service ]; then
+            is_m1=true
+        elif command -v systemctl >/dev/null 2>&1 && \
+             systemctl list-unit-files 2>/dev/null | grep -qE '^algo_app\.service\b'; then
+            is_m1=true
         fi
-        if [ "$m1_markers" -ge 1 ]; then
+        if [ "$is_m1" = true ]; then
             echo "m1"
             return 0
         fi

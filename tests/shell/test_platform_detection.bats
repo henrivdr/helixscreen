@@ -551,6 +551,30 @@ _mock_u1_detect_platform() {
 }
 
 # ============================================================================
+# Artillery M1 detection must NOT collide with QIDI Q2 (#1027).
+# The M1 fingerprint is algo_app.service (Artillery's proprietary AI service).
+# makerbase-client.services is the generic MKS-board LCD client shipped by
+# other MakerBase-class SBCs too (QIDI Q2: hostname linaro-alip, user mks),
+# so it must NOT be treated as a standalone M1 marker.
+# ============================================================================
+
+@test "platform.sh keys M1 detection on algo_app.service" {
+    grep -q 'algo_app\.service' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+}
+
+@test "platform.sh does NOT treat makerbase-client as an M1 marker (#1027)" {
+    # makerbase-client may still appear in comments, but must not gate detection
+    # via a file existence check or a systemctl unit-file match.
+    ! grep -qE '\[ -f [^]]*makerbase-client' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+    ! grep -qE 'list-unit-files.*makerbase-client' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+}
+
+@test "install.sh (bundled) does NOT treat makerbase-client as an M1 marker (#1027)" {
+    ! grep -qE '\[ -f [^]]*makerbase-client' "$WORKTREE_ROOT/scripts/install.sh"
+    ! grep -qE 'list-unit-files.*makerbase-client' "$WORKTREE_ROOT/scripts/install.sh"
+}
+
+# ============================================================================
 # get_download_platform() — maps platforms without dedicated release artifacts
 # to a donor platform whose binary is ABI-compatible. Regression coverage for
 # prestonbrown/helixscreen#970 + #971 (Artillery M1 had no helixscreen-m1.zip,
