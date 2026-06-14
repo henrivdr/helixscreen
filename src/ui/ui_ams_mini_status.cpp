@@ -548,9 +548,11 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_flex_flow(sc, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(sc, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_column(sc, theme_manager_get_spacing("space_xxs"), LV_PART_MAIN);
-        lv_obj_set_style_pad_all(sc, 0, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(sc, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(sc, 0, LV_PART_MAIN);
+        // Card surface for the wide multi-cell view: layer the shared Card style (bg_color,
+        // bg_opa, border, radius — reactive to theme changes) over the flex layout set above
+        // rather than setting transparent locals. A small inset keeps cells off the corners.
+        lv_obj_add_style(sc, ThemeManager::instance().get_style(StyleRole::Card), LV_PART_MAIN);
+        lv_obj_set_style_pad_all(sc, theme_manager_get_spacing("space_xs"), LV_PART_MAIN);
         lv_obj_add_flag(sc, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scroll_dir(sc, LV_DIR_HOR);
         lv_obj_set_scrollbar_mode(sc, LV_SCROLLBAR_MODE_AUTO);
