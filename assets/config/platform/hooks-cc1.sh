@@ -13,6 +13,58 @@
 # Storage: UDISK (6.5GB ext4) mounted at /opt and /root
 # SSH access: root@<ip> (port 22 or bind-shell on 4567)
 
+# Boot-time self-heal of the COSMOS gui-switcher hijack.
+#
+# COSMOS replaces the squashfs rootfs via SWUpdate on upgrade but does NOT touch
+# /data (which backs the /etc overlay where our sibling wrappers live). A future
+# COSMOS migration could still clobber a wrapper in the overlay, restoring the
+# stock grumpyscreen/guppyscreen/atomscreen init script. If that happens,
+# gui-switcher would launch the stock UI instead of delegating to HelixScreen.
+#
+# This re-asserts every missing/clobbered wrapper on each boot. It is the runtime
+# twin of the installer's _install_cc1_sibling_wrapper (competing_uis.sh) but is
+# fully SELF-CONTAINED: hooks.sh is deployed standalone to ${INSTALL_DIR} and
+# cannot source installer-lib files at runtime.
+#
+# Survivability: this hook lives at ${INSTALL_DIR}/platform/hooks.sh, deployed
+# from /user-resource (ext4, not part of the squashfs rootfs SWUpdate replaces),
+# and is sourced by /etc/init.d/helixscreen on every start. So the self-heal code
+# itself survives upgrades, and runs before the UI launches.
+#
+# Idempotent and conservative: only acts on a sibling when the live init script
+# LACKS the HELIXSCREEN_WRAPPER marker AND a .helix-bak backup already exists
+# (i.e. the installer wrapped it once, then something restored the stock file).
+# It never creates a fresh backup here — initial backup/wrap is the installer's
+# job; this only repairs an existing hijack. CC1-guarded by /usr/bin/update-cosmos.
+helix_platform_reassert_wrappers() {
+    # CC1/COSMOS only — presence of the COSMOS updater is the device fingerprint.
+    [ -x /usr/bin/update-cosmos ] || return 0
+
+    local s target backup
+    for s in grumpyscreen guppyscreen atomscreen; do
+        target="/etc/init.d/${s}"
+        backup="/etc/init.d/${s}.helix-bak"
+
+        # Only repair siblings the installer already hijacked (backup present).
+        [ -e "$backup" ] || continue
+        # Already wrapped — nothing to repair.
+        if grep -q "HELIXSCREEN_WRAPPER" "$target" 2>/dev/null; then
+            continue
+        fi
+
+        echo "Re-asserting HelixScreen wrapper for /etc/init.d/${s} (clobbered by upgrade)"
+        cat > "$target" <<'WRAPPER_EOF'
+#!/bin/sh
+# HELIXSCREEN_WRAPPER (do not remove this marker — used for idempotency)
+# Re-asserted at boot by hooks-cc1.sh after a COSMOS upgrade clobbered the
+# overlay copy. Delegates gui-switcher's launch to HelixScreen's init script.
+# Original UI preserved at <name>.helix-bak and restored by the uninstaller.
+exec /etc/init.d/helixscreen "$@"
+WRAPPER_EOF
+        chmod +x "$target" 2>/dev/null || true
+    done
+}
+
 # Stop any competing screen UIs so HelixScreen has exclusive framebuffer access.
 platform_stop_competing_uis() {
     # Stop any known competing third-party UIs
@@ -51,6 +103,11 @@ platform_wait_for_services() {
 
 platform_pre_start() {
     export HELIX_CACHE_DIR="/opt/helixscreen/cache"
+
+    # Repair any sibling gui-switcher wrapper a COSMOS upgrade clobbered in the
+    # /etc overlay, so the next boot still hands the framebuffer to HelixScreen.
+    # Runs before the UI launches; idempotent and CC1-guarded internally.
+    helix_platform_reassert_wrappers
 
     # Logging policy: write to flash (/user-resource is ext4 with ~4 GB free),
     # NOT to /tmp. /tmp here is tmpfs backed by ~56 MiB shared RAM, and CC1
