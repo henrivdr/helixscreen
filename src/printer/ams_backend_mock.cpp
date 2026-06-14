@@ -1186,6 +1186,9 @@ std::string AmsBackendMock::resolve_environment_mode() const {
 
 void AmsBackendMock::populate_environment_data(AmsSystemInfo& info) const {
     // Caller must hold mutex_
+    // Test override: simulate a unit with no humidity sensor (e.g. Happy Hare dryer)
+    // to exercise the temp-only overlay layout. See HELIX_MOCK_NO_HUMIDITY.
+    const bool no_humidity = std::getenv("HELIX_MOCK_NO_HUMIDITY") != nullptr;
     auto mode = resolve_environment_mode();
     if (mode != "passive" && mode != "dryer" && mode != "slot") {
         return;
@@ -1202,7 +1205,7 @@ void AmsBackendMock::populate_environment_data(AmsSystemInfo& info) const {
                 slot.environment = EnvironmentData{
                     .temperature_c = slot_temps[idx],
                     .humidity_pct = slot_humidity[idx],
-                    .has_humidity = true,
+                    .has_humidity = !no_humidity,
                 };
             }
         }
@@ -1213,14 +1216,14 @@ void AmsBackendMock::populate_environment_data(AmsSystemInfo& info) const {
                 info.units[u].environment = EnvironmentData{
                     .temperature_c = 24.5f,
                     .humidity_pct = 42.0f,
-                    .has_humidity = true,
+                    .has_humidity = !no_humidity,
                 };
             } else {
                 // Higher humidity on subsequent units to test yellow/red thresholds
                 info.units[u].environment = EnvironmentData{
                     .temperature_c = 26.1f,
                     .humidity_pct = 58.0f,
-                    .has_humidity = true,
+                    .has_humidity = !no_humidity,
                 };
             }
         }
@@ -1253,6 +1256,11 @@ void AmsBackendMock::set_dryer_enabled(bool enabled) {
     }
 
     spdlog::info("[AmsBackendMock] Dryer simulation {}", enabled ? "enabled" : "disabled");
+}
+
+void AmsBackendMock::set_dryer_initial_elapsed_min(int min) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    dryer_initial_elapsed_min_ = std::max(0, min);
 }
 
 void AmsBackendMock::set_dryer_speed(int speed_x) {
@@ -1291,17 +1299,24 @@ AmsError AmsBackendMock::start_drying(float temp_c, int duration_min, int fan_pc
     }
 
     float start_temp;
+    int initial_elapsed_min;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         dryer_stop_requested_ = false;
+
+        // Optional one-shot head start so a mock session can begin partway through.
+        initial_elapsed_min = std::max(0, std::min(dryer_initial_elapsed_min_, duration_min));
+        dryer_initial_elapsed_min_ = 0;
 
         // Set initial dryer state
         dryer_state_.active = true;
         dryer_state_.target_temp_c = temp_c;
         dryer_state_.duration_min = duration_min;
-        dryer_state_.remaining_min = duration_min;
+        dryer_state_.remaining_min = duration_min - initial_elapsed_min;
         dryer_state_.fan_pct = (fan_pct >= 0) ? fan_pct : 50;
-        start_temp = dryer_state_.current_temp_c; // Use current temp as starting point
+        // If starting past the heat-up ramp, present at target temperature already.
+        start_temp = (initial_elapsed_min * 60 > 300) ? temp_c : dryer_state_.current_temp_c;
+        dryer_state_.current_temp_c = start_temp;
     }
 
     // Mark dryer thread as running BEFORE creating it
@@ -1310,10 +1325,11 @@ AmsError AmsBackendMock::start_drying(float temp_c, int duration_min, int fan_pc
     // Start simulation thread
     // speed_x: how many simulated seconds pass per real second
     // At default 60x: 1 real second = 1 simulated minute, so 4h completes in 4min
-    dryer_thread_ = std::thread([this, temp_c, duration_min, speed_x, start_temp]() {
+    dryer_thread_ = std::thread([this, temp_c, duration_min, speed_x, start_temp,
+                                 initial_elapsed_min]() {
         float current_temp = start_temp;
         int total_sec = duration_min * 60; // Total simulated seconds
-        int elapsed_sim_sec = 0;
+        int elapsed_sim_sec = initial_elapsed_min * 60; // Honor optional head start
 
         // Update interval: 100ms real time, but simulate speed_x/10 seconds
         // With speed_x=60: each 100ms tick = 6 simulated seconds

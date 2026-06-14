@@ -57,6 +57,7 @@
 #include "wizard_config_paths.h"
 
 // UI headers
+#include "ui_ams_environment_overlay.h"
 #include "ui_ams_mini_status.h"
 #include "ui_ams_tool_text.h"
 #include "ui_bed_mesh.h"
@@ -2166,6 +2167,11 @@ void Application::create_overlays() {
         // Use multi-unit-aware navigation: shows overview for multi-unit,
         // detail panel directly for single-unit
         navigate_to_ams_panel();
+    }
+
+    if (m_args.overlays.ams_environment) {
+        // Filament Environment / dryer overlay for unit 0 (CLI screenshot/testing)
+        helix::ui::get_ams_environment_overlay().show(m_screen, 0);
     }
 
     if (m_args.overlays.spoolman) {

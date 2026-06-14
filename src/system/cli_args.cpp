@@ -259,6 +259,10 @@ static bool parse_panel_arg(const char* panel_arg, CliArgs& args) {
         args.overlays.gradient_test = true;
     } else if (strcmp(panel_arg, "ams") == 0) {
         args.overlays.ams = true;
+    } else if (strcmp(panel_arg, "ams-environment") == 0 ||
+               strcmp(panel_arg, "ams_environment") == 0 ||
+               strcmp(panel_arg, "filament-environment") == 0) {
+        args.overlays.ams_environment = true;
     } else if (strcmp(panel_arg, "spoolman") == 0) {
         args.overlays.spoolman = true;
     } else if (strcmp(panel_arg, "wizard-ams-identify") == 0 ||

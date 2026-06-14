@@ -118,6 +118,13 @@ lv_obj_t* AmsEnvironmentOverlay::create(lv_obj_t* parent) {
 
     spdlog::debug("[{}] Creating overlay...", get_name());
 
+    // Self-register our XML component if a host panel hasn't already. Makes the
+    // overlay safe to open directly (e.g. CLI --ams-environment) without first
+    // visiting the AMS panel, which is where lazy registration otherwise happens.
+    if (!lv_xml_component_get_scope("ams_environment_overlay")) {
+        lv_xml_register_component_from_file("A:ui_xml/ams_environment_overlay.xml");
+    }
+
     overlay_ = static_cast<lv_obj_t*>(
         lv_xml_create(parent, "ams_environment_overlay", nullptr));
     if (!overlay_) {

@@ -280,6 +280,15 @@ class AmsBackendMock : public AmsBackend {
     void set_dryer_speed(int speed_x);
 
     /**
+     * @brief Give the next start_drying() a head start (mock/demo only)
+     * @param min Simulated minutes already elapsed when drying begins (clamped to
+     *            the session duration). Consumed by the next start_drying() call,
+     *            then reset to 0. Lets a mock session begin partway through so the
+     *            countdown and progress bar read consistently.
+     */
+    void set_dryer_initial_elapsed_min(int min);
+
+    /**
      * @brief Enable realistic multi-phase operation mode
      * @param enabled true for HEATING→LOADING→CHECKING sequences
      *
@@ -631,6 +640,7 @@ class AmsBackendMock : public AmsBackend {
 
     // Dryer simulation state
     bool dryer_enabled_ = false;                    ///< Whether dryer is simulated
+    int dryer_initial_elapsed_min_ = 0;             ///< One-shot head start for next start_drying()
     DryerInfo dryer_state_;                         ///< Current dryer state
     std::thread dryer_thread_;                      ///< Background thread for dryer simulation
     std::atomic<bool> dryer_thread_running_{false}; ///< Guards against double-join

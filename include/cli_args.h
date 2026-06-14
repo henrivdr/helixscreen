@@ -48,6 +48,7 @@ struct OverlayFlags {
     bool gradient_test = false;
     bool history_dashboard = false;
     bool ams = false;
+    bool ams_environment = false; // Filament Environment / dryer overlay
     bool spoolman = false;
     bool led = false;
     bool wizard_ams_identify = false;
