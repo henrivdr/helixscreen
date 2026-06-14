@@ -678,6 +678,17 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
             return {"", 0, "Failed to load printer database"};
         }
 
+        // A prior detection compacts the in-memory database to reclaim memory,
+        // stripping every printer's heuristics array. Detection needs those
+        // heuristics, so restore them from disk before matching. This is the path
+        // hit when a second printer is added in the same process session: the first
+        // printer's detection (or startup auto-detect) already compacted the shared
+        // database, which would otherwise leave detect() with nothing to match
+        // against and misclassify the new printer as "Unknown".
+        if (g_database.compacted) {
+            g_database.reload();
+        }
+
         // Iterate through all printers in database and find best match
         PrinterDetectionResult best_match{"", 0, "No distinctive hardware detected"};
         PrinterDetectionResult runner_up{"", 0, ""};

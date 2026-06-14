@@ -720,6 +720,51 @@ TEST_CASE("PrinterDetector: Subsequent calls use cached database", "[printer][da
     REQUIRE(result1.confidence == result2.confidence);
 }
 
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: detection works after database compaction (second printer add)",
+                 "[printer][database][regression]") {
+    // Regression for the second-printer "Unknown" bug. Adding a second printer in
+    // the same process session failed to auto-detect because the first printer's
+    // detection (or startup auto-detect) ran compact_database(), which strips the
+    // heuristics arrays from the shared in-memory database to reclaim memory. A
+    // later detect() then found no heuristics on any printer and matched nothing,
+    // returning confidence 0 -> "Unknown".
+    //
+    // Real-world repro: Voron 2.4 + Creality K2 Plus on one Sonic Pad. The K2's
+    // Moonraker reported hostname "K2Plus-50C1", 141 objects (incl. box and
+    // motor_control), and corexy kinematics, yet detection returned confidence 0.
+
+    // Realistic Creality K2 Plus fingerprint (from on-device Moonraker discovery).
+    PrinterHardwareData k2_plus{
+        .heaters = {"extruder", "heater_bed", "heater_generic chamber_heater"},
+        .sensors = {"temperature_sensor chamber_temp"},
+        .fans = {"fan", "heater_fan chamber_fan"},
+        .leds = {},
+        .hostname = "K2Plus-50C1",
+        .printer_objects = {"box", "motor_control", "fan_feedback", "load_ai", "filament_rack",
+                            "temperature_sensor chamber_temp", "heater_generic chamber_heater"},
+        .kinematics = "corexy"};
+
+    // First detection (e.g. the first printer's auto-detect) succeeds.
+    auto first = PrinterDetector::detect(k2_plus);
+    REQUIRE(first.detected());
+    REQUIRE(first.type_name == "Creality K2 Plus");
+
+    // Simulate what auto_detect_and_save() does after every detection: compact the
+    // shared database. This is the event that broke detection of the next printer.
+    PrinterDetector::compact_database();
+
+    // Adding a SECOND printer runs detect() again against the same global database.
+    // Before the fix this returned confidence 0 (heuristics stripped) -> "Unknown".
+    auto second = PrinterDetector::detect(k2_plus);
+    REQUIRE(second.detected());
+    REQUIRE(second.type_name == "Creality K2 Plus");
+    REQUIRE(second.confidence == first.confidence);
+
+    // Restore the shared database so compaction does not leak into other tests.
+    PrinterDetector::reload();
+}
+
 // ============================================================================
 // Helper Method Tests
 // ============================================================================
