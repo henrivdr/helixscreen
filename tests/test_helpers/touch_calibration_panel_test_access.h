@@ -17,8 +17,8 @@ namespace helix {
  * env var to toggle it. This access class provides deterministic seams:
  *
  *  - `set_debounce_enabled()` overrides the gate per-panel-instance.
- *  - `set_now_fn()` injects a monotonic-ms clock so the stall-guard timeout
- *    can be advanced synchronously without spinning a real timer.
+ *  - `set_now_fn()` injects a monotonic-ms clock so the refractory + stall
+ *    windows can be advanced synchronously without spinning a real timer.
  */
 class TouchCalibrationPanelTestAccess {
   public:
@@ -30,17 +30,27 @@ class TouchCalibrationPanelTestAccess {
         return p.debounce_enabled_;
     }
 
-    static bool awaiting_release(const TouchCalibrationPanel& p) {
-        return p.awaiting_release_;
+    static bool press_pending(const TouchCalibrationPanel& p) {
+        return p.press_pending_;
     }
 
-    /// Inject a deterministic monotonic-ms clock used only for the stall-guard.
+    /// Inject a deterministic monotonic-ms clock used for refractory + stall logic.
     static void set_now_fn(TouchCalibrationPanel& p, std::function<uint32_t()> fn) {
         p.now_fn_ = std::move(fn);
     }
 
-    static uint32_t release_timeout_ms() {
-        return TouchCalibrationPanel::RELEASE_TIMEOUT_MS;
+    /// Drive the stall-timeout fallback directly (the LVGL timer would otherwise
+    /// fire this). Commits a pending press outstanding >= STALL_COMMIT_MS.
+    static void commit_pending_if_stale(TouchCalibrationPanel& p, uint32_t now) {
+        p.commit_pending_if_stale(now);
+    }
+
+    static uint32_t refractory_ms() {
+        return TouchCalibrationPanel::REFRACTORY_MS;
+    }
+
+    static uint32_t stall_commit_ms() {
+        return TouchCalibrationPanel::STALL_COMMIT_MS;
     }
 
     static int samples_required() {

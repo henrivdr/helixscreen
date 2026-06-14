@@ -27,6 +27,7 @@ TouchCalibrationPanel::TouchCalibrationPanel()
 TouchCalibrationPanel::~TouchCalibrationPanel() {
     stop_countdown_timer();
     stop_fast_revert_timer();
+    stop_stall_timer();
 }
 
 void TouchCalibrationPanel::set_completion_callback(CompletionCallback cb) {
@@ -51,6 +52,10 @@ void TouchCalibrationPanel::set_fast_revert_callback(FastRevertCallback cb) {
 
 void TouchCalibrationPanel::set_sample_progress_callback(SampleProgressCallback cb) {
     sample_progress_callback_ = std::move(cb);
+}
+
+void TouchCalibrationPanel::set_verify_entry_callback(VerifyEntryCallback cb) {
+    verify_entry_callback_ = std::move(cb);
 }
 
 void TouchCalibrationPanel::set_verify_timeout_seconds(int seconds) {
@@ -169,6 +174,13 @@ void TouchCalibrationPanel::capture_point(Point raw) {
         state_ = State::VERIFY;
         start_countdown_timer();
         start_fast_revert_timer();
+        // Notify the overlay the instant we enter VERIFY so it can re-enable
+        // the original calibration for safe button dispatch. Fired here (not on
+        // an input edge) so every commit path — release event, stall timer, and
+        // legacy sample-on-press — re-enables affine identically (#943/#986).
+        if (verify_entry_callback_) {
+            verify_entry_callback_();
+        }
         break;
     default:
         // No-op in IDLE, VERIFY, COMPLETE states
@@ -259,30 +271,10 @@ TouchCalibrationPanel::Progress TouchCalibrationPanel::get_progress() const {
 }
 
 void TouchCalibrationPanel::add_sample(Point raw) {
-    // Press-debounce gate (issue #943): when enabled, a physical contact may
-    // contribute at most one sample. A burst of PRESSED events from one tap is
-    // ignored until notify_release() (or the stall-guard) clears the gate.
-    if (debounce_enabled_ && awaiting_release_) {
-        // Stall-guard: some controllers emit PRESSED without a matching RELEASED.
-        // If the gate has been held longer than the timeout, clear it and proceed
-        // so calibration cannot wedge forever.
-        if (now_fn_() >= release_deadline_ms_) {
-            awaiting_release_ = false;
-        } else {
-            if (is_touch_debug_enabled()) {
-                spdlog::warn("[TouchDebug] ignored press (awaiting release)");
-            }
-            return;
-        }
-    }
-
     // Auto-start on first tap if in IDLE state (don't count this tap as a sample —
     // the crosshair isn't visible yet, so the user's first tap ON the crosshair is touch 1)
     if (state_ == State::IDLE) {
         start();
-        // Arm the gate so the same physical contact's burst doesn't immediately
-        // record sample 1 of POINT_1 without a finger-lift first.
-        arm_release_gate();
         return;
     }
 
@@ -293,10 +285,6 @@ void TouchCalibrationPanel::add_sample(Point raw) {
     if (sample_count_ < SAMPLES_REQUIRED) {
         sample_buffer_[sample_count_] = {raw.x, raw.y};
         sample_count_++;
-
-        // Arm the gate: the next press from this same contact is debounced until
-        // a finger-lift (RELEASED) or the stall-guard timeout.
-        arm_release_gate();
 
         if (is_touch_debug_enabled()) {
             auto p = get_progress();
@@ -314,32 +302,105 @@ void TouchCalibrationPanel::add_sample(Point raw) {
 
     if (sample_count_ >= SAMPLES_REQUIRED) {
         Point median;
-        if (compute_median_point(median)) {
-            capture_point(median);
-        } else {
-            if (failure_callback_) {
-                failure_callback_("Too much noise — tap the target again slowly and precisely.");
-            }
-        }
+        const bool ok = compute_median_point(median); // reads sample_buffer_
+
+        // Reset the per-point sample count BEFORE invoking the success/failure
+        // callbacks. Those callbacks refresh the "touch N of 3" instruction
+        // label; if the count were still at SAMPLES_REQUIRED when they run, the
+        // label would render "touch 4 of 3" (current_sample + 1). Clearing first
+        // means any UI refresh the callbacks trigger sees a fresh count of 0.
         reset_samples();
+
+        if (ok) {
+            capture_point(median);
+        } else if (failure_callback_) {
+            failure_callback_("Too much noise — tap the target again slowly and precisely.");
+        }
     }
 }
 
-void TouchCalibrationPanel::arm_release_gate() {
+void TouchCalibrationPanel::on_press(Point raw) {
+    // Opt-out: legacy sample-on-press behavior (byte-for-byte the pre-#943 path)
+    // for A/B testing on real hardware.
     if (!debounce_enabled_) {
+        add_sample(raw);
         return;
     }
-    awaiting_release_ = true;
-    release_deadline_ms_ = now_fn_() + RELEASE_TIMEOUT_MS;
+
+    // Capture the press; defer committing to on_release() or the stall timer.
+    // A burst of PRESSED edges from one physical contact overwrites the same
+    // pending press, so only the final position is committed once.
+    pending_press_point_ = raw;
+    press_pending_ = true;
+    press_time_ms_ = now_fn_();
+
+    if (is_touch_debug_enabled()) {
+        spdlog::debug("[TouchDebug] press captured ({},{}), pending commit", raw.x, raw.y);
+    }
+
+    // Arm the stall fallback for panels that never deliver a clean RELEASED.
+    start_stall_timer();
 }
 
-void TouchCalibrationPanel::notify_release() {
+void TouchCalibrationPanel::on_release() {
     // No-op when debounce is disabled — keeps the default path byte-for-byte
-    // identical to pre-#943 behavior.
+    // identical to pre-#943 behavior (release does nothing).
     if (!debounce_enabled_) {
         return;
     }
-    awaiting_release_ = false;
+    stop_stall_timer();
+    commit_pending(now_fn_());
+}
+
+void TouchCalibrationPanel::commit_pending(uint32_t now) {
+    if (!press_pending_) {
+        return;
+    }
+
+    // Release-immune refractory: a commit too soon after the last committed
+    // sample is capacitive bounce, not a deliberate tap. Drop it. The very first
+    // commit of a session has no prior sample to bounce off of, so it always
+    // passes (has_committed_ arms the window).
+    if (has_committed_ && now - last_sample_ms_ < REFRACTORY_MS) {
+        press_pending_ = false;
+        if (is_touch_debug_enabled()) {
+            spdlog::debug("[TouchDebug] dropped bounce sample, dt={}ms", now - last_sample_ms_);
+        }
+        return;
+    }
+
+    add_sample(pending_press_point_);
+    last_sample_ms_ = now;
+    has_committed_ = true;
+    press_pending_ = false;
+}
+
+void TouchCalibrationPanel::commit_pending_if_stale(uint32_t now) {
+    // Fallback for panels that never deliver a clean RELEASED: commit a press
+    // that has been outstanding at least STALL_COMMIT_MS so calibration cannot
+    // wedge forever.
+    if (press_pending_ && (now - press_time_ms_ >= STALL_COMMIT_MS)) {
+        commit_pending(now);
+    }
+}
+
+void TouchCalibrationPanel::start_stall_timer() {
+    stop_stall_timer();
+    stall_timer_ = lv_timer_create(stall_timer_cb, STALL_COMMIT_MS, this);
+    lv_timer_set_repeat_count(stall_timer_, 1);
+}
+
+void TouchCalibrationPanel::stop_stall_timer() {
+    if (stall_timer_ != nullptr) {
+        lv_timer_delete(stall_timer_);
+        stall_timer_ = nullptr;
+    }
+}
+
+void TouchCalibrationPanel::stall_timer_cb(lv_timer_t* timer) {
+    auto* self = static_cast<TouchCalibrationPanel*>(lv_timer_get_user_data(timer));
+    self->stall_timer_ = nullptr; // Timer auto-deletes (repeat_count=1)
+    self->commit_pending_if_stale(self->now_fn_());
 }
 
 void TouchCalibrationPanel::accept() {
@@ -383,6 +444,7 @@ void TouchCalibrationPanel::reset() {
     // completion callback the way cancel() does.
     stop_countdown_timer();
     stop_fast_revert_timer();
+    stop_stall_timer();
 
     state_ = State::IDLE;
     calibration_.valid = false;
@@ -390,10 +452,13 @@ void TouchCalibrationPanel::reset() {
     // Sample buffer + per-point capture progress.
     reset_samples();
 
-    // Press-debounce gate: a session that ended mid-press could leave the gate
-    // armed, swallowing the next session's taps until the stall-guard expired.
-    awaiting_release_ = false;
-    release_deadline_ms_ = 0;
+    // Press-debounce state: a session that ended mid-press could leave a pending
+    // press uncommitted, swallowing the next session's first tap.
+    press_pending_ = false;
+    pending_press_point_ = Point{};
+    press_time_ms_ = 0;
+    last_sample_ms_ = 0;
+    has_committed_ = false;
 
     // Re-read the debounce setting so a value that changed since construction
     // (or was unset when the singleton was built early in startup) applies to

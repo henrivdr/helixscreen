@@ -257,6 +257,9 @@ lv_obj_t* WizardTouchCalibrationStep::create(lv_obj_t* parent) {
     DisplayManager* dm = DisplayManager::instance();
     if (dm) {
         dm->disable_affine_calibration();
+        // Suppress the global debug-touches ripple during the wizard step — it
+        // would draw raw (Y-inverted) coords while affine is off (#943).
+        dm->set_touch_calibration_active(true);
     }
 
     // Enable Next button and set initial text to "Skip"
@@ -318,6 +321,7 @@ void WizardTouchCalibrationStep::cleanup() {
             dm->apply_touch_calibration(backup_calibration_);
         }
         dm->enable_affine_calibration();
+        dm->set_touch_calibration_active(false);
     }
     has_backup_ = false;
 
@@ -483,8 +487,9 @@ void WizardTouchCalibrationStep::handle_screen_touched(lv_event_t* e) {
     spdlog::debug("[{}] Screen touched at ({}, {}) during state {}", get_name(), point.x, point.y,
                   static_cast<int>(state_before));
 
-    // add_sample() handles IDLE→POINT_1 auto-start and sample collection
-    panel_->add_sample({point.x, point.y});
+    // on_press() captures the press; commit happens on release / stall (#943).
+    // Handles IDLE→POINT_1 auto-start and sample collection.
+    panel_->on_press({point.x, point.y});
 
     // Flash crosshair for visual tap feedback (only during calibration points,
     // not on the initial "tap anywhere to begin" transition from IDLE)
@@ -509,11 +514,18 @@ void WizardTouchCalibrationStep::handle_screen_touched(lv_event_t* e) {
 }
 
 void WizardTouchCalibrationStep::handle_screen_released() {
-    // Forward finger-lift to the panel so the press-debounce gate clears
+    // Forward finger-lift to the panel so the pending press commits
     // (issue #943). No-op when debounce is disabled. Main-thread input only.
-    if (panel_) {
-        panel_->notify_release();
+    if (!panel_) {
+        return;
     }
+    panel_->on_release();
+
+    // The commit happens here (not on press), so refresh the UI now that the
+    // sample count / state may have advanced — otherwise the instruction label
+    // keeps showing the pre-commit "touch N of 3" until the next press.
+    update_instruction_text();
+    update_crosshair_position();
 }
 
 void WizardTouchCalibrationStep::handle_test_area_touched(lv_event_t* e) {

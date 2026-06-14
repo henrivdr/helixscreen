@@ -146,6 +146,32 @@ TouchCalibrationOverlay::TouchCalibrationOverlay() {
     // Set up sample progress callback for UI updates
     panel_->set_sample_progress_callback([this]() { update_instruction_text(); });
 
+    // Re-enable the ORIGINAL calibration the instant the panel enters VERIFY.
+    //
+    // Fires on the actual state transition (from the release-commit, the stall
+    // timer, or legacy sample-on-press), so it cannot be defeated by which
+    // input edge happened to trigger the commit. The new (untested) cal is NOT
+    // applied — keeping the known-good cal active means Accept/Retry dispatch on
+    // their true screen locations, and a bad matrix can't map a stray tap onto
+    // Accept and save itself. The ripple in handle_screen_touched() visualizes
+    // where the new cal WOULD place the finger.
+    //
+    // Without this, VERIFY ran on raw, uncalibrated coordinates; on a resistive
+    // panel whose raw Y is inverted vs screen Y (AD5M) the bottom Accept button
+    // was unhittable and the cal timed out (#943/#986).
+    panel_->set_verify_entry_callback([this]() {
+        if (DisplayManager* dm = DisplayManager::instance()) {
+            dm->enable_affine_calibration();
+            spdlog::info("[{}] Entered VERIFY: re-enabled original calibration "
+                         "(new cal NOT applied until accept)",
+                         get_name());
+        }
+        has_backup_ = false;
+        update_state_subject();
+        update_instruction_text();
+        update_crosshair_position();
+    });
+
     // Set up fast-revert callback for broken matrix detection during verify
     panel_->set_fast_revert_callback([this]() {
         spdlog::warn("[{}] Fast-revert: broken matrix detected, reverting", get_name());
@@ -318,6 +344,10 @@ void TouchCalibrationOverlay::show(CompletionCallback callback) {
     DisplayManager* dm = DisplayManager::instance();
     if (dm) {
         dm->disable_affine_calibration();
+        // Suppress the global debug-touches ripple while this overlay is up —
+        // it draws its own ripple, and the global one would render raw coords
+        // during capture (#943).
+        dm->set_touch_calibration_active(true);
     }
 
     lv_subject_set_int(&state_subject_, STATE_IDLE);
@@ -390,6 +420,11 @@ void TouchCalibrationOverlay::on_deactivate() {
     // Cancel any in-progress calibration
     if (panel_) {
         panel_->cancel();
+    }
+
+    // Re-allow the global debug-touches ripple now that the overlay is gone.
+    if (DisplayManager* dm = DisplayManager::instance()) {
+        dm->set_touch_calibration_active(false);
     }
 
     // Call base class
@@ -557,11 +592,11 @@ void TouchCalibrationOverlay::handle_screen_touched(lv_event_t* e) {
     // Handle VERIFY state - show calibration accuracy visualization with ripple.
     //
     // The OLD calibration is active in the touch wrapper (for safe button
-    // dispatch — see VERIFY-entry block below). That means `point` is the
-    // finger's position under OLD cal. To give the user honest feedback about
-    // the NEW cal they just captured, we must show the ripple where the NEW
-    // cal would place the same physical finger: reverse OLD cal to recover
-    // raw coords, then forward through NEW cal.
+    // dispatch — re-enabled by the panel's verify_entry_callback). That means
+    // `point` is the finger's position under OLD cal. To give the user honest
+    // feedback about the NEW cal they just captured, we must show the ripple
+    // where the NEW cal would place the same physical finger: reverse OLD cal
+    // to recover raw coords, then forward through NEW cal.
     if (state_before == helix::TouchCalibrationPanel::State::VERIFY) {
         spdlog::debug("[{}] Verify touch at ({}, {})", get_name(), point.x, point.y);
 
@@ -592,10 +627,11 @@ void TouchCalibrationOverlay::handle_screen_touched(lv_event_t* e) {
         return;
     }
 
-    // add_sample() handles IDLE→POINT_1 auto-start and sample collection
+    // on_press() captures the press; commit happens on release / stall (#943).
+    // Handles IDLE→POINT_1 auto-start and sample collection.
     spdlog::debug("[{}] Screen touched at ({}, {}) during state {}", get_name(), point.x, point.y,
                   static_cast<int>(state_before));
-    panel_->add_sample({point.x, point.y});
+    panel_->on_press({point.x, point.y});
 
     // Flash crosshair for visual tap feedback (only during calibration points,
     // not on the initial "tap anywhere to begin" transition from IDLE)
@@ -607,28 +643,9 @@ void TouchCalibrationOverlay::handle_screen_touched(lv_event_t* e) {
         flash_object(crosshair_, 200, true);
     }
 
-    // On entering VERIFY, re-enable the ORIGINAL calibration so Accept/Retry
-    // buttons require a physical press on their actual screen location.
-    //
-    // Prior behavior: temporarily applied the new (untested) calibration here.
-    // That was unsafe — a bad matrix could map any random raw touch onto the
-    // Accept button's logical rect, causing the garbage cal to save itself
-    // the moment the user tapped anywhere on the overlay. Once saved, the
-    // device became un-touchable until reboot + config reset.
-    //
-    // With the original cal active, Accept only fires when the user physically
-    // taps the button. The ripple below visualizes finger position under the
-    // known-good cal, so the user can still sanity-check responsiveness.
-    if (panel_->get_state() == helix::TouchCalibrationPanel::State::VERIFY) {
-        DisplayManager* dm = DisplayManager::instance();
-        if (dm) {
-            dm->enable_affine_calibration();
-            spdlog::info("[{}] Re-enabled original calibration for VERIFY (new cal NOT applied "
-                         "until accept)",
-                         get_name());
-        }
-        has_backup_ = false;
-    }
+    // VERIFY entry (re-enabling the original calibration) is handled by the
+    // panel's verify_entry_callback so it fires on the real state transition
+    // rather than a specific input edge — see the callback in the constructor.
 
     // Map panel state to subject state
     update_state_subject();
@@ -637,11 +654,19 @@ void TouchCalibrationOverlay::handle_screen_touched(lv_event_t* e) {
 }
 
 void TouchCalibrationOverlay::handle_screen_released() {
-    // Forward finger-lift to the panel so the press-debounce gate clears
+    // Forward finger-lift to the panel so the pending press commits
     // (issue #943). No-op when debounce is disabled. Main-thread input only.
-    if (panel_) {
-        panel_->notify_release();
+    if (!panel_) {
+        return;
     }
+    panel_->on_release();
+
+    // The commit happens here (not on press), so refresh the UI now that the
+    // sample count / state may have advanced — otherwise the instruction label
+    // keeps showing the pre-commit "touch N of 3" until the next press.
+    update_state_subject();
+    update_instruction_text();
+    update_crosshair_position();
 }
 
 void TouchCalibrationOverlay::handle_back_clicked() {

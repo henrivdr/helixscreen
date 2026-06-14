@@ -471,6 +471,15 @@ bool DisplayManager::init(const Config& config) {
                 if (!RuntimeConfig::debug_touches())
                     return;
 
+                // Suppress while the touch-calibration UI is active: it draws
+                // its own (correct) ripple, and during point capture affine is
+                // disabled — so lv_indev_get_point() returns RAW coords and this
+                // would draw a Y-inverted ripple, which looks like a calibration
+                // bug but isn't (prestonbrown/helixscreen#943).
+                auto* cal_dm = DisplayManager::instance();
+                if (cal_dm && cal_dm->is_touch_calibration_active())
+                    return;
+
                 auto* indev = static_cast<lv_indev_t*>(lv_timer_get_user_data(t));
                 if (!indev)
                     return;

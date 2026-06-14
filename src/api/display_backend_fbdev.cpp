@@ -405,15 +405,16 @@ lv_indev_t* DisplayBackendFbdev::create_input_pointer() {
     // Load affine calibration from config (saved by calibration wizard)
     calibration_ = helix::load_touch_calibration();
 
-    // If a previously-saved calibration passed validation, the user has already
-    // calibrated this device — don't force the wizard again on every boot just
-    // because the ABS range disagrees with the display (a permanent property of
-    // panels like the Qidi Q2's 800x480 touch on a 480x272 LCD — #943).
-    if (needs_calibration_ && calibration_.valid) {
-        spdlog::info("[Fbdev Backend] Valid saved calibration found — "
-                     "not forcing wizard despite ABS/display mismatch");
-        needs_calibration_ = false;
-    }
+    // needs_calibration_ stays a STABLE capability flag: "this panel uses affine
+    // calibration" (true for resistive controllers). It must NOT be cleared just
+    // because a valid calibration is already loaded — needs_touch_calibration()
+    // also gates the manual Settings "Touch Calibration" button (visibility +
+    // click), so clearing it here left the button dead on any already-calibrated
+    // device (prestonbrown/helixscreen#943, prestonbrown/helixscreen#986). The
+    // boot wizard does NOT re-fire on calibrated devices because its own gate
+    // (WizardTouchCalibrationStep) independently skips when
+    // /input/calibration/valid is set — so the user can still re-calibrate on
+    // demand without the wizard forcing itself every boot.
 
     // Always install the calibrated read callback — it handles both rotation
     // transform and affine calibration independently. Without this, rotation

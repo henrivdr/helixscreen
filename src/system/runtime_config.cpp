@@ -57,12 +57,15 @@ void RuntimeConfig::set_debug_touches(bool value) {
 }
 
 bool RuntimeConfig::touch_cal_debounce() {
+    // ON by default (issue #943): capture-on-press / commit-on-release with a
+    // time refractory. Opt OUT only when HELIX_TOUCH_CAL_DEBOUNCE is exactly "0"
+    // (legacy sample-on-press behavior, for A/B testing on real hardware).
     static bool checked = false;
-    static bool enabled = false;
+    static bool enabled = true;
     if (!checked) {
         checked = true;
         const char* val = std::getenv("HELIX_TOUCH_CAL_DEBOUNCE");
-        enabled = (val != nullptr && std::strcmp(val, "1") == 0);
+        enabled = !(val != nullptr && std::strcmp(val, "0") == 0);
     }
     return enabled;
 }

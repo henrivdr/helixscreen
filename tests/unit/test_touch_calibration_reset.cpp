@@ -53,8 +53,13 @@ class TouchCalibrationResetFixture {
     int current_sample_count() const {
         return panel_->get_progress().current_sample;
     }
-    bool gate_armed() const {
-        return TouchCalibrationPanelTestAccess::awaiting_release(*panel_);
+    bool press_pending() const {
+        return TouchCalibrationPanelTestAccess::press_pending(*panel_);
+    }
+
+    /// Advance the clock past the refractory window so the next commit lands.
+    void clear_refractory() {
+        fake_now_ms_ += TouchCalibrationPanelTestAccess::refractory_ms() + 1;
     }
 };
 
@@ -66,31 +71,33 @@ class TouchCalibrationResetFixture {
 TEST_CASE_METHOD(TouchCalibrationResetFixture,
                  "TouchCalibrationPanel::reset clears mid-point session state",
                  "[touch][calibration][reset]") {
-    // Advance the state machine past point 0 (POINT_1 -> POINT_2) by capturing
-    // a full point, then partially fill the next point's sample buffer.
+    // Drive the panel into a genuine mid-session state: POINT_1 with one sample
+    // committed and a press captured-but-not-yet-committed.
     panel_->start();
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
 
-    // One sample for POINT_1 arms the debounce gate (no release follows).
-    panel_->add_sample(Point{100, 120});
-    REQUIRE(current_sample_count() == 1);
-    REQUIRE(gate_armed());
-
-    // The gate is armed, so subsequent presses are swallowed — exactly the
-    // stale state that would carry into the next Settings show.
-    panel_->add_sample(Point{100, 120});
+    // One press/release commits sample 1 for POINT_1.
+    panel_->on_press(Point{100, 120});
+    panel_->on_release();
     REQUIRE(current_sample_count() == 1);
 
-    // Sanity: we are genuinely mid-session (not IDLE, sample buffered, gate up).
+    // A second press is captured but left uncommitted (no release yet) — exactly
+    // the stale pending-press state that would carry into the next Settings show.
+    clear_refractory();
+    panel_->on_press(Point{100, 120});
+    REQUIRE(press_pending());
+    REQUIRE(current_sample_count() == 1);
+
+    // Sanity: we are genuinely mid-session.
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
 
     // The fix under test.
     panel_->reset();
 
-    // Back to a clean start: IDLE, no buffered samples, gate cleared.
+    // Back to a clean start: IDLE, no buffered samples, no pending press.
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::IDLE);
     REQUIRE(current_sample_count() == 0);
-    REQUIRE_FALSE(gate_armed());
+    REQUIRE_FALSE(press_pending());
 }
 
 // ---------------------------------------------------------------------------
@@ -99,14 +106,15 @@ TEST_CASE_METHOD(TouchCalibrationResetFixture,
 TEST_CASE_METHOD(TouchCalibrationResetFixture,
                  "TouchCalibrationPanel::reset returns to clean start from VERIFY",
                  "[touch][calibration][reset]") {
-    // Drive a full 3-point calibration to VERIFY, releasing between taps so the
-    // debounce gate lets each sample through.
+    // Drive a full 3-point calibration to VERIFY via clean press/release taps,
+    // spacing them past the refractory window so each commits.
     panel_->start();
     const Point taps[3] = {{100, 120}, {380, 390}, {660, 60}};
     for (const auto& tap : taps) {
         for (int s = 0; s < TouchCalibrationPanelTestAccess::samples_required(); ++s) {
-            panel_->add_sample(tap);
-            panel_->notify_release();
+            clear_refractory();
+            panel_->on_press(tap);
+            panel_->on_release();
         }
     }
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::VERIFY);
@@ -114,19 +122,21 @@ TEST_CASE_METHOD(TouchCalibrationResetFixture,
 
     panel_->reset();
 
-    // Fresh start: IDLE, no calibration exposed, no buffered samples, gate down.
+    // Fresh start: IDLE, no calibration exposed, no buffered samples, no pending.
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::IDLE);
     REQUIRE(panel_->get_calibration() == nullptr);
     REQUIRE(current_sample_count() == 0);
-    REQUIRE_FALSE(gate_armed());
+    REQUIRE_FALSE(press_pending());
 
     // And the panel is fully usable again after reset (the whole point of #943):
     // a brand-new run reaches POINT_1 and accepts a fresh sample.
-    panel_->add_sample(Point{100, 120}); // IDLE -> POINT_1 auto-start (gate armed, no sample)
+    panel_->on_press(Point{100, 120}); // IDLE -> POINT_1 auto-start (no sample yet)
+    panel_->on_release();
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
     REQUIRE(current_sample_count() == 0);
-    panel_->notify_release();
-    panel_->add_sample(Point{100, 120});
+    clear_refractory();
+    panel_->on_press(Point{100, 120});
+    panel_->on_release();
     REQUIRE(current_sample_count() == 1);
 }
 
@@ -140,7 +150,8 @@ TEST_CASE_METHOD(TouchCalibrationResetFixture,
     panel_->set_completion_callback([&](const TouchCalibration*) { callback_fired = true; });
 
     panel_->start();
-    panel_->add_sample(Point{100, 120});
+    panel_->on_press(Point{100, 120});
+    panel_->on_release();
 
     panel_->reset();
 

@@ -141,12 +141,14 @@ struct RuntimeConfig {
     /**
      * @brief Check if touch-calibration press debounce is enabled
      *
-     * When enabled, the calibration state machine records at most one sample
-     * per physical contact (gated on LV_EVENT_RELEASED), fixing controllers
-     * that emit a burst of PRESSED events per tap (issue #943). Default off;
-     * enabled via HELIX_TOUCH_CAL_DEBOUNCE=1. Static-cached, read once.
+     * When enabled, the calibration state machine uses capture-on-press /
+     * commit-on-release with a release-immune time refractory, recording at most
+     * one sample per physical contact and fixing controllers that emit a burst
+     * of PRESSED events per tap (issue #943). Default ON; opt out (legacy
+     * sample-on-press) only with HELIX_TOUCH_CAL_DEBOUNCE=0. Static-cached, read
+     * once.
      *
-     * @return true if press debounce is enabled
+     * @return true if press debounce is enabled (the default)
      */
     static bool touch_cal_debounce();
 
