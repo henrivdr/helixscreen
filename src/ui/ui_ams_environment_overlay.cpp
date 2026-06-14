@@ -28,6 +28,20 @@
 
 namespace helix::ui {
 
+namespace {
+// Clamp a preset's nominal dry temperature to a box's reported settable range so
+// the displayed value matches what start_drying() will actually send.
+float clamp_preset_temp(float temp_c, const DryerInfo& dryer) {
+    if (dryer.max_temp_c > 0.0f && temp_c > dryer.max_temp_c) {
+        temp_c = dryer.max_temp_c;
+    }
+    if (dryer.min_temp_c > 0.0f && temp_c < dryer.min_temp_c) {
+        temp_c = dryer.min_temp_c;
+    }
+    return temp_c;
+}
+} // namespace
+
 // ============================================================================
 // SINGLETON ACCESSOR
 // ============================================================================
@@ -405,6 +419,11 @@ void AmsEnvironmentOverlay::populate_presets() {
 
     cached_presets_ = backend->get_drying_presets();
 
+    // The box's max settable temp clamps both the dropdown label and the applied
+    // value, so a preset whose nominal dry temp exceeds this box's ceiling (e.g.
+    // PA at 70°C on a 65°C box) displays and sends the same clamped value.
+    DryerInfo dryer = backend->get_dryer_info();
+
     // Build dropdown options string (newline-separated)
     std::string options;
     for (const auto& preset : cached_presets_) {
@@ -414,7 +433,7 @@ void AmsEnvironmentOverlay::populate_presets() {
         char buf[64];
         int hours = preset.duration_min / 60;
         snprintf(buf, sizeof(buf), "%s %g°C/%dh",
-                 preset.name.c_str(), preset.temp_c, hours);
+                 preset.name.c_str(), clamp_preset_temp(preset.temp_c, dryer), hours);
         options += buf;
     }
 
@@ -437,9 +456,16 @@ void AmsEnvironmentOverlay::apply_preset(int index) {
 
     const auto& preset = cached_presets_[index];
 
+    // Clamp to the box's reported limits so the value shown in the field matches
+    // what Start Drying will actually send (see populate_presets()).
+    float applied_temp = preset.temp_c;
+    if (AmsBackend* backend = AmsState::instance().get_backend()) {
+        applied_temp = clamp_preset_temp(preset.temp_c, backend->get_dryer_info());
+    }
+
     if (temp_input_) {
         char buf[8];
-        snprintf(buf, sizeof(buf), "%d", static_cast<int>(preset.temp_c));
+        snprintf(buf, sizeof(buf), "%d", static_cast<int>(applied_temp));
         lv_textarea_set_text(temp_input_, buf);
     }
     if (duration_input_) {

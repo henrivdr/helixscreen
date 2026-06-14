@@ -1081,6 +1081,28 @@ TEST_CASE("Happy Hare reads filament_heater + heater_max_temp from config",
     REQUIRE(d.max_temp_c == Catch::Approx(65.0f));
 }
 
+TEST_CASE("Happy Hare surfaces box heater temp as unit environment",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    // Before any dryer data, no environment is reported.
+    auto info_before = helper.get_system_info();
+    REQUIRE_FALSE(info_before.units.empty());
+    REQUIRE_FALSE(info_before.units[0].environment.has_value());
+
+    // A drying_state with a current temp marks the dryer supported and sets temp.
+    nlohmann::json mmu_data = {{"drying_state", {{"active", true}, {"current_temp", 48.5}}}};
+    helper.test_parse_mmu_state(mmu_data);
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    REQUIRE(info.units[0].environment.has_value());
+    REQUIRE(info.units[0].environment->temperature_c == Catch::Approx(48.5f));
+    // Humidity has no printer-object source over Happy Hare — must stay hidden.
+    REQUIRE_FALSE(info.units[0].environment->has_humidity);
+}
+
 TEST_CASE("Happy Hare dryer computes remaining from commanded TIMER", "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
