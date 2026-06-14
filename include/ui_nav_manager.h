@@ -12,6 +12,7 @@
 #include <array>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Forward declarations for lifecycle dispatch
@@ -477,6 +478,17 @@ class NavigationManager {
     // Restores persistent overlay registrations that survived panel switches.
     IPanelLifecycle* resolve_overlay_lifecycle(lv_obj_t* overlay_panel);
 
+    // Self-healing against out-of-band widget deletion (bundle ZW6ATWSL).
+    // When LVGL deletes a tracked widget through ANY path (e.g. a teardown that
+    // bypasses go_back), LV_EVENT_DELETE fires synchronously just before the
+    // memory is freed. scrub_deleted_widget() erases the widget from every
+    // widget-keyed bookkeeping container so panel_stack_.back() can never
+    // dereference freed memory on the next push_overlay().
+    void scrub_deleted_widget(lv_obj_t* widget);
+    // Attach the LV_EVENT_DELETE scrub callback to a widget exactly once.
+    void ensure_delete_hook(lv_obj_t* widget);
+    static void overlay_delete_event_cb(lv_event_t* e);
+
     // Event callbacks
     static void backdrop_click_event_cb(lv_event_t* e);
     static void nav_button_clicked_cb(lv_event_t* event);
@@ -516,6 +528,10 @@ class NavigationManager {
 
     // Zoom animation source rects (overlay → source rect for reverse animation)
     std::unordered_map<lv_obj_t*, lv_area_t> zoom_source_rects_;
+
+    // Widgets that already have the LV_EVENT_DELETE scrub hook attached.
+    // Prevents double-registering the callback and is itself scrubbed on delete.
+    std::unordered_set<lv_obj_t*> delete_hooked_;
 
     // Navbar widget reference (for z-order management)
     lv_obj_t* navbar_widget_ = nullptr;

@@ -360,3 +360,75 @@ TEST_CASE_METHOD(NavbarIconTestFixture, "Overlay registration accepts IPanelLife
     // Cleanup
     lv_obj_delete(test_overlay);
 }
+
+// ============================================================================
+// Self-healing panel_stack_ against out-of-band widget deletion (bundle ZW6ATWSL)
+// ============================================================================
+// Regression for the SIGSEGV where OverlayBase::destroy_overlay_ui() deletes an
+// overlay that is still on panel_stack_ (the klippy MCU-shutdown teardown path),
+// leaving a dangling pointer that the next push_overlay() dereferences via
+// lv_obj_add_flag(panel_stack_.back(), LV_OBJ_FLAG_HIDDEN). The fix attaches an
+// LV_EVENT_DELETE hook so a deleted widget is scrubbed from panel_stack_ (and the
+// other bookkeeping maps) synchronously, before its memory is freed.
+
+#include "../test_helpers/update_queue_test_access.h"
+
+TEST_CASE_METHOD(NavbarIconTestFixture,
+                 "Out-of-band widget deletion scrubs panel_stack_",
+                 "[navigation][overlay][l081]") {
+    auto& nav = NavigationManager::instance();
+
+    // Seed a base main panel into the stack the way production does — via
+    // set_panels(), which pushes the active (Home) panel widget onto slot 0.
+    // push_overlay's is_first_overlay logic assumes a non-empty base stack.
+    lv_obj_t* base = lv_obj_create(test_screen());
+    REQUIRE(base != nullptr);
+    lv_obj_t* panels[UI_PANEL_COUNT] = {nullptr};
+    panels[static_cast<int>(PanelId::Home)] = base; // active panel is Home by default
+    nav.set_panels(panels);
+    REQUIRE(nav.is_panel_in_stack(base) == true);
+
+    // Build the overlay that will be torn down out-of-band, stacked on the base.
+    MockPanelLifecycle mock_panel;
+    lv_obj_t* overlay = lv_obj_create(test_screen());
+    REQUIRE(overlay != nullptr);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    nav.register_overlay_instance(overlay, &mock_panel);
+    nav.push_overlay(overlay);
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    // Precondition: the overlay is tracked as the top of the stack.
+    REQUIRE(nav.is_panel_in_stack(overlay) == true);
+
+    // Delete the overlay OUT-OF-BAND (not via go_back) — mirrors
+    // OverlayBase::destroy_overlay_ui() during a klippy-shutdown teardown.
+    lv_obj_delete(overlay);
+
+    // Regression assertion: the stack must no longer reference the freed widget.
+    // Without the LV_EVENT_DELETE self-heal, the stale pointer stays in
+    // panel_stack_ and the next push dereferences freed memory.
+    REQUIRE(nav.is_panel_in_stack(overlay) == false);
+    REQUIRE(nav.is_panel_in_stack(base) == true); // base untouched
+
+    // Prove no UAF on the next push: pushing a new overlay must not touch the
+    // freed previous-top widget (this is exactly the production crash chain —
+    // a reconnect push_overlay("Print Status") after the teardown).
+    MockPanelLifecycle mock_panel2;
+    lv_obj_t* overlay2 = lv_obj_create(test_screen());
+    REQUIRE(overlay2 != nullptr);
+    lv_obj_add_flag(overlay2, LV_OBJ_FLAG_HIDDEN);
+    nav.register_overlay_instance(overlay2, &mock_panel2);
+    nav.push_overlay(overlay2);
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+    REQUIRE(nav.is_panel_in_stack(overlay2) == true);
+
+    // overlay2 went through register_overlay_instance + push, so it is hooked
+    // and must also be scrubbed on out-of-band deletion.
+    lv_obj_delete(overlay2);
+    REQUIRE(nav.is_panel_in_stack(overlay2) == false);
+
+    // Cleanup: base is a main-panel widget (set_panels), not an overlay, so it
+    // is not delete-hooked; the fixture's deinit_subjects() clears panel_stack_
+    // without dereferencing, so leaving a stale base pointer is harmless.
+    lv_obj_delete(base);
+}

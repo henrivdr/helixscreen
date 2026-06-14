@@ -1284,8 +1284,47 @@ void NavigationManager::rekey_overlay_widget(lv_obj_t* old_widget, lv_obj_t* new
 
     std::replace(panel_stack_.begin(), panel_stack_.end(), old_widget, new_widget);
 
+    // The new widget needs its own delete hook — the old widget's hook does not
+    // transfer (it fires for the old object only).
+    ensure_delete_hook(new_widget);
+
     spdlog::debug("[NavigationManager] Rekeyed overlay widget {} → {}", (void*)old_widget,
                   (void*)new_widget);
+}
+
+void NavigationManager::scrub_deleted_widget(lv_obj_t* widget) {
+    if (!widget) return;
+
+    // Erase from every widget-keyed bookkeeping container. Mirrors the canonical
+    // list documented on rekey_overlay_widget(), but ERASES instead of rekeys.
+    // Does NOT free anything — LVGL is mid-deletion and owns the memory. We only
+    // drop the (now-dangling) references so the next push_overlay() can't deref
+    // panel_stack_.back() after the memory is freed (bundle ZW6ATWSL).
+    overlay_instances_.erase(widget);
+    persistent_overlay_instances_.erase(widget);
+    // Drop the backdrop map entry only — out of scope to delete the backdrop here.
+    overlay_backdrops_.erase(widget);
+    overlay_close_callbacks_.erase(widget);
+    zoom_source_rects_.erase(widget);
+    panel_stack_.erase(std::remove(panel_stack_.begin(), panel_stack_.end(), widget),
+                       panel_stack_.end());
+    delete_hooked_.erase(widget);
+
+    spdlog::trace("[NavigationManager] Scrubbed deleted widget {} from nav bookkeeping",
+                  (void*)widget);
+}
+
+void NavigationManager::overlay_delete_event_cb(lv_event_t* e) {
+    if (NavigationManager::is_destroyed()) return;
+    auto* target = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    NavigationManager::instance().scrub_deleted_widget(target);
+}
+
+void NavigationManager::ensure_delete_hook(lv_obj_t* widget) {
+    if (!widget) return;
+    if (delete_hooked_.count(widget)) return;
+    delete_hooked_.insert(widget);
+    lv_obj_add_event_cb(widget, overlay_delete_event_cb, LV_EVENT_DELETE, nullptr);
 }
 
 void NavigationManager::rebuild_active_views() {
@@ -1376,6 +1415,7 @@ void NavigationManager::register_overlay_instance(lv_obj_t* widget, IPanelLifecy
         spdlog::error("[NavigationManager] Cannot register overlay with NULL widget");
         return;
     }
+    ensure_delete_hook(widget);
     overlay_instances_[widget] = overlay;
     if (persistent) {
         persistent_overlay_instances_[widget] = overlay;
@@ -1515,6 +1555,7 @@ void NavigationManager::push_overlay(lv_obj_t* overlay_panel, bool hide_previous
         // Show overlay
         lv_obj_remove_flag(overlay_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(overlay_panel);
+        mgr.ensure_delete_hook(overlay_panel);
         mgr.panel_stack_.push_back(overlay_panel);
         mgr.overlay_animate_slide_in(overlay_panel);
 
@@ -1607,6 +1648,7 @@ void NavigationManager::push_overlay_zoom_from(lv_obj_t* overlay_panel, lv_area_
         // Show overlay with zoom animation instead of slide
         lv_obj_remove_flag(overlay_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(overlay_panel);
+        mgr.ensure_delete_hook(overlay_panel);
         mgr.panel_stack_.push_back(overlay_panel);
         mgr.overlay_animate_zoom_in(overlay_panel, source_rect);
 
@@ -1966,6 +2008,7 @@ void NavigationManager::deinit_subjects() {
     overlay_close_callbacks_.clear();
     overlay_backdrops_.clear();
     zoom_source_rects_.clear();
+    delete_hooked_.clear();
     panel_stack_.clear();
     app_layout_widget_ = nullptr;
     if (overlay_backdrop_) {
