@@ -24,12 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Home screen no longer stalls on the printer image** (prestonbrown/helixscreen#1025) — the printer-image refresh is deferred out of panel attach/activation.
 - **Home edit mode ignores widget taps** (prestonbrown/helixscreen#1003) — tapping a widget while rearranging the home screen no longer launches it.
 - **On-machine updates work on static-glibc printers** (AD5M and similar) — the libhv DNS resolver wiring now reaches the shipped binary.
+- **QIDI Q2 no longer misdetected as an Artillery M1** (prestonbrown/helixscreen#1027) — installer fingerprinting now tells the two printers apart.
+- **A second printer is no longer misdetected as Unknown** — the detector restores stripped heuristics before running, so adding a subsequent printer fingerprints correctly instead of falling back to Unknown.
 
 ### Changed
 
 - **"AMS" / "Multi-Material" is now "Multi-Filament System"** throughout the UI.
 - **Removed the broken load-cell calibration screen** — the mock printer is authoritative for probe behavior; logging docs updated.
 - **Filament Environment overlay** now has a responsive landscape layout, and the wide multi-cell spool view gets a card background.
+- **Setup wizard skips hardware steps a preset already covers** when you add a subsequent printer, so configuring a second printer is faster.
 
 ## [0.99.77] - 2026-06-13
 
