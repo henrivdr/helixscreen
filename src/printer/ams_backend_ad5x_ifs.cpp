@@ -2303,6 +2303,52 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
         }
     }
 
+    // External-unload presence resurrection. When the user unloads (or loads)
+    // a lane via zmod's OWN color macro (AD5X LCD / Mainsail), the console
+    // stream carries NO RUN_ZCOLOR / CHANGE_ZCOLOR token, so the branch below
+    // never fires and the emptied lane keeps showing loaded. zmod's
+    // _SET_EXTRUDER_SLOT (zmod_color.py cmd_SET_EXTRUDER_SLOT) emits a bare
+    //     Extruder: <N>
+    // via respond_raw at the channel-commit step near the END of the
+    // operation — the captured live sequence (raza616 AD5X) ends with
+    // "Extruder: 3" / "Setting active filament T99" / "Enable IFS". We key off
+    // that line to schedule one GET_ZCOLOR refresh so the now-empty lane
+    // updates.
+    //
+    // Why THIS token and not the others in the sequence:
+    //   - "Setting active filament T", "Enable IFS", "Filament ABSENT in
+    //     extruder" are all LOCALIZED by zmod (ru: "Включаю IFS", "Указываю
+    //     активный пруток T", "Пруток ОТСУСТВУЕТ в экструдере") — a ru user
+    //     would never hit them.
+    //   - "Extruder: <N>" is an un-localized f-string and is the channel-commit
+    //     marker, so it doubles as a clean terminal signal.
+    //   - The literal IN_ZCOLOR token only appears in the dialog button
+    //     DEFINITION echo ("action:prompt_button Unload|IN_ZCOLOR ...") at
+    //     prompt-render time, NOT when the unload runs — watching it would
+    //     false-fire on dialog-open and still miss the real unload.
+    //
+    // The match is STRICT — bare "Extruder: <int>" only. Both the GET_ZCOLOR
+    // SILENT header ("Extruder: ... | IFS: True") and the interactive prompt
+    // ("action:prompt_text Extruder: ... | IFS:") carry a " | IFS:" suffix, and
+    // per-slot rows look like "3: PLA/HEX"; none match the bare form. Combined
+    // with the zcolor_query_active_ early-return guard above (which buffers our
+    // own in-flight query echoes), this keeps the v0.99.51 self-feedback spam
+    // loop closed: GET_ZCOLOR never emits a bare "Extruder: N", so a re-read
+    // can't re-trigger itself.
+    //
+    // Self-trigger note: HelixScreen's own SET_EXTRUDER_SLOT (set_active_tool)
+    // also produces a bare "Extruder: N". Re-reading after a Helix-initiated
+    // tool change is harmless and desirable (fresh state); schedule_zcolor_query
+    // is debounced + idempotent, so it collapses to one query either way.
+    static const std::regex extruder_commit_re(R"(^\s*(?://\s*)?Extruder:\s*\d+\s*$)");
+    if (std::regex_search(line, extruder_commit_re)) {
+        spdlog::debug("{} Detected external channel commit ('{}') in gcode stream — "
+                      "scheduling GET_ZCOLOR to resurrect presence",
+                      backend_log_tag(), line);
+        schedule_zcolor_query();
+        return false;
+    }
+
     // NOTE: register_zcolor_listener() has a bg-side pre-filter that drops
     // every line not containing one of these tokens (and not buffering for
     // an active query). If you add a new trigger here, update that filter
@@ -2441,6 +2487,14 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             const bool query_active = zcolor_query_active_.load(std::memory_order_acquire);
             const bool is_zcolor_token = (line.find("RUN_ZCOLOR") != std::string::npos ||
                                           line.find("CHANGE_ZCOLOR") != std::string::npos);
+            // External-unload presence resurrection: zmod's _SET_EXTRUDER_SLOT
+            // emits a bare "Extruder: <N>" at the channel-commit step (no
+            // RUN_ZCOLOR/CHANGE_ZCOLOR in the stream). Cheap substring admit
+            // here; on_gcode_response_line applies the STRICT bare-form regex
+            // so SILENT-response "Extruder: ... | IFS:" headers and per-slot
+            // rows don't actually schedule. Keep this admit in sync with the
+            // extruder_commit_re branch in on_gcode_response_line.
+            const bool is_extruder_commit = (line.find("Extruder:") != std::string::npos);
             // Self-heal: if our _IFS_VARS mirror writes come back as
             // "Unknown command", the lessWaste/bambufy macro isn't actually
             // loaded — demote has_ifs_vars_ so we stop spamming the console.
@@ -2456,7 +2510,8 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
                 (line.find("Heating the nozzle to") != std::string::npos ||
                  line.find("Unloading filament") != std::string::npos ||
                  line.find("Loading filament") != std::string::npos);
-            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token) {
+            if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token &&
+                !is_extruder_commit) {
                 return;
             }
 

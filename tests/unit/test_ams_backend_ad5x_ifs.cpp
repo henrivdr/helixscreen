@@ -4488,6 +4488,93 @@ TEST_CASE("AD5X IFS listener ignores unrelated gcode lines", "[ams][ad5x_ifs][zc
 }
 
 // ==========================================================================
+// External-unload presence resurrection (zmod's own color macro)
+// ==========================================================================
+//
+// When the user unloads a lane via zmod's native macro (AD5X LCD / Mainsail),
+// the console stream contains NO RUN_ZCOLOR / CHANGE_ZCOLOR token, so the old
+// listener never re-read presence and the emptied lane kept showing loaded.
+// zmod's `_SET_EXTRUDER_SLOT` emits a bare, non-localized `Extruder: <N>` line
+// (zmod_color.py cmd_SET_EXTRUDER_SLOT) at the channel-commit step near the end
+// of the operation — we key off that to schedule one GET_ZCOLOR refresh.
+//
+// The match is deliberately strict (bare "Extruder: <int>" only): GET_ZCOLOR
+// SILENT responses and the interactive prompt both carry a " | IFS:" suffix,
+// and the per-slot rows look like "1: PLA/FFFFFF" — none match the bare form,
+// so neither our own in-flight query echo nor a dialog render re-triggers.
+
+TEST_CASE("AD5X IFS listener fires schedule_zcolor_query on external unload completion",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    // No in-flight query: this is the genuine post-unload channel-commit line.
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    // zmod's _SET_EXTRUDER_SLOT respond_raw form, exactly as captured live
+    // (raza616 AD5X, unloading lane 3 while lane 4 active).
+    bool buffered = Ad5xIfsTestAccess::on_gcode_response_line(backend, "Extruder: 3");
+
+    CHECK_FALSE(buffered); // Treated as external trigger, not buffered.
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
+}
+
+TEST_CASE("AD5X IFS external-unload trigger tolerates the // console prefix",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    // Same line, but framed with Klipper's "// " comment prefix.
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: 2");
+
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
+}
+
+TEST_CASE("AD5X IFS dialog button-definition with IN_ZCOLOR does NOT re-read",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    // The unload dialog DEFINITION echoes IN_ZCOLOR when the prompt renders —
+    // NOT when the unload executes. It must NOT schedule a query (IN_ZCOLOR is
+    // not a watched token, and the line carries no bare "Extruder: N").
+    Ad5xIfsTestAccess::on_gcode_response_line(
+        backend, "// action:prompt_button Unload|IN_ZCOLOR SLOT=3 NAPR=1|primary|");
+
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before);
+}
+
+TEST_CASE("AD5X IFS GET_ZCOLOR SILENT extruder line does NOT re-trigger (spam guard)",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Our own GET_ZCOLOR SILENT=1 is in flight: every response line (incl. the
+    // "Extruder: ... | IFS:" header) must be buffered, not re-armed.
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, true);
+    uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+
+    bool b1 =
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: None (1) | IFS: True");
+    bool b2 = Ad5xIfsTestAccess::on_gcode_response_line(backend, "// 2: PLA/2750E0");
+
+    CHECK(b1);
+    CHECK(b2);
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before);
+
+    // Even with no in-flight query, the SILENT header form (" | IFS:" suffix,
+    // non-bare) must NOT match the strict external-unload trigger.
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+    uint32_t before2 = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: None (1) | IFS: True");
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Extruder: 3: PLA/2750E0 | IFS: True");
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before2);
+}
+
+// ==========================================================================
 // JSON-content poll dedup
 // ==========================================================================
 //
