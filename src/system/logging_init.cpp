@@ -12,12 +12,16 @@
 #include "system/crash_handler.h"
 #endif
 
+#include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <lvgl.h>
+#include <memory>
+#include <sstream>
 #include <unistd.h>
 #include <vector>
 
@@ -68,6 +72,46 @@ namespace {
 // effective_destination() to surface the active sink in the About panel.
 LogTarget g_effective_target = LogTarget::Auto;
 std::string g_effective_file_path;
+
+// Process-global handle to the in-memory ring-buffer sink. Installed on every
+// platform by init() and read by tail_ring_buffer() (debug-bundle log_tail).
+// Rebuilt on each init() — a shared_ptr so a logger swap never frees it out
+// from under a concurrent tail read. Null in the watchdog build / before init.
+std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> g_ring_sink;
+
+// The user-configured level the persistent sinks run at (the logger floor may
+// be lower so the ring captures debug). Recorded for the bundle's log_meta.
+spdlog::level::level_enum g_effective_log_level = spdlog::level::warn;
+
+// Default ring capacity (messages). Tunable via HELIX_LOG_RING_LINES so a
+// constrained device can shrink it. ~2000 lines ≈ a few hundred KB at typical
+// line lengths — well within budget even on the 14 MB-diet AD5M.
+constexpr size_t kDefaultRingLines = 2000;
+
+size_t resolve_ring_capacity() {
+    size_t lines = kDefaultRingLines;
+    if (const char* env = std::getenv("HELIX_LOG_RING_LINES")) {
+        char* end = nullptr;
+        unsigned long long v = std::strtoull(env, &end, 10);
+        if (end != env && v > 0) {
+            lines = static_cast<size_t>(v);
+        }
+    }
+    return lines;
+}
+
+// Whether the ring buffer captures DEBUG (the diagnostic win) or matches the
+// persistent sinks' level (lower formatting cost). Default ON: the formatting
+// cost of debug-level emission into a memory ring is modest even on MIPS/AD5X,
+// and the bundle diagnostic value — recovering the live debug context that the
+// WARN-level file/syslog sinks never persisted — is the entire point of this
+// sink. Set HELIX_BUNDLE_LOG_DEBUG=0 to fall back to the configured level.
+bool ring_captures_debug() {
+    if (const char* env = std::getenv("HELIX_BUNDLE_LOG_DEBUG")) {
+        return !(env[0] == '0' || env[0] == 'f' || env[0] == 'F' || env[0] == 'n' || env[0] == 'N');
+    }
+    return true;
+}
 
 /// Check if a path is writable (for file logging location selection)
 bool is_path_writable(const std::string& path) {
@@ -332,18 +376,58 @@ void init(const LogConfig& config) {
         sinks.push_back(std::move(console));
     }
 
-    // Add system sink
-    add_system_sink(sinks, effective_target, config.file_path);
+    // The console/system sinks emit only at the user-configured level so
+    // persistent logs (/var/log/messages, the journal, the console) keep their
+    // normal volume — no spam, no tmpfs blowout. The logger floor is raised
+    // below (to debug) so the ring buffer alone gets the extra detail.
+    g_effective_log_level = config.level;
+    for (auto& s : sinks) {
+        s->set_level(config.level);
+    }
+
+    // Add system sink (also at the configured level — set immediately after).
+    {
+        size_t before = sinks.size();
+        add_system_sink(sinks, effective_target, config.file_path);
+        for (size_t i = before; i < sinks.size(); ++i) {
+            sinks[i]->set_level(config.level);
+        }
+    }
+
+    // In-memory ring-buffer sink — installed on ALL platforms. This is the
+    // authoritative source for the debug bundle's log_tail: always the live
+    // process, always fresh, and (by default) always carrying DEBUG even when
+    // the persistent sinks run at WARN. On syslog-target devices (AD5X/AD5M)
+    // the file cascade otherwise falls back to a stale leftover file and only
+    // WARN-filtered /var/log/messages lines reach the bundle — the runtime
+    // debug context needed to diagnose an in-progress incident (e.g. a stuck
+    // IFS filament purge) was being lost entirely.
+    //
+    // Perf tradeoff (MIPS/AD5X): debug-level emission costs a format pass per
+    // line into the ring even when persistent sinks drop it. That cost is
+    // bounded (memory ring, no I/O) and justified by the bundle's diagnostic
+    // value; HELIX_BUNDLE_LOG_DEBUG=0 reverts the ring to the configured level.
+    const spdlog::level::level_enum ring_level =
+        ring_captures_debug() ? spdlog::level::debug : config.level;
+    g_ring_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(resolve_ring_capacity());
+    g_ring_sink->set_pattern(pattern_for_sink(SinkKind::File));
+    g_ring_sink->set_level(ring_level);
+    sinks.push_back(g_ring_sink);
 
 #ifndef HELIX_WATCHDOG
     // Always retain recent ERROR-level lines for crash diagnostics, regardless
-    // of the output target (#987 last-ditch reason capture).
+    // of the output target (#987 last-ditch reason capture). Its own level is
+    // left at the sink default (trace) so it never misses an error.
     sinks.push_back(crash_error_log_sink());
 #endif
 
-    // Create logger with all sinks
+    // Create logger with all sinks. The logger level gates messages BEFORE any
+    // sink sees them, so it must be the MORE VERBOSE of {configured level, ring
+    // level} — otherwise debug lines are dropped at the logger and never reach
+    // the ring. Per-sink levels (set above) then restore each persistent sink's
+    // normal volume; only the ring buffer gains the extra detail.
     auto logger = std::make_shared<spdlog::logger>("helix", sinks.begin(), sinks.end());
-    logger->set_level(config.level);
+    logger->set_level(std::min(config.level, ring_level));
 
     // Set as default logger
     spdlog::set_default_logger(logger);
@@ -399,6 +483,40 @@ std::string effective_destination() {
 
 std::string effective_log_file_path() {
     return (g_effective_target == LogTarget::File) ? g_effective_file_path : std::string{};
+}
+
+std::string tail_ring_buffer(int num_lines) {
+    auto sink = g_ring_sink; // copy the shared_ptr so a concurrent init() swap is safe
+    if (!sink) {
+        return {};
+    }
+    size_t lim = num_lines > 0 ? static_cast<size_t>(num_lines) : 0;
+    auto lines = sink->last_formatted(lim); // oldest-first, already formatted
+    if (lines.empty()) {
+        return {};
+    }
+    std::ostringstream out;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (i > 0) {
+            out << '\n';
+        }
+        // last_formatted() appends the pattern's trailing newline; strip it so
+        // join produces one clean newline between entries (not a blank line).
+        std::string& line = lines[i];
+        if (!line.empty() && line.back() == '\n') {
+            line.pop_back();
+        }
+        out << line;
+    }
+    return out.str();
+}
+
+size_t ring_buffer_capacity() {
+    return g_ring_sink ? resolve_ring_capacity() : 0;
+}
+
+spdlog::level::level_enum effective_log_level() {
+    return g_effective_log_level;
 }
 
 const char* log_target_name(LogTarget target) {
@@ -485,7 +603,39 @@ int to_hv_level(spdlog::level::level_enum level) {
 
 #ifndef HELIX_WATCHDOG
 void set_runtime_level(spdlog::level::level_enum level) {
-    spdlog::set_level(level);
+    // Mirror init()'s split: the logger floor must stay at least as verbose as
+    // the ring buffer so debug keeps reaching it, while each persistent sink
+    // (and libhv) moves to the user-requested level. A plain spdlog::set_level()
+    // would set the logger floor to `level` and starve the ring of debug when
+    // the user picks WARN — defeating the always-on debug-capture fix.
+    const spdlog::level::level_enum ring_level =
+        ring_captures_debug() ? spdlog::level::debug : level;
+    g_effective_log_level = level;
+
+    // The crash error-log sink must keep capturing ERROR regardless of the
+    // user's level choice (#987), so it is excluded from the per-sink retune.
+    spdlog::sink_ptr crash_sink;
+#ifndef HELIX_WATCHDOG
+    crash_sink = crash_error_log_sink();
+#endif
+
+    if (auto logger = spdlog::default_logger()) {
+        for (auto& s : logger->sinks()) {
+            if (s == g_ring_sink) {
+                // Leave the ring at its debug floor so bundles keep debug detail.
+                s->set_level(ring_level);
+            } else if (crash_sink && s.get() == crash_sink.get()) {
+                // Crash breadcrumb sink: never raise above error (#987).
+                s->set_level(std::min(s->level(), spdlog::level::err));
+            } else {
+                s->set_level(level);
+            }
+        }
+        logger->set_level(std::min(level, ring_level));
+    } else {
+        spdlog::set_level(std::min(level, ring_level));
+    }
+
     hlog_set_level(to_hv_level(level));
     spdlog::info("[Logging] Runtime log level changed to {}",
                  spdlog::level::to_string_view(level).data());

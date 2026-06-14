@@ -36,6 +36,10 @@ class DebugBundleCollector {
     static nlohmann::json collect_system_info();
     static nlohmann::json collect_printer_info();
     static std::string collect_log_tail(int num_lines = 2000);
+
+    /// Metadata about the log pipeline so a bundle reader knows whether debug
+    /// was being captured: { target, level, ring_lines, log_tail_source }.
+    static nlohmann::json collect_log_meta();
     static std::string collect_crash_txt();
     static nlohmann::json collect_sanitized_settings();
     static std::string collect_klipper_log_tail(int num_lines = 2000);
