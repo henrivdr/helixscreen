@@ -2569,8 +2569,21 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // presence — don't let zmod's view race against them. Native ZMOD
             // has no exposed per-port sensor, so we must use zmod's view.
             if (!has_per_port_sensors_ && port_presence_[idx] != loaded) {
+                const bool was_present = port_presence_[idx];
                 port_presence_[idx] = loaded;
                 changed = true;
+
+                // present->absent: the spool was physically removed. Clear the
+                // user override so brand/spool_name/spoolman_id from the now-gone
+                // spool don't haunt the empty slot or get re-applied to whatever
+                // loads next. (This cleanup used to ride on parse_adventurer_json's
+                // presence inference; GET_ZCOLOR is now the sole presence
+                // authority, so it drives the override-clear too. mutex_ is held.)
+                if (was_present && !loaded) {
+                    if (auto* eject_entry = slots_.get_mut(i)) {
+                        clear_override_locked(i, eject_entry->info);
+                    }
+                }
             }
 
             // Fill in color/material if we got them and the slot isn't locally
@@ -2781,8 +2794,6 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             if (!hex.empty() && hex[0] == '#') {
                 hex = hex.substr(1);
             }
-            // Non-empty color means filament was loaded into this port
-            bool has_filament_data = !hex.empty();
             if (hex.empty()) {
                 hex = "808080";
             }
@@ -2813,33 +2824,16 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             signature.append(type);
             signature.push_back(';');
 
-            // Native ZMOD has no per-port switch sensors — infer presence from
-            // Adventurer5M.json data. A non-empty color means filament is present;
-            // an empty color means the spool has been fully ejected. Only act on
-            // eject when the system is IDLE so a transient read mid-unload cannot
-            // wipe presence (#631 follow-up).
-            if (!has_per_port_sensors_) {
-                auto& presence = port_presence_[static_cast<size_t>(idx)];
-                if (has_filament_data) {
-                    presence = true;
-                } else if (presence && system_info_.action == AmsAction::IDLE) {
-                    spdlog::info("{} Slot {} eject detected (empty color in "
-                                 "Adventurer5M.json)",
-                                 backend_log_tag(), idx);
-                    presence = false;
-                    // Spool was physically removed: clear the user override
-                    // so brand/spool_name/spoolman_id from the now-gone spool
-                    // don't haunt the empty slot or get re-applied to whatever
-                    // is loaded next. update_slot_from_state below would
-                    // otherwise see the placeholder #808080 read and create a
-                    // phantom override — sync_override_to_firmware_locked
-                    // skips slots where port_presence is false.
-                    if (auto* eject_entry = slots_.get_mut(idx)) {
-                        clear_override_locked(idx, eject_entry->info);
-                    }
-                    needs_ifs_vars_push = true;
-                }
-            }
+            // Presence is owned solely by GET_ZCOLOR (apply_zcolor_result) — the
+            // RS-485 silk sensor. parse_adventurer_json must NOT infer presence
+            // from ffmColorN: zmod persists the colour/material assignment across
+            // unload/eject and never writes an empty colour, so treating
+            // "non-empty colour" as "present" resurrects a previously-emptied
+            // channel on every content-changed poll (external unload not
+            // reflected; an edit to one channel resurrecting another). Every JSON
+            // content change calls schedule_zcolor_query() right after this parse,
+            // so GET_ZCOLOR re-establishes correct presence immediately — and its
+            // present->absent transition is what now drives clear_override_locked.
 
             update_slot_from_state(idx);
             ++parsed_count;

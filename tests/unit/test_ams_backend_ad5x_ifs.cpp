@@ -1864,16 +1864,27 @@ TEST_CASE("AD5X IFS dirty flag protects against both parse paths", "[ams][ad5x_i
 }
 
 // ==========================================================================
-// Native ZMOD: parse_adventurer_json infers filament presence (#716)
+// Native ZMOD: parse_adventurer_json does NOT own presence (GET_ZCOLOR does)
 // ==========================================================================
+//
+// History (#716): parse_adventurer_json used to *infer* presence from the
+// persisted ffmColorN field — "non-empty color means filament present". That
+// inference is wrong on native ZMOD: zmod persists the colour/material
+// assignment across unload/eject and never writes an empty colour, so a
+// previously-emptied channel got resurrected to "present" on the next
+// content-changed poll (external unload not reflected; an edit to one channel
+// resurrecting another). Presence is now owned solely by GET_ZCOLOR
+// (apply_zcolor_result) — the RS-485 silk sensor — and the JSON parse must not
+// touch port_presence_. It still refreshes colors_/materials_ for clean slots.
 
-TEST_CASE("AD5X IFS parse_adventurer_json infers presence for native ZMOD", "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS parse_adventurer_json does not own presence on native ZMOD",
+          "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
     // No per-port sensors — this is native ZMOD
     REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
 
-    SECTION("slots with non-empty color are marked AVAILABLE") {
+    SECTION("non-empty colour does NOT set presence — only GET_ZCOLOR can") {
         std::string content = R"({
             "FFMInfo": {
                 "ffmColor1": "#161616",
@@ -1889,55 +1900,139 @@ TEST_CASE("AD5X IFS parse_adventurer_json infers presence for native ZMOD", "[am
 
         Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
 
+        // Presence is untouched by the parse (default false). The colour/material
+        // refresh still happened — but the slot is not "present" until GET_ZCOLOR
+        // (the silk sensor) confirms it.
         for (int i = 0; i < 4; ++i) {
-            auto info = backend.get_slot_info(i);
-            REQUIRE(info.is_present());
-            REQUIRE(info.status == SlotStatus::AVAILABLE);
-            REQUIRE(Ad5xIfsTestAccess::port_presence(backend, i));
+            REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, i));
+            REQUIRE(backend.get_slot_info(i).status == SlotStatus::EMPTY);
         }
     }
 
-    SECTION("slot with empty color is NOT marked present") {
+    SECTION("colour/material refresh survives even though presence does not flip") {
         std::string content = R"({
             "FFMInfo": {
-                "ffmColor1": "",
-                "ffmType1": "?",
                 "ffmColor2": "#FF0000",
                 "ffmType2": "PLA"
             }
         })";
-
         Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
 
-        // Slot 0 (port 1): empty color → not present
-        auto info0 = backend.get_slot_info(0);
-        REQUIRE(info0.status == SlotStatus::EMPTY);
-        REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
-
-        // Slot 1 (port 2): has color → present
-        auto info1 = backend.get_slot_info(1);
-        REQUIRE(info1.is_present());
-        REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 1));
-    }
-
-    SECTION("per-port sensors take precedence over JSON inference") {
-        // Simulate a per-port sensor detecting filament on port 1
-        Ad5xIfsTestAccess::handle_status(backend, make_port_sensor(1, true));
-        REQUIRE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
-
-        // Now parse JSON for a slot with empty color
-        std::string content = R"({
-            "FFMInfo": {
-                "ffmColor2": "",
-                "ffmType2": "PLA"
-            }
-        })";
-        Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
-
-        // Slot 1 (port 2): has_per_port_sensors is true, so JSON inference is skipped.
-        // port_presence stays false (no sensor for port 2 reported detected).
+        // Parse must not have set presence...
         REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 1));
+
+        // ...but once GET_ZCOLOR marks the slot present, the colour/material the
+        // parse refreshed is visible. (apply_zcolor_result with an empty HEX in
+        // the slot keeps the JSON colour via the old-format / empty-hex guard, so
+        // assert presence only here.)
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.slots[1] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "FF0000"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+        REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 1));
+        REQUIRE(backend.get_slot_info(1).is_present());
     }
+}
+
+// ==========================================================================
+// Native ZMOD presence resurrection regression (the bug this branch fixes)
+// ==========================================================================
+//
+// Repro: channel 0 is LOADED (GET_ZCOLOR), then physically unloaded so the next
+// GET_ZCOLOR reports it ABSENT (presence cleared). zmod keeps ffmColor1 in
+// Adventurer5M.json. A subsequent edit to a DIFFERENT channel triggers a
+// content-changed JSON poll. Pre-fix, parse_adventurer_json saw the persisted
+// non-empty ffmColor1 and resurrected channel 0 to present. Post-fix, the parse
+// never touches presence, so channel 0 stays EMPTY.
+
+TEST_CASE("AD5X IFS emptied channel is not resurrected by a JSON edit to another channel",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // 1. Establish channel 0 LOADED via GET_ZCOLOR (the silk sensor's truth).
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.ifs_active = true;
+        r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "161616"};
+        r.slots[1] = AmsBackendAd5xIfs::ZColorSlot{"PETG", "FFFFFF"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE(backend.get_slot_info(0).is_present());
+
+    // 2. Channel 0 physically unloaded — GET_ZCOLOR now reports it ABSENT.
+    //    Channel 1 stays present.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.ifs_active = true;
+        r.slots[1] = AmsBackendAd5xIfs::ZColorSlot{"PETG", "FFFFFF"};
+        // slots[0] left empty → channel 0 absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+
+    // 3. A content-changed JSON poll edits a DIFFERENT channel (channel 1's
+    //    colour) while zmod still persists channel 0's stale non-empty colour.
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "#161616",
+            "ffmType1": "PLA",
+            "ffmColor2": "#00AAFF",
+            "ffmType2": "PETG"
+        }
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+
+    // 4. Channel 0 must STAY empty — the persisted non-empty ffmColor1 must not
+    //    resurrect it. (Pre-fix this failed: parse inferred present from colour.)
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+}
+
+// ==========================================================================
+// Override-clear is driven by GET_ZCOLOR's present->absent transition (Change 2)
+// ==========================================================================
+//
+// When a spool is removed, its brand/spool_name/spoolman_id override must be
+// cleared so it doesn't haunt the now-empty slot or get re-applied to whatever
+// loads next. That cleanup used to ride on parse_adventurer_json's presence
+// inference; it now rides on apply_zcolor_result's present->absent transition.
+
+TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // Slot 0 present with a user override staged.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "161616"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.spool_name = "PolyTerra Charcoal";
+    ovr.spoolman_id = 42;
+    Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
+    REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+
+    // GET_ZCOLOR now reports slot 0 ABSENT → present->absent transition must
+    // clear the override.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        // slots[0] left empty → absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 }
 
 // NOTE: tests previously here exercised parse_save_variables's color/type
@@ -3353,6 +3448,11 @@ TEST_CASE("AD5X IFS external color change syncs lane_data, preserves brand metad
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // Seed a lane_data entry in the mock DB plus a matching in-memory override
     // — what the override store load would produce after a Helix-initiated edit.
     api.mock_set_db_value("lane_data", "lane1",
@@ -3435,6 +3535,11 @@ TEST_CASE("AD5X IFS external color change with no override creates minimal lane_
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // No seeded override. lane_data starts empty.
     REQUIRE(api.mock_get_db_value("lane_data", "lane1").is_null());
 
@@ -3467,11 +3572,17 @@ TEST_CASE("AD5X IFS external color change with no override creates minimal lane_
     CHECK_FALSE(db.contains("vendor"));
 }
 
-TEST_CASE("AD5X IFS eject (empty Adventurer5M.json color) clears the override",
+TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
           "[ams][ad5x_ifs][filament_slot_override][slow]") {
-    // Genuine spool removal: zmod sets ffmColor to "" when the user ejects.
-    // parse_adventurer_json must clear the override (brand/spool_name/spoolman
-    // describe the gone spool) and delete the lane_data entry.
+    // Genuine spool removal. presence is owned solely by GET_ZCOLOR now: when
+    // apply_zcolor_result reports a slot present->absent it must clear the
+    // override (brand/spool_name/spoolman describe the gone spool) AND delete
+    // the lane_data entry via clear_override_locked's store->clear_async path.
+    // (This used to ride on parse_adventurer_json's empty-color eject branch.)
+    //
+    // The sibling test "GET_ZCOLOR present->absent clears the slot override"
+    // covers the override-only clear without a store; this case additionally
+    // verifies the MR DB lane_data row is deleted.
     Ad5xIfsTmpCacheDir tmp("eject_clears_override");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -3495,17 +3606,22 @@ TEST_CASE("AD5X IFS eject (empty Adventurer5M.json color) clears the override",
     ovr.color_rgb = 0xFF5500;
     Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
 
-    // Loaded state: presence becomes true via the non-empty color.
+    // Loaded state: slot 0 present. (Establish presence explicitly — parse no
+    // longer infers it.) Baseline color comes from the JSON parse.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
     })");
     REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 
-    // Eject: ffmColor1 empty. parse_adventurer_json's eject branch clears
-    // the override (and the MR DB lane_data entry) directly.
-    Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
-        "FFMInfo": {"ffmColor1": "", "ffmType1": ""}
-    })");
+    // Eject: GET_ZCOLOR reports slot 0 ABSENT. The present->absent transition
+    // in apply_zcolor_result clears the override and the MR DB lane_data entry.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        // slots[0] left empty => absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
 
     {
         auto info = backend.get_slot_info(0);
@@ -3561,6 +3677,11 @@ TEST_CASE("AD5X IFS external color change mirrors colors+types into _IFS_VARS",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // First parse establishes baseline — no sync, no mirror.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
@@ -3612,6 +3733,11 @@ TEST_CASE("AD5X IFS bambufy prefix gets SHOW=0 to suppress _IFS_VARS echo",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
 
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+
     // Establish baseline + drive an external change.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
@@ -3652,6 +3778,11 @@ TEST_CASE("AD5X IFS mirror skipped when has_ifs_vars_ is false (stock zmod)",
     auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
 
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
         "FFMInfo": {"ffmColor1": "#FF5500", "ffmType1": "PLA"}
@@ -3759,6 +3890,13 @@ TEST_CASE("AD5X IFS empty colors_[] on boot does NOT establish phantom baseline"
     }
     CHECK(!api.mock_get_db_value("lane_data", "lane1").is_null());
     CHECK(Ad5xIfsTestAccess::last_firmware_color(backend, 0) == 0x898989u);
+
+    // The slot is now loaded (firmware reported a real color). parse_adventurer_json
+    // no longer owns presence — in production the post-parse GET_ZCOLOR establishes
+    // it. Seed it here so the SUBSEQUENT external-edit parse below takes the sync
+    // path. (Seeding only now preserves the phantom-baseline guard checked above:
+    // the empty-colors_ parse_vars in step 1 still must not clear the override.)
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
 
     // Boot path step 3: a SUBSEQUENT firmware parse with a different color
     // is an external edit — sync override + lane_data, KEEP brand metadata.
@@ -3996,6 +4134,11 @@ TEST_CASE("AD5X IFS firmware color change with no override creates a minimal one
     // the helper is null-safe and that lane_data publication doesn't gate
     // the in-memory sync.
     AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // parse_adventurer_json no longer owns presence (GET_ZCOLOR does); seed it so
+    // the external-color-change sync path runs as it does in production after the
+    // post-parse GET_ZCOLOR. (Baseline parse never syncs — first observation.)
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
 
     // First parse establishes baseline only — no sync.
     Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
