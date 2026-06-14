@@ -335,6 +335,18 @@ void AmsEnvironmentOverlay::update_from_backend() {
 // ============================================================================
 
 void AmsEnvironmentOverlay::update_comfort_text(float humidity_pct) {
+    // Without a live humidity reading the comfort verdict is meaningless: a 0%
+    // reading would compare <= every material's "good" ceiling and render a
+    // fabricated all-"OK" panel (e.g. boxes with a heater but no humidity
+    // sensor — common on the QIDI box). Hide the rows entirely so the overlay
+    // shows "--" for humidity and no comfort claim, rather than a false all-clear.
+    if (humidity_pct <= 0.0f) {
+        for (int i = 0; i < MAX_COMFORT_ROWS; ++i) {
+            lv_subject_set_int(&comfort_visible_[i], 0);
+        }
+        return;
+    }
+
     // Collect unique materials loaded in slots
     std::vector<std::string> loaded_materials;
     AmsBackend* backend = AmsState::instance().get_backend();
