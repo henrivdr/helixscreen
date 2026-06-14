@@ -12,7 +12,13 @@
             scrollable="true" flex_flow="column">
       <setting_action_row name="row_touch_calibration"
                           label="Touch Calibration" label_tag="Touch Calibration" icon="cursor_move"
-                          callback="on_touch_calibration_clicked"/>
+                          callback="on_touch_calibration_clicked">
+        <!-- Hide on devices that don't need calibration (e.g. factory-calibrated
+             capacitive panels with a 1:1 ABS range). The click handler no-ops
+             there, so a visible row would be dead — see show_touch_calibration
+             in SettingsPanel (driven by needs_touch_calibration()). -->
+        <bind_flag_if_eq subject="show_touch_calibration" flag="hidden" ref_value="0"/>
+      </setting_action_row>
       <setting_toggle_row name="row_debug_touches"
                           label="Show Touch Points" label_tag="Show Touch Points" icon="bug"
                           description="Draw a ripple at each touch — helps diagnose offsets"
