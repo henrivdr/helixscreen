@@ -58,39 +58,21 @@ PYEOF
 
 NEEDED_COUNT=$(echo "$NEEDED" | wc -l | tr -d ' ')
 
-# Check what's compiled into fonts by looking at a representative font file
-# The lv_font_conv output includes a comment with the glyph ranges
-FONT_FILE=assets/fonts/noto_sans_14.c
-if [ ! -f "$FONT_FILE" ]; then
-    echo "⚠ Text font file not found - run 'make regen-text-fonts'"
+# Compare against the codepoint manifest written by regen_text_fonts.sh, which
+# records exactly the glyph set baked into the runtime CJK .bin files
+# (assets/fonts/cjk/*.bin). The CJK runtime is those .bin files — NOT the .c
+# fonts, which only carry the 12-codepoint wizard subset. Checking the .c here
+# (the old behavior) reported the entire CJK set as perpetually "missing".
+MANIFEST=assets/fonts/cjk/.cjk_codepoints.manifest
+if [ ! -f "$MANIFEST" ]; then
+    echo "⚠ CJK font manifest not found ($MANIFEST) - run 'make regen-text-fonts'"
     exit 0
 fi
 
-# Extract compiled CJK codepoints from the font C file
-# lv_font_conv embeds the ranges in the glyph_id_ofs_list and unicode_list arrays
-COMPILED=$(python3 << PYEOF
-import re
+# Normalize manifest to the same "0xXXXX" form NEEDED uses (lowercase, no blanks)
+COMPILED=$(grep -oE '0x[0-9a-fA-F]+' "$MANIFEST" | tr 'A-F' 'a-f' | sort -u)
 
-with open('$FONT_FILE', 'r') as f:
-    content = f.read()
-
-# Find all unicode values in the unicode_list arrays
-# Format: 0x4e00, 0x4e09, etc.
-codepoints = set()
-for match in re.finditer(r'0x([0-9a-fA-F]{4,5})', content):
-    val = int(match.group(1), 16)
-    # Only count CJK range codepoints
-    if (0x3000 <= val <= 0x303f or 0x3040 <= val <= 0x309f or
-        0x30a0 <= val <= 0x30ff or 0x3400 <= val <= 0x4dbf or
-        0x4e00 <= val <= 0x9fff or 0xff00 <= val <= 0xffef):
-        codepoints.add(val)
-
-for cp in sorted(codepoints):
-    print(f'0x{cp:04x}')
-PYEOF
-)
-
-COMPILED_COUNT=$(echo "$COMPILED" | wc -l | tr -d ' ')
+COMPILED_COUNT=$(echo "$COMPILED" | grep -c . | tr -d ' ')
 
 # Find characters needed but not compiled
 MISSING=$(comm -23 <(echo "$NEEDED" | sort) <(echo "$COMPILED" | sort))

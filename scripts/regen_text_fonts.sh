@@ -299,6 +299,17 @@ if [ -n "$RUNTIME_CJKCHARS" ]; then
 
     BIN_COUNT=$(ls -1 assets/fonts/cjk/*.bin 2>/dev/null | wc -l)
     echo "  Generated $BIN_COUNT .bin files"
+
+    # Record the exact codepoint set baked into the runtime .bin files. This is
+    # the source of truth for check_cjk_font_staleness.sh — it must compare a
+    # translation's needed glyphs against what's actually in the .bin runtime
+    # set, NOT against the .c fonts (which only carry the 12-codepoint wizard
+    # subset and would otherwise report the whole CJK set as perpetually
+    # "missing"). One "0xXXXX" per line, sorted, matching the format emitted by
+    # the staleness check's char extractor.
+    MANIFEST="assets/fonts/cjk/.cjk_codepoints.manifest"
+    echo "$RUNTIME_CJKCHARS" | tr ',' '\n' | sort > "$MANIFEST"
+    echo "  Wrote codepoint manifest ($RUNTIME_CJK_COUNT entries) -> $MANIFEST"
 else
     echo ""
     echo "WARNING: No CJK characters extracted - skipping .bin generation"
