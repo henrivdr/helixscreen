@@ -176,9 +176,13 @@ int and instead resolve the current `Step*` and call
 `on_back_clicked` cascades are replaced by a single `wizard_next/prev` walk over
 the registry with per-step `should_skip(ctx)`.
 
-`current_screen_step` becomes a `StepId` (or `Step*`), not an int. The
-"navigate by step int" public entry points (`ui_wizard_navigate_to_step`) keep an
-int boundary only where XML/callbacks require it, translated through the registry.
+`current_screen_step` becomes a `StepId`, not an int. **Full StepId — no int seam.**
+`ui_wizard_navigate_to_step(int)` becomes `ui_wizard_navigate_to_step(StepId)`; any
+XML/callback that currently passes a raw step index is converted to hand off a
+`StepId` (or is routed through `wizard_next/prev`, which already speak StepId).
+If an XML attribute genuinely must carry a step token, it carries the
+`component_name()` string and is resolved to a `StepId` at the single parse edge —
+no integer indices anywhere in wizard control flow.
 
 ## Files touched
 
