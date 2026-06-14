@@ -289,6 +289,7 @@ See `docs/ARCHITECTURAL_DEBT.md` for the full register.
 
 **Planned post-1.0 refactoring (active intent, not yet scheduled):**
 - **Dynamic overlay allocation** — migrate existing `ui_overlay_*` and `ui_settings_*` files from the `get_global_*()` + `init_global_*()` singleton pattern to on-demand construction with destroy-on-pop ownership held by NavigationManager. Saves memory on small devices (AD5M 14–20MB budget) and unblocks multi-instantiation. Mechanism unresolved: destroy-on-pop vs memory-pressure eviction, NavigationManager API changes, per-instance event callback adapter pattern. New overlays should not use the singleton pattern; see `YOUR_FIRST_CONTRIBUTION.md` § "Going forward: dynamic overlays".
+- **Per-gate / per-slot / per-lane drying control** (#1026) — today the dryer is a single shared control surface with per-unit environment *readout* (temp/humidity). Independently drying specific gates (Happy Hare `MMU_HEATER … GATES=`, per-gate `drying_state` array, per-gate countdowns) needs a per-gate dryer model + UI. Deferred: no per-gate/EMU hardware to validate against. See `FILAMENT_MANAGEMENT.md` § "Happy Hare Specifics".
 
 ---
 

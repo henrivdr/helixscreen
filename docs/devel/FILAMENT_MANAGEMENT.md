@@ -1135,9 +1135,10 @@ AmsEnvironmentOverlay              control UI (ui_ams_environment_overlay.cpp
 | `active` | bool | Dryer is currently running |
 | `current_temp` | float | Current chamber temperature (°C) |
 | `target_temp` | float | Target setpoint (°C) |
-| `humidity` | float | Relative humidity (%) — if sensor present |
 | `remaining_minutes` | int | Countdown to end of session (-1 = no timer) |
 | `max_temp` | float | Hardware maximum for the target slider |
+
+> **Humidity is not on `DryerInfo`.** It lives on `EnvironmentData` (per-unit, `AmsUnit::environment`) alongside the box temperature, because humidity is a per-enclosure reading from an environment sensor, not a property of the global dryer session. The dryer overlay and the AMS panel environment indicator both read `AmsUnit::environment`.
 
 ### Backend Virtual Interface
 
@@ -1156,7 +1157,7 @@ Declared in `include/ams_backend.h`. Default implementations return `supported=f
 | Backend | Drying | Command |
 |---------|--------|---------|
 | ACE (Anycubic ACE Pro) | ✅ | `ACE_START_DRYING TEMP=<t> DURATION=<m>` / `ACE_STOP_DRYING` |
-| Happy Hare | ✅ | `MMU_HEATER DRY=1 TEMP=<t>` / `MMU_HEATER DRY=0` |
+| Happy Hare | ✅ | `MMU_HEATER DRY=1 TEMP=<t> TIMER=<mins>` / `MMU_HEATER STOP=1` (TIMER is minutes; see [Happy Hare Specifics](#happy-hare-specifics)) |
 | QIDI Box | ✅ | `ENABLE_BOX_DRY BOX=<n> TEMP=<t> END_TIME=<h>` / `DISABLE_BOX_DRY BOX=<n>`, with `SET_HEATER_TEMPERATURE` fallback when `box_extras` is absent. Write-path gated by `HELIX_QIDI_BOX_WRITE=1`. |
 | CFS (Creality K2) | ❌ | Not supported — CFS has no drying hardware |
 | AFC (Box Turtle / OpenAMS) | ❌ | Not supported |
@@ -1169,6 +1170,23 @@ Declared in `include/ams_backend.h`. Default implementations return `supported=f
 The QIDI Box dryer uses the printer's standard `heater_generic heater_box<N>` Klipper object — the same safety system (temperature limits, watchdog) that applies to any Klipper heater. The active session timer is tracked via `box_extras.box_drying_state.box<N>` (fields `dry_state` and `end_time`). Remaining time is computed as `(end_time - now) / 60` since there is no native remaining-minutes field.
 
 See [QIDI_BOX_HEATER.md](QIDI_BOX_HEATER.md) for full reverse-engineering details: Klipper object schema, firmware command variants, config key spellings, per-material drying tables, and the `HELIX_QIDI_BOX_WRITE` field-safety gate.
+
+### Happy Hare Specifics
+
+Happy Hare's filament dryer is driven by the `MMU_HEATER` command and configured under `[mmu_machine]`. HelixScreen reads the dryer's object names from `configfile.settings` once at connect (`query_heater_config_from_config`), then tracks live state over the normal subscription push — **there is no polling**.
+
+**What HelixScreen supports today:**
+
+- **Commands.** `MMU_HEATER DRY=1 TEMP=<°C> TIMER=<minutes>` to start, `MMU_HEATER STOP=1` to stop. `TIMER` is **minutes** (float, `minval=0`), so sub-hour cycles are valid — the duration field in the overlay is a minutes field for this reason.
+- **Box temperature.** Read from the `filament_heater` `heater_generic` object's live `temperature`.
+- **Box humidity.** Happy Hare's `mmu` object deliberately does **not** republish temp/humidity (`mmu_environment_manager.get_status()` omits them by design); the client must read the environment sensor object directly. Humidity therefore comes from the **backing humidity chip** — `bme280` / `htu21d` / `sht3x` / `aht10` `<name>`, where `<name>` is the bare second token of the `environment_sensor` value (e.g. `temperature_sensor box` → `htu21d box`). Discovery subscribes these chips and requests the `humidity` field on all temperature sensors (only objects present in `objects.list` are subscribed, so this is safe for printers without them).
+- **Per-unit / multi-MMU resolution.** Happy Hare has two mutually-exclusive enclosure forms: a **shared** enclosure (scalar `filament_heater` / `environment_sensor`) or **per-gate** hardware (plural `filament_heaters` / `environment_sensors`, one entry per gate, distributed across units for multi-MMU). `get_system_info()` resolves **each unit's** heater + sensor — the scalar form applies to every unit; the per-gate lists map each unit to the object at its first gate (`first_slot_global_index`). So a multi-MMU rig with distinct box sensors shows the correct temp/humidity per unit in the panel indicator and overlay.
+
+**What is NOT yet supported (boundary):**
+
+- **Per-gate / per-slot / per-lane *drying control*.** The control surface (`AmsEnvironmentOverlay`) and the `DryerInfo` model are **single-dryer-global**: start/stop drives the default heater (no `GATES=` selector), and the per-gate `drying_state` **array** is collapsed to a single "any gate active" boolean in `parse_mmu_state`. Independently drying specific gates (`MMU_HEATER … GATES=g1,g2`), per-gate countdowns, and the `HUMIDITY=` termination target are tracked post-1.0 in **#1026**.
+
+> Note: the per-unit environment *readout* (above) is unverified on per-gate/EMU hardware — it is unit-tested (scalar + 2-unit per-gate) but we own no EMU rig. The QIDI Box (the common Happy-Hare-on-a-box case) is a single shared sensor.
 
 ### Adding Dryer Support to a New Backend
 
