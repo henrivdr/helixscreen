@@ -2931,6 +2931,9 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             if (!hex.empty() && hex[0] == '#') {
                 hex = hex.substr(1);
             }
+            // Non-empty color means filament was loaded into this port (only used
+            // as a presence signal on pre-SILENT zmod — see the gated block below).
+            bool has_filament_data = !hex.empty();
             if (hex.empty()) {
                 hex = "808080";
             }
@@ -2961,16 +2964,41 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             signature.append(type);
             signature.push_back(';');
 
-            // Presence is owned solely by GET_ZCOLOR (apply_zcolor_result) — the
-            // RS-485 silk sensor. parse_adventurer_json must NOT infer presence
-            // from ffmColorN: zmod persists the colour/material assignment across
-            // unload/eject and never writes an empty colour, so treating
-            // "non-empty colour" as "present" resurrects a previously-emptied
-            // channel on every content-changed poll (external unload not
-            // reflected; an edit to one channel resurrecting another). Every JSON
-            // content change calls schedule_zcolor_query() right after this parse,
-            // so GET_ZCOLOR re-establishes correct presence immediately — and its
-            // present->absent transition is what now drives clear_override_locked.
+            // Presence ownership depends on whether GET_ZCOLOR SILENT=1 works:
+            //
+            //   * Modern zmod (SILENT supported): presence is owned SOLELY by
+            //     GET_ZCOLOR (apply_zcolor_result, the RS-485 silk sensor). We must
+            //     NOT infer it from ffmColorN here — zmod persists the
+            //     colour/material assignment across unload/eject and never blanks
+            //     the colour, so "non-empty colour == present" would resurrect a
+            //     previously-emptied channel on every content-changed poll (the
+            //     external-unload-not-reflected / one-edit-resurrects-another bug).
+            //     Every JSON change schedules a GET_ZCOLOR right after this parse,
+            //     so silk-truth presence re-establishes immediately, and its
+            //     present->absent transition drives clear_override_locked.
+            //
+            //   * Pre-SILENT zmod (GET_ZCOLOR returns a prompt dialog →
+            //     zcolor_silent_supported_ latched false): there is NO silk-truth
+            //     query at all, so Adventurer5M.json is the only presence source we
+            //     have. Fall back to the legacy inference (non-empty colour ==
+            //     present; empty colour while IDLE == eject + override-clear). The
+            //     resurrection bug can't bite here because no GET_ZCOLOR ever
+            //     competes for ownership.
+            if (!has_per_port_sensors_ && !zcolor_silent_supported_.load()) {
+                auto& presence = port_presence_[static_cast<size_t>(idx)];
+                if (has_filament_data) {
+                    presence = true;
+                } else if (presence && system_info_.action == AmsAction::IDLE) {
+                    spdlog::info("{} Slot {} eject detected (empty color in "
+                                 "Adventurer5M.json, pre-SILENT zmod)",
+                                 backend_log_tag(), idx);
+                    presence = false;
+                    if (auto* eject_entry = slots_.get_mut(idx)) {
+                        clear_override_locked(idx, eject_entry->info);
+                    }
+                    needs_ifs_vars_push = true;
+                }
+            }
 
             update_slot_from_state(idx);
             ++parsed_count;

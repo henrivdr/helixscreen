@@ -2024,6 +2024,47 @@ TEST_CASE("AD5X IFS emptied channel is not resurrected by a JSON edit to another
 }
 
 // ==========================================================================
+// Pre-SILENT zmod fallback: JSON inference is the ONLY presence source when
+// GET_ZCOLOR SILENT=1 is unsupported (latched false on a prompt-dialog reply)
+// ==========================================================================
+//
+// The resurrection fix makes GET_ZCOLOR the sole presence authority — but that
+// authority only exists on modern zmod. On pre-SILENT zmod, GET_ZCOLOR returns
+// a prompt dialog, zcolor_silent_supported_ latches false, and schedule_zcolor_
+// query()/query_zcolor_silent() no-op forever. Without the gated fallback below
+// there would be NO presence source at all (every channel stuck EMPTY). So when
+// SILENT is unsupported, parse_adventurer_json must resume the legacy inference.
+
+TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "#161616", "ffmType1": "PLA",
+            "ffmColor2": "#FF0000", "ffmType2": "PETG"
+        }
+    })";
+
+    SECTION("SILENT supported (modern zmod): parse does NOT set presence") {
+        REQUIRE(Ad5xIfsTestAccess::zcolor_silent_supported(backend)); // default
+        Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+        REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+        REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 1));
+    }
+
+    SECTION("SILENT unsupported (pre-SILENT zmod): parse infers presence") {
+        Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+        Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+        // Non-empty colours → present; this is the only presence source here.
+        REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+        REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 1));
+        REQUIRE(backend.get_slot_info(0).is_present());
+    }
+}
+
+// ==========================================================================
 // Override-clear is driven by GET_ZCOLOR's present->absent transition (Change 2)
 // ==========================================================================
 //
