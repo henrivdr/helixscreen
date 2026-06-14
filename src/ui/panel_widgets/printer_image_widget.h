@@ -38,8 +38,14 @@ class PrinterImageWidget : public PanelWidget {
 
     // Persistent disk cache for exact-size printer image
     lv_timer_t* cache_timer_ = nullptr;
+    // Defers the image refresh out of the synchronous attach()/on_activate()
+    // path: lv_image_set_inner_align forces lv_obj_update_layout, which cascades
+    // into the parent grid's grid_update. Running that during a panel rebuild
+    // (mid-rebuild grid) walked the freed descriptor off the heap end (#983/#1025).
+    lv_timer_t* refresh_timer_ = nullptr;
     std::string current_source_path_; // Resolved source image (LVGL path)
 
+    void schedule_image_refresh();
     void schedule_cache_check();
     void check_or_generate_cache();
 

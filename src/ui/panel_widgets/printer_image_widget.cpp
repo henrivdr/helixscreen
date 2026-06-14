@@ -120,7 +120,13 @@ void PrinterImageWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
 }
 
 void PrinterImageWidget::detach() {
-    // Cancel any pending cache timer
+    // Cancel any pending timers. detach() runs from the destructor, so cancelling
+    // here makes the deferred timers lifetime-safe (main-thread work — no
+    // AsyncLifetimeGuard needed).
+    if (lv_is_initialized() && refresh_timer_) {
+        lv_timer_delete(refresh_timer_);
+        refresh_timer_ = nullptr;
+    }
     if (lv_is_initialized() && cache_timer_) {
         lv_timer_delete(cache_timer_);
         cache_timer_ = nullptr;
@@ -157,8 +163,13 @@ void PrinterImageWidget::reload_from_config() {
         config->get<std::string>(config->df() + helix::wizard::PRINTER_TYPE, "");
     get_printer_state().set_printer_type_sync(printer_type);
 
-    // Update printer image
-    refresh_printer_image();
+    // Update printer image — DEFERRED. refresh_printer_image() calls
+    // lv_image_set_inner_align(), which forces lv_obj_update_layout and cascades
+    // into the parent grid's grid_update. reload_from_config() runs from attach()
+    // and on_activate(), both reachable from a panel rebuild; forcing layout on a
+    // mid-rebuild grid walked the freed descriptor off the heap end (#983/#1025).
+    // Defer the image work to a later tick so it never runs inside the rebuild.
+    schedule_image_refresh();
 
     // Update printer info overlay
     // Always visible to maintain consistent flex layout (hidden flag removes from flex).
@@ -216,6 +227,30 @@ void PrinterImageWidget::refresh_printer_image() {
 
     // Schedule cache check after layout resolves
     schedule_cache_check();
+}
+
+void PrinterImageWidget::schedule_image_refresh() {
+    if (refresh_timer_) {
+        lv_timer_delete(refresh_timer_);
+        refresh_timer_ = nullptr;
+    }
+
+    refresh_timer_ = lv_timer_create(
+        [](lv_timer_t* timer) {
+            // Guard the C/C++ boundary: refresh_printer_image() sets the image
+            // source and forces an alignment-driven layout; an exception escaping
+            // into lv_timer_handler() (C) would terminate the process.
+            LVGL_SAFE_EVENT_CB_BEGIN("[PrinterImageWidget] refresh_timer");
+            auto* self = static_cast<PrinterImageWidget*>(lv_timer_get_user_data(timer));
+            if (self) {
+                self->refresh_timer_ = nullptr;
+                self->refresh_printer_image();
+            }
+            lv_timer_delete(timer);
+            LVGL_SAFE_EVENT_CB_END();
+        },
+        1, this);
+    lv_timer_set_repeat_count(refresh_timer_, 1);
 }
 
 void PrinterImageWidget::schedule_cache_check() {
