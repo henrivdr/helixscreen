@@ -432,3 +432,39 @@ TEST_CASE_METHOD(NavbarIconTestFixture,
     // without dereferencing, so leaving a stale base pointer is harmless.
     lv_obj_delete(base);
 }
+
+// ============================================================================
+// push_overlay onto an EMPTY stack must not deref panel_stack_.back() (UB)
+// ============================================================================
+// push_overlay's "deactivate previous overlay" else-branch derefs
+// panel_stack_.back(). With the old `is_first_overlay = (size() == 1)`, an empty
+// stack (size 0) fell into that else-branch and called back() on an empty vector
+// — undefined behavior (observed as a SIGSEGV under hardened libstdc++). The fix
+// (`size() <= 1`) treats an empty stack as the first overlay, skipping the deref.
+// Production never pushes onto an empty stack (slot 0 holds the active panel),
+// so this guards a latent path rather than a reachable user flow.
+
+TEST_CASE_METHOD(NavbarIconTestFixture,
+                 "push_overlay onto empty stack does not deref back()",
+                 "[navigation][overlay]") {
+    auto& nav = NavigationManager::instance();
+
+    // Fixture starts with an empty panel_stack_ (no set_panels()).
+    REQUIRE(nav.is_panel_in_stack(nullptr) == false);
+
+    MockPanelLifecycle mock_panel;
+    lv_obj_t* overlay = lv_obj_create(test_screen());
+    REQUIRE(overlay != nullptr);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    nav.register_overlay_instance(overlay, &mock_panel);
+
+    // Pushing onto the empty stack must not crash on panel_stack_.back().
+    nav.push_overlay(overlay);
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    // The overlay is now the (only) entry — survived the empty-stack push.
+    REQUIRE(nav.is_panel_in_stack(overlay) == true);
+
+    lv_obj_delete(overlay);
+    REQUIRE(nav.is_panel_in_stack(overlay) == false);
+}

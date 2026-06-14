@@ -1475,7 +1475,12 @@ void NavigationManager::push_overlay(lv_obj_t* overlay_panel, bool hide_previous
             return;
         }
 
-        bool is_first_overlay = (mgr.panel_stack_.size() == 1);
+        // <= 1 (not == 1) so an empty stack also counts as "first": the else
+        // branch below derefs panel_stack_.back(), which is UB on an empty
+        // vector. Production never pushes onto a truly empty stack (slot 0
+        // always holds the active main panel), but a defensive guard here keeps
+        // the empty case correct instead of undefined.
+        bool is_first_overlay = (mgr.panel_stack_.size() <= 1);
 
         // Track overlay opens for telemetry panel_usage event.
         // Breadcrumb distinguishes three cases so crash analysis can tell
@@ -1602,7 +1607,9 @@ void NavigationManager::push_overlay_zoom_from(lv_obj_t* overlay_panel, lv_area_
             return;
         }
 
-        bool is_first_overlay = (mgr.panel_stack_.size() == 1);
+        // <= 1: empty stack counts as "first" — the else branch derefs
+        // panel_stack_.back() (UB on empty). See push_overlay() above.
+        bool is_first_overlay = (mgr.panel_stack_.size() <= 1);
 
         // Track overlay opens for telemetry panel_usage event.
         // See push_overlay() above for the three-way distinction.
