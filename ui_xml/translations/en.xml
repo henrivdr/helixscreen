@@ -497,7 +497,6 @@
   <translation tag="Dev channel requires dev_url in config" en="Dev channel requires dev_url in config"/>
   <translation tag="Device" en="Device"/>
   <translation tag="Device name is required" en="Device name is required"/>
-  <translation tag="Diagnostic" en="Diagnostic"/>
   <translation tag="Disable" en="Disable"/>
   <translation tag="Disable Motors?" en="Disable Motors?"/>
   <translation tag="Disable the security PIN" en="Disable the security PIN"/>
@@ -904,7 +903,6 @@
   <translation tag="LED on at Start" en="LED on at Start"/>
   <translation tag="LEDs" en="LEDs"/>
   <translation tag="LEDs controlled by the light button" en="LEDs controlled by the light button"/>
-  <translation tag="LOAD CELL" en="LOAD CELL"/>
   <translation tag="LOADED" en="LOADED"/>
   <translation tag="LOCKED" en="LOCKED"/>
   <translation tag="LOT-2024-001" en="LOT-2024-001"/>
@@ -935,9 +933,6 @@
   <translation tag="Listen to all theme sounds" en="Listen to all theme sounds"/>
   <translation tag="Load" en="Load"/>
   <translation tag="Load Filament" en="Load Filament"/>
-  <translation tag="Load cell calibrate sent — follow console prompts" en="Load cell calibrate sent — follow console prompts"/>
-  <translation tag="Load cell diagnostic sent" en="Load cell diagnostic sent"/>
-  <translation tag="Load cell tare sent" en="Load cell tare sent"/>
   <translation tag="Load failed: {}" en="Load failed: {}"/>
   <translation tag="Load may still be running — response timed out" en="Load may still be running — response timed out"/>
   <translation tag="Load the required filaments or start anyway?" en="Load the required filaments or start anyway?"/>
@@ -1738,7 +1733,6 @@
   <translation tag="Tap the crosshair (point %1$d of 3) \xe2\x80\x94 touch %2$d of %3$d" en="Tap the crosshair (point %1$d of 3) \xe2\x80\x94 touch %2$d of %3$d"/>
   <translation tag="Tap to assign" en="Tap to assign"/>
   <translation tag="Tap to show keyboard..." en="Tap to show keyboard..."/>
-  <translation tag="Tare" en="Tare"/>
   <translation tag="Target Frequency" en="Target Frequency"/>
   <translation tag="Target Temperature" en="Target Temperature"/>
   <translation tag="Telemetry Data" en="Telemetry Data"/>

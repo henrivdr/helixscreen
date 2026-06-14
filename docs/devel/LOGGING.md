@@ -231,6 +231,25 @@ The TTY check means:
 
 This prevents the "double-log" mode that caused the Snapmaker U1 print failure where spdlog at trace wrote ~35 lines/sec to stdout, the init script captured stdout to a tmpfs file, and 498 MB filled `/tmp`.
 
+### Reading `--test` Logs When stdout Isn't a TTY
+
+The same `isatty(STDOUT_FILENO)` gate bites dev runs too: launch `./build/bin/helix-screen --test` with stdout **redirected or piped** (background run, `> log.txt`, `| grep`, a non-interactive agent shell) and there's no TTY, so the **console sink is not attached** — nothing prints to the pipe. The logs still land in the resolved system sink (syslog/journal on Linux dev boxes), not on stdout.
+
+Read them from syslog instead:
+
+```bash
+HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -v &   # boots, runs headless
+sleep 6 && kill %1
+journalctl --since "1 min ago" | grep helix          # all lines
+journalctl --since "1 min ago" | grep '\[PrinterDetector\]'   # one subsystem
+```
+
+Run it from an interactive shell (or `ssh -t`) and the console sink **is** attached — output goes straight to the terminal as usual.
+
+Don't reach for `--log-dest file` to work around this: it writes `/var/log/helix-screen.log`, which is **not writable by a non-root user**, so the run fails. For redirected/background dev runs, syslog (`journalctl`) is the way.
+
+Verbosity still applies (`-v`=info, `-vv`=debug, `-vvv`=trace). Detection lines such as `[PrinterState] Printer type set to: '…'` are **info-level**, so `-v` is enough to see them.
+
 ### Per-Platform Routing Summary
 
 | Platform | spdlog target (default) | Where structured logs land | How to read |

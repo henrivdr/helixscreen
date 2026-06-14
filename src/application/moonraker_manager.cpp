@@ -40,6 +40,7 @@
 #include "sound_manager.h"
 #include "spoolman_manager.h"
 #include "tool_state.h"
+#include "wizard_config_paths.h"
 
 #include <spdlog/spdlog.h>
 
@@ -64,6 +65,26 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
 
     // Create client (mock or real)
     create_client(runtime_config);
+
+    // HELIX_MOCK_PRINTER is authoritative over any persisted printer type.
+    // PrinterDetector::auto_detect_and_save() (which runs later, after the
+    // discovery handshake) short-circuits when a printer type is already
+    // saved in config — so a stale "Voron 2.4" from a previous run would
+    // silently win over the env var. Clearing the saved type here (before
+    // detection runs) forces auto-detection to re-resolve from the mock's
+    // reported identity on every launch. Strictly env-gated: zero behavior
+    // change when HELIX_MOCK_PRINTER is unset.
+    if (config && std::getenv("HELIX_MOCK_PRINTER")) {
+        const std::string type_path = config->df() + helix::wizard::PRINTER_TYPE;
+        const std::string prev = config->get<std::string>(type_path, "");
+        if (!prev.empty()) {
+            config->set<std::string>(type_path, "");
+            config->save();
+            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER set — cleared saved "
+                         "printer type '{}' so mock identity re-detects this launch",
+                         prev);
+        }
+    }
 
     // Configure timeouts from config file
     if (config) {

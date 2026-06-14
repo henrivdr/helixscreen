@@ -25,7 +25,6 @@
       "image": "flashforge-adventurer-5m.png",
       "preset": "ad5m",
       "print_start_profile": "ad5m",
-      "probe_type": "loadcell",
       "screws_tilt_direction": "ccw",
       "heuristics": [
         {
@@ -118,7 +117,6 @@
       "image": "flashforge-adventurer-5m.png",
       "preset": "ad5m_forgex",
       "print_start_profile": "forge_x",
-      "probe_type": "loadcell",
       "z_offset_calibration_strategy": "firmware_managed",
       "screws_tilt_direction": "ccw",
       "heuristics": [
@@ -226,7 +224,6 @@
       "image": "flashforge-adventurer-5m-pro.png",
       "preset": "ad5m_pro",
       "print_start_profile": "ad5m",
-      "probe_type": "loadcell",
       "screws_tilt_direction": "ccw",
       "heuristics": [
         {
@@ -340,7 +337,6 @@
       "image": "flashforge-adventurer-5m-pro.png",
       "preset": "ad5m_pro_forgex",
       "print_start_profile": "forge_x",
-      "probe_type": "loadcell",
       "z_offset_calibration_strategy": "firmware_managed",
       "screws_tilt_direction": "ccw",
       "heuristics": [
@@ -468,7 +464,6 @@
       "manufacturer": "FlashForge",
       "image": "flashforge-adventurer-5x.png",
       "preset": "ad5x",
-      "probe_type": "loadcell",
       "z_offset_calibration_strategy": "firmware_managed",
       "heuristics": [
         {
