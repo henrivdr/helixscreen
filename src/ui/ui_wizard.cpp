@@ -1399,18 +1399,20 @@ static void on_next_clicked(lv_event_t* e) {
         spdlog::debug("[Wizard] Skipping fan select step");
     }
 
-    // Skip AMS step (7) if no AMS detected
-    if (next_step == 7 && get_wizard_ams_identify_step()->should_skip()) {
-        ams_step_skipped = true;
+    // Skip AMS step (7) per the precalculated flag. precalculate_skips() already
+    // folded in both the preset-covers-hardware decision and the no-AMS
+    // should_skip() check, so consult the flag here (do NOT re-run should_skip,
+    // which ignores the preset and re-shows the step on preset printers that
+    // physically have an AMS — e.g. a Creality K2 Plus with CFS).
+    if (next_step == 7 && ams_step_skipped) {
         next_step = 8;
-        spdlog::debug("[Wizard] Skipping AMS step (no AMS detected)");
+        spdlog::debug("[Wizard] Skipping AMS step");
     }
 
-    // Skip LED step (8) if no LEDs detected
-    if (next_step == 8 && get_wizard_led_select_step()->should_skip()) {
-        led_step_skipped = true;
+    // Skip LED step (8) per the precalculated flag (see AMS note above).
+    if (next_step == 8 && led_step_skipped) {
         next_step = 9;
-        spdlog::debug("[Wizard] Skipping LED step (no LEDs detected)");
+        spdlog::debug("[Wizard] Skipping LED step");
     }
 
     // Ensure FilamentSensorManager is populated before skip check
@@ -1439,11 +1441,10 @@ static void on_next_clicked(lv_event_t* e) {
         spdlog::debug("[Wizard] Skipping filament sensor step (<2 sensors)");
     }
 
-    // Skip input shaper step (10) if no accelerometer detected
-    if (next_step == 10 && get_wizard_input_shaper_step()->should_skip()) {
-        input_shaper_step_skipped = true;
+    // Skip input shaper step (10) per the precalculated flag (see AMS note above).
+    if (next_step == 10 && input_shaper_step_skipped) {
         next_step = 11;
-        spdlog::debug("[Wizard] Skipping input shaper step (no accelerometer)");
+        spdlog::debug("[Wizard] Skipping input shaper step");
     }
 
     // Skip summary step (11) in preset mode
