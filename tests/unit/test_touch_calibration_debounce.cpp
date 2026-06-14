@@ -130,6 +130,39 @@ TEST_CASE_METHOD(DebounceFixture, "Debounce: deliberate well-spaced taps fill a 
 }
 
 // ---------------------------------------------------------------------------
+// Case: noise rejection must reset the sample count BEFORE the failure callback
+// runs (#943/#986). The failure callback refreshes the "touch N of 3"
+// instruction label; if it observed current_sample still at SAMPLES_REQUIRED,
+// the "(current_sample + 1) of total" math renders "touch 4 of 3".
+// ---------------------------------------------------------------------------
+TEST_CASE_METHOD(DebounceFixture,
+                 "Debounce: noise rejection resets sample count before failure callback",
+                 "[touch][calibration][debounce]") {
+    panel_->start();
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
+
+    int count_seen_in_failure = -1;
+    bool failed = false;
+    panel_->set_failure_callback([&](const char*) {
+        failed = true;
+        count_seen_in_failure = panel_->get_progress().current_sample;
+    });
+
+    // Three well-spaced taps (so all commit) at WIDELY different points — the
+    // sample spread exceeds MAX_SAMPLE_SPREAD so compute_median_point fails.
+    advance_to(0);
+    tap(Point{100, 120});
+    advance_to(200);
+    tap(Point{300, 400});
+    advance_to(400);
+    tap(Point{250, 150});
+
+    REQUIRE(failed);
+    REQUIRE(count_seen_in_failure == 0); // reset BEFORE the callback (was 3 pre-fix)
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_1);
+}
+
+// ---------------------------------------------------------------------------
 // Case 3: Threshold guard — taps spaced JUST over REFRACTORY_MS all commit.
 // ---------------------------------------------------------------------------
 TEST_CASE_METHOD(DebounceFixture, "Debounce: taps just over the refractory window all commit",

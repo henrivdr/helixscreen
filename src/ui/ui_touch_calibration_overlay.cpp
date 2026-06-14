@@ -640,9 +640,17 @@ void TouchCalibrationOverlay::handle_screen_touched(lv_event_t* e) {
 void TouchCalibrationOverlay::handle_screen_released() {
     // Forward finger-lift to the panel so the pending press commits
     // (issue #943). No-op when debounce is disabled. Main-thread input only.
-    if (panel_) {
-        panel_->on_release();
+    if (!panel_) {
+        return;
     }
+    panel_->on_release();
+
+    // The commit happens here (not on press), so refresh the UI now that the
+    // sample count / state may have advanced — otherwise the instruction label
+    // keeps showing the pre-commit "touch N of 3" until the next press.
+    update_state_subject();
+    update_instruction_text();
+    update_crosshair_position();
 }
 
 void TouchCalibrationOverlay::handle_back_clicked() {

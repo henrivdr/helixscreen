@@ -291,14 +291,20 @@ void TouchCalibrationPanel::add_sample(Point raw) {
 
     if (sample_count_ >= SAMPLES_REQUIRED) {
         Point median;
-        if (compute_median_point(median)) {
-            capture_point(median);
-        } else {
-            if (failure_callback_) {
-                failure_callback_("Too much noise — tap the target again slowly and precisely.");
-            }
-        }
+        const bool ok = compute_median_point(median); // reads sample_buffer_
+
+        // Reset the per-point sample count BEFORE invoking the success/failure
+        // callbacks. Those callbacks refresh the "touch N of 3" instruction
+        // label; if the count were still at SAMPLES_REQUIRED when they run, the
+        // label would render "touch 4 of 3" (current_sample + 1). Clearing first
+        // means any UI refresh the callbacks trigger sees a fresh count of 0.
         reset_samples();
+
+        if (ok) {
+            capture_point(median);
+        } else if (failure_callback_) {
+            failure_callback_("Too much noise — tap the target again slowly and precisely.");
+        }
     }
 }
 
