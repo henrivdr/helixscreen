@@ -1030,9 +1030,30 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
         return err;
 
     bool head_loaded;
+    int current_slot;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         head_loaded = head_filament_;
+        current_slot = system_info_.current_slot;
+    }
+
+    // A specific slot that is NOT the firmware's active slot is never seated at
+    // the toolhead — its filament sits in the lane, not the nozzle. Route it to a
+    // cold per-lane eject (IFS_F11 on that port) instead of the heated
+    // _IFS_REMOVE_CURRENT_PRUTOK, which resolves the channel from FFMInfo.channel
+    // and backs out whatever is actually at the nozzle regardless of slot index.
+    // Without this, "unload channel 1" while channel 3 is loaded heats the nozzle
+    // and backs out channel 3, never touching channel 1, then stalls (raza616,
+    // bundle HKHZFYB2). Fall through to the toolhead unload only when the slot IS
+    // the active one (slot_index == current_slot), the caller asked to unload
+    // whatever is active (slot_index < 0), or the firmware has lost its active
+    // pointer while the head is loaded (current_slot < 0) — the unknown-origin
+    // recovery case where removing the head is the intended action (see
+    // can_unload_from_toolhead()).
+    if (slot_index >= 0 && current_slot >= 0 && slot_index != current_slot) {
+        spdlog::info("{} Unload requested for non-active slot {} (active slot {}) -> cold lane eject",
+                     backend_log_tag(), slot_index, current_slot);
+        return eject_lane(slot_index);
     }
 
     // No filament seated at the nozzle: the toolhead unload would be a firmware

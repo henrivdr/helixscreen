@@ -4870,3 +4870,30 @@ TEST_CASE("AD5X IFS unload_filament clears toolhead when firmware dropped the ac
     REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
     REQUIRE_FALSE(backend.has_gcode("IFS_REMOVE_PRUTOK"));
 }
+
+TEST_CASE("AD5X IFS unload_filament on a non-active slot ejects that lane, not the loaded one "
+          "(raza616 HKHZFYB2)",
+          "[ams][ad5x_ifs]") {
+    // raza616's exact footgun: channel 3 (0-based slot 2) is loaded at the
+    // toolhead; the user asks to unload channel 1 (slot 0). The old path keyed
+    // off the global head sensor and fired _IFS_REMOVE_CURRENT_PRUTOK, which the
+    // firmware resolves from FFMInfo.channel — so it heated the nozzle and backed
+    // out the loaded channel 3, never touching channel 1, then stalled. A
+    // non-active slot's filament is in the lane, so unload must cold-eject THAT
+    // port instead of running the toolhead unload.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    Ad5xIfsTestAccess::set_current_slot(backend, 2, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    REQUIRE(backend.unload_filament(0).success());
+
+    // 0-based slot 0 -> 1-based port 1, cold retract. Crucially NOT the toolhead
+    // unload, which would back out the loaded channel 3.
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 CHECK=0"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("G28"));
+    REQUIRE_FALSE(backend.has_gcode_containing("M109"));
+}

@@ -2875,11 +2875,18 @@ void Application::init_action_prompt() {
     if (api) {
         m_action_prompt_modal->set_gcode_callback([api](const std::string& gcode) {
             spdlog::info("[ActionPrompt] Sending gcode: {}", gcode);
+            // Action-prompt buttons run firmware macros (IFS load/unload, color
+            // changes, tool changes) that routinely exceed the 60s default
+            // request timeout — heat + cut + multi-stage feed/retract/purge can
+            // take minutes. Use the macro timeout so a slow-but-progressing
+            // operation isn't falsely reported as failed/stalled (raza616's IFS
+            // unload via the ZMOD COLOR macro timed out at exactly 60s).
             api->execute_gcode(
                 gcode, []() { spdlog::debug("[ActionPrompt] Gcode executed successfully"); },
                 [gcode](const MoonrakerError& err) {
                     spdlog::error("[ActionPrompt] Gcode execution failed: {}", err.message);
-                });
+                },
+                MoonrakerAPI::MACRO_TIMEOUT_MS);
         });
     }
 
