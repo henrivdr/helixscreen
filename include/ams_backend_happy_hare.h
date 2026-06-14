@@ -275,6 +275,18 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     bool apply_filament_heater_status(const nlohmann::json& params);
 
     /**
+     * @brief Parse box humidity from an environment-sensor status update
+     *
+     * Mirrors Happy Hare's mmu_environment_manager._get_environment_status():
+     * derives the bare sensor name from environment_sensor_name_ and reads the
+     * "humidity" field from the env-sensor object or a matching humidity chip
+     * (bme280/htu21d/sht3x/aht10) present in the params object.
+     * @param params The top-level params object from notify_status_update
+     * @return true if a humidity value was found and stored
+     */
+    bool apply_environment_sensor_status(const nlohmann::json& params);
+
+    /**
      * @brief Check if this is a Type B MMU (hub topology)
      * @return true if selector_type is VirtualSelector
      */
@@ -306,6 +318,9 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     std::time_t dry_end_epoch_ = 0; ///< HelixScreen-initiated drying end (epoch s), 0 = none
     std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
     std::string filament_heater_name_; ///< Klipper object name, e.g. "heater_generic box1_heater"
+    std::string environment_sensor_name_; ///< [mmu_machine] environment_sensor, e.g. "temperature_sensor box"
+    float box_humidity_pct_ = 0.0f;       ///< Last box humidity reading (%RH)
+    bool box_humidity_valid_ = false;     ///< true once a humidity reading has been parsed
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)

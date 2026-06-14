@@ -127,9 +127,9 @@
                 </lv_obj>
                 <lv_obj width="1" flex_grow="1" height="content" style_pad_all="0"
                         flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
-                  <text_small text="Hours" translation_tag="Hours" style_text_color="#text_muted"/>
+                  <text_small text="Minutes" translation_tag="Minutes" style_text_color="#text_muted"/>
                   <text_input name="duration_input" width="100%"
-                               text="4" one_line="true" max_length="2" keyboard_hint="numeric"/>
+                               text="240" one_line="true" max_length="4" keyboard_hint="numeric"/>
                 </lv_obj>
               </lv_obj>
 

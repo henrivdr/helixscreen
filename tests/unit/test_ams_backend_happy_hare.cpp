@@ -185,6 +185,11 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
         apply_filament_heater_status(params);
     }
 
+    /// Expose apply_environment_sensor_status for testing
+    bool test_apply_environment_sensor_status(const nlohmann::json& params) {
+        return apply_environment_sensor_status(params);
+    }
+
     /**
      * @brief Check if exact G-code was captured
      * @param expected Exact G-code string to find
@@ -1099,8 +1104,41 @@ TEST_CASE("Happy Hare surfaces box heater temp as unit environment",
     REQUIRE_FALSE(info.units.empty());
     REQUIRE(info.units[0].environment.has_value());
     REQUIRE(info.units[0].environment->temperature_c == Catch::Approx(48.5f));
-    // Humidity has no printer-object source over Happy Hare — must stay hidden.
+    // No environment_sensor configured yet → humidity stays hidden.
     REQUIRE_FALSE(info.units[0].environment->has_humidity);
+}
+
+TEST_CASE("Happy Hare reads box humidity from environment sensor chip",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    // Configure the dryer + the environment_sensor name (mirrors [mmu_machine]).
+    nlohmann::json settings = {
+        {"mmu_machine",
+         {{"filament_heater", "heater_generic box1_heater"},
+          {"environment_sensor", "temperature_sensor box"}}},
+        {"mmu", {{"heater_max_temp", 65.0}}}};
+    helper.test_apply_heater_config(settings);
+
+    // Establish a current temp so environment is surfaced.
+    helper.test_parse_mmu_state(
+        nlohmann::json{{"drying_state", {{"active", true}, {"current_temp", 50.0}}}});
+
+    // Humidity arrives on the backing chip object "htu21d box" (bare name "box").
+    nlohmann::json status = {{"htu21d box", {{"temperature", 50.0}, {"humidity", 37.5}}}};
+    REQUIRE(helper.test_apply_environment_sensor_status(status));
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    REQUIRE(info.units[0].environment.has_value());
+    REQUIRE(info.units[0].environment->has_humidity);
+    REQUIRE(info.units[0].environment->humidity_pct == Catch::Approx(37.5f));
+
+    // A status frame without any matching humidity key leaves the last value intact.
+    nlohmann::json unrelated = {{"toolhead", {{"position", {0, 0, 0, 0}}}}};
+    REQUIRE_FALSE(helper.test_apply_environment_sensor_status(unrelated));
+    REQUIRE(helper.get_system_info().units[0].environment->humidity_pct == Catch::Approx(37.5f));
 }
 
 TEST_CASE("Happy Hare dryer computes remaining from commanded TIMER", "[ams][happy_hare][v4]") {
