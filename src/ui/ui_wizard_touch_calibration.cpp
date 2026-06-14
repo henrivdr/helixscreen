@@ -257,6 +257,9 @@ lv_obj_t* WizardTouchCalibrationStep::create(lv_obj_t* parent) {
     DisplayManager* dm = DisplayManager::instance();
     if (dm) {
         dm->disable_affine_calibration();
+        // Suppress the global debug-touches ripple during the wizard step — it
+        // would draw raw (Y-inverted) coords while affine is off (#943).
+        dm->set_touch_calibration_active(true);
     }
 
     // Enable Next button and set initial text to "Skip"
@@ -318,6 +321,7 @@ void WizardTouchCalibrationStep::cleanup() {
             dm->apply_touch_calibration(backup_calibration_);
         }
         dm->enable_affine_calibration();
+        dm->set_touch_calibration_active(false);
     }
     has_backup_ = false;
 

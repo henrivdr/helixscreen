@@ -83,6 +83,19 @@ class TouchCalibrationPanel {
     using SampleProgressCallback = std::function<void()>;
 
     /**
+     * @brief Callback invoked exactly once when the panel enters VERIFY
+     *
+     * Fired the instant the third point commits and the matrix validates,
+     * regardless of which path triggered the commit (release event, stall
+     * timer, or legacy sample-on-press). The overlay uses this to re-enable
+     * the original calibration so Accept/Retry dispatch on their true screen
+     * locations — tying that to a specific input edge is fragile (the
+     * commit-on-release debounce moved the transition off the press edge and
+     * left VERIFY running on raw, Y-inverted coordinates, #943/#986).
+     */
+    using VerifyEntryCallback = std::function<void()>;
+
+    /**
      * @brief Snapshot of calibration progress for UI display
      */
     struct Progress {
@@ -134,6 +147,11 @@ class TouchCalibrationPanel {
      * @brief Set callback for sample progress during point capture
      */
     void set_sample_progress_callback(SampleProgressCallback cb);
+
+    /**
+     * @brief Set callback fired when the panel transitions into VERIFY
+     */
+    void set_verify_entry_callback(VerifyEntryCallback cb);
 
     /**
      * @brief Set verify timeout duration (default: 10 seconds)
@@ -290,6 +308,7 @@ class TouchCalibrationPanel {
     TimeoutCallback timeout_callback_;
     FastRevertCallback fast_revert_callback_;
     SampleProgressCallback sample_progress_callback_;
+    VerifyEntryCallback verify_entry_callback_;
     int verify_timeout_seconds_ = 10;
     int countdown_remaining_ = 0;
     lv_timer_t* countdown_timer_ = nullptr;

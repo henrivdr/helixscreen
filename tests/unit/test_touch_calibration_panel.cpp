@@ -940,3 +940,99 @@ TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
 
     REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_2);
 }
+
+// ============================================================================
+// VERIFY-entry callback (#943/#986)
+//
+// The overlay re-enables the original calibration the instant the panel enters
+// VERIFY so Accept/Retry dispatch on their true screen locations. That MUST be
+// driven by the actual state transition, not a specific input edge — the
+// commit-on-release debounce moved the transition off the press edge, which
+// left VERIFY running on raw, Y-inverted coordinates (bottom Accept unhittable
+// on the AD5M resistive panel). These cases lock the callback to the transition
+// for every commit path.
+// ============================================================================
+
+TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
+                 "TouchCalibrationPanel: verify-entry callback fires once via release-commit",
+                 "[touch-calibration][debounce]") {
+    int verify_entries = 0;
+    panel_->set_verify_entry_callback([&]() { ++verify_entries; });
+    panel_->start();
+
+    // SAMPLES_REQUIRED commits per point, each a clean press/release past the
+    // refractory window. The transition into VERIFY lands on the final commit.
+    const Point taps[3] = {{100, 120}, {380, 390}, {660, 60}};
+    for (const auto& tap : taps) {
+        REQUIRE(verify_entries == 0); // not until the third point fully commits
+        for (int s = 0; s < 3; ++s) {
+            clear_refractory();
+            panel_->on_press(tap);
+            panel_->on_release();
+        }
+    }
+
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::VERIFY);
+    REQUIRE(verify_entries == 1);
+}
+
+TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
+                 "TouchCalibrationPanel: verify-entry callback fires via stall-timeout commit",
+                 "[touch-calibration][debounce]") {
+    int verify_entries = 0;
+    panel_->set_verify_entry_callback([&]() { ++verify_entries; });
+    panel_->start();
+
+    // First two points commit normally on release (3 samples each).
+    const Point first_two[2] = {{100, 120}, {380, 390}};
+    for (const auto& tap : first_two) {
+        for (int s = 0; s < 3; ++s) {
+            clear_refractory();
+            panel_->on_press(tap);
+            panel_->on_release();
+        }
+    }
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::POINT_3);
+    REQUIRE(verify_entries == 0);
+
+    // Third point: first two samples commit on release...
+    for (int s = 0; s < 2; ++s) {
+        clear_refractory();
+        panel_->on_press(Point{660, 60});
+        panel_->on_release();
+    }
+    REQUIRE(verify_entries == 0);
+
+    // ...then the FINAL sample commits via the stall timer (a press with NO
+    // release, as on a flaky-release panel). The stall path is the only route
+    // into VERIFY here, so the callback must fire from it.
+    clear_refractory();
+    fake_now_ms_ += 1;
+    panel_->on_press(Point{660, 60});
+    TouchCalibrationPanelTestAccess::commit_pending_if_stale(
+        *panel_, fake_now_ms_ + TouchCalibrationPanelTestAccess::stall_commit_ms());
+
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::VERIFY);
+    REQUIRE(verify_entries == 1);
+}
+
+TEST_CASE_METHOD(TouchCalibrationPanelDebounceFixture,
+                 "TouchCalibrationPanel: verify-entry callback fires with debounce OFF (legacy)",
+                 "[touch-calibration][debounce]") {
+    disable_debounce();
+    int verify_entries = 0;
+    panel_->set_verify_entry_callback([&]() { ++verify_entries; });
+    panel_->start();
+
+    // Legacy sample-on-press: three presses per point, transition happens on the
+    // ninth press. The callback must fire there too.
+    const Point taps[3] = {{100, 120}, {380, 390}, {660, 60}};
+    for (const auto& tap : taps) {
+        panel_->on_press(tap);
+        panel_->on_press(tap);
+        panel_->on_press(tap);
+    }
+
+    REQUIRE(panel_->get_state() == TouchCalibrationPanel::State::VERIFY);
+    REQUIRE(verify_entries == 1);
+}

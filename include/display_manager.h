@@ -351,6 +351,20 @@ class DisplayManager {
     void enable_affine_calibration();
 
     /**
+     * @brief Mark whether a touch-calibration UI (overlay or wizard) is on screen
+     *
+     * The debug-touches ripple is suppressed while this is true: the calibration
+     * draws its own ripple, and during point capture affine is disabled so the
+     * global debug ripple would render raw (Y-inverted) coordinates (#943).
+     */
+    void set_touch_calibration_active(bool active) {
+        m_touch_calibration_active = active;
+    }
+    bool is_touch_calibration_active() const {
+        return m_touch_calibration_active;
+    }
+
+    /**
      * @brief Run rotation probe on first boot (fbdev only)
      *
      * Cycles through 0°, 90°, 180°, 270° rotations showing "Tap anywhere
@@ -447,6 +461,7 @@ class DisplayManager {
     // Display sleep state
     bool m_display_sleeping = false;
     bool m_display_dimmed = false;
+    bool m_touch_calibration_active = false; // suppresses the debug-touches ripple (#943)
 #ifdef HELIX_ENABLE_SCREENSAVER
     bool m_screensaver_active = false;
     bool m_screensaver_is_preview = false;

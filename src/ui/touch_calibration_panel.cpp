@@ -54,6 +54,10 @@ void TouchCalibrationPanel::set_sample_progress_callback(SampleProgressCallback 
     sample_progress_callback_ = std::move(cb);
 }
 
+void TouchCalibrationPanel::set_verify_entry_callback(VerifyEntryCallback cb) {
+    verify_entry_callback_ = std::move(cb);
+}
+
 void TouchCalibrationPanel::set_verify_timeout_seconds(int seconds) {
     verify_timeout_seconds_ = seconds;
 }
@@ -170,6 +174,13 @@ void TouchCalibrationPanel::capture_point(Point raw) {
         state_ = State::VERIFY;
         start_countdown_timer();
         start_fast_revert_timer();
+        // Notify the overlay the instant we enter VERIFY so it can re-enable
+        // the original calibration for safe button dispatch. Fired here (not on
+        // an input edge) so every commit path — release event, stall timer, and
+        // legacy sample-on-press — re-enables affine identically (#943/#986).
+        if (verify_entry_callback_) {
+            verify_entry_callback_();
+        }
         break;
     default:
         // No-op in IDLE, VERIFY, COMPLETE states
