@@ -852,6 +852,42 @@ To add a new submodule patch:
 3. **Update Makefile** to apply the patch in the `apply-patches` target
 4. **Document** in `patches/README.md`
 
+### Patch Gotchas (hard-won)
+
+Two traps cost a full debugging session on 2026-06-14 when the libhv DNS resolver
+fallback patch silently stopped reaching the binary on the AD5M (on-machine
+update checks failed with "Connection failed"). Both are now regression-tested in
+`tests/shell/test_libhv_dns_resolver_patch.bats`.
+
+1. **Guard on the actual change, not on a side effect.** A patch that adds NEW
+   files *and* edits an existing one must not gate re-application on the new
+   file's existence. The old guard used `[ ! -f base/dns_resolv.c ]`; a submodule
+   reset reverted the tracked `base/hsocket.c` (the wiring) but left the
+   untracked `dns_resolv.c` orphaned, so the guard declared "already applied" and
+   never re-wired `hsocket.c`. Result: resolver compiled but **never called**.
+   Guard on a marker string *inside the edited file* and self-heal:
+   ```make
+   if ! grep -q "dns_resolv_resolve" "$(LIBHV_DIR)/base/hsocket.c"; then
+       rm -f .../base/dns_resolv.c .../base/dns_resolv.h;   # drop orphans
+       git -C $(LIBHV_DIR) checkout -- base/hsocket.c;       # pristine
+       git -C $(LIBHV_DIR) apply .../libhv-dns-resolver-fallback.patch
+   fi
+   ```
+
+2. **A patched file compiled into a static `.a` must invalidate that `.a`.**
+   `$(LIBHV_LIB)` (build/<plat>/lib/libhv.a) originally had **no
+   prerequisites** → built once, never rebuilt when a patch changed the libhv
+   source. Because the resolver *call site* lives only in `hsocket.c` (→ inside
+   `libhv.a`) while `dns_resolv.c` is compiled separately into the app, a stale
+   archive kept a pristine `hsocket.o` (pure `getaddrinfo` → `EAI_SYSTEM` /
+   `ret=-11` on static glibc) across every rebuild. **This is dev-only** — a
+   fresh CI build has no `libhv.a` yet — but the fix is to depend on the stamp:
+   ```make
+   $(LIBHV_LIB): $(PATCHES_STAMP)
+   ```
+   When in doubt, `rm build/<plat>/lib/libhv.a` to force a clean archive, and
+   confirm a patch's marker actually made it in: `strings <binary> | grep <sym>`.
+
 ## Multi-Display Support (macOS)
 
 The prototype supports multi-monitor development workflows with automatic window positioning.

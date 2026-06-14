@@ -141,8 +141,16 @@ ifndef SKIP_COMPILE_COMMANDS
 endif
 endif
 
-# Build libhv if not present (dependency rule)
-$(LIBHV_LIB):
+# Build libhv if not present (dependency rule).
+# MUST depend on $(PATCHES_STAMP): libhv patches (e.g. the DNS resolver fallback
+# wiring in base/hsocket.c) are applied to the libhv source tree, but hsocket.o
+# lives only inside libhv.a. Without this prerequisite, libhv.a is built once and
+# never rebuilt when a patch is (re)applied or changed — leaving a stale,
+# pristine hsocket.o in the archive (resolver compiled into the app but never
+# CALLED → getaddrinfo() EAI_SYSTEM on static-glibc devices). A fresh CI build
+# hides this because libhv.a doesn't exist yet; it only bites incremental dev
+# trees. Re-applying patches now invalidates the archive so the wiring lands.
+$(LIBHV_LIB): $(PATCHES_STAMP)
 	$(Q)$(MAKE) libhv-build
 
 ifneq ($(LIBHV_JSON_HEADER),)

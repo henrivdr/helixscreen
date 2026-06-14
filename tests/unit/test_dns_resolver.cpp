@@ -471,4 +471,36 @@ TEST_CASE("dns_resolv_get_nameservers_from() parses resolv.conf", "[dns][resolv]
 
         remove(tmpfile);
     }
+
+    SECTION("AD5M Forge-X format: inline '# eth0' comments after each address") {
+        // Real /etc/resolv.conf seen on the Flashforge AD5M (Forge-X 1.4.0).
+        // Each nameserver line has a trailing "# eth0" annotation, and the
+        // file leads with a 'search' directive that is also annotated. The IP
+        // must be parsed WITHOUT the trailing comment (sscanf %63s stops at the
+        // first whitespace), otherwise inet_pton later rejects it and the
+        // static-glibc device silently fails every HTTPS lookup.
+        const char* tmpfile = "/tmp/test_resolv_ad5m.conf";
+        FILE* fp = fopen(tmpfile, "w");
+        REQUIRE(fp != nullptr);
+        fprintf(fp, "search lan # eth0\n");
+        fprintf(fp, "nameserver 192.168.1.1 # eth0\n");
+        fprintf(fp, "nameserver 192.168.2.1 # eth0\n");
+        fprintf(fp, "nameserver 9.9.9.9 # eth0\n");
+        fclose(fp);
+
+        int count =
+            dns_resolv_get_nameservers_from(tmpfile, nameservers, DNS_RESOLV_MAX_NAMESERVERS);
+        CHECK(count == 3);
+        // Critically: the IP only, no trailing " # eth0".
+        CHECK(std::string(nameservers[0]) == "192.168.1.1");
+        CHECK(std::string(nameservers[1]) == "192.168.2.1");
+        CHECK(std::string(nameservers[2]) == "9.9.9.9");
+
+        // And each parsed value must be a valid IPv4 literal (what the resolver
+        // feeds to inet_pton before sending the UDP query).
+        struct in_addr probe;
+        CHECK(inet_pton(AF_INET, nameservers[0], &probe) == 1);
+
+        remove(tmpfile);
+    }
 }

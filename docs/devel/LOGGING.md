@@ -266,6 +266,23 @@ Verbosity still applies (`-v`=info, `-vv`=debug, `-vvv`=trace). Detection lines 
 | Android | Android | logcat | `adb logcat -s HelixScreen` |
 | Dev workstation (macOS / interactive Linux) | Console | stdout in terminal | visible directly |
 
+### Debugging the C / libhv Layer On-Device
+
+spdlog is C++-only. When you need temporary instrumentation **inside a C
+dependency** (libhv, the DNS resolver in `lib/libhv/base/`), do **not** rely on
+`fprintf(stderr)` — the app manages its own stdout/stderr and a raw stderr write
+may not be captured. Use **`syslog(3)`** (`#include <syslog.h>`,
+`syslog(LOG_WARNING, "[TAG] ...")`); it lands in the platform's syslog
+(`/var/log/messages`, `logread`, etc.) right alongside spdlog's syslog sink, with
+no plumbing. spdlog's own warn/error (fd1/syslog) is reliably captured;
+`--log-dest=console -vv` forces the console sink for redirected/non-tty runs.
+
+**Trap:** before trusting *absence* of instrumentation output, confirm the code
+is actually in the deployed binary: `strings <binary> | grep <MARKER>`. A patched
+file compiled into a static `.a` (e.g. `hsocket.o` in `libhv.a`) can be a stale
+cached object that never picked up your edit — "no log output" then means "not
+compiled in," not "not reached." See BUILD_SYSTEM.md § Patch Gotchas.
+
 ## Launcher Subshell Capture (`launcher.log`)
 
 `config/helixscreen.init` runs the launcher in a backgrounded subshell with `( ... exec "$LAUNCHER" ) >> "$LOGFILE" 2>&1 &`. Everything written to stdout/stderr inside that subshell ends up in `$LOGFILE`:

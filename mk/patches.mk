@@ -643,14 +643,15 @@ $(PATCHES_STAMP): $(PATCH_FILES) $(LVGL_HEAD) $(LIBHV_HEAD)
 			echo "$(GREEN)✓ Patched header synced$(RESET)"; \
 		fi \
 	fi
-	$(Q)if git -C $(LIBHV_DIR) diff --quiet base/hsocket.c 2>/dev/null && \
-	    [ ! -f "$(LIBHV_DIR)/base/dns_resolv.c" ]; then \
+	$(Q)if ! grep -q "dns_resolv_resolve" "$(LIBHV_DIR)/base/hsocket.c" 2>/dev/null; then \
 		echo "$(YELLOW)→ Applying libhv DNS resolver fallback patch...$(RESET)"; \
+		rm -f "$(LIBHV_DIR)/base/dns_resolv.c" "$(LIBHV_DIR)/base/dns_resolv.h"; \
+		git -C $(LIBHV_DIR) checkout -- base/hsocket.c 2>/dev/null || true; \
 		if git -C $(LIBHV_DIR) apply --check ../../patches/libhv-dns-resolver-fallback.patch 2>/dev/null; then \
 			git -C $(LIBHV_DIR) apply ../../patches/libhv-dns-resolver-fallback.patch && \
 			echo "$(GREEN)✓ DNS resolver fallback patch applied$(RESET)"; \
 		else \
-			echo "$(YELLOW)⚠ Cannot apply patch (already applied or conflicts)$(RESET)"; \
+			echo "$(RED)✗ Cannot apply DNS resolver fallback patch (conflicts) — embedded DNS will be BROKEN$(RESET)"; \
 		fi \
 	else \
 		echo "$(GREEN)✓ libhv DNS resolver fallback patch already applied$(RESET)"; \
