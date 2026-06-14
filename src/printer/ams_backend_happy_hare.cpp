@@ -129,6 +129,23 @@ AmsSystemInfo AmsBackendHappyHare::get_system_info() const {
         info.units[u].hub_sensor_triggered = system_info_.units[u].hub_sensor_triggered;
     }
 
+    // Surface the box/dryer heater temperature as per-unit environment data so the
+    // AMS panel environment indicator (heat-waves icon, live temp) and the dryer
+    // overlay show a reading. Happy Hare boxes (e.g. QIDI Box) expose box temp via
+    // the filament_heater heater_generic object, parsed into dryer_info_. Humidity
+    // has no standard printer-object source here — the value the MMU_HEATER macro
+    // prints is gcode-console-only — so we report temperature and mark humidity
+    // unavailable (has_humidity = false hides the humidity readout).
+    if (dryer_info_.supported && dryer_info_.current_temp_c > 0.0f) {
+        EnvironmentData env;
+        env.temperature_c = dryer_info_.current_temp_c;
+        env.humidity_pct = 0.0f;
+        env.has_humidity = false;
+        for (auto& unit : info.units) {
+            unit.environment = env;
+        }
+    }
+
     return info;
 }
 
