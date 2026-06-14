@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "wizard_step_logic.h"
 
+#include "wizard_step.h"
+
 #include "../catch_amalgamated.hpp"
+
+#include <vector>
+
+using helix::wizard::StepId;
 
 // ============================================================================
 // Default flags (no skips) — baseline behavior
@@ -203,4 +209,45 @@ TEST_CASE("Preset plan: secondary-printer flags navigate connection -> summary -
     REQUIRE(helix::wizard_next_step(3, flags) == 11); // connection -> summary
     REQUIRE(helix::wizard_next_step(11, flags) == -1); // summary -> done (telemetry skipped)
     REQUIRE(helix::wizard_calculate_display_total(flags) == 2); // connection + summary
+}
+
+// ============================================================================
+// Id-based pure navigation over the step registry (StepId + StepSkip vector).
+// ============================================================================
+
+static std::vector<helix::StepSkip> all_visible() {
+    std::vector<helix::StepSkip> v;
+    for (int i = 0; i < helix::wizard::kStepCount; ++i)
+        v.push_back({static_cast<StepId>(i), false});
+    return v;
+}
+
+TEST_CASE("id-nav: next walks visible steps", "[wizard][step_logic][idnav]") {
+    auto v = all_visible();
+    REQUIRE(helix::wizard_next(StepId::Connection, v) == StepId::PrinterIdentify);
+    REQUIRE(helix::wizard_visible_count(v) == 13);
+}
+
+TEST_CASE("id-nav: non-contiguous skips are honored", "[wizard][step_logic][idnav]") {
+    auto v = all_visible();
+    for (auto& s : v) if (s.id == StepId::HeaterSelect || s.id == StepId::AmsIdentify ||
+                          s.id == StepId::InputShaper) s.skipped = true;
+    REQUIRE(helix::wizard_next(StepId::PrinterIdentify, v) == StepId::FanSelect);
+    REQUIRE(helix::wizard_next(StepId::FanSelect, v) == StepId::LedSelect);
+    REQUIRE(helix::wizard_next(StepId::FilamentSensor, v) == StepId::Summary);
+    REQUIRE(helix::wizard_visible_count(v) == 10);
+}
+
+TEST_CASE("id-nav: last visible step reports done", "[wizard][step_logic][idnav]") {
+    auto v = all_visible();
+    for (auto& s : v) if (s.id == StepId::Telemetry) s.skipped = true;
+    REQUIRE(helix::wizard_is_last(StepId::Summary, v));
+    REQUIRE_FALSE(helix::wizard_next(StepId::Summary, v).has_value());
+}
+
+TEST_CASE("id-nav: display number counts visible predecessors", "[wizard][step_logic][idnav]") {
+    auto v = all_visible();
+    for (auto& s : v) if (s.id == StepId::TouchCalibration || s.id == StepId::Language) s.skipped = true;
+    REQUIRE(helix::wizard_display_number(StepId::Wifi, v) == 1);
+    REQUIRE(helix::wizard_display_number(StepId::Connection, v) == 2);
 }
