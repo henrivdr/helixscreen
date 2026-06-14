@@ -159,6 +159,17 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         return true; // AFC uses SET_SPOOL_ID gcode for persistence
     }
 
+    /**
+     * @brief Whether AFC unloads the toolhead automatically after a print.
+     *
+     * Unlike CFS/IFS (which always unload via firmware), AFC's post-print
+     * behavior depends on the user's end-of-print macros. This is driven by
+     * the per-printer SettingsManager toggle get_afc_unload_after_print()
+     * (default false). When enabled, the pre-print runout warning is
+     * suppressed because an empty toolhead is expected, not a fault.
+     */
+    [[nodiscard]] bool auto_unloads_after_print() const override;
+
     // Endless Spool support
     /**
      * @brief Get endless spool capabilities for AFC

@@ -19,6 +19,7 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "settings_manager.h"
 #include "static_panel_registry.h"
 
 #include <spdlog/spdlog.h>
@@ -59,6 +60,7 @@ AmsDeviceOperationsOverlay::~AmsDeviceOperationsOverlay() {
         lv_subject_deinit(&hw_bypass_sensor_subject_);
         lv_subject_deinit(&supports_auto_heat_subject_);
         lv_subject_deinit(&has_backend_subject_);
+        lv_subject_deinit(&is_afc_subject_);
     }
     spdlog::trace("[{}] Destroyed", get_name());
 }
@@ -101,6 +103,9 @@ void AmsDeviceOperationsOverlay::init_subjects() {
     lv_subject_init_int(&has_backend_subject_, 0);
     lv_xml_register_subject(nullptr, "ams_device_ops_has_backend", &has_backend_subject_);
 
+    lv_subject_init_int(&is_afc_subject_, 0);
+    lv_xml_register_subject(nullptr, "ams_device_ops_is_afc", &is_afc_subject_);
+
     subjects_initialized_ = true;
     spdlog::debug("[{}] Subjects initialized", get_name());
 }
@@ -110,6 +115,8 @@ void AmsDeviceOperationsOverlay::register_callbacks() {
     lv_xml_register_event_cb(nullptr, "on_ams_device_ops_recover", on_recover_clicked);
     lv_xml_register_event_cb(nullptr, "on_ams_device_ops_abort", on_abort_clicked);
     lv_xml_register_event_cb(nullptr, "on_ams_device_ops_bypass_toggled", on_bypass_toggled);
+    lv_xml_register_event_cb(nullptr, "on_ams_afc_unload_after_print_toggled",
+                             on_afc_unload_after_print_toggled);
     lv_xml_register_event_cb(nullptr, "on_ams_section_clicked", on_section_row_clicked);
     spdlog::debug("[{}] Callbacks registered", get_name());
 }
@@ -192,9 +199,10 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         lv_subject_set_int(&bypass_active_subject_, 0);
         lv_subject_set_int(&hw_bypass_sensor_subject_, 0);
         lv_subject_set_int(&supports_auto_heat_subject_, 0);
+        lv_subject_set_int(&is_afc_subject_, 0);
         system_info_buf_[0] = '\0';
         lv_subject_copy_string(&system_info_subject_, system_info_buf_);
-        snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("No AMS connected"));
+        snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("No Multi-Filament System connected"));
         lv_subject_copy_string(&status_subject_, status_buf_);
 
         if (section_list_container_) {
@@ -234,6 +242,9 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
     }
 
     lv_subject_set_int(&supports_auto_heat_subject_, backend->supports_auto_heat_on_load() ? 1 : 0);
+
+    // AFC-only: the unload-after-print toggle applies only to AFC systems
+    lv_subject_set_int(&is_afc_subject_, backend->get_type() == AmsType::AFC ? 1 : 0);
 
     // Update status
     AmsAction action = backend->get_current_action();
@@ -385,7 +396,7 @@ void AmsDeviceOperationsOverlay::on_home_clicked(lv_event_t* e) {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING("{}", lv_tr("No AMS system connected"));
+        NOTIFY_WARNING("{}", lv_tr("No Multi-Filament System connected"));
     } else {
         AmsError result = backend->reset();
         if (result.success()) {
@@ -407,7 +418,7 @@ void AmsDeviceOperationsOverlay::on_recover_clicked(lv_event_t* e) {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING("{}", lv_tr("No AMS system connected"));
+        NOTIFY_WARNING("{}", lv_tr("No Multi-Filament System connected"));
     } else {
         AmsError result = backend->recover();
         if (result.success()) {
@@ -429,7 +440,7 @@ void AmsDeviceOperationsOverlay::on_abort_clicked(lv_event_t* e) {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING("{}", lv_tr("No AMS system connected"));
+        NOTIFY_WARNING("{}", lv_tr("No Multi-Filament System connected"));
     } else {
         AmsError result = backend->cancel();
         if (result.success()) {
@@ -493,6 +504,22 @@ void AmsDeviceOperationsOverlay::on_bypass_toggled(lv_event_t* e) {
                 lv_obj_add_state(toggle, LV_STATE_CHECKED);
             }
         }
+    }
+
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void AmsDeviceOperationsOverlay::on_afc_unload_after_print_toggled(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[AmsDeviceOperationsOverlay] on_afc_unload_after_print_toggled");
+
+    auto* toggle = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    if (!toggle || !lv_obj_is_valid(toggle)) {
+        spdlog::warn("[AmsDeviceOperationsOverlay] Stale callback - toggle no longer valid");
+    } else {
+        bool is_checked = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+        spdlog::info("[AmsDeviceOperationsOverlay] AFC unload-after-print toggle: {}",
+                     is_checked ? "enabled" : "disabled");
+        SettingsManager::instance().set_afc_unload_after_print(is_checked);
     }
 
     LVGL_SAFE_EVENT_CB_END();

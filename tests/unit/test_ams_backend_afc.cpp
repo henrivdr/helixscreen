@@ -5,10 +5,14 @@
 #include "ams_types.h"
 #include "moonraker_api.h"
 
+#include "config.h"
+#include "settings_manager.h"
+
 #include <algorithm>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
+#include "../lvgl_test_fixture.h"
 
 using namespace helix;
 /**
@@ -3314,6 +3318,76 @@ TEST_CASE("AFC backend reports manages_active_spool=true", "[ams][afc][spoolman]
 TEST_CASE("AFC get_type returns AFC", "[ams][afc][spoolman]") {
     AmsBackendAfcTestHelper helper;
     REQUIRE(helper.get_type() == AmsType::AFC);
+}
+
+// ============================================================================
+// auto_unloads_after_print() driven by per-printer SettingsManager toggle
+// ============================================================================
+//
+// Unlike CFS/IFS (which hardcode auto_unloads_after_print()==true), AFC's
+// post-print unload depends on the user's macros. The behaviour is controlled
+// by a per-printer setting: get_afc_unload_after_print() (default false). The
+// pre-print runout warning is suppressed only when the setting is enabled.
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "AFC auto_unloads_after_print defaults to false (setting off)",
+                 "[ams][afc][capability]") {
+    helix::Config::get_instance();
+    helix::SettingsManager::instance().init_subjects();
+
+    // Ensure the setting starts disabled
+    helix::SettingsManager::instance().set_afc_unload_after_print(false);
+
+    AmsBackendAfcTestHelper helper;
+    REQUIRE(helper.auto_unloads_after_print() == false);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "AFC auto_unloads_after_print returns true when setting enabled",
+                 "[ams][afc][capability]") {
+    helix::Config::get_instance();
+    helix::SettingsManager::instance().init_subjects();
+
+    helix::SettingsManager::instance().set_afc_unload_after_print(true);
+
+    AmsBackendAfcTestHelper helper;
+    REQUIRE(helper.auto_unloads_after_print() == true);
+
+    // Toggling the setting back off must flip the capability back
+    helix::SettingsManager::instance().set_afc_unload_after_print(false);
+    REQUIRE(helper.auto_unloads_after_print() == false);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "SettingsManager afc_unload_after_print round-trips and persists",
+                 "[ams][afc][settings]") {
+    helix::Config* config = helix::Config::get_instance();
+    auto& settings = helix::SettingsManager::instance();
+    settings.init_subjects();
+
+    const std::string path = config->df() + "ams/afc_unload_after_print";
+
+    SECTION("defaults to false") {
+        settings.set_afc_unload_after_print(false);
+        REQUIRE(settings.get_afc_unload_after_print() == false);
+    }
+
+    SECTION("set true -> get true -> persisted to per-printer config path") {
+        settings.set_afc_unload_after_print(true);
+        REQUIRE(settings.get_afc_unload_after_print() == true);
+        REQUIRE(config->get<bool>(path, false) == true);
+
+        // subject reflects the new value
+        REQUIRE(lv_subject_get_int(settings.subject_afc_unload_after_print()) == 1);
+    }
+
+    SECTION("set false after true clears the value") {
+        settings.set_afc_unload_after_print(true);
+        settings.set_afc_unload_after_print(false);
+        REQUIRE(settings.get_afc_unload_after_print() == false);
+        REQUIRE(config->get<bool>(path, true) == false);
+        REQUIRE(lv_subject_get_int(settings.subject_afc_unload_after_print()) == 0);
+    }
 }
 
 TEST_CASE("AFC backend reports tracks_weight_locally=true", "[ams][afc][spoolman]") {

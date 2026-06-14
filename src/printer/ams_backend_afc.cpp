@@ -12,6 +12,7 @@
 #include "afc_defaults.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
+#include "settings_manager.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -70,6 +71,16 @@ AmsBackendAfc::AmsBackendAfc(MoonrakerAPI* api, MoonrakerClient* client)
 
 AmsBackendAfc::~AmsBackendAfc() {
     // lifetime_ destructor calls invalidate() automatically
+}
+
+// ============================================================================
+// Capability queries
+// ============================================================================
+
+bool AmsBackendAfc::auto_unloads_after_print() const {
+    // AFC's post-print unload depends on the user's end-of-print macros, so
+    // this is a per-printer user setting rather than a firmware constant.
+    return SettingsManager::instance().get_afc_unload_after_print();
 }
 
 // ============================================================================

@@ -115,6 +115,15 @@
           <icon src="check_circle" size="sm" variant="primary"/>
         </lv_obj>
 
+        <!-- AFC Unload-After-Print toggle (AFC backends only) -->
+        <setting_toggle_row name="row_afc_unload_after_print"
+                            label="Unloads After Print" label_tag="Unloads After Print" icon="filament"
+                            description="AFC retracts filament from the toolhead at end of print"
+                            description_tag="AFC retracts filament from the toolhead at end of print"
+                            subject="afc_unload_after_print" callback="on_ams_afc_unload_after_print_toggled">
+          <bind_flag_if_eq subject="ams_device_ops_is_afc" flag="hidden" ref_value="0"/>
+        </setting_toggle_row>
+
         <!-- Status Row -->
         <lv_obj name="status_row"
                 width="100%" height="content" style_pad_all="0" flex_flow="row" style_flex_main_place="start"
@@ -151,7 +160,7 @@
         <bind_flag_if_eq subject="ams_device_ops_has_backend" flag="hidden" ref_value="1"/>
         <icon src="info" size="lg" variant="secondary"/>
         <text_muted name="no_backend_text"
-                    width="100%" text="No AMS system connected." translation_tag="No AMS system connected."
+                    width="100%" text="No Multi-Filament System connected." translation_tag="No Multi-Filament System connected."
                     style_text_align="center"/>
       </ui_card>
 

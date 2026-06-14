@@ -137,6 +137,9 @@ class AmsDeviceOperationsOverlay : public OverlayBase {
     static void on_abort_clicked(lv_event_t* e);
     static void on_bypass_toggled(lv_event_t* e);
 
+    /// Callback for the AFC unload-after-print toggle (AFC backends only)
+    static void on_afc_unload_after_print_toggled(lv_event_t* e);
+
     /// Callback for section row click — pushes detail overlay
     static void on_section_row_clicked(lv_event_t* e);
 
@@ -176,6 +179,10 @@ class AmsDeviceOperationsOverlay : public OverlayBase {
 
     /// Subject for backend presence (0=no backend, 1=has backend)
     lv_subject_t has_backend_subject_;
+
+    /// Subject for AFC backend detection (0=not AFC, 1=AFC) — gates the
+    /// unload-after-print toggle, which only applies to AFC systems
+    lv_subject_t is_afc_subject_;
 
     /// Cached section metadata for row click dispatch
     std::vector<helix::printer::DeviceSection> cached_sections_;

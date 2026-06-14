@@ -261,6 +261,28 @@ class SettingsManager {
     }
 
     // =========================================================================
+    // AFC UNLOAD AFTER PRINT (owned by SettingsManager — per-printer AMS behavior)
+    // =========================================================================
+
+    /**
+     * @brief Get whether AFC unloads filament from the toolhead after a print.
+     *
+     * AFC behavior depends on the user's end-of-print macros: some retract
+     * filament out of the extruder, leaving the toolhead empty by design,
+     * others leave it loaded. When enabled, the pre-print runout warning is
+     * suppressed (an empty toolhead is expected, not a fault). Default false.
+     */
+    bool get_afc_unload_after_print() const;
+
+    /** @brief Set whether AFC unloads filament from the toolhead after a print */
+    void set_afc_unload_after_print(bool enabled);
+
+    /** @brief AFC unload-after-print subject (integer: 0=off, 1=on) */
+    lv_subject_t* subject_afc_unload_after_print() {
+        return &afc_unload_after_print_subject_;
+    }
+
+    // =========================================================================
     // CONSOLE FILTERS (owned by SettingsManager — gcode console noise toggles)
     // =========================================================================
 
@@ -352,6 +374,7 @@ class SettingsManager {
     lv_subject_t show_printer_switcher_subject_;
     lv_subject_t show_widget_labels_subject_;
     lv_subject_t auto_color_map_subject_;
+    lv_subject_t afc_unload_after_print_subject_;
     lv_subject_t console_filter_temps_subject_;
     lv_subject_t console_filter_firmware_noise_subject_;
 
