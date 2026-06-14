@@ -3614,20 +3614,41 @@ uninstall() {
         uninstall_forgex
     fi
 
-    # COSMOS (Centauri Carbon): restore /etc/init.d/grumpyscreen from the
-    # backup the installer made when it substituted in the helixscreen-wrapper
-    # init script (see competing_uis.sh stop_cc1_competing_uis). Also revert
-    # cosmos.conf in case the upstream config-manager allowlist fix lands and
-    # actually starts honoring 'helixscreen' values — we want to be a clean
+    # COSMOS (Centauri Carbon): restore the sibling gui-switcher UIs from the
+    # backups the installer made when it substituted in helixscreen-wrapper init
+    # scripts (see competing_uis.sh stop_cc1_competing_uis). We wrap ALL THREE
+    # siblings (grumpyscreen/guppyscreen/atomscreen), so restore each one — but
+    # ONLY when the live file is actually our wrapper (carries the
+    # HELIXSCREEN_WRAPPER marker) AND a .helix-bak backup exists. This guards
+    # against clobbering a stock file that was restored by a COSMOS upgrade, and
+    # against restoring a wrapper-over-wrapper. Also revert cosmos.conf in case
+    # the upstream config-manager allowlist fix lands — we want to be a clean
     # citizen on uninstall regardless.
     if [ -z "$restored_ui" ] && [ -x "/usr/bin/update-cosmos" ]; then
-        if [ -f /etc/init.d/grumpyscreen.helix-bak ]; then
-            log_info "Restoring original /etc/init.d/grumpyscreen"
-            $SUDO mv /etc/init.d/grumpyscreen.helix-bak /etc/init.d/grumpyscreen \
-                || log_warn "Could not restore /etc/init.d/grumpyscreen — gui-switcher may not launch a UI on next boot"
-        fi
+        for _sib in grumpyscreen guppyscreen atomscreen; do
+            _target="/etc/init.d/${_sib}"
+            _backup="/etc/init.d/${_sib}.helix-bak"
+            if [ -f "$_backup" ] && \
+               grep -q "HELIXSCREEN_WRAPPER" "$_target" 2>/dev/null; then
+                log_info "Restoring original /etc/init.d/${_sib}"
+                $SUDO mv "$_backup" "$_target" \
+                    || log_warn "Could not restore /etc/init.d/${_sib} — gui-switcher may not launch a UI on next boot"
+            elif [ -f "$_backup" ]; then
+                # Backup exists but the live file is no longer our wrapper (e.g. a
+                # COSMOS upgrade already restored the stock file). Drop the now-
+                # redundant backup so it doesn't masquerade as a future original.
+                $SUDO rm -f "$_backup" 2>/dev/null || true
+            fi
+        done
+        unset _sib _target _backup
+        # Revert screen_ui ONLY if it holds the legacy invalid 'helixscreen'
+        # value (written by pre-3-sibling installs). We no longer write that —
+        # we point screen_ui at a real sibling — and after this uninstall all
+        # three siblings are restored to stock, so any sibling value is valid
+        # and we must respect the operator's choice rather than clobber it.
         if [ -f /etc/klipper/config/cosmos.conf ] && \
-           grep -q "^screen_ui[[:space:]]*=[[:space:]]*helixscreen" /etc/klipper/config/cosmos.conf 2>/dev/null; then
+           grep -q "^screen_ui[[:space:]]*=[[:space:]]*helixscreen" \
+               /etc/klipper/config/cosmos.conf 2>/dev/null; then
             log_info "Reverting cosmos.conf screen_ui to grumpyscreen"
             $SUDO sed -i "s|^screen_ui[[:space:]]*=.*|screen_ui = grumpyscreen|" \
                 /etc/klipper/config/cosmos.conf 2>/dev/null || true
