@@ -667,21 +667,6 @@ bool ProbeSensorManager::parse_klipper_name(const std::string& klipper_name,
         return true;
     }
 
-    // Load cell probe: bare "[load_cell]" / "[load_cell_probe]" sections, or a
-    // named "[load_cell <name>]". Mirrors the eddy-current detection pattern.
-    if (klipper_name == "load_cell" || klipper_name == "load_cell_probe") {
-        sensor_name = klipper_name;
-        type = ProbeSensorType::LOADCELL;
-        return true;
-    }
-    const std::string load_cell_prefix = "load_cell ";
-    if (klipper_name.rfind(load_cell_prefix, 0) == 0 &&
-        klipper_name.size() > load_cell_prefix.size()) {
-        sensor_name = klipper_name.substr(load_cell_prefix.size());
-        type = ProbeSensorType::LOADCELL;
-        return true;
-    }
-
     return false;
 }
 

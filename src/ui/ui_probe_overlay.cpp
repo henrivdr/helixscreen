@@ -204,52 +204,6 @@ void ui_probe_overlay_register_callbacks() {
              spdlog::warn("[Probe] No eddy current sensor found for drive current cal");
          }},
 
-        // Load cell probe controls (FlashForge AD5M/AD5X, Klipper [load_cell])
-        {"on_loadcell_tare",
-         [](lv_event_t* /*e*/) {
-             auto& mgr = ProbeSensorManager::instance();
-             for (const auto& s : mgr.get_sensors()) {
-                 if (s.type == ProbeSensorType::LOADCELL) {
-                     std::string cmd = helix::sensors::build_loadcell_command("LOAD_CELL_TARE", s.sensor_name);
-                     send_probe_gcode(cmd.c_str(), "Load Cell Tare");
-                     ToastManager::instance().show(ToastSeverity::INFO,
-                                                   lv_tr("Load cell tare sent"));
-                     return;
-                 }
-             }
-             spdlog::warn("[Probe] No load cell sensor found for tare");
-         }},
-        {"on_loadcell_calibrate",
-         [](lv_event_t* /*e*/) {
-             auto& mgr = ProbeSensorManager::instance();
-             for (const auto& s : mgr.get_sensors()) {
-                 if (s.type == ProbeSensorType::LOADCELL) {
-                     std::string cmd = helix::sensors::build_loadcell_command("LOAD_CELL_CALIBRATE", s.sensor_name);
-                     send_probe_gcode(cmd.c_str(), "Load Cell Calibrate");
-                     ToastManager::instance().show(
-                         ToastSeverity::INFO,
-                         lv_tr("Load cell calibrate sent — follow console prompts"));
-                     return;
-                 }
-             }
-             spdlog::warn("[Probe] No load cell sensor found for calibrate");
-         }},
-        {"on_loadcell_diagnostic",
-         [](lv_event_t* /*e*/) {
-             auto& mgr = ProbeSensorManager::instance();
-             for (const auto& s : mgr.get_sensors()) {
-                 if (s.type == ProbeSensorType::LOADCELL) {
-                     std::string cmd =
-                         helix::sensors::build_loadcell_command("LOAD_CELL_DIAGNOSTIC", s.sensor_name);
-                     send_probe_gcode(cmd.c_str(), "Load Cell Diagnostic");
-                     ToastManager::instance().show(ToastSeverity::INFO,
-                                                   lv_tr("Load cell diagnostic sent"));
-                     return;
-                 }
-             }
-             spdlog::warn("[Probe] No load cell sensor found for diagnostic");
-         }},
-
         // Config edit callbacks
         {"on_probe_cfg_x_offset",
          [](lv_event_t* /*e*/) {
@@ -588,9 +542,6 @@ void ProbeOverlay::load_type_panel() {
         break;
     case ProbeSensorType::EDDY_CURRENT:
         component = "probe_eddy_panel";
-        break;
-    case ProbeSensorType::LOADCELL:
-        component = "probe_loadcell_panel";
         break;
     default:
         component = "probe_generic_panel";

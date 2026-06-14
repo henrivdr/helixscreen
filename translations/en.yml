@@ -497,7 +497,6 @@ translations:
   Dev channel requires dev_url in config: Dev channel requires dev_url in config
   Device: Device
   Device name is required: Device name is required
-  Diagnostic: Diagnostic
   Disable: Disable
   Disable Motors?: Disable Motors?
   Disable the security PIN: Disable the security PIN
@@ -906,7 +905,6 @@ translations:
   LED on at Start: LED on at Start
   LEDs: LEDs
   LEDs controlled by the light button: LEDs controlled by the light button
-  LOAD CELL: LOAD CELL
   LOADED: LOADED
   LOCKED: LOCKED
   LOT-2024-001: LOT-2024-001
@@ -937,9 +935,6 @@ translations:
   Listen to all theme sounds: Listen to all theme sounds
   Load: Load
   Load Filament: Load Filament
-  Load cell calibrate sent — follow console prompts: Load cell calibrate sent — follow console prompts
-  Load cell diagnostic sent: Load cell diagnostic sent
-  Load cell tare sent: Load cell tare sent
   'Load failed: {}': 'Load failed: {}'
   Load may still be running — response timed out: Load may still be running — response timed out
   Load the required filaments or start anyway?: Load the required filaments or start anyway?
@@ -1742,7 +1737,6 @@ translations:
   Tap the crosshair (point %1$d of 3) \xe2\x80\x94 touch %2$d of %3$d: Tap the crosshair (point %1$d of 3) \xe2\x80\x94 touch %2$d of %3$d
   Tap to assign: Tap to assign
   Tap to show keyboard...: Tap to show keyboard...
-  Tare: Tare
   Target Frequency: Target Frequency
   Target Temperature: Target Temperature
   Telemetry Data: Telemetry Data

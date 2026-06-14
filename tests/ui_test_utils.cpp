@@ -410,8 +410,18 @@ int count_children_with_marker(lv_obj_t* parent, const char* marker) {
 #include "printer_state.h"
 #include "temperature_controller.h"
 
+// Settable global client pointer — mirrors the real app_globals.cpp semantics.
+// Defaults to nullptr (most UI tests don't touch Moonraker); tests that exercise
+// real callback routing can swap in a MoonrakerClientMock via
+// set_moonraker_client() and restore it in their dtor.
+static helix::MoonrakerClient* g_test_moonraker_client = nullptr;
+
 MoonrakerClient* get_moonraker_client() {
-    return nullptr;
+    return g_test_moonraker_client;
+}
+
+void set_moonraker_client(MoonrakerClient* client) {
+    g_test_moonraker_client = client;
 }
 
 MoonrakerAPI* get_moonraker_api() {
