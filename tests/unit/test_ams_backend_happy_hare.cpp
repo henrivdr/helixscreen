@@ -76,6 +76,23 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
     }
 
     /**
+     * @brief Initialize the slot registry with multiple units (per-gate testing).
+     * @param gates_per_unit Gate count for each unit; total gates = sum.
+     */
+    void initialize_test_units(const std::vector<int>& gates_per_unit) {
+        std::vector<std::pair<std::string, std::vector<std::string>>> units;
+        int g = 0;
+        for (size_t u = 0; u < gates_per_unit.size(); ++u) {
+            std::vector<std::string> names;
+            for (int i = 0; i < gates_per_unit[u]; ++i) {
+                names.push_back(std::to_string(g++));
+            }
+            units.push_back({"MMU" + std::to_string(u), std::move(names)});
+        }
+        slots_.initialize_units(units);
+    }
+
+    /**
      * @brief Get mutable slot pointer for test setup
      * @param slot_index Global slot index
      * @return Pointer to SlotInfo or nullptr
@@ -181,8 +198,8 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
     }
 
     /// Expose apply_filament_heater_status for testing
-    void test_apply_filament_heater_status(const nlohmann::json& params) {
-        apply_filament_heater_status(params);
+    bool test_apply_filament_heater_status(const nlohmann::json& params) {
+        return apply_filament_heater_status(params);
     }
 
     /// Expose apply_environment_sensor_status for testing
@@ -1139,6 +1156,47 @@ TEST_CASE("Happy Hare reads box humidity from environment sensor chip",
     nlohmann::json unrelated = {{"toolhead", {{"position", {0, 0, 0, 0}}}}};
     REQUIRE_FALSE(helper.test_apply_environment_sensor_status(unrelated));
     REQUIRE(helper.get_system_info().units[0].environment->humidity_pct == Catch::Approx(37.5f));
+}
+
+TEST_CASE("Happy Hare per-gate sensors map to the right unit (multi-MMU)",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    // Two MMU units of 2 gates each (gates 0-1 = unit 0, gates 2-3 = unit 1).
+    helper.initialize_test_units({2, 2});
+
+    // Per-gate (EMU) config: one heater + one env sensor per gate. Comma-string
+    // form (as Moonraker often returns getlist values) is parsed too.
+    nlohmann::json settings = {
+        {"mmu_machine",
+         {{"filament_heaters", "heater_generic h0, heater_generic h1, "
+                               "heater_generic h2, heater_generic h3"},
+          {"environment_sensors", nlohmann::json::array({"temperature_sensor s0",
+                                                         "temperature_sensor s1",
+                                                         "temperature_sensor s2",
+                                                         "temperature_sensor s3"})}}},
+        {"mmu", {{"heater_max_temp", 65.0}}}};
+    helper.test_apply_heater_config(settings);
+
+    // Live readings: unit 0's first gate (gate 0) heater h0 + sensor s0;
+    // unit 1's first gate (gate 2) heater h2 + sensor s2. Distinct values.
+    nlohmann::json status = {
+        {"heater_generic h0", {{"temperature", 40.0}}},
+        {"heater_generic h2", {{"temperature", 55.0}}},
+        {"htu21d s0", {{"humidity", 20.0}}},
+        {"htu21d s2", {{"humidity", 80.0}}}};
+    REQUIRE(helper.test_apply_filament_heater_status(status));
+    REQUIRE(helper.test_apply_environment_sensor_status(status));
+
+    auto info = helper.get_system_info();
+    REQUIRE(info.units.size() == 2);
+
+    REQUIRE(info.units[0].environment.has_value());
+    REQUIRE(info.units[0].environment->temperature_c == Catch::Approx(40.0f));
+    REQUIRE(info.units[0].environment->humidity_pct == Catch::Approx(20.0f));
+
+    REQUIRE(info.units[1].environment.has_value());
+    REQUIRE(info.units[1].environment->temperature_c == Catch::Approx(55.0f));
+    REQUIRE(info.units[1].environment->humidity_pct == Catch::Approx(80.0f));
 }
 
 TEST_CASE("Happy Hare dryer computes remaining from commanded TIMER", "[ams][happy_hare][v4]") {

@@ -9,6 +9,7 @@
 
 #include <ctime>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 
@@ -317,10 +318,19 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     DryerInfo dryer_info_;
     std::time_t dry_end_epoch_ = 0; ///< HelixScreen-initiated drying end (epoch s), 0 = none
     std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
-    std::string filament_heater_name_; ///< Klipper object name, e.g. "heater_generic box1_heater"
-    std::string environment_sensor_name_; ///< [mmu_machine] environment_sensor, e.g. "temperature_sensor box"
-    float box_humidity_pct_ = 0.0f;       ///< Last box humidity reading (%RH)
-    bool box_humidity_valid_ = false;     ///< true once a humidity reading has been parsed
+    // Dryer enclosure heaters + environment sensors. Happy Hare supports either a
+    // single shared enclosure (scalar filament_heater / environment_sensor) OR a
+    // per-gate setup (plural filament_heaters / environment_sensors, one entry per
+    // gate, distributed across units for multi-MMU). See [mmu_machine] config and
+    // mmu_environment_manager.py. The scalar name (when set) drives the global
+    // dryer model (dryer_info_); the maps hold live readings keyed by object name
+    // for per-unit resolution in get_system_info().
+    std::string filament_heater_name_;    ///< scalar [mmu_machine] filament_heater (primary heater)
+    std::string environment_sensor_name_; ///< scalar [mmu_machine] environment_sensor
+    std::vector<std::string> filament_heaters_;    ///< per-gate heaters (plural), empty if shared
+    std::vector<std::string> environment_sensors_; ///< per-gate env sensors (plural), empty if shared
+    std::map<std::string, float> heater_temp_;     ///< live temp (°C) keyed by heater object name
+    std::map<std::string, float> sensor_humidity_; ///< live humidity (%RH) keyed by env-sensor object name
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)

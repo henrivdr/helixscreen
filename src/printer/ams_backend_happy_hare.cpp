@@ -129,18 +129,43 @@ AmsSystemInfo AmsBackendHappyHare::get_system_info() const {
         info.units[u].hub_sensor_triggered = system_info_.units[u].hub_sensor_triggered;
     }
 
-    // Surface the box/dryer heater temperature as per-unit environment data so the
-    // AMS panel environment indicator (heat-waves icon, live temp) and the dryer
-    // overlay show a reading. Happy Hare boxes (e.g. QIDI Box) expose box temp via
-    // the filament_heater heater_generic object, parsed into dryer_info_. Humidity
-    // comes from the environment_sensor chip (see apply_environment_sensor_status)
-    // when present; has_humidity = false hides the readout if no sensor reports it.
-    if (dryer_info_.supported && dryer_info_.current_temp_c > 0.0f) {
-        EnvironmentData env;
-        env.temperature_c = dryer_info_.current_temp_c;
-        env.humidity_pct = box_humidity_valid_ ? box_humidity_pct_ : 0.0f;
-        env.has_humidity = box_humidity_valid_;
+    // Surface per-unit environment data (box heater temp + humidity) so the AMS
+    // panel indicator (heat-waves icon, live temp) and the dryer overlay show a
+    // reading. Each unit resolves its OWN heater + env sensor: a scalar shared
+    // sensor/heater applies to every unit (QIDI Box, common case); a per-gate
+    // (EMU) list maps each unit to the object at its first gate, so multi-MMU rigs
+    // with distinct box sensors read correctly. Per-gate *drying control*
+    // (start/stop/countdown) still uses the global dryer model — true per-gate
+    // drying is a separate gap (drying_state array; see parse_mmu_state).
+    if (dryer_info_.supported) {
         for (auto& unit : info.units) {
+            const int gi = unit.first_slot_global_index;
+
+            std::string heater = filament_heater_name_;
+            if (heater.empty() && gi >= 0 && gi < static_cast<int>(filament_heaters_.size())) {
+                heater = filament_heaters_[gi];
+            }
+            std::string sensor = environment_sensor_name_;
+            if (sensor.empty() && gi >= 0 && gi < static_cast<int>(environment_sensors_.size())) {
+                sensor = environment_sensors_[gi];
+            }
+
+            // Temperature: per-object reading, falling back to the global dryer temp
+            // for the scalar/shared case (same value).
+            float temp = dryer_info_.current_temp_c;
+            if (auto t = heater_temp_.find(heater); t != heater_temp_.end()) {
+                temp = t->second;
+            }
+            if (temp <= 0.0f) {
+                continue; // no live heater reading for this unit yet
+            }
+
+            EnvironmentData env;
+            env.temperature_c = temp;
+            if (auto h = sensor_humidity_.find(sensor); h != sensor_humidity_.end()) {
+                env.humidity_pct = h->second;
+                env.has_humidity = true;
+            }
             unit.environment = env;
         }
     }
@@ -1193,76 +1218,128 @@ void AmsBackendHappyHare::query_selector_type_from_config() {
 // ============================================================================
 
 bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& params) {
-    // Determine which Moonraker status key to look up.
-    std::string status_key;
+    // Gather every configured heater object: the scalar primary (shared enclosure)
+    // plus any per-gate heaters (EMU). The primary also drives the global dryer
+    // model; all of them populate heater_temp_ for per-unit resolution.
+    std::vector<std::string> heaters;
+    std::string primary;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (filament_heater_name_.empty()) {
-            return false;
+        if (!filament_heater_name_.empty()) {
+            primary = filament_heater_name_;
+            heaters.push_back(filament_heater_name_);
         }
-        // Normalize: ensure the key starts with "heater_generic " as Moonraker uses.
-        if (filament_heater_name_.rfind("heater_generic ", 0) == 0) {
-            status_key = filament_heater_name_;
-        } else {
-            status_key = "heater_generic " + filament_heater_name_;
+        for (const auto& h : filament_heaters_) {
+            if (!h.empty()) heaters.push_back(h);
         }
     }
-
-    auto h_it = params.find(status_key);
-    if (h_it == params.end() || !h_it->is_object()) {
+    if (heaters.empty()) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (auto t = h_it->find("temperature"); t != h_it->end() && t->is_number()) {
-        dryer_info_.current_temp_c = t->get<float>();
+    bool any = false;
+    for (const auto& hname : heaters) {
+        // Normalize: Moonraker keys generic heaters as "heater_generic <name>".
+        const std::string status_key =
+            (hname.rfind("heater_generic ", 0) == 0) ? hname : ("heater_generic " + hname);
+        auto h_it = params.find(status_key);
+        if (h_it == params.end() || !h_it->is_object()) {
+            continue;
+        }
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (auto t = h_it->find("temperature"); t != h_it->end() && t->is_number()) {
+            const float temp = t->get<float>();
+            heater_temp_[hname] = temp;
+            if (hname == primary) dryer_info_.current_temp_c = temp;
+            any = true;
+        }
+        if (auto tg = h_it->find("target"); tg != h_it->end() && tg->is_number()) {
+            if (hname == primary) dryer_info_.target_temp_c = tg->get<float>();
+        }
     }
-    if (auto tg = h_it->find("target"); tg != h_it->end() && tg->is_number()) {
-        dryer_info_.target_temp_c = tg->get<float>();
-    }
-    return true;
+    return any;
 }
 
 bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& params) {
-    std::string env_name;
+    // Gather every configured env sensor: the scalar shared sensor plus any
+    // per-gate sensors (EMU). Each updates sensor_humidity_ keyed by its object
+    // name for per-unit resolution in get_system_info().
+    std::vector<std::string> sensors;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        env_name = environment_sensor_name_;
+        if (!environment_sensor_name_.empty()) sensors.push_back(environment_sensor_name_);
+        for (const auto& s : environment_sensors_) {
+            if (!s.empty()) sensors.push_back(s);
+        }
     }
-    if (env_name.empty()) {
+    if (sensors.empty()) {
         return false;
     }
 
-    // Build the candidate object keys that may carry the humidity field, mirroring
-    // Happy Hare's _get_environment_status(): the configured sensor object itself
-    // (in case it is a humidity chip directly), plus "<chip> <name>" for each
-    // humidity-capable chip, where <name> is the bare second token of the config
-    // value (e.g. "temperature_sensor box" -> "box" -> "htu21d box").
-    std::vector<std::string> candidates;
-    candidates.push_back(env_name);
-    if (auto sp = env_name.find(' '); sp != std::string::npos) {
-        const std::string bare = env_name.substr(sp + 1);
-        if (!bare.empty()) {
-            for (const char* chip : {"bme280", "htu21d", "sht3x", "aht10"}) {
-                candidates.push_back(std::string(chip) + " " + bare);
+    bool any = false;
+    for (const auto& sname : sensors) {
+        // Candidate object keys carrying the humidity field, mirroring Happy Hare's
+        // _get_environment_status(): the sensor object itself (it may be a humidity
+        // chip directly), plus "<chip> <name>" for each humidity-capable chip, where
+        // <name> is the bare second token (e.g. "temperature_sensor box" -> "box").
+        std::vector<std::string> candidates;
+        candidates.push_back(sname);
+        if (auto sp = sname.find(' '); sp != std::string::npos) {
+            const std::string bare = sname.substr(sp + 1);
+            if (!bare.empty()) {
+                for (const char* chip : {"bme280", "htu21d", "sht3x", "aht10"}) {
+                    candidates.push_back(std::string(chip) + " " + bare);
+                }
+            }
+        }
+        for (const auto& key : candidates) {
+            auto it = params.find(key);
+            if (it == params.end() || !it->is_object()) {
+                continue;
+            }
+            if (auto h = it->find("humidity"); h != it->end() && h->is_number()) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                sensor_humidity_[sname] = h->get<float>();
+                spdlog::trace("[AMS HappyHare] Humidity {:.1f}% for {} (from {})",
+                              sensor_humidity_[sname], sname, key);
+                any = true;
+                break; // first matching chip wins for this sensor
             }
         }
     }
+    return any;
+}
 
-    for (const auto& key : candidates) {
-        auto it = params.find(key);
-        if (it == params.end() || !it->is_object()) {
-            continue;
+// Parse a Happy Hare config-list value (e.g. environment_sensors) into trimmed
+// object names. Moonraker may return it as a JSON array or as a raw
+// comma-separated string, so handle both.
+static std::vector<std::string> parse_hh_config_list(const nlohmann::json& v) {
+    auto trim = [](std::string s) {
+        const auto b = s.find_first_not_of(" \t");
+        const auto e = s.find_last_not_of(" \t");
+        return (b == std::string::npos) ? std::string() : s.substr(b, e - b + 1);
+    };
+    std::vector<std::string> out;
+    if (v.is_array()) {
+        for (const auto& e : v) {
+            if (e.is_string()) {
+                std::string s = trim(e.get<std::string>());
+                if (!s.empty()) out.push_back(std::move(s));
+            }
         }
-        if (auto h = it->find("humidity"); h != it->end() && h->is_number()) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            box_humidity_pct_ = h->get<float>();
-            box_humidity_valid_ = true;
-            spdlog::trace("[AMS HappyHare] Box humidity {:.1f}% from {}", box_humidity_pct_, key);
-            return true;
+    } else if (v.is_string()) {
+        const std::string str = v.get<std::string>();
+        size_t start = 0;
+        while (start <= str.size()) {
+            const size_t comma = str.find(',', start);
+            std::string tok =
+                trim(str.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+            if (!tok.empty()) out.push_back(std::move(tok));
+            if (comma == std::string::npos) break;
+            start = comma + 1;
         }
     }
-    return false;
+    return out;
 }
 
 void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
@@ -1282,6 +1359,28 @@ void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
             std::lock_guard<std::mutex> lock(mutex_);
             environment_sensor_name_ = mmu_machine["environment_sensor"].get<std::string>();
             spdlog::info("[AMS HappyHare] Environment sensor: {}", environment_sensor_name_);
+        }
+        // Per-gate (EMU) form: filament_heaters / environment_sensors are lists with
+        // one entry per gate, mutually exclusive with the scalar form. For multi-MMU
+        // these span all units' gates; get_system_info() maps each unit to its own.
+        if (mmu_machine.contains("filament_heaters")) {
+            auto heaters = parse_hh_config_list(mmu_machine["filament_heaters"]);
+            if (!heaters.empty()) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                filament_heaters_ = std::move(heaters);
+                dryer_info_.supported = true; // per-gate heaters imply a dryer exists
+                spdlog::info("[AMS HappyHare] Per-gate filament heaters: {}",
+                             filament_heaters_.size());
+            }
+        }
+        if (mmu_machine.contains("environment_sensors")) {
+            auto sensors = parse_hh_config_list(mmu_machine["environment_sensors"]);
+            if (!sensors.empty()) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                environment_sensors_ = std::move(sensors);
+                spdlog::info("[AMS HappyHare] Per-gate environment sensors: {}",
+                             environment_sensors_.size());
+            }
         }
     }
 
