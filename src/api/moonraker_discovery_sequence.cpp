@@ -938,8 +938,11 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     }
 
     // All discovered sensors. temperature_fan also lives in fans and is
-    // overwritten in the fans loop below with the union of fields.
-    static const json temp_sensor_fields = json::array({"temperature"});
+    // overwritten in the fans loop below with the union of fields. "humidity" is
+    // requested for every sensor — Moonraker simply omits it for sensors that
+    // don't report it (temperature-only), and it carries box humidity for the
+    // bme280/htu21d/sht3x chips a Happy Hare filament dryer reads.
+    static const json temp_sensor_fields = json::array({"temperature", "humidity"});
     for (const auto& sensor : sensors) {
         subscription_objects[sensor] = temp_sensor_fields;
     }
@@ -1401,6 +1404,14 @@ void MoonrakerDiscoverySequence::parse_objects(const json& objects) {
         }
         // Read-only temperature sensors
         else if (name.rfind("temperature_sensor ", 0) == 0) {
+            sensors_.push_back(name);
+        }
+        // Humidity-capable sensor chips. Happy Hare's filament dryer reads box
+        // humidity from these directly (mmu_environment_manager ENV_SENSOR_CHIPS).
+        // Classified from objects.list, so only existing objects are subscribed;
+        // the humidity field is added to the sensor subscription below.
+        else if (name.rfind("bme280 ", 0) == 0 || name.rfind("htu21d ", 0) == 0 ||
+                 name.rfind("sht3x ", 0) == 0 || name.rfind("aht10 ", 0) == 0) {
             sensors_.push_back(name);
         }
         // Temperature-controlled fans (also act as sensors)

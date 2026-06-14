@@ -133,14 +133,13 @@ AmsSystemInfo AmsBackendHappyHare::get_system_info() const {
     // AMS panel environment indicator (heat-waves icon, live temp) and the dryer
     // overlay show a reading. Happy Hare boxes (e.g. QIDI Box) expose box temp via
     // the filament_heater heater_generic object, parsed into dryer_info_. Humidity
-    // has no standard printer-object source here — the value the MMU_HEATER macro
-    // prints is gcode-console-only — so we report temperature and mark humidity
-    // unavailable (has_humidity = false hides the humidity readout).
+    // comes from the environment_sensor chip (see apply_environment_sensor_status)
+    // when present; has_humidity = false hides the readout if no sensor reports it.
     if (dryer_info_.supported && dryer_info_.current_temp_c > 0.0f) {
         EnvironmentData env;
         env.temperature_c = dryer_info_.current_temp_c;
-        env.humidity_pct = 0.0f;
-        env.has_humidity = false;
+        env.humidity_pct = box_humidity_valid_ ? box_humidity_pct_ : 0.0f;
+        env.has_humidity = box_humidity_valid_;
         for (auto& unit : info.units) {
             unit.environment = env;
         }
@@ -279,10 +278,13 @@ void AmsBackendHappyHare::handle_status_update(const nlohmann::json& notificatio
     // Moonraker sends heater updates as sibling keys in the same notification.
     const bool heater_updated = apply_filament_heater_status(params);
 
+    // Parse box humidity from the environment sensor chip (sibling key too).
+    const bool humidity_updated = apply_environment_sensor_status(params);
+
     // Only re-pump downstream sync when this frame actually carried AMS-relevant
     // data; notify_status_update fires for every Klipper object (toolhead, temps,
     // ...), so an unconditional emit here would be a per-frame event storm.
-    if (mmu_present || heater_updated) {
+    if (mmu_present || heater_updated || humidity_updated) {
         emit_event(EVENT_STATE_CHANGED);
     }
 }
@@ -1221,6 +1223,48 @@ bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& par
     return true;
 }
 
+bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& params) {
+    std::string env_name;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        env_name = environment_sensor_name_;
+    }
+    if (env_name.empty()) {
+        return false;
+    }
+
+    // Build the candidate object keys that may carry the humidity field, mirroring
+    // Happy Hare's _get_environment_status(): the configured sensor object itself
+    // (in case it is a humidity chip directly), plus "<chip> <name>" for each
+    // humidity-capable chip, where <name> is the bare second token of the config
+    // value (e.g. "temperature_sensor box" -> "box" -> "htu21d box").
+    std::vector<std::string> candidates;
+    candidates.push_back(env_name);
+    if (auto sp = env_name.find(' '); sp != std::string::npos) {
+        const std::string bare = env_name.substr(sp + 1);
+        if (!bare.empty()) {
+            for (const char* chip : {"bme280", "htu21d", "sht3x", "aht10"}) {
+                candidates.push_back(std::string(chip) + " " + bare);
+            }
+        }
+    }
+
+    for (const auto& key : candidates) {
+        auto it = params.find(key);
+        if (it == params.end() || !it->is_object()) {
+            continue;
+        }
+        if (auto h = it->find("humidity"); h != it->end() && h->is_number()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            box_humidity_pct_ = h->get<float>();
+            box_humidity_valid_ = true;
+            spdlog::trace("[AMS HappyHare] Box humidity {:.1f}% from {}", box_humidity_pct_, key);
+            return true;
+        }
+    }
+    return false;
+}
+
 void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
     // Parse [mmu_machine] filament_heater — the Klipper heater_generic object name.
     if (settings.contains("mmu_machine") && settings["mmu_machine"].is_object()) {
@@ -1230,6 +1274,14 @@ void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
             std::lock_guard<std::mutex> lock(mutex_);
             filament_heater_name_ = mmu_machine["filament_heater"].get<std::string>();
             spdlog::info("[AMS HappyHare] Filament heater: {}", filament_heater_name_);
+        }
+        // Parse [mmu_machine] environment_sensor — the Klipper object (e.g.
+        // "temperature_sensor box") whose backing humidity chip reports box %RH.
+        if (mmu_machine.contains("environment_sensor") &&
+            mmu_machine["environment_sensor"].is_string()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            environment_sensor_name_ = mmu_machine["environment_sensor"].get<std::string>();
+            spdlog::info("[AMS HappyHare] Environment sensor: {}", environment_sensor_name_);
         }
     }
 
