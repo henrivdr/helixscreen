@@ -35,4 +35,19 @@ int wizard_next_step(int current, const WizardSkipFlags& skips);
 /// Returns the previous valid internal step, or -1 if at beginning.
 int wizard_prev_step(int current, const WizardSkipFlags& skips);
 
+/// Preset-driven wizard skip policy, derived purely from whether a complete
+/// preset is applied and how many printers are configured. Single source of
+/// truth so the LVGL wizard and tests agree, and so the two concerns can't drift:
+///   - skip_hardware: the preset already configures heater/fan/AMS/LED/filament/
+///     input-shaper, so those pickers are redundant. True for ANY printer with a
+///     preset — the first one or a later one added via the printer manager.
+///   - first_run: additionally skip the summary and show the one-time telemetry
+///     opt-in. First configured printer only — telemetry is a global, one-time
+///     prompt, so it must not re-fire when adding subsequent printers.
+struct WizardPresetPlan {
+    bool skip_hardware = false;
+    bool first_run = false;
+};
+WizardPresetPlan wizard_preset_plan(bool has_preset, int printer_count);
+
 } // namespace helix

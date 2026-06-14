@@ -78,4 +78,16 @@ int wizard_prev_step(int current, const WizardSkipFlags& skips) {
     return -1; // At beginning
 }
 
+WizardPresetPlan wizard_preset_plan(bool has_preset, int printer_count) {
+    WizardPresetPlan plan;
+    // A complete preset configures the hardware for any printer it applies to,
+    // so the hardware-pick steps are redundant regardless of printer order.
+    plan.skip_hardware = has_preset;
+    // The first-run fast path additionally skips the summary and shows the
+    // one-time telemetry opt-in — gated to the initial printer so telemetry
+    // never re-prompts when adding subsequent printers.
+    plan.first_run = has_preset && printer_count <= 1;
+    return plan;
+}
+
 } // namespace helix

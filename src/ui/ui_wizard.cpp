@@ -125,16 +125,25 @@ static bool skips_precalculated = false;
 // Preset mode: skip hardware steps and show telemetry instead of summary
 static bool preset_mode = false;
 
-/// Decide whether the wizard should run in preset mode for the active config.
-/// Preset mode requires (a) a preset name set in config, and (b) this is the
-/// initial-printer setup — secondary printers added via the printer manager
-/// always go through the full hardware-pick flow regardless of preset.
+/// Preset-driven skip plan for the active config. Thin Config-aware wrapper over
+/// the pure helix::wizard_preset_plan() policy (tested in test_wizard_step_logic)
+/// so the LVGL wizard and the unit tests share one source of truth.
+static helix::WizardPresetPlan wizard_preset_plan_for(Config* cfg) {
+    if (!cfg)
+        return {};
+    return helix::wizard_preset_plan(cfg->has_preset(),
+                                     static_cast<int>(cfg->get_printer_ids().size()));
+}
+
+/// "Preset mode" is the first-run fast path: a preset is applied AND this is the
+/// initial-printer setup, so the wizard skips the hardware pickers and the
+/// summary and shows the one-time telemetry opt-in. Subsequent printers still
+/// skip the (preset-covered) hardware steps — see ui_wizard_precalculate_skips()
+/// — but are not "preset mode" because telemetry must not re-fire.
 /// All three sites that update preset_mode (init_subjects, on_next_clicked,
 /// precalculate_skips) call this single helper to avoid polarity drift.
 static bool wizard_preset_mode_eligible(Config* cfg) {
-    if (!cfg)
-        return false;
-    return cfg->has_preset() && cfg->get_printer_ids().size() <= 1;
+    return wizard_preset_plan_for(cfg).first_run;
 }
 
 // Guard against rapid double-clicks during navigation
@@ -301,15 +310,18 @@ static bool wizard_subjects_initialized = false;
 void ui_wizard_init_subjects() {
     spdlog::debug("[Wizard] Initializing subjects");
 
-    // Check if running in preset mode (pre-configured printer package).
-    // Single source of truth for the eligibility condition lives in
-    // wizard_preset_mode_eligible() — the three refresh sites all share it.
+    // Check the preset-driven skip plan (pre-configured printer package).
+    // Single source of truth is wizard_preset_plan_for() — the three refresh
+    // sites all share it.
     auto* cfg = Config::get_instance();
-    preset_mode = wizard_preset_mode_eligible(cfg);
+    helix::WizardPresetPlan preset_plan = wizard_preset_plan_for(cfg);
+    preset_mode = preset_plan.first_run;
     if (preset_mode) {
         spdlog::info("[Wizard] Preset mode active (preset: {})", cfg->get_preset());
-    } else if (cfg && cfg->has_preset() && cfg->get_printer_ids().size() > 1) {
-        spdlog::info("[Wizard] Disabled preset mode for secondary printer setup");
+    } else if (preset_plan.skip_hardware) {
+        spdlog::info("[Wizard] Subsequent printer with preset '{}': hardware steps will be "
+                     "skipped, summary shown",
+                     cfg->get_preset());
     }
 
     // Initialize subjects with defaults using managed macros for RAII cleanup
@@ -704,14 +716,15 @@ static void ui_wizard_precalculate_skips() {
     // (in init_subjects) is stale if a fresh-install detection just landed a preset
     // file. Without this re-read the wizard runs every hardware step on a known
     // printer.
-    bool fresh_preset_mode = wizard_preset_mode_eligible(Config::get_instance());
-    if (fresh_preset_mode != preset_mode) {
-        spdlog::info("[Wizard] preset_mode refreshed: {} -> {}", preset_mode, fresh_preset_mode);
-        preset_mode = fresh_preset_mode;
+    helix::WizardPresetPlan plan = wizard_preset_plan_for(Config::get_instance());
+    if (plan.first_run != preset_mode) {
+        spdlog::info("[Wizard] preset_mode refreshed: {} -> {}", preset_mode, plan.first_run);
+        preset_mode = plan.first_run;
     }
 
-    if (preset_mode) {
-        // Preset mode: skip all hardware steps and summary, show telemetry
+    if (plan.skip_hardware) {
+        // A complete preset configures the hardware — skip the redundant pickers
+        // for ANY printer it applies to (first or subsequent).
         printer_identify_step_skipped = true;
         heater_select_step_skipped = true;
         fan_select_step_skipped = true;
@@ -719,10 +732,20 @@ static void ui_wizard_precalculate_skips() {
         led_step_skipped = true;
         filament_step_skipped = true;
         input_shaper_step_skipped = true;
-        summary_step_skipped = true;
-        telemetry_step_skipped = false; // Enable telemetry step
-        spdlog::info("[Wizard] Preset mode: skipping all hardware steps and summary, "
-                     "showing telemetry");
+
+        if (plan.first_run) {
+            // First-run fast path: also skip the summary and show the one-time
+            // telemetry opt-in instead.
+            summary_step_skipped = true;
+            telemetry_step_skipped = false;
+            spdlog::info("[Wizard] Preset mode (first run): skipping hardware steps and "
+                         "summary, showing telemetry");
+        } else {
+            // Subsequent printer: keep the summary as a confirmation, leave
+            // telemetry skipped (it is a one-time global prompt).
+            spdlog::info("[Wizard] Preset applied for subsequent printer: skipping hardware "
+                         "steps, showing summary");
+        }
     } else {
         // Touch calibration (step 0) and language (step 1) handled at navigation time
 
