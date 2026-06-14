@@ -38,6 +38,13 @@ class PrinterStateTestAccess {
     static PrinterFanState& get_fan_state(PrinterState& ps) {
         return ps.fan_state_;
     }
+
+    /// Inject a synthetic pre-print option set (bypasses the printer DB) so tests
+    /// can exercise option configurations that no shipped printer declares yet —
+    /// e.g. a bed_mesh option with a custom adaptive_param name.
+    static void set_option_set(PrinterState& ps, PrePrintOptionSet set) {
+        ps.pre_print_option_set_ = std::move(set);
+    }
 };
 
 } // namespace helix

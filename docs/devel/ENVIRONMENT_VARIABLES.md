@@ -694,6 +694,44 @@ HELIX_AMS_GATES=8 ./build/bin/helix-screen --test
 HELIX_AMS_GATES=16 ./build/bin/helix-screen --test
 ```
 
+### `HELIX_MOCK_AUTO_PRINT`
+
+Boot the mock printer straight into an active print so print-gated features can be exercised under `--test` without manually driving a print-start flow.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` / any non-empty, non-`0` value to enable |
+| **Default** | unset (no auto-print) |
+| **File** | `src/application/moonraker_manager.cpp` (sets `mock_auto_start_print`); consumed in `src/api/moonraker_client_mock.cpp` |
+
+When set truthy, the mock calls its normal `start_print_internal()` on connect (the same path `--print-status` uses), so `print_stats.state` becomes `printing`. Uses `--gcode-file` if given, otherwise the default test gcode. Useful for exercising any UI that depends on an active print.
+
+```bash
+HELIX_MOCK_AUTO_PRINT=1 ./build/bin/helix-screen --test -vv
+```
+
+#### Seeing the Adaptive Bed Mesh toggle
+
+Adaptive bed mesh is a property of the **single** Bed Mesh pre-print option (on a
+print file's detail view), not a separate row and not behind an active print.
+When the printer's `pre_print_options.bed_mesh` entry declares an `adaptive_param`,
+the firmware exposes `[exclude_object]`, and there is no custom
+`calibration.bed_mesh_gcode` template, the one bed-mesh toggle is **relabeled**
+from "Auto Bed Mesh" to **"Adaptive Bed Mesh"**. The default Voron 2.4 mock has
+**no** pre-print options, so use the FlashForge AD5M mock (which ships
+`pre_print_options` incl. `bed_mesh` with `adaptive_param: "ADAPTIVE"`, and is also
+the load-cell-probe demo printer):
+
+```bash
+HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -vv
+```
+
+Then open a print file, tap a file to reach its detail view, and look in the
+**PRINT OPTIONS** card: the bed-mesh row reads **"Adaptive Bed Mesh"**. Enabling
+it makes the print-start emit `SKIP_LEVELING=0 ADAPTIVE=1` on the `START_PRINT`
+invocation. On a non-adaptive printer the same row reads "Auto Bed Mesh" and
+behaves exactly as before.
+
 ### `HELIX_MOCK_AMS`
 
 Select the mock AMS topology/type.

@@ -238,6 +238,7 @@ class ProbeSensorManager : public ISensorManager {
     void update_subjects_on_main_thread();
 
     friend class ProbeSensorManagerTestAccess;
+    friend class ProbeLoadCellTestAccess;
 
   private:
     ProbeSensorManager();

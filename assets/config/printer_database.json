@@ -104,7 +104,9 @@
             "param_name": "SKIP_LEVELING",
             "enable_value": "0",
             "skip_value": "1",
-            "default_value": "0"
+            "default_value": "0",
+            "adaptive_param": "ADAPTIVE",
+            "adaptive_value": "1"
           }
         ]
       }
@@ -210,7 +212,9 @@
             "param_name": "SKIP_LEVELING",
             "enable_value": "0",
             "skip_value": "1",
-            "default_value": "0"
+            "default_value": "0",
+            "adaptive_param": "ADAPTIVE",
+            "adaptive_value": "1"
           }
         ]
       }
@@ -322,7 +326,9 @@
             "param_name": "SKIP_LEVELING",
             "enable_value": "0",
             "skip_value": "1",
-            "default_value": "0"
+            "default_value": "0",
+            "adaptive_param": "ADAPTIVE",
+            "adaptive_value": "1"
           }
         ]
       }
@@ -449,7 +455,9 @@
             "param_name": "SKIP_LEVELING",
             "enable_value": "0",
             "skip_value": "1",
-            "default_value": "0"
+            "default_value": "0",
+            "adaptive_param": "ADAPTIVE",
+            "adaptive_value": "1"
           }
         ]
       }

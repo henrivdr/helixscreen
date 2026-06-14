@@ -54,6 +54,18 @@ struct PrePrintStrategyMacroParam {
     std::string enable_value;  ///< Value when toggle is ON  (e.g. "1")
     std::string skip_value;    ///< Value when toggle is OFF (e.g. "0")
     std::string default_value; ///< Optional default if option is absent from selection
+
+    /// Optional adaptive-mesh modifier (bed_mesh option only). When non-empty,
+    /// the printer's START_PRINT macro is known to forward this parameter into
+    /// its internal BED_MESH_CALIBRATE (e.g. "ADAPTIVE"). Its PRESENCE is the
+    /// "forwarding signal": adaptive mode is only offered when set, so it can
+    /// never be a silent no-op. The token name is per printer (ADAPTIVE /
+    /// ADAPTIVE_MESH / ...), exactly like param_name above. When the single
+    /// bed_mesh toggle is "Adaptive Bed Mesh" (see PrePrintOption::adaptive_active)
+    /// and ENABLED, the print-start emits `<adaptive_param>=<adaptive_value>`
+    /// alongside the enable param. adaptive_value defaults to "1".
+    std::string adaptive_param;          ///< Adaptive param name (empty = unsupported)
+    std::string adaptive_value = "1";    ///< Value emitted when adaptive is ON
 };
 
 /// `PreStartGcode`: a gcode line emitted before the start macro. The literal
@@ -103,6 +115,15 @@ struct PrePrintOption {
 
     PrePrintStrategyKind strategy_kind = PrePrintStrategyKind::MacroParam;
     PrePrintStrategyPayload strategy{PrePrintStrategyMacroParam{}};
+
+    /// Runtime flag (NOT parsed from JSON), set by PrinterState::apply_dynamic_options()
+    /// for the bed_mesh option when adaptive meshing is available for the connected
+    /// printer: the option declares a MacroParam `adaptive_param`, the firmware
+    /// exposes [exclude_object], and no custom calibration.bed_mesh_gcode template
+    /// is in use. When true, the SINGLE bed_mesh toggle is relabeled "Adaptive Bed
+    /// Mesh" and, when ENABLED, the print-start params include the adaptive token
+    /// (e.g. `ADAPTIVE=1`) alongside the enable param. No separate sub-toggle.
+    bool adaptive_active = false;
 };
 
 /**

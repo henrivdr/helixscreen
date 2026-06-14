@@ -861,6 +861,28 @@ PrintPreparationManager::collect_macro_skip_params() const {
             // printer doesn't support the op and skip params shouldn't be
             // appended.
             if (get_option_state(opt.id) != PrePrintOptionState::DISABLED) {
+                // Adaptive bed mesh: the bed_mesh toggle is relabeled "Adaptive
+                // Bed Mesh" when adaptive_active (set by apply_dynamic_options:
+                // adaptive_param present + exclude_object + no custom template).
+                // When the toggle is ENABLED, emit the adaptive token (e.g.
+                // ADAPTIVE=1) ALONGSIDE the enable param so START_PRINT forwards
+                // it into BED_MESH_CALIBRATE. Gated on ENABLED — never on skip.
+                if (opt.adaptive_active && opt.strategy_kind == PrePrintStrategyKind::MacroParam &&
+                    get_option_state(opt.id) == PrePrintOptionState::ENABLED) {
+                    const auto* macro = std::get_if<PrePrintStrategyMacroParam>(&opt.strategy);
+                    if (macro && !macro->adaptive_param.empty()) {
+                        // Emit BOTH the enable param and the adaptive token, e.g.
+                        // SKIP_LEVELING=0 ADAPTIVE=1. The enable param is normally
+                        // omitted on ENABLED (macro default), but adaptive meshing
+                        // must explicitly run the mesh, so make it unambiguous.
+                        skip_params.emplace_back(macro->param_name, macro->enable_value);
+                        skip_params.emplace_back(macro->adaptive_param, macro->adaptive_value);
+                        spdlog::debug("[PrintPreparationManager] Adaptive bed mesh: {}={} {}={} "
+                                      "(id={})",
+                                      macro->param_name, macro->enable_value, macro->adaptive_param,
+                                      macro->adaptive_value, opt.id);
+                    }
+                }
                 // Even when ENABLED/NOT_APPLICABLE, the DB has spoken for this
                 // id — don't let macro analysis emit a duplicate param under
                 // the assumption the DB didn't cover it.

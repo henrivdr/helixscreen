@@ -96,7 +96,9 @@ std::string PrePrintOptionsRenderer::label_for(const PrePrintOption& opt) {
     // mechanical/quality toggles. Phase 4 should replace these with proper
     // `label_key` entries in printer_database.json.
     if (opt.id == "bed_mesh") {
-        return std::string(lv_tr("Auto Bed Mesh"));
+        // Single toggle relabels when adaptive meshing is available for this
+        // printer (set by PrinterState::apply_dynamic_options). No separate row.
+        return std::string(lv_tr(opt.adaptive_active ? "Adaptive Bed Mesh" : "Auto Bed Mesh"));
     }
     if (opt.id == "qgl") {
         return std::string(lv_tr("Quad Gantry Level"));
