@@ -1465,6 +1465,20 @@ void NavigationManager::push_overlay(lv_obj_t* overlay_panel, bool hide_previous
     // Always queue - this is the safest pattern for overlay operations
     // which can be triggered from various contexts (events, observers, etc.)
     helix::ui::queue_update([overlay_panel, hide_previous]() {
+        // The captured overlay_panel is a raw lv_obj_t* — it can be destroyed
+        // between queue time and now (rapid push→teardown, e.g. a print that
+        // fails Klipper config validation and immediately tears its status
+        // overlay back down before this deferred push drains). Dereferencing it
+        // below (lv_obj_get_screen) would be a use-after-free. lv_obj_is_valid
+        // searches the display tree for the pointer instead of dereferencing
+        // it, so it is safe to call on a freed pointer. (bundle MBUX7WUN)
+        if (!lv_obj_is_valid(overlay_panel)) {
+            spdlog::warn("[NavigationManager] push_overlay: target {} destroyed before "
+                         "deferred push ran; skipping",
+                         (void*)overlay_panel);
+            return;
+        }
+
         auto& mgr = NavigationManager::instance();
 
         // Check for duplicate push
@@ -1594,6 +1608,15 @@ void NavigationManager::push_overlay_zoom_from(lv_obj_t* overlay_panel, lv_area_
 
     // Queue the push operation (same pattern as push_overlay)
     helix::ui::queue_update([overlay_panel, source_rect]() {
+        // See push_overlay() above: the captured raw pointer can be freed
+        // before this deferred lambda drains. Bail before any deref. (MBUX7WUN)
+        if (!lv_obj_is_valid(overlay_panel)) {
+            spdlog::warn("[NavigationManager] push_overlay_zoom_from: target {} destroyed "
+                         "before deferred push ran; skipping",
+                         (void*)overlay_panel);
+            return;
+        }
+
         auto& mgr = NavigationManager::instance();
 
         // Store source rect for reverse animation on go_back (must be on UI thread)

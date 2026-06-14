@@ -434,6 +434,62 @@ TEST_CASE_METHOD(NavbarIconTestFixture,
 }
 
 // ============================================================================
+// Overlay freed BEFORE the deferred push drains (bundle MBUX7WUN)
+// ============================================================================
+// push_overlay() queues its whole body via queue_update, capturing the raw
+// overlay_panel pointer. If the overlay is destroyed between the queue call and
+// the drain — e.g. a print that fails Klipper config validation
+// ('sense_resistor' not valid in 'tmc2240 stepper_z') and immediately tears its
+// Print Status overlay back down — the deferred lambda dereferences a freed
+// pointer at lv_obj_get_screen(overlay_panel), SIGSEGV with a wild fault_addr.
+//
+// This differs from the ZW6ATWSL self-heal above: there the overlay was already
+// ON panel_stack_ when deleted; here it is deleted while the push is still
+// pending, so it never reached the stack and the delete-hook scrub does not
+// apply. The fix is an lv_obj_is_valid(overlay_panel) guard at the top of the
+// deferred lambda — lv_obj_is_valid searches the display tree rather than
+// dereferencing, so it is safe on a freed pointer.
+
+TEST_CASE_METHOD(NavbarIconTestFixture,
+                 "push_overlay skips a target freed before the deferred push drains",
+                 "[navigation][overlay][l081]") {
+    auto& nav = NavigationManager::instance();
+
+    // Seed a base main panel so push_overlay's is_first_overlay logic has a
+    // non-empty base stack (matches production: slot 0 holds the active panel).
+    lv_obj_t* base = lv_obj_create(test_screen());
+    REQUIRE(base != nullptr);
+    lv_obj_t* panels[UI_PANEL_COUNT] = {nullptr};
+    panels[static_cast<int>(PanelId::Home)] = base;
+    nav.set_panels(panels);
+    REQUIRE(nav.is_panel_in_stack(base) == true);
+
+    // Register + push an overlay, but do NOT drain yet — the push lambda is now
+    // pending in the UpdateQueue with a raw pointer captured by value.
+    MockPanelLifecycle mock_panel;
+    lv_obj_t* overlay = lv_obj_create(test_screen());
+    REQUIRE(overlay != nullptr);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    nav.register_overlay_instance(overlay, &mock_panel);
+    nav.push_overlay(overlay);
+
+    // Destroy the overlay BEFORE the deferred push runs — this is the
+    // push→teardown race from the bundle.
+    lv_obj_delete(overlay);
+
+    // Draining must not crash on the freed pointer, and the dead overlay must
+    // not be admitted to the stack. Without the lv_obj_is_valid guard the lambda
+    // calls lv_obj_get_screen on freed memory (SIGSEGV under ASAN) or pushes the
+    // dangling pointer onto panel_stack_ (is_panel_in_stack would be true).
+    REQUIRE_NOTHROW(
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance()));
+    REQUIRE(nav.is_panel_in_stack(overlay) == false);
+    REQUIRE(nav.is_panel_in_stack(base) == true); // base untouched
+
+    lv_obj_delete(base);
+}
+
+// ============================================================================
 // push_overlay onto an EMPTY stack must not deref panel_stack_.back() (UB)
 // ============================================================================
 // push_overlay's "deactivate previous overlay" else-branch derefs
