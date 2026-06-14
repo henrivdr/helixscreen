@@ -63,8 +63,6 @@ StepContext build_context() {
     bool has_preset = c.config && c.config->has_preset();
     c.preset = helix::wizard_preset_plan(has_preset, n);
     c.is_subsequent_printer = n > 1;
-    c.is_fbdev = false;            // steps that need it delegate to their own legacy check
-    c.force_language_step = false; // same
     return c;
 }
 

@@ -34,8 +34,9 @@ struct StepContext {
     MoonrakerAPI* api = nullptr;
     WizardPresetPlan preset{}; // {skip_hardware, first_run}
     bool is_subsequent_printer = false;
-    bool is_fbdev = false;
-    bool force_language_step = false;
+    // Note: touch-calibration's fbdev check and language's force-step flag live in
+    // those steps' own legacy should_skip() (they read process-static state), so
+    // they intentionally do NOT need fields here.
 };
 
 class Step {

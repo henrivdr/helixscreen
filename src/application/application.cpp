@@ -1970,6 +1970,13 @@ bool Application::run_wizard() {
     }
 
     // initial_step is a raw CLI/config int (--wizard-step) — a genuine int seam.
+    // Clamp to a valid StepId range so an out-of-range debug value lands on a real
+    // step (the last one) instead of a blank wizard from a bogus enum cast.
+    if (initial_step < 0 || initial_step >= helix::wizard::kStepCount) {
+        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping",
+                     initial_step, helix::wizard::kStepCount);
+        initial_step = (initial_step < 0) ? 0 : helix::wizard::kStepCount - 1;
+    }
     // Map it to a StepId for the registry-driven wizard.
     ui_wizard_navigate_to_step(static_cast<helix::wizard::StepId>(initial_step));
 
