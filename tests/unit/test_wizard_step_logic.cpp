@@ -3,6 +3,8 @@
 
 #include "wizard_step.h"
 #include "../../src/ui/wizard_step_registry.h"
+#include "static_panel_registry.h"
+#include <string>
 
 #include "../catch_amalgamated.hpp"
 
@@ -308,4 +310,24 @@ TEST_CASE("registry: first-run preset printer skips summary, shows telemetry",
     auto ctx = preset_ctx(/*has_preset=*/true, /*printers=*/1);
     REQUIRE(helix::wizard::step_by_id(StepId::Summary)->should_skip(ctx));
     REQUIRE_FALSE(helix::wizard::step_by_id(StepId::Telemetry)->should_skip(ctx));
+}
+
+TEST_CASE("registry: step_by_id stays valid after panel teardown (3rd-printer UAF)",
+          "[wizard][step_logic][regression]") {
+    // First wizard session: fetch a step and exercise its vtable.
+    helix::wizard::Step* before = helix::wizard::step_by_id(StepId::HeaterSelect);
+    REQUIRE(before != nullptr);
+    REQUIRE(before->id() == StepId::HeaterSelect);
+
+    // Simulate the wizard tearing down between printer adds: StaticPanelRegistry
+    // frees the lazily-created step singletons. The old registry cached raw Step*
+    // in a static vector, so the NEXT fetch returned dangling pointers and a
+    // virtual call crashed (SIGSEGV adding a 3rd printer). The registry must now
+    // hand back a freshly recreated, live step.
+    StaticPanelRegistry::instance().destroy_all();
+
+    helix::wizard::Step* after = helix::wizard::step_by_id(StepId::HeaterSelect);
+    REQUIRE(after != nullptr);
+    REQUIRE(after->id() == StepId::HeaterSelect); // virtual call on a live object
+    REQUIRE(std::string(after->component_name()) == "wizard_heater_select");
 }

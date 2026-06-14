@@ -10,8 +10,11 @@ namespace helix {
 namespace wizard {
 
 /// Ordered list of all wizard steps, indexed by StepId (0..kStepCount-1).
-/// Built lazily on first call and cached for the process lifetime.
-const std::vector<Step*>& steps();
+/// Returned BY VALUE and rebuilt every call — the step singletons can be
+/// destroyed and recreated by StaticPanelRegistry across wizard sessions, so the
+/// pointers must NOT be cached (a stale cache dangled and crashed on a 3rd
+/// printer add). The get_wizard_*_step() accessors recreate on demand.
+std::vector<Step*> steps();
 
 /// Step for the given id, or nullptr if the id is out of range.
 Step* step_by_id(StepId id);
