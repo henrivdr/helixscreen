@@ -77,10 +77,9 @@
   <translation tag="AFC recovery failed" ru="Восстановление AFC не удалось"/>
   <translation tag="AFC reset complete" ru="Сброс AFC завершён"/>
   <translation tag="AFC reset failed" ru="Ошибка сброса AFC"/>
+  <translation tag="AFC retracts filament from the toolhead at end of print" ru="AFC выгружает филамент из печатающей головки по завершении печати"/>
   <translation tag="ALL DEVICES" ru="ВСЕ УСТРОЙСТВА"/>
   <translation tag="AMS" ru="AMS"/>
-  <translation tag="AMS is busy: {}" ru="AMS занят: {}"/>
-  <translation tag="AMS not available" ru="AMS недоступен"/>
   <translation tag="API not available" ru="API недоступен"/>
   <translation tag="APPEARANCE" ru="ВНЕШНИЙ ВИД"/>
   <translation tag="AUTO FANS" ru="АВТО ВЕНТИЛЯТОРЫ"/>
@@ -103,6 +102,7 @@
   <translation tag="Actions" ru="Действия"/>
   <translation tag="Active" ru="Активно"/>
   <translation tag="Active Spool" ru="Активная катушка"/>
+  <translation tag="Adaptive Bed Mesh" ru="Адаптивная сетка стола"/>
   <translation tag="Add" ru="Добавить"/>
   <translation tag="Add Filament" ru="Добавить филамент"/>
   <translation tag="Add Hidden Network" ru="Добавить скрытую сеть"/>
@@ -1051,9 +1051,11 @@
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." ru="Перемещает печатающую головку для измерения частот вибрации по каждой оси. Занимает 2-3 минуты. Принтер будет шуметь — это нормально."/>
   <translation tag="Multi-Filament" ru="Мульти-филамент"/>
   <translation tag="Multi-Filament Overview" ru="Обзор мульти-филамента"/>
+  <translation tag="Multi-Filament System" ru="Мультифиламентная система"/>
+  <translation tag="Multi-Filament System Detected" ru="Обнаружена мультифиламентная система"/>
   <translation tag="Multi-Filament System Management" ru="Управление мульти-филаментной системой"/>
-  <translation tag="Multi-Material" ru="Мульти-материал"/>
-  <translation tag="Multi-Material System Detected" ru="Обнаружена мульти-материальная система"/>
+  <translation tag="Multi-Filament System is busy: {}" ru="Мультифиламентная система занята: {}"/>
+  <translation tag="Multi-Filament System not available" ru="Мультифиламентная система недоступна"/>
   <translation tag="Must home axes first" ru="Сначала необходимо запарковать оси"/>
   <translation tag="My Custom Theme" ru="Моя тема"/>
   <translation tag="My Panel" ru="Моя панель"/>
@@ -1079,9 +1081,6 @@
   <translation tag="New profile name" ru="Новое имя профиля"/>
   <translation tag="Next" ru="Далее"/>
   <translation tag="Niimbot (Bluetooth)" ru="Niimbot (Bluetooth)"/>
-  <translation tag="No AMS connected" ru="AMS не подключена"/>
-  <translation tag="No AMS system connected" ru="AMS-система не подключена"/>
-  <translation tag="No AMS system connected." ru="AMS-система не подключена."/>
   <translation tag="No Bluetooth printer selected — pick one in settings" ru="Bluetooth-принтер не выбран — выберите его в настройках"/>
   <translation tag="No Bluetooth printers found" ru="Bluetooth-принтеры не найдены"/>
   <translation tag="No Camera" ru="Нет камеры"/>
@@ -1090,6 +1089,8 @@
   <translation tag="No LED macros detected on your printer." ru="На вашем принтере не обнаружены LED-макросы."/>
   <translation tag="No LED macros detected on your printer. Add Klipper macros for LED control first." ru="На вашем принтере не обнаружены LED-макросы. Сначала добавьте макросы Klipper для управления LED."/>
   <translation tag="No Macros Found" ru="Макросы не найдены"/>
+  <translation tag="No Multi-Filament System connected" ru="Мультифиламентная система не подключена"/>
+  <translation tag="No Multi-Filament System connected." ru="Мультифиламентная система не подключена."/>
   <translation tag="No PRINT_START macro found" ru="Макрос PRINT_START не найден"/>
   <translation tag="No Power Devices" ru="Нет устройств питания"/>
   <translation tag="No Spool" ru="Нет катушки"/>
@@ -1332,7 +1333,7 @@
   <translation tag="Printer name" ru="Название принтера"/>
   <translation tag="Printer ready" ru="Принтер готов"/>
   <translation tag="Printers" ru="Принтеры"/>
-  <translation tag="Printers, AMS, fans, sensors, and LEDs" ru="Принтеры, AMS, вентиляторы, датчики и светодиоды"/>
+  <translation tag="Printers, Multi-Filament System, fans, sensors, and LEDs" ru="Принтеры, мультифиламентная система, вентиляторы, датчики и светодиоды"/>
   <translation tag="Printing" ru="Печать"/>
   <translation tag="Printing label..." ru="Печать этикетки..."/>
   <translation tag="Printing test label..." ru="Печать тестовой этикетки..."/>
@@ -1722,7 +1723,7 @@
   <translation tag="TD-1 filament color detection" ru="Определение цвета филамента TD-1"/>
   <translation tag="TEMPERATURE SENSORS" ru="ДАТЧИКИ ТЕМПЕРАТУРЫ"/>
   <translation tag="THEME COLORS" ru="ЦВЕТА ТЕМЫ"/>
-  <translation tag="TOOLS" ru="TOOLS"/>
+  <translation tag="TOOLS" ru="ИНСТРУМЕНТЫ"/>
   <translation tag="TPU" ru="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ru="Занимает 3-5 мин. Не прерывайте."/>
   <translation tag="Tap again to confirm this orientation" ru="Нажмите ещё раз для подтверждения ориентации"/>
@@ -1738,7 +1739,7 @@
   <translation tag="Telemetry queue cleared" ru="Очередь телеметрии очищена"/>
   <translation tag="Temp" ru="Темп."/>
   <translation tag="Temp Compensation" ru="Термокомпенсация"/>
-  <translation tag="Temp °C" ru="Temp °C"/>
+  <translation tag="Temp °C" ru="Темп. °C"/>
   <translation tag="Temperature" ru="Температура"/>
   <translation tag="Temperature Graph Config" ru="Настройка графика температуры"/>
   <translation tag="Temperatures" ru="Температуры"/>
@@ -1749,7 +1750,7 @@
   <translation tag="Test Network" ru="Тест сети"/>
   <translation tag="Test Print" ru="Тестовая печать"/>
   <translation tag="Test Screensaver" ru="Проверить заставку"/>
-  <translation tag="Test Tracker" ru="Test Tracker"/>
+  <translation tag="Test Tracker" ru="Трекер тестов"/>
   <translation tag="Test label printed" ru="Тестовая этикетка напечатана"/>
   <translation tag="Testing rotation: %d\xc2\xb0 (%d/%d) - %ds remaining" ru="Тест поворота: %d\xc2\xb0 (%d/%d) - осталось %ds"/>
   <translation tag="Thanks! Anonymous usage data helps improve HelixScreen." ru="Спасибо! Анонимные данные использования помогают улучшить HelixScreen."/>
@@ -1859,6 +1860,7 @@
   <translation tag="Unloading filament ({}mm)..." ru="Выгрузка филамента ({}мм)..."/>
   <translation tag="Unloading filament..." ru="Выгрузка филамента..."/>
   <translation tag="Unloading... click again to load slot {}" ru="Выгрузка... нажмите ещё раз для загрузки слота {}"/>
+  <translation tag="Unloads After Print" ru="Выгрузка после печати"/>
   <translation tag="Unmapped" ru="Не назначен"/>
   <translation tag="Unretract Extra" ru="Дополнительная подача"/>
   <translation tag="Unretract Speed" ru="Скорость возврата"/>

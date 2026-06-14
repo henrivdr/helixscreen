@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: AFC恢复失败
   AFC reset complete: AFC重置完成
   AFC reset failed: AFC重置失败
+  AFC retracts filament from the toolhead at end of print: AFC 在打印结束时将耗材从工具头退出
   ALL DEVICES: 所有设备
   AMS: AMS
-  'AMS is busy: {}': 'AMS 忙碌中: {}'
-  AMS not available: AMS 不可用
+  'Multi-Filament System is busy: {}': '多耗材系统忙碌中: {}'
+  Multi-Filament System not available: 多耗材系统不可用
   API not available: API 不可用
   APPEARANCE: 外观
   AUTO FANS: 自动风扇
@@ -103,6 +104,7 @@ translations:
   Actions: 操作
   Active: 活动
   Active Spool: 当前料盘
+  Adaptive Bed Mesh: 自适应热床网格
   Add: 添加
   Add Filament: 添加耗材
   Add Hidden Network: 添加隐藏网络
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: 多耗材
   Multi-Filament Overview: 多耗材概览
   Multi-Filament System Management: 多耗材系统管理
-  Multi-Material: 多材料
-  Multi-Material System Detected: 检测到多材料系统
+  Multi-Filament System: 多耗材系统
+  Multi-Filament System Detected: 检测到多耗材系统
   Must home axes first: 请先归位
   My Custom Theme: 我的自定义主题
   My Panel: 我的面板
@@ -1082,9 +1084,8 @@ translations:
   New profile name: 新配置名称
   Next: 下一步
   Niimbot (Bluetooth): Niimbot（蓝牙）
-  No AMS connected: 未连接AMS
-  No AMS system connected: 未连接 AMS 系统
-  No AMS system connected.: 未连接 AMS 系统。
+  No Multi-Filament System connected: 未连接多耗材系统
+  No Multi-Filament System connected.: 未连接多耗材系统。
   No Bluetooth printer selected — pick one in settings: '未选择蓝牙打印机 — 请在设置中选择'
   No Bluetooth printers found: 未找到蓝牙打印机
   No Camera: 无摄像头
@@ -1335,7 +1336,7 @@ translations:
   Printer name: 打印机名称
   Printer ready: 打印机就绪
   Printers: 打印机
-  Printers, AMS, fans, sensors, and LEDs: 打印机、AMS、风扇、传感器和LED
+  Printers, Multi-Filament System, fans, sensors, and LEDs: 打印机、多耗材系统、风扇、传感器和LED
   Printing: 正在打印
   Printing label...: 正在打印标签...
   Printing test label...: 正在打印测试标签...
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: TD-1 耗材颜色检测
   TEMPERATURE SENSORS: 温度传感器
   THEME COLORS: 主题颜色
-  TOOLS: TOOLS
+  TOOLS: 工具
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 需要 3-5 分钟。请勿中断。
   Tap again to confirm this orientation: 再次点击确认此方向
@@ -1742,7 +1743,7 @@ translations:
   Telemetry queue cleared: 遥测队列已清除
   Temp: 温度
   Temp Compensation: 温度补偿
-  Temp °C: Temp °C
+  Temp °C: 温度 °C
   Temperature: 温度
   Temperature Graph Config: 温度图表配置
   Temperatures: 温度
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': '卸载失败: {}'
   Unload macro not configured: 卸载宏未配置
   Unload may still be running — response timed out: 卸载可能仍在运行 — 响应超时
+  Unloads After Print: 打印后卸载
   Unloading: '卸载中'
   Unloading before bypass...: 旁通前正在卸载...
   Unloading filament ({}mm)...: 正在卸载耗材 ({}mm)...

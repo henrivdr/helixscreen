@@ -77,10 +77,9 @@
   <translation tag="AFC recovery failed" de="AFC-Wiederherstellung fehlgeschlagen"/>
   <translation tag="AFC reset complete" de="AFC-Reset abgeschlossen"/>
   <translation tag="AFC reset failed" de="AFC-Reset fehlgeschlagen"/>
+  <translation tag="AFC retracts filament from the toolhead at end of print" de="AFC zieht das Filament am Druckende aus dem Werkzeugkopf zurück"/>
   <translation tag="ALL DEVICES" de="ALLE GERÄTE"/>
   <translation tag="AMS" de="AMS"/>
-  <translation tag="AMS is busy: {}" de="AMS ist beschäftigt: {}"/>
-  <translation tag="AMS not available" de="AMS nicht verfügbar"/>
   <translation tag="API not available" de="API nicht verfügbar"/>
   <translation tag="APPEARANCE" de="ERSCHEINUNGSBILD"/>
   <translation tag="AUTO FANS" de="AUTO-LÜFTER"/>
@@ -103,6 +102,7 @@
   <translation tag="Actions" de="Aktionen"/>
   <translation tag="Active" de="Aktiv"/>
   <translation tag="Active Spool" de="Aktive Spule"/>
+  <translation tag="Adaptive Bed Mesh" de="Adaptives Bettnetz"/>
   <translation tag="Add" de="Hinzufügen"/>
   <translation tag="Add Filament" de="Filament hinzufügen"/>
   <translation tag="Add Hidden Network" de="Verstecktes Netzwerk hinzufügen"/>
@@ -296,7 +296,7 @@
   <translation tag="Cartographer scan calibrate sent — use Z-Offset panel to adjust" de="Cartographer Scan-Kalibrierung gesendet — Z-Offset-Panel zum Anpassen verwenden"/>
   <translation tag="Cartographer touch calibrate sent" de="Cartographer Touch-Kalibrierung gesendet"/>
   <translation tag="Center QR code in frame" de="QR-Code im Rahmen zentrieren"/>
-  <translation tag="Chamb:" de="Chamb:"/>
+  <translation tag="Chamb:" de="Kamm.:"/>
   <translation tag="Chamber" de="Kammer"/>
   <translation tag="Chamber Fan" de="Kammerlüfter"/>
   <translation tag="Chamber Heater" de="Kammerheizung"/>
@@ -1051,9 +1051,11 @@
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." de="Bewegt den Druckkopf, um Vibrationsfrequenzen auf jeder Achse zu messen. Dauert 2-3 Minuten. Der Drucker wird Geräusche machen — das ist normal."/>
   <translation tag="Multi-Filament" de="Multi-Filament"/>
   <translation tag="Multi-Filament Overview" de="Multi-Filament-Übersicht"/>
+  <translation tag="Multi-Filament System" de="Multi-Filament"/>
+  <translation tag="Multi-Filament System Detected" de="Multi-Filament-System erkannt"/>
   <translation tag="Multi-Filament System Management" de="Multi-Filament-Systemverwaltung"/>
-  <translation tag="Multi-Material" de="Multi-Material"/>
-  <translation tag="Multi-Material System Detected" de="Multi-Material-System erkannt"/>
+  <translation tag="Multi-Filament System is busy: {}" de="Multi-Filament-System ist beschäftigt: {}"/>
+  <translation tag="Multi-Filament System not available" de="Multi-Filament-System nicht verfügbar"/>
   <translation tag="Must home axes first" de="Achsen müssen zuerst referenziert werden"/>
   <translation tag="My Custom Theme" de="Mein benutzerdefiniertes Thema"/>
   <translation tag="My Panel" de="Mein Panel"/>
@@ -1079,9 +1081,6 @@
   <translation tag="New profile name" de="Neuer Profilname"/>
   <translation tag="Next" de="Weiter"/>
   <translation tag="Niimbot (Bluetooth)" de="Niimbot (Bluetooth)"/>
-  <translation tag="No AMS connected" de="Kein AMS verbunden"/>
-  <translation tag="No AMS system connected" de="Kein AMS-System verbunden"/>
-  <translation tag="No AMS system connected." de="Kein AMS-System verbunden."/>
   <translation tag="No Bluetooth printer selected — pick one in settings" de="Kein Bluetooth-Drucker ausgewählt — in den Einstellungen auswählen"/>
   <translation tag="No Bluetooth printers found" de="Keine Bluetooth-Drucker gefunden"/>
   <translation tag="No Camera" de="Keine Kamera"/>
@@ -1090,6 +1089,8 @@
   <translation tag="No LED macros detected on your printer." de="Keine LED-Makros auf Ihrem Drucker erkannt."/>
   <translation tag="No LED macros detected on your printer. Add Klipper macros for LED control first." de="Keine LED-Makros auf Ihrem Drucker erkannt. Fügen Sie zuerst Klipper-Makros zur LED-Steuerung hinzu."/>
   <translation tag="No Macros Found" de="Keine Makros gefunden"/>
+  <translation tag="No Multi-Filament System connected" de="Kein Multi-Filament-System verbunden"/>
+  <translation tag="No Multi-Filament System connected." de="Kein Multi-Filament-System verbunden."/>
   <translation tag="No PRINT_START macro found" de="Kein PRINT_START-Makro gefunden"/>
   <translation tag="No Power Devices" de="Keine Stromgeräte"/>
   <translation tag="No Spool" de="Keine Spule"/>
@@ -1332,7 +1333,7 @@
   <translation tag="Printer name" de="Druckername"/>
   <translation tag="Printer ready" de="Drucker bereit"/>
   <translation tag="Printers" de="Drucker"/>
-  <translation tag="Printers, AMS, fans, sensors, and LEDs" de="Drucker, AMS, Lüfter, Sensoren und LEDs"/>
+  <translation tag="Printers, Multi-Filament System, fans, sensors, and LEDs" de="Drucker, Multi-Filament-System, Lüfter, Sensoren und LEDs"/>
   <translation tag="Printing" de="Drucken"/>
   <translation tag="Printing label..." de="Etikett wird gedruckt..."/>
   <translation tag="Printing test label..." de="Testetikett wird gedruckt..."/>
@@ -1722,7 +1723,7 @@
   <translation tag="TD-1 filament color detection" de="TD-1-Filamentfarberkennung"/>
   <translation tag="TEMPERATURE SENSORS" de="TEMPERATURSENSOREN"/>
   <translation tag="THEME COLORS" de="THEMENFARBEN"/>
-  <translation tag="TOOLS" de="TOOLS"/>
+  <translation tag="TOOLS" de="WERKZEUGE"/>
   <translation tag="TPU" de="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." de="Dauert 3-5 Min. Nicht unterbrechen."/>
   <translation tag="Tap again to confirm this orientation" de="Erneut tippen, um diese Ausrichtung zu bestätigen"/>
@@ -1859,6 +1860,7 @@
   <translation tag="Unloading filament ({}mm)..." de="Filament wird entladen ({}mm)..."/>
   <translation tag="Unloading filament..." de="Filament wird entladen..."/>
   <translation tag="Unloading... click again to load slot {}" de="Entladen... erneut tippen, um Slot {} zu laden"/>
+  <translation tag="Unloads After Print" de="Entlädt nach dem Druck"/>
   <translation tag="Unmapped" de="Nicht zugeordnet"/>
   <translation tag="Unretract Extra" de="Zusätzliches Primen"/>
   <translation tag="Unretract Speed" de="Prime-Geschwindigkeit"/>

@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: Échec de la récupération AFC
   AFC reset complete: Réinitialisation AFC terminée
   AFC reset failed: Échec de la réinitialisation AFC
+  AFC retracts filament from the toolhead at end of print: AFC rétracte le filament de la tête d'outil à la fin de l'impression
   ALL DEVICES: TOUS LES APPAREILS
   AMS: AMS
-  'AMS is busy: {}': 'AMS est occupé : {}'
-  AMS not available: AMS non disponible
+  'Multi-Filament System is busy: {}': 'Le système multi-filament est occupé : {}'
+  Multi-Filament System not available: Système multi-filament non disponible
   API not available: API non disponible
   APPEARANCE: APPARENCE
   AUTO FANS: VENTILATEURS AUTO
@@ -103,6 +104,7 @@ translations:
   Actions: Actions
   Active: Actif
   Active Spool: Bobine active
+  Adaptive Bed Mesh: Maillage du plateau adaptatif
   Add: Ajouter
   Add Filament: Ajouter un filament
   Add Hidden Network: Ajouter un réseau masqué
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: Multi-filament
   Multi-Filament Overview: Vue d'ensemble multi-filament
   Multi-Filament System Management: Gestion du système multi-filament
-  Multi-Material: Multi-matériau
-  Multi-Material System Detected: Système multi-matériau détecté
+  Multi-Filament System: Système multi-filament
+  Multi-Filament System Detected: Système multi-filament détecté
   Must home axes first: Les axes doivent d'abord être référencés
   My Custom Theme: Mon thème personnalisé
   My Panel: Mon panneau
@@ -1082,9 +1084,8 @@ translations:
   New profile name: Nouveau nom de profil
   Next: Suivant
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: Aucun AMS connecté
-  No AMS system connected: Aucun système AMS connecté
-  No AMS system connected.: Aucun système AMS connecté.
+  No Multi-Filament System connected: Aucun système multi-filament connecté
+  No Multi-Filament System connected.: Aucun système multi-filament connecté.
   No Bluetooth printer selected — pick one in settings: 'Aucune imprimante Bluetooth sélectionnée — choisissez-en une dans les paramètres'
   No Bluetooth printers found: Aucune imprimante Bluetooth trouvée
   No Camera: Aucune caméra
@@ -1335,7 +1336,7 @@ translations:
   Printer name: Nom de l'imprimante
   Printer ready: Imprimante prête
   Printers: Imprimantes
-  Printers, AMS, fans, sensors, and LEDs: Imprimantes, AMS, ventilateurs, capteurs et LEDs
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Imprimantes, système multi-filament, ventilateurs, capteurs et LEDs
   Printing: Impression
   Printing label...: Impression de l'étiquette...
   Printing test label...: Impression de l'étiquette de test...
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: Détection de couleur de filament TD-1
   TEMPERATURE SENSORS: CAPTEURS DE TEMPÉRATURE
   THEME COLORS: COULEURS DU THÈME
-  TOOLS: TOOLS
+  TOOLS: OUTILS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Prend 3-5 min. Ne pas interrompre.
   Tap again to confirm this orientation: Appuyez à nouveau pour confirmer cette orientation
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'Échec du déchargement : {}'
   Unload macro not configured: Macro de déchargement non configurée
   Unload may still be running — response timed out: Le déchargement est peut-être encore en cours — délai dépassé
+  Unloads After Print: Décharge après l'impression
   Unloading: 'Déchargement'
   Unloading before bypass...: Déchargement avant bypass...
   Unloading filament ({}mm)...: Déchargement du filament ({}mm)...

@@ -1156,7 +1156,7 @@ void AmsOverviewPanel::show_detail_context_menu(int slot_index, lv_obj_t* near_w
                     NOTIFY_ERROR(lv_tr("Unload failed: {}"), error.user_msg);
                 }
             } else {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             break;
@@ -1300,7 +1300,7 @@ void AmsOverviewPanel::show_edit_modal(int slot_index) {
     // Regular AMS slot
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
 

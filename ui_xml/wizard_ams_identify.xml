@@ -6,7 +6,7 @@
   <!-- Displays detected AMS system type and lane count -->
   <consts>
     <!-- Step metadata (read by wizard orchestrator) -->
-    <str name="step_title" value="Multi-Material System Detected" value_tag="Multi-Material System Detected"/>
+    <str name="step_title" value="Multi-Filament System Detected" value_tag="Multi-Filament System Detected"/>
     <str name="step_subtitle" value="Your printer has an automatic filament changer" value_tag="Your printer has an automatic filament changer"/>
     <int name="step_order" value="6"/>
   </consts>

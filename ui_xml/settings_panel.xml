@@ -35,8 +35,8 @@
     <!-- ================================================================== -->
     <setting_action_row name="row_hardware"
                         label="Hardware &amp; Devices" label_tag="Hardware &amp; Devices" icon="sysinfo"
-                        description="Printers, AMS, fans, sensors, and LEDs"
-                        description_tag="Printers, AMS, fans, sensors, and LEDs"
+                        description="Printers, Multi-Filament System, fans, sensors, and LEDs"
+                        description_tag="Printers, Multi-Filament System, fans, sensors, and LEDs"
                         callback="on_hardware_clicked"/>
     <!-- ================================================================== -->
     <!-- SAFETY & NOTIFICATIONS -->

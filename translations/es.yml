@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: Error en recuperación AFC
   AFC reset complete: Reinicio AFC completado
   AFC reset failed: Error en reinicio AFC
+  AFC retracts filament from the toolhead at end of print: AFC retrae el filamento del cabezal al finalizar la impresión
   ALL DEVICES: TODOS LOS DISPOSITIVOS
   AMS: AMS
-  'AMS is busy: {}': 'AMS ocupado: {}'
-  AMS not available: AMS no disponible
+  'Multi-Filament System is busy: {}': 'Sistema multi-filamento ocupado: {}'
+  Multi-Filament System not available: Sistema multi-filamento no disponible
   API not available: API no disponible
   APPEARANCE: APARIENCIA
   AUTO FANS: VENTILADORES AUTO
@@ -103,6 +104,7 @@ translations:
   Actions: Acciones
   Active: Activo
   Active Spool: Bobina activa
+  Adaptive Bed Mesh: Malla de Cama Adaptativa
   Add: Agregar
   Add Filament: Agregar Filamento
   Add Hidden Network: Agregar Red Oculta
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: Multi-Filamento
   Multi-Filament Overview: Vista general multi-filamento
   Multi-Filament System Management: Gestión del sistema multi-filamento
-  Multi-Material: Multi-Material
-  Multi-Material System Detected: Sistema Multi-Material Detectado
+  Multi-Filament System: Sistema multi-filamento
+  Multi-Filament System Detected: Sistema multi-filamento detectado
   Must home axes first: Debe posicionar los ejes primero
   My Custom Theme: Mi Tema Personalizado
   My Panel: Mi Panel
@@ -1082,9 +1084,8 @@ translations:
   New profile name: Nombre del nuevo perfil
   Next: Siguiente
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: Sin AMS conectado
-  No AMS system connected: Ningún sistema AMS conectado
-  No AMS system connected.: No hay sistema AMS conectado.
+  No Multi-Filament System connected: Ningún sistema multi-filamento conectado
+  No Multi-Filament System connected.: No hay sistema multi-filamento conectado.
   No Bluetooth printer selected — pick one in settings: 'No hay impresora Bluetooth seleccionada — elige una en ajustes'
   No Bluetooth printers found: No se encontraron impresoras Bluetooth
   No Camera: Sin Cámara
@@ -1335,7 +1336,7 @@ translations:
   Printer name: Nombre de impresora
   Printer ready: Impresora lista
   Printers: Impresoras
-  Printers, AMS, fans, sensors, and LEDs: Impresoras, AMS, ventiladores, sensores y LEDs
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Impresoras, sistema multi-filamento, ventiladores, sensores y LEDs
   Printing: Imprimiendo
   Printing label...: Imprimiendo etiqueta...
   Printing test label...: Imprimiendo etiqueta de prueba...
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: Detección de color de filamento TD-1
   TEMPERATURE SENSORS: SENSORES DE TEMPERATURA
   THEME COLORS: COLORES DEL TEMA
-  TOOLS: TOOLS
+  TOOLS: HERRAMIENTAS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Tarda 3-5 min. No interrumpa.
   Tap again to confirm this orientation: Toque de nuevo para confirmar esta orientación
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'Error al descargar: {}'
   Unload macro not configured: Macro de descarga no configurado
   Unload may still be running — response timed out: La descarga puede seguir en curso — tiempo de espera agotado
+  Unloads After Print: Descarga después de imprimir
   Unloading: 'Descargando'
   Unloading before bypass...: Descargando antes del bypass...
   Unloading filament ({}mm)...: Descargando filamento ({}mm)...

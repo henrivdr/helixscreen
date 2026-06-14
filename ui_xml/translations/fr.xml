@@ -77,10 +77,9 @@
   <translation tag="AFC recovery failed" fr="Échec de la récupération AFC"/>
   <translation tag="AFC reset complete" fr="Réinitialisation AFC terminée"/>
   <translation tag="AFC reset failed" fr="Échec de la réinitialisation AFC"/>
+  <translation tag="AFC retracts filament from the toolhead at end of print" fr="AFC rétracte le filament de la tête d&apos;outil à la fin de l&apos;impression"/>
   <translation tag="ALL DEVICES" fr="TOUS LES APPAREILS"/>
   <translation tag="AMS" fr="AMS"/>
-  <translation tag="AMS is busy: {}" fr="AMS est occupé : {}"/>
-  <translation tag="AMS not available" fr="AMS non disponible"/>
   <translation tag="API not available" fr="API non disponible"/>
   <translation tag="APPEARANCE" fr="APPARENCE"/>
   <translation tag="AUTO FANS" fr="VENTILATEURS AUTO"/>
@@ -103,6 +102,7 @@
   <translation tag="Actions" fr="Actions"/>
   <translation tag="Active" fr="Actif"/>
   <translation tag="Active Spool" fr="Bobine active"/>
+  <translation tag="Adaptive Bed Mesh" fr="Maillage du plateau adaptatif"/>
   <translation tag="Add" fr="Ajouter"/>
   <translation tag="Add Filament" fr="Ajouter un filament"/>
   <translation tag="Add Hidden Network" fr="Ajouter un réseau masqué"/>
@@ -1051,9 +1051,11 @@
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." fr="Déplace la tête d&apos;impression pour mesurer les fréquences de vibration sur chaque axe. Prend 2-3 minutes. L&apos;imprimante fera du bruit — c&apos;est normal."/>
   <translation tag="Multi-Filament" fr="Multi-filament"/>
   <translation tag="Multi-Filament Overview" fr="Vue d&apos;ensemble multi-filament"/>
+  <translation tag="Multi-Filament System" fr="Système multi-filament"/>
+  <translation tag="Multi-Filament System Detected" fr="Système multi-filament détecté"/>
   <translation tag="Multi-Filament System Management" fr="Gestion du système multi-filament"/>
-  <translation tag="Multi-Material" fr="Multi-matériau"/>
-  <translation tag="Multi-Material System Detected" fr="Système multi-matériau détecté"/>
+  <translation tag="Multi-Filament System is busy: {}" fr="Le système multi-filament est occupé : {}"/>
+  <translation tag="Multi-Filament System not available" fr="Système multi-filament non disponible"/>
   <translation tag="Must home axes first" fr="Les axes doivent d&apos;abord être référencés"/>
   <translation tag="My Custom Theme" fr="Mon thème personnalisé"/>
   <translation tag="My Panel" fr="Mon panneau"/>
@@ -1079,9 +1081,6 @@
   <translation tag="New profile name" fr="Nouveau nom de profil"/>
   <translation tag="Next" fr="Suivant"/>
   <translation tag="Niimbot (Bluetooth)" fr="Niimbot (Bluetooth)"/>
-  <translation tag="No AMS connected" fr="Aucun AMS connecté"/>
-  <translation tag="No AMS system connected" fr="Aucun système AMS connecté"/>
-  <translation tag="No AMS system connected." fr="Aucun système AMS connecté."/>
   <translation tag="No Bluetooth printer selected — pick one in settings" fr="Aucune imprimante Bluetooth sélectionnée — choisissez-en une dans les paramètres"/>
   <translation tag="No Bluetooth printers found" fr="Aucune imprimante Bluetooth trouvée"/>
   <translation tag="No Camera" fr="Aucune caméra"/>
@@ -1090,6 +1089,8 @@
   <translation tag="No LED macros detected on your printer." fr="Aucune macro LED détectée sur votre imprimante."/>
   <translation tag="No LED macros detected on your printer. Add Klipper macros for LED control first." fr="Aucune macro LED détectée sur votre imprimante. Ajoutez d&apos;abord des macros Klipper pour le contrôle des LEDs."/>
   <translation tag="No Macros Found" fr="Aucune macro trouvée"/>
+  <translation tag="No Multi-Filament System connected" fr="Aucun système multi-filament connecté"/>
+  <translation tag="No Multi-Filament System connected." fr="Aucun système multi-filament connecté."/>
   <translation tag="No PRINT_START macro found" fr="Aucune macro PRINT_START trouvée"/>
   <translation tag="No Power Devices" fr="Aucun appareil électrique"/>
   <translation tag="No Spool" fr="Aucune bobine"/>
@@ -1332,7 +1333,7 @@
   <translation tag="Printer name" fr="Nom de l&apos;imprimante"/>
   <translation tag="Printer ready" fr="Imprimante prête"/>
   <translation tag="Printers" fr="Imprimantes"/>
-  <translation tag="Printers, AMS, fans, sensors, and LEDs" fr="Imprimantes, AMS, ventilateurs, capteurs et LEDs"/>
+  <translation tag="Printers, Multi-Filament System, fans, sensors, and LEDs" fr="Imprimantes, système multi-filament, ventilateurs, capteurs et LEDs"/>
   <translation tag="Printing" fr="Impression"/>
   <translation tag="Printing label..." fr="Impression de l&apos;étiquette..."/>
   <translation tag="Printing test label..." fr="Impression de l&apos;étiquette de test..."/>
@@ -1722,7 +1723,7 @@
   <translation tag="TD-1 filament color detection" fr="Détection de couleur de filament TD-1"/>
   <translation tag="TEMPERATURE SENSORS" fr="CAPTEURS DE TEMPÉRATURE"/>
   <translation tag="THEME COLORS" fr="COULEURS DU THÈME"/>
-  <translation tag="TOOLS" fr="TOOLS"/>
+  <translation tag="TOOLS" fr="OUTILS"/>
   <translation tag="TPU" fr="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." fr="Prend 3-5 min. Ne pas interrompre."/>
   <translation tag="Tap again to confirm this orientation" fr="Appuyez à nouveau pour confirmer cette orientation"/>
@@ -1859,6 +1860,7 @@
   <translation tag="Unloading filament ({}mm)..." fr="Déchargement du filament ({}mm)..."/>
   <translation tag="Unloading filament..." fr="Déchargement du filament..."/>
   <translation tag="Unloading... click again to load slot {}" fr="Déchargement... appuyez à nouveau pour charger le slot {}"/>
+  <translation tag="Unloads After Print" fr="Décharge après l&apos;impression"/>
   <translation tag="Unmapped" fr="Non mappé"/>
   <translation tag="Unretract Extra" fr="Extra de dérétraction"/>
   <translation tag="Unretract Speed" fr="Vitesse de dérétraction"/>

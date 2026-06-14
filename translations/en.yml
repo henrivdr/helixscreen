@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: AFC recovery failed
   AFC reset complete: AFC reset complete
   AFC reset failed: AFC reset failed
+  AFC retracts filament from the toolhead at end of print: AFC retracts filament from the toolhead at end of print
   ALL DEVICES: ALL DEVICES
   AMS: AMS
-  'AMS is busy: {}': 'AMS is busy: {}'
-  AMS not available: AMS not available
+  'Multi-Filament System is busy: {}': 'Multi-Filament System is busy: {}'
+  Multi-Filament System not available: Multi-Filament System not available
   API not available: API not available
   APPEARANCE: APPEARANCE
   AUTO FANS: AUTO FANS
@@ -1056,8 +1057,8 @@ translations:
   Multi-Filament: Multi-Filament
   Multi-Filament Overview: Multi-Filament Overview
   Multi-Filament System Management: Multi-Filament System Management
-  Multi-Material: Multi-Material
-  Multi-Material System Detected: Multi-Material System Detected
+  Multi-Filament System: Multi-Filament System
+  Multi-Filament System Detected: Multi-Filament System Detected
   Must home axes first: Must home axes first
   My Custom Theme: My Custom Theme
   My Panel: My Panel
@@ -1083,9 +1084,8 @@ translations:
   New profile name: New profile name
   Next: Next
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: No AMS connected
-  No AMS system connected: No AMS system connected
-  No AMS system connected.: No AMS system connected.
+  No Multi-Filament System connected: No Multi-Filament System connected
+  No Multi-Filament System connected.: No Multi-Filament System connected.
   No Bluetooth printer selected — pick one in settings: No Bluetooth printer selected — pick one in settings
   No Bluetooth printers found: No Bluetooth printers found
   No Camera: No Camera
@@ -1336,7 +1336,7 @@ translations:
   Printer name: Printer name
   Printer ready: Printer ready
   Printers: Printers
-  Printers, AMS, fans, sensors, and LEDs: Printers, AMS, fans, sensors, and LEDs
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Printers, Multi-Filament System, fans, sensors, and LEDs
   Printing: Printing
   Printing label...: Printing label...
   Printing test label...: Printing test label...
@@ -1863,6 +1863,7 @@ translations:
   Unload: Unload
   Unload Filament: Unload Filament
   'Unload failed: {}': 'Unload failed: {}'
+  Unloads After Print: Unloads After Print
   Unload macro not configured: Unload macro not configured
   Unload may still be running — response timed out: Unload may still be running — response timed out
   Unloading: Unloading

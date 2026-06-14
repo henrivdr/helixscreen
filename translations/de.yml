@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: AFC-Wiederherstellung fehlgeschlagen
   AFC reset complete: AFC-Reset abgeschlossen
   AFC reset failed: AFC-Reset fehlgeschlagen
+  AFC retracts filament from the toolhead at end of print: AFC zieht das Filament am Druckende aus dem Werkzeugkopf zurück
   ALL DEVICES: ALLE GERÄTE
   AMS: AMS
-  'AMS is busy: {}': 'AMS ist beschäftigt: {}'
-  AMS not available: AMS nicht verfügbar
+  'Multi-Filament System is busy: {}': 'Multi-Filament-System ist beschäftigt: {}'
+  Multi-Filament System not available: Multi-Filament-System nicht verfügbar
   API not available: API nicht verfügbar
   APPEARANCE: ERSCHEINUNGSBILD
   AUTO FANS: AUTO-LÜFTER
@@ -103,6 +104,7 @@ translations:
   Actions: Aktionen
   Active: Aktiv
   Active Spool: Aktive Spule
+  Adaptive Bed Mesh: Adaptives Bettnetz
   Add: Hinzufügen
   Add Filament: Filament hinzufügen
   Add Hidden Network: Verstecktes Netzwerk hinzufügen
@@ -296,7 +298,7 @@ translations:
   Cartographer scan calibrate sent — use Z-Offset panel to adjust: 'Cartographer Scan-Kalibrierung gesendet — Z-Offset-Panel zum Anpassen verwenden'
   Cartographer touch calibrate sent: Cartographer Touch-Kalibrierung gesendet
   Center QR code in frame: QR-Code im Rahmen zentrieren
-  'Chamb:': 'Chamb:'
+  'Chamb:': 'Kamm.:'
   Chamber: Kammer
   Chamber Fan: Kammerlüfter
   Chamber Heater: Kammerheizung
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: Multi-Filament
   Multi-Filament Overview: Multi-Filament-Übersicht
   Multi-Filament System Management: Multi-Filament-Systemverwaltung
-  Multi-Material: Multi-Material
-  Multi-Material System Detected: Multi-Material-System erkannt
+  Multi-Filament System: Multi-Filament
+  Multi-Filament System Detected: Multi-Filament-System erkannt
   Must home axes first: Achsen müssen zuerst referenziert werden
   My Custom Theme: Mein benutzerdefiniertes Thema
   My Panel: Mein Panel
@@ -1082,9 +1084,8 @@ translations:
   New profile name: Neuer Profilname
   Next: Weiter
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: Kein AMS verbunden
-  No AMS system connected: Kein AMS-System verbunden
-  No AMS system connected.: Kein AMS-System verbunden.
+  No Multi-Filament System connected: Kein Multi-Filament-System verbunden
+  No Multi-Filament System connected.: Kein Multi-Filament-System verbunden.
   No Bluetooth printer selected — pick one in settings: 'Kein Bluetooth-Drucker ausgewählt — in den Einstellungen auswählen'
   No Bluetooth printers found: Keine Bluetooth-Drucker gefunden
   No Camera: Keine Kamera
@@ -1335,7 +1336,7 @@ translations:
   Printer name: Druckername
   Printer ready: Drucker bereit
   Printers: Drucker
-  Printers, AMS, fans, sensors, and LEDs: Drucker, AMS, Lüfter, Sensoren und LEDs
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Drucker, Multi-Filament-System, Lüfter, Sensoren und LEDs
   Printing: Drucken
   Printing label...: Etikett wird gedruckt...
   Printing test label...: Testetikett wird gedruckt...
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: TD-1-Filamentfarberkennung
   TEMPERATURE SENSORS: TEMPERATURSENSOREN
   THEME COLORS: THEMENFARBEN
-  TOOLS: TOOLS
+  TOOLS: WERKZEUGE
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Dauert 3-5 Min. Nicht unterbrechen.
   Tap again to confirm this orientation: Erneut tippen, um diese Ausrichtung zu bestätigen
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'Entladen fehlgeschlagen: {}'
   Unload macro not configured: Entlade-Makro nicht konfiguriert
   Unload may still be running — response timed out: Entladen läuft möglicherweise noch — Zeitüberschreitung
+  Unloads After Print: Entlädt nach dem Druck
   Unloading: 'Entladen'
   Unloading before bypass...: Entladen vor Bypass...
   Unloading filament ({}mm)...: Filament wird entladen ({}mm)...

@@ -727,7 +727,7 @@ void AmsOperationSidebar::handle_unload(int slot_index) {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
 
@@ -750,7 +750,7 @@ void AmsOperationSidebar::handle_reset() {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
 
@@ -765,7 +765,7 @@ void AmsOperationSidebar::handle_check_gates() {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
 
@@ -780,7 +780,7 @@ void AmsOperationSidebar::handle_bypass_toggle() {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
 

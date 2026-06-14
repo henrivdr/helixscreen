@@ -67,7 +67,7 @@ translations:
   A: 'A'
   ABS: ABS
   ACCELEROMETERS: 加速度センサー
-  ACTIONS: ACTIONS
+  ACTIONS: アクション
   ADXL: ADXL
   AFC: AFC
   AFC Version Warning: AFCバージョン警告
@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: AFC復旧失敗
   AFC reset complete: AFCリセット完了
   AFC reset failed: AFCリセット失敗
+  AFC retracts filament from the toolhead at end of print: AFCは印刷終了時にツールヘッドからフィラメントを引き戻します
   ALL DEVICES: すべてのデバイス
   AMS: AMS
-  'AMS is busy: {}': 'AMS がビジー状態: {}'
-  AMS not available: AMS が利用できません
+  'Multi-Filament System is busy: {}': 'マルチフィラメントシステムがビジー状態: {}'
+  Multi-Filament System not available: マルチフィラメントシステムが利用できません
   API not available: APIが利用できません
   APPEARANCE: 外観
   AUTO FANS: 自動ファン
@@ -103,6 +104,7 @@ translations:
   Actions: アクション
   Active: アクティブ
   Active Spool: アクティブスプール
+  Adaptive Bed Mesh: 適応ベッドメッシュ
   Add: 追加
   Add Filament: フィラメントを追加
   Add Hidden Network: 非公開ネットワークを追加
@@ -248,11 +250,11 @@ translations:
   CHANGED FROM LAST SESSION: 前回のセッションから変更
   COLOR SENSORS: カラーセンサー
   COLORS REQUIRED: 必要な色
-  CONFIGURATION: CONFIGURATION
+  CONFIGURATION: 設定
   CONNECTION TYPE: 接続タイプ
   CONTROLLABLE FANS: 制御可能なファン
   CRITICAL: 重大
-  CURRENT SELECTION: 'CURRENT SELECTION'
+  CURRENT SELECTION: 現在の選択
   CUSTOM IMAGES: カスタム画像
   Cache Dir: 'キャッシュディレクトリ'
   Calibrate: キャリブレート
@@ -883,7 +885,7 @@ translations:
   Job Queue: ジョブキュー
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Discord で HelixScreen コミュニティに参加して、ディスカッション、ヒント、トラブルシューティング支援、機能リクエストを共有しましょう。
   Just now: たった今
-  KEYBOARD LAYOUT: 'KEYBOARD LAYOUT'
+  KEYBOARD LAYOUT: キーボードレイアウト
   KLICKY CONTROLS: KLICKY CONTROLS
   Keep Navigation Bar: 'ナビゲーションバーを維持'
   Keep Printing: 印刷を続行
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: マルチフィラメント
   Multi-Filament Overview: マルチフィラメント概要
   Multi-Filament System Management: マルチフィラメントシステム管理
-  Multi-Material: マルチマテリアル
-  Multi-Material System Detected: マルチマテリアルシステムを検出
+  Multi-Filament System: マルチフィラメントシステム
+  Multi-Filament System Detected: マルチフィラメントシステムを検出
   Must home axes first: 先にホーミングしてください
   My Custom Theme: マイカスタムテーマ
   My Panel: マイパネル
@@ -1082,9 +1084,8 @@ translations:
   New profile name: 新しいプロファイル名
   Next: 次へ
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: AMSが接続されていません
-  No AMS system connected: AMSシステム未接続
-  No AMS system connected.: AMS システムが接続されていません。
+  No Multi-Filament System connected: マルチフィラメントシステムが接続されていません
+  No Multi-Filament System connected.: マルチフィラメントシステムが接続されていません。
   No Bluetooth printer selected — pick one in settings: 'Bluetooth プリンターが選択されていません — 設定で選択してください'
   No Bluetooth printers found: Bluetooth プリンターが見つかりません
   No Camera: カメラなし
@@ -1335,7 +1336,7 @@ translations:
   Printer name: プリンター名
   Printer ready: プリンター準備完了
   Printers: プリンター
-  Printers, AMS, fans, sensors, and LEDs: プリンター、AMS、ファン、センサー、LED
+  Printers, Multi-Filament System, fans, sensors, and LEDs: プリンター、マルチフィラメントシステム、ファン、センサー、LED
   Printing: 印刷中
   Printing label...: ラベル印刷中...
   Printing test label...: テストラベル印刷中...
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: TD-1 フィラメント色検出
   TEMPERATURE SENSORS: 温度センサー
   THEME COLORS: テーマカラー
-  TOOLS: TOOLS
+  TOOLS: ツール
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 3〜5分かかります。中断しないでください。
   Tap again to confirm this orientation: もう一度タップしてこの向きを確定
@@ -1742,7 +1743,7 @@ translations:
   Telemetry queue cleared: テレメトリキューをクリアしました
   Temp: 温度
   Temp Compensation: 温度補正
-  Temp °C: Temp °C
+  Temp °C: 温度 °C
   Temperature: 温度
   Temperature Graph Config: 温度グラフ設定
   Temperatures: 温度
@@ -1848,7 +1849,7 @@ translations:
   Type to preview input field...: 入力フィールドをプレビューするには入力してください...
   UI Sounds: UIサウンド
   USB: USB
-  USB DEVICES: 'USB DEVICES'
+  USB DEVICES: USBデバイス
   USB printer access denied — check permissions: 'USB プリンターへのアクセスが拒否されました — 権限を確認してください'
   Understanding Results: 結果の理解
   Uninstall HelixPrint Plugin: HelixPrint プラグインをアンインストール
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'アンロードに失敗しました: {}'
   Unload macro not configured: アンロードマクロが未設定です
   Unload may still be running — response timed out: 排出がまだ実行中の可能性があります — 応答タイムアウト
+  Unloads After Print: 印刷後にアンロード
   Unloading: 'アンロード中'
   Unloading before bypass...: バイパス前にアンロード中...
   Unloading filament ({}mm)...: フィラメントを排出中 ({}mm)...

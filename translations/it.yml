@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: Recupero AFC fallito
   AFC reset complete: Reset AFC completato
   AFC reset failed: Reset AFC fallito
+  AFC retracts filament from the toolhead at end of print: AFC ritrae il filamento dalla testina al termine della stampa
   ALL DEVICES: TUTTI I DISPOSITIVI
   AMS: AMS
-  'AMS is busy: {}': 'AMS occupato: {}'
-  AMS not available: AMS non disponibile
+  'Multi-Filament System is busy: {}': 'Sistema multi-filamento occupato: {}'
+  Multi-Filament System not available: Sistema multi-filamento non disponibile
   API not available: API non disponibile
   APPEARANCE: ASPETTO
   AUTO FANS: VENTOLE AUTO
@@ -103,6 +104,7 @@ translations:
   Actions: Azioni
   Active: Attivo
   Active Spool: Bobina attiva
+  Adaptive Bed Mesh: Mesh piano adattiva
   Add: Aggiungi
   Add Filament: Aggiungi filamento
   Add Hidden Network: Aggiungi rete nascosta
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: Multi-filamento
   Multi-Filament Overview: Panoramica multi-filamento
   Multi-Filament System Management: Gestione sistema multi-filamento
-  Multi-Material: Multi-materiale
-  Multi-Material System Detected: Sistema multi-materiale rilevato
+  Multi-Filament System: Sistema multi-filamento
+  Multi-Filament System Detected: Sistema multi-filamento rilevato
   Must home axes first: È necessario eseguire homing prima
   My Custom Theme: Il mio tema personalizzato
   My Panel: Il mio pannello
@@ -1082,9 +1084,8 @@ translations:
   New profile name: Nome nuovo profilo
   Next: Avanti
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: Nessun AMS connesso
-  No AMS system connected: Nessun sistema AMS connesso
-  No AMS system connected.: Nessun sistema AMS connesso.
+  No Multi-Filament System connected: Nessun sistema multi-filamento connesso
+  No Multi-Filament System connected.: Nessun sistema multi-filamento connesso.
   No Bluetooth printer selected — pick one in settings: 'Nessuna stampante Bluetooth selezionata — sceglierne una nelle impostazioni'
   No Bluetooth printers found: Nessuna stampante Bluetooth trovata
   No Camera: Nessuna telecamera
@@ -1335,7 +1336,7 @@ translations:
   Printer name: Nome stampante
   Printer ready: Stampante pronta
   Printers: Stampanti
-  Printers, AMS, fans, sensors, and LEDs: Stampanti, AMS, ventole, sensori e LED
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Stampanti, sistema multi-filamento, ventole, sensori e LED
   Printing: Stampa in corso
   Printing label...: Stampa etichetta in corso...
   Printing test label...: Stampa etichetta di prova...
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'Scaricamento fallito: {}'
   Unload macro not configured: Macro scaricamento non configurata
   Unload may still be running — response timed out: Lo scaricamento potrebbe essere ancora in corso — tempo scaduto
+  Unloads After Print: Scarica dopo la stampa
   Unloading: 'Scaricamento'
   Unloading before bypass...: Scaricamento prima del bypass...
   Unloading filament ({}mm)...: Scaricamento filamento ({}mm)...

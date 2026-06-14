@@ -77,10 +77,9 @@
   <translation tag="AFC recovery failed" en="AFC recovery failed"/>
   <translation tag="AFC reset complete" en="AFC reset complete"/>
   <translation tag="AFC reset failed" en="AFC reset failed"/>
+  <translation tag="AFC retracts filament from the toolhead at end of print" en="AFC retracts filament from the toolhead at end of print"/>
   <translation tag="ALL DEVICES" en="ALL DEVICES"/>
   <translation tag="AMS" en="AMS"/>
-  <translation tag="AMS is busy: {}" en="AMS is busy: {}"/>
-  <translation tag="AMS not available" en="AMS not available"/>
   <translation tag="API not available" en="API not available"/>
   <translation tag="APPEARANCE" en="APPEARANCE"/>
   <translation tag="AUTO FANS" en="AUTO FANS"/>
@@ -1052,9 +1051,11 @@
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." en="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal."/>
   <translation tag="Multi-Filament" en="Multi-Filament"/>
   <translation tag="Multi-Filament Overview" en="Multi-Filament Overview"/>
+  <translation tag="Multi-Filament System" en="Multi-Filament System"/>
+  <translation tag="Multi-Filament System Detected" en="Multi-Filament System Detected"/>
   <translation tag="Multi-Filament System Management" en="Multi-Filament System Management"/>
-  <translation tag="Multi-Material" en="Multi-Material"/>
-  <translation tag="Multi-Material System Detected" en="Multi-Material System Detected"/>
+  <translation tag="Multi-Filament System is busy: {}" en="Multi-Filament System is busy: {}"/>
+  <translation tag="Multi-Filament System not available" en="Multi-Filament System not available"/>
   <translation tag="Must home axes first" en="Must home axes first"/>
   <translation tag="My Custom Theme" en="My Custom Theme"/>
   <translation tag="My Panel" en="My Panel"/>
@@ -1080,9 +1081,6 @@
   <translation tag="New profile name" en="New profile name"/>
   <translation tag="Next" en="Next"/>
   <translation tag="Niimbot (Bluetooth)" en="Niimbot (Bluetooth)"/>
-  <translation tag="No AMS connected" en="No AMS connected"/>
-  <translation tag="No AMS system connected" en="No AMS system connected"/>
-  <translation tag="No AMS system connected." en="No AMS system connected."/>
   <translation tag="No Bluetooth printer selected — pick one in settings" en="No Bluetooth printer selected — pick one in settings"/>
   <translation tag="No Bluetooth printers found" en="No Bluetooth printers found"/>
   <translation tag="No Camera" en="No Camera"/>
@@ -1091,6 +1089,8 @@
   <translation tag="No LED macros detected on your printer." en="No LED macros detected on your printer."/>
   <translation tag="No LED macros detected on your printer. Add Klipper macros for LED control first." en="No LED macros detected on your printer. Add Klipper macros for LED control first."/>
   <translation tag="No Macros Found" en="No Macros Found"/>
+  <translation tag="No Multi-Filament System connected" en="No Multi-Filament System connected"/>
+  <translation tag="No Multi-Filament System connected." en="No Multi-Filament System connected."/>
   <translation tag="No PRINT_START macro found" en="No PRINT_START macro found"/>
   <translation tag="No Power Devices" en="No Power Devices"/>
   <translation tag="No Spool" en="No Spool"/>
@@ -1333,7 +1333,7 @@
   <translation tag="Printer name" en="Printer name"/>
   <translation tag="Printer ready" en="Printer ready"/>
   <translation tag="Printers" en="Printers"/>
-  <translation tag="Printers, AMS, fans, sensors, and LEDs" en="Printers, AMS, fans, sensors, and LEDs"/>
+  <translation tag="Printers, Multi-Filament System, fans, sensors, and LEDs" en="Printers, Multi-Filament System, fans, sensors, and LEDs"/>
   <translation tag="Printing" en="Printing"/>
   <translation tag="Printing label..." en="Printing label..."/>
   <translation tag="Printing test label..." en="Printing test label..."/>
@@ -1860,6 +1860,7 @@
   <translation tag="Unloading filament ({}mm)..." en="Unloading filament ({}mm)..."/>
   <translation tag="Unloading filament..." en="Unloading filament..."/>
   <translation tag="Unloading... click again to load slot {}" en="Unloading... click again to load slot {}"/>
+  <translation tag="Unloads After Print" en="Unloads After Print"/>
   <translation tag="Unmapped" en="Unmapped"/>
   <translation tag="Unretract Extra" en="Unretract Extra"/>
   <translation tag="Unretract Speed" en="Unretract Speed"/>

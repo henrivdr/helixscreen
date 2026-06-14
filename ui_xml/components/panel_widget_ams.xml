@@ -7,7 +7,7 @@
         style_pad_left="#space_xxs" style_pad_right="#space_xxs" scrollable="false">
     <!-- Hardware gate (ams_slot_count) checked in C++ populate_widgets() -->
     <ams_mini_status/>
-    <text_tiny text="AMS" style_text_color="#text_muted" style_text_align="center"
+    <text_tiny text="Multi-Filament" style_text_color="#text_muted" style_text_align="center"
                align="bottom_mid" y="-#space_md">
       <bind_flag_if_eq subject="show_widget_labels" flag="hidden" ref_value="0"/>
     </text_tiny>

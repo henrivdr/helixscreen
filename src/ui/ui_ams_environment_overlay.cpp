@@ -219,7 +219,7 @@ void AmsEnvironmentOverlay::update_from_backend() {
 
     if (!backend) {
         spdlog::warn("[{}] No backend available", get_name());
-        snprintf(title_text_buf_, sizeof(title_text_buf_), "%s", lv_tr("No AMS connected"));
+        snprintf(title_text_buf_, sizeof(title_text_buf_), "%s", lv_tr("No Multi-Filament System connected"));
         lv_subject_copy_string(&title_text_subject_, title_text_buf_);
         lv_subject_set_int(&dryer_visible_subject_, 0);
         lv_subject_set_int(&no_dryer_visible_subject_, 1);
@@ -547,7 +547,7 @@ void AmsEnvironmentOverlay::on_start_stop_clicked(lv_event_t* e) {
     AmsBackend* backend = AmsState::instance().get_backend();
 
     if (!backend) {
-        NOTIFY_WARNING("{}", lv_tr("No AMS system connected"));
+        NOTIFY_WARNING("{}", lv_tr("No Multi-Filament System connected"));
     } else {
         DryerInfo dryer = backend->get_dryer_info();
 

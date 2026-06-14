@@ -67,7 +67,7 @@
   <translation tag="A" ja="A"/>
   <translation tag="ABS" ja="ABS"/>
   <translation tag="ACCELEROMETERS" ja="加速度センサー"/>
-  <translation tag="ACTIONS" ja="ACTIONS"/>
+  <translation tag="ACTIONS" ja="アクション"/>
   <translation tag="ADXL" ja="ADXL"/>
   <translation tag="AFC" ja="AFC"/>
   <translation tag="AFC Version Warning" ja="AFCバージョン警告"/>
@@ -77,10 +77,9 @@
   <translation tag="AFC recovery failed" ja="AFC復旧失敗"/>
   <translation tag="AFC reset complete" ja="AFCリセット完了"/>
   <translation tag="AFC reset failed" ja="AFCリセット失敗"/>
+  <translation tag="AFC retracts filament from the toolhead at end of print" ja="AFCは印刷終了時にツールヘッドからフィラメントを引き戻します"/>
   <translation tag="ALL DEVICES" ja="すべてのデバイス"/>
   <translation tag="AMS" ja="AMS"/>
-  <translation tag="AMS is busy: {}" ja="AMS がビジー状態: {}"/>
-  <translation tag="AMS not available" ja="AMS が利用できません"/>
   <translation tag="API not available" ja="APIが利用できません"/>
   <translation tag="APPEARANCE" ja="外観"/>
   <translation tag="AUTO FANS" ja="自動ファン"/>
@@ -103,6 +102,7 @@
   <translation tag="Actions" ja="アクション"/>
   <translation tag="Active" ja="アクティブ"/>
   <translation tag="Active Spool" ja="アクティブスプール"/>
+  <translation tag="Adaptive Bed Mesh" ja="適応ベッドメッシュ"/>
   <translation tag="Add" ja="追加"/>
   <translation tag="Add Filament" ja="フィラメントを追加"/>
   <translation tag="Add Hidden Network" ja="非公開ネットワークを追加"/>
@@ -248,11 +248,11 @@
   <translation tag="CHANGED FROM LAST SESSION" ja="前回のセッションから変更"/>
   <translation tag="COLOR SENSORS" ja="カラーセンサー"/>
   <translation tag="COLORS REQUIRED" ja="必要な色"/>
-  <translation tag="CONFIGURATION" ja="CONFIGURATION"/>
+  <translation tag="CONFIGURATION" ja="設定"/>
   <translation tag="CONNECTION TYPE" ja="接続タイプ"/>
   <translation tag="CONTROLLABLE FANS" ja="制御可能なファン"/>
   <translation tag="CRITICAL" ja="重大"/>
-  <translation tag="CURRENT SELECTION" ja="CURRENT SELECTION"/>
+  <translation tag="CURRENT SELECTION" ja="現在の選択"/>
   <translation tag="CUSTOM IMAGES" ja="カスタム画像"/>
   <translation tag="Cache Dir" ja="キャッシュディレクトリ"/>
   <translation tag="Calibrate" ja="キャリブレート"/>
@@ -882,7 +882,7 @@
   <translation tag="Job Queue" ja="ジョブキュー"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." ja="Discord で HelixScreen コミュニティに参加して、ディスカッション、ヒント、トラブルシューティング支援、機能リクエストを共有しましょう。"/>
   <translation tag="Just now" ja="たった今"/>
-  <translation tag="KEYBOARD LAYOUT" ja="KEYBOARD LAYOUT"/>
+  <translation tag="KEYBOARD LAYOUT" ja="キーボードレイアウト"/>
   <translation tag="KLICKY CONTROLS" ja="KLICKY CONTROLS"/>
   <translation tag="Keep Navigation Bar" ja="ナビゲーションバーを維持"/>
   <translation tag="Keep Printing" ja="印刷を続行"/>
@@ -1051,9 +1051,11 @@
   <translation tag="Moves the print head to measure vibration frequencies on each axis. Takes 2-3 minutes. The printer will make noise — this is normal." ja="プリントヘッドを移動させて各軸の振動周波数を測定します。2〜3分かかります。プリンターから音がしますが、これは正常です。"/>
   <translation tag="Multi-Filament" ja="マルチフィラメント"/>
   <translation tag="Multi-Filament Overview" ja="マルチフィラメント概要"/>
+  <translation tag="Multi-Filament System" ja="マルチフィラメントシステム"/>
+  <translation tag="Multi-Filament System Detected" ja="マルチフィラメントシステムを検出"/>
   <translation tag="Multi-Filament System Management" ja="マルチフィラメントシステム管理"/>
-  <translation tag="Multi-Material" ja="マルチマテリアル"/>
-  <translation tag="Multi-Material System Detected" ja="マルチマテリアルシステムを検出"/>
+  <translation tag="Multi-Filament System is busy: {}" ja="マルチフィラメントシステムがビジー状態: {}"/>
+  <translation tag="Multi-Filament System not available" ja="マルチフィラメントシステムが利用できません"/>
   <translation tag="Must home axes first" ja="先にホーミングしてください"/>
   <translation tag="My Custom Theme" ja="マイカスタムテーマ"/>
   <translation tag="My Panel" ja="マイパネル"/>
@@ -1079,9 +1081,6 @@
   <translation tag="New profile name" ja="新しいプロファイル名"/>
   <translation tag="Next" ja="次へ"/>
   <translation tag="Niimbot (Bluetooth)" ja="Niimbot (Bluetooth)"/>
-  <translation tag="No AMS connected" ja="AMSが接続されていません"/>
-  <translation tag="No AMS system connected" ja="AMSシステム未接続"/>
-  <translation tag="No AMS system connected." ja="AMS システムが接続されていません。"/>
   <translation tag="No Bluetooth printer selected — pick one in settings" ja="Bluetooth プリンターが選択されていません — 設定で選択してください"/>
   <translation tag="No Bluetooth printers found" ja="Bluetooth プリンターが見つかりません"/>
   <translation tag="No Camera" ja="カメラなし"/>
@@ -1090,6 +1089,8 @@
   <translation tag="No LED macros detected on your printer." ja="プリンターで LED マクロが検出されませんでした。"/>
   <translation tag="No LED macros detected on your printer. Add Klipper macros for LED control first." ja="プリンターで LED マクロが検出されませんでした。先に LED 制御用の Klipper マクロを追加してください。"/>
   <translation tag="No Macros Found" ja="マクロが見つかりません"/>
+  <translation tag="No Multi-Filament System connected" ja="マルチフィラメントシステムが接続されていません"/>
+  <translation tag="No Multi-Filament System connected." ja="マルチフィラメントシステムが接続されていません。"/>
   <translation tag="No PRINT_START macro found" ja="PRINT_START マクロが見つかりません"/>
   <translation tag="No Power Devices" ja="電源デバイスなし"/>
   <translation tag="No Spool" ja="スプールなし"/>
@@ -1332,7 +1333,7 @@
   <translation tag="Printer name" ja="プリンター名"/>
   <translation tag="Printer ready" ja="プリンター準備完了"/>
   <translation tag="Printers" ja="プリンター"/>
-  <translation tag="Printers, AMS, fans, sensors, and LEDs" ja="プリンター、AMS、ファン、センサー、LED"/>
+  <translation tag="Printers, Multi-Filament System, fans, sensors, and LEDs" ja="プリンター、マルチフィラメントシステム、ファン、センサー、LED"/>
   <translation tag="Printing" ja="印刷中"/>
   <translation tag="Printing label..." ja="ラベル印刷中..."/>
   <translation tag="Printing test label..." ja="テストラベル印刷中..."/>
@@ -1722,7 +1723,7 @@
   <translation tag="TD-1 filament color detection" ja="TD-1 フィラメント色検出"/>
   <translation tag="TEMPERATURE SENSORS" ja="温度センサー"/>
   <translation tag="THEME COLORS" ja="テーマカラー"/>
-  <translation tag="TOOLS" ja="TOOLS"/>
+  <translation tag="TOOLS" ja="ツール"/>
   <translation tag="TPU" ja="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ja="3〜5分かかります。中断しないでください。"/>
   <translation tag="Tap again to confirm this orientation" ja="もう一度タップしてこの向きを確定"/>
@@ -1738,7 +1739,7 @@
   <translation tag="Telemetry queue cleared" ja="テレメトリキューをクリアしました"/>
   <translation tag="Temp" ja="温度"/>
   <translation tag="Temp Compensation" ja="温度補正"/>
-  <translation tag="Temp °C" ja="Temp °C"/>
+  <translation tag="Temp °C" ja="温度 °C"/>
   <translation tag="Temperature" ja="温度"/>
   <translation tag="Temperature Graph Config" ja="温度グラフ設定"/>
   <translation tag="Temperatures" ja="温度"/>
@@ -1838,7 +1839,7 @@
   <translation tag="Type to preview input field..." ja="入力フィールドをプレビューするには入力してください..."/>
   <translation tag="UI Sounds" ja="UIサウンド"/>
   <translation tag="USB" ja="USB"/>
-  <translation tag="USB DEVICES" ja="USB DEVICES"/>
+  <translation tag="USB DEVICES" ja="USBデバイス"/>
   <translation tag="USB printer access denied — check permissions" ja="USB プリンターへのアクセスが拒否されました — 権限を確認してください"/>
   <translation tag="Understanding Results" ja="結果の理解"/>
   <translation tag="Uninstall HelixPrint Plugin" ja="HelixPrint プラグインをアンインストール"/>
@@ -1859,6 +1860,7 @@
   <translation tag="Unloading filament ({}mm)..." ja="フィラメントを排出中 ({}mm)..."/>
   <translation tag="Unloading filament..." ja="フィラメントを排出中..."/>
   <translation tag="Unloading... click again to load slot {}" ja="アンロード中... もう一度クリックでスロット {} を装填"/>
+  <translation tag="Unloads After Print" ja="印刷後にアンロード"/>
   <translation tag="Unmapped" ja="未割当"/>
   <translation tag="Unretract Extra" ja="アンリトラクト追加量"/>
   <translation tag="Unretract Speed" ja="アンリトラクト速度"/>

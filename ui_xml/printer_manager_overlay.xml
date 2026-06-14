@@ -242,7 +242,7 @@
           <bind_flag_if_eq subject="ams_type" flag="hidden" ref_value="0"/>
           <event_cb trigger="clicked" callback="pm_chip_ams_clicked"/>
           <icon src="source_branch" size="xs" variant="success"/>
-          <text_small text="AMS"/>
+          <text_small text="Multi-Filament"/>
         </lv_obj>
 
         <!-- Extra Fans -->

@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: Recuperação AFC falhou
   AFC reset complete: Reinício AFC concluído
   AFC reset failed: Falha no reinício AFC
+  AFC retracts filament from the toolhead at end of print: AFC retrai o filamento do cabeçote ao final da impressão
   ALL DEVICES: TODOS OS DISPOSITIVOS
   AMS: AMS
-  'AMS is busy: {}': 'AMS ocupado: {}'
-  AMS not available: AMS não disponível
+  'Multi-Filament System is busy: {}': 'Sistema multi-filamento ocupado: {}'
+  Multi-Filament System not available: Sistema multi-filamento não disponível
   API not available: API não disponível
   APPEARANCE: APARÊNCIA
   AUTO FANS: VENTOINHAS AUTO
@@ -103,6 +104,7 @@ translations:
   Actions: Ações
   Active: Ativo
   Active Spool: Bobina ativa
+  Adaptive Bed Mesh: Malha da Mesa Adaptativa
   Add: Adicionar
   Add Filament: Adicionar Filamento
   Add Hidden Network: Adicionar Rede Oculta
@@ -511,7 +513,7 @@ translations:
   Display Sleep: Suspensão da Tela
   Do not power off your printer.: Não desligue sua impressora.
   Do not touch the printer during calibration: Não toque na impressora durante a calibração
-  Dock: Dock
+  Dock: Encaixar
   Documentation: Documentação
   Don't Save: Não Salvar
   Don't ask again: Não perguntar novamente
@@ -813,7 +815,7 @@ translations:
   Help improve HelixScreen?: Ajudar a melhorar o HelixScreen?
   Hide Firmware Noise: Ocultar Ruído do Firmware
   Hide Temperature Reports: Ocultar Relatórios de Temperatura
-  Home: Home
+  Home: Início
   Home failed: Homing falhou
   Home selector: Fazer home do seletor
   Homing AFC system...: Homing do sistema AFC...
@@ -923,7 +925,7 @@ translations:
   Layer mode captures one frame per layer change. Best for most prints.: O modo por camada captura um quadro por mudança de camada. Melhor para a maioria das impressões.
   'Layer:': 'Camada:'
   Layers: Camadas
-  Layout: 'Layout'
+  Layout: 'Disposição'
   Learn More: Saiba Mais
   'Length:': 'Comprimento:'
   Leveling Gantry...: Nivelando pórtico...
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: Multi-Filamento
   Multi-Filament Overview: Visão geral multi-filamento
   Multi-Filament System Management: Gerenciamento do sistema multi-filamento
-  Multi-Material: Multi-Material
-  Multi-Material System Detected: Sistema Multi-Material Detectado
+  Multi-Filament System: Sistema multi-filamento
+  Multi-Filament System Detected: Sistema multi-filamento detectado
   Must home axes first: Deve referenciar os eixos primeiro
   My Custom Theme: Meu Tema Personalizado
   My Panel: Meu Painel
@@ -1082,9 +1084,8 @@ translations:
   New profile name: Novo nome do perfil
   Next: Próximo
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: Nenhum AMS conectado
-  No AMS system connected: Nenhum sistema AMS conectado
-  No AMS system connected.: Nenhum sistema AMS conectado.
+  No Multi-Filament System connected: Nenhum sistema multi-filamento conectado
+  No Multi-Filament System connected.: Nenhum sistema multi-filamento conectado.
   No Bluetooth printer selected — pick one in settings: 'Nenhuma impressora Bluetooth selecionada — escolha uma nas configurações'
   No Bluetooth printers found: Nenhuma impressora Bluetooth encontrada
   No Camera: Sem câmera
@@ -1335,7 +1336,7 @@ translations:
   Printer name: Nome da impressora
   Printer ready: Impressora pronta
   Printers: Impressoras
-  Printers, AMS, fans, sensors, and LEDs: Impressoras, AMS, ventoinhas, sensores e LEDs
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Impressoras, sistema multi-filamento, ventoinhas, sensores e LEDs
   Printing: Imprimindo
   Printing label...: Imprimindo etiqueta...
   Printing test label...: Imprimindo etiqueta de teste...
@@ -1691,7 +1692,7 @@ translations:
   Startup Brightness: Brilho na inicialização
   Startup, auto-control, and macro devices: Inicialização, controle automático e dispositivos de macro
   State: Estado
-  Status: Status
+  Status: Estado
   Status icons: Ícones de status
   Std Deviation: Desvio Padrão
   Step: Etapa
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: Detecção de cor de filamento TD-1
   TEMPERATURE SENSORS: SENSORES DE TEMPERATURA
   THEME COLORS: CORES DO TEMA
-  TOOLS: TOOLS
+  TOOLS: FERRAMENTAS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Leva 3-5 min. Não interrompa.
   Tap again to confirm this orientation: Toque novamente para confirmar esta orientação
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'Falha ao descarregar: {}'
   Unload macro not configured: Macro de descarga não configurado
   Unload may still be running — response timed out: A descarga pode ainda estar em execução — tempo esgotado
+  Unloads After Print: Descarrega após a impressão
   Unloading: 'Descarregando'
   Unloading before bypass...: Descarregando antes do bypass...
   Unloading filament ({}mm)...: Descarregando filamento ({}mm)...

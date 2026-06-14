@@ -1169,7 +1169,7 @@ void AmsPanel::dispatch_selector_action(helix::ui::AmsSelectorMenu::SelectorActi
     using SA = helix::ui::AmsSelectorMenu::SelectorAction;
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
     AmsError err{};
@@ -1301,14 +1301,14 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
         switch (action) {
         case helix::ui::AmsContextMenu::MenuAction::LOAD:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             // Check if backend is busy
             {
                 AmsSystemInfo info = backend->get_system_info();
                 if (info.action != AmsAction::IDLE && info.action != AmsAction::ERROR) {
-                    NOTIFY_WARNING(lv_tr("AMS is busy: {}"), ams_action_to_string(info.action));
+                    NOTIFY_WARNING(lv_tr("Multi-Filament System is busy: {}"), ams_action_to_string(info.action));
                     return;
                 }
             }
@@ -1320,7 +1320,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 
         case helix::ui::AmsContextMenu::MenuAction::UNLOAD:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             // Route through the sidebar so start_operation(UNLOAD) builds the
@@ -1337,7 +1337,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 
         case helix::ui::AmsContextMenu::MenuAction::EJECT:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             {
@@ -1356,7 +1356,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 
         case helix::ui::AmsContextMenu::MenuAction::RESET_LANE:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             {
@@ -1369,7 +1369,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 
         case helix::ui::AmsContextMenu::MenuAction::SELECT_GATE:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             {
@@ -1382,7 +1382,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 
         case helix::ui::AmsContextMenu::MenuAction::CHECK_GATE:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             {
@@ -1420,7 +1420,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 
         case helix::ui::AmsContextMenu::MenuAction::CLEAR_SPOOL:
             if (!backend) {
-                NOTIFY_WARNING(lv_tr("AMS not available"));
+                NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
                 return;
             }
             {
@@ -1500,7 +1500,7 @@ void AmsPanel::show_edit_modal(int slot_index) {
 
     AmsBackend* backend = AmsState::instance().get_backend();
     if (!backend) {
-        NOTIFY_WARNING(lv_tr("AMS not available"));
+        NOTIFY_WARNING(lv_tr("Multi-Filament System not available"));
         return;
     }
 

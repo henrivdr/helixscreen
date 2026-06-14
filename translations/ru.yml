@@ -77,10 +77,11 @@ translations:
   AFC recovery failed: Восстановление AFC не удалось
   AFC reset complete: Сброс AFC завершён
   AFC reset failed: Ошибка сброса AFC
+  AFC retracts filament from the toolhead at end of print: AFC выгружает филамент из печатающей головки по завершении печати
   ALL DEVICES: ВСЕ УСТРОЙСТВА
   AMS: AMS
-  'AMS is busy: {}': 'AMS занят: {}'
-  AMS not available: AMS недоступен
+  'Multi-Filament System is busy: {}': 'Мультифиламентная система занята: {}'
+  Multi-Filament System not available: Мультифиламентная система недоступна
   API not available: API недоступен
   APPEARANCE: ВНЕШНИЙ ВИД
   AUTO FANS: АВТО ВЕНТИЛЯТОРЫ
@@ -103,6 +104,7 @@ translations:
   Actions: Действия
   Active: Активно
   Active Spool: Активная катушка
+  Adaptive Bed Mesh: Адаптивная сетка стола
   Add: Добавить
   Add Filament: Добавить филамент
   Add Hidden Network: Добавить скрытую сеть
@@ -1055,8 +1057,8 @@ translations:
   Multi-Filament: Мульти-филамент
   Multi-Filament Overview: Обзор мульти-филамента
   Multi-Filament System Management: Управление мульти-филаментной системой
-  Multi-Material: Мульти-материал
-  Multi-Material System Detected: Обнаружена мульти-материальная система
+  Multi-Filament System: Мультифиламентная система
+  Multi-Filament System Detected: Обнаружена мультифиламентная система
   Must home axes first: Сначала необходимо запарковать оси
   My Custom Theme: Моя тема
   My Panel: Моя панель
@@ -1082,9 +1084,8 @@ translations:
   New profile name: Новое имя профиля
   Next: Далее
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  No AMS connected: AMS не подключена
-  No AMS system connected: AMS-система не подключена
-  No AMS system connected.: AMS-система не подключена.
+  No Multi-Filament System connected: Мультифиламентная система не подключена
+  No Multi-Filament System connected.: Мультифиламентная система не подключена.
   No Bluetooth printer selected — pick one in settings: 'Bluetooth-принтер не выбран — выберите его в настройках'
   No Bluetooth printers found: Bluetooth-принтеры не найдены
   No Camera: Нет камеры
@@ -1335,7 +1336,7 @@ translations:
   Printer name: Название принтера
   Printer ready: Принтер готов
   Printers: Принтеры
-  Printers, AMS, fans, sensors, and LEDs: Принтеры, AMS, вентиляторы, датчики и светодиоды
+  Printers, Multi-Filament System, fans, sensors, and LEDs: Принтеры, мультифиламентная система, вентиляторы, датчики и светодиоды
   Printing: Печать
   Printing label...: Печать этикетки...
   Printing test label...: Печать тестовой этикетки...
@@ -1726,7 +1727,7 @@ translations:
   TD-1 filament color detection: Определение цвета филамента TD-1
   TEMPERATURE SENSORS: ДАТЧИКИ ТЕМПЕРАТУРЫ
   THEME COLORS: ЦВЕТА ТЕМЫ
-  TOOLS: TOOLS
+  TOOLS: ИНСТРУМЕНТЫ
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Занимает 3-5 мин. Не прерывайте.
   Tap again to confirm this orientation: Нажмите ещё раз для подтверждения ориентации
@@ -1742,7 +1743,7 @@ translations:
   Telemetry queue cleared: Очередь телеметрии очищена
   Temp: Темп.
   Temp Compensation: Термокомпенсация
-  Temp °C: Temp °C
+  Temp °C: Темп. °C
   Temperature: Температура
   Temperature Graph Config: Настройка графика температуры
   Temperatures: Температуры
@@ -1753,7 +1754,7 @@ translations:
   Test Network: Тест сети
   Test Print: Тестовая печать
   Test Screensaver: 'Проверить заставку'
-  Test Tracker: Test Tracker
+  Test Tracker: Трекер тестов
   Test label printed: Тестовая этикетка напечатана
   'Testing rotation: %d\xc2\xb0 (%d/%d) - %ds remaining': 'Тест поворота: %d\xc2\xb0 (%d/%d) - осталось %ds'
   Thanks! Anonymous usage data helps improve HelixScreen.: Спасибо! Анонимные данные использования помогают улучшить HelixScreen.
@@ -1864,6 +1865,7 @@ translations:
   'Unload failed: {}': 'Ошибка выгрузки: {}'
   Unload macro not configured: Макрос выгрузки не настроен
   Unload may still be running — response timed out: Выгрузка может ещё выполняться — время ожидания истекло
+  Unloads After Print: Выгрузка после печати
   Unloading: 'Выгрузка'
   Unloading before bypass...: Выгрузка перед байпасом...
   Unloading filament ({}mm)...: Выгрузка филамента ({}мм)...
