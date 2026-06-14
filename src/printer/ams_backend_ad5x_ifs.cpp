@@ -2173,6 +2173,63 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
     // reaches this function on heavy-print response streams.
     if (line.find("RUN_ZCOLOR") != std::string::npos ||
         line.find("CHANGE_ZCOLOR") != std::string::npos) {
+        // A CHANGE_ZCOLOR in the gcode stream is always a DELIBERATE external
+        // edit: HelixScreen persists colors by writing Adventurer5M.json directly
+        // and never emits CHANGE_ZCOLOR, so this command can only originate from
+        // the AD5X LCD, Mainsail, or zmod's COLOR/material macro. If the slot
+        // still carries a user-locked override from an earlier HelixScreen edit,
+        // sync_override_to_firmware_locked() skips the locked color/material
+        // (the #965 guard) and apply_overrides() keeps re-painting that stale
+        // value on every parse — so the user's new firmware color/type never
+        // surfaces (raza616, #981: set yellow PLA on the zmod screen, HelixScreen
+        // kept showing the previously Helix-set white PETG). The user has plainly
+        // overridden their earlier choice, so drop the stale override and let
+        // firmware truth (colors_/materials_, refreshed by the re-read below)
+        // show through. clear_slot_override() persists the clear, so it survives
+        // a restart instead of reloading the locked value from lane_data.
+        //
+        // This is gated on a CHANGE_ZCOLOR carrying a real locked override —
+        // RUN_ZCOLOR (display-only) and the post-print FFMInfo auto-revert that
+        // #965 guards against (it rewrites the JSON WITHOUT emitting
+        // CHANGE_ZCOLOR) never reach the clear, so the lock still protects the
+        // user's material there.
+        if (line.find("CHANGE_ZCOLOR") != std::string::npos) {
+            static const std::regex slot_re(R"(SLOT=(\d+))");
+            std::smatch m;
+            if (std::regex_search(line, m, slot_re)) {
+                // zmod SLOT is 1-based; overrides_ is 0-based.
+                int slot0 = std::atoi(m[1].str().c_str()) - 1;
+                bool has_locked_override = false;
+                if (slot0 >= 0 && slot0 < NUM_PORTS) {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    auto it = overrides_.find(slot0);
+                    has_locked_override =
+                        (it != overrides_.end() &&
+                         (it->second.user_locked_color || it->second.user_locked_material));
+                }
+                if (has_locked_override) {
+                    spdlog::info("{} External CHANGE_ZCOLOR for slot {} overrides an earlier "
+                                 "HelixScreen edit — clearing the stale locked override so the "
+                                 "new firmware color/type wins (#981)",
+                                 backend_log_tag(), slot0);
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        auto* entry = slots_.get_mut(slot0);
+                        if (entry) {
+                            // Erase + persist the stale override, then re-run
+                            // update_slot_from_state so entry->info is refreshed
+                            // from firmware truth (colors_/materials_) NOW —
+                            // clear_override_locked deliberately leaves the baked
+                            // color/material for the next update to refresh, and
+                            // we don't want to wait on the async re-read below.
+                            clear_override_locked(slot0, entry->info);
+                            update_slot_from_state(slot0);
+                        }
+                    }
+                    emit_event(EVENT_SLOT_CHANGED, std::to_string(slot0));
+                }
+            }
+        }
         spdlog::debug("{} Detected external color change in gcode stream, "
                       "scheduling re-read + zcolor query",
                       backend_log_tag());

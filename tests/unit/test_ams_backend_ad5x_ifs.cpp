@@ -4897,3 +4897,102 @@ TEST_CASE("AD5X IFS unload_filament on a non-active slot ejects that lane, not t
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
     REQUIRE_FALSE(backend.has_gcode_containing("M109"));
 }
+
+// ==========================================================================
+// External CHANGE_ZCOLOR releases a stale locked override — #981
+// (native ZMOD slot colors/types "randomly revert").
+// ==========================================================================
+//
+// raza616 (#981, bundle HKHZFYB2): slot 1 was once edited in HelixScreen (white
+// PETG, persist=true -> user-locked override), then physically changed to yellow
+// PLA and re-typed on the zmod screen. The #965 user-lock made
+// sync_override_to_firmware_locked() skip the locked color/material, so
+// apply_overrides() re-painted white PETG over firmware truth on every parse —
+// presence updated (not overridden) but color/type stayed stale, exactly his
+// report. A CHANGE_ZCOLOR in the gcode stream is a deliberate external edit
+// (HelixScreen never emits it), so it must drop the stale override and let
+// firmware truth surface.
+
+namespace {
+helix::ams::FilamentSlotOverride make_locked_override(uint32_t color_rgb,
+                                                      const std::string& material) {
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.color_rgb = color_rgb;
+    ovr.color_set = true;
+    ovr.material = material;
+    ovr.user_locked_color = true;
+    ovr.user_locked_material = true;
+    return ovr;
+}
+} // namespace
+
+TEST_CASE("AD5X IFS external CHANGE_ZCOLOR clears a stale locked override so firmware wins (#981)",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+
+    // Firmware truth for slot 0: zmod already wrote yellow PLA to Adventurer5M.json.
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+    Ad5xIfsTestAccess::set_color(backend, 0, "FEF043");
+    Ad5xIfsTestAccess::set_material(backend, 0, "PLA");
+
+    // Stale Helix edit: white PETG, user-locked. Seed it, then re-run
+    // update_slot_from_state (via set_color) so the override bakes into
+    // entry->info — mirroring the production parse path.
+    Ad5xIfsTestAccess::seed_override(backend, 0, make_locked_override(0xFFFFFF, "PETG"));
+    Ad5xIfsTestAccess::set_color(backend, 0, "FEF043");
+
+    // Precondition: the locked override masks firmware truth.
+    {
+        SlotInfo before = backend.get_slot_info(0);
+        REQUIRE(before.material == "PETG");
+        REQUIRE(before.color_rgb == 0xFFFFFF);
+    }
+
+    // Deliberate external edit on the zmod screen. SLOT is 1-based -> slot 0.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::on_gcode_response_line(
+        backend, "CHANGE_ZCOLOR SLOT=1 HEX=FEF043 TYPE=PLA"));
+
+    // The stale override is gone and firmware truth (yellow PLA) now shows.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+    SlotInfo after = backend.get_slot_info(0);
+    REQUIRE(after.material == "PLA");
+    REQUIRE(after.color_rgb == 0xFEF043);
+}
+
+TEST_CASE("AD5X IFS RUN_ZCOLOR (display-only) leaves a locked override intact (#981)",
+          "[ams][ad5x_ifs]") {
+    // RUN_ZCOLOR only renders the material menu; it is NOT an edit, so a
+    // user-locked override must survive it — only CHANGE_ZCOLOR is a real change.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+
+    Ad5xIfsTestAccess::seed_override(backend, 0, make_locked_override(0xFFFFFF, "PETG"));
+
+    REQUIRE_FALSE(Ad5xIfsTestAccess::on_gcode_response_line(
+        backend, "RUN_ZCOLOR SLOT=1 HEX=46328E TYPE=PETG"));
+
+    REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+}
+
+TEST_CASE("AD5X IFS CHANGE_ZCOLOR with no locked override is a harmless no-op (#981)",
+          "[ams][ad5x_ifs]") {
+    // External edit to a slot HelixScreen never touched: nothing to clear, and we
+    // must not crash or fabricate an override.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    Ad5xIfsTestAccess::set_port_presence(backend, 1, true);
+    Ad5xIfsTestAccess::set_color(backend, 1, "0DE2A0");
+    Ad5xIfsTestAccess::set_material(backend, 1, "SILK");
+
+    REQUIRE_FALSE(Ad5xIfsTestAccess::on_gcode_response_line(
+        backend, "CHANGE_ZCOLOR SLOT=2 HEX=0DE2A0 TYPE=SILK"));
+
+    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 1).has_value());
+    SlotInfo info = backend.get_slot_info(1);
+    REQUIRE(info.material == "SILK");
+    REQUIRE(info.color_rgb == 0x0DE2A0);
+}
