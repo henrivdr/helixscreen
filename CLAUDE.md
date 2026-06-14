@@ -20,7 +20,7 @@ make pi-test                         # Build on thelio + deploy + run
 scripts/setup-worktree.sh feature/my-branch  # Symlinks deps, builds fast
 ```
 
-**XML hot reload:** `HELIX_HOT_RELOAD=1 ./build/bin/helix-screen --test -vv` — edit XML, save, switch panels to see changes live.
+**XML changes need no rebuild:** `ui_xml/*.xml` is loaded at runtime — edit XML, then **relaunch** the binary to see changes (no `make` needed). Live hot-reload-while-running is NOT implemented yet (planned future feature of the XML loader; see `docs/devel/plans/2026-02-23-xml-hot-reload.md`). `HELIX_HOT_RELOAD=1` currently does nothing.
 
 **Screenshots:** Press 'S' in UI, or `./scripts/screenshot.sh helix-screen output-name [panel]`
 

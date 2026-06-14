@@ -792,6 +792,43 @@ Speed multiplier for dryer simulation (for faster testing).
 HELIX_MOCK_DRYER=1 HELIX_MOCK_DRYER_SPEED=10 ./build/bin/helix-screen --test
 ```
 
+### `HELIX_MOCK_DRYING`
+
+Start a live *active* drying session at boot (60 °C target, 4 h) so the environment
+overlay renders its drying state and the countdown actually ticks down. Uses the
+real mock countdown thread, so it honors `HELIX_MOCK_DRYER_SPEED`. Requires
+`HELIX_MOCK_DRYER=1`.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Set (any value) to start drying; unset for idle |
+| **Default** | unset (dryer idle) |
+| **File** | `src/printer/ams_backend.cpp` |
+
+```bash
+# Active drying, ticking at 10x, no humidity sensor, 600x480
+HELIX_SCREEN_SIZE=600x480 HELIX_MOCK_DRYER=1 HELIX_MOCK_DRYING=1 \
+  HELIX_MOCK_DRYER_SPEED=10 ./build/bin/helix-screen --test -p ams-environment
+```
+
+### `HELIX_MOCK_NO_HUMIDITY`
+
+Simulate a filament unit with no humidity sensor (e.g. a Happy Hare dryer). The
+environment overlay then shows the temp-only layout instead of the temp +
+humidity + comfort-ranges layout. Useful for verifying both overlay states.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Set (any value) to disable humidity; unset to keep humidity |
+| **Default** | unset (humidity sensor present) |
+| **File** | `src/printer/ams_backend_mock.cpp` |
+
+```bash
+# No humidity sensor + active dryer at 600x480
+HELIX_SCREEN_SIZE=600x480 HELIX_MOCK_DRYER=1 HELIX_MOCK_NO_HUMIDITY=1 \
+  ./build/bin/helix-screen --test
+```
+
 ### `HELIX_MOCK_SPOOLMAN`
 
 Enable or disable mock Spoolman integration. When disabled, `get_spoolman_status()` reports as disconnected.
