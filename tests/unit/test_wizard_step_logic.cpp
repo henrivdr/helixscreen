@@ -2,6 +2,7 @@
 #include "wizard_step_logic.h"
 
 #include "wizard_step.h"
+#include "../../src/ui/wizard_step_registry.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -250,4 +251,43 @@ TEST_CASE("id-nav: display number counts visible predecessors", "[wizard][step_l
     for (auto& s : v) if (s.id == StepId::TouchCalibration || s.id == StepId::Language) s.skipped = true;
     REQUIRE(helix::wizard_display_number(StepId::Wifi, v) == 1);
     REQUIRE(helix::wizard_display_number(StepId::Connection, v) == 2);
+}
+
+// ============================================================================
+// Registry preset-skip regression tests (Task 20). These drive the live step
+// singletons through step_by_id()->should_skip(ctx) and assert that the PRESET
+// branch dominates: when preset.skip_hardware is set, the hardware steps skip
+// regardless of any live hardware state they would otherwise consult.
+//
+// Context is built directly (NOT via build_context(), which needs a live app):
+// only the fields the preset policy reads are populated.
+// ============================================================================
+
+static helix::wizard::StepContext preset_ctx(bool has_preset, int printers) {
+    helix::wizard::StepContext c;
+    c.preset = helix::wizard_preset_plan(has_preset, printers);
+    c.is_subsequent_printer = printers > 1;
+    return c;
+}
+
+TEST_CASE("registry: subsequent preset printer skips hardware, shows summary, no telemetry",
+          "[wizard][step_logic][regression]") {
+    auto ctx = preset_ctx(/*has_preset=*/true, /*printers=*/2);
+    auto skip = [&](StepId id) { return helix::wizard::step_by_id(id)->should_skip(ctx); };
+    REQUIRE(skip(StepId::PrinterIdentify));
+    REQUIRE(skip(StepId::HeaterSelect));
+    REQUIRE(skip(StepId::FanSelect));
+    REQUIRE(skip(StepId::AmsIdentify));
+    REQUIRE(skip(StepId::LedSelect));
+    REQUIRE(skip(StepId::FilamentSensor));
+    REQUIRE(skip(StepId::InputShaper));
+    REQUIRE_FALSE(skip(StepId::Summary)); // shown for subsequent printer
+    REQUIRE(skip(StepId::Telemetry));     // never re-prompt
+}
+
+TEST_CASE("registry: first-run preset printer skips summary, shows telemetry",
+          "[wizard][step_logic][regression]") {
+    auto ctx = preset_ctx(/*has_preset=*/true, /*printers=*/1);
+    REQUIRE(helix::wizard::step_by_id(StepId::Summary)->should_skip(ctx));
+    REQUIRE_FALSE(helix::wizard::step_by_id(StepId::Telemetry)->should_skip(ctx));
 }
