@@ -191,5 +191,33 @@ void set_runtime_level(spdlog::level::level_enum level);
 spdlog::level::level_enum resolve_log_level(int cli_verbosity, const std::string& config_level_str,
                                             bool test_mode);
 
+/**
+ * @brief Tail of the in-memory ring-buffer log sink (newest-last, joined by \n)
+ *
+ * The ring buffer is installed on ALL platforms by init() and captures DEBUG
+ * regardless of the user-configured level the file/syslog/console sinks run at.
+ * It is the authoritative source for the debug bundle's log_tail because it is
+ * always the live process and always fresh — unlike the file cascade, which on
+ * syslog-target devices (AD5X/AD5M) falls back to stale leftover files and only
+ * carries WARN-filtered /var/log/messages lines.
+ *
+ * Returns at most `num_lines` of the most-recent formatted log lines, oldest
+ * first. Empty before init() has installed the sink (e.g. the watchdog build,
+ * which does not call init() with a ring sink) or if nothing has been logged.
+ *
+ * @param num_lines Max lines to return (0 = all retained)
+ * @return Newline-joined recent log lines, or empty string
+ */
+std::string tail_ring_buffer(int num_lines);
+
+/// Number of messages the ring buffer currently retains (capacity), for the
+/// bundle's log_meta diagnostic key. 0 before init() installs the sink.
+size_t ring_buffer_capacity();
+
+/// The effective spdlog level the persistent (file/syslog/console) sinks run
+/// at — i.e. the user-configured level, NOT the ring buffer's debug floor.
+/// Lets a bundle reader know whether debug was reaching persistent logs.
+spdlog::level::level_enum effective_log_level();
+
 } // namespace logging
 } // namespace helix

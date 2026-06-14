@@ -7,6 +7,7 @@
 #include "app_globals.h"
 #include "data_root_resolver.h"
 #include "helix_version.h"
+#include "logging_init.h"
 #include "http_executor.h"
 #include "hv/requests.h"
 #include "moonraker_api.h"
@@ -73,6 +74,15 @@ json DebugBundleCollector::collect(const BundleOptions& options) {
         }
     } catch (const std::exception& e) {
         spdlog::warn("[DebugBundle] Failed to collect log tail: {}", e.what());
+    }
+
+    // log_meta records the active sink target, the persistent level, and whether
+    // the log_tail came from the live ring buffer or the on-disk cascade — so a
+    // future reader knows whether debug detail was even being captured.
+    try {
+        bundle["log_meta"] = collect_log_meta();
+    } catch (const std::exception& e) {
+        spdlog::warn("[DebugBundle] Failed to collect log meta: {}", e.what());
     }
 
     try {
@@ -299,6 +309,29 @@ json DebugBundleCollector::collect_printer_info() {
 
 std::string DebugBundleCollector::collect_log_tail(int num_lines) {
     return helix::logs::tail_best(num_lines);
+}
+
+// =============================================================================
+// Log meta — tells a bundle reader whether debug was being captured and where
+// the log_tail actually came from. Cheap, no I/O, no network.
+// =============================================================================
+
+json DebugBundleCollector::collect_log_meta() {
+    json meta;
+    // The destination the persistent (file/syslog/journal/console) sinks write
+    // to, and the level they run at. If level is "warn", the on-disk logs only
+    // have WARN+; the ring buffer (below) is the only place debug survives.
+    meta["target"] = helix::logging::effective_destination();
+    meta["level"] =
+        spdlog::level::to_string_view(helix::logging::effective_log_level()).data();
+    meta["ring_lines"] = helix::logging::ring_buffer_capacity();
+
+    // Where collect_log_tail() got its content. The ring buffer is preferred
+    // when this process is alive; an empty ring (crash-reporter next boot)
+    // falls through to the file/syslog/journal cascade.
+    meta["log_tail_source"] =
+        helix::logging::tail_ring_buffer(1).empty() ? "file_cascade" : "ring_buffer";
+    return meta;
 }
 
 // =============================================================================

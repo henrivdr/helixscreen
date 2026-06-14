@@ -238,11 +238,28 @@ std::string tail_journal(int num_lines) {
 }
 
 std::string tail_best(int num_lines, const std::vector<std::string>& paths) {
-    // The running app already resolved exactly which file its sink writes to —
-    // prefer that over any heuristic so the collector never re-derives (and
-    // drifts from) logging_init's path logic. Only consulted for the default
-    // cascade; an explicit `paths` list from the caller is honored as-is.
+    // The in-memory ring buffer is the authoritative source when this process
+    // is alive: it is always the current run, always fresh, and (by default)
+    // carries DEBUG even when the file/syslog sinks ran at WARN. On syslog-
+    // target devices (AD5X/AD5M) the file cascade below otherwise falls back to
+    // a stale leftover file and only WARN-filtered /var/log/messages lines —
+    // the live debug context needed to diagnose an in-progress incident was
+    // being lost entirely. The file/syslog/journal cascade is kept intact as a
+    // fallback for the crash-reporter-next-boot case, where this process is gone
+    // and only on-disk logs survive (the ring is empty in a fresh process).
+    //
+    // Only consulted for the default cascade; an explicit `paths` list from the
+    // caller (the path-resolution test seam) is honored as-is and skips both the
+    // ring buffer and the effective-file step.
     if (paths.empty()) {
+        if (auto ring = helix::logging::tail_ring_buffer(num_lines); !ring.empty()) {
+            spdlog::debug("[Logs] Using in-memory ring buffer ({} chars)", ring.size());
+            return ring;
+        }
+
+        // The running app already resolved exactly which file its sink writes to
+        // — prefer that over any heuristic so the collector never re-derives
+        // (and drifts from) logging_init's path logic.
         if (auto effective = helix::logging::effective_log_file_path(); !effective.empty()) {
             if (auto result = read_tail_lines(effective, num_lines, "effective"); !result.empty())
                 return result;
