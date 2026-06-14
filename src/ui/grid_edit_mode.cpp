@@ -2156,7 +2156,16 @@ void GridEditMode::create_dots_overlay() {
     dots_overlay_ = lv_obj_create(container_);
     lv_obj_set_size(dots_overlay_, LV_PCT(100), LV_PCT(100));
     lv_obj_add_flag(dots_overlay_, LV_OBJ_FLAG_FLOATING);
-    lv_obj_remove_flag(dots_overlay_, LV_OBJ_FLAG_CLICKABLE);
+    // CLICKABLE + EVENT_BUBBLE makes this a genuine event shield: as the
+    // top-most full-grid child it becomes the hit target for every touch, so
+    // no widget underneath ever receives a press/click while editing (only
+    // sizing and moving, handled geometrically by the container's bubbled
+    // press/click handlers). A non-clickable overlay would let touches fall
+    // through to widgets that re-add CLICKABLE on async updates (e.g. the AMS
+    // mini-status), launching them mid-edit. Chrome buttons (configure/remove/
+    // delete-page) are created after this overlay, so they stay on top.
+    lv_obj_add_flag(dots_overlay_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(dots_overlay_, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_remove_flag(dots_overlay_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(dots_overlay_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(dots_overlay_, 0, 0);
