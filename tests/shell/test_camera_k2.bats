@@ -267,7 +267,11 @@ teardown() {
 
 @test "detect_lan_ip: empty when nothing resolves" {
     mock_command_script "ip" 'exit 0'
-    # No ifconfig either (PATH from mock dir only has our ip stub plus system).
+    # Stub ifconfig too: the system PATH stays on the front of $PATH after
+    # mock_command_script, so a host with net-tools (e.g. the CI runners)
+    # would otherwise hit detect_lan_ip's ifconfig fallback and return the
+    # runner's real IP. Stubbing it empty makes "nothing resolves" deterministic.
+    mock_command_script "ifconfig" 'exit 0'
     run detect_lan_ip
     [ "$status" -eq 0 ]
     [ -z "$output" ]
