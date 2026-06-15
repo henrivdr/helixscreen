@@ -161,6 +161,17 @@ void SettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(console_filter_firmware_noise_subject_, filter_firmware_noise ? 1 : 0,
                            "console_filter_firmware_noise", subjects_);
 
+    // Spaghetti detection master toggle (default: true — enabled out of the box)
+    bool detection_enabled = config->get<bool>("/detection/enabled", true);
+    UI_MANAGED_SUBJECT_INT(detection_enabled_subject_, detection_enabled ? 1 : 0,
+                           "detection_enabled", subjects_);
+
+    // Per-source policy for Snapmaker U1 built-in detector (default: 2 = DeferToSource)
+    int detection_policy_u1 = config->get<int>("/detection/policy_u1", 2);
+    detection_policy_u1 = std::clamp(detection_policy_u1, 0, 2);
+    UI_MANAGED_SUBJECT_INT(detection_policy_u1_subject_, detection_policy_u1,
+                           "detection_policy_u1", subjects_);
+
     // Chamber assignment (default: "auto" = use name heuristics).
     // Legacy paths (printer/chamber_{sensor,heater}) moved to the canonical flat paths
     // by config migration v11→v12.
@@ -511,6 +522,41 @@ void SettingsManager::set_console_filter_user_remove(const std::vector<std::stri
     Config* config = Config::get_instance();
     config->set<std::vector<std::string>>("/console/filter_user_remove", patterns);
     config->save();
+}
+
+// ============================================================================
+// Spaghetti Detection Settings
+// ============================================================================
+
+bool SettingsManager::get_detection_enabled() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&detection_enabled_subject_)) != 0;
+}
+
+void SettingsManager::set_detection_enabled(bool enabled) {
+    spdlog::info("[SettingsManager] set_detection_enabled({})", enabled);
+    auto old_val = std::to_string(lv_subject_get_int(&detection_enabled_subject_));
+    lv_subject_set_int(&detection_enabled_subject_, enabled ? 1 : 0);
+    Config* config = Config::get_instance();
+    config->set<bool>("/detection/enabled", enabled);
+    config->save();
+    TelemetryManager::instance().notify_setting_changed("detection_enabled", old_val,
+                                                        std::to_string(enabled ? 1 : 0));
+}
+
+int SettingsManager::get_detection_policy_u1() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&detection_policy_u1_subject_));
+}
+
+void SettingsManager::set_detection_policy_u1(int policy) {
+    policy = std::clamp(policy, 0, 2);
+    spdlog::info("[SettingsManager] set_detection_policy_u1({})", policy);
+    auto old_val = std::to_string(lv_subject_get_int(&detection_policy_u1_subject_));
+    lv_subject_set_int(&detection_policy_u1_subject_, policy);
+    Config* config = Config::get_instance();
+    config->set<int>("/detection/policy_u1", policy);
+    config->save();
+    TelemetryManager::instance().notify_setting_changed("detection_policy_u1", old_val,
+                                                        std::to_string(policy));
 }
 
 // ============================================================================
