@@ -364,16 +364,7 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         system_info_.filament_loaded = head_filament_;
 
         // Map current tool to current slot
-        if (active_tool_ >= 0 && active_tool_ < TOOL_MAP_SIZE) {
-            int port = tool_map_[static_cast<size_t>(active_tool_)];
-            if (port >= 1 && port <= NUM_PORTS) {
-                system_info_.current_slot = port - 1;
-            } else {
-                system_info_.current_slot = -1;
-            }
-        } else {
-            system_info_.current_slot = -1;
-        }
+        recompute_current_slot_locked();
 
         // Update all slot states
         for (int i = 0; i < NUM_PORTS; ++i) {
@@ -2673,6 +2664,18 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
 
     spdlog::debug("{} Querying GET_ZCOLOR SILENT=1", backend_log_tag());
     auto token = lifetime_.token();
+
+    // Also fire IFS_STATUS (fire-and-forget): its respond_info JSON carries the
+    // seated channel ("Chan"), which persists at the loaded port while idle —
+    // unlike GET_ZCOLOR's "Extruder:" feed view that reads "None" when loaded-
+    // idle. zcolor_query_active_ is already set, so the JSON line lands in
+    // zcolor_response_buffer_ and is parsed by parse_zcolor_silent. Clean JSON
+    // (not a prompt dialog), so it works even on old zmod where GET_ZCOLOR
+    // degrades to a prompt-fallback. Routed through the backend's fire-and-forget
+    // execute_gcode() (same call the toolhead unload uses) rather than the
+    // callback-taking MoonrakerAPI overload.
+    execute_gcode("IFS_STATUS");
+
     api_->execute_gcode(
         "GET_ZCOLOR SILENT=1",
         [this, token]() {
@@ -2724,6 +2727,69 @@ void AmsBackendAd5xIfs::finalize_zcolor_response() {
 }
 
 void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
+    // IFS_STATUS "Chan" is the seated-channel authority and rides the same
+    // response buffer as clean JSON (respond_info, not a prompt dialog). Apply
+    // it BEFORE the prompt-fallback / no-content early-returns so an old-zmod
+    // GET_ZCOLOR dialog can't discard the seated-slot signal. Also drives the
+    // unload/load phase finalize, which on old zmod has no other clean terminal
+    // signal (GET_ZCOLOR's extruder_slot is unavailable behind the prompt).
+    if (result.ifs_chan.has_value()) {
+        bool chan_changed = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const int chan = *result.ifs_chan; // 1-based, 0 = none
+
+            // ifs_chan takes precedence over extruder_slot for active_tool_
+            // derivation (gated on !has_ifs_vars_, matching the extruder_slot
+            // path below: lessWaste/bambufy own active_tool_ via save_variables).
+            if (!has_ifs_vars_) {
+                int new_active_tool = (chan > 0) ? find_first_tool_for_port(chan) : -1;
+                if (active_tool_ != new_active_tool) {
+                    active_tool_ = new_active_tool;
+                    chan_changed = true;
+                }
+                // Recompute the seated slot immediately so the UI's
+                // Unload/Eject gating updates without waiting for the next
+                // status frame.
+                int prev_slot = system_info_.current_slot;
+                recompute_current_slot_locked();
+                if (system_info_.current_slot != prev_slot) {
+                    chan_changed = true;
+                }
+            }
+
+            // Phase finalize from Chan: Chan==0 confirms an unload reached the
+            // empty state; Chan>0 confirms a load seated a channel. Same
+            // progressed-gate as the extruder_slot path so the early
+            // post-dispatch query can't finalize before the op physically ran.
+            if (phase_tracker_.active) {
+                const bool progressed = phase_tracker_.is_unload ? phase_tracker_.seen_head_drop
+                                                                 : phase_tracker_.seen_head_rise;
+                const bool reached_end =
+                    phase_tracker_.is_unload ? (chan == 0) : (chan > 0);
+                if (progressed && reached_end) {
+                    spdlog::info("{} Phase: IFS_STATUS Chan={} confirms {} complete -> IDLE",
+                                 backend_log_tag(), chan,
+                                 phase_tracker_.is_unload ? "unload" : "load");
+                    system_info_.action = AmsAction::IDLE;
+                    end_phase_tracking_locked();
+                    set_operation_detail_locked("");
+                    chan_changed = true;
+                }
+            }
+
+            if (chan_changed) {
+                for (int i = 0; i < NUM_PORTS; ++i) {
+                    update_slot_from_state(i);
+                }
+            }
+        } // release lock before emit_event (which also takes mutex_)
+
+        if (chan_changed) {
+            emit_event(EVENT_STATE_CHANGED);
+        }
+    }
+
     if (result.is_prompt_fallback) {
         if (zcolor_silent_supported_.exchange(false)) {
             spdlog::warn("{} zmod returned a prompt dialog for GET_ZCOLOR SILENT=1 — "
@@ -2799,7 +2865,12 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
         // Stock-ZMOD users have no other source — without this, active_tool_
         // is permanently stuck at -1 and the UI never shows which lane is
         // loaded (raza616's report against v0.99.50).
-        if (!has_ifs_vars_) {
+        //
+        // IFS_STATUS "Chan" takes precedence: when ifs_chan is present it
+        // already drove active_tool_/current_slot above (it persists at the
+        // seated port, while "Extruder:" reads "None" loaded-idle), so skip the
+        // extruder_slot derivation to avoid clobbering it with the stale view.
+        if (!has_ifs_vars_ && !result.ifs_chan.has_value()) {
             int new_active_tool = -1;
             if (result.extruder_slot.has_value()) {
                 int port = *result.extruder_slot + 1;
@@ -2807,6 +2878,7 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             }
             if (active_tool_ != new_active_tool) {
                 active_tool_ = new_active_tool;
+                recompute_current_slot_locked();
                 changed = true;
             }
         }
@@ -2818,8 +2890,10 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
         // query confirms the end state, finalize to IDLE immediately rather than
         // waiting for the 90s timeout backstop. The progressed-gate prevents the
         // early post-dispatch query (unload_filament schedules one immediately)
-        // from finalizing before the op has even run.
-        if (phase_tracker_.active && result.saw_valid_response) {
+        // from finalizing before the op has even run. (When ifs_chan is present
+        // the finalize already ran above; phase_tracker_.active is now false so
+        // this is a no-op — guarded anyway for clarity.)
+        if (phase_tracker_.active && result.saw_valid_response && !result.ifs_chan.has_value()) {
             const bool progressed = phase_tracker_.is_unload ? phase_tracker_.seen_head_drop
                                                              : phase_tracker_.seen_head_rise;
             const bool reached_end = phase_tracker_.is_unload ? !result.extruder_slot.has_value()
@@ -2861,10 +2935,52 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines) {
     // current channel: "None (N)" or bare "N" form — look for "(N)" paren form
     static const std::regex channel_paren_re(R"(\((\d+)\))");
 
+    // First pass: classify the response and pull the IFS_STATUS JSON line.
+    //
+    // IFS_STATUS (zmod cmd_IFS_STATUS -> respond_info(json.dumps(get_values())))
+    // arrives as one `// `-prefixed clean-JSON object containing "Chan" (1-based
+    // seated port, 0 = none). It shares the response buffer with GET_ZCOLOR but
+    // is emitted via respond_info, NOT a prompt dialog — so on old zmod where
+    // GET_ZCOLOR degrades to an action:prompt_ dialog, the IFS_STATUS data is
+    // still present and must NOT be discarded by the prompt early-out. We scan
+    // every line here (no early return) and let apply_zcolor_result honor
+    // ifs_chan even when is_prompt_fallback is set.
     for (const auto& raw : lines) {
         if (raw.find("action:prompt_") != std::string::npos) {
             result.is_prompt_fallback = true;
-            return result;
+            continue;
+        }
+        if (result.ifs_chan.has_value() || raw.find("\"Chan\"") == std::string::npos) {
+            continue;
+        }
+        // Strip the gcode-console "// " prefix before JSON parsing.
+        std::string body = raw;
+        const size_t slashes = body.find("//");
+        if (slashes != std::string::npos) {
+            body = body.substr(slashes + 2);
+        }
+        try {
+            json obj = json::parse(body);
+            if (obj.is_object()) {
+                auto chan_it = obj.find("Chan");
+                if (chan_it != obj.end() && chan_it->is_number_integer()) {
+                    result.ifs_chan = chan_it->get<int>();
+                    result.saw_valid_response = true;
+                    // Diagnostic: log the seated channel + presence view so the
+                    // next field bundle proves Chan's loaded-idle behavior.
+                    int state = obj.value("State", -1);
+                    std::string ports_str;
+                    if (auto ports_it = obj.find("Ports");
+                        ports_it != obj.end() && ports_it->is_array()) {
+                        ports_str = ports_it->dump();
+                    }
+                    spdlog::info("[AMS AD5X-IFS] IFS_STATUS Chan={} State={} Ports={}",
+                                 *result.ifs_chan, state, ports_str);
+                }
+            }
+        } catch (const json::parse_error&) {
+            // Not valid JSON (malformed line, partial buffer) — ignore. Never
+            // throw on a bad gcode-response line.
         }
     }
 
@@ -3165,8 +3281,14 @@ void AmsBackendAd5xIfs::on_head_transition_locked(bool detected) {
     }
     if (!detected) {
         // Head sensor cleared: cut + retract underway (unload) — advance to the
-        // retract phase. Only meaningful after heating completed.
+        // retract phase. The toolhead unload (_IFS_REMOVE_CURRENT_PRUTOK) runs
+        // with BYPASS_TEMPERATURE_CHECK and sends no preheat, so the nozzle may
+        // never reach target and the heat-completion gate would never trip,
+        // pinning the op in HEATING until the 300s timeout. A physical head drop
+        // proves the cut/retract has begun, so treat it as heat-complete and let
+        // apply_phase_action_locked advance HEATING -> UNLOADING.
         phase_tracker_.seen_head_drop = true;
+        phase_tracker_.reached_target_once = true;
         spdlog::info("{} Phase: head sensor dropped (cut/retract started)", backend_log_tag());
     } else {
         // Head sensor tripped: filament reached the nozzle (load) — advance to
@@ -3294,6 +3416,17 @@ int AmsBackendAd5xIfs::find_first_tool_for_port(int port_1based) const {
         }
     }
     return -1; // No tool mapped to this port
+}
+
+void AmsBackendAd5xIfs::recompute_current_slot_locked() {
+    if (active_tool_ >= 0 && active_tool_ < TOOL_MAP_SIZE) {
+        int port = tool_map_[static_cast<size_t>(active_tool_)];
+        if (port >= 1 && port <= NUM_PORTS) {
+            system_info_.current_slot = port - 1;
+            return;
+        }
+    }
+    system_info_.current_slot = -1;
 }
 
 bool AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {

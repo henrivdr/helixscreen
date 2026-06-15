@@ -218,6 +218,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
         bool saw_valid_response = false; // Matched at least one summary or slot line
         std::optional<int> current_channel;
         std::optional<int> extruder_slot; // 0-based, absent when "None"
+        // Seated/engaged channel from IFS_STATUS "Chan" (1-based, 0 = none).
+        // Distinct from current_channel (the stale "(N)" paren form, unused) and
+        // from extruder_slot (the live "Extruder:" feed view, which reads "None"
+        // while loaded-idle). Chan persists at the physically seated port, so it
+        // is the seated-channel authority for active_tool_/current_slot.
+        std::optional<int> ifs_chan;
         std::array<std::optional<ZColorSlot>, NUM_PORTS> slots;
     };
 
@@ -420,6 +426,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     void set_operation_detail_locked(std::string detail);
 
     int find_first_tool_for_port(int port_1based) const;
+
+    // Map active_tool_ -> system_info_.current_slot via tool_map_. Single source
+    // of truth shared by handle_status_update and apply_zcolor_result so the
+    // seated slot updates immediately when IFS_STATUS reports a new Chan instead
+    // of waiting for the next status frame. Caller must hold mutex_.
+    void recompute_current_slot_locked();
 
   private:
     bool validate_slot_index(int slot_index) const;

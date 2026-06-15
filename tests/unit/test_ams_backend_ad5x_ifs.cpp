@@ -2491,6 +2491,141 @@ TEST_CASE("AD5X IFS parse_zcolor_silent malformed lines skipped", "[ams][ad5x_if
     REQUIRE_FALSE(r.slots[3].has_value());
 }
 
+// ==========================================================================
+// IFS_STATUS Chan as seated-channel authority (2026-06-15 plan)
+// ==========================================================================
+//
+// zmod's IFS_STATUS macro emits one clean-JSON line via respond_info carrying
+// the current engaged port in "Chan" (1-based, 0 = none). Unlike the
+// GET_ZCOLOR "Extruder:" feed line — which reads "None (N)" while loaded-idle —
+// Chan persists at the seated port. parse_zcolor_silent must extract it into
+// ifs_chan, and apply_zcolor_result must derive active_tool_/current_slot from
+// it even on prompt-fallback (old zmod where GET_ZCOLOR degrades to a dialog).
+
+TEST_CASE("AD5X IFS parse_zcolor_silent extracts IFS_STATUS Chan", "[ams][ad5x_ifs]") {
+    // Firmware-accurate IFS_STATUS line: a single `// `-prefixed JSON object.
+    // Chan=4 means port 4 is the seated/engaged channel.
+    std::vector<std::string> lines = {
+        R"(// {"RawData": "...", "State": 4, "Ports": [false, true, true, true], "Silk": 14, )"
+        R"("Chan": 4, "Insert": 0, "NeedInsert": false, "Stall": false, "stall_state": 0})",
+    };
+
+    auto r = Ad5xIfsTestAccess::parse_zcolor_silent(lines);
+
+    REQUIRE_FALSE(r.is_prompt_fallback);
+    REQUIRE(r.saw_valid_response);
+    REQUIRE(r.ifs_chan.has_value());
+    REQUIRE(*r.ifs_chan == 4);
+}
+
+TEST_CASE("AD5X IFS IFS_STATUS Chan is seated authority over stale Extruder: None",
+          "[ams][ad5x_ifs]") {
+    // The field defect: GET_ZCOLOR says "Extruder: None (4)" (idle-extruder view)
+    // while port 4 is physically seated. IFS_STATUS Chan=4 must win, so the active
+    // slot is 3 (port 4) — making Unload available ONLY on slot 3 and Eject on the
+    // rest, not Unload-everywhere via the current_slot<0 recovery branch.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Identity tool map so find_first_tool_for_port(N) -> tool N-1.
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+    REQUIRE(backend.set_tool_mapping(2, 2).success());
+    REQUIRE(backend.set_tool_mapping(3, 3).success());
+
+    // Filament physically seated at the head (RS-485 reports true).
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // GET_ZCOLOR reports "Extruder: None (4)" (no active feed) but IFS_STATUS
+    // Chan=4 is the seated channel.
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.current_channel = 4; // stale "(4)" — never used
+    // extruder_slot deliberately absent (the "None" feed view).
+    r.ifs_chan = 4; // 1-based seated channel from IFS_STATUS
+
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // current_slot recomputed immediately to port 4 -> slot 3.
+    REQUIRE(backend.get_system_info().current_slot == 3);
+    REQUIRE(Ad5xIfsTestAccess::active_tool(backend) == 3);
+
+    // Unload is offered ONLY on the seated slot; the rest fall through to the
+    // base capability (false), so the UI shows Eject on them instead.
+    REQUIRE(backend.can_unload_from_toolhead(3));
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(0));
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(1));
+    REQUIRE_FALSE(backend.can_unload_from_toolhead(2));
+}
+
+TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)",
+          "[ams][ad5x_ifs]") {
+    // On old zmod, GET_ZCOLOR SILENT=1 degrades to an action:prompt dialog
+    // (is_prompt_fallback). IFS_STATUS rides the same buffer as clean JSON
+    // (respond_info, not a dialog), so its Chan must still drive the seated slot
+    // even though the prompt-fallback flag is set and silent support is disabled.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(3, 3).success()); // tool 3 -> port 4
+
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.is_prompt_fallback = true; // GET_ZCOLOR dialog on old zmod
+    r.saw_valid_response = true; // IFS_STATUS JSON still recognised
+    r.ifs_chan = 4;
+
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // Prompt-fallback still disables silent support for the session...
+    REQUIRE_FALSE(Ad5xIfsTestAccess::zcolor_silent_supported(backend));
+    // ...but the seated channel from IFS_STATUS was applied regardless.
+    REQUIRE(Ad5xIfsTestAccess::active_tool(backend) == 3);
+    REQUIRE(backend.get_system_info().current_slot == 3);
+}
+
+TEST_CASE("AD5X IFS phase: IFS_STATUS Chan=0 after head drop finalizes unload to IDLE",
+          "[ams][ad5x_ifs][phase]") {
+    // During a tracked unload, after the head sensor drops, an IFS_STATUS with
+    // Chan=0 (nothing seated) is the clean terminal signal — finalize to IDLE
+    // even though extruder_slot is also absent. Works on prompt-fallback.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_chan = 0; // nothing seated -> unload complete
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+}
+
+TEST_CASE("AD5X IFS phase: head drop during unload advances past HEATING (no heat event)",
+          "[ams][ad5x_ifs][phase]") {
+    // _IFS_REMOVE_CURRENT_PRUTOK runs with BYPASS_TEMPERATURE_CHECK and sends no
+    // preheat, so the nozzle never reaches target and reached_target_once stays
+    // false -> stuck in HEATING forever (only the 300s timeout recovered). A head
+    // drop physically proves the cut/retract started, so it must mark
+    // reached_target_once and advance the phase past HEATING.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+
+    // No temp ever reaches target. Head sensor drops (cut underway).
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+
+    // Must have advanced past HEATING despite never seeing a heat event.
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+}
+
 TEST_CASE("AD5X IFS apply_zcolor_result updates port_presence", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
@@ -5069,6 +5204,37 @@ class TestableAd5xIfsBackend : public AmsBackendAd5xIfs {
     }
 };
 } // namespace
+
+TEST_CASE("AD5X IFS unload non-active slot with IFS_STATUS Chan ejects that lane (raza D8Z7DAA6)",
+          "[ams][ad5x_ifs]") {
+    // raza616 D8Z7DAA6: channel 4 seated (Chan=4), user picks Unload on channel 2
+    // (slot 1). With current_slot now correctly 3 (from Chan), the non-active
+    // unload routes to cold eject_lane on port 2 — NOT _IFS_REMOVE_CURRENT_PRUTOK
+    // which would back out the actually-seated channel 4.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    REQUIRE(backend.set_tool_mapping(3, 3).success()); // tool 3 -> port 4
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // IFS_STATUS Chan=4 establishes the seated slot (3) before the unload.
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 4;
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    REQUIRE(backend.get_system_info().current_slot == 3);
+
+    REQUIRE(backend.unload_filament(1).success());
+
+    // 0-based slot 1 -> 1-based port 2, cold clamp/retract/unclamp. NOT the
+    // toolhead unload (which would remove the seated channel 4).
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=2"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=2 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=2"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK"));
+}
 
 TEST_CASE("AD5X IFS reports lane-eject and force-eject support", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
