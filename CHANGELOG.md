@@ -5,6 +5,28 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.79] - 2026-06-14
+
+### Added
+
+- **K2 camera works in HelixScreen and Fluidd** — the installer replaces the K2's proprietary WebRTC camera (which neither HelixScreen nor Fluidd can display) with a bundled MJPEG streamer, registers it in Moonraker, and cleanly restores the stock camera on uninstall.
+- **AD5X per-lane filament eject** — the IFS filament system can eject each material lane individually using its configured tube length, instead of only unloading the active channel.
+- **QIDI Box write support is always on** — tool mapping and box controls (including the dryer) now work without a feature flag, and box humidity is shown in the dryer overlay.
+
+### Fixed
+
+- **Installer will not wipe a mounted partition** — temp-directory cleanup refuses to `rm -rf` a mountpoint or the filesystem root, and a missing `realpath` on BusyBox firmware no longer aborts the install.
+- **Fewer spurious Moonraker warnings on K1/K2/Snapmaker U1** — the "Unable to initialize System Update Provider for distribution: buildroot" warning is suppressed on buildroot firmware without affecting HelixScreen's own updater.
+- **No crash adding a third printer** — a use-after-free when re-running the setup wizard for an additional printer is fixed, and per-step skips for AMS/LED/input-shaper steps are honored.
+- **AD5X IFS filament presence is accurate** (prestonbrown/helixscreen#981) — channel presence is driven solely by the firmware's color query so emptied channels no longer reappear, external lane unloads and color changes are reflected, and older firmware keeps a working presence fallback.
+- **Touch calibration auto-accepts reliably** (prestonbrown/helixscreen#1029) — the wizard accepts a completed calibration when the verify step is shown, not only on the press that triggered it.
+- **QIDI Box dryer and mapping fixes** (prestonbrown/helixscreen#1022, prestonbrown/helixscreen#1030) — box humidity appears in the dryer overlay, the tool-mapping card now surfaces, and drying-capable backends without a temperature sensor still show an environment indicator.
+- **AMS dryer panel hidden without a humidity reading** (prestonbrown/helixscreen#1022) — the dryer comfort panel no longer shows when there is no live humidity value.
+- **Model presets no longer overwrite your Moonraker host** — applying a printer-model preset keeps the IP/host you entered instead of resetting it.
+- **Webcam URLs preserve their port**, and HTML/iframe snapshot URLs are skipped so a real image is shown.
+- **Debug bundles include fresh logs** instead of a stale leftover log file.
+- **AD5M presets declare the E1 sensor** (role=none) in the ForgeX/ZMOD presets.
+
 ## [0.99.78] - 2026-06-14
 
 ### Added
@@ -4053,6 +4075,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.79]: https://github.com/prestonbrown/helixscreen/compare/v0.99.78...v0.99.79
 [0.99.78]: https://github.com/prestonbrown/helixscreen/compare/v0.99.77...v0.99.78
 [0.99.77]: https://github.com/prestonbrown/helixscreen/compare/v0.99.76...v0.99.77
 [0.99.76]: https://github.com/prestonbrown/helixscreen/compare/v0.99.75...v0.99.76
