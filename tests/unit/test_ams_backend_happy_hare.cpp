@@ -1158,6 +1158,37 @@ TEST_CASE("Happy Hare reads box humidity from environment sensor chip",
     REQUIRE(helper.get_system_info().units[0].environment->humidity_pct == Catch::Approx(37.5f));
 }
 
+TEST_CASE("Happy Hare resolves box humidity from aht20_f chip (QIDI Box)",
+          "[ams][happy_hare][v4]") {
+    // The QIDI Box's humidity chip is aht20_f (e.g. "aht20_f heater_box1"). When
+    // [mmu_machine] environment_sensor is an ALIAS (e.g. "temperature_sensor box"),
+    // the parser must derive "aht20_f box" as a humidity-chip candidate. Before the
+    // candidate list gained aht20_f/aht20, this resolved nothing and humidity never
+    // showed for QIDI Box users on the Happy Hare backend (#1022).
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    nlohmann::json settings = {
+        {"mmu_machine",
+         {{"filament_heater", "heater_generic box1_heater"},
+          {"environment_sensor", "temperature_sensor box"}}},
+        {"mmu", {{"heater_max_temp", 65.0}}}};
+    helper.test_apply_heater_config(settings);
+
+    helper.test_parse_mmu_state(
+        nlohmann::json{{"drying_state", {{"active", true}, {"current_temp", 50.0}}}});
+
+    // Humidity arrives on the backing chip object "aht20_f box" (bare name "box").
+    nlohmann::json status = {{"aht20_f box", {{"temperature", 27.67}, {"humidity", 16.0}}}};
+    REQUIRE(helper.test_apply_environment_sensor_status(status));
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    REQUIRE(info.units[0].environment.has_value());
+    REQUIRE(info.units[0].environment->has_humidity);
+    REQUIRE(info.units[0].environment->humidity_pct == Catch::Approx(16.0f));
+}
+
 TEST_CASE("Happy Hare per-gate sensors map to the right unit (multi-MMU)",
           "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;

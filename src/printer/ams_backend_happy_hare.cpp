@@ -1287,7 +1287,7 @@ bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& 
         if (auto sp = sname.find(' '); sp != std::string::npos) {
             const std::string bare = sname.substr(sp + 1);
             if (!bare.empty()) {
-                for (const char* chip : {"bme280", "htu21d", "sht3x", "aht10"}) {
+                for (const char* chip : {"bme280", "htu21d", "sht3x", "aht10", "aht20_f", "aht20"}) {
                     candidates.push_back(std::string(chip) + " " + bare);
                 }
             }
