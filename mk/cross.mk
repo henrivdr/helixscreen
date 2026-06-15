@@ -460,7 +460,7 @@ else ifeq ($(PLATFORM_TARGET),k1-dynamic)
 else ifeq ($(PLATFORM_TARGET),k2)
     # -------------------------------------------------------------------------
     # Creality K2 Series - Allwinner A133 (ARM Cortex-A53)
-    # Specs: 480x800 display (portrait), ~512MB RAM, musl libc (Tina Linux)
+    # Specs: 480x800 display (portrait), ~512MB RAM, glibc 2.29 rootfs (Tina Linux)
     # -------------------------------------------------------------------------
     # FULLY STATIC BUILD with musl: Same proven strategy as K1 target.
     # Uses Bootlin's armv7-eabihf musl toolchain (32-bit ARM hard-float).
@@ -468,8 +468,9 @@ else ifeq ($(PLATFORM_TARGET),k2)
     # We target armv7 despite the A53 being aarch64-capable because Tina Linux
     # (OpenWrt) commonly uses 32-bit userland, and entware packages are armv7sf.
     #
-    # UNTESTED: Based on research. See docs/printer-research/CREALITY_K2_PLUS_RESEARCH.md
-    # Key unknowns: actual ARM variant (armv7 vs aarch64), libc, fb orientation
+    # The K2 root filesystem is glibc 2.29, NOT musl — but we ship a FULLY
+    # STATIC binary built with the Bootlin musl toolchain, so it runs regardless
+    # of the device libc. See docs/printer-research/CREALITY_K2_PLUS_RESEARCH.md.
     CROSS_COMPILE ?= arm-buildroot-linux-musleabihf-
     TARGET_ARCH := armv7-a
     TARGET_TRIPLE := arm-buildroot-linux-musleabihf
@@ -846,7 +847,7 @@ endif
 # Cross-Compilation Build Targets
 # =============================================================================
 
-.PHONY: pi pi-both pi32 pi32-both ad5m ad5m-br cc1 mips k1 ad5x k1-dynamic k2 snapmaker-u1 x86 x86-both pi-docker pi32-docker ad5m-docker cc1-docker mips-docker k1-docker ad5x-docker k1-dynamic-docker k2-docker snapmaker-u1-docker x86-docker x86-fbdev-docker x86-all-docker docker-toolchains docker-toolchain-snapmaker-u1 docker-toolchain-x86 cross-info ensure-docker ensure-buildx maybe-stop-colima
+.PHONY: pi pi-both pi32 pi32-both ad5m ad5m-br cc1 mips k1 ad5x k1-dynamic k2 snapmaker-u1 x86 x86-both pi-docker pi32-docker ad5m-docker cc1-docker mips-docker k1-docker ad5x-docker k1-dynamic-docker k2-docker ustreamer-k2 snapmaker-u1-docker x86-docker x86-fbdev-docker x86-all-docker docker-toolchains docker-toolchain-snapmaker-u1 docker-toolchain-x86 cross-info ensure-docker ensure-buildx maybe-stop-colima
 
 # Persistent ccache for Docker builds — bind-mounts a host directory so the
 # cache survives across container runs (the container is --rm).  Per-platform
@@ -1166,6 +1167,22 @@ k2-docker: ensure-docker
 	$(call ensure-ccache-dir,k2)
 	$(Q)scripts/cross-compile-lock.sh docker run --platform linux/amd64 --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src $(DOCKER_WORKTREE_MOUNT) -w /src $(call docker-ccache-args,k2) helixscreen/toolchain-k2 \
 		make PLATFORM_TARGET=k2 SKIP_OPTIONAL_DEPS=1 -j$(NPROC_DOCKER_RUN)
+	@$(MAKE) --no-print-directory maybe-stop-colima
+
+# Cross-build the static armv7 ustreamer (MJPEG camera server) for K2.
+# Runs the vendored build script inside the K2 toolchain image. Idempotent:
+# scripts/ustreamer/build-ustreamer-k2.sh skips the build if a valid static
+# ARM binary already sits at build/k2/bin/ustreamer (FORCE_REBUILD=1 to force).
+# Source tarballs are cached under build/.cache/ustreamer; checksums verified.
+# Output lands at build/k2/bin/ustreamer so release-k2 picks it up.
+ustreamer-k2: ensure-docker
+	@echo "$(CYAN)$(BOLD)Cross-compiling static ustreamer for Creality K2 via Docker...$(RESET)"
+	@if ! docker image inspect helixscreen/toolchain-k2 >/dev/null 2>&1; then \
+		echo "$(YELLOW)Docker image not found. Building toolchain first...$(RESET)"; \
+		$(MAKE) docker-toolchain-k2; \
+	fi
+	$(Q)scripts/cross-compile-lock.sh docker run --platform linux/amd64 --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src $(DOCKER_WORKTREE_MOUNT) -w /src -e FORCE_REBUILD="$(FORCE_REBUILD)" helixscreen/toolchain-k2 \
+		bash scripts/ustreamer/build-ustreamer-k2.sh
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
 snapmaker-u1-docker: ensure-docker
@@ -2725,6 +2742,15 @@ release-k2: | build/k2/bin/helix-screen build/k2/bin/helix-splash
 	@mkdir -p $(RELEASE_DIR)/helixscreen/bin
 	@cp build/k2/bin/helix-screen build/k2/bin/helix-splash $(RELEASE_DIR)/helixscreen/bin/
 	@if [ -f build/k2/bin/helix-watchdog ]; then cp build/k2/bin/helix-watchdog $(RELEASE_DIR)/helixscreen/bin/; fi
+	@# Static MJPEG camera server. Built by `make ustreamer-k2` (cached, idempotent);
+	@# trigger it here so a clean release always bundles it. Ships at bin/ustreamer.
+	@$(MAKE) --no-print-directory ustreamer-k2
+	@if [ -f build/k2/bin/ustreamer ]; then \
+		cp build/k2/bin/ustreamer $(RELEASE_DIR)/helixscreen/bin/; \
+		echo "  $(DIM)Bundled static ustreamer (MJPEG camera server) at bin/ustreamer$(RESET)"; \
+	else \
+		echo "$(YELLOW)  WARNING: build/k2/bin/ustreamer missing — release will not include the camera server$(RESET)"; \
+	fi
 	@cp scripts/helix-launcher.sh $(RELEASE_DIR)/helixscreen/bin/
 	@cp -r ui_xml config $(RELEASE_DIR)/helixscreen/
 	@# Install K2 preset as default config (skips hardware wizard on first run)
