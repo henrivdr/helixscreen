@@ -124,6 +124,8 @@ class WizardTouchCalibrationStep : public helix::wizard::Step {
     }
 
   private:
+    friend class WizardTouchCalibrationTestAccess;
+
     lv_obj_t* screen_root_ = nullptr;
     lv_obj_t* crosshair_ = nullptr;           // Reparented to screen for absolute positioning
     lv_obj_t* test_area_container_ = nullptr; // Container for test area (shown in COMPLETE state)
@@ -169,6 +171,14 @@ class WizardTouchCalibrationStep : public helix::wizard::Step {
 
     // Panel callback
     void on_calibration_complete(const helix::TouchCalibration* cal);
+
+    // Auto-accept handler fired when the panel enters VERIFY (issue #1029).
+    // Wired via set_verify_entry_callback so it runs on every commit path
+    // (release event / 600ms stall timer / legacy sample-on-press), not just
+    // the press edge — clean capacitive panels (Goodix/Q2) commit POINT_3 on
+    // release, so the old press-handler check never fired and the wizard hung
+    // on "Computing calibration...".
+    void on_verify_entered();
 
     // UI update helper
     void update_instruction_text();

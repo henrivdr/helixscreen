@@ -101,9 +101,18 @@ WizardTouchCalibrationStep::WizardTouchCalibrationStep() {
     // Set up sample progress callback for UI updates
     panel_->set_sample_progress_callback([this]() { update_instruction_text(); });
 
+    // Auto-accept the instant the panel enters VERIFY. Wired to the panel's
+    // verify-entry hook (NOT the press handler) so it fires on whichever commit
+    // path actually reaches VERIFY — release event, 600ms stall timer, or legacy
+    // sample-on-press. The #943 debounce moved the POINT_3->VERIFY transition off
+    // the press edge to on_release()/stall; the old press-handler-only check then
+    // never ran on clean capacitive panels (Goodix/Q2), hanging the wizard forever
+    // on "Computing calibration..." (#1029).
+    panel_->set_verify_entry_callback([this]() { on_verify_entered(); });
+
     // Note: No countdown/timeout/fast-revert callbacks needed for wizard mode.
     // The wizard auto-accepts calibration immediately upon entering VERIFY state
-    // (see handle_screen_touched), so these timers never fire.
+    // (see on_verify_entered), so these timers never fire.
 
     spdlog::debug("[{}] Instance created", get_name());
 }
@@ -248,6 +257,9 @@ lv_obj_t* WizardTouchCalibrationStep::create(lv_obj_t* parent) {
                 update_button_visibility();
             }
         });
+        // Re-arm auto-accept (mirrors completion/failure above; the panel's
+        // verify-entry hook drives VERIFY->COMPLETE on every commit path, #1029).
+        panel_->set_verify_entry_callback([this]() { on_verify_entered(); });
         panel_->cancel(); // Reset to IDLE
     }
 
@@ -325,11 +337,16 @@ void WizardTouchCalibrationStep::cleanup() {
     }
     has_backup_ = false;
 
-    // Reset panel state - clear callback before cancel to prevent updates to
-    // destroyed UI widgets (callback would call update_instruction_text() etc.)
+    // Reset panel state - clear callbacks before reset to prevent updates to
+    // destroyed UI widgets (callbacks would call update_instruction_text() etc.).
+    // Clear the verify-entry callback too: it captures `this` and could otherwise
+    // be invoked by a stall timer left armed if the user navigated away mid-press
+    // (#1029). reset() (not cancel()) stops that stall timer and clears the
+    // pending-press state, fully disarming the panel on teardown.
     if (panel_) {
         panel_->set_completion_callback(nullptr);
-        panel_->cancel();
+        panel_->set_verify_entry_callback(nullptr);
+        panel_->reset();
     }
 
     // Clear pending calibration (user skipped or went back)
@@ -501,11 +518,11 @@ void WizardTouchCalibrationStep::handle_screen_touched(lv_event_t* e) {
         helix::ui::flash_object(crosshair_, 200, true);
     }
 
-    // Auto-accept when VERIFY state is reached (wizard doesn't need user to click Accept)
-    if (panel_->get_state() == helix::TouchCalibrationPanel::State::VERIFY) {
-        spdlog::info("[{}] Auto-accepting calibration (wizard mode)", get_name());
-        panel_->accept();
-    }
+    // Auto-accept on reaching VERIFY is handled by on_verify_entered() via the
+    // panel's verify-entry callback — it fires on whichever commit path actually
+    // reaches VERIFY (release / stall / legacy press), not just this press edge
+    // (#1029). Do not re-check state here: with debounce on, the 3rd point
+    // commits on release, so VERIFY is never reached inside this press handler.
 
     // Update UI for next step
     update_instruction_text();
@@ -526,6 +543,29 @@ void WizardTouchCalibrationStep::handle_screen_released() {
     // keeps showing the pre-commit "touch N of 3" until the next press.
     update_instruction_text();
     update_crosshair_position();
+}
+
+void WizardTouchCalibrationStep::on_verify_entered() {
+    if (!panel_) {
+        return;
+    }
+
+    // The wizard has no interactive verify step — accept the freshly computed
+    // calibration immediately. Fired from the panel's verify-entry hook, which
+    // runs on every commit path (#1029), so this is the single place auto-accept
+    // happens regardless of how POINT_3 committed (release / stall / press).
+    spdlog::info("[{}] Auto-accepting calibration (wizard mode)", get_name());
+    panel_->accept();
+
+    // Refresh UI only when a live screen exists. accept()'s completion callback
+    // (on_calibration_complete) is itself screen_root_-guarded; mirror that here
+    // so the verify-entry hook is safe to fire from the stall timer before the
+    // screen is built, and from unit tests that drive the panel without UI.
+    if (screen_root_) {
+        update_instruction_text();
+        update_crosshair_position();
+        update_button_visibility();
+    }
 }
 
 void WizardTouchCalibrationStep::handle_test_area_touched(lv_event_t* e) {
