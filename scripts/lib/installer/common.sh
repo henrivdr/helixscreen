@@ -189,7 +189,7 @@ error_handler() {
 
     # Cleanup temporary files after restores are done
     if [ "$CLEANUP_TMP" = true ] && [ -d "$TMP_DIR" ]; then
-        rm -rf "$TMP_DIR"
+        _safe_remove_tmp_dir "$TMP_DIR"
     fi
 
     echo ""
@@ -205,10 +205,41 @@ error_handler() {
     exit $exit_code
 }
 
+# Safely remove the installer's temp dir. REFUSES to delete the filesystem root
+# or a mountpoint — a user-supplied TMP_DIR pointing at a mount root (e.g.
+# `TMP_DIR=/mnt/UDISK`) once caused `rm -rf "$TMP_DIR"` to wipe a live data
+# partition (printer_data + device userdata). Only ever removes a normal,
+# non-mountpoint directory.
+_safe_remove_tmp_dir() {
+    local d="$1"
+    [ -n "$d" ] && [ -d "$d" ] || return 0
+    if [ "$d" = "/" ]; then
+        log_warn "Refusing to remove TMP_DIR='/'"
+        return 0
+    fi
+    # Mountpoint detection: prefer mountpoint(1); else compare the device id of
+    # the dir against its parent (differs at a mount boundary). BusyBox-safe.
+    if command -v mountpoint >/dev/null 2>&1; then
+        if mountpoint -q "$d"; then
+            log_warn "Refusing to rm -rf mountpoint TMP_DIR='$d' (would wipe a live partition); leaving it in place."
+            return 0
+        fi
+    else
+        local _ddev _pdev
+        _ddev=$(stat -c '%d' "$d" 2>/dev/null)
+        _pdev=$(stat -c '%d' "$d/.." 2>/dev/null)
+        if [ -n "$_ddev" ] && [ -n "$_pdev" ] && [ "$_ddev" != "$_pdev" ]; then
+            log_warn "Refusing to rm -rf mountpoint TMP_DIR='$d' (would wipe a live partition); leaving it in place."
+            return 0
+        fi
+    fi
+    rm -rf "$d"
+}
+
 # Cleanup function for normal exit
 cleanup_on_success() {
     if [ -d "$TMP_DIR" ]; then
-        rm -rf "$TMP_DIR"
+        _safe_remove_tmp_dir "$TMP_DIR"
     fi
 }
 
