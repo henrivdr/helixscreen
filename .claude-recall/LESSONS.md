@@ -110,8 +110,8 @@
 > 4. `Read /tmp/test.log`.
 > Failures: shell `&`, `timeout X cmd &`, retrying, assuming auto-nav. One bg task, tee to log, user interacts, you read.
 
-### [L061] [**---|***--] AD5M test printer environment
-- **Uses**: 7 | **Velocity**: 1.0703125 | **Learned**: 2026-02-07 | **Last**: 2026-05-23 | **Category**: system
+### [L061] [**---|****-] AD5M test printer environment
+- **Uses**: 8 | **Velocity**: 2.0703125 | **Learned**: 2026-02-07 | **Last**: 2026-06-13 | **Category**: system
 > AD5M (192.168.1.67, root@). armv7l Linux 5.4.61 (BusyBox). Gotchas: (1) wget no HTTPS, no curl. (2) No sftp-server — `scp -O`. (3) Logs go to BOTH `/tmp/helixscreen.log` AND syslog (`/var/log/messages`); syslog is current session, file may be stale. Default level WARN. (4) `/etc/ssl/certs/` empty — breaks all outbound HTTPS (libhv, wget); ship `ca-certificates.crt`. (5) No `openssl` CLI. (6) No inotify. (7) No WiFi (wpa_supplicant present, no interfaces — but see project_ad5m_wifi_actually_works.md). (8) OpenSSL 1.1 at `/usr/lib/libssl.so.1.1`. (9) Binary at `/opt/helixscreen/`, config `/opt/helixscreen/config/helixconfig.json`. (10) `ldd` may return empty for static ARM binaries.
 
 ### [L062] [***--|**---] AD5M build and deploy targets
@@ -186,16 +186,16 @@
 - **Uses**: 31 | **Velocity**: 6.125 | **Learned**: 2026-04-16 | **Last**: 2026-06-13 | **Category**: gotcha
 > Before asking user to interact on-device, verify in one pass: (1) NEW binary running (PID start time / version in log), (2) logs land where you expect (journalctl/file/console), (3) required state on (telemetry, debug level in helixscreen.env), (4) logs reachable via SSH. Each failed round-trip burns user patience. Pi: systemctl → journalctl; `deploy-pi-fg` uses `ssh -t` (console only); nohup drops output. Production log capture: systemd + journalctl.
 
-### [L081] [***--|***--] lifetime_.defer does NOT escape UpdateQueue batch
-- **Uses**: 22 | **Velocity**: 1.953125 | **Learned**: 2026-04-18 | **Last**: 2026-05-17 | **Category**: gotcha | **Type**: constraint
+### [L081] [***--|****-] lifetime_.defer does NOT escape UpdateQueue batch
+- **Uses**: 24 | **Velocity**: 3.953125 | **Learned**: 2026-04-18 | **Last**: 2026-06-14 | **Category**: gotcha | **Type**: constraint
 > `lifetime_.defer` / `tok.defer` / our `helix::ui::async_call` are thin wrappers over `queue_update` — the cb fires in the next `process_pending` tick, still inside a UpdateQueue batch with other sync deletions. AsyncLifetimeGuard's gen counter only protects `this`, not LVGL event-list. Any comment claiming "defer is outside process_pending" is wrong — fix it. Observer cbs (`observe_int_sync`, `observe_string`) are also queued since #82, same batch. BANNED inside any queued/deferred cb: `safe_delete(ptr)`, `lv_obj_delete(obj)`, `lv_obj_clean(container)`. INSTEAD: `safe_delete_deferred(ptr)`, `lv_obj_delete_async(obj)`, `helix::ui::safe_clean_children(container)` — all route through LVGL's async list, outside our batch. Multiple sync deletes in one batch → SIGSEGV in `lv_event_mark_deleted` (#776, #190, #80). CLAUDE.md § "No sync widget deletion in queued callbacks", `include/ui_utils.h`.
 
 ### [L082] [**---|***--] Percent size inside LV_SIZE_CONTENT parent collapses to 0
 - **Uses**: 5 | **Velocity**: 1.28125 | **Learned**: 2026-04-20 | **Last**: 2026-06-04 | **Category**: gotcha | **Type**: constraint
 > LVGL percent sizing (`width="50%"`, `style_min_width="50%"`) resolves against parent content area. If parent is `LV_SIZE_CONTENT` → circular dep, percent collapses to 0, child vanishes. Symptom: `long_mode="wrap"` + `flex_grow="1"` wraps near-per-character (super-tall cards); flex rows show only fixed-width children with the growing one squeezed out. Fix: give parent an explicit width, then child `width="100%"`. Never nest percent kids in content-sized parents. Bit us in toast stacking refactor 26573f1f2 — LV_SIZE_CONTENT stack between `lv_layer_top` and toast_root collapsed `min_width="50%"`.
 
-### [L083] [***--|***--] Never `std::thread(...).detach()` for fire-and-forget work
-- **Uses**: 12 | **Velocity**: 1.53125 | **Learned**: 2026-04-22 | **Last**: 2026-05-21 | **Category**: gotcha | **Type**: constraint
+### [L083] [***--|****-] Never `std::thread(...).detach()` for fire-and-forget work
+- **Uses**: 14 | **Velocity**: 3.53125 | **Learned**: 2026-04-22 | **Last**: 2026-06-14 | **Category**: gotcha | **Type**: constraint
 > On AD5M/CC1/MIPS32, `pthread_create` returns EAGAIN under thread exhaustion → `std::thread` ctor throws `std::system_error`. Propagating through an LVGL C event-dispatch frame or a `noexcept` boundary → `std::terminate without active exception`, near-impossible to diagnose because the crash looks unrelated (#724, #837 debug-bundle upload, #811-adjacent RatOS HTTP-thread storm).
 > **HTTP work**: `helix::http::HttpExecutor::fast()` (4 workers — REST/API/thumbnails/small uploads) or `::slow()` (1 worker — multi-MB transfers, debug bundles). Submitted lambdas still need `helix::ui::queue_update()` / `tok.defer()` for UI. `include/http_executor.h`.
 > **Non-HTTP IO** (BT/USB/RFCOMM, QR decode, device discovery): use an existing managed pool / BusThread, OR wrap `std::thread(...).detach()` in `try { ... } catch (const std::system_error&) { ... toast + error cb ... }` so spawn failure surfaces a toast instead of terminating. `feedback_no_bare_threads_arm.md`.
@@ -219,7 +219,7 @@
 > If you reason "release() seems safer because it skips the observer-remove" — that's the misconception that caused 17× #579. The remove call IS the point; skipping it leaks context and corrupts rendering state. Companion to [L073]. Audit 2026-04-22 fixed `ui_ams_current_tool.cpp`, `ui_heating_animator.cpp`, `ui_ams_mini_status.cpp`.
 
 ### [L086] [***--|*****] OpenWrt/procd silently skips plain SysV init scripts at boot
-- **Uses**: 13 | **Velocity**: 6.125 | **Learned**: 2026-04-28 | **Last**: 2026-06-03 | **Category**: gotcha | **Type**: constraint
+- **Uses**: 14 | **Velocity**: 7.125 | **Learned**: 2026-04-28 | **Last**: 2026-06-14 | **Category**: gotcha | **Type**: constraint
 > On OpenWrt-derived firmware (Tina Linux on K2 series, possibly future Creality/Allwinner), procd's boot iterator only invokes `/etc/init.d/<name>` scripts that have BOTH `#!/bin/sh /etc/rc.common` shebang AND a `DEPEND=...` directive. Plain SysV (`#!/bin/sh` + `case "$1" in start)`) is silently skipped — even when symlinked from `/etc/rc.d/SXXname`. No log, no error.
 > Symptom: device hangs at boot animation; no UI; SSH in → no `/tmp/helixscreen.log`, no helix-screen procs, no syslog entries. Manual `/etc/init.d/S99helixscreen start` works.
 > Fix: install a procd shim at `/etc/init.d/<name>` with `#!/bin/sh /etc/rc.common`, `START=99 STOP=01 DEPEND=done`, and `boot()/start()/stop()/restart()/status()` that delegate to the SysV `/etc/init.d/SXX<name>`. Then `<shim> enable` for rc.d symlinks. See `install_procd_shim_k2()` in `scripts/lib/installer/service.sh`. Diag: `head -1 /etc/init.d/<name>` must show `/etc/rc.common`; `<script> boot; echo $?` must succeed; post-reboot `grep <tag> /var/log/messages` must show boot invocation.
@@ -241,8 +241,8 @@
 - **Uses**: 1 | **Velocity**: 1 | **Learned**: 2026-06-12 | **Last**: 2026-06-12 | **Category**: gotcha
 > scripts/resolve-backtrace.sh forks one aarch64-linux-gnu-addr2line PER backtrace address against the multi-GB DWARF (pi.debug ~2.6G). addr2line loads DWARF lazily so each child GROWS over time (4G->8G+). If the harness auto-backgrounds the resolver and you 'kill' it, the script's subshell+addr2line children ORPHAN and keep grinding -> RAM erodes with ever-new PIDs invisible to 'pkill -f addr2line' / 'ps -C addr2line' (binary name truncates to 'aarch64-linux-g'). Three parallel YA2GVVXT resolves once ate ~26G+ while a build ran, nearly OOMing the box. RULES: (1) run resolve-backtrace.sh with run_in_background:true from the START so the harness owns the whole process tree; (2) NEVER hand-fork addr2line in a chained shell that can be backgrounded; (3) let ONE resolver finish, don't launch parallel retries; (4) to clean up, kill the PARENT resolve-backtrace.sh PIDs (find via 'pgrep -af resolve-backtrace'), not just children; identify the big procs via /proc/PID/cmdline since the name truncates. The resolver's reliable-frames block prints quickly; the slow part is the stack-scan over all addresses.
 
-### [L091] [-----|-----] Stale-but-200 R2 manifest silently suppresses updates fleet-wide
-- **Uses**: 0 | **Velocity**: 0 | **Learned**: 2026-06-12 | **Last**: 2026-06-12 | **Category**: gotcha
+### [L091] [*----|***--] Stale-but-200 R2 manifest silently suppresses updates fleet-wide
+- **Uses**: 1 | **Velocity**: 1 | **Learned**: 2026-06-12 | **Last**: 2026-06-14 | **Category**: gotcha
 > If 'new version not showing in check-for-updates on ANY device', it's the source of truth, not per-device: the in-app updater fetches https://releases.helixscreen.org/<channel>/manifest.json FIRST and trusts any HTTP-200 unconditionally (update_checker.cpp fetch_stable_release) -- it only falls back to GitHub on FETCH FAILURE, never on staleness. Root cause of v0.99.76 not appearing: the release.yml 'Upload to R2' job is non-blocking AND its monolithic set -e upload step put the manifest AFTER the large .zip artifacts; a transient 504 on k2.zip aborted the step before the manifest uploaded, so R2 stayed pinned at .75 while the run still showed green. Diagnose: curl the live manifest .version vs the tag; check the 'Upload to R2' job (not just run status). Fix shipped (942bcbd51,d0034b282): upload referenced .tar.gz -> publish manifest -> then zips/symbols, all via s3cp() retry wrapper, then read the manifest back and assert .version==tag so a bad publish fails the release loudly. Lesson: verify the SERVED artifact, never trust upload success; a non-blocking CI job that publishes the source-of-truth is a silent-failure trap.
 
 ### [L092] [*----|****-] make | tail masks exit code; -j hides the real build error

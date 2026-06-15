@@ -347,6 +347,11 @@ The Snapmaker U1 is an all-in-one printer with a built-in touchscreen. HelixScre
   - [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) installed (required for SSH access). Tested on **1.2.x, 1.3.x, and 1.4.x**. Stock Snapmaker firmware is not supported.
   - SSH access (`root@<printer-ip>` or `lava@<printer-ip>`, password: `snapmaker`)
 
+**Notes:**
+- **Reinstall after a firmware update** — updating the PAXX firmware can overwrite HelixScreen; re-run the installer afterward.
+- **Remote screen ("gui" camera) is not yet supported** — the built-in firmware exposes a "gui" webcam in Mainsail/Fluidd that mirrors the printer's local touchscreen. Once HelixScreen takes over the display it owns the screen directly, so that feed shows "No Signal" and is expected. The physical "case" camera is unaffected. Streaming the HelixScreen UI to the web frontend is planned but not implemented; use Mainsail/Fluidd for remote monitoring in the meantime.
+- **Two harmless Moonraker warnings are expected** — after install, the Mainsail/Fluidd "Moonraker warnings found" banner may show *"Unable to find DBus PolKit Interface"* and *"Unable to initialize System Update Provider for distribution: buildroot"*. Both are inherent to Moonraker on the U1's buildroot firmware (no PolKit, no OS package manager) and do **not** affect HelixScreen or printing. They are not specific to HelixScreen — installing simply restarts Moonraker, which re-surfaces them. See [Troubleshooting](TROUBLESHOOTING.md).
+
 ---
 
 ## Raspberry Pi / MainsailOS Installation
