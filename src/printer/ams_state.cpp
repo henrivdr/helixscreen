@@ -1177,12 +1177,17 @@ void AmsState::sync_from_backend() {
         }
     }
 
-    // Update per-unit environment indicator display subjects (formatted text for XML)
+    // Update per-unit environment indicator display subjects (formatted text for XML).
+    // dryer is system-level (applies to all units); fetch once up front so the
+    // indicator can be made reachable for any drying-capable backend, not only when
+    // a live temp/humidity reading is present.
+    const auto& dryer = backend->get_dryer_info();
     for (const auto& unit : info.units) {
         int idx = unit.unit_index;
         if (idx < 0 || idx >= MAX_UNITS)
             continue;
-        if (unit.environment.has_value()) {
+        const bool has_env = unit.environment.has_value();
+        if (has_env) {
             // Format temperature text (e.g., "24°C")
             char buf[ENV_IND_TEXT_BUF_SIZE];
             snprintf(buf, sizeof(buf),
@@ -1236,29 +1241,31 @@ void AmsState::sync_from_backend() {
                 lv_subject_set_int(&env_ind_humidity_status_[idx], humidity_status);
             }
 
-            // Show indicator
-            if (lv_subject_get_int(&env_ind_visible_[idx]) != 1) {
-                lv_subject_set_int(&env_ind_visible_[idx], 1);
-            }
-
-            // Show/hide humidity based on backend capability
-            int hum_vis = unit.environment->has_humidity ? 1 : 0;
-            if (lv_subject_get_int(&env_ind_humidity_visible_[idx]) != hum_vis) {
-                lv_subject_set_int(&env_ind_humidity_visible_[idx], hum_vis);
-            }
         } else {
-            // Hide indicator when no environment data
-            if (lv_subject_get_int(&env_ind_visible_[idx]) != 0) {
-                lv_subject_set_int(&env_ind_visible_[idx], 0);
+            // No live reading — show an em-dash so a drying-capable unit still
+            // presents a tappable indicator instead of a blank temperature.
+            if (strcmp(lv_subject_get_string(&env_ind_temp_text_[idx]), "\xE2\x80\x94") != 0) {
+                lv_subject_copy_string(&env_ind_temp_text_[idx], "\xE2\x80\x94");
             }
-            if (lv_subject_get_int(&env_ind_humidity_visible_[idx]) != 0) {
-                lv_subject_set_int(&env_ind_humidity_visible_[idx], 0);
-            }
+        }
+
+        // Indicator is reachable when there is live environment data OR the
+        // backend supports drying — otherwise a dryer-capable box with no
+        // temp/humidity sensor would have no way to open the drying controls.
+        const int ind_vis = (has_env || dryer.supported) ? 1 : 0;
+        if (lv_subject_get_int(&env_ind_visible_[idx]) != ind_vis) {
+            lv_subject_set_int(&env_ind_visible_[idx], ind_vis);
+        }
+
+        // Humidity row only when a real humidity reading exists.
+        const int hum_vis = (has_env && unit.environment->has_humidity) ? 1 : 0;
+        if (lv_subject_get_int(&env_ind_humidity_visible_[idx]) != hum_vis) {
+            lv_subject_set_int(&env_ind_humidity_visible_[idx], hum_vis);
         }
     }
 
-    // Update drying state for indicator (system-level dryer applies to all units)
-    const auto& dryer = backend->get_dryer_info();
+    // Update drying state for indicator (system-level dryer applies to all units).
+    // dryer was fetched above for the visibility gate.
     for (int i = 0; i < MAX_UNITS; ++i) {
         // Only update drying for units that have environment data visible
         if (lv_subject_get_int(&env_ind_visible_[i]) != 1) {
