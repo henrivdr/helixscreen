@@ -429,12 +429,27 @@ class MoonrakerAPI : public IMoonrakerAPI {
         return http_base_url_;
     }
 
+    /// Moonraker's default API port. When the HTTP base points here we assume a
+    /// "direct to Moonraker" connection, where the webcam is served by a separate
+    /// reverse proxy (conventionally nginx on :80) rather than the API port.
+    static constexpr int MOONRAKER_DEFAULT_PORT = 7125;
+
     /**
      * @brief Resolve a relative webcam URL against the web frontend base.
      *
-     * Moonraker webcam URLs are often relative paths (e.g. "/webcam/?action=stream")
-     * meant for the nginx reverse proxy on port 80, not the Moonraker API port.
-     * This extracts "http://HOST" from the HTTP base URL and prepends it.
+     * Moonraker webcam URLs are often relative paths (e.g. "/webcam/?action=stream").
+     * The base URL is always of the form "http://HOST" or "http://HOST:PORT".
+     *
+     * Port handling depends on which port the HTTP base points at:
+     *   - Base port == 7125 (Moonraker's default API port): we're talking to
+     *     Moonraker directly. The webcam is NOT served on the API port — it lives
+     *     on the reverse proxy, conventionally nginx on :80. So we STRIP the port
+     *     and resolve against the bare host (port 80). This is the common, working
+     *     case (e.g. a printer on :7125 with an mjpegstreamer-adaptive webcam).
+     *   - Base port == anything else (user connected via a reverse-proxy port such
+     *     as :4408, e.g. a Creality K2): the frontend that serves the webcam is on
+     *     that same port. KEEP the port and resolve against host:port.
+     *   - Base has no port: resolve against the base as-is.
      *
      * @param url The URL to resolve (modified in place). Absolute URLs are unchanged.
      */
@@ -443,16 +458,30 @@ class MoonrakerAPI : public IMoonrakerAPI {
         ensure_http_base_url();
         const auto& base = get_http_base_url();
         if (base.empty()) return;
-        // Extract "http://HOST" — drop port and path
         auto scheme_end = base.find("://");
         if (scheme_end == std::string::npos) {
             url = base + url;
             return;
         }
         auto port_pos = base.find(':', scheme_end + 3);
-        if (port_pos != std::string::npos) {
+        if (port_pos == std::string::npos) {
+            // No port in base — resolve as-is.
+            url = base + url;
+            return;
+        }
+        // Parse the port that follows the ':'.
+        int base_port = 0;
+        for (size_t i = port_pos + 1; i < base.size(); ++i) {
+            char c = base[i];
+            if (c < '0' || c > '9') break;
+            base_port = base_port * 10 + (c - '0');
+        }
+        if (base_port == MOONRAKER_DEFAULT_PORT) {
+            // Direct-to-Moonraker: webcam lives on the reverse proxy (port 80).
             url = base.substr(0, port_pos) + url;
         } else {
+            // Reverse-proxy port (e.g. :4408): the frontend serving the webcam is
+            // on this same port — keep it.
             url = base + url;
         }
     }

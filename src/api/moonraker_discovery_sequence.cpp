@@ -21,10 +21,49 @@
 #include "unit_conversions.h"
 
 #include <algorithm>
+#include <cctype>
 #include <thread>
 #include <unordered_set>
 
 namespace helix {
+
+namespace {
+// Lowercase a copy of a string (ASCII) for case-insensitive suffix/substring checks.
+std::string to_lower_ascii(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
+bool ends_with(const std::string& s, const std::string& suffix) {
+    return s.size() >= suffix.size() &&
+           s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// The path component of a URL (everything before '?' or '#').
+std::string url_path(const std::string& url) {
+    auto cut = url.find_first_of("?#");
+    return cut == std::string::npos ? url : url.substr(0, cut);
+}
+} // namespace
+
+bool is_usable_snapshot_url(const std::string& snapshot_url) {
+    if (snapshot_url.empty())
+        return false;
+    std::string lower = to_lower_ascii(snapshot_url);
+    // Reject HTML pages (e.g. /snapshot.html, /camera.html) — never a JPEG.
+    if (ends_with(url_path(lower), ".html"))
+        return false;
+    // Accept obvious image/snapshot endpoints.
+    if (lower.find("action=snapshot") != std::string::npos)
+        return true;
+    std::string path = url_path(lower);
+    if (ends_with(path, ".jpg") || ends_with(path, ".jpeg") || ends_with(path, ".png"))
+        return true;
+    // No HTML marker and no explicit image marker: treat conservatively as usable
+    // so atypical-but-real endpoints (bare host, query-only) are not dropped.
+    return true;
+}
 
 MoonrakerDiscoverySequence::MoonrakerDiscoverySequence(MoonrakerClient& client) : client_(client) {}
 
@@ -436,6 +475,21 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                     std::string snap = cam.value("snapshot_url", "");
                                     if (snap.empty())
                                         continue;
+                                    // Reject HTML viewer pages (e.g. the K2's
+                                    // "iframe" service points snapshot_url at
+                                    // /snapshot.html). CameraStream would poll it
+                                    // forever and never decode a JPEG frame.
+                                    if (!is_usable_snapshot_url(snap)) {
+                                        spdlog::info(
+                                            "[Discovery] Rejecting snapshot fallback for "
+                                            "service '{}': snapshot_url '{}' is an HTML page, "
+                                            "not an image endpoint",
+                                            cam.value("service", "").empty()
+                                                ? "<unset>"
+                                                : cam.value("service", ""),
+                                            snap);
+                                        continue;
+                                    }
                                     has_webcam = true;
                                     chosen_name = cam.value("name", "");
                                     chosen_service = cam.value("service", "");
