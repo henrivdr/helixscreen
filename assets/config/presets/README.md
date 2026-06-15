@@ -37,13 +37,13 @@ Presets contain only basic hardware configuration:
 - **`wizard_completed: false`** - Ensures abbreviated wizard runs on first boot
 - **Touch calibration** (`input.calibration`) - Hardware-specific touch matrix
 - **Display quirks** (`display.*`) - Platform-specific display driver settings
-- **Moonraker connection** (`printer.moonraker_host/port`) - localhost for on-device installs
 - **Hardware mappings** (`printer.heaters`, `fans`, `leds`, `filament_sensors`) - Klipper object names
 - **Expected hardware** (`printer.hardware.expected`) - For missing hardware warnings
 - **Default macros** (`printer.default_macros`) - Platform-specific G-code macros
 
 What's NOT in presets:
 
+- **`printer.moonraker_host` / `moonraker_port` / `moonraker_api_key`** - Deployment-specific connection settings, set by the Connection wizard step. Presets must NEVER carry these: `apply_preset_file()` merges preset content over the active printer, so a hardcoded host would clobber the user's entered IP (e.g. silently reverting a real LAN IP to `127.0.0.1`). The preset apply explicitly strips these keys.
 - `printer.type` - Auto-detected from Klipper hardware fingerprints
 - `hardware.last_snapshot` - Runtime data, populated on first connection
 - `hardware.optional` - Runtime data

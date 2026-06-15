@@ -5,8 +5,6 @@
     "animations_enabled": false
   },
   "printer": {
-    "moonraker_host": "127.0.0.1",
-    "moonraker_port": 7125,
     "input": {
       "scroll_limit": 10,
       "scroll_throw": 25,

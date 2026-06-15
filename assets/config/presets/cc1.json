@@ -26,8 +26,6 @@
     "touch_device": "/dev/input/event0"
   },
   "printer": {
-    "moonraker_host": "127.0.0.1",
-    "moonraker_port": 80,
     "heaters": {
       "bed": "heater_bed",
       "hotend": "extruder"

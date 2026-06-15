@@ -198,9 +198,6 @@
     "leds": {
       "strip": "neopixel case_lights"
     },
-    "moonraker_api_key": false,
-    "moonraker_host": "192.168.1.112",
-    "moonraker_port": 7125,
     "name": "voronv2",
     "temp_sensors": {
       "bed": "heater_bed",

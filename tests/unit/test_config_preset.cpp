@@ -231,12 +231,46 @@ TEST_CASE_METHOD(PresetConfigFixture,
 }
 
 TEST_CASE_METHOD(PresetConfigFixture,
-                 "Config::apply_preset_file merges moonraker host/port and input block",
+                 "Config::apply_preset_file does not overwrite user-entered moonraker host",
+                 "[config][preset][regression]") {
+    // Regression for the 127.0.0.1 persistence bug: the add-printer wizard's
+    // Connection step saves the user's real Moonraker IP BEFORE the
+    // Printer-Identify step applies the model preset. Preset "printer" blocks
+    // hardcode "moonraker_host":"127.0.0.1", so merge_patch was clobbering the
+    // user's entered IP — on next restart HelixScreen connected to localhost.
+    // Connection settings are deployment-specific and must survive preset merge,
+    // while all non-connection keys must still merge.
+    SetUp();
+
+    // Connection wizard step already saved the user's real host/port.
+    printer_data()["moonraker_host"] = "192.168.1.67";
+    printer_data()["moonraker_port"] = 7125;
+    printer_data()["wizard_completed"] = false;
+
+    // Preset carries the offending 127.0.0.1 plus genuine hardware keys.
+    json preset = {{"printer",
+                    {{"moonraker_host", "127.0.0.1"},
+                     {"moonraker_port", 7125},
+                     {"fans", {{"chamber", "fan_generic chamber_fan"}}},
+                     {"heaters", {{"bed", "heater_bed"}}}}}};
+    write_preset("clobber_preset", preset);
+
+    REQUIRE(config.apply_preset_file("clobber_preset") == true);
+
+    auto& pd = printer_data();
+    // The user-entered IP MUST survive the preset merge.
+    REQUIRE(pd["moonraker_host"] == "192.168.1.67");
+    // Non-connection keys still merge in.
+    REQUIRE(pd["fans"]["chamber"] == "fan_generic chamber_fan");
+    REQUIRE(pd["heaters"]["bed"] == "heater_bed");
+}
+
+TEST_CASE_METHOD(PresetConfigFixture,
+                 "Config::apply_preset_file does not overwrite connection settings, merges rest",
                  "[config][preset]") {
     SetUp();
 
-    // Scaffold with empty moonraker_host (simulates fresh install where installer
-    // seeded the printer entry without a pre-filled host)
+    // Scaffolded with empty moonraker_host (fresh install before Connection step).
     printer_data()["moonraker_host"] = "";
     printer_data().erase("moonraker_port");
 
@@ -254,12 +288,16 @@ TEST_CASE_METHOD(PresetConfigFixture,
     REQUIRE(config.apply_preset_file("network_preset") == true);
 
     auto& pd = printer_data();
-    REQUIRE(pd["moonraker_host"] == "127.0.0.1");
-    REQUIRE(pd["moonraker_port"] == 7125);
+    // Connection settings are NOT seeded from the preset — the Connection wizard
+    // step owns them. A scaffolded-empty host stays empty.
+    REQUIRE(pd["moonraker_host"] == "");
+    REQUIRE_FALSE(pd.contains("moonraker_port"));
+    // Everything else still merges.
     REQUIRE(pd["input"]["scroll_limit"] == 10);
     REQUIRE(pd["input"]["scroll_throw"] == 25);
     REQUIRE(pd["input"]["jitter_threshold"] == 5);
     REQUIRE(pd["input"]["scroll_guard"] == true);
+    REQUIRE(pd["heaters"]["bed"] == "heater_bed");
 
     TearDown();
 }

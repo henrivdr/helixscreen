@@ -5,8 +5,6 @@
     "animations_enabled": true
   },
   "printer": {
-    "moonraker_host": "127.0.0.1",
-    "moonraker_port": 7125,
     "heaters": {
       "bed": "heater_bed",
       "hotend": "extruder"

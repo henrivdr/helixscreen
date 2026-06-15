@@ -1732,18 +1732,28 @@ bool Config::apply_preset_file(const std::string& preset_name) {
         return false;
     }
 
-    // Deep-merge the entire "printer" section into the active printer subtree.
-    // Guarded by wizard_completed above, so this only runs on fresh-install / pre-wizard
-    // state — safe to overwrite any scaffolded defaults (e.g. empty moonraker_host) with
-    // preset values. Covers all preset keys (hardware, moonraker_host/port, input, etc.)
-    // without a hardcoded allowlist.
+    // Deep-merge the "printer" section (hardware, fans, heaters, input, etc.) into
+    // the active printer subtree. Guarded by wizard_completed above, so this only
+    // runs on fresh-install / pre-wizard state — safe to seed scaffolded hardware
+    // defaults from the preset without a hardcoded allowlist.
+    //
+    // EXCEPTION: connection settings are deployment-specific and are owned by the
+    // Connection wizard step, which runs BEFORE this preset is applied and saves the
+    // user's real Moonraker host/port. Model presets hardcode "moonraker_host":
+    // "127.0.0.1", so merging them here clobbered the user's entered IP and made
+    // HelixScreen connect to localhost on the next restart. Strip those keys so the
+    // preset can never overwrite them.
     if (preset_json.contains("printer") && preset_json["printer"].is_object() &&
         !active_printer_id_.empty()) {
+        json patch = preset_json["printer"];
+        patch.erase("moonraker_host");
+        patch.erase("moonraker_port");
+        patch.erase("moonraker_api_key");
         auto& printer_node = data["printers"][active_printer_id_];
         if (!printer_node.is_object()) {
             printer_node = json::object();
         }
-        printer_node.merge_patch(preset_json["printer"]);
+        printer_node.merge_patch(patch);
     }
 
     // Deep-merge device-level display settings (preserves keys not in preset)
