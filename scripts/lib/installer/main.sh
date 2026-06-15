@@ -365,6 +365,13 @@ main() {
     # Configure Moonraker update_manager (Pi only - enables web UI updates)
     configure_moonraker_updates "$platform"
 
+    # K2: replace the stock proprietary WebRTC camera (which HelixScreen and
+    # fluidd can't consume) with a static ustreamer MJPEG server and point both
+    # UIs at it. No-op on every other platform. Runs after the binary is
+    # extracted and Moonraker is reachable; safe (detect-first) and reversible
+    # (stock WebRTC disable is recorded for re-enable on uninstall).
+    install_camera_k2 "$platform" || true
+
     # Install platform-specific helix-recover.sh used by PrinterRecoveryService
     # when klippy_uds is dead and firmware_restart can't proxy. No-op on stock
     # systemd platforms (pi/pi32/x86) where services.restart handles it.

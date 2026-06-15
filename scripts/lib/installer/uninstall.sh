@@ -254,6 +254,15 @@ uninstall() {
     $SUDO rm -f /var/run/helix-splash.pid 2>/dev/null || true
     rm -f /tmp/helixscreen.log 2>/dev/null || true
 
+    # K2 ustreamer camera teardown (#camera): stop/disable/remove the ustreamer
+    # service + binary and restore Moonraker's stock webcam list. Must run BEFORE
+    # reenable_disabled_services (which chmod +x's the stock WebRTC init scripts
+    # back) and BEFORE $INSTALL_DIR is removed (the .webcams_backup.json and
+    # .camera_migrated marker live in $INSTALL_DIR/config). No-op off K2.
+    if type uninstall_camera_k2 >/dev/null 2>&1; then
+        uninstall_camera_k2 "$platform" || true
+    fi
+
     # Re-enable services from state file (before removing install dir)
     reenable_disabled_services
 
