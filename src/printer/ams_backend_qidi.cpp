@@ -81,14 +81,6 @@ AmsBackendQidi::AmsBackendQidi(MoonrakerAPI* api, helix::MoonrakerClient* client
     system_info_.units.push_back(std::move(unit));
     slot_rfid_.resize(NUM_SLOTS);
 
-    // Field-testing gate. Default off; set HELIX_QIDI_BOX_WRITE=1 (or any
-    // non-empty value) to enable the write-path. See header for rationale.
-    if (const char* env = std::getenv("HELIX_QIDI_BOX_WRITE");
-        env != nullptr && *env != '\0' && *env != '0') {
-        write_enabled_ = true;
-        spdlog::info("{} Write-path ENABLED via HELIX_QIDI_BOX_WRITE", backend_log_tag());
-    }
-
     // Box PTC dryer capabilities (issue #1019). max_temp_c is the settable ceiling
     // (target_max_temp_heater_generic=90); refined from configfile in on_started().
     dryer_info_.supported = true;
@@ -98,8 +90,8 @@ AmsBackendQidi::AmsBackendQidi(MoonrakerAPI* api, helix::MoonrakerClient* client
     dryer_info_.max_duration_min = 720;
     dryer_info_.supports_fan_control = false;
 
-    spdlog::debug("{} Backend constructed ({} slots, write_enabled={})",
-                  backend_log_tag(), NUM_SLOTS, write_enabled_);
+    spdlog::debug("{} Backend constructed ({} slots, write-path always on)",
+                  backend_log_tag(), NUM_SLOTS);
 }
 
 AmsBackendQidi::~AmsBackendQidi() = default;
@@ -642,9 +634,7 @@ AmsSystemInfo AmsBackendQidi::get_system_info() const {
 
 helix::printer::ToolMappingCapabilities AmsBackendQidi::get_tool_mapping_capabilities() const {
     // QIDI Box maps tools to slots via save_variables value_t<N> assignment.
-    // editable tracks the write-path gate (HELIX_QIDI_BOX_WRITE): the mapping
-    // UI stays hidden until the write-path is enabled for field testing.
-    return {true, write_enabled_, "Tool-to-slot mapping via save_variables"};
+    return {true, true, "Tool-to-slot mapping via save_variables"};
 }
 
 SlotInfo AmsBackendQidi::get_slot_info(int slot_index) const {
@@ -676,17 +666,12 @@ PathSegment AmsBackendQidi::infer_error_segment() const {
 
 // --- Filament operations ---
 //
-// All write-path methods are gated behind write_enabled_ (HELIX_QIDI_BOX_WRITE).
-// Default disabled: every operation returns not_supported so the read-only
-// state mirror can ship without risking unvalidated gcode on production
-// hardware. Sib6019 (issue #954 author) opts in via env var for field tests;
-// flip the gate to default-on once the gcode protocol is validated.
+// The write-path is always enabled. Every QIDI write op logs at info (a per-op
+// entry log here, plus the raw G-code via execute_gcode) so field behavior is
+// fully visible until the gcode protocol is validated on real hardware (#1030).
 
 AmsError AmsBackendQidi::load_filament(int slot_index) {
-    if (!write_enabled_) {
-        return AmsErrorHelper::not_supported(
-            "QIDI Box write-path disabled (set HELIX_QIDI_BOX_WRITE=1 for field testing)");
-    }
+    spdlog::info("{} load_filament(slot={})", backend_log_tag(), slot_index);
     int tool = -1;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -706,10 +691,7 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
 }
 
 AmsError AmsBackendQidi::unload_filament(int slot_index) {
-    if (!write_enabled_) {
-        return AmsErrorHelper::not_supported(
-            "QIDI Box write-path disabled (set HELIX_QIDI_BOX_WRITE=1 for field testing)");
-    }
+    spdlog::info("{} unload_filament(slot={})", backend_log_tag(), slot_index);
     int tool = -1;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -747,10 +729,7 @@ AmsError AmsBackendQidi::select_slot(int /*slot_index*/) {
 }
 
 AmsError AmsBackendQidi::change_tool(int tool_number) {
-    if (!write_enabled_) {
-        return AmsErrorHelper::not_supported(
-            "QIDI Box write-path disabled (set HELIX_QIDI_BOX_WRITE=1 for field testing)");
-    }
+    spdlog::info("{} change_tool(tool={})", backend_log_tag(), tool_number);
     if (tool_number < 0) {
         return AmsErrorHelper::not_supported("QIDI Box: tool number out of range");
     }
@@ -783,10 +762,7 @@ AmsError AmsBackendQidi::set_slot_info(int /*slot_index*/, const SlotInfo& /*inf
 }
 
 AmsError AmsBackendQidi::set_tool_mapping(int tool_number, int slot_index) {
-    if (!write_enabled_) {
-        return AmsErrorHelper::not_supported(
-            "QIDI Box write-path disabled (set HELIX_QIDI_BOX_WRITE=1 for field testing)");
-    }
+    spdlog::info("{} set_tool_mapping(tool={}, slot={})", backend_log_tag(), tool_number, slot_index);
     if (tool_number < 0) {
         return AmsErrorHelper::not_supported("QIDI Box: tool number out of range");
     }
@@ -840,13 +816,8 @@ DryerInfo AmsBackendQidi::get_dryer_info() const {
 AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
     (void)fan_pct;
     const int box = unit + 1; // status objects are 1-indexed (heater_box1)
-
-    if (!write_enabled_) {
-        return AmsError(AmsResult::NOT_SUPPORTED,
-                        "QIDI Box write-path disabled",
-                        "Box drying disabled",
-                        "Set HELIX_QIDI_BOX_WRITE=1 for field testing");
-    }
+    spdlog::info("{} start_drying(temp={}C, dur={}min, box={})", backend_log_tag(), temp_c,
+                 duration_min, box);
 
     float min_temp, max_temp;
     int max_duration;
@@ -893,12 +864,7 @@ AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pc
 
 AmsError AmsBackendQidi::stop_drying(int unit) {
     const int box = unit + 1;
-    if (!write_enabled_) {
-        return AmsError(AmsResult::NOT_SUPPORTED,
-                        "QIDI Box write-path disabled",
-                        "Box drying disabled",
-                        "Set HELIX_QIDI_BOX_WRITE=1 for field testing");
-    }
+    spdlog::info("{} stop_drying(box={})", backend_log_tag(), box);
     bool timer;
     {
         std::lock_guard<std::mutex> lock(mutex_);

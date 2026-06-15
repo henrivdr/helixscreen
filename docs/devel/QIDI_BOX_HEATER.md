@@ -213,17 +213,9 @@ This means the countdown display is only available on firmware that exposes `box
 
 `box_extras` and `save_variables` are included in the Moonraker object subscription sequence (in `moonraker_discovery_sequence.cpp`, gated on `AmsType::QIDI_BOX`). This keeps the drying countdown and `dry_state` updating live during a session without polling.
 
-### Safety Gate — `HELIX_QIDI_BOX_WRITE`
+### Write-path logging
 
-All write operations in `start_drying()` and `stop_drying()` are gated behind an environment variable for field-testing safety:
-
-```bash
-HELIX_QIDI_BOX_WRITE=1 ./build/bin/helix-screen
-```
-
-When `HELIX_QIDI_BOX_WRITE` is not set, the dryer commands are logged at DEBUG level but nothing is sent to the printer. This prevents accidental hardware actuation while the firmware command syntax is still being validated against real hardware.
-
-Remove this gate once the command syntax has been confirmed on real QIDI Q2 + Box hardware.
+The write-path is always enabled. (The former `HELIX_QIDI_BOX_WRITE` field-testing gate was removed once the command syntax was verified against QIDI's open-source firmware — `box_stepper.py`/`box_extras.py`, #1030.) Every write op (`start_drying`/`stop_drying`, load/unload/mapping) emits an `info`-level entry log plus the raw G-code via `execute_gcode`, so field behavior stays fully visible while the protocol is confirmed on real hardware.
 
 ---
 

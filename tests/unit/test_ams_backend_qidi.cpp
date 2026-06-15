@@ -39,9 +39,6 @@ class QidiBoxTestAccess {
     static void apply_query(AmsBackendQidi& b, const json& response) {
         b.apply_query_response(response);
     }
-    static void set_write_enabled(AmsBackendQidi& b, bool on) {
-        b.write_enabled_ = on;
-    }
     static void apply_filas_list(AmsBackendQidi& b, const std::string& content) {
         b.apply_filas_list(content);
     }
@@ -491,28 +488,12 @@ TEST_CASE("QIDI Box notifications without heater data leave environment alone",
 }
 
 // =====================================================================
-// Write-path (Task 7): gated behind HELIX_QIDI_BOX_WRITE for field testing
+// Write-path: always enabled (commands verified vs QIDI firmware, #1030)
 // =====================================================================
-// We're shipping the write-path behind an env-var gate so Sib6019 can
-// field-test it without risk to other users. Default = disabled (returns
-// not_supported). Tests use the friend accessor to toggle.
 
-TEST_CASE("QIDI Box load_filament: gate-off returns not_supported",
+TEST_CASE("QIDI Box load_filament: emits T<tool>",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    // Gate defaults off unless HELIX_QIDI_BOX_WRITE is set at construction.
-    QidiBoxTestAccess::set_write_enabled(backend, false);
-
-    auto err = backend.load_filament(0);
-
-    REQUIRE_FALSE(err.success());
-    REQUIRE(backend.sent.empty());
-}
-
-TEST_CASE("QIDI Box load_filament: gate-on emits T<tool>",
-          "[ams][qidi_box][write_path]") {
-    RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     // Default mapping is tool=slot, so loading slot 2 emits T2.
     auto err = backend.load_filament(2);
@@ -525,7 +506,6 @@ TEST_CASE("QIDI Box load_filament: gate-on emits T<tool>",
 TEST_CASE("QIDI Box load_filament: respects value_t<N> tool mapping",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     // Map slot 3 to tool 0 via save_variables.
     QidiBoxTestAccess::parse_vars(backend, json{{"value_t0", "slot3"}});
@@ -537,10 +517,9 @@ TEST_CASE("QIDI Box load_filament: respects value_t<N> tool mapping",
     REQUIRE(backend.sent[0] == "T0");
 }
 
-TEST_CASE("QIDI Box unload_filament: gate-on emits UNLOAD_T<tool>",
+TEST_CASE("QIDI Box unload_filament: emits UNLOAD_T<tool>",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     auto err = backend.unload_filament(1);
 
@@ -552,7 +531,6 @@ TEST_CASE("QIDI Box unload_filament: gate-on emits UNLOAD_T<tool>",
 TEST_CASE("QIDI Box unload_filament with -1 unloads the active slot",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
     // Seed slot 2 as LOADED so unload_filament(-1) targets it.
     QidiBoxTestAccess::parse_vars(backend, json{{"last_load_slot", "slot2"}});
 
@@ -566,7 +544,6 @@ TEST_CASE("QIDI Box unload_filament with -1 unloads the active slot",
 TEST_CASE("QIDI Box unload_filament with -1 and nothing loaded errors",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     auto err = backend.unload_filament(-1);
 
@@ -577,7 +554,6 @@ TEST_CASE("QIDI Box unload_filament with -1 and nothing loaded errors",
 TEST_CASE("QIDI Box change_tool emits T<tool> directly",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     auto err = backend.change_tool(3);
 
@@ -589,7 +565,6 @@ TEST_CASE("QIDI Box change_tool emits T<tool> directly",
 TEST_CASE("QIDI Box set_tool_mapping emits SAVE_VARIABLE for value_t<N>",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     auto err = backend.set_tool_mapping(/*tool=*/1, /*slot_idx=*/3);
 
@@ -631,7 +606,6 @@ TEST_CASE("QIDI Box on_started dispatches printer.objects.query (integration)",
 TEST_CASE("QIDI Box write-path rejects out-of-range slot/tool indices",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
 
     SECTION("load_filament: negative slot") {
         REQUIRE_FALSE(backend.load_filament(-1).success());
@@ -938,7 +912,6 @@ TEST_CASE("QIDI Box config query refines max temp (box_config section)",
 TEST_CASE("QIDI Box start_drying uses ENABLE_BOX_DRY when timer supported",
           "[ams][qidi_box][dryer][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
     QidiBoxTestAccess::set_drying_timer_supported(backend, true);
     auto err = backend.start_drying(55.0f, 240);
     REQUIRE(err.success());
@@ -949,7 +922,6 @@ TEST_CASE("QIDI Box start_drying uses ENABLE_BOX_DRY when timer supported",
 TEST_CASE("QIDI Box start_drying falls back to SET_HEATER_TEMPERATURE",
           "[ams][qidi_box][dryer][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
     QidiBoxTestAccess::set_drying_timer_supported(backend, false);
     auto err = backend.start_drying(55.0f, 240);
     REQUIRE(err.success());
@@ -960,16 +932,7 @@ TEST_CASE("QIDI Box start_drying falls back to SET_HEATER_TEMPERATURE",
 TEST_CASE("QIDI Box start_drying rejects out-of-range temp",
           "[ams][qidi_box][dryer][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
     auto err = backend.start_drying(150.0f, 240);
-    REQUIRE_FALSE(err.success());
-    REQUIRE(backend.sent.empty());
-}
-
-TEST_CASE("QIDI Box start_drying blocked when write-path disabled",
-          "[ams][qidi_box][dryer][write_path]") {
-    RecordingQidiBackend backend;
-    auto err = backend.start_drying(55.0f, 240);
     REQUIRE_FALSE(err.success());
     REQUIRE(backend.sent.empty());
 }
@@ -977,7 +940,6 @@ TEST_CASE("QIDI Box start_drying blocked when write-path disabled",
 TEST_CASE("QIDI Box stop_drying uses DISABLE_BOX_DRY when timer supported",
           "[ams][qidi_box][dryer][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
     QidiBoxTestAccess::set_drying_timer_supported(backend, true);
     auto err = backend.stop_drying(0);
     REQUIRE(err.success());
@@ -988,17 +950,8 @@ TEST_CASE("QIDI Box stop_drying uses DISABLE_BOX_DRY when timer supported",
 TEST_CASE("QIDI Box stop_drying falls back to TARGET=0",
           "[ams][qidi_box][dryer][write_path]") {
     RecordingQidiBackend backend;
-    QidiBoxTestAccess::set_write_enabled(backend, true);
     QidiBoxTestAccess::set_drying_timer_supported(backend, false);
     auto err = backend.stop_drying(0);
     REQUIRE(err.success());
     REQUIRE(backend.sent[0] == "SET_HEATER_TEMPERATURE HEATER=heater_box1 TARGET=0");
-}
-
-TEST_CASE("QIDI Box stop_drying blocked when write-path disabled",
-          "[ams][qidi_box][dryer][write_path]") {
-    RecordingQidiBackend backend;
-    auto err = backend.stop_drying(0);
-    REQUIRE_FALSE(err.success());
-    REQUIRE(backend.sent.empty());
 }
