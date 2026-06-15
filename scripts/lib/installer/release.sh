@@ -664,9 +664,12 @@ use_local_tarball() {
         # Resolve to absolute path so a symlink created in $TMP_DIR doesn't
         # become dangling if the user passed a relative path.
         # (BusyBox readlink may not support -f, so try realpath first.)
+        # NOTE: `|| abs_src=""` on each substitution is REQUIRED under `set -e`:
+        # on BusyBox (K2/AD5M) `realpath` is often absent, so the substitution
+        # exits 127 and would abort the whole installer before the fallback runs.
         local abs_src
-        abs_src=$(realpath "$src" 2>/dev/null)
-        [ -n "$abs_src" ] || abs_src=$(readlink -f "$src" 2>/dev/null)
+        abs_src=$(realpath "$src" 2>/dev/null) || abs_src=""
+        [ -n "$abs_src" ] || abs_src=$(readlink -f "$src" 2>/dev/null) || abs_src=""
         [ -n "$abs_src" ] || abs_src="$src"
 
         # Prefer a symlink to avoid copying large files on constrained devices,
