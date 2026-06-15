@@ -645,6 +645,192 @@ CONF
     grep -q 'type: web' "$conf"
 }
 
+# =============================================================================
+# disable_system_updates_on_buildroot
+# =============================================================================
+
+# Helper: make is_buildroot_distro() return true by pointing OS_RELEASE_FILE
+# at a fixture os-release that contains "buildroot".
+fake_buildroot_os_release() {
+    local osr="$BATS_TEST_TMPDIR/etc/os-release"
+    mkdir -p "$(dirname "$osr")"
+    cat > "$osr" << 'OSR'
+NAME=Buildroot
+VERSION=2021.02
+ID=buildroot
+OSR
+    export OS_RELEASE_FILE="$osr"
+}
+
+# Helper: make is_buildroot_distro() return false (non-buildroot distro).
+fake_non_buildroot_os_release() {
+    local osr="$BATS_TEST_TMPDIR/etc/os-release"
+    mkdir -p "$(dirname "$osr")"
+    cat > "$osr" << 'OSR'
+NAME="Debian GNU/Linux"
+VERSION="12 (bookworm)"
+ID=debian
+OSR
+    export OS_RELEASE_FILE="$osr"
+}
+
+@test "disable_system_updates_on_buildroot: adds bare section + key on buildroot" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf_with_helix "$conf"
+    fake_buildroot_os_release
+
+    disable_system_updates_on_buildroot "$conf"
+
+    # A bare [update_manager] section now exists (exact match, no name)
+    grep -qE '^\[update_manager\][[:space:]]*$' "$conf"
+    # enable_system_updates: False is present under it
+    awk '
+        /^\[update_manager\][[:space:]]*$/ { in_section=1; next }
+        in_section && /^\[/ { in_section=0 }
+        in_section && /enable_system_updates:[[:space:]]*False/ { found=1 }
+        END { exit (found ? 0 : 1) }
+    ' "$conf"
+    # The helixscreen section is still intact
+    grep -q '^\[update_manager helixscreen\]' "$conf"
+    # Backup was created
+    [ -f "${conf}.bak.helixscreen" ]
+}
+
+@test "disable_system_updates_on_buildroot: idempotent — no duplicate section or key" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf_with_helix "$conf"
+    fake_buildroot_os_release
+
+    disable_system_updates_on_buildroot "$conf"
+    disable_system_updates_on_buildroot "$conf"
+
+    # Exactly one bare [update_manager] section
+    [ "$(grep -cE '^\[update_manager\][[:space:]]*$' "$conf")" -eq 1 ]
+    # Exactly one enable_system_updates key
+    [ "$(grep -cE '^[[:space:]]*enable_system_updates:' "$conf")" -eq 1 ]
+}
+
+@test "disable_system_updates_on_buildroot: merges key into existing bare section" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf "$conf"
+    # Pre-existing bare [update_manager] with another key (common on K1/K2)
+    cat >> "$conf" << 'CONF'
+
+[update_manager]
+channel: dev
+CONF
+    fake_buildroot_os_release
+
+    disable_system_updates_on_buildroot "$conf"
+
+    # Still exactly one bare section (merged, not duplicated)
+    [ "$(grep -cE '^\[update_manager\][[:space:]]*$' "$conf")" -eq 1 ]
+    # The original key is preserved
+    grep -q '^channel: dev' "$conf"
+    # The new key was added under the bare section
+    awk '
+        /^\[update_manager\][[:space:]]*$/ { in_section=1; next }
+        in_section && /^\[/ { in_section=0 }
+        in_section && /enable_system_updates:[[:space:]]*False/ { found=1 }
+        END { exit (found ? 0 : 1) }
+    ' "$conf"
+}
+
+@test "disable_system_updates_on_buildroot: respects existing user value" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf "$conf"
+    # User already set it to True — we must not override
+    cat >> "$conf" << 'CONF'
+
+[update_manager]
+enable_system_updates: True
+CONF
+    fake_buildroot_os_release
+
+    disable_system_updates_on_buildroot "$conf"
+
+    # User's True value is untouched
+    grep -q '^enable_system_updates: True' "$conf"
+    ! grep -q '^enable_system_updates: False' "$conf"
+    # No backup needed (early return, no edit)
+    [ ! -f "${conf}.bak.helixscreen" ]
+}
+
+@test "disable_system_updates_on_buildroot: appends bare section when no helixscreen block" {
+    local conf
+    conf=$(setup_moonraker_home)
+    # Plain conf, no helixscreen section at all
+    create_moonraker_conf "$conf"
+    fake_buildroot_os_release
+
+    disable_system_updates_on_buildroot "$conf"
+
+    grep -qE '^\[update_manager\][[:space:]]*$' "$conf"
+    grep -q '^enable_system_updates: False' "$conf"
+}
+
+@test "disable_system_updates_on_buildroot: non-buildroot is a no-op" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf_with_helix "$conf"
+    fake_non_buildroot_os_release
+
+    local before
+    before=$(cat "$conf")
+
+    disable_system_updates_on_buildroot "$conf"
+
+    # Nothing added, nothing changed
+    [ "$(cat "$conf")" = "$before" ]
+    ! grep -qE '^\[update_manager\][[:space:]]*$' "$conf"
+    ! grep -q 'enable_system_updates' "$conf"
+    [ ! -f "${conf}.bak.helixscreen" ]
+}
+
+@test "disable_system_updates_on_buildroot: missing conf does not crash" {
+    fake_buildroot_os_release
+    run disable_system_updates_on_buildroot "/nonexistent/moonraker.conf"
+    [ "$status" -eq 0 ]
+}
+
+@test "configure_moonraker_updates: buildroot adds enable_system_updates: False" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf "$conf"
+    MOONRAKER_CONF_PATHS="$conf"
+    rm -f "$INSTALL_DIR/bin/helix-screen"
+    fake_buildroot_os_release
+    mock_command_script "systemctl" 'exit 0'
+
+    configure_moonraker_updates "k1"
+
+    # Our helixscreen section was added
+    grep -q '^\[update_manager helixscreen\]' "$conf"
+    # And the buildroot warning suppression key is present
+    grep -qE '^\[update_manager\][[:space:]]*$' "$conf"
+    grep -q '^enable_system_updates: False' "$conf"
+}
+
+@test "configure_moonraker_updates: non-buildroot does NOT add enable_system_updates" {
+    local conf
+    conf=$(setup_moonraker_home)
+    create_moonraker_conf "$conf"
+    MOONRAKER_CONF_PATHS="$conf"
+    rm -f "$INSTALL_DIR/bin/helix-screen"
+    fake_non_buildroot_os_release
+    mock_command_script "systemctl" 'exit 0'
+
+    configure_moonraker_updates "pi"
+
+    grep -q '^\[update_manager helixscreen\]' "$conf"
+    ! grep -qE '^\[update_manager\][[:space:]]*$' "$conf"
+    ! grep -q 'enable_system_updates' "$conf"
+}
+
 @test "configure_moonraker_updates: existing section without persistent_files is a no-op" {
     local conf
     conf=$(setup_moonraker_home)
