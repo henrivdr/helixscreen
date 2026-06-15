@@ -14,7 +14,7 @@ DetectionManager& DetectionManager::instance() {
     return s_instance;
 }
 
-void DetectionManager::init(helix::MoonrakerClient* client, ::PrinterState* state) {
+void DetectionManager::init(helix::MoonrakerClient* client, helix::PrinterState* state) {
     client_ = client;
     state_  = state;
     probe_capabilities();

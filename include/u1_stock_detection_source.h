@@ -5,8 +5,6 @@
 #include "printer_state.h" // PrintJobState
 #include "ui_observer_guard.h"
 
-class PrinterState;
-
 namespace helix::detection {
 
 /**
@@ -19,7 +17,7 @@ namespace helix::detection {
  */
 class U1StockSource : public DetectionSource {
   public:
-    explicit U1StockSource(PrinterState* state) : state_(state) {}
+    explicit U1StockSource(helix::PrinterState* state) : state_(state) {}
 
     std::string id() const override {
         return "u1_stock";
@@ -44,7 +42,7 @@ class U1StockSource : public DetectionSource {
   private:
     void on_print_state(int state_enum);
 
-    PrinterState* state_ = nullptr;
+    helix::PrinterState* state_ = nullptr;
     Callback cb_;
     bool capable_ = false;
     int last_state_ = -1;

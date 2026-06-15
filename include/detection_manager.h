@@ -11,8 +11,8 @@
 
 namespace helix {
 class MoonrakerClient;
-}
 class PrinterState;
+} // namespace helix
 
 namespace helix::detection {
 
@@ -27,7 +27,7 @@ class DetectionManager {
     static DetectionManager& instance();
 
     /// Wire up Moonraker/PrinterState deps and probe for detector capabilities.
-    void init(helix::MoonrakerClient* client, ::PrinterState* state);
+    void init(helix::MoonrakerClient* client, helix::PrinterState* state);
 
     /// Take ownership of a source, route its events here, default its policy to
     /// DeferToSource if one was not already set.
@@ -50,7 +50,7 @@ class DetectionManager {
     void probe_capabilities();
 
     helix::MoonrakerClient* client_ = nullptr;
-    ::PrinterState*         state_  = nullptr;
+    helix::PrinterState*    state_  = nullptr;
 
     std::vector<std::unique_ptr<DetectionSource>> sources_;
     std::map<std::string, DetectionPolicy>        policies_;

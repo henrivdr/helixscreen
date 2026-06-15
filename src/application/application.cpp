@@ -110,6 +110,7 @@
 #include "ui_settings_hardware_health.h"
 #include "ui_settings_sensors.h"
 #include "ui_severity_card.h"
+#include "ui_spaghetti_detection_modal.h"
 #include "ui_status_pill.h"
 #include "ui_switch.h"
 #include "ui_temp_display.h"
@@ -137,6 +138,7 @@
 #include "printer_detector.h"
 #include "printer_image_manager.h"
 #include "safety_settings_manager.h"
+#include "settings_manager.h"
 #include "system/crash_handler.h"
 #include "system/crash_history.h"
 #include "system/crash_reporter.h"
@@ -144,6 +146,7 @@
 #include "system/update_checker.h"
 #include "system_settings_manager.h"
 #include "theme_manager.h"
+#include "u1_stock_detection_source.h"
 #include "upgrade_banner.h"
 #include "wifi_manager.h"
 
@@ -154,12 +157,14 @@
 #include "action_prompt_manager.h"
 #include "action_prompt_modal.h"
 #include "app_globals.h"
+#include "detection_manager.h"
 #include "filament_consumption_tracker.h"
 #include "filament_sensor_manager.h"
 #include "gcode_file_modifier.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_translation.h"
 #include "hv/hlog.h" // libhv logging - sync level with spdlog
+#include "hv/json.hpp"
 #include "logging_init.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "lvgl_log_handler.h"
@@ -1594,6 +1599,48 @@ bool Application::init_panel_subjects() {
     // Initialize AbortManager for smart print cancellation
     // Must happen after both API and AbortManager::init_subjects()
     helix::AbortManager::instance().init(m_moonraker->api(), &get_printer_state());
+
+    // Spaghetti / failed-print detection
+    // (see docs/devel/plans/2026-06-15-spaghetti-detection-source.md)
+    // Must happen after MoonrakerClient + PrinterState exist (above).
+    {
+        auto u1 = std::make_unique<helix::detection::U1StockSource>(&get_printer_state());
+        u1->start();
+        auto& dm = helix::detection::DetectionManager::instance();
+        dm.register_source(std::move(u1));
+        dm.init(get_moonraker_client(), &get_printer_state());
+        dm.set_policy("u1_stock", static_cast<helix::detection::DetectionPolicy>(
+                                      SettingsManager::instance().get_detection_policy_u1()));
+        dm.set_presenter([](const helix::detection::DetectionEvent& e,
+                            helix::detection::DetectionPolicy p) {
+            using helix::detection::DetectionPolicy;
+            if (!SettingsManager::instance().get_detection_enabled())
+                return;
+            if (p == DetectionPolicy::NotifyOnly) {
+                ToastManager::instance().show(ToastSeverity::WARNING,
+                                              "Spaghetti detected — print paused", 8000);
+                return;
+            }
+            // DeferToSource: show the response modal. ModalStack owns the modal once
+            // shown; LVGL event cleanup destroys it on hide() (no manual delete).
+            auto* modal = new SpaghettiDetectionModal();
+            // TODO(detection): attach latest camera frame when a stream is active
+            modal->set_detection(e.message, nullptr);
+            modal->set_on_resume([] {
+                get_moonraker_api()->job().resume_print([] {},
+                                                        [](const MoonrakerError&) {});
+            });
+            modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
+            modal->set_on_tune([] {
+                get_moonraker_client()->send_jsonrpc(
+                    "printer.gcode.script",
+                    nlohmann::json{{"script",
+                                    "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
+                    [](const nlohmann::json&) {}, [](const MoonrakerError&) {});
+            });
+            modal->show(lv_screen_active());
+        });
+    }
 
     // Register notification callbacks
     helix::ui::notification_register_callbacks();
