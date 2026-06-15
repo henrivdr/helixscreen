@@ -3,6 +3,8 @@
 
 #include "ui_spaghetti_detection_modal.h"
 
+#include "ui_update_queue.h"
+
 #include <spdlog/spdlog.h>
 
 void SpaghettiDetectionModal::on_show() {
@@ -36,4 +38,14 @@ void SpaghettiDetectionModal::on_show() {
     } else {
         spdlog::warn("[SpaghettiDetectionModal] detection_preview widget not found");
     }
+}
+
+void SpaghettiDetectionModal::on_hide() {
+    // Self-delete the heap object once hidden. ModalStack/LVGL cleanup never calls
+    // Modal::~Modal, so the C++ object must free itself here or it leaks on every
+    // detection. Deferred via async_call so we never delete `this` mid-event.
+    // Mirrors BufferStatusModal::on_hide() — the proven-safe pattern.
+    auto* self = this;
+    helix::ui::async_call(
+        [](void* data) { delete static_cast<SpaghettiDetectionModal*>(data); }, self);
 }

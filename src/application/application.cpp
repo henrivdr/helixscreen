@@ -1621,8 +1621,10 @@ bool Application::init_panel_subjects() {
                                               "Spaghetti detected — print paused", 8000);
                 return;
             }
-            // DeferToSource: show the response modal. ModalStack owns the modal once
-            // shown; LVGL event cleanup destroys it on hide() (no manual delete).
+            // DeferToSource: show the response modal. The modal self-deletes via its
+            // on_hide() override (async_call(delete this)) — LVGL/ModalStack cleanup
+            // never calls Modal::~Modal, so dropping this pointer is intentional and
+            // does NOT leak.
             auto* modal = new SpaghettiDetectionModal();
             // TODO(detection): attach latest camera frame when a stream is active
             modal->set_detection(e.message, nullptr);

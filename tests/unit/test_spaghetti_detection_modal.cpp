@@ -10,38 +10,56 @@
 
 #include "../catch_amalgamated.hpp"
 
+// NOTE: SpaghettiDetectionModal self-deletes via its on_hide() override
+// (async_call(delete this)) — matching its production usage, where the modal is
+// always heap-allocated and dropped after show(). These tests therefore heap-
+// allocate each modal and let process_lvgl() drain the queued self-delete. A
+// stack-allocated modal would double-free here, so do NOT switch these to stack.
+
 TEST_CASE_METHOD(LVGLUITestFixture,
                  "SpaghettiDetectionModal shows message + invokes callbacks",
                  "[detection][modal][.ui_integration]") {
-    SpaghettiDetectionModal modal;
     int resumed = 0, aborted = 0, tuned = 0;
-    modal.set_on_resume([&] { ++resumed; });
-    modal.set_on_abort([&] { ++aborted; });
-    modal.set_on_tune([&] { ++tuned; });
-    modal.set_detection("detected noodle", nullptr);
 
-    // Resume path.
-    REQUIRE(modal.show(test_screen()));
-    REQUIRE(modal.is_visible());
-    modal.invoke_resume_for_test();
-    REQUIRE(resumed == 1);
-    REQUIRE(aborted == 0);
-    REQUIRE_FALSE(modal.is_visible()); // Resume hides the modal
+    // Resume path: heap modal self-deletes on hide.
+    {
+        auto* modal = new SpaghettiDetectionModal();
+        modal->set_on_resume([&] { ++resumed; });
+        modal->set_on_abort([&] { ++aborted; });
+        modal->set_on_tune([&] { ++tuned; });
+        modal->set_detection("detected noodle", nullptr);
+        REQUIRE(modal->show(test_screen()));
+        REQUIRE(modal->is_visible());
+        modal->invoke_resume_for_test(); // invokes callback then hide() -> self-delete
+        REQUIRE(resumed == 1);
+        REQUIRE(aborted == 0);
+        process_lvgl(50); // drain the async self-delete; do not touch modal after this
+    }
 
     // Abort path.
-    REQUIRE(modal.show(test_screen()));
-    REQUIRE(modal.is_visible());
-    modal.invoke_abort_for_test();
-    REQUIRE(aborted == 1);
-    REQUIRE(resumed == 1);
-    REQUIRE_FALSE(modal.is_visible()); // Abort hides the modal
+    {
+        auto* modal = new SpaghettiDetectionModal();
+        modal->set_on_abort([&] { ++aborted; });
+        modal->set_detection("detected noodle", nullptr);
+        REQUIRE(modal->show(test_screen()));
+        REQUIRE(modal->is_visible());
+        modal->invoke_abort_for_test();
+        REQUIRE(aborted == 1);
+        REQUIRE(resumed == 1);
+        process_lvgl(50);
+    }
 
-    // Tune does NOT hide; it only invokes the callback.
-    REQUIRE(modal.show(test_screen()));
-    modal.invoke_tune_for_test();
-    REQUIRE(tuned == 1);
-    REQUIRE(modal.is_visible());
-    modal.hide();
-
-    process_lvgl(50);
+    // Tune does NOT hide; it only invokes the callback. The modal stays alive
+    // until we hide() it explicitly.
+    {
+        auto* modal = new SpaghettiDetectionModal();
+        modal->set_on_tune([&] { ++tuned; });
+        modal->set_detection("detected noodle", nullptr);
+        REQUIRE(modal->show(test_screen()));
+        modal->invoke_tune_for_test();
+        REQUIRE(tuned == 1);
+        REQUIRE(modal->is_visible()); // still visible: Tune does not hide
+        modal->hide();                // triggers on_hide() -> self-delete
+        process_lvgl(50);
+    }
 }

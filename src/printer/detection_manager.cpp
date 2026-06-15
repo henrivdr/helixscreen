@@ -17,7 +17,16 @@ DetectionManager& DetectionManager::instance() {
 void DetectionManager::init(helix::MoonrakerClient* client, helix::PrinterState* state) {
     client_ = client;
     state_  = state;
-    probe_capabilities();
+    // Do NOT probe here: init() runs during Application::init_panel_subjects, before
+    // the WebSocket connects. printer.objects.list would fail (not connected) and the
+    // capability would latch false forever. Instead, run the probe on every connect.
+    if (client_ && !connect_observer_registered_) {
+        client_->add_connected_observer(
+            "DetectionManager::refresh_capabilities",
+            lifetime_.bg_cb("DetectionManager::on_connected",
+                            [this]() { refresh_capabilities(); }));
+        connect_observer_registered_ = true;
+    }
 }
 
 void DetectionManager::register_source(std::unique_ptr<DetectionSource> src) {
@@ -67,38 +76,57 @@ void DetectionManager::on_event(const DetectionEvent& e) {
     }
 }
 
-void DetectionManager::probe_capabilities() {
+// Scan a printer.objects.list "objects" array for the U1 "defect_detection" module.
+static bool objects_have_defect_detection(const json& objects) {
+    if (!objects.is_array()) {
+        return false;
+    }
+    for (const auto& obj : objects) {
+        if (obj.is_string() && obj.get<std::string>() == "defect_detection") {
+            return true;
+        }
+    }
+    return false;
+}
+
+void DetectionManager::apply_capability(bool has_defect_detection) {
+    spdlog::info("DetectionManager: defect_detection capability = {}", has_defect_detection);
+    for (const auto& src : sources_) {
+        if (src && src->id() == "u1_stock") {
+            if (auto* u1 = dynamic_cast<U1StockSource*>(src.get())) {
+                u1->set_capable(has_defect_detection);
+            }
+        }
+    }
+}
+
+void DetectionManager::refresh_capabilities() {
     if (!client_) {
         return;
     }
     client_->send_jsonrpc(
         "printer.objects.list", json::object(),
-        [this](const json& resp) {
-            bool has = false;
-            auto result_it = resp.find("result");
-            if (result_it != resp.end() && result_it->is_object()) {
-                auto objects_it = result_it->find("objects");
-                if (objects_it != result_it->end() && objects_it->is_array()) {
-                    for (const auto& obj : *objects_it) {
-                        if (obj.is_string() && obj.get<std::string>() == "defect_detection") {
-                            has = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            spdlog::info("DetectionManager: defect_detection capability = {}", has);
-            for (const auto& src : sources_) {
-                if (src && src->id() == "u1_stock") {
-                    if (auto* u1 = dynamic_cast<U1StockSource*>(src.get())) {
-                        u1->set_capable(has);
-                    }
-                }
-            }
-        },
+        lifetime_.bg_cb("DetectionManager::on_objects_list",
+                        [this](const json& resp) {
+                            bool has = false;
+                            auto result_it = resp.find("result");
+                            if (result_it != resp.end() && result_it->is_object()) {
+                                auto objects_it = result_it->find("objects");
+                                if (objects_it != result_it->end()) {
+                                    has = objects_have_defect_detection(*objects_it);
+                                }
+                            }
+                            apply_capability(has);
+                        }),
         [](const MoonrakerError& err) {
             spdlog::warn("DetectionManager: capability probe failed: {}", err.message);
         });
+}
+
+bool DetectionManager::apply_objects_list_for_test(const nlohmann::json& objects) {
+    bool has = objects_have_defect_detection(objects);
+    apply_capability(has);
+    return has;
 }
 
 void DetectionManager::reset_for_test() {
@@ -107,6 +135,8 @@ void DetectionManager::reset_for_test() {
     presenter_ = nullptr;
     client_    = nullptr;
     state_     = nullptr;
+    connect_observer_registered_ = false;
+    lifetime_.invalidate();
 }
 
 }  // namespace helix::detection

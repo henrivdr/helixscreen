@@ -2,8 +2,10 @@
 #include "../catch_amalgamated.hpp"
 #include "../helix_test_fixture.h"
 #include "detection_manager.h"
+#include "u1_stock_detection_source.h"
 
 using namespace helix::detection;
+using json = nlohmann::json;
 namespace {
 struct StubSource : DetectionSource {
     std::string id() const override { return "stub"; }
@@ -60,4 +62,30 @@ TEST_CASE_METHOD(HelixTestFixture,
     REQUIRE_FALSE(m.any_available());
     raw->avail = true;
     REQUIRE(m.any_available());
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+        "DetectionManager capability probe sets U1 source available", "[detection][manager]") {
+    auto& m = DetectionManager::instance();
+    m.reset_for_test();
+
+    // U1 source starts unavailable (capable_ defaults false). No PrinterState needed:
+    // apply_objects_list_for_test() only drives the capability flag, not the observer.
+    auto u1 = std::make_unique<U1StockSource>(nullptr);
+    auto* raw = u1.get();
+    m.register_source(std::move(u1));
+    REQUIRE_FALSE(raw->available());
+
+    // objects.list WITHOUT defect_detection -> stays unavailable.
+    REQUIRE_FALSE(m.apply_objects_list_for_test(json::array({"gcode_move", "toolhead"})));
+    REQUIRE_FALSE(raw->available());
+
+    // objects.list WITH defect_detection -> becomes available.
+    REQUIRE(m.apply_objects_list_for_test(
+        json::array({"gcode_move", "defect_detection", "toolhead"})));
+    REQUIRE(raw->available());
+
+    // Probe again without it -> capability is re-cleared (idempotent, reflects state).
+    REQUIRE_FALSE(m.apply_objects_list_for_test(json::array({"gcode_move"})));
+    REQUIRE_FALSE(raw->available());
 }

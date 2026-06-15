@@ -29,6 +29,11 @@ void U1StockSource::on_print_state(int state_enum) {
     const int prev = last_state_;
     last_state_ = state_enum;
 
+    // Gate on confirmed capability: only U1 stock firmware exposes defect_detection.
+    // capable_ is set by DetectionManager's post-connect probe, so this stays false
+    // (and detection never fires) on non-U1 printers.
+    if (!capable_)
+        return;
     if (state_enum != static_cast<int>(PrintJobState::PAUSED))
         return;
     if (prev == static_cast<int>(PrintJobState::PAUSED))
