@@ -640,6 +640,13 @@ AmsSystemInfo AmsBackendQidi::get_system_info() const {
     return system_info_;
 }
 
+helix::printer::ToolMappingCapabilities AmsBackendQidi::get_tool_mapping_capabilities() const {
+    // QIDI Box maps tools to slots via save_variables value_t<N> assignment.
+    // editable tracks the write-path gate (HELIX_QIDI_BOX_WRITE): the mapping
+    // UI stays hidden until the write-path is enabled for field testing.
+    return {true, write_enabled_, "Tool-to-slot mapping via save_variables"};
+}
+
 SlotInfo AmsBackendQidi::get_slot_info(int slot_index) const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (slot_index < 0 || slot_index >= system_info_.total_slots) {

@@ -66,6 +66,8 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     [[nodiscard]] PathSegment infer_error_segment() const override;
 
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
+    [[nodiscard]] helix::printer::ToolMappingCapabilities
+    get_tool_mapping_capabilities() const override;
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
     [[nodiscard]] bool is_bypass_active() const override;
 
