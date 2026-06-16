@@ -37,6 +37,7 @@
 #include "led/led_controller.h"
 #include "moonraker_manager.h"
 #include "panel_factory.h"
+#include "panel_widget_manager.h"
 #include "pending_startup_warnings.h"
 #include "post_op_cooldown_manager.h"
 #include "power_device_state.h"
@@ -3714,6 +3715,13 @@ void Application::switch_printer(const std::string& printer_id) {
         return;
     }
     m_config->save();
+
+    // Per-printer widget layouts live at /printers/<active>/panel_widgets/<panel>.
+    // The active printer just changed, so Config::df() now points at the new
+    // printer — invalidate every cached PanelWidgetConfig (and the per-page
+    // derived caches) so Home re-reads the new printer's layout instead of
+    // serving the previous printer's cached one (#804 load() guard regression).
+    PanelWidgetManager::instance().clear_all_panel_configs();
 
     tear_down_printer_state();
     init_printer_state();

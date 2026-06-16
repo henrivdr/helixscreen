@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "panel_widget_config.h"
 #include "ui_observer_guard.h"
 
 #include <any>
@@ -97,6 +98,15 @@ class PanelWidgetManager {
     /// the user explicitly edits the widget layout.
     void clear_panel_config(const std::string& panel_id);
 
+    /// Invalidate EVERY cached panel config and clear all per-page derived
+    /// caches. Call when the active printer changes (Application::switch_printer)
+    /// — per-printer layouts live at /printers/<active>/panel_widgets/<panel>,
+    /// so a switch repoints Config::df() and every cached PanelWidgetConfig must
+    /// reload from the now-current path. Marks each cached config dirty (next
+    /// load() re-reads disk) and empties active_configs_ + grid_descriptors_.
+    /// Main-thread only — no synchronization on the cache maps.
+    void clear_all_panel_configs();
+
     /// Get the PanelWidgetConfig for a panel (creates if needed).
     class PanelWidgetConfig& get_widget_config(const std::string& panel_id);
 
@@ -155,6 +165,13 @@ class PanelWidgetManager {
         std::vector<std::string> widget_ids; // ordered list of active widget IDs
     };
     std::unordered_map<std::string, ActiveWidgetConfig> active_configs_;
+
+    /// Per-panel PanelWidgetConfig instances, cached by panel ID and lazily
+    /// created on first access. Main-thread only — no synchronization. A cached
+    /// config's load() is a no-op once loaded (#804); invalidation is explicit
+    /// via mark_dirty() (notify_config_changed) or clear_all_panel_configs()
+    /// (active-printer switch).
+    std::unordered_map<std::string, PanelWidgetConfig> panel_configs_;
 };
 
 } // namespace helix

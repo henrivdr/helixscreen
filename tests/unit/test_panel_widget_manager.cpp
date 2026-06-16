@@ -519,3 +519,66 @@ TEST_CASE_METHOD(XMLTestFixture,
     helix::register_widget_factory("clock", original_clock_factory);
     mgr.clear_panel_config(panel_id);
 }
+
+// ============================================================================
+// Per-printer config cache invalidation on printer switch (#804 regression)
+// ============================================================================
+//
+// PanelWidgetConfig instances are cached process-wide inside PanelWidgetManager
+// and only reload from disk when marked dirty. Switching the active printer
+// changes Config::df() (the /printers/<id>/ prefix the config reads from), so
+// the manager must invalidate every cached panel via clear_all_panel_configs()
+// — otherwise it keeps serving the previous printer's layout.
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PanelWidgetManager: clear_all_panel_configs reloads after printer switch",
+                 "[panel_widget][manager]") {
+    auto* cfg = Config::get_instance();
+    REQUIRE(cfg != nullptr);
+
+    auto& mgr = PanelWidgetManager::instance();
+
+    // Build two printers whose "home" panel enables a DIFFERENT, non-default
+    // widget. "network" and "shutdown" both default to disabled in the registry,
+    // so the registry-default append path can't muddy these assertions.
+    auto make_home_layout = [](const char* enabled_id) {
+        nlohmann::json widgets = nlohmann::json::array();
+        widgets.push_back({{"id", enabled_id}, {"enabled", true}});
+        nlohmann::json page = {{"id", "main"}, {"widgets", std::move(widgets)}};
+        nlohmann::json root;
+        root["pages"] = nlohmann::json::array({std::move(page)});
+        root["main_page_index"] = 0;
+        root["next_page_id"] = 1;
+        return root;
+    };
+
+    cfg->add_printer("printer-A", nlohmann::json::object());
+    cfg->add_printer("printer-B", nlohmann::json::object());
+    cfg->set<nlohmann::json>("/printers/printer-A/panel_widgets/home",
+                             make_home_layout("network"));
+    cfg->set<nlohmann::json>("/printers/printer-B/panel_widgets/home",
+                             make_home_layout("shutdown"));
+
+    // Active printer = A -> home reflects A's layout.
+    REQUIRE(cfg->set_active_printer("printer-A"));
+    {
+        auto& wc = mgr.get_widget_config("home");
+        REQUIRE(wc.is_enabled("network"));
+        REQUIRE_FALSE(wc.is_enabled("shutdown"));
+    }
+
+    // Simulate Application::switch_printer(): change the active printer, then
+    // invalidate every cached panel config so the next access re-reads df().
+    REQUIRE(cfg->set_active_printer("printer-B"));
+    mgr.clear_all_panel_configs();
+
+    // Active printer = B -> home must now reflect B's layout, not the stale A cache.
+    {
+        auto& wc = mgr.get_widget_config("home");
+        REQUIRE(wc.is_enabled("shutdown"));
+        REQUIRE_FALSE(wc.is_enabled("network"));
+    }
+
+    // Clean up so the cached "home" config doesn't leak the temp printers into
+    // later tests sharing the process-wide cache.
+    mgr.clear_all_panel_configs();
+}

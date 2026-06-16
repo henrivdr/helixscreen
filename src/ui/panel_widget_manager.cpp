@@ -78,23 +78,6 @@ void PanelWidgetManager::notify_config_changed(const std::string& panel_id) {
     }
 }
 
-static PanelWidgetConfig& get_widget_config_impl(const std::string& panel_id) {
-    // Per-panel config instances cached by panel ID. Main-thread only — no
-    // synchronization on the static map.
-    static std::unordered_map<std::string, PanelWidgetConfig> configs;
-    auto it = configs.find(panel_id);
-    if (it == configs.end()) {
-        it = configs.emplace(panel_id, PanelWidgetConfig(panel_id, *Config::get_instance())).first;
-    }
-    // load() is a no-op if already loaded. Callers that bypass the setters
-    // must call notify_config_changed() → mark_dirty() to trigger a reload.
-    // Previously this unconditionally reloaded on every access, churning
-    // pages_ many times per panel populate and leaving outer frames exposed
-    // to invalidated references (#804).
-    it->second.load();
-    return it->second;
-}
-
 std::vector<std::unique_ptr<PanelWidget>>
 PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* container,
                                      int page_index, WidgetReuseMap reuse) {
@@ -111,7 +94,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     }
     populating_ = true;
 
-    auto& widget_config = get_widget_config_impl(panel_id);
+    auto& widget_config = get_widget_config(panel_id);
 
     // Resolved widget slot: holds the widget ID, resolved XML component name,
     // per-widget config, and optionally a pre-created PanelWidget instance.
@@ -435,7 +418,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
     // Write computed positions back to config entries and persist to disk.
     // This ensures auto-placed positions survive the next load() call
-    // (get_widget_config_impl always reloads from the JSON store).
+    // (get_widget_config reloads from the JSON store after mark_dirty).
     // Only write positions for widgets that are enabled in config — skip
     // temporarily injected widgets (e.g., firmware_restart during Klipper error)
     // whose positions would block cells for real widgets on subsequent layouts.
@@ -778,7 +761,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
 std::vector<std::string> PanelWidgetManager::compute_visible_widget_ids(const std::string& panel_id,
                                                                         int page_index) {
-    auto& widget_config = get_widget_config_impl(panel_id);
+    auto& widget_config = get_widget_config(panel_id);
     std::vector<std::string> ids;
 
     for (const auto& entry : widget_config.page_entries(page_index)) {
@@ -984,8 +967,36 @@ void PanelWidgetManager::clear_panel_config(const std::string& panel_id) {
     }
 }
 
+void PanelWidgetManager::clear_all_panel_configs() {
+    // Active printer changed: every cached PanelWidgetConfig was loaded from the
+    // PREVIOUS printer's /printers/<id>/panel_widgets/<panel> path. Mark each
+    // dirty so the next load() re-reads from the now-current Config::df() path
+    // (the #804 load() guard otherwise serves the stale layout indefinitely).
+    for (auto& [panel_id, config] : panel_configs_) {
+        (void)panel_id;
+        config.mark_dirty();
+    }
+    // Drop the per-page derived caches wholesale — they key on "panel:page" and
+    // describe the old printer's resolved widget list / grid geometry.
+    active_configs_.clear();
+    grid_descriptors_.clear();
+}
+
 PanelWidgetConfig& PanelWidgetManager::get_widget_config(const std::string& panel_id) {
-    return get_widget_config_impl(panel_id);
+    // Per-panel config instances cached by panel ID in panel_configs_.
+    // Main-thread only — no synchronization on the map.
+    auto it = panel_configs_.find(panel_id);
+    if (it == panel_configs_.end()) {
+        it = panel_configs_.emplace(panel_id, PanelWidgetConfig(panel_id, *Config::get_instance()))
+                 .first;
+    }
+    // load() is a no-op if already loaded. Callers that bypass the setters must
+    // call notify_config_changed() → mark_dirty() (or clear_all_panel_configs()
+    // on a printer switch) to trigger a reload. Previously this unconditionally
+    // reloaded on every access, churning pages_ many times per panel populate
+    // and leaving outer frames exposed to invalidated references (#804).
+    it->second.load();
+    return it->second;
 }
 
 // -- PanelWidget base class --
