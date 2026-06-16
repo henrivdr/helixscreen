@@ -19,6 +19,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
+#include <string>
 
 namespace helix {
 
@@ -30,6 +32,18 @@ void register_nozzle_temps_widget() {
 }
 
 } // namespace helix
+
+std::vector<std::string> helix::distinct_extruder_names(const std::vector<ToolInfo>& tools) {
+    std::vector<std::string> result;
+    std::set<std::string> seen;
+    for (const auto& tool : tools) {
+        if (!tool.extruder_name)
+            continue;
+        if (seen.insert(*tool.extruder_name).second)
+            result.push_back(*tool.extruder_name);
+    }
+    return result;
+}
 
 using namespace helix;
 
@@ -140,14 +154,14 @@ void NozzleTempsWidget::rebuild_rows() {
 
     auto token = lifetime_.token();
 
-    // Create extruder rows ordered by ToolState tools
-    const auto& tools = ToolState::instance().tools();
-    for (const auto& tool : tools) {
-        if (!tool.extruder_name)
-            continue;
-
+    // One row per PHYSICAL extruder. Multiplexing backends (AFC BoxTurtle, Happy
+    // Hare, ERCF) expose one logical tool per spool lane (T0..Tn) that all feed a
+    // single extruder; without the collapse a 4-lane unit shows its one nozzle
+    // temp four times. A true toolchanger maps each tool to a distinct extruder,
+    // so every nozzle still gets its own row.
+    for (const auto& extruder_name : distinct_extruder_names(ToolState::instance().tools())) {
         ExtruderRow row;
-        row.name = *tool.extruder_name;
+        row.name = extruder_name;
         create_extruder_row(container, row);
 
         // Observe per-extruder temp subject with lifetime token

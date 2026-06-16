@@ -13,6 +13,16 @@
 namespace helix {
 
 class PrinterState;
+struct ToolInfo;
+
+/// Collapse a tool list to the distinct physical extruders feeding it, preserving
+/// first-seen order. Multiplexing backends (AFC BoxTurtle, Happy Hare, ERCF) expose
+/// one logical tool per spool lane that all share a single extruder; a true
+/// toolchanger maps each tool to its own extruder. The nozzle-temps widget shows
+/// one row per physical nozzle, so it iterates this rather than tools() directly.
+/// Tools with no extruder_name are dropped.
+[[nodiscard]] std::vector<std::string>
+distinct_extruder_names(const std::vector<ToolInfo>& tools);
 
 /// Panel widget showing per-extruder temperature rows with progress bars.
 /// Gated on show_tool_badge (multi-tool printers only). Displays each

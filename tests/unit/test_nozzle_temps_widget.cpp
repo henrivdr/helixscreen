@@ -8,7 +8,9 @@
  * panel widget registry with expected metadata and hardware gating.
  */
 
+#include "src/ui/panel_widgets/nozzle_temps_widget.h"
 #include "panel_widget_registry.h"
+#include "tool_state.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -66,4 +68,57 @@ TEST_CASE("NozzleTempsWidget: not enabled by default (requires multi-tool)",
     const auto* def = find_widget_def("nozzle_temps");
     REQUIRE(def != nullptr);
     REQUIRE_FALSE(def->default_enabled);
+}
+
+// Regression: an AFC BoxTurtle (and Happy Hare / ERCF) is one physical extruder
+// fed by N spool lanes. ToolState models the lanes as N logical tools (T0..Tn)
+// that all carry extruder_name="extruder", so iterating tools() builds N
+// identical nozzle rows — the widget showed "150°" four times. The widget must
+// collapse to distinct physical extruders.
+TEST_CASE("NozzleTempsWidget: collapses multiplexed lanes to one nozzle row",
+          "[nozzle_temps][panel_widget][afc]") {
+    SECTION("AFC: 4 lanes feeding one extruder -> one row") {
+        std::vector<ToolInfo> tools;
+        for (int i = 0; i < 4; ++i) {
+            ToolInfo t;
+            t.index = i;
+            t.name = "T" + std::to_string(i);
+            t.extruder_name = "extruder"; // all lanes share the single extruder
+            tools.push_back(std::move(t));
+        }
+        auto extruders = distinct_extruder_names(tools);
+        REQUIRE(extruders.size() == 1);
+        REQUIRE(extruders[0] == "extruder");
+    }
+
+    SECTION("Toolchanger: 4 distinct extruders -> four rows, order preserved") {
+        std::vector<ToolInfo> tools;
+        const char* names[] = {"extruder", "extruder1", "extruder2", "extruder3"};
+        for (int i = 0; i < 4; ++i) {
+            ToolInfo t;
+            t.index = i;
+            t.name = "T" + std::to_string(i);
+            t.extruder_name = names[i];
+            tools.push_back(std::move(t));
+        }
+        auto extruders = distinct_extruder_names(tools);
+        REQUIRE(extruders.size() == 4);
+        REQUIRE(extruders[0] == "extruder");
+        REQUIRE(extruders[1] == "extruder1");
+        REQUIRE(extruders[2] == "extruder2");
+        REQUIRE(extruders[3] == "extruder3");
+    }
+
+    SECTION("Tools without an extruder mapping are dropped") {
+        std::vector<ToolInfo> tools(2);
+        tools[0].extruder_name = "extruder";
+        tools[1].extruder_name = std::nullopt;
+        auto extruders = distinct_extruder_names(tools);
+        REQUIRE(extruders.size() == 1);
+        REQUIRE(extruders[0] == "extruder");
+    }
+
+    SECTION("Empty tool list -> no rows") {
+        REQUIRE(distinct_extruder_names({}).empty());
+    }
 }
