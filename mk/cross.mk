@@ -69,7 +69,10 @@ ifeq ($(PLATFORM_TARGET),pi)
     # -DHELIX_RELEASE_BUILD: Disables debug features like LV_USE_ASSERT_STYLE
     # -funwind-tables: Emit ARM unwind info (.ARM.exidx) so backtrace() can walk
     # the full call stack in crash reports. ~5-10% code size increase, zero runtime cost.
-    TARGET_CFLAGS := -march=armv8-a -funwind-tables -I/usr/aarch64-linux-gnu/include -I/usr/include/libdrm -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_BINARY_VARIANT=\"drm\"
+    # -fno-omit-frame-pointer: required for the crash handler's fp_walk_backtrace /
+    # stack-scan fallback (libgcc backtrace() can't cross the signal frame on ARM).
+    # Without it SIGABRT reports get garbage frames. Matches ad5x/cc1/k1/k2/snapmaker-u1.
+    TARGET_CFLAGS := -march=armv8-a -fno-omit-frame-pointer -funwind-tables -I/usr/aarch64-linux-gnu/include -I/usr/include/libdrm -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_BINARY_VARIANT=\"drm\"
     DISPLAY_BACKEND := drm
     ENABLE_OPENGLES := yes
     ENABLE_SDL := no
@@ -92,7 +95,7 @@ else ifeq ($(PLATFORM_TARGET),pi-fbdev)
     CROSS_COMPILE ?= aarch64-linux-gnu-
     TARGET_ARCH := aarch64
     TARGET_TRIPLE := aarch64-linux-gnu
-    TARGET_CFLAGS := -march=armv8-a -funwind-tables \
+    TARGET_CFLAGS := -march=armv8-a -fno-omit-frame-pointer -funwind-tables \
         -I/usr/aarch64-linux-gnu/include \
         -Wno-error=conversion -Wno-error=sign-conversion \
         -DHELIX_RELEASE_BUILD -DHELIX_BINARY_VARIANT=\"fbdev\"
@@ -117,7 +120,7 @@ else ifeq ($(PLATFORM_TARGET),pi-both)
     CROSS_COMPILE ?= aarch64-linux-gnu-
     TARGET_ARCH := aarch64
     TARGET_TRIPLE := aarch64-linux-gnu
-    TARGET_CFLAGS := -march=armv8-a -funwind-tables -I/usr/aarch64-linux-gnu/include -I/usr/include/libdrm -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_BINARY_VARIANT=\"drm\"
+    TARGET_CFLAGS := -march=armv8-a -fno-omit-frame-pointer -funwind-tables -I/usr/aarch64-linux-gnu/include -I/usr/include/libdrm -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_BINARY_VARIANT=\"drm\"
     DISPLAY_BACKEND := drm
     ENABLE_OPENGLES := yes
     ENABLE_SDL := no
@@ -143,7 +146,10 @@ else ifeq ($(PLATFORM_TARGET),pi32)
     TARGET_TRIPLE := arm-linux-gnueabihf
     # -funwind-tables: Emit ARM unwind info (.ARM.exidx) so backtrace() can walk
     # the full call stack in crash reports. ~5-10% code size increase, zero runtime cost.
-    TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funwind-tables \
+    # -fno-omit-frame-pointer: required for the crash handler's fp_walk_backtrace /
+    # stack-scan fallback (libgcc backtrace() can't cross the signal frame on ARM).
+    # Without it SIGABRT reports get garbage frames. Matches ad5x/cc1/k1/k2/snapmaker-u1.
+    TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -fno-omit-frame-pointer -funwind-tables \
         -I/usr/arm-linux-gnueabihf/include -I/usr/include/libdrm \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_PI32 -DHELIX_BINARY_VARIANT=\"drm\"
     DISPLAY_BACKEND := drm
@@ -166,7 +172,7 @@ else ifeq ($(PLATFORM_TARGET),pi32-fbdev)
     CROSS_COMPILE ?= arm-linux-gnueabihf-
     TARGET_ARCH := armv7-a
     TARGET_TRIPLE := arm-linux-gnueabihf
-    TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funwind-tables \
+    TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -fno-omit-frame-pointer -funwind-tables \
         -I/usr/arm-linux-gnueabihf/include \
         -Wno-error=conversion -Wno-error=sign-conversion \
         -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_PI32 -DHELIX_BINARY_VARIANT=\"fbdev\"
@@ -191,7 +197,7 @@ else ifeq ($(PLATFORM_TARGET),pi32-both)
     CROSS_COMPILE ?= arm-linux-gnueabihf-
     TARGET_ARCH := armv7-a
     TARGET_TRIPLE := arm-linux-gnueabihf
-    TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funwind-tables \
+    TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -fno-omit-frame-pointer -funwind-tables \
         -I/usr/arm-linux-gnueabihf/include -I/usr/include/libdrm \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_PI32 -DHELIX_BINARY_VARIANT=\"drm\"
     DISPLAY_BACKEND := drm
@@ -1048,6 +1054,21 @@ pi32-docker: ensure-docker
 		make PLATFORM_TARGET=pi32 SKIP_OPTIONAL_DEPS=1 -j$(NPROC_DOCKER_RUN)
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
+# AddressSanitizer build for the Pi 32-bit (DRM). Output lands in build/pi32-asan/.
+# Uses -static-libasan (via mk/cross.mk SANITIZE block) so the binary is
+# self-contained — no libasan install needed on the device. For sharper stack
+# traces, override OPT: `make pi32-asan-docker OPT=1`.
+pi32-asan-docker: ensure-docker
+	@echo "$(CYAN)$(BOLD)Cross-compiling Pi 32-bit with AddressSanitizer via Docker...$(RESET)"
+	@if ! docker image inspect helixscreen/toolchain-pi32 >/dev/null 2>&1; then \
+		echo "$(YELLOW)Docker image not found. Building toolchain first...$(RESET)"; \
+		$(MAKE) docker-toolchain-pi32; \
+	fi
+	$(call ensure-ccache-dir,pi32-asan)
+	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src $(DOCKER_WORKTREE_MOUNT) -w /src $(call docker-ccache-args,pi32-asan) helixscreen/toolchain-pi32 \
+		make PLATFORM_TARGET=pi32 SANITIZE=address SKIP_OPTIONAL_DEPS=1 -j$(NPROC_DOCKER_RUN)
+	@$(MAKE) --no-print-directory maybe-stop-colima
+
 pi32-fbdev-docker: ensure-docker
 	@echo "$(CYAN)$(BOLD)Cross-compiling Pi 32-bit fbdev fallback via Docker...$(RESET)"
 	@if ! docker image inspect helixscreen/toolchain-pi32 >/dev/null 2>&1; then \
@@ -1636,6 +1657,28 @@ deploy-pi32-bin:
 
 # Full cycle: build + deploy + run in foreground
 pi32-test: pi32-docker deploy-pi32-fg
+
+.PHONY: deploy-pi32-asan deploy-pi32-asan-fg pi32-asan-test
+
+# Deploy the pi32 ASAN binary. Shares PI_ASAN_OPTIONS with the 64-bit Pi target.
+deploy-pi32-asan:
+	@test -f build/pi32-asan/bin/helix-screen || { echo "$(RED)Error: build/pi32-asan/bin/helix-screen not found. Run 'make pi32-asan-docker' first.$(RESET)"; exit 1; }
+	$(call deploy-common,$(PI_SSH_TARGET),$(PI_DEPLOY_DIR),build/pi32-asan/bin)
+	@echo "$(CYAN)Shipping ASAN suppressions...$(RESET)"
+	$(Q)rsync -avzz tests/asan.supp $(PI_SSH_TARGET):$(PI_DEPLOY_DIR)/
+	@echo "$(GREEN)✓ Deployed ASAN build to $(PI_HOST):$(PI_DEPLOY_DIR)$(RESET)"
+	@echo "$(YELLOW)Note: do NOT systemd-restart — ASAN binaries need ASAN_OPTIONS in env.$(RESET)"
+
+# Run the pi32 ASAN binary in the foreground with ASAN_OPTIONS injected so the
+# heap error report lands on your terminal as soon as the boot/print-history
+# load provokes it.
+deploy-pi32-asan-fg: deploy-pi32-asan
+	@echo "$(CYAN)Starting helix-screen on $(PI_HOST) under AddressSanitizer...$(RESET)"
+	@echo "$(DIM)ASAN_OPTIONS=$(PI_ASAN_OPTIONS)$(RESET)"
+	ssh -t $(PI_SSH_TARGET) "cd $(PI_DEPLOY_DIR) && ASAN_OPTIONS='$(PI_ASAN_OPTIONS)' ./bin/helix-launcher.sh --debug --log-dest=console"
+
+# Full cycle: ASAN build + deploy + run in foreground.
+pi32-asan-test: pi32-asan-docker deploy-pi32-asan-fg
 
 # =============================================================================
 # AD5M Deployment Configuration
