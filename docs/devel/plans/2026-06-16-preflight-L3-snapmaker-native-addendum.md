@@ -4,6 +4,10 @@
 **Status:** Spec addendum, pending review → rebuild L3 for U1
 **Supersedes:** the U1 `GcodeRewrite` apply path in `2026-06-16-preflight-filament-validation.md` (Tasks 11–12). L1 (gate), L2 (honest display), and the enriched modal UX are UNCHANGED.
 
+**Decisions (locked, Preston 2026-06-16):**
+- **Part A is ALWAYS-ON** — `SET_PRINT_USED_EXTRUDERS` is sent before *every* U1 print (not gated behind remap / not only-when-empty). This fixes the reporter's spurious-feed runout for all multi-color U1 prints with zero user interaction.
+- **`SnapmakerNative` is a NEW `RemapStrategy` enum value** (`AmsBackend::RemapStrategy {None, Native, GcodeRewrite, SnapmakerNative}`) — NOT folded under `Native`. U1 returns `SnapmakerNative`.
+
 ## Why this addendum exists
 
 Earlier research wrongly concluded the U1 had no native remap mechanism, so L3 was built as a gcode rewrite (`GcodeToolRemapper`) printed through the HelixPrint plugin. That was wrong. The U1's `print_task_config` Klipper extra (`klippy/extras/print_task_config.py`) exposes a native command API — the exact one the stock screen used. Full reference: `docs/devel/SNAPMAKER_U1_PRINT_TASK_CONFIG.md`. We pivot the U1 apply path to that API: simpler, firmware-blessed, matches stock UX, no temp files / no history patching / no plugin dependency.
@@ -49,7 +53,7 @@ The enriched modal (Task 8) and `recompute_preflight()` (Task 10) are reused unc
 
 ### Part D — Strategy + scope changes
 
-- Replace U1's `RemapStrategy::GcodeRewrite` with a new `RemapStrategy::SnapmakerNative` (or fold into `Native` with a Snapmaker-specific apply). ACE stays `None` (unchanged).
+- Add a new `RemapStrategy::SnapmakerNative` enum value; U1 returns it (was `GcodeRewrite`). ACE stays `None` (unchanged). Update the `[ams][strategy]` test accordingly (U1 → `SnapmakerNative`).
 - **KEEP `GcodeToolRemapper` + `modify_and_print_with_remap` — do NOT delete.** They are a distinct, tested, generic capability (rewrite slicer-baked tool commands + print via the history-preserving HelixPrint plugin), not redundant code. `RemapStrategy::GcodeRewrite` remains the **generic fallback for backends with no native remap API**. U1 simply moves *off* it to `SnapmakerNative`; it currently has no active consumer, which is acceptable for kept infrastructure with a foreseeable user.
   - Reusability boundary: the *wiring* (`modify_and_print_with_remap`, GCodeFileModifier, plugin) is backend-agnostic. The *command families* in `GcodeToolRemapper` (`Tn`, `SM_PRINT_*_EXTRUDER=`, `M10x …T`) are U1-shaped. To serve another backend the remapper must become **family-parameterized per backend** (the backend supplies its tool-command patterns). 
   - **First real consumer: ACE** (`ACE_CHANGE_TOOL TOOL=n`). When we add ACE's family + an ACE fixture, ACE flips from `None` back to `GcodeRewrite`. That generalization is the trigger to parameterize the families (vs hardcoding U1's). Until then, leave the families as-is and documented as U1-derived.
