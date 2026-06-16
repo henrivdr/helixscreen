@@ -488,6 +488,21 @@ _resolve_primary_group() {
     fi
 }
 
+# QIDI-class SBC fingerprint (Q2, and likely Plus 4): the Linaro Debian
+# reference rootfs hostname `linaro-alip` plus the `mks` user home. This is the
+# same signal get_hardware_label() uses to print "QIDI-class SBC".
+#
+# It exists to VETO Artillery M1 detection: the Q2 ships the stock Artillery
+# `algo_app.service`, so algo_app alone cannot tell a Q2 apart from a real M1
+# (field-confirmed on a Q2 in prestonbrown/helixscreen#1027 — algo_app.service
+# present, makerbase-client.services absent). The hostname+user pair is the
+# only reliable QIDI marker we have, and the M1 is not a linaro-alip host.
+_is_qidi_class_sbc() {
+    local _h=""
+    [ -r /etc/hostname ] && _h=$(cat /etc/hostname 2>/dev/null | tr -d '[:space:]')
+    [ "$_h" = "linaro-alip" ] && [ -d /home/mks ]
+}
+
 # Detect platform
 # Returns: "ad5m", "ad5x", "cc1", "k1", "k2", "m1", "pi", "pi32", "snapmaker-u1", "x86", or "unsupported"
 detect_platform() {
@@ -584,13 +599,14 @@ detect_platform() {
     # and would otherwise be misdetected as plain "pi" — which would skip the
     # M1 platform hook that stops the stock UIs (algo_app + makerbase-client).
     #
-    # Discriminate ONLY on algo_app.service — Artillery's proprietary "AI"
-    # service, which is unique to the M1. Do NOT key off
-    # makerbase-client.services: that is the generic MKS-board LCD client and
-    # is shipped by other MakerBase-class SBCs too — notably the QIDI Q2
-    # (hostname linaro-alip, user mks), which was misdetected as m1 because of
-    # it (prestonbrown/helixscreen#1027). The M1 hook still stops both services
-    # regardless of which fingerprint triggered detection.
+    # Fingerprint: algo_app.service (Artillery's proprietary "AI" service). But
+    # algo_app is NOT exclusive to the M1 — the QIDI Q2 ships it too (field-
+    # confirmed: algo_app.service present, makerbase-client.services absent on a
+    # Q2 — prestonbrown/helixscreen#1027). An earlier fix that keyed M1 solely on
+    # algo_app therefore still misdetected the Q2 as m1. So we additionally VETO
+    # via the QIDI-class fingerprint (hostname linaro-alip + /home/mks): a Q2
+    # falls through to the normal pi/pi32 arch path below. The M1 hook still
+    # stops both stock services regardless of which fingerprint triggered.
     if [ "$arch" = "aarch64" ] || [ "$arch" = "armv7l" ]; then
         local is_m1=false
         if [ -f /etc/systemd/system/algo_app.service ] || \
@@ -600,7 +616,7 @@ detect_platform() {
              systemctl list-unit-files 2>/dev/null | grep -qE '^algo_app\.service\b'; then
             is_m1=true
         fi
-        if [ "$is_m1" = true ]; then
+        if [ "$is_m1" = true ] && ! _is_qidi_class_sbc; then
             echo "m1"
             return 0
         fi
@@ -4255,12 +4271,14 @@ uninstall() {
 
     # Snapmaker U1: re-enable the stock UI we neutralized at install time.
     # snapmaker-u1-setup-autostart.sh disables the stock UI binary
-    # (chmod a-x /usr/bin/gui) so neither firmware 1.3's /etc/init.d/S99screen
-    # nor 1.4's relocated launcher can start it; it also patches (or creates)
-    # /etc/init.d/S99screen to launch HelixScreen. Reverse both:
+    # (chmod a-x /usr/bin/gui) so no launcher (PAXX's S99screen / 1.4's relocated
+    # launcher, or stock's supervisor) can start it; it also patches the boot
+    # launchers to start HelixScreen. Reverse all of it:
     #   1. Re-enable /usr/bin/gui (chmod +x) so a stock launcher can exec it.
-    #   2. Restore the launcher — from S99screen.stock on 1.3, or by removing
-    #      our HelixScreen-marked S99screen on 1.4 (we created it there).
+    #   2. Restore the launcher(s) — from S99screen.stock on PAXX 1.3, by
+    #      removing our HelixScreen-marked S99screen on PAXX 1.4, from
+    #      S99fb-http.stock on PAXX 1.4, and from S99input-event-daemon.stock on
+    #      stock firmware (the stock-safe boot hook).
     if [ -z "$restored_ui" ] && [ "$platform" = "snapmaker-u1" ]; then
         if [ -f /usr/bin/gui ] && [ ! -x /usr/bin/gui ]; then
             log_info "Re-enabling stock UI binary (/usr/bin/gui)"
@@ -4282,6 +4300,14 @@ uninstall() {
             log_info "Restoring stock /etc/init.d/S99fb-http (firmware 1.4)"
             $SUDO mv /etc/init.d/S99fb-http.stock /etc/init.d/S99fb-http \
                 || log_warn "Could not restore /etc/init.d/S99fb-http — stock screen launcher may be missing"
+        fi
+        # Stock firmware: restore the input-event-daemon launcher we took over for
+        # boot-time autostart. .stock is present only if we patched it, so this is
+        # a no-op where it was never hooked.
+        if [ -f /etc/init.d/S99input-event-daemon.stock ]; then
+            log_info "Restoring stock /etc/init.d/S99input-event-daemon"
+            $SUDO mv /etc/init.d/S99input-event-daemon.stock /etc/init.d/S99input-event-daemon \
+                || log_warn "Could not restore /etc/init.d/S99input-event-daemon"
         fi
         restored_ui="Snapmaker stock UI (/usr/bin/gui re-enabled)"
     fi

@@ -389,12 +389,14 @@ uninstall() {
 
     # Snapmaker U1: re-enable the stock UI we neutralized at install time.
     # snapmaker-u1-setup-autostart.sh disables the stock UI binary
-    # (chmod a-x /usr/bin/gui) so neither firmware 1.3's /etc/init.d/S99screen
-    # nor 1.4's relocated launcher can start it; it also patches (or creates)
-    # /etc/init.d/S99screen to launch HelixScreen. Reverse both:
+    # (chmod a-x /usr/bin/gui) so no launcher (PAXX's S99screen / 1.4's relocated
+    # launcher, or stock's supervisor) can start it; it also patches the boot
+    # launchers to start HelixScreen. Reverse all of it:
     #   1. Re-enable /usr/bin/gui (chmod +x) so a stock launcher can exec it.
-    #   2. Restore the launcher — from S99screen.stock on 1.3, or by removing
-    #      our HelixScreen-marked S99screen on 1.4 (we created it there).
+    #   2. Restore the launcher(s) — from S99screen.stock on PAXX 1.3, by
+    #      removing our HelixScreen-marked S99screen on PAXX 1.4, from
+    #      S99fb-http.stock on PAXX 1.4, and from S99input-event-daemon.stock on
+    #      stock firmware (the stock-safe boot hook).
     if [ -z "$restored_ui" ] && [ "$platform" = "snapmaker-u1" ]; then
         if [ -f /usr/bin/gui ] && [ ! -x /usr/bin/gui ]; then
             log_info "Re-enabling stock UI binary (/usr/bin/gui)"
@@ -416,6 +418,14 @@ uninstall() {
             log_info "Restoring stock /etc/init.d/S99fb-http (firmware 1.4)"
             $SUDO mv /etc/init.d/S99fb-http.stock /etc/init.d/S99fb-http \
                 || log_warn "Could not restore /etc/init.d/S99fb-http — stock screen launcher may be missing"
+        fi
+        # Stock firmware: restore the input-event-daemon launcher we took over for
+        # boot-time autostart. .stock is present only if we patched it, so this is
+        # a no-op where it was never hooked.
+        if [ -f /etc/init.d/S99input-event-daemon.stock ]; then
+            log_info "Restoring stock /etc/init.d/S99input-event-daemon"
+            $SUDO mv /etc/init.d/S99input-event-daemon.stock /etc/init.d/S99input-event-daemon \
+                || log_warn "Could not restore /etc/init.d/S99input-event-daemon"
         fi
         restored_ui="Snapmaker stock UI (/usr/bin/gui re-enabled)"
     fi

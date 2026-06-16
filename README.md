@@ -136,7 +136,7 @@ See [docs/devel/GALLERY.md](docs/devel/GALLERY.md) for the full gallery.
 
 ² Elegoo Centauri Carbon requires the community [OpenCentauri COSMOS](https://github.com/OpenCentauri/cosmos) firmware ([docs](https://docs.opencentauri.cc/klipper-conversion/cosmos/cosmos/); stock Elegoo firmware has no SSH, Klipper, or Moonraker). Ships with factory white-balance calibration for the 4.3" panel.
 
-³ Snapmaker U1 requires the community [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) (stock firmware has no SSH access). Developed and tested on 1.3.x; 1.4.x should also work. Reinstall HelixScreen after updating the Extended Firmware — a firmware update resets system files and the stock screen returns until you reinstall.
+³ Snapmaker U1 needs SSH access. Stock firmware (1.2+) provides it via the **Root access** option in printer settings; the community [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) enables SSH by default and is the easiest path. Tested on PAXX 1.3.x/1.4.x; stock-firmware support is newly added. Reinstall HelixScreen after any firmware update — it resets system files and the stock screen returns until you reinstall.
 
 ## Installation
 

@@ -50,7 +50,7 @@ No SSL required — uses plain HTTP. See [Creality K1 Series](#creality-k1-serie
 
 **Flashforge Adventurer 5X:** Install [ZMOD](https://github.com/ghzserg/zmod), which manages HelixScreen installation and updates. See [FlashForge Adventurer 5X](#flashforge-adventurer-5x).
 
-**Snapmaker U1:** Run directly on the printer via SSH (requires [Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware)):
+**Snapmaker U1:** Run directly on the printer via SSH (stock firmware with **Root access** enabled, or [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) which enables SSH by default):
 ```bash
 curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
@@ -344,11 +344,13 @@ The Snapmaker U1 is an all-in-one printer with a built-in touchscreen. HelixScre
   - Network connection
 
 - **Software:**
-  - [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) installed (required for SSH access). Tested on **1.2.x, 1.3.x, and 1.4.x**. Stock Snapmaker firmware is not supported.
-  - SSH access (`root@<printer-ip>` or `lava@<printer-ip>`, password: `snapmaker`)
+  - **SSH access** — via either firmware path:
+    - **Stock Snapmaker firmware (1.2+):** enable the **Root access** option in printer settings (added in V1.2.0). This turns on SSH. *(Stock-firmware support is newly added and not yet verified end-to-end on a stock device — see note below.)*
+    - **[PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware):** SSH on by default. Tested on **1.2.x, 1.3.x, and 1.4.x**.
+  - SSH login (`root@<printer-ip>` or `lava@<printer-ip>`, password: `snapmaker`)
 
 **Notes:**
-- **Reinstall after a firmware update** — updating the PAXX firmware can overwrite HelixScreen; re-run the installer afterward.
+- **Reinstall after a firmware update** — any firmware update (stock or PAXX) resets system files and can overwrite HelixScreen; re-run the installer afterward.
 - **Remote screen ("gui" camera) is not yet supported** — the built-in firmware exposes a "gui" webcam in Mainsail/Fluidd that mirrors the printer's local touchscreen. Once HelixScreen takes over the display it owns the screen directly, so that feed shows "No Signal" and is expected. The physical "case" camera is unaffected. Streaming the HelixScreen UI to the web frontend is planned but not implemented; use Mainsail/Fluidd for remote monitoring in the meantime.
 - **Two harmless Moonraker warnings are expected** — after install, the Mainsail/Fluidd "Moonraker warnings found" banner may show *"Unable to find DBus PolKit Interface"* and *"Unable to initialize System Update Provider for distribution: buildroot"*. Both are inherent to Moonraker on the U1's buildroot firmware (no PolKit, no OS package manager) and do **not** affect HelixScreen or printing. They are not specific to HelixScreen — installing simply restarts Moonraker, which re-surfaces them. See [Troubleshooting](TROUBLESHOOTING.md).
 
@@ -574,9 +576,9 @@ Use the touchscreen to complete the setup wizard. The printer should auto-detect
 
 ## Snapmaker U1 Installation
 
-> **Requires [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware).** Stock firmware does not provide SSH access. Install Extended Firmware first before proceeding.
+> **Requires SSH access.** Enable it on **stock firmware (1.2+)** via the **Root access** option in printer settings, or install [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) (SSH on by default). PAXX is **not** required — it's just the turnkey option.
 >
-> **Firmware versions:** HelixScreen is tested on Extended Firmware **1.2.x, 1.3.x, and 1.4.x**. After you update the Extended Firmware, **reinstall HelixScreen** — a firmware update resets the printer's system files and the stock screen will return until you reinstall (see [Upgrading the Extended Firmware](#upgrading-the-extended-firmware-with-helixscreen-installed)).
+> **Firmware versions:** Tested on PAXX Extended Firmware **1.2.x, 1.3.x, and 1.4.x**. Stock-firmware support is newly added and not yet verified end-to-end on a stock device. After any firmware update, **reinstall HelixScreen** — the update resets the printer's system files and the stock screen will return until you reinstall (see [Upgrading the firmware](#upgrading-the-extended-firmware-with-helixscreen-installed)).
 
 SSH into the printer:
 
@@ -642,7 +644,7 @@ reboot
 ```
 
 **Notes:**
-- Extended firmware is required — stock firmware does not provide SSH access
+- SSH is required — enable stock firmware's **Root access** option, or use PAXX Extended Firmware (SSH on by default). PAXX is not required.
 - Display resolution may need manual configuration if the screen appears stretched or misaligned (see [Display Configuration](#display-configuration))
 - A firmware update resets the printer's system files and brings the stock screen back — reinstall HelixScreen afterward
 

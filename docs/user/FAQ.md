@@ -38,7 +38,7 @@ HelixScreen works with any Klipper-based printer running Moonraker. Tested and s
 | FlashForge AD5X | **Tested** | IFS filament system integrated |
 | SOVOL SV06 / SV08 | **Tested** | Community reports welcome |
 | Elegoo Centauri Carbon 1 | **Tested** | Requires [OpenCentauri COSMOS](https://docs.opencentauri.cc/klipper-conversion/cosmos/cosmos/) firmware; ships with factory white-balance calibration |
-| Snapmaker U1 (SnapSwap toolchanger) | **Tested** | Native four-head support with RFID spool recognition; PAXX Extended Firmware required (tested on 1.2.x, 1.3.x, 1.4.x). Reinstall after a firmware update. Remote screen streaming (the "gui" webcam) is not yet supported; physical cameras work normally. |
+| Snapmaker U1 (SnapSwap toolchanger) | **Tested** | Native four-head support with RFID spool recognition. Needs SSH — stock firmware (1.2+) via its **Root access** option, or PAXX Extended Firmware (SSH on by default). Tested on PAXX 1.2.x–1.4.x; stock-firmware support is newly added. Reinstall after a firmware update. Remote screen streaming (the "gui" webcam) is not yet supported; physical cameras work normally. |
 | Artillery M1 Pro | **Tested** | |
 | Zero G Mercury / Nebula / Hydra | **Tested** | Multiple variants supported |
 | Other Klipper printers | **Should work** | Any printer with Moonraker API access |

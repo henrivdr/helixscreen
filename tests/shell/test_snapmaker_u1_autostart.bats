@@ -2,15 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Tests for snapmaker-u1-setup-autostart.sh (display takeover) across PAXX
-# Extended Firmware 1.3 and 1.4, plus the matching uninstall restore block.
+# Extended Firmware 1.3 and 1.4 AND stock Snapmaker firmware, plus the matching
+# uninstall restore block.
 #
 # Firmware difference under test:
-#   1.3 ships /etc/init.d/S99screen (the only launcher of /usr/bin/gui).
-#   1.4 deleted S99screen and launches /usr/bin/gui from a relocated path.
-# The launcher-independent fix disables /usr/bin/gui (chmod a-x) so neither
-# firmware can start the stock UI; the script still writes S99screen as the
-# HelixScreen launcher. The autostart script is driven against a mock rootfs
-# via HELIX_SETUP_ROOT.
+#   PAXX 1.3 ships /etc/init.d/S99screen (the only launcher of /usr/bin/gui).
+#   PAXX 1.4 deleted S99screen, ships /etc/init.d/S99fb-http instead.
+#   STOCK ships NEITHER — /usr/bin/gui is started by a supervisor binary, not an
+#     init script. The only squashfs-resident, boot-glob, late launcher present
+#     on stock is /etc/init.d/S99input-event-daemon, so the script delegates from
+#     it (preserving its stock function) to autostart HelixScreen at boot.
+# The launcher-independent fix disables /usr/bin/gui (chmod a-x) so no launcher
+# on any firmware can start the stock UI. The autostart script is driven against
+# a mock rootfs via HELIX_SETUP_ROOT.
 
 WORKTREE_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 
@@ -68,6 +72,21 @@ DAEMON="/usr/local/bin/fb-http.py"
 start-stop-daemon -S -b -x "$DAEMON" -m -p /var/run/$NAME.pid
 EOF
     chmod +x "$MOCK_ROOT/etc/init.d/S99fb-http"
+}
+
+# Pre-create a stock S99input-event-daemon (no HelixScreen marker). Present on
+# both stock and PAXX squashfs; on stock it is the ONLY boot-glob launcher we can
+# hook (stock ships no S99screen/S99fb-http display launcher).
+seed_stock_s99ied() {
+    cat > "$MOCK_ROOT/etc/init.d/S99input-event-daemon" <<'EOF'
+#!/bin/sh
+[ -f /usr/bin/input-event-daemon ] || exit 0
+case "$1" in
+  start) input-event-daemon ;;
+  stop)  killall input-event-daemon ;;
+esac
+EOF
+    chmod +x "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
 }
 
 run_autostart() {
@@ -199,6 +218,60 @@ run_autostart() {
     ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99fb-http.stock"
 }
 
+# --- Stock firmware boot-glob hook: S99input-event-daemon ------------------
+# Stock ships no S99screen/S99fb-http display launcher; /usr/bin/gui is started
+# by a supervisor binary. The only squashfs-resident, late, boot-glob launcher
+# is S99input-event-daemon, whose stock function (input-event-daemon) we KEEP.
+# So we delegate: run the saved .stock first, THEN start HelixScreen.
+
+@test "autostart stock: hooks S99input-event-daemon — saves .stock, delegate preserves stock + starts helix" {
+    seed_stock_s99ied   # stock: only S99input-event-daemon, NO S99screen/S99fb-http
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99screen" ]
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99fb-http" ]
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+
+    # Stock script preserved without our marker.
+    [ -f "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock" ]
+    grep -q "input-event-daemon" "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock"
+    ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock"
+
+    # Live launcher: carries marker, calls helixscreen.init, AND preserves the
+    # stock daemon via the .stock delegate (we keep input-event-daemon running).
+    grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
+    grep -q "helixscreen.init" "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
+    grep -q "S99input-event-daemon.stock" "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
+    [ -x "$MOCK_ROOT/etc/init.d/S99input-event-daemon" ]
+
+    # gui kill-switch still fires on stock.
+    [ -f "$MOCK_ROOT/usr/bin/gui" ]
+    [ ! -x "$MOCK_ROOT/usr/bin/gui" ]
+}
+
+@test "autostart: no S99input-event-daemon present — stock hook skipped, no fabrication" {
+    # PAXX-without-the-binary or any rootfs lacking it: must not create one.
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99input-event-daemon" ]
+    run run_autostart
+    [ "$status" -eq 0 ]
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99input-event-daemon" ]
+    echo "$output" | grep -q "No S99input-event-daemon present"
+}
+
+@test "autostart stock idempotent: second run keeps S99input-event-daemon patched, .stock intact" {
+    seed_stock_s99ied
+
+    run run_autostart
+    [ "$status" -eq 0 ]
+    run run_autostart
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "S99input-event-daemon already patched"
+    grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
+    # .stock must remain the stock script, not our delegate.
+    grep -q "input-event-daemon" "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock"
+    ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock"
+}
+
 # --- Uninstall restore block -------------------------------------------------
 # Extract just the snapmaker-u1 branch from uninstall.sh and exercise it against
 # the mock rootfs, using the same path-rewriting trick as test_cc1_uninstall.
@@ -219,6 +292,7 @@ SH_EOF
         -e "s|/usr/bin/gui|$MOCK_ROOT/usr/bin/gui|g" \
         -e "s|/etc/init.d/S99fb-http|$MOCK_ROOT/etc/init.d/S99fb-http|g" \
         -e "s|/etc/init.d/S99screen|$MOCK_ROOT/etc/init.d/S99screen|g" \
+        -e "s|/etc/init.d/S99input-event-daemon|$MOCK_ROOT/etc/init.d/S99input-event-daemon|g" \
         "$BATS_TEST_TMPDIR/u1_restore.sh" > "$BATS_TEST_TMPDIR/u1_restore.sh.tmp"
     mv "$BATS_TEST_TMPDIR/u1_restore.sh.tmp" "$BATS_TEST_TMPDIR/u1_restore.sh"
 
@@ -301,4 +375,32 @@ EOF
     [ -f "$MOCK_ROOT/etc/init.d/S99screen" ]
     grep -q "start-stop-daemon" "$MOCK_ROOT/etc/init.d/S99screen"
     ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99screen"
+}
+
+@test "uninstall u1 (stock): re-enables gui and restores stock S99input-event-daemon from .stock" {
+    chmod a-x "$MOCK_ROOT/usr/bin/gui"
+    # Post-install stock state: our delegate is live, stock saved as .stock.
+    cat > "$MOCK_ROOT/etc/init.d/S99input-event-daemon" <<'EOF'
+#!/bin/sh
+# Modified by HelixScreen
+[ -x /etc/init.d/S99input-event-daemon.stock ] && /etc/init.d/S99input-event-daemon.stock "$@"
+exec /userdata/helixscreen/config/helixscreen.init "$1"
+EOF
+    chmod +x "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
+    cat > "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock" <<'EOF'
+#!/bin/sh
+[ -f /usr/bin/input-event-daemon ] || exit 0
+input-event-daemon
+EOF
+    chmod +x "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock"
+
+    extract_u1_restore
+    run u1_restore
+    [ "$status" -eq 0 ]
+
+    [ -x "$MOCK_ROOT/usr/bin/gui" ]
+    [ ! -e "$MOCK_ROOT/etc/init.d/S99input-event-daemon.stock" ]
+    [ -f "$MOCK_ROOT/etc/init.d/S99input-event-daemon" ]
+    grep -q "input-event-daemon" "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
+    ! grep -q HelixScreen "$MOCK_ROOT/etc/init.d/S99input-event-daemon"
 }

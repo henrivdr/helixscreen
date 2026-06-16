@@ -10,18 +10,27 @@
 # 3. Disables the stock UI binary /usr/bin/gui (chmod a-x) so no launcher can
 #    exec it
 #
-# Firmware 1.3 vs 1.4 behavior:
-#   - 1.3 ships /etc/init.d/S99screen, the ONLY launcher of /usr/bin/gui. Our
-#     S99screen patch (step 2) suppresses the stock UI there.
-#   - 1.4 DELETED /etc/init.d/S99screen and launches /usr/bin/gui from a
+# Firmware behavior (PAXX Extended Firmware vs stock Snapmaker firmware):
+#   - PAXX 1.3 ships /etc/init.d/S99screen, the ONLY launcher of /usr/bin/gui.
+#     Our S99screen patch (step 2) suppresses the stock UI there.
+#   - PAXX 1.4 DELETED /etc/init.d/S99screen and launches /usr/bin/gui from a
 #     runtime-generated path that is NOT present in the flashed rootfs, so it
-#     cannot be patched by name. Patching S99screen alone does not suppress the
-#     stock UI on 1.4 — on reboot the stock screen reclaims the display.
-#   Step 3 is the launcher-independent fix: disabling the binary itself means
-#   no stock launcher on EITHER firmware (1.3's S99screen or 1.4's relocated
-#   launcher) can exec /usr/bin/gui, so the stock UI never grabs the
+#     cannot be patched by name. It DOES ship /etc/init.d/S99fb-http (step 4b).
+#   - STOCK firmware ships NEITHER S99screen NOR S99fb-http — those exist only
+#     in PAXX, which rebuilds the read-only squashfs to add them. On stock,
+#     /usr/bin/gui is started by a supervisor binary, not by any /etc/init.d
+#     script, so there is no display launcher to hook. The S99screen we write
+#     in step 2 lives only in the writable overlay, and the busybox boot glob is
+#     frozen from the squashfs BEFORE S01aoverlayfs pivots onto the overlay — so
+#     an overlay-only S99screen runs at shutdown (rcK) but NEVER at boot. Step 4c
+#     handles stock: it delegates from S99input-event-daemon, which DOES ship in
+#     the stock squashfs (so it is in the boot glob) and runs after the overlay
+#     pivot.
+#   Step 3 is the launcher-independent SUPPRESSION fix: disabling the binary
+#   itself means no launcher on any firmware (PAXX's S99screen/relocated path or
+#   stock's supervisor) can exec /usr/bin/gui, so the stock UI never grabs the
 #   framebuffer / DRM. We still write S99screen (step 2) because it is also our
-#   HelixScreen LAUNCHER and runs at boot on both firmwares.
+#   HelixScreen LAUNCHER and runs at boot on PAXX 1.2/1.3.
 #
 # The patch is regenerated and compared to the on-disk version every run; if
 # they differ we rewrite. This is self-healing: a legacy patch from an older
@@ -74,7 +83,8 @@ fi
 S99_TARGET="${SYSROOT}/etc/init.d/S99screen"
 TMP_PATCH=$(mktemp)
 TMP_FB=""
-trap 'rm -f "$TMP_PATCH" "$TMP_FB"' EXIT
+TMP_IED=""
+trap 'rm -f "$TMP_PATCH" "$TMP_FB" "$TMP_IED"' EXIT
 
 cat > "$TMP_PATCH" << 'PATCH'
 #!/bin/sh
@@ -220,6 +230,67 @@ FBPATCH
     fi
 else
     echo "No S99fb-http present (firmware 1.2/1.3) — S99screen hook handles boot"
+fi
+
+# Step 4c: Stock-firmware boot hook — S99input-event-daemon.
+#
+# Stock Snapmaker firmware ships NO display-launcher init script (/usr/bin/gui is
+# started by a supervisor binary, not by /etc/init.d) and neither S99screen nor
+# S99fb-http — both are PAXX-only additions baked into PAXX's rebuilt squashfs.
+# On stock, the S99screen we write in step 2 lives only in the overlay, so the
+# busybox boot glob (frozen from the read-only squashfs before S01aoverlayfs
+# pivots) never runs it at boot.
+#
+# To auto-start on stock we delegate from a script that DOES ship in the stock
+# squashfs (so it is in the boot glob) and runs after S01aoverlayfs.
+# S99input-event-daemon fits: present on stock (and PAXX), sorts last, runs
+# post-pivot, so rcS executes its overlay copy. Unlike the display launchers, its
+# stock function (starting input-event-daemon) is one we KEEP — so we run the
+# preserved stock script first, THEN start HelixScreen. helixscreen.init `start`
+# is idempotent (pidof guard), so on PAXX — where S99fb-http/S99screen already
+# started HelixScreen earlier in the same sequential boot glob — this second call
+# is a harmless no-op. 1.2/1.3/stock without the binary: [ -f ] guard skips it.
+S99IED_TARGET="${SYSROOT}/etc/init.d/S99input-event-daemon"
+if [ -f "$S99IED_TARGET" ]; then
+    TMP_IED=$(mktemp)
+    # Wrapper body runs ON-DEVICE — absolute device paths, no SYSROOT. Quoted
+    # heredoc: nothing is expanded at render time.
+    cat > "$TMP_IED" << 'IEDPATCH'
+#!/bin/sh
+#
+# Modified by HelixScreen: preserve the stock input-event-daemon behavior, then
+# launch HelixScreen. On stock Snapmaker firmware this is the only boot-glob
+# script that starts HelixScreen (stock ships no S99screen/S99fb-http display
+# launcher). helixscreen.init `start` is idempotent, so on PAXX — where an
+# earlier launcher already started HelixScreen — the call below is a no-op.
+#
+if [ -x /etc/init.d/S99input-event-daemon.stock ]; then
+    /etc/init.d/S99input-event-daemon.stock "$@"
+fi
+for helix_init in /userdata/helixscreen/config/helixscreen.init /opt/helixscreen/config/helixscreen.init; do
+    if [ -x "$helix_init" ]; then
+        "$helix_init" "$1"
+        break
+    fi
+done
+exit 0
+IEDPATCH
+    if cmp -s "$TMP_IED" "$S99IED_TARGET"; then
+        echo "S99input-event-daemon already patched (current version)"
+    else
+        # Preserve the stock script the first time we replace it (detected by
+        # absence of a HelixScreen marker), so the uninstaller can restore it.
+        if [ ! -f "$S99IED_TARGET.stock" ] && \
+           ! grep -q HelixScreen "$S99IED_TARGET" 2>/dev/null; then
+            cp "$S99IED_TARGET" "$S99IED_TARGET.stock"
+            echo "Saved stock S99input-event-daemon backup to $S99IED_TARGET.stock"
+        fi
+        cp "$TMP_IED" "$S99IED_TARGET"
+        chmod +x "$S99IED_TARGET"
+        echo "S99input-event-daemon patched — HelixScreen will auto-start on boot (stock firmware)"
+    fi
+else
+    echo "No S99input-event-daemon present — skipping stock boot hook"
 fi
 
 # Step 5: Neutralize the stock on-device UI so HelixScreen owns the display.
