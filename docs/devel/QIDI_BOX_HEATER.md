@@ -177,6 +177,79 @@ Present only when the community open-source firmware replacement is installed (s
 
 ---
 
+## Filament Operations (Stock Firmware) — verified from a Q2 + Box config
+
+Source: [`elliotboney/my_qidi_2`](https://github.com/elliotboney/my_qidi_2) `printer_data/config/box1.cfg` — a real **stock** QIDI Q2 + QidiBox install (Camden-Winder's exact hardware class, #1022). The per-tool macros are the entry points the slicer and any UI use:
+
+```ini
+[gcode_macro T0]
+gcode:
+    {% set slot = printer.save_variables.variables.value_t0|default('slot0') %}
+    {% if printer.save_variables.variables.enable_box == 1 %}
+        EXTRUDER_LOAD SLOT={slot}
+    {% endif %}
+
+[gcode_macro UNLOAD_T0]
+gcode:
+    {% set slot = printer.save_variables.variables.value_t0|default('slot0') %}
+    {% if printer.save_variables.variables.enable_box == 1 %}
+        EXTRUDER_UNLOAD SLOT={slot}
+    {% endif %}
+```
+`T1`..`T15` / `UNLOAD_T1`..`UNLOAD_T15` repeat the pattern with `value_t1`..`value_t15`.
+
+**Critical gotchas for HelixScreen's load path:**
+
+1. **`T<n>` / `UNLOAD_T<n>` are no-ops unless `save_variables.enable_box == 1`.** If the box is not "enabled" in the firmware's saved state, the macro's `{% if %}` falls through and **nothing happens** — which presents exactly as #1022's "nozzle heats to 250 °C, then nothing." (The 250 °C preheat is driven by HelixScreen / the surrounding tool-change flow, not the `T<n>` macro itself.)
+2. **The true primitives are `EXTRUDER_LOAD SLOT=<slotname>` and `EXTRUDER_UNLOAD SLOT=<slotname>`** (implemented in the proprietary `box_stepper.so`). `<slotname>` is a string like `slot0`, resolved per tool from the `value_t<n>` saved variable — **not** the tool index directly.
+3. HelixScreen currently sends bare `T<n>` (`ams_backend_qidi.cpp:688`) and `UNLOAD_T<n>` (:720). The macro *names* are correct, but we depend on the firmware's `enable_box` flag and `value_t<n>` mapping being set. Decision for Phase 3 (#1022 de-stub plan): either (a) ensure/SET `enable_box` + `value_t<n>` before issuing `T<n>`, or (b) bypass the wrapper and send `EXTRUDER_LOAD SLOT=slot<n>` directly. (b) is more robust but skips whatever the wrapper guards.
+
+The slicer-level change sequence (`slicer_configs/change_filament.gcode`) confirms the tool-change entry points: it calls `UNLOAD_T[current_extruder]` then `T[next_extruder]` around `CUT_FILAMENT` / flush moves. So the load/unload command *names* HelixScreen emits are right; the gating is the open question.
+
+**Eject:** no discrete "eject one slot back to the box" command is present in this config — `EXTRUDER_UNLOAD SLOT=` is the only unload primitive. This matches HelixScreen leaving `supports_lane_eject()` at its `false` default. Confirm against the user's macro list before implementing an eject affordance.
+
+---
+
+## Filas List Format (`officiall_filas_list.cfg`, #1030)
+
+> Note the firmware's filename is misspelled **`officiall_filas_list.cfg`** (double-l). Match that spelling.
+
+Plain INI, ~50 `[filaN]` material sections plus a color dictionary and vendor list. Verbatim sample (stock Q2):
+
+```ini
+[fila1]
+filament                       = PLA Rapido
+min_temp                       = 190
+max_temp                       = 240
+box_min_temp                   = 0
+box_max_temp                   = 0
+type                           = PLA
+
+[colordict]
+1                              = #FAFAFA
+2                              = #060606
+; … 24 entries, id → hex …
+
+[vendor_list]
+0       = Generic
+1       = QIDI
+2       = eSUN
+; … 14 entries, id → vendor name …
+```
+
+| Key | Meaning |
+|-----|---------|
+| `filament` | Display name (e.g. "PLA Rapido", "PLA Matte") |
+| `min_temp` / `max_temp` | Nozzle temperature range (°C) |
+| `box_min_temp` / `box_max_temp` | Per-material **box drying** range (°C); `0` = unset (e.g. PLA), non-zero for ABS/ASA (≤45), engineering plastics (≤65) |
+| `type` | Material family (PLA, ABS, ASA, PC, PA, PET, TPU, PVA, …) |
+| `[colordict]` | Numeric id → hex color; per-slot color is stored as a color id referencing this table |
+| `[vendor_list]` | Numeric id → vendor name |
+
+`AmsBackendQidi::apply_filas_list()` (declared but unimplemented, `include/ams_backend_qidi.h:164`) should parse this into `fila_profiles_` to seed material presets, nozzle ranges, and per-material drying defaults. The colordict/vendor tables decode the per-slot saved state (see Known Unknowns — where per-slot type/color is persisted is still TBD; `box1.cfg` has **no** `SAVE_VARIABLE` for filament attributes, so it likely lives in `box_rfid.so` state or another saved-variable namespace).
+
+---
+
 ## HelixScreen Implementation
 
 ### Backend Files
@@ -235,9 +308,18 @@ The write-path is always enabled. (The former `HELIX_QIDI_BOX_WRITE` field-testi
 
 If firmware behavior differs from what is documented here, adjust the command string in `AmsBackendQidi::start_drying()` and `stop_drying()`. The rest of the pipeline (DryerInfo population, subscription, UI) does not need to change — only the emitted G-code.
 
-Also unconfirmed:
+**Resolved from the `my_qidi_2` stock config (2026-06-16, #1022):**
 
+- Filament load/unload primitives: `EXTRUDER_LOAD SLOT=<slotname>` / `EXTRUDER_UNLOAD SLOT=<slotname>`, wrapped by `T<n>`/`UNLOAD_T<n>` and gated on `save_variables.enable_box == 1`.
+- `officiall_filas_list.cfg` format (INI; `[filaN]` + `[colordict]` + `[vendor_list]`) — see "Filas List Format" above.
+- No discrete single-slot eject command in stock config.
+
+Still unconfirmed (needs the user's device dumps — see plan `plans/2026-06-16-qidi-box-stock-path-destub.md` §4):
+
+- **Where per-slot filament type/color is persisted.** `box1.cfg` has no `SAVE_VARIABLE` for it; suspected `box_rfid.so` state or another saved-variable namespace. Need a `save_variables` dump (and a before/after when a slot's filament is set in QIDI's own UI).
+- **Whether `enable_box` is set on Camden's box** (the likely cause of load doing nothing) and what the `value_t<n>` → slot mapping is.
 - Box numbering when multiple Box units are chained (does `BOX=2` work as `heater_box2`?)
 - Whether `END_TIME` is in hours or minutes on the PLUS4 firmware variant
 - `MULTI_COLOR_DRY` parameter shapes
 - Whether `box_extras` is present on all supported firmware versions or only some
+- Why the dryer indicator doesn't render on the stock path despite `dryer.supported==true` forcing it (needs a device `-vv` log; see plan §1).
