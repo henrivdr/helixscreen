@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "preflight_validator.h"
+#include "filament_mapper.h"
 #include <algorithm>
 
 namespace helix {
@@ -41,7 +42,11 @@ PreflightResult PreflightValidator::validate(const std::vector<GcodeToolInfo>& t
             c.severity = ToolCheck::Severity::EmptySlot;
         } else {
             c.slot_present = true;
-            c.severity = ToolCheck::Severity::Ok;
+            c.color_ok = FilamentMapper::colors_match(t.color_rgb, slot->color_rgb);
+            c.material_ok = FilamentMapper::materials_match(t.material, slot->material);
+            if (!c.material_ok)      c.severity = ToolCheck::Severity::MaterialMismatch;
+            else if (!c.color_ok)    c.severity = ToolCheck::Severity::ColorMismatch;
+            else                     c.severity = ToolCheck::Severity::Ok;
         }
         out.checks.push_back(std::move(c));
     }
