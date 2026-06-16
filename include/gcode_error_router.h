@@ -4,12 +4,15 @@
 #pragma once
 
 #include "action_prompt_manager.h"  // PromptData / PromptButton
+#include "action_prompt_modal.h"    // helix::ui::ActionPromptModal
 #include "async_lifetime_guard.h"
 #include "error_event.h"
 #include "hv/json.hpp"
 
+#include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 class MoonrakerAPI;
 
@@ -135,6 +138,15 @@ class GcodeErrorRouter {
     /// without this we'd modal the same error twice.
     std::mutex replay_mutex_;
     double last_replayed_time_ = 0.0;
+
+    /// Router-owned recovery modal. Reused across faults — created lazily on
+    /// the first MODAL_WITH_RECOVER and reshown via show_prompt(). Declared
+    /// before lifetime_ so it destructs AFTER it: outstanding tokens are
+    /// invalidated first, then the modal tears itself down, so no captured
+    /// `this` (the gcode callback) can fire against a half-destroyed router.
+    std::unique_ptr<helix::ui::ActionPromptModal> recovery_modal_;
+    std::vector<RecoveryAction> active_recovery_actions_;  ///< actions for the in-flight modal
+    std::string shown_recovery_detail_;                    ///< dedup: detail of the visible modal
 
     /// [L072] Generation guard for callbacks captured by MoonrakerClient.
     /// `MoonrakerClient::unregister_method_callback` and

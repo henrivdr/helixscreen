@@ -27,7 +27,6 @@
 #include <spdlog/spdlog.h>
 
 #include <chrono>
-#include <cstring>
 #include <vector>
 
 namespace helix {
@@ -37,47 +36,12 @@ namespace {
 constexpr const char* kNotifyHandlerName = "gcode_error_notifier";
 constexpr const char* kReplayObserverName = "gcode_store_replay";
 
-/// One-tap recovery action attached to specific CFS error codes. Named
-/// distinctly from helix::RecoveryAction (error_event.h, std::string fields):
-/// this file-local entry uses `const char*` fields with STATIC lifetime so a
-/// pointer to it can be stashed in the modal's RecoveryCtx callback.
-struct CfsRecoveryEntry {
-    const char* button_label;  ///< Label like "Reset CFS"
-    const char* gcode;         ///< GCode to send on tap
-    const char* log_tag;       ///< For spdlog::info on tap
-};
-
-/// Context passed to the modal's confirm/cancel callbacks. Heap-
-/// allocated by the call site, freed in whichever callback fires.
-struct RecoveryCtx {
-    MoonrakerAPI* api;
-    const CfsRecoveryEntry* action;  ///< Points at a static CfsRecoveryEntry
-};
-
 /// Maps RecoveryAction.style to PromptButton.color.
 /// "primary" → "primary", "danger" → "error", anything else → "" (neutral).
 std::string color_for_style(const std::string& style) {
     if (style == "primary") return "primary";
     if (style == "danger") return "error";
     return "";  // neutral / theme default
-}
-
-/// Lookup: which key codes get an actionable button.
-///
-/// Conservative list — only codes where a software action is genuinely
-/// curative. Most slot-level errors (key849 retract stuck, key835-839
-/// extrude jams) need a physical fix; a button there would mislead the
-/// user. Add codes here as we identify real one-tap recoveries.
-const CfsRecoveryEntry* find_recovery(const std::string& code) {
-    // key840: "box switch state error" — state machine in an inconsistent
-    // state. BOX_ERROR_CLEAR resets the box driver state and lets the
-    // user retry the operation. Same gcode AmsBackendCfs::reset_gcode()
-    // already exposes via the AMS panel.
-    static const CfsRecoveryEntry key840 = {
-        "Reset CFS", "BOX_ERROR_CLEAR", "GcodeErrorRouter::key840_reset"};
-    if (code == "key840") return &key840;
-
-    return nullptr;
 }
 
 /// Title for a plain CRITICAL modal (no recovery action). Preserves the prior
@@ -295,63 +259,38 @@ PromptData build_recovery_prompt(const ErrorEvent& e) {
 }
 
 void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
-    // key8xx — CFS / motor hardware faults. Modal because the AMS step
-    // indicator otherwise hides the failure (box driver emits via
-    // respond_raw and the dispatch script still returns success).
-    // ui_notification's modal dedup-by-title collapses bursts.
-    //
-    // The actionable case: a confirmation modal with a one-tap fix button.
-    // We re-derive via find_recovery(e.code) rather than reading
-    // e.recovery_actions[0] because the RecoveryCtx callback needs a pointer
-    // with STATIC lifetime — find_recovery returns a function-static
-    // CfsRecoveryEntry that outlives the dialog, whereas e.recovery_actions[0]
-    // is a vector element that isn't stable past this event's scope.
-    auto* rec = find_recovery(e.code);
-    if (!rec || !api_) {
-        // No registered action for this code (shouldn't happen — the
-        // presenter is only reached when the event carries a recovery
-        // action) — fall back to a plain alert.
-        ui_notification_error(lv_tr("Filament System Error"), e.detail.c_str(),
-                              /*modal=*/true);
+    // CRITICAL faults carrying recovery action(s) — rendered as a multi-button
+    // ActionPromptModal built from e.recovery_actions (already populated by the
+    // active backend's classify()). Modal because the AMS step indicator
+    // otherwise hides CFS failures (box driver emits via respond_raw and the
+    // dispatch script still returns success). The key840 "Reset CFS"/
+    // BOX_ERROR_CLEAR one-button flow runs through this generic path too.
+    if (!api_) {
+        ui_notification_error(modal_title_for(e), e.detail.c_str(), /*modal=*/true);
         return;
     }
 
-    const char* title = lv_tr("Filament System Error");
-
-    // Dedup against an already-showing modal with the same title.
-    // modal_show_confirmation does NOT dedup internally (only
-    // ui_notification_error does); without this, two rapid key840
-    // events would stack two modals and leak two RecoveryCtxs.
-    if (lv_obj_t* top = helix::ui::modal_get_top()) {
-        if (lv_obj_t* title_label = lv_obj_find_by_name(top, "dialog_title")) {
-            const char* existing = lv_label_get_text(title_label);
-            if (existing && strcmp(existing, title) == 0) {
-                spdlog::debug("[GcodeError] Skipping duplicate "
-                              "recovery modal for {}",
-                              e.code);
-                return;
-            }
-        }
+    // Dedup: the AFC jam repeats; don't re-pop the same modal.
+    if (e.detail == shown_recovery_detail_) {
+        spdlog::debug("[GcodeError] Skipping duplicate recovery modal: {}", e.detail);
+        return;
     }
 
-    // Heap-allocate ctx for the recovery callback. Lifetime is
-    // tied to the dialog widget via LV_EVENT_DELETE — fires
-    // unconditionally when the dialog is destroyed (button tap,
-    // backdrop dismiss, ESC, ModalStack::clear() on shutdown),
-    // so the ctx is freed exactly once regardless of dismissal
-    // path. confirm/cancel cbs only invoke the action; the
-    // DELETE cb is the sole owner of the free.
-    auto* ctx = new RecoveryCtx{api_, rec};
-    lv_obj_t* dialog = helix::ui::modal_show_confirmation(
-        title, e.detail.c_str(), ModalSeverity::Error, rec->button_label,
-        [](lv_event_t* ev) {
-            auto* c = static_cast<RecoveryCtx*>(lv_event_get_user_data(ev));
-            if (!c || !c->api || !c->action) return;
-            const char* tag = c->action->log_tag;
-            spdlog::info("[GcodeError] User tapped recovery: {}", tag);
-            c->api->execute_gcode(
-                c->action->gcode,
-                [tag]() { spdlog::info("[Recovery] {} completed", tag); },
+    if (!recovery_modal_) {
+        recovery_modal_ = std::make_unique<helix::ui::ActionPromptModal>();
+        recovery_modal_->set_gcode_callback([this](const std::string& gcode) {
+            // Runs on the main thread (button tap). Find the action for its log_tag.
+            std::string tag = "GcodeErrorRouter::recovery";
+            for (const auto& a : active_recovery_actions_) {
+                if (a.gcode == gcode) {
+                    tag = a.log_tag;
+                    break;
+                }
+            }
+            shown_recovery_detail_.clear();  // user acted; allow re-show on a new fault
+            spdlog::info("[GcodeError] User tapped recovery: {} ({})", tag, gcode);
+            api_->execute_gcode(
+                gcode, [tag]() { spdlog::info("[Recovery] {} completed", tag); },
                 [tag](const MoonrakerError& err) {
                     spdlog::error("[Recovery] {} failed: {}", tag, err.message);
                     ToastManager::instance().show(
@@ -359,26 +298,25 @@ void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
                         ("Recovery failed: " + err.user_message()).c_str(), 6000);
                 },
                 MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
-        },
-        /*on_cancel=*/nullptr,  // DELETE cb handles all cleanup
-        ctx);
-
-    if (!dialog) {
-        // modal_show_confirmation logs internally on failure.
-        // ctx never reaches a callback; free directly.
-        spdlog::warn("[GcodeError] modal_show_confirmation returned null; "
-                     "discarding recovery ctx for {}",
-                     e.code);
-        delete ctx;
-        return;
+        });
     }
 
-    lv_obj_add_event_cb(
-        dialog,
-        [](lv_event_t* ev) {
-            delete static_cast<RecoveryCtx*>(lv_event_get_user_data(ev));
-        },
-        LV_EVENT_DELETE, ctx);
+    active_recovery_actions_ = e.recovery_actions;
+    shown_recovery_detail_ = e.detail;
+
+    // Preserve the CFS/key840 title wording ("Filament System Error") and the
+    // generic "Printer Error" default by sourcing the title from modal_title_for.
+    // build_recovery_prompt only knows e.title (empty for the classifier) and
+    // its own "Printer Error" fallback; modal_title_for encodes the CFS rule.
+    PromptData prompt = build_recovery_prompt(e);
+    if (e.title.empty()) prompt.title = modal_title_for(e);
+
+    lv_obj_t* screen = lv_screen_active();
+    if (!screen || !recovery_modal_->show_prompt(screen, prompt)) {
+        spdlog::warn("[GcodeError] recovery modal show failed; falling back to alert");
+        shown_recovery_detail_.clear();
+        ui_notification_error(modal_title_for(e), e.detail.c_str(), /*modal=*/true);
+    }
 }
 
 void GcodeErrorRouter::present_recover_toast(const ErrorEvent& e) {
