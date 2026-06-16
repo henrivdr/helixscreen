@@ -331,31 +331,23 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
     // Update filament mapping card (shown when AMS is available)
     filament_mapping_card_.update(filament_colors, filament_materials);
 
-    // Publish all three color-display subjects so XML drives every HIDDEN
-    // flag and the warning icon. Mapping card and swatches card are mutually
-    // exclusive: swatches only show when mapping doesn't AND the card's
-    // own visibility predicate (see swatches_card_visible_for) is met.
+    // Publish the mapping-card display subjects. The mapping card's visibility
+    // depends only on its own state (AMS presence + slicer colors), so it can
+    // be decided here. The swatches card, by contrast, must reflect the real
+    // per-tool set used by the file — which is only known once the gcode is
+    // parsed.
     const bool mapping_visible = filament_mapping_card_.should_show();
-    const bool swatches_visible =
-        !mapping_visible && swatches_card_visible_for(filament_colors.size());
     lv_subject_set_int(&filament_mapping_visible_, mapping_visible ? 1 : 0);
-    lv_subject_set_int(&color_swatches_visible_, swatches_visible ? 1 : 0);
     lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
 
-    // Build swatch content only when swatches will actually be shown. At
-    // this point we don't yet have parsed gcode — fall back to a synthetic
-    // tool index set covering the slicer palette so the swatch row still
-    // populates. The parsed-gcode path below (try_extract_gcode_colors) will
-    // re-call this with the precise tools_used set once the gcode loads.
-    if (swatches_visible) {
-        std::set<int> synthetic_tools;
-        for (size_t i = 0; i < filament_colors.size(); ++i) {
-            synthetic_tools.insert(static_cast<int>(i));
-        }
-        update_color_swatches(synthetic_tools, filament_colors);
-    } else {
-        lv_subject_set_int(&empty_tools_warning_, 0);
-    }
+    // Swatches start in a neutral "not yet known" state: hidden, no warning.
+    // Seeding from the slicer palette index here mislabels chips (a T0+T2 file
+    // renders as T0/T1) and inspects the wrong AMS slots. The authoritative
+    // render happens in try_extract_gcode_colors() once the gcode viewer has
+    // parsed and produced tools_used_indices. Reset every show() so re-selecting
+    // a different file never leaks stale swatch state.
+    lv_subject_set_int(&color_swatches_visible_, 0);
+    lv_subject_set_int(&empty_tools_warning_, 0);
 
     // Register with NavigationManager for lifecycle callbacks
     NavigationManager::instance().register_overlay_instance(overlay_root_, this);
