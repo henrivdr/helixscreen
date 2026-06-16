@@ -270,9 +270,12 @@ void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
         return;
     }
 
-    // Dedup: the AFC jam repeats; don't re-pop the same modal.
-    if (e.detail == shown_recovery_detail_) {
-        spdlog::debug("[GcodeError] Skipping duplicate recovery modal: {}", e.detail);
+    // Dedup: the AFC jam repeats; don't re-pop the same modal. Only suppress
+    // while the modal is actually on screen — a dismissed-but-ongoing fault
+    // self-heals so it can re-show after backdrop/ESC dismiss.
+    if (recovery_modal_ && recovery_modal_->is_visible() && e.detail == shown_recovery_detail_) {
+        spdlog::debug("[GcodeError] Skipping duplicate recovery modal (still visible): {}",
+                      e.detail);
         return;
     }
 
@@ -310,6 +313,9 @@ void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
     // its own "Printer Error" fallback; modal_title_for encodes the CFS rule.
     PromptData prompt = build_recovery_prompt(e);
     if (e.title.empty()) prompt.title = modal_title_for(e);
+    // MODAL_WITH_RECOVER is only emitted for CRITICAL+actions, so this modal is
+    // always an error — restore the red error affordance retired with modal_show_confirmation.
+    prompt.severity = "error";
 
     lv_obj_t* screen = lv_screen_active();
     if (!screen || !recovery_modal_->show_prompt(screen, prompt)) {

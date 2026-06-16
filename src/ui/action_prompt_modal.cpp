@@ -102,6 +102,17 @@ void ActionPromptModal::populate_content() {
         lv_label_set_text(title_label, prompt_data_.title.c_str());
     }
 
+    // Error-severity affordance: show the red error icon only for severity "error".
+    // The modal instance is reused across shows, so reset both ways to clear any
+    // prior error state on a subsequent neutral (action:prompt) show.
+    if (lv_obj_t* err_icon = find_widget("icon_error")) {
+        if (prompt_data_.severity == "error") {
+            lv_obj_remove_flag(err_icon, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(err_icon, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     // Create text lines
     create_text_lines();
 
