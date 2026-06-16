@@ -63,3 +63,20 @@ TEST_CASE("empty required slot is flagged and blocks", "[preflight_validator]") 
     CHECK(result.has_block());
     CHECK_FALSE(result.has_advisory());
 }
+
+TEST_CASE("tool with no mapping is treated as empty/block", "[preflight_validator]") {
+    std::vector<GcodeToolInfo> tools = { {3, 0xFFFFFF, "PLA"} };
+    std::vector<AvailableSlot> slots = { {0, 0, 0xFFFFFF, "PLA", false, -1, 0, 0, ""} };
+    std::vector<ToolMapping> mapping = {};  // tool 3 unmapped
+    auto r = PreflightValidator::validate(tools, slots, mapping);
+    CHECK(r.checks[0].severity == Severity::EmptySlot);
+    CHECK(r.checks[0].mapped_slot == -1);
+    CHECK(r.has_block());
+}
+
+TEST_CASE("no tools yields empty, non-blocking result", "[preflight_validator]") {
+    auto r = PreflightValidator::validate({}, {}, {});
+    CHECK(r.checks.empty());
+    CHECK_FALSE(r.has_block());
+    CHECK_FALSE(r.has_advisory());
+}
