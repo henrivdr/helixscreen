@@ -1,6 +1,8 @@
 # QIDI Box Stock-Firmware Path — De-Stub Plan (#1022 / #1030)
 
-**Status:** Planning · **Created:** 2026-06-16 · **Tracking issue:** #1022 (verify), #1030 (filas list)
+**Status:** Planning · **Created:** 2026-06-16 · **Tracking issue:** **#1041** (stock-path de-stub + data collection) · refs #1022 (verify), #1030 (firmware dumps)
+
+> **Correction (2026-06-16, after reading `.claude/scratchpad/qidi-box-firmware/`):** two rows below were wrong. `apply_filas_list()` **is implemented** (`ams_backend_qidi.cpp:536`, tested in `test_ams_backend_qidi.cpp`) — S3's real gap is consuming its output in the UI, not the parser. And the per-slot storage model for S2 is **known** from `saved_variables.cfg`: `filament_slot<n>` (→`[fila<n>]`), `color_slot<n>` (→`[colordict]`), `vendor_slot<n>` (→`[vendor_list]`), with the load gate `enable_box==1`. `set_slot_info()` just needs the inverse `SAVE_VARIABLE` writes — no longer device-blocked on "where is it stored", only on confirming Camden's specific values.
 **Trigger:** Camden-Winder field test on **QIDI Q2 + Box, STOCK QIDI firmware (no Happy Hare), v0.99.79** (issue #1022, 2026-06-16). First real test of the *stock* path; most of it is stubbed or broken.
 
 > The Happy Hare path is verified working on-device. Everything below is the **stock-firmware** path, which has never had a successful hardware test.
@@ -40,8 +42,8 @@ At the C++ data layer the dryer indicator is **forced visible** for any drying-c
 | # | Symptom (Camden) | Current code | Real implementation target | Data source |
 |---|---|---|---|---|
 | S1 | Dryer screen / heat-waves icon never shows | indicator *forced* visible; contradiction | Reproduce via device log, then fix the real gap | **Camden D1** (`-vv` log + screenshot) |
-| S2 | "Spool info" → **"Feature not available"** | `set_slot_info()` returns `not_supported` (`ams_backend_qidi.cpp:756`) | Persist per-slot filament type/color via the stock variable store | **Camden D2** (`save_variables` dump) + QIDITECH/klipper `box_stepper.py` |
-| S3 | Spool list ignores `official_filas_list.cfg` / Spoolman (#1030) | `apply_filas_list()` declared, **not implemented** (`include/ams_backend_qidi.h:164`); `fila_profiles_` unused | Parse the filas list → seed material presets + temp ranges; optional Spoolman bridge | **Camden D3** (`official_filas_list.cfg` + `drying.conf`) |
+| S2 | "Spool info" → **"Feature not available"** | `set_slot_info()` returns `not_supported` (`ams_backend_qidi.cpp:756`) | Inverse `SAVE_VARIABLE` writes: `filament_slot<n>`/`color_slot<n>`/`vendor_slot<n>` (model known from `saved_variables.cfg`). Needs name→id reverse lookup into the parsed filas list. | **mostly unblocked**; D2 only confirms Camden's values |
+| S3 | Spool list ignores `officiall_filas_list.cfg` / Spoolman (#1030) | `apply_filas_list()` **is implemented** (`ams_backend_qidi.cpp:536`); parses temps into `fila_profiles_`. Gap: parser keeps only temps (not name/type/color); output not surfaced as a material picker. | Extend `FilaProfile` to retain `filament`/`type`; expose as material presets; optional Spoolman bridge | **unblocked** (have format + sample); D3 seeds the real list |
 | S4 | Load filament: heats to 250 °C, loading tracker shows, **then nothing**; no Eject | `load_filament()` sends `T<n>` (`ams_backend_qidi.cpp:688`); `unload_filament()` sends `UNLOAD_T<n>` (:720) | Send the macro the **stock** firmware actually implements for a box load/unload; track completion | **Camden D4** (`gcode_macro` list + console transcript of a manual load) + `box_stepper.py` |
 | S5 | No Eject option in slot context menu | `supports_lane_eject()` not overridden → defaults `false` (`ui_ams_context_menu.cpp:251`) | If stock exposes a discrete eject/unload-to-box, implement `eject_lane()` + override the cap | depends on D4 |
 | S6 | (latent) initial dryer/humidity snapshot missing | `on_started()` queries only `save_variables` + `box_extras` (`ams_backend_qidi.cpp:114`); no initial `heater_box`/`aht20_f` query — first values arrive only on next push delta | Add `heater_generic heater_box<N>` + `aht20_f heater_box<N>` to the `on_started` snapshot query | code-only |
