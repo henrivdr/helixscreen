@@ -67,10 +67,16 @@ TEST_CASE("LedController discover_from_hardware populates native backend", "[led
 
     REQUIRE(strips[1].id == "dotstar status_led");
     REQUIRE(strips[1].name == "Status LED");
+    // Addressable strips keep color at discovery — their configfile section carries
+    // no red/green/blue_pin, so update_pin_config() skips them (regression guard).
+    REQUIRE(strips[1].supports_color == true);
     REQUIRE(strips[1].supports_white == true);
 
     REQUIRE(strips[2].id == "led case_light");
     REQUIRE(strips[2].name == "Case Light");
+    // Generic [led] is fail-closed to white-only at discovery (no color picker)
+    // until the configfile parse proves RGB pins exist.
+    REQUIRE(strips[2].supports_color == false);
     REQUIRE(strips[2].supports_white == false);
 
     // Other backends should be empty
@@ -81,6 +87,91 @@ TEST_CASE("LedController discover_from_hardware populates native backend", "[led
     auto backends = ctrl.available_backends();
     REQUIRE(backends.size() == 1);
     REQUIRE(backends[0] == helix::led::LedBackendType::NATIVE);
+
+    ctrl.deinit();
+}
+
+TEST_CASE("LedController: generic [led] discovery defaults to white-only (fail-closed)",
+          "[led][discovery]") {
+    // A generic "[led]" section (e.g. AD5M [led chamber_light], white_pin only) must
+    // NOT advertise color before the configfile parse proves RGB pins. This closes the
+    // window where a white-only chamber light shows a meaningless color picker.
+    helix::PrinterDiscovery discovery;
+    nlohmann::json objects = nlohmann::json::array(
+        {"led chamber_light", "neopixel ring", "dotstar bar", "extruder"});
+    discovery.parse_objects(objects);
+
+    auto& ctrl = helix::led::LedController::instance();
+    ctrl.deinit();
+    ctrl.init(nullptr, nullptr);
+    ctrl.discover_from_hardware(discovery);
+
+    auto& strips = ctrl.native().strips();
+    REQUIRE(strips.size() == 3);
+
+    auto find = [&](const std::string& id) -> const helix::led::LedStripInfo& {
+        for (const auto& s : strips) {
+            if (s.id == id)
+                return s;
+        }
+        FAIL("strip not found: " << id);
+        return strips[0];
+    };
+
+    // Generic [led]: white-only default, no color until configfile proves RGB pins.
+    REQUIRE(find("led chamber_light").supports_color == false);
+    REQUIRE(find("led chamber_light").supports_white == false);
+
+    // Addressable strips: color stays true at discovery (regression guard — their
+    // configfile sections have no red/green/blue_pin, so update_pin_config skips them).
+    REQUIRE(find("neopixel ring").supports_color == true);
+    REQUIRE(find("neopixel ring").supports_white == true);
+    REQUIRE(find("dotstar bar").supports_color == true);
+    REQUIRE(find("dotstar bar").supports_white == true);
+
+    ctrl.deinit();
+}
+
+TEST_CASE("LedController: configfile RGB pins upgrade a generic [led] to color",
+          "[led][discovery][pin_config]") {
+    // A real RGB [led] strip starts white-only at discovery, then gets upgraded once
+    // the configfile reveals red/green/blue pins (the connect-flow upgrade path).
+    helix::PrinterDiscovery discovery;
+    nlohmann::json objects = nlohmann::json::array({"led rgb_strip", "led white_strip"});
+    discovery.parse_objects(objects);
+
+    auto& ctrl = helix::led::LedController::instance();
+    ctrl.deinit();
+    ctrl.init(nullptr, nullptr);
+    ctrl.discover_from_hardware(discovery);
+
+    auto& strips = ctrl.native().strips();
+    REQUIRE(strips.size() == 2);
+    // Both start fail-closed (white-only) before any pin config.
+    for (const auto& s : strips) {
+        REQUIRE(s.supports_color == false);
+    }
+
+    // Configfile keyed by the full section header (matches strip.id).
+    nlohmann::json cfg = {
+        {"led rgb_strip", {{"red_pin", "PA1"}, {"green_pin", "PA2"}, {"blue_pin", "PA3"}}},
+        {"led white_strip", {{"white_pin", "PB0"}}}};
+    ctrl.update_led_pin_config(cfg);
+
+    auto find = [&](const std::string& id) -> const helix::led::LedStripInfo& {
+        for (const auto& s : ctrl.native().strips()) {
+            if (s.id == id)
+                return s;
+        }
+        FAIL("strip not found: " << id);
+        return ctrl.native().strips()[0];
+    };
+
+    // RGB pins → upgraded to color.
+    REQUIRE(find("led rgb_strip").supports_color == true);
+    // White-only pins → stays fail-closed, gains white support.
+    REQUIRE(find("led white_strip").supports_color == false);
+    REQUIRE(find("led white_strip").supports_white == true);
 
     ctrl.deinit();
 }

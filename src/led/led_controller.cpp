@@ -222,19 +222,29 @@ void LedController::discover_from_hardware(const helix::PrinterDiscovery& hardwa
         LedStripInfo strip;
         strip.id = led_id;
         strip.backend = LedBackendType::NATIVE;
-        strip.supports_color = true;
+        // Fail-closed: default to white-only (no color). Addressable strips
+        // (neopixel/dotstar) re-enable color below since their configfile sections
+        // carry no red/green/blue_pin and are skipped by update_pin_config(). A
+        // generic [led] stays white-only until the configfile proves RGB pins exist,
+        // avoiding a meaningless color picker on white-only chamber lights.
+        strip.supports_color = false;
 
         // Determine display name: strip prefix, replace underscores, title case
         std::string raw_name;
         if (led_id.rfind("neopixel ", 0) == 0) {
             raw_name = led_id.substr(9);
+            strip.supports_color = true; // Addressable: RGB(W); no rgb pins in configfile
             strip.supports_white = true; // Neopixel supports RGBW
         } else if (led_id.rfind("dotstar ", 0) == 0) {
             raw_name = led_id.substr(8);
+            strip.supports_color = true; // Addressable: RGB(W); no rgb pins in configfile
             strip.supports_white = true; // Dotstar supports RGBW
         } else if (led_id.rfind("led ", 0) == 0) {
             raw_name = led_id.substr(4);
-            strip.supports_white = false; // Basic LED is RGB only
+            // Generic [led]: treat as white-only until the configfile parse proves
+            // RGB pins exist (update_pin_config upgrades supports_color when red/
+            // green/blue_pin are present). Leaves supports_color at the false default.
+            strip.supports_white = false;
         } else {
             raw_name = led_id;
             strip.supports_white = false;
