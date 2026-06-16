@@ -128,9 +128,6 @@ class FilamentMappingCard {
     /// Open the filament mapping modal
     void open_mapping_modal();
 
-    /// Build AvailableSlot list from AmsState singleton
-    std::vector<helix::AvailableSlot> collect_available_slots();
-
     /// Build GcodeToolInfo list from color/material strings
     std::vector<helix::GcodeToolInfo> build_tool_info(const std::vector<std::string>& colors,
                                                       const std::vector<std::string>& materials);

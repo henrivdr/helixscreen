@@ -7,6 +7,8 @@
 #include "ui_pre_print_options_renderer.h"
 #include "ui_print_preparation_manager.h"
 
+#include "preflight_validator.h"
+
 #include "moonraker_types.h"
 #include "overlay_base.h"
 #include "print_file_data.h" // For FileHistoryStatus
@@ -183,8 +185,9 @@ class PrintSelectDetailView : public OverlayBase {
 
     /**
      * @brief Whether the currently-shown file references any tool whose
-     *        AMS lane/slot is empty. Backend-agnostic — driven by
-     *        SlotInfo::has_filament_info() for each used tool index.
+     *        AMS lane/slot is empty. Backend-agnostic — driven by the cached
+     *        PreflightResult (has_block(): any tool mapped to an empty slot),
+     *        computed for ALL backends in try_extract_gcode_colors().
      *        Used by the print-start path to confirm with the user before
      *        sending a print that will likely fail mid-flight.
      */
@@ -261,6 +264,19 @@ class PrintSelectDetailView : public OverlayBase {
      */
     [[nodiscard]] const std::vector<helix::AvailableSlot>& get_available_slots() const {
         return filament_mapping_card_.get_available_slots();
+    }
+
+    /**
+     * @brief Get the cached pre-flight validation result for the current file.
+     *
+     * Computed in try_extract_gcode_colors() after the gcode is parsed, for
+     * ALL AMS backends (including those whose mapping card is hidden, e.g.
+     * Snapmaker U1 / ACE). Drives the filament_mismatch_ and
+     * empty_tools_warning_ subjects, and is read by the print-start gate and
+     * the enriched pre-print modal. Empty (no checks) until a file is parsed.
+     */
+    [[nodiscard]] const helix::PreflightResult& preflight_result() const {
+        return preflight_result_;
     }
 
     /**
@@ -369,6 +385,12 @@ class PrintSelectDetailView : public OverlayBase {
     lv_subject_t filament_mapping_visible_{};   // 1 = filament mapping card visible (AMS+tools)
     lv_subject_t color_swatches_visible_{};     // 1 = legacy color swatches card visible
     lv_subject_t empty_tools_warning_{};        // 1 = at least one used tool's slot is empty
+    // Cached backend-agnostic pre-flight validation result for the current file.
+    // Computed in try_extract_gcode_colors() once the gcode is parsed; the single
+    // source of truth driving filament_mismatch_ + empty_tools_warning_ (works
+    // even when the mapping card is hidden, e.g. Snapmaker U1 / ACE). Read by the
+    // print-start gate and the enriched pre-print modal. Empty until a file parses.
+    helix::PreflightResult preflight_result_{};
     lv_subject_t prep_time_estimate_subject_{}; // formatted prep time string for bind_text
     char prep_time_estimate_buf_[64]{};         // buffer backing the string subject
     SubjectManager subjects_;                   // RAII manager for subject cleanup

@@ -338,7 +338,6 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
     // parsed.
     const bool mapping_visible = filament_mapping_card_.should_show();
     lv_subject_set_int(&filament_mapping_visible_, mapping_visible ? 1 : 0);
-    lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
 
     // Swatches start in a neutral "not yet known" state: hidden, no warning.
     // Seeding from the slicer palette index here mislabels chips (a T0+T2 file
@@ -346,8 +345,20 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
     // render happens in try_extract_gcode_colors() once the gcode viewer has
     // parsed and produced tools_used_indices. Reset every show() so re-selecting
     // a different file never leaks stale swatch state.
+    //
+    // filament_mismatch_ is likewise neutral-until-parse: seeding it from
+    // filament_mapping_card_.has_mismatch() here would flash a value computed
+    // against the full slicer palette before the validator runs against the
+    // precise tools_used set. The pre-flight validator in
+    // try_extract_gcode_colors() is the sole authoritative post-parse writer.
     lv_subject_set_int(&color_swatches_visible_, 0);
     lv_subject_set_int(&empty_tools_warning_, 0);
+    lv_subject_set_int(&filament_mismatch_, 0);
+
+    // Drop any cached pre-flight result from a previously-selected file. The
+    // validator re-runs in try_extract_gcode_colors() once this file's gcode is
+    // parsed; clearing here prevents the gate/modal from reading stale checks.
+    preflight_result_ = {};
 
     // Register with NavigationManager for lifecycle callbacks
     NavigationManager::instance().register_overlay_instance(overlay_root_, this);
@@ -628,7 +639,6 @@ void PrintSelectDetailView::update_color_swatches(
     helix::ui::safe_clean_children(color_swatches_row_);
 
     auto* backend = AmsState::instance().get_backend();
-    bool any_empty = false;
 
     for (int tool : tool_indices) {
         std::string hex_color;
@@ -643,7 +653,6 @@ void PrintSelectDetailView::update_color_swatches(
             } else {
                 // Print needs this tool but the AMS doesn't have it loaded.
                 slot_is_empty = true;
-                any_empty = true;
             }
         } else if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size()) {
             // No backend — slicer palette is the only source; no empty check
@@ -681,7 +690,9 @@ void PrintSelectDetailView::update_color_swatches(
         }
     }
 
-    lv_subject_set_int(&empty_tools_warning_, any_empty ? 1 : 0);
+    // Note: empty_tools_warning_ is published by the pre-flight validator in
+    // try_extract_gcode_colors() (the single source of truth), NOT here — this
+    // method only renders swatches.
 }
 
 void PrintSelectDetailView::update_history_status(FileHistoryStatus status, int success_count) {
@@ -803,10 +814,11 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
                      parsed->tool_color_palette.size());
         current_filament_colors_ = parsed->tool_color_palette;
 
-        // Republish the mapping/mismatch subjects (mapping card uses these
-        // colors when AMS is present).
+        // Rebuild the mapping card's internal tool/slot/mapping state with the
+        // newly-extracted colors (the card uses them when AMS is present). The
+        // filament_mismatch_ / empty_tools_warning_ subjects are NOT published
+        // here — the pre-flight validator below is the single source of truth.
         filament_mapping_card_.update(current_filament_colors_, current_filament_materials_);
-        lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
     }
 
     // Re-publish swatches/mapping visibility using the precise tools_used set
@@ -819,9 +831,45 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
 
     if (swatches_visible) {
         update_color_swatches(parsed->tools_used_indices, current_filament_colors_);
-    } else {
-        lv_subject_set_int(&empty_tools_warning_, 0);
     }
+
+    // ------------------------------------------------------------------
+    // Backend-agnostic pre-flight validation (single source of truth for
+    // filament_mismatch_ + empty_tools_warning_).
+    //
+    // Runs for ALL AMS backends — including those whose mapping card is hidden
+    // (Snapmaker U1 / ACE), where get_available_slots() on the card is empty.
+    // We source slots straight from AmsState's canonical accessor, build the
+    // intended per-tool color/material from the slicer palette (reusing the
+    // mapping card's already-parsed tool_info_, filtered to the precise
+    // tools_used set), compute default mappings, then validate.
+    // ------------------------------------------------------------------
+    const auto& all_tool_info = filament_mapping_card_.get_tool_info();
+    std::vector<helix::GcodeToolInfo> tools;
+    tools.reserve(parsed->tools_used_indices.size());
+    for (int tool : parsed->tools_used_indices) {
+        if (tool >= 0 && static_cast<size_t>(tool) < all_tool_info.size()) {
+            tools.push_back(all_tool_info[static_cast<size_t>(tool)]);
+        }
+    }
+
+    auto slots = AmsState::instance().collect_available_slots();
+    auto mapping = helix::FilamentMapper::compute_defaults(tools, slots);
+    preflight_result_ = helix::PreflightValidator::validate(tools, slots, mapping);
+
+    bool any_mismatch = false;
+    for (const auto& check : preflight_result_.checks) {
+        if (check.severity != helix::ToolCheck::Severity::Ok) {
+            any_mismatch = true;
+            break;
+        }
+    }
+    lv_subject_set_int(&filament_mismatch_, any_mismatch ? 1 : 0);
+    lv_subject_set_int(&empty_tools_warning_, preflight_result_.has_block() ? 1 : 0);
+
+    spdlog::debug("[DetailView] Preflight: {} tools, {} slots, {} checks, mismatch={}, block={}",
+                  tools.size(), slots.size(), preflight_result_.checks.size(), any_mismatch,
+                  preflight_result_.has_block());
 }
 
 bool PrintSelectDetailView::swatches_card_visible_for(size_t tool_count) const {
