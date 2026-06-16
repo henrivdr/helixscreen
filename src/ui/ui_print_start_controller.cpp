@@ -19,6 +19,7 @@
 #include "ui_update_queue.h"
 
 #include "active_print_media_manager.h"
+#include "ams_backend_snapmaker.h"
 #include "ams_state.h"
 #include "app_constants.h"
 #include "color_utils.h"
@@ -255,17 +256,6 @@ void PrintStartController::execute_print_start() {
             });
     }
 
-    // Navigate to print status panel IMMEDIATELY (optimistic navigation)
-    // The busy overlay will show on top during download/upload operations.
-    // On failure, we'll navigate back to the detail overlay.
-    if (navigate_to_print_status_) {
-        spdlog::info("[PrintStartController] Navigating to print status panel (preparing...)");
-        if (hide_detail_view_) {
-            hide_detail_view_();
-        }
-        navigate_to_print_status_();
-    }
-
     // Capture callbacks for use in lambdas
     auto on_started = on_print_started_;
     auto on_cancelled = on_print_cancelled_;
@@ -275,68 +265,185 @@ void PrintStartController::execute_print_start() {
     // Capture thumbnail path for lambda
     std::string thumbnail_path = thumbnail_path_;
 
-    // Delegate to PrintPreparationManager
-    prep_manager->start_print(
-        filename_to_print, path_,
-        // Navigation callback - called when Moonraker confirms print start
-        // Sets thumbnail source so PrintStatusPanel loads the correct thumbnail
-        // NOTE: Called from background HTTP thread - must defer LVGL calls to main thread
-        [filename_to_print, path = path_, thumbnail_path, on_started]() {
-            // Construct full path for metadata lookup (e.g., usb/flowrate_0.gcode)
-            std::string full_path =
-                path.empty() ? filename_to_print : path + "/" + filename_to_print;
-            helix::ui::queue_update([full_path, thumbnail_path, on_started]() {
-                auto& status_panel = get_global_print_status_panel();
-                status_panel.set_thumbnail_source(full_path);
+    // The actual "start the print" step: navigate to the status panel, then
+    // delegate to PrintPreparationManager. Hoisted into a continuation so the
+    // Snapmaker U1 native pre-print config send (which must land BEFORE
+    // PRINT_START) can run first and only invoke this on success.
+    auto start_now = [this, prep_manager, filename_to_print, path = path_, thumbnail_path,
+                      on_started, update_button, show_detail]() {
+        // Navigate to print status panel IMMEDIATELY (optimistic navigation)
+        // The busy overlay will show on top during download/upload operations.
+        // On failure, we'll navigate back to the detail overlay.
+        if (navigate_to_print_status_) {
+            spdlog::info("[PrintStartController] Navigating to print status panel (preparing...)");
+            if (hide_detail_view_) {
+                hide_detail_view_();
+            }
+            navigate_to_print_status_();
+        }
 
-                // If we have a pre-extracted thumbnail (USB/embedded), set it directly
-                // This bypasses Moonraker metadata lookup which doesn't have USB file info
-                if (!thumbnail_path.empty()) {
-                    helix::get_active_print_media_manager().set_thumbnail_path(thumbnail_path);
-                    spdlog::debug("[PrintStartController] Set extracted thumbnail path: {}",
-                                  thumbnail_path);
-                }
+        // Delegate to PrintPreparationManager
+        prep_manager->start_print(
+            filename_to_print, path,
+            // Navigation callback - called when Moonraker confirms print start
+            // Sets thumbnail source so PrintStatusPanel loads the correct thumbnail
+            // NOTE: Called from background HTTP thread - must defer LVGL calls to main thread
+            [filename_to_print, path, thumbnail_path, on_started]() {
+                // Construct full path for metadata lookup (e.g., usb/flowrate_0.gcode)
+                std::string full_path =
+                    path.empty() ? filename_to_print : path + "/" + filename_to_print;
+                helix::ui::queue_update([full_path, thumbnail_path, on_started]() {
+                    auto& status_panel = get_global_print_status_panel();
+                    status_panel.set_thumbnail_source(full_path);
 
-                spdlog::debug(
-                    "[PrintStartController] Print start confirmed, thumbnail source set: {}",
-                    full_path);
-                if (on_started) {
-                    on_started();
+                    // If we have a pre-extracted thumbnail (USB/embedded), set it directly
+                    // This bypasses Moonraker metadata lookup which doesn't have USB file info
+                    if (!thumbnail_path.empty()) {
+                        helix::get_active_print_media_manager().set_thumbnail_path(thumbnail_path);
+                        spdlog::debug("[PrintStartController] Set extracted thumbnail path: {}",
+                                      thumbnail_path);
+                    }
+
+                    spdlog::debug(
+                        "[PrintStartController] Print start confirmed, thumbnail source set: {}",
+                        full_path);
+                    if (on_started) {
+                        on_started();
+                    }
+                });
+            },
+            // Completion callback
+            // NOTE: Called from background HTTP thread - must defer LVGL calls to main thread
+            [update_button, show_detail](bool success, const std::string& error) {
+                helix::ui::queue_update([success, error, update_button, show_detail]() {
+                    auto& status_panel = get_global_print_status_panel();
+
+                    if (success) {
+                        spdlog::debug("[PrintStartController] Print started successfully");
+                        status_panel.end_preparing(true);
+                    } else if (!error.empty()) {
+                        NOTIFY_ERROR(lv_tr("Print preparation failed: {}"), error);
+                        LOG_ERROR_INTERNAL("[PrintStartController] Print preparation failed: {}",
+                                           error);
+                        status_panel.end_preparing(false);
+
+                        // Navigate back to print detail overlay on failure
+                        spdlog::info(
+                            "[PrintStartController] Navigating back to print select after failure");
+                        NavigationManager::instance().go_back(); // Pop print status overlay
+
+                        // Re-show the detail view so user can retry
+                        if (show_detail) {
+                            show_detail();
+                        }
+
+                        // Re-enable button on failure
+                        if (update_button) {
+                            update_button();
+                        }
+                    }
+                });
+            });
+    };
+
+    // Snapmaker U1: emit the firmware-native print_task_config gcode BEFORE the
+    // print starts (it errors mid-print). ALWAYS-ON for U1 — even with no remap —
+    // because SET_PRINT_USED_EXTRUDERS suppresses a spurious-feed runout (the
+    // slicer auto-feeds heads the print doesn't use → empty head → runout cancel).
+    // Only this backend's strategy triggers the pre-send; every other backend
+    // takes the unchanged synchronous start path below.
+    if (AmsBackend* backend = AmsState::instance().get_backend();
+        backend && backend->get_remap_strategy() == AmsBackend::RemapStrategy::SnapmakerNative) {
+        send_snapmaker_preprint_then(start_now);
+        return; // start_now fires from the send continuation — do NOT also start here
+    }
+
+    start_now();
+}
+
+void PrintStartController::send_snapmaker_preprint_then(std::function<void()> on_done) {
+    if (!detail_view_) {
+        spdlog::warn("[PrintStartController] No detail view for U1 pre-print config — starting "
+                     "print without it");
+        if (on_done) {
+            on_done();
+        }
+        return;
+    }
+
+    AmsBackend* backend = AmsState::instance().get_backend();
+    auto* sm = dynamic_cast<AmsBackendSnapmaker*>(backend);
+    if (!sm) {
+        // The SnapmakerNative strategy gate uniquely identifies this backend type,
+        // so this should never happen — but fall back to starting rather than
+        // stranding the user if it somehow does.
+        spdlog::error("[PrintStartController] SnapmakerNative strategy but backend is not "
+                      "AmsBackendSnapmaker — starting print without native config");
+        if (on_done) {
+            on_done();
+        }
+        return;
+    }
+
+    const std::set<int> tools_used = detail_view_->get_tools_used();
+    const std::map<int, int> remap = detail_view_->get_effective_remap();
+    std::string gcode = sm->build_preprint_gcode(tools_used, remap);
+
+    if (gcode.empty()) {
+        // Nothing the firmware needs (e.g. no parsed tools) — start immediately.
+        spdlog::debug("[PrintStartController] U1 pre-print config empty — starting print directly");
+        if (on_done) {
+            on_done();
+        }
+        return;
+    }
+
+    spdlog::info("[PrintStartController] U1 pre-print config:\n{}", gcode);
+
+    if (!api_) {
+        spdlog::error("[PrintStartController] No API to send U1 pre-print config — aborting print");
+        NOTIFY_ERROR(lv_tr("Print setup failed: internal error"));
+        if (update_print_button_) {
+            update_print_button_();
+        }
+        if (on_print_cancelled_) {
+            on_print_cancelled_();
+        }
+        return;
+    }
+
+    auto tok = lifetime_.token();
+    api_->execute_gcode(
+        gcode,
+        // Success: defer to main thread, then run the real start step.
+        [tok, on_done]() mutable {
+            tok.defer("PrintStartController::preprint.ok", [on_done]() {
+                if (on_done) {
+                    on_done();
                 }
             });
         },
-        // Completion callback
-        // NOTE: Called from background HTTP thread - must defer LVGL calls to main thread
-        [update_button, show_detail](bool success, const std::string& error) {
-            helix::ui::queue_update([success, error, update_button, show_detail]() {
-                auto& status_panel = get_global_print_status_panel();
-
-                if (success) {
-                    spdlog::debug("[PrintStartController] Print started successfully");
-                    status_panel.end_preparing(true);
-                } else if (!error.empty()) {
-                    NOTIFY_ERROR(lv_tr("Print preparation failed: {}"), error);
-                    LOG_ERROR_INTERNAL("[PrintStartController] Print preparation failed: {}",
-                                       error);
-                    status_panel.end_preparing(false);
-
-                    // Navigate back to print detail overlay on failure
-                    spdlog::info(
-                        "[PrintStartController] Navigating back to print select after failure");
-                    NavigationManager::instance().go_back(); // Pop print status overlay
-
-                    // Re-show the detail view so user can retry
-                    if (show_detail) {
-                        show_detail();
-                    }
-
-                    // Re-enable button on failure
-                    if (update_button) {
-                        update_button();
-                    }
+        // Error: defer to main thread, surface a user-visible failure, and ABORT.
+        // Better to fail loud than feed an empty head.
+        [this, tok](const MoonrakerError& err) mutable {
+            std::string msg = err.message;
+            tok.defer("PrintStartController::preprint.err", [this, msg]() {
+                LOG_ERROR_INTERNAL("[PrintStartController] U1 pre-print config rejected: {}", msg);
+                NOTIFY_ERROR_MODAL(
+                    lv_tr("Print setup failed"),
+                    "{}",
+                    lv_tr("The printer rejected the filament configuration. The print was not "
+                          "started."));
+                // Re-enable the print button and treat as a cancel — do NOT start.
+                if (update_print_button_) {
+                    update_print_button_();
+                }
+                if (on_print_cancelled_) {
+                    on_print_cancelled_();
                 }
             });
-        });
+        },
+        15000);
 }
 
 // ============================================================================

@@ -16,6 +16,7 @@
 
 #include <functional>
 #include <lvgl.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -259,6 +260,31 @@ class PrintSelectDetailView : public OverlayBase {
     [[nodiscard]] std::vector<helix::GcodeToolInfo> get_filament_tool_info() const {
         return filament_mapping_card_.get_tool_info();
     }
+
+    /**
+     * @brief Logical tools the parsed gcode body actually uses.
+     *
+     * Returns ParsedGCodeFile::tools_used_indices from the gcode viewer's
+     * parsed file (empty if no file is parsed). Read the same way
+     * recompute_preflight() does. Consumed by the print-start gate to build
+     * the Snapmaker U1 native print_task_config command sequence.
+     */
+    [[nodiscard]] std::set<int> get_tools_used() const;
+
+    /**
+     * @brief Effective tool→slot remap the print will actually use.
+     *
+     * Built from the mapping card's current mappings. Contains ONLY real
+     * remaps: an entry tool_index → mapped_slot is included only when
+     * mapped_slot >= 0 AND mapped_slot != default_head(tool_index), where
+     * default_head(t) = (t in [0,3]) ? t : 0. Tools mapped to their identity
+     * head are omitted (the firmware default already routes them).
+     *
+     * On Snapmaker U1 today the mapping card is hidden so get_mappings() is
+     * empty and this returns empty (identity / Part A). It becomes non-empty
+     * once the U1 remap modal lands (Batch 2) — kept forward-compatible.
+     */
+    [[nodiscard]] std::map<int, int> get_effective_remap() const;
 
     /**
      * @brief Get per-tool filament materials from gcode metadata

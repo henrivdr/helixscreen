@@ -922,6 +922,35 @@ void PrintSelectDetailView::recompute_preflight() {
                   preflight_result_.has_block());
 }
 
+std::set<int> PrintSelectDetailView::get_tools_used() const {
+    if (!gcode_viewer_) {
+        return {};
+    }
+    auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
+    if (!parsed) {
+        return {};
+    }
+    return parsed->tools_used_indices;
+}
+
+std::map<int, int> PrintSelectDetailView::get_effective_remap() const {
+    // default_head(t): the physical head a logical tool routes to with no remap.
+    // Tools 0..3 map to their identity head; anything else falls back to head 0.
+    auto default_head = [](int tool) { return (tool >= 0 && tool <= 3) ? tool : 0; };
+
+    std::map<int, int> remap;
+    for (const auto& m : filament_mapping_card_.get_mappings()) {
+        // Only include genuine remaps: a real slot assignment that differs from
+        // the firmware-default head for this tool. Identity mappings are omitted
+        // (the firmware already routes them). On U1 today the card is hidden so
+        // get_mappings() is empty and this stays empty (Part A / identity).
+        if (m.mapped_slot >= 0 && m.mapped_slot != default_head(m.tool_index)) {
+            remap[m.tool_index] = m.mapped_slot;
+        }
+    }
+    return remap;
+}
+
 void PrintSelectDetailView::open_filament_mapping_modal() {
     filament_mapping_card_.open_mapping_modal();
 }

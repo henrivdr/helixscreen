@@ -2570,6 +2570,12 @@ void PrintSelectPanel::on_preflight_remap() {
     case AmsBackend::RemapStrategy::GcodeRewrite:
         open_gcode_remap_modal();
         break;
+    case AmsBackend::RemapStrategy::SnapmakerNative:
+        // U1 native remap modal lands in Batch 2. Today the pre-flight gate is
+        // identity-only for U1 (no remap UI), so there is nothing to open — the
+        // always-on SET_PRINT_USED_EXTRUDERS send at print-start handles the
+        // spurious-feed runout without any user remap.
+        break;
     case AmsBackend::RemapStrategy::None:
         break;
     }
