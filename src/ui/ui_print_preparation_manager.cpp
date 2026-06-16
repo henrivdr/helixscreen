@@ -11,6 +11,7 @@
 
 #include "active_print_media_manager.h"
 #include "app_globals.h"
+#include "gcode_tool_remapper.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "macro_modification_manager.h"
 #include "macro_param_cache.h"
@@ -26,9 +27,11 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 
 // Forward declaration for global print status panel (declared in ui_panel_print_status.h)
 PrintStatusPanel& get_global_print_status_panel();
@@ -1391,6 +1394,284 @@ void PrintPreparationManager::modify_and_print_streaming(
                         });
         },
         // Download progress callback
+        download_progress);
+}
+
+void PrintPreparationManager::modify_and_print_with_remap(
+    const std::string& file_path, const std::map<int, int>& remap,
+    NavigateToStatusCallback on_navigate_to_status) {
+    if (!api_) {
+        spdlog::error("[PrintPreparationManager] modify_and_print_with_remap: no API");
+        NOTIFY_ERROR(lv_tr("Cannot remap: internal error"));
+        return;
+    }
+
+    // Extract just the filename for display / temp naming.
+    size_t last_slash = file_path.rfind('/');
+    std::string display_filename =
+        (last_slash != std::string::npos) ? file_path.substr(last_slash + 1) : file_path;
+
+    if (printer_state_)
+        printer_state_->set_print_in_progress(true);
+
+    auto token = lifetime_.token();
+
+    std::string temp_dir = get_temp_directory();
+    if (temp_dir.empty()) {
+        NOTIFY_ERROR(lv_tr("Cannot remap G-code: no temp directory available"));
+        if (printer_state_)
+            printer_state_->set_print_in_progress(false);
+        return;
+    }
+
+    auto timestamp = std::to_string(std::time(nullptr));
+    std::string local_download_path = temp_dir + "/helix_remap_dl_" + timestamp + ".gcode";
+    std::string remote_temp_path = ".helix_temp/remapped_" + timestamp + "_" + display_filename;
+
+    spdlog::info("[PrintPreparationManager] Remap modification: {} tool mapping(s), downloading {}",
+                 remap.size(), file_path);
+
+    BusyOverlay::show("Preparing print...");
+
+    auto download_progress = [](size_t received, size_t total) {
+        float pct = (total > 0)
+                        ? (100.0f * static_cast<float>(received) / static_cast<float>(total))
+                        : 0.0f;
+        helix::ui::async_call(
+            [](void* data) {
+                auto pct_val = static_cast<float>(reinterpret_cast<uintptr_t>(data)) / 100.0f;
+                BusyOverlay::set_progress("Downloading", pct_val);
+            },
+            reinterpret_cast<void*>(static_cast<uintptr_t>(pct * 100.0f)));
+    };
+
+    // Step 1: Download original file to disk (streaming).
+    api_->transfers().download_file_to_path(
+        "gcodes", file_path, local_download_path,
+        // Download success - runs on HTTP bg thread. All bg-safe local work
+        // (read file, compute replacements, apply_streaming) runs here; every
+        // this->/api_-> access is deferred to the main thread via token.defer.
+        [this, token, file_path, display_filename, remap, local_download_path, remote_temp_path,
+         on_navigate_to_status](const std::string& /*dest_path*/) {
+            // Read the downloaded gcode into memory to feed the remapper. The
+            // remapper needs full content to map each line from its ORIGINAL
+            // index in one collision-safe pass.
+            std::string content;
+            {
+                std::ifstream in(local_download_path, std::ios::binary);
+                if (in) {
+                    std::ostringstream ss;
+                    ss << in.rdbuf();
+                    content = ss.str();
+                }
+            }
+
+            std::error_code ec;
+            if (content.empty()) {
+                std::filesystem::remove(local_download_path, ec);
+                NOTIFY_ERROR(lv_tr("Failed to read G-code for remap"));
+                token.defer("PrintPreparationManager::remap_read_fail",
+                            [this]() {
+                                BusyOverlay::hide();
+                                if (printer_state_)
+                                    printer_state_->set_print_in_progress(false);
+                            });
+                return;
+            }
+
+            // Compute exactly the changed lines.
+            auto replacements = helix::GcodeToolRemapper::build_line_replacements(content, remap);
+
+            // Identity remap (nothing changes): print the original directly,
+            // no temp copy. Clean up the download and dispatch a plain start.
+            if (replacements.empty()) {
+                std::filesystem::remove(local_download_path, ec);
+                spdlog::info("[PrintPreparationManager] Remap produced no changes; "
+                             "printing original {}",
+                             file_path);
+                token.defer(
+                    "PrintPreparationManager::remap_identity_start",
+                    [this, file_path, on_navigate_to_status]() {
+                        BusyOverlay::hide();
+                        start_print_directly(
+                            file_path, on_navigate_to_status,
+                            [this](bool success, const std::string& /*error*/) {
+                                if (!success && printer_state_)
+                                    printer_state_->set_print_in_progress(false);
+                            });
+                    });
+                return;
+            }
+
+            // Step 2: Convert each replacement -> a single-line REPLACE
+            // modification and apply file-to-file (streaming, minimal memory).
+            gcode::GCodeFileModifier modifier;
+            for (const auto& r : replacements) {
+                modifier.add_modification(gcode::Modification::replace(
+                    static_cast<size_t>(r.line_number), r.new_line, "tool remap"));
+            }
+
+            auto result = modifier.apply_streaming(local_download_path);
+
+            // Download file no longer needed (bg-safe filesystem op).
+            std::filesystem::remove(local_download_path, ec);
+
+            if (!result.success) {
+                NOTIFY_ERROR(lv_tr("Failed to remap G-code: {}"), result.error_message);
+                token.defer("PrintPreparationManager::remap_apply_fail",
+                            [this]() {
+                                BusyOverlay::hide();
+                                if (printer_state_)
+                                    printer_state_->set_print_in_progress(false);
+                            });
+                return;
+            }
+
+            spdlog::info("[PrintPreparationManager] Remap applied ({} lines), uploading {}",
+                         result.lines_modified, result.modified_path);
+
+            // Step 3: Upload modified copy from disk — defer api_-> kickoff to main.
+            std::string modified_path = result.modified_path;
+            std::vector<std::string> mod_names;
+            mod_names.reserve(remap.size());
+            for (const auto& [logical, physical] : remap) {
+                mod_names.push_back("remap_T" + std::to_string(logical) + "_to_T" +
+                                    std::to_string(physical));
+            }
+
+            token.defer(
+                "PrintPreparationManager::remap_upload_kickoff",
+                [this, token, modified_path, remote_temp_path, file_path, display_filename,
+                 mod_names, on_navigate_to_status]() {
+                    api_->transfers().upload_file_from_path(
+                        "gcodes", remote_temp_path, modified_path,
+                        // Upload success - runs on HTTP bg thread.
+                        [this, token, modified_path, remote_temp_path, file_path, display_filename,
+                         mod_names, on_navigate_to_status]() {
+                            std::error_code ec;
+                            std::filesystem::remove(modified_path, ec);
+
+                            spdlog::info("[PrintPreparationManager] Remapped file uploaded, "
+                                         "starting print via plugin");
+
+                            token.defer(
+                                "PrintPreparationManager::remap_start_kickoff",
+                                [this, token, remote_temp_path, file_path, display_filename,
+                                 mod_names, on_navigate_to_status]() {
+                                    auto on_print_success = [this, token, on_navigate_to_status,
+                                                             display_filename, file_path]() {
+                                        spdlog::info("[PrintPreparationManager] Remapped print "
+                                                     "started (original: {})",
+                                                     display_filename);
+                                        token.defer(
+                                            "PrintPreparationManager::remap_success_clear",
+                                            [this]() {
+                                                if (printer_state_)
+                                                    printer_state_->set_print_in_progress(false);
+                                            });
+
+                                        struct PrintStartedData {
+                                            std::string display_filename;
+                                            std::string original_path;
+                                            NavigateToStatusCallback navigate_cb;
+                                        };
+                                        helix::ui::queue_update<PrintStartedData>(
+                                            std::make_unique<PrintStartedData>(PrintStartedData{
+                                                display_filename, file_path, on_navigate_to_status}),
+                                            [](PrintStartedData* d) {
+                                                BusyOverlay::hide();
+                                                get_global_print_status_panel()
+                                                    .set_thumbnail_source(d->original_path);
+                                                helix::get_active_print_media_manager()
+                                                    .set_thumbnail_source(d->original_path);
+                                                if (d->navigate_cb)
+                                                    d->navigate_cb();
+                                            });
+                                    };
+
+                                    auto on_print_error = [this, token, remote_temp_path](
+                                                              const MoonrakerError& error) {
+                                        helix::ui::async_call(
+                                            [](void*) { BusyOverlay::hide(); }, nullptr);
+                                        NOTIFY_ERROR(lv_tr("Failed to start print: {}"),
+                                                     error.message);
+                                        LOG_ERROR_INTERNAL(
+                                            "[PrintPreparationManager] Remapped print start "
+                                            "failed for {}: {}",
+                                            remote_temp_path, error.message);
+                                        token.defer(
+                                            "PrintPreparationManager::remap_start_error_cleanup",
+                                            [this, remote_temp_path]() {
+                                                if (printer_state_)
+                                                    printer_state_->set_print_in_progress(false);
+                                                std::string full_path = "gcodes/" + remote_temp_path;
+                                                api_->files().delete_file(
+                                                    full_path, []() {},
+                                                    [](const MoonrakerError& /*e*/) {});
+                                            });
+                                    };
+
+                                    // Plugin path: symlink + history patch keeps the original
+                                    // filename in print history. Caller guarantees the plugin
+                                    // is installed (open_gcode_remap_modal guards on it).
+                                    api_->job().start_modified_print(
+                                        file_path, remote_temp_path, mod_names,
+                                        [on_print_success](const ModifiedPrintResult& result) {
+                                            spdlog::info(
+                                                "[PrintPreparationManager] Plugin accepted "
+                                                "remapped print: {} -> {}",
+                                                result.original_filename, result.print_filename);
+                                            on_print_success();
+                                        },
+                                        on_print_error);
+                                });
+                        },
+                        // Upload error - runs on HTTP bg thread.
+                        [this, token, modified_path](const MoonrakerError& error) {
+                            helix::ui::async_call([](void*) { BusyOverlay::hide(); }, nullptr);
+                            std::error_code ec;
+                            std::filesystem::remove(modified_path, ec);
+                            NOTIFY_ERROR(lv_tr("Failed to upload remapped G-code: {}"),
+                                         error.message);
+                            LOG_ERROR_INTERNAL("[PrintPreparationManager] Remap upload failed: {}",
+                                               error.message);
+                            token.defer("PrintPreparationManager::remap_upload_fail_clear",
+                                        [this]() {
+                                            if (printer_state_)
+                                                printer_state_->set_print_in_progress(false);
+                                        });
+                        },
+                        // Upload progress callback
+                        [](size_t sent, size_t total) {
+                            float pct =
+                                (total > 0)
+                                    ? (100.0f * static_cast<float>(sent) / static_cast<float>(total))
+                                    : 0.0f;
+                            helix::ui::async_call(
+                                [](void* data) {
+                                    auto pct_val =
+                                        static_cast<float>(reinterpret_cast<uintptr_t>(data)) /
+                                        100.0f;
+                                    BusyOverlay::set_progress("Uploading", pct_val);
+                                },
+                                reinterpret_cast<void*>(static_cast<uintptr_t>(pct * 100.0f)));
+                        });
+                });
+        },
+        // Download error - runs on HTTP bg thread.
+        [this, token, file_path, local_download_path](const MoonrakerError& error) {
+            helix::ui::async_call([](void*) { BusyOverlay::hide(); }, nullptr);
+            std::error_code ec;
+            std::filesystem::remove(local_download_path, ec);
+            NOTIFY_ERROR(lv_tr("Failed to download G-code for remap: {}"), error.message);
+            LOG_ERROR_INTERNAL("[PrintPreparationManager] Remap download failed for {}: {}",
+                               file_path, error.message);
+            token.defer("PrintPreparationManager::remap_download_fail_clear",
+                        [this]() {
+                            if (printer_state_)
+                                printer_state_->set_print_in_progress(false);
+                        });
+        },
         download_progress);
 }
 

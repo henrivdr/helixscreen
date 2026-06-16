@@ -2593,11 +2593,99 @@ void PrintSelectPanel::open_native_remap_modal() {
     detail_view_->open_filament_mapping_modal();
 }
 
-// TODO(Task 12): implement the gcode-rewrite remap modal for backends with no
-// internal tool table (Snapmaker U1, ACE). This rewrites Tx commands in the
-// gcode file before the print starts.
+// GcodeRewrite (Snapmaker U1, ACE) tool->head remap. These backends own no
+// internal routing table, so the only way to redirect a logical tool to a
+// different physical head is to REWRITE the Tx / ACTIVATE_EXTRUDER /
+// SET_GCODE_VARIABLE lines in the gcode itself (Task-11 GcodeToolRemapper) and
+// print the modified copy through the HelixPrint plugin so print history stays
+// under the original filename.
+//
+// The FilamentMappingCard is hidden for these backends, so we build the picker
+// inputs DIRECTLY from the cached pre-flight result rather than reading the
+// card. On "Done" we convert the edited mappings into a logical->physical map
+// and drive the prep-manager's rewrite+print pipeline.
 void PrintSelectPanel::open_gcode_remap_modal() {
-    NOTIFY_INFO(lv_tr("Remap coming soon"));
+    // Plugin guard FIRST: the rewrite path prints a modified temp copy and
+    // relies on the HelixPrint plugin to symlink + patch history back to the
+    // original filename. Without it, history would show the temp name.
+    if (!printer_state_.service_has_helix_plugin()) {
+        helix::ui::modal_show_alert(
+            lv_tr("Remap needs the HelixPrint plugin"),
+            lv_tr("Install the HelixPrint plugin in Advanced settings to remap "
+                  "filament without affecting print history."),
+            ModalSeverity::Info, lv_tr("OK"), nullptr, nullptr);
+        return;
+    }
+
+    if (!detail_view_) {
+        spdlog::warn("[{}] Gcode remap requested with no detail view", get_name());
+        return;
+    }
+
+    // Build picker inputs directly from the pre-flight checks (the hidden card is
+    // not consulted). Each ToolCheck carries the intended color/material the
+    // gcode declared for that tool.
+    const auto& pf = detail_view_->preflight_result();
+    std::vector<helix::GcodeToolInfo> tool_info;
+    tool_info.reserve(pf.checks.size());
+    for (const auto& check : pf.checks) {
+        helix::GcodeToolInfo info;
+        info.tool_index = check.tool_index;
+        info.color_rgb = check.intended_color;
+        info.material = check.intended_material;
+        tool_info.push_back(std::move(info));
+    }
+
+    if (tool_info.empty()) {
+        spdlog::warn("[{}] Gcode remap: no tools in pre-flight result", get_name());
+        NOTIFY_INFO(lv_tr("Nothing to remap"));
+        return;
+    }
+
+    auto slots = AmsState::instance().collect_available_slots();
+    auto mappings = helix::FilamentMapper::compute_defaults(tool_info, slots);
+
+    gcode_remap_modal_.set_tool_info(tool_info);
+    gcode_remap_modal_.set_available_slots(slots);
+    gcode_remap_modal_.set_mappings(mappings);
+    gcode_remap_modal_.set_on_mappings_updated([this](std::vector<helix::ToolMapping> updated) {
+        // Convert edited mappings -> logical tool index -> physical head index.
+        // Skip auto/unmapped entries (mapped_slot < 0) — those leave the gcode's
+        // original tool number untouched.
+        std::map<int, int> remap;
+        for (const auto& m : updated) {
+            if (m.tool_index < 0 || m.mapped_slot < 0) {
+                continue;
+            }
+            // NOTE(Task 13): for U1/ACE slot index == physical head, so
+            // mapped_slot is the head the gcode rewrite targets. A GcodeRewrite
+            // backend where slot != head would need a slot->head translation
+            // here — confirm on bench U1.
+            remap[m.tool_index] = m.mapped_slot;
+        }
+
+        // Resolve the prep manager + current file path, then drive the
+        // rewrite+print pipeline. The pipeline guards identity remaps internally
+        // (prints the original unmodified when nothing changes).
+        auto* prep = detail_view_ ? detail_view_->get_prep_manager() : nullptr;
+        if (!prep) {
+            spdlog::warn("[{}] Gcode remap: no prep manager", get_name());
+            NOTIFY_ERROR(lv_tr("Cannot remap: internal error"));
+            return;
+        }
+
+        std::string filename(selected_filename_buffer_);
+        std::string file_path =
+            current_path_.empty() ? filename : current_path_ + "/" + filename;
+
+        spdlog::info("[{}] Applying gcode remap: {} tool(s) for {}", get_name(), remap.size(),
+                     file_path);
+        prep->modify_and_print_with_remap(file_path, remap, [this]() {
+            PrintStatusPanel::push_overlay(parent_screen_);
+        });
+    });
+
+    gcode_remap_modal_.show(lv_screen_active());
 }
 
 void PrintSelectPanel::delete_file() {

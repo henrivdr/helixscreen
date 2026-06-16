@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ui_filament_mapping_modal.h"
 #include "ui_observer_guard.h"
 #include "ui_panel_base.h"
 #include "ui_plugin_install_modal.h"
@@ -594,6 +595,11 @@ class PrintSelectPanel : public PanelBase {
 
     // Print start controller (handles print initiation workflow, warnings)
     std::unique_ptr<helix::ui::PrintStartController> print_controller_;
+
+    // Tool-remap picker for GcodeRewrite backends (U1 / ACE). Embedded so its
+    // lifecycle follows the panel; ModalStack manages the on-screen dialog. Reused
+    // across remap invocations (same pattern as FilamentMappingCard's member modal).
+    helix::ui::FilamentMappingModal gcode_remap_modal_;
 
     // File sorter (handles sorting logic for file list)
     helix::ui::PrintSelectFileSorter file_sorter_;

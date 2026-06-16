@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <lvgl.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -379,6 +380,35 @@ class PrintPreparationManager {
     void start_print(const std::string& filename, const std::string& current_path,
                      NavigateToStatusCallback on_navigate_to_status,
                      PrintCompletionCallback on_completion = nullptr);
+
+    /**
+     * @brief Rewrite tool commands in a G-code file and print the modified copy.
+     *
+     * For RemapStrategy::GcodeRewrite backends (Snapmaker U1, ACE) that own no
+     * internal tool table: the only way to redirect a logical tool to a
+     * different physical head is to rewrite the Tx / ACTIVATE_EXTRUDER /
+     * SET_GCODE_VARIABLE lines in the file itself.
+     *
+     * Flow (reuses the proven streaming modify+print pipeline):
+     * 1. Download the original to a temp file (streaming, no memory spike).
+     * 2. Read it back, call GcodeToolRemapper::build_line_replacements(content,
+     *    remap) to get exactly the lines that change.
+     * 3. Convert each GcodeLineReplacement -> GCodeFileModifier::replace(line,
+     *    text), apply_streaming() file-to-file.
+     * 4. Upload the modified copy and start it via the HelixPrint plugin's
+     *    start_modified_print() so print history stays under the ORIGINAL
+     *    filename. (This path requires the plugin; callers must guard.)
+     *
+     * If `remap` produces no line changes (identity remap), the original file is
+     * printed directly with no temp copy.
+     *
+     * @param file_path Full path to the original file relative to gcodes root
+     *                  (e.g. "usb/multicolor.gcode")
+     * @param remap Logical tool index -> physical head index
+     * @param on_navigate_to_status Callback to navigate to the print status panel
+     */
+    void modify_and_print_with_remap(const std::string& file_path, const std::map<int, int>& remap,
+                                     NavigateToStatusCallback on_navigate_to_status);
 
     /**
      * @brief Get the pre-print time estimate subject (seconds)
