@@ -11,6 +11,8 @@
 
 #include "hv/json.hpp"
 
+#include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -48,6 +50,35 @@ class QidiBoxTestAccess {
         if (it == b.fila_profiles_.end())
             return std::nullopt;
         return it->second;
+    }
+    static std::optional<uint32_t> get_color(const AmsBackendQidi& b, int color_id) {
+        auto it = b.color_palette_.find(color_id);
+        if (it == b.color_palette_.end())
+            return std::nullopt;
+        return it->second;
+    }
+    static std::optional<std::string> get_vendor(const AmsBackendQidi& b, int vendor_id) {
+        auto it = b.vendor_names_.find(vendor_id);
+        if (it == b.vendor_names_.end())
+            return std::nullopt;
+        return it->second;
+    }
+    static size_t color_count(const AmsBackendQidi& b) {
+        return b.color_palette_.size();
+    }
+    static size_t vendor_count(const AmsBackendQidi& b) {
+        return b.vendor_names_.size();
+    }
+    static int resolve_fila_id(const std::map<int, AmsBackendQidi::FilaProfile>& profiles,
+                               const std::string& material, const std::string& name) {
+        return AmsBackendQidi::resolve_fila_id(profiles, material, name);
+    }
+    static int resolve_color_id(const std::map<int, uint32_t>& palette, uint32_t rgb) {
+        return AmsBackendQidi::resolve_color_id(palette, rgb);
+    }
+    static int resolve_vendor_id(const std::map<int, std::string>& vendors,
+                                 const std::string& brand) {
+        return AmsBackendQidi::resolve_vendor_id(vendors, brand);
     }
     static DryerInfo get_dryer(const AmsBackendQidi& b) {
         return b.get_dryer_info();
@@ -954,4 +985,354 @@ TEST_CASE("QIDI Box stop_drying falls back to TARGET=0",
     auto err = backend.stop_drying(0);
     REQUIRE(err.success());
     REQUIRE(backend.sent[0] == "SET_HEATER_TEMPERATURE HEATER=heater_box1 TARGET=0");
+}
+
+// =====================================================================
+// apply_filas_list: extended parse — filament name + type, colordict,
+// vendor_list (stock QIDI officiall_filas_list.cfg, real excerpts)
+// =====================================================================
+
+// A trimmed-but-real excerpt of the stock file: a few fila sections plus
+// the colordict and vendor_list tail. Mirrors the real ConfigParser
+// alignment (key/value separated by a run of spaces around `=`).
+static const char* kStockFilasExcerpt = R"INI(
+[fila1]
+filament                       = PLA Rapido
+min_temp                       = 190
+max_temp                       = 240
+box_min_temp                   = 0
+box_max_temp                   = 0
+type                           = PLA
+
+[fila11]
+filament                       = ABS Rapido
+min_temp                       = 240
+max_temp                       = 280
+box_min_temp                   = 0
+box_max_temp                   = 45
+type                           = ABS
+
+[fila42]
+filament                       = PETG-CF
+min_temp                       = 240
+max_temp                       = 270
+box_min_temp                   = 0
+box_max_temp                   = 45
+type                           = PETG-CF
+
+[colordict]
+1                              = #FAFAFA
+2                              = #060606
+18                             = #FF362D
+24                             = #B87F2B
+
+[vendor_list]
+0                              = Generic
+1                              = QIDI
+2                              = eSUN
+)INI";
+
+TEST_CASE("QIDI Box apply_filas_list captures filament name and type",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    auto p1 = QidiBoxTestAccess::get_profile(backend, 1);
+    REQUIRE(p1.has_value());
+    REQUIRE(p1->name == "PLA Rapido");
+    REQUIRE(p1->type == "PLA");
+    REQUIRE(p1->nozzle_min == 190);
+    REQUIRE(p1->nozzle_max == 240);
+
+    auto p11 = QidiBoxTestAccess::get_profile(backend, 11);
+    REQUIRE(p11.has_value());
+    REQUIRE(p11->name == "ABS Rapido");
+    REQUIRE(p11->type == "ABS");
+    REQUIRE(p11->box_max == 45);
+
+    auto p42 = QidiBoxTestAccess::get_profile(backend, 42);
+    REQUIRE(p42.has_value());
+    REQUIRE(p42->name == "PETG-CF");
+    REQUIRE(p42->type == "PETG-CF");
+}
+
+TEST_CASE("QIDI Box apply_filas_list parses colordict to packed RGB",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 1) == 0xFAFAFA);
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 2) == 0x060606);
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 18) == 0xFF362D);
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 24) == 0xB87F2B);
+    REQUIRE_FALSE(QidiBoxTestAccess::get_color(backend, 99).has_value());
+}
+
+TEST_CASE("QIDI Box apply_filas_list parses vendor_list",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    REQUIRE(QidiBoxTestAccess::get_vendor(backend, 0) == "Generic");
+    REQUIRE(QidiBoxTestAccess::get_vendor(backend, 1) == "QIDI");
+    REQUIRE(QidiBoxTestAccess::get_vendor(backend, 2) == "eSUN");
+    REQUIRE_FALSE(QidiBoxTestAccess::get_vendor(backend, 99).has_value());
+}
+
+TEST_CASE("QIDI Box apply_filas_list colordict accepts bare hex (no #)",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend,
+                                        "[colordict]\n1 = FAFAFA\n2 = #060606\n");
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 1) == 0xFAFAFA);
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 2) == 0x060606);
+}
+
+TEST_CASE("QIDI Box apply_filas_list ignores bad sections and atomically swaps",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    // First load populates all three maps.
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+    REQUIRE(QidiBoxTestAccess::get_color(backend, 1).has_value());
+
+    // Reload with only fila data + a typo'd section — colordict/vendor should
+    // be cleared (atomic replace), not merged.
+    QidiBoxTestAccess::apply_filas_list(backend, R"INI(
+[colourdict]
+1 = #112233
+
+[fila3]
+filament = PLA Metal
+type = PLA
+min_temp = 190
+max_temp = 240
+)INI");
+    REQUIRE(QidiBoxTestAccess::get_profile(backend, 3).has_value());
+    // Old fila1 gone (replaced).
+    REQUIRE_FALSE(QidiBoxTestAccess::get_profile(backend, 1).has_value());
+    // Typo'd [colourdict] not accepted, old palette wiped.
+    REQUIRE(QidiBoxTestAccess::color_count(backend) == 0);
+    REQUIRE(QidiBoxTestAccess::vendor_count(backend) == 0);
+}
+
+TEST_CASE("QIDI Box apply_filas_list still parses temps (regression)",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+    auto p11 = QidiBoxTestAccess::get_profile(backend, 11);
+    REQUIRE(p11.has_value());
+    REQUIRE(p11->nozzle_min == 240);
+    REQUIRE(p11->nozzle_max == 280);
+    REQUIRE(p11->box_min == 0);
+    REQUIRE(p11->box_max == 45);
+}
+
+// =====================================================================
+// Read-path resolution: slot_rfid_ ids → SlotInfo material/color/brand
+// =====================================================================
+// Once the filas list is cached, parse_save_variables must resolve the raw
+// filament_slot/color_slot/vendor_slot indices onto the SlotInfo fields the
+// UI reads (material, color_rgb, brand) — in addition to the nozzle temps it
+// already applied.
+
+TEST_CASE("QIDI Box read-path resolves material/color/brand from filas list",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"filament_slot0", 11}, // ABS Rapido / ABS
+                                               {"color_slot0", 18},    // #FF362D
+                                               {"vendor_slot0", 2},    // eSUN
+                                           });
+
+    auto info = backend.get_system_info();
+    const auto& s = info.units[0].slots[0];
+    REQUIRE(s.material == "ABS");
+    REQUIRE(s.color_rgb == 0xFF362D);
+    REQUIRE(s.brand == "eSUN");
+    // Temps still applied from the same profile.
+    REQUIRE(s.nozzle_temp_min == 240);
+    REQUIRE(s.nozzle_temp_max == 280);
+}
+
+TEST_CASE("QIDI Box read-path leaves fields unchanged when ids miss",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    // Unknown filament id (not in the cfg) + unknown color/vendor ids.
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"filament_slot0", 77},
+                                               {"color_slot0", 99},
+                                               {"vendor_slot0", 88},
+                                           });
+
+    auto info = backend.get_system_info();
+    const auto& s = info.units[0].slots[0];
+    // Material/brand untouched (empty defaults), color stays at default.
+    REQUIRE(s.material.empty());
+    REQUIRE(s.brand.empty());
+    REQUIRE(s.color_rgb == AMS_DEFAULT_SLOT_COLOR);
+}
+
+TEST_CASE("QIDI Box read-path resolution survives before filas list loads",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+    // No filas list yet — ids captured but nothing resolved, no crash.
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"filament_slot0", 1},
+                                               {"color_slot0", 1},
+                                               {"vendor_slot0", 1},
+                                           });
+    auto info = backend.get_system_info();
+    REQUIRE(info.units[0].slots[0].material.empty());
+    REQUIRE(info.units[0].slots[0].color_rgb == AMS_DEFAULT_SLOT_COLOR);
+    REQUIRE(QidiBoxTestAccess::filament_id(backend, 0) == 1);
+}
+
+// =====================================================================
+// Reverse lookups (pure) for set_slot_info()
+// =====================================================================
+
+TEST_CASE("QIDI Box resolve_fila_id matches name then falls back to type",
+          "[ams][qidi_box]") {
+    std::map<int, AmsBackendQidi::FilaProfile> profiles;
+    profiles[1] = {"PLA Rapido", "PLA", 190, 240, 0, 0};
+    profiles[11] = {"ABS Rapido", "ABS", 240, 280, 0, 45};
+    profiles[42] = {"PETG-CF", "PETG-CF", 240, 270, 0, 45};
+
+    // Exact (case-insensitive) name match wins.
+    REQUIRE(QidiBoxTestAccess::resolve_fila_id(profiles, "ABS", "abs rapido") == 11);
+    // No name match → first profile whose type matches material.
+    REQUIRE(QidiBoxTestAccess::resolve_fila_id(profiles, "pla", "") == 1);
+    // Nothing matches → 0.
+    REQUIRE(QidiBoxTestAccess::resolve_fila_id(profiles, "NYLON", "Whatever") == 0);
+}
+
+TEST_CASE("QIDI Box resolve_color_id picks nearest palette entry",
+          "[ams][qidi_box]") {
+    std::map<int, uint32_t> palette;
+    palette[1] = 0xFAFAFA; // near-white
+    palette[2] = 0x060606; // near-black
+    palette[18] = 0xFF362D; // red
+
+    // Pure white → near-white entry.
+    REQUIRE(QidiBoxTestAccess::resolve_color_id(palette, 0xFFFFFF) == 1);
+    // Pure black → near-black entry.
+    REQUIRE(QidiBoxTestAccess::resolve_color_id(palette, 0x000000) == 2);
+    // Reddish → red entry.
+    REQUIRE(QidiBoxTestAccess::resolve_color_id(palette, 0xEE2020) == 18);
+    // Empty palette → 0.
+    REQUIRE(QidiBoxTestAccess::resolve_color_id(std::map<int, uint32_t>{}, 0x123456) == 0);
+}
+
+TEST_CASE("QIDI Box resolve_vendor_id matches name, falls back to Generic",
+          "[ams][qidi_box]") {
+    std::map<int, std::string> vendors;
+    vendors[0] = "Generic";
+    vendors[1] = "QIDI";
+    vendors[2] = "eSUN";
+
+    REQUIRE(QidiBoxTestAccess::resolve_vendor_id(vendors, "esun") == 2);
+    REQUIRE(QidiBoxTestAccess::resolve_vendor_id(vendors, "QIDI") == 1);
+    // Unknown brand → Generic id.
+    REQUIRE(QidiBoxTestAccess::resolve_vendor_id(vendors, "Polymaker") == 0);
+    // No Generic present and no match → 0.
+    std::map<int, std::string> no_generic{{5, "QIDI"}};
+    REQUIRE(QidiBoxTestAccess::resolve_vendor_id(no_generic, "Polymaker") == 0);
+}
+
+// =====================================================================
+// set_slot_info: write reverse-mapped ids back to save_variables
+// =====================================================================
+
+TEST_CASE("QIDI Box set_slot_info emits SAVE_VARIABLE for all three ids",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    SlotInfo info;
+    info.material = "ABS";
+    info.brand = "eSUN";
+    info.color_rgb = 0xFF362D;
+
+    auto err = backend.set_slot_info(0, info, /*persist=*/true);
+    REQUIRE(err.success());
+
+    // Three writes: filament_slot0 / color_slot0 / vendor_slot0 — integers
+    // unquoted (matches Klipper SAVE_VARIABLE for numeric values).
+    std::vector<std::string> sent = backend.sent;
+    REQUIRE(sent.size() == 3);
+    bool saw_fila = false, saw_color = false, saw_vendor = false;
+    for (const auto& g : sent) {
+        if (g == "SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=11")
+            saw_fila = true;
+        if (g == "SAVE_VARIABLE VARIABLE=color_slot0 VALUE=18")
+            saw_color = true;
+        if (g == "SAVE_VARIABLE VARIABLE=vendor_slot0 VALUE=2")
+            saw_vendor = true;
+    }
+    REQUIRE(saw_fila);
+    REQUIRE(saw_color);
+    REQUIRE(saw_vendor);
+}
+
+TEST_CASE("QIDI Box set_slot_info skips fields with no mapping",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    // Material that doesn't map to any fila; valid color + vendor.
+    SlotInfo info;
+    info.material = "NYLON-X";
+    info.brand = "QIDI";
+    info.color_rgb = 0xFAFAFA;
+
+    auto err = backend.set_slot_info(1, info, /*persist=*/true);
+    REQUIRE(err.success());
+    // No filament_slot write (unmapped), but color + vendor present.
+    for (const auto& g : backend.sent) {
+        REQUIRE(g.find("filament_slot") == std::string::npos);
+    }
+    bool saw_color = false, saw_vendor = false;
+    for (const auto& g : backend.sent) {
+        if (g == "SAVE_VARIABLE VARIABLE=color_slot1 VALUE=1")
+            saw_color = true;
+        if (g == "SAVE_VARIABLE VARIABLE=vendor_slot1 VALUE=1")
+            saw_vendor = true;
+    }
+    REQUIRE(saw_color);
+    REQUIRE(saw_vendor);
+}
+
+TEST_CASE("QIDI Box set_slot_info rejects out-of-range slot index",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_filas_list(backend, kStockFilasExcerpt);
+
+    SlotInfo info;
+    info.material = "PLA";
+    REQUIRE_FALSE(backend.set_slot_info(-1, info, true).success());
+    REQUIRE_FALSE(backend.set_slot_info(99, info, true).success());
+    REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box set_slot_info with no palette/vendor data still writes fila",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    // Only fila profiles loaded — no colordict / vendor_list.
+    QidiBoxTestAccess::apply_filas_list(backend,
+                                        "[fila1]\nfilament = PLA Rapido\ntype = PLA\n"
+                                        "min_temp = 190\nmax_temp = 240\n");
+    SlotInfo info;
+    info.material = "PLA";
+    info.brand = "eSUN";
+    info.color_rgb = 0x123456;
+
+    auto err = backend.set_slot_info(0, info, true);
+    REQUIRE(err.success());
+    // Only the filament_slot write — empty palette/vendor skip cleanly.
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=1");
 }
