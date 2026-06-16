@@ -107,14 +107,19 @@ void AmsBackendQidi::on_started() {
     // objects too — Moonraker won't push notifications for anything we
     // haven't subscribed to.
     //
-    // For now we query the entire save_variables namespace + box_extras
-    // status; heater_box<N> and aht20_f heater_box<N> are wildcarded by
-    // box_count so we issue follow-up subscribes lazily as box_count is
-    // observed (TODO once we have field data).
+    // Query save_variables + box_extras, AND the box-1 heater/humidity objects
+    // so temperature + humidity render immediately instead of waiting for the
+    // first push delta. We don't yet know box_count at bootstrap, so query
+    // box 1 unconditionally (always present on a connected box); additional
+    // boxes get picked up by the notification path once box_count is observed.
+    // Null field-lists request the full object — apply_query_response routes
+    // the result back through handle_status_update so no new parsing is added.
     nlohmann::json params = {
         {"objects", nlohmann::json::object({
                         {"save_variables", nullptr},
                         {"box_extras", nullptr},
+                        {"heater_generic heater_box1", nullptr},
+                        {"aht20_f heater_box1", nullptr},
                     })},
     };
 
@@ -521,13 +526,30 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
             it != variables.end() && it->is_number_integer()) {
             slot_rfid_[i].vendor_id = it->get<int>();
         }
-        // Apply cached fila profile (from officiall_filas_list.cfg) when
-        // we've seen a filament_id and have the matching section cached.
+        // Resolve cached RFID ids onto SlotInfo for the UI. Each lookup is
+        // best-effort: a miss leaves the existing field untouched so we never
+        // clobber good data with a blank.
+        SlotInfo& slot = unit_ref.slots[i];
         if (slot_rfid_[i].filament_id > 0) {
             auto p = fila_profiles_.find(slot_rfid_[i].filament_id);
             if (p != fila_profiles_.end()) {
-                unit_ref.slots[i].nozzle_temp_min = p->second.nozzle_min;
-                unit_ref.slots[i].nozzle_temp_max = p->second.nozzle_max;
+                slot.nozzle_temp_min = p->second.nozzle_min;
+                slot.nozzle_temp_max = p->second.nozzle_max;
+                if (!p->second.type.empty()) {
+                    slot.material = p->second.type;
+                }
+            }
+        }
+        if (slot_rfid_[i].color_id > 0) {
+            auto c = color_palette_.find(slot_rfid_[i].color_id);
+            if (c != color_palette_.end()) {
+                slot.color_rgb = c->second;
+            }
+        }
+        if (slot_rfid_[i].vendor_id > 0) {
+            auto v = vendor_names_.find(slot_rfid_[i].vendor_id);
+            if (v != vendor_names_.end() && !v->second.empty()) {
+                slot.brand = v->second;
             }
         }
     }
@@ -535,42 +557,82 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
 
 void AmsBackendQidi::apply_filas_list(const std::string& content) {
     // Minimal ConfigParser-compatible INI: `[section]` headers, `key = value`
-    // lines, `#` or `;` comments. Only sections matching `fila<N>` populate
-    // the cache; everything else is silently ignored. Trailing tail content
-    // after the value is dropped at the first whitespace+`#`/`;`.
+    // lines, `#` or `;` comments. Three section kinds are honoured:
+    //   [fila<N>]     → FilaProfile (name, type, nozzle + box temps)
+    //   [colordict]   → integer id → 0xRRGGBB
+    //   [vendor_list] → integer id → vendor name
+    // Everything else is silently ignored. Trailing `#`/`;` tail content on a
+    // value is dropped. All three maps are built into locals and swapped under
+    // mutex_ at the end so a reload replaces atomically.
     auto trim = [](std::string s) {
         const auto not_space = [](unsigned char c) { return !std::isspace(c); };
         s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
         s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
         return s;
     };
-    auto parse_int_field = [&](const std::string& v, int& out) {
-        // Drop inline `;` / `#` tail if present.
+    // Drop inline `;` / `#` tail then trim. ConfigParser keeps `#` inside a
+    // value unless preceded by whitespace, but the stock file never relies on
+    // that, so the simpler "strip at first comment char" rule is fine here.
+    auto strip_tail = [&](const std::string& v) {
         std::string body = v;
         for (char ch : {';', '#'}) {
+            // A leading '#' is a color literal, not a comment — only strip a
+            // '#' that is not at the very start of the trimmed value.
             auto pos = body.find(ch);
+            if (ch == '#' && pos == 0) {
+                continue;
+            }
             if (pos != std::string::npos) {
                 body.erase(pos);
             }
         }
+        return trim(body);
+    };
+    auto parse_int_field = [&](const std::string& v, int& out) {
         try {
-            out = std::stoi(trim(body));
+            out = std::stoi(strip_tail(v));
             return true;
         } catch (const std::exception&) {
             return false;
         }
     };
+    // `#RRGGBB` or `RRGGBB` → packed 0xRRGGBB. Returns nullopt on bad input.
+    auto parse_hex_color = [&](const std::string& v) -> std::optional<std::uint32_t> {
+        std::string body = trim(v);
+        if (!body.empty() && body.front() == '#') {
+            body.erase(0, 1);
+        }
+        if (body.size() != 6) {
+            return std::nullopt;
+        }
+        try {
+            std::size_t consumed = 0;
+            const unsigned long packed = std::stoul(body, &consumed, 16);
+            if (consumed != body.size()) {
+                return std::nullopt;
+            }
+            return static_cast<std::uint32_t>(packed & 0xFFFFFFu);
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+    };
 
-    std::map<int, FilaProfile> next;
+    enum class Section { None, Fila, Color, Vendor };
+
+    std::map<int, FilaProfile> next_profiles;
+    std::map<int, std::uint32_t> next_colors;
+    std::map<int, std::string> next_vendors;
+
+    Section section = Section::None;
     std::optional<int> current_id;
     FilaProfile current;
 
-    auto flush = [&]() {
-        if (current_id) {
-            next[*current_id] = current;
-            current_id.reset();
-            current = FilaProfile{};
+    auto flush_fila = [&]() {
+        if (section == Section::Fila && current_id) {
+            next_profiles[*current_id] = current;
         }
+        current_id.reset();
+        current = FilaProfile{};
     };
 
     std::istringstream iss(content);
@@ -581,22 +643,26 @@ void AmsBackendQidi::apply_filas_list(const std::string& content) {
             continue;
         }
         if (t.front() == '[' && t.back() == ']') {
-            flush();
-            std::string section = trim(t.substr(1, t.size() - 2));
-            // Only `fila<digits>` sections.
-            if (section.rfind("fila", 0) == 0) {
+            flush_fila();
+            std::string name = trim(t.substr(1, t.size() - 2));
+            if (name == "colordict") {
+                section = Section::Color;
+            } else if (name == "vendor_list") {
+                section = Section::Vendor;
+            } else if (name.rfind("fila", 0) == 0) {
+                section = Section::Fila;
                 try {
-                    int id = std::stoi(section.substr(4));
+                    int id = std::stoi(name.substr(4));
                     if (id > 0) {
                         current_id = id;
                     }
                 } catch (const std::exception&) {
-                    // Malformed section name — fall through to ignore.
+                    // Malformed `fila<N>` — treat as no current section.
+                    section = Section::None;
                 }
+            } else {
+                section = Section::None;
             }
-            continue;
-        }
-        if (!current_id) {
             continue;
         }
         auto eq = t.find('=');
@@ -605,22 +671,61 @@ void AmsBackendQidi::apply_filas_list(const std::string& content) {
         }
         std::string key = trim(t.substr(0, eq));
         std::string val = t.substr(eq + 1);
-        if (key == "min_temp") {
-            parse_int_field(val, current.nozzle_min);
-        } else if (key == "max_temp") {
-            parse_int_field(val, current.nozzle_max);
-        } else if (key == "box_min_temp") {
-            parse_int_field(val, current.box_min);
-        } else if (key == "box_max_temp") {
-            parse_int_field(val, current.box_max);
+
+        switch (section) {
+        case Section::Fila: {
+            if (!current_id) {
+                break;
+            }
+            if (key == "filament") {
+                current.name = strip_tail(val);
+            } else if (key == "type") {
+                current.type = strip_tail(val);
+            } else if (key == "min_temp") {
+                parse_int_field(val, current.nozzle_min);
+            } else if (key == "max_temp") {
+                parse_int_field(val, current.nozzle_max);
+            } else if (key == "box_min_temp") {
+                parse_int_field(val, current.box_min);
+            } else if (key == "box_max_temp") {
+                parse_int_field(val, current.box_max);
+            }
+            break;
+        }
+        case Section::Color: {
+            try {
+                int id = std::stoi(trim(key));
+                if (auto rgb = parse_hex_color(val)) {
+                    next_colors[id] = *rgb;
+                }
+            } catch (const std::exception&) {
+                // Non-integer key in [colordict] — ignore.
+            }
+            break;
+        }
+        case Section::Vendor: {
+            try {
+                int id = std::stoi(trim(key));
+                next_vendors[id] = strip_tail(val);
+            } catch (const std::exception&) {
+                // Non-integer key in [vendor_list] — ignore.
+            }
+            break;
+        }
+        case Section::None:
+            break;
         }
     }
-    flush();
+    flush_fila();
 
     std::lock_guard<std::mutex> lock(mutex_);
-    fila_profiles_ = std::move(next);
-    spdlog::info("{} Loaded {} fila profile(s) from officiall_filas_list.cfg",
-                 backend_log_tag(), fila_profiles_.size());
+    fila_profiles_ = std::move(next_profiles);
+    color_palette_ = std::move(next_colors);
+    vendor_names_ = std::move(next_vendors);
+    spdlog::info("{} Loaded {} fila profile(s), {} color(s), {} vendor(s) from "
+                 "officiall_filas_list.cfg",
+                 backend_log_tag(), fila_profiles_.size(), color_palette_.size(),
+                 vendor_names_.size());
 }
 
 // --- State queries ---
@@ -753,10 +858,144 @@ AmsError AmsBackendQidi::cancel() {
 
 // --- Configuration ---
 
-AmsError AmsBackendQidi::set_slot_info(int /*slot_index*/, const SlotInfo& /*info*/,
-                                       bool /*persist*/) {
-    spdlog::warn("{} {} not yet implemented", backend_log_tag(), __func__);
-    return AmsErrorHelper::not_supported("QIDI Box set_slot_info");
+namespace {
+// Lowercase copy for case-insensitive comparisons.
+std::string to_lower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+} // namespace
+
+int AmsBackendQidi::resolve_fila_id(const std::map<int, FilaProfile>& profiles,
+                                    const std::string& material, const std::string& name) {
+    const std::string want_name = to_lower(name);
+    const std::string want_type = to_lower(material);
+
+    // 1. Exact case-insensitive name match (e.g. "ABS Rapido").
+    if (!want_name.empty()) {
+        for (const auto& [id, p] : profiles) {
+            if (to_lower(p.name) == want_name) {
+                return id;
+            }
+        }
+    }
+    // 2. First profile whose type equals the requested material (e.g. "PLA").
+    if (!want_type.empty()) {
+        for (const auto& [id, p] : profiles) {
+            if (to_lower(p.type) == want_type) {
+                return id;
+            }
+        }
+    }
+    return 0;
+}
+
+int AmsBackendQidi::resolve_color_id(const std::map<int, std::uint32_t>& palette,
+                                     std::uint32_t rgb) {
+    int best_id = 0;
+    long best_dist = -1;
+    const long r = (rgb >> 16) & 0xFF;
+    const long g = (rgb >> 8) & 0xFF;
+    const long b = rgb & 0xFF;
+    for (const auto& [id, packed] : palette) {
+        const long pr = (packed >> 16) & 0xFF;
+        const long pg = (packed >> 8) & 0xFF;
+        const long pb = packed & 0xFF;
+        const long dist = (r - pr) * (r - pr) + (g - pg) * (g - pg) + (b - pb) * (b - pb);
+        if (best_dist < 0 || dist < best_dist) {
+            best_dist = dist;
+            best_id = id;
+        }
+    }
+    return best_id;
+}
+
+int AmsBackendQidi::resolve_vendor_id(const std::map<int, std::string>& vendors,
+                                      const std::string& brand) {
+    const std::string want = to_lower(brand);
+    if (!want.empty()) {
+        for (const auto& [id, name] : vendors) {
+            if (to_lower(name) == want) {
+                return id;
+            }
+        }
+    }
+    // Fall back to the "Generic" vendor when present.
+    for (const auto& [id, name] : vendors) {
+        if (to_lower(name) == "generic") {
+            return id;
+        }
+    }
+    return 0;
+}
+
+AmsError AmsBackendQidi::set_slot_info(int slot_index, const SlotInfo& info, bool persist) {
+    spdlog::info("{} set_slot_info(slot={}, material='{}', brand='{}', persist={})",
+                 backend_log_tag(), slot_index, info.material, info.brand, persist);
+
+    int fila_id = 0;
+    int color_id = 0;
+    int vendor_id = 0;
+    bool have_palette = false;
+    bool have_vendors = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (system_info_.units.empty()) {
+            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
+        }
+        const auto& slots = system_info_.units[0].slots;
+        if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
+            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+        }
+        // SlotInfo has no dedicated "QIDI product label" field; callers may put
+        // a product name ("ABS Rapido") OR a bare material ("ABS") in .material.
+        // Pass it as BOTH the material and the name hint so the resolver tries
+        // an exact-name match first, then the type fallback.
+        fila_id = resolve_fila_id(fila_profiles_, info.material, info.material);
+        have_palette = !color_palette_.empty();
+        have_vendors = !vendor_names_.empty();
+        if (have_palette) {
+            color_id = resolve_color_id(color_palette_, info.color_rgb);
+        }
+        if (have_vendors) {
+            vendor_id = resolve_vendor_id(vendor_names_, info.brand);
+        }
+    }
+
+    const std::string suffix = std::to_string(slot_index);
+    bool wrote_any = false;
+
+    if (fila_id > 0) {
+        execute_gcode("SAVE_VARIABLE VARIABLE=filament_slot" + suffix + " VALUE=" +
+                      std::to_string(fila_id));
+        wrote_any = true;
+    } else {
+        spdlog::warn("{} set_slot_info: no fila match for material='{}' — "
+                     "skipping filament_slot write",
+                     backend_log_tag(), info.material);
+    }
+    if (have_palette && color_id > 0) {
+        execute_gcode("SAVE_VARIABLE VARIABLE=color_slot" + suffix + " VALUE=" +
+                      std::to_string(color_id));
+        wrote_any = true;
+    }
+    // vendor_id 0 is the legitimate "Generic" id, so only the empty-map case
+    // (have_vendors == false) suppresses the write.
+    if (have_vendors) {
+        execute_gcode("SAVE_VARIABLE VARIABLE=vendor_slot" + suffix + " VALUE=" +
+                      std::to_string(vendor_id));
+        wrote_any = true;
+    }
+
+    if (!wrote_any) {
+        // Nothing resolved — soft success so the UI doesn't show an error, but
+        // log loudly since the filas list probably hasn't loaded yet.
+        spdlog::warn("{} set_slot_info(slot={}): nothing mapped (filas list not "
+                     "loaded?) — no SAVE_VARIABLE issued",
+                     backend_log_tag(), slot_index);
+    }
+    return AmsErrorHelper::success();
 }
 
 AmsError AmsBackendQidi::set_tool_mapping(int tool_number, int slot_index) {

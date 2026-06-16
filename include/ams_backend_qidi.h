@@ -151,6 +151,8 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// Temperature profile for a single fila entry from
     /// officiall_filas_list.cfg. Public so test friend can return one.
     struct FilaProfile {
+        std::string name; ///< Human label from `filament` (e.g. "PLA Rapido")
+        std::string type; ///< Material class from `type` (e.g. "PLA", "ABS-GF")
         int nozzle_min = 0;
         int nozzle_max = 0;
         int box_min = 0;
@@ -159,10 +161,38 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
   private:
     /// Parse a ConfigParser-formatted officiall_filas_list.cfg payload and
-    /// populate fila_profiles_. Tolerant of whitespace, blank lines, and
-    /// `#` / `;` comments. Non-`fila<N>` sections are ignored.
+    /// populate fila_profiles_, color_palette_, and vendor_names_. Tolerant of
+    /// whitespace, blank lines, and `#` / `;` comments. Non-matching sections
+    /// (anything but `[fila<N>]`, `[colordict]`, `[vendor_list]`) are ignored.
     void apply_filas_list(const std::string& content);
 
     /// fila_id (1-99) → temperature profile, populated by apply_filas_list().
     std::map<int, FilaProfile> fila_profiles_;
+    /// colordict id (1-24) → packed 0xRRGGBB, populated by apply_filas_list().
+    std::map<int, std::uint32_t> color_palette_;
+    /// vendor_list id → vendor name, populated by apply_filas_list().
+    std::map<int, std::string> vendor_names_;
+
+    // --- Reverse lookups for set_slot_info() (pure, no member access) ---
+    //
+    // Map a SlotInfo back onto the three stock RFID indices written to
+    // save_variables. Static + parameterised by the parsed maps so they
+    // unit-test without a live backend (exposed via QidiBoxTestAccess).
+
+    /// Best-effort fila id from a SlotInfo's material/name. Exact
+    /// case-insensitive `name` match wins; else first profile whose `type`
+    /// case-insensitively equals `material`. Returns 0 when nothing matches.
+    static int resolve_fila_id(const std::map<int, FilaProfile>& profiles,
+                               const std::string& material, const std::string& name);
+
+    /// Nearest palette entry to `rgb` by squared RGB distance. Returns 0 when
+    /// the palette is empty.
+    static int resolve_color_id(const std::map<int, std::uint32_t>& palette,
+                                std::uint32_t rgb);
+
+    /// Vendor id from a case-insensitive name match against `vendors`. Falls
+    /// back to the id whose name is "Generic" (case-insensitive) if present,
+    /// else 0.
+    static int resolve_vendor_id(const std::map<int, std::string>& vendors,
+                                 const std::string& brand);
 };
