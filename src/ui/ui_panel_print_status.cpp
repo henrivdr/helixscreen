@@ -16,6 +16,8 @@
 #include "ui_nav_manager.h"
 #include "ui_overlay_temp_graph.h"
 #include "ui_panel_common.h"
+#include "ui_panel_print_select.h"
+#include "ui_print_start_controller.h"
 #include "ui_subject_registry.h"
 #include "ui_temperature_utils.h"
 #include "ui_toast_manager.h"
@@ -60,6 +62,7 @@ using helix::gcode::resolve_gcode_filename;
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <set>
 #include <vector>
 
 // Global instance for legacy API and resize callback
@@ -1584,21 +1587,55 @@ void PrintStatusPanel::handle_reprint_button() {
 
     std::string filename = current_print_filename_;
 
-    api_->job().start_print(
-        filename,
-        [this, filename]() {
-            spdlog::info("[{}] Reprint started: {}", get_name(), filename);
-            // State will update via PrinterState observer when Moonraker confirms
-            // Button will transform back to Cancel mode when state changes to Printing
-        },
-        [this, token = lifetime_.token()](const MoonrakerError& err) {
-            // Runs on libhv WS event loop — marshal LVGL work to main.
-            token.defer("PrintStatusPanel::reprint_err", [this, err]() {
-                spdlog::error("[{}] Failed to reprint: {}", get_name(), err.message);
-                NOTIFY_ERROR(lv_tr("Failed to reprint: {}"), err.user_message());
-                ui_set_button_enabled(btn_cancel_, true);
+    // Route through PrintStartController so reprint gets the Snapmaker U1 native
+    // pre-print send (SET_PRINT_USED_EXTRUDERS ...) that suppresses a spurious
+    // filament-feed runout. The controller owns the U1 logic; this panel only
+    // supplies tools_used and re-enables its own button on failure.
+    auto* select_panel = get_print_select_panel(printer_state_, api_);
+    auto* controller = select_panel ? select_panel->get_print_start_controller() : nullptr;
+    if (controller) {
+        auto tok = lifetime_.token();
+        controller->initiate_reprint(
+            filename, /*path=*/"", get_tools_used(),
+            // on_started: nothing — the PrinterState observer flips the button to Cancel
+            // mode when Moonraker confirms Printing (same as the old success callback,
+            // which only logged).
+            []() {},
+            // on_error: re-enable THIS panel's button. Guard with this panel's lifetime
+            // token because the controller guards ITSELF, not this status panel (which
+            // can be popped mid-flight). The controller already emits the error toast.
+            [this, tok]() mutable {
+                tok.defer("PrintStatusPanel::reprint_reenable",
+                          [this]() { ui_set_button_enabled(btn_cancel_, true); });
             });
-        });
+    } else {
+        // Fallback: controller unreachable — keep the existing direct path so reprint
+        // still works (no U1 pre-send).
+        spdlog::warn("[{}] No print controller for reprint — using direct start (no U1 pre-send)",
+                     get_name());
+        api_->job().start_print(
+            filename,
+            [this, filename]() { spdlog::info("[{}] Reprint started: {}", get_name(), filename); },
+            [this, token = lifetime_.token()](const MoonrakerError& err) {
+                // Runs on libhv WS event loop — marshal LVGL work to main.
+                token.defer("PrintStatusPanel::reprint_err", [this, err]() {
+                    spdlog::error("[{}] Failed to reprint: {}", get_name(), err.message);
+                    NOTIFY_ERROR(lv_tr("Failed to reprint: {}"), err.user_message());
+                    ui_set_button_enabled(btn_cancel_, true);
+                });
+            });
+    }
+}
+
+std::set<int> PrintStatusPanel::get_tools_used() const {
+    if (!gcode_viewer_) {
+        return {};
+    }
+    const auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
+    if (!parsed) {
+        return {};
+    }
+    return parsed->tools_used_indices;
 }
 
 void PrintStatusPanel::handle_resize() {

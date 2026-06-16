@@ -25,6 +25,7 @@ class MoonrakerAPI;
 
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 
 // Forward declarations
@@ -553,6 +554,10 @@ class PrintStatusPanel : public OverlayBase {
     void handle_tune_button();
     void handle_reprint_button(); ///< Reprint the cancelled file
     void handle_resize();
+
+    /// @brief Tool indices used by the currently-loaded G-code (for U1 native pre-send).
+    /// Mirrors PrintSelectDetailView::get_tools_used(). Empty if no parsed file.
+    std::set<int> get_tools_used() const;
 
     //
     // === Static Trampolines ===
