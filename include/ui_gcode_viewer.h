@@ -173,6 +173,19 @@ void ui_gcode_viewer_set_clear_callback(lv_obj_t* obj, ui_gcode_viewer_clear_cb_
  */
 helix::GcodeViewerState ui_gcode_viewer_get_state(lv_obj_t* obj);
 
+/**
+ * @brief Query whether the viewer currently holds renderable geometry
+ *
+ * Returns true after a successful load_file / set_gcode_data, false after
+ * ui_gcode_viewer_clear() or before any load (and false if @p obj is null).
+ * Used by the print status panel to reconcile the preview against the real
+ * widget state on re-entry instead of trusting intent bools.
+ *
+ * @param obj Viewer widget (may be null)
+ * @return true if geometry is loaded and renderable
+ */
+bool ui_gcode_viewer_has_content(lv_obj_t* obj);
+
 // ==============================================
 // Rendering Pause Control
 // ==============================================

@@ -610,6 +610,18 @@ void MoonrakerManager::init_print_start_collector() {
             int current_print_duration =
                 s_print_duration_subject ? lv_subject_get_int(s_print_duration_subject) : 0;
 
+            // Diagnostic for the stuck "Starting Print..." overlay: a mid-print
+            // restart of the collector (prev state left the PRINTING/PAUSED pair,
+            // e.g. during AFC error recovery, then returned to PRINTING) re-enters
+            // the pre-print phase at high progress. Logging the full transition
+            // with progress + duration captures the exact sequence on the next
+            // field occurrence so the persistence path can be confirmed.
+            spdlog::info("[MoonrakerManager] print_state transition: {} -> {} (progress={}%, "
+                         "print_duration={}s, initial={}, collector_active={})",
+                         static_cast<int>(s_prev_print_state), static_cast<int>(new_state),
+                         current_progress, current_print_duration, s_is_initial_transition,
+                         collector->is_active());
+
             // Use helper function for testable decision logic
             if (should_start_print_collector(s_prev_print_state, new_state, current_progress,
                                              s_is_initial_transition,
