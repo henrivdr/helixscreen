@@ -156,3 +156,33 @@ Real tests (fail if the feature regresses):
 
 - Exact Resume macro: plain `RESUME` vs. an AFC-specific resume entry point (default `RESUME`).
 - Lane/hub error text signatures to hand-match in step 2 (vs. relying on the catch-all). Enumerate from AFC source / observed Voron logs; the catch-all is the safety net.
+
+---
+
+## 8. E3 audit finding (L1)
+
+**Verdict: CONFIRMED LIVE — no fix needed.**
+
+**Audited:** 2026-06-16. Worktree `feature/backend-error-recovery`.
+
+### Signal chain traced
+
+1. **Sensor ingestion** (`src/printer/ams_backend_afc.cpp:1141-1157`, `1415-1420`): Every Moonraker status notification lands in `handle_status_update()` on the main thread (deferred via `token.defer` in `AmsSubscriptionBackend::start()`, `src/printer/ams_subscription_backend.cpp:59-60`). It parses `prep`/`load`/`loaded_to_hub`/`tool_start_status`/`tool_end_status` into `slots_[i].sensors.*`, `tool_start_sensor_`, `tool_end_sensor_` — the live in-memory state — then calls `emit_event(EVENT_STATE_CHANGED)`.
+
+2. **State sync** (`src/printer/ams_state.cpp:1421-1422`, `1406-1418`): `AmsState::on_backend_event()` receives `EVENT_STATE_CHANGED` and queues `sync_backend(backend_index)` via `queue_update()`. `sync_backend()` calls `sync_from_backend()` which at lines 1058-1064 calls `backend->get_filament_segment()` and `backend->infer_error_segment()` — both read live `sensors.*` fields — and sets `path_filament_segment_` and `path_error_segment_` subjects if their values changed.
+
+3. **Canvas update trigger** (`src/ui/ui_panel_ams.cpp:272-275`): `path_segment_observer_` observes `path_filament_segment_` subject via `observe_int_sync`. When that subject changes, a deferred `update_path_canvas_from_backend()` call is queued.
+
+4. **Canvas repaint** (`src/ui/ui_ams_detail.cpp:458-639`): `ams_detail_setup_path_canvas()` (called from `update_path_canvas_from_backend()`) reads all sensor-derived state live: `backend->get_filament_segment()` (line 525), `backend->infer_error_segment()` (line 528), and `backend->get_slot_filament_segment(global_idx)` for every slot (line 554) — which itself reads `slots_[i].sensors.*` directly. Ends with `ui_filament_path_canvas_refresh()` (line 635) forcing an immediate canvas redraw.
+
+5. **Sensor dot rendering** (`src/ui/ui_filament_path_topology.cpp:69-94`, `722-733`, `761-769`): `compute_slot_render_states()` builds render state from `data->slot_filament_states[i].segment` (populated by the above setters). Prep sensor dots (line 724), hub sensor dots (line 761), toolhead dots (line 1154) are all drawn from this freshly-set per-slot segment — not from any stale cache.
+
+### Conclusion
+
+Every per-lane sensor state change (prep → load → hub progression, or any sensor flip) that causes `path_filament_segment_` to change drives a full canvas re-render. `compute_filament_segment_unlocked()` (`src/printer/ams_backend_afc.cpp:394-479`) scans ALL lanes (not just the active one) and returns the furthest-progressed segment across any lane, so a single-lane sensor transition during a multi-lane error batch will almost always move the overall segment value and trigger the repaint.
+
+**The sensor indicators read live state and refresh on every `EVENT_STATE_CHANGED`.** No lag.
+
+### Adjacent P2 note (out of L1 scope, do not fix in L1)
+
+The one residual edge case — where a per-lane sensor changes but the overall `path_filament_segment_` value does not (e.g., two lanes both at LANE and one advances to HUB while the other is already at HUB: system segment stays HUB) — means the per-slot canvas dots for the lagging lane are not repainted until the next segment change. This is the P2 "tube-to-hub stale-segment" issue identified in the spec. The indicator positions shown are stale only for that narrow case; overall system segment is not wrong. Tracking for L3, not L1.
