@@ -18,8 +18,11 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
+#include <optional>
 #include <sstream>
+#include <vector>
 
 using namespace helix;
 
@@ -310,6 +313,82 @@ bool AmsBackendAfc::slot_has_prep_sensor(int slot_index) const {
     std::lock_guard<std::mutex> lock(mutex_);
     // AFC always has prep sensors on all lanes
     return slot_index >= 0 && slot_index < system_info_.total_slots;
+}
+
+std::vector<helix::RecoveryAction> AmsBackendAfc::build_recovery_actions() const {
+    // Caller holds mutex_.
+    std::vector<helix::RecoveryAction> actions;
+
+    // Resume after the user clears the jam (always offered).
+    actions.push_back({lv_tr("Resume"), "RESUME", "afc::resume", "primary"});
+
+    const bool toolhead_loaded = tool_start_sensor_ || system_info_.filament_loaded;
+    if (toolhead_loaded) {
+        // Closes R1: unload from the toolhead before any eject is possible.
+        actions.push_back({lv_tr("Unload"), "TOOL_UNLOAD", "afc::tool_unload", ""});
+    } else if (!current_lane_name_.empty()) {
+        // Empty toolhead but a lane is selected — eject that lane.
+        actions.push_back({lv_tr("Eject"), "LANE_UNLOAD LANE=" + current_lane_name_,
+                           "afc::lane_unload", ""});
+    }
+
+    // Reset/re-prep all lanes (last resort).
+    actions.push_back({lv_tr("Recover"), "AFC_RESET", "afc::reset", "danger"});
+    return actions;
+}
+
+std::optional<helix::ErrorEvent> AmsBackendAfc::classify_error(
+    const std::string& raw_line, const helix::ClassifyContext& ctx) const {
+    // Only `!!` emergency lines are candidates.
+    if (raw_line.size() < 2 || raw_line[0] != '!' || raw_line[1] != '!') {
+        return std::nullopt;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // Strip the "!! " prefix for the detail text.
+    std::string detail = (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3)
+                                                                      : raw_line.substr(2);
+
+    auto contains_ci = [](const std::string& hay, const char* needle) {
+        std::string h = hay;
+        std::string n = needle;
+        for (auto& c : h)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : n)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return h.find(n) != std::string::npos;
+    };
+
+    // 1) Toolhead jam / break (handle_toolhead_runout signature).
+    const bool is_jam = contains_ci(detail, "tool_end") &&
+                        (contains_ci(detail, "jam") || contains_ci(detail, "break") ||
+                         contains_ci(detail, "runout detected"));
+    if (is_jam) {
+        helix::ErrorEvent e;
+        e.source = helix::ErrorSource::AFC;
+        e.severity = helix::ErrorSeverity::CRITICAL;
+        e.title = lv_tr("Toolhead jam");
+        e.detail = detail;
+        e.sticky = true;
+        e.recovery_actions = build_recovery_actions();
+        return e;
+    }
+
+    // 2) Catch-all: any pausing !! while AFC is in an error state.
+    if (ctx.is_paused && error_state_) {
+        helix::ErrorEvent e;
+        e.source = helix::ErrorSource::AFC;
+        e.severity = helix::ErrorSeverity::CRITICAL;
+        e.title = lv_tr("Filament system error");
+        e.detail = detail;
+        e.sticky = true;
+        e.recovery_actions = build_recovery_actions();
+        return e;
+    }
+
+    // 3) Not an AFC-owned fault — let the generic classifier handle it.
+    return std::nullopt;
 }
 
 PathSegment AmsBackendAfc::compute_filament_segment_unlocked() const {

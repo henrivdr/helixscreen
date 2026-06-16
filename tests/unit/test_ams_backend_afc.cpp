@@ -3,6 +3,7 @@
 
 #include "ams_backend_afc.h"
 #include "ams_types.h"
+#include "error_event.h"
 #include "moonraker_api.h"
 
 #include "config.h"
@@ -4292,4 +4293,88 @@ TEST_CASE("AFC tool changer reconciliation derives current_slot from active tool
     CHECK(info.current_slot == -1);
     CHECK(info.filament_loaded == false);
     CHECK(info.current_tool == 2);
+}
+
+// ---- L1: classify_error ----
+static const char* kJamLine =
+    "!! Toolhead runout detected by tool_end sensor, but upstream sensors still "
+    "detect filament. Possible filament break or jam at the toolhead. Please clear "
+    "the jam and reload filament manually, then resume the print.";
+
+TEST_CASE("AFC jam with toolhead loaded offers Unload not Eject", "[ams][afc][classify]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helper.feed_afc_extruder("extruder",
+                             {{"tool_start_status", true}, {"lane_loaded", "lane2"}});
+
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
+    auto e = helper.classify_error(kJamLine, ctx);
+
+    REQUIRE(e.has_value());
+    REQUIRE(e->severity == helix::ErrorSeverity::CRITICAL);
+    REQUIRE(e->source == helix::ErrorSource::AFC);
+    REQUIRE(e->detail.find("reload filament manually") != std::string::npos);  // full text
+
+    auto has = [&](const std::string& label) {
+        return std::any_of(e->recovery_actions.begin(), e->recovery_actions.end(),
+                           [&](const helix::RecoveryAction& a) { return a.label == label; });
+    };
+    REQUIRE(has("Resume"));
+    REQUIRE(has("Unload"));   // toolhead loaded -> Unload (closes R1)
+    REQUIRE(has("Recover"));
+    REQUIRE_FALSE(has("Eject"));
+}
+
+TEST_CASE("AFC jam with empty toolhead offers Eject not Unload", "[ams][afc][classify]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helper.feed_afc_extruder("extruder",
+                             {{"tool_start_status", false}, {"lane_loaded", "lane2"}});
+
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
+    auto e = helper.classify_error(kJamLine, ctx);
+
+    REQUIRE(e.has_value());
+    auto has = [&](const std::string& label) {
+        return std::any_of(e->recovery_actions.begin(), e->recovery_actions.end(),
+                           [&](const helix::RecoveryAction& a) { return a.label == label; });
+    };
+    REQUIRE(has("Resume"));
+    REQUIRE(has("Eject"));      // empty toolhead -> Eject
+    REQUIRE_FALSE(has("Unload"));
+    REQUIRE(has("Recover"));
+}
+
+TEST_CASE("AFC catch-all: paused + error_state + unknown !! is CRITICAL AFC",
+          "[ams][afc][classify]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helper.feed_afc_state({{"error_state", true}});
+
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
+    auto e = helper.classify_error("!! Some AFC fault we do not recognize", ctx);
+
+    REQUIRE(e.has_value());
+    REQUIRE(e->severity == helix::ErrorSeverity::CRITICAL);
+    REQUIRE(e->source == helix::ErrorSource::AFC);
+    REQUIRE_FALSE(e->recovery_actions.empty());  // std actions attached
+}
+
+TEST_CASE("AFC defers when not paused and no error_state", "[ams][afc][classify]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helix::ClassifyContext ctx;  // idle, no error_state fed
+    REQUIRE_FALSE(helper.classify_error("!! Some AFC fault", ctx).has_value());
+}
+
+TEST_CASE("AFC ignores non-error lines", "[ams][afc][classify]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
+    REQUIRE_FALSE(helper.classify_error("// AFC_Brush: Clean Nozzle", ctx).has_value());
+    REQUIRE_FALSE(helper.classify_error("ok", ctx).has_value());
 }
