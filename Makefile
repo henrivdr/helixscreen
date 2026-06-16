@@ -975,10 +975,18 @@ $(CONTRIBUTORS_H): CONTRIBUTORS.txt scripts/gen-contributors.sh
 	$(Q)BUILD_DIR=$(BUILD_DIR) ./scripts/gen-contributors.sh
 
 # Refresh CONTRIBUTORS.txt from git history (respects .mailmap).
-# Run before release to pick up new contributors, then commit the result.
+# Unions primary authors (%aN) with Co-authored-by trailer names so pair- and
+# co-authored work is credited too. Run before release to pick up new
+# contributors, then commit the result.
 .PHONY: update-contributors
 update-contributors:
-	@git -c safe.directory='*' log --format='%aN' | sort -u \
+	@{ \
+		git -c safe.directory='*' log --format='%aN'; \
+		git -c safe.directory='*' log --format='%(trailers:key=Co-authored-by,valueonly,unfold)' \
+			| sed '/^$$/d' \
+			| git -c safe.directory='*' check-mailmap --stdin 2>/dev/null \
+			| sed -E 's/ *<[^>]*>//'; \
+	} | sort -u \
 		| grep -ivE 'bot\b|\[bot\]|dependabot|github-actions|claude' \
 		| awk 'length >= 2' > CONTRIBUTORS.txt
 	@echo "$(GREEN)✓ CONTRIBUTORS.txt updated ($$(wc -l < CONTRIBUTORS.txt) contributors)$(RESET)"
