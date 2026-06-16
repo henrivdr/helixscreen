@@ -81,12 +81,7 @@ MAJOR work (4+ files, backend behavior, critical-ish path) → worktree, test-fi
 > Thanks for the stock-path run — that's the first real test of it, and it surfaced exactly what we needed. A few targeted asks so we replace the stubbed bits with the real thing instead of guessing. All read-only / safe with no print active; replace `<printer>` with the printer's IP.
 
 **D1 — why the dryer controls don't appear (most important).**
-Run HelixScreen with debug logging and reproduce "open the Multi-Filament/AMS panel, no heat-waves icon":
-```sh
-# in helixscreen.env, then restart HelixScreen:
-HELIX_LOG_LEVEL=debug
-```
-Then grab the log and a screenshot of the AMS panel. In the log we're looking for the lines around AMS detection and `sync_from_backend` — specifically whether it logs creating the **QIDI Box** backend and how many units it reports.
+On the printer: **Settings → System → Log Level → Debug**, then open the Multi-Filament/AMS panel and reproduce "no heat-waves icon". Send logs via **Settings → Help → Upload Debug Bundle** (gives a share code) + a screenshot. (End users don't run from a CLI — never tell them `-vv` or to edit `helixscreen.env`; the in-app Log Level dropdown is the path. See [[feedback_debug_instructions]].) In the log we're looking for the AMS-detection lines and `sync_from_backend` — whether it logs creating the **QIDI Box** backend and how many units it reports.
 
 **D2 — saved state (fixes both "Feature not available" *and* the 250 °C-then-nothing load).**
 ```
