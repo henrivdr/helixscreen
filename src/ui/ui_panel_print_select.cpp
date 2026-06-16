@@ -2575,11 +2575,22 @@ void PrintSelectPanel::on_preflight_remap() {
     }
 }
 
-// TODO(Task 10): implement the native (Happy Hare / AFC / CFS / IFS / tool
-// changer) tool-to-slot remap modal. The backend owns the routing table, so
-// this opens a slot reassignment UI and pushes the result back to the backend.
+// Native (Happy Hare / AFC / CFS / AD5X-IFS / toolchanger) tool→slot remap.
+// These backends own the routing table, so we reuse the existing
+// FilamentMappingModal — opened via the detail view's embedded mapping card —
+// to let the user reassign tools to slots. The card's on_mappings_changed path
+// (wired in the detail view) republishes the edited mappings AND re-runs the
+// pre-flight validator, so a subsequent Print reflects the new mapping. The
+// backend itself is updated at print-start by PrintStartController::apply_remap,
+// which reads detail_view_->get_filament_mappings() (the card's vector). We do
+// NOT auto-start the print: the user taps Print again, and the now-cleared gate
+// lets it proceed.
 void PrintSelectPanel::open_native_remap_modal() {
-    NOTIFY_INFO(lv_tr("Remap coming soon"));
+    if (!detail_view_) {
+        spdlog::warn("[{}] Native remap requested with no detail view", get_name());
+        return;
+    }
+    detail_view_->open_filament_mapping_modal();
 }
 
 // TODO(Task 12): implement the gcode-rewrite remap modal for backends with no

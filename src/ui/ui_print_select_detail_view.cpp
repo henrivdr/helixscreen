@@ -261,6 +261,10 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
     filament_mapping_card_.set_on_mappings_changed([this]() {
         apply_mapped_tool_colors();
         lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
+        // Re-evaluate the pre-flight gate so a subsequent Print reflects the new
+        // tool→slot mapping (the native remap flow reaches the backend via the
+        // print-start controller, which reads get_filament_mappings()).
+        recompute_preflight();
     });
 
     // Look up history status display
@@ -847,6 +851,13 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
         update_color_swatches(parsed->tools_used_indices, current_filament_colors_);
     }
 
+    // Backend-agnostic pre-flight validation (single source of truth for
+    // filament_mismatch_ + empty_tools_warning_). Extracted so the native
+    // remap flow can re-evaluate the gate after the backend mapping changes.
+    recompute_preflight();
+}
+
+void PrintSelectDetailView::recompute_preflight() {
     // ------------------------------------------------------------------
     // Backend-agnostic pre-flight validation (single source of truth for
     // filament_mismatch_ + empty_tools_warning_).
@@ -857,7 +868,18 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
     // intended per-tool color/material from the slicer palette (reusing the
     // mapping card's already-parsed tool_info_, filtered to the precise
     // tools_used set), compute default mappings, then validate.
+    //
+    // Guarded on the parsed gcode: a no-op until the viewer has produced a
+    // tools_used set (before parse there is nothing to validate against).
     // ------------------------------------------------------------------
+    if (!gcode_viewer_) {
+        return;
+    }
+    auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
+    if (!parsed) {
+        return;
+    }
+
     const auto& all_tool_info = filament_mapping_card_.get_tool_info();
     std::vector<helix::GcodeToolInfo> tools;
     tools.reserve(parsed->tools_used_indices.size());
@@ -868,7 +890,21 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
     }
 
     auto slots = AmsState::instance().collect_available_slots();
-    auto mapping = helix::FilamentMapper::compute_defaults(tools, slots);
+
+    // Validate against the EFFECTIVE mapping the print will actually use, not a
+    // freshly-recomputed default. The card's current mappings_ are what
+    // PrintStartController::apply_remap() sends to the backend at print-start, so
+    // the gate must consult the same vector — otherwise a native remap (AFC /
+    // Happy Hare / CFS / AD5X-IFS / toolchanger) would never clear the block.
+    //
+    // Behavior-preserving at parse time: for editable backends the card seeds
+    // mappings_ with compute_defaults() until the user edits it (identical
+    // result); for U1/ACE the card is hidden and mappings_ is empty, so the
+    // fallback reproduces the original compute_defaults() path exactly.
+    auto mapping = filament_mapping_card_.get_mappings();
+    if (mapping.empty()) {
+        mapping = helix::FilamentMapper::compute_defaults(tools, slots);
+    }
     preflight_result_ = helix::PreflightValidator::validate(tools, slots, mapping);
 
     bool any_mismatch = false;
@@ -884,6 +920,10 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
     spdlog::debug("[DetailView] Preflight: {} tools, {} slots, {} checks, mismatch={}, block={}",
                   tools.size(), slots.size(), preflight_result_.checks.size(), any_mismatch,
                   preflight_result_.has_block());
+}
+
+void PrintSelectDetailView::open_filament_mapping_modal() {
+    filament_mapping_card_.open_mapping_modal();
 }
 
 void PrintSelectDetailView::run_when_loaded(std::function<void()> cb) {

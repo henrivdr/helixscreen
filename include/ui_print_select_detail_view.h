@@ -291,6 +291,31 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Re-run the backend-agnostic pre-flight validator and republish.
+     *
+     * Rebuilds the per-tool intent (filtered to the precise tools_used set from
+     * the parsed gcode), re-reads available slots from AmsState, computes the
+     * default mapping, runs PreflightValidator::validate, caches the result into
+     * preflight_result_, and republishes the filament_mismatch_ /
+     * empty_tools_warning_ subjects.
+     *
+     * Called once after parse (from try_extract_gcode_colors()) and again after
+     * a native tool→slot remap so the print-start gate reflects the new mapping.
+     * No-op until the gcode is loaded (gcode_viewer_ has a parsed file).
+     */
+    void recompute_preflight();
+
+    /**
+     * @brief Open the filament mapping modal (tool→slot reassignment).
+     *
+     * Thin passthrough to the embedded FilamentMappingCard's modal. Used by the
+     * pre-flight gate's "Remap…" button for native-routing backends (AFC, Happy
+     * Hare, CFS, AD5X-IFS, toolchanger). Applied mappings flow through the card's
+     * existing on_mappings_changed path, which recomputes pre-flight.
+     */
+    void open_filament_mapping_modal();
+
+    /**
      * @brief Get cached file metadata from the most recent async fetch
      *
      * Populated after the metadata fetch completes. Returns nullopt if the
