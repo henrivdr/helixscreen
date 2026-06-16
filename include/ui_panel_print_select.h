@@ -382,6 +382,17 @@ class PrintSelectPanel : public PanelBase {
     void hide_detail_view();
 
     /**
+     * @brief Access the print start controller (owned by this panel).
+     *
+     * Exposed so the print status panel's reprint path can route through the
+     * controller's initiate_reprint() — sharing the Snapmaker U1 native
+     * pre-print send instead of bypassing it.
+     */
+    [[nodiscard]] helix::ui::PrintStartController* get_print_start_controller() const {
+        return print_controller_.get();
+    }
+
+    /**
      * @brief Show delete confirmation dialog
      */
     void show_delete_confirmation();

@@ -102,6 +102,27 @@ class PrintStartController {
     void initiate();
 
     /**
+     * @brief Reprint a file already on the printer.
+     *
+     * Shares the U1 native pre-print send with the normal start path, but uses
+     * the lightweight job().start_print (no upload/prep — the file is already on
+     * the printer). @p tools_used drives the SET_PRINT_USED_EXTRUDERS
+     * computation (empty → no native send, just starts). @p on_started /
+     * @p on_error are invoked on the MAIN thread.
+     *
+     * @param filename   Raw filename to reprint (already on the printer).
+     * @param path       Directory path relative to gcodes root (unused by the
+     *                   lightweight start; kept for symmetry with set_file()).
+     * @param tools_used Set of tool indices used by the file (U1 native send).
+     * @param on_started Called on success (main thread).
+     * @param on_error   Called on failure (main thread).
+     */
+    void initiate_reprint(const std::string& filename, const std::string& path,
+                          const std::set<int>& tools_used,
+                          std::function<void()> on_started,
+                          std::function<void()> on_error);
+
+    /**
      * @brief Check if controller is ready to start a print
      *
      * @return true if filename is set and detail view is available

@@ -443,6 +443,56 @@ void PrintStartController::send_snapmaker_preprint_then(const std::set<int>& too
         15000);
 }
 
+void PrintStartController::initiate_reprint(const std::string& filename, const std::string& path,
+                                            const std::set<int>& tools_used,
+                                            std::function<void()> on_started,
+                                            std::function<void()> on_error) {
+    (void)path; // The lightweight start uses the bare filename; path kept for symmetry.
+
+    if (!api_) {
+        spdlog::error("[PrintStartController] initiate_reprint: no API");
+        if (on_error) {
+            on_error();
+        }
+        return;
+    }
+
+    // Lightweight start — the file is already on the printer; no upload/prep.
+    auto start = [this, filename, on_started, on_error]() {
+        auto tok = lifetime_.token();
+        api_->job().start_print(
+            filename,
+            [tok, on_started]() mutable {
+                tok.defer("PrintStartController::reprint.ok",
+                          [on_started]() {
+                              if (on_started) {
+                                  on_started();
+                              }
+                          });
+            },
+            [tok, on_error](const MoonrakerError& err) mutable {
+                std::string msg = err.user_message();
+                tok.defer("PrintStartController::reprint.err", [msg, on_error]() {
+                    NOTIFY_ERROR(lv_tr("Failed to reprint: {}"), msg);
+                    if (on_error) {
+                        on_error();
+                    }
+                });
+            });
+    };
+
+    // Snapmaker U1: emit the firmware-native print_task_config gcode BEFORE the reprint starts,
+    // same as the normal start path. remap is empty (no reprint remap UI) → identity, which
+    // reproduces the spurious-feed fix. On native-send error the modal is shown and on_error runs.
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (backend && backend->get_remap_strategy() == AmsBackend::RemapStrategy::SnapmakerNative) {
+        send_snapmaker_preprint_then(tools_used, /*remap=*/{}, start, on_error);
+        return; // start fires from the send continuation — do NOT also start here
+    }
+
+    start();
+}
+
 // ============================================================================
 // Filament Warning Dialog
 // ============================================================================
