@@ -94,8 +94,8 @@ can run on.
 Extended firmware enabling SSH (and thus HelixScreen) on the Snapmaker U1.
 
 ### Phil1988 — [FreeDi / FreeQIDI](https://github.com/Phil1988/FreeDi)
-Community Klipper + Moonraker stack for QIDI printers. (Commits to HelixScreen
-under the name **C0co**.)
+Community Klipper + Moonraker stack for QIDI printers, and improvements to
+HelixScreen's own QIDI support docs (#949, #963).
 
 ---
 
