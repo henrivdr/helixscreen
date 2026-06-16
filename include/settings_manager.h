@@ -322,6 +322,35 @@ class SettingsManager {
     void set_console_filter_user_remove(const std::vector<std::string>& patterns);
 
     // =========================================================================
+    // SPAGHETTI DETECTION (owned by SettingsManager — master toggle + per-source policy)
+    // =========================================================================
+
+    /** @brief Get whether spaghetti detection is globally enabled (master toggle) */
+    bool get_detection_enabled() const;
+
+    /** @brief Set spaghetti detection master toggle and persist */
+    void set_detection_enabled(bool enabled);
+
+    /** @brief Detection enabled subject (integer: 0=off, 1=on) */
+    lv_subject_t* subject_detection_enabled() {
+        return &detection_enabled_subject_;
+    }
+
+    /**
+     * @brief Get per-source policy for the Snapmaker U1 built-in detector
+     *        0=Off, 1=NotifyOnly, 2=DeferToSource (default)
+     */
+    int get_detection_policy_u1() const;
+
+    /** @brief Set per-source policy for the Snapmaker U1 built-in detector (clamped 0-2) */
+    void set_detection_policy_u1(int policy);
+
+    /** @brief Detection policy subject for U1 (integer: 0=Off, 1=NotifyOnly, 2=DeferToSource) */
+    lv_subject_t* subject_detection_policy_u1() {
+        return &detection_policy_u1_subject_;
+    }
+
+    // =========================================================================
     // BARCODE SCANNER (owned by SettingsManager — manual device selection)
     // =========================================================================
 
@@ -377,6 +406,8 @@ class SettingsManager {
     lv_subject_t afc_unload_after_print_subject_;
     lv_subject_t console_filter_temps_subject_;
     lv_subject_t console_filter_firmware_noise_subject_;
+    lv_subject_t detection_enabled_subject_;
+    lv_subject_t detection_policy_u1_subject_;
 
     // External references
     MoonrakerClient* moonraker_client_ = nullptr;
