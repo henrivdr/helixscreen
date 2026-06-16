@@ -15,6 +15,7 @@
 
 #include "ams_error.h"
 #include "ams_types.h"
+#include "error_event.h"
 
 class MoonrakerAPI;
 namespace helix {
@@ -225,6 +226,23 @@ class AmsBackend {
      */
     [[nodiscard]] virtual std::optional<int> slot_for_extruder(int extruder_idx) const {
         (void)extruder_idx;
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Backend-specific error classification hook.
+     *
+     * Called by ErrorCenter before the generic classifier so domain-aware
+     * backends (AFC first, others later) can recognize their own error lines
+     * and attach accurate severity + recovery actions. Return nullopt to
+     * defer to the generic classifier; return an ErrorEvent to short-circuit it.
+     *
+     * @param raw_line  Unmodified gcode-response line to classify
+     * @param ctx       Printer state at the time the line arrived
+     * @return ErrorEvent if this backend claims the line, nullopt otherwise
+     */
+    [[nodiscard]] virtual std::optional<helix::ErrorEvent> classify_error(
+        const std::string& /*raw_line*/, const helix::ClassifyContext& /*ctx*/) const {
         return std::nullopt;
     }
 
