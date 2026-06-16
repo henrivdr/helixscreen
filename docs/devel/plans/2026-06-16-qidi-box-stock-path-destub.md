@@ -1,6 +1,8 @@
 # QIDI Box Stock-Firmware Path — De-Stub Plan (#1022 / #1030)
 
-**Status:** Planning · **Created:** 2026-06-16 · **Tracking issue:** **#1041** (stock-path de-stub + data collection) · refs #1022 (verify), #1030 (firmware dumps)
+**Status:** In progress — S2/S3/S6 **merged to main** (`801456169`, 2026-06-16); S1/S4/S5 device-gated on #1041 · **Created:** 2026-06-16 · **Tracking issue:** **#1041** (stock-path de-stub + data collection) · refs #1022 (verify), #1030 (firmware dumps)
+
+> **Shipped 2026-06-16** (`5a3ce17a3`, 71/71 `[qidi_box]` tests): `set_slot_info()` writes `filament_slot/color_slot/vendor_slot` via `SAVE_VARIABLE` (fixes "Feature not available"); `apply_filas_list()` retains name/type + parses `[colordict]`/`[vendor_list]`; read-path resolves ids → material/color/brand; `on_started()` queries `heater_box1`+`aht20_f heater_box1` for immediate temp/humidity. Remaining: S1 (dryer overlay visibility — needs `-vv` log), S4 (load `enable_box` gate), S5 (eject) — all need Camden's #1041 data.
 
 > **Correction (2026-06-16, after reading `.claude/scratchpad/qidi-box-firmware/`):** two rows below were wrong. `apply_filas_list()` **is implemented** (`ams_backend_qidi.cpp:536`, tested in `test_ams_backend_qidi.cpp`) — S3's real gap is consuming its output in the UI, not the parser. And the per-slot storage model for S2 is **known** from `saved_variables.cfg`: `filament_slot<n>` (→`[fila<n>]`), `color_slot<n>` (→`[colordict]`), `vendor_slot<n>` (→`[vendor_list]`), with the load gate `enable_box==1`. `set_slot_info()` just needs the inverse `SAVE_VARIABLE` writes — no longer device-blocked on "where is it stored", only on confirming Camden's specific values.
 **Trigger:** Camden-Winder field test on **QIDI Q2 + Box, STOCK QIDI firmware (no Happy Hare), v0.99.79** (issue #1022, 2026-06-16). First real test of the *stock* path; most of it is stubbed or broken.
