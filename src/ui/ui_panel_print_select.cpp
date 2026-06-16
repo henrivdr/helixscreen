@@ -2469,6 +2469,16 @@ void PrintSelectPanel::handle_file_click(size_t file_index) {
         // File clicked - apply selection state and open the detail view
         apply_file_selection(file);
         show_detail_view();
+
+        // A programmatically- or off-screen-selected file (e.g. "Print Last")
+        // may never have had its metadata fetched — the viewport scan only
+        // covers visible cards. Its list entry is then empty, so the detail
+        // view shows 0 min / 0.0 g and the no-thumbnail placeholder. Trigger the
+        // fetch now; process_metadata_result() re-syncs the open detail view via
+        // set_selected_file() once the metadata (and real thumbnail) land.
+        if (!file_list_[file_index].metadata_fetched) {
+            fetch_metadata_range(file_index, file_index + 1);
+        }
     }
 }
 

@@ -754,6 +754,17 @@ void PrintSelectDetailView::show_gcode_viewer(bool show) {
     }
     lv_subject_set_int(&detail_gcode_viewer_mode_, mode);
 
+    // The 3D render is the preview when the viewer is active, so the
+    // no-thumbnail placeholder glyph must not sit on top of it. (When the
+    // viewer is inactive the print-select panel's has-thumbnail logic owns
+    // whether the placeholder shows.)
+    if (mode > 0 && overlay_root_) {
+        lv_obj_t* no_thumb = lv_obj_find_by_name(overlay_root_, "detail_no_thumbnail_icon");
+        if (no_thumb) {
+            lv_obj_add_flag(no_thumb, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     // Hide loading spinner now that viewer state is resolved
     lv_subject_set_int(&detail_gcode_loading_, 0);
 
