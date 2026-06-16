@@ -431,9 +431,13 @@ class PrintStatusPanel : public OverlayBase {
     // When set, load_thumbnail_for_file() uses this instead of the actual filename
     std::string thumbnail_source_filename_;
 
-    // Track what thumbnail is currently loaded to make set_filename() idempotent
-    // Prevents redundant thumbnail loads when observer fires repeatedly with same filename
-    std::string loaded_thumbnail_filename_;
+    // Single source of truth: the effective filename whose content is CURRENTLY
+    // shown in the preview widgets (thumbnail + gcode viewer). Empty when the
+    // widgets show nothing. Cleared in lockstep with widget destruction
+    // (on_ui_destroyed) and viewer geometry clearing (clear callback) so the
+    // reconciliation in ensure_preview_current() never trusts a stale "showing
+    // X" claim against a blank widget.
+    std::string displayed_file_;
 
     // Deferred G-code loading: filename to load when panel becomes visible
     // Set in set_filename(), consumed in on_activate() - avoids downloading
@@ -445,15 +449,13 @@ class PrintStatusPanel : public OverlayBase {
     lv_timer_t* gcode_load_timer_ = nullptr;
     void schedule_deferred_gcode_load();
 
-    // Track what G-code file we've already requested to load (deduplication).
-    // Unlike loaded_thumbnail_filename_ which guards thumbnail loads, this guards
-    // the expensive async G-code download. Set when load_gcode_for_viewing() is
-    // called or deferred; cleared when print ends or a different file is loaded.
-    std::string requested_gcode_filename_;
+    // Reconcile the preview widgets against the current print state. Reads the
+    // ACTUAL widget state (thumbnail image source, gcode viewer geometry) and
+    // (re)loads only what is missing or stale. Safe and idempotent to call any
+    // time; called unconditionally on every on_activate() so re-entry after a
+    // destroy-on-close / memory-reclaim cycle is self-healing.
+    void ensure_preview_current();
 
-    // Track whether G-code was successfully loaded into the viewer
-    // When false (memory check failed), don't switch to viewer mode on state changes
-    bool gcode_loaded_ = false;
     bool complete_view_mode_ = false;
 
     // Tracks whether the panel was already in the preparing (pre-print) state on

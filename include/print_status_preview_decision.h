@@ -1,0 +1,73 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <string>
+
+namespace helix::ui {
+
+/**
+ * @brief What the print-status preview needs to (re)load to match desired state.
+ *
+ * Each flag is independent: the thumbnail (fallback content) and the gcode
+ * viewer (3D/2D geometry) are reconciled separately.
+ */
+struct PreviewAction {
+    bool load_thumbnail;
+    bool load_gcode;
+};
+
+/**
+ * @brief Decide what to (re)load so the preview matches the desired print.
+ *
+ * Pure function (no LVGL deps). The caller reads the *actual* widget state
+ * (does the thumbnail have an image source? does the viewer hold geometry?)
+ * and the desired state (the current print's effective filename, view mode,
+ * lifecycle intent) and this function reconciles the two. Because the decision
+ * is driven by real widget state rather than intent bools, re-entry is
+ * self-healing: a blank widget always reloads.
+ *
+ * @param displayed_file    File whose content is CURRENTLY in the widgets
+ *                          ("" = none/blank).
+ * @param desired_file      The current print's effective filename
+ *                          ("" = nothing to show).
+ * @param thumbnail_has_src Does the thumbnail widget currently have an image
+ *                          source.
+ * @param gcode_has_content Does the gcode viewer currently hold geometry.
+ * @param want_viewer       Lifecycle wants the 3D/2D viewer for the current
+ *                          print state (independent of the render-mode setting).
+ * @return Which resources to (re)load.
+ */
+inline PreviewAction decide_preview_action(const std::string& displayed_file,
+                                           const std::string& desired_file, bool thumbnail_has_src,
+                                           bool gcode_has_content, bool want_viewer) {
+    PreviewAction action{false, false};
+
+    // Nothing to show: no print selected. Leave widgets untouched.
+    if (desired_file.empty()) {
+        return action;
+    }
+
+    const bool file_mismatch = (displayed_file != desired_file);
+
+    // Thumbnail is always the fallback content beneath the viewer. (Re)load it
+    // whenever the displayed file differs from desired or the widget is blank.
+    if (file_mismatch || !thumbnail_has_src) {
+        action.load_thumbnail = true;
+    }
+
+    // Gcode geometry (re)loads whenever the lifecycle wants the viewer and the
+    // file differs or the viewer holds no geometry. Do NOT gate on the current
+    // view-mode subject: the mode only flips to 3D/2D AFTER the gcode loads, so
+    // gating here would deadlock the load and pin the preview to the thumbnail.
+    // The render-mode setting (thumbnail-only / 3D-disabled) is enforced
+    // downstream in load_gcode_for_viewing().
+    if (want_viewer && (file_mismatch || !gcode_has_content)) {
+        action.load_gcode = true;
+    }
+
+    return action;
+}
+
+} // namespace helix::ui

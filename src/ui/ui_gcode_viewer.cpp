@@ -1961,6 +1961,14 @@ GcodeViewerState ui_gcode_viewer_get_state(lv_obj_t* obj) {
     return st ? st->viewer_state : GcodeViewerState::Empty;
 }
 
+bool ui_gcode_viewer_has_content(lv_obj_t* obj) {
+    gcode_viewer_state_t* st = get_state(obj);
+    // Loaded is the authoritative state for "holds renderable geometry": it is
+    // set on a successful full-file or streaming load and cleared back to Empty
+    // by ui_gcode_viewer_clear(). Loading/Error/Empty all mean no content.
+    return st && st->viewer_state == GcodeViewerState::Loaded;
+}
+
 // ==============================================
 // Rendering Pause Control
 // ==============================================
