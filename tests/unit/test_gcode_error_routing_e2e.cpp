@@ -184,7 +184,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 // This locks the severity affordance (icon_error visible) and the title text.
 TEST_CASE_METHOD(LVGLUITestFixture,
                  "AFC jam while paused drives the recovery modal to actually show",
-                 "[error-center][routing][integration][.ui_integration]") {
+                 "[error-center][routing][integration][ui_integration]") {
     // Paused printer: process_line reads is_paused() into the ClassifyContext.
     get_printer_state().update_from_status(
         nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
@@ -196,6 +196,11 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // jam branch is text-driven (tool_end + jam/break/runout), no live state.
     AmsState::instance().set_backend(
         std::make_unique<AmsBackendAfc>(api(), client()));
+    // RAII guard: clear the AmsState singleton backend even if a REQUIRE throws,
+    // so it never leaks into subsequent tests in the same run.
+    struct BackendGuard {
+        ~BackendGuard() { AmsState::instance().set_backend(nullptr); }
+    } backend_guard;
     REQUIRE(AmsState::instance().get_backend() != nullptr);
 
     // The AFC handle_toolhead_runout chinglish: `tool_end` + `jam` → CRITICAL
@@ -249,9 +254,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // A recovery button is present (the modal built buttons from the actions).
     REQUIRE(find_text_containing(screen, lv_tr("Resume")) != nullptr);
 
-    // Cleanup: AmsState is a singleton — clear the test backend so it does not
-    // leak into subsequent tests. The router owns its modal and tears it down
-    // in its dtor at end-of-scope.
-    AmsState::instance().set_backend(nullptr);
+    // The router owns its modal and tears it down in its dtor at end-of-scope.
+    // AmsState backend is cleared by backend_guard's dtor (exception-safe).
     process_lvgl(20);
 }
