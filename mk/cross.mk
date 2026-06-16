@@ -1593,7 +1593,15 @@ pi-test: pi-docker deploy-pi-fg
 # normal LVGL image cache entry; abort_on_error=1 so the first UAF takes the
 # process down with a coredump-style report; fast_unwind_on_malloc=0 makes
 # stack traces reliable at the cost of speed (worth it for a stress run).
-PI_ASAN_OPTIONS ?= suppressions=$(PI_DEPLOY_DIR)/asan.supp:detect_leaks=0:abort_on_error=1:fast_unwind_on_malloc=0:print_stacktrace=1:halt_on_error=1:strip_path_prefix=/src/
+#
+# asan.supp holds LeakSanitizer (`leak:`) rules, which belong in LSAN_OPTIONS,
+# NOT ASAN_OPTIONS:suppressions= — feeding a leak-only file to ASAN's own
+# suppression parser makes it abort at startup with "failed to parse
+# suppressions" (hit while reproducing 783DVYKD, 2026-06-16). Keep them split.
+# (LSAN_OPTIONS is only consulted when detect_leaks=1, but homing the file there
+# keeps it correct if leak detection is re-enabled.)
+PI_ASAN_OPTIONS ?= detect_leaks=0:abort_on_error=1:fast_unwind_on_malloc=0:print_stacktrace=1:halt_on_error=1:strip_path_prefix=/src/
+PI_LSAN_OPTIONS ?= suppressions=$(PI_DEPLOY_DIR)/asan.supp
 
 deploy-pi-asan:
 	@test -f build/pi-asan/bin/helix-screen || { echo "$(RED)Error: build/pi-asan/bin/helix-screen not found. Run 'make pi-asan-docker' first.$(RESET)"; exit 1; }
@@ -1608,8 +1616,8 @@ deploy-pi-asan:
 # when (if) the wizard navigation provokes a heap error.
 deploy-pi-asan-fg: deploy-pi-asan
 	@echo "$(CYAN)Starting helix-screen on $(PI_HOST) under AddressSanitizer...$(RESET)"
-	@echo "$(DIM)ASAN_OPTIONS=$(PI_ASAN_OPTIONS)$(RESET)"
-	ssh -t $(PI_SSH_TARGET) "cd $(PI_DEPLOY_DIR) && ASAN_OPTIONS='$(PI_ASAN_OPTIONS)' ./bin/helix-launcher.sh --debug --log-dest=console"
+	@echo "$(DIM)ASAN_OPTIONS=$(PI_ASAN_OPTIONS) LSAN_OPTIONS=$(PI_LSAN_OPTIONS)$(RESET)"
+	ssh -t $(PI_SSH_TARGET) "cd $(PI_DEPLOY_DIR) && ASAN_OPTIONS='$(PI_ASAN_OPTIONS)' LSAN_OPTIONS='$(PI_LSAN_OPTIONS)' ./bin/helix-launcher.sh --debug --log-dest=console"
 
 # Full cycle: ASAN build + deploy + run in foreground.
 pi-asan-test: pi-asan-docker deploy-pi-asan-fg
@@ -1674,8 +1682,8 @@ deploy-pi32-asan:
 # load provokes it.
 deploy-pi32-asan-fg: deploy-pi32-asan
 	@echo "$(CYAN)Starting helix-screen on $(PI_HOST) under AddressSanitizer...$(RESET)"
-	@echo "$(DIM)ASAN_OPTIONS=$(PI_ASAN_OPTIONS)$(RESET)"
-	ssh -t $(PI_SSH_TARGET) "cd $(PI_DEPLOY_DIR) && ASAN_OPTIONS='$(PI_ASAN_OPTIONS)' ./bin/helix-launcher.sh --debug --log-dest=console"
+	@echo "$(DIM)ASAN_OPTIONS=$(PI_ASAN_OPTIONS) LSAN_OPTIONS=$(PI_LSAN_OPTIONS)$(RESET)"
+	ssh -t $(PI_SSH_TARGET) "cd $(PI_DEPLOY_DIR) && ASAN_OPTIONS='$(PI_ASAN_OPTIONS)' LSAN_OPTIONS='$(PI_LSAN_OPTIONS)' ./bin/helix-launcher.sh --debug --log-dest=console"
 
 # Full cycle: ASAN build + deploy + run in foreground.
 pi32-asan-test: pi32-asan-docker deploy-pi32-asan-fg
