@@ -1324,8 +1324,10 @@ std::vector<GCodeThumbnail> extract_thumbnails(const std::string& filepath) {
                 current_thumb.width = w;
                 current_thumb.height = h;
                 base64_data.clear();
-                base64_data.reserve(static_cast<size_t>(size) * 4 / 3 +
-                                    100); // Estimate base64 size
+                if (size > 0) {
+                    base64_data.reserve(static_cast<size_t>(size) * 4 / 3 +
+                                        100); // Estimate base64 size
+                }
                 in_thumbnail_block = true;
                 spdlog::debug("[GCode Parser] Found thumbnail {}x{} in {}", w, h, filepath);
             }
@@ -1425,8 +1427,10 @@ std::vector<GCodeThumbnail> extract_thumbnails_from_content(const std::string& c
                 current_thumb.width = w;
                 current_thumb.height = h;
                 base64_data.clear();
-                base64_data.reserve(static_cast<size_t>(size) * 4 / 3 +
-                                    100); // Estimate base64 size
+                if (size > 0) {
+                    base64_data.reserve(static_cast<size_t>(size) * 4 / 3 +
+                                        100); // Estimate base64 size
+                }
                 in_thumbnail_block = true;
                 spdlog::debug("[GCode Parser] Found thumbnail {}x{} in content", w, h);
             }
