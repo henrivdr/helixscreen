@@ -503,6 +503,21 @@ _resolve_primary_group() {
     fi
 }
 
+# QIDI-class SBC fingerprint (Q2, and likely Plus 4): the Linaro Debian
+# reference rootfs hostname `linaro-alip` plus the `mks` user home. This is the
+# same signal get_hardware_label() uses to print "QIDI-class SBC".
+#
+# It exists to VETO Artillery M1 detection: the Q2 ships the stock Artillery
+# `algo_app.service`, so algo_app alone cannot tell a Q2 apart from a real M1
+# (field-confirmed on a Q2 in prestonbrown/helixscreen#1027 — algo_app.service
+# present, makerbase-client.services absent). The hostname+user pair is the
+# only reliable QIDI marker we have, and the M1 is not a linaro-alip host.
+_is_qidi_class_sbc() {
+    local _h=""
+    [ -r /etc/hostname ] && _h=$(cat /etc/hostname 2>/dev/null | tr -d '[:space:]')
+    [ "$_h" = "linaro-alip" ] && [ -d /home/mks ]
+}
+
 # Detect platform
 # Returns: "ad5m", "ad5x", "cc1", "k1", "k2", "m1", "pi", "pi32", "snapmaker-u1", "x86", or "unsupported"
 detect_platform() {
@@ -599,13 +614,14 @@ detect_platform() {
     # and would otherwise be misdetected as plain "pi" — which would skip the
     # M1 platform hook that stops the stock UIs (algo_app + makerbase-client).
     #
-    # Discriminate ONLY on algo_app.service — Artillery's proprietary "AI"
-    # service, which is unique to the M1. Do NOT key off
-    # makerbase-client.services: that is the generic MKS-board LCD client and
-    # is shipped by other MakerBase-class SBCs too — notably the QIDI Q2
-    # (hostname linaro-alip, user mks), which was misdetected as m1 because of
-    # it (prestonbrown/helixscreen#1027). The M1 hook still stops both services
-    # regardless of which fingerprint triggered detection.
+    # Fingerprint: algo_app.service (Artillery's proprietary "AI" service). But
+    # algo_app is NOT exclusive to the M1 — the QIDI Q2 ships it too (field-
+    # confirmed: algo_app.service present, makerbase-client.services absent on a
+    # Q2 — prestonbrown/helixscreen#1027). An earlier fix that keyed M1 solely on
+    # algo_app therefore still misdetected the Q2 as m1. So we additionally VETO
+    # via the QIDI-class fingerprint (hostname linaro-alip + /home/mks): a Q2
+    # falls through to the normal pi/pi32 arch path below. The M1 hook still
+    # stops both stock services regardless of which fingerprint triggered.
     if [ "$arch" = "aarch64" ] || [ "$arch" = "armv7l" ]; then
         local is_m1=false
         if [ -f /etc/systemd/system/algo_app.service ] || \
@@ -615,7 +631,7 @@ detect_platform() {
              systemctl list-unit-files 2>/dev/null | grep -qE '^algo_app\.service\b'; then
             is_m1=true
         fi
-        if [ "$is_m1" = true ]; then
+        if [ "$is_m1" = true ] && ! _is_qidi_class_sbc; then
             echo "m1"
             return 0
         fi

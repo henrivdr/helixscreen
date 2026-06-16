@@ -575,6 +575,64 @@ _mock_u1_detect_platform() {
 }
 
 # ============================================================================
+# #1027 reopened: algo_app.service is NOT exclusive to the M1 — the QIDI Q2
+# ships it too (field-confirmed: algo_app present, makerbase-client absent on a
+# Q2). So M1 detection must be vetoed by the QIDI-class fingerprint (hostname
+# linaro-alip + /home/mks) or the Q2 is still misdetected as m1.
+# ============================================================================
+
+# Mirror of the real M1 gate in detect_platform(); the algo_app probe and the
+# QIDI veto are injected so we can exercise the branch logic without touching
+# /etc/systemd, /etc/hostname, or /home.
+_mock_m1_gate() {
+    local is_m1=false
+    if _has_algo_app; then
+        is_m1=true
+    fi
+    if [ "$is_m1" = true ] && ! _is_qidi_class_sbc; then
+        echo "m1"
+        return 0
+    fi
+    echo "pi"
+}
+
+@test "M1 gate: algo_app present + NOT qidi-class → m1" {
+    _has_algo_app() { return 0; }
+    _is_qidi_class_sbc() { return 1; }
+    run _mock_m1_gate
+    [ "$status" -eq 0 ]
+    [ "$output" = "m1" ]
+}
+
+@test "M1 gate: algo_app present + qidi-class (Q2) → pi, NOT m1 (#1027)" {
+    _has_algo_app() { return 0; }
+    _is_qidi_class_sbc() { return 0; }
+    run _mock_m1_gate
+    [ "$output" = "pi" ]
+    [ "$output" != "m1" ]
+}
+
+@test "M1 gate: no algo_app → pi regardless of qidi signature" {
+    _has_algo_app() { return 1; }
+    _is_qidi_class_sbc() { return 1; }
+    run _mock_m1_gate
+    [ "$output" = "pi" ]
+}
+
+@test "platform.sh vetoes M1 detection with the QIDI-class fingerprint (#1027)" {
+    grep -qE 'is_m1.*=.*true.*&&.*! _is_qidi_class_sbc' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+}
+
+@test "install.sh (bundled) vetoes M1 detection with the QIDI-class fingerprint (#1027)" {
+    grep -qE 'is_m1.*=.*true.*&&.*! _is_qidi_class_sbc' "$WORKTREE_ROOT/scripts/install.sh"
+}
+
+@test "_is_qidi_class_sbc keys on hostname linaro-alip + /home/mks" {
+    grep -q 'linaro-alip' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+    grep -qE '_is_qidi_class_sbc\(\)' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+}
+
+# ============================================================================
 # get_download_platform() — maps platforms without dedicated release artifacts
 # to a donor platform whose binary is ABI-compatible. Regression coverage for
 # prestonbrown/helixscreen#970 + #971 (Artillery M1 had no helixscreen-m1.zip,
