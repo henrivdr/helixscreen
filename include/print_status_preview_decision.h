@@ -35,13 +35,13 @@ struct PreviewAction {
  * @param thumbnail_has_src Does the thumbnail widget currently have an image
  *                          source.
  * @param gcode_has_content Does the gcode viewer currently hold geometry.
- * @param want_viewer       Lifecycle wants the 3D/2D viewer (vs thumbnail-only).
- * @param view_mode         0=thumbnail, 1=3D, 2=2D.
+ * @param want_viewer       Lifecycle wants the 3D/2D viewer for the current
+ *                          print state (independent of the render-mode setting).
  * @return Which resources to (re)load.
  */
 inline PreviewAction decide_preview_action(const std::string& displayed_file,
                                            const std::string& desired_file, bool thumbnail_has_src,
-                                           bool gcode_has_content, bool want_viewer, int view_mode) {
+                                           bool gcode_has_content, bool want_viewer) {
     PreviewAction action{false, false};
 
     // Nothing to show: no print selected. Leave widgets untouched.
@@ -57,13 +57,14 @@ inline PreviewAction decide_preview_action(const std::string& displayed_file,
         action.load_thumbnail = true;
     }
 
-    // Gcode geometry is only relevant when the lifecycle wants the viewer and
-    // the current view mode is 3D (1) or 2D (2). (Re)load when the file differs
-    // or the viewer holds no geometry.
-    if (want_viewer && (view_mode == 1 || view_mode == 2)) {
-        if (file_mismatch || !gcode_has_content) {
-            action.load_gcode = true;
-        }
+    // Gcode geometry (re)loads whenever the lifecycle wants the viewer and the
+    // file differs or the viewer holds no geometry. Do NOT gate on the current
+    // view-mode subject: the mode only flips to 3D/2D AFTER the gcode loads, so
+    // gating here would deadlock the load and pin the preview to the thumbnail.
+    // The render-mode setting (thumbnail-only / 3D-disabled) is enforced
+    // downstream in load_gcode_for_viewing().
+    if (want_viewer && (file_mismatch || !gcode_has_content)) {
+        action.load_gcode = true;
     }
 
     return action;

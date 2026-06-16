@@ -3233,16 +3233,15 @@ void PrintStatusPanel::ensure_preview_current() {
         print_thumbnail_ && lv_image_get_src(print_thumbnail_) != nullptr;
     bool gcode_has_content = gcode_viewer_ && ui_gcode_viewer_has_content(gcode_viewer_);
 
-    int view_mode = lv_subject_get_int(&gcode_viewer_mode_subject_);
     bool want_viewer = lifecycle_.want_viewer();
 
     helix::ui::PreviewAction action = helix::ui::decide_preview_action(
-        displayed_file_, desired, thumbnail_has_src, gcode_has_content, want_viewer, view_mode);
+        displayed_file_, desired, thumbnail_has_src, gcode_has_content, want_viewer);
 
     spdlog::debug("[{}] ensure_preview_current: displayed='{}' desired='{}' thumb_src={} "
-                  "gcode_content={} want_viewer={} mode={} -> load_thumb={} load_gcode={}",
+                  "gcode_content={} want_viewer={} -> load_thumb={} load_gcode={}",
                   get_name(), displayed_file_, desired, thumbnail_has_src, gcode_has_content,
-                  want_viewer, view_mode, action.load_thumbnail, action.load_gcode);
+                  want_viewer, action.load_thumbnail, action.load_gcode);
 
     if (desired.empty()) {
         return; // Nothing to show.
