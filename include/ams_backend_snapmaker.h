@@ -137,6 +137,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return true;
     }
 
+    // Snapmaker U1 has no internal tool-routing table; the slicer's Tx
+    // commands must be rewritten with the user's slot->tool assignment before
+    // the gcode file is sent to the printer.
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::GcodeRewrite;
+    }
+
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;

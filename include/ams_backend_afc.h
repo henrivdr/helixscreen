@@ -155,6 +155,10 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         return true;
     }
 
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::Native;
+    }
+
     [[nodiscard]] bool has_firmware_spool_persistence() const override {
         return true; // AFC uses SET_SPOOL_ID gcode for persistence
     }

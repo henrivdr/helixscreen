@@ -1074,6 +1074,34 @@ class AmsBackend {
     // ========================================================================
 
     /**
+     * @brief How this backend maps tool numbers to filament slots.
+     *
+     * Used by the preflight filament validator to decide whether the slicer's
+     * Tx tool-change commands need to be rewritten before the print starts, or
+     * whether the backend handles routing internally.
+     *
+     *  None         — base / default; no multi-tool routing (single-extruder,
+     *                 no AMS attached)
+     *  Native       — backend owns the T0..Tn → slot mapping internally
+     *                 (Happy Hare, AFC, CFS, AD5X IFS, ToolChanger); helix
+     *                 does NOT rewrite gcode
+     *  GcodeRewrite — helix must rewrite Tx commands in the gcode file because
+     *                 the firmware has no internal tool-routing table
+     *                 (Snapmaker U1, ACE)
+     */
+    enum class RemapStrategy { None, Native, GcodeRewrite };
+
+    /**
+     * @brief Get the tool-remapping strategy for this backend.
+     *
+     * Default: RemapStrategy::None (base class / no-AMS path).
+     * Overridden per backend — see RemapStrategy doc above.
+     */
+    [[nodiscard]] virtual RemapStrategy get_remap_strategy() const {
+        return RemapStrategy::None;
+    }
+
+    /**
      * @brief Check if backend automatically heats extruder before loading
      *
      * Some backends (like AFC) use material-specific temperatures from their
