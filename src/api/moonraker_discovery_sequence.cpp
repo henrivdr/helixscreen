@@ -984,6 +984,9 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // Klipper firmware state (shutdown/error detection + state_message)
     subscription_objects["webhooks"] = json::array({"state", "state_message"});
 
+    // Pause/resume state (PAUSE/RESUME gcode) — PrinterState::is_paused() reads this.
+    subscription_objects["pause_resume"] = json::array({"is_paused"});
+
     // All discovered heaters (extruders, beds, generic heaters).
     // PrinterTemperatureState reads only temperature + target.
     static const json heater_fields = json::array({"temperature", "target"});
