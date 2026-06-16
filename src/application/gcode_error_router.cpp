@@ -3,11 +3,16 @@
 
 #include "gcode_error_router.h"
 
+#include "ams_state.h"
+#include "app_globals.h"
+#include "error_classify.h"
+#include "error_event.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "moonraker_error.h"
 #include "moonraker_types.h"
 #include "printer_recovery_service.h"
+#include "printer_state.h"
 #include "rpc_error_correlation.h"
 #include "ui_modal.h"
 #include "ui_notification.h"
@@ -32,8 +37,11 @@ namespace {
 constexpr const char* kNotifyHandlerName = "gcode_error_notifier";
 constexpr const char* kReplayObserverName = "gcode_store_replay";
 
-/// One-tap recovery action attached to specific CFS error codes.
-struct RecoveryAction {
+/// One-tap recovery action attached to specific CFS error codes. Named
+/// distinctly from helix::RecoveryAction (error_event.h, std::string fields):
+/// this file-local entry uses `const char*` fields with STATIC lifetime so a
+/// pointer to it can be stashed in the modal's RecoveryCtx callback.
+struct CfsRecoveryEntry {
     const char* button_label;  ///< Label like "Reset CFS"
     const char* gcode;         ///< GCode to send on tap
     const char* log_tag;       ///< For spdlog::info on tap
@@ -43,7 +51,7 @@ struct RecoveryAction {
 /// allocated by the call site, freed in whichever callback fires.
 struct RecoveryCtx {
     MoonrakerAPI* api;
-    const RecoveryAction* action;  ///< Points at a static RecoveryAction
+    const CfsRecoveryEntry* action;  ///< Points at a static CfsRecoveryEntry
 };
 
 /// Lookup: which key codes get an actionable button.
@@ -52,16 +60,25 @@ struct RecoveryCtx {
 /// curative. Most slot-level errors (key849 retract stuck, key835-839
 /// extrude jams) need a physical fix; a button there would mislead the
 /// user. Add codes here as we identify real one-tap recoveries.
-const RecoveryAction* find_recovery(const std::string& code) {
+const CfsRecoveryEntry* find_recovery(const std::string& code) {
     // key840: "box switch state error" — state machine in an inconsistent
     // state. BOX_ERROR_CLEAR resets the box driver state and lets the
     // user retry the operation. Same gcode AmsBackendCfs::reset_gcode()
     // already exposes via the AMS panel.
-    static const RecoveryAction key840 = {
+    static const CfsRecoveryEntry key840 = {
         "Reset CFS", "BOX_ERROR_CLEAR", "GcodeErrorRouter::key840_reset"};
     if (code == "key840") return &key840;
 
     return nullptr;
+}
+
+/// Title for a plain CRITICAL modal (no recovery action). Preserves the prior
+/// per-source behavior: CFS faults read "Filament System Error", anything else
+/// the event's own title, falling back to "Printer Error". The classifier
+/// leaves title empty, so the choice is derived from the source here.
+const char* modal_title_for(const ErrorEvent& e) {
+    if (e.source == ErrorSource::CFS) return lv_tr("Filament System Error");
+    return e.title.empty() ? lv_tr("Printer Error") : e.title.c_str();
 }
 
 /// Replay age gate: a latched `!!` older than this in the gcode_store is
@@ -246,185 +263,207 @@ std::string GcodeErrorRouter::truncate_for_toast(std::string text) {
     return text;
 }
 
-void GcodeErrorRouter::process_line(const std::string& line) {
-    if (line.empty()) return;
+PresentAs decide_presentation(const ErrorEvent& e) {
+    const bool has_recover = !e.recovery_actions.empty();
+    if (e.severity == ErrorSeverity::CRITICAL)
+        return has_recover ? PresentAs::MODAL_WITH_RECOVER : PresentAs::MODAL;
+    if (e.severity == ErrorSeverity::WARNING)
+        return has_recover ? PresentAs::TOAST_WITH_RECOVER : PresentAs::TOAST;
+    return PresentAs::NONE;  // INFO not surfaced in L0
+}
 
-    // Klipper emergency errors: "!! MCU shutdown", "!! Timer too close",
-    // or "!! {json}" from CFS / motor_control wrappers.
-    if (line.size() >= 2 && line[0] == '!' && line[1] == '!') {
-        std::string clean =
-            (line.size() > 3 && line[2] == ' ') ? line.substr(3) : line.substr(2);
-        std::string code;
-        clean_error_text(clean, code);
-        spdlog::error("[GcodeError] Emergency: {} (code={})", clean,
-                      code.empty() ? "-" : code);
-
-        // Cross-source dedup: when an RPC caller triggered the gcode that
-        // emitted this `!!`, the caller's error_cb already surfaced a
-        // contextual toast ("Failed to resume print: ..."). Skipping our
-        // generic toast avoids double-notification for the same root cause.
-        //
-        // The broadcast `!!` and the JSON-RPC error response can arrive in
-        // either order — the broadcast often beats the RPC response on
-        // slow devices, so the sync check below can miss late arrivals.
-        // We re-check after a 150ms timer below.
-        if (rpc_error_correlation::was_recently_handled(clean)) {
-            spdlog::info("[GcodeError] Suppressing duplicate `!!` toast "
-                         "(caller-handled RPC error already recorded): {}",
-                         clean);
-            return;
-        }
-
-        // key298 — rpi MCU bridge daemon shutdown. firmware_restart alone
-        // can't recover; PrinterRecoveryService bounces klipper_mcu via
-        // the platform recovery script.
-        if (code == "key298" && api_) {
-            MoonrakerAPI* api = api_;
-            ToastManager::instance().show_with_action(
-                ToastSeverity::ERROR, truncate_for_toast(clean).c_str(), lv_tr("Recover"),
-                [](void* ud) {
-                    auto* a = static_cast<MoonrakerAPI*>(ud);
-                    if (!a) return;
-                    spdlog::info("[GcodeError] User tapped Recover for key298");
-                    PrinterRecoveryService recovery(a);
-                    recovery.recover(
-                        []() { spdlog::info("[Recovery] Auto-recovery initiated"); },
-                        [](const MoonrakerError& err) {
-                            spdlog::error("[Recovery] Auto-recovery failed: {}", err.message);
-                            ToastManager::instance().show(
-                                ToastSeverity::ERROR,
-                                ("Recovery failed: " + err.user_message()).c_str(), 6000);
-                        });
-                },
-                api, /*duration_ms=*/15000);
-            return;
-        }
-
-        // key8xx — CFS / motor hardware faults. Modal because the AMS step
-        // indicator otherwise hides the failure (box driver emits via
-        // respond_raw and the dispatch script still returns success).
-        // ui_notification's modal dedup-by-title collapses bursts.
-        if (code.size() >= 4 && code.compare(0, 4, "key8") == 0) {
-            // If the code has a registered recovery action, surface as a
-            // confirmation modal with a one-tap fix button; otherwise a
-            // plain alert.
-            if (auto* rec = find_recovery(code); rec && api_) {
-                const char* title = lv_tr("Filament System Error");
-
-                // Dedup against an already-showing modal with the same title.
-                // modal_show_confirmation does NOT dedup internally (only
-                // ui_notification_error does); without this, two rapid key840
-                // events would stack two modals and leak two RecoveryCtxs.
-                if (lv_obj_t* top = helix::ui::modal_get_top()) {
-                    if (lv_obj_t* title_label =
-                            lv_obj_find_by_name(top, "dialog_title")) {
-                        const char* existing = lv_label_get_text(title_label);
-                        if (existing && strcmp(existing, title) == 0) {
-                            spdlog::debug("[GcodeError] Skipping duplicate "
-                                          "recovery modal for {}", code);
-                            return;
-                        }
-                    }
-                }
-
-                // Heap-allocate ctx for the recovery callback. Lifetime is
-                // tied to the dialog widget via LV_EVENT_DELETE — fires
-                // unconditionally when the dialog is destroyed (button tap,
-                // backdrop dismiss, ESC, ModalStack::clear() on shutdown),
-                // so the ctx is freed exactly once regardless of dismissal
-                // path. confirm/cancel cbs only invoke the action; the
-                // DELETE cb is the sole owner of the free.
-                auto* ctx = new RecoveryCtx{api_, rec};
-                lv_obj_t* dialog = helix::ui::modal_show_confirmation(
-                    title, clean.c_str(), ModalSeverity::Error, rec->button_label,
-                    [](lv_event_t* e) {
-                        auto* c = static_cast<RecoveryCtx*>(lv_event_get_user_data(e));
-                        if (!c || !c->api || !c->action) return;
-                        const char* tag = c->action->log_tag;
-                        spdlog::info("[GcodeError] User tapped recovery: {}", tag);
-                        c->api->execute_gcode(
-                            c->action->gcode,
-                            [tag]() { spdlog::info("[Recovery] {} completed", tag); },
-                            [tag](const MoonrakerError& err) {
-                                spdlog::error("[Recovery] {} failed: {}", tag, err.message);
-                                ToastManager::instance().show(
-                                    ToastSeverity::ERROR,
-                                    ("Recovery failed: " + err.user_message()).c_str(), 6000);
-                            },
-                            MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
-                    },
-                    /*on_cancel=*/nullptr,  // DELETE cb handles all cleanup
-                    ctx);
-
-                if (!dialog) {
-                    // modal_show_confirmation logs internally on failure.
-                    // ctx never reaches a callback; free directly.
-                    spdlog::warn("[GcodeError] modal_show_confirmation returned null; "
-                                 "discarding recovery ctx for {}", code);
-                    delete ctx;
-                    return;
-                }
-
-                lv_obj_add_event_cb(
-                    dialog,
-                    [](lv_event_t* e) {
-                        delete static_cast<RecoveryCtx*>(lv_event_get_user_data(e));
-                    },
-                    LV_EVENT_DELETE, ctx);
-                return;
-            }
-            ui_notification_error(lv_tr("Filament System Error"), clean.c_str(),
-                                  /*modal=*/true);
-            return;
-        }
-
-        // Deferred toast for unclassified `!!` — gives the late-arrival
-        // RPC error response a chance to populate the correlation buffer
-        // before we re-check at fire time.
-        struct DeferredCtx {
-            std::string clean;
-            std::string short_form;
-        };
-        auto* dctx = new DeferredCtx{clean, truncate_for_toast(clean)};
-        auto* dt = lv_timer_create(
-            [](lv_timer_t* timer) {
-                auto* c = static_cast<DeferredCtx*>(lv_timer_get_user_data(timer));
-                if (c) {
-                    if (rpc_error_correlation::was_recently_handled(c->clean)) {
-                        spdlog::info(
-                            "[GcodeError] Suppressing deferred `!!` toast "
-                            "(caller-handled RPC error arrived after): {}",
-                            c->clean);
-                    } else {
-                        ui_notification_error("Klipper Error", c->short_form.c_str(),
-                                              /*modal=*/false);
-                    }
-                    delete c;
-                }
-                lv_timer_delete(timer);
-            },
-            150, dctx);
-        lv_timer_set_repeat_count(dt, 1);
+void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
+    // key8xx — CFS / motor hardware faults. Modal because the AMS step
+    // indicator otherwise hides the failure (box driver emits via
+    // respond_raw and the dispatch script still returns success).
+    // ui_notification's modal dedup-by-title collapses bursts.
+    //
+    // The actionable case: a confirmation modal with a one-tap fix button.
+    // We re-derive via find_recovery(e.code) rather than reading
+    // e.recovery_actions[0] because the RecoveryCtx callback needs a pointer
+    // with STATIC lifetime — find_recovery returns a function-static
+    // CfsRecoveryEntry that outlives the dialog, whereas e.recovery_actions[0]
+    // is a vector element that isn't stable past this event's scope.
+    auto* rec = find_recovery(e.code);
+    if (!rec || !api_) {
+        // No registered action for this code (shouldn't happen — the
+        // presenter is only reached when the event carries a recovery
+        // action) — fall back to a plain alert.
+        ui_notification_error(lv_tr("Filament System Error"), e.detail.c_str(),
+                              /*modal=*/true);
         return;
     }
 
-    // Command errors: "Error: Must home before probe", etc.
-    if (line.size() >= 5) {
-        std::string prefix = line.substr(0, 5);
-        for (auto& c : prefix) c = static_cast<char>(std::tolower(c));
-        if (prefix == "error") {
-            std::string clean = line;
-            if (line.size() > 7 && line[5] == ':' && line[6] == ' ') {
-                clean = line.substr(7);
-            } else if (line.size() > 6 && line[5] == ':') {
-                clean = line.substr(6);
+    const char* title = lv_tr("Filament System Error");
+
+    // Dedup against an already-showing modal with the same title.
+    // modal_show_confirmation does NOT dedup internally (only
+    // ui_notification_error does); without this, two rapid key840
+    // events would stack two modals and leak two RecoveryCtxs.
+    if (lv_obj_t* top = helix::ui::modal_get_top()) {
+        if (lv_obj_t* title_label = lv_obj_find_by_name(top, "dialog_title")) {
+            const char* existing = lv_label_get_text(title_label);
+            if (existing && strcmp(existing, title) == 0) {
+                spdlog::debug("[GcodeError] Skipping duplicate "
+                              "recovery modal for {}",
+                              e.code);
+                return;
             }
-            std::string code;
-            clean_error_text(clean, code);
-            spdlog::error("[GcodeError] {}", clean);
-            ui_notification_error(nullptr, truncate_for_toast(clean).c_str(),
-                                  /*modal=*/false);
         }
+    }
+
+    // Heap-allocate ctx for the recovery callback. Lifetime is
+    // tied to the dialog widget via LV_EVENT_DELETE — fires
+    // unconditionally when the dialog is destroyed (button tap,
+    // backdrop dismiss, ESC, ModalStack::clear() on shutdown),
+    // so the ctx is freed exactly once regardless of dismissal
+    // path. confirm/cancel cbs only invoke the action; the
+    // DELETE cb is the sole owner of the free.
+    auto* ctx = new RecoveryCtx{api_, rec};
+    lv_obj_t* dialog = helix::ui::modal_show_confirmation(
+        title, e.detail.c_str(), ModalSeverity::Error, rec->button_label,
+        [](lv_event_t* ev) {
+            auto* c = static_cast<RecoveryCtx*>(lv_event_get_user_data(ev));
+            if (!c || !c->api || !c->action) return;
+            const char* tag = c->action->log_tag;
+            spdlog::info("[GcodeError] User tapped recovery: {}", tag);
+            c->api->execute_gcode(
+                c->action->gcode,
+                [tag]() { spdlog::info("[Recovery] {} completed", tag); },
+                [tag](const MoonrakerError& err) {
+                    spdlog::error("[Recovery] {} failed: {}", tag, err.message);
+                    ToastManager::instance().show(
+                        ToastSeverity::ERROR,
+                        ("Recovery failed: " + err.user_message()).c_str(), 6000);
+                },
+                MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+        },
+        /*on_cancel=*/nullptr,  // DELETE cb handles all cleanup
+        ctx);
+
+    if (!dialog) {
+        // modal_show_confirmation logs internally on failure.
+        // ctx never reaches a callback; free directly.
+        spdlog::warn("[GcodeError] modal_show_confirmation returned null; "
+                     "discarding recovery ctx for {}",
+                     e.code);
+        delete ctx;
+        return;
+    }
+
+    lv_obj_add_event_cb(
+        dialog,
+        [](lv_event_t* ev) {
+            delete static_cast<RecoveryCtx*>(lv_event_get_user_data(ev));
+        },
+        LV_EVENT_DELETE, ctx);
+}
+
+void GcodeErrorRouter::present_recover_toast(const ErrorEvent& e) {
+    // key298 — rpi MCU bridge daemon shutdown. firmware_restart alone
+    // can't recover; PrinterRecoveryService bounces klipper_mcu via
+    // the platform recovery script. The recovery action carries an EMPTY
+    // gcode (log_tag error_classify::key298_recover) — recovery runs
+    // through PrinterRecoveryService, not execute_gcode.
+    if (!api_) return;  // No API client → recovery would be a no-op; nothing actionable to show.
+    MoonrakerAPI* api = api_;
+    ToastManager::instance().show_with_action(
+        ToastSeverity::ERROR, truncate_for_toast(e.detail).c_str(), lv_tr("Recover"),
+        [](void* ud) {
+            auto* a = static_cast<MoonrakerAPI*>(ud);
+            if (!a) return;
+            spdlog::info("[GcodeError] User tapped Recover for key298");
+            PrinterRecoveryService recovery(a);
+            recovery.recover(
+                []() { spdlog::info("[Recovery] Auto-recovery initiated"); },
+                [](const MoonrakerError& err) {
+                    spdlog::error("[Recovery] Auto-recovery failed: {}", err.message);
+                    ToastManager::instance().show(
+                        ToastSeverity::ERROR,
+                        ("Recovery failed: " + err.user_message()).c_str(), 6000);
+                });
+        },
+        api, /*duration_ms=*/15000);
+}
+
+void GcodeErrorRouter::present_deferred_toast(const std::string& text) {
+    // Deferred toast for unclassified errors — gives the late-arrival
+    // RPC error response a chance to populate the correlation buffer
+    // before we re-check at fire time.
+    struct DeferredCtx {
+        std::string clean;
+        std::string short_form;
+    };
+    auto* dctx = new DeferredCtx{text, truncate_for_toast(text)};
+    auto* dt = lv_timer_create(
+        [](lv_timer_t* timer) {
+            auto* c = static_cast<DeferredCtx*>(lv_timer_get_user_data(timer));
+            if (c) {
+                if (rpc_error_correlation::was_recently_handled(c->clean)) {
+                    spdlog::info(
+                        "[GcodeError] Suppressing deferred `!!` toast "
+                        "(caller-handled RPC error arrived after): {}",
+                        c->clean);
+                } else {
+                    ui_notification_error("Klipper Error", c->short_form.c_str(),
+                                          /*modal=*/false);
+                }
+                delete c;
+            }
+            lv_timer_delete(timer);
+        },
+        150, dctx);
+    lv_timer_set_repeat_count(dt, 1);
+}
+
+void GcodeErrorRouter::process_line(const std::string& line) {
+    if (line.empty()) return;
+
+    // Build classify context from current printer state. process_line runs
+    // on the MAIN thread (the ctor's lifetime_.bg_cb wrapper defers the
+    // notify body to main), so these synchronous getters are safe.
+    ClassifyContext ctx;
+    ctx.is_paused = get_printer_state().is_paused();
+    ctx.is_printing = get_printer_state().get_print_job_state() == PrintJobState::PRINTING;
+
+    // Ask the active AMS backend first (domain-aware); else the generic
+    // classifier. get_backend() may return nullptr — guarded.
+    std::optional<ErrorEvent> ev;
+    if (auto* backend = AmsState::instance().get_backend())
+        ev = backend->classify_error(line, ctx);
+    if (!ev) ev = error_classify::classify(line, ctx);
+    if (!ev) return;
+
+    spdlog::error("[GcodeError] sev={} src={} code={}: {}",
+                  static_cast<int>(ev->severity), static_cast<int>(ev->source),
+                  ev->code.empty() ? "-" : ev->code, ev->detail);
+
+    // Cross-source dedup: when an RPC caller triggered the gcode that
+    // emitted this error, the caller's error_cb already surfaced a
+    // contextual toast. Skipping our generic surfacing avoids double-
+    // notification for the same root cause. (The deferred-toast path
+    // re-checks at fire time for late-arriving RPC responses.)
+    if (rpc_error_correlation::was_recently_handled(ev->detail)) {
+        spdlog::info("[GcodeError] Suppressing duplicate (RPC-handled): {}", ev->detail);
+        return;
+    }
+
+    switch (decide_presentation(*ev)) {
+        case PresentAs::MODAL:
+            // CRITICAL without a recovery action — see modal_title_for().
+            ui_notification_error(modal_title_for(*ev), ev->detail.c_str(), /*modal=*/true);
+            return;
+        case PresentAs::MODAL_WITH_RECOVER:
+            present_recovery_modal(*ev);
+            return;
+        case PresentAs::TOAST_WITH_RECOVER:
+            present_recover_toast(*ev);
+            return;
+        case PresentAs::TOAST:
+            present_deferred_toast(ev->detail);
+            return;
+        case PresentAs::NONE:
+            return;
     }
 }
 

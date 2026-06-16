@@ -4,6 +4,7 @@
 #pragma once
 
 #include "async_lifetime_guard.h"
+#include "error_event.h"
 #include "hv/json.hpp"
 
 #include <mutex>
@@ -13,6 +14,16 @@ class MoonrakerAPI;
 
 namespace helix {
 class MoonrakerClient;
+
+/// How a classified error should be surfaced to the user. Decided purely
+/// from an ErrorEvent's severity + whether it carries a recovery action,
+/// so the routing decision is unit-testable without LVGL or printer state.
+enum class PresentAs { MODAL, TOAST, TOAST_WITH_RECOVER, MODAL_WITH_RECOVER, NONE };
+
+/// Pure routing function: maps an ErrorEvent to its presentation. In L0,
+/// INFO is not surfaced. CRITICAL → modal (with a recovery button if the
+/// event carries one); WARNING → toast (with a Recover action if present).
+PresentAs decide_presentation(const ErrorEvent& e);
 
 /// Centralizes Klipper/Moonraker gcode-error surfacing for HelixScreen.
 ///
@@ -82,6 +93,20 @@ class GcodeErrorRouter {
     /// both the live path and the replay path (replay only feeds `!!`
     /// lines; this still handles `Error:` for the live caller).
     void process_line(const std::string& line);
+
+    /// CRITICAL error that carries a recovery action: confirmation modal
+    /// with a one-tap fix button (the key840 flow). Runs the
+    /// `e.recovery_actions[0].gcode` on confirm.
+    void present_recovery_modal(const ErrorEvent& e);
+
+    /// WARNING error that carries a recovery action: toast with a "Recover"
+    /// button (the key298 flow — bounces klipper_mcu via
+    /// PrinterRecoveryService rather than running a gcode).
+    void present_recover_toast(const ErrorEvent& e);
+
+    /// Plain unclassified toast: deferred 150ms so a late-arriving RPC
+    /// error response can populate the correlation buffer first.
+    void present_deferred_toast(const std::string& text);
 
     /// Bytes-only truncation for transient toasts. Modals always get the
     /// full text — they wrap to multiple lines.
