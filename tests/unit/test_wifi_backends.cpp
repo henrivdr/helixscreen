@@ -14,6 +14,7 @@
 
 #if !defined(__APPLE__) && !defined(__ANDROID__)
 #include <cstring>
+#include <fstream>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -765,5 +766,71 @@ TEST_CASE("WpaBackend honest is_running after failed init (#1036)",
     ::close(fd);
     ::unlink(sock_path.c_str());
     ::rmdir(dir);
+}
+
+// ============================================================================
+// read_ctrl_interface_from_conf — config-file ctrl_interface parsing (#1036)
+//
+// Vendor firmwares often launch `wpa_supplicant -c <conf>` with a non-standard
+// ctrl_interface set inside the config file rather than via -O/-C on the
+// command line. The /proc cmdline scan parses that file so we can auto-detect
+// the socket directory without a manual HELIX_WPA_SOCKET_DIR override.
+// ============================================================================
+TEST_CASE("read_ctrl_interface_from_conf parses ctrl_interface forms", "[network][backend][wpa]") {
+    using helix::wifi::detail::read_ctrl_interface_from_conf;
+
+    auto write_conf = [](const std::string& body) {
+        char tmpl[] = "/tmp/helix_wpa_conf_XXXXXX";
+        int fd = ::mkstemp(tmpl);
+        REQUIRE(fd >= 0);
+        ::close(fd);
+        std::ofstream out(tmpl);
+        out << body;
+        out.close();
+        return std::string(tmpl);
+    };
+
+    SECTION("keyed DIR=... GROUP=... form") {
+        auto p = write_conf("ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\n"
+                            "update_config=1\n");
+        REQUIRE(read_ctrl_interface_from_conf(p) == "/var/run/wpa_supplicant");
+        ::unlink(p.c_str());
+    }
+
+    SECTION("bare absolute path form") {
+        auto p = write_conf("ctrl_interface=/etc/wifi/wpa_supplicant/sockets\n");
+        REQUIRE(read_ctrl_interface_from_conf(p) == "/etc/wifi/wpa_supplicant/sockets");
+        ::unlink(p.c_str());
+    }
+
+    SECTION("ignores comments and leading whitespace") {
+        auto p = write_conf("# ctrl_interface=/wrong/commented/out\n"
+                            "\n"
+                            "    ctrl_interface=DIR=/run/wpa_supplicant\n");
+        REQUIRE(read_ctrl_interface_from_conf(p) == "/run/wpa_supplicant");
+        ::unlink(p.c_str());
+    }
+
+    SECTION("tolerates CRLF line endings") {
+        auto p = write_conf("ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev\r\n");
+        REQUIRE(read_ctrl_interface_from_conf(p) == "/run/wpa_supplicant");
+        ::unlink(p.c_str());
+    }
+
+    SECTION("no ctrl_interface present → empty") {
+        auto p = write_conf("update_config=1\nnetwork={\n ssid=\"x\"\n}\n");
+        REQUIRE(read_ctrl_interface_from_conf(p).empty());
+        ::unlink(p.c_str());
+    }
+
+    SECTION("non-absolute value rejected") {
+        auto p = write_conf("ctrl_interface=wlan0\n");
+        REQUIRE(read_ctrl_interface_from_conf(p).empty());
+        ::unlink(p.c_str());
+    }
+
+    SECTION("unreadable file → empty") {
+        REQUIRE(read_ctrl_interface_from_conf("/nonexistent/helix/wpa.conf").empty());
+    }
 }
 #endif // !__APPLE__ && !__ANDROID__

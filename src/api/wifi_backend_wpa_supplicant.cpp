@@ -61,13 +61,55 @@ static std::string parse_wpa_ctrl_value(std::string v) {
     return v;
 }
 
-/// Inspect running processes for `wpa_supplicant ... -O <value>` and return the
-/// control-interface directory it parses to.
+/// Parse a wpa_supplicant config file's `ctrl_interface=` directive.
+///
+/// Vendor init scripts frequently launch `wpa_supplicant -c <conf>` with a
+/// non-standard ctrl_interface set in the config file rather than passing
+/// -O/-C on the command line, so scanning the cmdline alone would miss them.
+/// The value uses the same bare-dir or `DIR=<path> GROUP=<grp>` form as -O.
+/// Returns "" if the file is unreadable, has no ctrl_interface, or the value
+/// is not an absolute directory path.
+namespace helix::wifi::detail {
+std::string read_ctrl_interface_from_conf(const std::string& conf_path) {
+    std::ifstream conf(conf_path);
+    if (!conf.is_open())
+        return {};
+
+    const std::string key = "ctrl_interface=";
+    std::string line;
+    while (std::getline(conf, line)) {
+        const auto first = line.find_first_not_of(" \t");
+        if (first == std::string::npos || line[first] == '#')
+            continue; // blank line or comment
+        if (line.compare(first, key.size(), key) != 0)
+            continue;
+
+        std::string val = line.substr(first + key.size());
+        // Trim trailing whitespace / CR (CRLF configs).
+        const auto last = val.find_last_not_of(" \t\r\n");
+        if (last != std::string::npos)
+            val.erase(last + 1);
+
+        std::string dir = parse_wpa_ctrl_value(std::move(val));
+        // ctrl_interface may also be a DBus-style name; only accept it when it
+        // resolves to an absolute filesystem directory path.
+        if (!dir.empty() && dir.front() == '/')
+            return dir;
+    }
+    return {};
+}
+} // namespace helix::wifi::detail
+
+/// Inspect running processes for a `wpa_supplicant` daemon and return the
+/// control-interface directory it was launched with.
 ///
 /// The directory is whatever wpa_supplicant was launched with; some vendor
-/// firmwares relocate it off the standard paths.  Auto-detecting the live `-O`
-/// argument lets us adapt without per-device patches or manual symlinks.
-/// Returns "" when not found (no daemon, no -O arg, or /proc unavailable).
+/// firmwares relocate it off the standard paths.  Auto-detecting it from the
+/// live process lets us adapt without per-device patches or manual symlinks.
+/// Precedence mirrors wpa_supplicant itself: `-O <dir>` overrides the control
+/// directory; otherwise the `ctrl_interface` in the `-c <conf>` config file;
+/// otherwise a `-C <ctrl>` value (used only when no -c is given).
+/// Returns "" when not found (no daemon, no usable arg, or /proc unavailable).
 static std::string detect_wpa_ctrl_dir_from_proc() {
     std::error_code ec;
     if (!fs::is_directory("/proc", ec))
@@ -97,14 +139,35 @@ static std::string detect_wpa_ctrl_dir_from_proc() {
         if (fs::path(argv[0]).filename().string() != "wpa_supplicant")
             continue;
 
-        // Accept "-O <value>" and the joined "-O<value>" forms.  The value may
-        // itself be the keyed "DIR=<path> GROUP=<grp>" form (parse_wpa_ctrl_value).
+        // Collect the relevant flags. Each accepts a separate "-X value" or a
+        // joined "-Xvalue" form. -O / -C values may be the keyed
+        // "DIR=<path> GROUP=<grp>" form (parse_wpa_ctrl_value handles both).
+        std::string o_dir, c_val, conf_path;
         for (size_t i = 1; i < argv.size(); ++i) {
-            if (argv[i] == "-O" && i + 1 < argv.size())
-                return parse_wpa_ctrl_value(argv[i + 1]);
-            if (argv[i].rfind("-O", 0) == 0 && argv[i].size() > 2)
-                return parse_wpa_ctrl_value(argv[i].substr(2));
+            const std::string& a = argv[i];
+            if (a == "-O" && i + 1 < argv.size())
+                o_dir = parse_wpa_ctrl_value(argv[++i]);
+            else if (a.rfind("-O", 0) == 0 && a.size() > 2)
+                o_dir = parse_wpa_ctrl_value(a.substr(2));
+            else if (a == "-C" && i + 1 < argv.size())
+                c_val = argv[++i];
+            else if (a.rfind("-C", 0) == 0 && a.size() > 2)
+                c_val = a.substr(2);
+            else if (a == "-c" && i + 1 < argv.size())
+                conf_path = argv[++i];
+            else if (a.rfind("-c", 0) == 0 && a.size() > 2)
+                conf_path = a.substr(2);
         }
+
+        if (!o_dir.empty())
+            return o_dir;
+        if (!conf_path.empty()) {
+            std::string conf_dir = helix::wifi::detail::read_ctrl_interface_from_conf(conf_path);
+            if (!conf_dir.empty())
+                return conf_dir;
+        }
+        if (!c_val.empty())
+            return parse_wpa_ctrl_value(std::move(c_val));
     }
     return {};
 }

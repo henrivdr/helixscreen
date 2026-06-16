@@ -26,6 +26,15 @@
 // Forward declaration - avoid including wpa_ctrl.h in header
 struct wpa_ctrl;
 
+namespace helix::wifi::detail {
+// Parse a wpa_supplicant config file's `ctrl_interface=` directive and return
+// the control-socket directory it points to ("" if absent, unreadable, or not
+// an absolute path). Exposed for unit testing; used by the /proc cmdline scan
+// to honour `wpa_supplicant -c <conf>` launches whose ctrl_interface lives in
+// the config file rather than on the command line.
+std::string read_ctrl_interface_from_conf(const std::string& conf_path);
+} // namespace helix::wifi::detail
+
 /**
  * @brief wpa_supplicant backend using libhv async event loop
  *
