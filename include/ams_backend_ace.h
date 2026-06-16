@@ -55,10 +55,11 @@ class AmsBackendAce : public AmsSubscriptionBackend {
 
     [[nodiscard]] AmsType get_type() const override { return AmsType::ACE; }
 
-    // ACE has no internal tool-routing table; gcode Tx commands must be
-    // rewritten with the user's slot->tool assignment before sending.
+    // ACE uses ACE_CHANGE_TOOL TOOL=n, not the U1 Tn/SM_PRINT_* families
+    // GcodeToolRemapper handles. Remap disabled until that command family is
+    // implemented + validated on a real ACE file.
     [[nodiscard]] RemapStrategy get_remap_strategy() const override {
-        return RemapStrategy::GcodeRewrite;
+        return RemapStrategy::None;
     }
 
     // ========================================================================

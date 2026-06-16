@@ -440,8 +440,8 @@ class PrintSelectPanel : public PanelBase {
     /**
      * @brief Route a Remap… request to the strategy-appropriate remap UI.
      *
-     * Skeleton: dispatches on the active backend's RemapStrategy. The Native
-     * and GcodeRewrite paths are implemented by Tasks 10 and 12.
+     * Dispatches on the active backend's RemapStrategy: Native backends open
+     * the native remap modal; GcodeRewrite backends open the gcode remap modal.
      */
     void on_preflight_remap();
 
@@ -456,8 +456,7 @@ class PrintSelectPanel : public PanelBase {
     void hide_delete_confirmation();
 
   private:
-    // Remap UI entry points dispatched by on_preflight_remap(). Stubs for now —
-    // implemented by Task 10 (Native) and Task 12 (GcodeRewrite).
+    // Remap UI entry points dispatched by on_preflight_remap().
     void open_native_remap_modal();
     void open_gcode_remap_modal();
 

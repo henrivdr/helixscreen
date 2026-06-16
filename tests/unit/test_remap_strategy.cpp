@@ -4,11 +4,13 @@
 //
 // RemapStrategy tells the preflight filament validator how a backend routes
 // tool->material assignments through to the printer:
-//   None         — no mapping (base / default)
+//   None         — no mapping (base / default); also used for ACE which uses
+//                  ACE_CHANGE_TOOL TOOL=n rather than the Tn/SM_PRINT_* families
+//                  that GcodeToolRemapper handles (remap unimplemented for ACE)
 //   Native       — backend owns the T0..Tn slot mapping internally (HH, AFC,
 //                  CFS, AD5X IFS, ToolChanger); helix does NOT rewrite gcode
 //   GcodeRewrite — helix must rewrite T-commands in the gcode file because the
-//                  backend has no internal tool-routing (Snapmaker U1, ACE)
+//                  backend has no internal tool-routing (Snapmaker U1)
 //
 // Backends that need nullptr-constructible probes follow the pattern established
 // in test_ams_backend_afc_capabilities.cpp.
@@ -133,13 +135,17 @@ TEST_CASE("GcodeRewrite-strategy backends return RemapStrategy::GcodeRewrite",
         SnapmakerProbe sm;
         REQUIRE(sm.get_remap_strategy() == AmsBackend::RemapStrategy::GcodeRewrite);
     }
-    SECTION("ACE") {
-        AceProbe ace;
-        REQUIRE(ace.get_remap_strategy() == AmsBackend::RemapStrategy::GcodeRewrite);
-    }
 }
 
 TEST_CASE("Base AmsBackend default returns RemapStrategy::None", "[ams][strategy]") {
     BaseProbe base;
     REQUIRE(base.get_remap_strategy() == AmsBackend::RemapStrategy::None);
+}
+
+TEST_CASE("ACE returns RemapStrategy::None (GcodeRewrite unimplemented)", "[ams][strategy]") {
+    // ACE uses ACE_CHANGE_TOOL TOOL=n, not the Tn/SM_PRINT_* families that
+    // GcodeToolRemapper handles, so remap is disabled until that command family
+    // is implemented and validated on a real ACE file.
+    AceProbe ace;
+    REQUIRE(ace.get_remap_strategy() == AmsBackend::RemapStrategy::None);
 }

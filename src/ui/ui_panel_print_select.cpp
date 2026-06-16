@@ -2657,10 +2657,9 @@ void PrintSelectPanel::open_gcode_remap_modal() {
             if (m.tool_index < 0 || m.mapped_slot < 0) {
                 continue;
             }
-            // NOTE(Task 13): for U1/ACE slot index == physical head, so
-            // mapped_slot is the head the gcode rewrite targets. A GcodeRewrite
-            // backend where slot != head would need a slot->head translation
-            // here — confirm on bench U1.
+            // For U1/ACE, slot index == physical head, so mapped_slot is the head
+            // the gcode rewrite targets. A backend where slot != head would need a
+            // slot->head translation here (verify on bench U1).
             remap[m.tool_index] = m.mapped_slot;
         }
 
