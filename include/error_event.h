@@ -17,9 +17,10 @@ enum class ErrorSource {
 /// populated only by classifiers that already know a one-tap fix (the
 /// migrated CFS key840 case); per-backend smart actions arrive in L1.
 struct RecoveryAction {
-    std::string label;   ///< Button label, e.g. "Reset CFS"
+    std::string label;   ///< Button label, e.g. "Unload"
     std::string gcode;   ///< G-code to run on tap
     std::string log_tag; ///< spdlog tag on tap
+    std::string style;   ///< "" (neutral) | "primary" | "danger" — maps to PromptButton.color
 };
 
 /// Result of classifying one gcode-response line. Produced by the pure

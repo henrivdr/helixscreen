@@ -83,3 +83,11 @@ TEST_CASE("non-error line yields nullopt", "[error-center][classify]") {
     REQUIRE_FALSE(classify("// AFC_Brush: Clean Nozzle", ctx).has_value());
     REQUIRE_FALSE(classify("ok T:210", ctx).has_value());
 }
+
+TEST_CASE("RecoveryAction carries an optional style", "[error-center][model]") {
+    helix::RecoveryAction a;
+    REQUIRE(a.style.empty());                 // default neutral
+    helix::RecoveryAction b{"Resume", "RESUME", "afc::resume", "primary"};
+    REQUIRE(b.style == "primary");
+    REQUIRE(b.gcode == "RESUME");
+}
