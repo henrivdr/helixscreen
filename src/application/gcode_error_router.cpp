@@ -54,6 +54,14 @@ struct RecoveryCtx {
     const CfsRecoveryEntry* action;  ///< Points at a static CfsRecoveryEntry
 };
 
+/// Maps RecoveryAction.style to PromptButton.color.
+/// "primary" → "primary", "danger" → "error", anything else → "" (neutral).
+std::string color_for_style(const std::string& style) {
+    if (style == "primary") return "primary";
+    if (style == "danger") return "error";
+    return "";  // neutral / theme default
+}
+
 /// Lookup: which key codes get an actionable button.
 ///
 /// Conservative list — only codes where a software action is genuinely
@@ -270,6 +278,20 @@ PresentAs decide_presentation(const ErrorEvent& e) {
     if (e.severity == ErrorSeverity::WARNING)
         return has_recover ? PresentAs::TOAST_WITH_RECOVER : PresentAs::TOAST;
     return PresentAs::NONE;  // INFO not surfaced in L0
+}
+
+PromptData build_recovery_prompt(const ErrorEvent& e) {
+    PromptData p;
+    p.title = e.title.empty() ? std::string(lv_tr("Printer Error")) : e.title;
+    if (!e.detail.empty()) p.text_lines.push_back(e.detail);
+    for (const auto& a : e.recovery_actions) {
+        PromptButton b;
+        b.label = a.label;
+        b.gcode = a.gcode;
+        b.color = color_for_style(a.style);
+        p.buttons.push_back(std::move(b));
+    }
+    return p;
 }
 
 void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
