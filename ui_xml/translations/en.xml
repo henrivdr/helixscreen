@@ -1814,6 +1814,7 @@
   <translation tag="Tool Changer" en="Tool Changer"/>
   <translation tag="Tool change failed: {}" en="Tool change failed: {}"/>
   <translation tag="Toolhead Style" en="Toolhead Style"/>
+  <translation tag="Toolhead jam" en="Toolhead jam"/>
   <translation tag="Toolhead, G-code, limits, and materials" en="Toolhead, G-code, limits, and materials"/>
   <translation tag="Top" en="Top"/>
   <translation tag="Total Prints" en="Total Prints"/>

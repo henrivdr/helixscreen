@@ -380,7 +380,7 @@ std::optional<helix::ErrorEvent> AmsBackendAfc::classify_error(
         helix::ErrorEvent e;
         e.source = helix::ErrorSource::AFC;
         e.severity = helix::ErrorSeverity::CRITICAL;
-        e.title = lv_tr("Filament system error");
+        e.title = lv_tr("Filament System Error");
         e.detail = detail;
         e.sticky = true;
         e.recovery_actions = build_recovery_actions();
