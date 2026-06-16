@@ -2507,30 +2507,48 @@ void PrintSelectPanel::start_print(bool force) {
         return;
     }
 
-    // Pre-flight check: confirm before printing if any required tool's
-    // filament slot is empty. Backend-agnostic — the detail view publishes
-    // empty_tools_warning by inspecting AmsSlotInfo::has_filament_info()
-    // for each tool the gcode references. Bypassed when force=true (the
-    // user pressed "Print Anyway" on the confirmation modal).
-    if (!force && detail_view_ && detail_view_->has_empty_tool_warning()) {
-        ui::modal_show_confirmation(
-            lv_tr("Empty filament slot"),
-            lv_tr("One or more tools required by this file have no filament loaded. "
-                  "The print will likely fail. Print anyway?"),
-            ModalSeverity::Warning, lv_tr("Print Anyway"),
-            [](lv_event_t*) {
-                LVGL_SAFE_EVENT_CB_BEGIN("on_empty_filament_confirm")
-                // modal_show_confirmation replaces the default close cb with
-                // ours, so we must close the modal explicitly before the
-                // panel transition kicks in.
-                if (auto* top = Modal::get_top()) {
-                    Modal::hide(top);
-                }
-                get_global_print_select_panel().start_print(true);
-                LVGL_SAFE_EVENT_CB_END()
-            },
-            nullptr, nullptr);
+    // Parse gate: filament pre-flight checks are only valid once the gcode has
+    // been parsed (preflight_result_ is computed in the load callback). If the
+    // user taps Print before parse completes, defer the attempt until the file
+    // is loaded rather than evaluating stale/empty checks. force=true bypasses
+    // (the deferred re-entry and the "Print Anyway" path both call with force).
+    if (!force && detail_view_ && !detail_view_->is_gcode_loaded()) {
+        spdlog::debug("[{}] Print tapped before gcode parse - deferring until loaded",
+                      get_name());
+        detail_view_->run_when_loaded(
+            []() { get_global_print_select_panel().start_print(false); });
+        NOTIFY_INFO(lv_tr("Checking filament..."));
         return;
+    }
+
+    // Pre-flight check: hard-confirm before printing when the cached
+    // PreflightResult reports a definitively-empty required filament slot
+    // (has_block(): any tool the gcode references maps to an empty slot).
+    // Backend-agnostic — computed for ALL backends in try_extract_gcode_colors().
+    // Material mismatch is advisory only (surfaced via the warning icon) and does
+    // NOT block here. Bypassed when force=true (user pressed "Print Anyway").
+    if (!force && detail_view_) {
+        const auto& pf = detail_view_->preflight_result();
+        if (pf.has_block()) {
+            ui::modal_show_confirmation(
+                lv_tr("Empty filament slot"),
+                lv_tr("A filament slot required by this file is empty. "
+                      "The print will run out partway through."),
+                ModalSeverity::Warning, lv_tr("Print Anyway"),
+                [](lv_event_t*) {
+                    LVGL_SAFE_EVENT_CB_BEGIN("on_empty_filament_confirm")
+                    // modal_show_confirmation replaces the default close cb with
+                    // ours, so we must close the modal explicitly before the
+                    // panel transition kicks in.
+                    if (auto* top = Modal::get_top()) {
+                        Modal::hide(top);
+                    }
+                    get_global_print_select_panel().start_print(true);
+                    LVGL_SAFE_EVENT_CB_END()
+                },
+                nullptr, nullptr);
+            return;
+        }
     }
 
     // Set the file to print in the controller

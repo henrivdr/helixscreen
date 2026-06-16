@@ -184,16 +184,27 @@ class PrintSelectDetailView : public OverlayBase {
     void hide();
 
     /**
-     * @brief Whether the currently-shown file references any tool whose
-     *        AMS lane/slot is empty. Backend-agnostic — driven by the cached
-     *        PreflightResult (has_block(): any tool mapped to an empty slot),
-     *        computed for ALL backends in try_extract_gcode_colors().
-     *        Used by the print-start path to confirm with the user before
-     *        sending a print that will likely fail mid-flight.
+     * @brief Whether the current file's gcode has finished parsing.
+     *
+     * Set true in the gcode-viewer load callback AFTER the pre-flight
+     * validator has run, so a true return guarantees preflight_result() is
+     * fresh for the loaded file. The print-start gate waits on this to close
+     * the race where Print is tapped before parse completes.
      */
-    [[nodiscard]] bool has_empty_tool_warning() {
-        return lv_subject_get_int(&empty_tools_warning_) == 1;
+    [[nodiscard]] bool is_gcode_loaded() const {
+        return gcode_loaded_;
     }
+
+    /**
+     * @brief Run @p cb once the gcode parse + pre-flight validation complete.
+     *
+     * If the gcode is already loaded, @p cb is invoked synchronously (main
+     * thread). Otherwise it is stored and fired exactly once from the load
+     * callback after preflight_result() is populated. Only one pending
+     * callback is tracked; a later call overwrites an earlier pending one.
+     * Cleared on show() so a stale attempt from a previous file can't fire.
+     */
+    void run_when_loaded(std::function<void()> cb);
 
     // Note: is_visible() inherited from OverlayBase
 
@@ -377,6 +388,10 @@ class PrintSelectDetailView : public OverlayBase {
     lv_subject_t detail_gcode_loading_{};
     std::string temp_gcode_path_; // Cached downloaded gcode file path
     bool gcode_loaded_ = false;   // Whether gcode file has been loaded into viewer
+    // Pending print-attempt (or other) callback registered via run_when_loaded()
+    // while a parse was still in flight. Fired once from the load callback after
+    // preflight_result_ is fresh, then cleared. Reset on show().
+    std::function<void()> on_loaded_cb_;
 
     // Pre-print option toggle state lives in `option_rows_renderer_` (one
     // heap-allocated subject per option) — the legacy fixed six subjects
@@ -462,6 +477,16 @@ class PrintSelectDetailView : public OverlayBase {
      * Fixes Snapmaker (and other printers whose Moonraker doesn't return filament_colors).
      */
     void try_extract_gcode_colors(lv_obj_t* viewer);
+
+    /**
+     * @brief Fire and clear any pending run_when_loaded() callback.
+     *
+     * Invoked from the gcode load callback after try_extract_gcode_colors()
+     * has refreshed preflight_result_. Moves the callback out and clears the
+     * member before invoking it, so it runs exactly once and a re-entrant
+     * run_when_loaded() during the callback registers cleanly for next time.
+     */
+    void fire_on_loaded();
 
     /**
      * @brief Populate the dynamic per-printer option-toggle rows.

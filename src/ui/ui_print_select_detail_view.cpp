@@ -360,6 +360,10 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
     // parsed; clearing here prevents the gate/modal from reading stale checks.
     preflight_result_ = {};
 
+    // Drop any pending run_when_loaded() callback from a previously-selected
+    // file so a stale print-attempt can't fire against this file's parse.
+    on_loaded_cb_ = nullptr;
+
     // Register with NavigationManager for lifecycle callbacks
     NavigationManager::instance().register_overlay_instance(overlay_root_, this);
 
@@ -455,6 +459,12 @@ void PrintSelectDetailView::on_deactivate() {
     show_gcode_viewer(false);
     gcode_loaded_ = false;
 
+    // Drop any pending run_when_loaded() callback. If the user tapped Print
+    // before parse completed (deferring the attempt) and then navigated away,
+    // a late load callback firing fire_on_loaded() would call start_print() on
+    // a hidden panel → a ghost print with no UI. Clearing here prevents that.
+    on_loaded_cb_ = nullptr;
+
     // Hide any open delete confirmation modal
     hide_delete_confirmation();
 
@@ -507,6 +517,10 @@ void PrintSelectDetailView::on_ui_destroyed() {
 
     // Pause and clear gcode viewer state (widget is already deleted by base)
     gcode_loaded_ = false;
+
+    // Drop any pending run_when_loaded() callback so a late load callback can't
+    // fire start_print() against a destroyed view (ghost-print guard).
+    on_loaded_cb_ = nullptr;
 
     // Clean up temp gcode file so stale cached data doesn't persist
     if (!temp_gcode_path_.empty()) {
@@ -872,6 +886,27 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
                   preflight_result_.has_block());
 }
 
+void PrintSelectDetailView::run_when_loaded(std::function<void()> cb) {
+    if (!cb) {
+        return;
+    }
+    // Already parsed: preflight_result_ is fresh, run synchronously (main thread).
+    if (gcode_loaded_) {
+        cb();
+        return;
+    }
+    // Parse still in flight: store; fire_on_loaded() invokes it post-parse.
+    on_loaded_cb_ = std::move(cb);
+}
+
+void PrintSelectDetailView::fire_on_loaded() {
+    if (on_loaded_cb_) {
+        auto cb = std::move(on_loaded_cb_);
+        on_loaded_cb_ = nullptr;
+        cb();
+    }
+}
+
 bool PrintSelectDetailView::swatches_card_visible_for(size_t tool_count) const {
     // Multi-tool printers: any tool referenced is enough (lane identity matters).
     // Single-extruder: 2+ tools required (manual-swap multi-color files).
@@ -963,8 +998,14 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                     self->apply_tool_colors();
                     self->apply_mapped_tool_colors();
 
-                    // Extract colors from parsed gcode when metadata lacked them
+                    // Extract colors from parsed gcode when metadata lacked them.
+                    // This also computes preflight_result_ — it MUST run before
+                    // fire_on_loaded() so any deferred print-attempt sees fresh checks.
                     self->try_extract_gcode_colors(viewer);
+
+                    // Parse + pre-flight are now complete: release any deferred
+                    // run_when_loaded() callback (e.g. a print tapped pre-parse).
+                    self->fire_on_loaded();
 
                     // Unpause, show, then reset camera (must be visible for layout)
                     ui_gcode_viewer_set_paused(viewer, false);
@@ -1054,8 +1095,14 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                                 self->apply_tool_colors();
                                 self->apply_mapped_tool_colors();
 
-                                // Extract colors from parsed gcode when metadata lacked them
+                                // Extract colors from parsed gcode when metadata lacked them.
+                                // Also computes preflight_result_ — MUST run before
+                                // fire_on_loaded() so a deferred print sees fresh checks.
                                 self->try_extract_gcode_colors(viewer);
+
+                                // Parse + pre-flight complete: release any deferred
+                                // run_when_loaded() callback (e.g. a pre-parse print tap).
+                                self->fire_on_loaded();
 
                                 // Unpause, show, then reset camera (must be visible for layout)
                                 ui_gcode_viewer_set_paused(viewer, false);
