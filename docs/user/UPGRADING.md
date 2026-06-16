@@ -133,6 +133,16 @@ curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/script
 
 **Adventurer 5M:** Download the specific version archive from [GitHub Releases](https://github.com/prestonbrown/helixscreen/releases), then use `--local` as shown above.
 
+### Reinstall a Version with Fresh Settings
+
+The commands above keep your existing `settings.json`. To reinstall a specific version **and** reset HelixScreen's settings to defaults at the same time, use `--clean` instead of `--update`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --version v1.2.0
+```
+
+`--clean` removes HelixScreen's settings and caches (it asks for confirmation first), then installs the version you specified. Your Klipper config, Moonraker settings, print history, and G-code files are **not** affected.
+
 ---
 
 ## Checking Your Version

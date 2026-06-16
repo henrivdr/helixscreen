@@ -1009,9 +1009,29 @@ curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/script
 
 **Creality K1 / Flashforge Adventurer 5M:** Download the specific version archive from [GitHub Releases](https://github.com/prestonbrown/helixscreen/releases), then use `--local` as shown above.
 
+To reinstall a specific version with a **fresh settings.json** (instead of keeping your existing settings), swap `--update` for `--clean`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --version v1.2.0
+```
+
 ### Preserving Configuration
 
-The update process preserves your `settings.json` settings. If you want to reset to defaults:
+The update process preserves your `settings.json` settings. If you want to reset to defaults, use the `--clean` flag — it removes your HelixScreen settings and caches everywhere they live, then does a fresh install:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean
+```
+
+`--clean` asks for confirmation before wiping anything. Your Klipper config, Moonraker settings, print history, and G-code files are **not** touched — only HelixScreen's own settings.
+
+To reset settings **and** pin a specific version in one step, combine `--clean` with `--version`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --version v1.2.0
+```
+
+If you'd rather delete the settings file by hand instead of reinstalling:
 
 ```bash
 # Use your actual install path (~/helixscreen or /opt/helixscreen)
