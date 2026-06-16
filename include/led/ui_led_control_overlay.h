@@ -34,6 +34,9 @@ namespace helix::led {
  * @see led_control_overlay.xml for layout definition
  */
 class LedControlOverlay : public OverlayBase {
+    // Test access for exercising private visibility logic (color picker gate).
+    friend class LedControlOverlayTestAccess;
+
   public:
     explicit LedControlOverlay(helix::PrinterState& printer_state);
     ~LedControlOverlay() override;

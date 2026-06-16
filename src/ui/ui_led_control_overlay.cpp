@@ -348,7 +348,36 @@ void LedControlOverlay::update_section_visibility() {
     lv_subject_set_int(&macro_visible_, macro_vis ? 1 : 0);
 
     // Color section visible for native RGB strips but NOT output_pin (brightness-only)
-    bool color_vis = (native_vis && selected_backend_type_ != LedBackendType::OUTPUT_PIN);
+    // or white-only native strips (e.g. [led chamber_light] with white_pin only).
+    // Mirror the capability gate in LedSettingsOverlay::populate_auto_state_rows():
+    // treat the selection as color-capable if any selected native strip reports
+    // supports_color. Picking a color on a white-only strip silently converts
+    // RGB->white luminance, which is misleading — so hide the picker entirely.
+    bool selected_supports_color = false;
+    if (ctrl_init) {
+        const auto& selected = controller.selected_strips();
+        const auto& native_strips = controller.native().strips();
+        if (selected.empty()) {
+            // No explicit selection: fall back to the first native strip (the
+            // implicit target used by send_color_to_strips / first_available_strip).
+            if (!native_strips.empty())
+                selected_supports_color = native_strips[0].supports_color;
+        } else {
+            for (const auto& strip_id : selected) {
+                for (const auto& s : native_strips) {
+                    if (s.id == strip_id && s.supports_color) {
+                        selected_supports_color = true;
+                        break;
+                    }
+                }
+                if (selected_supports_color)
+                    break;
+            }
+        }
+    }
+
+    bool color_vis = (native_vis && selected_backend_type_ != LedBackendType::OUTPUT_PIN &&
+                      selected_supports_color);
     lv_subject_set_int(&color_visible_, color_vis ? 1 : 0);
 
     // Strip selector visible when there are 2+ strips total
