@@ -517,6 +517,15 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // flips it false for the session (not retried).
     std::atomic<bool> zcolor_query_active_{false};
     std::atomic<bool> zcolor_query_pending_{false};
+    // Coalesce-gate for schedule_zcolor_query(): true while a debounce worker is
+    // in flight. zmod re-emits the "Select print materials" prompt on every
+    // CHANGE_ZCOLOR, so a single color edit produces a burst of trigger lines —
+    // without this gate each one submitted its own fast()-pool worker (20+ in a
+    // 40ms window seen in bundle ACJRZBXJ), every one holding a pool slot through
+    // its 500ms sleep while only a single query ever fired. zcolor_query_pending_
+    // carries the "refresh wanted" signal, so later callers just set it and
+    // return. Mirrors reread_pending_ on schedule_json_reread().
+    std::atomic<bool> zcolor_schedule_armed_{false};
     std::atomic<bool> zcolor_silent_supported_{true};
     std::mutex zcolor_buffer_mutex_;
     std::vector<std::string> zcolor_response_buffer_;
@@ -524,6 +533,10 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // Exposed via Ad5xIfsTestAccess so the listener-feedback regression test
     // can assert that buffered response lines never re-arm a query.
     std::atomic<uint32_t> zcolor_schedule_count_{0};
+    // Diagnostic counter — incremented only when a debounce worker is actually
+    // submitted (past the zcolor_schedule_armed_ gate). Lets the coalescing test
+    // assert that a burst of triggers spawns a single worker, not one each.
+    std::atomic<uint32_t> zcolor_worker_submit_count_{0};
     // Diagnostic-only: which operation triggered the next/current GET_ZCOLOR +
     // IFS_STATUS query, threaded into the IFS_STATUS Chan log line for field
     // diagnostics. const char* to string literals (no allocation). _pending_ is

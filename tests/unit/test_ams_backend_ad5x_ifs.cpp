@@ -266,6 +266,12 @@ class Ad5xIfsTestAccess {
     static uint32_t zcolor_schedule_count(const AmsBackendAd5xIfs& b) {
         return b.zcolor_schedule_count_.load();
     }
+    static uint32_t zcolor_worker_submit_count(const AmsBackendAd5xIfs& b) {
+        return b.zcolor_worker_submit_count_.load();
+    }
+    static bool zcolor_schedule_armed(const AmsBackendAd5xIfs& b) {
+        return b.zcolor_schedule_armed_.load();
+    }
     static size_t zcolor_buffer_size(AmsBackendAd5xIfs& b) {
         std::lock_guard<std::mutex> lock(b.zcolor_buffer_mutex_);
         return b.zcolor_response_buffer_.size();
@@ -4606,6 +4612,34 @@ TEST_CASE("AD5X IFS listener fires schedule_zcolor_query on external RUN_ZCOLOR 
 
     CHECK_FALSE(buffered); // Treated as external trigger, not buffered.
     CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
+}
+
+// A single user color edit makes zmod re-emit its "Select print materials"
+// prompt, which echoes a burst of CHANGE_ZCOLOR tokens on the console (20+ in a
+// 40ms window — bundle ACJRZBXJ, an old-zmod AD5X). Pre-fix, schedule_zcolor_query
+// submitted one HttpExecutor::fast() worker per line, each holding a pool slot
+// through its 500ms debounce sleep while only a single query ever fired. The
+// zcolor_schedule_armed_ gate coalesces the burst into one in-flight worker.
+TEST_CASE("AD5X IFS coalesces a burst of color-change triggers into one debounce worker",
+          "[ams][ad5x_ifs][zcolor]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_zcolor_query_active(backend, false);
+
+    const uint32_t sched_before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+    const uint32_t submit_before = Ad5xIfsTestAccess::zcolor_worker_submit_count(backend);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::zcolor_schedule_armed(backend));
+
+    constexpr int kBurst = 20;
+    for (int i = 0; i < kBurst; ++i) {
+        Ad5xIfsTestAccess::on_gcode_response_line(
+            backend, "// CHANGE_ZCOLOR SLOT=2 HEX=F72224 TYPE=PLA");
+    }
+
+    // Every trigger is seen (diagnostic counter rises by the full burst)...
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == sched_before + kBurst);
+    // ...but only ONE debounce worker was submitted; the rest hit the armed gate.
+    CHECK(Ad5xIfsTestAccess::zcolor_worker_submit_count(backend) == submit_before + 1);
+    CHECK(Ad5xIfsTestAccess::zcolor_schedule_armed(backend));
 }
 
 TEST_CASE("AD5X IFS listener ignores unrelated gcode lines", "[ams][ad5x_ifs][zcolor]") {

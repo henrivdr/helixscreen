@@ -2631,17 +2631,30 @@ void AmsBackendAd5xIfs::schedule_zcolor_query(const char* reason) {
     // Cleared on claim by the first worker to wake OR by finalize_zcolor_response.
     zcolor_query_pending_.store(true);
 
+    // Coalesce: only ONE debounce worker is ever in flight. A burst of
+    // CHANGE_ZCOLOR lines (zmod re-pops the color prompt on every edit) used to
+    // submit one fast()-pool worker each — 20+ in a 40ms window in bundle
+    // ACJRZBXJ — every one sleeping out 500ms on a pool slot while a single query
+    // actually fired. The pending flag above already carries the intent, so once
+    // a worker is armed, later callers just set it and return. (Mirror of the
+    // reread_pending_ gate in schedule_json_reread().)
+    if (zcolor_schedule_armed_.exchange(true)) {
+        return;
+    }
+    zcolor_worker_submit_count_.fetch_add(1, std::memory_order_relaxed);
+
     auto token = lifetime_.token();
     helix::http::HttpExecutor::fast().submit([this, token]() {
         // BG THREAD: just the debounce sleep — no member touch.
         // Short debounce — coalesce bursts from port-sensor changes, the
-        // gcode stream, and unload-complete triggers. Multiple workers may
-        // wake concurrently; only one claims via exchange.
+        // gcode stream, and unload-complete triggers.
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-        // MAIN THREAD: claim the pending flag and run the query. Both touch
+        // MAIN THREAD: disarm so a trigger arriving after this point arms a fresh
+        // worker, then claim the pending flag and run the query. Both touch
         // members (zcolor_query_pending_, api_ via query_zcolor_silent).
         token.defer("Ad5xIfsBackend::zcolor_debounce_apply", [this]() {
+            zcolor_schedule_armed_.store(false);
             if (!zcolor_query_pending_.exchange(false)) {
                 return; // Another worker (or finalize) already claimed this refresh.
             }
