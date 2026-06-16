@@ -354,23 +354,28 @@ void PrintStartController::execute_print_start() {
     // takes the unchanged synchronous start path below.
     if (AmsBackend* backend = AmsState::instance().get_backend();
         backend && backend->get_remap_strategy() == AmsBackend::RemapStrategy::SnapmakerNative) {
-        send_snapmaker_preprint_then(start_now);
+        send_snapmaker_preprint_then(
+            detail_view_ ? detail_view_->get_tools_used() : std::set<int>{},
+            detail_view_ ? detail_view_->get_effective_remap() : std::map<int, int>{},
+            start_now,
+            [this]() {
+                if (update_print_button_) {
+                    update_print_button_();
+                }
+                if (on_print_cancelled_) {
+                    on_print_cancelled_();
+                }
+            });
         return; // start_now fires from the send continuation — do NOT also start here
     }
 
     start_now();
 }
 
-void PrintStartController::send_snapmaker_preprint_then(std::function<void()> on_done) {
-    if (!detail_view_) {
-        spdlog::warn("[PrintStartController] No detail view for U1 pre-print config — starting "
-                     "print without it");
-        if (on_done) {
-            on_done();
-        }
-        return;
-    }
-
+void PrintStartController::send_snapmaker_preprint_then(const std::set<int>& tools_used,
+                                                        const std::map<int, int>& remap,
+                                                        std::function<void()> on_done,
+                                                        std::function<void()> on_abort) {
     AmsBackend* backend = AmsState::instance().get_backend();
     auto* sm = dynamic_cast<AmsBackendSnapmaker*>(backend);
     if (!sm) {
@@ -385,8 +390,6 @@ void PrintStartController::send_snapmaker_preprint_then(std::function<void()> on
         return;
     }
 
-    const std::set<int> tools_used = detail_view_->get_tools_used();
-    const std::map<int, int> remap = detail_view_->get_effective_remap();
     std::string gcode = sm->build_preprint_gcode(tools_used, remap);
 
     if (gcode.empty()) {
@@ -403,11 +406,8 @@ void PrintStartController::send_snapmaker_preprint_then(std::function<void()> on
     if (!api_) {
         spdlog::error("[PrintStartController] No API to send U1 pre-print config — aborting print");
         NOTIFY_ERROR(lv_tr("Print setup failed: internal error"));
-        if (update_print_button_) {
-            update_print_button_();
-        }
-        if (on_print_cancelled_) {
-            on_print_cancelled_();
+        if (on_abort) {
+            on_abort();
         }
         return;
     }
@@ -425,21 +425,18 @@ void PrintStartController::send_snapmaker_preprint_then(std::function<void()> on
         },
         // Error: defer to main thread, surface a user-visible failure, and ABORT.
         // Better to fail loud than feed an empty head.
-        [this, tok](const MoonrakerError& err) mutable {
+        [tok, on_abort](const MoonrakerError& err) mutable {
             std::string msg = err.message;
-            tok.defer("PrintStartController::preprint.err", [this, msg]() {
+            tok.defer("PrintStartController::preprint.err", [msg, on_abort]() {
                 LOG_ERROR_INTERNAL("[PrintStartController] U1 pre-print config rejected: {}", msg);
                 NOTIFY_ERROR_MODAL(
                     lv_tr("Print setup failed"),
                     "{}",
                     lv_tr("The printer rejected the filament configuration. The print was not "
                           "started."));
-                // Re-enable the print button and treat as a cancel — do NOT start.
-                if (update_print_button_) {
-                    update_print_button_();
-                }
-                if (on_print_cancelled_) {
-                    on_print_cancelled_();
+                // Notify caller to re-enable UI state — do NOT start.
+                if (on_abort) {
+                    on_abort();
                 }
             });
         },

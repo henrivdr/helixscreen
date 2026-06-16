@@ -10,7 +10,9 @@
 
 #include <functional>
 #include <lvgl.h>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -152,15 +154,23 @@ class PrintStartController {
      * When the active AMS backend's RemapStrategy is SnapmakerNative, the U1
      * firmware requires SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP to be
      * emitted BEFORE PRINT_START (they error mid-print). Builds that gcode from
-     * the detail view's tools_used + effective remap, sends it, and only invokes
-     * @p on_done (which starts the print) after the send succeeds. On send error
-     * it surfaces a user-visible failure and does NOT start the print. If there
-     * is nothing to send (empty tools or empty gcode), @p on_done runs immediately.
+     * @p tools_used and @p remap (supplied by the caller), sends it, and only invokes
+     * @p on_done (which starts the print) after the send succeeds. On send error it
+     * surfaces a user-visible failure, calls @p on_abort, and does NOT start the print.
+     * If there is nothing to send (empty tools or empty gcode), @p on_done runs immediately.
      *
      * Callbacks land on the WebSocket background thread; the body is deferred to
      * the main thread via the lifetime token.
+     *
+     * @param tools_used  Set of tool indices used by the file (from detail view or reprint).
+     * @param remap       Tool-to-slot remap map (from detail view or reprint).
+     * @param on_done     Called on success — proceeds with the actual print start.
+     * @param on_abort    Called on error — caller is responsible for re-enabling UI state.
      */
-    void send_snapmaker_preprint_then(std::function<void()> on_done);
+    void send_snapmaker_preprint_then(const std::set<int>& tools_used,
+                                      const std::map<int, int>& remap,
+                                      std::function<void()> on_done,
+                                      std::function<void()> on_abort);
 
     /**
      * @brief Show filament warning dialog
