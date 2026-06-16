@@ -8,6 +8,7 @@
 #include "app_globals.h"
 #include "filament_sensor_manager.h"
 #include "humidity_sensor_manager.h"
+#include "led/led_auto_state.h"
 #include "led/led_controller.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
@@ -158,6 +159,13 @@ void init_subsystems_from_hardware(const PrinterDiscovery& hardware, MoonrakerAP
     auto& led_ctrl = helix::led::LedController::instance();
     led_ctrl.init(api, client);
     led_ctrl.discover_from_hardware(hardware);
+    // Wire up auto-state LED control. init() reloads the per-printer auto-state
+    // config and (re)subscribes to PrinterState subjects. Because switch_printer()
+    // re-runs this discovery path, this also reloads per-printer auto-state config
+    // on printer switch automatically. Runs on the main thread (this function is
+    // invoked inside a queue_update() drain), so the observe_int_sync subscriptions
+    // are main-thread-safe.
+    helix::led::LedAutoState::instance().init(printer_state);
     led_ctrl.discover_wled_strips();
 
     // Set tracked LED early so the subscription response populates subjects correctly.

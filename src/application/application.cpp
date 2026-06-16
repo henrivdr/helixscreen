@@ -34,6 +34,7 @@
 #include "job_queue_state.h"
 #include "keyboard_shortcuts.h"
 #include "layout_manager.h"
+#include "led/led_auto_state.h"
 #include "led/led_controller.h"
 #include "moonraker_manager.h"
 #include "panel_factory.h"
@@ -3900,6 +3901,10 @@ void Application::tear_down_printer_state() {
 
     // 10. Clear AMS backends (hold subscription guards with raw client pointers)
     AmsState::instance().clear_backends();
+
+    // 10b. Deinit LedAutoState before LedController/subjects — it observes
+    //      PrinterState subjects and drives LedController in apply_action().
+    helix::led::LedAutoState::instance().deinit();
 
     // 11. Deinit LedController (holds API/client pointers about to be freed)
     helix::led::LedController::instance().deinit();

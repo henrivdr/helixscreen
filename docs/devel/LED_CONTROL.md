@@ -174,6 +174,22 @@ When enabled, `LedAutoState` subscribes to three PrinterState subjects:
 
 On any change, `compute_state_key()` determines the current state, and if it differs from `last_applied_key_`, `apply_action()` sends the appropriate LED command.
 
+### Lifecycle / Initialization
+
+`LedAutoState` is a dormant singleton until `init(PrinterState&)` is called — `load_config()` runs only inside `init()`, and `evaluate()` / `on_state_changed()` early-return unless `initialized_` is set. The wiring lives in the printer lifecycle:
+
+- **init** — `init_subsystems_from_hardware()` in `src/printer/printer_discovery.cpp` calls `LedAutoState::instance().init(printer_state)` immediately after `LedController::init()` / `discover_from_hardware()`. `init()` is idempotent: it first unsubscribes any stale observers, reloads the per-printer config, and re-subscribes if enabled.
+- **deinit** — `Application::tear_down_printer_state()` in `src/application/application.cpp` calls `LedAutoState::instance().deinit()` (step 10b) **before** `LedController::deinit()` (step 11) and well before `StaticSubjectRegistry::deinit_all()`.
+
+**Ordering constraints (both load-bearing):**
+
+1. `LedAutoState` observes PrinterState subjects, so it **must deinit before those subjects are destroyed** (`deinit_all()`). Otherwise the observers outlive their subjects and `lv_subject_deinit()` frees observers that `ObserverGuard` still references → use-after-free.
+2. `LedAutoState` drives `LedController` in `apply_action()`, so it **must deinit before `LedController`** to avoid a deferred auto-state callback touching a torn-down controller.
+
+**Per-printer reload on switch.** `load_config()` reads from the active-printer path `<Config::df()>leds/auto_state/...` (i.e. `/printers/<active>/leds/auto_state/enabled` and `.../mappings`), with a one-time migration from the legacy global `/led/auto_state/` path. Because `switch_printer()` runs teardown → `init_printer_state` → `connect_moonraker` → discovery, the discovery-path `init()` call automatically reloads the new printer's auto-state config on every printer switch — no extra wiring needed.
+
+**Main-thread-only.** `init()` (and thus `subscribe_observers()` via `observe_int_sync`) runs on the main thread: `init_subsystems_from_hardware()` is invoked inside a `queue_update()` drain. Do not call `init()` / `deinit()` from a background thread.
+
 ## Config Persistence
 
 LED configuration is stored in `settings.json` under `/printer/leds/`:
@@ -200,19 +216,21 @@ LED configuration is stored in `settings.json` under `/printer/leds/`:
 }
 ```
 
-Auto-state mappings are stored under `/printer/leds/auto_state/`:
+Auto-state mappings are stored **per printer** under `<Config::df()>leds/auto_state/` — i.e. `/printers/<active-printer-id>/leds/auto_state/` (mappings serialize the action under the `action` key with the color as a `#RRGGBB` string; see `LedAutoState::save_config()`):
 
 ```json
 {
-    "printer": {
-        "leds": {
-            "auto_state": {
-                "enabled": true,
-                "mappings": {
-                    "idle": {"action_type": "brightness", "brightness": 50},
-                    "printing": {"action_type": "color", "color": 16777215, "brightness": 100},
-                    "error": {"action_type": "color", "color": 16711680, "brightness": 100},
-                    "complete": {"action_type": "effect", "effect_name": "rainbow"}
+    "printers": {
+        "<active-printer-id>": {
+            "leds": {
+                "auto_state": {
+                    "enabled": true,
+                    "mappings": {
+                        "idle": {"action": "brightness", "color": "#FFFFFF", "brightness": 50},
+                        "printing": {"action": "color", "color": "#FFFFFF", "brightness": 100},
+                        "error": {"action": "color", "color": "#FF0000", "brightness": 100},
+                        "complete": {"action": "effect", "color": "#FFFFFF", "brightness": 100, "effect_name": "rainbow"}
+                    }
                 }
             }
         }
@@ -220,7 +238,7 @@ Auto-state mappings are stored under `/printer/leds/auto_state/`:
 }
 ```
 
-Config migration from the old `/led/` path is handled automatically on first load.
+Config migration from the old global `/led/auto_state/` path to the active-printer path is handled automatically on first load (`LedAutoState::load_config()`).
 
 ## UI Components
 
@@ -253,6 +271,7 @@ Opened from Settings panel. Configures which strips HelixScreen controls and how
 - **LED commands**: Sent via `MoonrakerAPI` (through WebSocket, runs on libhv thread)
 - **Status updates**: `NativeBackend::update_from_status()`, `OutputPinBackend::update_from_status()`, and `WledBackend::update_strip_state()` called from Moonraker subscription handler (background thread), change callbacks dispatched to main thread
 - **UI updates**: All subject updates and widget manipulation on main thread only
+- **Auto-state lifecycle**: `LedAutoState::init()` / `deinit()` run on the main thread only (init via the `init_subsystems_from_hardware()` discovery path inside a `queue_update()` drain; deinit via `Application::tear_down_printer_state()`). Its `observe_int_sync` subscriptions defer callbacks through the UpdateQueue, so auto-state actions always apply on the main thread
 
 ## Home Panel Widget Integration
 
