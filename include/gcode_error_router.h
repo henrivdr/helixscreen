@@ -12,6 +12,10 @@
 
 class MoonrakerAPI;
 
+// Test-only accessor (tests/test_helpers/gcode_error_router_test_access.h),
+// forward-declared here so the friend grant below can name it explicitly.
+struct GcodeErrorRouterTestAccess;
+
 namespace helix {
 class MoonrakerClient;
 
@@ -81,6 +85,12 @@ class GcodeErrorRouter {
     static bool should_surface_replay(double entry_time, double now);
 
   private:
+    /// Test-only access to the private presentation glue (`process_line`).
+    /// Kept private + friend (L065/L088) so production callers can't bypass
+    /// the live/replay entry points. The accessor lives in the global
+    /// namespace (tests/test_helpers), hence the leading `::`.
+    friend struct ::GcodeErrorRouterTestAccess;
+
     /// Live `notify_gcode_response` handler — runs on the WS thread.
     void on_notify_gcode_response(const nlohmann::json& msg);
 
