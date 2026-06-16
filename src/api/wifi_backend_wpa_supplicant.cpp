@@ -193,13 +193,18 @@ WiFiError WifiBackendWpaSupplicant::start() {
     }
 
     if (event_loop_active()) {
-        // Thread already running
-        if (init_complete_.load()) {
+        // Thread already running AND a prior init actually connected — nothing to do.
+        // We gate on init_succeeded_ (not init_complete_): a *failed* prior init
+        // also sets init_complete_, and keying off it here would early-return
+        // success and silently skip the retry, leaving the backend permanently
+        // dead after a transient first-boot failure (helixscreen#1036).
+        if (init_complete_.load() && init_succeeded_.load()) {
             spdlog::debug("[WifiBackend] Already running and initialized");
             return WiFiErrorHelper::success();
         }
-        // Thread running but WiFi disabled (after stop()) - re-initialize wpa connections
-        spdlog::info("[WifiBackend] Re-enabling WiFi on existing event loop");
+        // Thread running but not connected (after stop(), or a prior init failed)
+        // — re-initialize the wpa connections.
+        spdlog::info("[WifiBackend] (Re)initializing WiFi on existing event loop");
         init_complete_ = false;
         loop()->runInLoop(std::bind(&WifiBackendWpaSupplicant::init_wpa, this));
     } else {
@@ -228,6 +233,16 @@ WiFiError WifiBackendWpaSupplicant::start() {
         }
     }
 
+    // init_complete_ fired, but that only means the attempt finished. If
+    // init_wpa() bailed (socket not found, connect/attach failed) it dispatched
+    // INIT_FAILED and left init_succeeded_ false. Report that honestly so
+    // set_enabled() surfaces the failure and start_async() fires INIT_FAILED
+    // (not READY) — and so the next start() retries instead of short-circuiting.
+    if (!init_succeeded_.load()) {
+        return WiFiErrorHelper::connection_failed(
+            "wpa_supplicant init did not complete (no live control connection)");
+    }
+
     spdlog::info("[WifiBackend] Backend initialized successfully");
     return WiFiErrorHelper::success();
 }
@@ -241,7 +256,10 @@ void WifiBackendWpaSupplicant::start_async() {
         spdlog::debug("[WifiBackend] wpa: start_async already in progress");
         return;
     }
-    if (init_complete_.load()) {
+    // Already connected — replay READY for late subscribers. A *failed* prior
+    // init also sets init_complete_, so we additionally require init_succeeded_;
+    // otherwise we'd falsely report READY and never retry (helixscreen#1036).
+    if (init_complete_.load() && init_succeeded_.load()) {
         async_init_in_progress_ = false;
         dispatch_event("READY", "");
         return;
@@ -255,10 +273,15 @@ void WifiBackendWpaSupplicant::start_async() {
     try {
         async_init_thread_ = std::thread([this]() {
             WiFiError result = start();
+            bool ran_init = init_complete_.load();
             async_init_in_progress_ = false;
             if (result.success()) {
                 dispatch_event("READY", "");
-            } else {
+            } else if (!ran_init) {
+                // start() failed before init_wpa() ran (preflight / thread spawn),
+                // so no INIT_FAILED was dispatched there — emit it here. When
+                // init_wpa() did run and fail it already dispatched INIT_FAILED;
+                // re-dispatching would double-notify the manager.
                 dispatch_event("INIT_FAILED", result.technical_msg);
             }
         });
@@ -288,7 +311,10 @@ void WifiBackendWpaSupplicant::stop() {
 
     spdlog::info("[WifiBackend] Disabling WiFi backend (keeping event loop alive)");
 
-    // Reset init state so is_running() returns false and start() can re-init
+    // Reset init state so is_running() returns false and start() can re-init.
+    // Clear init_succeeded_ too — the control connections are about to be torn
+    // down, so the backend is no longer "up".
+    init_succeeded_ = false;
     init_complete_ = false;
 
     // THREAD SAFETY: cleanup_wpa() manipulates libhv I/O handles (hio_read_stop,
@@ -506,6 +532,10 @@ WiFiError WifiBackendWpaSupplicant::check_wifi_hardware() {
 void WifiBackendWpaSupplicant::init_wpa() {
     spdlog::trace("[WifiBackend] init_wpa() called in event loop thread");
 
+    // Clear the success flag up front; only the fully-connected tail below sets
+    // it true. Every early-return failure path therefore leaves it false.
+    init_succeeded_ = false;
+
     // Socket discovery: Try common paths
     std::string wpa_socket;
     bool socket_found = false;
@@ -653,6 +683,10 @@ void WifiBackendWpaSupplicant::init_wpa() {
     hio_read_start(mon_io_); // Start monitoring socket for events
 
     resolve_5ghz_support();
+
+    // Reached only with live control + monitor connections registered — the
+    // backend is genuinely up. This is the one place init_succeeded_ goes true.
+    init_succeeded_ = true;
 
     spdlog::debug("[WifiBackend] wpa_supplicant backend initialized successfully");
     signal_init_complete();
@@ -859,9 +893,13 @@ std::string WifiBackendWpaSupplicant::send_command(const std::string& cmd) {
 // ============================================================================
 
 bool WifiBackendWpaSupplicant::is_running() const {
-    // Use init_complete_ instead of thread state - this tracks "logically enabled"
-    // The thread may still be running after stop() but WiFi is disabled
-    return init_complete_.load();
+    // "Running" means we have live wpa_supplicant connections, not merely that
+    // an init attempt finished. Keying off init_succeeded_ (not init_complete_)
+    // means a failed init reports as not-running, so trigger_scan()/is_enabled()
+    // surface "not ready" honestly instead of a contradictory "up but every
+    // command fails" state (helixscreen#1036). The event-loop thread may still
+    // be alive after stop(); that's fine — init_succeeded_ is false then too.
+    return init_succeeded_.load();
 }
 
 WiFiError WifiBackendWpaSupplicant::trigger_scan() {

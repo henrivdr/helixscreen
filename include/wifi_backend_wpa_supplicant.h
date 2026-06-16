@@ -278,7 +278,15 @@ class WifiBackendWpaSupplicant : public WifiBackend, private hv::EventLoopThread
     // Init synchronization - ensures init_wpa() completes before start() returns
     std::mutex init_mutex_;
     std::condition_variable init_cv_;
+    // init_complete_: an init *attempt* finished (success OR failure). Used only
+    // to wake start()'s condition-variable wait — NOT a "backend is usable" flag.
     std::atomic<bool> init_complete_{false};
+    // init_succeeded_: init_wpa() ran to completion with live control + monitor
+    // connections. This is the real "backend is up" signal — is_running(),
+    // is_enabled(), and the start()/start_async() retry guards key off it so a
+    // failed init (e.g. a fresh-boot race where wpa_supplicant's control socket
+    // isn't up yet) does not read as "running" and does not block a later retry.
+    std::atomic<bool> init_succeeded_{false};
 
     // Shutdown coordination - prevents use-after-free when start() times out
     // (GitHub issue #8: thread still in wpa_ctrl_attach when destructor runs)

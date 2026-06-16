@@ -233,6 +233,15 @@ void WiFiManager::scan_timer_callback(lv_timer_t* timer) {
         if (!result.success()) {
             manager->scan_pending_ = false;
             LOG_WARN_INTERNAL("Periodic scan failed: {}", result.technical_msg);
+            // Self-heal: a NOT_INITIALIZED scan means the backend never came up
+            // (typically a fresh-boot race where wpa_supplicant's control socket
+            // wasn't ready when the constructor first probed). Re-attempt bringup
+            // here so the backend recovers on its own once the socket appears,
+            // instead of looping "Backend not started" forever (helixscreen#1036).
+            if (result.result == WiFiResult::NOT_INITIALIZED) {
+                spdlog::info("[WiFiManager] Backend not started — re-attempting bringup");
+                manager->backend_->start_async();
+            }
         }
     }
 }
@@ -374,6 +383,14 @@ bool WiFiManager::set_enabled(bool enabled) {
         spdlog::debug("[WiFiManager] WiFi backend stopped");
         return true;
     }
+}
+
+void WiFiManager::retry_async() {
+    if (!backend_) {
+        return;
+    }
+    spdlog::debug("[WiFiManager] Re-attempting backend bringup (retry_async)");
+    backend_->start_async();
 }
 
 // ============================================================================

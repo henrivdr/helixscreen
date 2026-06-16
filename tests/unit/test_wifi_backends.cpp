@@ -3,11 +3,21 @@
 
 #include "../../include/wifi_backend.h"
 #include "../../include/wifi_backend_mock.h"
+#if !defined(__APPLE__) && !defined(__ANDROID__)
+#include "../../include/wifi_backend_wpa_supplicant.h"
+#endif
 
 #include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <thread>
+
+#if !defined(__APPLE__) && !defined(__ANDROID__)
+#include <cstring>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#endif
 
 #include "../catch_amalgamated.hpp"
 
@@ -701,3 +711,59 @@ TEST_CASE_METHOD(WiFiBackendTestFixture, "Backend edge cases",
         REQUIRE(status.signal_strength == 0);
     }
 }
+
+#if !defined(__APPLE__) && !defined(__ANDROID__)
+// ============================================================================
+// Regression: wpa_supplicant backend must NOT report "running" after a FAILED
+// init (helixscreen#1036).
+//
+// On a fresh boot the control socket can be present (so discovery + preflight
+// pass) while wpa_supplicant isn't actually answering yet, so the control
+// connection / ATTACH fails. The old code keyed is_running() off init_complete_,
+// which signal_init_complete() sets on *every* init path — success OR failure —
+// so a dead backend reported as "running". The wizard then believed WiFi was up,
+// every scan returned "Backend not started", and nothing ever retried. is_running()
+// now keys off init_succeeded_ (set only on a fully-connected init), so a failed
+// init reports honestly and the retry paths re-attempt.
+//
+// We fake the failure with a bound-but-unanswered AF_UNIX DGRAM socket pointed at
+// by HELIX_WPA_SOCKET_DIR: directory iteration + is_socket() + permission checks
+// pass, but it speaks no wpa protocol, so init_wpa() fails at connect/ATTACH.
+// ============================================================================
+TEST_CASE("WpaBackend honest is_running after failed init (#1036)",
+          "[network][backend][wpa][slow]") {
+    char dir_template[] = "/tmp/helix_wpa_test_XXXXXX";
+    char* dir = mkdtemp(dir_template);
+    REQUIRE(dir != nullptr);
+
+    std::string sock_path = std::string(dir) + "/wlan0";
+    int fd = ::socket(AF_UNIX, SOCK_DGRAM, 0);
+    REQUIRE(fd >= 0);
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
+    REQUIRE(::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    setenv("HELIX_WPA_SOCKET_DIR", dir, 1);
+
+    {
+        WifiBackendWpaSupplicant backend;
+        // start() runs preflight (passes — socket exists + accessible) then
+        // init_wpa() (fails — nobody answers on the dummy socket).
+        WiFiError result = backend.start();
+
+        // The init attempt must NOT be reported as a usable backend. Pre-fix,
+        // is_running() returned init_complete_ (true after any finished attempt),
+        // so this REQUIRE_FALSE caught the bug.
+        REQUIRE_FALSE(result.success());
+        REQUIRE_FALSE(backend.is_running());
+
+        backend.stop();
+    }
+
+    unsetenv("HELIX_WPA_SOCKET_DIR");
+    ::close(fd);
+    ::unlink(sock_path.c_str());
+    ::rmdir(dir);
+}
+#endif // !__APPLE__ && !__ANDROID__

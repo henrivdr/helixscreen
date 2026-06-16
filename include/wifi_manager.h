@@ -178,6 +178,20 @@ class WiFiManager {
     bool set_enabled(bool enabled);
 
     /**
+     * @brief Non-blocking re-attempt of backend bringup.
+     *
+     * The backend's initial start_async() (kicked from the constructor) can fail
+     * on a fresh boot if the system WiFi service (wpa_supplicant) hasn't created
+     * its control socket yet. Without a retry the backend stays permanently dead
+     * and every scan reports "Backend not started" (helixscreen#1036). This kicks
+     * a fresh start_async() on a worker thread; on success the backend fires
+     * READY, which wakes state observers and the periodic scan. Safe to call
+     * repeatedly — concurrent attempts are de-duplicated by the backend, and a
+     * call while already connected is a cheap no-op (re-fires READY).
+     */
+    void retry_async();
+
+    /**
      * @brief Subscribe to backend state changes (READY / CONNECTED / DISCONNECTED)
      *
      * Fires when the backend's connection state transitions — including the

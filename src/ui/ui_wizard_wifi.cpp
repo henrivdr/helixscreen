@@ -897,6 +897,19 @@ void WizardWifiStep::init_wifi_manager() {
 
     apply_wifi_backend_state();
 
+    // If the backend isn't up yet, actively re-attempt bringup. The constructor's
+    // one-shot start_async() can lose a fresh-boot race against wpa_supplicant
+    // creating its control socket; the old (blocking) wizard masked this because
+    // it re-ran set_enabled(true) on every step entry, so users could "skip then
+    // go back" to recover. The non-blocking rewrite dropped that retry, leaving
+    // the backend permanently dead (helixscreen#1036). retry_async() restores it
+    // without blocking the UI thread: on success the backend fires READY, which
+    // drives the state observer above back into apply_wifi_backend_state().
+    if (!wifi_manager_->is_enabled()) {
+        crash_handler::breadcrumb::note("wifi", "retry_async");
+        wifi_manager_->retry_async();
+    }
+
     spdlog::debug("[{}] WiFi and Ethernet managers initialized", get_name());
     crash_handler::breadcrumb::note("wifi", "init_mgr_ok");
 }
