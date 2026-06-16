@@ -271,6 +271,13 @@ jobs:
     - name: Initialize submodules
       uses: ./.github/actions/init-submodules
 
+    # Apply submodule patches so the working-tree assertions in
+    # test_libhv_dns_resolver_patch.bats (the hsocket.c DNS-resolver wiring)
+    # see the post-build state they expect. This also exercises mk/patches.mk's
+    # apply logic in CI — the exact machinery that regressed in #700.
+    - name: Apply submodule patches
+      run: make apply-patches
+
     - name: Install bats
       run: |
         sudo npm install -g bats

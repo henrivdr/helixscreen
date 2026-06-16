@@ -75,7 +75,22 @@ setup() {
 @test "libhv working tree has the resolver wired into ResolveAddr" {
     # Any build applies patches; after that the wiring must be live in the tree.
     [ -f "$HSOCKET" ] || skip "libhv submodule not checked out"
-    grep -q 'dns_resolv_resolve' "$HSOCKET"
+
+    if grep -q 'dns_resolv_resolve' "$HSOCKET"; then
+        return 0  # wiring present — patches applied, all good
+    fi
+
+    # No wiring. Distinguish a legitimately unpatched tree (no build / no
+    # apply-patches has run here — e.g. `bats tests/shell/` on a fresh clone)
+    # from the actual #700 regression this guard exists to catch: an orphaned
+    # dns_resolv.c left behind while hsocket.c reverted to pristine. The patch
+    # CREATES dns_resolv.c, so its presence alongside an unwired hsocket.c is
+    # the half-applied signature.
+    if [ -f "$REPO_ROOT/lib/libhv/base/dns_resolv.c" ]; then
+        echo "half-applied: dns_resolv.c orphan present but hsocket.c not wired" >&2
+        return 1
+    fi
+    skip "libhv working tree pristine (run 'make apply-patches' or a build first)"
 }
 
 @test "guard self-heals a half-applied (orphan-file) state" {
