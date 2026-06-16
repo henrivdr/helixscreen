@@ -129,11 +129,10 @@ TEST_CASE("Native-strategy backends return RemapStrategy::Native", "[ams][strate
     }
 }
 
-TEST_CASE("GcodeRewrite-strategy backends return RemapStrategy::GcodeRewrite",
-          "[ams][strategy]") {
+TEST_CASE("Snapmaker returns RemapStrategy::SnapmakerNative", "[ams][strategy]") {
     SECTION("Snapmaker") {
         SnapmakerProbe sm;
-        REQUIRE(sm.get_remap_strategy() == AmsBackend::RemapStrategy::GcodeRewrite);
+        REQUIRE(sm.get_remap_strategy() == AmsBackend::RemapStrategy::SnapmakerNative);
     }
 }
 

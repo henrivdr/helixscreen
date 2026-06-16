@@ -137,11 +137,11 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return true;
     }
 
-    // Snapmaker U1 has no internal tool-routing table; the slicer's Tx
-    // commands must be rewritten with the user's slot->tool assignment before
-    // the gcode file is sent to the printer.
+    // Snapmaker U1 uses firmware-native print_task_config gcode
+    // (SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP) emitted before
+    // PRINT_START; no gcode-file rewrite is needed.
     [[nodiscard]] RemapStrategy get_remap_strategy() const override {
-        return RemapStrategy::GcodeRewrite;
+        return RemapStrategy::SnapmakerNative;
     }
 
     // Configuration
