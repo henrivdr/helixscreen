@@ -358,10 +358,11 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // physically loaded slot (filtered by live per-port sensors) plus a
     // summary line. See project_ifs_data_sources.md for rationale.
     void query_zcolor_silent();
-    void schedule_zcolor_query();
+    void schedule_zcolor_query(const char* reason = "unknown");
     void finalize_zcolor_response();
     void apply_zcolor_result(const ZColorSilentResult& result);
-    static ZColorSilentResult parse_zcolor_silent(const std::vector<std::string>& lines);
+    static ZColorSilentResult parse_zcolor_silent(const std::vector<std::string>& lines,
+                                                  const char* reason);
 
     std::string build_color_list_value() const;
     std::string build_type_list_value() const;
@@ -523,6 +524,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // Exposed via Ad5xIfsTestAccess so the listener-feedback regression test
     // can assert that buffered response lines never re-arm a query.
     std::atomic<uint32_t> zcolor_schedule_count_{0};
+    // Diagnostic-only: which operation triggered the next/current GET_ZCOLOR +
+    // IFS_STATUS query, threaded into the IFS_STATUS Chan log line for field
+    // diagnostics. const char* to string literals (no allocation). _pending_ is
+    // set by schedule_zcolor_query(reason); _active_ is promoted from it when
+    // query_zcolor_silent() actually fires. Main-thread only; not synchronized.
+    const char* zcolor_query_reason_pending_ = "unknown";
+    const char* zcolor_query_reason_active_ = "unknown";
 
     // JSON poll state: download Adventurer5M.json on a slow tick and compare
     // to last-seen content. Hash-by-equality is fine here — file is a few

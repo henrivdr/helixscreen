@@ -230,7 +230,7 @@ void AmsBackendAd5xIfs::on_started() {
                             // results.
                             register_klippy_ready_listener();
                             if (klippy_ready) {
-                                schedule_zcolor_query();
+                                schedule_zcolor_query("startup");
                             } else {
                                 spdlog::info("{} Deferring GET_ZCOLOR SILENT=1 until klippy ready",
                                              backend_log_tag());
@@ -247,7 +247,7 @@ void AmsBackendAd5xIfs::request_resync() {
     spdlog::info("{} request_resync(): re-reading Adventurer5M.json + GET_ZCOLOR",
                  backend_log_tag());
     read_adventurer_json();
-    schedule_zcolor_query();
+    schedule_zcolor_query("manual_resync");
 }
 
 // --- Status parsing ---
@@ -1089,7 +1089,7 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     // sensor never changes, so detect_load_unload_completion() won't fire.
     // schedule_zcolor_query() coalesces with any trigger from the gcode
     // stream listener, so this is cheap when they overlap.
-    schedule_zcolor_query();
+    schedule_zcolor_query("toolhead_unload");
     return result;
 }
 
@@ -2226,7 +2226,7 @@ void AmsBackendAd5xIfs::poll_adventurer_json() {
                               "scheduling GET_ZCOLOR",
                               backend_log_tag(), content.size());
                 parse_adventurer_json(content);
-                schedule_zcolor_query();
+                schedule_zcolor_query("json_poll");
             });
         },
         [this, token](const MoonrakerError& err) {
@@ -2336,7 +2336,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
         spdlog::debug("{} Detected external channel commit ('{}') in gcode stream — "
                       "scheduling GET_ZCOLOR to resurrect presence",
                       backend_log_tag(), line);
-        schedule_zcolor_query();
+        schedule_zcolor_query("external_extruder_commit");
         return false;
     }
 
@@ -2408,7 +2408,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                       "scheduling re-read + zcolor query",
                       backend_log_tag());
         schedule_json_reread();
-        schedule_zcolor_query();
+        schedule_zcolor_query("external_change_zcolor");
         return false;
     }
 
@@ -2542,7 +2542,7 @@ void AmsBackendAd5xIfs::register_klippy_ready_listener() {
                 // colors during boot, and the stream may have missed
                 // RUN_ZCOLOR notifications that happened before we reconnected.
                 schedule_json_reread();
-                schedule_zcolor_query();
+                schedule_zcolor_query("reconnect_macro_check");
             });
         });
 }
@@ -2618,11 +2618,14 @@ void AmsBackendAd5xIfs::schedule_json_reread() {
     });
 }
 
-void AmsBackendAd5xIfs::schedule_zcolor_query() {
+void AmsBackendAd5xIfs::schedule_zcolor_query(const char* reason) {
     if (!zcolor_silent_supported_.load()) {
         return; // Session flagged unsupported; don't retry.
     }
     zcolor_schedule_count_.fetch_add(1, std::memory_order_relaxed);
+    // Diagnostic-only: record which operation wants this refresh. Last-writer-
+    // wins when bursts coalesce into a single query — fine for field diagnostics.
+    zcolor_query_reason_pending_ = reason;
     // Semantics of zcolor_query_pending_: "a refresh is wanted". Set here and
     // re-set by query_zcolor_silent() when it can't run (active in flight).
     // Cleared on claim by the first worker to wake OR by finalize_zcolor_response.
@@ -2656,6 +2659,10 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
         spdlog::debug("{} GET_ZCOLOR SILENT=1 already in flight, deferring", backend_log_tag());
         return;
     }
+
+    // Real fire path: promote the pending trigger reason so it rides this query
+    // through to the IFS_STATUS Chan diagnostic log (diagnostic-only).
+    zcolor_query_reason_active_ = zcolor_query_reason_pending_;
 
     {
         std::lock_guard<std::mutex> lock(zcolor_buffer_mutex_);
@@ -2711,7 +2718,7 @@ void AmsBackendAd5xIfs::finalize_zcolor_response() {
     zcolor_query_active_.store(false);
 
     if (!lines.empty()) {
-        auto result = parse_zcolor_silent(lines);
+        auto result = parse_zcolor_silent(lines, zcolor_query_reason_active_);
         apply_zcolor_result(result);
     } else {
         spdlog::debug("{} GET_ZCOLOR SILENT=1 returned no lines", backend_log_tag());
@@ -2722,6 +2729,9 @@ void AmsBackendAd5xIfs::finalize_zcolor_response() {
     if (zcolor_query_pending_.exchange(false)) {
         spdlog::debug("{} Re-querying GET_ZCOLOR SILENT=1 (trigger fired during last query)",
                       backend_log_tag());
+        // Diagnostic-only: mark the re-fire so its IFS_STATUS log is
+        // distinguishable from the original trigger.
+        zcolor_query_reason_pending_ = "requeue_pending";
         query_zcolor_silent();
     }
 }
@@ -2921,7 +2931,8 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
 }
 
 AmsBackendAd5xIfs::ZColorSilentResult
-AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines) {
+AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
+                                       const char* reason) {
     ZColorSilentResult result;
 
     // Regexes compiled once per call; parsing is off the hot path.
@@ -2974,8 +2985,8 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines) {
                         ports_it != obj.end() && ports_it->is_array()) {
                         ports_str = ports_it->dump();
                     }
-                    spdlog::info("[AMS AD5X-IFS] IFS_STATUS Chan={} State={} Ports={}",
-                                 *result.ifs_chan, state, ports_str);
+                    spdlog::info("[AMS AD5X-IFS] IFS_STATUS trigger={} Chan={} State={} Ports={}",
+                                 reason, *result.ifs_chan, state, ports_str);
                 }
             }
         } catch (const json::parse_error&) {
@@ -3302,7 +3313,7 @@ void AmsBackendAd5xIfs::on_head_transition_locked(bool detected) {
     // terminal signal that lets us finalize to IDLE within ~1s instead of
     // waiting out the 90s timeout backstop. Safe under mutex_ —
     // schedule_zcolor_query only touches atomics + HttpExecutor (no re-lock).
-    schedule_zcolor_query();
+    schedule_zcolor_query("phase_head_transition");
 }
 
 void AmsBackendAd5xIfs::apply_phase_action_locked() {
@@ -3400,12 +3411,12 @@ void AmsBackendAd5xIfs::detect_load_unload_completion(bool head_detected) {
         system_info_.action = AmsAction::IDLE;
         spdlog::info("{} Load complete (head sensor triggered)", backend_log_tag());
         PostOpCooldownManager::instance().schedule();
-        schedule_zcolor_query();
+        schedule_zcolor_query("load_complete_head");
     } else if (system_info_.action == AmsAction::UNLOADING && !head_detected) {
         system_info_.action = AmsAction::IDLE;
         spdlog::info("{} Unload complete (head sensor cleared)", backend_log_tag());
         PostOpCooldownManager::instance().schedule();
-        schedule_zcolor_query();
+        schedule_zcolor_query("unload_complete_head");
     }
 }
 

@@ -189,7 +189,7 @@ class Ad5xIfsTestAccess {
     }
     static AmsBackendAd5xIfs::ZColorSilentResult
     parse_zcolor_silent(const std::vector<std::string>& lines) {
-        return AmsBackendAd5xIfs::parse_zcolor_silent(lines);
+        return AmsBackendAd5xIfs::parse_zcolor_silent(lines, "test");
     }
     static bool zcolor_silent_supported(const AmsBackendAd5xIfs& b) {
         return b.zcolor_silent_supported_.load();
