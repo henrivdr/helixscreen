@@ -22,12 +22,15 @@
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_print_status.h"
+#include "ui_preflight_check_modal.h"
 #include "ui_print_select_file_sorter.h"
 #include "ui_print_select_history.h"
 #include "ui_print_select_path_navigator.h"
 #include "ui_subject_registry.h"
 #include "ui_update_queue.h"
 
+#include "ams_backend.h"
+#include "ams_state.h"
 #include "app_globals.h"
 #include "config.h"
 #include "display_manager.h"
@@ -2530,23 +2533,7 @@ void PrintSelectPanel::start_print(bool force) {
     if (!force && detail_view_) {
         const auto& pf = detail_view_->preflight_result();
         if (pf.has_block()) {
-            ui::modal_show_confirmation(
-                lv_tr("Empty filament slot"),
-                lv_tr("A filament slot required by this file is empty. "
-                      "The print will run out partway through."),
-                ModalSeverity::Warning, lv_tr("Print Anyway"),
-                [](lv_event_t*) {
-                    LVGL_SAFE_EVENT_CB_BEGIN("on_empty_filament_confirm")
-                    // modal_show_confirmation replaces the default close cb with
-                    // ours, so we must close the modal explicitly before the
-                    // panel transition kicks in.
-                    if (auto* top = Modal::get_top()) {
-                        Modal::hide(top);
-                    }
-                    get_global_print_select_panel().start_print(true);
-                    LVGL_SAFE_EVENT_CB_END()
-                },
-                nullptr, nullptr);
+            show_preflight_modal(pf);
             return;
         }
     }
@@ -2558,6 +2545,48 @@ void PrintSelectPanel::start_print(bool force) {
 
     // Delegate to the print start controller
     print_controller_->initiate();
+}
+
+void PrintSelectPanel::show_preflight_modal(const helix::PreflightResult& pf) {
+    // Heap-allocated; self-deletes in PreflightCheckModal::on_hide() (LVGL /
+    // ModalStack cleanup never calls Modal::~Modal). Mirrors the spaghetti
+    // detection modal's lifecycle.
+    auto* modal = new helix::ui::PreflightCheckModal();
+    modal->set_checks(pf);
+    modal->set_on_force([]() { get_global_print_select_panel().start_print(true); });
+    modal->set_on_remap([]() { get_global_print_select_panel().on_preflight_remap(); });
+    modal->show(lv_screen_active());
+}
+
+void PrintSelectPanel::on_preflight_remap() {
+    auto* backend = AmsState::instance().get_backend();
+    if (!backend) {
+        return;
+    }
+    switch (backend->get_remap_strategy()) {
+    case AmsBackend::RemapStrategy::Native:
+        open_native_remap_modal();
+        break;
+    case AmsBackend::RemapStrategy::GcodeRewrite:
+        open_gcode_remap_modal();
+        break;
+    case AmsBackend::RemapStrategy::None:
+        break;
+    }
+}
+
+// TODO(Task 10): implement the native (Happy Hare / AFC / CFS / IFS / tool
+// changer) tool-to-slot remap modal. The backend owns the routing table, so
+// this opens a slot reassignment UI and pushes the result back to the backend.
+void PrintSelectPanel::open_native_remap_modal() {
+    NOTIFY_INFO(lv_tr("Remap coming soon"));
+}
+
+// TODO(Task 12): implement the gcode-rewrite remap modal for backends with no
+// internal tool table (Snapmaker U1, ACE). This rewrites Tx commands in the
+// gcode file before the print starts.
+void PrintSelectPanel::open_gcode_remap_modal() {
+    NOTIFY_INFO(lv_tr("Remap coming soon"));
 }
 
 void PrintSelectPanel::delete_file() {

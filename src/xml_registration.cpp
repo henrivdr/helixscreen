@@ -337,6 +337,8 @@ void register_xml_components() {
     register_xml("klipper_recovery_dialog.xml");
     register_xml("print_cancel_confirm_modal.xml");
     register_xml("components/spaghetti_detection_modal.xml");
+    register_xml("components/preflight_check_tool_row.xml");
+    register_xml("components/preflight_check_modal.xml");
     register_xml("print_completion_modal.xml");
     register_xml("save_z_offset_modal.xml");
     register_xml("exclude_object_modal.xml");
