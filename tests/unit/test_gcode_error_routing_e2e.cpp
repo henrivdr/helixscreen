@@ -33,6 +33,8 @@
 //
 // Tagged [.ui_integration]: needs the XML component tree on disk (modal_dialog).
 
+#include "ams_backend_afc.h"
+#include "ams_state.h"
 #include "app_globals.h"
 #include "error_classify.h"
 #include "error_event.h"
@@ -158,5 +160,98 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     REQUIRE(std::string(msg).find("resume the print") != std::string::npos);
 
     Modal::hide(dialog);
+    process_lvgl(20);
+}
+
+// ---------------------------------------------------------------------------
+// MODAL_WITH_RECOVER path: AFC jam → real recovery modal actually SHOWN.
+//
+// Unlike the generic PresentAs::MODAL arm above (which terminates in the
+// ui_notification_error STUB), present_recovery_modal() drives the recovery
+// case through helix::ui::ActionPromptModal::show_prompt() DIRECTLY — that
+// modal layer (ui_modal.o + action_prompt_modal XML) is NOT stubbed in the
+// test binary. So this integration test can assert the modal is genuinely on
+// screen, closing the glue gap that the unit tests (classify_error /
+// decide_presentation / build_recovery_prompt in isolation) leave open.
+//
+// The chain exercised end-to-end:
+//   process_line(jam) → AmsBackendAfc::classify_error → CRITICAL+AFC+actions
+//   → decide_presentation == MODAL_WITH_RECOVER → present_recovery_modal
+//   → ActionPromptModal::show_prompt(lv_screen_active(), prompt)
+//
+// Regression value: the two review-caught bugs lived right here — lost
+// severity styling (icon_error hidden) and stuck dedup (modal never reshows).
+// This locks the severity affordance (icon_error visible) and the title text.
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "AFC jam while paused drives the recovery modal to actually show",
+                 "[error-center][routing][integration][.ui_integration]") {
+    // Paused printer: process_line reads is_paused() into the ClassifyContext.
+    get_printer_state().update_from_status(
+        nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
+    REQUIRE(get_printer_state().is_paused());
+
+    // Install an AFC backend as the ACTIVE AmsState backend so process_line's
+    // `AmsState::instance().get_backend()->classify_error(...)` resolves to the
+    // AFC classifier (not the generic fallback). A fresh backend is enough: the
+    // jam branch is text-driven (tool_end + jam/break/runout), no live state.
+    AmsState::instance().set_backend(
+        std::make_unique<AmsBackendAfc>(api(), client()));
+    REQUIRE(AmsState::instance().get_backend() != nullptr);
+
+    // The AFC handle_toolhead_runout chinglish: `tool_end` + `jam` → CRITICAL
+    // jam, titled "Toolhead jam", carrying recovery actions (Resume is always
+    // pushed → non-empty → MODAL_WITH_RECOVER).
+    const std::string kAfcJam =
+        "!! Toolhead runout detected by tool_end sensor — possible filament jam at "
+        "the toolhead. Clear the jam and resume.";
+
+    // Sanity: the active backend really classifies this as the recoverable
+    // CRITICAL jam (the precondition for MODAL_WITH_RECOVER). Fails loudly if
+    // the classifier text-match or recovery-action population regresses.
+    {
+        helix::ClassifyContext ctx;
+        ctx.is_paused = true;
+        ctx.is_printing = false;
+        auto ev = AmsState::instance().get_backend()->classify_error(kAfcJam, ctx);
+        REQUIRE(ev.has_value());
+        REQUIRE(ev->severity == helix::ErrorSeverity::CRITICAL);
+        REQUIRE(ev->source == helix::ErrorSource::AFC);
+        REQUIRE_FALSE(ev->recovery_actions.empty());
+        REQUIRE(helix::decide_presentation(*ev) == helix::PresentAs::MODAL_WITH_RECOVER);
+    }
+
+    // Drive the REAL glue. api_ MUST be non-null or present_recovery_modal
+    // short-circuits to the ui_notification_error stub — api() provides
+    // a real MoonrakerAPI, so the show_prompt arm runs.
+    helix::GcodeErrorRouter router(api(), client());
+    REQUIRE_NOTHROW(GcodeErrorRouterTestAccess::process_line(router, kAfcJam));
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(50);
+
+    // ---- Assert the recovery modal is actually on screen ----
+    // present_recovery_modal sets the title from e.title ("Toolhead jam") and
+    // populate_content() writes it into the label named "title". Walk the live
+    // widget tree from the active screen — recovery_modal_ is private, so we
+    // observe via the rendered tree, which is the user-visible proof.
+    REQUIRE(Modal::any_visible());
+    lv_obj_t* screen = lv_screen_active();
+    REQUIRE(screen != nullptr);
+
+    const char* title = find_text_containing(screen, "Toolhead jam");
+    REQUIRE(title != nullptr);
+
+    // Severity affordance regression guard (review bug #1): the error icon must
+    // be VISIBLE because present_recovery_modal forces prompt.severity="error".
+    lv_obj_t* err_icon = lv_obj_find_by_name(screen, "icon_error");
+    REQUIRE(err_icon != nullptr);
+    REQUIRE_FALSE(lv_obj_has_flag(err_icon, LV_OBJ_FLAG_HIDDEN));
+
+    // A recovery button is present (the modal built buttons from the actions).
+    REQUIRE(find_text_containing(screen, lv_tr("Resume")) != nullptr);
+
+    // Cleanup: AmsState is a singleton — clear the test backend so it does not
+    // leak into subsequent tests. The router owns its modal and tears it down
+    // in its dtor at end-of-scope.
+    AmsState::instance().set_backend(nullptr);
     process_lvgl(20);
 }
