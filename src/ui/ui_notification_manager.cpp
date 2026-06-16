@@ -3,7 +3,9 @@
 #include "ui_notification_manager.h"
 
 #include "ui_nav_manager.h"
+#include "ui_notification_history.h"
 #include "ui_panel_notification_history.h"
+#include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -269,6 +271,31 @@ void helix::ui::notification_update(NotificationStatus status) {
 
 void helix::ui::notification_update_count(size_t count) {
     NotificationManager::instance().update_notification_count(count);
+}
+
+void helix::ui::notification_refresh_from_history() {
+    auto& history = NotificationHistory::instance();
+    size_t unread = history.get_unread_count();
+
+    NotificationManager::instance().update_notification_count(unread);
+
+    NotificationStatus status = NotificationStatus::NONE;
+    if (unread > 0) {
+        switch (history.get_highest_unread_severity()) {
+        case ToastSeverity::ERROR:
+            status = NotificationStatus::ERROR;
+            break;
+        case ToastSeverity::WARNING:
+            status = NotificationStatus::WARNING;
+            break;
+        case ToastSeverity::INFO:
+        case ToastSeverity::SUCCESS:
+        default:
+            status = NotificationStatus::INFO;
+            break;
+        }
+    }
+    NotificationManager::instance().update_notification(status);
 }
 
 void helix::ui::notification_deinit_subjects() {

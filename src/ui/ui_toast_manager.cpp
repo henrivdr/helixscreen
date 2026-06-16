@@ -60,21 +60,6 @@ static const char* severity_to_string(ToastSeverity s) {
     }
 }
 
-static NotificationStatus severity_to_notification_status(ToastSeverity s) {
-    switch (s) {
-    case ToastSeverity::INFO:
-        return NotificationStatus::INFO;
-    case ToastSeverity::SUCCESS:
-        return NotificationStatus::INFO; // status bar has no success state
-    case ToastSeverity::WARNING:
-        return NotificationStatus::WARNING;
-    case ToastSeverity::ERROR:
-        return NotificationStatus::ERROR;
-    default:
-        return NotificationStatus::NONE;
-    }
-}
-
 static void severity_to_icon(ToastSeverity s, const char*& glyph, const char*& color_token) {
     switch (s) {
     case ToastSeverity::SUCCESS:
@@ -537,14 +522,9 @@ void ToastManager::finalize_remove(lv_obj_t* widget) {
 }
 
 void ToastManager::update_notification_bell() {
-    ToastSeverity highest = NotificationHistory::instance().get_highest_unread_severity();
-    size_t unread = NotificationHistory::instance().get_unread_count();
-
-    if (unread == 0) {
-        helix::ui::notification_update(NotificationStatus::NONE);
-    } else {
-        helix::ui::notification_update(severity_to_notification_status(highest));
-    }
+    // Recompute count + severity color together from the current history.
+    // Single source of truth shared with the notification-create paths.
+    helix::ui::notification_refresh_from_history();
 }
 
 // ============================================================================

@@ -143,7 +143,7 @@ static void async_message_callback(void* user_data) {
         entry.message[sizeof(entry.message) - 1] = '\0';
 
         NotificationHistory::instance().add(entry);
-        helix::ui::notification_update_count(NotificationHistory::instance().get_unread_count());
+        helix::ui::notification_refresh_from_history();
     }
     delete data;
 }
@@ -207,7 +207,7 @@ static void async_error_callback(void* user_data) {
         entry.message[sizeof(entry.message) - 1] = '\0';
 
         NotificationHistory::instance().add(entry);
-        helix::ui::notification_update_count(NotificationHistory::instance().get_unread_count());
+        helix::ui::notification_refresh_from_history();
     }
     delete data;
 }
@@ -285,7 +285,7 @@ static void show_notification(const char* title, const char* message, ToastSever
         entry.message[sizeof(entry.message) - 1] = '\0';
 
         NotificationHistory::instance().add(entry);
-        helix::ui::notification_update_count(NotificationHistory::instance().get_unread_count());
+        helix::ui::notification_refresh_from_history();
     } else {
         // Background thread: marshal to main thread
         auto* data = new (std::nothrow) AsyncMessageData{};
@@ -338,7 +338,7 @@ void ui_notification_info_with_action(const char* title, const char* message, co
 
     if (is_main_thread()) {
         NotificationHistory::instance().add(entry);
-        helix::ui::notification_update_count(NotificationHistory::instance().get_unread_count());
+        helix::ui::notification_refresh_from_history();
     } else {
         auto* data = new (std::nothrow) NotificationHistoryEntry(entry);
         if (!data) {
@@ -349,8 +349,7 @@ void ui_notification_info_with_action(const char* title, const char* message, co
             [](void* user_data) {
                 auto* e = static_cast<NotificationHistoryEntry*>(user_data);
                 NotificationHistory::instance().add(*e);
-                helix::ui::notification_update_count(
-                    NotificationHistory::instance().get_unread_count());
+                helix::ui::notification_refresh_from_history();
                 delete e;
             },
             data);
@@ -428,7 +427,7 @@ void ui_notification_error(const char* title, const char* message, bool modal) {
         entry.message[sizeof(entry.message) - 1] = '\0';
 
         NotificationHistory::instance().add(entry);
-        helix::ui::notification_update_count(NotificationHistory::instance().get_unread_count());
+        helix::ui::notification_refresh_from_history();
     } else {
         // Background thread: marshal to main thread
         auto* data = new (std::nothrow) AsyncErrorData{};

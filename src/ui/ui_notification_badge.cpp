@@ -122,22 +122,11 @@ void* notification_badge_create(lv_xml_parser_state_t* state, const char** attrs
     lv_obj_set_style_border_width(badge, 0, LV_PART_MAIN);
     lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Parse variant for default background color
-    const char* variant = lv_xml_get_value_of(attrs, "variant");
-    if (!variant) {
-        variant = "info";
-    }
-
-    // Set background color based on variant
-    lv_color_t bg_color;
-    if (strcmp(variant, "warning") == 0) {
-        bg_color = theme_manager_get_color("warning");
-    } else if (strcmp(variant, "error") == 0 || strcmp(variant, "danger") == 0) {
-        bg_color = theme_manager_get_color("danger");
-    } else {
-        bg_color = theme_manager_get_color("info");
-    }
-    lv_obj_set_style_bg_color(badge, bg_color, LV_PART_MAIN);
+    // Background color is driven by the severity-bound styles in XML
+    // (badge_info/badge_warning/badge_error via bind_style). Do NOT set a local
+    // bg_color here: a local style outranks the added bind_style styles in
+    // LVGL's cascade, which would freeze the badge at one color regardless of
+    // severity. Only the opacity (which the bound styles don't set) is local.
     lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, LV_PART_MAIN);
 
     // Parse text attribute
@@ -183,7 +172,7 @@ void* notification_badge_create(lv_xml_parser_state_t* state, const char** attrs
     // Register delete callback to free BadgeData
     lv_obj_add_event_cb(badge, badge_delete_cb, LV_EVENT_DELETE, nullptr);
 
-    spdlog::trace("[notification_badge] Created badge variant='{}' text='{}'", variant, text);
+    spdlog::trace("[notification_badge] Created badge text='{}'", text);
     return badge;
 }
 

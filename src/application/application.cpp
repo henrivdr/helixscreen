@@ -1700,21 +1700,9 @@ bool Application::init_ui() {
 
     // Seed test notifications in --test mode for debugging
     if (get_runtime_config()->is_test_mode()) {
-        auto& history = NotificationHistory::instance();
-        history.seed_test_data();
-        // Update notification badge to show unread count and severity
-        helix::ui::notification_update_count(history.get_unread_count());
-        // Map ToastSeverity to NotificationStatus for bell color
-        auto severity = history.get_highest_unread_severity();
-        NotificationStatus status = NotificationStatus::NONE;
-        if (severity == ToastSeverity::ERROR) {
-            status = NotificationStatus::ERROR;
-        } else if (severity == ToastSeverity::WARNING) {
-            status = NotificationStatus::WARNING;
-        } else if (severity == ToastSeverity::INFO || severity == ToastSeverity::SUCCESS) {
-            status = NotificationStatus::INFO;
-        }
-        helix::ui::notification_update(status);
+        NotificationHistory::instance().seed_test_data();
+        // Update notification badge to show unread count and severity color
+        helix::ui::notification_refresh_from_history();
     }
 
     // Initialize toast system

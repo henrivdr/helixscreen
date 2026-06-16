@@ -167,4 +167,15 @@ void notification_update(NotificationStatus status);
  */
 void notification_update_count(size_t count);
 
+/**
+ * @brief Recompute both the unread-count badge and its severity color from the
+ *        current NotificationHistory in a single pass.
+ *
+ * Call this AFTER appending an entry to history. It guarantees count and color
+ * are derived from the same snapshot, avoiding the off-by-one where severity is
+ * computed before the triggering entry exists. Maps the worst unread severity
+ * (ERROR > WARNING > INFO; NONE when nothing is unread) to the badge color.
+ */
+void notification_refresh_from_history();
+
 } // namespace helix::ui
