@@ -12,6 +12,7 @@
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
+#include "ams_state.h"
 #include "app_constants.h"
 #include "app_globals.h"
 #include "filament_sensor_manager.h"
@@ -885,6 +886,17 @@ void PrintStatusWidget::check_and_show_idle_runout_modal() {
     // Check suppression logic (AMS without bypass, wizard active, etc.)
     if (!get_runtime_config()->should_show_runout_modal()) {
         spdlog::debug("[PrintStatusWidget] Runout modal suppressed by runtime config");
+        return;
+    }
+
+    // A manual load/unload deliberately drags filament past the runout sensor;
+    // the resulting empty reading is not a real runout. Mirrors the toast
+    // suppression in FilamentSensorManager (is_filament_operation_active()).
+    // This is the idle case that fired the spurious modal on the U1 when a lane
+    // was unloaded by hand while the printer sat idle.
+    if (AmsState::instance().is_filament_operation_active()) {
+        spdlog::debug(
+            "[PrintStatusWidget] AMS filament operation in progress - skipping runout modal");
         return;
     }
 
