@@ -201,6 +201,16 @@ class FilamentPanel : public PanelBase {
     // Operation state
     OperationTimeoutGuard operation_guard_;
 
+    // LIVE load-state gating for Load/Unload/Purge (Task 5). For the SELECTED
+    // tool: Load disabled when that tool is already loaded; Unload + Purge
+    // disabled when it is NOT loaded. Re-evaluated on tool-selector change and
+    // when live AMS state changes (observers below).
+    lv_subject_t load_disabled_subject_;      ///< 1 = Load button disabled
+    lv_subject_t unload_disabled_subject_;    ///< 1 = Unload/Purge buttons disabled
+    ObserverGuard ams_loaded_observer_;       ///< Re-eval gating on live load change
+    ObserverGuard ams_current_slot_observer_; ///< Re-eval gating on active-slot change
+    void update_filament_op_buttons(); ///< Recompute Load/Unload/Purge gating from live state
+
     // Cooldown button visibility (1 when nozzle target > 0, 0 otherwise)
     lv_subject_t nozzle_heating_subject_;
 

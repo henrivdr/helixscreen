@@ -50,6 +50,7 @@ struct AmsSlotData {
     ObserverGuard status_observer;
     ObserverGuard current_slot_observer;
     ObserverGuard filament_loaded_observer;
+    ObserverGuard active_loaded_observer; ///< Per-slot active-loaded (single highlight source)
     ObserverGuard action_observer;
     ObserverGuard target_slot_observer;
 
@@ -128,6 +129,7 @@ static void unregister_slot_data(lv_obj_t* obj) {
             data->status_observer.reset();
             data->current_slot_observer.reset();
             data->filament_loaded_observer.reset();
+            data->active_loaded_observer.reset();
             data->action_observer.reset();
             data->target_slot_observer.reset();
         }
@@ -152,6 +154,7 @@ static void cleanup_all_slot_data() {
         data->status_observer.release();
         data->current_slot_observer.release();
         data->filament_loaded_observer.release();
+        data->active_loaded_observer.release();
         data->action_observer.release();
         data->target_slot_observer.release();
 
@@ -337,11 +340,17 @@ static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
         return;
     }
 
-    // Also check filament_loaded to only highlight when actually loaded
-    lv_subject_t* loaded_subject = AmsState::instance().get_filament_loaded_subject();
-    bool filament_loaded = loaded_subject ? (lv_subject_get_int(loaded_subject) != 0) : false;
-
-    bool is_active = (current_slot == data->slot_index) && filament_loaded;
+    // SINGLE SOURCE OF TRUTH for the active-lane highlight: the per-slot
+    // active-loaded subject (AmsBackend::slot_is_actively_loaded(i), updated live
+    // on every status sync). Previously this read current_slot + the aggregate
+    // filament_loaded subject separately, which diverged on unload — the badge
+    // stayed lit after an idle unload while the top-right correctly cleared.
+    // Observing the per-slot subject keeps both in lockstep.
+    lv_subject_t* active_loaded_subject =
+        AmsState::instance().get_slot_active_loaded_subject(data->slot_index);
+    bool is_active =
+        active_loaded_subject ? (lv_subject_get_int(active_loaded_subject) != 0) : false;
+    (void)current_slot; // retained for the pulse/observer signature only
 
     // Apply highlight to spool_container (not container) so it doesn't include label padding area
     lv_obj_t* highlight_target = data->spool_container ? data->spool_container : data->container;
@@ -368,8 +377,8 @@ static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
         lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_TRANSP, LV_PART_MAIN);
     }
 
-    spdlog::trace("[AmsSlot] Slot {} active={} (current_slot={}, loaded={})", data->slot_index,
-                  is_active, current_slot, filament_loaded);
+    spdlog::debug("[AmsSlot] Slot {} highlight active={} (from slot_active_loaded subject)",
+                  data->slot_index, is_active);
 }
 
 // Forward declaration (defined below in Animation section)
@@ -459,8 +468,8 @@ static void apply_tool_badge(AmsSlotData* data, int mapped_tool, bool is_overrid
             lv_color_t text_color = theme_manager_get_contrast_color(bg);
             lv_obj_set_style_text_color(data->tool_badge, text_color, LV_PART_MAIN);
         }
-        spdlog::trace("[AmsSlot] Slot {} tool badge: {} (override={})",
-                      data->slot_index, tool_text, is_override);
+        spdlog::trace("[AmsSlot] Slot {} tool badge: {} (override={})", data->slot_index, tool_text,
+                      is_override);
     } else {
         // No tool mapped - hide badge
         lv_obj_add_flag(data->tool_badge_bg, LV_OBJ_FLAG_HIDDEN);
@@ -629,6 +638,22 @@ static void setup_slot_observers(AmsSlotData* data) {
                 lv_subject_t* slot_subject = AmsState::instance().get_current_slot_subject();
                 if (slot_subject) {
                     apply_current_slot_highlight(d, lv_subject_get_int(slot_subject));
+                }
+            });
+    }
+
+    // Per-slot active-loaded observer: the SINGLE source driving the active-lane
+    // highlight. Fires the instant slot_is_actively_loaded(i) flips on a status
+    // sync (e.g. an idle unload clears it), so the badge tracks live load state.
+    // Static-array subject (singleton lifetime) — no SubjectLifetime token needed.
+    lv_subject_t* active_loaded_subject = state.get_slot_active_loaded_subject(data->slot_index);
+    if (active_loaded_subject) {
+        data->active_loaded_observer =
+            observe_int_sync<lv_obj_t>(active_loaded_subject, obj, [](lv_obj_t* o, int /*active*/) {
+                auto* d = get_slot_data(o);
+                if (d) {
+                    evaluate_pulse_state(d);
+                    apply_current_slot_highlight(d, d->slot_index);
                 }
             });
     }

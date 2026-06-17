@@ -489,6 +489,7 @@ void AmsPanel::clear_panel_reference() {
     slot_count_observer_.reset();
     path_segment_observer_.reset();
     path_topology_observer_.reset();
+    slot_path_observers_.clear();
     backend_count_observer_.reset();
     external_spool_observer_.reset();
 
@@ -695,8 +696,62 @@ void AmsPanel::create_slots(int count) {
 
     spdlog::info("[{}] Created {} slot widgets via shared helpers", get_name(), result.slot_count);
 
+    // Wire per-slot LIVE path observers so pushing/pulling filament redraws the
+    // path in real time (Task 1). Re-built here because the slot count is known.
+    setup_slot_path_observers(result.slot_count);
+
     // Update tray
     ams_detail_update_tray(detail_widgets_);
+}
+
+void AmsPanel::setup_slot_path_observers(int slot_count) {
+    // Rebuild from scratch — slot_count may have changed.
+    slot_path_observers_.clear();
+    if (slot_count <= 0)
+        return;
+
+    auto& state = AmsState::instance();
+    int slot_offset = 0;
+    if (scoped_unit_index_ >= 0) {
+        AmsBackend* backend = state.get_backend();
+        if (backend) {
+            AmsSystemInfo info = backend->get_system_info();
+            if (scoped_unit_index_ < static_cast<int>(info.units.size()))
+                slot_offset = info.units[scoped_unit_index_].first_slot_global_index;
+        }
+    }
+
+    // Coalesced redraw handler (same pattern as path_segment_observer_): re-runs
+    // the full path setup (which re-reads every slot's live segment + color and
+    // calls ui_filament_path_canvas_refresh) on the next deferred tick.
+    auto on_slot_path_change = [](AmsPanel* self, int) {
+        if (!self->subjects_initialized_ || !self->panel_)
+            return;
+        spdlog::debug("[AmsPanel] Per-slot path subject fired — scheduling path redraw");
+        if (!self->path_update_pending_) {
+            self->path_update_pending_ = true;
+            self->lifetime_.defer("AmsPanel::update_path_canvas(slot)", [self]() {
+                self->path_update_pending_ = false;
+                self->update_path_canvas_from_backend();
+            });
+        }
+    };
+
+    for (int i = 0; i < slot_count; ++i) {
+        int global_idx = i + slot_offset;
+        // Segment subject — how far filament extends along this lane's path.
+        if (auto* seg_subj = state.get_slot_segment_subject(global_idx)) {
+            slot_path_observers_.push_back(
+                helix::ui::observe_int_sync<AmsPanel>(seg_subj, this, on_slot_path_change));
+        }
+        // Toolhead-present subject — live per-slot motion/switch sensor.
+        if (auto* th_subj = state.get_slot_toolhead_present_subject(global_idx)) {
+            slot_path_observers_.push_back(
+                helix::ui::observe_int_sync<AmsPanel>(th_subj, this, on_slot_path_change));
+        }
+    }
+    spdlog::debug("[AmsPanel] Wired {} per-slot path observers (offset={})",
+                  slot_path_observers_.size(), slot_offset);
 }
 
 // on_slot_count_changed migrated to lambda in init_subjects()
@@ -1308,7 +1363,8 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
             {
                 AmsSystemInfo info = backend->get_system_info();
                 if (info.action != AmsAction::IDLE && info.action != AmsAction::ERROR) {
-                    NOTIFY_WARNING(lv_tr("Multi-Filament System is busy: {}"), ams_action_to_string(info.action));
+                    NOTIFY_WARNING(lv_tr("Multi-Filament System is busy: {}"),
+                                   ams_action_to_string(info.action));
                     return;
                 }
             }

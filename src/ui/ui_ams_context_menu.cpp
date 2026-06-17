@@ -241,28 +241,39 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
 
     // Get slot info for filament presence check
     bool slot_has_filament = false;
+    // LIVE load state (Task 3): firmware seated+loaded OR filament at this slot's
+    // toolhead sensor — drives Load/Unload availability instead of static RFID
+    // presence so the menu matches real load state the moment a sensor flips.
+    bool slot_is_loaded_live = false;
     if (backend_) {
         SlotInfo slot_info = backend_->get_slot_info(slot_index);
         slot_has_filament = slot_info.is_present();
+        slot_is_loaded_live = backend_->slot_is_actively_loaded(slot_index) ||
+                              backend_->slot_has_filament_at_toolhead(slot_index);
     }
+
+    // Treat the slot as loaded if EITHER the caller's snapshot (can_unload_from_
+    // toolhead, computed at open) OR the live per-slot accessors say so. The OR
+    // keeps Unload available for the firmware's active slot even after a runout
+    // clears the head sensor (#995), while live signals enable real-time accuracy.
+    const bool is_loaded = pending_is_loaded_ || slot_is_loaded_live;
 
     // Determine eject mode: not loaded to toolhead, but filament is in the lane,
     // and backend supports per-lane eject (AFC, Happy Hare, AD5X IFS)
     bool supports_eject = backend_ && backend_->supports_lane_eject();
-    eject_mode_ = supports_eject && !pending_is_loaded_ && slot_has_filament;
+    eject_mode_ = supports_eject && !is_loaded && slot_has_filament;
 
     // Determine force-eject/recover mode: idle lane reporting EMPTY, but backend
     // supports a cold presence-ignoring retract (AD5X IFS only) to recover a
     // snapped chunk stuck in the lane (#996). Mutually exclusive with eject_mode_:
     // eject requires filament present, force-eject requires the lane empty.
     bool slot_empty = !slot_has_filament;
-    force_eject_mode_ =
-        backend_ && backend_->supports_force_eject() && !pending_is_loaded_ && slot_empty;
+    force_eject_mode_ = backend_ && backend_->supports_force_eject() && !is_loaded && slot_empty;
 
     // Update the unload/eject button label and state
     bool unload_eject_enabled = false;
-    if (pending_is_loaded_) {
-        // Loaded to toolhead → "Unload" enabled
+    if (is_loaded) {
+        // Loaded to toolhead → "Unload" enabled (disabled when NOT loaded)
         unload_eject_enabled = !system_busy;
     } else if (eject_mode_ || force_eject_mode_) {
         // Filament-in-lane eject, or empty-lane recover → enabled when idle
@@ -290,13 +301,14 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
     }
 
     // Determine if slot has filament for Load button state
-    // Disable Load if: system busy, slot empty, OR slot is already loaded to extruder
-    bool can_load = !system_busy && !pending_is_loaded_ && slot_has_filament;
+    // Disable Load if: system busy, slot empty, OR slot is already loaded
+    // (live: firmware seated/loaded or filament at this slot's toolhead).
+    bool can_load = !system_busy && !is_loaded && slot_has_filament;
     lv_subject_set_int(&slot_can_load_subject_, can_load ? 1 : 0);
     if (!can_load) {
-        spdlog::debug("[AmsContextMenu] Load disabled for slot {}: busy={}, loaded={}, "
-                      "has_filament={}",
-                      slot_index, system_busy, pending_is_loaded_, slot_has_filament);
+        spdlog::debug("[AmsContextMenu] Load disabled for slot {}: busy={}, loaded={} "
+                      "(live={}), has_filament={}",
+                      slot_index, system_busy, is_loaded, slot_is_loaded_live, slot_has_filament);
     }
 
     // Show Reset Lane button if backend supports it

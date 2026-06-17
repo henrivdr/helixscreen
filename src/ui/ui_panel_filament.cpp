@@ -173,8 +173,20 @@ FilamentPanel::FilamentPanel(PrinterState& printer_state, MoonrakerAPI* api)
                     self->temp_control_panel_->switch_active_extruder(*tool->extruder_name);
                 }
             }
+            // Re-evaluate Load/Unload/Purge gating for the newly-selected tool.
+            self->update_filament_op_buttons();
         });
     update_nozzle_label();
+
+    // Re-evaluate Load/Unload/Purge gating whenever live AMS load state changes
+    // (Task 5): the aggregate filament_loaded flag and the active-slot index.
+    // Both are static AmsState subjects — no SubjectLifetime token needed.
+    ams_loaded_observer_ = observe_int_sync<FilamentPanel>(
+        AmsState::instance().get_filament_loaded_subject(), this,
+        [](FilamentPanel* self, int) { self->update_filament_op_buttons(); });
+    ams_current_slot_observer_ = observe_int_sync<FilamentPanel>(
+        AmsState::instance().get_current_slot_subject(), this,
+        [](FilamentPanel* self, int) { self->update_filament_op_buttons(); });
 
     // Note: Chamber temperature display is initialized by observer callbacks
     // and refresh_all_displays() on panel activation.
@@ -251,6 +263,12 @@ void FilamentPanel::init_subjects() {
         // Operation in progress subject (for disabling buttons during filament ops)
         operation_guard_.init_subject("filament_operation_in_progress", subjects_);
 
+        // LIVE load-state gating subjects (Task 5). Default: Load enabled, Unload
+        // disabled (cold start = nothing loaded). Recomputed by
+        // update_filament_op_buttons() from the selected tool's live load state.
+        UI_MANAGED_SUBJECT_INT(load_disabled_subject_, 0, "filament_load_disabled", subjects_);
+        UI_MANAGED_SUBJECT_INT(unload_disabled_subject_, 1, "filament_unload_disabled", subjects_);
+
         // Cooldown button visibility (1 when nozzle or bed target > 0)
         UI_MANAGED_SUBJECT_INT(nozzle_heating_subject_, 0, "filament_nozzle_heating", subjects_);
 
@@ -297,6 +315,8 @@ void FilamentPanel::deinit_subjects() {
         prior_nozzle_target_ = 0;
     }
     external_spool_observer_.reset();
+    ams_loaded_observer_.reset();
+    ams_current_slot_observer_.reset();
     temp_observers_.clear();
     deinit_subjects_base(subjects_);
 }
@@ -364,6 +384,9 @@ void FilamentPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     // Populate extruder dropdown and set card visibility
     populate_extruder_dropdown();
     update_multi_filament_card_visibility();
+
+    // Seed Load/Unload/Purge gating from current live load state (Task 5).
+    update_filament_op_buttons();
 
     // Rebuild dropdown if tool list changes
     tools_version_observer_ =
@@ -1382,12 +1405,60 @@ void FilamentPanel::populate_extruder_dropdown() {
                   ts.tool_count(), active);
 }
 
+void FilamentPanel::update_filament_op_buttons() {
+    // Recompute Load/Unload/Purge gating from the SELECTED tool's LIVE load
+    // state (Task 5). Without an AMS backend (single-extruder / external-spool
+    // mode) we have no per-slot load signal, so leave both enabled — the only
+    // disablers there are the safety-warning / operation-in-progress XML binds.
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (!backend) {
+        lv_subject_set_int(&load_disabled_subject_, 0);
+        lv_subject_set_int(&unload_disabled_subject_, 0);
+        return;
+    }
+
+    // Map the selected tool (dropdown index == tool index) to a global slot.
+    // Fall back to the dropdown index itself when no explicit map exists
+    // (toolchangers report tool index == slot index), then to current_slot.
+    AmsSystemInfo sys = backend->get_system_info();
+    int selected_tool = helix::ToolState::instance().active_tool_index();
+    if (extruder_dropdown_) {
+        selected_tool = static_cast<int>(lv_dropdown_get_selected(extruder_dropdown_));
+    }
+
+    int slot = -1;
+    if (selected_tool >= 0 && selected_tool < static_cast<int>(sys.tool_to_slot_map.size())) {
+        slot = sys.tool_to_slot_map[selected_tool];
+    }
+    if (slot < 0)
+        slot = selected_tool; // toolchanger: tool index == slot index
+    if (slot < 0)
+        slot = sys.current_slot;
+
+    bool is_loaded = false;
+    if (slot >= 0) {
+        is_loaded =
+            backend->slot_is_actively_loaded(slot) || backend->slot_has_filament_at_toolhead(slot);
+    }
+
+    // Load disabled when already loaded; Unload/Purge disabled when NOT loaded.
+    lv_subject_set_int(&load_disabled_subject_, is_loaded ? 1 : 0);
+    lv_subject_set_int(&unload_disabled_subject_, is_loaded ? 0 : 1);
+    spdlog::debug("[FilamentPanel] Op buttons: tool={} slot={} loaded={} "
+                  "(load_disabled={}, unload_disabled={})",
+                  selected_tool, slot, is_loaded, is_loaded ? 1 : 0, is_loaded ? 0 : 1);
+}
+
 void FilamentPanel::handle_extruder_changed() {
     if (!extruder_dropdown_)
         return;
 
     int selected = static_cast<int>(lv_dropdown_get_selected(extruder_dropdown_));
     auto& ts = helix::ToolState::instance();
+
+    // Re-evaluate button gating for the newly-selected tool immediately, even if
+    // it's already the active tool (no tool change issued below).
+    update_filament_op_buttons();
 
     if (selected == ts.active_tool_index())
         return;

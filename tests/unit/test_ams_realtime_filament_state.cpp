@@ -22,11 +22,11 @@
 #include "ams_state.h"
 #include "ams_types.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <chrono>
 #include <memory>
 #include <thread>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 using namespace helix::printer;
@@ -203,6 +203,120 @@ TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes per-slot LIVE subjects on 
 }
 
 // ============================================================================
+// Phase 2 — Reactive chain: observers on per-slot LIVE subjects fire on change
+// ============================================================================
+//
+// The MULTI-FILAMENT panel (path canvas) and the per-lane active badge OBSERVE
+// these subjects. This pins the observable contract those panels depend on: a
+// sensor change → sync → the subject value changes AND a registered observer
+// fires. If this breaks, the panel silently stops redrawing on push/pull.
+
+TEST_CASE_METHOD(LVGLTestFixture, "Per-slot LIVE subjects notify observers on sensor change",
+                 "[ams][realtime][reactive]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    auto backend = std::make_unique<AmsBackendSnapmaker>(nullptr, nullptr);
+    auto* backend_ptr = backend.get();
+    ams.set_backend(std::move(backend));
+
+    json status = json{
+        {"toolhead", json{{"extruder", "extruder"}}}, // active tool = slot 0
+        {"print_task_config", json{{"filament_exist", json::array({true, true, false, false})}}}};
+    SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, status);
+    ams.sync_from_backend();
+    drain();
+
+    // Both seated tools' toolhead sensors start present.
+    REQUIRE(lv_subject_get_int(ams.get_slot_toolhead_present_subject(1)) == 1);
+
+    // Attach an observer to slot 1's toolhead-present subject (mirrors how the
+    // panel observes it to redraw the lane path).
+    int fire_count = 0;
+    int last_value = -1;
+    struct Ctx {
+        int* count;
+        int* value;
+    } ctx{&fire_count, &last_value};
+    lv_observer_t* obs = lv_subject_add_observer(
+        ams.get_slot_toolhead_present_subject(1),
+        [](lv_observer_t* o, lv_subject_t* s) {
+            auto* c = static_cast<Ctx*>(lv_observer_get_user_data(o));
+            (*c->count)++;
+            *c->value = lv_subject_get_int(s);
+        },
+        &ctx);
+    REQUIRE(obs != nullptr);
+    int baseline = fire_count;
+
+    // Pull filament from tool 1's toolhead back to the buffer → sensor drops.
+    SnapmakerRealtimeTestAccess::set_sensor_present(*backend_ptr, 1, false);
+    ams.sync_from_backend();
+    drain();
+
+    CHECK(lv_subject_get_int(ams.get_slot_toolhead_present_subject(1)) == 0);
+    CHECK(fire_count > baseline); // observer fired → panel would redraw the lane
+    CHECK(last_value == 0);
+
+    lv_observer_remove(obs);
+    ams.clear_backends();
+    ams.deinit_subjects();
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "Active-loaded subject is the single highlight source on unload",
+                 "[ams][realtime][reactive][badge]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    auto backend = std::make_unique<AmsBackendSnapmaker>(nullptr, nullptr);
+    auto* backend_ptr = backend.get();
+    ams.set_backend(std::move(backend));
+
+    json loaded = json{
+        {"toolhead", json{{"extruder", "extruder"}}},
+        {"print_task_config", json{{"filament_exist", json::array({true, false, false, false})}}}};
+    SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, loaded);
+    ams.sync_from_backend();
+    drain();
+    REQUIRE(lv_subject_get_int(ams.get_slot_active_loaded_subject(0)) == 1);
+
+    // Observe slot 0's active-loaded subject (the SINGLE source the bottom
+    // T-badge now binds to). It must fire and drop to 0 on unload — previously
+    // the badge read current_slot + filament_loaded separately and stayed lit.
+    int fire_count = 0;
+    int last_value = -1;
+    struct Ctx {
+        int* count;
+        int* value;
+    } ctx{&fire_count, &last_value};
+    lv_observer_t* obs = lv_subject_add_observer(
+        ams.get_slot_active_loaded_subject(0),
+        [](lv_observer_t* o, lv_subject_t* s) {
+            auto* c = static_cast<Ctx*>(lv_observer_get_user_data(o));
+            (*c->count)++;
+            *c->value = lv_subject_get_int(s);
+        },
+        &ctx);
+    REQUIRE(obs != nullptr);
+    int baseline = fire_count;
+
+    json unloaded =
+        json{{"filament_feed left", json{{"extruder0", json{{"filament_detected", true},
+                                                            {"channel_state", "unload_finish"}}}}}};
+    SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, unloaded);
+    ams.sync_from_backend();
+    drain();
+
+    CHECK(lv_subject_get_int(ams.get_slot_active_loaded_subject(0)) == 0);
+    CHECK(fire_count > baseline); // badge observer fired → highlight drops
+    CHECK(last_value == 0);
+
+    lv_observer_remove(obs);
+    ams.clear_backends();
+    ams.deinit_subjects();
+}
+
+// ============================================================================
 // Part 3a — Op-card current-loaded color matches the loaded slot (not slot+1)
 // ============================================================================
 
@@ -272,10 +386,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "AMS clears filament_loaded after unload compl
 
     // Unload completes: the firmware retracts to the buffer and reports the
     // channel state as unload_finish for that tool.
-    json unloaded = json{{"filament_feed left",
-                          json{{"extruder0",
-                                json{{"filament_detected", true},
-                                     {"channel_state", "unload_finish"}}}}}};
+    json unloaded =
+        json{{"filament_feed left", json{{"extruder0", json{{"filament_detected", true},
+                                                            {"channel_state", "unload_finish"}}}}}};
     SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, unloaded);
     ams.sync_from_backend();
     drain();

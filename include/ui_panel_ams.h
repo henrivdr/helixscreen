@@ -19,6 +19,7 @@
 
 #include <chrono>
 #include <memory>
+#include <vector>
 
 /**
  * @file ui_panel_ams.h
@@ -144,6 +145,11 @@ class AmsPanel : public PanelBase {
     ObserverGuard slot_count_observer_;
     ObserverGuard path_segment_observer_;
     ObserverGuard path_topology_observer_;
+    /// Per-slot LIVE path observers: each lane's filament path-segment and
+    /// toolhead-present subjects. When a slot's sensor flips (push/pull filament),
+    /// these fire and redraw that lane's path in real time. Static-array subjects
+    /// (singleton lifetime) — no SubjectLifetime token needed.
+    std::vector<ObserverGuard> slot_path_observers_;
     ObserverGuard backend_count_observer_;  ///< For backend selector visibility
     ObserverGuard external_spool_observer_; ///< Reactive updates when external spool color changes
     helix::AsyncLifetimeGuard
@@ -189,6 +195,8 @@ class AmsPanel : public PanelBase {
     void setup_slots();
     void setup_path_canvas();
     void update_path_canvas_from_backend();
+    /// (Re)wire per-slot LIVE path observers for the current slot count (Task 1).
+    void setup_slot_path_observers(int slot_count);
     void setup_bypass_spool();
     void update_bypass_spool_position();
     void update_bypass_spool_from_state();
