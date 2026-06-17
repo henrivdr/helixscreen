@@ -1117,6 +1117,20 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                 changed = true;
                             }
                         }
+
+                        // Diagnostic: trace the firmware channel_state sequence during
+                        // a load/unload so we can tell which event is the TRUE physical
+                        // completion vs an intermediate (preload_finish staged-in-buffer).
+                        // The on-screen step bar / status was dropping to Idle before the
+                        // physical unload finished; the real event order is firmware-
+                        // specific and was previously unlogged. (#u1-unload-steps)
+                        if (!state.empty()) {
+                            spdlog::debug("[AmsBackendSnapmaker] tool {} channel_state='{}' "
+                                          "error='{}' -> action={} current_slot={}",
+                                          i, state, error,
+                                          ams_action_to_string(system_info_.action),
+                                          system_info_.current_slot);
+                        }
                     }
                 }
             }
