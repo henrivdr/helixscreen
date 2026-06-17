@@ -145,6 +145,25 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// notification path.
     void apply_query_response(const nlohmann::json& response);
 
+    /// Build the stock unload g-code for the box, chosen by firmware capability.
+    /// M603 is the verified stock unload (Q2 1.1.1); if a firmware revision drops
+    /// it, fall back to the box_stepper EXTRUDER_UNLOAD primitive that UNLOAD_T<n>
+    /// wraps. slot_index >= 0 targets a specific lane; -1 unloads whatever is in
+    /// the extruder.
+    [[nodiscard]] std::string build_unload_gcode(int slot_index, int temp) const;
+
+    /// Detect firmware-version-dependent capabilities from the macro set and log
+    /// a fingerprint. The 1.1.x -> 01.01.02 QIDI refactor changes the macro
+    /// surface (e.g. T0-T3 absent on Q2 1.1.1), so we branch on capability rather
+    /// than a version string. Called from on_started() once the macro cache is up.
+    void detect_firmware_capabilities();
+
+    // Firmware-capability flags (see detect_firmware_capabilities()). Optimistic
+    // defaults match verified Q2 1.1.1 stock firmware so tests and a discovery
+    // race never downgrade off the known-good path.
+    bool fw_has_m603_ = true;         ///< M603 stock unload macro present
+    bool fw_has_clear_nozzle_ = true; ///< CLEAR_NOZZLE post-load wipe macro present
+
     /// Raw RFID indices read from save_variables. Per-slot side-table so we
     /// don't pollute SlotInfo with backend-specific fields. Resolution to
     /// material/color/brand happens via the officiall_filas_list.cfg lookup

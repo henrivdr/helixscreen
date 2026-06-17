@@ -3,6 +3,7 @@
 #include "ams_backend_qidi.h"
 
 #include "ams_error.h"
+#include "macro_param_cache.h"
 
 #include <spdlog/spdlog.h>
 
@@ -119,6 +120,7 @@ void AmsBackendQidi::on_started() {
     if (!client_) {
         return;
     }
+    detect_firmware_capabilities();
     // Bootstrap: notify_status_update only carries deltas, so we need an
     // initial snapshot to populate save_variables. Subscribe to the QIDI
     // objects too — Moonraker won't push notifications for anything we
@@ -790,10 +792,48 @@ PathSegment AmsBackendQidi::infer_error_segment() const {
 // entry log here, plus the raw G-code via execute_gcode) so field behavior is
 // fully visible until the gcode protocol is validated on real hardware (#1030).
 
+void AmsBackendQidi::detect_firmware_capabilities() {
+    auto& mc = helix::MacroParamCache::instance();
+
+    // Only trust the macro cache once it's actually populated for this printer —
+    // PRINT_START is a universal QIDI macro, so its presence confirms discovery
+    // has run. Without this guard a discovery-timing race would read an empty
+    // cache and wrongly downgrade us off the verified M603 / CLEAR_NOZZLE paths.
+    const bool cache_ready =
+        mc.has_macro("print_start") || mc.has_macro("m603") || mc.has_macro("t4");
+    if (cache_ready) {
+        fw_has_m603_ = mc.has_macro("m603");
+        fw_has_clear_nozzle_ = mc.has_macro("clear_nozzle");
+    }
+
+    // Fingerprint line so every debug bundle records which QIDI firmware variant
+    // we're talking to. The macro surface is the version tell (T0-T3 absent on
+    // Q2 1.1.1; the 01.01.02 refactor relocates macros). See #1041.
+    spdlog::info("{} Firmware fingerprint: cache_ready={} macros{{T0={} T4={} M603={} "
+                 "CLEAR_NOZZLE={} UNLOAD_FILAMENT={}}} -> use_m603={} append_clear_nozzle={}",
+                 backend_log_tag(), cache_ready, mc.has_macro("t0"), mc.has_macro("t4"),
+                 mc.has_macro("m603"), mc.has_macro("clear_nozzle"),
+                 mc.has_macro("unload_filament"), fw_has_m603_, fw_has_clear_nozzle_);
+}
+
+std::string AmsBackendQidi::build_unload_gcode(int slot_index, int temp) const {
+    if (fw_has_m603_) {
+        return "M603 S" + std::to_string(temp);
+    }
+    // Fallback for firmware without M603: drive the box_stepper primitive that
+    // UNLOAD_T<n> wraps. Needs the hotend hot like the load path does.
+    std::string g = "M109 S" + std::to_string(temp) + "\nEXTRUDER_UNLOAD";
+    if (slot_index >= 0) {
+        g += " SLOT=slot" + std::to_string(slot_index);
+    }
+    g += "\nM104 S0";
+    return g;
+}
+
 AmsError AmsBackendQidi::load_filament(int slot_index) {
     spdlog::info("{} load_filament(slot={})", backend_log_tag(), slot_index);
     int load_temp = QIDI_DEFAULT_LOAD_TEMP_C;
-    bool unload_first = false;
+    int loaded_other = -1; // slot in the extruder that must be retracted first
     int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -807,11 +847,11 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
         load_temp = load_temp_for_slot(slots[slot_index]);
         // If a *different* slot is already in the extruder, retract it first —
         // EXTRUDER_LOAD on top of loaded filament would jam. Compose the two
-        // verified stock primitives (M603 unload + EXTRUDER_LOAD) rather than
-        // relying on a tool-change macro.
+        // verified stock primitives (unload + EXTRUDER_LOAD) rather than relying
+        // on a tool-change macro.
         for (const auto& s : slots) {
             if (s.status == SlotStatus::LOADED && s.slot_index != slot_index) {
-                unload_first = true;
+                loaded_other = s.slot_index;
                 unload_temp = load_temp_for_slot(s);
                 break;
             }
@@ -824,12 +864,14 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
     // hence the M109 pre-heat; CLEAR_NOZZLE wipes the post-load ooze (no clean
     // is built into EXTRUDER_LOAD); M104 S0 leaves the hotend cooling down.
     std::string seq;
-    if (unload_first) {
-        seq += "M603 S" + std::to_string(unload_temp) + "\n";
+    if (loaded_other >= 0) {
+        seq += build_unload_gcode(loaded_other, unload_temp) + "\n";
     }
     seq += "M109 S" + std::to_string(load_temp) + "\n";
     seq += "EXTRUDER_LOAD SLOT=slot" + std::to_string(slot_index) + "\n";
-    seq += "CLEAR_NOZZLE\n";
+    if (fw_has_clear_nozzle_) {
+        seq += "CLEAR_NOZZLE\n";
+    }
     seq += "M104 S0";
     return execute_gcode(seq);
 }
@@ -837,6 +879,7 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
 AmsError AmsBackendQidi::unload_filament(int slot_index) {
     spdlog::info("{} unload_filament(slot={})", backend_log_tag(), slot_index);
     int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
+    int target_slot = slot_index; // for the EXTRUDER_UNLOAD fallback
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -856,6 +899,7 @@ AmsError AmsBackendQidi::unload_filament(int slot_index) {
                 return AmsErrorHelper::not_supported("QIDI Box: no slot currently loaded");
             }
             unload_temp = load_temp_for_slot(*loaded);
+            target_slot = loaded->slot_index;
         } else if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
             return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
         } else {
@@ -866,8 +910,9 @@ AmsError AmsBackendQidi::unload_filament(int slot_index) {
     // M603 is the stock "unload" the QIDI screen runs — it heats, retracts to
     // before the hub and (with the box active) calls E_UNLOAD. UNLOAD_T<n> /
     // UNLOAD_FILAMENT proved inert on Q2 firmware. M603 acts on whatever is in
-    // the extruder, so the slot index only selects the unload temperature.
-    return execute_gcode("M603 S" + std::to_string(unload_temp));
+    // the extruder, so the slot index only selects the unload temperature
+    // (used by the EXTRUDER_UNLOAD fallback for firmware without M603).
+    return execute_gcode(build_unload_gcode(target_slot, unload_temp));
 }
 
 AmsError AmsBackendQidi::select_slot(int /*slot_index*/) {

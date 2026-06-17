@@ -95,6 +95,10 @@ class QidiBoxTestAccess {
     static void apply_config_settings(AmsBackendQidi& b, const json& s) {
         b.apply_config_settings(s);
     }
+    static void set_fw_caps(AmsBackendQidi& b, bool has_m603, bool has_clear_nozzle) {
+        b.fw_has_m603_ = has_m603;
+        b.fw_has_clear_nozzle_ = has_clear_nozzle;
+    }
 };
 
 // Subclass that captures execute_gcode() invocations so write-path tests
@@ -626,6 +630,31 @@ TEST_CASE("QIDI Box unload_filament with -1 and nothing loaded errors",
 
     REQUIRE_FALSE(err.success());
     REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box unload falls back to EXTRUDER_UNLOAD when M603 is absent",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    // Simulate a firmware revision without the M603 macro.
+    QidiBoxTestAccess::set_fw_caps(backend, /*m603=*/false, /*clear_nozzle=*/true);
+
+    auto err = backend.unload_filament(1);
+
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "M109 S250\nEXTRUDER_UNLOAD SLOT=slot1\nM104 S0");
+}
+
+TEST_CASE("QIDI Box load omits CLEAR_NOZZLE when the macro is absent",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_fw_caps(backend, /*m603=*/true, /*clear_nozzle=*/false);
+
+    auto err = backend.load_filament(2);
+
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "M109 S250\nEXTRUDER_LOAD SLOT=slot2\nM104 S0");
 }
 
 TEST_CASE("QIDI Box change_tool resolves to the slot and drives the load path",
