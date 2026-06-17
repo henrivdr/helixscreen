@@ -1068,6 +1068,22 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         } else if (state == "unloading") {
                             system_info_.action = AmsAction::UNLOADING;
                             changed = true;
+                        } else if (state.rfind("unload_", 0) == 0 && state != "unload_finish") {
+                            // Snapmaker U1 emits granular unload sub-states rather than
+                            // a flat "unloading": unload_homing/picking/heating/doing.
+                            // Without recognizing these the action never leaves Idle
+                            // during a U1 unload, so the optimistic HEATING set by the
+                            // UI gets clobbered and the step bar drops to Idle mid-op.
+                            // unload_finish is excluded so it reaches its handler below.
+                            system_info_.action = AmsAction::UNLOADING;
+                            changed = true;
+                        } else if (state.rfind("load_", 0) == 0 && state != "load_finish") {
+                            // Granular load sub-states: load_homing/picking/heating/doing.
+                            // The "load_" prefix deliberately does NOT match "preload_*"
+                            // (preload_finish / preloading), which are handled elsewhere.
+                            // load_finish is excluded so it reaches its IDLE handler below.
+                            system_info_.action = AmsAction::LOADING;
+                            changed = true;
                         } else if (state == "unload_finish" || state == "preload_finish") {
                             // Unload completed: the firmware has retracted filament
                             // out of the toolhead into the buffer. The extruder
@@ -1100,13 +1116,20 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             // mid-heat (#u1-unload-steps). Leave the action alone for
                             // preload_finish; it resolves to IDLE via the "idle"
                             // channel_state below once the operation truly settles.
-                            if (state == "unload_finish" &&
-                                (system_info_.action == AmsAction::LOADING ||
-                                 system_info_.action == AmsAction::UNLOADING)) {
-                                system_info_.action = AmsAction::IDLE;
-                                system_info_.operation_detail.clear();
-                                PostOpCooldownManager::instance().schedule();
-                                changed = true;
+                            if (state == "unload_finish") {
+                                // Record the just-unloaded lane so FilamentSensorManager
+                                // can suppress the runout-guidance modal for the grace
+                                // window during which the user is EXPECTED to pull the
+                                // filament out of this lane (the e<N>_filament sensor
+                                // fires "no filament" seconds after the unload completes).
+                                AmsState::instance().mark_slot_unloaded(i);
+                                if (system_info_.action == AmsAction::LOADING ||
+                                    system_info_.action == AmsAction::UNLOADING) {
+                                    system_info_.action = AmsAction::IDLE;
+                                    system_info_.operation_detail.clear();
+                                    PostOpCooldownManager::instance().schedule();
+                                    changed = true;
+                                }
                             }
                         } else if (state == "load_finish" || state == "idle") {
                             if (system_info_.action == AmsAction::LOADING ||

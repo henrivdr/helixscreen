@@ -413,6 +413,91 @@ TEST_CASE("Snapmaker channel_error on the ACTIVE lane DOES raise Error", "[ams][
     CHECK(backend.get_system_info().operation_detail == "some_fault");
 }
 
+TEST_CASE("Snapmaker granular unload sub-states drive UNLOADING action",
+          "[ams][snapmaker][unload]") {
+    // The U1 firmware NEVER sends a flat "unloading" — it emits granular
+    // sub-states unload_homing/picking/heating/doing. Each must set action to
+    // UNLOADING so the on-screen step bar stays visible during the unload.
+    for (const char* state :
+         {"unload_homing", "unload_picking", "unload_heating", "unload_doing"}) {
+        AmsBackendSnapmaker backend(nullptr, nullptr);
+        json status = json{
+            {"filament_feed left",
+             json{{"extruder2", json{{"filament_detected", true},
+                                     {"channel_state", state},
+                                     {"channel_error", "ok"}}}}}};
+        SnapmakerTestAccess::handle_status(backend, status);
+        INFO("state=" << state);
+        CHECK(backend.get_system_info().action == AmsAction::UNLOADING);
+    }
+}
+
+TEST_CASE("Snapmaker granular load sub-states drive LOADING action",
+          "[ams][snapmaker][load]") {
+    // Symmetric to the unload case: load_homing/picking/heating/doing → LOADING.
+    for (const char* state :
+         {"load_homing", "load_picking", "load_heating", "load_doing"}) {
+        AmsBackendSnapmaker backend(nullptr, nullptr);
+        json status = json{
+            {"filament_feed left",
+             json{{"extruder2", json{{"filament_detected", true},
+                                     {"channel_state", state},
+                                     {"channel_error", "ok"}}}}}};
+        SnapmakerTestAccess::handle_status(backend, status);
+        INFO("state=" << state);
+        CHECK(backend.get_system_info().action == AmsAction::LOADING);
+    }
+}
+
+TEST_CASE("Snapmaker unload_finish resolves UNLOADING to IDLE", "[ams][snapmaker][unload]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Mid-unload: action becomes UNLOADING.
+    json doing = json{
+        {"filament_feed left",
+         json{{"extruder2", json{{"filament_detected", true},
+                                 {"channel_state", "unload_doing"},
+                                 {"channel_error", "ok"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, doing);
+    REQUIRE(backend.get_system_info().action == AmsAction::UNLOADING);
+
+    // unload_finish is the TRUE end of the operation → IDLE.
+    json finish = json{
+        {"filament_feed left",
+         json{{"extruder2", json{{"filament_detected", true},
+                                 {"channel_state", "unload_finish"},
+                                 {"channel_error", "ok"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, finish);
+    CHECK(backend.get_system_info().action == AmsAction::IDLE);
+}
+
+TEST_CASE("Snapmaker preload_finish is NOT matched by the load_ prefix branch",
+          "[ams][snapmaker][unload]") {
+    // preload_finish starts with "preload_", NOT "load_" — it must reach the
+    // existing preload_finish handler (which leaves the action alone) rather than
+    // being misread as a granular load sub-state.
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Start mid-unload so there is an action to (incorrectly) clobber.
+    json doing = json{
+        {"filament_feed left",
+         json{{"extruder2", json{{"filament_detected", true},
+                                 {"channel_state", "unload_heating"},
+                                 {"channel_error", "ok"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, doing);
+    REQUIRE(backend.get_system_info().action == AmsAction::UNLOADING);
+
+    json preload = json{
+        {"filament_feed left",
+         json{{"extruder2", json{{"filament_detected", true},
+                                 {"channel_state", "preload_finish"},
+                                 {"channel_error", "ok"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, preload);
+    // preload_finish leaves the in-progress action alone (does NOT become LOADING
+    // and does NOT resolve to IDLE — only unload_finish/load_finish/idle do).
+    CHECK(backend.get_system_info().action == AmsAction::UNLOADING);
+}
+
 // get_slot_filament_segment — on the U1's PARALLEL multi-toolhead topology
 // every present tool feeds its own dedicated nozzle, so its filament must
 // render all the way into the toolhead (NOZZLE). The firmware marks only the

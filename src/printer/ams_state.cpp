@@ -2020,6 +2020,28 @@ bool AmsState::is_filament_operation_active() {
     }
 }
 
+void AmsState::mark_slot_unloaded(int slot_index) {
+    if (slot_index < 0 || slot_index >= MAX_SLOTS) {
+        return;
+    }
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    last_unload_time_[slot_index] = std::chrono::steady_clock::now();
+    spdlog::debug("[AmsState] marked slot {} as recently unloaded (runout grace started)",
+                  slot_index);
+}
+
+bool AmsState::was_slot_recently_unloaded(int slot_index) const {
+    if (slot_index < 0 || slot_index >= MAX_SLOTS) {
+        return false;
+    }
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    const auto t = last_unload_time_[slot_index];
+    if (t.time_since_epoch().count() == 0) {
+        return false; // never unloaded
+    }
+    return (std::chrono::steady_clock::now() - t) < RECENT_UNLOAD_GRACE;
+}
+
 void AmsState::set_current_loaded_defaults() {
     if (strcmp(lv_subject_get_string(&current_material_text_), "---") != 0) {
         lv_subject_copy_string(&current_material_text_, "---");

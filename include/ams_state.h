@@ -12,6 +12,8 @@
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
 
+#include <array>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -1049,6 +1051,30 @@ class AmsState {
     bool is_filament_operation_active();
 
     /**
+     * @brief Record that a lane just completed an unload
+     *
+     * Called by the Snapmaker U1 backend when channel_state reaches
+     * "unload_finish" for a slot. The user is then expected to pull the
+     * filament out of that lane, which fires the per-lane runout sensor a few
+     * seconds later. FilamentSensorManager queries was_slot_recently_unloaded()
+     * to suppress the runout-guidance modal during the grace window.
+     *
+     * Thread-safe; may be called from the WebSocket background thread.
+     *
+     * @param slot_index Slot index (0 to MAX_SLOTS-1)
+     */
+    void mark_slot_unloaded(int slot_index);
+
+    /**
+     * @brief Check whether a lane completed an unload within the grace window
+     *
+     * @param slot_index Slot index (0 to MAX_SLOTS-1)
+     * @return true if mark_slot_unloaded(slot_index) was called within the last
+     *         RECENT_UNLOAD_GRACE window
+     */
+    bool was_slot_recently_unloaded(int slot_index) const;
+
+    /**
      * @brief Bump the slots version counter to trigger UI refresh
      *
      * Call after modifying slot data (weights, endless spool config, etc.)
@@ -1299,4 +1325,16 @@ class AmsState {
 
     // Stored callback for mock gcode response injection
     std::function<void(const std::string&)> gcode_response_callback_;
+
+    /// Grace window after an unload during which a runout on that lane's sensor
+    /// is expected (the user pulls the just-unloaded filament out) and must NOT
+    /// pop the runout-guidance modal. Auto-expires.
+    static constexpr std::chrono::seconds RECENT_UNLOAD_GRACE{30};
+
+    /// Per-slot timestamp of the last completed unload (unload_finish). A
+    /// non-subject plain field guarded by mutex_ — written from the backend's
+    /// background-thread status parse, read from FilamentSensorManager. Default
+    /// time_point{} (epoch) means "never unloaded" and is always outside the
+    /// grace window.
+    std::array<std::chrono::steady_clock::time_point, MAX_SLOTS> last_unload_time_{};
 };

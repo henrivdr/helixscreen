@@ -542,6 +542,21 @@ bool FilamentSensorManager::has_real_runout() const {
                               sensor.sensor_name, lane);
                 continue;
             }
+
+            // A lane that JUST finished an unload (unload_finish) is expected to
+            // go empty when the user pulls the filament out — the firmware reports
+            // the slot AVAILABLE again, so the empty-lane check above no longer
+            // catches it, but the sensor still flips to "no filament" seconds
+            // later and would pop the runout-guidance modal. Suppress the runout
+            // for that lane within the post-unload grace window. This is lane- and
+            // time-scoped, so a genuine mid-print runout on a different (loaded,
+            // in-use) lane — which was never recently unloaded — is NOT suppressed.
+            if (AmsState::instance().was_slot_recently_unloaded(lane)) {
+                spdlog::debug("[FilamentSensorManager] suppressing runout on lane {} — "
+                              "recently unloaded ({})",
+                              lane, sensor.sensor_name);
+                continue;
+            }
         }
 
         spdlog::debug("[FilamentSensorManager] has_real_runout: TRUE - {} ({}) lost filament",

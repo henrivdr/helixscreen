@@ -338,6 +338,20 @@ void TempGraphController::setup_observers() {
                     if (si.series_id < 0)
                         return;
 
+                    // Filter garbage / "no data" readings at the source, mirroring
+                    // TemperatureService::on_temp_changed. A heater/sensor subject
+                    // momentarily reads 0 on disconnect, partial status updates, or
+                    // for an inactive extruder on a multi-tool printer. Pushing a 0
+                    // appends a literal 0 sample, so the series line draws a solid
+                    // vertical drop to the 0°C floor at the live edge (the reported
+                    // U1 artifact). Drop these BEFORE the throttle timestamp update so
+                    // a spurious 0 never consumes the per-series sample slot and block
+                    // the next real reading. Upper bound rejects obviously-bogus spikes
+                    // (deci-degrees: 4000 = 400°C covers any nozzle).
+                    constexpr int kMaxValidTempDeci = 4000;
+                    if (temp_deci <= 0 || temp_deci > kMaxValidTempDeci)
+                        return;
+
                     // Throttle chart updates to one sample per SAMPLE_INTERVAL_SEC
                     // per series — Klipper pushes status at ~4Hz, and the chart
                     // only holds one point per interval, so faster pushes just
@@ -350,6 +364,8 @@ void TempGraphController::setup_observers() {
                     si.last_update_ms = now_ms;
 
                     float temp_deg = deci_to_degrees_f(temp_deci);
+                    spdlog::debug("[TempGraphController] live push series_id={} '{}' {:.1f}°C",
+                                  si.series_id, si.klipper_name, temp_deg);
                     ui_temp_graph_update_series_with_time(self->graph_, si.series_id, temp_deg,
                                                           now_ms);
                     self->apply_auto_range();
