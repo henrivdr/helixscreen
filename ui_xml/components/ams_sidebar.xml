@@ -33,7 +33,8 @@
     </lv_obj>
     <!-- Step Progress Stepper (shown during load operations) -->
     <lv_obj name="progress_stepper_container"
-            width="100%" height="150" style_pad_all="0" scrollable="false" hidden="true">
+            width="100%" height="content" style_max_height="260" style_pad_all="0"
+            scrollable="true" scroll_dir="ver" scrollbar_mode="auto" hidden="true">
       <!-- Step progress widget created dynamically by AmsOperationSidebar -->
     </lv_obj>
     <!-- Flex spacer - pushes action buttons to bottom of column -->

@@ -6,10 +6,12 @@
 #include "ui_clog_meter.h"
 #include "ui_observer_guard.h"
 
+#include "ams_backend.h"
 #include "ams_step_operation.h"
 #include "ams_types.h"
 
 #include <memory>
+#include <vector>
 
 // Forward declarations
 struct _lv_obj_t;
@@ -138,6 +140,21 @@ class AmsOperationSidebar {
     ObserverGuard extruder_temp_observer_;
     ObserverGuard extruder_target_observer_;
     ObserverGuard color_observer_;
+
+    // Observes AmsState's toolchange_step subject (static singleton — member
+    // ObserverGuard alone is correct, no SubjectLifetime needed). The
+    // GcodeNarrationRouter drives this index from `//` narration lines; the
+    // observer highlights the matching step row and scrolls it into view.
+    ObserverGuard toolchange_step_observer_;
+    // True when the active backend supplied a non-empty toolchange phase
+    // template, so the step bar is driven by narration rather than the coarse
+    // AmsAction enum. Suppresses the legacy AmsAction→index advancement.
+    bool narration_driven_ = false;
+    // Keeps the current backend phase template alive. (ui_step_progress_create
+    // copies label strings into its own buffers, so this is not strictly
+    // required for c_str() validity, but it documents the active template and
+    // is harmless.)
+    std::vector<AmsBackend::ToolchangePhase> current_phase_template_;
 
     // Bypass-after-unload state
     bool pending_bypass_enable_ = false;

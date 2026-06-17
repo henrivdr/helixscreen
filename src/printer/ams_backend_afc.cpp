@@ -391,6 +391,68 @@ std::optional<helix::ErrorEvent> AmsBackendAfc::classify_error(
     return std::nullopt;
 }
 
+std::vector<AmsBackend::ToolchangePhase>
+AmsBackendAfc::toolchange_phase_template(StepOperationType op) const {
+    switch (op) {
+    case StepOperationType::LOAD_SWAP:
+        return {
+            {"heat", "Heat nozzle", false},
+            {"cut", "Cut tip", true},
+            {"poop", "Purge to bucket", true},
+            {"kick", "Kick away", true},
+            {"feed", "Feed filament", false},
+            {"purge", "Purge", true},
+            {"brush", "Brush nozzle", true},
+            {"clean", "Clean nozzle", true},
+            {"load", "Load complete", false},
+        };
+    case StepOperationType::LOAD_FRESH:
+        return {
+            {"heat", "Heat nozzle", false},
+            {"feed", "Feed filament", false},
+            {"purge", "Purge", true},
+            {"load", "Load complete", false},
+        };
+    case StepOperationType::UNLOAD:
+        return {
+            {"heat", "Heat nozzle", false},
+            {"cut", "Cut tip", true},
+            {"retract", "Retract", false},
+        };
+    }
+    return {};
+}
+
+std::optional<std::string>
+AmsBackendAfc::match_narration_phase(const std::string& narration) const {
+    if (narration.empty())
+        return std::nullopt;
+    std::string s = narration;
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    auto has = [&](const char* needle) { return s.find(needle) != std::string::npos; };
+    // Order matters: more specific phrases first.
+    if (has("is now loaded in toolhead") || has("load complete"))
+        return "load";
+    if (has("clean nozzle") || has("afc_brush: clean"))
+        return "clean";
+    if (has("move to brush") || has("brush"))
+        return "brush";
+    if (has("purg")) // S1: purge/purging is its own phase, not "feed"
+        return "purge";
+    if (has("kick"))
+        return "kick";
+    if (has("poop"))
+        return "poop";
+    if (has("cut"))
+        return "cut";
+    if (has("to hub") || has("feed") || has("loading lane"))
+        return "feed";
+    if (has("heat"))
+        return "heat";
+    return std::nullopt;
+}
+
 PathSegment AmsBackendAfc::compute_filament_segment_unlocked() const {
     // Must be called with mutex_ held!
     // Returns the furthest point filament has reached based on sensor states.

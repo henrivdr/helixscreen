@@ -28,6 +28,7 @@
 #include "display_manager.h"
 #include "environment_config.h"
 #include "gcode_error_router.h"
+#include "gcode_narration_router.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -3074,6 +3075,11 @@ void Application::init_action_prompt() {
     // a member so its dtor unregisters callbacks before MoonrakerClient dies.
     m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client);
 
+    // Narration router: maps `//` toolchange narration to the active AMS
+    // backend's step model and drives the toolchange_step subject. Separate
+    // handler key from the error router; ignores `!!` / `Error:` lines.
+    m_gcode_narration_router = std::make_unique<helix::GcodeNarrationRouter>(api, client);
+
     // Register layer tracking fallback via gcode responses.
     // Some slicers don't emit SET_PRINT_STATS_INFO, so Moonraker's print_stats.info
     // never updates current_layer. This parses gcode responses as a fallback.
@@ -3949,6 +3955,7 @@ void Application::tear_down_printer_state() {
     // 17b. Tear down GcodeErrorRouter before MoonrakerClient — its dtor
     //      unregisters the notify_gcode_response handler and the
     //      gcode_store_replay connected observer; both touch the client.
+    m_gcode_narration_router.reset();
     m_gcode_error_router.reset();
 
     // 18. Release MoonrakerManager
@@ -4257,6 +4264,7 @@ void Application::shutdown() {
 
     // Tear down GcodeErrorRouter before MoonrakerClient (its dtor unregisters
     // the live + replay callbacks; both touch the client).
+    m_gcode_narration_router.reset();
     m_gcode_error_router.reset();
 
     // Destroy MoonrakerManager (its ObserverGuards now release without

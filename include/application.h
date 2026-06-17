@@ -23,6 +23,7 @@ class PluginManager;
 namespace helix {
 class ActionPromptManager;
 class GcodeErrorRouter;
+class GcodeNarrationRouter;
 }
 namespace helix::ui {
 class ActionPromptModal;
@@ -142,6 +143,11 @@ class Application {
     // the most recent error from gcode_store on (re)connect. Owns the
     // notify_gcode_response and connected-observer registrations.
     std::unique_ptr<helix::GcodeErrorRouter> m_gcode_error_router;
+
+    // Routes `//` toolchange narration lines to the active AMS backend's step
+    // model, updating the toolchange_step subject. Sibling of the error router;
+    // owns a SEPARATE notify_gcode_response handler key. Does NOT surface errors.
+    std::unique_ptr<helix::GcodeNarrationRouter> m_gcode_narration_router;
 
     // Configuration
     helix::Config* m_config = nullptr; // Singleton, not owned

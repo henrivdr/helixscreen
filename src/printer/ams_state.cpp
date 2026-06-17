@@ -204,6 +204,7 @@ void AmsState::init_subjects(bool register_xml) {
     // System-level subjects
     INIT_SUBJECT_INT(ams_type, static_cast<int>(AmsType::NONE), subjects_, register_xml);
     INIT_SUBJECT_INT(ams_action, static_cast<int>(AmsAction::IDLE), subjects_, register_xml);
+    INIT_SUBJECT_INT(toolchange_step, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(current_slot, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(pending_target_slot, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(ams_current_tool, -1, subjects_, register_xml);
@@ -1794,7 +1795,11 @@ void AmsState::recompute_action_detail() {
     // the AmsAction strings are user-visible — translate at this UI binding
     // site, not in ams_action_to_string() which is also used for logs.
     const char* new_detail = "";
-    if (!last_operation_detail_.empty()) {
+    if (!last_narration_label_.empty()) {
+        // Live toolchange narration phase ("Brush nozzle") — finer-grained than
+        // the AmsAction enum; wins until the operation ends (IDLE clears it).
+        new_detail = last_narration_label_.c_str();
+    } else if (!last_operation_detail_.empty()) {
         // Backend strings are intentionally NOT lv_tr()'d — the backend may
         // emit dynamic content ("Waiting for slot 2", "Heating to 230°C") that
         // isn't a fixed translation key. Pass through as-is.
@@ -1828,10 +1833,26 @@ void AmsState::set_action(AmsAction action) {
     if (lv_subject_get_int(&ams_action_) != val) {
         lv_subject_set_int(&ams_action_, val);
         spdlog::debug("[AMS State] Action set: {}", ams_action_to_string(action));
+        // Operation ended: clear the narration label + phase index BEFORE the
+        // recompute so the cleared state is reflected in the detail string. The
+        // next swap then restarts from a clean step bar. set_action writes
+        // subjects directly (main-thread contract), so write toolchange_step_
+        // directly too.
+        if (action == AmsAction::IDLE) {
+            last_narration_label_.clear();
+            lv_subject_set_int(&toolchange_step_, -1);
+        }
         // Action change must propagate to the displayed detail string (e.g.
         // LOADING → IDLE while still printing should flip "Loading" → "Printing").
         recompute_action_detail();
     }
+}
+
+void AmsState::set_narration_phase(int index, const std::string& label) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    lv_subject_set_int(&toolchange_step_, index);
+    last_narration_label_ = label;
+    recompute_action_detail();
 }
 
 void AmsState::set_pending_target_slot(int slot) {
