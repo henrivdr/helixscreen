@@ -891,7 +891,16 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
     seq += "M109 S" + std::to_string(load_temp) + "\n";
     seq += "EXTRUDER_LOAD SLOT=slot" + std::to_string(slot_index) + "\n";
     if (fw_has_clear_nozzle_) {
+        // The stock CLEAR_NOZZLE macro makes absolute XY/Z wipe moves with no
+        // homing guard of its own (it assumes a print context). A load triggered
+        // from idle may be unhomed, which would error "Must home axis first"
+        // mid-sequence and leave the hotend hot (the trailing M104 S0 never runs).
+        // EXTRUDER_LOAD itself doesn't move the toolhead, so only the wipe needs
+        // this — route through ensure_homed_then() so Moonraker's
+        // toolhead.homed_axes is checked and G28 runs first when needed.
         seq += "CLEAR_NOZZLE\n";
+        seq += "M104 S0";
+        return ensure_homed_then(seq);
     }
     seq += "M104 S0";
     return execute_gcode(seq);
