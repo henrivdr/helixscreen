@@ -1823,6 +1823,7 @@ translations:
   Tool: Tool
   Tool Changer: Tool Changer
   'Tool change failed: {}': 'Tool change failed: {}'
+  Toolhead jam: Toolhead jam
   Toolhead Style: Toolhead Style
   Toolhead, G-code, limits, and materials: Toolhead, G-code, limits, and materials
   Top: Top

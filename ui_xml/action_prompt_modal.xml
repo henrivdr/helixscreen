@@ -13,8 +13,10 @@
     <lv_obj width="100%"
             height="content" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="#space_lg"
             style_pad_bottom="#space_sm" flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center"
-            scrollable="false">
-      <text_heading name="title" text="Action Required" translation_tag="Action Required"/>
+            style_pad_gap="#space_sm" scrollable="false">
+      <!-- ERROR icon - default-hidden; toggled imperatively in populate_content() for severity="error" -->
+      <icon name="icon_error" src="alert_octagon" size="md" variant="danger" hidden="true"/>
+      <text_heading name="title" text="Action Required" translation_tag="Action Required" flex_grow="1"/>
     </lv_obj>
     <!-- Horizontal divider below title -->
     <divider_horizontal/>

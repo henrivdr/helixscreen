@@ -546,6 +546,14 @@ class PrinterState {
     }
 
     /**
+     * @brief True when Klipper's pause_resume.is_paused is set.
+     *
+     * Reflects the last received pause_resume.is_paused value from Moonraker.
+     * Safe to read synchronously from the main thread.
+     */
+    [[nodiscard]] bool is_paused() const { return is_paused_; }
+
+    /**
      * @brief Reset UI state when starting a new print
      *
      * Clears the print_complete flag and resets progress to prepare for
@@ -1965,6 +1973,9 @@ class PrinterState {
 
     /// Auto-detected bed_moves value from kinematics (before user override)
     bool auto_detected_bed_moves_ = false;
+
+    /// Klipper pause_resume.is_paused: true when the print is paused via PAUSE gcode
+    bool is_paused_ = false;
 
     // ============================================================================
     // Thread-safe internal methods (called via lv_async_call from main thread)

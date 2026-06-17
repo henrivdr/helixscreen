@@ -74,6 +74,7 @@ struct PromptData {
     std::vector<std::string> text_lines; ///< Text content lines
     std::vector<PromptButton> buttons;   ///< All buttons (regular + footer)
     int current_group_id = -1;           ///< Current group being built (-1 = no active group)
+    std::string severity; ///< "" (neutral, default) or "error" — drives the modal's error icon
 };
 
 /**

@@ -31,6 +31,7 @@ class PrinterStateTestAccess {
         ps.pre_print_option_set_ = PrePrintOptionSet();
         ps.z_offset_calibration_strategy_ = ZOffsetCalibrationStrategy::PROBE_CALIBRATE;
         ps.auto_detected_bed_moves_ = false;
+        ps.is_paused_ = false;
         ps.last_kinematics_.clear();
         PrinterPrintStateTestAccess::reset_extra(ps.print_domain_);
     }

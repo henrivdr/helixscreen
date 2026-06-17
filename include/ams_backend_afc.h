@@ -6,6 +6,7 @@
 #include "afc_config_manager.h"
 #include "ams_subscription_backend.h"
 #include "async_lifetime_guard.h"
+#include "error_event.h"
 #include "slot_registry.h"
 
 #include <deque>
@@ -117,6 +118,13 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     [[nodiscard]] PathSegment get_slot_filament_segment(int slot_index) const override;
     [[nodiscard]] PathSegment infer_error_segment() const override;
     [[nodiscard]] bool slot_has_prep_sensor(int slot_index) const override;
+
+    /// L1: recognize AFC toolhead jam / lane / hub faults and emit a CRITICAL
+    /// ErrorEvent with context-aware recovery actions. Falls back to a catch-all
+    /// for any pausing !! while error_state_ is set. Returns nullopt otherwise so
+    /// the generic classifier handles the line.
+    [[nodiscard]] std::optional<helix::ErrorEvent> classify_error(
+        const std::string& raw_line, const helix::ClassifyContext& ctx) const override;
 
     // Operations
     AmsError load_filament(int slot_index) override;
@@ -467,6 +475,11 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
      * @return PathSegment indicating filament position
      */
     [[nodiscard]] PathSegment compute_filament_segment_unlocked() const;
+
+    /// Build the applicable recovery actions for an AFC pause/jam, reading live
+    /// toolhead state. Caller holds mutex_. Offers Unload only when the toolhead
+    /// is loaded; Eject only when empty and a lane is selected.
+    [[nodiscard]] std::vector<helix::RecoveryAction> build_recovery_actions() const;
 
     /**
      * @brief Execute a G-code command with user-facing toast notifications

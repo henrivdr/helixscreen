@@ -465,6 +465,14 @@ void PrinterState::update_from_status(const json& state) {
         }
     }
 
+    // Track Klipper pause_resume.is_paused (PAUSE/RESUME gcode state)
+    if (state.contains("pause_resume")) {
+        const auto& pr = state["pause_resume"];
+        if (pr.contains("is_paused") && pr["is_paused"].is_boolean()) {
+            is_paused_ = pr["is_paused"].get<bool>();
+        }
+    }
+
     // Delegate calibration updates (manual probe, motor state, firmware retraction)
     // to calibration_state_ component
     calibration_state_.update_from_status(state);
