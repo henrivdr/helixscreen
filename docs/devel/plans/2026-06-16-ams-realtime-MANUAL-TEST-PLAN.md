@@ -1,8 +1,16 @@
 # MANUAL TEST PLAN — AMS Real-Time Filament State (Snapmaker U1)
 
 **Device:** U1 @ 192.168.30.103 · **Branch:** `feature/ams-realtime-filament-state`
-**Status:** ⏳ NOT YET DEPLOYED — Phase 1 (abstraction) building; Phase 2 (panel binding) next.
-**Last deployed build:** _(none for this branch yet — current device build is the preflight branch)_
+**Status:** ✅ Phase 1+2 + temp-graph DONE & committed (`77b22faa6`); **U1 cross-build in progress**.
+Will deploy this AMS+gradient build AFTER you finish the Part A print test (it would replace the
+preflight build currently on the device). T1–T8 below run on the AMS build.
+**Currently on device:** the **preflight** build (`0.99.79`) — for the **Part A print test only**
+(see "Parked" section at the bottom; that test is ready to run NOW).
+
+**Live-test debug markers** (Settings→System→Log Level→Debug; I'll watch the device log):
+- `[AmsPanel] Per-slot path subject fired` — path redraw fired on a push/pull (T2)
+- `[AmsSlot] Slot N highlight active=…` — active-lane badge following real load state (T3)
+- `[FilamentPanel] Op buttons: tool=… slot=… loaded=…` — Load/Unload/Purge gating (T7)
 
 > I'll bump the Status line + "Enabled this build" column each time I deploy. Run the ⬜ items and
 > tell me PASS/FAIL + what you saw. For real-time items, push/pull filament slowly so we can watch.
@@ -61,6 +69,21 @@
 - **Action:** unload a lane so filament retracts to the buffer but stays staged (not fully ejected).
 - **✅ Expect:** the path shows filament **staged in the buffer** visually distinct from "at the
   toolhead" (different segment/length), rather than looking identical to loaded.
+- Result: ⬜
+
+### T7 — Filament/Material panel: Load disabled when already loaded (Phase 2, your note)
+- **Action:** open the **Filament/Material** panel (the one with the Tool selector + PLA/PETG/ABS
+  buttons + Load/Unload/Purge/Extrude/Retract). Select a **Tool that IS loaded** (e.g. T1).
+- **✅ Expect:** **Load is disabled** (greyed) for that tool — no more "tap Load → heat nozzle →
+  shut off" pointlessness. **Unload/Purge enabled.** Now select an **unloaded** tool → **Load
+  enabled, Unload/Purge disabled.** Buttons update live as load state changes (push/pull).
+- Result: ⬜
+
+### T8 — Temperature graph gradient fill (separate fix, [L079]/#979)
+- **Action:** open the full **TEMPERATURE** overlay (Nozzle/Bed/Chamber). Glance at the mini graph
+  on the temp/filament panel too.
+- **✅ Expect:** each visible series' line has a **colored gradient fill beneath it** — opaque at the
+  curve, fading toward the axis. (Before: line only, fill invisible.)
 - Result: ⬜
 
 ---
