@@ -771,6 +771,31 @@ static void migrate_v16_to_v17(json& config) {
     }
 }
 
+/// v17 → v18: After the #943/#986 touch-scaling fix, the DRM/fbdev backends apply
+/// evdev linear scaling to MT-only digitizers (e.g. Qidi Q2: 800x480 controller on a
+/// 480x272 panel). Any affine calibration captured before the fix was computed in the
+/// wrong (unscaled) coordinate space and would re-break touch on upgrade. We cannot
+/// distinguish a stale capacitive affine from a legitimate resistive one in JSON alone
+/// (large coefficients are valid for resistive panels), so set a one-shot
+/// recheck_pending flag here; the display backend decides at boot — when it knows the
+/// device's resistive/capacitive nature and live ABS range — whether to invalidate.
+static void migrate_v17_to_v18(json& config) {
+    // Guard ([L087]): an absent/default-constructed json is null, and writing into a
+    // null via operator[] would replace it — but reading .value()/iterating a null
+    // throws. Create the input/calibration objects only when missing, never overwrite
+    // existing data.
+    if (!config.contains("input") || !config["input"].is_object()) {
+        config["input"] = json::object();
+    }
+    if (!config["input"].contains("calibration") || !config["input"]["calibration"].is_object()) {
+        config["input"]["calibration"] = json::object();
+    }
+
+    config["input"]["calibration"]["recheck_pending"] = true;
+    spdlog::info("[Config] Migration v18: flagged touch calibration for post-#943 recheck "
+                 "(recheck_pending=true)");
+}
+
 /// Run all versioned migrations in sequence from current version to CURRENT_CONFIG_VERSION
 static void run_versioned_migrations(json& config, const std::string& config_path = "") {
     int version = 0;
@@ -812,6 +837,8 @@ static void run_versioned_migrations(json& config, const std::string& config_pat
         migrate_v15_to_v16(config);
     if (version < 17)
         migrate_v16_to_v17(config);
+    if (version < 18)
+        migrate_v17_to_v18(config);
 
     config["config_version"] = CURRENT_CONFIG_VERSION;
 }
