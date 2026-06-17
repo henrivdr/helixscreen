@@ -1185,6 +1185,17 @@ void PrintSelectDetailView::kick_off_headless_tools_scan() {
                           if (swatches_visible) {
                               update_color_swatches(tools_used, current_filament_colors_);
                           }
+                          // Populate the mapping card's tool_info from the headless
+                          // colors even though the card widget is hidden here. The
+                          // viewer-parse path does this (try_extract_gcode_colors,
+                          // filament_mapping_card_.update); the headless path must too,
+                          // else the card's tool_info_ stays empty and recompute_preflight()
+                          // sees 0 tools — so the gate never fires AND the remap modal
+                          // shows "Nothing to remap" on U1 / 2D-only (mismatched source:
+                          // swatches drew from current_filament_colors_, preflight read
+                          // the empty card).
+                          filament_mapping_card_.update(current_filament_colors_,
+                                                        current_filament_materials_);
                       }
 
                       // Refresh pre-flight using the headless set (no-op on full
