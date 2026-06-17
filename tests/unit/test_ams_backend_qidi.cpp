@@ -682,6 +682,40 @@ TEST_CASE("QIDI Box set_tool_mapping emits SAVE_VARIABLE for value_t<N>",
     REQUIRE(backend.sent[0] == "SAVE_VARIABLE VARIABLE=value_t1 VALUE=\"slot3\"");
 }
 
+TEST_CASE("QIDI Box lane eject is unsupported until force_move is enabled",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+
+    REQUIRE_FALSE(backend.supports_lane_eject());
+    auto err = backend.eject_lane(0);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box [force_move] enable_force_move turns on lane eject",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"force_move", {{"enable_force_move", true}}}});
+
+    REQUIRE(backend.supports_lane_eject());
+
+    auto err = backend.eject_lane(1);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] ==
+            "FORCE_MOVE STEPPER=\"box_stepper slot1\" VELOCITY=100 DISTANCE=-878");
+}
+
+TEST_CASE("QIDI Box [force_move] disabled keeps lane eject off",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"force_move", {{"enable_force_move", false}}}});
+
+    REQUIRE_FALSE(backend.supports_lane_eject());
+}
+
 // =====================================================================
 // Full-stack integration: on_started actually fires the bootstrap query
 // =====================================================================

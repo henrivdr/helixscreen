@@ -95,6 +95,13 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     AmsError reset() override;
     AmsError cancel() override;
 
+    // Per-lane eject for non-loaded lanes via FORCE_MOVE on the box_stepper
+    // (#1041). Gated on [force_move] enable_force_move being set in the config.
+    AmsError eject_lane(int slot_index) override;
+    [[nodiscard]] bool supports_lane_eject() const override {
+        return fw_force_move_enabled_;
+    }
+
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
     void clear_slot_override(int slot_index) override;
@@ -163,6 +170,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     // race never downgrade off the known-good path.
     bool fw_has_m603_ = true;         ///< M603 stock unload macro present
     bool fw_has_clear_nozzle_ = true; ///< CLEAR_NOZZLE post-load wipe macro present
+    bool fw_force_move_enabled_ = false; ///< [force_move] enable_force_move -> lane eject
 
     /// Raw RFID indices read from save_variables. Per-slot side-table so we
     /// don't pollute SlotInfo with backend-specific fields. Resolution to

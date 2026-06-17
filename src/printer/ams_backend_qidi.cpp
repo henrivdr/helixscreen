@@ -53,6 +53,12 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
 // 280) and fall back to a safe universal load temperature when no profile is
 // known.
 constexpr int QIDI_DEFAULT_LOAD_TEMP_C = 250;
+
+// Manual lane-eject via FORCE_MOVE on the box_stepper (#1041). Distance/velocity
+// from the QIDI Discord (xenon) + Camden's Q2 measurement: -878 mm fully ejects,
+// ~100 mm/s matches the stock feel. May need refining for Plus 4 / Max 4 boxes.
+constexpr int QIDI_EJECT_DISTANCE_MM = -878;
+constexpr int QIDI_EJECT_VELOCITY = 100;
 int load_temp_for_slot(const SlotInfo& slot) {
     if (slot.nozzle_temp_max > 0) {
         return slot.nozzle_temp_max;
@@ -310,6 +316,21 @@ void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {
         spdlog::info("{} Box dryer max temp from config: {}°C", backend_log_tag(),
                      *settable_max);
     }
+
+    // Lane eject (#1041) is a FORCE_MOVE on the box_stepper, which Klipper rejects
+    // unless [force_move] enable_force_move: True. Gate supports_lane_eject() on it
+    // so we never offer an eject button that would just error.
+    bool force_move = false;
+    if (auto fm = settings.find("force_move"); fm != settings.end() && fm->is_object()) {
+        if (auto en = fm->find("enable_force_move");
+            en != fm->end() && en->is_boolean()) {
+            force_move = en->get<bool>();
+        }
+    }
+    fw_force_move_enabled_ = force_move;
+    spdlog::info("{} Lane eject {} (force_move {})", backend_log_tag(),
+                 force_move ? "available" : "unavailable",
+                 force_move ? "enabled" : "disabled/absent");
 }
 
 void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
@@ -959,6 +980,31 @@ AmsError AmsBackendQidi::reset() {
 AmsError AmsBackendQidi::cancel() {
     spdlog::warn("{} {} not yet implemented", backend_log_tag(), __func__);
     return AmsErrorHelper::not_supported("QIDI Box cancel");
+}
+
+AmsError AmsBackendQidi::eject_lane(int slot_index) {
+    spdlog::info("{} eject_lane(slot={})", backend_log_tag(), slot_index);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (system_info_.units.empty()) {
+            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
+        }
+        const auto& slots = system_info_.units[0].slots;
+        if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
+            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+        }
+    }
+    if (!fw_force_move_enabled_) {
+        return AmsErrorHelper::not_supported(
+            "QIDI Box: eject needs [force_move] enable_force_move: True");
+    }
+    // Manual eject: FORCE_MOVE the lane's box_stepper to push filament out the box
+    // side (#1041, QIDI Discord / xenon). Offered only for non-loaded lanes (the
+    // context menu gates on !loaded), so no pre-unload is needed here — for a
+    // loaded lane the caller runs the unload stack first to park at the hub.
+    return execute_gcode("FORCE_MOVE STEPPER=\"box_stepper slot" + std::to_string(slot_index) +
+                         "\" VELOCITY=" + std::to_string(QIDI_EJECT_VELOCITY) +
+                         " DISTANCE=" + std::to_string(QIDI_EJECT_DISTANCE_MM));
 }
 
 // --- Configuration ---
