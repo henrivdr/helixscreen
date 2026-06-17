@@ -360,6 +360,28 @@ void AmsState::init_subjects(bool register_xml) {
             snprintf(name_buf, sizeof(name_buf), "ams_slot_%d_remaining", i);
             lv_xml_register_subject(nullptr, name_buf, &slot_remaining_[i]);
         }
+
+        // Per-slot LIVE state subjects (path segment, toolhead-present, active-loaded)
+        lv_subject_init_int(&slot_segments_[i], static_cast<int>(PathSegment::NONE));
+        subjects_.register_subject(&slot_segments_[i]);
+        if (register_xml) {
+            snprintf(name_buf, sizeof(name_buf), "ams_slot_%d_segment", i);
+            lv_xml_register_subject(nullptr, name_buf, &slot_segments_[i]);
+        }
+
+        lv_subject_init_int(&slot_toolhead_present_[i], 0);
+        subjects_.register_subject(&slot_toolhead_present_[i]);
+        if (register_xml) {
+            snprintf(name_buf, sizeof(name_buf), "ams_slot_%d_toolhead_present", i);
+            lv_xml_register_subject(nullptr, name_buf, &slot_toolhead_present_[i]);
+        }
+
+        lv_subject_init_int(&slot_active_loaded_[i], 0);
+        subjects_.register_subject(&slot_active_loaded_[i]);
+        if (register_xml) {
+            snprintf(name_buf, sizeof(name_buf), "ams_slot_%d_active_loaded", i);
+            lv_xml_register_subject(nullptr, name_buf, &slot_active_loaded_[i]);
+        }
     }
 
     // Per-unit environment subjects (CFS temperature/humidity)
@@ -751,6 +773,48 @@ lv_subject_t* AmsState::get_slot_remaining_subject(int slot_index) {
     return &slot_remaining_[slot_index];
 }
 
+// Per-slot LIVE state subjects. These are static-array (singleton-lifetime)
+// subjects, so the (slot, SubjectLifetime&) overloads return an EMPTY lifetime
+// token — the documented contract for static subjects (ui_observer_guard.h),
+// always-alive, no dynamic recreation. The empty-token overload exists for
+// call-site symmetry with the project's dynamic-subject accessors.
+lv_subject_t* AmsState::get_slot_segment_subject(int slot_index) {
+    if (slot_index < 0 || slot_index >= MAX_SLOTS) {
+        return nullptr;
+    }
+    return &slot_segments_[slot_index];
+}
+
+lv_subject_t* AmsState::get_slot_segment_subject(int slot_index, SubjectLifetime& lifetime) {
+    lifetime.reset(); // static subject — empty (always-alive) token
+    return get_slot_segment_subject(slot_index);
+}
+
+lv_subject_t* AmsState::get_slot_toolhead_present_subject(int slot_index) {
+    if (slot_index < 0 || slot_index >= MAX_SLOTS) {
+        return nullptr;
+    }
+    return &slot_toolhead_present_[slot_index];
+}
+
+lv_subject_t* AmsState::get_slot_toolhead_present_subject(int slot_index,
+                                                          SubjectLifetime& lifetime) {
+    lifetime.reset(); // static subject — empty (always-alive) token
+    return get_slot_toolhead_present_subject(slot_index);
+}
+
+lv_subject_t* AmsState::get_slot_active_loaded_subject(int slot_index) {
+    if (slot_index < 0 || slot_index >= MAX_SLOTS) {
+        return nullptr;
+    }
+    return &slot_active_loaded_[slot_index];
+}
+
+lv_subject_t* AmsState::get_slot_active_loaded_subject(int slot_index, SubjectLifetime& lifetime) {
+    lifetime.reset(); // static subject — empty (always-alive) token
+    return get_slot_active_loaded_subject(slot_index);
+}
+
 lv_subject_t* AmsState::get_unit_temp_subject(int unit_index) {
     if (unit_index < 0 || unit_index >= MAX_UNITS) {
         return nullptr;
@@ -1096,6 +1160,25 @@ void AmsState::sync_from_backend() {
             if (strcmp(lv_subject_get_string(&slot_remaining_[i]), remaining.c_str()) != 0) {
                 lv_subject_copy_string(&slot_remaining_[i], remaining.c_str());
             }
+
+            // Per-slot LIVE state: path segment, toolhead-present, active-loaded.
+            // Sourced directly from the backend accessors so the panel observes
+            // real-time sensor changes (path redraw + active-lane highlight).
+            int new_segment = static_cast<int>(backend->get_slot_filament_segment(i));
+            if (lv_subject_get_int(&slot_segments_[i]) != new_segment) {
+                lv_subject_set_int(&slot_segments_[i], new_segment);
+                any_slot_changed = true;
+            }
+            int new_toolhead = backend->slot_has_filament_at_toolhead(i) ? 1 : 0;
+            if (lv_subject_get_int(&slot_toolhead_present_[i]) != new_toolhead) {
+                lv_subject_set_int(&slot_toolhead_present_[i], new_toolhead);
+                any_slot_changed = true;
+            }
+            int new_active = backend->slot_is_actively_loaded(i) ? 1 : 0;
+            if (lv_subject_get_int(&slot_active_loaded_[i]) != new_active) {
+                lv_subject_set_int(&slot_active_loaded_[i], new_active);
+                any_slot_changed = true;
+            }
         }
     }
 
@@ -1323,6 +1406,19 @@ void AmsState::sync_from_backend() {
         if (strcmp(lv_subject_get_string(&slot_remaining_[i]), "") != 0) {
             lv_subject_copy_string(&slot_remaining_[i], "");
         }
+        // Reset per-slot LIVE state subjects for unused slots
+        if (lv_subject_get_int(&slot_segments_[i]) != static_cast<int>(PathSegment::NONE)) {
+            lv_subject_set_int(&slot_segments_[i], static_cast<int>(PathSegment::NONE));
+            any_slot_changed = true;
+        }
+        if (lv_subject_get_int(&slot_toolhead_present_[i]) != 0) {
+            lv_subject_set_int(&slot_toolhead_present_[i], 0);
+            any_slot_changed = true;
+        }
+        if (lv_subject_get_int(&slot_active_loaded_[i]) != 0) {
+            lv_subject_set_int(&slot_active_loaded_[i], 0);
+            any_slot_changed = true;
+        }
     }
 
     if (any_slot_changed) {
@@ -1376,6 +1472,23 @@ void AmsState::update_slot(int slot_index) {
         }
         if (strcmp(lv_subject_get_string(&slot_remaining_[slot_index]), remaining.c_str()) != 0) {
             lv_subject_copy_string(&slot_remaining_[slot_index], remaining.c_str());
+        }
+
+        // Per-slot LIVE state: path segment, toolhead-present, active-loaded.
+        int new_segment = static_cast<int>(backend->get_slot_filament_segment(slot_index));
+        if (lv_subject_get_int(&slot_segments_[slot_index]) != new_segment) {
+            lv_subject_set_int(&slot_segments_[slot_index], new_segment);
+            changed = true;
+        }
+        int new_toolhead = backend->slot_has_filament_at_toolhead(slot_index) ? 1 : 0;
+        if (lv_subject_get_int(&slot_toolhead_present_[slot_index]) != new_toolhead) {
+            lv_subject_set_int(&slot_toolhead_present_[slot_index], new_toolhead);
+            changed = true;
+        }
+        int new_active = backend->slot_is_actively_loaded(slot_index) ? 1 : 0;
+        if (lv_subject_get_int(&slot_active_loaded_[slot_index]) != new_active) {
+            lv_subject_set_int(&slot_active_loaded_[slot_index], new_active);
+            changed = true;
         }
 
         if (changed) {

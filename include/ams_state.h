@@ -789,6 +789,59 @@ class AmsState {
     [[nodiscard]] lv_subject_t* get_slot_remaining_subject(int slot_index);
 
     // ========================================================================
+    // Per-Slot LIVE State Subject Accessors
+    // ========================================================================
+    //
+    // These reflect real-time, Moonraker-fed per-slot state the panel observes
+    // to redraw the filament path and active-lane highlight as sensors change.
+    // They are backed by static arrays (singleton lifetime, same as the color /
+    // status / remaining subjects above), so the bare accessors are safe to
+    // observe directly. A (slot, SubjectLifetime&) overload is provided for
+    // call-site symmetry with the project's dynamic-subject pattern; because the
+    // subjects are static, it returns an EMPTY lifetime token (always alive),
+    // which is the documented contract for static subjects (ui_observer_guard.h).
+
+    /**
+     * @brief Get per-slot filament path-segment subject.
+     *
+     * Holds the PathSegment enum value (as int) from
+     * AmsBackend::get_slot_filament_segment(slot). Drives the per-slot path
+     * canvas redraw.
+     *
+     * @param slot_index Slot index (0 to MAX_SLOTS-1)
+     * @return Subject pointer or nullptr if out of range
+     */
+    [[nodiscard]] lv_subject_t* get_slot_segment_subject(int slot_index);
+    [[nodiscard]] lv_subject_t* get_slot_segment_subject(int slot_index,
+                                                         SubjectLifetime& lifetime);
+
+    /**
+     * @brief Get per-slot toolhead-present subject.
+     *
+     * Holds 0/1 from AmsBackend::slot_has_filament_at_toolhead(slot) — the live
+     * per-slot toolhead/motion sensor. 0 when the backend has no such sensor.
+     *
+     * @param slot_index Slot index (0 to MAX_SLOTS-1)
+     * @return Subject pointer or nullptr if out of range
+     */
+    [[nodiscard]] lv_subject_t* get_slot_toolhead_present_subject(int slot_index);
+    [[nodiscard]] lv_subject_t*
+    get_slot_toolhead_present_subject(int slot_index, SubjectLifetime& lifetime);
+
+    /**
+     * @brief Get per-slot active-loaded subject.
+     *
+     * Holds 0/1 from AmsBackend::slot_is_actively_loaded(slot) — the single
+     * source of truth for the active-lane highlight.
+     *
+     * @param slot_index Slot index (0 to MAX_SLOTS-1)
+     * @return Subject pointer or nullptr if out of range
+     */
+    [[nodiscard]] lv_subject_t* get_slot_active_loaded_subject(int slot_index);
+    [[nodiscard]] lv_subject_t* get_slot_active_loaded_subject(int slot_index,
+                                                              SubjectLifetime& lifetime);
+
+    // ========================================================================
     // Per-Unit Subject Accessors (CFS environment sensors)
     // ========================================================================
 
@@ -1197,6 +1250,13 @@ class AmsState {
     lv_subject_t slot_statuses_[MAX_SLOTS];
     lv_subject_t slot_remaining_[MAX_SLOTS]; // string: "52m" or "432g" or ""
     char slot_remaining_buf_[MAX_SLOTS][16]; // buffers for remaining strings
+
+    // Per-slot LIVE state subjects — the panel observes these to redraw the path
+    // and active-lane highlight in real time as Moonraker sensor data arrives.
+    // Updated alongside slot_colors_/slot_statuses_ in the status-sync path.
+    lv_subject_t slot_segments_[MAX_SLOTS];         // int: PathSegment enum value
+    lv_subject_t slot_toolhead_present_[MAX_SLOTS]; // int: 0/1 per-slot toolhead sensor
+    lv_subject_t slot_active_loaded_[MAX_SLOTS];    // int: 0/1 firmware seated & loaded
 
     // Per-unit environment subjects (CFS temp/humidity)
     lv_subject_t unit_temp_[MAX_UNITS];     // int: tenths of C (270 = 27.0C), 0 = no data

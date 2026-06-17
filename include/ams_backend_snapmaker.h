@@ -13,6 +13,7 @@
 #include <vector>
 
 class SnapmakerTestAccess;
+class SnapmakerRealtimeTestAccess;
 
 /**
  * @file ams_backend_snapmaker.h
@@ -91,6 +92,17 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] PathSegment get_filament_segment() const override;
     [[nodiscard]] PathSegment get_slot_filament_segment(int slot_index) const override;
     [[nodiscard]] PathSegment infer_error_segment() const override;
+
+    // LIVE per-slot toolhead sensor: the per-tool filament_motion_sensor
+    // (e{N}_filament) cached in sensor_filament_present_[]. Reads true only while
+    // filament is at THIS tool's toolhead, dropping to false once it parks in the
+    // buffer — exactly the real-time signal the panel observes to redraw the path.
+    [[nodiscard]] bool slot_has_filament_at_toolhead(int slot_index) const override;
+
+    // Per-tool LOADED status. The U1 has 4 independent toolheads, so each slot's
+    // loaded state is tracked separately rather than derived from a single
+    // current_slot. Drives the active-lane highlight per tool.
+    [[nodiscard]] bool slot_is_actively_loaded(int slot_index) const override;
 
     // Operations
     AmsError load_filament(int slot_index) override;
@@ -171,6 +183,7 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
 
   private:
     friend class ::SnapmakerTestAccess;
+    friend class ::SnapmakerRealtimeTestAccess;
 
     static constexpr int NUM_TOOLS = 4;
 

@@ -286,6 +286,23 @@ bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
     return sensor_filament_present_[slot_index];
 }
 
+bool AmsBackendSnapmaker::slot_has_filament_at_toolhead(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (slot_index < 0 || slot_index >= NUM_TOOLS) {
+        return false;
+    }
+    return sensor_filament_present_[slot_index];
+}
+
+bool AmsBackendSnapmaker::slot_is_actively_loaded(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (slot_index < 0 || slot_index >= NUM_TOOLS) {
+        return false;
+    }
+    const auto* slot = system_info_.get_slot_global(slot_index);
+    return slot && slot->status == SlotStatus::LOADED;
+}
+
 AmsError AmsBackendSnapmaker::select_slot(int slot_index) {
     return change_tool(slot_index);
 }
@@ -1011,6 +1028,36 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         } else if (state == "unloading") {
                             system_info_.action = AmsAction::UNLOADING;
                             changed = true;
+                        } else if (state == "unload_finish" || state == "preload_finish") {
+                            // Unload completed: the firmware has retracted filament
+                            // out of the toolhead into the buffer. The extruder
+                            // pin-state path keeps filament_loaded=(active>=0) true
+                            // because the tool's active_pin stays set while parked,
+                            // so without this the active-lane highlight never clears
+                            // after an idle unload (bottom T-badge stayed "active"
+                            // while top-right correctly showed Idle). Clear the
+                            // loaded state for THIS channel so the single
+                            // active-loaded source of truth (slot_is_actively_loaded
+                            // / filament_loaded) drops immediately.
+                            auto* slot = system_info_.units[0].get_slot(i);
+                            if (slot && slot->status == SlotStatus::LOADED) {
+                                slot->status = SlotStatus::AVAILABLE;
+                                changed = true;
+                            }
+                            if (system_info_.current_slot == i ||
+                                system_info_.current_tool == i) {
+                                system_info_.filament_loaded = false;
+                                system_info_.current_slot = -1;
+                                system_info_.current_tool = -1;
+                                changed = true;
+                            }
+                            if (system_info_.action == AmsAction::LOADING ||
+                                system_info_.action == AmsAction::UNLOADING) {
+                                system_info_.action = AmsAction::IDLE;
+                                system_info_.operation_detail.clear();
+                                PostOpCooldownManager::instance().schedule();
+                                changed = true;
+                            }
                         } else if (state == "load_finish" || state == "idle") {
                             if (system_info_.action == AmsAction::LOADING ||
                                 system_info_.action == AmsAction::UNLOADING) {

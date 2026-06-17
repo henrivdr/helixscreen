@@ -316,6 +316,42 @@ class AmsBackend {
     [[nodiscard]] virtual PathSegment get_slot_filament_segment(int slot_index) const = 0;
 
     /**
+     * @brief LIVE: filament present at this slot's toolhead/extruder.
+     *
+     * Reports the per-slot toolhead/motion-switch sensor state (e.g. the
+     * Snapmaker per-tool `filament_motion_sensor`). This is the real-time signal
+     * the panel observes to redraw the path the instant filament reaches (or
+     * leaves) a slot's toolhead.
+     *
+     * Default false = "no per-slot toolhead sensor"; the panel falls back to the
+     * slot's path segment / status. Backends override ONLY where the signal
+     * genuinely exists in their parse — never fabricate.
+     *
+     * @param slot_index Slot index (0 to total_slots-1)
+     * @return true if filament is detected at this slot's toolhead
+     */
+    [[nodiscard]] virtual bool slot_has_filament_at_toolhead(int slot_index) const {
+        (void)slot_index;
+        return false;
+    }
+
+    /**
+     * @brief Firmware "seated & loaded" for this slot.
+     *
+     * The single source of truth for the active-lane highlight, replacing the
+     * divergent badge/top-right reads. Default derives from the aggregate
+     * current_slot + filament_loaded state; per-slot-aware backends (e.g. a
+     * toolchanger with per-tool LOADED status) override to report each slot
+     * independently.
+     *
+     * @param slot_index Slot index (0 to total_slots-1)
+     * @return true if firmware considers this slot seated and loaded
+     */
+    [[nodiscard]] virtual bool slot_is_actively_loaded(int slot_index) const {
+        return slot_index == get_current_slot() && is_filament_loaded();
+    }
+
+    /**
      * @brief Infer which segment has an error
      *
      * When an error occurs, this determines which segment of the path

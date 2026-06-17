@@ -1,0 +1,294 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_ams_realtime_filament_state.cpp
+ * @brief Phase 1 of the cross-backend AMS real-time filament-state refactor.
+ *
+ * Covers:
+ *  - AmsBackend per-slot LIVE accessors: the base-class safe defaults
+ *    (slot_has_filament_at_toolhead=false, slot_is_actively_loaded derived
+ *    from current_slot + filament_loaded) plus the Snapmaker overrides.
+ *  - AmsState per-slot LIVE subjects published on sync_from_backend:
+ *    get_slot_segment_subject / get_slot_toolhead_present_subject /
+ *    get_slot_active_loaded_subject.
+ *  - Op-card current-loaded color matches the loaded slot's color (not slot+1).
+ *  - filament_loaded cleared on unload (active-lane subject clears).
+ */
+
+#include "../lvgl_test_fixture.h"
+#include "../test_helpers/update_queue_test_access.h"
+#include "ams_backend_mock.h"
+#include "ams_backend_snapmaker.h"
+#include "ams_state.h"
+#include "ams_types.h"
+
+#include "../catch_amalgamated.hpp"
+
+#include <chrono>
+#include <memory>
+#include <thread>
+
+using namespace helix;
+using namespace helix::printer;
+
+using json = nlohmann::json;
+
+// Friend-class shim mirroring the one in test_ams_backend_snapmaker.cpp.
+class SnapmakerRealtimeTestAccess {
+  public:
+    static void handle_status(AmsBackendSnapmaker& b, const json& n) {
+        b.handle_status_update(n);
+    }
+    static void set_sensor_present(AmsBackendSnapmaker& b, int slot_index, bool present) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.sensor_filament_present_[slot_index] = present;
+    }
+};
+
+namespace {
+void drain() {
+    helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+}
+} // namespace
+
+// ============================================================================
+// Part 1 — Backend per-slot LIVE accessors
+// ============================================================================
+
+TEST_CASE("AmsBackend base defaults: slot LIVE accessors degrade gracefully",
+          "[ams][realtime][backend]") {
+    // The mock backend does NOT override the new virtuals, so it exercises the
+    // base-class defaults.
+    AmsBackendMock backend;
+    backend.set_operation_delay(10); // fast async completion for testing
+    backend.start();
+
+    // Default toolhead-present is always false ("no per-slot toolhead sensor").
+    for (int i = 0; i < 4; ++i) {
+        CHECK_FALSE(backend.slot_has_filament_at_toolhead(i));
+    }
+
+    SECTION("active-loaded default tracks current_slot + filament_loaded") {
+        // The mock starts with slot 0 loaded — the default derives the
+        // actively-loaded slot from current_slot + filament_loaded.
+        REQUIRE(backend.is_filament_loaded());
+        REQUIRE(backend.get_current_slot() == 0);
+        CHECK(backend.slot_is_actively_loaded(0));
+        CHECK_FALSE(backend.slot_is_actively_loaded(1));
+        CHECK_FALSE(backend.slot_is_actively_loaded(2));
+
+        // After an unload completes, no slot is actively loaded.
+        backend.unload_filament();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        REQUIRE_FALSE(backend.is_filament_loaded());
+        for (int i = 0; i < 4; ++i) {
+            CHECK_FALSE(backend.slot_is_actively_loaded(i));
+        }
+
+        // Load slot 1 → it becomes the actively-loaded slot.
+        backend.load_filament(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        REQUIRE(backend.is_filament_loaded());
+        REQUIRE(backend.get_current_slot() == 1);
+        CHECK(backend.slot_is_actively_loaded(1));
+        CHECK_FALSE(backend.slot_is_actively_loaded(0));
+        CHECK_FALSE(backend.slot_is_actively_loaded(2));
+    }
+
+    backend.stop();
+}
+
+TEST_CASE("Snapmaker overrides slot LIVE accessors from sensor + LOADED status",
+          "[ams][realtime][snapmaker]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Slot 0 active (LOADED), slots 1 & 3 hold filament (AVAILABLE), slot 2 empty.
+    json status = json{
+        {"toolhead", json{{"extruder", "extruder"}}}, // active tool = slot 0
+        {"print_task_config", json{{"filament_exist", json::array({true, true, false, true})}}}};
+    SnapmakerRealtimeTestAccess::handle_status(backend, status);
+
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::LOADED);
+    REQUIRE(backend.get_slot_info(1).status == SlotStatus::AVAILABLE);
+
+    SECTION("slot_is_actively_loaded true only for the LOADED slot") {
+        CHECK(backend.slot_is_actively_loaded(0));
+        CHECK_FALSE(backend.slot_is_actively_loaded(1));
+        CHECK_FALSE(backend.slot_is_actively_loaded(2));
+        CHECK_FALSE(backend.slot_is_actively_loaded(3));
+    }
+
+    SECTION("slot_has_filament_at_toolhead reflects the per-tool motion sensor") {
+        // Default sensors all read present.
+        CHECK(backend.slot_has_filament_at_toolhead(0));
+        CHECK(backend.slot_has_filament_at_toolhead(1));
+
+        // Drop the motion sensor for tool 1 (filament retracted to buffer).
+        SnapmakerRealtimeTestAccess::set_sensor_present(backend, 1, false);
+        CHECK_FALSE(backend.slot_has_filament_at_toolhead(1));
+        // Other tools unaffected.
+        CHECK(backend.slot_has_filament_at_toolhead(0));
+    }
+
+    SECTION("out-of-range indices are safe") {
+        CHECK_FALSE(backend.slot_has_filament_at_toolhead(-1));
+        CHECK_FALSE(backend.slot_has_filament_at_toolhead(99));
+        CHECK_FALSE(backend.slot_is_actively_loaded(-1));
+        CHECK_FALSE(backend.slot_is_actively_loaded(99));
+    }
+}
+
+// ============================================================================
+// Part 2 — AmsState per-slot LIVE subjects
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes per-slot LIVE subjects on sync",
+                 "[ams][realtime][ams_state]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    auto backend = std::make_unique<AmsBackendSnapmaker>(nullptr, nullptr);
+    auto* backend_ptr = backend.get();
+    ams.set_backend(std::move(backend));
+
+    // Drive a known state: slot 0 LOADED, slot 1 AVAILABLE, slot 2 empty.
+    json status = json{
+        {"toolhead", json{{"extruder", "extruder"}}},
+        {"print_task_config", json{{"filament_exist", json::array({true, true, false, false})}}}};
+    SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, status);
+
+    ams.sync_from_backend();
+    drain();
+
+    SECTION("accessors return non-null subjects in range and null out of range") {
+        CHECK(ams.get_slot_segment_subject(0) != nullptr);
+        CHECK(ams.get_slot_toolhead_present_subject(0) != nullptr);
+        CHECK(ams.get_slot_active_loaded_subject(0) != nullptr);
+        CHECK(ams.get_slot_segment_subject(-1) == nullptr);
+        CHECK(ams.get_slot_segment_subject(AmsState::MAX_SLOTS) == nullptr);
+    }
+
+    SECTION("active-loaded subject reflects backend per-slot loaded state") {
+        CHECK(lv_subject_get_int(ams.get_slot_active_loaded_subject(0)) == 1);
+        CHECK(lv_subject_get_int(ams.get_slot_active_loaded_subject(1)) == 0);
+        CHECK(lv_subject_get_int(ams.get_slot_active_loaded_subject(2)) == 0);
+    }
+
+    SECTION("toolhead-present subject reflects the per-tool motion sensor") {
+        // Both seated tools' sensors default present.
+        CHECK(lv_subject_get_int(ams.get_slot_toolhead_present_subject(0)) == 1);
+
+        // Retract tool 0 to buffer → sensor false → subject updates on next sync.
+        SnapmakerRealtimeTestAccess::set_sensor_present(*backend_ptr, 0, false);
+        ams.sync_from_backend();
+        drain();
+        CHECK(lv_subject_get_int(ams.get_slot_toolhead_present_subject(0)) == 0);
+    }
+
+    SECTION("segment subject matches the backend per-slot segment") {
+        int expected = static_cast<int>(backend_ptr->get_slot_filament_segment(0));
+        CHECK(lv_subject_get_int(ams.get_slot_segment_subject(0)) == expected);
+    }
+
+    SECTION("SubjectLifetime overload returns the same static subject + empty token") {
+        SubjectLifetime lt;
+        lv_subject_t* s = ams.get_slot_active_loaded_subject(0, lt);
+        CHECK(s == ams.get_slot_active_loaded_subject(0));
+        // Static subject → empty (always-alive) token.
+        CHECK(lt == nullptr);
+    }
+
+    ams.clear_backends();
+    ams.deinit_subjects();
+}
+
+// ============================================================================
+// Part 3a — Op-card current-loaded color matches the loaded slot (not slot+1)
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture, "AMS op-card color matches the loaded slot's color",
+                 "[ams][realtime][opcard]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    auto mock = std::make_unique<AmsBackendMock>();
+    auto* mock_ptr = mock.get();
+    mock_ptr->set_operation_delay(10); // fast async completion for testing
+    ams.set_backend(std::move(mock));
+    mock_ptr->start();
+
+    // Give each slot a distinct, unambiguous color so an off-by-one would be
+    // visible (slot N's color != slot N+1's color).
+    const uint32_t colors[4] = {0x111111, 0x222222, 0x333333, 0x444444};
+    for (int i = 0; i < 4; ++i) {
+        auto slot = mock_ptr->get_slot_info(i);
+        slot.color_rgb = colors[i];
+        mock_ptr->set_slot_info(i, slot);
+    }
+
+    // Load slot 1 (a non-zero, non-first slot to expose +1 indexing).
+    mock_ptr->load_filament(1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    REQUIRE(mock_ptr->is_filament_loaded());
+    REQUIRE(mock_ptr->get_current_slot() == 1);
+
+    ams.sync_from_backend();
+    drain();
+
+    int current_color = lv_subject_get_int(ams.get_current_color_subject());
+    // The op-card color MUST be slot 1's color, NOT slot 2's (the off-by-one).
+    CHECK(current_color == static_cast<int>(colors[1]));
+    CHECK(current_color != static_cast<int>(colors[2]));
+
+    mock_ptr->stop();
+    ams.clear_backends();
+    ams.deinit_subjects();
+}
+
+// ============================================================================
+// Part 3b — filament_loaded cleared on unload (active-lane subject clears)
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture, "AMS clears filament_loaded after unload completes",
+                 "[ams][realtime][unload]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    auto backend = std::make_unique<AmsBackendSnapmaker>(nullptr, nullptr);
+    auto* backend_ptr = backend.get();
+    ams.set_backend(std::move(backend));
+
+    // Load slot 0: active tool = extruder0, filament present.
+    json loaded = json{
+        {"toolhead", json{{"extruder", "extruder"}}},
+        {"print_task_config", json{{"filament_exist", json::array({true, false, false, false})}}}};
+    SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, loaded);
+    ams.sync_from_backend();
+    drain();
+
+    REQUIRE(backend_ptr->is_filament_loaded());
+    REQUIRE(lv_subject_get_int(ams.get_filament_loaded_subject()) == 1);
+    REQUIRE(lv_subject_get_int(ams.get_slot_active_loaded_subject(0)) == 1);
+
+    // Unload completes: the firmware retracts to the buffer and reports the
+    // channel state as unload_finish for that tool.
+    json unloaded = json{{"filament_feed left",
+                          json{{"extruder0",
+                                json{{"filament_detected", true},
+                                     {"channel_state", "unload_finish"}}}}}};
+    SnapmakerRealtimeTestAccess::handle_status(*backend_ptr, unloaded);
+    ams.sync_from_backend();
+    drain();
+
+    // filament_loaded must be cleared so the active-lane highlight drops.
+    CHECK_FALSE(backend_ptr->is_filament_loaded());
+    CHECK(lv_subject_get_int(ams.get_filament_loaded_subject()) == 0);
+    // No slot is actively loaded after unload.
+    for (int i = 0; i < 4; ++i) {
+        CHECK_FALSE(backend_ptr->slot_is_actively_loaded(i));
+        CHECK(lv_subject_get_int(ams.get_slot_active_loaded_subject(i)) == 0);
+    }
+
+    ams.clear_backends();
+    ams.deinit_subjects();
+}
