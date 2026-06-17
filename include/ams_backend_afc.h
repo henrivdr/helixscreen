@@ -126,6 +126,15 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     [[nodiscard]] std::optional<helix::ErrorEvent> classify_error(
         const std::string& raw_line, const helix::ClassifyContext& ctx) const override;
 
+    /// L2 (S1/S2): ordered toolchange phase templates and narration→phase-id
+    /// matcher for AFC. AFC emits `//` narration lines for feed/purge/brush/
+    /// clean/cut/poop/kick; the sidebar step bar uses these to label phases
+    /// correctly (S1) and to surface brush/clean/cut/poop/kick steps (S2).
+    [[nodiscard]] std::vector<ToolchangePhase>
+    toolchange_phase_template(StepOperationType op) const override;
+    [[nodiscard]] std::optional<std::string>
+    match_narration_phase(const std::string& narration) const override;
+
     // Operations
     AmsError load_filament(int slot_index) override;
     AmsError unload_filament(int slot_index = -1) override;

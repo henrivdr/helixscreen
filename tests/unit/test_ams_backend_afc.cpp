@@ -10,6 +10,8 @@
 #include "settings_manager.h"
 
 #include <algorithm>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -4377,4 +4379,39 @@ TEST_CASE("AFC ignores non-error lines", "[ams][afc][classify]") {
     ctx.is_paused = true;
     REQUIRE_FALSE(helper.classify_error("// AFC_Brush: Clean Nozzle", ctx).has_value());
     REQUIRE_FALSE(helper.classify_error("ok", ctx).has_value());
+}
+
+TEST_CASE("AFC narration maps purge to purge not feed (S1)", "[unit][ams][afc][narration]") {
+    AmsBackendAfcTestHelper afc;
+    REQUIRE(afc.match_narration_phase("Purge") == std::optional<std::string>("purge"));
+    REQUIRE(afc.match_narration_phase("Purging old filament") == std::optional<std::string>("purge"));
+    REQUIRE(afc.match_narration_phase("Loading lane 2 to hub") == std::optional<std::string>("feed"));
+}
+TEST_CASE("AFC narration recognizes brush/clean/cut/poop/kick (S2)", "[unit][ams][afc][narration]") {
+    AmsBackendAfcTestHelper afc;
+    REQUIRE(afc.match_narration_phase("AFC_Brush: Clean Nozzle") == std::optional<std::string>("clean"));
+    REQUIRE(afc.match_narration_phase("Move to Brush") == std::optional<std::string>("brush"));
+    REQUIRE(afc.match_narration_phase("Cutting tip") == std::optional<std::string>("cut"));
+    REQUIRE(afc.match_narration_phase("Poop") == std::optional<std::string>("poop"));
+    REQUIRE(afc.match_narration_phase("Kick") == std::optional<std::string>("kick"));
+    REQUIRE(afc.match_narration_phase("lane 2 is now loaded in toolhead") == std::optional<std::string>("load"));
+}
+TEST_CASE("AFC narration ignores unrelated lines", "[unit][ams][afc][narration]") {
+    AmsBackendAfcTestHelper afc;
+    REQUIRE_FALSE(afc.match_narration_phase("Klipper state: ready").has_value());
+    REQUIRE_FALSE(afc.match_narration_phase("").has_value());
+}
+TEST_CASE("AFC LOAD_SWAP template ordering puts purge after feed, brush after purge", "[unit][ams][afc][narration]") {
+    AmsBackendAfcTestHelper afc;
+    auto tmpl = afc.toolchange_phase_template(StepOperationType::LOAD_SWAP);
+    REQUIRE_FALSE(tmpl.empty());
+    auto idx = [&](const std::string& id) {
+        for (size_t i = 0; i < tmpl.size(); ++i) if (tmpl[i].id == id) return static_cast<int>(i);
+        return -1;
+    };
+    REQUIRE(idx("heat") == 0);
+    REQUIRE(idx("feed") >= 0);
+    REQUIRE(idx("purge") > idx("feed"));
+    REQUIRE(idx("brush") > idx("purge"));
+    REQUIRE(idx("clean") > idx("brush"));
 }
