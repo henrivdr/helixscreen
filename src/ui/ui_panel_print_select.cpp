@@ -22,12 +22,15 @@
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_print_status.h"
+#include "ui_preflight_check_modal.h"
 #include "ui_print_select_file_sorter.h"
 #include "ui_print_select_history.h"
 #include "ui_print_select_path_navigator.h"
 #include "ui_subject_registry.h"
 #include "ui_update_queue.h"
 
+#include "ams_backend.h"
+#include "ams_state.h"
 #include "app_globals.h"
 #include "config.h"
 #include "display_manager.h"
@@ -1832,32 +1835,40 @@ void PrintSelectPanel::set_selected_file(const char* filename, const char* thumb
     selected_thumbnail_buffer_[sizeof(selected_thumbnail_buffer_) - 1] = '\0';
     lv_subject_set_pointer(&selected_thumbnail_subject_, selected_thumbnail_buffer_);
 
-    // Detail view thumbnail - use cached PNG for better upscaling quality
-    // The PNG was downloaded by ThumbnailCache alongside the pre-scaled .bin
-    if (original_url && original_url[0] != '\0') {
-        // Look up the PNG path from the original Moonraker URL
-        // Pass modification timestamp to invalidate stale cache entries
-        std::string png_path =
-            get_thumbnail_cache().get_if_cached(original_url, modified_timestamp);
-        if (!png_path.empty()) {
-            strncpy(selected_detail_thumbnail_buffer_, png_path.c_str(),
-                    sizeof(selected_detail_thumbnail_buffer_) - 1);
-            selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
-            spdlog::debug("[{}] Using cached PNG for detail view: {}", get_name(), png_path);
-        } else {
-            // Fallback to pre-scaled thumbnail if PNG not cached
-            strncpy(selected_detail_thumbnail_buffer_, thumbnail_src,
-                    sizeof(selected_detail_thumbnail_buffer_) - 1);
-            selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
-            spdlog::debug("[{}] PNG not cached, using pre-scaled for detail: {}", get_name(),
-                          thumbnail_src);
+    // Detail view thumbnail source selection.
+    //
+    // The pre-scaled card .bin (thumbnail_src) is the AUTHORITATIVE source: it is
+    // the exact image the file-browser card renders successfully, so if it exists
+    // the detail view is guaranteed to show something. The full-resolution PNG is
+    // only an upscaling-quality ENHANCEMENT, and it is fragile: it may have been
+    // evicted while the .bin survives, or may fail to decode at the large detail
+    // size on memory-constrained 2D-only devices (Snapmaker U1, AD5M). On those
+    // platforms the detail preview is the ONLY render (no 3D viewer to mask a
+    // failed thumbnail), so a missing/undecodable PNG showed as an all-black
+    // preview even though the card .bin was right there.
+    //
+    // Resolution order: (1) proven card .bin if present, (2) cached PNG when no
+    // .bin exists yet, (3) nullptr sentinel handled by the has_real block below.
+    const bool have_bin =
+        thumbnail_src && thumbnail_src[0] != '\0' &&
+        !helix::ui::PrintSelectCardView::is_placeholder_thumbnail(thumbnail_src);
+    std::string detail_src;
+    if (have_bin) {
+        detail_src = thumbnail_src;
+        spdlog::debug("[{}] Using pre-scaled .bin for detail view: {}", get_name(), detail_src);
+    } else if (original_url && original_url[0] != '\0') {
+        // No card .bin yet — fall back to the cached full-res PNG so the detail
+        // view still shows the model. Pass modification timestamp to invalidate
+        // stale cache entries.
+        detail_src = get_thumbnail_cache().get_if_cached(original_url, modified_timestamp);
+        if (!detail_src.empty()) {
+            spdlog::debug("[{}] No .bin yet — using cached PNG for detail view: {}", get_name(),
+                          detail_src);
         }
-    } else {
-        // No original URL - use same as card thumbnail
-        strncpy(selected_detail_thumbnail_buffer_, thumbnail_src,
-                sizeof(selected_detail_thumbnail_buffer_) - 1);
-        selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
     }
+    strncpy(selected_detail_thumbnail_buffer_, detail_src.c_str(),
+            sizeof(selected_detail_thumbnail_buffer_) - 1);
+    selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
     // Publish nullptr for the no-thumbnail sentinel: an empty buffer is misread by
     // LVGL as a VARIABLE image source and warns/fails to decode (#990). The
     // has_real block below handles the placeholder-icon/gradient UI toggle.
@@ -2517,30 +2528,35 @@ void PrintSelectPanel::start_print(bool force) {
         return;
     }
 
-    // Pre-flight check: confirm before printing if any required tool's
-    // filament slot is empty. Backend-agnostic — the detail view publishes
-    // empty_tools_warning by inspecting AmsSlotInfo::has_filament_info()
-    // for each tool the gcode references. Bypassed when force=true (the
-    // user pressed "Print Anyway" on the confirmation modal).
-    if (!force && detail_view_ && detail_view_->has_empty_tool_warning()) {
-        ui::modal_show_confirmation(
-            lv_tr("Empty filament slot"),
-            lv_tr("One or more tools required by this file have no filament loaded. "
-                  "The print will likely fail. Print anyway?"),
-            ModalSeverity::Warning, lv_tr("Print Anyway"),
-            [](lv_event_t*) {
-                LVGL_SAFE_EVENT_CB_BEGIN("on_empty_filament_confirm")
-                // modal_show_confirmation replaces the default close cb with
-                // ours, so we must close the modal explicitly before the
-                // panel transition kicks in.
-                if (auto* top = Modal::get_top()) {
-                    Modal::hide(top);
-                }
-                get_global_print_select_panel().start_print(true);
-                LVGL_SAFE_EVENT_CB_END()
-            },
-            nullptr, nullptr);
+    // Pre-flight gate: filament checks + tools_used are only valid once the file
+    // has been scanned. Readiness arrives via EITHER the visual viewer parse
+    // (full platforms) OR the headless tools_used scan (runs on ALL platforms,
+    // including 2D-only where the viewer skips parsing). Gating on
+    // is_preflight_ready() — NOT is_gcode_loaded(), which never becomes true on
+    // 2D-only and would hang the print forever (the original bug). If Print is
+    // tapped before readiness, defer the attempt; run_when_preflight_ready()
+    // carries a safety timeout so a stuck/failed scan can never wedge the print.
+    // force=true bypasses (deferred re-entry + "Print Anyway" both call with force).
+    if (!force && detail_view_ && !detail_view_->is_preflight_ready()) {
+        spdlog::debug("[{}] Print tapped before pre-flight ready - deferring", get_name());
+        detail_view_->run_when_preflight_ready(
+            []() { get_global_print_select_panel().start_print(false); });
+        NOTIFY_INFO(lv_tr("Checking filament..."));
         return;
+    }
+
+    // Pre-flight check: hard-confirm before printing when the cached
+    // PreflightResult reports a definitively-empty required filament slot
+    // (has_block(): any tool the gcode references maps to an empty slot).
+    // Backend-agnostic — computed for ALL backends in try_extract_gcode_colors().
+    // Material mismatch is advisory only (surfaced via the warning icon) and does
+    // NOT block here. Bypassed when force=true (user pressed "Print Anyway").
+    if (!force && detail_view_) {
+        const auto& pf = detail_view_->preflight_result();
+        if (pf.has_block()) {
+            show_preflight_modal(pf);
+            return;
+        }
     }
 
     // Set the file to print in the controller
@@ -2550,6 +2566,152 @@ void PrintSelectPanel::start_print(bool force) {
 
     // Delegate to the print start controller
     print_controller_->initiate();
+}
+
+void PrintSelectPanel::show_preflight_modal(const helix::PreflightResult& pf) {
+    // Heap-allocated; self-deletes in PreflightCheckModal::on_hide() (LVGL /
+    // ModalStack cleanup never calls Modal::~Modal). Mirrors the spaghetti
+    // detection modal's lifecycle.
+    auto* modal = new helix::ui::PreflightCheckModal();
+    modal->set_checks(pf);
+    modal->set_on_force([]() { get_global_print_select_panel().start_print(true); });
+    modal->set_on_remap([]() { get_global_print_select_panel().on_preflight_remap(); });
+    modal->show(lv_screen_active());
+}
+
+void PrintSelectPanel::on_preflight_remap() {
+    auto* backend = AmsState::instance().get_backend();
+    if (!backend) {
+        return;
+    }
+    switch (backend->get_remap_strategy()) {
+    case AmsBackend::RemapStrategy::Native:
+        open_native_remap_modal();
+        break;
+    case AmsBackend::RemapStrategy::GcodeRewrite:
+        open_gcode_remap_modal();
+        break;
+    case AmsBackend::RemapStrategy::SnapmakerNative:
+        // U1 native remap modal lands in Batch 2. Today the pre-flight gate is
+        // identity-only for U1 (no remap UI), so there is nothing to open — the
+        // always-on SET_PRINT_USED_EXTRUDERS send at print-start handles the
+        // spurious-feed runout without any user remap.
+        break;
+    case AmsBackend::RemapStrategy::None:
+        break;
+    }
+}
+
+// Native (Happy Hare / AFC / CFS / AD5X-IFS / toolchanger) tool→slot remap.
+// These backends own the routing table, so we reuse the existing
+// FilamentMappingModal — opened via the detail view's embedded mapping card —
+// to let the user reassign tools to slots. The card's on_mappings_changed path
+// (wired in the detail view) republishes the edited mappings AND re-runs the
+// pre-flight validator, so a subsequent Print reflects the new mapping. The
+// backend itself is updated at print-start by PrintStartController::apply_remap,
+// which reads detail_view_->get_filament_mappings() (the card's vector). We do
+// NOT auto-start the print: the user taps Print again, and the now-cleared gate
+// lets it proceed.
+void PrintSelectPanel::open_native_remap_modal() {
+    if (!detail_view_) {
+        spdlog::warn("[{}] Native remap requested with no detail view", get_name());
+        return;
+    }
+    detail_view_->open_filament_mapping_modal();
+}
+
+// GcodeRewrite (Snapmaker U1, ACE) tool->head remap. These backends own no
+// internal routing table, so the only way to redirect a logical tool to a
+// different physical head is to REWRITE the Tx / ACTIVATE_EXTRUDER /
+// SET_GCODE_VARIABLE lines in the gcode itself (Task-11 GcodeToolRemapper) and
+// print the modified copy through the HelixPrint plugin so print history stays
+// under the original filename.
+//
+// The FilamentMappingCard is hidden for these backends, so we build the picker
+// inputs DIRECTLY from the cached pre-flight result rather than reading the
+// card. On "Done" we convert the edited mappings into a logical->physical map
+// and drive the prep-manager's rewrite+print pipeline.
+void PrintSelectPanel::open_gcode_remap_modal() {
+    // Plugin guard FIRST: the rewrite path prints a modified temp copy and
+    // relies on the HelixPrint plugin to symlink + patch history back to the
+    // original filename. Without it, history would show the temp name.
+    if (!printer_state_.service_has_helix_plugin()) {
+        helix::ui::modal_show_alert(
+            lv_tr("Remap needs the HelixPrint plugin"),
+            lv_tr("Install the HelixPrint plugin in Advanced settings to remap "
+                  "filament without affecting print history."),
+            ModalSeverity::Info, lv_tr("OK"), nullptr, nullptr);
+        return;
+    }
+
+    if (!detail_view_) {
+        spdlog::warn("[{}] Gcode remap requested with no detail view", get_name());
+        return;
+    }
+
+    // Build picker inputs directly from the pre-flight checks (the hidden card is
+    // not consulted). Each ToolCheck carries the intended color/material the
+    // gcode declared for that tool.
+    const auto& pf = detail_view_->preflight_result();
+    std::vector<helix::GcodeToolInfo> tool_info;
+    tool_info.reserve(pf.checks.size());
+    for (const auto& check : pf.checks) {
+        helix::GcodeToolInfo info;
+        info.tool_index = check.tool_index;
+        info.color_rgb = check.intended_color;
+        info.material = check.intended_material;
+        tool_info.push_back(std::move(info));
+    }
+
+    if (tool_info.empty()) {
+        spdlog::warn("[{}] Gcode remap: no tools in pre-flight result", get_name());
+        NOTIFY_INFO(lv_tr("Nothing to remap"));
+        return;
+    }
+
+    auto slots = AmsState::instance().collect_available_slots();
+    auto mappings = helix::FilamentMapper::compute_defaults(tool_info, slots);
+
+    gcode_remap_modal_.set_tool_info(tool_info);
+    gcode_remap_modal_.set_available_slots(slots);
+    gcode_remap_modal_.set_mappings(mappings);
+    gcode_remap_modal_.set_on_mappings_updated([this](std::vector<helix::ToolMapping> updated) {
+        // Convert edited mappings -> logical tool index -> physical head index.
+        // Skip auto/unmapped entries (mapped_slot < 0) — those leave the gcode's
+        // original tool number untouched.
+        std::map<int, int> remap;
+        for (const auto& m : updated) {
+            if (m.tool_index < 0 || m.mapped_slot < 0) {
+                continue;
+            }
+            // For U1/ACE, slot index == physical head, so mapped_slot is the head
+            // the gcode rewrite targets. A backend where slot != head would need a
+            // slot->head translation here (verify on bench U1).
+            remap[m.tool_index] = m.mapped_slot;
+        }
+
+        // Resolve the prep manager + current file path, then drive the
+        // rewrite+print pipeline. The pipeline guards identity remaps internally
+        // (prints the original unmodified when nothing changes).
+        auto* prep = detail_view_ ? detail_view_->get_prep_manager() : nullptr;
+        if (!prep) {
+            spdlog::warn("[{}] Gcode remap: no prep manager", get_name());
+            NOTIFY_ERROR(lv_tr("Cannot remap: internal error"));
+            return;
+        }
+
+        std::string filename(selected_filename_buffer_);
+        std::string file_path =
+            current_path_.empty() ? filename : current_path_ + "/" + filename;
+
+        spdlog::info("[{}] Applying gcode remap: {} tool(s) for {}", get_name(), remap.size(),
+                     file_path);
+        prep->modify_and_print_with_remap(file_path, remap, [this]() {
+            PrintStatusPanel::push_overlay(parent_screen_);
+        });
+    });
+
+    gcode_remap_modal_.show(lv_screen_active());
 }
 
 void PrintSelectPanel::delete_file() {

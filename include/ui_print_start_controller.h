@@ -5,11 +5,14 @@
 
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "filament_mapper.h"
 
 #include <functional>
 #include <lvgl.h>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -99,6 +102,27 @@ class PrintStartController {
     void initiate();
 
     /**
+     * @brief Reprint a file already on the printer.
+     *
+     * Shares the U1 native pre-print send with the normal start path, but uses
+     * the lightweight job().start_print (no upload/prep — the file is already on
+     * the printer). @p tools_used drives the SET_PRINT_USED_EXTRUDERS
+     * computation (empty → no native send, just starts). @p on_started /
+     * @p on_error are invoked on the MAIN thread.
+     *
+     * @param filename   Raw filename to reprint (already on the printer).
+     * @param path       Directory path relative to gcodes root (unused by the
+     *                   lightweight start; kept for symmetry with set_file()).
+     * @param tools_used Set of tool indices used by the file (U1 native send).
+     * @param on_started Called on success (main thread).
+     * @param on_error   Called on failure (main thread).
+     */
+    void initiate_reprint(const std::string& filename, const std::string& path,
+                          const std::set<int>& tools_used,
+                          std::function<void()> on_started,
+                          std::function<void()> on_error);
+
+    /**
      * @brief Check if controller is ready to start a print
      *
      * @return true if filename is set and detail view is available
@@ -144,6 +168,30 @@ class PrintStartController {
      * Delegates to PrintPreparationManager for file operations and Moonraker API calls.
      */
     void execute_print_start();
+
+    /**
+     * @brief Send the Snapmaker U1 firmware-native print_task_config gcode, then continue.
+     *
+     * When the active AMS backend's RemapStrategy is SnapmakerNative, the U1
+     * firmware requires SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP to be
+     * emitted BEFORE PRINT_START (they error mid-print). Builds that gcode from
+     * @p tools_used and @p remap (supplied by the caller), sends it, and only invokes
+     * @p on_done (which starts the print) after the send succeeds. On send error it
+     * surfaces a user-visible failure, calls @p on_abort, and does NOT start the print.
+     * If there is nothing to send (empty tools or empty gcode), @p on_done runs immediately.
+     *
+     * Callbacks land on the WebSocket background thread; the body is deferred to
+     * the main thread via the lifetime token.
+     *
+     * @param tools_used  Set of tool indices used by the file (from detail view or reprint).
+     * @param remap       Tool-to-slot remap map (from detail view or reprint).
+     * @param on_done     Called on success — proceeds with the actual print start.
+     * @param on_abort    Called on error — caller is responsible for re-enabling UI state.
+     */
+    void send_snapmaker_preprint_then(const std::set<int>& tools_used,
+                                      const std::map<int, int>& remap,
+                                      std::function<void()> on_done,
+                                      std::function<void()> on_abort);
 
     /**
      * @brief Show filament warning dialog
@@ -200,6 +248,11 @@ class PrintStartController {
     MoonrakerAPI* api_ = nullptr;
     PrintSelectDetailView* detail_view_ = nullptr;
     lv_subject_t* can_print_subject_ = nullptr;
+
+    // Guards background-thread API callbacks (Snapmaker U1 pre-print send) so a
+    // dismissed controller doesn't UAF. From bg threads use lifetime_.token()
+    // then tok.defer(...). See async_lifetime_guard.h.
+    helix::AsyncLifetimeGuard lifetime_;
 
     // === File State ===
     std::string filename_;

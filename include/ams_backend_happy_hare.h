@@ -160,6 +160,10 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
         return true; // Happy Hare persists via MMU_GATE_MAP SPOOLID
     }
 
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::Native;
+    }
+
     // Tool Mapping support
     /**
      * @brief Get tool mapping capabilities for Happy Hare

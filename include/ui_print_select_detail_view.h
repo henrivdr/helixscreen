@@ -7,6 +7,8 @@
 #include "ui_pre_print_options_renderer.h"
 #include "ui_print_preparation_manager.h"
 
+#include "preflight_validator.h"
+
 #include "moonraker_types.h"
 #include "overlay_base.h"
 #include "print_file_data.h" // For FileHistoryStatus
@@ -14,6 +16,7 @@
 
 #include <functional>
 #include <lvgl.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -182,15 +185,54 @@ class PrintSelectDetailView : public OverlayBase {
     void hide();
 
     /**
-     * @brief Whether the currently-shown file references any tool whose
-     *        AMS lane/slot is empty. Backend-agnostic — driven by
-     *        SlotInfo::has_filament_info() for each used tool index.
-     *        Used by the print-start path to confirm with the user before
-     *        sending a print that will likely fail mid-flight.
+     * @brief Whether the current file's gcode has finished parsing.
+     *
+     * Set true in the gcode-viewer load callback AFTER the pre-flight
+     * validator has run, so a true return guarantees preflight_result() is
+     * fresh for the loaded file. The print-start gate waits on this to close
+     * the race where Print is tapped before parse completes.
      */
-    [[nodiscard]] bool has_empty_tool_warning() {
-        return lv_subject_get_int(&empty_tools_warning_) == 1;
+    [[nodiscard]] bool is_gcode_loaded() const {
+        return gcode_loaded_;
     }
+
+    /**
+     * @brief Whether pre-flight inputs are ready for the print-start gate.
+     *
+     * True once EITHER the visual gcode viewer has parsed (full platforms) OR
+     * the headless tools_used scan has completed (runs on ALL platforms,
+     * including 2D-only where the viewer skips parsing). On either path
+     * recompute_preflight() has run, so preflight_result() is fresh.
+     *
+     * This is the signal the print-start gate must wait on — NOT is_gcode_loaded(),
+     * which never becomes true on 2D-only platforms and would hang the print.
+     */
+    [[nodiscard]] bool is_preflight_ready() const {
+        return gcode_loaded_ || headless_scan_done_;
+    }
+
+    /**
+     * @brief Run @p cb once the gcode parse + pre-flight validation complete.
+     *
+     * If the gcode is already loaded, @p cb is invoked synchronously (main
+     * thread). Otherwise it is stored and fired exactly once from the load
+     * callback after preflight_result() is populated. Only one pending
+     * callback is tracked; a later call overwrites an earlier pending one.
+     * Cleared on show() so a stale attempt from a previous file can't fire.
+     */
+    void run_when_loaded(std::function<void()> cb);
+
+    /**
+     * @brief Run @p cb once pre-flight inputs are ready (is_preflight_ready()).
+     *
+     * Unlike run_when_loaded() this fires when EITHER the viewer parse OR the
+     * headless tools_used scan completes — so it never hangs on 2D-only
+     * platforms. If already ready, runs @p cb synchronously. A safety timeout
+     * (see kPreflightReadyTimeoutMs) fires @p cb anyway if neither signal
+     * arrives, so a stuck/failed scan can never wedge the print: the print
+     * proceeds without Part A's optimization rather than never starting.
+     */
+    void run_when_preflight_ready(std::function<void()> cb);
 
     // Note: is_visible() inherited from OverlayBase
 
@@ -247,6 +289,31 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Logical tools the parsed gcode body actually uses.
+     *
+     * Returns ParsedGCodeFile::tools_used_indices from the gcode viewer's
+     * parsed file (empty if no file is parsed). Read the same way
+     * recompute_preflight() does. Consumed by the print-start gate to build
+     * the Snapmaker U1 native print_task_config command sequence.
+     */
+    [[nodiscard]] std::set<int> get_tools_used() const;
+
+    /**
+     * @brief Effective tool→slot remap the print will actually use.
+     *
+     * Built from the mapping card's current mappings. Contains ONLY real
+     * remaps: an entry tool_index → mapped_slot is included only when
+     * mapped_slot >= 0 AND mapped_slot != default_head(tool_index), where
+     * default_head(t) = (t in [0,3]) ? t : 0. Tools mapped to their identity
+     * head are omitted (the firmware default already routes them).
+     *
+     * On Snapmaker U1 today the mapping card is hidden so get_mappings() is
+     * empty and this returns empty (identity / Part A). It becomes non-empty
+     * once the U1 remap modal lands (Batch 2) — kept forward-compatible.
+     */
+    [[nodiscard]] std::map<int, int> get_effective_remap() const;
+
+    /**
      * @brief Get per-tool filament materials from gcode metadata
      *
      * Available even when AMS is not present (unlike get_filament_tool_info
@@ -262,6 +329,44 @@ class PrintSelectDetailView : public OverlayBase {
     [[nodiscard]] const std::vector<helix::AvailableSlot>& get_available_slots() const {
         return filament_mapping_card_.get_available_slots();
     }
+
+    /**
+     * @brief Get the cached pre-flight validation result for the current file.
+     *
+     * Computed in try_extract_gcode_colors() after the gcode is parsed, for
+     * ALL AMS backends (including those whose mapping card is hidden, e.g.
+     * Snapmaker U1 / ACE). Drives the filament_mismatch_ and
+     * empty_tools_warning_ subjects, and is read by the print-start gate and
+     * the enriched pre-print modal. Empty (no checks) until a file is parsed.
+     */
+    [[nodiscard]] const helix::PreflightResult& preflight_result() const {
+        return preflight_result_;
+    }
+
+    /**
+     * @brief Re-run the backend-agnostic pre-flight validator and republish.
+     *
+     * Rebuilds the per-tool intent (filtered to the precise tools_used set from
+     * the parsed gcode), re-reads available slots from AmsState, computes the
+     * default mapping, runs PreflightValidator::validate, caches the result into
+     * preflight_result_, and republishes the filament_mismatch_ /
+     * empty_tools_warning_ subjects.
+     *
+     * Called once after parse (from try_extract_gcode_colors()) and again after
+     * a native tool→slot remap so the print-start gate reflects the new mapping.
+     * No-op until the gcode is loaded (gcode_viewer_ has a parsed file).
+     */
+    void recompute_preflight();
+
+    /**
+     * @brief Open the filament mapping modal (tool→slot reassignment).
+     *
+     * Thin passthrough to the embedded FilamentMappingCard's modal. Used by the
+     * pre-flight gate's "Remap…" button for native-routing backends (AFC, Happy
+     * Hare, CFS, AD5X-IFS, toolchanger). Applied mappings flow through the card's
+     * existing on_mappings_changed path, which recomputes pre-flight.
+     */
+    void open_filament_mapping_modal();
 
     /**
      * @brief Get cached file metadata from the most recent async fetch
@@ -361,6 +466,30 @@ class PrintSelectDetailView : public OverlayBase {
     lv_subject_t detail_gcode_loading_{};
     std::string temp_gcode_path_; // Cached downloaded gcode file path
     bool gcode_loaded_ = false;   // Whether gcode file has been loaded into viewer
+    // Pending print-attempt (or other) callback registered via run_when_loaded()
+    // while a parse was still in flight. Fired once from the load callback after
+    // preflight_result_ is fresh, then cleared. Reset on show().
+    std::function<void()> on_loaded_cb_;
+
+    // --- Headless tools_used scan (works on ALL platforms incl. 2D-only) ---
+    // The visual gcode viewer does NOT parse on 2D-only platforms (Snapmaker U1,
+    // AD5M, small screens), so tools_used and the pre-flight "ready" signal must
+    // come from a separate, memory-safe streaming scan. Kicked off in
+    // on_activate(); completion sets headless_scan_done_ and runs
+    // recompute_preflight() so the gate has a fresh result even when the viewer
+    // never parsed. See kick_off_headless_tools_scan().
+    std::optional<std::set<int>> headless_tools_used_; // result of the streaming scan
+    bool headless_scan_done_ = false;                  // scan finished (success/empty/fail/timeout)
+    // Pending callback registered via run_when_preflight_ready() while neither the
+    // viewer parse nor the headless scan had completed. Fired once when readiness
+    // arrives (or on the safety timeout), then cleared. Reset on show().
+    std::function<void()> on_preflight_ready_cb_;
+    lv_timer_t* preflight_ready_timeout_timer_ = nullptr; // safety fallback; never wedge a print
+
+    // Safety fallback: if neither the viewer parse nor the headless scan reports
+    // readiness within this window, fire the deferred print attempt anyway
+    // (graceful degradation — print without Part A's optimization, never hang).
+    static constexpr uint32_t kPreflightReadyTimeoutMs = 8000;
 
     // Pre-print option toggle state lives in `option_rows_renderer_` (one
     // heap-allocated subject per option) — the legacy fixed six subjects
@@ -369,6 +498,12 @@ class PrintSelectDetailView : public OverlayBase {
     lv_subject_t filament_mapping_visible_{};   // 1 = filament mapping card visible (AMS+tools)
     lv_subject_t color_swatches_visible_{};     // 1 = legacy color swatches card visible
     lv_subject_t empty_tools_warning_{};        // 1 = at least one used tool's slot is empty
+    // Cached backend-agnostic pre-flight validation result for the current file.
+    // Computed in try_extract_gcode_colors() once the gcode is parsed; the single
+    // source of truth driving filament_mismatch_ + empty_tools_warning_ (works
+    // even when the mapping card is hidden, e.g. Snapmaker U1 / ACE). Read by the
+    // print-start gate and the enriched pre-print modal. Empty until a file parses.
+    helix::PreflightResult preflight_result_{};
     lv_subject_t prep_time_estimate_subject_{}; // formatted prep time string for bind_text
     char prep_time_estimate_buf_[64]{};         // buffer backing the string subject
     SubjectManager subjects_;                   // RAII manager for subject cleanup
@@ -440,6 +575,48 @@ class PrintSelectDetailView : public OverlayBase {
      * Fixes Snapmaker (and other printers whose Moonraker doesn't return filament_colors).
      */
     void try_extract_gcode_colors(lv_obj_t* viewer);
+
+    /**
+     * @brief Fire and clear any pending run_when_loaded() callback.
+     *
+     * Invoked from the gcode load callback after try_extract_gcode_colors()
+     * has refreshed preflight_result_. Moves the callback out and clears the
+     * member before invoking it, so it runs exactly once and a re-entrant
+     * run_when_loaded() during the callback registers cleanly for next time.
+     */
+    void fire_on_loaded();
+
+    /**
+     * @brief Start the headless tools_used scan for the current file.
+     *
+     * Streams the gcode to a temp file via the file-transfer API (off the main
+     * thread, memory-safe — never holds the whole file), runs a lightweight
+     * Tn-only line scan, then marshals the result back to the main thread. On
+     * completion sets headless_tools_used_ + headless_scan_done_ and runs
+     * recompute_preflight() + fire_on_preflight_ready(). Runs on ALL platforms;
+     * it is the readiness signal the gate uses on 2D-only (where the viewer
+     * never parses). Degrades gracefully: a download/scan failure still marks the
+     * scan done (with an empty set) so the print can proceed.
+     */
+    void kick_off_headless_tools_scan();
+
+    /**
+     * @brief Mark readiness arrived and fire/clear any pending preflight-ready cb.
+     *
+     * Invoked from the viewer load callback, the headless scan completion, or the
+     * safety timeout. Cancels the timeout timer and runs the deferred attempt
+     * exactly once.
+     */
+    void fire_on_preflight_ready();
+
+    /**
+     * @brief Tools the print will use, sourced from whichever scan is available.
+     *
+     * Prefers the visual viewer's parsed tools_used_indices (full platforms);
+     * falls back to the headless scan result (2D-only). Empty if neither is
+     * available yet.
+     */
+    [[nodiscard]] std::set<int> tools_used_effective() const;
 
     /**
      * @brief Populate the dynamic per-printer option-toggle rows.

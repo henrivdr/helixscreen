@@ -93,8 +93,9 @@ void FilamentMappingCard::update(const std::vector<std::string>& gcode_colors,
         return;
     }
 
-    // Collect available slots from AMS backends
-    available_slots_ = collect_available_slots();
+    // Collect available slots from AMS backends (canonical accessor — single
+    // source of truth shared with the print detail view's preflight check).
+    available_slots_ = AmsState::instance().collect_available_slots();
 
     // Compute mappings based on user preference
     if (SettingsManager::instance().get_auto_color_map()) {
@@ -292,46 +293,6 @@ void FilamentMappingCard::open_mapping_modal() {
 // ============================================================================
 // Data collection
 // ============================================================================
-
-std::vector<helix::AvailableSlot> FilamentMappingCard::collect_available_slots() {
-    std::vector<helix::AvailableSlot> slots;
-    auto& ams = AmsState::instance();
-
-    for (int bi = 0; bi < ams.backend_count(); ++bi) {
-        auto* backend = ams.get_backend(bi);
-        if (!backend) {
-            continue;
-        }
-
-        auto info = backend->get_system_info();
-        bool multi_unit = info.units.size() > 1;
-
-        for (const auto& unit : info.units) {
-            for (const auto& slot_info : unit.slots) {
-                helix::AvailableSlot as;
-                as.slot_index = slot_info.global_index;
-                as.local_slot_index = slot_info.slot_index;
-                as.backend_index = bi;
-                as.color_rgb = slot_info.color_rgb;
-                as.material = slot_info.material;
-                as.is_empty = (slot_info.status == SlotStatus::EMPTY ||
-                               slot_info.status == SlotStatus::UNKNOWN);
-                as.current_tool_mapping = slot_info.mapped_tool;
-                as.unit_index = unit.unit_index;
-                if (multi_unit) {
-                    as.unit_display_name = unit.display_name.empty()
-                                               ? unit.name
-                                               : unit.display_name;
-                }
-                slots.push_back(std::move(as));
-            }
-        }
-    }
-
-    spdlog::debug("[FilamentMapping] Collected {} available slots from {} backends",
-                  slots.size(), ams.backend_count());
-    return slots;
-}
 
 std::vector<helix::GcodeToolInfo> FilamentMappingCard::build_tool_info(
     const std::vector<std::string>& colors,

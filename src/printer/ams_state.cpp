@@ -709,6 +709,45 @@ void AmsState::clear_backends() {
     }
 }
 
+std::vector<helix::AvailableSlot> AmsState::collect_available_slots() const {
+    std::vector<helix::AvailableSlot> slots;
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+    for (size_t bi = 0; bi < backends_.size(); ++bi) {
+        const auto& backend = backends_[bi];
+        if (!backend) {
+            continue;
+        }
+
+        auto info = backend->get_system_info();
+        bool multi_unit = info.units.size() > 1;
+
+        for (const auto& unit : info.units) {
+            for (const auto& slot_info : unit.slots) {
+                helix::AvailableSlot as;
+                as.slot_index = slot_info.global_index;
+                as.local_slot_index = slot_info.slot_index;
+                as.backend_index = static_cast<int>(bi);
+                as.color_rgb = slot_info.color_rgb;
+                as.material = slot_info.material;
+                as.is_empty = (slot_info.status == SlotStatus::EMPTY ||
+                               slot_info.status == SlotStatus::UNKNOWN);
+                as.current_tool_mapping = slot_info.mapped_tool;
+                as.unit_index = unit.unit_index;
+                if (multi_unit) {
+                    as.unit_display_name =
+                        unit.display_name.empty() ? unit.name : unit.display_name;
+                }
+                slots.push_back(std::move(as));
+            }
+        }
+    }
+
+    spdlog::debug("[AmsState] Collected {} available slots from {} backends", slots.size(),
+                  backends_.size());
+    return slots;
+}
+
 AmsBackend* AmsState::get_backend() const {
     return get_backend(0);
 }

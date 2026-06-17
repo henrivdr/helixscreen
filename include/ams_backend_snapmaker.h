@@ -7,7 +7,9 @@
 #include "filament_slot_override_store.h"
 
 #include <array>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -150,6 +152,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return true;
     }
 
+    // Snapmaker U1 uses firmware-native print_task_config gcode
+    // (SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP) emitted before
+    // PRINT_START; no gcode-file rewrite is needed.
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::SnapmakerNative;
+    }
+
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
@@ -170,6 +179,15 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] bool is_bypass_active() const override {
         return false;
     }
+
+    // Builds the firmware-native pre-print command sequence for print_task_config.
+    // tools_used: logical tools the gcode body uses (ParsedGCodeFile::tools_used_indices).
+    // remap:      logical tool -> physical head, ONLY for tools the user changed from identity.
+    //             Tools absent from `remap` use default_head(t) = (t>=0 && t<=3) ? t : 0.
+    // Returns newline-joined gcode (NO trailing newline), or "" when tools_used is empty.
+    // Pure — no api_/network access, trivially unit-testable.
+    [[nodiscard]] std::string build_preprint_gcode(const std::set<int>& tools_used,
+                                                   const std::map<int, int>& remap) const;
 
     // Static parsers (public for testing)
     static ExtruderToolState parse_extruder_state(const nlohmann::json& json);

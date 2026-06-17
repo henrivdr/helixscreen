@@ -118,18 +118,22 @@ class FilamentMappingCard {
      */
     void on_ui_destroyed();
 
+    /**
+     * @brief Open the tool→slot filament mapping modal.
+     *
+     * Also invoked internally when the card itself is tapped. Exposed so the
+     * pre-flight gate's "Remap…" button can reuse the exact same modal wiring
+     * (data population + on_mappings_updated → on_mappings_changed_) for
+     * native-routing backends rather than duplicating it.
+     */
+    void open_mapping_modal();
+
   private:
     /// Build compact swatch pair row in rows_container_
     void rebuild_compact_view();
 
     /// Check if any mappings have material mismatches
     bool has_any_mismatch() const;
-
-    /// Open the filament mapping modal
-    void open_mapping_modal();
-
-    /// Build AvailableSlot list from AmsState singleton
-    std::vector<helix::AvailableSlot> collect_available_slots();
 
     /// Build GcodeToolInfo list from color/material strings
     std::vector<helix::GcodeToolInfo> build_tool_info(const std::vector<std::string>& colors,

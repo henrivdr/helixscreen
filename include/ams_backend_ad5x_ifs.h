@@ -178,6 +178,10 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
         return false;
     }
 
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::Native;
+    }
+
     // IFS retracts filament from the extruder at end-of-print by default, so
     // the toolhead is expected to be empty at the next print-start. Suppresses
     // the pre-print runout warning modal.

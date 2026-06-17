@@ -767,5 +767,43 @@ GCodeHeaderMetadata extract_header_metadata(const std::string& filepath);
  */
 GCodeHeaderMetadata extract_header_metadata_from_content(const std::string& content);
 
+/**
+ * @brief Lightweight, memory-safe scan for the set of distinct tool indices a
+ *        G-code body references.
+ *
+ * Matches standalone tool-change commands (bare `Tn`, possibly indented, with a
+ * trailing comment) over the WHOLE content — tool changes occur throughout a
+ * multi-color print body, so a header-only / partial scan is insufficient. This
+ * retains ONLY the integer set; it never builds a geometry model, so it is safe
+ * to run on memory-constrained devices (AD5M / 2D-only platforms) where the full
+ * GCodeParser is too heavy.
+ *
+ * Semantics intentionally mirror GCodeParser::parse_tool_change_command():
+ *   - A line is a tool change only if, after stripping a trailing `;` comment and
+ *     surrounding whitespace, it is exactly `T` followed by one or more digits
+ *     (e.g. "T0", "  T2  ", "T1 ; change"). Tokens like "T0 X1" or "TURN" are
+ *     ignored, and `Tn` appearing inside a comment is ignored.
+ *
+ * @param content G-code content (a whole file, or any line-complete chunk).
+ * @return Distinct tool indices seen. Unlike ParsedGCodeFile::tools_used_indices,
+ *         this does NOT inject {0} for single-extruder files with only a color
+ *         palette (it has no palette knowledge); callers needing that convention
+ *         should fall back to {0} when this returns an empty set and tools exist.
+ */
+std::set<int> scan_tools_used_from_content(const std::string& content);
+
+/**
+ * @brief Streaming, memory-safe variant of scan_tools_used_from_content() that
+ *        reads a file line-by-line from disk.
+ *
+ * Never loads the whole file into memory — reads one line at a time and retains
+ * only the distinct-tool-index set. Preferred over downloading the entire file
+ * into a std::string on constrained devices.
+ *
+ * @param filepath Path to a local G-code file.
+ * @return Distinct tool indices seen (empty if the file can't be opened).
+ */
+std::set<int> scan_tools_used_from_file(const std::string& filepath);
+
 } // namespace gcode
 } // namespace helix

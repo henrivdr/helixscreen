@@ -1502,3 +1502,54 @@ AmsError AmsBackendSnapmaker::validate_slot_index(int slot_index) const {
     }
     return AmsErrorHelper::success();
 }
+
+std::string AmsBackendSnapmaker::build_preprint_gcode(const std::set<int>& tools_used,
+                                                      const std::map<int, int>& remap) const {
+    if (tools_used.empty()) {
+        return "";
+    }
+
+    // Firmware default extruder map is [0,1,2,3,0,0,...]: logical tools 0-3 map
+    // to physical heads 0-3, and every extended tool (4-31) without an explicit
+    // user remap falls to firmware-identity head 0.
+    //
+    // NOTE: extended tools 4-31 collapsing to head 0 is the firmware-default
+    // behavior; a future pass may add a richer extended-tool mapping policy.
+    const auto default_head = [](int t) { return (t >= 0 && t <= 3) ? t : 0; };
+
+    std::vector<std::string> lines;
+
+    // std::map iterates in ascending key order — emit one SET_PRINT_EXTRUDER_MAP
+    // per user remap entry (logical CONFIG_EXTRUDER -> physical MAP_EXTRUDER).
+    for (const auto& [logical, physical] : remap) {
+        lines.push_back(fmt::format("SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER={} MAP_EXTRUDER={}",
+                                    logical, physical));
+    }
+
+    // Resolve each used logical tool to its physical head, deduped and ascending
+    // via std::set, then format as a comma-separated list.
+    std::set<int> used_heads;
+    for (int t : tools_used) {
+        auto it = remap.find(t);
+        used_heads.insert(it != remap.end() ? it->second : default_head(t));
+    }
+
+    std::string csv;
+    for (int head : used_heads) {
+        if (!csv.empty()) {
+            csv += ',';
+        }
+        csv += std::to_string(head);
+    }
+    lines.push_back(fmt::format("SET_PRINT_USED_EXTRUDERS EXTRUDERS={}", csv));
+
+    // Join with newlines, no trailing newline.
+    std::string out;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (i != 0) {
+            out += '\n';
+        }
+        out += lines[i];
+    }
+    return out;
+}

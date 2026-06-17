@@ -78,6 +78,13 @@ PrintSelectDetailView::~PrintSelectDetailView() {
 
     spdlog::trace("[DetailView] Destroyed");
 
+    // Cancel the pre-flight readiness safety timer if still armed (LVGL is known
+    // initialized here — checked above).
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+
     // Unregister from NavigationManager (fallback if cleanup() wasn't called)
     if (overlay_root_) {
         NavigationManager::instance().unregister_overlay_instance(overlay_root_);
@@ -261,6 +268,10 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
     filament_mapping_card_.set_on_mappings_changed([this]() {
         apply_mapped_tool_colors();
         lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
+        // Re-evaluate the pre-flight gate so a subsequent Print reflects the new
+        // tool→slot mapping (the native remap flow reaches the backend via the
+        // print-start controller, which reads get_filament_mappings()).
+        recompute_preflight();
     });
 
     // Look up history status display
@@ -331,30 +342,48 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
     // Update filament mapping card (shown when AMS is available)
     filament_mapping_card_.update(filament_colors, filament_materials);
 
-    // Publish all three color-display subjects so XML drives every HIDDEN
-    // flag and the warning icon. Mapping card and swatches card are mutually
-    // exclusive: swatches only show when mapping doesn't AND the card's
-    // own visibility predicate (see swatches_card_visible_for) is met.
+    // Publish the mapping-card display subjects. The mapping card's visibility
+    // depends only on its own state (AMS presence + slicer colors), so it can
+    // be decided here. The swatches card, by contrast, must reflect the real
+    // per-tool set used by the file — which is only known once the gcode is
+    // parsed.
     const bool mapping_visible = filament_mapping_card_.should_show();
-    const bool swatches_visible =
-        !mapping_visible && swatches_card_visible_for(filament_colors.size());
     lv_subject_set_int(&filament_mapping_visible_, mapping_visible ? 1 : 0);
-    lv_subject_set_int(&color_swatches_visible_, swatches_visible ? 1 : 0);
-    lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
 
-    // Build swatch content only when swatches will actually be shown. At
-    // this point we don't yet have parsed gcode — fall back to a synthetic
-    // tool index set covering the slicer palette so the swatch row still
-    // populates. The parsed-gcode path below (try_extract_gcode_colors) will
-    // re-call this with the precise tools_used set once the gcode loads.
-    if (swatches_visible) {
-        std::set<int> synthetic_tools;
-        for (size_t i = 0; i < filament_colors.size(); ++i) {
-            synthetic_tools.insert(static_cast<int>(i));
-        }
-        update_color_swatches(synthetic_tools, filament_colors);
-    } else {
-        lv_subject_set_int(&empty_tools_warning_, 0);
+    // Swatches start in a neutral "not yet known" state: hidden, no warning.
+    // Seeding from the slicer palette index here mislabels chips (a T0+T2 file
+    // renders as T0/T1) and inspects the wrong AMS slots. The authoritative
+    // render happens in try_extract_gcode_colors() once the gcode viewer has
+    // parsed and produced tools_used_indices. Reset every show() so re-selecting
+    // a different file never leaks stale swatch state.
+    //
+    // filament_mismatch_ is likewise neutral-until-parse: seeding it from
+    // filament_mapping_card_.has_mismatch() here would flash a value computed
+    // against the full slicer palette before the validator runs against the
+    // precise tools_used set. The pre-flight validator in
+    // try_extract_gcode_colors() is the sole authoritative post-parse writer.
+    lv_subject_set_int(&color_swatches_visible_, 0);
+    lv_subject_set_int(&empty_tools_warning_, 0);
+    lv_subject_set_int(&filament_mismatch_, 0);
+
+    // Drop any cached pre-flight result from a previously-selected file. The
+    // validator re-runs in try_extract_gcode_colors() once this file's gcode is
+    // parsed; clearing here prevents the gate/modal from reading stale checks.
+    preflight_result_ = {};
+
+    // Drop any pending run_when_loaded() callback from a previously-selected
+    // file so a stale print-attempt can't fire against this file's parse.
+    on_loaded_cb_ = nullptr;
+
+    // Reset headless-scan state for the newly-selected file. on_activate() will
+    // (re)kick the scan. Drop any pending preflight-ready attempt + timer so a
+    // stale attempt from a previous file can't fire against this one.
+    headless_tools_used_.reset();
+    headless_scan_done_ = false;
+    on_preflight_ready_cb_ = nullptr;
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
     }
 
     // Register with NavigationManager for lifecycle callbacks
@@ -426,6 +455,12 @@ void PrintSelectDetailView::on_activate() {
         prep_manager_->scan_file_for_operations(current_filename_, current_path_);
     }
 
+    // Headless tools_used scan — runs on ALL platforms (including 2D-only, where
+    // the visual viewer below skips parsing). Provides tools_used + the pre-flight
+    // readiness signal the print-start gate waits on, so prints never hang on
+    // 2D-only devices. Result is typically ready by the time Print is tapped.
+    kick_off_headless_tools_scan();
+
     // Invalidate predictor cache so we pick up any new timing data from completed prints
     if (prep_manager_) {
         prep_manager_->invalidate_predictor_cache();
@@ -451,6 +486,20 @@ void PrintSelectDetailView::on_deactivate() {
     // Reset viewer mode to thumbnail so next open starts clean
     show_gcode_viewer(false);
     gcode_loaded_ = false;
+
+    // Drop any pending run_when_loaded() callback. If the user tapped Print
+    // before parse completed (deferring the attempt) and then navigated away,
+    // a late load callback firing fire_on_loaded() would call start_print() on
+    // a hidden panel → a ghost print with no UI. Clearing here prevents that.
+    on_loaded_cb_ = nullptr;
+
+    // Same protection for the preflight-ready deferral + its safety timer: a late
+    // scan completion (or timeout) must not start a print on a hidden panel.
+    on_preflight_ready_cb_ = nullptr;
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
 
     // Hide any open delete confirmation modal
     hide_delete_confirmation();
@@ -504,6 +553,10 @@ void PrintSelectDetailView::on_ui_destroyed() {
 
     // Pause and clear gcode viewer state (widget is already deleted by base)
     gcode_loaded_ = false;
+
+    // Drop any pending run_when_loaded() callback so a late load callback can't
+    // fire start_print() against a destroyed view (ghost-print guard).
+    on_loaded_cb_ = nullptr;
 
     // Clean up temp gcode file so stale cached data doesn't persist
     if (!temp_gcode_path_.empty()) {
@@ -636,7 +689,6 @@ void PrintSelectDetailView::update_color_swatches(
     helix::ui::safe_clean_children(color_swatches_row_);
 
     auto* backend = AmsState::instance().get_backend();
-    bool any_empty = false;
 
     for (int tool : tool_indices) {
         std::string hex_color;
@@ -651,7 +703,6 @@ void PrintSelectDetailView::update_color_swatches(
             } else {
                 // Print needs this tool but the AMS doesn't have it loaded.
                 slot_is_empty = true;
-                any_empty = true;
             }
         } else if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size()) {
             // No backend — slicer palette is the only source; no empty check
@@ -689,7 +740,9 @@ void PrintSelectDetailView::update_color_swatches(
         }
     }
 
-    lv_subject_set_int(&empty_tools_warning_, any_empty ? 1 : 0);
+    // Note: empty_tools_warning_ is published by the pre-flight validator in
+    // try_extract_gcode_colors() (the single source of truth), NOT here — this
+    // method only renders swatches.
 }
 
 void PrintSelectDetailView::update_history_status(FileHistoryStatus status, int success_count) {
@@ -822,10 +875,11 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
                      parsed->tool_color_palette.size());
         current_filament_colors_ = parsed->tool_color_palette;
 
-        // Republish the mapping/mismatch subjects (mapping card uses these
-        // colors when AMS is present).
+        // Rebuild the mapping card's internal tool/slot/mapping state with the
+        // newly-extracted colors (the card uses them when AMS is present). The
+        // filament_mismatch_ / empty_tools_warning_ subjects are NOT published
+        // here — the pre-flight validator below is the single source of truth.
         filament_mapping_card_.update(current_filament_colors_, current_filament_materials_);
-        lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
     }
 
     // Re-publish swatches/mapping visibility using the precise tools_used set
@@ -838,9 +892,278 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
 
     if (swatches_visible) {
         update_color_swatches(parsed->tools_used_indices, current_filament_colors_);
-    } else {
-        lv_subject_set_int(&empty_tools_warning_, 0);
     }
+
+    // Backend-agnostic pre-flight validation (single source of truth for
+    // filament_mismatch_ + empty_tools_warning_). Extracted so the native
+    // remap flow can re-evaluate the gate after the backend mapping changes.
+    recompute_preflight();
+}
+
+void PrintSelectDetailView::recompute_preflight() {
+    // ------------------------------------------------------------------
+    // Backend-agnostic pre-flight validation (single source of truth for
+    // filament_mismatch_ + empty_tools_warning_).
+    //
+    // Runs for ALL AMS backends — including those whose mapping card is hidden
+    // (Snapmaker U1 / ACE), where get_available_slots() on the card is empty.
+    // We source slots straight from AmsState's canonical accessor, build the
+    // intended per-tool color/material from the slicer palette (reusing the
+    // mapping card's already-parsed tool_info_, filtered to the precise
+    // tools_used set), compute default mappings, then validate.
+    //
+    // Guarded on tools_used availability: a no-op until EITHER the viewer has
+    // parsed (full platforms) OR the headless scan has completed (2D-only) — both
+    // feed tools_used_effective(). Before either there is nothing to validate.
+    // ------------------------------------------------------------------
+    const std::set<int> used = tools_used_effective();
+    if (used.empty() && !headless_scan_done_) {
+        // Nothing parsed yet and no headless result: defer. (An empty set AFTER a
+        // completed headless scan is a legitimate single-extruder result and must
+        // still validate, so we only bail when truly nothing is known.)
+        return;
+    }
+
+    const auto& all_tool_info = filament_mapping_card_.get_tool_info();
+    std::vector<helix::GcodeToolInfo> tools;
+    tools.reserve(used.size());
+    for (int tool : used) {
+        if (tool >= 0 && static_cast<size_t>(tool) < all_tool_info.size()) {
+            tools.push_back(all_tool_info[static_cast<size_t>(tool)]);
+        }
+    }
+
+    auto slots = AmsState::instance().collect_available_slots();
+
+    // Validate against the EFFECTIVE mapping the print will actually use, not a
+    // freshly-recomputed default. The card's current mappings_ are what
+    // PrintStartController::apply_remap() sends to the backend at print-start, so
+    // the gate must consult the same vector — otherwise a native remap (AFC /
+    // Happy Hare / CFS / AD5X-IFS / toolchanger) would never clear the block.
+    //
+    // Behavior-preserving at parse time: for editable backends the card seeds
+    // mappings_ with compute_defaults() until the user edits it (identical
+    // result); for U1/ACE the card is hidden and mappings_ is empty, so the
+    // fallback reproduces the original compute_defaults() path exactly.
+    auto mapping = filament_mapping_card_.get_mappings();
+    if (mapping.empty()) {
+        mapping = helix::FilamentMapper::compute_defaults(tools, slots);
+    }
+    preflight_result_ = helix::PreflightValidator::validate(tools, slots, mapping);
+
+    bool any_mismatch = false;
+    for (const auto& check : preflight_result_.checks) {
+        if (check.severity != helix::ToolCheck::Severity::Ok) {
+            any_mismatch = true;
+            break;
+        }
+    }
+    lv_subject_set_int(&filament_mismatch_, any_mismatch ? 1 : 0);
+    lv_subject_set_int(&empty_tools_warning_, preflight_result_.has_block() ? 1 : 0);
+
+    spdlog::debug("[DetailView] Preflight: {} tools, {} slots, {} checks, mismatch={}, block={}",
+                  tools.size(), slots.size(), preflight_result_.checks.size(), any_mismatch,
+                  preflight_result_.has_block());
+}
+
+std::set<int> PrintSelectDetailView::tools_used_effective() const {
+    // Prefer the visual viewer's parsed set (full platforms): it carries the
+    // single-extruder {0} convention from a color palette. Fall back to the
+    // headless scan (2D-only platforms, where the viewer never parses).
+    if (gcode_viewer_) {
+        if (auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_)) {
+            if (!parsed->tools_used_indices.empty()) {
+                return parsed->tools_used_indices;
+            }
+        }
+    }
+    if (headless_tools_used_) {
+        return *headless_tools_used_;
+    }
+    return {};
+}
+
+std::set<int> PrintSelectDetailView::get_tools_used() const {
+    return tools_used_effective();
+}
+
+std::map<int, int> PrintSelectDetailView::get_effective_remap() const {
+    // default_head(t): the physical head a logical tool routes to with no remap.
+    // Tools 0..3 map to their identity head; anything else falls back to head 0.
+    auto default_head = [](int tool) { return (tool >= 0 && tool <= 3) ? tool : 0; };
+
+    std::map<int, int> remap;
+    for (const auto& m : filament_mapping_card_.get_mappings()) {
+        // Only include genuine remaps: a real slot assignment that differs from
+        // the firmware-default head for this tool. Identity mappings are omitted
+        // (the firmware already routes them). On U1 today the card is hidden so
+        // get_mappings() is empty and this stays empty (Part A / identity).
+        if (m.mapped_slot >= 0 && m.mapped_slot != default_head(m.tool_index)) {
+            remap[m.tool_index] = m.mapped_slot;
+        }
+    }
+    return remap;
+}
+
+void PrintSelectDetailView::open_filament_mapping_modal() {
+    filament_mapping_card_.open_mapping_modal();
+}
+
+void PrintSelectDetailView::run_when_loaded(std::function<void()> cb) {
+    if (!cb) {
+        return;
+    }
+    // Already parsed: preflight_result_ is fresh, run synchronously (main thread).
+    if (gcode_loaded_) {
+        cb();
+        return;
+    }
+    // Parse still in flight: store; fire_on_loaded() invokes it post-parse.
+    on_loaded_cb_ = std::move(cb);
+}
+
+void PrintSelectDetailView::fire_on_loaded() {
+    if (on_loaded_cb_) {
+        auto cb = std::move(on_loaded_cb_);
+        on_loaded_cb_ = nullptr;
+        cb();
+    }
+}
+
+void PrintSelectDetailView::run_when_preflight_ready(std::function<void()> cb) {
+    if (!cb) {
+        return;
+    }
+    // Already ready (viewer parsed or headless scan done): run synchronously.
+    if (is_preflight_ready()) {
+        cb();
+        return;
+    }
+    on_preflight_ready_cb_ = std::move(cb);
+
+    // Arm a one-shot safety timeout so a stuck/failed scan can never wedge the
+    // print. On expiry we fire the deferred attempt anyway (graceful degradation:
+    // print without Part A's optimization rather than never starting).
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+    preflight_ready_timeout_timer_ = lv_timer_create(
+        [](lv_timer_t* t) {
+            auto* self = static_cast<PrintSelectDetailView*>(lv_timer_get_user_data(t));
+            spdlog::warn("[DetailView] Pre-flight readiness timed out — proceeding without "
+                         "tools_used (graceful degradation)");
+            // Mark done so a later readiness signal doesn't double-fire, and so
+            // is_preflight_ready() returns true for the deferred re-entry.
+            self->headless_scan_done_ = true;
+            self->fire_on_preflight_ready();
+        },
+        kPreflightReadyTimeoutMs, this);
+    lv_timer_set_repeat_count(preflight_ready_timeout_timer_, 1);
+}
+
+void PrintSelectDetailView::fire_on_preflight_ready() {
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+    if (on_preflight_ready_cb_) {
+        auto cb = std::move(on_preflight_ready_cb_);
+        on_preflight_ready_cb_ = nullptr;
+        cb();
+    }
+}
+
+void PrintSelectDetailView::kick_off_headless_tools_scan() {
+    headless_scan_done_ = false;
+    headless_tools_used_.reset();
+
+    if (!api_ || current_filename_.empty()) {
+        // No way to scan — mark done with no result so the gate degrades to
+        // "proceed without tools_used" instead of hanging.
+        headless_scan_done_ = true;
+        return;
+    }
+
+    const std::string file_path =
+        current_path_.empty() ? current_filename_ : current_path_ + "/" + current_filename_;
+
+    std::string cache_dir = get_helix_cache_dir("gcode_temp");
+    if (cache_dir.empty()) {
+        spdlog::warn("[DetailView] No cache dir for headless tools scan — degrading gracefully");
+        headless_scan_done_ = true;
+        return;
+    }
+    const std::string scan_path =
+        cache_dir + "/tools_scan_" +
+        std::to_string(std::hash<std::string>{}(file_path)) + ".gcode";
+
+    auto tok = lifetime_.token();
+
+    // Marshals the final state back to the main thread (LVGL + member writes).
+    auto finish = [this, tok](std::set<int> tools) {
+        tok.defer("DetailView::headless_scan_finish",
+                  [this, tools = std::move(tools)]() mutable {
+                      headless_tools_used_ = std::move(tools);
+                      headless_scan_done_ = true;
+                      spdlog::debug("[DetailView] Headless tools_used scan complete: {} tools",
+                                    headless_tools_used_->size());
+
+                      // Render the per-tool color swatches from the REAL used-tool
+                      // set recovered by the headless scan. On 2D-only platforms
+                      // (Snapmaker U1, AD5M) the gcode viewer never parses, so
+                      // try_extract_gcode_colors() — the viewer-parse owner of this
+                      // render — never fires and the detail panel would otherwise
+                      // show no color info at all (regression 22d37fd47). Mirror its
+                      // visibility decision and renderer here, sourcing the tool set
+                      // from tools_used_effective() so the swatches reflect the
+                      // precise used tools (e.g. {0,2}), not an over-counted palette.
+                      //
+                      // Guard on !is_gcode_loaded(): when the viewer DID parse (full
+                      // platforms) it already owns the render — don't double-fire.
+                      if (!is_gcode_loaded()) {
+                          const bool mapping_visible = filament_mapping_card_.should_show();
+                          const auto tools_used = tools_used_effective();
+                          const bool swatches_visible =
+                              !mapping_visible && swatches_card_visible_for(tools_used.size());
+                          lv_subject_set_int(&color_swatches_visible_,
+                                             swatches_visible ? 1 : 0);
+                          if (swatches_visible) {
+                              update_color_swatches(tools_used, current_filament_colors_);
+                          }
+                      }
+
+                      // Refresh pre-flight using the headless set (no-op on full
+                      // platforms where the viewer parse already populated it).
+                      recompute_preflight();
+                      // Release any deferred print attempt waiting on readiness.
+                      fire_on_preflight_ready();
+                  });
+    };
+
+    // Stream the whole file to disk (memory-safe), then scan it line-by-line off
+    // the main thread. The scan retains ONLY the int set — no geometry — so it is
+    // safe on constrained devices. download_file_to_path runs on the HTTP slow
+    // lane internally; the success/error callbacks run on the HTTP thread, so we
+    // do the (bg-only, no `this`) scan there and marshal the result via tok.defer.
+    api_->transfers().download_file_to_path(
+        "gcodes", file_path, scan_path,
+        [scan_path, finish](const std::string& path) mutable {
+            // HTTP thread: parse to a LOCAL set (no `this` access), then delete the
+            // temp file. The scanner streams from disk and never holds the whole
+            // file in memory.
+            std::set<int> tools = helix::gcode::scan_tools_used_from_file(path);
+            std::remove(scan_path.c_str());
+            finish(std::move(tools));
+        },
+        [scan_path, finish](const MoonrakerError& err) mutable {
+            // HTTP thread: download failed — degrade gracefully with an empty set.
+            spdlog::warn("[DetailView] Headless tools scan download failed: {} — proceeding "
+                         "without tools_used",
+                         err.message);
+            std::remove(scan_path.c_str());
+            finish({});
+        });
 }
 
 bool PrintSelectDetailView::swatches_card_visible_for(size_t tool_count) const {
@@ -934,8 +1257,17 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                     self->apply_tool_colors();
                     self->apply_mapped_tool_colors();
 
-                    // Extract colors from parsed gcode when metadata lacked them
+                    // Extract colors from parsed gcode when metadata lacked them.
+                    // This also computes preflight_result_ — it MUST run before
+                    // fire_on_loaded() so any deferred print-attempt sees fresh checks.
                     self->try_extract_gcode_colors(viewer);
+
+                    // Parse + pre-flight are now complete: release any deferred
+                    // run_when_loaded() callback (e.g. a print tapped pre-parse).
+                    self->fire_on_loaded();
+                    // The viewer parse also satisfies pre-flight readiness on full
+                    // platforms — release any run_when_preflight_ready() attempt.
+                    self->fire_on_preflight_ready();
 
                     // Unpause, show, then reset camera (must be visible for layout)
                     ui_gcode_viewer_set_paused(viewer, false);
@@ -1025,8 +1357,17 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                                 self->apply_tool_colors();
                                 self->apply_mapped_tool_colors();
 
-                                // Extract colors from parsed gcode when metadata lacked them
+                                // Extract colors from parsed gcode when metadata lacked them.
+                                // Also computes preflight_result_ — MUST run before
+                                // fire_on_loaded() so a deferred print sees fresh checks.
                                 self->try_extract_gcode_colors(viewer);
+
+                                // Parse + pre-flight complete: release any deferred
+                                // run_when_loaded() callback (e.g. a pre-parse print tap).
+                                self->fire_on_loaded();
+                                // Viewer parse also satisfies pre-flight readiness
+                                // on full platforms.
+                                self->fire_on_preflight_ready();
 
                                 // Unpause, show, then reset camera (must be visible for layout)
                                 ui_gcode_viewer_set_paused(viewer, false);

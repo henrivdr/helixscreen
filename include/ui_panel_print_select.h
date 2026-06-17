@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "ui_filament_mapping_modal.h"
 #include "ui_observer_guard.h"
 #include "ui_panel_base.h"
 #include "ui_plugin_install_modal.h"
@@ -381,6 +382,17 @@ class PrintSelectPanel : public PanelBase {
     void hide_detail_view();
 
     /**
+     * @brief Access the print start controller (owned by this panel).
+     *
+     * Exposed so the print status panel's reprint path can route through the
+     * controller's initiate_reprint() — sharing the Snapmaker U1 native
+     * pre-print send instead of bypassing it.
+     */
+    [[nodiscard]] helix::ui::PrintStartController* get_print_start_controller() const {
+        return print_controller_.get();
+    }
+
+    /**
      * @brief Show delete confirmation dialog
      */
     void show_delete_confirmation();
@@ -427,6 +439,24 @@ class PrintSelectPanel : public PanelBase {
     void start_print(bool force = false);
 
     /**
+     * @brief Show the enriched pre-flight filament check modal.
+     *
+     * Replaces the simple confirmation dialog. Renders a per-tool breakdown of
+     * intended vs seated filament and offers Remap… / Cancel / Print Anyway.
+     * Print Anyway re-enters start_print(true); Remap… routes by backend
+     * strategy via on_preflight_remap().
+     */
+    void show_preflight_modal(const helix::PreflightResult& pf);
+
+    /**
+     * @brief Route a Remap… request to the strategy-appropriate remap UI.
+     *
+     * Dispatches on the active backend's RemapStrategy: Native backends open
+     * the native remap modal; GcodeRewrite backends open the gcode remap modal.
+     */
+    void on_preflight_remap();
+
+    /**
      * @brief Delete currently selected file
      */
     void delete_file();
@@ -437,6 +467,10 @@ class PrintSelectPanel : public PanelBase {
     void hide_delete_confirmation();
 
   private:
+    // Remap UI entry points dispatched by on_preflight_remap().
+    void open_native_remap_modal();
+    void open_gcode_remap_modal();
+
     //
     // === Constants ===
     //
@@ -571,6 +605,11 @@ class PrintSelectPanel : public PanelBase {
 
     // Print start controller (handles print initiation workflow, warnings)
     std::unique_ptr<helix::ui::PrintStartController> print_controller_;
+
+    // Tool-remap picker for GcodeRewrite backends (U1 / ACE). Embedded so its
+    // lifecycle follows the panel; ModalStack manages the on-screen dialog. Reused
+    // across remap invocations (same pattern as FilamentMappingCard's member modal).
+    helix::ui::FilamentMappingModal gcode_remap_modal_;
 
     // File sorter (handles sorting logic for file list)
     helix::ui::PrintSelectFileSorter file_sorter_;

@@ -71,6 +71,10 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     [[nodiscard]] AmsType get_type() const override;
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
 
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::Native;
+    }
+
     /// Klipper tool-changers have one extruder per tool. Tool N sources slot N
     /// directly — identity mapping — which activates per-extruder consumption
     /// tracking in FilamentConsumptionTracker.

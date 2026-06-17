@@ -8,6 +8,7 @@
 #include "ams_backend.h"
 #include "ams_types.h"
 #include "filament_consumption_tracker.h"
+#include "filament_mapper.h"
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
 
@@ -182,6 +183,25 @@ class AmsState {
      * @brief Remove and stop all backends
      */
     void clear_backends();
+
+    /**
+     * @brief Flatten the live AMS state of every backend into AvailableSlots.
+     *
+     * Walks each registered backend's get_system_info() and converts each
+     * unit's slots into the LVGL-free helix::AvailableSlot abstraction
+     * (mapping SlotStatus::EMPTY/UNKNOWN to is_empty, copying color/material,
+     * unit/global indices, and current tool mapping).
+     *
+     * This is the canonical "live loaded-filament slot view" shared by the
+     * FilamentMappingCard, the print detail view's backend-agnostic preflight
+     * validation, and the print-start gate. It reads backend state directly,
+     * independent of any UI/card visibility — the card's update() returns early
+     * for non-editable backends (Snapmaker U1 / ACE), so its own cache is empty
+     * for exactly those backends, but this accessor still reports their slots.
+     *
+     * @return One AvailableSlot per slot across all backends (empty if none).
+     */
+    [[nodiscard]] std::vector<helix::AvailableSlot> collect_available_slots() const;
 
     /**
      * @brief Check if AMS is available
