@@ -218,6 +218,10 @@ class WiFiManager {
     void init_self_reference(std::shared_ptr<WiFiManager> self);
 
   private:
+    // Grants the auth-failure-debounce regression test direct access to the
+    // connection handlers and grace-timer state (helixscreen#1050).
+    friend class WiFiManagerTestAccess;
+
     std::unique_ptr<WifiBackend> backend_;
 
     // Self-reference for async callback safety
@@ -233,6 +237,20 @@ class WiFiManager {
     std::function<void(bool, const std::string&)> connect_callback_;
     bool connecting_in_progress_ =
         false; // True during connect attempt, prevents false failure on DISCONNECTED
+
+    // Auth-failure debounce (helixscreen#1050). Some adapters' wpa_supplicant emit a
+    // transient CTRL-EVENT-SSID-TEMP-DISABLED/WRONG_KEY mid-handshake on a connect that
+    // ultimately succeeds (CONNECTED follows ~1-3s later). Treating that AUTH_FAILED as
+    // terminal latched failure into the wizard while WiFi was actually up. Instead the
+    // failure is deferred for a grace window; a CONNECTED arriving within it preempts and
+    // delivers success. Only a real wrong password (no CONNECTED) surfaces the error.
+    // Touched on the UI thread only (the timer and the queue_update apply lambdas).
+    lv_timer_t* auth_fail_grace_timer_ = nullptr;
+    std::string pending_auth_error_;
+    void start_auth_fail_grace(const std::string& error); // arm/restart grace window
+    void cancel_auth_fail_grace();                         // CONNECTED preempted the failure
+    void deliver_auth_failure();                           // grace elapsed — failure is real
+    static void auth_fail_grace_timer_cb(lv_timer_t* timer);
 
     // Event handling
     void handle_scan_complete(const std::string& event_data);

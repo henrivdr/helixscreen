@@ -983,6 +983,15 @@ void AmsPanel::refresh_slots() {
 
     int current_slot = lv_subject_get_int(AmsState::instance().get_current_slot_subject());
     update_current_slot_highlight(current_slot);
+
+    // P2 (#1045): a per-slot status change (e.g. idle-lane unload) must also
+    // re-read the backend's per-slot filament segments so a now-empty lane's
+    // stale lane→hub tube is cleared. update_path_canvas_from_backend() reads
+    // get_slot_filament_segment() live and repaints the canvas. It internally
+    // guards against a missing canvas (ams_detail_setup_path_canvas() returns
+    // early when canvas/backend is null) and never writes slot subjects, so it
+    // can't recurse back into a slots_version bump.
+    update_path_canvas_from_backend();
 }
 
 // ============================================================================

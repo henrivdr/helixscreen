@@ -300,6 +300,19 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
         }
     }
 
+    // QIDI Box: a lane with ejectable filament but [force_move] enable_force_move
+    // off means eject is unavailable (supports_lane_eject() is false). Surface a
+    // one-line hint pointing at the config instead of silently omitting the
+    // action — for QIDI, !supports_eject here can only mean force_move is off
+    // (the box always supports eject otherwise). See #1041.
+    if (backend_ && backend_->get_type() == AmsType::QIDI_BOX && !supports_eject &&
+        !pending_is_loaded_ && slot_has_filament) {
+        lv_obj_t* hint = lv_obj_find_by_name(menu_obj, "eject_force_move_hint");
+        if (hint) {
+            lv_obj_remove_flag(hint, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     // Determine if slot has filament for Load button state
     // Disable Load if: system busy, slot empty, OR slot is already loaded
     // (live: firmware seated/loaded or filament at this slot's toolhead).

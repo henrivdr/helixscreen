@@ -43,6 +43,14 @@
         <bind_state_if_eq subject="ams_slot_is_loaded" state="disabled" ref_value="0"/>
         <event_cb trigger="clicked" callback="ams_context_unload_cb"/>
       </ui_button>
+      <!-- Eject hint (QIDI Box): a lane has ejectable filament but
+           [force_move] enable_force_move is off, so eject is unavailable.
+           Revealed from C++ instead of silently omitting the action (#1041). -->
+      <text_small name="eject_force_move_hint"
+                  width="100%" long_mode="wrap"
+                  text="Eject needs [force_move] enabled in printer config"
+                  translation_tag="Eject needs [force_move] enabled in printer config"
+                  style_text_color="#text_muted" hidden="true"/>
       <!-- Reset Lane Button (hidden unless backend supports it) -->
       <ui_button name="btn_reset_lane"
                  height="#button_height_sm" icon="refresh" text="Reset" translation_tag="Reset"

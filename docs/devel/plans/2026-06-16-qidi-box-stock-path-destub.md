@@ -1,6 +1,13 @@
 # QIDI Box Stock-Firmware Path — De-Stub Plan (#1022 / #1030)
 
-**Status:** In progress — S2/S3/S6 **merged to main** (`801456169`, 2026-06-16); S1/S4/S5 device-gated on #1041 · **Created:** 2026-06-16 · **Tracking issue:** **#1041** (stock-path de-stub + data collection) · refs #1022 (verify), #1030 (firmware dumps)
+**Status:** S1/S4/S5 **resolved 2026-06-16** from Camden's #1041 hardware data (S2/S3/S6 already merged in `801456169`) · **Created:** 2026-06-16 · **Tracking issue:** **#1041** (stock-path de-stub + data collection) · refs #1022 (verify), #1030 (firmware dumps)
+
+> **Resolved 2026-06-16 from Camden-Winder's Q2+Box stock-firmware data (#1041):**
+> - **S1 (dryer indicator never appears):** the real gate the first triage missed was `ams_detail_pre_show_env_indicator()` hard-hiding the widget unless `backend->has_environment_sensors()` — which QIDI never overrode (ACE/HH/CFS all do). Fixed by overriding it → `true`. The `env_ind_visible_` subject was already correct.
+> - **S4 (load fails at 250°C):** load-gate theory was **wrong** — Camden's dump shows `enable_box==1` already. Real cause: `T<n>` is the wrong primitive (T0–T3 macros don't exist on Q2 1.1.1 — only T4+) and nothing managed hotend temp. Fixed by driving the verified `EXTRUDER_LOAD SLOT=slot<n>` directly: `[M603 if a different slot loaded] → M109 S<temp> → EXTRUDER_LOAD → CLEAR_NOZZLE → M104 S0`. Backend now owns preheat (`supports_auto_heat_on_load()` → true); temp from the slot's filas profile (`nozzle_max`), default 250.
+> - **S5 (unload / eject):** `UNLOAD_T<n>` / `UNLOAD_FILAMENT` proved inert; `M603` is the stock unload (verified) → `unload_filament()` emits `M603 S<temp>`. **Eject stays unsupported** — Camden confirmed no discrete eject macro in stock config.
+> - **change_tool** rerouted through the load path (T<n> was equally broken).
+> - Tests in `tests/unit/test_ams_backend_qidi.cpp` updated to the new command surface (75 `[qidi_box]` cases green). **Still ships blind** — Camden to verify the full automated sequence on hardware.
 
 > **Shipped 2026-06-16** (`5a3ce17a3`, 71/71 `[qidi_box]` tests): `set_slot_info()` writes `filament_slot/color_slot/vendor_slot` via `SAVE_VARIABLE` (fixes "Feature not available"); `apply_filas_list()` retains name/type + parses `[colordict]`/`[vendor_list]`; read-path resolves ids → material/color/brand; `on_started()` queries `heater_box1`+`aht20_f heater_box1` for immediate temp/humidity. Remaining: S1 (dryer overlay visibility — needs `-vv` log), S4 (load `enable_box` gate), S5 (eject) — all need Camden's #1041 data.
 

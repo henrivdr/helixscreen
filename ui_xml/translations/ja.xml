@@ -122,17 +122,20 @@
   <translation tag="All" ja="すべて"/>
   <translation tag="All Devices" ja="すべてのデバイス"/>
   <translation tag="All axes homed" ja="すべての軸がホーミング済み"/>
+  <translation tag="Allow cold load/unload"/>
   <translation tag="Allow display to sleep during active prints" ja="印刷中のスリープを許可"/>
   <translation tag="Allwinner" ja="Allwinner"/>
   <translation tag="Already connecting — wait a moment and try again" ja="接続処理中です — 少し待ってからもう一度お試しください"/>
   <translation tag="Always show Android navigation bar instead of using gestures" ja="ジェスチャーの代わりにAndroidナビゲーションバーを常に表示"/>
   <translation tag="Ambient Transfer" ja="環境熱伝達"/>
+  <translation tag="AmsIdentify"/>
   <translation tag="An accelerometer was detected on your printer." ja="プリンターで加速度センサーが検出されました。"/>
   <translation tag="An error occurred during calibration." ja="キャリブレーション中にエラーが発生しました。"/>
   <translation tag="An error occurred during probing." ja="プローブ中にエラーが発生しました。"/>
   <translation tag="An error occurred while loading filament." ja="フィラメントの装填中にエラーが発生しました。"/>
   <translation tag="An unexpected printer error occurred." ja="予期しないプリンターエラーが発生しました。"/>
   <translation tag="An update is available" ja="更新があります"/>
+  <translation tag="Android logcat"/>
   <translation tag="Animations" ja="アニメーション"/>
   <translation tag="Anonymous data to help improve HelixScreen" ja="HelixScreen改善のための匿名データ"/>
   <translation tag="Anonymous stats — no personal data, ever." ja="匿名の統計情報 — 個人データは一切収集しません。"/>
@@ -224,6 +227,7 @@
   <translation tag="Both belts need tightening." ja="両方のベルトを張る必要があります。"/>
   <translation tag="Brightness" ja="明るさ"/>
   <translation tag="Brightness level when LEDs turn on at startup" ja="起動時にLEDが点灯する際の明るさレベル"/>
+  <translation tag="BrightnessCLI"/>
   <translation tag="Brother PT (Bluetooth)" ja="Brother PT (Bluetooth)"/>
   <translation tag="Brother QL" ja="Brother QL"/>
   <translation tag="Brother QL (Bluetooth)" ja="Brother QL (Bluetooth)"/>
@@ -251,6 +255,7 @@
   <translation tag="CONFIGURATION" ja="設定"/>
   <translation tag="CONNECTION TYPE" ja="接続タイプ"/>
   <translation tag="CONTROLLABLE FANS" ja="制御可能なファン"/>
+  <translation tag="CPU"/>
   <translation tag="CRITICAL" ja="重大"/>
   <translation tag="CURRENT SELECTION" ja="現在の選択"/>
   <translation tag="CUSTOM IMAGES" ja="カスタム画像"/>
@@ -288,6 +293,8 @@
   <translation tag="Cannot modify G-code: no temp directory available" ja="G-code を変更できません: 一時ディレクトリがありません"/>
   <translation tag="Cannot modify G-code: scan result not available" ja="G-code を変更できません: スキャン結果がありません"/>
   <translation tag="Cannot modify G-code: {}. Printing original file." ja="G-code を変更できません: {}。元のファイルで印刷します。"/>
+  <translation tag="Cannot remap G-code: no temp directory available"/>
+  <translation tag="Cannot remap: internal error"/>
   <translation tag="Cannot reprint: not connected to printer" ja="再印刷できません: プリンター未接続"/>
   <translation tag="Cannot restart — no filename" ja="再起動できません — ファイル名がありません"/>
   <translation tag="Cannot start print: internal error" ja="印刷を開始できません: 内部エラー"/>
@@ -298,8 +305,10 @@
   <translation tag="Center QR code in frame" ja="QR コードをフレームの中央に合わせてください"/>
   <translation tag="Chamb:" ja="チャンバ:"/>
   <translation tag="Chamber" ja="チャンバー"/>
+  <translation tag="Chamber Cooling Fan"/>
   <translation tag="Chamber Fan" ja="チャンバーファン"/>
   <translation tag="Chamber Heater" ja="チャンバーヒーター"/>
+  <translation tag="Chamber Heater Fan"/>
   <translation tag="Chamber Sensor" ja="チャンバーセンサー"/>
   <translation tag="Chamber Temperature" ja="チャンバー温度"/>
   <translation tag="Chamber and dryer humidity monitoring" ja="チャンバーとドライヤーの湿度監視"/>
@@ -315,6 +324,7 @@
   <translation tag="Changes are temporary and reset on printer reboot" ja="変更は一時的で、プリンター再起動時にリセットされます"/>
   <translation tag="Changes can be reversed anytime using the Macro Viewer." ja="変更はいつでも Macro Viewer を使って元に戻せます。"/>
   <translation tag="Check Again" ja="再確認"/>
+  <translation tag="Check filament"/>
   <translation tag="Check for Updates" ja="更新を確認"/>
   <translation tag="Check slot" ja="スロットを確認"/>
   <translation tag="Check slot failed: {}" ja="スロットの確認に失敗しました: {}"/>
@@ -325,6 +335,7 @@
   <translation tag="Checking" ja="確認中"/>
   <translation tag="Checking Spoolman server..." ja="Spoolman サーバーを確認中..."/>
   <translation tag="Checking accelerometer..." ja="加速度センサーを確認中..."/>
+  <translation tag="Checking filament..."/>
   <translation tag="Checking for plugin..." ja="プラグインを確認中..."/>
   <translation tag="Checking slots..." ja="スロットを確認中..."/>
   <translation tag="Checking timelapse plugin..." ja="タイムラプスプラグインを確認中..."/>
@@ -534,6 +545,7 @@
   <translation tag="E-Stop Confirmation" ja="緊急停止の確認"/>
   <translation tag="EDDY CURRENT" ja="EDDY CURRENT"/>
   <translation tag="EMERGENCY STOP" ja="緊急停止"/>
+  <translation tag="EMPTY"/>
   <translation tag="Each fan can only be selected once" ja="各ファンは一度のみ選択できます"/>
   <translation tag="Edit" ja="編集"/>
   <translation tag="Edit Preset" ja="プリセットを編集"/>
@@ -543,7 +555,10 @@
   <translation tag="Edit Theme Colors (Modified)" ja="テーマカラーを編集（変更済み）"/>
   <translation tag="Effects" ja="エフェクト"/>
   <translation tag="Eject" ja="取り出し"/>
+  <translation tag="Eject Distance"/>
+  <translation tag="Eject Velocity"/>
   <translation tag="Eject failed: {}" ja="イジェクトに失敗しました: {}"/>
+  <translation tag="Eject needs [force_move] enabled in printer config"/>
   <translation tag="Elegoo Centauri Carbon" ja="Elegoo Centauri Carbon"/>
   <translation tag="Emergency Stop" ja="緊急停止"/>
   <translation tag="Emergency Stop?" ja="緊急停止しますか？"/>
@@ -627,6 +642,7 @@
   <translation tag="Failed to delete profile" ja="プロファイルの削除に失敗しました"/>
   <translation tag="Failed to delete spool" ja="スプールの削除に失敗しました"/>
   <translation tag="Failed to download G-code for modification: {}" ja="G-code の変更用ダウンロードに失敗しました: {}"/>
+  <translation tag="Failed to download G-code for remap: {}"/>
   <translation tag="Failed to download helixscreen.conf.\nCheck printer connection." ja="helixscreen.confのダウンロードに失敗しました。\nプリンター接続を確認してください。"/>
   <translation tag="Failed to download moonraker.conf.\nCheck printer connection." ja="moonraker.confのダウンロードに失敗しました。\nプリンター接続を確認してください。"/>
   <translation tag="Failed to duplicate spool" ja="スプールの複製に失敗しました"/>
@@ -636,6 +652,7 @@
   <translation tag="Failed to load G-code preview" ja="G-code プレビューの読み込みに失敗しました"/>
   <translation tag="Failed to load fan configuration screen" ja="ファン設定画面の読み込みに失敗しました"/>
   <translation tag="Failed to load fan control overlay" ja="ファン制御オーバーレイの読み込みに失敗しました"/>
+  <translation tag="Failed to load filament: {}"/>
   <translation tag="Failed to load file details" ja="ファイル詳細の読み込みに失敗しました"/>
   <translation tag="Failed to load history" ja="履歴の読み込みに失敗しました"/>
   <translation tag="Failed to load overlay" ja="オーバーレイの読み込みに失敗しました"/>
@@ -649,10 +666,12 @@
   <translation tag="Failed to open wizard" ja="ウィザードを開けませんでした"/>
   <translation tag="Failed to pause print: {}" ja="印刷の一時停止に失敗しました: {}"/>
   <translation tag="Failed to purge: {}" ja="パージに失敗しました: {}"/>
+  <translation tag="Failed to read G-code for remap"/>
   <translation tag="Failed to read config." ja="設定の読み込みに失敗しました。"/>
   <translation tag="Failed to read config. Check connection." ja="設定の読み込みに失敗しました。接続を確認してください。"/>
   <translation tag="Failed to read moonraker.conf." ja="moonraker.confの読み込みに失敗しました。"/>
   <translation tag="Failed to refresh file list" ja="ファイルリストの更新に失敗しました"/>
+  <translation tag="Failed to remap G-code: {}"/>
   <translation tag="Failed to reprint: {}" ja="再印刷に失敗しました: {}"/>
   <translation tag="Failed to reset flow: {}" ja="フローのリセットに失敗しました: {}"/>
   <translation tag="Failed to reset speed: {}" ja="速度のリセットに失敗しました: {}"/>
@@ -691,11 +710,14 @@
   <translation tag="Failed to update moonraker.conf.\nCheck printer connection." ja="moonraker.confの更新に失敗しました。\nプリンター接続を確認してください。"/>
   <translation tag="Failed to update phase tracking" ja="フェーズトラッキングの更新に失敗しました"/>
   <translation tag="Failed to upload modified G-code: {}" ja="変更済み G-code のアップロードに失敗しました: {}"/>
+  <translation tag="Failed to upload remapped G-code: {}"/>
   <translation tag="Fan Calibration" ja="ファンキャリブレーション"/>
   <translation tag="Fan Transfer" ja="ファン熱伝達"/>
   <translation tag="Fan control failed: {}" ja="ファン制御に失敗しました: {}"/>
+  <translation tag="FanSelect"/>
   <translation tag="Fans" ja="ファン"/>
   <translation tag="Farther" ja="遠く"/>
+  <translation tag="Feed filament"/>
   <translation tag="Feed filament directly to extruder" ja="フィラメントをエクストルーダーに直接供給"/>
   <translation tag="Feeding filament forward" ja="フィラメントを前方に送り出し中"/>
   <translation tag="Filament" ja="フィラメント"/>
@@ -720,6 +742,7 @@
   <translation tag="Filament tracking and inventory" ja="フィラメント追跡と在庫管理"/>
   <translation tag="Filament unload failed: {}" ja="フィラメントの取出しに失敗しました: {}"/>
   <translation tag="Filament unloaded" ja="フィラメントを取出しました"/>
+  <translation tag="FilamentSensor"/>
   <translation tag="File" ja="ファイル"/>
   <translation tag="File Info" ja="ファイル情報"/>
   <translation tag="Filename" ja="ファイル名"/>
@@ -767,6 +790,7 @@
   <translation tag="Gray" ja="グレー"/>
   <translation tag="Guides and reference" ja="ガイドとリファレンス"/>
   <translation tag="H" ja="H"/>
+  <translation tag="HOST"/>
   <translation tag="HUMIDITY SENSORS" ja="湿度センサー"/>
   <translation tag="Hang on, we&apos;ll be right back!" ja="しばらくお待ちください。すぐに戻ります！"/>
   <translation tag="Happy Hare MMU" ja="Happy Hare MMU"/>
@@ -791,6 +815,7 @@
   <translation tag="Heated Bed PID Tuning" ja="ヒートベッド PIDチューニング"/>
   <translation tag="Heater" ja="ヒーター"/>
   <translation tag="Heater Power" ja="ヒーター出力"/>
+  <translation tag="HeaterSelect"/>
   <translation tag="Heaters off" ja="ヒーターをオフにしました"/>
   <translation tag="Heating" ja="加熱中"/>
   <translation tag="Heating (%d°C below minimum)" ja="&quot;加熱中（最低温度より%d°C低い）&quot;"/>
@@ -834,6 +859,7 @@
   <translation tag="Hotend Heater" ja="ホットエンドヒーター"/>
   <translation tag="Hours" ja="時間"/>
   <translation tag="How Z-axis movement is displayed" ja="Z軸の移動表示方法"/>
+  <translation tag="How far filament is pushed back into the box on eject (mm)"/>
   <translation tag="How many labels to print" ja="印刷するラベル枚数"/>
   <translation tag="How the toolhead icon appears" ja="ツールヘッドアイコンの表示スタイル"/>
   <translation tag="Humidity" ja="湿度"/>
@@ -862,12 +888,14 @@
   <translation tag="Input shaper settings applied!" ja="インプットシェーパー設定が適用されました！"/>
   <translation tag="Input shaping reduces ringing and ghosting artifacts caused by printer vibrations during fast movements." ja="インプットシェーピングは高速移動時のプリンター振動によるリンギングやゴーストのアーティファクトを軽減します。"/>
   <translation tag="Input shaping reduces vibration artifacts (ringing) in your prints." ja="インプットシェーピングは印刷物の振動アーティファクト（リンギング）を軽減します。"/>
+  <translation tag="InputShaper"/>
   <translation tag="Insert filament before resuming" ja="再開前にフィラメントを挿入してください"/>
   <translation tag="Install" ja="インストール"/>
   <translation tag="Install HelixPrint Plugin" ja="HelixPrint プラグインをインストール"/>
   <translation tag="Install Plugin" ja="プラグインをインストール"/>
   <translation tag="Install Root" ja="インストールルート"/>
   <translation tag="Install Update" ja="更新をインストール"/>
+  <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history."/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" ja="高速 G-code 修正を有効にするために HelixPrint プラグインをインストールしてください。プリンターで SSH 経由でこのコマンドを実行してください:"/>
   <translation tag="Install the timelapse plugin via SSH,\nthen tap \&quot;Check Again\&quot;." ja="SSHでタイムラプスプラグインをインストールし、\n「再確認」をタップしてください。"/>
   <translation tag="Install timelapse plugin" ja="タイムラプスプラグインをインストール"/>
@@ -923,6 +951,7 @@
   <translation tag="Layers" ja="レイヤー"/>
   <translation tag="Layout" ja="レイアウト"/>
   <translation tag="Learn More" ja="詳細を見る"/>
+  <translation tag="LedSelect"/>
   <translation tag="Length:" ja="長さ:"/>
   <translation tag="Leveling Gantry..." ja="ガントリーレベリング中..."/>
   <translation tag="Library" ja="ライブラリ"/>
@@ -955,6 +984,7 @@
   <translation tag="Lock screen after idle timeout" ja="アイドルタイムアウト後に画面をロック"/>
   <translation tag="Locked during print" ja="印刷中はロックされています"/>
   <translation tag="Log Level" ja="ログレベル"/>
+  <translation tag="Logs"/>
   <translation tag="Loosen Path A belt." ja="パスAのベルトを緩めてください。"/>
   <translation tag="Loosen Path B belt." ja="パスBのベルトを緩めてください。"/>
   <translation tag="Lost connection during print — try again" ja="印刷中に接続が切断されました — もう一度お試しください"/>
@@ -965,6 +995,7 @@
   <translation tag="MACRO DEVICES" ja="マクロデバイス"/>
   <translation tag="MAIN POWER BUTTON" ja="メイン電源ボタン"/>
   <translation tag="MANUAL" ja="手動"/>
+  <translation tag="MCU"/>
   <translation tag="MCU, host, and auxiliary temperature monitoring" ja="MCU、ホスト、補助温度の監視"/>
   <translation tag="MDI Icons" ja="MDI アイコン"/>
   <translation tag="MISSING CONFIGURED" ja="設定済みが見つかりません"/>
@@ -991,6 +1022,7 @@
   <translation tag="Macro to unload filament from extruder" ja="エクストルーダーからフィラメントを排出するマクロ"/>
   <translation tag="Macros" ja="マクロ"/>
   <translation tag="Main LED Strip" ja="メインLEDストリップ"/>
+  <translation tag="Maintaining"/>
   <translation tag="Make %s Optional?" ja="%sをオプションにしますか？"/>
   <translation tag="Make Optional" ja="オプションにする"/>
   <translation tag="Make bed mesh and QGL skippable" ja="ベッドメッシュと QGL をスキップ可能にする"/>
@@ -1007,6 +1039,7 @@
   <translation tag="Match your typical print fan speed" ja="通常の印刷ファン速度に合わせてください"/>
   <translation tag="Material" ja="素材"/>
   <translation tag="Material Comfort" ja="素材コンフォート"/>
+  <translation tag="Material Comfort:"/>
   <translation tag="Material Design Spinner" ja="マテリアルデザインスピナー"/>
   <translation tag="Material Mismatch" ja="素材の不一致"/>
   <translation tag="Material Temperatures" ja="素材温度"/>
@@ -1025,6 +1058,7 @@
   <translation tag="Measured" ja="測定値"/>
   <translation tag="Measurement Failed" ja="測定失敗"/>
   <translation tag="Mechanical setup" ja="機械的セットアップ"/>
+  <translation tag="Memory"/>
   <translation tag="Memory (MB)" ja="メモリ (MB)"/>
   <translation tag="Mesh Complete" ja="メッシュ完了"/>
   <translation tag="Mesh saved as &apos;{}&apos;" ja="&quot;メッシュを &apos;{}&apos; として保存しました&quot;"/>
@@ -1032,6 +1066,7 @@
   <translation tag="Min" ja="最小"/>
   <translation tag="Minimal" ja="ミニマル"/>
   <translation tag="Minimum" ja="最小"/>
+  <translation tag="Minutes"/>
   <translation tag="Mode" ja="モード"/>
   <translation tag="Modified" ja="変更日時"/>
   <translation tag="Monitoring" ja="モニタリング"/>
@@ -1149,6 +1184,7 @@
   <translation tag="Not yet calibrated" ja="未キャリブレーション"/>
   <translation tag="Notes" ja="メモ"/>
   <translation tag="Notes (optional)" ja="メモ（オプション）"/>
+  <translation tag="Nothing to remap"/>
   <translation tag="Notification" ja="通知"/>
   <translation tag="Notifications" ja="通知"/>
   <translation tag="Notify when print finishes" ja="印刷完了時に通知"/>
@@ -1188,6 +1224,7 @@
   <translation tag="Or Enter Manually" ja="または手動で入力"/>
   <translation tag="Oscillating... cycle %d/%d" ja="振動中... サイクル %d/%d"/>
   <translation tag="Out of range" ja="範囲外"/>
+  <translation tag="Output Device"/>
   <translation tag="Output Mode" ja="出力モード"/>
   <translation tag="Output Pin" ja="出力ピン"/>
   <translation tag="Overheating" ja="過熱"/>
@@ -1230,6 +1267,7 @@
   <translation tag="Pausing..." ja="一時停止中..."/>
   <translation tag="Peak Freq" ja="ピーク周波数"/>
   <translation tag="Peak:" ja="ピーク:"/>
+  <translation tag="Performance"/>
   <translation tag="Phase Tracking" ja="フェーズトラッキング"/>
   <translation tag="Phase tracking disabled" ja="フェーズトラッキング無効"/>
   <translation tag="Phase tracking enabled" ja="フェーズトラッキング有効"/>
@@ -1277,6 +1315,7 @@
   <translation tag="Preset" ja="プリセット"/>
   <translation tag="Preset ID: {}" ja="プリセット ID: {}"/>
   <translation tag="Presets" ja="プリセット"/>
+  <translation tag="Press Abort to stop"/>
   <translation tag="Press Scan to search" ja="スキャンを押して検索"/>
   <translation tag="Pressure:" ja="圧力:"/>
   <translation tag="Preview Sounds" ja="サウンドをプレビュー"/>
@@ -1304,9 +1343,12 @@
   <translation tag="Print Tuning" ja="印刷チューニング"/>
   <translation tag="Print Was Terminated" ja="印刷が中止されました"/>
   <translation tag="Print failed" ja="印刷失敗"/>
+  <translation tag="Print issue detected"/>
   <translation tag="Print preparation failed: {}" ja="印刷準備に失敗しました: {}"/>
   <translation tag="Print quality" ja="印刷品質"/>
   <translation tag="Print server rejected the job — check printer status" ja="印刷サーバーがジョブを拒否しました — プリンターの状態を確認してください"/>
+  <translation tag="Print setup failed"/>
+  <translation tag="Print setup failed: internal error"/>
   <translation tag="Printer" ja="プリンター"/>
   <translation tag="Printer Error" ja="プリンターエラー"/>
   <translation tag="Printer Firmware Disconnected" ja="プリンターファームウェア切断"/>
@@ -1332,6 +1374,7 @@
   <translation tag="Printer is not paired — pair it first" ja="プリンターがペアリングされていません — 先にペアリングしてください"/>
   <translation tag="Printer name" ja="プリンター名"/>
   <translation tag="Printer ready" ja="プリンター準備完了"/>
+  <translation tag="PrinterIdentify"/>
   <translation tag="Printers" ja="プリンター"/>
   <translation tag="Printers, Multi-Filament System, fans, sensors, and LEDs" ja="プリンター、マルチフィラメントシステム、ファン、センサー、LED"/>
   <translation tag="Printing" ja="印刷中"/>
@@ -1406,8 +1449,10 @@
   <translation tag="Recover MMU state?" ja="MMU の状態を復旧しますか？"/>
   <translation tag="Recovering AFC system..." ja="AFCシステムを復旧中..."/>
   <translation tag="Recovery failed" ja="復旧失敗"/>
+  <translation tag="Reduce Sensitivity"/>
   <translation tag="Reduce ringing and ghosting artifacts" ja="リンギングとゴーストのアーティファクトを軽減"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" ja="リンギングやゴーストなどの振動アーティファクトを軽減"/>
+  <translation tag="Refill the spool, then Resume."/>
   <translation tag="Refresh" ja="更新"/>
   <translation tag="Refresh Interval" ja="更新間隔"/>
   <translation tag="Release all stepper motors. Position will be lost." ja="すべてのステッピングモーターを解放します。位置情報は失われます。"/>
@@ -1415,6 +1460,8 @@
   <translation tag="Remaining (g)" ja="残量 (g)"/>
   <translation tag="Remaining Weight (g)" ja="残量（g）"/>
   <translation tag="Remap Tool" ja="ツールを再割当"/>
+  <translation tag="Remap needs the HelixPrint plugin"/>
+  <translation tag="Remap…"/>
   <translation tag="Remove" ja="削除"/>
   <translation tag="Remove PIN" ja="PIN を削除"/>
   <translation tag="Remove Spoolman?" ja="Spoolman を削除しますか？"/>
@@ -1488,6 +1535,7 @@
   <translation tag="Run Macro" ja="マクロを実行"/>
   <translation tag="Run Macro?" ja="マクロを実行しますか？"/>
   <translation tag="Run a Klipper macro when preheating this material" ja="この素材の予熱時に Klipper マクロを実行"/>
+  <translation tag="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)"/>
   <translation tag="Run {}?" ja="{} を実行しますか？"/>
   <translation tag="Running {}..." ja="{} を実行中..."/>
   <translation tag="Runout Sensor" ja="フィラメント切れセンサー"/>
@@ -1640,6 +1688,7 @@
   <translation tag="Snapmaker SnapSwap" ja="Snapmaker SnapSwap"/>
   <translation tag="Snapmaker U1" ja="Snapmaker U1"/>
   <translation tag="Soft" ja="ソフト"/>
+  <translation tag="Some filaments don&apos;t match the slicer&apos;s intent."/>
   <translation tag="Some settings will take effect after restart." ja="一部の設定は再起動後に有効になります。"/>
   <translation tag="Sound Theme" ja="サウンドテーマ"/>
   <translation tag="Sounds" ja="サウンド"/>
@@ -1651,6 +1700,7 @@
   <translation tag="Speed change failed: {}" ja="速度変更に失敗しました: {}"/>
   <translation tag="Speed of prime movement" ja="プライム動作の速度"/>
   <translation tag="Speed of retraction movement" ja="リトラクション動作の速度"/>
+  <translation tag="Speed used to push filament out of the box (mm/s)"/>
   <translation tag="Spool" ja="スプール"/>
   <translation tag="Spool Details" ja="スプール詳細"/>
   <translation tag="Spool Info" ja="スプール情報"/>
@@ -1694,6 +1744,7 @@
   <translation tag="Step" ja="ステップ"/>
   <translation tag="Step 1 of 3" ja="ステップ 1/3"/>
   <translation tag="Step Progress Widget Test" ja="ステッププログレスウィジェットテスト"/>
+  <translation tag="Still working... taking longer than usual"/>
   <translation tag="Stop" ja="停止"/>
   <translation tag="Stop Drying" ja="乾燥を停止"/>
   <translation tag="Stop Print?" ja="印刷を停止しますか？"/>
@@ -1705,6 +1756,7 @@
   <translation tag="Success" ja="成功"/>
   <translation tag="Success Rate" ja="成功率"/>
   <translation tag="Success!" ja="成功！"/>
+  <translation tag="Summary"/>
   <translation tag="Support, documentation, and version info" ja="サポート、ドキュメント、バージョン情報"/>
   <translation tag="Suppress periodic &apos;T:.../B:...&apos; status lines" ja="定期的な &apos;T:.../B:...&apos; ステータス行を抑制"/>
   <translation tag="Suppress raw debug output from printer firmware modules" ja="プリンターファームウェアモジュールからの生のデバッグ出力を抑制"/>
@@ -1720,6 +1772,8 @@
   <translation tag="System" ja="システム"/>
   <translation tag="System Keyboard" ja="システムキーボード"/>
   <translation tag="System detected" ja="システムを検出しました"/>
+  <translation tag="T%d has no filament loaded — this print will run out."/>
+  <translation tag="T%d needs filament in slot %d, which is empty — this print will run out."/>
   <translation tag="TD-1 filament color detection" ja="TD-1 フィラメント色検出"/>
   <translation tag="TEMPERATURE SENSORS" ja="温度センサー"/>
   <translation tag="THEME COLORS" ja="テーマカラー"/>
@@ -1735,6 +1789,7 @@
   <translation tag="Tap to show keyboard..." ja="タップしてキーボードを表示..."/>
   <translation tag="Target Frequency" ja="目標周波数"/>
   <translation tag="Target Temperature" ja="目標温度"/>
+  <translation tag="Telemetry"/>
   <translation tag="Telemetry Data" ja="テレメトリデータ"/>
   <translation tag="Telemetry queue cleared" ja="テレメトリキューをクリアしました"/>
   <translation tag="Temp" ja="温度"/>
@@ -1759,6 +1814,7 @@
   <translation tag="The animated screensaver has been turned off on this device to prevent it from interfering with prints. You can re-enable it in Settings &gt; Display." ja="アニメーション付きスクリーンセーバーが印刷に干渉しないよう、このデバイスではオフになっています。設定 &gt; ディスプレイで再度有効にできます。"/>
   <translation tag="The heater will cycle on and off several times." ja="ヒーターは数回オン/オフを繰り返します。"/>
   <translation tag="The printer halted this print and cannot resume it. Restart from the beginning?" ja="プリンターはこの印刷を停止し、再開できません。最初からやり直しますか？"/>
+  <translation tag="The printer rejected the filament configuration. The print was not started."/>
   <translation tag="The runout sensor indicates no filament is loaded. Start print anyway?" ja="フィラメント切れセンサーがフィラメント未装填を検出しました。それでも印刷を開始しますか？"/>
   <translation tag="The toolhead sensor indicates filament is already loaded. Proceed with load anyway?" ja="ツールヘッドセンサーがフィラメント装填済みを検出しました。それでも装填を続行しますか？"/>
   <translation tag="The toolhead sensor indicates no filament is present. Proceed with unload anyway?" ja="ツールヘッドセンサーがフィラメント未検出を報告しました。それでもアンロードを続行しますか？"/>
@@ -1814,6 +1870,7 @@
   <translation tag="Tool Changer" ja="ツールチェンジャー"/>
   <translation tag="Tool change failed: {}" ja="ツール変更に失敗しました: {}"/>
   <translation tag="Toolhead Style" ja="ツールヘッドスタイル"/>
+  <translation tag="Toolhead jam"/>
   <translation tag="Toolhead, G-code, limits, and materials" ja="ツールヘッド、Gコード、制限、材料"/>
   <translation tag="Top" ja="上"/>
   <translation tag="Total Prints" ja="総印刷数"/>
@@ -1825,6 +1882,7 @@
   <translation tag="Touch anywhere to verify accuracy" ja="どこかをタッチして精度を確認"/>
   <translation tag="Touch screen to wake from sleep" ja="画面をタッチしてスリープ解除"/>
   <translation tag="Touch the target (point %1$d of 3) \xe2\x80\x94 touch %2$d of %3$d" ja="ターゲットをタッチ（ポイント %1$d / 3）\xe2\x80\x94 タッチ %2$d / %3$d"/>
+  <translation tag="TouchCalibration"/>
   <translation tag="Trace" ja="トレース"/>
   <translation tag="Travels" ja="移動"/>
   <translation tag="Troubleshooting:" ja="トラブルシューティング:"/>
@@ -1922,6 +1980,7 @@
   <translation tag="What We Collect" ja="収集する情報"/>
   <translation tag="When enabled, only the macro runs. When disabled, temperatures are set first, then the macro runs." ja="有効時はマクロのみ実行されます。無効時は先に温度を設定してからマクロが実行されます。"/>
   <translation tag="When starting a print, you&apos;ll be able to choose whether to run %s. This saves time when you&apos;ve already done it recently or want more control over your print preparation." ja="印刷開始時に %s を実行するかどうかを選択できるようになります。最近すでに実行した場合や、印刷準備をより細かく制御したい場合に時間を節約できます。"/>
+  <translation tag="Where UI sounds play"/>
   <translation tag="White" ja="ホワイト"/>
   <translation tag="WiFi" ja="WiFi"/>
   <translation tag="WiFi Disabled" ja="WiFi 無効"/>
@@ -1933,6 +1992,7 @@
   <translation tag="WiFi unavailable" ja="WiFi が利用できません"/>
   <translation tag="Widget Labels" ja="ウィジェットラベル"/>
   <translation tag="Width" ja="幅"/>
+  <translation tag="Wifi"/>
   <translation tag="Wrong PIN" ja="PIN が違います"/>
   <translation tag="Wrong media" ja="不正なメディア"/>
   <translation tag="X" ja="X"/>

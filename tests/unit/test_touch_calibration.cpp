@@ -1401,3 +1401,27 @@ TEST_CASE("TouchCalibration: no false axis swap on well-aligned 480x272 screen",
     bool swapped = detect_and_correct_axis_swap(cal, screen_points, touch_points);
     REQUIRE(swapped == false);
 }
+
+// ============================================================================
+// Legacy calibration invalidation (post-#943 upgrade) — truth table
+// ============================================================================
+
+TEST_CASE("TouchCalibration: should_invalidate_legacy_calibration truth table",
+          "[touch-calibration][migration]") {
+    // Resistive panels legitimately need their affine — never reset, even on mismatch.
+    REQUIRE(should_invalidate_legacy_calibration(/*recheck*/ true, /*resistive*/ true,
+                                                 /*mismatch*/ true) == false);
+
+    // Non-resistive panel with an ABS/display mismatch, recheck pending → invalidate.
+    // (Qidi Q2: 800x480 capacitive controller on a 480x272 panel.)
+    REQUIRE(should_invalidate_legacy_calibration(/*recheck*/ true, /*resistive*/ false,
+                                                 /*mismatch*/ true) == true);
+
+    // No recheck pending → never touch the stored calibration.
+    REQUIRE(should_invalidate_legacy_calibration(/*recheck*/ false, /*resistive*/ false,
+                                                 /*mismatch*/ true) == false);
+
+    // Non-resistive, no mismatch (e.g. generic HID range) → calibration was fine.
+    REQUIRE(should_invalidate_legacy_calibration(/*recheck*/ true, /*resistive*/ false,
+                                                 /*mismatch*/ false) == false);
+}

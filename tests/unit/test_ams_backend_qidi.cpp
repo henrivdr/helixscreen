@@ -6,6 +6,7 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "settings_manager.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -94,6 +95,10 @@ class QidiBoxTestAccess {
     }
     static void apply_config_settings(AmsBackendQidi& b, const json& s) {
         b.apply_config_settings(s);
+    }
+    static void set_fw_caps(AmsBackendQidi& b, bool has_m603, bool has_clear_nozzle) {
+        b.fw_has_m603_ = has_m603;
+        b.fw_has_clear_nozzle_ = has_clear_nozzle;
     }
 };
 
@@ -522,33 +527,79 @@ TEST_CASE("QIDI Box notifications without heater data leave environment alone",
 // Write-path: always enabled (commands verified vs QIDI firmware, #1030)
 // =====================================================================
 
-TEST_CASE("QIDI Box load_filament: emits T<tool>",
+TEST_CASE("QIDI Box reports environment sensors (dryer indicator reachable)",
+          "[ams][qidi_box]") {
+    RecordingQidiBackend backend;
+    // The box has a PTC heater + aht20_f humidity chip; the env indicator widget
+    // is hard-hidden unless the backend advertises environment sensors (#1041).
+    REQUIRE(backend.has_environment_sensors());
+}
+
+TEST_CASE("QIDI Box manages preheat itself (no UI-driven heat on load)",
+          "[ams][qidi_box]") {
+    RecordingQidiBackend backend;
+    REQUIRE(backend.supports_auto_heat_on_load());
+}
+
+TEST_CASE("QIDI Box load_filament: heats, EXTRUDER_LOADs the slot, clears, cools",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
 
-    // Default mapping is tool=slot, so loading slot 2 emits T2.
+    // Fresh load into an empty extruder; no profile temp → default load temp.
     auto err = backend.load_filament(2);
 
     REQUIRE(err.success());
     REQUIRE(backend.sent.size() == 1);
-    REQUIRE(backend.sent[0] == "T2");
+    REQUIRE(backend.sent[0] ==
+            "M109 S250\nEXTRUDER_LOAD SLOT=slot2\nCLEAR_NOZZLE\nM104 S0");
 }
 
-TEST_CASE("QIDI Box load_filament: respects value_t<N> tool mapping",
+TEST_CASE("QIDI Box load_filament: addresses the slot directly, not value_t mapping",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
 
-    // Map slot 3 to tool 0 via save_variables.
+    // value_t mapping is for the slicer's T<n> commands; EXTRUDER_LOAD takes the
+    // slot name directly, so a mapping must not change which slot is loaded.
     QidiBoxTestAccess::parse_vars(backend, json{{"value_t0", "slot3"}});
 
     auto err = backend.load_filament(3);
 
     REQUIRE(err.success());
     REQUIRE(backend.sent.size() == 1);
-    REQUIRE(backend.sent[0] == "T0");
+    REQUIRE(backend.sent[0] ==
+            "M109 S250\nEXTRUDER_LOAD SLOT=slot3\nCLEAR_NOZZLE\nM104 S0");
 }
 
-TEST_CASE("QIDI Box unload_filament: emits UNLOAD_T<tool>",
+TEST_CASE("QIDI Box load_filament: unloads a different loaded slot first",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    // Slot 0 is in the extruder; loading slot 2 must retract slot 0 first so
+    // EXTRUDER_LOAD doesn't jam on top of loaded filament.
+    QidiBoxTestAccess::parse_vars(backend, json{{"last_load_slot", "slot0"}});
+
+    auto err = backend.load_filament(2);
+
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] ==
+            "M603 S250\nM109 S250\nEXTRUDER_LOAD SLOT=slot2\nCLEAR_NOZZLE\nM104 S0");
+}
+
+TEST_CASE("QIDI Box load_filament: reloading the active slot does not self-unload",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::parse_vars(backend, json{{"last_load_slot", "slot2"}});
+
+    auto err = backend.load_filament(2);
+
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    // No leading M603 — slot 2 is already the loaded slot.
+    REQUIRE(backend.sent[0] ==
+            "M109 S250\nEXTRUDER_LOAD SLOT=slot2\nCLEAR_NOZZLE\nM104 S0");
+}
+
+TEST_CASE("QIDI Box unload_filament: emits M603 (stock unload)",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
 
@@ -556,10 +607,10 @@ TEST_CASE("QIDI Box unload_filament: emits UNLOAD_T<tool>",
 
     REQUIRE(err.success());
     REQUIRE(backend.sent.size() == 1);
-    REQUIRE(backend.sent[0] == "UNLOAD_T1");
+    REQUIRE(backend.sent[0] == "M603 S250");
 }
 
-TEST_CASE("QIDI Box unload_filament with -1 unloads the active slot",
+TEST_CASE("QIDI Box unload_filament with -1 unloads the active slot via M603",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
     // Seed slot 2 as LOADED so unload_filament(-1) targets it.
@@ -569,7 +620,7 @@ TEST_CASE("QIDI Box unload_filament with -1 unloads the active slot",
 
     REQUIRE(err.success());
     REQUIRE(backend.sent.size() == 1);
-    REQUIRE(backend.sent[0] == "UNLOAD_T2");
+    REQUIRE(backend.sent[0] == "M603 S250");
 }
 
 TEST_CASE("QIDI Box unload_filament with -1 and nothing loaded errors",
@@ -582,15 +633,43 @@ TEST_CASE("QIDI Box unload_filament with -1 and nothing loaded errors",
     REQUIRE(backend.sent.empty());
 }
 
-TEST_CASE("QIDI Box change_tool emits T<tool> directly",
+TEST_CASE("QIDI Box unload falls back to EXTRUDER_UNLOAD when M603 is absent",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    // Simulate a firmware revision without the M603 macro.
+    QidiBoxTestAccess::set_fw_caps(backend, /*m603=*/false, /*clear_nozzle=*/true);
+
+    auto err = backend.unload_filament(1);
+
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "M109 S250\nEXTRUDER_UNLOAD SLOT=slot1\nM104 S0");
+}
+
+TEST_CASE("QIDI Box load omits CLEAR_NOZZLE when the macro is absent",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::set_fw_caps(backend, /*m603=*/true, /*clear_nozzle=*/false);
+
+    auto err = backend.load_filament(2);
+
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] == "M109 S250\nEXTRUDER_LOAD SLOT=slot2\nM104 S0");
+}
+
+TEST_CASE("QIDI Box change_tool resolves to the slot and drives the load path",
           "[ams][qidi_box][write_path]") {
     RecordingQidiBackend backend;
 
+    // Default mapping is tool=slot, so changing to tool 3 loads slot 3 via the
+    // verified EXTRUDER_LOAD sequence rather than a non-existent T3 macro.
     auto err = backend.change_tool(3);
 
     REQUIRE(err.success());
     REQUIRE(backend.sent.size() == 1);
-    REQUIRE(backend.sent[0] == "T3");
+    REQUIRE(backend.sent[0] ==
+            "M109 S250\nEXTRUDER_LOAD SLOT=slot3\nCLEAR_NOZZLE\nM104 S0");
 }
 
 TEST_CASE("QIDI Box set_tool_mapping emits SAVE_VARIABLE for value_t<N>",
@@ -602,6 +681,69 @@ TEST_CASE("QIDI Box set_tool_mapping emits SAVE_VARIABLE for value_t<N>",
     REQUIRE(err.success());
     REQUIRE(backend.sent.size() == 1);
     REQUIRE(backend.sent[0] == "SAVE_VARIABLE VARIABLE=value_t1 VALUE=\"slot3\"");
+}
+
+TEST_CASE("QIDI Box lane eject is unsupported until force_move is enabled",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+
+    REQUIRE_FALSE(backend.supports_lane_eject());
+    auto err = backend.eject_lane(0);
+    REQUIRE_FALSE(err.success());
+    REQUIRE(backend.sent.empty());
+}
+
+TEST_CASE("QIDI Box [force_move] enable_force_move turns on lane eject",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"force_move", {{"enable_force_move", true}}}});
+
+    REQUIRE(backend.supports_lane_eject());
+
+    auto err = backend.eject_lane(1);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] ==
+            "FORCE_MOVE STEPPER=\"box_stepper slot1\" VELOCITY=100 DISTANCE=-878");
+}
+
+TEST_CASE("QIDI Box lane eject honors configurable distance/velocity settings",
+          "[ams][qidi_box][write_path]") {
+    // The eject FORCE_MOVE distance/velocity are user-tunable (#1041) because
+    // different QIDI Box variants need different push-out distances. Verify
+    // eject_lane reads the SettingsManager values, not the hardcoded defaults,
+    // and that the stored positive magnitude is negated into the box direction.
+    auto& settings = helix::SettingsManager::instance();
+    settings.init_subjects(); // idempotent; ensures the subjects hold real values
+    const int saved_dist = settings.get_qidi_eject_distance();
+    const int saved_vel = settings.get_qidi_eject_velocity();
+
+    settings.set_qidi_eject_distance(500);
+    settings.set_qidi_eject_velocity(60);
+
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"force_move", {{"enable_force_move", true}}}});
+
+    auto err = backend.eject_lane(2);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] ==
+            "FORCE_MOVE STEPPER=\"box_stepper slot2\" VELOCITY=60 DISTANCE=-500");
+
+    // Restore defaults so sibling tests in this shard see the default eject gcode.
+    settings.set_qidi_eject_distance(saved_dist > 0 ? saved_dist : 878);
+    settings.set_qidi_eject_velocity(saved_vel > 0 ? saved_vel : 100);
+}
+
+TEST_CASE("QIDI Box [force_move] disabled keeps lane eject off",
+          "[ams][qidi_box][write_path]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"force_move", {{"enable_force_move", false}}}});
+
+    REQUIRE_FALSE(backend.supports_lane_eject());
 }
 
 // =====================================================================

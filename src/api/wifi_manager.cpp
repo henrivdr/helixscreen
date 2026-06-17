@@ -137,6 +137,12 @@ WiFiManager::~WiFiManager() {
     // Clean up scanning
     stop_scan();
 
+    // Clean up any pending auth-failure grace timer (helixscreen#1050)
+    if (auth_fail_grace_timer_ && lv_is_initialized()) {
+        lv_timer_delete(auth_fail_grace_timer_);
+    }
+    auth_fail_grace_timer_ = nullptr;
+
     // Clear callbacks BEFORE stopping backend
     // Pending lv_async_call operations check for null callbacks before invoking
     scan_callback_ = nullptr;
@@ -261,6 +267,10 @@ void WiFiManager::connect(const std::string& ssid, const std::string& password,
     }
 
     spdlog::info("[WiFiManager] Connecting to '{}'", ssid);
+
+    // Drop any grace timer left over from a prior attempt so it can't deliver a stale
+    // failure against this new connect (helixscreen#1050).
+    cancel_auth_fail_grace();
 
     connect_callback_ = on_complete;
     connecting_in_progress_ = true; // Ignore DISCONNECTED events during connection attempt
@@ -506,6 +516,10 @@ void WiFiManager::handle_connected(const std::string& event_data) {
         std::make_unique<ConnectCallbackData>(ConnectCallbackData{self_, true, ""}),
         [](ConnectCallbackData* d) {
             if (auto manager = d->manager.lock()) {
+                // A transient AUTH_FAILED may be sitting in the grace window — this
+                // CONNECTED is the real outcome, so cancel it before delivering success
+                // (helixscreen#1050).
+                manager->cancel_auth_fail_grace();
                 if (manager->connect_callback_) {
                     manager->connect_callback_(d->success, d->error);
                     manager->connect_callback_ = nullptr;
@@ -557,8 +571,11 @@ void WiFiManager::handle_disconnected(const std::string& event_data) {
 void WiFiManager::handle_auth_failed(const std::string& event_data) {
     spdlog::warn("[WiFiManager] Authentication failed event received (backend thread)");
 
-    connecting_in_progress_ = false; // Connection attempt complete (failed)
-
+    // Do NOT clear connecting_in_progress_ or deliver the failure synchronously here.
+    // wpa_supplicant emits a transient CTRL-EVENT-SSID-TEMP-DISABLED/WRONG_KEY mid-handshake
+    // on some adapters even when the connect ultimately succeeds — a CONNECTED follows ~1-3s
+    // later (helixscreen#1050). Staying "in progress" keeps any interleaved DISCONNECTED
+    // ignored, and the failure is armed on a grace timer that a CONNECTED can preempt.
     if (!connect_callback_) {
         LOG_WARN_INTERNAL("Auth failed event but no callback registered");
         return;
@@ -573,15 +590,70 @@ void WiFiManager::handle_auth_failed(const std::string& event_data) {
             ConnectCallbackData{self_, false, std::move(error_msg)}),
         [](ConnectCallbackData* d) {
             if (auto manager = d->manager.lock()) {
+                // Only arm the grace window if a connect is still pending; a CONNECTED that
+                // already resolved it nulls connect_callback_.
                 if (manager->connect_callback_) {
-                    manager->connect_callback_(d->success, d->error);
-                    manager->connect_callback_ = nullptr;
+                    manager->start_auth_fail_grace(d->error);
                 }
             } else {
                 spdlog::debug(
                     "[WiFiManager] Manager destroyed before auth_failed callback - safely ignored");
             }
         });
+}
+
+// ----------------------------------------------------------------------------
+// Auth-failure debounce (helixscreen#1050) — UI thread only
+// ----------------------------------------------------------------------------
+
+namespace {
+// Window to wait after a transient AUTH_FAILED for a CONNECTED to arrive. wpa_supplicant's
+// TEMP-DISABLED -> CONNECTED gap is typically 1-3s; allow margin for slow embedded adapters.
+// A genuine wrong password (no CONNECTED) surfaces the failure after this delay.
+constexpr uint32_t AUTH_FAIL_GRACE_MS = 4000;
+} // namespace
+
+void WiFiManager::start_auth_fail_grace(const std::string& error) {
+    pending_auth_error_ = error;
+    if (auth_fail_grace_timer_) {
+        lv_timer_delete(auth_fail_grace_timer_);
+        auth_fail_grace_timer_ = nullptr;
+    }
+    auth_fail_grace_timer_ = lv_timer_create(auth_fail_grace_timer_cb, AUTH_FAIL_GRACE_MS, this);
+    lv_timer_set_repeat_count(auth_fail_grace_timer_, 1); // one-shot
+    spdlog::debug("[WiFiManager] AUTH_FAILED deferred {}ms pending possible CONNECTED",
+                  AUTH_FAIL_GRACE_MS);
+}
+
+void WiFiManager::cancel_auth_fail_grace() {
+    if (auth_fail_grace_timer_) {
+        spdlog::debug("[WiFiManager] CONNECTED preempted pending AUTH_FAILED — transient "
+                      "handshake failure ignored");
+        lv_timer_delete(auth_fail_grace_timer_);
+        auth_fail_grace_timer_ = nullptr;
+    }
+    pending_auth_error_.clear();
+}
+
+void WiFiManager::deliver_auth_failure() {
+    // Grace window elapsed with no CONNECTED — the authentication failure is real.
+    connecting_in_progress_ = false;
+    notify_state_observers();
+    if (connect_callback_) {
+        connect_callback_(false, pending_auth_error_);
+        connect_callback_ = nullptr;
+    }
+    pending_auth_error_.clear();
+}
+
+void WiFiManager::auth_fail_grace_timer_cb(lv_timer_t* timer) {
+    auto* self = static_cast<WiFiManager*>(lv_timer_get_user_data(timer));
+    if (!self) {
+        return;
+    }
+    // One-shot: LVGL deletes the timer after this callback returns, so just drop our handle.
+    self->auth_fail_grace_timer_ = nullptr;
+    self->deliver_auth_failure();
 }
 
 // ============================================================================

@@ -80,6 +80,21 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
     [[nodiscard]] bool is_bypass_active() const override;
 
+    // The box exposes a PTC dryer heater (heater_generic heater_box<N>) plus an
+    // aht20_f humidity/temperature chip, so the per-unit environment indicator
+    // (temp/humidity + drying controls) must be reachable. Without this override
+    // the indicator widget is hard-hidden in ams_detail_pre_show_env_indicator().
+    [[nodiscard]] bool has_environment_sensors() const override {
+        return true;
+    }
+
+    // load_filament() drives the stock EXTRUDER_LOAD primitive directly and
+    // manages hotend temperature itself (heat → load → clear → cool), so the UI
+    // must not run its own preheat for QIDI loads.
+    [[nodiscard]] bool supports_auto_heat_on_load() const override {
+        return true;
+    }
+
     AmsError load_filament(int slot_index) override;
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;
@@ -88,6 +103,13 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     AmsError recover() override;
     AmsError reset() override;
     AmsError cancel() override;
+
+    // Per-lane eject for non-loaded lanes via FORCE_MOVE on the box_stepper
+    // (#1041). Gated on [force_move] enable_force_move being set in the config.
+    AmsError eject_lane(int slot_index) override;
+    [[nodiscard]] bool supports_lane_eject() const override {
+        return fw_force_move_enabled_;
+    }
 
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
@@ -138,6 +160,26 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// bootstrap fetch reuses every parser already exercised by the
     /// notification path.
     void apply_query_response(const nlohmann::json& response);
+
+    /// Build the stock unload g-code for the box, chosen by firmware capability.
+    /// M603 is the verified stock unload (Q2 1.1.1); if a firmware revision drops
+    /// it, fall back to the box_stepper EXTRUDER_UNLOAD primitive that UNLOAD_T<n>
+    /// wraps. slot_index >= 0 targets a specific lane; -1 unloads whatever is in
+    /// the extruder.
+    [[nodiscard]] std::string build_unload_gcode(int slot_index, int temp) const;
+
+    /// Detect firmware-version-dependent capabilities from the macro set and log
+    /// a fingerprint. The 1.1.x -> 01.01.02 QIDI refactor changes the macro
+    /// surface (e.g. T0-T3 absent on Q2 1.1.1), so we branch on capability rather
+    /// than a version string. Called from on_started() once the macro cache is up.
+    void detect_firmware_capabilities();
+
+    // Firmware-capability flags (see detect_firmware_capabilities()). Optimistic
+    // defaults match verified Q2 1.1.1 stock firmware so tests and a discovery
+    // race never downgrade off the known-good path.
+    bool fw_has_m603_ = true;         ///< M603 stock unload macro present
+    bool fw_has_clear_nozzle_ = true; ///< CLEAR_NOZZLE post-load wipe macro present
+    bool fw_force_move_enabled_ = false; ///< [force_move] enable_force_move -> lane eject
 
     /// Raw RFID indices read from save_variables. Per-slot side-table so we
     /// don't pollute SlotInfo with backend-specific fields. Resolution to

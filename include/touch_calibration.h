@@ -417,4 +417,16 @@ inline bool has_abs_display_mismatch(int abs_max_x, int abs_max_y, int display_w
     return (x_ratio > TOLERANCE) || (y_ratio > TOLERANCE);
 }
 
+/**
+ * @brief Decide whether a stored affine calibration should be invalidated on the
+ * post-#943-fix upgrade boot. True ONLY for non-resistive panels whose ABS range
+ * mismatches the display — these now ride on evdev's linear scaling, so any affine
+ * captured before the fix was computed in the wrong (unscaled) coordinate space.
+ * Resistive panels legitimately need their affine and are never reset.
+ */
+inline bool should_invalidate_legacy_calibration(bool recheck_pending, bool is_resistive,
+                                                  bool abs_display_mismatch) {
+    return recheck_pending && !is_resistive && abs_display_mismatch;
+}
+
 } // namespace helix

@@ -3,6 +3,8 @@
 #include "ams_backend_qidi.h"
 
 #include "ams_error.h"
+#include "macro_param_cache.h"
+#include "settings_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -43,6 +45,30 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
         // Bad slot string — fall through to nullopt
     }
     return std::nullopt;
+}
+
+// Hotend temperature to heat to before driving EXTRUDER_LOAD / M603. Klipper
+// rejects extrusion below the configured min_extrude_temp ("Extrude below
+// minimum temp"), so we heat to the slot's profile temperature first. Prefer the
+// material's upper bound (matches the stock QIDI flow Camden verified — ABS at
+// 280) and fall back to a safe universal load temperature when no profile is
+// known.
+constexpr int QIDI_DEFAULT_LOAD_TEMP_C = 250;
+
+// Manual lane-eject via FORCE_MOVE on the box_stepper (#1041). Distance/velocity
+// from the QIDI Discord (xenon) + Camden's Q2 measurement: 878 mm fully ejects,
+// ~100 mm/s matches the stock feel. These are now user-configurable via
+// SettingsManager (settings_qidi_eject_distance / settings_qidi_eject_velocity);
+// the defaults below match the historic hardcoded values. May need refining for
+// Plus 4 / Max 4 boxes.
+int load_temp_for_slot(const SlotInfo& slot) {
+    if (slot.nozzle_temp_max > 0) {
+        return slot.nozzle_temp_max;
+    }
+    if (slot.nozzle_temp_min > 0) {
+        return slot.nozzle_temp_min;
+    }
+    return QIDI_DEFAULT_LOAD_TEMP_C;
 }
 } // namespace
 
@@ -102,6 +128,7 @@ void AmsBackendQidi::on_started() {
     if (!client_) {
         return;
     }
+    detect_firmware_capabilities();
     // Bootstrap: notify_status_update only carries deltas, so we need an
     // initial snapshot to populate save_variables. Subscribe to the QIDI
     // objects too — Moonraker won't push notifications for anything we
@@ -291,6 +318,21 @@ void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {
         spdlog::info("{} Box dryer max temp from config: {}°C", backend_log_tag(),
                      *settable_max);
     }
+
+    // Lane eject (#1041) is a FORCE_MOVE on the box_stepper, which Klipper rejects
+    // unless [force_move] enable_force_move: True. Gate supports_lane_eject() on it
+    // so we never offer an eject button that would just error.
+    bool force_move = false;
+    if (auto fm = settings.find("force_move"); fm != settings.end() && fm->is_object()) {
+        if (auto en = fm->find("enable_force_move");
+            en != fm->end() && en->is_boolean()) {
+            force_move = en->get<bool>();
+        }
+    }
+    fw_force_move_enabled_ = force_move;
+    spdlog::info("{} Lane eject {} (force_move {})", backend_log_tag(),
+                 force_move ? "available" : "unavailable",
+                 force_move ? "enabled" : "disabled/absent");
 }
 
 void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
@@ -773,9 +815,49 @@ PathSegment AmsBackendQidi::infer_error_segment() const {
 // entry log here, plus the raw G-code via execute_gcode) so field behavior is
 // fully visible until the gcode protocol is validated on real hardware (#1030).
 
+void AmsBackendQidi::detect_firmware_capabilities() {
+    auto& mc = helix::MacroParamCache::instance();
+
+    // Only trust the macro cache once it's actually populated for this printer —
+    // PRINT_START is a universal QIDI macro, so its presence confirms discovery
+    // has run. Without this guard a discovery-timing race would read an empty
+    // cache and wrongly downgrade us off the verified M603 / CLEAR_NOZZLE paths.
+    const bool cache_ready =
+        mc.has_macro("print_start") || mc.has_macro("m603") || mc.has_macro("t4");
+    if (cache_ready) {
+        fw_has_m603_ = mc.has_macro("m603");
+        fw_has_clear_nozzle_ = mc.has_macro("clear_nozzle");
+    }
+
+    // Fingerprint line so every debug bundle records which QIDI firmware variant
+    // we're talking to. The macro surface is the version tell (T0-T3 absent on
+    // Q2 1.1.1; the 01.01.02 refactor relocates macros). See #1041.
+    spdlog::info("{} Firmware fingerprint: cache_ready={} macros{{T0={} T4={} M603={} "
+                 "CLEAR_NOZZLE={} UNLOAD_FILAMENT={}}} -> use_m603={} append_clear_nozzle={}",
+                 backend_log_tag(), cache_ready, mc.has_macro("t0"), mc.has_macro("t4"),
+                 mc.has_macro("m603"), mc.has_macro("clear_nozzle"),
+                 mc.has_macro("unload_filament"), fw_has_m603_, fw_has_clear_nozzle_);
+}
+
+std::string AmsBackendQidi::build_unload_gcode(int slot_index, int temp) const {
+    if (fw_has_m603_) {
+        return "M603 S" + std::to_string(temp);
+    }
+    // Fallback for firmware without M603: drive the box_stepper primitive that
+    // UNLOAD_T<n> wraps. Needs the hotend hot like the load path does.
+    std::string g = "M109 S" + std::to_string(temp) + "\nEXTRUDER_UNLOAD";
+    if (slot_index >= 0) {
+        g += " SLOT=slot" + std::to_string(slot_index);
+    }
+    g += "\nM104 S0";
+    return g;
+}
+
 AmsError AmsBackendQidi::load_filament(int slot_index) {
     spdlog::info("{} load_filament(slot={})", backend_log_tag(), slot_index);
-    int tool = -1;
+    int load_temp = QIDI_DEFAULT_LOAD_TEMP_C;
+    int loaded_other = -1; // slot in the extruder that must be retracted first
+    int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -785,17 +867,51 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
         if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
             return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
         }
-        tool = slots[slot_index].mapped_tool;
-        if (tool < 0) {
-            tool = slot_index;
+        load_temp = load_temp_for_slot(slots[slot_index]);
+        // If a *different* slot is already in the extruder, retract it first —
+        // EXTRUDER_LOAD on top of loaded filament would jam. Compose the two
+        // verified stock primitives (unload + EXTRUDER_LOAD) rather than relying
+        // on a tool-change macro.
+        for (const auto& s : slots) {
+            if (s.status == SlotStatus::LOADED && s.slot_index != slot_index) {
+                loaded_other = s.slot_index;
+                unload_temp = load_temp_for_slot(s);
+                break;
+            }
         }
     }
-    return execute_gcode("T" + std::to_string(tool));
+
+    // The stock T<n> macros don't exist for the box's own slots on Q2 firmware
+    // (only T4+ for additional boxes) and don't manage hotend temperature, so
+    // drive EXTRUDER_LOAD directly. Klipper rejects it below min_extrude_temp,
+    // hence the M109 pre-heat; CLEAR_NOZZLE wipes the post-load ooze (no clean
+    // is built into EXTRUDER_LOAD); M104 S0 leaves the hotend cooling down.
+    std::string seq;
+    if (loaded_other >= 0) {
+        seq += build_unload_gcode(loaded_other, unload_temp) + "\n";
+    }
+    seq += "M109 S" + std::to_string(load_temp) + "\n";
+    seq += "EXTRUDER_LOAD SLOT=slot" + std::to_string(slot_index) + "\n";
+    if (fw_has_clear_nozzle_) {
+        // The stock CLEAR_NOZZLE macro makes absolute XY/Z wipe moves with no
+        // homing guard of its own (it assumes a print context). A load triggered
+        // from idle may be unhomed, which would error "Must home axis first"
+        // mid-sequence and leave the hotend hot (the trailing M104 S0 never runs).
+        // EXTRUDER_LOAD itself doesn't move the toolhead, so only the wipe needs
+        // this — route through ensure_homed_then() so Moonraker's
+        // toolhead.homed_axes is checked and G28 runs first when needed.
+        seq += "CLEAR_NOZZLE\n";
+        seq += "M104 S0";
+        return ensure_homed_then(seq);
+    }
+    seq += "M104 S0";
+    return execute_gcode(seq);
 }
 
 AmsError AmsBackendQidi::unload_filament(int slot_index) {
     spdlog::info("{} unload_filament(slot={})", backend_log_tag(), slot_index);
-    int tool = -1;
+    int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
+    int target_slot = slot_index; // for the EXTRUDER_UNLOAD fallback
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -803,26 +919,32 @@ AmsError AmsBackendQidi::unload_filament(int slot_index) {
         }
         const auto& slots = system_info_.units[0].slots;
         if (slot_index == -1) {
-            // Active slot: find the LOADED one.
+            // Active slot: find the LOADED one and use its profile temperature.
+            const SlotInfo* loaded = nullptr;
             for (const auto& s : slots) {
                 if (s.status == SlotStatus::LOADED) {
-                    tool = (s.mapped_tool >= 0) ? s.mapped_tool : s.slot_index;
+                    loaded = &s;
                     break;
                 }
             }
-            if (tool < 0) {
+            if (!loaded) {
                 return AmsErrorHelper::not_supported("QIDI Box: no slot currently loaded");
             }
+            unload_temp = load_temp_for_slot(*loaded);
+            target_slot = loaded->slot_index;
         } else if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
             return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
         } else {
-            tool = slots[slot_index].mapped_tool;
-            if (tool < 0) {
-                tool = slot_index;
-            }
+            unload_temp = load_temp_for_slot(slots[slot_index]);
         }
     }
-    return execute_gcode("UNLOAD_T" + std::to_string(tool));
+
+    // M603 is the stock "unload" the QIDI screen runs — it heats, retracts to
+    // before the hub and (with the box active) calls E_UNLOAD. UNLOAD_T<n> /
+    // UNLOAD_FILAMENT proved inert on Q2 firmware. M603 acts on whatever is in
+    // the extruder, so the slot index only selects the unload temperature
+    // (used by the EXTRUDER_UNLOAD fallback for firmware without M603).
+    return execute_gcode(build_unload_gcode(target_slot, unload_temp));
 }
 
 AmsError AmsBackendQidi::select_slot(int /*slot_index*/) {
@@ -836,7 +958,22 @@ AmsError AmsBackendQidi::change_tool(int tool_number) {
     if (tool_number < 0) {
         return AmsErrorHelper::not_supported("QIDI Box: tool number out of range");
     }
-    return execute_gcode("T" + std::to_string(tool_number));
+    // The bare T<n> macros don't exist for the box's own slots on Q2 firmware, so
+    // resolve the tool→slot mapping (value_t<n>) and drive the same verified
+    // load path (which retracts any currently-loaded slot first).
+    int slot_index = tool_number;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!system_info_.units.empty()) {
+            for (const auto& s : system_info_.units[0].slots) {
+                if (s.mapped_tool == tool_number) {
+                    slot_index = s.slot_index;
+                    break;
+                }
+            }
+        }
+    }
+    return load_filament(slot_index);
 }
 
 // --- Recovery ---
@@ -854,6 +991,44 @@ AmsError AmsBackendQidi::reset() {
 AmsError AmsBackendQidi::cancel() {
     spdlog::warn("{} {} not yet implemented", backend_log_tag(), __func__);
     return AmsErrorHelper::not_supported("QIDI Box cancel");
+}
+
+AmsError AmsBackendQidi::eject_lane(int slot_index) {
+    spdlog::info("{} eject_lane(slot={})", backend_log_tag(), slot_index);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (system_info_.units.empty()) {
+            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
+        }
+        const auto& slots = system_info_.units[0].slots;
+        if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
+            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+        }
+    }
+    if (!fw_force_move_enabled_) {
+        return AmsErrorHelper::not_supported(
+            "QIDI Box: eject needs [force_move] enable_force_move: True");
+    }
+    // Manual eject: FORCE_MOVE the lane's box_stepper to push filament out the box
+    // side (#1041, QIDI Discord / xenon). Offered only for non-loaded lanes (the
+    // context menu gates on !loaded), so no pre-unload is needed here — for a
+    // loaded lane the caller runs the unload stack first to park at the hub.
+    // Distance is stored as a positive magnitude in settings; negate it here to
+    // keep the existing "push back into the box" direction. Fall back to the
+    // historic defaults (878 mm / 100 mm/s) if SettingsManager hasn't been
+    // initialized — a FORCE_MOVE with VELOCITY=0/DISTANCE=0 is a degenerate no-op
+    // that Klipper rejects, so the eject must always carry real numbers.
+    int eject_velocity = helix::SettingsManager::instance().get_qidi_eject_velocity();
+    int eject_distance_mm = helix::SettingsManager::instance().get_qidi_eject_distance();
+    if (eject_velocity <= 0) {
+        eject_velocity = 100;
+    }
+    if (eject_distance_mm <= 0) {
+        eject_distance_mm = 878;
+    }
+    return execute_gcode("FORCE_MOVE STEPPER=\"box_stepper slot" + std::to_string(slot_index) +
+                         "\" VELOCITY=" + std::to_string(eject_velocity) +
+                         " DISTANCE=" + std::to_string(-eject_distance_mm));
 }
 
 // --- Configuration ---

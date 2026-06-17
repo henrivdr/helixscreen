@@ -17,6 +17,7 @@
 #include "ams_backend.h"
 #include "ams_state.h"
 #include "ams_types.h"
+#include "config.h"
 #include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "static_panel_registry.h"
@@ -196,6 +197,21 @@ void AmsEnvironmentOverlay::show(lv_obj_t* parent_screen, int unit_index) {
     }
 
     refresh();
+
+    // Restore the temp/duration the user last started a dry with (per-printer),
+    // so the inputs default to remembered values rather than the XML constants.
+    Config* config = Config::get_instance();
+    if (temp_input_) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", config->get<int>(config->df() + "ams/dryer_last_temp", 55));
+        lv_textarea_set_text(temp_input_, buf);
+    }
+    if (duration_input_) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d",
+                 config->get<int>(config->df() + "ams/dryer_last_duration", 240));
+        lv_textarea_set_text(duration_input_, buf);
+    }
 
     NavigationManager::instance().register_overlay_instance(overlay_, this);
     NavigationManager::instance().push_overlay(overlay_);
@@ -575,8 +591,12 @@ void AmsEnvironmentOverlay::on_start_stop_clicked(lv_event_t* e) {
             // Start drying with textarea values, clamped to backend limits.
             // Duration field is in minutes (HH's MMU_HEATER TIMER takes minutes,
             // minval=0, so sub-hour cycles are valid).
-            float temp_c = 55.0f;
-            int duration_min = 240;
+            // Defaults remember the last values the user started a dry with
+            // (per-printer); fall back to 55°C / 240 min on first use.
+            Config* config = Config::get_instance();
+            float temp_c =
+                static_cast<float>(config->get<int>(config->df() + "ams/dryer_last_temp", 55));
+            int duration_min = config->get<int>(config->df() + "ams/dryer_last_duration", 240);
 
             if (overlay.temp_input_) {
                 const char* text = lv_textarea_get_text(overlay.temp_input_);
@@ -602,6 +622,11 @@ void AmsEnvironmentOverlay::on_start_stop_clicked(lv_event_t* e) {
             AmsError result =
                 backend->start_drying(temp_c, duration_min, -1, overlay.unit_index_);
             if (result.success()) {
+                // Remember the chosen values so the next open restores them.
+                config->set<int>(config->df() + "ams/dryer_last_temp",
+                                 static_cast<int>(temp_c));
+                config->set<int>(config->df() + "ams/dryer_last_duration", duration_min);
+                config->save();
                 NOTIFY_INFO("{}", lv_tr("Drying started"));
             } else {
                 NOTIFY_ERROR("{}: {}", lv_tr("Start failed"), result.user_msg);

@@ -125,6 +125,19 @@ void SettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(extrude_speed_subject_, extrude_speed, "settings_extrude_speed",
                            subjects_);
 
+    // QIDI Box eject distance magnitude (default: 878 mm, range 100-2000).
+    // Stored positive; negated when assembled into the FORCE_MOVE gcode.
+    int qidi_eject_distance = config->get<int>(config->df() + "ams/qidi_eject_distance", 878);
+    qidi_eject_distance = std::clamp(qidi_eject_distance, 100, 2000);
+    UI_MANAGED_SUBJECT_INT(qidi_eject_distance_subject_, qidi_eject_distance,
+                           "settings_qidi_eject_distance", subjects_);
+
+    // QIDI Box eject velocity (default: 100 mm/s, range 10-300)
+    int qidi_eject_velocity = config->get<int>(config->df() + "ams/qidi_eject_velocity", 100);
+    qidi_eject_velocity = std::clamp(qidi_eject_velocity, 10, 300);
+    UI_MANAGED_SUBJECT_INT(qidi_eject_velocity_subject_, qidi_eject_velocity,
+                           "settings_qidi_eject_velocity", subjects_);
+
     // Toolhead style (default: 0 = Auto)
     int toolhead_style = config->get<int>("/appearance/toolhead_style", 0);
     toolhead_style = std::clamp(toolhead_style, 0, 7);
@@ -398,6 +411,46 @@ void SettingsManager::set_extrude_speed(int mm_per_sec) {
     config->save();
 
     TelemetryManager::instance().notify_setting_changed("extrude_speed", old_val,
+                                                        std::to_string(mm_per_sec));
+}
+
+int SettingsManager::get_qidi_eject_distance() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&qidi_eject_distance_subject_));
+}
+
+void SettingsManager::set_qidi_eject_distance(int mm) {
+    mm = std::clamp(mm, 100, 2000);
+    spdlog::info("[SettingsManager] set_qidi_eject_distance({} mm)", mm);
+
+    auto old_val = std::to_string(lv_subject_get_int(&qidi_eject_distance_subject_));
+
+    lv_subject_set_int(&qidi_eject_distance_subject_, mm);
+
+    Config* config = Config::get_instance();
+    config->set<int>(config->df() + "ams/qidi_eject_distance", mm);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed("qidi_eject_distance", old_val,
+                                                        std::to_string(mm));
+}
+
+int SettingsManager::get_qidi_eject_velocity() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&qidi_eject_velocity_subject_));
+}
+
+void SettingsManager::set_qidi_eject_velocity(int mm_per_sec) {
+    mm_per_sec = std::clamp(mm_per_sec, 10, 300);
+    spdlog::info("[SettingsManager] set_qidi_eject_velocity({} mm/s)", mm_per_sec);
+
+    auto old_val = std::to_string(lv_subject_get_int(&qidi_eject_velocity_subject_));
+
+    lv_subject_set_int(&qidi_eject_velocity_subject_, mm_per_sec);
+
+    Config* config = Config::get_instance();
+    config->set<int>(config->df() + "ams/qidi_eject_velocity", mm_per_sec);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed("qidi_eject_velocity", old_val,
                                                         std::to_string(mm_per_sec));
 }
 

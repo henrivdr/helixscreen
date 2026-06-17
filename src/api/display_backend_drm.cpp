@@ -546,31 +546,58 @@ lv_indev_t* DisplayBackendDRM::create_input_pointer() {
 
             needs_calibration_ = helix::device_needs_calibration(dev_name, dev_phys, has_abs);
 
-            // Check for ABS range / display resolution mismatch on capacitive screens
-            if (!needs_calibration_ && has_abs && screen_width_ > 0 && screen_height_ > 0) {
-                struct input_absinfo abs_x = {}, abs_y = {};
+            // Query the touch controller's ABS range and propagate it into LVGL's
+            // internal calibration. This runs unconditionally (not gated on
+            // needs_calibration_) because MT-only digitizers report zero range for
+            // the legacy ABS_X/ABS_Y axes — LVGL's evdev driver derives its scaling
+            // ONLY from those, so without the MT-fallback range it does passthrough
+            // and raw 0..max coords flow unscaled (touch lands only top-left). The
+            // fbdev backend already does this (#943/#986); the DRM backend did not.
+            struct input_absinfo abs_x = {}, abs_y = {};
+            bool got_range = false;
+            if (has_abs && screen_width_ > 0 && screen_height_ > 0) {
                 int fd = open(touch_path, O_RDONLY | O_NONBLOCK);
                 if (fd >= 0) {
                     bool got_x = (ioctl(fd, EVIOCGABS(ABS_X), &abs_x) == 0);
                     bool got_y = (ioctl(fd, EVIOCGABS(ABS_Y), &abs_y) == 0);
-                    if (!got_x || abs_x.maximum <= 0) {
+
+                    // MT-only devices (Goodix gt9xxnew_ts, Qidi Q2) don't have legacy
+                    // ABS_X/ABS_Y, or report them all-zero. Fall back to MT axes.
+                    bool range_is_zero = got_x && got_y && abs_x.maximum == 0 && abs_y.maximum == 0;
+                    bool used_mt_fallback = false;
+                    if (!got_x || abs_x.maximum <= 0 || range_is_zero) {
+                        used_mt_fallback = true;
                         got_x = (ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), &abs_x) == 0);
                     }
-                    if (!got_y || abs_y.maximum <= 0) {
+                    if (!got_y || abs_y.maximum <= 0 || range_is_zero) {
+                        used_mt_fallback = true;
                         got_y = (ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), &abs_y) == 0);
                     }
                     close(fd);
+                    got_range = got_x && got_y;
 
-                    if (got_x && got_y) {
+                    // When the fallback provided a valid range, push it into LVGL's
+                    // internal calibration so coordinate mapping works even though
+                    // EVIOCGABS(ABS_X) returned zeros.
+                    if (used_mt_fallback && got_range && abs_x.maximum > abs_x.minimum) {
+                        lv_evdev_set_calibration(pointer_, abs_x.minimum, abs_y.minimum,
+                                                 abs_x.maximum, abs_y.maximum);
+                        spdlog::info("[DRM Backend] Applied MT axis range to LVGL calibration: "
+                                     "X({}..{}) Y({}..{})",
+                                     abs_x.minimum, abs_x.maximum, abs_y.minimum, abs_y.maximum);
+                    }
+
+                    if (got_range) {
                         spdlog::info(
                             "[DRM Backend] Touch ABS range: X({}..{}), Y({}..{}) — display: {}x{}",
                             abs_x.minimum, abs_x.maximum, abs_y.minimum, abs_y.maximum,
                             screen_width_, screen_height_);
 
-                        if (abs_x.maximum <= 0 && abs_y.maximum <= 0) {
+                        if (!needs_calibration_ && abs_x.maximum <= 0 && abs_y.maximum <= 0) {
                             needs_calibration_ = true;
                             spdlog::warn("[DRM Backend] ABS range is zero — forcing calibration");
-                        } else if (helix::has_abs_display_mismatch(abs_x.maximum, abs_y.maximum,
+                        } else if (!needs_calibration_ &&
+                                   helix::has_abs_display_mismatch(abs_x.maximum, abs_y.maximum,
                                                                    screen_width_, screen_height_)) {
                             needs_calibration_ = true;
                             spdlog::warn("[DRM Backend] ABS range ({},{}) mismatches display "
@@ -582,19 +609,50 @@ lv_indev_t* DisplayBackendDRM::create_input_pointer() {
                 }
             }
 
-            // Load stored calibration and install wrapper
+            // Load stored calibration.
             calibration_ = helix::load_touch_calibration();
 
-            // If a previously-saved calibration passed validation, the user has
-            // already calibrated this device — don't force the wizard again on
-            // every boot just because the ABS range disagrees with the display
-            // (which is a permanent property of devices like the Qidi Q2's
-            // 800x480 touch controller driving a 480x272 panel — #943).
-            if (needs_calibration_ && calibration_.valid) {
-                spdlog::info("[DRM Backend] Valid saved calibration found — "
-                             "not forcing wizard despite ABS/display mismatch");
-                needs_calibration_ = false;
+            // Post-#943-fix upgrade: a stored affine on a non-resistive panel whose
+            // ABS range mismatches the display was computed in the wrong (unscaled)
+            // coordinate space — those panels now ride on evdev's linear scaling
+            // above. The v17→v18 migration set recheck_pending; decide here, where
+            // the device's resistive nature and live ABS range are known.
+            if (helix::Config* cfg = helix::Config::get_instance()) {
+                bool recheck_pending =
+                    cfg->get<bool>("/input/calibration/recheck_pending", false);
+                bool changed = false;
+                if (recheck_pending) {
+                    bool is_resistive = helix::is_resistive_touchscreen_name(dev_name);
+                    bool abs_mismatch =
+                        got_range && helix::has_abs_display_mismatch(
+                                         abs_x.maximum, abs_y.maximum, screen_width_, screen_height_);
+                    if (helix::should_invalidate_legacy_calibration(recheck_pending, is_resistive,
+                                                                    abs_mismatch)) {
+                        spdlog::info("[DRM Backend] Invalidating legacy pre-#943 affine "
+                                     "calibration (non-resistive panel, ABS/display mismatch)");
+                        calibration_.valid = false;
+                        cfg->set<bool>("/input/calibration/valid", false);
+                        changed = true;
+                    }
+                    // One-shot: clear the flag regardless of the decision above.
+                    cfg->set<bool>("/input/calibration/recheck_pending", false);
+                    changed = true;
+                }
+                if (changed) {
+                    cfg->save();
+                }
             }
+
+            // needs_calibration_ stays a STABLE capability flag: "this panel uses
+            // affine calibration". It must NOT be cleared just because a valid
+            // calibration is already loaded — needs_touch_calibration() also gates the
+            // manual Settings "Touch Calibration" button (visibility + click), so
+            // clearing it left the button dead on any already-calibrated device
+            // (prestonbrown/helixscreen#943, prestonbrown/helixscreen#986). The boot
+            // wizard does NOT re-fire on calibrated devices because its own gate
+            // (WizardTouchCalibrationStep) independently skips when
+            // /input/calibration/valid is set — so the user can still re-calibrate on
+            // demand without the wizard forcing itself every boot.
 
             spdlog::info("[DRM Backend] Touch device '{}' phys='{}' — calibration {}", dev_name,
                          dev_phys, needs_calibration_ ? "needed" : "not needed");

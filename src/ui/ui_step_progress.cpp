@@ -493,6 +493,14 @@ void ui_step_progress_set_current(lv_obj_t* widget, int step_index) {
             lv_obj_set_style_bg_color(data->connectors[i], connector_color, 0);
         }
     }
+
+    // Scroll the active step into view if the widget lives in a scrollable
+    // container (vertical step bars can exceed the AMS sidebar column on small
+    // screens). Use the stored step item directly — connectors are moved to
+    // child index 0, so lv_obj_get_child(container, step_index) is unreliable.
+    if (data->step_items[step_index]) {
+        lv_obj_scroll_to_view(data->step_items[step_index], LV_ANIM_ON);
+    }
 }
 
 void ui_step_progress_set_completed(lv_obj_t* widget, int step_index) {

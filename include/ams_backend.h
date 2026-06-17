@@ -14,6 +14,7 @@
 #pragma once
 
 #include "ams_error.h"
+#include "ams_step_operation.h"
 #include "ams_types.h"
 #include "error_event.h"
 
@@ -243,6 +244,28 @@ class AmsBackend {
      */
     [[nodiscard]] virtual std::optional<helix::ErrorEvent> classify_error(
         const std::string& /*raw_line*/, const helix::ClassifyContext& /*ctx*/) const {
+        return std::nullopt;
+    }
+
+    /// One ordered phase in a backend's toolchange narration model.
+    struct ToolchangePhase {
+        std::string id;       ///< stable key matched from narration, e.g. "brush"
+        std::string label;    ///< display label (translatable), e.g. "Brush nozzle"
+        bool        optional; ///< if true, stays greyed/Pending when never narrated this swap
+    };
+
+    /// Declared ordered phase template for a toolchange operation.
+    /// Empty (default) => backend has no narration model; the sidebar uses the
+    /// legacy AmsAction-driven hardcoded step list (no regression).
+    [[nodiscard]] virtual std::vector<ToolchangePhase>
+    toolchange_phase_template(StepOperationType /*op*/) const {
+        return {};
+    }
+
+    /// Map one `//` narration body (prefix already stripped) to a phase id.
+    /// nullopt (default) => not a recognized phase line.
+    [[nodiscard]] virtual std::optional<std::string>
+    match_narration_phase(const std::string& /*narration*/) const {
         return std::nullopt;
     }
 

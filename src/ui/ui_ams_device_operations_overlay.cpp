@@ -61,6 +61,9 @@ AmsDeviceOperationsOverlay::~AmsDeviceOperationsOverlay() {
         lv_subject_deinit(&supports_auto_heat_subject_);
         lv_subject_deinit(&has_backend_subject_);
         lv_subject_deinit(&is_afc_subject_);
+        lv_subject_deinit(&is_qidi_subject_);
+        lv_subject_deinit(&qidi_eject_distance_display_subject_);
+        lv_subject_deinit(&qidi_eject_velocity_display_subject_);
     }
     spdlog::trace("[{}] Destroyed", get_name());
 }
@@ -106,6 +109,22 @@ void AmsDeviceOperationsOverlay::init_subjects() {
     lv_subject_init_int(&is_afc_subject_, 0);
     lv_xml_register_subject(nullptr, "ams_device_ops_is_afc", &is_afc_subject_);
 
+    // QIDI Box gating + eject distance/velocity value displays
+    lv_subject_init_int(&is_qidi_subject_, 0);
+    lv_xml_register_subject(nullptr, "ams_device_ops_is_qidi", &is_qidi_subject_);
+
+    qidi_eject_distance_buf_[0] = '\0';
+    lv_subject_init_string(&qidi_eject_distance_display_subject_, qidi_eject_distance_buf_, nullptr,
+                           sizeof(qidi_eject_distance_buf_), qidi_eject_distance_buf_);
+    lv_xml_register_subject(nullptr, "ams_device_ops_qidi_eject_distance_display",
+                            &qidi_eject_distance_display_subject_);
+
+    qidi_eject_velocity_buf_[0] = '\0';
+    lv_subject_init_string(&qidi_eject_velocity_display_subject_, qidi_eject_velocity_buf_, nullptr,
+                           sizeof(qidi_eject_velocity_buf_), qidi_eject_velocity_buf_);
+    lv_xml_register_subject(nullptr, "ams_device_ops_qidi_eject_velocity_display",
+                            &qidi_eject_velocity_display_subject_);
+
     subjects_initialized_ = true;
     spdlog::debug("[{}] Subjects initialized", get_name());
 }
@@ -117,6 +136,10 @@ void AmsDeviceOperationsOverlay::register_callbacks() {
     lv_xml_register_event_cb(nullptr, "on_ams_device_ops_bypass_toggled", on_bypass_toggled);
     lv_xml_register_event_cb(nullptr, "on_ams_afc_unload_after_print_toggled",
                              on_afc_unload_after_print_toggled);
+    lv_xml_register_event_cb(nullptr, "on_ams_qidi_eject_distance_changed",
+                             on_qidi_eject_distance_changed);
+    lv_xml_register_event_cb(nullptr, "on_ams_qidi_eject_velocity_changed",
+                             on_qidi_eject_velocity_changed);
     lv_xml_register_event_cb(nullptr, "on_ams_section_clicked", on_section_row_clicked);
     spdlog::debug("[{}] Callbacks registered", get_name());
 }
@@ -200,6 +223,7 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         lv_subject_set_int(&hw_bypass_sensor_subject_, 0);
         lv_subject_set_int(&supports_auto_heat_subject_, 0);
         lv_subject_set_int(&is_afc_subject_, 0);
+        lv_subject_set_int(&is_qidi_subject_, 0);
         system_info_buf_[0] = '\0';
         lv_subject_copy_string(&system_info_subject_, system_info_buf_);
         snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("No Multi-Filament System connected"));
@@ -245,6 +269,30 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
 
     // AFC-only: the unload-after-print toggle applies only to AFC systems
     lv_subject_set_int(&is_afc_subject_, backend->get_type() == AmsType::AFC ? 1 : 0);
+
+    // QIDI-only: the eject distance/velocity rows apply only to QIDI Box systems.
+    // Sync the sliders + value displays from the persisted settings.
+    bool is_qidi = backend->get_type() == AmsType::QIDI_BOX;
+    lv_subject_set_int(&is_qidi_subject_, is_qidi ? 1 : 0);
+    if (is_qidi && overlay_) {
+        int eject_distance = SettingsManager::instance().get_qidi_eject_distance();
+        int eject_velocity = SettingsManager::instance().get_qidi_eject_velocity();
+
+        auto* dist_slider = lv_obj_find_by_name(overlay_, "qidi_eject_distance_slider");
+        if (dist_slider) {
+            lv_slider_set_value(dist_slider, eject_distance, LV_ANIM_OFF);
+        }
+        snprintf(qidi_eject_distance_buf_, sizeof(qidi_eject_distance_buf_), "%d mm", eject_distance);
+        lv_subject_copy_string(&qidi_eject_distance_display_subject_, qidi_eject_distance_buf_);
+
+        auto* vel_slider = lv_obj_find_by_name(overlay_, "qidi_eject_velocity_slider");
+        if (vel_slider) {
+            lv_slider_set_value(vel_slider, eject_velocity, LV_ANIM_OFF);
+        }
+        snprintf(qidi_eject_velocity_buf_, sizeof(qidi_eject_velocity_buf_), "%d mm/s",
+                 eject_velocity);
+        lv_subject_copy_string(&qidi_eject_velocity_display_subject_, qidi_eject_velocity_buf_);
+    }
 
     // Update status
     AmsAction action = backend->get_current_action();
@@ -520,6 +568,48 @@ void AmsDeviceOperationsOverlay::on_afc_unload_after_print_toggled(lv_event_t* e
         spdlog::info("[AmsDeviceOperationsOverlay] AFC unload-after-print toggle: {}",
                      is_checked ? "enabled" : "disabled");
         SettingsManager::instance().set_afc_unload_after_print(is_checked);
+    }
+
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void AmsDeviceOperationsOverlay::on_qidi_eject_distance_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[AmsDeviceOperationsOverlay] on_qidi_eject_distance_changed");
+
+    auto* slider = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    if (!slider || !lv_obj_is_valid(slider)) {
+        spdlog::warn("[AmsDeviceOperationsOverlay] Stale callback - eject distance slider invalid");
+    } else {
+        int value = lv_slider_get_value(slider);
+        spdlog::info("[AmsDeviceOperationsOverlay] QIDI eject distance: {} mm", value);
+        SettingsManager::instance().set_qidi_eject_distance(value);
+
+        auto& overlay = get_ams_device_operations_overlay();
+        snprintf(overlay.qidi_eject_distance_buf_, sizeof(overlay.qidi_eject_distance_buf_),
+                 "%d mm", SettingsManager::instance().get_qidi_eject_distance());
+        lv_subject_copy_string(&overlay.qidi_eject_distance_display_subject_,
+                               overlay.qidi_eject_distance_buf_);
+    }
+
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void AmsDeviceOperationsOverlay::on_qidi_eject_velocity_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[AmsDeviceOperationsOverlay] on_qidi_eject_velocity_changed");
+
+    auto* slider = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    if (!slider || !lv_obj_is_valid(slider)) {
+        spdlog::warn("[AmsDeviceOperationsOverlay] Stale callback - eject velocity slider invalid");
+    } else {
+        int value = lv_slider_get_value(slider);
+        spdlog::info("[AmsDeviceOperationsOverlay] QIDI eject velocity: {} mm/s", value);
+        SettingsManager::instance().set_qidi_eject_velocity(value);
+
+        auto& overlay = get_ams_device_operations_overlay();
+        snprintf(overlay.qidi_eject_velocity_buf_, sizeof(overlay.qidi_eject_velocity_buf_),
+                 "%d mm/s", SettingsManager::instance().get_qidi_eject_velocity());
+        lv_subject_copy_string(&overlay.qidi_eject_velocity_display_subject_,
+                               overlay.qidi_eject_velocity_buf_);
     }
 
     LVGL_SAFE_EVENT_CB_END();

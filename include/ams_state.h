@@ -6,6 +6,7 @@
 #include "ui_observer_guard.h"
 
 #include "ams_backend.h"
+#include "ams_step_operation.h"
 #include "ams_types.h"
 #include "filament_consumption_tracker.h"
 #include "filament_mapper.h"
@@ -1056,6 +1057,26 @@ class AmsState {
      */
     void set_action(AmsAction action);
 
+    /// @brief Subject holding the current toolchange narration phase index (-1 = none).
+    lv_subject_t* get_toolchange_step_subject() {
+        return &toolchange_step_;
+    }
+
+    /// @brief Active toolchange operation (used by the narration router to resolve phases).
+    StepOperationType get_active_step_operation() const {
+        return active_step_operation_;
+    }
+
+    /// @brief Set the active toolchange operation kind.
+    void set_active_step_operation(StepOperationType op) {
+        active_step_operation_ = op;
+    }
+
+    /// Set the current toolchange narration phase index (MAIN THREAD ONLY).
+    /// Also mirrors the human label into ams_action_detail for the status line.
+    /// index = -1 clears.
+    void set_narration_phase(int index, const std::string& label);
+
     /**
      * @brief Check if a filament operation (load/unload) is currently active
      *
@@ -1181,6 +1202,10 @@ class AmsState {
     /// Granular load/unload sub-phase (-1=none, 0=Home, 1=Select, 2=Heat,
     /// 3=Move). Snapmaker U1 only; static-lifetime singleton subject.
     lv_subject_t ams_operation_phase_;
+    lv_subject_t toolchange_step_; ///< current narration phase index (-1 = none/idle)
+    /// Active toolchange operation for the narration router to resolve a phase
+    /// index without a sidebar pointer. Defaults to a swap (most common case).
+    StepOperationType active_step_operation_ = StepOperationType::LOAD_SWAP;
     lv_subject_t current_slot_;
     lv_subject_t pending_target_slot_;
     lv_subject_t ams_current_tool_;
@@ -1205,6 +1230,8 @@ class AmsState {
     /// observer can rerun the action-detail derivation without re-querying the
     /// backend). Updated from sync_from_backend() and set_action_detail().
     std::string last_operation_detail_;
+
+    std::string last_narration_label_; ///< live toolchange narration phase label; top priority in recompute_action_detail; cleared on IDLE
 
     /// Observer that re-runs compute_action_detail() when PrinterState's
     /// print_state_enum subject changes, so the sidebar flips between
