@@ -670,6 +670,13 @@ void ui_filament_path_canvas_set_slot_filament(lv_obj_t* obj, int slot_index, in
     }
 }
 
+int ui_filament_path_canvas_get_slot_filament(lv_obj_t* obj, int slot_index) {
+    auto* data = get_data(obj);
+    if (!data || slot_index < 0 || slot_index >= FilamentPathData::MAX_SLOTS)
+        return static_cast<int>(PathSegment::NONE);
+    return static_cast<int>(data->slot_filament_states[slot_index].segment);
+}
+
 void ui_filament_path_canvas_set_slot_prep_sensor(lv_obj_t* obj, int slot, bool has_sensor) {
     auto* data = get_data(obj);
     if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)

@@ -225,6 +225,20 @@ void ui_filament_path_canvas_set_slot_filament(lv_obj_t* obj, int slot_index, in
                                                uint32_t color);
 
 /**
+ * @brief Get the per-slot filament path segment currently drawn for a slot
+ *
+ * Returns the PathSegment enum value (as int) the canvas is rendering for the
+ * given slot's lane→hub tube. PathSegment::NONE means no tube is drawn (empty
+ * lane). Out-of-range slots and a null/uninitialized widget return
+ * PathSegment::NONE.
+ *
+ * @param obj The filament_path_canvas widget
+ * @param slot_index Slot index (0-15)
+ * @return PathSegment enum value (as int) for the slot
+ */
+int ui_filament_path_canvas_get_slot_filament(lv_obj_t* obj, int slot_index);
+
+/**
  * @brief Set per-slot prep sensor capability flag
  *
  * Controls whether a prep/pre-gate sensor dot is drawn for the given slot.
