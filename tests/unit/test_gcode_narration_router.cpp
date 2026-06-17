@@ -17,6 +17,9 @@ using namespace helix;
 // MoonrakerClient + WebSocket.
 struct GcodeNarrationRouterTestAccess {
     static void feed(GcodeNarrationRouter& r, const std::string& line) { r.process_line(line); }
+    static void notify(GcodeNarrationRouter& r, const nlohmann::json& msg) {
+        r.on_notify_gcode_response(msg);
+    }
 };
 
 namespace {
