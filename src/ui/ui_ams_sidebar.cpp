@@ -267,6 +267,18 @@ void AmsOperationSidebar::init_observers() {
             }
         });
 
+    // Toolchange step observer: when the step bar is narration-driven, the
+    // GcodeNarrationRouter updates this subject with the current phase index.
+    // Highlight the matching step row and scroll it into view (ui_step_progress
+    // scrolls its active row via lv_obj_scroll_to_view in set_current).
+    toolchange_step_observer_ = observe_int_sync<AmsOperationSidebar>(
+        AmsState::instance().get_toolchange_step_subject(), this,
+        [](AmsOperationSidebar* self, int index) {
+            if (!self->active_ || !self->step_progress_ || !self->narration_driven_ || index < 0)
+                return;
+            ui_step_progress_set_current(self->step_progress_, index);
+        });
+
     // Extruder temp observer: checks pending preheat load + refreshes heat step
     extruder_temp_observer_ = observe_int_sync<AmsOperationSidebar>(
         printer_state_.get_active_extruder_temp_subject(), this,
@@ -314,6 +326,7 @@ void AmsOperationSidebar::cleanup() {
     active_backend_observer_.reset();
     bypass_spool_observer_.reset();
     color_observer_.reset();
+    toolchange_step_observer_.reset(); // [L085] reset(), never release()
     extruder_temp_observer_.reset();
 
     // Reset extracted modules AFTER observers — they may have their own observers
@@ -327,6 +340,8 @@ void AmsOperationSidebar::cleanup() {
     pending_load_target_temp_ = 0;
     ui_initiated_heat_ = false;
     prev_ams_action_ = AmsAction::IDLE;
+    narration_driven_ = false;
+    current_phase_template_.clear();
 
     spdlog::debug("[AmsSidebar] Cleaned up");
 }
@@ -454,10 +469,49 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
 
     current_operation_type_ = op_type;
 
+    // Expose the active operation to AmsState so the narration router can
+    // resolve `//` phase narration lines to step indices for THIS operation.
+    AmsState::instance().set_active_step_operation(op_type);
+
+    AmsBackend* backend = AmsState::instance().get_backend();
+
+    // Preferred path: build the step bar from the backend's ordered phase
+    // template (AFC and any backend that overrides toolchange_phase_template).
+    // The template labels purge/brush/clean/cut/poop/kick correctly (fixes S1
+    // mislabeling purge as "Feed" and S2 omitting brush/clean/cut/poop/kick).
+    if (backend) {
+        current_phase_template_ = backend->toolchange_phase_template(op_type);
+        if (!current_phase_template_.empty()) {
+            std::vector<ui_step_t> steps;
+            steps.reserve(current_phase_template_.size());
+            for (const auto& p : current_phase_template_) {
+                steps.push_back({p.label.c_str(), helix::StepState::Pending});
+            }
+            current_step_count_ = static_cast<int>(steps.size());
+            step_progress_ = ui_step_progress_create(step_progress_container_, steps.data(),
+                                                     current_step_count_, false,
+                                                     "ams_step_progress");
+            narration_driven_ = (step_progress_ != nullptr);
+            if (narration_driven_) {
+                spdlog::debug("[AmsSidebar] Created narration-driven step bar: {} phases for "
+                              "op_type={}",
+                              current_step_count_, static_cast<int>(op_type));
+                return; // skip legacy hardcoded switch — narration drives the index
+            }
+            spdlog::error("[AmsSidebar] Failed to create narration step bar; falling back to "
+                          "legacy switch for op_type={}",
+                          static_cast<int>(op_type));
+        }
+    }
+
+    // Legacy path (backends with no phase template — no regression): build the
+    // hardcoded Heat/Feed/Purge stepper driven by the coarse AmsAction enum.
+    narration_driven_ = false;
+    current_phase_template_.clear();
+
     // Get capabilities from backend for dynamic labels
     TipMethod tip_method = TipMethod::CUT;
     bool supports_purge = false;
-    AmsBackend* backend = AmsState::instance().get_backend();
     if (backend) {
         AmsSystemInfo info = backend->get_system_info();
         tip_method = info.tip_method;
@@ -661,6 +715,14 @@ void AmsOperationSidebar::update_step_progress(AmsAction action) {
             ui_step_progress_set_label(step_progress_, 0, lv_tr("Heat nozzle"));
             heat_label_showing_temp_ = false;
         }
+        return;
+    }
+
+    // When the step bar is narration-driven, the toolchange_step observer owns
+    // the active index — the coarse AmsAction→index map (which mislabels purge
+    // as "Feed", S1) must not fight it. The show/hide container logic above still
+    // runs so the bar appears/disappears with the operation.
+    if (narration_driven_) {
         return;
     }
 
