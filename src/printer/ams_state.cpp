@@ -204,6 +204,7 @@ void AmsState::init_subjects(bool register_xml) {
     // System-level subjects
     INIT_SUBJECT_INT(ams_type, static_cast<int>(AmsType::NONE), subjects_, register_xml);
     INIT_SUBJECT_INT(ams_action, static_cast<int>(AmsAction::IDLE), subjects_, register_xml);
+    INIT_SUBJECT_INT(toolchange_step, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(current_slot, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(pending_target_slot, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(ams_current_tool, -1, subjects_, register_xml);
@@ -1831,6 +1832,20 @@ void AmsState::set_action(AmsAction action) {
         // Action change must propagate to the displayed detail string (e.g.
         // LOADING → IDLE while still printing should flip "Loading" → "Printing").
         recompute_action_detail();
+        // Operation ended: clear the narration phase index so the next swap
+        // restarts from a clean step bar. set_action writes subjects directly
+        // (main-thread contract), so write toolchange_step_ directly too.
+        if (action == AmsAction::IDLE) {
+            lv_subject_set_int(&toolchange_step_, -1);
+        }
+    }
+}
+
+void AmsState::set_narration_phase(int index, const std::string& label) {
+    lv_subject_set_int(&toolchange_step_, index);
+    if (!label.empty() &&
+        std::strcmp(lv_subject_get_string(&ams_action_detail_), label.c_str()) != 0) {
+        lv_subject_copy_string(&ams_action_detail_, label.c_str());
     }
 }
 
