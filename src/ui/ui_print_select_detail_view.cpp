@@ -714,18 +714,19 @@ void PrintSelectDetailView::on_cancel_delete_static(lv_event_t* e) {
 
 void PrintSelectDetailView::update_color_swatches(
     const std::set<int>& tool_indices, const std::vector<std::string>& palette_colors) {
-    // Each chip shows the gcode tool number on top ("T0", "T2", ...) and the
-    // EFFECTIVE mapped slot/lane number underneath ("1", "4", ...), with the
-    // chip fill = the ACTUAL present color of the mapped slot. Source the slot
-    // and fill from the resolved tool→slot mapping (NOT backend->get_slot_info(),
+    // TWO-TONE chip: the TOP band shows the GCODE FILE intended color (slicer
+    // palette) + the gcode tool number ("T0", "T2"); the BOTTOM band shows the
+    // ACTUAL present color of the EFFECTIVE mapped slot + that slot's lane
+    // number ("1", "4"). A thin divider separates them. We source the mapped
+    // slot from the resolved tool→slot mapping (NOT backend->get_slot_info(),
     // since slot != tool on multi-unit backends like the U1). This mirrors
     // recompute_preflight() / open_remap_modal: use the card's current mappings
     // if present (so chips reflect a user edit after Done), else compute the
     // defaults — the same effective mapping the remap dialog shows.
     //
-    // Palette-only fallback (no AMS backend at all): collect_available_slots()
-    // is empty and compute_defaults yields mapped_slot < 0, so we fall back to
-    // the slicer palette color for the fill and hide the slot number.
+    // No-backend / palette-only: collect_available_slots() is empty and
+    // compute_defaults yields mapped_slot < 0, so no lane resolves — the bottom
+    // band stays blank and the chip is effectively just the gcode-color top band.
     if (!color_swatches_row_) {
         return;
     }
@@ -738,6 +739,8 @@ void PrintSelectDetailView::update_color_swatches(
     if (mappings.empty()) {
         mappings = helix::FilamentMapper::compute_defaults(tools, slots);
     }
+
+    const lv_color_t neutral = theme_manager_get_color("text_muted");
 
     for (int tool : tool_indices) {
         // Resolve this tool's effective mapping → present slot.
@@ -757,8 +760,17 @@ void PrintSelectDetailView::update_color_swatches(
             break;
         }
 
-        lv_color_t fill_color{};
-        bool have_fill = false;
+        // TOP band: gcode intended color from the slicer palette. Falls back to
+        // the neutral chip default when the palette has no entry for this tool.
+        lv_color_t gcode_color = neutral;
+        if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size() &&
+            !palette_colors[tool].empty()) {
+            gcode_color = theme_manager_parse_hex_color(palette_colors[tool].c_str());
+        }
+
+        // BOTTOM band: present color of the effective mapped slot.
+        lv_color_t slot_color = neutral;
+        bool have_slot_color = false;
         bool slot_is_empty = false;
         std::string slot_number_text;
 
@@ -766,22 +778,15 @@ void PrintSelectDetailView::update_color_swatches(
             slot_number_text = std::to_string(resolved->local_slot_index + 1);
             if (resolved->is_empty) {
                 // Mapped to an empty lane — show which lane it routes to but
-                // render the empty-slot variant.
+                // render the empty-slot variant on the bottom band.
                 slot_is_empty = true;
             } else {
-                fill_color = lv_color_hex(resolved->color_rgb);
-                have_fill = true;
+                slot_color = lv_color_hex(resolved->color_rgb);
+                have_slot_color = true;
             }
-        } else if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size() &&
-                   !palette_colors[tool].empty()) {
-            // No resolved lane (auto/unmapped or no backend) — fall back to the
-            // slicer palette intended color; no slot number to show.
-            fill_color = theme_manager_parse_hex_color(palette_colors[tool].c_str());
-            have_fill = true;
-        } else {
-            // No mapping and no palette color: render the empty variant.
-            slot_is_empty = true;
         }
+        // No resolved lane (auto/unmapped or no backend): bottom band stays
+        // blank (no number, default fill) — chip reads as just the gcode top.
 
         auto* swatch = static_cast<lv_obj_t*>(
             lv_xml_create(color_swatches_row_, "filament_swatch", nullptr));
@@ -789,22 +794,38 @@ void PrintSelectDetailView::update_color_swatches(
             continue;
         }
 
-        if (slot_is_empty) {
-            lv_obj_add_state(swatch, LV_STATE_USER_1);
-        } else if (have_fill) {
-            lv_obj_set_style_bg_color(swatch, fill_color, 0);
+        // Top band fill + label.
+        if (auto* top_band = lv_obj_find_by_name(swatch, "top_band")) {
+            lv_obj_set_style_bg_color(top_band, gcode_color, 0);
+            if (auto* tool_label = lv_obj_find_by_name(top_band, "tool_label")) {
+                lv_label_set_text_fmt(tool_label, "T%d", tool);
+                lv_obj_set_style_text_color(
+                    tool_label, theme_manager_get_contrast_color(gcode_color), 0);
+            }
         }
 
-        lv_color_t text_color = slot_is_empty ? theme_manager_get_color("warning")
-                                              : theme_manager_get_contrast_color(fill_color);
-
-        if (auto* tool_label = lv_obj_find_by_name(swatch, "tool_label")) {
-            lv_label_set_text_fmt(tool_label, "T%d", tool);
-            lv_obj_set_style_text_color(tool_label, text_color, 0);
+        // Bottom band fill (or empty variant) + lane number.
+        lv_color_t bottom_text_color = slot_is_empty
+                                            ? theme_manager_get_color("warning")
+                                            : theme_manager_get_contrast_color(slot_color);
+        if (auto* bottom_band = lv_obj_find_by_name(swatch, "bottom_band")) {
+            if (slot_is_empty) {
+                lv_obj_add_state(bottom_band, LV_STATE_USER_1);
+            } else if (have_slot_color) {
+                lv_obj_set_style_bg_color(bottom_band, slot_color, 0);
+            }
+            if (auto* slot_label = lv_obj_find_by_name(bottom_band, "slot_label")) {
+                lv_label_set_text(slot_label, slot_number_text.c_str());
+                lv_obj_set_style_text_color(slot_label, bottom_text_color, 0);
+            }
         }
-        if (auto* slot_label = lv_obj_find_by_name(swatch, "slot_label")) {
-            lv_label_set_text(slot_label, slot_number_text.c_str());
-            lv_obj_set_style_text_color(slot_label, text_color, 0);
+
+        // Divider: a color that reads against BOTH band fills. Blend the two
+        // band colors (50/50) and take the contrast of the blend, so the rule
+        // stays visible whether the bands are light, dark, or mixed.
+        if (auto* divider = lv_obj_find_by_name(swatch, "divider")) {
+            lv_color_t blend = lv_color_mix(gcode_color, slot_color, LV_OPA_50);
+            lv_obj_set_style_bg_color(divider, theme_manager_get_contrast_color(blend), 0);
         }
     }
 
