@@ -184,8 +184,10 @@
           </lv_obj>
           <lv_obj name="color_swatches_row"
                   width="100%" height="32" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="row"
-                  style_pad_top="#space_xs" scrollable="false">
-            <!-- Color swatches added dynamically in C++ -->
+                  style_pad_top="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+            <!-- Color swatches added dynamically in C++ (clickable=false +
+                 event_bubble=true on the swatch component) so a tap reaches the
+                 parent color_requirements_card → opens the remap modal on U1. -->
           </lv_obj>
         </ui_card>
 

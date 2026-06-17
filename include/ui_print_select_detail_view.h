@@ -151,6 +151,26 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Set callback fired when the color-requirements swatch card is tapped.
+     *
+     * Mirrors the AFC/CFS mapping-card UX: the panel wires this to open the
+     * native (Snapmaker) remap modal. The click is only made active for backends
+     * whose remap strategy is SnapmakerNative (see create()).
+     */
+    void set_on_remap_requested(std::function<void()> callback) {
+        on_remap_requested_ = std::move(callback);
+    }
+
+    /**
+     * @brief Handle a tap on the color-requirements swatch card.
+     *
+     * Gates on the active backend's remap strategy (SnapmakerNative only) and,
+     * when applicable, fires on_remap_requested_. Public so the LVGL click
+     * trampoline in create() can dispatch to it. No-op on non-Snapmaker backends.
+     */
+    void on_color_card_clicked();
+
+    /**
      * @brief Set the visible subject for XML binding
      *
      * The subject should be initialized to 0 (hidden).
@@ -465,6 +485,10 @@ class PrintSelectDetailView : public OverlayBase {
     // Color swatches container (parent card visibility driven by the
     // color_swatches_visible subject — bound in print_file_detail.xml).
     lv_obj_t* color_swatches_row_ = nullptr;
+    // The legacy color-requirements card (parent of color_swatches_row_). Made
+    // tappable on Snapmaker (SnapmakerNative remap strategy) to open the remap
+    // modal, mirroring the AFC/CFS FilamentMappingCard whole-card click.
+    lv_obj_t* color_requirements_card_ = nullptr;
 
     // History status display
     lv_obj_t* history_status_row_ = nullptr;
@@ -546,6 +570,12 @@ class PrintSelectDetailView : public OverlayBase {
 
     // === Callbacks ===
     DeleteConfirmedCallback on_delete_confirmed_;
+
+    // Fired when the user taps the (Snapmaker) color-requirements swatch card.
+    // Set by PrintSelectPanel to open the native remap modal — the same entry
+    // point the preflight-check modal's "Remap…" button uses. Empty on backends
+    // where the swatch card is purely informational.
+    std::function<void()> on_remap_requested_;
 
     // === Internal Methods ===
 

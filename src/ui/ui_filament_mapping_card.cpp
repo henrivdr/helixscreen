@@ -31,14 +31,20 @@ void FilamentMappingCard::create(lv_obj_t* card_widget, lv_obj_t* rows_container
     rows_container_ = rows_container;
     warning_container_ = warning_container;
 
-    // Make the entire card tappable to open the mapping modal
+    // Make the entire card tappable. If an on_tap override is set (the print
+    // detail view routes the tap to the panel's single open_remap_modal()), fire
+    // that; otherwise fall back to the card's own internal mapping modal.
     if (card_) {
         lv_obj_add_flag(card_, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(
             card_,
             [](lv_event_t* e) {
                 auto* self = static_cast<FilamentMappingCard*>(lv_event_get_user_data(e));
-                self->open_mapping_modal();
+                if (self->on_tap_) {
+                    self->on_tap_();
+                } else {
+                    self->open_mapping_modal();
+                }
             },
             LV_EVENT_CLICKED, this);
     }

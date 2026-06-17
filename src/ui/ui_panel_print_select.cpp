@@ -2378,6 +2378,12 @@ void PrintSelectPanel::create_detail_view() {
     detail_view_->set_visible_subject(&detail_view_visible_subject_);
     detail_view_->set_on_delete_confirmed([this]() { delete_file(); });
 
+    // The detail view's tappable cards (the visible color-requirements swatch
+    // card on U1, AND the embedded editable FilamentMappingCard on AFC/CFS) all
+    // route their tap here so there is ONE opener and ONE modal instance for
+    // every backend — the same entry the preflight "Remap…" button uses.
+    detail_view_->set_on_remap_requested([this]() { open_remap_modal(); });
+
     // Re-enable the print button when macro analysis completes. The legacy
     // bullet-text "preprint steps" display has been replaced by the dynamic
     // PrePrintOption toggle UI in print_file_detail.xml, so no scan/analysis
@@ -2580,59 +2586,47 @@ void PrintSelectPanel::show_preflight_modal(const helix::PreflightResult& pf) {
 }
 
 void PrintSelectPanel::on_preflight_remap() {
+    open_remap_modal();
+}
+
+// ============================================================================
+// Unified filament remap
+// ============================================================================
+//
+// ONE opener for every backend. The picker inputs are built UNIFORMLY:
+//   - tool_info  from the cached pre-flight checks (each ToolCheck carries the
+//                tool index + the gcode's intended color/material), so the modal
+//                shows exactly the tools this print uses.
+//   - slots      from AmsState::collect_available_slots() (canonical accessor).
+//   - mappings   the current effective mappings if the card already holds any
+//                (preserves in-progress AFC/CFS edits), else FilamentMapper
+//                defaults.
+//
+// The per-backend difference is ONLY in how the chosen mapping is applied — see
+// apply_remap(), dispatched on RemapStrategy. Print-start is likewise already
+// strategy-dispatched (PrintStartController), so Native and SnapmakerNative both
+// read the same shared card store and need no special opener.
+void PrintSelectPanel::open_remap_modal() {
+    if (!detail_view_) {
+        spdlog::warn("[{}] Remap requested with no detail view", get_name());
+        return;
+    }
+
     auto* backend = AmsState::instance().get_backend();
     if (!backend) {
         return;
     }
-    switch (backend->get_remap_strategy()) {
-    case AmsBackend::RemapStrategy::Native:
-        open_native_remap_modal();
-        break;
-    case AmsBackend::RemapStrategy::GcodeRewrite:
-        open_gcode_remap_modal();
-        break;
-    case AmsBackend::RemapStrategy::SnapmakerNative:
-        open_snapmaker_remap_modal();
-        break;
-    case AmsBackend::RemapStrategy::None:
-        break;
-    }
-}
-
-// Native (Happy Hare / AFC / CFS / AD5X-IFS / toolchanger) tool→slot remap.
-// These backends own the routing table, so we reuse the existing
-// FilamentMappingModal — opened via the detail view's embedded mapping card —
-// to let the user reassign tools to slots. The card's on_mappings_changed path
-// (wired in the detail view) republishes the edited mappings AND re-runs the
-// pre-flight validator, so a subsequent Print reflects the new mapping. The
-// backend itself is updated at print-start by PrintStartController::apply_remap,
-// which reads detail_view_->get_filament_mappings() (the card's vector). We do
-// NOT auto-start the print: the user taps Print again, and the now-cleared gate
-// lets it proceed.
-void PrintSelectPanel::open_native_remap_modal() {
-    if (!detail_view_) {
-        spdlog::warn("[{}] Native remap requested with no detail view", get_name());
+    const auto strategy = backend->get_remap_strategy();
+    if (strategy == AmsBackend::RemapStrategy::None) {
         return;
     }
-    detail_view_->open_filament_mapping_modal();
-}
 
-// GcodeRewrite (Snapmaker U1, ACE) tool->head remap. These backends own no
-// internal routing table, so the only way to redirect a logical tool to a
-// different physical head is to REWRITE the Tx / ACTIVATE_EXTRUDER /
-// SET_GCODE_VARIABLE lines in the gcode itself (Task-11 GcodeToolRemapper) and
-// print the modified copy through the HelixPrint plugin so print history stays
-// under the original filename.
-//
-// The FilamentMappingCard is hidden for these backends, so we build the picker
-// inputs DIRECTLY from the cached pre-flight result rather than reading the
-// card. On "Done" we convert the edited mappings into a logical->physical map
-// and drive the prep-manager's rewrite+print pipeline.
-void PrintSelectPanel::open_gcode_remap_modal() {
-    // Plugin guard FIRST: the rewrite path prints a modified temp copy and
-    // relies on the HelixPrint plugin to symlink + patch history back to the
-    // original filename. Without it, history would show the temp name.
-    if (!printer_state_.service_has_helix_plugin()) {
+    // GcodeRewrite (ACE / Snapmaker-via-rewrite) prints a modified temp copy and
+    // relies on the HelixPrint plugin to patch print history back to the original
+    // filename. Guard BEFORE opening the modal so the user sees the actionable
+    // alert instead of a picker whose Done would silently fail.
+    if (strategy == AmsBackend::RemapStrategy::GcodeRewrite &&
+        !printer_state_.service_has_helix_plugin()) {
         helix::ui::modal_show_alert(
             lv_tr("Remap needs the HelixPrint plugin"),
             lv_tr("Install the HelixPrint plugin in Advanced settings to remap "
@@ -2641,14 +2635,9 @@ void PrintSelectPanel::open_gcode_remap_modal() {
         return;
     }
 
-    if (!detail_view_) {
-        spdlog::warn("[{}] Gcode remap requested with no detail view", get_name());
-        return;
-    }
-
-    // Build picker inputs directly from the pre-flight checks (the hidden card is
-    // not consulted). Each ToolCheck carries the intended color/material the
-    // gcode declared for that tool.
+    // Build picker inputs uniformly from the cached pre-flight checks. Works for
+    // ALL backends — including those whose inline mapping card is hidden (U1 /
+    // ACE) — because recompute_preflight() populates checks for every backend.
     const auto& pf = detail_view_->preflight_result();
     std::vector<helix::GcodeToolInfo> tool_info;
     tool_info.reserve(pf.checks.size());
@@ -2661,35 +2650,56 @@ void PrintSelectPanel::open_gcode_remap_modal() {
     }
 
     if (tool_info.empty()) {
-        spdlog::warn("[{}] Gcode remap: no tools in pre-flight result", get_name());
+        spdlog::warn("[{}] Remap: no tools in pre-flight result", get_name());
         NOTIFY_INFO(lv_tr("Nothing to remap"));
         return;
     }
 
     auto slots = AmsState::instance().collect_available_slots();
-    auto mappings = helix::FilamentMapper::compute_defaults(tool_info, slots);
 
-    gcode_remap_modal_.set_tool_info(tool_info);
-    gcode_remap_modal_.set_available_slots(slots);
-    gcode_remap_modal_.set_mappings(mappings);
-    gcode_remap_modal_.set_on_mappings_updated([this](std::vector<helix::ToolMapping> updated) {
-        // Convert edited mappings -> logical tool index -> physical head index.
-        // Skip auto/unmapped entries (mapped_slot < 0) — those leave the gcode's
-        // original tool number untouched.
+    // Seed the picker with the mappings the print will actually use. For editable
+    // backends (AFC / CFS / Happy Hare / AD5X-IFS) the card already holds the
+    // current/positional mappings, so reusing them preserves in-progress edits;
+    // for U1 / ACE the card is hidden and get_filament_mappings() is empty, so we
+    // fall back to FilamentMapper defaults (identical to the prior per-backend
+    // openers).
+    auto mappings = detail_view_->get_filament_mappings();
+    if (mappings.empty()) {
+        mappings = helix::FilamentMapper::compute_defaults(tool_info, slots);
+    }
+
+    remap_modal_.set_tool_info(tool_info);
+    remap_modal_.set_available_slots(slots);
+    remap_modal_.set_mappings(mappings);
+    remap_modal_.set_on_mappings_updated(
+        [this](std::vector<helix::ToolMapping> updated) { apply_remap(updated); });
+    remap_modal_.show(lv_screen_active());
+}
+
+// Strategy-dispatched APPLY — the ONLY place the backends diverge in the UI.
+void PrintSelectPanel::apply_remap(const std::vector<helix::ToolMapping>& updated) {
+    auto* backend = AmsState::instance().get_backend();
+    if (!backend) {
+        return;
+    }
+
+    switch (backend->get_remap_strategy()) {
+    case AmsBackend::RemapStrategy::GcodeRewrite: {
+        // ACE / Snapmaker-via-rewrite: rewrite the Tx / ACTIVATE_EXTRUDER /
+        // SET_GCODE_VARIABLE lines in the gcode and print the modified copy via
+        // the HelixPrint plugin (history stays under the original filename). The
+        // plugin presence was already guarded in open_remap_modal().
         std::map<int, int> remap;
         for (const auto& m : updated) {
             if (m.tool_index < 0 || m.mapped_slot < 0) {
-                continue;
+                continue; // auto / unmapped — leave the gcode's tool number alone
             }
             // For U1/ACE, slot index == physical head, so mapped_slot is the head
             // the gcode rewrite targets. A backend where slot != head would need a
-            // slot->head translation here (verify on bench U1).
+            // slot→head translation here.
             remap[m.tool_index] = m.mapped_slot;
         }
 
-        // Resolve the prep manager + current file path, then drive the
-        // rewrite+print pipeline. The pipeline guards identity remaps internally
-        // (prints the original unmodified when nothing changes).
         auto* prep = detail_view_ ? detail_view_->get_prep_manager() : nullptr;
         if (!prep) {
             spdlog::warn("[{}] Gcode remap: no prep manager", get_name());
@@ -2703,65 +2713,20 @@ void PrintSelectPanel::open_gcode_remap_modal() {
 
         spdlog::info("[{}] Applying gcode remap: {} tool(s) for {}", get_name(), remap.size(),
                      file_path);
+        // The pipeline guards identity remaps internally (prints the original
+        // unmodified when nothing changed).
         prep->modify_and_print_with_remap(file_path, remap, [this]() {
             PrintStatusPanel::push_overlay(parent_screen_);
         });
-    });
-
-    gcode_remap_modal_.show(lv_screen_active());
-}
-
-// SnapmakerNative (Snapmaker U1) tool→physical-head remap. The U1 firmware
-// owns the print_task_config routing table, applied natively at print-start
-// via SET_PRINT_EXTRUDER_MAP lines (PrintStartController::send_snapmaker_
-// preprint_then → AmsBackendSnapmaker::build_preprint_gcode). The inline
-// FilamentMappingCard widget is HIDDEN on U1 (caps editable=false), so we
-// build the picker DIRECTLY from the cached pre-flight result, exactly like
-// open_gcode_remap_modal(). On "Done" we push the chosen mappings into the
-// card's mappings_ store (detail_view_->set_filament_mappings) — that single
-// store feeds BOTH recompute_preflight() (the gate refreshes) AND
-// get_effective_remap() (the print-start native send). We do NOT auto-start
-// the print: the user taps Print again and the recomputed gate lets it
-// proceed, at which point the SET_PRINT_EXTRUDER_MAP lines are emitted.
-void PrintSelectPanel::open_snapmaker_remap_modal() {
-    if (!detail_view_) {
-        spdlog::warn("[{}] Snapmaker remap requested with no detail view", get_name());
-        return;
+        break;
     }
 
-    // Build picker inputs directly from the pre-flight checks (the hidden card
-    // is not consulted). Each ToolCheck carries the intended color/material the
-    // gcode declared for that logical tool.
-    const auto& pf = detail_view_->preflight_result();
-    std::vector<helix::GcodeToolInfo> tool_info;
-    tool_info.reserve(pf.checks.size());
-    for (const auto& check : pf.checks) {
-        helix::GcodeToolInfo info;
-        info.tool_index = check.tool_index;
-        info.color_rgb = check.intended_color;
-        info.material = check.intended_material;
-        tool_info.push_back(std::move(info));
-    }
-
-    if (tool_info.empty()) {
-        spdlog::warn("[{}] Snapmaker remap: no tools in pre-flight result", get_name());
-        NOTIFY_INFO(lv_tr("Nothing to remap"));
-        return;
-    }
-
-    // The U1's 4 physical heads (0-3) are the assignable targets. slot_index
-    // == physical head for the toolchanger backend, so no slot→head xlate.
-    auto slots = AmsState::instance().collect_available_slots();
-    auto mappings = helix::FilamentMapper::compute_defaults(tool_info, slots);
-
-    gcode_remap_modal_.set_tool_info(tool_info);
-    gcode_remap_modal_.set_available_slots(slots);
-    gcode_remap_modal_.set_mappings(mappings);
-    gcode_remap_modal_.set_on_mappings_updated([this](std::vector<helix::ToolMapping> updated) {
-        // Log each non-identity choice for on-device confirmation, then push
-        // the full mapping vector into the card store. get_effective_remap()
-        // identity-filters (logical t → head t is dropped), so only changed
-        // tools yield a SET_PRINT_EXTRUDER_MAP line at print-start.
+    case AmsBackend::RemapStrategy::SnapmakerNative: {
+        // Snapmaker U1: log each non-identity choice for on-device confirmation,
+        // then push the full vector into the shared card store. The backend send
+        // (SET_PRINT_EXTRUDER_MAP via build_preprint_gcode) happens at print-start
+        // through PrintStartController, which reads get_effective_remap() — that
+        // identity-filters, so only changed tools emit a line.
         auto default_head = [](int tool) { return (tool >= 0 && tool <= 3) ? tool : 0; };
         for (const auto& m : updated) {
             if (m.tool_index >= 0 && m.mapped_slot >= 0 &&
@@ -2771,11 +2736,25 @@ void PrintSelectPanel::open_snapmaker_remap_modal() {
             }
         }
         if (detail_view_) {
-            detail_view_->set_filament_mappings(std::move(updated));
+            detail_view_->set_filament_mappings(updated);
         }
-    });
+        break;
+    }
 
-    gcode_remap_modal_.show(lv_screen_active());
+    case AmsBackend::RemapStrategy::Native:
+        // AFC / Happy Hare / CFS / AD5X-IFS / toolchanger: push the chosen
+        // mappings into the shared card store. The backend send (set_tool_mapping
+        // per changed tool) happens at print-start through PrintStartController,
+        // which reads get_filament_mappings(). The card's on_mappings_changed
+        // path re-runs the pre-flight gate so a subsequent Print clears the block.
+        if (detail_view_) {
+            detail_view_->set_filament_mappings(updated);
+        }
+        break;
+
+    case AmsBackend::RemapStrategy::None:
+        break;
+    }
 }
 
 void PrintSelectPanel::delete_file() {

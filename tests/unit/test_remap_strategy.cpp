@@ -21,6 +21,7 @@
 #include "ams_backend_afc.h"
 #include "ams_backend_cfs.h"
 #include "ams_backend_happy_hare.h"
+#include "ams_backend_qidi.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_backend_toolchanger.h"
 
@@ -65,6 +66,11 @@ class SnapmakerProbe : public AmsBackendSnapmaker {
 class AceProbe : public AmsBackendAce {
   public:
     AceProbe() : AmsBackendAce(nullptr, nullptr) {}
+};
+
+class QidiProbe : public AmsBackendQidi {
+  public:
+    QidiProbe() : AmsBackendQidi(nullptr, nullptr) {}
 };
 
 // Minimal concrete subclass of the base to test the default.
@@ -126,6 +132,10 @@ TEST_CASE("Native-strategy backends return RemapStrategy::Native", "[ams][strate
     SECTION("ToolChanger") {
         ToolChangerProbe tc;
         REQUIRE(tc.get_remap_strategy() == AmsBackend::RemapStrategy::Native);
+    }
+    SECTION("QIDI Box") {
+        QidiProbe qidi;
+        REQUIRE(qidi.get_remap_strategy() == AmsBackend::RemapStrategy::Native);
     }
 }
 

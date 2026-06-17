@@ -260,11 +260,42 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
     // driven by the color_swatches_visible subject — no flag manipulation here).
     color_swatches_row_ = lv_obj_find_by_name(overlay_root_, "color_swatches_row");
 
+    // Make the color-requirements card tappable so the U1's visible swatches
+    // open the native remap modal — matching the AFC/CFS whole-card click in
+    // FilamentMappingCard. The card's children already declare
+    // clickable=false + event_bubble=true in print_file_detail.xml (L071), so
+    // the parent receives the click. lv_obj_add_event_cb on the card mirrors the
+    // sibling FilamentMappingCard pattern (allowed exception). The handler gates
+    // on the active backend's remap strategy at click time: it only opens the
+    // modal for SnapmakerNative — on other backends this card is informational
+    // and a different remap path applies, so the tap is a no-op.
+    color_requirements_card_ = lv_obj_find_by_name(overlay_root_, "color_requirements_card");
+    if (color_requirements_card_) {
+        lv_obj_add_flag(color_requirements_card_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(
+            color_requirements_card_,
+            [](lv_event_t* e) {
+                auto* self = static_cast<PrintSelectDetailView*>(lv_event_get_user_data(e));
+                self->on_color_card_clicked();
+            },
+            LV_EVENT_CLICKED, this);
+    }
+
     // Look up and initialize filament mapping card
     lv_obj_t* mapping_card = lv_obj_find_by_name(overlay_root_, "filament_mapping_card");
     lv_obj_t* mapping_rows = lv_obj_find_by_name(overlay_root_, "filament_mapping_rows");
     lv_obj_t* mapping_warning = lv_obj_find_by_name(overlay_root_, "filament_mapping_warning");
     filament_mapping_card_.create(mapping_card, mapping_rows, mapping_warning);
+    // Route the card tap to the panel's single remap opener instead of the
+    // card's own internal modal, so there is ONE opener and ONE modal instance
+    // for every backend (AFC/CFS card tap, U1 swatch tap, preflight "Remap…"
+    // all reach PrintSelectPanel::open_remap_modal()). Falls back to the card's
+    // own modal only if no override is wired.
+    filament_mapping_card_.set_on_tap([this]() {
+        if (on_remap_requested_) {
+            on_remap_requested_();
+        }
+    });
     filament_mapping_card_.set_on_mappings_changed([this]() {
         apply_mapped_tool_colors();
         lv_subject_set_int(&filament_mismatch_, filament_mapping_card_.has_mismatch() ? 1 : 0);
@@ -592,6 +623,7 @@ void PrintSelectDetailView::on_ui_destroyed() {
     }
 
     color_swatches_row_ = nullptr;
+    color_requirements_card_ = nullptr;
 
     // Filament mapping card
     filament_mapping_card_.on_ui_destroyed();
@@ -1012,6 +1044,22 @@ void PrintSelectDetailView::set_filament_mappings(std::vector<helix::ToolMapping
 
 void PrintSelectDetailView::open_filament_mapping_modal() {
     filament_mapping_card_.open_mapping_modal();
+}
+
+void PrintSelectDetailView::on_color_card_clicked() {
+    // The color-requirements swatch card is the visible remap entry point on
+    // backends whose editable FilamentMappingCard is hidden (e.g. Snapmaker U1).
+    // Fire the panel's unified remap opener for ANY backend that supports remap
+    // (strategy != None); the panel opener itself guards plugin presence etc.
+    // On a non-remappable backend (None) the tap is a deliberate no-op.
+    auto* backend = AmsState::instance().get_backend();
+    if (!backend || backend->get_remap_strategy() == AmsBackend::RemapStrategy::None) {
+        return;
+    }
+    spdlog::debug("[PrintSelect] swatch tap -> remap modal");
+    if (on_remap_requested_) {
+        on_remap_requested_();
+    }
 }
 
 void PrintSelectDetailView::run_when_loaded(std::function<void()> cb) {

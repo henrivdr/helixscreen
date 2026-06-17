@@ -449,10 +449,11 @@ class PrintSelectPanel : public PanelBase {
     void show_preflight_modal(const helix::PreflightResult& pf);
 
     /**
-     * @brief Route a Remap… request to the strategy-appropriate remap UI.
+     * @brief Route a Remap… request to the single unified remap UI.
      *
-     * Dispatches on the active backend's RemapStrategy: Native backends open
-     * the native remap modal; GcodeRewrite backends open the gcode remap modal.
+     * Thin wrapper around open_remap_modal(). The per-backend difference lives
+     * at the apply layer (apply_remap) and at print-start (already strategy-
+     * dispatched), never at the opener.
      */
     void on_preflight_remap();
 
@@ -467,10 +468,15 @@ class PrintSelectPanel : public PanelBase {
     void hide_delete_confirmation();
 
   private:
-    // Remap UI entry points dispatched by on_preflight_remap().
-    void open_native_remap_modal();
-    void open_gcode_remap_modal();
-    void open_snapmaker_remap_modal();
+    // Single unified remap entry point. Builds the picker UNIFORMLY for every
+    // backend (tool_info from preflight checks, slots from AmsState) and shows
+    // the one shared remap_modal_. Called by on_preflight_remap(), the detail
+    // card tap (any non-None backend), and the embedded mapping card tap.
+    void open_remap_modal();
+    // Strategy-dispatched APPLY for the chosen mappings. The ONLY per-backend
+    // branch: GcodeRewrite rewrites + prints; Native / SnapmakerNative push to
+    // the shared card store (backend-specific send happens at print-start).
+    void apply_remap(const std::vector<helix::ToolMapping>& updated);
 
     //
     // === Constants ===
@@ -607,10 +613,12 @@ class PrintSelectPanel : public PanelBase {
     // Print start controller (handles print initiation workflow, warnings)
     std::unique_ptr<helix::ui::PrintStartController> print_controller_;
 
-    // Tool-remap picker for GcodeRewrite backends (U1 / ACE). Embedded so its
-    // lifecycle follows the panel; ModalStack manages the on-screen dialog. Reused
-    // across remap invocations (same pattern as FilamentMappingCard's member modal).
-    helix::ui::FilamentMappingModal gcode_remap_modal_;
+    // THE single tool-remap picker for every backend. Embedded so its lifecycle
+    // follows the panel; ModalStack manages the on-screen dialog. Reused across
+    // all remap invocations (AFC/CFS/Happy Hare/AD5X-IFS native, ACE gcode
+    // rewrite, Snapmaker U1 native). open_remap_modal() configures it; the apply
+    // strategy lives in apply_remap().
+    helix::ui::FilamentMappingModal remap_modal_;
 
     // File sorter (handles sorting logic for file list)
     helix::ui::PrintSelectFileSorter file_sorter_;

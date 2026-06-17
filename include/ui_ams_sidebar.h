@@ -162,6 +162,9 @@ class AmsOperationSidebar {
     int current_step_count_ = 4;
     int target_load_slot_ = -1;
     bool heat_label_showing_temp_ = false;
+    // Index of the Heat step in the Snapmaker 4-phase bar (Home/Select/Heat/Move).
+    // The phase subject reports this index when the firmware is heating.
+    static constexpr int kSnapmakerHeatStep = 2;
     // Whether the current LOAD_SWAP/UNLOAD stepper includes a discrete tip
     // (cut / tip-form) step. False for backends with TipMethod::NONE (e.g. the
     // Snapmaker U1, which only heats + retracts). Drives the step-index map in
@@ -185,6 +188,12 @@ class AmsOperationSidebar {
     // Apply the granular firmware phase (0..3, -1=none) to the current Snapmaker
     // step bar. No-op unless the current operation is a SNAPMAKER_* stepper.
     void apply_snapmaker_phase(int phase);
+
+    // Update the Snapmaker Heat step (index kSnapmakerHeatStep) label: a live
+    // "Heat nozzle X / Y°C" readout while on the Heat phase, reverting to the
+    // static "Heat nozzle" label otherwise. Driven by apply_snapmaker_phase and
+    // the extruder temp/target observers (live updates while heating).
+    void refresh_snapmaker_heat_label(int phase);
 
     // Re-evaluate step display when extruder temp/target changes (called by observers).
     // Physical heating state overrides AmsAction for step indicator: backends emit

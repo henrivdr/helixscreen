@@ -1613,7 +1613,8 @@ void PrintPreparationManager::modify_and_print_with_remap(
 
                                     // Plugin path: symlink + history patch keeps the original
                                     // filename in print history. Caller guarantees the plugin
-                                    // is installed (open_gcode_remap_modal guards on it).
+                                    // is installed (open_remap_modal guards on it for the
+                                    // GcodeRewrite strategy).
                                     api_->job().start_modified_print(
                                         file_path, remote_temp_path, mod_names,
                                         [on_print_success](const ModifiedPrintResult& result) {

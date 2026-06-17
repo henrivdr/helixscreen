@@ -68,6 +68,15 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] helix::printer::ToolMappingCapabilities
     get_tool_mapping_capabilities() const override;
+    // QIDI Box reassigns a logical tool to a physical slot by rewriting the
+    // save_variables entry (value_t<N>="slot<M>") that the stock T<N> macros
+    // read at load time — applied via set_tool_mapping(). Same shape as CFS, so
+    // it joins the unified Native remap path (the single FilamentMappingModal +
+    // print-start set_tool_mapping apply); without this it inherits the base
+    // None default and the unified apply_remap would no-op for QIDI.
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return RemapStrategy::Native;
+    }
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
     [[nodiscard]] bool is_bypass_active() const override;
 

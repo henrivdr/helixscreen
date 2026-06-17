@@ -609,6 +609,35 @@ void AmsOperationSidebar::apply_snapmaker_phase(int phase) {
     spdlog::debug("[AmsSidebar] Snapmaker phase {} → step {} (op_type={})", phase, phase,
                   static_cast<int>(current_operation_type_));
     ui_step_progress_set_current(step_progress_, phase);
+
+    // Restore the live "Heat nozzle X / Y°C" readout the old 2-step bar showed.
+    // On the Snapmaker 4-phase bar the Heat step is index kSnapmakerHeatStep; the
+    // label is driven both here (phase transitions) and by the extruder
+    // temp/target observers (live updates while sitting on the Heat phase).
+    refresh_snapmaker_heat_label(phase);
+}
+
+void AmsOperationSidebar::refresh_snapmaker_heat_label(int phase) {
+    if (!step_progress_) {
+        return;
+    }
+    if (phase == kSnapmakerHeatStep) {
+        int current_deci = lv_subject_get_int(printer_state_.get_active_extruder_temp_subject());
+        int target_deci = lv_subject_get_int(printer_state_.get_active_extruder_target_subject());
+        char temp_buf[32];
+        temperature::format_temperature_pair(temperature::deci_to_degrees(current_deci),
+                                             temperature::deci_to_degrees(target_deci), temp_buf,
+                                             sizeof(temp_buf));
+        char label_buf[64];
+        snprintf(label_buf, sizeof(label_buf), "%s %s", lv_tr("Heat nozzle"), temp_buf);
+        ui_step_progress_set_label(step_progress_, kSnapmakerHeatStep, label_buf);
+        heat_label_showing_temp_ = true;
+        spdlog::debug("[AmsSidebar] Snapmaker Heat step label: {}", label_buf);
+    } else if (heat_label_showing_temp_) {
+        // Left the Heat phase — restore the static label.
+        ui_step_progress_set_label(step_progress_, kSnapmakerHeatStep, lv_tr("Heat nozzle"));
+        heat_label_showing_temp_ = false;
+    }
 }
 
 int AmsOperationSidebar::get_step_index_for_action(AmsAction action, StepOperationType op_type) {

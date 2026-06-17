@@ -114,6 +114,21 @@ class FilamentMappingCard {
         on_mappings_changed_ = std::move(cb);
     }
 
+    using TapCallback = std::function<void()>;
+
+    /**
+     * @brief Override what happens when the card is tapped.
+     *
+     * When set, a tap on the card fires this callback INSTEAD of opening the
+     * card's internal mapping modal. The print detail view uses this to route
+     * the tap to PrintSelectPanel::open_remap_modal(), so there is exactly one
+     * remap opener and one modal instance across all backends. When unset, the
+     * card falls back to opening its own modal (open_mapping_modal()).
+     */
+    void set_on_tap(TapCallback cb) {
+        on_tap_ = std::move(cb);
+    }
+
     /**
      * @brief Check if any mappings have material mismatches
      */
@@ -167,6 +182,7 @@ class FilamentMappingCard {
 
     FilamentMappingModal mapping_modal_;
     MappingsChangedCallback on_mappings_changed_;
+    TapCallback on_tap_; ///< If set, tap fires this instead of opening the internal modal
 };
 
 } // namespace helix::ui
