@@ -289,8 +289,9 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
     // Route the card tap to the panel's single remap opener instead of the
     // card's own internal modal, so there is ONE opener and ONE modal instance
     // for every backend (AFC/CFS card tap, U1 swatch tap, preflight "Remap…"
-    // all reach PrintSelectPanel::open_remap_modal()). Falls back to the card's
-    // own modal only if no override is wired.
+    // all reach PrintSelectPanel::open_remap_modal()). on_remap_requested_ is
+    // wired by the panel in create_detail_view() right after construction, so the
+    // null check is just defensive — a tap before wiring is a no-op, not a crash.
     filament_mapping_card_.set_on_tap([this]() {
         if (on_remap_requested_) {
             on_remap_requested_();

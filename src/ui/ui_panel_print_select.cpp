@@ -2621,10 +2621,12 @@ void PrintSelectPanel::open_remap_modal() {
         return;
     }
 
-    // GcodeRewrite (ACE / Snapmaker-via-rewrite) prints a modified temp copy and
-    // relies on the HelixPrint plugin to patch print history back to the original
-    // filename. Guard BEFORE opening the modal so the user sees the actionable
-    // alert instead of a picker whose Done would silently fail.
+    // GcodeRewrite is the generic fallback for backends with no native routing
+    // table: it prints a modified temp copy and relies on the HelixPrint plugin
+    // to patch print history back to the original filename. No backend ships this
+    // strategy today (ACE will adopt it once ACE_CHANGE_TOOL is implemented).
+    // Guard BEFORE opening the modal so the user sees the actionable alert instead
+    // of a picker whose Done would silently fail.
     if (strategy == AmsBackend::RemapStrategy::GcodeRewrite &&
         !printer_state_.service_has_helix_plugin()) {
         helix::ui::modal_show_alert(
@@ -2685,18 +2687,19 @@ void PrintSelectPanel::apply_remap(const std::vector<helix::ToolMapping>& update
 
     switch (backend->get_remap_strategy()) {
     case AmsBackend::RemapStrategy::GcodeRewrite: {
-        // ACE / Snapmaker-via-rewrite: rewrite the Tx / ACTIVATE_EXTRUDER /
-        // SET_GCODE_VARIABLE lines in the gcode and print the modified copy via
-        // the HelixPrint plugin (history stays under the original filename). The
-        // plugin presence was already guarded in open_remap_modal().
+        // Generic fallback (no backend ships it yet; ACE once ACE_CHANGE_TOOL
+        // lands): rewrite the Tx / ACTIVATE_EXTRUDER / SET_GCODE_VARIABLE lines in
+        // the gcode and print the modified copy via the HelixPrint plugin (history
+        // stays under the original filename). Plugin presence was already guarded
+        // in open_remap_modal().
         std::map<int, int> remap;
         for (const auto& m : updated) {
             if (m.tool_index < 0 || m.mapped_slot < 0) {
                 continue; // auto / unmapped — leave the gcode's tool number alone
             }
-            // For U1/ACE, slot index == physical head, so mapped_slot is the head
-            // the gcode rewrite targets. A backend where slot != head would need a
-            // slot→head translation here.
+            // slot index == physical head for these backends, so mapped_slot is the
+            // head the gcode rewrite targets. A backend where slot != head would
+            // need a slot→head translation here.
             remap[m.tool_index] = m.mapped_slot;
         }
 
