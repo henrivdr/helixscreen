@@ -97,8 +97,12 @@ setup() {
     # Reproduce the EXACT regression against a throwaway tree and prove the
     # fixed guard's heal sequence recovers it.
     command -v git >/dev/null || skip "git not available"
-    git -C "$REPO_ROOT/lib/libhv" rev-parse HEAD >/dev/null 2>&1 \
-        || skip "libhv submodule not a git repo"
+    # `rev-parse HEAD` is NOT a sufficient guard: when the submodule is not
+    # checked out, lib/libhv is an empty dir and git climbs to the parent
+    # helixscreen repo, so rev-parse HEAD succeeds against the WRONG repo. Verify
+    # the blob this test actually reads (line below) exists in *this* HEAD.
+    git -C "$REPO_ROOT/lib/libhv" cat-file -e HEAD:base/hsocket.c 2>/dev/null \
+        || skip "libhv submodule not checked out"
 
     local work="$BATS_TEST_TMPDIR/libhv"
     mkdir -p "$work/base"
