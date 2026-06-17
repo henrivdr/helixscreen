@@ -11,6 +11,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <stdlib.h>
 #include <string.h>
@@ -211,7 +212,13 @@ struct overrange_save_t {
     int32_t* location; // Pointer into LVGL's y_points array
     int32_t value;     // Original value
 };
-static std::vector<overrange_save_t> s_overrange_saved;
+// Keyed by graph so concurrently-drawn charts (overlay + mini graph + widget) do
+// not clobber each other's saved points. A single file-static vector was a
+// correctness bug: chart B's DRAW_MAIN_BEGIN would clear chart A's saved
+// pointers before chart A's DRAW_MAIN_END could restore them, leaving chart A's
+// over-range points stuck at LV_CHART_POINT_NONE (line gaps / frozen segments)
+// until the next data write.
+static std::map<ui_temp_graph_t*, std::vector<overrange_save_t>> s_overrange_saved;
 
 // DRAW_MAIN_BEGIN: mask over-range points before LVGL draws chart lines
 static void mask_overrange_begin_cb(lv_event_t* e) {
@@ -219,7 +226,8 @@ static void mask_overrange_begin_cb(lv_event_t* e) {
     if (!graph || !graph->chart)
         return;
 
-    s_overrange_saved.clear();
+    std::vector<overrange_save_t>& saved = s_overrange_saved[graph];
+    saved.clear();
 
     int32_t y_max = static_cast<int32_t>(graph->max_temp * TEMP_SCALE);
     uint32_t pc = lv_chart_get_point_count(graph->chart);
@@ -235,7 +243,7 @@ static void mask_overrange_begin_cb(lv_event_t* e) {
 
         for (uint32_t j = 0; j < pc; j++) {
             if (y_data[j] != LV_CHART_POINT_NONE && y_data[j] > y_max) {
-                s_overrange_saved.push_back({&y_data[j], y_data[j]});
+                saved.push_back({&y_data[j], y_data[j]});
                 y_data[j] = LV_CHART_POINT_NONE;
             }
         }
@@ -244,11 +252,18 @@ static void mask_overrange_begin_cb(lv_event_t* e) {
 
 // DRAW_MAIN_END: restore original values so gradient callback sees full data
 static void mask_overrange_end_cb(lv_event_t* e) {
-    (void)e;
-    for (auto& saved : s_overrange_saved) {
+    auto* graph = static_cast<ui_temp_graph_t*>(lv_event_get_user_data(e));
+    if (!graph)
+        return;
+
+    auto it = s_overrange_saved.find(graph);
+    if (it == s_overrange_saved.end())
+        return;
+
+    for (auto& saved : it->second) {
         *saved.location = saved.value;
     }
-    s_overrange_saved.clear();
+    it->second.clear();
 }
 
 // Geometry of the chart's content rect (inside padding) plus the deci-degree
@@ -1386,6 +1401,10 @@ void ui_temp_graph_destroy(ui_temp_graph_t* graph) {
     // fire after the struct below is freed → UAF. Keyed cancel matches (cb, arg).
     lv_async_call_cancel(gradient_recompute_async, graph);
 
+    // Drop this graph's over-range save slot so the keyed map doesn't retain a
+    // stale key (the pointer is about to be freed).
+    s_overrange_saved.erase(graph);
+
     // Only clean up series and chart if chart widget still exists.
     // Chart may already be deleted by LVGL parent cascade (chart_delete_cb nulls graph->chart).
     if (graph_ptr->chart) {
@@ -1632,6 +1651,14 @@ void ui_temp_graph_update_series(ui_temp_graph_t* graph, int series_id, float te
 
     // New point shifted the curve — gradient must recompute.
     mark_gradient_cache_dirty(graph);
+
+    // Whole-object invalidate so the series line, gradient, axis labels and target
+    // trace all repaint together. lv_chart_set_next_value already invalidates in
+    // shift mode, but issuing the full-object invalidate LAST guarantees the chart's
+    // entire area is the final queued dirty region for this frame — under
+    // LV_DISPLAY_RENDER_MODE_PARTIAL a stale/partial intermediate dirty rect could
+    // otherwise repaint only the axis-label strip and leave the plot frozen (#979).
+    lv_obj_invalidate(graph->chart);
 }
 
 // Add temperature point with timestamp (for X-axis labels)
@@ -1681,6 +1708,11 @@ void ui_temp_graph_update_series_with_time(ui_temp_graph_t* graph, int series_id
 
     // New point shifted the curve — gradient must recompute.
     mark_gradient_cache_dirty(graph);
+
+    // Whole-object invalidate so the series line, gradient, axis labels and target
+    // trace all repaint together as the final queued dirty region for this frame.
+    // See ui_temp_graph_update_series above for the PARTIAL-render-mode rationale.
+    lv_obj_invalidate(graph->chart);
 }
 
 // Replace all data points (array mode)
