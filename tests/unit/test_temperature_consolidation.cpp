@@ -3,7 +3,11 @@
 
 #include "ui_temperature_utils.h"
 
+#include "theme_manager.h"
+
 #include "../catch_amalgamated.hpp"
+
+#include <string>
 
 using namespace helix::ui::temperature;
 
@@ -158,4 +162,64 @@ TEST_CASE("heater_display: color matches get_heating_state_color for cooling sta
     REQUIRE(result.color.red == expected_color.red);
     REQUIRE(result.color.green == expected_color.green);
     REQUIRE(result.color.blue == expected_color.blue);
+}
+
+// ============================================================================
+// get_heating_state_variant() - icon variant matches the 4-state color logic
+// (drives the bed-icon tint in the nozzle-temps widget; must agree with the
+// temp-label color so icon and label never contradict each other)
+// ============================================================================
+
+TEST_CASE("get_heating_state_variant: off when target is zero", "[temperature][heater_variant]") {
+    REQUIRE(std::string(get_heating_state_variant(25, 0)) == "muted");
+}
+
+TEST_CASE("get_heating_state_variant: off when target is negative",
+          "[temperature][heater_variant]") {
+    REQUIRE(std::string(get_heating_state_variant(25, -5)) == "muted");
+}
+
+TEST_CASE("get_heating_state_variant: heating below tolerance", "[temperature][heater_variant]") {
+    REQUIRE(std::string(get_heating_state_variant(150, 200)) == "danger");
+}
+
+TEST_CASE("get_heating_state_variant: at-temp within tolerance", "[temperature][heater_variant]") {
+    REQUIRE(std::string(get_heating_state_variant(199, 200)) == "success");
+    REQUIRE(std::string(get_heating_state_variant(200, 200)) == "success");
+    REQUIRE(std::string(get_heating_state_variant(201, 200)) == "success");
+}
+
+TEST_CASE("get_heating_state_variant: cooling above tolerance", "[temperature][heater_variant]") {
+    REQUIRE(std::string(get_heating_state_variant(210, 200)) == "info");
+}
+
+TEST_CASE("get_heating_state_variant: tolerance boundaries are at-temp",
+          "[temperature][heater_variant]") {
+    // DEFAULT_AT_TEMP_TOLERANCE = 2: target-2 and target+2 are still "at temp"
+    REQUIRE(std::string(get_heating_state_variant(198, 200)) == "success"); // lower bound
+    REQUIRE(std::string(get_heating_state_variant(202, 200)) == "success"); // upper bound
+    REQUIRE(std::string(get_heating_state_variant(197, 200)) == "danger");  // just below -> heating
+    REQUIRE(std::string(get_heating_state_variant(203, 200)) == "info");    // just above -> cooling
+}
+
+TEST_CASE("get_heating_state_variant: agrees with get_heating_state_color across states",
+          "[temperature][heater_variant]") {
+    // The variant string must map to the same theme token the color function
+    // resolves, for every state. (Color is token-resolved; variant is the token
+    // family name used by ui_icon_set_variant.)
+    auto same = [](int cur, int tgt, const char* token) {
+        auto color = get_heating_state_color(cur, tgt);
+        auto expected = theme_manager_get_color(token);
+        return color.red == expected.red && color.green == expected.green &&
+               color.blue == expected.blue;
+    };
+    // off -> muted maps to text_muted; the other three share variant==token name
+    REQUIRE(std::string(get_heating_state_variant(25, 0)) == "muted");
+    REQUIRE(same(25, 0, "text_muted"));
+    REQUIRE(std::string(get_heating_state_variant(150, 200)) == "danger");
+    REQUIRE(same(150, 200, "danger"));
+    REQUIRE(std::string(get_heating_state_variant(199, 200)) == "success");
+    REQUIRE(same(199, 200, "success"));
+    REQUIRE(std::string(get_heating_state_variant(210, 200)) == "info");
+    REQUIRE(same(210, 200, "info"));
 }

@@ -2,17 +2,20 @@
 
 #include "nozzle_temps_widget.h"
 
+#include "nozzle_layout.h"
 #include "ui_overlay_temp_graph.h"
 #include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
 
 #include "app_globals.h"
+#include "lvgl/src/misc/lv_text_private.h" // lv_text_get_width, lv_text_attributes_t
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
 #include "theme_manager.h"
 #include "tool_state.h"
+#include "ui_icon.h"
 #include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
@@ -128,6 +131,7 @@ void NozzleTempsWidget::clear_rows() {
         helix::ui::safe_clean_children(container);
 
     bed_row_ = nullptr;
+    bed_icon_ = nullptr;
     bed_temp_label_ = nullptr;
     bed_target_label_ = nullptr;
     bed_progress_bar_ = nullptr;
@@ -262,7 +266,24 @@ void NozzleTempsWidget::rebuild_rows() {
     spdlog::debug("[NozzleTempsWidget] Rebuilt with {} extruder rows + bed", extruder_rows_.size());
 }
 
-void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int /*width_px*/,
+namespace {
+
+// Pixel width of a UTF-8 string in the given font. lv_text_get_width
+// dereferences its attributes argument, so a zeroed attributes block (no
+// recolor, zero letter/line space, unbounded width) is required — NULL crashes.
+int measure_text_px(const char* txt, const lv_font_t* font) {
+    if (!txt || !font)
+        return 0;
+    lv_text_attributes_t attrs;
+    lv_text_attributes_init(&attrs);
+    attrs.letter_space = 0;
+    attrs.max_width = LV_COORD_MAX;
+    return lv_text_get_width(txt, LV_TEXT_LEN_MAX, font, &attrs);
+}
+
+} // namespace
+
+void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int width_px,
                                         int /*height_px*/) {
     if (!widget_obj_)
         return;
@@ -273,20 +294,71 @@ void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int /*width_px
 
     current_colspan_ = colspan;
 
-    // Wide layout (2x1): use row-wrap so items flow into 2 columns
-    bool wide = (colspan >= 2 && rowspan <= 1);
-    if (wide) {
-        lv_obj_set_style_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP, 0);
-        lv_obj_set_style_pad_column(container, theme_manager_get_spacing("space_md"), 0);
-        lv_obj_set_style_flex_main_place(container, LV_FLEX_ALIGN_SPACE_EVENLY, 0);
-        // Each row takes just under half so two fit per line
+    const int pad_x = theme_manager_get_spacing("space_xs"); // root style_pad_all per side
+    const int avail_px = width_px - 2 * pad_x;
+
+    // Pre-layout / degenerate width: fall back to single full-width column with
+    // long labels rather than dividing by an unknown width.
+    if (width_px <= 0 || avail_px <= 0) {
+        lv_obj_set_style_flex_flow(container, LV_FLEX_FLOW_COLUMN, 0);
+        lv_obj_set_style_pad_column(container, 0, 0);
+        lv_obj_set_style_flex_main_place(container, LV_FLEX_ALIGN_START, 0);
         for (auto& row : extruder_rows_) {
             if (row.row_obj)
-                lv_obj_set_width(row.row_obj, lv_pct(45));
+                lv_obj_set_width(row.row_obj, lv_pct(100));
+            if (row.tool_label)
+                lv_label_set_text(row.tool_label, row.long_name.c_str());
         }
         if (bed_row_) {
-            lv_obj_set_width(bed_row_, lv_pct(45));
-            // Remove divider border + its top padding in wide layout
+            lv_obj_set_width(bed_row_, lv_pct(100));
+            lv_obj_set_style_border_width(bed_row_, 1, 0);
+            lv_obj_set_style_pad_top(bed_row_, theme_manager_get_spacing("space_xxs"), 0);
+        }
+        spdlog::debug("[NozzleTempsWidget] on_size_changed {}x{} avail={} (pre-layout fallback)",
+                      colspan, rowspan, avail_px);
+        return;
+    }
+
+    // Measure against the font the widget actually renders text_small as.
+    const lv_font_t* font = theme_manager_get_font("font_xs");
+
+    // Widest label (long and short) across all extruder rows, plus the bed
+    // label which shares the same row geometry.
+    int widest_long_px = 0;
+    int widest_short_px = 0;
+    for (const auto& row : extruder_rows_) {
+        widest_long_px = std::max(widest_long_px, measure_text_px(row.long_name.c_str(), font));
+        widest_short_px = std::max(widest_short_px, measure_text_px(row.short_name.c_str(), font));
+    }
+    const int bed_label_px = measure_text_px(lv_tr("Bed"), font);
+    widest_long_px = std::max(widest_long_px, bed_label_px);
+    widest_short_px = std::max(widest_short_px, bed_label_px);
+
+    // A representative widest value string so the column decision is stable
+    // regardless of the current temperatures shown.
+    const int widest_value_px = measure_text_px("888\xC2\xB0 / 888\xC2\xB0", font);
+
+    const int label_value_gap = theme_manager_get_spacing("space_sm");
+    const int comfort_margin = theme_manager_get_spacing("space_md");
+    const int gap_px = theme_manager_get_spacing("space_md"); // gap between two side-by-side rows
+
+    const int long_row_px = widest_long_px + label_value_gap + widest_value_px + comfort_margin;
+    const int short_row_px = widest_short_px + label_value_gap + widest_value_px + comfort_margin;
+
+    const NozzleLayoutDecision decision = decide_nozzle_layout(
+        avail_px, gap_px, long_row_px, short_row_px, static_cast<int>(extruder_rows_.size()));
+
+    if (decision.columns == 2) {
+        lv_obj_set_style_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP, 0);
+        lv_obj_set_style_pad_column(container, gap_px, 0);
+        lv_obj_set_style_flex_main_place(container, LV_FLEX_ALIGN_SPACE_BETWEEN, 0);
+        for (auto& row : extruder_rows_) {
+            if (row.row_obj)
+                lv_obj_set_width(row.row_obj, lv_pct(48));
+        }
+        if (bed_row_) {
+            lv_obj_set_width(bed_row_, lv_pct(48));
+            // Remove divider border + its top padding in two-column layout
             lv_obj_set_style_border_width(bed_row_, 0, 0);
             lv_obj_set_style_pad_top(bed_row_, 0, 0);
         }
@@ -305,8 +377,11 @@ void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int /*width_px
         }
     }
 
-    // Use compact font when widget is narrow (single column)
-    const lv_font_t* text_font = (colspan <= 1) ? theme_manager_get_font("font_xs") : nullptr;
+    // Compact font only matters when single-column AND narrow; reuse the
+    // decision so the font doesn't shrink in a comfortable two-up layout.
+    const lv_font_t* text_font = (decision.columns == 1 && !decision.use_long_label)
+                                     ? theme_manager_get_font("font_xs")
+                                     : nullptr;
     if (text_font) {
         auto set_font = [text_font](lv_obj_t* lbl) {
             if (lbl)
@@ -320,16 +395,17 @@ void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int /*width_px
         set_font(bed_target_label_);
     }
 
-    // Swap row labels between short ("T0") and long ("Nozzle 1") based on the
-    // available horizontal room.
+    // Core fix: short label ("T0") when cramped, long label ("Nozzle 1") only
+    // when the column is wide enough to hold it.
     for (auto& row : extruder_rows_) {
         if (!row.tool_label)
             continue;
-        const std::string& text = (colspan >= 2) ? row.long_name : row.short_name;
+        const std::string& text = decision.use_long_label ? row.long_name : row.short_name;
         lv_label_set_text(row.tool_label, text.c_str());
     }
 
-    spdlog::debug("[NozzleTempsWidget] on_size_changed {}x{} wide={}", colspan, rowspan, wide);
+    spdlog::debug("[NozzleTempsWidget] on_size_changed {}x{} avail={} cols={} long={}", colspan,
+                  rowspan, avail_px, decision.columns, decision.use_long_label);
 }
 
 void NozzleTempsWidget::create_extruder_row(lv_obj_t* container, ExtruderRow& row) {
@@ -377,6 +453,15 @@ void NozzleTempsWidget::create_extruder_row(lv_obj_t* container, ExtruderRow& ro
     row.target_label = lv_obj_find_by_name(row_obj, "target_label");
     row.progress_bar = lv_obj_find_by_name(row_obj, "progress_bar");
 
+    // Belt-and-suspenders: clip (never wrap) the value labels so even a
+    // pathologically narrow tile keeps "220° / 230°" on one line. The XML
+    // value_group (content width, no flex_grow) already prevents the wrap;
+    // this guards against a degenerate measurement.
+    if (row.temp_label)
+        lv_label_set_long_mode(row.temp_label, LV_LABEL_LONG_MODE_CLIP);
+    if (row.target_label)
+        lv_label_set_long_mode(row.target_label, LV_LABEL_LONG_MODE_CLIP);
+
     // Tap row → open nozzle temp graph overlay
     lv_obj_add_flag(row_obj, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_t* screen = parent_screen_;
@@ -401,9 +486,16 @@ void NozzleTempsWidget::create_bed_row(lv_obj_t* container) {
     }
 
     bed_row_ = row_obj;
+    bed_icon_ = lv_obj_find_by_name(row_obj, "bed_icon");
     bed_temp_label_ = lv_obj_find_by_name(row_obj, "bed_temp_label");
     bed_target_label_ = lv_obj_find_by_name(row_obj, "bed_target_label");
     bed_progress_bar_ = lv_obj_find_by_name(row_obj, "bed_progress_bar");
+
+    // Clip rather than wrap the bed value labels (see create_extruder_row).
+    if (bed_temp_label_)
+        lv_label_set_long_mode(bed_temp_label_, LV_LABEL_LONG_MODE_CLIP);
+    if (bed_target_label_)
+        lv_label_set_long_mode(bed_target_label_, LV_LABEL_LONG_MODE_CLIP);
 
     // Tap bed row → open bed temp graph overlay
     lv_obj_add_flag(row_obj, LV_OBJ_FLAG_CLICKABLE);
@@ -421,7 +513,7 @@ void NozzleTempsWidget::create_bed_row(lv_obj_t* container) {
 
 void NozzleTempsWidget::update_row_display(lv_obj_t* temp_label, lv_obj_t* target_label,
                                            lv_obj_t* /* progress_bar */, int temp_deci,
-                                           int target_deci, bool /* is_bed */) {
+                                           int target_deci, bool is_bed) {
     if (!temp_label || !target_label)
         return;
 
@@ -431,6 +523,15 @@ void NozzleTempsWidget::update_row_display(lv_obj_t* temp_label, lv_obj_t* targe
     lv_label_set_text_fmt(temp_label, "%d\xC2\xB0",
                           helix::ui::temperature::deci_to_degrees(temp_deci));
     lv_obj_set_style_text_color(temp_label, result.color, LV_PART_MAIN);
+
+    // Keep the bed icon tint in lockstep with the temp-label color (same
+    // thresholds, same inputs) so they can never disagree.
+    if (is_bed && bed_icon_) {
+        const char* variant = helix::ui::temperature::get_heating_state_variant(
+            helix::ui::temperature::deci_to_degrees(temp_deci),
+            helix::ui::temperature::deci_to_degrees(target_deci));
+        ui_icon_set_variant(bed_icon_, variant);
+    }
 
     if (target_deci > 0) {
         lv_label_set_text_fmt(target_label, "/ %d\xC2\xB0",

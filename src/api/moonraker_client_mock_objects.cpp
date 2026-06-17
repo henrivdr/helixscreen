@@ -5,7 +5,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cctype>
 #include <chrono>
+#include <string>
 
 namespace mock_internal {
 
@@ -372,6 +374,31 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                                           {"pressure_advance", 0.04}};
             }
 
+            // Toolchanger secondary extruders (HELIX_MOCK_AMS=toolchanger registers
+            // extruder1/2/3 as heaters). Distinct initial values so each heating
+            // state renders a different color in the Nozzle Temps widget:
+            //   extruder1 HEATING (150 → 250), extruder2 AT-TEMP (248 → 250),
+            //   extruder3 COOLING (200, no target). The contains() guard is
+            //   self-limiting: these heaters only exist in toolchanger mode.
+            if (objects.contains("extruder1")) {
+                status_obj["extruder1"] = {{"temperature", 150.0},
+                                           {"target", 250.0},
+                                           {"power", 0.8},
+                                           {"pressure_advance", 0.04}};
+            }
+            if (objects.contains("extruder2")) {
+                status_obj["extruder2"] = {{"temperature", 248.0},
+                                           {"target", 250.0},
+                                           {"power", 0.2},
+                                           {"pressure_advance", 0.04}};
+            }
+            if (objects.contains("extruder3")) {
+                status_obj["extruder3"] = {{"temperature", 200.0},
+                                           {"target", 0.0},
+                                           {"power", 0.0},
+                                           {"pressure_advance", 0.04}};
+            }
+
             // toolhead
             if (objects.contains("toolhead")) {
                 status_obj["toolhead"] = {{"max_velocity", 500.0},
@@ -451,13 +478,29 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             }
             for (auto it = objects.begin(); it != objects.end(); ++it) {
                 if (it.key().rfind("tool ", 0) == 0) {
+                    // Faithfully map each tool to its own extruder (T0→extruder,
+                    // T1→extruder1, ...) when the matching heater is registered
+                    // (toolchanger mode). Not read by ToolState — which maps by
+                    // sorted heater index — but keeps the tool object self-consistent.
+                    std::string extruder_for_tool = "extruder";
+                    const std::string tool_suffix = it.key().substr(5); // after "tool "
+                    if (tool_suffix.size() >= 2 && tool_suffix[0] == 'T' &&
+                        std::isdigit(static_cast<unsigned char>(tool_suffix[1]))) {
+                        int tool_idx = tool_suffix[1] - '0';
+                        if (tool_idx > 0) {
+                            std::string candidate = "extruder" + std::to_string(tool_idx);
+                            if (objects.contains(candidate)) {
+                                extruder_for_tool = candidate;
+                            }
+                        }
+                    }
                     status_obj[it.key()] = {{"active", false},
                                             {"mounted", true},
                                             {"detect_state", "OK"},
                                             {"gcode_x_offset", 0.0},
                                             {"gcode_y_offset", 0.0},
                                             {"gcode_z_offset", 0.0},
-                                            {"extruder", "extruder"},
+                                            {"extruder", extruder_for_tool},
                                             {"fan", "fan"}};
                 }
             }

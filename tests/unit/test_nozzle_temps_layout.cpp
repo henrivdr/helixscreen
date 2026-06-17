@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_nozzle_temps_layout.cpp
+ * @brief Unit tests for decide_nozzle_layout() — the pure layout-decision
+ *        function behind the Nozzle Temps dashboard widget.
+ *
+ * decide_nozzle_layout() is deliberately LVGL-free, so these tests need no
+ * display, font subsystem, or fixture. They lock in the column-count and
+ * label-form behavior so a regression (e.g. the old "long label when most
+ * cramped" bug) fails the build.
+ *
+ * Run with: ./build/bin/helix-tests "[nozzle][layout]"
+ */
+
+#include "src/ui/panel_widgets/nozzle_layout.h"
+
+#include "../catch_amalgamated.hpp"
+
+using helix::decide_nozzle_layout;
+using helix::NozzleLayoutDecision;
+
+TEST_CASE("Narrow 480px-panel 2x1 tile picks two short-label columns", "[nozzle][layout]") {
+    // 480px panel, 2x1 tile ≈ 196px usable inner width. Short row fits twice
+    // with a gap; long row does NOT fit a 92px column → short labels.
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/196, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 2);
+    REQUIRE(d.use_long_label == false);
+}
+
+TEST_CASE("Wide 1024px-panel 2x1 tile picks two long-label columns", "[nozzle][layout]") {
+    // 500px usable → each column ≈ 244px, comfortably wider than long_row_px.
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/500, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 2);
+    REQUIRE(d.use_long_label == true);
+}
+
+TEST_CASE("Single extruder never splits into two columns", "[nozzle][layout]") {
+    // Plenty of width, but only one row → clamp to a single full-width column.
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/500, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/1);
+    REQUIRE(d.columns == 1);
+    // col_w == avail_px == 500 >= 150 → long label fits.
+    REQUIRE(d.use_long_label == true);
+}
+
+TEST_CASE("Too narrow for two short columns falls back to one column", "[nozzle][layout]") {
+    // avail (150) < 2*short(90) + gap(12) = 192 → single column.
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/150, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 1);
+    // col_w == 150 >= long_row_px(150) → long label (just fits at the edge).
+    REQUIRE(d.use_long_label == true);
+}
+
+TEST_CASE("Single full-width column shows long label when it fits", "[nozzle][layout]") {
+    // Narrow enough to refuse two columns, but the full width holds the long row.
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/180, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 1);
+    REQUIRE(d.use_long_label == true);
+}
+
+TEST_CASE("Single column too narrow for long label uses short label", "[nozzle][layout]") {
+    // avail (120) < 2*short+gap → 1 column; col_w(120) < long_row_px(150) → short.
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/120, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 1);
+    REQUIRE(d.use_long_label == false);
+}
+
+TEST_CASE("Degenerate zero width returns safe single-column long default",
+          "[nozzle][layout]") {
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/0, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 1);
+    REQUIRE(d.use_long_label == true);
+}
+
+TEST_CASE("Negative width returns safe single-column long default", "[nozzle][layout]") {
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/-50, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/4);
+    REQUIRE(d.columns == 1);
+    REQUIRE(d.use_long_label == true);
+}
+
+TEST_CASE("Zero rows clamps to a single column", "[nozzle][layout]") {
+    NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/500, /*gap_px=*/12,
+                                                  /*long_row_px=*/150, /*short_row_px=*/90,
+                                                  /*row_count=*/0);
+    REQUIRE(d.columns == 1);
+}

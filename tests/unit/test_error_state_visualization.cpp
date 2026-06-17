@@ -343,6 +343,58 @@ TEST_CASE("AFC lane error: cleared when status leaves Error", "[ams][afc][error_
     REQUIRE_FALSE(slot->error.has_value());
 }
 
+TEST_CASE("AFC lane error: empty errored lane is EMPTY, not present",
+          "[ams][afc][error_state]") {
+    // A print that requests an empty lane (e.g. slicer assigned the model to a
+    // tool whose AFC lane has no spool) leaves the live lane in status "Error"
+    // with prep=false, load=false, spool_id=null. The AMS panel must show the
+    // lane as empty, NOT as "filament present, not loaded". Regression for the
+    // catch-all in parse_afc_stepper that previously defaulted unknown statuses
+    // (including "Error") to AVAILABLE -> is_present() == true.
+    AfcErrorStateHelper helper;
+    helper.initialize_test_lanes_with_slots(4); // slots start AVAILABLE
+
+    nlohmann::json lane_data;
+    lane_data["status"] = "Error";
+    lane_data["prep"] = false;
+    lane_data["load"] = false;
+    lane_data["tool_loaded"] = false;
+    lane_data["spool_id"] = nullptr;
+    lane_data["material"] = "";
+    lane_data["color"] = "";
+    helper.feed_afc_stepper("lane3", lane_data);
+
+    const auto* slot = helper.get_slot(2);
+    REQUIRE(slot != nullptr);
+    // No physical filament -> empty, and is_present() must be false.
+    REQUIRE(slot->status == SlotStatus::EMPTY);
+    REQUIRE_FALSE(slot->is_present());
+    // The error badge is independent of presence and must still be set.
+    REQUIRE(slot->error.has_value());
+    REQUIRE(slot->error->severity == SlotError::ERROR);
+}
+
+TEST_CASE("AFC lane error: errored lane WITH prep sensor stays present",
+          "[ams][afc][error_state]") {
+    // Counterpart to the empty-lane case: if the prep sensor sees filament, an
+    // "Error" status (e.g. a jam) must keep the lane present so the user sees
+    // there is still filament to clear.
+    AfcErrorStateHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+
+    nlohmann::json lane_data;
+    lane_data["status"] = "Error";
+    lane_data["prep"] = true; // filament physically present at prep sensor
+    lane_data["load"] = false;
+    helper.feed_afc_stepper("lane1", lane_data);
+
+    const auto* slot = helper.get_slot(0);
+    REQUIRE(slot != nullptr);
+    REQUIRE(slot->status == SlotStatus::AVAILABLE);
+    REQUIRE(slot->is_present());
+    REQUIRE(slot->error.has_value());
+}
+
 TEST_CASE("AFC lane error: only errored lane gets error, not others", "[ams][afc][error_state]") {
     AfcErrorStateHelper helper;
     helper.initialize_test_lanes_with_slots(4);

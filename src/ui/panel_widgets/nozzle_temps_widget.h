@@ -70,6 +70,7 @@ class NozzleTempsWidget : public PanelWidget {
     std::vector<ExtruderRow> extruder_rows_;
 
     lv_obj_t* bed_row_ = nullptr;
+    lv_obj_t* bed_icon_ = nullptr;
     lv_obj_t* bed_temp_label_ = nullptr;
     lv_obj_t* bed_target_label_ = nullptr;
     lv_obj_t* bed_progress_bar_ = nullptr;

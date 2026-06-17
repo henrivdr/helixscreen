@@ -485,6 +485,18 @@ void MoonrakerClientMock::populate_capabilities() {
             "[MoonrakerClientMock] Default filament sensor: filament_switch_sensor runout_sensor");
     }
 
+    // Toolchanger mock mode (HELIX_MOCK_AMS=toolchanger): push the toolchanger +
+    // per-tool discovery objects so PrinterDiscovery sets has_tool_changer() and
+    // tool_names() = {T0..T3}. The 4 extruder heaters (extruder + extruder1/2/3)
+    // are already flowing in via the discovery_.heaters() loop above. Tool naming
+    // uses "tool TN" to match the established test convention (test_hardware_validator).
+    if (is_mock_toolchanger()) {
+        mock_objects.push_back("toolchanger");
+        for (int i = 0; i < 4; ++i) {
+            mock_objects.push_back("tool T" + std::to_string(i));
+        }
+    }
+
     // Parse objects into hardware discovery (unified hardware access)
     discovery_.modify_hardware([&](PrinterDiscovery& hw) { hw.parse_objects(mock_objects); });
 
@@ -744,6 +756,19 @@ void MoonrakerClientMock::discover_printer(
     });
 }
 
+bool MoonrakerClientMock::is_mock_toolchanger() const {
+    // Mirror the HELIX_MOCK_AMS parsing in ams_backend.cpp: toolchanger mode is
+    // selected by "toolchanger", "tool_changer", or "tc" (case-insensitive).
+    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
+    if (!ams_env || !ams_env[0]) {
+        return false;
+    }
+    std::string ams_type(ams_env);
+    std::transform(ams_type.begin(), ams_type.end(), ams_type.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
+}
+
 void MoonrakerClientMock::populate_hardware() {
     // Clear existing data (in discovery sequence)
     discovery_.heaters().clear();
@@ -839,6 +864,29 @@ void MoonrakerClientMock::populate_hardware() {
                              "fan_generic exhaust_fan"};
         discovery_.leds() = {"neopixel chamber_light"};
         break;
+    }
+
+    // Toolchanger mock mode (HELIX_MOCK_AMS=toolchanger): emulate a real Klipper
+    // toolchanger with 4 distinct extruder heaters so ToolState::init_tools()
+    // maps each of the 4 tools to its own extruder and the Nozzle Temps widget
+    // renders the full 4-row multi-extruder layout. The bare "extruder" is
+    // already present from the printer-type switch above; add extruder1/2/3.
+    // Gated entirely on is_mock_toolchanger() so other AMS modes are unaffected.
+    if (is_mock_toolchanger()) {
+        for (const char* ext : {"extruder1", "extruder2", "extruder3"}) {
+            // Klipper exposes secondary extruders as both a heater and a sensor
+            // under the bare name (matching the MULTI_EXTRUDER case convention).
+            if (std::find(discovery_.heaters().begin(), discovery_.heaters().end(), ext) ==
+                discovery_.heaters().end()) {
+                discovery_.heaters().push_back(ext);
+            }
+            if (std::find(discovery_.sensors().begin(), discovery_.sensors().end(), ext) ==
+                discovery_.sensors().end()) {
+                discovery_.sensors().push_back(ext);
+            }
+        }
+        spdlog::debug("[MoonrakerClientMock] Toolchanger mock: registered 4 extruders "
+                      "(extruder, extruder1, extruder2, extruder3)");
     }
 
     // Initialize LED states (all off by default)
@@ -3819,6 +3867,17 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         // Always include to ensure WidthSensorManager receives updates
         status_obj["hall_filament_width_sensor"] = {
             {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+
+        // Toolchanger mock mode: keep the 3 extra extruder temps on the live
+        // subscription stream so they don't go stale. Static values (matching the
+        // initial query response) chosen for easy heating-state color eyeballing:
+        // extruder1 HEATING (150/250), extruder2 AT-TEMP (248/250),
+        // extruder3 COOLING (200/0). Not wired into the ramping atomics by design.
+        if (is_mock_toolchanger()) {
+            status_obj["extruder1"] = {{"temperature", 150.0}, {"target", 250.0}};
+            status_obj["extruder2"] = {{"temperature", 248.0}, {"target", 250.0}};
+            status_obj["extruder3"] = {{"temperature", 200.0}, {"target", 0.0}};
+        }
 
         // Add klippy state if not ready (only send when abnormal)
         KlippyState klippy = klippy_state_.load();

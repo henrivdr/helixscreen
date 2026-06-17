@@ -1131,7 +1131,12 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         } else if (status_str == "None" || status_str.empty()) {
             slot.status = SlotStatus::EMPTY;
         } else {
-            slot.status = SlotStatus::AVAILABLE; // Default for other states
+            // Unrecognized status (e.g. "Error" after a failed load on an empty
+            // lane). We only reach here when prep, load and tool_loaded are all
+            // false, so no filament is physically present — the lane is empty,
+            // not available. The per-slot error badge below is set independently
+            // of slot.status, so the error indicator is preserved.
+            slot.status = SlotStatus::EMPTY;
         }
     }
 

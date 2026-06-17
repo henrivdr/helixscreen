@@ -114,6 +114,18 @@ lv_color_t get_heating_state_color(int current_deg, int target_deg, int toleranc
     }
 }
 
+const char* get_heating_state_variant(int current_deg, int target_deg, int tolerance) {
+    if (target_deg <= 0) {
+        return "muted"; // OFF: heater disabled - GRAY
+    } else if (current_deg < target_deg - tolerance) {
+        return "danger"; // HEATING: actively heating up - RED
+    } else if (current_deg > target_deg + tolerance) {
+        return "info"; // COOLING: cooling down to target - BLUE
+    } else {
+        return "success"; // AT_TEMP: within tolerance of target - GREEN
+    }
+}
+
 // ============================================================================
 // Heater Display
 // ============================================================================

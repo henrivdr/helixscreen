@@ -249,6 +249,25 @@ constexpr int DEFAULT_AT_TEMP_TOLERANCE = 2;
 lv_color_t get_heating_state_color(int current_deg, int target_deg,
                                    int tolerance = DEFAULT_AT_TEMP_TOLERANCE);
 
+/**
+ * @brief Get the icon color-variant string for a heater's thermal state
+ *
+ * Mirrors get_heating_state_color()'s 4-state logic, but returns the
+ * ui_icon_set_variant() string instead of a resolved color. Keeps icon tint
+ * and temp-label color in lockstep (same thresholds, same inputs):
+ * - target <= 0:                    "muted"   (off / gray)
+ * - current < target - tolerance:   "danger"  (heating / red)
+ * - current > target + tolerance:   "info"    (cooling / blue)
+ * - within +/- tolerance:           "success" (at-temp / green)
+ *
+ * @param current_deg Current temperature in degrees
+ * @param target_deg Target temperature in degrees (<= 0 = heater off)
+ * @param tolerance Degrees tolerance for "at temp" state (default: 2)
+ * @return Variant string suitable for ui_icon_set_variant()
+ */
+const char* get_heating_state_variant(int current_deg, int target_deg,
+                                      int tolerance = DEFAULT_AT_TEMP_TOLERANCE);
+
 // ============================================================================
 // Heater Display
 // ============================================================================
