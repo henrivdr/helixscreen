@@ -793,6 +793,14 @@ void PrintSelectDetailView::update_color_swatches(
         if (!swatch) {
             continue;
         }
+        // Fix the chip width in code: a numeric width on the component <view>
+        // root is not honored by lv_xml_create (only "content"/"%"), and the
+        // band labels use flex_grow (which contributes 0 to content-width), so
+        // without an explicit width the whole chip collapses to 0. A uniform
+        // width lets both bands cross-stretch to the same width (connected,
+        // full-bleed) and centers the labels. Height comes from the 32px parent
+        // row via the XML height="100%". Tunable.
+        lv_obj_set_width(swatch, 40);
 
         // Top band fill + label.
         if (auto* top_band = lv_obj_find_by_name(swatch, "top_band")) {
