@@ -71,6 +71,21 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
     [[nodiscard]] bool is_bypass_active() const override;
 
+    // The box exposes a PTC dryer heater (heater_generic heater_box<N>) plus an
+    // aht20_f humidity/temperature chip, so the per-unit environment indicator
+    // (temp/humidity + drying controls) must be reachable. Without this override
+    // the indicator widget is hard-hidden in ams_detail_pre_show_env_indicator().
+    [[nodiscard]] bool has_environment_sensors() const override {
+        return true;
+    }
+
+    // load_filament() drives the stock EXTRUDER_LOAD primitive directly and
+    // manages hotend temperature itself (heat → load → clear → cool), so the UI
+    // must not run its own preheat for QIDI loads.
+    [[nodiscard]] bool supports_auto_heat_on_load() const override {
+        return true;
+    }
+
     AmsError load_filament(int slot_index) override;
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;

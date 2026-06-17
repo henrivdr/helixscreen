@@ -44,6 +44,23 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
     }
     return std::nullopt;
 }
+
+// Hotend temperature to heat to before driving EXTRUDER_LOAD / M603. Klipper
+// rejects extrusion below the configured min_extrude_temp ("Extrude below
+// minimum temp"), so we heat to the slot's profile temperature first. Prefer the
+// material's upper bound (matches the stock QIDI flow Camden verified — ABS at
+// 280) and fall back to a safe universal load temperature when no profile is
+// known.
+constexpr int QIDI_DEFAULT_LOAD_TEMP_C = 250;
+int load_temp_for_slot(const SlotInfo& slot) {
+    if (slot.nozzle_temp_max > 0) {
+        return slot.nozzle_temp_max;
+    }
+    if (slot.nozzle_temp_min > 0) {
+        return slot.nozzle_temp_min;
+    }
+    return QIDI_DEFAULT_LOAD_TEMP_C;
+}
 } // namespace
 
 AmsBackendQidi::AmsBackendQidi(MoonrakerAPI* api, helix::MoonrakerClient* client)
@@ -775,7 +792,9 @@ PathSegment AmsBackendQidi::infer_error_segment() const {
 
 AmsError AmsBackendQidi::load_filament(int slot_index) {
     spdlog::info("{} load_filament(slot={})", backend_log_tag(), slot_index);
-    int tool = -1;
+    int load_temp = QIDI_DEFAULT_LOAD_TEMP_C;
+    bool unload_first = false;
+    int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -785,17 +804,39 @@ AmsError AmsBackendQidi::load_filament(int slot_index) {
         if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
             return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
         }
-        tool = slots[slot_index].mapped_tool;
-        if (tool < 0) {
-            tool = slot_index;
+        load_temp = load_temp_for_slot(slots[slot_index]);
+        // If a *different* slot is already in the extruder, retract it first —
+        // EXTRUDER_LOAD on top of loaded filament would jam. Compose the two
+        // verified stock primitives (M603 unload + EXTRUDER_LOAD) rather than
+        // relying on a tool-change macro.
+        for (const auto& s : slots) {
+            if (s.status == SlotStatus::LOADED && s.slot_index != slot_index) {
+                unload_first = true;
+                unload_temp = load_temp_for_slot(s);
+                break;
+            }
         }
     }
-    return execute_gcode("T" + std::to_string(tool));
+
+    // The stock T<n> macros don't exist for the box's own slots on Q2 firmware
+    // (only T4+ for additional boxes) and don't manage hotend temperature, so
+    // drive EXTRUDER_LOAD directly. Klipper rejects it below min_extrude_temp,
+    // hence the M109 pre-heat; CLEAR_NOZZLE wipes the post-load ooze (no clean
+    // is built into EXTRUDER_LOAD); M104 S0 leaves the hotend cooling down.
+    std::string seq;
+    if (unload_first) {
+        seq += "M603 S" + std::to_string(unload_temp) + "\n";
+    }
+    seq += "M109 S" + std::to_string(load_temp) + "\n";
+    seq += "EXTRUDER_LOAD SLOT=slot" + std::to_string(slot_index) + "\n";
+    seq += "CLEAR_NOZZLE\n";
+    seq += "M104 S0";
+    return execute_gcode(seq);
 }
 
 AmsError AmsBackendQidi::unload_filament(int slot_index) {
     spdlog::info("{} unload_filament(slot={})", backend_log_tag(), slot_index);
-    int tool = -1;
+    int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -803,26 +844,30 @@ AmsError AmsBackendQidi::unload_filament(int slot_index) {
         }
         const auto& slots = system_info_.units[0].slots;
         if (slot_index == -1) {
-            // Active slot: find the LOADED one.
+            // Active slot: find the LOADED one and use its profile temperature.
+            const SlotInfo* loaded = nullptr;
             for (const auto& s : slots) {
                 if (s.status == SlotStatus::LOADED) {
-                    tool = (s.mapped_tool >= 0) ? s.mapped_tool : s.slot_index;
+                    loaded = &s;
                     break;
                 }
             }
-            if (tool < 0) {
+            if (!loaded) {
                 return AmsErrorHelper::not_supported("QIDI Box: no slot currently loaded");
             }
+            unload_temp = load_temp_for_slot(*loaded);
         } else if (slot_index < 0 || static_cast<size_t>(slot_index) >= slots.size()) {
             return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
         } else {
-            tool = slots[slot_index].mapped_tool;
-            if (tool < 0) {
-                tool = slot_index;
-            }
+            unload_temp = load_temp_for_slot(slots[slot_index]);
         }
     }
-    return execute_gcode("UNLOAD_T" + std::to_string(tool));
+
+    // M603 is the stock "unload" the QIDI screen runs — it heats, retracts to
+    // before the hub and (with the box active) calls E_UNLOAD. UNLOAD_T<n> /
+    // UNLOAD_FILAMENT proved inert on Q2 firmware. M603 acts on whatever is in
+    // the extruder, so the slot index only selects the unload temperature.
+    return execute_gcode("M603 S" + std::to_string(unload_temp));
 }
 
 AmsError AmsBackendQidi::select_slot(int /*slot_index*/) {
@@ -836,7 +881,22 @@ AmsError AmsBackendQidi::change_tool(int tool_number) {
     if (tool_number < 0) {
         return AmsErrorHelper::not_supported("QIDI Box: tool number out of range");
     }
-    return execute_gcode("T" + std::to_string(tool_number));
+    // The bare T<n> macros don't exist for the box's own slots on Q2 firmware, so
+    // resolve the tool→slot mapping (value_t<n>) and drive the same verified
+    // load path (which retracts any currently-loaded slot first).
+    int slot_index = tool_number;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!system_info_.units.empty()) {
+            for (const auto& s : system_info_.units[0].slots) {
+                if (s.mapped_tool == tool_number) {
+                    slot_index = s.slot_index;
+                    break;
+                }
+            }
+        }
+    }
+    return load_filament(slot_index);
 }
 
 // --- Recovery ---
