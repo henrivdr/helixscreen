@@ -3,6 +3,7 @@
 
 #include "ams_backend.h"
 
+#include "ams_state.h"
 #include "ams_backend_afc.h"
 #include "ams_backend_happy_hare.h"
 #ifdef HELIX_ENABLE_MOCKS
@@ -32,6 +33,15 @@
 #include <string_view>
 
 using namespace helix;
+
+lv_subject_t* AmsBackend::get_operation_step_index_subject(StepOperationType op) {
+    // Narration-capable backends drive their step index through the
+    // GcodeNarrationRouter, which writes AmsState's toolchange_step subject.
+    if (!toolchange_phase_template(op).empty()) {
+        return AmsState::instance().get_toolchange_step_subject();
+    }
+    return nullptr;
+}
 
 std::string AmsBackend::normalize_material(const std::string& material) const {
     auto supported = get_supported_materials();

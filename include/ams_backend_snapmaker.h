@@ -79,6 +79,14 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
 
+    // Operation step bar. The U1 firmware reports a sequential
+    // Home -> Select -> Heat -> Move phase via the ams_operation_phase subject,
+    // so the step model and its driving index live in the backend (the sidebar
+    // renders generically). LOAD ends in "Feed filament", UNLOAD in "Retract";
+    // the Heat step shows a live nozzle temperature.
+    [[nodiscard]] OperationStepModel get_operation_step_model(StepOperationType op) const override;
+    [[nodiscard]] lv_subject_t* get_operation_step_index_subject(StepOperationType op) override;
+
     /// Snapmaker U1 has 4 independent extruders (extruder, extruder1, extruder2,
     /// extruder3), one per tool. Tool N sources slot N directly — identity mapping.
     [[nodiscard]] std::optional<int> slot_for_extruder(int extruder_idx) const override {

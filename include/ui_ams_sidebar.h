@@ -140,26 +140,21 @@ class AmsOperationSidebar {
     ObserverGuard extruder_temp_observer_;
     ObserverGuard extruder_target_observer_;
     ObserverGuard color_observer_;
-    // Drives the step bar's current step on the Snapmaker U1 from the granular
-    // firmware phase (Home/Select/Heat/Move) instead of the coarse AmsAction.
-    // ams_operation_phase is a STATIC singleton subject (one per AmsState), so
-    // no SubjectLifetime token is required — cleaned up via reset() in cleanup().
-    ObserverGuard operation_phase_observer_;
 
-    // Observes AmsState's toolchange_step subject (static singleton — member
-    // ObserverGuard alone is correct, no SubjectLifetime needed). The
-    // GcodeNarrationRouter drives this index from `//` narration lines; the
-    // observer highlights the matching step row and scrolls it into view.
-    ObserverGuard toolchange_step_observer_;
-    // True when the active backend supplied a non-empty toolchange phase
-    // template, so the step bar is driven by narration rather than the coarse
-    // AmsAction enum. Suppresses the legacy AmsAction→index advancement.
-    bool narration_driven_ = false;
-    // Keeps the current backend phase template alive. (ui_step_progress_create
-    // copies label strings into its own buffers, so this is not strictly
-    // required for c_str() validity, but it documents the active template and
-    // is harmless.)
-    std::vector<AmsBackend::ToolchangePhase> current_phase_template_;
+    // Drives the step bar's current step when the active backend supplies a
+    // specialized step model (get_operation_step_index_subject). The subject is
+    // backend-supplied and always a STATIC singleton (firmware-phase subject for
+    // the U1, narration toolchange-step subject for AFC-style backends), so a
+    // member ObserverGuard with no SubjectLifetime is correct — cleaned up via
+    // reset() in cleanup(). When null the sidebar uses the legacy coarse
+    // AmsAction→index fallback.
+    ObserverGuard step_index_observer_;
+    // The subject the step_index_observer_ watches (nullptr => legacy fallback).
+    // Set in recreate_step_progress_for_operation from the active backend.
+    lv_subject_t* step_index_subject_ = nullptr;
+    // Keeps the current backend step model alive so live_temp / phase lookups
+    // work for the active operation. Empty => legacy coarse model.
+    AmsBackend::OperationStepModel current_step_model_;
 
     // Bypass-after-unload state
     bool pending_bypass_enable_ = false;
@@ -179,13 +174,14 @@ class AmsOperationSidebar {
     int current_step_count_ = 4;
     int target_load_slot_ = -1;
     bool heat_label_showing_temp_ = false;
-    // Index of the Heat step in the Snapmaker 4-phase bar (Home/Select/Heat/Move).
-    // The phase subject reports this index when the firmware is heating.
-    static constexpr int kSnapmakerHeatStep = 2;
+    // Index of the step whose label shows a live "<label> cur/target°C" readout
+    // (OperationStep::live_temp), or -1 if the active model has none. Set when a
+    // backend-supplied step model is built; for the legacy coarse model the Heat
+    // step is always index 0.
+    int live_temp_step_index_ = -1;
     // Whether the current LOAD_SWAP/UNLOAD stepper includes a discrete tip
-    // (cut / tip-form) step. False for backends with TipMethod::NONE (e.g. the
-    // Snapmaker U1, which only heats + retracts). Drives the step-index map in
-    // get_step_index_for_action so the trailing steps don't shift out of place.
+    // (cut / tip-form) step. False for backends with TipMethod::NONE. Drives the
+    // step-index map in get_step_index_for_action so trailing steps don't shift.
     bool current_op_has_tip_step_ = true;
 
     // Step progress methods
@@ -194,23 +190,16 @@ class AmsOperationSidebar {
     void update_step_progress(AmsAction action);
     int get_step_index_for_action(AmsAction action, StepOperationType op_type);
 
-    // True when the active backend is the Snapmaker U1, whose granular firmware
-    // phases drive a dedicated 4-step bar (Home/Select/Heat/Move).
-    static bool active_backend_is_snapmaker();
+    // Apply a backend-supplied step index (-1=none, clamped to model size) to the
+    // current step bar and refresh the live-temp step label. Used when the active
+    // backend supplied a step-index subject (firmware phase or narration).
+    void apply_backend_step_index(int index);
 
-    // Translate a base op_type (LOAD_FRESH/LOAD_SWAP/UNLOAD) to its Snapmaker
-    // four-phase variant. Pass-through for non-load/unload types.
-    static StepOperationType to_snapmaker_op_type(StepOperationType base);
-
-    // Apply the granular firmware phase (0..3, -1=none) to the current Snapmaker
-    // step bar. No-op unless the current operation is a SNAPMAKER_* stepper.
-    void apply_snapmaker_phase(int phase);
-
-    // Update the Snapmaker Heat step (index kSnapmakerHeatStep) label: a live
-    // "Heat nozzle X / Y°C" readout while on the Heat phase, reverting to the
-    // static "Heat nozzle" label otherwise. Driven by apply_snapmaker_phase and
-    // the extruder temp/target observers (live updates while heating).
-    void refresh_snapmaker_heat_label(int phase);
+    // Update the live-temp step (live_temp_step_index_) label: a live
+    // "<label> X / Y°C" readout while that step is current, reverting to the
+    // static label otherwise. Driven by apply_backend_step_index and the
+    // extruder temp/target observers (live updates while heating).
+    void refresh_live_temp_step_label(int current_index);
 
     // Re-evaluate step display when extruder temp/target changes (called by observers).
     // Physical heating state overrides AmsAction for step indicator: backends emit

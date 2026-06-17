@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ams_backend_afc.h"
+#include "ams_state.h"
 #include "ams_types.h"
 #include "error_event.h"
 #include "moonraker_api.h"
@@ -4414,4 +4415,32 @@ TEST_CASE("AFC LOAD_SWAP template ordering puts purge after feed, brush after pu
     REQUIRE(idx("purge") > idx("feed"));
     REQUIRE(idx("brush") > idx("purge"));
     REQUIRE(idx("clean") > idx("brush"));
+}
+
+TEST_CASE("AFC get_operation_step_model mirrors the narration phase template",
+          "[unit][ams][afc][stepmodel]") {
+    AmsBackendAfcTestHelper afc;
+    // The base AmsBackend default builds the step model from the backend's
+    // toolchange_phase_template — narration backends need no separate override.
+    auto tmpl = afc.toolchange_phase_template(StepOperationType::LOAD_SWAP);
+    auto model = afc.get_operation_step_model(StepOperationType::LOAD_SWAP);
+    REQUIRE_FALSE(model.steps.empty());
+    REQUIRE(model.steps.size() == tmpl.size());
+    for (size_t i = 0; i < tmpl.size(); ++i) {
+        CHECK(model.steps[i].label == tmpl[i].label);
+        CHECK(model.steps[i].optional == tmpl[i].optional);
+    }
+    // No step is flagged for a live temperature readout on a narration model.
+    for (const auto& s : model.steps) {
+        CHECK_FALSE(s.live_temp);
+    }
+}
+
+TEST_CASE("AFC get_operation_step_index_subject is the narration toolchange-step subject",
+          "[unit][ams][afc][stepmodel]") {
+    AmsBackendAfcTestHelper afc;
+    // The GcodeNarrationRouter drives AmsState's toolchange_step subject; the
+    // base default returns it for any operation with a non-empty template.
+    CHECK(afc.get_operation_step_index_subject(StepOperationType::LOAD_SWAP) ==
+          AmsState::instance().get_toolchange_step_subject());
 }

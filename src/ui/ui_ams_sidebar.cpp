@@ -267,18 +267,6 @@ void AmsOperationSidebar::init_observers() {
             }
         });
 
-    // Toolchange step observer: when the step bar is narration-driven, the
-    // GcodeNarrationRouter updates this subject with the current phase index.
-    // Highlight the matching step row and scroll it into view (ui_step_progress
-    // scrolls its active row via lv_obj_scroll_to_view in set_current).
-    toolchange_step_observer_ = observe_int_sync<AmsOperationSidebar>(
-        AmsState::instance().get_toolchange_step_subject(), this,
-        [](AmsOperationSidebar* self, int index) {
-            if (!self->active_ || !self->step_progress_ || !self->narration_driven_ || index < 0)
-                return;
-            ui_step_progress_set_current(self->step_progress_, index);
-        });
-
     // Extruder temp observer: checks pending preheat load + refreshes heat step
     extruder_temp_observer_ = observe_int_sync<AmsOperationSidebar>(
         printer_state_.get_active_extruder_temp_subject(), this,
@@ -299,16 +287,11 @@ void AmsOperationSidebar::init_observers() {
             self->refresh_heat_step_display();
         });
 
-    // Operation-phase observer (Snapmaker U1 only): drives the 4-step bar's
-    // current step directly from the firmware Home/Select/Heat/Move phase.
-    // ams_operation_phase is a static singleton subject → no SubjectLifetime.
-    operation_phase_observer_ = observe_int_sync<AmsOperationSidebar>(
-        AmsState::instance().get_ams_operation_phase_subject(), this,
-        [](AmsOperationSidebar* self, int phase) {
-            if (!self->active_ || !self->sidebar_root_)
-                return;
-            self->apply_snapmaker_phase(phase);
-        });
+    // The backend-driven step-index observer (step_index_observer_) is created
+    // lazily in recreate_step_progress_for_operation() once the active backend's
+    // step-index subject is known — the subject differs per backend (firmware
+    // phase for the U1, narration toolchange-step for AFC-style backends) and
+    // may not exist for coarse backends (legacy AmsAction fallback).
 }
 
 // ============================================================================
@@ -337,10 +320,9 @@ void AmsOperationSidebar::cleanup() {
     active_backend_observer_.reset();
     bypass_spool_observer_.reset();
     color_observer_.reset();
-    toolchange_step_observer_.reset(); // [L085] reset(), never release()
+    step_index_observer_.reset(); // [L085] reset(), never release()
     extruder_temp_observer_.reset();
     extruder_target_observer_.reset();
-    operation_phase_observer_.reset();
 
     // Reset extracted modules AFTER observers — they may have their own observers
     // that reference widget pointers; resetting before our observers could
@@ -353,8 +335,9 @@ void AmsOperationSidebar::cleanup() {
     pending_load_target_temp_ = 0;
     ui_initiated_heat_ = false;
     prev_ams_action_ = AmsAction::IDLE;
-    narration_driven_ = false;
-    current_phase_template_.clear();
+    step_index_subject_ = nullptr;
+    live_temp_step_index_ = -1;
+    current_step_model_.steps.clear();
 
     spdlog::debug("[AmsSidebar] Cleaned up");
 }
@@ -482,45 +465,70 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
 
     current_operation_type_ = op_type;
 
+    // Reset the backend-driven step driver; re-established below if the backend
+    // supplies a specialized step model. Drop the old observer first.
+    step_index_observer_.reset();
+    step_index_subject_ = nullptr;
+    live_temp_step_index_ = -1;
+    current_step_model_.steps.clear();
+
     // Expose the active operation to AmsState so the narration router can
     // resolve `//` phase narration lines to step indices for THIS operation.
     AmsState::instance().set_active_step_operation(op_type);
 
     AmsBackend* backend = AmsState::instance().get_backend();
 
-    // Preferred path: build the step bar from the backend's ordered phase
-    // template (AFC and any backend that overrides toolchange_phase_template).
-    // The template labels purge/brush/clean/cut/poop/kick correctly (fixes S1
-    // mislabeling purge as "Feed" and S2 omitting brush/clean/cut/poop/kick).
+    // Preferred path: build the step bar from the backend's ordered step model.
+    // The backend owns ALL operation-specific knowledge — firmware phases
+    // (Snapmaker U1), narration phases (AFC), etc. The sidebar renders generically
+    // and observes the backend-supplied index subject. No backend-type checks here.
     if (backend) {
-        current_phase_template_ = backend->toolchange_phase_template(op_type);
-        if (!current_phase_template_.empty()) {
+        current_step_model_ = backend->get_operation_step_model(op_type);
+        if (!current_step_model_.steps.empty()) {
             std::vector<ui_step_t> steps;
-            steps.reserve(current_phase_template_.size());
-            for (const auto& p : current_phase_template_) {
-                steps.push_back({p.label.c_str(), helix::StepState::Pending});
+            steps.reserve(current_step_model_.steps.size());
+            int idx = 0;
+            for (const auto& s : current_step_model_.steps) {
+                steps.push_back({lv_tr(s.label.c_str()), helix::StepState::Pending});
+                if (s.live_temp) {
+                    live_temp_step_index_ = idx;
+                }
+                ++idx;
             }
             current_step_count_ = static_cast<int>(steps.size());
             step_progress_ = ui_step_progress_create(step_progress_container_, steps.data(),
                                                      current_step_count_, false,
                                                      "ams_step_progress");
-            narration_driven_ = (step_progress_ != nullptr);
-            if (narration_driven_) {
-                spdlog::debug("[AmsSidebar] Created narration-driven step bar: {} phases for "
-                              "op_type={}",
-                              current_step_count_, static_cast<int>(op_type));
-                return; // skip legacy hardcoded switch — narration drives the index
+            if (step_progress_) {
+                // Observe the backend-supplied current-step subject. The subject
+                // is always a STATIC singleton (firmware phase or narration step),
+                // so a member ObserverGuard with no SubjectLifetime is correct.
+                step_index_subject_ = backend->get_operation_step_index_subject(op_type);
+                if (step_index_subject_) {
+                    step_index_observer_ = observe_int_sync<AmsOperationSidebar>(
+                        step_index_subject_, this, [](AmsOperationSidebar* self, int index) {
+                            if (!self->active_ || !self->step_progress_)
+                                return;
+                            self->apply_backend_step_index(index);
+                        });
+                }
+                spdlog::debug("[AmsSidebar] Created backend step bar: {} steps for op_type={} "
+                              "(index_subject={})",
+                              current_step_count_, static_cast<int>(op_type),
+                              step_index_subject_ ? "set" : "null");
+                return; // backend model drives the bar — skip the legacy switch
             }
-            spdlog::error("[AmsSidebar] Failed to create narration step bar; falling back to "
+            spdlog::error("[AmsSidebar] Failed to create backend step bar; falling back to "
                           "legacy switch for op_type={}",
                           static_cast<int>(op_type));
+            current_step_model_.steps.clear();
         }
     }
 
-    // Legacy path (backends with no phase template — no regression): build the
+    // Legacy path (backends with no step model — no regression): build the
     // hardcoded Heat/Feed/Purge stepper driven by the coarse AmsAction enum.
-    narration_driven_ = false;
-    current_phase_template_.clear();
+    // The Heat step is always index 0 here; mark it as the live-temp step.
+    live_temp_step_index_ = 0;
 
     // Get capabilities from backend for dynamic labels
     TipMethod tip_method = TipMethod::CUT;
@@ -586,39 +594,6 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
                                                  "ams_step_progress");
         break;
     }
-
-    // Snapmaker U1 four-phase steppers — built directly from the firmware's real
-    // Home -> Select -> Heat -> Move sequence. The current step is driven by the
-    // ams_operation_phase subject (see apply_snapmaker_phase), not AmsAction, so
-    // these don't participate in the heat-anchor / get_step_index_for_action path.
-    case StepOperationType::SNAPMAKER_LOAD: {
-        // lv_tr() at creation so the labels are translated and picked up by the
-        // string-extraction tooling (the widget stores label text verbatim and
-        // does not translate internally). "Home"/"Select" join the already-
-        // translated "Heat nozzle"/"Feed filament" strings used elsewhere.
-        ui_step_t steps[] = {
-            {lv_tr("Home"), StepState::Pending},
-            {lv_tr("Select"), StepState::Pending},
-            {lv_tr("Heat nozzle"), StepState::Pending},
-            {lv_tr("Feed filament"), StepState::Pending},
-        };
-        current_step_count_ = 4;
-        step_progress_ = ui_step_progress_create(step_progress_container_, steps, 4, false,
-                                                 "ams_step_progress");
-        break;
-    }
-    case StepOperationType::SNAPMAKER_UNLOAD: {
-        ui_step_t steps[] = {
-            {lv_tr("Home"), StepState::Pending},
-            {lv_tr("Select"), StepState::Pending},
-            {lv_tr("Heat nozzle"), StepState::Pending},
-            {lv_tr("Retract"), StepState::Pending},
-        };
-        current_step_count_ = 4;
-        step_progress_ = ui_step_progress_create(step_progress_container_, steps, 4, false,
-                                                 "ams_step_progress");
-        break;
-    }
     }
 
     if (!step_progress_) {
@@ -630,66 +605,56 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     }
 }
 
-bool AmsOperationSidebar::active_backend_is_snapmaker() {
-    AmsBackend* backend = AmsState::instance().get_backend();
-    return backend && backend->get_type() == AmsType::SNAPMAKER;
-}
-
-StepOperationType AmsOperationSidebar::to_snapmaker_op_type(StepOperationType base) {
-    switch (base) {
-    case StepOperationType::UNLOAD:
-        return StepOperationType::SNAPMAKER_UNLOAD;
-    case StepOperationType::LOAD_FRESH:
-    case StepOperationType::LOAD_SWAP:
-        return StepOperationType::SNAPMAKER_LOAD;
-    default:
-        return base; // already a SNAPMAKER_* type
-    }
-}
-
-void AmsOperationSidebar::apply_snapmaker_phase(int phase) {
+void AmsOperationSidebar::apply_backend_step_index(int index) {
     if (!active_ || !step_progress_) {
         return;
     }
-    if (!is_snapmaker_step_operation(current_operation_type_)) {
+    // index -1 = no active step (firmware idle / narration cleared). The action
+    // observer's show/hide logic handles container visibility at end-of-op; hold
+    // the bar here so a transient -1 between steps doesn't flicker the highlight.
+    if (index < 0 || index >= current_step_count_) {
         return;
     }
-    // phase -1 = no active step (firmware idle / *_finish). The action observer's
-    // show/hide logic handles container visibility at end-of-op; hold the bar
-    // here so a transient -1 between phases doesn't flicker the highlight.
-    if (phase < 0 || phase >= current_step_count_) {
-        return;
-    }
-    spdlog::debug("[AmsSidebar] Snapmaker phase {} → step {} (op_type={})", phase, phase,
+    spdlog::debug("[AmsSidebar] Backend step index {} (op_type={})", index,
                   static_cast<int>(current_operation_type_));
-    ui_step_progress_set_current(step_progress_, phase);
+    ui_step_progress_set_current(step_progress_, index);
 
-    // Restore the live "Heat nozzle X / Y°C" readout the old 2-step bar showed.
-    // On the Snapmaker 4-phase bar the Heat step is index kSnapmakerHeatStep; the
-    // label is driven both here (phase transitions) and by the extruder
-    // temp/target observers (live updates while sitting on the Heat phase).
-    refresh_snapmaker_heat_label(phase);
+    // Refresh the live "<label> X / Y°C" readout on the live-temp step (declared
+    // by the backend model, e.g. the Snapmaker Heat step). Driven both here (step
+    // transitions) and by the extruder temp/target observers (live updates while
+    // sitting on the live-temp step).
+    refresh_live_temp_step_label(index);
 }
 
-void AmsOperationSidebar::refresh_snapmaker_heat_label(int phase) {
-    if (!step_progress_) {
+void AmsOperationSidebar::refresh_live_temp_step_label(int current_index) {
+    if (!step_progress_ || live_temp_step_index_ < 0) {
         return;
     }
-    if (phase == kSnapmakerHeatStep) {
+    if (current_index == live_temp_step_index_) {
         int current_deci = lv_subject_get_int(printer_state_.get_active_extruder_temp_subject());
         int target_deci = lv_subject_get_int(printer_state_.get_active_extruder_target_subject());
         char temp_buf[32];
         temperature::format_temperature_pair(temperature::deci_to_degrees(current_deci),
                                              temperature::deci_to_degrees(target_deci), temp_buf,
                                              sizeof(temp_buf));
+        const char* base_label = (live_temp_step_index_ <
+                                  static_cast<int>(current_step_model_.steps.size()))
+                                     ? lv_tr(current_step_model_.steps[live_temp_step_index_]
+                                                 .label.c_str())
+                                     : lv_tr("Heat nozzle");
         char label_buf[64];
-        snprintf(label_buf, sizeof(label_buf), "%s %s", lv_tr("Heat nozzle"), temp_buf);
-        ui_step_progress_set_label(step_progress_, kSnapmakerHeatStep, label_buf);
+        snprintf(label_buf, sizeof(label_buf), "%s %s", base_label, temp_buf);
+        ui_step_progress_set_label(step_progress_, live_temp_step_index_, label_buf);
         heat_label_showing_temp_ = true;
-        spdlog::debug("[AmsSidebar] Snapmaker Heat step label: {}", label_buf);
+        spdlog::debug("[AmsSidebar] Live-temp step label: {}", label_buf);
     } else if (heat_label_showing_temp_) {
-        // Left the Heat phase — restore the static label.
-        ui_step_progress_set_label(step_progress_, kSnapmakerHeatStep, lv_tr("Heat nozzle"));
+        // Left the live-temp step — restore the static label.
+        const char* base_label = (live_temp_step_index_ <
+                                  static_cast<int>(current_step_model_.steps.size()))
+                                     ? lv_tr(current_step_model_.steps[live_temp_step_index_]
+                                                 .label.c_str())
+                                     : lv_tr("Heat nozzle");
+        ui_step_progress_set_label(step_progress_, live_temp_step_index_, base_label);
         heat_label_showing_temp_ = false;
     }
 }
@@ -753,23 +718,13 @@ int AmsOperationSidebar::get_step_index_for_action(AmsAction action, StepOperati
             return -1;
         }
     }
-
-    case StepOperationType::SNAPMAKER_LOAD:
-    case StepOperationType::SNAPMAKER_UNLOAD:
-        // Snapmaker steppers are driven by ams_operation_phase (see
-        // apply_snapmaker_phase), not by AmsAction. Never derive a step here.
-        return -1;
     }
     return -1;
 }
 
 void AmsOperationSidebar::start_operation(StepOperationType op_type, int target_slot) {
-    // Snapmaker U1: build the dedicated 4-phase stepper (Home/Select/Heat/Move)
-    // driven by the firmware phase subject instead of the coarse 2-step bar.
-    if (active_backend_is_snapmaker()) {
-        op_type = to_snapmaker_op_type(op_type);
-    }
-
+    // The active backend supplies the step model (and its driving index subject)
+    // in recreate_step_progress_for_operation — no backend-type remapping here.
     spdlog::info("[AmsSidebar] Starting operation: type={}, target_slot={}",
                  static_cast<int>(op_type), target_slot);
 
@@ -806,25 +761,19 @@ void AmsOperationSidebar::update_step_progress(AmsAction action) {
         }
     }
 
-    const bool snapmaker = active_backend_is_snapmaker();
-
     auto detection = detect_step_operation(action, prev_ams_action_, current_operation_type_,
                                            is_external, filament_loaded);
     if (detection.should_recreate) {
         StepOperationType new_op = detection.op_type;
-        // Snapmaker U1: the pure auto-detect logic yields the coarse
-        // LOAD_*/UNLOAD types; remap to the 4-phase steppers so the firmware
-        // Home/Select/Heat/Move sequence shows. Skip the jump_to_step hint —
-        // the phase subject is the sole step driver for these.
-        if (snapmaker) {
-            new_op = to_snapmaker_op_type(new_op);
-        }
         if (new_op == StepOperationType::LOAD_SWAP &&
             current_operation_type_ == StepOperationType::UNLOAD) {
             spdlog::debug("[AmsSidebar] Upgrading UNLOAD → LOAD_SWAP");
         }
         recreate_step_progress_for_operation(new_op);
-        if (!snapmaker && detection.jump_to_step >= 0 && step_progress_) {
+        // The coarse jump_to_step hint only applies to the legacy AmsAction model.
+        // When a backend step model drives the bar, its index subject is the sole
+        // step driver — skip the hint so it doesn't fight the backend.
+        if (!step_index_subject_ && detection.jump_to_step >= 0 && step_progress_) {
             ui_step_progress_set_current(step_progress_, detection.jump_to_step);
         }
     }
@@ -844,28 +793,20 @@ void AmsOperationSidebar::update_step_progress(AmsAction action) {
         lv_obj_add_flag(step_progress_container_, LV_OBJ_FLAG_HIDDEN);
         target_load_slot_ = -1;
         if (heat_label_showing_temp_) {
-            ui_step_progress_set_label(step_progress_, 0, lv_tr("Heat nozzle"));
+            int reset_idx = (live_temp_step_index_ >= 0) ? live_temp_step_index_ : 0;
+            ui_step_progress_set_label(step_progress_, reset_idx, lv_tr("Heat nozzle"));
             heat_label_showing_temp_ = false;
         }
         return;
     }
 
-    // Snapmaker U1: the granular firmware phase (ams_operation_phase) is the sole
-    // step driver — the heat-anchor and action-derived step logic below is for the
-    // coarse 2-step bar and must NOT run here (it has no Home/Select notion and
-    // would fight the phase observer). Apply the current phase and return. Checked
-    // BEFORE the narration path so the U1 4-phase bar wins for Snapmaker.
-    if (snapmaker && is_snapmaker_step_operation(current_operation_type_)) {
-        int phase = lv_subject_get_int(AmsState::instance().get_ams_operation_phase_subject());
-        apply_snapmaker_phase(phase);
-        return;
-    }
-
-    // When the step bar is narration-driven, the toolchange_step observer owns
-    // the active index — the coarse AmsAction→index map (which mislabels purge
-    // as "Feed", S1) must not fight it. The show/hide container logic above still
-    // runs so the bar appears/disappears with the operation.
-    if (narration_driven_) {
+    // Backend-driven step bar (firmware phase OR narration): the backend-supplied
+    // index subject is the sole step driver — the coarse AmsAction→index map and
+    // heat-anchor below are for the legacy 2-step bar and must NOT run here (they
+    // would fight the index observer). Apply the current value and return.
+    if (step_index_subject_) {
+        int index = lv_subject_get_int(step_index_subject_);
+        apply_backend_step_index(index);
         return;
     }
 

@@ -16,6 +16,7 @@
 #include <spdlog/spdlog.h>
 
 #include <lvgl.h>
+#include "lvgl/src/others/translation/lv_translation.h"
 #include <string_view>
 #include <utility>
 
@@ -187,6 +188,30 @@ SlotInfo AmsBackendSnapmaker::get_slot_info(int slot_index) const {
     SlotInfo empty;
     empty.slot_index = -1;
     return empty;
+}
+
+AmsBackend::OperationStepModel
+AmsBackendSnapmaker::get_operation_step_model(StepOperationType op) const {
+    // Four-phase firmware sequence (Home / Select / Heat / Move). The phase_id
+    // matches the value reported by the ams_operation_phase subject, and the Heat
+    // step (phase 2) shows a live nozzle temperature. The trailing "Move" step is
+    // "Feed filament" on load and "Retract" on unload. Labels are wrapped in
+    // lv_tr() so they are both translated at build time and picked up by the
+    // string-extraction tooling.
+    const bool unload = (op == StepOperationType::UNLOAD);
+    OperationStepModel model;
+    model.steps.push_back({lv_tr("Home"), 0, false, false});
+    model.steps.push_back({lv_tr("Select"), 1, false, false});
+    model.steps.push_back({lv_tr("Heat nozzle"), 2, false, /*live_temp=*/true});
+    model.steps.push_back(
+        {unload ? lv_tr("Retract") : lv_tr("Feed filament"), 3, false, false});
+    return model;
+}
+
+lv_subject_t* AmsBackendSnapmaker::get_operation_step_index_subject(StepOperationType /*op*/) {
+    // The U1 firmware drives the current step directly via the operation-phase
+    // subject (Home/Select/Heat/Move), not via narration.
+    return AmsState::instance().get_ams_operation_phase_subject();
 }
 
 // ============================================================================

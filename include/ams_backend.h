@@ -23,6 +23,10 @@ namespace helix {
 class MoonrakerClient;
 }
 
+// LVGL subject — forward-declared so backends can expose the subject that drives
+// the operation step bar's current index without ams_state.h (circular include).
+typedef struct _lv_subject_t lv_subject_t;
+
 #include <any>
 #include <functional>
 #include <memory>
@@ -268,6 +272,64 @@ class AmsBackend {
     match_narration_phase(const std::string& /*narration*/) const {
         return std::nullopt;
     }
+
+    // ========================================================================
+    // Operation Step Model (backend-driven step bar)
+    // ========================================================================
+
+    /// One ordered step in a backend's operation step bar.
+    struct OperationStep {
+        std::string label;        ///< display label (translatable)
+        int         phase_id = -1; ///< backend phase index this step represents (-1 = positional)
+        bool        optional = false; ///< stays greyed/Pending when never reached this op
+        bool        live_temp = false; ///< render a live "<label> cur/target°C" while current
+    };
+
+    /// Ordered step labels for an operation. Empty => backend has no specialized
+    /// step model and the sidebar falls back to the legacy coarse AmsAction model.
+    struct OperationStepModel {
+        std::vector<OperationStep> steps;
+    };
+
+    /**
+     * @brief Ordered step model for an operation type.
+     *
+     * Default builds from toolchange_phase_template(op): if the backend declares
+     * a narration phase template the steps mirror it (label + optional). Backends
+     * with no template inherit an empty model and the sidebar uses the legacy
+     * coarse AmsAction->index fallback. Backends with a non-narration step source
+     * (e.g. firmware phases) override this to supply their own labels.
+     *
+     * @param op  Operation being performed
+     * @return ordered steps, or empty for the legacy fallback
+     */
+    [[nodiscard]] virtual OperationStepModel
+    get_operation_step_model(StepOperationType op) const {
+        OperationStepModel model;
+        for (const auto& p : toolchange_phase_template(op)) {
+            model.steps.push_back({p.label, -1, p.optional, false});
+        }
+        return model;
+    }
+
+    /**
+     * @brief Subject the sidebar observes to learn the CURRENT step index.
+     *
+     * The value is the step index (-1 = none/idle). nullptr (or no specialized
+     * model) => the sidebar derives the index from the coarse AmsAction map.
+     *
+     * Default: returns the toolchange narration step subject when the backend has
+     * a non-empty phase template (the GcodeNarrationRouter drives it), else
+     * nullptr. Backends with a firmware-phase source override this.
+     *
+     * The returned subject MUST be a static/singleton subject (the sidebar
+     * observes it with a member ObserverGuard and no SubjectLifetime token).
+     *
+     * @param op  Operation being performed
+     * @return subject pointer, or nullptr for the legacy fallback
+     */
+    [[nodiscard]] virtual lv_subject_t*
+    get_operation_step_index_subject(StepOperationType op);
 
     /**
      * @brief True when this backend already populates remaining_weight_g from a live

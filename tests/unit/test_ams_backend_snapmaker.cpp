@@ -4,6 +4,8 @@
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
 #include "ams_backend_snapmaker.h"
+#include "ams_state.h"
+#include "ams_step_operation.h"
 #include "ams_types.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
@@ -242,6 +244,61 @@ TEST_CASE("AmsBackendSnapmaker construction", "[ams][snapmaker]") {
         AmsBackendSnapmaker backend(nullptr, nullptr);
         auto info = backend.get_system_info();
         REQUIRE(info.tip_method == TipMethod::NONE);
+    }
+}
+
+// ============================================================================
+// Operation Step Model Tests
+// ============================================================================
+
+TEST_CASE("Snapmaker get_operation_step_model is the 4-phase firmware sequence",
+          "[ams][snapmaker][stepmodel]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    SECTION("LOAD ends in Feed filament with a live-temp Heat step") {
+        auto model = backend.get_operation_step_model(StepOperationType::LOAD_FRESH);
+        REQUIRE(model.steps.size() == 4);
+        CHECK(std::string(model.steps[0].label) == "Home");
+        CHECK(std::string(model.steps[1].label) == "Select");
+        CHECK(std::string(model.steps[2].label) == "Heat nozzle");
+        CHECK(std::string(model.steps[3].label) == "Feed filament");
+        // phase_id mirrors the firmware operation_phase index.
+        CHECK(model.steps[0].phase_id == 0);
+        CHECK(model.steps[1].phase_id == 1);
+        CHECK(model.steps[2].phase_id == 2);
+        CHECK(model.steps[3].phase_id == 3);
+        // Only the Heat step shows a live nozzle temperature.
+        CHECK(model.steps[2].live_temp);
+        CHECK_FALSE(model.steps[0].live_temp);
+        CHECK_FALSE(model.steps[3].live_temp);
+    }
+
+    SECTION("LOAD_SWAP also produces the load-direction model") {
+        auto model = backend.get_operation_step_model(StepOperationType::LOAD_SWAP);
+        REQUIRE(model.steps.size() == 4);
+        CHECK(std::string(model.steps[3].label) == "Feed filament");
+    }
+
+    SECTION("UNLOAD ends in Retract") {
+        auto model = backend.get_operation_step_model(StepOperationType::UNLOAD);
+        REQUIRE(model.steps.size() == 4);
+        CHECK(std::string(model.steps[0].label) == "Home");
+        CHECK(std::string(model.steps[1].label) == "Select");
+        CHECK(std::string(model.steps[2].label) == "Heat nozzle");
+        CHECK(std::string(model.steps[3].label) == "Retract");
+        CHECK(model.steps[2].live_temp);
+    }
+}
+
+TEST_CASE("Snapmaker get_operation_step_index_subject is the firmware phase subject",
+          "[ams][snapmaker][stepmodel]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+    // The U1 drives the current step from the firmware Home/Select/Heat/Move
+    // phase, surfaced via AmsState's operation_phase subject (static singleton).
+    for (auto op : {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP,
+                    StepOperationType::UNLOAD}) {
+        CHECK(backend.get_operation_step_index_subject(op) ==
+              AmsState::instance().get_ams_operation_phase_subject());
     }
 }
 
