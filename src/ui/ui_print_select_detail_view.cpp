@@ -1005,6 +1005,11 @@ std::map<int, int> PrintSelectDetailView::get_effective_remap() const {
     return remap;
 }
 
+void PrintSelectDetailView::set_filament_mappings(std::vector<helix::ToolMapping> mappings) {
+    spdlog::debug("[DetailView] set_filament_mappings: {} mapping(s)", mappings.size());
+    filament_mapping_card_.set_mappings(std::move(mappings));
+}
+
 void PrintSelectDetailView::open_filament_mapping_modal() {
     filament_mapping_card_.open_mapping_modal();
 }

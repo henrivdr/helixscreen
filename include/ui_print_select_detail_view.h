@@ -314,6 +314,17 @@ class PrintSelectDetailView : public OverlayBase {
     [[nodiscard]] std::map<int, int> get_effective_remap() const;
 
     /**
+     * @brief Push a chosen tool→slot mapping into the card's store.
+     *
+     * Used by the U1 native-remap flow: the inline card widget is hidden, but
+     * its mappings_ store still feeds get_effective_remap() and
+     * recompute_preflight(). Storing here makes the chosen map flow to BOTH the
+     * pre-flight gate and the print-start SET_PRINT_EXTRUDER_MAP send without a
+     * visible card. Fires the card's on_mappings_changed_ → recompute_preflight().
+     */
+    void set_filament_mappings(std::vector<helix::ToolMapping> mappings);
+
+    /**
      * @brief Get per-tool filament materials from gcode metadata
      *
      * Available even when AMS is not present (unlike get_filament_tool_info

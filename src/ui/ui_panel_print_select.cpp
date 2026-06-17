@@ -2592,10 +2592,7 @@ void PrintSelectPanel::on_preflight_remap() {
         open_gcode_remap_modal();
         break;
     case AmsBackend::RemapStrategy::SnapmakerNative:
-        // U1 native remap modal lands in Batch 2. Today the pre-flight gate is
-        // identity-only for U1 (no remap UI), so there is nothing to open — the
-        // always-on SET_PRINT_USED_EXTRUDERS send at print-start handles the
-        // spurious-feed runout without any user remap.
+        open_snapmaker_remap_modal();
         break;
     case AmsBackend::RemapStrategy::None:
         break;
@@ -2709,6 +2706,73 @@ void PrintSelectPanel::open_gcode_remap_modal() {
         prep->modify_and_print_with_remap(file_path, remap, [this]() {
             PrintStatusPanel::push_overlay(parent_screen_);
         });
+    });
+
+    gcode_remap_modal_.show(lv_screen_active());
+}
+
+// SnapmakerNative (Snapmaker U1) tool→physical-head remap. The U1 firmware
+// owns the print_task_config routing table, applied natively at print-start
+// via SET_PRINT_EXTRUDER_MAP lines (PrintStartController::send_snapmaker_
+// preprint_then → AmsBackendSnapmaker::build_preprint_gcode). The inline
+// FilamentMappingCard widget is HIDDEN on U1 (caps editable=false), so we
+// build the picker DIRECTLY from the cached pre-flight result, exactly like
+// open_gcode_remap_modal(). On "Done" we push the chosen mappings into the
+// card's mappings_ store (detail_view_->set_filament_mappings) — that single
+// store feeds BOTH recompute_preflight() (the gate refreshes) AND
+// get_effective_remap() (the print-start native send). We do NOT auto-start
+// the print: the user taps Print again and the recomputed gate lets it
+// proceed, at which point the SET_PRINT_EXTRUDER_MAP lines are emitted.
+void PrintSelectPanel::open_snapmaker_remap_modal() {
+    if (!detail_view_) {
+        spdlog::warn("[{}] Snapmaker remap requested with no detail view", get_name());
+        return;
+    }
+
+    // Build picker inputs directly from the pre-flight checks (the hidden card
+    // is not consulted). Each ToolCheck carries the intended color/material the
+    // gcode declared for that logical tool.
+    const auto& pf = detail_view_->preflight_result();
+    std::vector<helix::GcodeToolInfo> tool_info;
+    tool_info.reserve(pf.checks.size());
+    for (const auto& check : pf.checks) {
+        helix::GcodeToolInfo info;
+        info.tool_index = check.tool_index;
+        info.color_rgb = check.intended_color;
+        info.material = check.intended_material;
+        tool_info.push_back(std::move(info));
+    }
+
+    if (tool_info.empty()) {
+        spdlog::warn("[{}] Snapmaker remap: no tools in pre-flight result", get_name());
+        NOTIFY_INFO(lv_tr("Nothing to remap"));
+        return;
+    }
+
+    // The U1's 4 physical heads (0-3) are the assignable targets. slot_index
+    // == physical head for the toolchanger backend, so no slot→head xlate.
+    auto slots = AmsState::instance().collect_available_slots();
+    auto mappings = helix::FilamentMapper::compute_defaults(tool_info, slots);
+
+    gcode_remap_modal_.set_tool_info(tool_info);
+    gcode_remap_modal_.set_available_slots(slots);
+    gcode_remap_modal_.set_mappings(mappings);
+    gcode_remap_modal_.set_on_mappings_updated([this](std::vector<helix::ToolMapping> updated) {
+        // Log each non-identity choice for on-device confirmation, then push
+        // the full mapping vector into the card store. get_effective_remap()
+        // identity-filters (logical t → head t is dropped), so only changed
+        // tools yield a SET_PRINT_EXTRUDER_MAP line at print-start.
+        auto default_head = [](int tool) { return (tool >= 0 && tool <= 3) ? tool : 0; };
+        for (const auto& m : updated) {
+            if (m.tool_index >= 0 && m.mapped_slot >= 0 &&
+                m.mapped_slot != default_head(m.tool_index)) {
+                spdlog::debug("[{}] U1 remap applied: tool {} -> head {}", get_name(),
+                              m.tool_index, m.mapped_slot);
+            }
+        }
+        if (detail_view_) {
+            detail_view_->set_filament_mappings(std::move(updated));
+        }
     });
 
     gcode_remap_modal_.show(lv_screen_active());

@@ -68,6 +68,22 @@ class FilamentMappingCard {
     }
 
     /**
+     * @brief Replace the current tool→slot mappings.
+     *
+     * Stores the provided mappings into the card's internal store and fires
+     * on_mappings_changed_ so downstream consumers (color sync, pre-flight gate)
+     * re-evaluate. Used by the U1 native-remap flow, where the inline card
+     * widget is hidden but its mappings_ store still feeds get_effective_remap()
+     * and recompute_preflight(). Safe to call when widgets are not created.
+     */
+    void set_mappings(std::vector<helix::ToolMapping> mappings) {
+        mappings_ = std::move(mappings);
+        if (on_mappings_changed_) {
+            on_mappings_changed_();
+        }
+    }
+
+    /**
      * @brief Get per-tool gcode info (colors, materials)
      */
     [[nodiscard]] std::vector<helix::GcodeToolInfo> get_tool_info() const {

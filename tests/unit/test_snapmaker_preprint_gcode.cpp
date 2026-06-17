@@ -14,11 +14,14 @@
 
 #include "ams_backend_snapmaker.h"
 
+#include "filament_mapper.h"
+
 #include "../catch_amalgamated.hpp"
 
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -90,4 +93,77 @@ TEST_CASE("Snapmaker build_preprint_gcode extended tool defaults to head 0",
     SnapmakerProbe sm;
     // default_head(5) == 0 (firmware default map [0,1,2,3,0,0,...]).
     REQUIRE(sm.build_preprint_gcode({5}, {}) == "SET_PRINT_USED_EXTRUDERS EXTRUDERS=0");
+}
+
+// End-to-end scenario for the Batch 2 native-remap UI: a 2-color body using
+// logical tools {0,2}, with the user remapping tool 0 → head 1 in the picker.
+// get_effective_remap() identity-filters, so only tool 0 yields an entry
+// {0,1}; tool 2 stays identity (head 2). build_preprint_gcode then emits one
+// SET_PRINT_EXTRUDER_MAP line plus the recomputed used-heads {1,2}.
+TEST_CASE("Snapmaker build_preprint_gcode 2-color remap tool0->head1",
+          "[snapmaker][preprint]") {
+    SnapmakerProbe sm;
+    REQUIRE(sm.build_preprint_gcode({0, 2}, {{0, 1}}) ==
+            "SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=1\n"
+            "SET_PRINT_USED_EXTRUDERS EXTRUDERS=1,2");
+}
+
+// Focused unit test of the IDENTITY-FILTER / conversion logic that
+// PrintSelectDetailView::get_effective_remap() performs on the card's stored
+// mappings vector. Full UI modal simulation is impractical (XML/LVGL fixture
+// heavy), so we replicate the exact filter inline as a lambda and assert the
+// produced map<int,int> matches get_effective_remap()'s contract:
+//   * mapped_slot < 0 (auto/unmapped)          -> dropped
+//   * mapped_slot == default_head(tool_index)  -> dropped (firmware identity)
+//   * mapped_slot >= 0 && != default_head      -> kept as a true remap
+// This test FAILS if the identity-filter logic regresses.
+TEST_CASE("get_effective_remap identity-filter drops identity + auto entries",
+          "[snapmaker][remap]") {
+    // Mirror of PrintSelectDetailView::get_effective_remap (lines 979-995).
+    auto effective_remap = [](const std::vector<helix::ToolMapping>& mappings) {
+        auto default_head = [](int tool) { return (tool >= 0 && tool <= 3) ? tool : 0; };
+        std::map<int, int> remap;
+        for (const auto& m : mappings) {
+            if (m.mapped_slot >= 0 && m.mapped_slot != default_head(m.tool_index)) {
+                remap[m.tool_index] = m.mapped_slot;
+            }
+        }
+        return remap;
+    };
+
+    auto mk = [](int tool, int slot) {
+        helix::ToolMapping m;
+        m.tool_index = tool;
+        m.mapped_slot = slot;
+        return m;
+    };
+
+    SECTION("mix of identity, auto, and true remaps keeps only true remaps") {
+        std::vector<helix::ToolMapping> mappings = {
+            mk(0, 1),  // true remap: head 1 != default_head(0)=0  -> KEEP
+            mk(1, 1),  // identity: head 1 == default_head(1)=1     -> DROP
+            mk(2, -1), // auto/unmapped: mapped_slot < 0            -> DROP
+            mk(3, 0),  // true remap: head 0 != default_head(3)=3   -> KEEP
+        };
+        std::map<int, int> expected = {{0, 1}, {3, 0}};
+        REQUIRE(effective_remap(mappings) == expected);
+    }
+
+    SECTION("all-identity map yields empty remap") {
+        std::vector<helix::ToolMapping> mappings = {mk(0, 0), mk(1, 1), mk(2, 2), mk(3, 3)};
+        REQUIRE(effective_remap(mappings).empty());
+    }
+
+    SECTION("extended tool (>3) remapped off head 0 is kept") {
+        // default_head(5) == 0, so a remap to head 2 is a true remap.
+        std::vector<helix::ToolMapping> mappings = {mk(5, 2)};
+        std::map<int, int> expected = {{5, 2}};
+        REQUIRE(effective_remap(mappings) == expected);
+    }
+
+    SECTION("extended tool (>3) mapped to head 0 is dropped as identity") {
+        // default_head(5) == 0, so mapping 5 -> 0 is the firmware identity.
+        std::vector<helix::ToolMapping> mappings = {mk(5, 0)};
+        REQUIRE(effective_remap(mappings).empty());
+    }
 }

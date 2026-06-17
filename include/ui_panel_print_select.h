@@ -470,6 +470,7 @@ class PrintSelectPanel : public PanelBase {
     // Remap UI entry points dispatched by on_preflight_remap().
     void open_native_remap_modal();
     void open_gcode_remap_modal();
+    void open_snapmaker_remap_modal();
 
     //
     // === Constants ===
