@@ -304,12 +304,15 @@ lv_indev_t* DisplayBackendFbdev::create_input_pointer() {
     }
 
     // Read and log ABS ranges for diagnostic purposes, and check for mismatch
-    // on capacitive screens that may report coordinates for a different resolution
+    // on capacitive screens that may report coordinates for a different resolution.
+    // abs_x/abs_y/got_range are hoisted to this scope so the post-#943 legacy
+    // calibration recheck below can consult the (MT-fallback-resolved) range.
+    struct input_absinfo abs_x = {};
+    struct input_absinfo abs_y = {};
+    bool got_range = false;
     if (has_abs) {
         int fd = open(touch_path.c_str(), O_RDONLY | O_CLOEXEC);
         if (fd >= 0) {
-            struct input_absinfo abs_x = {};
-            struct input_absinfo abs_y = {};
             bool got_x = (ioctl(fd, EVIOCGABS(ABS_X), &abs_x) == 0);
             bool got_y = (ioctl(fd, EVIOCGABS(ABS_Y), &abs_y) == 0);
 
@@ -339,6 +342,7 @@ lv_indev_t* DisplayBackendFbdev::create_input_pointer() {
                              abs_x.minimum, abs_x.maximum, abs_y.minimum, abs_y.maximum);
             }
 
+            got_range = got_x && got_y;
             if (got_x && got_y) {
                 spdlog::info(
                     "[Fbdev Backend] Touch ABS range: X({}..{}), Y({}..{}) — display: {}x{}",
@@ -404,6 +408,31 @@ lv_indev_t* DisplayBackendFbdev::create_input_pointer() {
 
     // Load affine calibration from config (saved by calibration wizard)
     calibration_ = helix::load_touch_calibration();
+
+    // Post-#943-fix upgrade: a stored affine on a non-resistive panel whose ABS range
+    // mismatches the display was computed in the wrong (unscaled) coordinate space —
+    // those panels now ride on evdev's linear scaling applied above. The v17→v18
+    // migration set recheck_pending; decide here, where the device's resistive nature
+    // and live ABS range are known.
+    if (helix::Config* cfg = helix::Config::get_instance()) {
+        bool recheck_pending = cfg->get<bool>("/input/calibration/recheck_pending", false);
+        if (recheck_pending) {
+            bool is_resistive = helix::is_resistive_touchscreen_name(dev_name);
+            bool abs_mismatch =
+                got_range && helix::has_abs_display_mismatch(abs_x.maximum, abs_y.maximum,
+                                                             screen_width_, screen_height_);
+            if (helix::should_invalidate_legacy_calibration(recheck_pending, is_resistive,
+                                                            abs_mismatch)) {
+                spdlog::info("[Fbdev Backend] Invalidating legacy pre-#943 affine calibration "
+                             "(non-resistive panel, ABS/display mismatch)");
+                calibration_.valid = false;
+                cfg->set<bool>("/input/calibration/valid", false);
+            }
+            // One-shot: clear the flag regardless of the decision above.
+            cfg->set<bool>("/input/calibration/recheck_pending", false);
+            cfg->save();
+        }
+    }
 
     // needs_calibration_ stays a STABLE capability flag: "this panel uses affine
     // calibration" (true for resistive controllers). It must NOT be cleared just
