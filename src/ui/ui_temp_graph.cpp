@@ -251,12 +251,246 @@ static void mask_overrange_end_cb(lv_event_t* e) {
     s_overrange_saved.clear();
 }
 
+// Geometry of the chart's content rect (inside padding) plus the deci-degree
+// Y range. Returns false when the chart is too small or the range is degenerate.
+// Computed from the chart object directly (no draw context) so it is valid from
+// both the draw callback and the out-of-render-pass async recompute.
+struct gradient_geometry_t {
+    int32_t cx1, cy1; // content top-left (absolute display coords)
+    int32_t cw, ch;   // content width / height
+    int32_t y_min, y_max;
+    uint32_t point_count;
+};
+
+static bool gradient_compute_geometry(ui_temp_graph_t* graph, gradient_geometry_t* g) {
+    lv_obj_t* chart = graph->chart;
+    if (!chart)
+        return false;
+
+    lv_area_t obj_coords;
+    lv_obj_get_coords(chart, &obj_coords);
+
+    int32_t pad_left = lv_obj_get_style_pad_left(chart, LV_PART_MAIN);
+    int32_t pad_right = lv_obj_get_style_pad_right(chart, LV_PART_MAIN);
+    int32_t pad_top = lv_obj_get_style_pad_top(chart, LV_PART_MAIN);
+    int32_t pad_bottom = lv_obj_get_style_pad_bottom(chart, LV_PART_MAIN);
+
+    int32_t cx1 = obj_coords.x1 + pad_left;
+    int32_t cx2 = obj_coords.x2 - pad_right;
+    int32_t cy1 = obj_coords.y1 + pad_top;
+    int32_t cy2 = obj_coords.y2 - pad_bottom;
+    int32_t cw = cx2 - cx1;
+    int32_t ch = cy2 - cy1;
+    if (cw <= 1 || ch <= 0)
+        return false;
+
+    uint32_t point_count = lv_chart_get_point_count(chart);
+    if (point_count < 2)
+        return false;
+
+    int32_t y_min = static_cast<int32_t>(graph->min_temp * TEMP_SCALE);
+    int32_t y_max = static_cast<int32_t>(graph->max_temp * TEMP_SCALE);
+    if (y_max - y_min <= 0)
+        return false;
+
+    g->cx1 = cx1;
+    g->cy1 = cy1;
+    g->cw = cw;
+    g->ch = ch;
+    g->y_min = y_min;
+    g->y_max = y_max;
+    g->point_count = point_count;
+    return true;
+}
+
+// Render the per-column gradient fill for every visible series into `target`,
+// with column 0 at x_off and the chart floor at y_off + ch (content-relative
+// when drawing to the cache buffer, absolute when drawing to the event layer).
+static void gradient_render_columns(ui_temp_graph_t* graph, const gradient_geometry_t& g,
+                                    lv_layer_t* target, int32_t x_off, int32_t y_off) {
+    int32_t cw = g.cw;
+    int32_t ch = g.ch;
+    int32_t pc = static_cast<int32_t>(g.point_count);
+    int32_t y_min = g.y_min;
+    int32_t y_max = g.y_max;
+    int32_t floor_y = y_off + ch; // chart floor in target coords
+
+    for (int s = 0; s < UI_TEMP_GRAPH_MAX_SERIES; s++) {
+        ui_temp_series_meta_t* meta = &graph->series_meta[s];
+        if (!meta->chart_series || !meta->visible)
+            continue;
+        if (meta->gradient_top_opa == LV_OPA_TRANSP && meta->gradient_bottom_opa == LV_OPA_TRANSP)
+            continue;
+
+        int32_t* y_data = lv_chart_get_y_array(graph->chart, meta->chart_series);
+        if (!y_data)
+            continue;
+
+        uint32_t sp = lv_chart_get_x_start_point(graph->chart, meta->chart_series);
+
+        lv_draw_fill_dsc_t fd;
+        lv_draw_fill_dsc_init(&fd);
+        fd.color = meta->color;
+        fd.opa = LV_OPA_COVER;
+        fd.grad.dir = LV_GRAD_DIR_VER;
+        fd.grad.stops_count = 2;
+        // LVGL 9.5 vertical fill: frac=0 maps to the TOP row of the fill region,
+        // frac=255 to the BOTTOM (verified in lv_draw_sw_grad.c color_map indexing +
+        // lv_draw_sw_fill.c VER case: opa_map[h - y1], so y1/top => index 0 => frac 0).
+        // Each column is filled from the curve (top) down to the chart floor, so the
+        // top stop (frac=0) carries the "at the line" opacity and the bottom stop
+        // (frac=255) the floor opacity — the line is solid, fading toward the axis.
+        fd.grad.stops[0].color = meta->color;
+        fd.grad.stops[0].opa = meta->gradient_top_opa;
+        fd.grad.stops[0].frac = 0;
+        fd.grad.stops[1].color = meta->color;
+        fd.grad.stops[1].opa = meta->gradient_bottom_opa;
+        fd.grad.stops[1].frac = 255;
+
+        // Walk columns (not segments) so each pixel column is drawn exactly
+        // once. When pc > cw (e.g. 400 points over ~332 px) a segment walk
+        // would draw overlapping fills at shared boundaries, compounding
+        // semi-transparent opacity into visible dark bands.
+        for (int32_t x = 0; x < cw; x++) {
+            // Map this pixel column back to a fractional point index.
+            // frac_256 is in 8.8 fixed point to avoid float.
+            int32_t frac_256 = x * (pc - 1) * 256 / (cw - 1);
+            int32_t idx = frac_256 / 256;
+            int32_t t = frac_256 & 255; // fractional part [0..255]
+
+            if (idx >= pc - 1) {
+                idx = pc - 2;
+                t = 255;
+            }
+
+            int32_t v0 = y_data[(sp + idx) % pc];
+            int32_t v1 = y_data[(sp + idx + 1) % pc];
+
+            if (v0 == LV_CHART_POINT_NONE && v1 == LV_CHART_POINT_NONE)
+                continue;
+            if (v0 == LV_CHART_POINT_NONE)
+                v0 = v1;
+            if (v1 == LV_CHART_POINT_NONE)
+                v1 = v0;
+
+            // Curve Y in target coords: lv_map gives height above the floor.
+            int32_t py0 = floor_y - lv_map(v0, y_min, y_max, 0, ch);
+            int32_t py1 = floor_y - lv_map(v1, y_min, y_max, 0, ch);
+            int32_t series_y = py0 + (py1 - py0) * t / 256;
+
+            if (series_y < y_off)
+                series_y = y_off;
+            if (series_y >= floor_y)
+                continue;
+
+            // Fill from the curve down to the chart floor with the full-height
+            // vertical fade. The ramp stays faintly visible well below the line,
+            // so a taller series' tint correctly overlays lower series via alpha.
+            // We deliberately do NOT clamp to a band: with this gentle ramp the
+            // deep pixels are low-opacity but not invisible, so clamping would
+            // change the multi-series appearance (#979 review). The per-recompute
+            // cost is instead bounded by caching — this loop only runs when the
+            // data or viewport actually changes, not every frame.
+            int32_t col_bottom = floor_y - 1;
+            if (col_bottom < series_y)
+                continue;
+
+            lv_area_t col_area;
+            col_area.x1 = x_off + x;
+            col_area.x2 = x_off + x;
+            col_area.y1 = series_y;
+            col_area.y2 = col_bottom;
+
+            lv_draw_fill(target, &fd, &col_area);
+        }
+    }
+}
+
+// Lazily (re)create the offscreen canvas + ARGB8888 buffer for the current
+// viewport size. Returns true when a usable buffer is available. A size change
+// reallocates the buffer and marks the cache dirty (cached pixels no longer map
+// to the new geometry). Must run OUTSIDE the render pass.
+static bool gradient_ensure_cache_buf(ui_temp_graph_t* graph, const gradient_geometry_t& g) {
+    if (!graph->chart)
+        return false;
+
+    if (!graph->gradient_canvas) {
+        // The canvas is HIDDEN — LVGL never auto-draws it. We render into its
+        // backing buffer below and blit that buffer manually in the draw cb.
+        graph->gradient_canvas = lv_canvas_create(graph->chart);
+        if (graph->gradient_canvas) {
+            lv_obj_add_flag(graph->gradient_canvas, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(graph->gradient_canvas, LV_OBJ_FLAG_CLICKABLE);
+        }
+    }
+    if (!graph->gradient_canvas)
+        return false;
+
+    if (!graph->gradient_cache_buf || graph->gradient_cache_w != g.cw ||
+        graph->gradient_cache_h != g.ch) {
+        if (graph->gradient_cache_buf) {
+            lv_draw_buf_destroy(graph->gradient_cache_buf);
+            graph->gradient_cache_buf = nullptr;
+        }
+        graph->gradient_cache_buf = lv_draw_buf_create(g.cw, g.ch, LV_COLOR_FORMAT_ARGB8888, 0);
+        if (graph->gradient_cache_buf) {
+            // Bind the draw-buf directly. lv_canvas_set_buffer() would treat its
+            // pointer arg as raw pixel data; passing a lv_draw_buf_t* there makes
+            // the canvas rasterize ~cw*ch*4 bytes onto the 40-byte struct address
+            // (heap overrun). set_draw_buf assigns the buffer as-is.
+            lv_canvas_set_draw_buf(graph->gradient_canvas, graph->gradient_cache_buf);
+            graph->gradient_cache_w = g.cw;
+            graph->gradient_cache_h = g.ch;
+            graph->gradient_cache_dirty = true;
+        }
+    }
+    return graph->gradient_cache_buf != nullptr;
+}
+
+// Recompute the cached gradient buffer. lv_canvas_init_layer / finish_layer run a
+// nested synchronous draw dispatch and end with lv_obj_invalidate(canvas), which
+// is ILLEGAL during an active render pass (disp->rendering_in_progress) — doing it
+// from the DRAW_MAIN_END draw callback produced an empty/undrawn buffer, so the
+// blit rendered nothing (the LVGL 9.5 gradient regression; same rule the filament
+// path layers obey, see ui_filament_path_layers.cpp). This runs as an lv_async_call
+// OUTSIDE the render pass, so the canvas layer round-trip is legal here.
+static void gradient_recompute_async(void* arg) {
+    ui_temp_graph_t* graph = static_cast<ui_temp_graph_t*>(arg);
+    if (!graph || !graph->chart)
+        return;
+    if (!(graph->features & TEMP_GRAPH_FEATURE_GRADIENTS))
+        return;
+
+    gradient_geometry_t g;
+    if (!gradient_compute_geometry(graph, &g))
+        return;
+    if (!gradient_ensure_cache_buf(graph, g))
+        return;
+    if (!graph->gradient_cache_dirty)
+        return; // nothing changed since the last recompute
+
+    lv_canvas_fill_bg(graph->gradient_canvas, lv_color_black(), LV_OPA_TRANSP);
+
+    lv_layer_t glayer;
+    lv_canvas_init_layer(graph->gradient_canvas, &glayer);
+    gradient_render_columns(graph, g, &glayer, 0, 0); // buffer-relative coords
+    lv_canvas_finish_layer(graph->gradient_canvas, &glayer);
+
+    graph->gradient_cache_dirty = false;
+
+    static uint64_t s_gradient_recompute_count = 0;
+    spdlog::debug("[TempGraph] gradient recompute #{} ({}x{}, {} series)",
+                  ++s_gradient_recompute_count, g.cw, g.ch, graph->series_count);
+
+    // The buffer changed — request a redraw so the draw cb blits the fresh pixels.
+    lv_obj_invalidate(graph->chart);
+}
+
 // Render gradient fills by reading chart data directly.
 // LVGL 9.5 changed DRAW_TASK_ADDED to fire during rendering (after all draw events),
 // so we can no longer add draw tasks from that callback. Instead, we compute pixel
 // positions from the raw chart series data and draw gradient fills in DRAW_MAIN_END.
 static void draw_gradient_cb(lv_event_t* e) {
-    lv_obj_t* chart = lv_event_get_target_obj(e);
     ui_temp_graph_t* graph = static_cast<ui_temp_graph_t*>(lv_event_get_user_data(e));
     if (!graph || !graph->chart || graph->series_count == 0)
         return;
@@ -277,197 +511,35 @@ static void draw_gradient_cb(lv_event_t* e) {
     if (!event_layer)
         return;
 
-    lv_area_t obj_coords;
-    lv_obj_get_coords(chart, &obj_coords);
-
-    // Content area (inside padding)
-    int32_t pad_left = lv_obj_get_style_pad_left(chart, LV_PART_MAIN);
-    int32_t pad_right = lv_obj_get_style_pad_right(chart, LV_PART_MAIN);
-    int32_t pad_top = lv_obj_get_style_pad_top(chart, LV_PART_MAIN);
-    int32_t pad_bottom = lv_obj_get_style_pad_bottom(chart, LV_PART_MAIN);
-
-    int32_t cx1 = obj_coords.x1 + pad_left;
-    int32_t cx2 = obj_coords.x2 - pad_right;
-    int32_t cy1 = obj_coords.y1 + pad_top;
-    int32_t cy2 = obj_coords.y2 - pad_bottom;
-    int32_t cw = cx2 - cx1;
-    int32_t ch = cy2 - cy1;
-    if (cw <= 1 || ch <= 0)
+    gradient_geometry_t g;
+    if (!gradient_compute_geometry(graph, &g))
         return;
 
-    uint32_t point_count = lv_chart_get_point_count(graph->chart);
-    if (point_count < 2)
-        return;
+    // Fast path: the cached buffer is valid for the current viewport and clean.
+    // Blit it straight onto the event layer (cheap — no per-column software fill).
+    bool cache_ready = graph->gradient_cache_buf && graph->gradient_cache_w == g.cw &&
+                       graph->gradient_cache_h == g.ch && !graph->gradient_cache_dirty;
 
-    int32_t y_min = static_cast<int32_t>(graph->min_temp * TEMP_SCALE);
-    int32_t y_max = static_cast<int32_t>(graph->max_temp * TEMP_SCALE);
-    int32_t y_range = y_max - y_min;
-    if (y_range <= 0)
-        return;
+    if (cache_ready) {
+        lv_draw_image_dsc_t idsc;
+        lv_draw_image_dsc_init(&idsc);
+        idsc.src = graph->gradient_cache_buf;
+        idsc.opa = LV_OPA_COVER;
+        lv_area_t dst = {g.cx1, g.cy1, g.cx1 + g.cw - 1, g.cy1 + g.ch - 1};
+        lv_draw_image(event_layer, &idsc, &dst);
 
-    // Lazily create the offscreen render target. Cache the per-column software
-    // gradient once into this buffer, then blit it on subsequent redraws where
-    // data + viewport are unchanged (#979: K2 Plus froze ~2-3s repainting it
-    // per frame). The canvas is HIDDEN — we never let LVGL auto-draw it; we blit
-    // its buffer manually below.
-    if (!graph->gradient_canvas) {
-        graph->gradient_canvas = lv_canvas_create(chart);
-        if (graph->gradient_canvas) {
-            lv_obj_add_flag(graph->gradient_canvas, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_remove_flag(graph->gradient_canvas, LV_OBJ_FLAG_CLICKABLE);
-        }
-    }
-
-    // (Re)allocate the buffer when the viewport size changes. A size change also
-    // forces a recompute (the cached pixels no longer map to the new geometry).
-    if (graph->gradient_canvas && (!graph->gradient_cache_buf || graph->gradient_cache_w != cw ||
-                                   graph->gradient_cache_h != ch)) {
-        if (graph->gradient_cache_buf) {
-            lv_draw_buf_destroy(graph->gradient_cache_buf);
-            graph->gradient_cache_buf = nullptr;
-        }
-        graph->gradient_cache_buf = lv_draw_buf_create(cw, ch, LV_COLOR_FORMAT_ARGB8888, 0);
-        if (graph->gradient_cache_buf) {
-            // Bind the draw-buf directly. lv_canvas_set_buffer() would treat its
-            // pointer arg as raw pixel data; passing a lv_draw_buf_t* there makes
-            // the canvas rasterize ~cw*ch*4 bytes onto the 40-byte struct address
-            // (heap overrun). set_draw_buf assigns the buffer as-is.
-            lv_canvas_set_draw_buf(graph->gradient_canvas, graph->gradient_cache_buf);
-            graph->gradient_cache_w = cw;
-            graph->gradient_cache_h = ch;
-            graph->gradient_cache_dirty = true;
-        }
-    }
-
-    // Render the per-column gradient fill for every visible series. Draws into
-    // `target` with column 0 at x_off and the chart floor at y_off + ch (i.e.
-    // content-relative when blitting to the buffer, absolute when falling back to
-    // the event layer).
-    auto render_columns = [&](lv_layer_t* target, int32_t x_off, int32_t y_off) {
-        int32_t pc = static_cast<int32_t>(point_count);
-        int32_t floor_y = y_off + ch; // chart floor in target coords
-
-        for (int s = 0; s < UI_TEMP_GRAPH_MAX_SERIES; s++) {
-            ui_temp_series_meta_t* meta = &graph->series_meta[s];
-            if (!meta->chart_series || !meta->visible)
-                continue;
-            if (meta->gradient_top_opa == LV_OPA_TRANSP &&
-                meta->gradient_bottom_opa == LV_OPA_TRANSP)
-                continue;
-
-            int32_t* y_data = lv_chart_get_y_array(graph->chart, meta->chart_series);
-            if (!y_data)
-                continue;
-
-            uint32_t sp = lv_chart_get_x_start_point(graph->chart, meta->chart_series);
-
-            lv_draw_fill_dsc_t fd;
-            lv_draw_fill_dsc_init(&fd);
-            fd.color = meta->color;
-            fd.opa = LV_OPA_COVER;
-            fd.grad.dir = LV_GRAD_DIR_VER;
-            fd.grad.stops_count = 2;
-            fd.grad.stops[0].color = meta->color;
-            fd.grad.stops[0].opa = meta->gradient_top_opa;
-            fd.grad.stops[0].frac = 0;
-            fd.grad.stops[1].color = meta->color;
-            fd.grad.stops[1].opa = meta->gradient_bottom_opa;
-            fd.grad.stops[1].frac = 255;
-
-            // Walk columns (not segments) so each pixel column is drawn exactly
-            // once. When pc > cw (e.g. 400 points over ~332 px) a segment walk
-            // would draw overlapping fills at shared boundaries, compounding
-            // semi-transparent opacity into visible dark bands.
-            for (int32_t x = 0; x < cw; x++) {
-                // Map this pixel column back to a fractional point index.
-                // frac_256 is in 8.8 fixed point to avoid float.
-                int32_t frac_256 = x * (pc - 1) * 256 / (cw - 1);
-                int32_t idx = frac_256 / 256;
-                int32_t t = frac_256 & 255; // fractional part [0..255]
-
-                if (idx >= pc - 1) {
-                    idx = pc - 2;
-                    t = 255;
-                }
-
-                int32_t v0 = y_data[(sp + idx) % pc];
-                int32_t v1 = y_data[(sp + idx + 1) % pc];
-
-                if (v0 == LV_CHART_POINT_NONE && v1 == LV_CHART_POINT_NONE)
-                    continue;
-                if (v0 == LV_CHART_POINT_NONE)
-                    v0 = v1;
-                if (v1 == LV_CHART_POINT_NONE)
-                    v1 = v0;
-
-                // Curve Y in target coords: lv_map gives height above the floor.
-                int32_t py0 = floor_y - lv_map(v0, y_min, y_max, 0, ch);
-                int32_t py1 = floor_y - lv_map(v1, y_min, y_max, 0, ch);
-                int32_t series_y = py0 + (py1 - py0) * t / 256;
-
-                if (series_y < y_off)
-                    series_y = y_off;
-                if (series_y >= floor_y)
-                    continue;
-
-                // Fill from the curve down to the chart floor with the full-height
-                // vertical fade (stops[1], opa=bottom, maps to the floor). The ramp
-                // stays faintly visible well below the line, so a taller series'
-                // tint correctly overlays lower series via alpha. We deliberately do
-                // NOT clamp to a band: with this gentle top_opa->0 ramp the deep
-                // pixels are low-opacity but not invisible, so clamping would change
-                // the multi-series appearance (#979 review). The per-recompute cost
-                // is instead bounded by caching — this loop only runs when the data
-                // or viewport actually changes, not every frame.
-                int32_t col_bottom = floor_y - 1;
-                if (col_bottom < series_y)
-                    continue;
-
-                lv_area_t col_area;
-                col_area.x1 = x_off + x;
-                col_area.x2 = x_off + x;
-                col_area.y1 = series_y;
-                col_area.y2 = col_bottom;
-
-                lv_draw_fill(target, &fd, &col_area);
-            }
-        }
-    };
-
-    // No usable offscreen buffer (creation/OOM failed): draw straight into the
-    // event layer the way the pre-cache code did. Keeps a working path on tiny
-    // boards that can't spare an ARGB8888 buffer.
-    if (!graph->gradient_cache_buf) {
-        render_columns(event_layer, cx1, cy1);
+        static uint64_t s_gradient_blit_count = 0;
+        spdlog::trace("[TempGraph] gradient blit #{}", ++s_gradient_blit_count);
         return;
     }
 
-    // Recompute the cache only when something changed.
-    if (graph->gradient_cache_dirty) {
-        lv_canvas_fill_bg(graph->gradient_canvas, lv_color_black(), LV_OPA_TRANSP);
-
-        lv_layer_t glayer;
-        lv_canvas_init_layer(graph->gradient_canvas, &glayer);
-        render_columns(&glayer, 0, 0); // buffer-relative coords
-        lv_canvas_finish_layer(graph->gradient_canvas, &glayer);
-
-        graph->gradient_cache_dirty = false;
-
-        static uint64_t s_gradient_recompute_count = 0;
-        spdlog::debug("[TempGraph] gradient recompute #{} ({}x{}, {} series)",
-                      ++s_gradient_recompute_count, cw, ch, graph->series_count);
-    }
-
-    // Blit the cached buffer onto the event layer at the content rect.
-    lv_draw_image_dsc_t idsc;
-    lv_draw_image_dsc_init(&idsc);
-    idsc.src = graph->gradient_cache_buf;
-    idsc.opa = LV_OPA_COVER;
-    lv_area_t dst = {cx1, cy1, cx1 + cw - 1, cy1 + ch - 1};
-    lv_draw_image(event_layer, &idsc, &dst);
-
-    static uint64_t s_gradient_blit_count = 0;
-    spdlog::trace("[TempGraph] gradient blit #{}", ++s_gradient_blit_count);
+    // Cache is stale, mis-sized, or not yet built. Draw straight into the event
+    // layer this frame so the gradient is never invisible (the proven direct path,
+    // L079), and schedule an out-of-render-pass recompute so subsequent frames hit
+    // the cheap blit path above. lv_async_call dedups on (cb, arg), so repeated
+    // dirty frames collapse to a single recompute.
+    gradient_render_columns(graph, g, event_layer, g.cx1, g.cy1);
+    lv_async_call(gradient_recompute_async, graph);
 }
 
 // Draw legend chips in the upper-left of the chart content area.
@@ -1308,6 +1380,11 @@ void ui_temp_graph_destroy(ui_temp_graph_t* graph) {
 
     // Transfer ownership to RAII wrapper - automatic cleanup
     std::unique_ptr<ui_temp_graph_t> graph_ptr(graph);
+
+    // Cancel any pending out-of-render-pass gradient recompute keyed on this graph
+    // (lv_async_call(gradient_recompute_async, graph)). Without this the async could
+    // fire after the struct below is freed → UAF. Keyed cancel matches (cb, arg).
+    lv_async_call_cancel(gradient_recompute_async, graph);
 
     // Only clean up series and chart if chart widget still exists.
     // Chart may already be deleted by LVGL parent cascade (chart_delete_cb nulls graph->chart).
