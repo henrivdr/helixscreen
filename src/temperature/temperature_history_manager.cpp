@@ -190,6 +190,23 @@ void TemperatureHistoryManager::notify_observers(const std::string& heater_name)
 
 bool TemperatureHistoryManager::add_sample_internal(const std::string& heater_name, int temp_deci,
                                                     int target_deci, int64_t timestamp_ms) {
+    // Reject "no data" / disconnect / inactive-extruder readings BEFORE storing.
+    // The temp subject momentarily reads 0 on disconnect, on partial Klipper
+    // status updates, and for an idle extruder on a multi-tool printer (the U1).
+    // Storing a 0 makes the history backfill/replay path draw a real data point
+    // at the chart's 0°C floor — a solid vertical line dropping to the baseline
+    // at the replayed live edge (the reported U1 artifact). The live-push filter
+    // in TempGraphController only guards new pushes; the 0 enters here, via the
+    // recorder, and is replayed later, so it must be rejected at this boundary —
+    // the single source feeding every consumer (overlay, mini graph, panel).
+    // Upper bound rejects obviously-bogus spikes (deci-degrees; 4000 = 400°C).
+    constexpr int kMaxValidTempDeci = 4000;
+    if (temp_deci <= 0 || temp_deci > kMaxValidTempDeci) {
+        spdlog::debug("[TempHistory] dropping invalid sample for '{}': {} deci-°C",
+                      heater_name, temp_deci);
+        return false;
+    }
+
     // Get or create heater history
     HeaterHistory& history = heaters_[heater_name];
 

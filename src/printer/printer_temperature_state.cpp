@@ -291,8 +291,19 @@ const std::string& PrinterTemperatureState::active_extruder_name() const {
 void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
     // Update dynamic per-extruder subjects
     for (auto& [name, info] : extruders_) {
-        if (!status.contains(name))
+        if (!status.contains(name)) {
+            // Moonraker status updates are DELTAS — an extruder holding steady
+            // (or any inactive head on a multi-tool printer) is omitted entirely
+            // from the notification. Without re-publishing, its per-extruder temp
+            // subject freezes, and the temperature overlay (which graphs one line
+            // per head) stops advancing that head's line — it looks stuck, not
+            // flat. Re-notify the last-known value so observers fire and the line
+            // keeps advancing. Guard on >0 so a never-initialized head doesn't
+            // push a spurious 0 (the chart/history 0-filters would drop it anyway).
+            if (lv_subject_get_int(info.temp_subject.get()) > 0)
+                lv_subject_notify(info.temp_subject.get());
             continue;
+        }
         const auto& data = status[name];
 
         if (data.contains("temperature") && data["temperature"].is_number()) {

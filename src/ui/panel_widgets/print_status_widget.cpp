@@ -920,6 +920,17 @@ void PrintStatusWidget::check_and_show_idle_runout_modal() {
         return;
     }
 
+    // The Snapmaker U1 drives load/unload entirely on its own, so an idle lane
+    // going empty — a hand-pull, or a lane simply left unloaded — needs no
+    // operator action and the runout-guidance modal is just noise. Other backends
+    // that require manual intervention keep the idle modal. Mid-print runout is a
+    // separate path (FilamentRunoutHandler) and is unaffected by this gate.
+    if (auto* backend = AmsState::instance().get_backend(0);
+        backend && backend->get_type() == AmsType::SNAPMAKER) {
+        spdlog::debug("[PrintStatusWidget] Snapmaker AMS idle - suppressing runout modal");
+        return;
+    }
+
     spdlog::info("[PrintStatusWidget] Showing idle runout modal");
     show_idle_runout_modal();
     runout_modal_shown_ = true;
