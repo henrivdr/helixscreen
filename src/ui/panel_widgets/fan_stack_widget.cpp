@@ -793,7 +793,12 @@ void FanStackWidget::handle_clicked() {
     }
 
     if (fan_control_panel_) {
-        get_fan_control_overlay().set_api(get_moonraker_api());
+        auto& overlay = get_fan_control_overlay();
+        overlay.set_api(get_moonraker_api());
+        // Re-register before every push: navbar switches clear overlay_instances_,
+        // so a cached panel loses its registration after the user leaves and returns.
+        // register_overlay_instance is idempotent, so this is safe on first open too.
+        NavigationManager::instance().register_overlay_instance(fan_control_panel_, &overlay);
         NavigationManager::instance().push_overlay(fan_control_panel_);
     }
 }
