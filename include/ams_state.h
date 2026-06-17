@@ -1113,6 +1113,8 @@ class AmsState {
     /// backend). Updated from sync_from_backend() and set_action_detail().
     std::string last_operation_detail_;
 
+    std::string last_narration_label_; ///< live toolchange narration phase label; top priority in recompute_action_detail; cleared on IDLE
+
     /// Observer that re-runs compute_action_detail() when PrinterState's
     /// print_state_enum subject changes, so the sidebar flips between
     /// "Idle" / "Printing" / "Paused" without waiting for the next backend sync.

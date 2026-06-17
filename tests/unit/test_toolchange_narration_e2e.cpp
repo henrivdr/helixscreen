@@ -103,18 +103,17 @@ TEST_CASE_METHOD(LVGLTestFixture,
         INFO("line: " << step.line);
 
         // set_narration_phase writes both subjects synchronously on the main
-        // thread (feed() invokes process_line directly), so the label mirror in
-        // ams_action_detail is observable immediately after feed(). Assert it
-        // here, BEFORE draining: recompute_action_detail() — fired by the
-        // print-state observer during a drain — re-derives the detail from the
-        // (IDLE, not-printing) action state and would reassert "Idle" in this
-        // isolated fixture. In production the surrounding swap state keeps the
-        // narration label authoritative; the step-index subject below is the
-        // un-contended S1 signal.
+        // thread (feed() invokes process_line directly), so the label is
+        // observable immediately after feed().
         REQUIRE(current_detail() == std::string(step.expected_detail));
 
         helix::ui::UpdateQueue::instance().drain();
         REQUIRE(current_step() == step.expected_index);
+        // Narration is now the single top-priority writer of ams_action_detail
+        // (recompute_action_detail reads last_narration_label_ before anything
+        // else), so the precise phase label SURVIVES a drain — the print-state
+        // observer's recompute can no longer clobber it back to "Idle".
+        REQUIRE(current_detail() == std::string(step.expected_detail));
     }
 
     // S1 acceptance, stated explicitly: "// Purge" resolves to the dedicated
@@ -125,6 +124,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(current_detail() != std::string("Feed filament"));
     helix::ui::UpdateQueue::instance().drain();
     REQUIRE(current_step() == 5);
+    // Single-writer guarantee: the precise phase label is stable post-drain.
+    REQUIRE(current_detail() == std::string("Purge"));
 }
 
 // ---------------------------------------------------------------------------
@@ -150,11 +151,11 @@ TEST_CASE_METHOD(LVGLTestFixture,
     nlohmann::json nested = {
         {"params", nlohmann::json::array({nlohmann::json::array({"// Purge"})})}};
     GcodeNarrationRouterTestAccess::notify(router, nested);
-    // notify() resolves on the calling thread here; assert the label mirror
-    // before draining (see case 1 for why the IDLE-state recompute clobbers it).
     REQUIRE(current_detail() == std::string("Purge"));
     helix::ui::UpdateQueue::instance().drain();
     REQUIRE(current_step() == 5); // S1: purge, not feed (4)
+    // Single-writer guarantee: the phase label survives the drain.
+    REQUIRE(current_detail() == std::string("Purge"));
 }
 
 // ---------------------------------------------------------------------------
