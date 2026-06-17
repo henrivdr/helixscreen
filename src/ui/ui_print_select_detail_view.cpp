@@ -304,6 +304,12 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
         // tool→slot mapping (the native remap flow reaches the backend via the
         // print-start controller, which reads get_filament_mappings()).
         recompute_preflight();
+        // Re-render the FILAMENTS chips so their slot number + present color
+        // reflect the user's new mapping. set_mappings() fires this callback
+        // synchronously on the main thread, so a direct call is safe.
+        if (lv_subject_get_int(&color_swatches_visible_) == 1) {
+            update_color_swatches(tools_used_effective(), current_filament_colors_);
+        }
     });
 
     // Look up history status display
@@ -708,39 +714,73 @@ void PrintSelectDetailView::on_cancel_delete_static(lv_event_t* e) {
 
 void PrintSelectDetailView::update_color_swatches(
     const std::set<int>& tool_indices, const std::vector<std::string>& palette_colors) {
-    // Color source priority: (1) live AMS backend slot at slot index == tool
-    // index, (2) slicer palette entry palette_colors[tool] when no backend.
+    // Each chip shows the gcode tool number on top ("T0", "T2", ...) and the
+    // EFFECTIVE mapped slot/lane number underneath ("1", "4", ...), with the
+    // chip fill = the ACTUAL present color of the mapped slot. Source the slot
+    // and fill from the resolved tool→slot mapping (NOT backend->get_slot_info(),
+    // since slot != tool on multi-unit backends like the U1). This mirrors
+    // recompute_preflight() / open_remap_modal: use the card's current mappings
+    // if present (so chips reflect a user edit after Done), else compute the
+    // defaults — the same effective mapping the remap dialog shows.
     //
-    // Empty-slot detection uses the inverse of AmsSlotInfo::has_filament_info()
-    // as a heuristic. It under-warns (cached metadata after physical removal
-    // still looks loaded) but doesn't false-positive. See post-1.0 issue
-    // prestonbrown/helixscreen#962 for a precise empty-detection API.
+    // Palette-only fallback (no AMS backend at all): collect_available_slots()
+    // is empty and compute_defaults yields mapped_slot < 0, so we fall back to
+    // the slicer palette color for the fill and hide the slot number.
     if (!color_swatches_row_) {
         return;
     }
 
     helix::ui::safe_clean_children(color_swatches_row_);
 
-    auto* backend = AmsState::instance().get_backend();
+    const auto tools = get_used_tool_info(); // real tool_index, intended colors
+    auto slots = AmsState::instance().collect_available_slots();
+    auto mappings = filament_mapping_card_.get_mappings();
+    if (mappings.empty()) {
+        mappings = helix::FilamentMapper::compute_defaults(tools, slots);
+    }
 
     for (int tool : tool_indices) {
-        std::string hex_color;
-        bool slot_is_empty = false;
-
-        if (backend) {
-            auto slot = backend->get_slot_info(tool);
-            if (slot.has_filament_info()) {
-                char buf[8];
-                snprintf(buf, sizeof(buf), "#%06x", slot.color_rgb & 0xFFFFFF);
-                hex_color = buf;
-            } else {
-                // Print needs this tool but the AMS doesn't have it loaded.
-                slot_is_empty = true;
+        // Resolve this tool's effective mapping → present slot.
+        const helix::AvailableSlot* resolved = nullptr;
+        for (const auto& m : mappings) {
+            if (m.tool_index != tool) {
+                continue;
             }
-        } else if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size()) {
-            // No backend — slicer palette is the only source; no empty check
-            // possible (no source of truth for "what's loaded").
-            hex_color = palette_colors[tool];
+            if (!m.is_auto && m.mapped_slot >= 0) {
+                for (const auto& s : slots) {
+                    if (s.slot_index == m.mapped_slot && s.backend_index == m.mapped_backend) {
+                        resolved = &s;
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+
+        lv_color_t fill_color{};
+        bool have_fill = false;
+        bool slot_is_empty = false;
+        std::string slot_number_text;
+
+        if (resolved) {
+            slot_number_text = std::to_string(resolved->local_slot_index + 1);
+            if (resolved->is_empty) {
+                // Mapped to an empty lane — show which lane it routes to but
+                // render the empty-slot variant.
+                slot_is_empty = true;
+            } else {
+                fill_color = lv_color_hex(resolved->color_rgb);
+                have_fill = true;
+            }
+        } else if (tool >= 0 && static_cast<size_t>(tool) < palette_colors.size() &&
+                   !palette_colors[tool].empty()) {
+            // No resolved lane (auto/unmapped or no backend) — fall back to the
+            // slicer palette intended color; no slot number to show.
+            fill_color = theme_manager_parse_hex_color(palette_colors[tool].c_str());
+            have_fill = true;
+        } else {
+            // No mapping and no palette color: render the empty variant.
+            slot_is_empty = true;
         }
 
         auto* swatch = static_cast<lv_obj_t*>(
@@ -751,25 +791,20 @@ void PrintSelectDetailView::update_color_swatches(
 
         if (slot_is_empty) {
             lv_obj_add_state(swatch, LV_STATE_USER_1);
-        } else if (!hex_color.empty()) {
-            lv_obj_set_style_bg_color(
-                swatch, theme_manager_parse_hex_color(hex_color.c_str()), 0);
+        } else if (have_fill) {
+            lv_obj_set_style_bg_color(swatch, fill_color, 0);
         }
 
-        auto* label = lv_obj_find_by_name(swatch, "tool_label");
-        if (label) {
-            lv_label_set_text_fmt(label, "T%d", tool);
+        lv_color_t text_color = slot_is_empty ? theme_manager_get_color("warning")
+                                              : theme_manager_get_contrast_color(fill_color);
 
-            if (slot_is_empty) {
-                lv_obj_set_style_text_color(label, theme_manager_get_color("warning"), 0);
-            } else if (auto parsed_color = helix::parse_hex_color(hex_color)) {
-                uint32_t rgb = *parsed_color;
-                int brightness = (((rgb >> 16) & 0xFF) * 299 + ((rgb >> 8) & 0xFF) * 587 +
-                                  (rgb & 0xFF) * 114) /
-                                 1000;
-                lv_obj_set_style_text_color(
-                    label, brightness > 128 ? lv_color_black() : lv_color_white(), 0);
-            }
+        if (auto* tool_label = lv_obj_find_by_name(swatch, "tool_label")) {
+            lv_label_set_text_fmt(tool_label, "T%d", tool);
+            lv_obj_set_style_text_color(tool_label, text_color, 0);
+        }
+        if (auto* slot_label = lv_obj_find_by_name(swatch, "slot_label")) {
+            lv_label_set_text(slot_label, slot_number_text.c_str());
+            lv_obj_set_style_text_color(slot_label, text_color, 0);
         }
     }
 
@@ -945,7 +980,9 @@ std::vector<helix::GcodeToolInfo> PrintSelectDetailView::get_used_tool_info() co
     tools.reserve(used.size());
     for (int tool : used) {
         if (tool >= 0 && static_cast<size_t>(tool) < all_tool_info.size()) {
-            tools.push_back(all_tool_info[static_cast<size_t>(tool)]);
+            auto info = all_tool_info[static_cast<size_t>(tool)];
+            info.tool_index = tool; // real gcode tool number, not palette ordinal
+            tools.push_back(info);
         }
     }
     return tools;

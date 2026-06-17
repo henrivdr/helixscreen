@@ -133,7 +133,7 @@ lv_obj_t* FilamentMappingModal::create_tool_row(int tool_index) {
     if (auto* tool_label = lv_obj_find_by_name(row, "tool_label")) {
         if (tool_info_.size() > 1) {
             char tool_buf[8];
-            snprintf(tool_buf, sizeof(tool_buf), "T%d", tool_index);
+            snprintf(tool_buf, sizeof(tool_buf), "T%d", tool.tool_index);
             lv_label_set_text(tool_label, tool_buf);
             lv_obj_set_style_text_color(
                 tool_label, theme_manager_get_contrast_color(gcode_color), 0);
