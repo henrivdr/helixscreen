@@ -107,6 +107,24 @@ class DisplaySettingsManager {
     /** @brief Check if backlight supports continuous dimming (not binary on/off) */
     bool has_dimming_control() const;
 
+    /**
+     * @brief Whether a screensaver is enabled (type != OFF).
+     *
+     * Always false when HELIX_ENABLE_SCREENSAVER is not compiled in.
+     */
+    bool screensaver_enabled() const;
+
+    /**
+     * @brief Whether the Sleep>=Dim coupling must be enforced.
+     *
+     * The Display Sleep stage (power-off) must never precede the Screen Dim
+     * stage. On dimming-capable devices that stage is a backlight dim; on
+     * no-backlight devices an enabled screensaver IS the dim-stage visual, so
+     * the coupling must hold there too (#1049). Returns true when the device can
+     * dim OR a screensaver is enabled.
+     */
+    bool should_couple_sleep_to_dim() const;
+
 /** @brief Get sleep while printing state */
     bool get_sleep_while_printing() const;
 

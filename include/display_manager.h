@@ -438,6 +438,11 @@ class DisplayManager {
     void register_resize_callback(ResizeCallback callback);
 
   private:
+    // Test-only seam (#1049): grants the test harness access to the private
+    // sleep/wake/power-off members so the idle paths can be exercised without a
+    // full init(). See tests/test_helpers/display_manager_test_access.h.
+    friend class DisplayManagerTestAccess;
+
     bool m_initialized = false;
     bool m_shutting_down = false;
     int m_width = 0;
@@ -475,6 +480,11 @@ class DisplayManager {
 
     // Hardware vs software blank strategy
     bool m_use_hardware_blank = false;
+    // Real panel power-off (fbdev FB_BLANK_POWERDOWN / DRM DPMS) for HDMI/fbdev
+    // devices with no hardware backlight blank. When true and the screensaver is
+    // OFF, idle entry powers the panel off instead of painting a software overlay
+    // (#1049). Falls back to the overlay when no backend supports power-off.
+    bool m_use_power_off = false;
     bool m_sleep_backlight_off = true; // Whether to power off backlight during sleep
     lv_obj_t* m_sleep_overlay = nullptr;
 
@@ -497,6 +507,14 @@ class DisplayManager {
      * @param timeout_sec Sleep timeout for logging
      */
     void enter_sleep(int timeout_sec);
+
+    /**
+     * @brief Restore panel output on wake (unblank / power-on / remove overlay).
+     *
+     * Mirrors enter_sleep()'s branch selection. Runs BEFORE the post-wake
+     * lv_refr_now() so the framebuffer is ready when LVGL paints (#303).
+     */
+    void restore_display_output();
 
     /**
      * @brief Create fullscreen black overlay on lv_layer_top() for software sleep

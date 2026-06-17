@@ -806,6 +806,46 @@ bool DisplayBackendFbdev::blank_display() {
     return true;
 }
 
+bool DisplayBackendFbdev::supports_power_off() const {
+    // The framebuffer node must be readable+writable for FBIOBLANK to work.
+    // We can't reliably detect ahead of time whether the panel driver honors
+    // FB_BLANK_POWERDOWN, but on real fbdev HDMI/DSI panels it is the standard
+    // power-down request; drivers that ignore it simply leave the panel lit,
+    // which is no worse than the software-overlay fallback (#1049).
+    return access(fb_device_.c_str(), R_OK | W_OK) == 0;
+}
+
+bool DisplayBackendFbdev::power_off() {
+    // Power the panel down via FB_BLANK_POWERDOWN — a deeper state than the
+    // FB_BLANK_NORMAL used by blank_display(): it requests the driver to drop
+    // the panel's backlight/transceiver entirely. Used on HDMI/fbdev devices
+    // with no sysfs/ioctl backlight where a software overlay leaves the panel
+    // fully powered (#1049).
+    int fd = open(fb_device_.c_str(), O_RDWR);
+    if (fd < 0) {
+        spdlog::warn("[Fbdev Backend] Cannot open {} for power-off: {}", fb_device_,
+                     strerror(errno));
+        return false;
+    }
+
+    if (ioctl(fd, FBIOBLANK, FB_BLANK_POWERDOWN) != 0) {
+        spdlog::warn("[Fbdev Backend] FBIOBLANK power-down failed: {}", strerror(errno));
+        close(fd);
+        return false;
+    }
+
+    spdlog::info("[Fbdev Backend] Display powered down via FBIOBLANK FB_BLANK_POWERDOWN");
+    close(fd);
+    return true;
+}
+
+bool DisplayBackendFbdev::power_on() {
+    // Counterpart to power_off(): unblank and reset pan position so the next
+    // render lands on the visible portion of the framebuffer. Mirrors
+    // unblank_display() so the #303 wake-race fix applies to this path too.
+    return unblank_display();
+}
+
 bool DisplayBackendFbdev::set_calibration(const helix::TouchCalibration& cal) {
     if (!helix::is_calibration_valid(cal)) {
         spdlog::warn("[Fbdev Backend] Invalid calibration rejected");

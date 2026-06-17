@@ -206,17 +206,10 @@ void DisplaySettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(has_dimming_subject_, has_dimming ? 1 : 0, "settings_has_dimming",
                            subjects_);
 
-    // Cross-validate: on dimming-capable devices, sleep must be >= dim
-    // (config could be inconsistent from manual edits or migration)
-    if (has_dimming && dim_sec > 0 && sleep_sec > 0 && sleep_sec < dim_sec) {
-        spdlog::warn("[DisplaySettingsManager] Config inconsistency: sleep {}s < dim {}s, "
-                     "clamping sleep to dim",
-                     sleep_sec, dim_sec);
-        sleep_sec = dim_sec;
-        lv_subject_set_int(&display_sleep_subject_, sleep_sec);
-        config->set<int>("/display/sleep_sec", sleep_sec);
-        config->save();
-    }
+    // NOTE: the sleep >= dim cross-validation is deferred until after the
+    // screensaver_type subject is initialized below — on no-backlight devices an
+    // enabled screensaver requires the coupling too (#1049), and
+    // should_couple_sleep_to_dim() reads that subject.
 
     // Sleep while printing (default: true = allow sleep during prints)
     bool sleep_while_printing = config->get<bool>("/display/sleep_while_printing", true);
@@ -315,6 +308,22 @@ void DisplaySettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(screensaver_type_subject_, screensaver_type, "settings_screensaver_type",
                            subjects_);
 #endif
+
+    // Cross-validate: sleep must be >= dim when the device dims OR a screensaver
+    // provides the dim-stage visual (#1049). This runs AFTER screensaver_type is
+    // initialized so should_couple_sleep_to_dim() sees it. Critical for the field
+    // config in bundle 3VDWMLYQ (no backlight, screensaver on, persisted
+    // sleep=60 < dim=600) — it self-corrects on next launch instead of starving
+    // the screensaver. Config can also be inconsistent from manual edits.
+    if (should_couple_sleep_to_dim() && dim_sec > 0 && sleep_sec > 0 && sleep_sec < dim_sec) {
+        spdlog::warn("[DisplaySettingsManager] Config inconsistency: sleep {}s < dim {}s, "
+                     "clamping sleep to dim",
+                     sleep_sec, dim_sec);
+        sleep_sec = dim_sec;
+        lv_subject_set_int(&display_sleep_subject_, sleep_sec);
+        config->set<int>("/display/sleep_sec", sleep_sec);
+        config->save();
+    }
 
     subjects_initialized_ = true;
 
@@ -487,9 +496,10 @@ void DisplaySettingsManager::set_display_dim_sec(int seconds) {
     }
 
     // If dim is now > sleep, bump sleep up to match (unless sleep is disabled).
-    // Only enforce when hardware supports dimming — same rationale as sleep setter.
+    // Enforce when the device dims OR a screensaver provides the dim-stage visual
+    // (#1049) — same rationale as the sleep setter.
     int sleep_sec = get_display_sleep_sec();
-    if (has_dimming_control() && seconds > 0 && sleep_sec > 0 && sleep_sec < seconds) {
+    if (should_couple_sleep_to_dim() && seconds > 0 && sleep_sec > 0 && sleep_sec < seconds) {
         spdlog::info("[DisplaySettingsManager] Bumping sleep {}s up to match dim {}s", sleep_sec,
                      seconds);
         lv_subject_set_int(&display_sleep_subject_, seconds);
@@ -509,12 +519,13 @@ int DisplaySettingsManager::get_display_sleep_sec() const {
 void DisplaySettingsManager::set_display_sleep_sec(int seconds) {
     spdlog::info("[DisplaySettingsManager] set_display_sleep_sec({})", seconds);
 
-    // Ensure sleep timeout >= dim timeout (unless sleep is disabled with 0)
-    // It's nonsensical to sleep before dimming — but only enforce when
-    // the hardware actually supports dimming. On devices without dimming
-    // (e.g. AD5M/AD5X binary backlight), dim_sec retains a default value
-    // even though the dim UI is hidden, which would block short sleep times.
-    if (seconds > 0 && has_dimming_control()) {
+    // Ensure sleep timeout >= dim timeout (unless sleep is disabled with 0).
+    // It's nonsensical to power off before the dim/screensaver stage. Enforce
+    // when the hardware dims OR a screensaver provides the dim-stage visual on a
+    // no-backlight device (#1049). On binary-backlight devices with no
+    // screensaver (e.g. AD5M/AD5X) the dim UI is hidden and dim_sec retains a
+    // default that should NOT block short sleep times — hence the gate.
+    if (seconds > 0 && should_couple_sleep_to_dim()) {
         int dim_sec = get_display_dim_sec();
         if (dim_sec > 0 && seconds < dim_sec) {
             spdlog::info("[DisplaySettingsManager] Clamping sleep {}s to dim {}s", seconds,
@@ -565,6 +576,21 @@ bool DisplaySettingsManager::has_dimming_control() const {
         return dm->has_dimming_control();
     }
     return false;
+}
+
+bool DisplaySettingsManager::screensaver_enabled() const {
+#ifdef HELIX_ENABLE_SCREENSAVER
+    return get_screensaver_type() != 0;
+#else
+    return false;
+#endif
+}
+
+bool DisplaySettingsManager::should_couple_sleep_to_dim() const {
+    // Sleep (power-off) must never precede the Dim stage. The Dim stage is a
+    // backlight dim on dimming-capable devices, or — on no-backlight fbdev/DRM
+    // devices — an enabled screensaver. Couple in either case (#1049).
+    return has_dimming_control() || screensaver_enabled();
 }
 
 bool DisplaySettingsManager::get_sleep_while_printing() const {
