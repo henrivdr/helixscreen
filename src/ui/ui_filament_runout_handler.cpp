@@ -77,8 +77,12 @@ void FilamentRunoutHandler::check_and_show_runout_guidance() {
 
     auto& sensor_mgr = helix::FilamentSensorManager::instance();
 
-    // Check if any runout sensor shows no filament
-    if (sensor_mgr.has_any_runout()) {
+    // Check if a runout sensor on a LOADED lane shows no filament. Use
+    // has_real_runout() so an intentionally-empty AMS lane (e.g. head 1 left
+    // unloaded for a multi-color print) doesn't pop guidance when the print is
+    // paused for an unrelated reason. A loaded lane that lost filament still
+    // counts. (Snapmaker U1 false-alarm fix.)
+    if (sensor_mgr.has_real_runout()) {
         // Auto-recover-on-pause was previously gated on `motion=false AND
         // port=true` but field testing exposed two failure modes: (a) the
         // "port=true" signal alone doesn't prove filament reached the

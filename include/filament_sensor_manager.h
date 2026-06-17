@@ -18,6 +18,11 @@
 #include <string>
 #include <vector>
 
+// Test-only friend (defined in tests/unit/test_runout_empty_lane_scope.cpp) used
+// to set per-sensor roles directly, bypassing the single-RUNOUT exclusivity in
+// set_sensor_role() so multi-lane (Snapmaker) runout scenarios can be exercised.
+class RunoutScopeTestAccess;
+
 namespace helix {
 
 /**
@@ -232,6 +237,26 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
     [[nodiscard]] bool has_any_runout() const;
 
     /**
+     * @brief Check for a GENUINE runout, ignoring empty / never-loaded lanes.
+     *
+     * Like has_any_runout(), but for a sensor that maps to an AMS lane
+     * (Snapmaker "e{N}_filament" -> slot N) it consults the active AMS backend
+     * and treats a no-filament reading on a lane the backend reports as EMPTY /
+     * not-present as a non-event, NOT a runout. A lane deliberately left
+     * unloaded for a multi-color print must not raise the idle runout modal.
+     *
+     * A sensor that DOES NOT map to a lane (no AMS backend, or an unmappable
+     * sensor name) is treated exactly as has_any_runout() would — its
+     * no-filament reading still counts, so a plain single-extruder runout
+     * sensor keeps working. A lane that was LOADED and lost filament mid-use
+     * (slot present, sensor now false) still reports a real runout.
+     *
+     * @return true if at least one runout-role sensor reports no filament on a
+     *         lane that is loaded/present (or that does not map to a lane).
+     */
+    [[nodiscard]] bool has_real_runout() const;
+
+    /**
      * @brief Check if motion sensor encoder is active
      *
      * Only applicable for motion sensors during extrusion.
@@ -353,6 +378,7 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
 
   private:
     friend class FilamentSensorManagerTestAccess;
+    friend class ::RunoutScopeTestAccess;
 
     FilamentSensorManager();
     ~FilamentSensorManager();

@@ -2150,7 +2150,7 @@ void PrintStatusPanel::recompute_paused_overlay_visibility() {
         const char* fw_msg = lv_subject_get_string(printer_state_.get_print_message_subject());
         if (fw_msg && *fw_msg) {
             reason = fw_msg;
-        } else if (FilamentSensorManager::instance().has_any_runout()) {
+        } else if (FilamentSensorManager::instance().has_real_runout()) {
             reason = lv_tr("Filament Runout");
         }
     }

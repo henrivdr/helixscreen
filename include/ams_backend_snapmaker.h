@@ -14,6 +14,7 @@
 
 class SnapmakerTestAccess;
 class SnapmakerRealtimeTestAccess;
+class RunoutScopeTestAccess;
 
 /**
  * @file ams_backend_snapmaker.h
@@ -184,6 +185,7 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
   private:
     friend class ::SnapmakerTestAccess;
     friend class ::SnapmakerRealtimeTestAccess;
+    friend class ::RunoutScopeTestAccess;
 
     static constexpr int NUM_TOOLS = 4;
 

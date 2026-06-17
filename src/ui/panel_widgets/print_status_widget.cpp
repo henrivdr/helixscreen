@@ -877,9 +877,13 @@ void PrintStatusWidget::check_and_show_idle_runout_modal() {
         return;
     }
 
-    // Verify actual sensor state
-    if (!fsm.has_any_runout()) {
-        spdlog::debug("[PrintStatusWidget] No actual runout detected - skipping modal");
+    // Verify actual sensor state. Use has_real_runout() (not has_any_runout())
+    // so a runout sensor on an intentionally-empty / never-loaded AMS lane does
+    // NOT raise the idle modal — e.g. a multi-color print using heads 0+2 with
+    // head 1 left empty. A lane that was loaded and lost filament mid-use still
+    // counts as a real runout. (Snapmaker U1 false-alarm fix.)
+    if (!fsm.has_real_runout()) {
+        spdlog::debug("[PrintStatusWidget] No real runout detected - skipping modal");
         return;
     }
 

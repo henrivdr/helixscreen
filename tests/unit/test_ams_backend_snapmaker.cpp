@@ -346,6 +346,73 @@ TEST_CASE("Snapmaker can_unload_from_toolhead requires filament at the toolhead,
     }
 }
 
+// channel_error scoping — the firmware reports channel_error="no_filament" for
+// any lane sitting empty, INCLUDING a lane deliberately left unloaded for a
+// multi-color print (heads 0+2 used, head 1 empty). Post-print that idle empty
+// lane must NOT latch the whole backend into action=Error and pop a spurious
+// AMS loading-error modal. A genuine load FAILURE (during/after a load attempt,
+// or on a present/active lane) MUST still raise Error. (Snapmaker U1 false-alarm.)
+TEST_CASE("Snapmaker channel_error on idle empty lane does NOT raise Error", "[ams][snapmaker]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Heads 0 and 2 present, head 1 left empty. Head 1 reports the firmware's
+    // idle-empty token while sitting idle (channel_state "idle"), not loading.
+    json status = json{
+        {"filament_feed left",
+         json{{"extruder0", json{{"filament_detected", true},
+                                 {"channel_state", "idle"},
+                                 {"channel_error", "ok"}}},
+              {"extruder1", json{{"filament_detected", false},
+                                 {"channel_state", "idle"},
+                                 {"channel_error", "no_filament"}}},
+              {"extruder2", json{{"filament_detected", true},
+                                 {"channel_state", "idle"},
+                                 {"channel_error", "ok"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, status);
+
+    // Lane 1 is empty, idle, and not the active lane → no error.
+    REQUIRE(backend.get_slot_info(1).status == SlotStatus::EMPTY);
+    CHECK(backend.get_system_info().action != AmsAction::ERROR);
+    CHECK(backend.get_system_info().operation_detail.empty());
+}
+
+TEST_CASE("Snapmaker channel_error during an active load DOES raise Error", "[ams][snapmaker]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // A real load FAILURE: lane 1 is mid-load (channel_state "loading") when the
+    // firmware reports an error. This must surface as Error so the user is told.
+    json status = json{
+        {"filament_feed left",
+         json{{"extruder1", json{{"filament_detected", false},
+                                 {"channel_state", "loading"},
+                                 {"channel_error", "no_filament"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, status);
+
+    CHECK(backend.get_system_info().action == AmsAction::ERROR);
+    // Raw firmware token mapped to a friendly, lane-numbered message.
+    CHECK(backend.get_system_info().operation_detail.find("No filament in lane 2") !=
+          std::string::npos);
+}
+
+TEST_CASE("Snapmaker channel_error on the ACTIVE lane DOES raise Error", "[ams][snapmaker]") {
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+
+    // Make lane 0 the active/current lane, then have it report an error while
+    // idle. An error on the in-use lane is a genuine fault, not a quiet empty
+    // lane — it must alarm.
+    SnapmakerTestAccess::set_current_slot(backend, 0);
+    json status = json{
+        {"filament_feed left",
+         json{{"extruder0", json{{"filament_detected", false},
+                                 {"channel_state", "idle"},
+                                 {"channel_error", "some_fault"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, status);
+
+    CHECK(backend.get_system_info().action == AmsAction::ERROR);
+    // Unknown token falls through unmapped so we never hide a novel error.
+    CHECK(backend.get_system_info().operation_detail == "some_fault");
+}
+
 // get_slot_filament_segment — on the U1's PARALLEL multi-toolhead topology
 // every present tool feeds its own dedicated nozzle, so its filament must
 // render all the way into the toolhead (NOZZLE). The firmware marks only the

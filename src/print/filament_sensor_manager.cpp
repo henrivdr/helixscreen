@@ -15,6 +15,7 @@
 #include "static_subject_registry.h"
 
 #include <algorithm>
+#include <cctype>
 
 // CRITICAL: Subject updates trigger lv_obj_invalidate() which asserts if called
 // during LVGL rendering. WebSocket callbacks run on libhv's event loop thread,
@@ -478,6 +479,74 @@ bool FilamentSensorManager::has_any_runout() const {
                           sensor.sensor_name, role_to_config_string(sensor.role));
             return true;
         }
+    }
+
+    return false;
+}
+
+namespace {
+// Map a per-lane filament sensor short name to its AMS slot index. Snapmaker U1
+// names its per-tool motion sensors "e0_filament" .. "e3_filament" (and the
+// matching filament_switch_sensor form). Returns the slot index, or -1 if the
+// name does not encode a lane (e.g. a single-extruder "runout" sensor) — in
+// which case the caller must NOT lane-scope it.
+[[nodiscard]] int lane_index_for_sensor(const std::string& sensor_name) {
+    // Match "e<N>_filament" where <N> is one or more digits.
+    if (sensor_name.size() < 3 || sensor_name.front() != 'e') {
+        return -1;
+    }
+    size_t pos = 1;
+    int value = 0;
+    while (pos < sensor_name.size() && std::isdigit(static_cast<unsigned char>(sensor_name[pos]))) {
+        value = value * 10 + (sensor_name[pos] - '0');
+        ++pos;
+    }
+    if (pos == 1) {
+        return -1; // no digits after 'e'
+    }
+    if (sensor_name.compare(pos, std::string::npos, "_filament") != 0) {
+        return -1;
+    }
+    return value;
+}
+} // namespace
+
+bool FilamentSensorManager::has_real_runout() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+    if (!master_enabled_) {
+        return false;
+    }
+
+    AmsBackend* backend = AmsState::instance().get_backend();
+
+    for (const auto& sensor : sensors_) {
+        if (!sensor.enabled || sensor.role == FilamentSensorRole::NONE) {
+            continue;
+        }
+
+        auto it = states_.find(sensor.klipper_name);
+        if (it == states_.end() || !it->second.available || it->second.filament_detected) {
+            continue; // sensor present and filament detected -> not a runout
+        }
+
+        // This sensor reports no filament. Decide whether it is a real runout.
+        // If it maps to an AMS lane and the backend says that lane is EMPTY /
+        // not-present, it is an intentionally-empty lane, not a runout.
+        const int lane = backend ? lane_index_for_sensor(sensor.sensor_name) : -1;
+        if (lane >= 0) {
+            const SlotInfo slot = backend->get_slot_info(lane);
+            if (!slot.is_present()) {
+                spdlog::debug("[FilamentSensorManager] has_real_runout: ignoring {} - lane {} "
+                              "is empty/never-loaded (not a runout)",
+                              sensor.sensor_name, lane);
+                continue;
+            }
+        }
+
+        spdlog::debug("[FilamentSensorManager] has_real_runout: TRUE - {} ({}) lost filament",
+                      sensor.sensor_name, role_to_config_string(sensor.role));
+        return true;
     }
 
     return false;

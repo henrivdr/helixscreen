@@ -40,6 +40,19 @@ constexpr std::array<std::string_view, 8> kKnownSubTypes = {
     return false;
 }
 
+// Map a raw firmware channel_error token to a user-facing message. The firmware
+// emits machine tokens (e.g. "no_filament") that are meaningless to a user and
+// were previously shown verbatim in the AMS loading-error modal. Unknown tokens
+// fall back to the raw string so we never hide a novel error behind a generic
+// message. Single source of truth shared by the error-set path here and any
+// modal that surfaces operation_detail.
+[[nodiscard]] std::string friendly_channel_error(const std::string& token, int lane_index) {
+    if (token == "no_filament") {
+        return fmt::format("No filament in lane {}. Load filament and retry.", lane_index + 1);
+    }
+    return token;
+}
+
 } // namespace
 
 // ============================================================================
@@ -1019,9 +1032,36 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         auto state = ch.value("channel_state", "");
                         auto error = ch.value("channel_error", "ok");
                         if (error != "ok" && !error.empty() && error != "none") {
-                            system_info_.action = AmsAction::ERROR;
-                            system_info_.operation_detail = error;
-                            changed = true;
+                            // Distinguish a genuine load FAILURE from an idle,
+                            // never-loaded EMPTY lane. The firmware reports
+                            // channel_error="no_filament" for any lane sitting
+                            // empty — including a lane deliberately left unloaded
+                            // for a multi-color print (e.g. heads 0+2 used, head 1
+                            // empty). Post-print that empty lane would latch the
+                            // whole backend into action=Error="no_filament" and
+                            // pop a spurious AMS loading-error modal. A real load
+                            // failure happens during/after a load attempt
+                            // (channel_state loading/preloading) or on a lane that
+                            // actually has filament present, or on the active lane.
+                            // Treat an error on an idle, empty, non-active lane as
+                            // a non-event. (Snapmaker U1 false-alarm fix.)
+                            const auto* slot = system_info_.units[0].get_slot(i);
+                            const bool lane_empty =
+                                slot == nullptr || !slot->is_present();
+                            const bool load_in_progress =
+                                state == "loading" || state == "preloading";
+                            const bool active_lane = system_info_.current_slot == i ||
+                                                     system_info_.current_tool == i;
+                            if (lane_empty && !load_in_progress && !active_lane) {
+                                spdlog::debug(
+                                    "[AmsBackendSnapmaker] ignoring channel_error '{}' on idle "
+                                    "empty lane {} (not loading, not active)",
+                                    error, i);
+                            } else {
+                                system_info_.action = AmsAction::ERROR;
+                                system_info_.operation_detail = friendly_channel_error(error, i);
+                                changed = true;
+                            }
                         } else if (state == "loading" || state == "preloading") {
                             system_info_.action = AmsAction::LOADING;
                             changed = true;

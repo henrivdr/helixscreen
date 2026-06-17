@@ -866,7 +866,7 @@ void ui_wizard_complete() {
     lv_timer_create(
         [](lv_timer_t* timer) {
             auto& fsm = helix::FilamentSensorManager::instance();
-            if (fsm.has_any_runout() && get_runtime_config()->should_show_runout_modal()) {
+            if (fsm.has_real_runout() && get_runtime_config()->should_show_runout_modal()) {
                 spdlog::debug("[Wizard] Deferred runout check - triggering modal");
                 get_global_home_panel().trigger_idle_runout_check();
             }
