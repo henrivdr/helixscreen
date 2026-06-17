@@ -933,6 +933,24 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
     recompute_preflight();
 }
 
+std::vector<helix::GcodeToolInfo> PrintSelectDetailView::get_used_tool_info() const {
+    // Source per-tool info DIRECTLY from the slicer palette (Moonraker metadata,
+    // populated on ALL platforms) via the stateless assembler — NOT from the
+    // mapping card INSTANCE, whose tool_info_ is empty on the U1/headless path.
+    const auto all_tool_info =
+        FilamentMappingCard::build_tool_info(current_filament_colors_, current_filament_materials_);
+    const std::set<int> used = tools_used_effective();
+
+    std::vector<helix::GcodeToolInfo> tools;
+    tools.reserve(used.size());
+    for (int tool : used) {
+        if (tool >= 0 && static_cast<size_t>(tool) < all_tool_info.size()) {
+            tools.push_back(all_tool_info[static_cast<size_t>(tool)]);
+        }
+    }
+    return tools;
+}
+
 void PrintSelectDetailView::recompute_preflight() {
     // ------------------------------------------------------------------
     // Backend-agnostic pre-flight validation (single source of truth for
@@ -957,14 +975,11 @@ void PrintSelectDetailView::recompute_preflight() {
         return;
     }
 
-    const auto& all_tool_info = filament_mapping_card_.get_tool_info();
-    std::vector<helix::GcodeToolInfo> tools;
-    tools.reserve(used.size());
-    for (int tool : used) {
-        if (tool >= 0 && static_cast<size_t>(tool) < all_tool_info.size()) {
-            tools.push_back(all_tool_info[static_cast<size_t>(tool)]);
-        }
-    }
+    // Per-tool intent for the precise tools_used set, sourced directly from the
+    // slicer palette (current_filament_colors_/materials) — the same data the
+    // swatches use, populated on ALL platforms — NOT from the card instance's
+    // tool_info_ (empty on the U1/headless path → the original "0 tools" bug).
+    const auto tools = get_used_tool_info();
 
     auto slots = AmsState::instance().collect_available_slots();
 
@@ -1185,15 +1200,18 @@ void PrintSelectDetailView::kick_off_headless_tools_scan() {
                           if (swatches_visible) {
                               update_color_swatches(tools_used, current_filament_colors_);
                           }
-                          // Populate the mapping card's tool_info from the headless
-                          // colors even though the card widget is hidden here. The
-                          // viewer-parse path does this (try_extract_gcode_colors,
-                          // filament_mapping_card_.update); the headless path must too,
-                          // else the card's tool_info_ stays empty and recompute_preflight()
-                          // sees 0 tools — so the gate never fires AND the remap modal
-                          // shows "Nothing to remap" on U1 / 2D-only (mismatched source:
-                          // swatches drew from current_filament_colors_, preflight read
-                          // the empty card).
+                          // Refresh the mapping card's DISPLAY from the headless
+                          // colors. Still required for editable-card backends that
+                          // use the headless path (e.g. CFS on a 2D-only platform):
+                          // the card widget renders its own swatches/rows from
+                          // tool_info_, so it must be fed here just as the
+                          // viewer-parse path does (try_extract_gcode_colors).
+                          //
+                          // NOTE: this is now redundant for preflight/remap LOGIC —
+                          // recompute_preflight() and open_remap_modal() source
+                          // per-tool info from current_filament_colors_/materials
+                          // directly (get_used_tool_info()), not the card instance —
+                          // but it remains correct and necessary for card display.
                           filament_mapping_card_.update(current_filament_colors_,
                                                         current_filament_materials_);
                       }

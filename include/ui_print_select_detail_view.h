@@ -309,6 +309,20 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Per-tool gcode info for the tools THIS file actually uses.
+     *
+     * Single source of truth for "the per-tool color/material of the used
+     * tools". Builds the full slicer palette via
+     * FilamentMappingCard::build_tool_info(current_filament_colors_,
+     * current_filament_materials_) — the same Moonraker-metadata data the color
+     * swatches use, populated on ALL platforms — then keeps only the entries
+     * whose tool_index is in tools_used_effective() (original tool_index
+     * preserved). Decouples preflight/remap from the mapping card INSTANCE's
+     * tool_info_, which is empty on the U1/headless path.
+     */
+    [[nodiscard]] std::vector<helix::GcodeToolInfo> get_used_tool_info() const;
+
+    /**
      * @brief Logical tools the parsed gcode body actually uses.
      *
      * Returns ParsedGCodeFile::tools_used_indices from the gcode viewer's

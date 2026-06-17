@@ -159,16 +159,24 @@ class FilamentMappingCard {
      */
     void open_mapping_modal();
 
+    /// Build GcodeToolInfo list from color/material strings.
+    ///
+    /// Pure/stateless: derives one GcodeToolInfo per tool (tool_index = i,
+    /// color_rgb parsed from colors[i], material = materials[i]) using only its
+    /// arguments. Exposed static so callers can source per-tool info directly
+    /// from the same color/material data that feeds the card (Moonraker
+    /// metadata, populated on all platforms) without coupling to a card
+    /// INSTANCE whose tool_info_ is only populated on some code paths.
+    static std::vector<helix::GcodeToolInfo>
+    build_tool_info(const std::vector<std::string>& colors,
+                    const std::vector<std::string>& materials);
+
   private:
     /// Build compact swatch pair row in rows_container_
     void rebuild_compact_view();
 
     /// Check if any mappings have material mismatches
     bool has_any_mismatch() const;
-
-    /// Build GcodeToolInfo list from color/material strings
-    std::vector<helix::GcodeToolInfo> build_tool_info(const std::vector<std::string>& colors,
-                                                      const std::vector<std::string>& materials);
 
     lv_obj_t* card_ = nullptr;
     lv_obj_t* rows_container_ = nullptr;

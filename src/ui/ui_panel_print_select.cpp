@@ -2637,19 +2637,12 @@ void PrintSelectPanel::open_remap_modal() {
         return;
     }
 
-    // Build picker inputs uniformly from the cached pre-flight checks. Works for
-    // ALL backends — including those whose inline mapping card is hidden (U1 /
-    // ACE) — because recompute_preflight() populates checks for every backend.
-    const auto& pf = detail_view_->preflight_result();
-    std::vector<helix::GcodeToolInfo> tool_info;
-    tool_info.reserve(pf.checks.size());
-    for (const auto& check : pf.checks) {
-        helix::GcodeToolInfo info;
-        info.tool_index = check.tool_index;
-        info.color_rgb = check.intended_color;
-        info.material = check.intended_material;
-        tool_info.push_back(std::move(info));
-    }
+    // Build picker inputs from the per-tool info of the tools this file uses.
+    // Sourced directly from the slicer palette (Moonraker metadata) via the
+    // detail view's single assembler — populated on ALL backends, including
+    // those whose inline mapping card is hidden (U1 / ACE / 2D-only), where the
+    // card instance's tool_info_ is empty.
+    auto tool_info = detail_view_->get_used_tool_info();
 
     if (tool_info.empty()) {
         spdlog::warn("[{}] Remap: no tools in pre-flight result", get_name());
