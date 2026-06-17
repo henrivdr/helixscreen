@@ -21,6 +21,7 @@
  */
 
 #include <functional>
+#include <set>
 
 #include "../catch_amalgamated.hpp"
 
@@ -139,6 +140,118 @@ TEST_CASE("Pre-flight gate: graceful degradation on stuck scan (timeout)",
     m.on_timeout();
     REQUIRE(print_started);
     REQUIRE(m.is_preflight_ready());
+}
+
+namespace {
+
+/// Minimal model of the detail view's color-swatch render decision, mirroring the
+/// logic shared by try_extract_gcode_colors() (viewer-parse path) and the headless
+/// scan completion path. Guards the 22d37fd47 regression where 2D-only platforms
+/// rendered no swatches because the viewer never parses.
+struct SwatchRenderModel {
+    bool gcode_loaded = false;       // viewer parse done (full platforms)
+    bool mapping_visible = false;    // editable mapping card shown (hides swatches)
+    bool is_multi_tool = false;      // multi-tool printer / >1 AMS slot
+    std::set<int> viewer_tools;      // tools from viewer parse (full platforms)
+    std::set<int> headless_tools;    // tools from headless scan (2D-only)
+    bool headless_done = false;
+
+    // Render outputs.
+    int swatches_visible = 0;
+    std::set<int> rendered_tools;
+
+    [[nodiscard]] bool is_gcode_loaded() const { return gcode_loaded; }
+
+    /// Mirrors tools_used_effective(): prefer viewer parse, else headless set.
+    [[nodiscard]] std::set<int> tools_used_effective() const {
+        if (!viewer_tools.empty()) {
+            return viewer_tools;
+        }
+        if (headless_done) {
+            return headless_tools;
+        }
+        return {};
+    }
+
+    /// Mirrors swatches_card_visible_for().
+    [[nodiscard]] bool swatches_card_visible_for(size_t n) const {
+        return is_multi_tool ? n > 0 : n > 1;
+    }
+
+    void render_swatches(const std::set<int>& tools) {
+        rendered_tools = tools; // update_color_swatches clears-then-rebuilds → idempotent
+    }
+
+    /// Mirrors the headless-scan completion handler (2D-only swatch render).
+    void on_headless_scan_done() {
+        headless_done = true;
+        if (!is_gcode_loaded()) {
+            auto tools = tools_used_effective();
+            bool visible = !mapping_visible && swatches_card_visible_for(tools.size());
+            swatches_visible = visible ? 1 : 0;
+            if (visible) {
+                render_swatches(tools);
+            }
+        }
+    }
+
+    /// Mirrors try_extract_gcode_colors() (viewer-parse swatch render).
+    void on_viewer_parsed() {
+        gcode_loaded = true;
+        bool visible = !mapping_visible && swatches_card_visible_for(viewer_tools.size());
+        swatches_visible = visible ? 1 : 0;
+        if (visible) {
+            render_swatches(viewer_tools);
+        }
+    }
+};
+
+} // namespace
+
+TEST_CASE("Swatch render: 2D-only headless scan renders real used tools",
+          "[print_select][preflight][swatch]") {
+    // Regression 22d37fd47: 2D-only viewer never parses, so swatches must be driven
+    // by the headless scan's REAL tool set ({0,2}), not left hidden/empty.
+    SwatchRenderModel m;
+    m.is_multi_tool = true;          // U1 toolchanger
+    m.headless_tools = {0, 2};       // real used tools recovered by the scan
+
+    REQUIRE(m.swatches_visible == 0); // nothing rendered before the scan
+    m.on_headless_scan_done();
+
+    REQUIRE_FALSE(m.gcode_loaded);                  // viewer never parsed
+    REQUIRE(m.swatches_visible == 1);               // swatches now shown
+    REQUIRE(m.rendered_tools == std::set<int>{0, 2}); // REAL tools, not {0,1,2,3}
+}
+
+TEST_CASE("Swatch render: mapping card hides swatches on 2D-only",
+          "[print_select][preflight][swatch]") {
+    SwatchRenderModel m;
+    m.is_multi_tool = true;
+    m.mapping_visible = true;   // editable mapping present → swatches suppressed
+    m.headless_tools = {0, 2};
+
+    m.on_headless_scan_done();
+    REQUIRE(m.swatches_visible == 0);
+    REQUIRE(m.rendered_tools.empty());
+}
+
+TEST_CASE("Swatch render: full platform keeps viewer-parse ownership",
+          "[print_select][preflight][swatch]") {
+    // On full platforms the viewer parse renders. A subsequent headless scan must
+    // NOT re-render (is_gcode_loaded() guard) — avoids double-render.
+    SwatchRenderModel m;
+    m.is_multi_tool = true;
+    m.viewer_tools = {0, 1};
+    m.headless_tools = {0, 1, 2}; // would over-count if it leaked through
+
+    m.on_viewer_parsed();
+    REQUIRE(m.swatches_visible == 1);
+    REQUIRE(m.rendered_tools == std::set<int>{0, 1});
+
+    // Headless scan completes later — must be a no-op for the swatch render.
+    m.on_headless_scan_done();
+    REQUIRE(m.rendered_tools == std::set<int>{0, 1}); // unchanged: viewer owns it
 }
 
 TEST_CASE("Pre-flight gate: readiness fires exactly once", "[print_select][preflight][gate]") {

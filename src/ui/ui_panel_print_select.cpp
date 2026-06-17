@@ -1835,32 +1835,40 @@ void PrintSelectPanel::set_selected_file(const char* filename, const char* thumb
     selected_thumbnail_buffer_[sizeof(selected_thumbnail_buffer_) - 1] = '\0';
     lv_subject_set_pointer(&selected_thumbnail_subject_, selected_thumbnail_buffer_);
 
-    // Detail view thumbnail - use cached PNG for better upscaling quality
-    // The PNG was downloaded by ThumbnailCache alongside the pre-scaled .bin
-    if (original_url && original_url[0] != '\0') {
-        // Look up the PNG path from the original Moonraker URL
-        // Pass modification timestamp to invalidate stale cache entries
-        std::string png_path =
-            get_thumbnail_cache().get_if_cached(original_url, modified_timestamp);
-        if (!png_path.empty()) {
-            strncpy(selected_detail_thumbnail_buffer_, png_path.c_str(),
-                    sizeof(selected_detail_thumbnail_buffer_) - 1);
-            selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
-            spdlog::debug("[{}] Using cached PNG for detail view: {}", get_name(), png_path);
-        } else {
-            // Fallback to pre-scaled thumbnail if PNG not cached
-            strncpy(selected_detail_thumbnail_buffer_, thumbnail_src,
-                    sizeof(selected_detail_thumbnail_buffer_) - 1);
-            selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
-            spdlog::debug("[{}] PNG not cached, using pre-scaled for detail: {}", get_name(),
-                          thumbnail_src);
+    // Detail view thumbnail source selection.
+    //
+    // The pre-scaled card .bin (thumbnail_src) is the AUTHORITATIVE source: it is
+    // the exact image the file-browser card renders successfully, so if it exists
+    // the detail view is guaranteed to show something. The full-resolution PNG is
+    // only an upscaling-quality ENHANCEMENT, and it is fragile: it may have been
+    // evicted while the .bin survives, or may fail to decode at the large detail
+    // size on memory-constrained 2D-only devices (Snapmaker U1, AD5M). On those
+    // platforms the detail preview is the ONLY render (no 3D viewer to mask a
+    // failed thumbnail), so a missing/undecodable PNG showed as an all-black
+    // preview even though the card .bin was right there.
+    //
+    // Resolution order: (1) proven card .bin if present, (2) cached PNG when no
+    // .bin exists yet, (3) nullptr sentinel handled by the has_real block below.
+    const bool have_bin =
+        thumbnail_src && thumbnail_src[0] != '\0' &&
+        !helix::ui::PrintSelectCardView::is_placeholder_thumbnail(thumbnail_src);
+    std::string detail_src;
+    if (have_bin) {
+        detail_src = thumbnail_src;
+        spdlog::debug("[{}] Using pre-scaled .bin for detail view: {}", get_name(), detail_src);
+    } else if (original_url && original_url[0] != '\0') {
+        // No card .bin yet — fall back to the cached full-res PNG so the detail
+        // view still shows the model. Pass modification timestamp to invalidate
+        // stale cache entries.
+        detail_src = get_thumbnail_cache().get_if_cached(original_url, modified_timestamp);
+        if (!detail_src.empty()) {
+            spdlog::debug("[{}] No .bin yet — using cached PNG for detail view: {}", get_name(),
+                          detail_src);
         }
-    } else {
-        // No original URL - use same as card thumbnail
-        strncpy(selected_detail_thumbnail_buffer_, thumbnail_src,
-                sizeof(selected_detail_thumbnail_buffer_) - 1);
-        selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
     }
+    strncpy(selected_detail_thumbnail_buffer_, detail_src.c_str(),
+            sizeof(selected_detail_thumbnail_buffer_) - 1);
+    selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
     // Publish nullptr for the no-thumbnail sentinel: an empty buffer is misread by
     // LVGL as a VARIABLE image source and warns/fails to decode (#990). The
     // has_real block below handles the placeholder-icon/gradient UI toggle.

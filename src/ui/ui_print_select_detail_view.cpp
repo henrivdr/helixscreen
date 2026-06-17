@@ -1097,6 +1097,31 @@ void PrintSelectDetailView::kick_off_headless_tools_scan() {
                       headless_scan_done_ = true;
                       spdlog::debug("[DetailView] Headless tools_used scan complete: {} tools",
                                     headless_tools_used_->size());
+
+                      // Render the per-tool color swatches from the REAL used-tool
+                      // set recovered by the headless scan. On 2D-only platforms
+                      // (Snapmaker U1, AD5M) the gcode viewer never parses, so
+                      // try_extract_gcode_colors() — the viewer-parse owner of this
+                      // render — never fires and the detail panel would otherwise
+                      // show no color info at all (regression 22d37fd47). Mirror its
+                      // visibility decision and renderer here, sourcing the tool set
+                      // from tools_used_effective() so the swatches reflect the
+                      // precise used tools (e.g. {0,2}), not an over-counted palette.
+                      //
+                      // Guard on !is_gcode_loaded(): when the viewer DID parse (full
+                      // platforms) it already owns the render — don't double-fire.
+                      if (!is_gcode_loaded()) {
+                          const bool mapping_visible = filament_mapping_card_.should_show();
+                          const auto tools_used = tools_used_effective();
+                          const bool swatches_visible =
+                              !mapping_visible && swatches_card_visible_for(tools_used.size());
+                          lv_subject_set_int(&color_swatches_visible_,
+                                             swatches_visible ? 1 : 0);
+                          if (swatches_visible) {
+                              update_color_swatches(tools_used, current_filament_colors_);
+                          }
+                      }
+
                       // Refresh pre-flight using the headless set (no-op on full
                       // platforms where the viewer parse already populated it).
                       recompute_preflight();
