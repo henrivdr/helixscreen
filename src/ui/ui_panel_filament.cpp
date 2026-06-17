@@ -263,6 +263,14 @@ void FilamentPanel::init_subjects() {
         UI_MANAGED_SUBJECT_INT(purge_25mm_active_subject_, 0, "filament_purge_25mm_active",
                                subjects_);
 
+        // Per-op button feedback state (0=idle, 1=busy spinner, 2=done check).
+        // Bound to each op button's bind_op_state in filament_panel.xml.
+        UI_MANAGED_SUBJECT_INT(op_load_state_subject_, 0, "filament_op_load_state", subjects_);
+        UI_MANAGED_SUBJECT_INT(op_unload_state_subject_, 0, "filament_op_unload_state", subjects_);
+        UI_MANAGED_SUBJECT_INT(op_purge_state_subject_, 0, "filament_op_purge_state", subjects_);
+        UI_MANAGED_SUBJECT_INT(op_extrude_state_subject_, 0, "filament_op_extrude_state", subjects_);
+        UI_MANAGED_SUBJECT_INT(op_retract_state_subject_, 0, "filament_op_retract_state", subjects_);
+
         // Preset button temperature label subjects (populated from filament DB in setup)
         static constexpr const char* preset_subject_names[] = {
             "filament_preset_pla_temps", "filament_preset_petg_temps", "filament_preset_abs_temps",
@@ -284,6 +292,11 @@ void FilamentPanel::init_subjects() {
 }
 
 void FilamentPanel::deinit_subjects() {
+    // Cancel the op-state timer before the subjects it writes go away.
+    cancel_op_revert_timer();
+    backend_op_active_ = false;
+    op_in_flight_.reset();
+
     // Cancel any pending preheat without notification (panel is being torn down)
     if (pending_preheat_op_ != PreheatOp::NONE) {
         pending_preheat_op_ = PreheatOp::NONE;
@@ -390,6 +403,16 @@ void FilamentPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
                 spdlog::debug("[{}] AMS action returned to idle, ending operation guard",
                               self->get_name());
                 self->operation_guard_.end();
+                // Complete on-button feedback for fire-and-forget AMS-backend ops.
+                // Gated on backend_op_active_ so gcode/macro ops (which drive
+                // op_succeeded from their own execute_gcode callback) are never
+                // double-completed here.
+                if (self->backend_op_active_ && self->op_in_flight_) {
+                    FilamentOp op = *self->op_in_flight_;
+                    self->backend_op_active_ = false;
+                    self->op_in_flight_.reset();
+                    self->op_succeeded(op);
+                }
             }
         });
 
@@ -849,6 +872,108 @@ void FilamentPanel::handle_purge_amount_select(int amount) {
     spdlog::debug("[{}] Purge amount set to {}mm", get_name(), amount);
 }
 
+// ============================================================================
+// ON-BUTTON OPERATION FEEDBACK
+//
+// Each op button shows its own progress (animated spinner → checkmark) via an
+// int subject bound to ui_button bind_op_state, replacing the old stacked
+// start/complete toasts. Errors/timeouts keep their toast. All setters below run
+// on the main thread (op_started from the click handler; op_succeeded/op_failed
+// inside the helix::ui::async_call bodies already used to marshal off the
+// WebSocket background thread). FilamentPanel is a global singleton, so `this` is
+// always valid — no AsyncLifetimeGuard needed here [L012].
+// ============================================================================
+
+constexpr uint32_t OP_DONE_REVERT_MS = 1500;   ///< how long the "done" checkmark shows
+constexpr uint32_t MIN_SPINNER_VISIBLE_MS = 500; ///< floor so instant ops still flash a spinner
+
+lv_subject_t* FilamentPanel::op_state_subject(FilamentOp op) {
+    switch (op) {
+    case FilamentOp::Load:
+        return &op_load_state_subject_;
+    case FilamentOp::Unload:
+        return &op_unload_state_subject_;
+    case FilamentOp::Purge:
+        return &op_purge_state_subject_;
+    case FilamentOp::Extrude:
+        return &op_extrude_state_subject_;
+    case FilamentOp::Retract:
+        return &op_retract_state_subject_;
+    }
+    return &op_load_state_subject_;
+}
+
+void FilamentPanel::set_op_state(FilamentOp op, int state) {
+    lv_subject_set_int(op_state_subject(op), state);
+}
+
+void FilamentPanel::cancel_op_revert_timer() {
+    // Single handle covers both phases (min-spinner delay AND done→idle revert),
+    // so this cancels whichever is pending.
+    if (op_revert_timer_) {
+        lv_timer_delete(op_revert_timer_);
+        op_revert_timer_ = nullptr;
+    }
+}
+
+// Schedule the single shared op timer. `this` is a singleton so the raw user_data
+// capture is safe; the timer is cancelled on a new op / teardown via
+// cancel_op_revert_timer(). repeat_count==1 → LVGL auto-deletes after firing, so
+// the callbacks must NOT delete it (double-free); they just null the handle.
+void FilamentPanel::schedule_op_timer(uint32_t delay_ms, lv_timer_cb_t cb) {
+    cancel_op_revert_timer();
+    op_revert_timer_ = lv_timer_create(cb, delay_ms, this);
+    lv_timer_set_repeat_count(op_revert_timer_, 1);
+}
+
+// Enter the "done" checkmark state and arm the timer that reverts it to idle.
+// Shared by both op_succeeded branches (immediate vs after the min-spinner floor).
+void FilamentPanel::enter_op_done_state(FilamentOp op) {
+    set_op_state(op, 2); // done → checkmark
+    op_revert_target_ = op;
+    schedule_op_timer(OP_DONE_REVERT_MS, [](lv_timer_t* t) {
+        auto* self = static_cast<FilamentPanel*>(lv_timer_get_user_data(t));
+        self->op_revert_timer_ = nullptr;
+        self->set_op_state(self->op_revert_target_, 0);
+    });
+}
+
+void FilamentPanel::op_started(FilamentOp op) {
+    // A new op cancels any pending timer (min-delay or revert) and resets all op
+    // buttons to idle so only the active one shows the spinner.
+    cancel_op_revert_timer();
+    for (FilamentOp o : {FilamentOp::Load, FilamentOp::Unload, FilamentOp::Purge,
+                         FilamentOp::Extrude, FilamentOp::Retract}) {
+        if (o != op) {
+            lv_subject_set_int(op_state_subject(o), 0);
+        }
+    }
+    op_busy_started_tick_ = lv_tick_get();
+    set_op_state(op, 1); // busy → spinner
+}
+
+void FilamentPanel::op_succeeded(FilamentOp op) {
+    // Instant-completing ops (mock gcode fires success synchronously; fast real
+    // ops too) would flip spinner→check within a frame. Hold the spinner for a
+    // minimum visible duration before showing the checkmark.
+    uint32_t elapsed = lv_tick_elaps(op_busy_started_tick_);
+    if (elapsed >= MIN_SPINNER_VISIBLE_MS) {
+        enter_op_done_state(op);
+        return;
+    }
+    op_revert_target_ = op; // reused by the deferred-done timer to know the op
+    schedule_op_timer(MIN_SPINNER_VISIBLE_MS - elapsed, [](lv_timer_t* t) {
+        auto* self = static_cast<FilamentPanel*>(lv_timer_get_user_data(t));
+        self->op_revert_timer_ = nullptr;
+        self->enter_op_done_state(self->op_revert_target_);
+    });
+}
+
+void FilamentPanel::op_failed(FilamentOp op) {
+    cancel_op_revert_timer(); // also clears any pending min-spinner delay
+    set_op_state(op, 0);      // back to idle; the error/timeout toast still fires
+}
+
 void FilamentPanel::handle_load_button() {
     if (operation_guard_.is_active()) {
         NOTIFY_WARNING(lv_tr("Operation already in progress"));
@@ -952,18 +1077,27 @@ void FilamentPanel::execute_extrude() {
     int speed_mm_min = helix::SettingsManager::instance().get_extrude_speed() * 60;
     spdlog::info("[{}] Extruding {}mm at F{}", get_name(), purge_amount_, speed_mm_min);
     std::string gcode = fmt::format("M83\nG1 E{} F{}", purge_amount_, speed_mm_min);
-    NOTIFY_INFO(lv_tr("Extruding {}mm..."), purge_amount_);
+    op_started(FilamentOp::Extrude); // on-button spinner replaces the start toast
 
     api_->execute_gcode(
         gcode,
-        [this, amount = purge_amount_]() {
+        [this]() {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
-            NOTIFY_SUCCESS(lv_tr("Extrude complete ({}mm)"), amount);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_succeeded(FilamentOp::Extrude); // checkmark, then auto-revert
+                },
+                this);
         },
         [this](const MoonrakerError& error) {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_failed(FilamentOp::Extrude);
+                },
+                this);
             if (error.type == MoonrakerErrorType::TIMEOUT) {
                 NOTIFY_WARNING(lv_tr("Extrude may still be running — response timed out"));
             } else {
@@ -1067,18 +1201,27 @@ void FilamentPanel::execute_purge() {
                  PURGE_FALLBACK_SPEED_MM_MIN);
     std::string gcode =
         fmt::format("M83\nG1 E{} F{}", PURGE_FALLBACK_MM, PURGE_FALLBACK_SPEED_MM_MIN);
-    NOTIFY_INFO(lv_tr("Purging {}mm..."), PURGE_FALLBACK_MM);
+    op_started(FilamentOp::Purge); // on-button spinner replaces the start toast
 
     api_->execute_gcode(
         gcode,
         [this]() {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
-            NOTIFY_SUCCESS(lv_tr("Purge complete"));
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_succeeded(FilamentOp::Purge);
+                },
+                this);
         },
         [this](const MoonrakerError& error) {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_failed(FilamentOp::Purge);
+                },
+                this);
             if (error.type == MoonrakerErrorType::TIMEOUT) {
                 NOTIFY_WARNING(lv_tr("Purge may still be running — response timed out"));
             } else {
@@ -1122,18 +1265,27 @@ void FilamentPanel::execute_retract() {
     int speed_mm_min = helix::SettingsManager::instance().get_extrude_speed() * 60;
     spdlog::info("[{}] Retracting {}mm at F{}", get_name(), purge_amount_, speed_mm_min);
     std::string gcode = fmt::format("M83\nG1 E-{} F{}", purge_amount_, speed_mm_min);
-    NOTIFY_INFO(lv_tr("Retracting {}mm..."), purge_amount_);
+    op_started(FilamentOp::Retract); // on-button spinner replaces the start toast
 
     api_->execute_gcode(
         gcode,
-        [this, amount = purge_amount_]() {
+        [this]() {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
-            NOTIFY_SUCCESS(lv_tr("Retract complete ({}mm)"), amount);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_succeeded(FilamentOp::Retract);
+                },
+                this);
         },
         [this](const MoonrakerError& error) {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_failed(FilamentOp::Retract);
+                },
+                this);
             if (error.type == MoonrakerErrorType::TIMEOUT) {
                 NOTIFY_WARNING(lv_tr("Retract may still be running — response timed out"));
             } else {
@@ -2008,8 +2160,21 @@ void FilamentPanel::execute_load() {
         if (sys.current_slot >= 0) {
             spdlog::info("[{}] Loading filament directly into active slot {} (no redirect)",
                          get_name(), sys.current_slot);
+            // Backend load is fire-and-forget: completion is signaled by
+            // ams_action_observer_ when AmsAction returns to IDLE. Start the guard
+            // + on-button spinner here; backend_op_active_ gates the observer so it
+            // only completes backend ops (never gcode/macro ops).
+            operation_guard_.begin(OPERATION_TIMEOUT_MS,
+                                   [] { NOTIFY_WARNING(lv_tr("Filament operation timed out")); });
+            backend_op_active_ = true;
+            op_in_flight_ = FilamentOp::Load;
+            op_started(FilamentOp::Load);
             AmsError err = backend->load_filament(sys.current_slot);
             if (!err.success()) {
+                operation_guard_.end();
+                backend_op_active_ = false;
+                op_in_flight_.reset();
+                op_failed(FilamentOp::Load);
                 NOTIFY_ERROR("{}", err.user_msg);
             }
             return;
@@ -2063,7 +2228,7 @@ void FilamentPanel::execute_load() {
                  LOAD_SLOW_MM);
     std::string gcode = fmt::format("M83\nG1 E{} F{}\nG1 E{} F{}", LOAD_FAST_MM, LOAD_FAST_SPEED,
                                     LOAD_SLOW_MM, LOAD_SLOW_SPEED);
-    NOTIFY_INFO(lv_tr("Loading filament ({}mm)..."), LOAD_FAST_MM + LOAD_SLOW_MM);
+    op_started(FilamentOp::Load); // on-button spinner replaces the start toast
 
     api_->execute_gcode(
         gcode,
@@ -2073,13 +2238,18 @@ void FilamentPanel::execute_load() {
                     auto* self = static_cast<FilamentPanel*>(ud);
                     self->operation_guard_.end();
                     self->restore_heater_after_preheat();
+                    self->op_succeeded(FilamentOp::Load);
                 },
                 this);
-            NOTIFY_SUCCESS(lv_tr("Filament loaded"));
         },
         [this](const MoonrakerError& error) {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_failed(FilamentOp::Load);
+                },
+                this);
             if (error.type == MoonrakerErrorType::TIMEOUT) {
                 NOTIFY_WARNING(lv_tr("Load may still be running — response timed out"));
             } else {
@@ -2106,13 +2276,21 @@ void FilamentPanel::execute_unload() {
                                [] { NOTIFY_WARNING(lv_tr("Filament operation timed out")); });
         spdlog::info("[{}] Unloading filament via AMS backend ({})", get_name(),
                      ams_type_to_string(backend->get_type()));
-        NOTIFY_INFO(lv_tr("Unloading filament..."));
+        // On-button spinner replaces the start toast. Completion is signaled by
+        // ams_action_observer_ when AmsAction returns to IDLE; backend_op_active_
+        // gates that observer to backend ops only.
+        backend_op_active_ = true;
+        op_in_flight_ = FilamentOp::Unload;
+        op_started(FilamentOp::Unload);
         AmsError err = backend->unload_filament();
         if (!err.success()) {
             operation_guard_.end();
+            backend_op_active_ = false;
+            op_in_flight_.reset();
+            op_failed(FilamentOp::Unload);
             NOTIFY_ERROR(lv_tr("Unload failed: {}"), err.user_msg);
         }
-        // Guard ends via timeout — backend tracks completion via state observer
+        // Guard ends via ams_action_observer_ (AmsAction IDLE) or timeout.
         return;
     }
 
@@ -2158,7 +2336,7 @@ void FilamentPanel::execute_unload() {
     spdlog::info("[{}] Unload fallback: tip-shape + {}mm retract", get_name(), UNLOAD_MM);
     std::string gcode = fmt::format("M83\nG1 E3 F{}\nG1 E-5 F{}\nG4 P500\nG1 E-{} F{}",
                                     TIP_PUSH_SPEED, TIP_PULL_SPEED, UNLOAD_MM, UNLOAD_SPEED);
-    NOTIFY_INFO(lv_tr("Unloading filament ({}mm)..."), UNLOAD_MM);
+    op_started(FilamentOp::Unload); // on-button spinner replaces the start toast
 
     api_->execute_gcode(
         gcode,
@@ -2168,13 +2346,18 @@ void FilamentPanel::execute_unload() {
                     auto* self = static_cast<FilamentPanel*>(ud);
                     self->operation_guard_.end();
                     self->restore_heater_after_preheat();
+                    self->op_succeeded(FilamentOp::Unload);
                 },
                 this);
-            NOTIFY_SUCCESS(lv_tr("Filament unloaded"));
         },
         [this](const MoonrakerError& error) {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    self->op_failed(FilamentOp::Unload);
+                },
+                this);
             if (error.type == MoonrakerErrorType::TIMEOUT) {
                 NOTIFY_WARNING(lv_tr("Unload may still be running — response timed out"));
             } else {
@@ -2194,6 +2377,24 @@ void FilamentPanel::run_filament_macro(const std::string& macro_name, const std:
                            [] { NOTIFY_WARNING(lv_tr("Filament operation timed out")); });
     spdlog::info("[{}] Running '{}' ({})", get_name(), macro_name, op_label);
 
+    // Map the op label ("Load"/"Unload"/"Purg") to the triggering button so the
+    // on-button spinner/checkmark drives that button. Unknown labels (none today)
+    // get no on-button feedback but still run. Only one filament op runs at a time
+    // (operation_guard_), so a single in-flight op member is sufficient; the
+    // main-thread success/error bodies read it back.
+    std::optional<FilamentOp> op;
+    if (op_label == "Load") {
+        op = FilamentOp::Load;
+    } else if (op_label == "Unload") {
+        op = FilamentOp::Unload;
+    } else if (op_label == "Purg") {
+        op = FilamentOp::Purge;
+    }
+    op_in_flight_ = op;
+    if (op) {
+        op_started(*op); // on-button spinner replaces the start toast
+    }
+
     std::string gcode = helix::build_macro_gcode(macro_name, params);
     // FilamentPanel is a global singleton, so `this` capture is safe [L012]
     api_->execute_gcode(
@@ -2204,13 +2405,22 @@ void FilamentPanel::run_filament_macro(const std::string& macro_name, const std:
                     auto* self = static_cast<FilamentPanel*>(ud);
                     self->operation_guard_.end();
                     self->restore_heater_after_preheat();
+                    if (self->op_in_flight_) {
+                        self->op_succeeded(*self->op_in_flight_);
+                    }
                 },
                 this);
-            NOTIFY_SUCCESS(lv_tr("Macro complete"));
         },
         [this](const MoonrakerError& error) {
             helix::ui::async_call(
-                [](void* ud) { static_cast<FilamentPanel*>(ud)->operation_guard_.end(); }, this);
+                [](void* ud) {
+                    auto* self = static_cast<FilamentPanel*>(ud);
+                    self->operation_guard_.end();
+                    if (self->op_in_flight_) {
+                        self->op_failed(*self->op_in_flight_);
+                    }
+                },
+                this);
             if (error.type == MoonrakerErrorType::TIMEOUT) {
                 NOTIFY_WARNING(lv_tr("Macro may still be running — response timed out"));
             } else {

@@ -41,6 +41,14 @@ struct UiButtonData {
     lv_obj_t* icon;     // Icon widget (or nullptr if none)
     lv_obj_t* label;    // Label widget (always present)
     bool icon_on_right; // true if icon is after text
+
+    // op-state (bind_op_state): 0=idle, 1=busy (spinner), 2=done (check glyph).
+    // op_spinner is an lv_arc lazily created in the icon slot the first time the
+    // button goes busy; it is shown/hidden as state changes so the button width
+    // never reflows. op_idle_glyph caches the original icon codepoint so the idle
+    // glyph can be restored after busy/done.
+    lv_obj_t* op_spinner{nullptr};
+    char op_idle_glyph[8]{}; // MDI glyph is 4-byte UTF-8 + NUL; 8 is generous
 };
 
 // Monotonic source of per-button identity tokens. Buttons are created on the
@@ -102,6 +110,100 @@ static bool is_mdi_icon_font(const lv_font_t* font) {
     return font == &mdi_icons_14 || font == &mdi_icons_16 || font == &mdi_icons_24 ||
            font == &mdi_icons_32 || font == &mdi_icons_48 || font == &mdi_icons_64;
 }
+
+// ---------------------------------------------------------------------------
+// op-state spinner (bind_op_state busy animation)
+//
+// A self-contained Material-style indeterminate arc spinner rendered inside the
+// button's icon slot. Mirrors ui_spinner.cpp but uses its own file-local
+// animation callbacks (lv_anim_delete keys on obj+exec_cb, so the callbacks must
+// be distinct from the standalone <spinner> widget's). The arc is sized to the
+// icon line-height so the button width never reflows between idle and busy.
+// ---------------------------------------------------------------------------
+namespace op_spinner_anim {
+
+constexpr uint32_t ROTATION_DURATION_MS = 1568;
+constexpr uint32_t SWEEP_DURATION_MS = 667;
+constexpr int32_t ARC_MIN_SWEEP = 45;
+constexpr int32_t ARC_MAX_SWEEP = 270;
+
+int32_t g_last_start = 0;
+int32_t g_last_end = 0;
+
+int32_t clamp_sweep(int32_t angle, int32_t reference, bool angle_is_start) {
+    int32_t sweep = angle_is_start ? (reference - angle) : (angle - reference);
+    if (sweep < 0)
+        sweep += 360;
+    if (sweep >= ARC_MIN_SWEEP)
+        return angle;
+
+    int32_t clamped = angle_is_start ? (reference - ARC_MIN_SWEEP) : (reference + ARC_MIN_SWEEP);
+    if (clamped < 0)
+        clamped += 360;
+    if (clamped >= 360)
+        clamped -= 360;
+    return clamped;
+}
+
+void start_angle(void* obj, int32_t value) {
+    value = clamp_sweep(value, g_last_end, /*angle_is_start=*/true);
+    g_last_start = value;
+    lv_arc_set_start_angle(static_cast<lv_obj_t*>(obj), static_cast<uint32_t>(value));
+}
+
+void end_angle(void* obj, int32_t value) {
+    value = clamp_sweep(value, g_last_start, /*angle_is_start=*/false);
+    g_last_end = value;
+    lv_arc_set_end_angle(static_cast<lv_obj_t*>(obj), static_cast<uint32_t>(value));
+}
+
+void rotation(void* obj, int32_t value) {
+    lv_arc_set_rotation(static_cast<lv_obj_t*>(obj), value);
+}
+
+void start(lv_obj_t* arc) {
+    lv_anim_t a_end;
+    lv_anim_init(&a_end);
+    lv_anim_set_var(&a_end, arc);
+    lv_anim_set_exec_cb(&a_end, end_angle);
+    lv_anim_set_duration(&a_end, SWEEP_DURATION_MS * 2);
+    lv_anim_set_values(&a_end, ARC_MIN_SWEEP, ARC_MIN_SWEEP + 360);
+    lv_anim_set_repeat_count(&a_end, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a_end, lv_anim_path_custom_bezier3);
+    lv_anim_set_bezier3_param(&a_end, LV_BEZIER_VAL_FLOAT(0.0), LV_BEZIER_VAL_FLOAT(0.0),
+                              LV_BEZIER_VAL_FLOAT(0.2), LV_BEZIER_VAL_FLOAT(1.0));
+    lv_anim_start(&a_end);
+
+    lv_anim_t a_start;
+    lv_anim_init(&a_start);
+    lv_anim_set_var(&a_start, arc);
+    lv_anim_set_exec_cb(&a_start, start_angle);
+    lv_anim_set_duration(&a_start, SWEEP_DURATION_MS * 2);
+    lv_anim_set_values(&a_start, 0, 360);
+    lv_anim_set_repeat_count(&a_start, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a_start, lv_anim_path_custom_bezier3);
+    lv_anim_set_bezier3_param(&a_start, LV_BEZIER_VAL_FLOAT(0.8), LV_BEZIER_VAL_FLOAT(0.0),
+                              LV_BEZIER_VAL_FLOAT(1.0), LV_BEZIER_VAL_FLOAT(1.0));
+    lv_anim_start(&a_start);
+
+    lv_anim_t a_rot;
+    lv_anim_init(&a_rot);
+    lv_anim_set_var(&a_rot, arc);
+    lv_anim_set_exec_cb(&a_rot, rotation);
+    lv_anim_set_duration(&a_rot, ROTATION_DURATION_MS);
+    lv_anim_set_values(&a_rot, 270, 270 + 360);
+    lv_anim_set_repeat_count(&a_rot, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a_rot, lv_anim_path_linear);
+    lv_anim_start(&a_rot);
+}
+
+void stop(lv_obj_t* arc) {
+    lv_anim_delete(arc, start_angle);
+    lv_anim_delete(arc, end_angle);
+    lv_anim_delete(arc, rotation);
+}
+
+} // namespace op_spinner_anim
 
 /**
  * @brief Update button text color for contrast against the button background
@@ -612,6 +714,123 @@ void icon_subject_observer_cb(lv_observer_t* observer, lv_subject_t* subject) {
 }
 
 /**
+ * @brief Cleanup callback for the op-state spinner arc
+ *
+ * Stops the running animations before the arc is freed so the animation engine
+ * never dereferences a deleted object. The arc is a child of the button, so this
+ * fires automatically when the button (and thus the arc) is deleted.
+ */
+void op_spinner_delete_cb(lv_event_t* e) {
+    op_spinner_anim::stop(lv_event_get_target_obj(e));
+}
+
+/**
+ * @brief Lazily create the busy spinner arc inside the button's icon slot
+ *
+ * Sized to the icon line-height and inserted at the icon's position so it
+ * occupies the same footprint — toggling between glyph and spinner never reflows
+ * the button. Created once and reused; returns the existing arc on later calls.
+ */
+lv_obj_t* ensure_op_spinner(lv_obj_t* btn, UiButtonData* data) {
+    if (data->op_spinner) {
+        return data->op_spinner;
+    }
+    if (!data->icon) {
+        return nullptr;
+    }
+
+    // Match the icon glyph footprint so width/height stay constant.
+    const lv_font_t* icon_font = lv_obj_get_style_text_font(data->icon, LV_PART_MAIN);
+    int32_t sz = icon_font ? static_cast<int32_t>(lv_font_get_line_height(icon_font)) : 16;
+    int32_t arc_width = sz >= 24 ? 3 : 2;
+
+    lv_obj_t* arc = lv_arc_create(btn);
+    lv_obj_set_size(arc, sz, sz);
+    lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_arc_set_bg_angles(arc, 0, 360);
+    lv_arc_set_rotation(arc, 270);
+    lv_obj_set_style_opa(arc, LV_OPA_0, LV_PART_KNOB);
+    lv_obj_add_style(arc, ThemeManager::instance().get_style(StyleRole::Spinner),
+                     LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, arc_width, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_opa(arc, LV_OPA_0, LV_PART_MAIN);
+    lv_arc_set_angles(arc, 0, op_spinner_anim::ARC_MAX_SWEEP);
+
+    // Occupy the icon's slot in the flex flow.
+    int32_t icon_index = lv_obj_get_index(data->icon);
+    lv_obj_move_to_index(arc, icon_index);
+
+    lv_obj_add_flag(arc, LV_OBJ_FLAG_HIDDEN); // shown only while busy
+    lv_obj_add_event_cb(arc, op_spinner_delete_cb, LV_EVENT_DELETE, nullptr);
+
+    data->op_spinner = arc;
+    return arc;
+}
+
+/**
+ * @brief Render an op-state value (0=idle, 1=busy, 2=done) on the button
+ */
+void apply_op_state(lv_obj_t* btn, UiButtonData* data, int op_state) {
+    if (!data || data->magic != UiButtonData::MAGIC || !data->icon) {
+        return;
+    }
+
+    switch (op_state) {
+    case 1: { // busy: hide glyph, show animated spinner
+        lv_obj_t* arc = ensure_op_spinner(btn, data);
+        lv_obj_add_flag(data->icon, LV_OBJ_FLAG_HIDDEN);
+        if (arc) {
+            lv_obj_remove_flag(arc, LV_OBJ_FLAG_HIDDEN);
+            op_spinner_anim::stop(arc); // restart cleanly if re-entered
+            op_spinner_anim::start(arc);
+        }
+        break;
+    }
+    case 2: { // done: show check glyph, hide spinner
+        if (data->op_spinner) {
+            op_spinner_anim::stop(data->op_spinner);
+            lv_obj_add_flag(data->op_spinner, LV_OBJ_FLAG_HIDDEN);
+        }
+        const char* check_cp = ui_icon::lookup_codepoint("check");
+        if (check_cp) {
+            lv_label_set_text(data->icon, check_cp);
+        }
+        lv_obj_remove_flag(data->icon, LV_OBJ_FLAG_HIDDEN);
+        break;
+    }
+    case 0:
+    default: { // idle: restore original glyph, hide spinner
+        if (data->op_spinner) {
+            op_spinner_anim::stop(data->op_spinner);
+            lv_obj_add_flag(data->op_spinner, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (data->op_idle_glyph[0] != '\0') {
+            lv_label_set_text(data->icon, data->op_idle_glyph);
+        }
+        lv_obj_remove_flag(data->icon, LV_OBJ_FLAG_HIDDEN);
+        break;
+    }
+    }
+    update_button_text_contrast(btn);
+}
+
+/**
+ * @brief Observer callback for bind_op_state int subject changes
+ *
+ * The int subject value (0/1/2) drives the icon-slot rendering. The button is in
+ * the observer's user_data, its UiButtonData in user_data of the button.
+ */
+void op_state_observer_cb(lv_observer_t* observer, lv_subject_t* subject) {
+    lv_obj_t* btn = static_cast<lv_obj_t*>(lv_observer_get_user_data(observer));
+    if (!btn) {
+        return;
+    }
+    UiButtonData* data = static_cast<UiButtonData*>(lv_obj_get_user_data(btn));
+    apply_op_state(btn, data, lv_subject_get_int(subject));
+}
+
+/**
  * @brief XML apply callback for <ui_button> widget
  *
  * Delegates to standard object parser for base properties (align, hidden, etc.)
@@ -758,6 +977,36 @@ void ui_button_apply(lv_xml_parser_state_t* state, const char** attrs) {
         }
     }
 
+    // Handle bind_op_state - drive idle/busy/done rendering from an int subject.
+    // 0=idle (original icon glyph), 1=busy (animated spinner in the icon slot),
+    // 2=done ("check" glyph). Requires an icon to render into.
+    const char* bind_op_state = lv_xml_get_value_of(attrs, "bind_op_state");
+    if (bind_op_state && bind_op_state[0] != '\0' && data &&
+        data->magic == UiButtonData::MAGIC) {
+        if (!data->icon) {
+            spdlog::warn("[ui_button] bind_op_state '{}' ignored — button has no icon",
+                         bind_op_state);
+        } else {
+            // Cache the current (idle) glyph so it can be restored after busy/done.
+            const char* current_glyph = lv_label_get_text(data->icon);
+            if (current_glyph) {
+                lv_strlcpy(data->op_idle_glyph, current_glyph, sizeof(data->op_idle_glyph));
+            }
+
+            lv_subject_t* subject = lv_xml_get_subject(&state->scope, bind_op_state);
+            if (subject) {
+                // Render the initial state, then react to changes. Observer is
+                // object-tied (auto-removed when the button is deleted), matching
+                // the bind_icon precedent above.
+                apply_op_state(btn, data, lv_subject_get_int(subject));
+                lv_subject_add_observer_obj(subject, op_state_observer_cb, btn, btn);
+                spdlog::trace("[ui_button] Bound op_state to subject '{}'", bind_op_state);
+            } else {
+                spdlog::warn("[ui_button] Subject '{}' not found for bind_op_state", bind_op_state);
+            }
+        }
+    }
+
     // Handle long_mode - set label text truncation mode (dots, clip, scroll, etc.)
     const char* long_mode = lv_xml_get_value_of(attrs, "long_mode");
     if (long_mode && data && data->magic == UiButtonData::MAGIC && data->label) {
@@ -876,4 +1125,26 @@ void ui_button_set_label_hidden(lv_obj_t* btn, bool hidden) {
     } else {
         lv_obj_remove_flag(data->label, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+lv_obj_t* ui_button_get_icon(lv_obj_t* btn) {
+    if (!btn) {
+        return nullptr;
+    }
+    auto* data = static_cast<UiButtonData*>(lv_obj_get_user_data(btn));
+    if (!data || data->magic != UiButtonData::MAGIC) {
+        return nullptr;
+    }
+    return data->icon;
+}
+
+lv_obj_t* ui_button_get_op_spinner(lv_obj_t* btn) {
+    if (!btn) {
+        return nullptr;
+    }
+    auto* data = static_cast<UiButtonData*>(lv_obj_get_user_data(btn));
+    if (!data || data->magic != UiButtonData::MAGIC) {
+        return nullptr;
+    }
+    return data->op_spinner;
 }

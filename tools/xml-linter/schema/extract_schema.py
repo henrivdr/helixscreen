@@ -1039,6 +1039,7 @@ CPP_WIDGET_FILES: dict[str, dict[str, Any]] = {
             "layout": {"type": "enum", "enum": "button_layout"},
             "bind_text": {"type": "string"},
             "bind_icon": {"type": "string"},
+            "bind_op_state": {"type": "string"},
             "long_mode": {"type": "enum", "enum": "label_long_mode"},
             "label_hidden_if_bp_eq": {"type": "int"},
             "bind_text-fmt": {"type": "string"},

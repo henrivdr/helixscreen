@@ -98,3 +98,22 @@ void ui_button_set_icon(lv_obj_t* btn, const char* icon_name);
  * returns silently if not a ui_button or if the button has no label.
  */
 void ui_button_set_label_hidden(lv_obj_t* btn, bool hidden);
+
+/**
+ * @brief Get the internal icon glyph label of a ui_button
+ *
+ * Returns the lv_label that renders the button's MDI icon glyph, or nullptr if
+ * the button has no icon (text-only) or is not a ui_button. Intended for tests
+ * and for callers that need to inspect/animate the icon slot.
+ */
+lv_obj_t* ui_button_get_icon(lv_obj_t* btn);
+
+/**
+ * @brief Get the op-state spinner arc of a ui_button, if one exists
+ *
+ * A ui_button created with bind_op_state lazily creates an animated arc spinner
+ * in its icon slot the first time it enters the busy state. Returns that arc, or
+ * nullptr if the button has no op-state binding / has never gone busy / is not a
+ * ui_button. Intended for tests.
+ */
+lv_obj_t* ui_button_get_op_spinner(lv_obj_t* btn);
