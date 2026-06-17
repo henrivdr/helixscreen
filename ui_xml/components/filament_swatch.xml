@@ -3,44 +3,39 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
   <!-- Per-tool color chip shown in the Print File Detail FILAMENTS card.
-       One instance per gcode tool used by the file. TWO-TONE layout, split
-       by a horizontal divider into two equal-height bands:
+       One instance per gcode tool used by the file. TWO-TONE chip: one
+       unified tile split by a thin horizontal divider into two equal-size,
+       full-bleed color bands:
          - TOP band "top_band": bg = the GCODE FILE intended color for this
-           tool (slicer palette). Label "tool_label" = gcode tool number
-           ("T0", "T2", ...).
-         - DIVIDER "divider": thin horizontal rule. Its color is set per chip
-           from C++ to read against BOTH band colors.
+           tool (slicer palette). Label "tool_label" = gcode tool number ("T0").
+         - DIVIDER "divider": thin horizontal rule; color set per chip from C++.
          - BOTTOM band "bottom_band": bg = the ACTUAL present color of the
-           EFFECTIVE mapped slot. Label "slot_label" = mapped lane number
-           ("1", "4", ...).
-       Example: a {0,2} U1 file where T2 maps to Slot 4 → top band the
-       gcode color + "T2", bottom band the slot-4 color + "4".
+           EFFECTIVE mapped slot. Label "slot_label" = mapped lane number ("1").
 
-       Appearance (layout, sizing, padding, radius, label fonts, divider
-       thickness, empty-state visual) all live here. C++ owns only the
-       dynamic data:
-         - top_band background  = gcode/palette intended color
-         - bottom_band background = mapped slot present color (or empty variant)
-         - tool_label text/contrast color (against the top band bg)
-         - slot_label text/contrast color (against the bottom band bg)
+       Layout: the chip has a FIXED width so both bands cross-stretch to the
+       same width (full-bleed, connected — NOT content-width, which would let
+       each band hug its own label, producing two disconnected mismatched-width
+       boxes). Labels center via flex_grow + text_align. Bands fill the height
+       via flex_grow. width="40" is tunable — the snug size that fits the widest
+       label ("T31").
+
+       C++ (update_color_swatches) owns only the dynamic data:
+         - top_band bg = gcode/palette intended color
+         - bottom_band bg = mapped slot present color (or empty variant)
+         - tool_label text + contrast color (against top band bg)
+         - slot_label text + contrast color (against bottom band bg)
          - divider bg color (contrast against a blend of both bands)
-         - LV_STATE_USER_1 on bottom_band for the empty-slot variant
-       Tweak appearance here without touching code.
-
-       L082 note: the swatch is width="content"; children must NOT use
-       width="100%". Equal-width bands come from the column flex cross-axis
-       STRETCH (LV_FLEX_ALIGN_STRETCH) — children keep auto width and stretch
-       to the chip's content width with no percent sizing. -->
+         - LV_STATE_USER_1 on bottom_band for the empty-slot variant -->
   <styles>
-    <!-- Empty-slot variant applied to the BOTTOM band when the gcode tool's
-         mapped slot is empty: warning-colored border + reduced bg opacity.
-         Toggled by C++ via lv_obj_add_state(bottom_band, LV_STATE_USER_1). -->
+    <!-- Empty-slot variant on the BOTTOM band when the tool's mapped slot is
+         empty: warning border + reduced bg opacity. Toggled by C++ via
+         lv_obj_add_state(bottom_band, LV_STATE_USER_1). -->
     <style name="empty_slot"
            bg_opa="60"
            border_width="2" border_color="#warning" border_opa="255"/>
   </styles>
   <view name="swatch"
-        extends="lv_obj" width="content" height="100%"
+        extends="lv_obj" width="40" height="100%"
         flex_flow="column"
         style_flex_main_place="center" style_flex_cross_place="stretch"
         style_pad_all="0" style_pad_row="0"
@@ -49,28 +44,25 @@
         style_border_width="0"
         style_clip_corner="true"
         scrollable="false" clickable="false" event_bubble="true">
-    <!-- TOP band: gcode intended color. Equal height via flex_grow. Its own
-         horizontal padding keeps the chip hugging the label width. -->
+    <!-- TOP band: gcode intended color. Cross-stretches to the chip width;
+         flex_grow fills half the height. -->
     <lv_obj name="top_band"
-            width="content" height="0" flex_grow="1"
+            height="0" flex_grow="1"
             flex_flow="row"
             style_flex_main_place="center" style_flex_cross_place="center"
-            style_pad_left="#space_md" style_pad_right="#space_md"
-            style_pad_top="0" style_pad_bottom="0"
-            style_radius="0" style_bg_opa="255"
-            style_border_width="0"
+            style_pad_all="0"
+            style_radius="0" style_bg_opa="255" style_border_width="0"
             scrollable="false" clickable="false" event_bubble="true">
       <lv_label name="tool_label"
-                text="" align="center"
+                text="" flex_grow="1"
+                style_text_align="center"
                 style_text_font="#font_small"
                 style_text_color="#text"
                 clickable="false" event_bubble="true"/>
     </lv_obj>
-    <!-- Divider: thin horizontal rule between the bands. Stretches to the
-         chip width via the parent's cross-axis stretch; color set per chip
-         from C++. -->
+    <!-- Divider: thin full-width rule; color set per chip from C++. -->
     <lv_obj name="divider"
-            width="content" height="1"
+            height="1"
             style_bg_color="#text_muted" style_bg_opa="255"
             style_radius="0" style_border_width="0" style_pad_all="0"
             scrollable="false" clickable="false" event_bubble="true"/>
@@ -79,14 +71,13 @@
             height="0" flex_grow="1"
             flex_flow="row"
             style_flex_main_place="center" style_flex_cross_place="center"
-            style_pad_left="#space_md" style_pad_right="#space_md"
-            style_pad_top="0" style_pad_bottom="0"
-            style_radius="0" style_bg_opa="255"
-            style_border_width="0"
+            style_pad_all="0"
+            style_radius="0" style_bg_opa="255" style_border_width="0"
             scrollable="false" clickable="false" event_bubble="true">
       <style name="empty_slot" selector="user_1"/>
       <lv_label name="slot_label"
-                text="" align="center"
+                text="" flex_grow="1"
+                style_text_align="center"
                 style_text_font="#font_small"
                 style_text_color="#text"
                 clickable="false" event_bubble="true"/>
