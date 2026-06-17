@@ -1091,8 +1091,18 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                 system_info_.current_tool = -1;
                                 changed = true;
                             }
-                            if (system_info_.action == AmsAction::LOADING ||
-                                system_info_.action == AmsAction::UNLOADING) {
+                            // Only "unload_finish" is the TRUE end of the operation.
+                            // "preload_finish" (filament staged in the buffer) can be
+                            // reported while the operation is still running — e.g. a
+                            // lane already at preload_finish that the user re-unloads:
+                            // the nozzle heats but channel_state stays preload_finish,
+                            // and dropping to IDLE here killed the unload step display
+                            // mid-heat (#u1-unload-steps). Leave the action alone for
+                            // preload_finish; it resolves to IDLE via the "idle"
+                            // channel_state below once the operation truly settles.
+                            if (state == "unload_finish" &&
+                                (system_info_.action == AmsAction::LOADING ||
+                                 system_info_.action == AmsAction::UNLOADING)) {
                                 system_info_.action = AmsAction::IDLE;
                                 system_info_.operation_detail.clear();
                                 PostOpCooldownManager::instance().schedule();
