@@ -186,6 +186,32 @@ class SettingsManager {
     }
 
     // =========================================================================
+    // QIDI BOX EJECT (owned by SettingsManager — persisted per-printer)
+    // =========================================================================
+
+    /** @brief Get QIDI Box eject distance magnitude in mm (default 878, range 100-2000) */
+    int get_qidi_eject_distance() const;
+
+    /** @brief Set QIDI Box eject distance magnitude in mm (clamped 100-2000, persisted) */
+    void set_qidi_eject_distance(int mm);
+
+    /** @brief QIDI eject distance subject (integer: mm) for UI binding */
+    lv_subject_t* subject_qidi_eject_distance() {
+        return &qidi_eject_distance_subject_;
+    }
+
+    /** @brief Get QIDI Box eject velocity in mm/s (default 100, range 10-300) */
+    int get_qidi_eject_velocity() const;
+
+    /** @brief Set QIDI Box eject velocity in mm/s (clamped 10-300, persisted) */
+    void set_qidi_eject_velocity(int mm_per_sec);
+
+    /** @brief QIDI eject velocity subject (integer: mm/s) for UI binding */
+    lv_subject_t* subject_qidi_eject_velocity() {
+        return &qidi_eject_velocity_subject_;
+    }
+
+    // =========================================================================
     // FILAMENT SETTINGS (owned by SettingsManager — AMS types dependency)
     // =========================================================================
 
@@ -399,6 +425,8 @@ class SettingsManager {
     lv_subject_t led_enabled_subject_;
     lv_subject_t z_movement_style_subject_;
     lv_subject_t extrude_speed_subject_;
+    lv_subject_t qidi_eject_distance_subject_;
+    lv_subject_t qidi_eject_velocity_subject_;
     lv_subject_t toolhead_style_subject_;
     lv_subject_t show_printer_switcher_subject_;
     lv_subject_t show_widget_labels_subject_;

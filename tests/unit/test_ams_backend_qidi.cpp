@@ -6,6 +6,7 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "settings_manager.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -705,6 +706,35 @@ TEST_CASE("QIDI Box [force_move] enable_force_move turns on lane eject",
     REQUIRE(backend.sent.size() == 1);
     REQUIRE(backend.sent[0] ==
             "FORCE_MOVE STEPPER=\"box_stepper slot1\" VELOCITY=100 DISTANCE=-878");
+}
+
+TEST_CASE("QIDI Box lane eject honors configurable distance/velocity settings",
+          "[ams][qidi_box][write_path]") {
+    // The eject FORCE_MOVE distance/velocity are user-tunable (#1041) because
+    // different QIDI Box variants need different push-out distances. Verify
+    // eject_lane reads the SettingsManager values, not the hardcoded defaults,
+    // and that the stored positive magnitude is negated into the box direction.
+    auto& settings = helix::SettingsManager::instance();
+    settings.init_subjects(); // idempotent; ensures the subjects hold real values
+    const int saved_dist = settings.get_qidi_eject_distance();
+    const int saved_vel = settings.get_qidi_eject_velocity();
+
+    settings.set_qidi_eject_distance(500);
+    settings.set_qidi_eject_velocity(60);
+
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_config_settings(
+        backend, json{{"force_move", {{"enable_force_move", true}}}});
+
+    auto err = backend.eject_lane(2);
+    REQUIRE(err.success());
+    REQUIRE(backend.sent.size() == 1);
+    REQUIRE(backend.sent[0] ==
+            "FORCE_MOVE STEPPER=\"box_stepper slot2\" VELOCITY=60 DISTANCE=-500");
+
+    // Restore defaults so sibling tests in this shard see the default eject gcode.
+    settings.set_qidi_eject_distance(saved_dist > 0 ? saved_dist : 878);
+    settings.set_qidi_eject_velocity(saved_vel > 0 ? saved_vel : 100);
 }
 
 TEST_CASE("QIDI Box [force_move] disabled keeps lane eject off",

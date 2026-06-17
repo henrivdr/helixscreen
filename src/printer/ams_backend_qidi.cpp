@@ -4,6 +4,7 @@
 
 #include "ams_error.h"
 #include "macro_param_cache.h"
+#include "settings_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -55,10 +56,11 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
 constexpr int QIDI_DEFAULT_LOAD_TEMP_C = 250;
 
 // Manual lane-eject via FORCE_MOVE on the box_stepper (#1041). Distance/velocity
-// from the QIDI Discord (xenon) + Camden's Q2 measurement: -878 mm fully ejects,
-// ~100 mm/s matches the stock feel. May need refining for Plus 4 / Max 4 boxes.
-constexpr int QIDI_EJECT_DISTANCE_MM = -878;
-constexpr int QIDI_EJECT_VELOCITY = 100;
+// from the QIDI Discord (xenon) + Camden's Q2 measurement: 878 mm fully ejects,
+// ~100 mm/s matches the stock feel. These are now user-configurable via
+// SettingsManager (settings_qidi_eject_distance / settings_qidi_eject_velocity);
+// the defaults below match the historic hardcoded values. May need refining for
+// Plus 4 / Max 4 boxes.
 int load_temp_for_slot(const SlotInfo& slot) {
     if (slot.nozzle_temp_max > 0) {
         return slot.nozzle_temp_max;
@@ -1011,9 +1013,22 @@ AmsError AmsBackendQidi::eject_lane(int slot_index) {
     // side (#1041, QIDI Discord / xenon). Offered only for non-loaded lanes (the
     // context menu gates on !loaded), so no pre-unload is needed here — for a
     // loaded lane the caller runs the unload stack first to park at the hub.
+    // Distance is stored as a positive magnitude in settings; negate it here to
+    // keep the existing "push back into the box" direction. Fall back to the
+    // historic defaults (878 mm / 100 mm/s) if SettingsManager hasn't been
+    // initialized — a FORCE_MOVE with VELOCITY=0/DISTANCE=0 is a degenerate no-op
+    // that Klipper rejects, so the eject must always carry real numbers.
+    int eject_velocity = helix::SettingsManager::instance().get_qidi_eject_velocity();
+    int eject_distance_mm = helix::SettingsManager::instance().get_qidi_eject_distance();
+    if (eject_velocity <= 0) {
+        eject_velocity = 100;
+    }
+    if (eject_distance_mm <= 0) {
+        eject_distance_mm = 878;
+    }
     return execute_gcode("FORCE_MOVE STEPPER=\"box_stepper slot" + std::to_string(slot_index) +
-                         "\" VELOCITY=" + std::to_string(QIDI_EJECT_VELOCITY) +
-                         " DISTANCE=" + std::to_string(QIDI_EJECT_DISTANCE_MM));
+                         "\" VELOCITY=" + std::to_string(eject_velocity) +
+                         " DISTANCE=" + std::to_string(-eject_distance_mm));
 }
 
 // --- Configuration ---

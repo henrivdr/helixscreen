@@ -140,6 +140,12 @@ class AmsDeviceOperationsOverlay : public OverlayBase {
     /// Callback for the AFC unload-after-print toggle (AFC backends only)
     static void on_afc_unload_after_print_toggled(lv_event_t* e);
 
+    /// Callback for the QIDI eject distance slider (QIDI Box backends only)
+    static void on_qidi_eject_distance_changed(lv_event_t* e);
+
+    /// Callback for the QIDI eject velocity slider (QIDI Box backends only)
+    static void on_qidi_eject_velocity_changed(lv_event_t* e);
+
     /// Callback for section row click — pushes detail overlay
     static void on_section_row_clicked(lv_event_t* e);
 
@@ -183,6 +189,18 @@ class AmsDeviceOperationsOverlay : public OverlayBase {
     /// Subject for AFC backend detection (0=not AFC, 1=AFC) — gates the
     /// unload-after-print toggle, which only applies to AFC systems
     lv_subject_t is_afc_subject_;
+
+    /// Subject for QIDI Box backend detection (0=not QIDI, 1=QIDI) — gates the
+    /// eject distance/velocity rows, which only apply to QIDI Box systems
+    lv_subject_t is_qidi_subject_;
+
+    /// Display string subject for the QIDI eject distance value (e.g. "878 mm")
+    lv_subject_t qidi_eject_distance_display_subject_;
+    char qidi_eject_distance_buf_[32] = {};
+
+    /// Display string subject for the QIDI eject velocity value (e.g. "100 mm/s")
+    lv_subject_t qidi_eject_velocity_display_subject_;
+    char qidi_eject_velocity_buf_[32] = {};
 
     /// Cached section metadata for row click dispatch
     std::vector<helix::printer::DeviceSection> cached_sections_;
