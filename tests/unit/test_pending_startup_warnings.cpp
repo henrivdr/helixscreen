@@ -65,6 +65,40 @@ TEST_CASE("PendingStartupWarnings: enqueue preserves FIFO order", "[startup_warn
     REQUIRE(captured[2].severity == PendingStartupWarnings::Severity::INFO);
 }
 
+TEST_CASE("PendingStartupWarnings: deduplicates identical pending entries",
+          "[startup_warnings]") {
+    auto& q = PendingStartupWarnings::instance();
+    q.clear();
+
+    // The same condition can be reported by multiple layers during startup — e.g.
+    // a resolution-fallback warning enqueued by both the DRM and fbdev backends.
+    // The user should see it once.
+    q.enqueue(PendingStartupWarnings::Severity::WARNING, "same message");
+    q.enqueue(PendingStartupWarnings::Severity::WARNING, "same message");
+    q.enqueue(PendingStartupWarnings::Severity::WARNING, "same message");
+
+    std::vector<CapturedWarning> captured;
+    q.drain([&](PendingStartupWarnings::Severity s, const std::string& m) {
+        captured.push_back({s, m});
+    });
+
+    REQUIRE(captured.size() == 1);
+    REQUIRE(captured[0].message == "same message");
+}
+
+TEST_CASE("PendingStartupWarnings: same text at different severity is not deduplicated",
+          "[startup_warnings]") {
+    auto& q = PendingStartupWarnings::instance();
+    q.clear();
+
+    q.enqueue(PendingStartupWarnings::Severity::WARNING, "dup text");
+    q.enqueue(PendingStartupWarnings::Severity::ERROR, "dup text");
+
+    int count = 0;
+    q.drain([&](auto, auto&) { count++; });
+    REQUIRE(count == 2);
+}
+
 TEST_CASE("PendingStartupWarnings: drain empties the queue", "[startup_warnings]") {
     auto& q = PendingStartupWarnings::instance();
     q.clear();

@@ -380,11 +380,11 @@ lv_display_t* DisplayBackendDRM::create_display(int width, int height) {
 
             char toast_msg[160];
             snprintf(toast_msg, sizeof(toast_msg),
-                     "Cannot set HelixScreen to selected resolution (%dx%d); "
-                     "using fallback %ux%u instead.",
+                     "Configured resolution %dx%d is unavailable on this display; "
+                     "using %ux%u instead.",
                      width, height, chosen_w, chosen_h);
             helix::PendingStartupWarnings::instance().enqueue(
-                helix::PendingStartupWarnings::Severity::ERROR, toast_msg);
+                helix::PendingStartupWarnings::Severity::WARNING, toast_msg);
             mismatch_warned = true;
         }
     }
@@ -419,11 +419,11 @@ lv_display_t* DisplayBackendDRM::create_display(int width, int height) {
                          actual_h, width, height);
             char toast_msg[160];
             snprintf(toast_msg, sizeof(toast_msg),
-                     "Cannot set HelixScreen to selected resolution (%dx%d); "
-                     "using fallback %dx%d instead.",
+                     "Configured resolution %dx%d is unavailable on this display; "
+                     "using %dx%d instead.",
                      width, height, actual_w, actual_h);
             helix::PendingStartupWarnings::instance().enqueue(
-                helix::PendingStartupWarnings::Severity::ERROR, toast_msg);
+                helix::PendingStartupWarnings::Severity::WARNING, toast_msg);
         }
     }
 

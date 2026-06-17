@@ -316,36 +316,31 @@ TEST_CASE_METHOD(LayoutFixture, "resolve_xml_path falls back to base for non-sta
 }
 
 // ============================================================================
-// Ultrawide override integration (requires ui_xml/ultrawide/home_panel.xml on disk)
+// Ultrawide fallback integration
+//
+// The ultrawide layout has no XML overrides — the former bespoke
+// ui_xml/ultrawide/home_panel.xml predated the responsive widget grid and was
+// removed so ultrawide inherits the standard carousel+grid (which already widens
+// the column count dynamically). Every panel therefore falls back to standard.
 // ============================================================================
 
-TEST_CASE_METHOD(LayoutFixture,
-                 "resolve_xml_path returns ultrawide override when file exists on disk",
+TEST_CASE_METHOD(LayoutFixture, "resolve_xml_path falls back to standard for ultrawide panels",
                  "[layout-manager]") {
     auto& lm = LayoutManager::instance();
     lm.init(1920, 480);
     REQUIRE(lm.type() == LayoutType::ULTRAWIDE);
 
-    // home_panel.xml has an ultrawide override -> should resolve to ultrawide path
-    REQUIRE(lm.resolve_xml_path("home_panel.xml") == "ui_xml/ultrawide/home_panel.xml");
-}
-
-TEST_CASE_METHOD(LayoutFixture, "resolve_xml_path falls back for panels without ultrawide override",
-                 "[layout-manager]") {
-    auto& lm = LayoutManager::instance();
-    lm.init(1920, 480);
-    REQUIRE(lm.type() == LayoutType::ULTRAWIDE);
-
-    // controls_panel.xml has no ultrawide override -> should fall back to standard
+    // No ultrawide overrides exist -> home and controls both resolve to standard.
+    REQUIRE(lm.resolve_xml_path("home_panel.xml") == "ui_xml/home_panel.xml");
     REQUIRE(lm.resolve_xml_path("controls_panel.xml") == "ui_xml/controls_panel.xml");
 }
 
-TEST_CASE_METHOD(LayoutFixture, "has_override returns true for ultrawide home_panel",
+TEST_CASE_METHOD(LayoutFixture, "has_override returns false for all ultrawide panels",
                  "[layout-manager]") {
     auto& lm = LayoutManager::instance();
     lm.init(1920, 480);
 
-    REQUIRE(lm.has_override("home_panel.xml") == true);
+    REQUIRE(lm.has_override("home_panel.xml") == false);
     REQUIRE(lm.has_override("controls_panel.xml") == false);
 }
 

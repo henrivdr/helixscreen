@@ -164,11 +164,11 @@ lv_display_t* DisplayBackendFbdev::create_display(int width, int height) {
                                  "Raspberry Pi / RatOS) and reboot.");
                     char toast_msg[160];
                     snprintf(toast_msg, sizeof(toast_msg),
-                             "Cannot set HelixScreen to selected resolution (%dx%d); "
-                             "using fallback %ux%u instead.",
+                             "Configured resolution %dx%d is unavailable on this display; "
+                             "using %ux%u instead.",
                              width, height, actual.width, actual.height);
                     helix::PendingStartupWarnings::instance().enqueue(
-                        helix::PendingStartupWarnings::Severity::ERROR, toast_msg);
+                        helix::PendingStartupWarnings::Severity::WARNING, toast_msg);
                 }
             }
             close(fb_fd);

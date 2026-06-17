@@ -5,6 +5,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace helix {
@@ -28,6 +29,16 @@ void PendingStartupWarnings::enqueue(Severity severity, std::string message) {
                          "dropping subsequent early notifications",
                          kMaxPending);
         }
+        return;
+    }
+    // Deduplicate identical notifications. The same condition can be reported by
+    // more than one layer during startup — e.g. a resolution-fallback warning is
+    // enqueued by both the DRM backend and the fbdev backend when DisplayManager
+    // tries DRM first and then falls back to fbdev for software rotation. The
+    // user should see one toast, not one per backend that hit the same condition.
+    if (std::any_of(pending_.begin(), pending_.end(), [&](const auto& entry) {
+            return entry.first == severity && entry.second == message;
+        })) {
         return;
     }
     pending_.emplace_back(severity, std::move(message));
