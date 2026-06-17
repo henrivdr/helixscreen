@@ -78,6 +78,13 @@ PrintSelectDetailView::~PrintSelectDetailView() {
 
     spdlog::trace("[DetailView] Destroyed");
 
+    // Cancel the pre-flight readiness safety timer if still armed (LVGL is known
+    // initialized here — checked above).
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+
     // Unregister from NavigationManager (fallback if cleanup() wasn't called)
     if (overlay_root_) {
         NavigationManager::instance().unregister_overlay_instance(overlay_root_);
@@ -368,6 +375,17 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
     // file so a stale print-attempt can't fire against this file's parse.
     on_loaded_cb_ = nullptr;
 
+    // Reset headless-scan state for the newly-selected file. on_activate() will
+    // (re)kick the scan. Drop any pending preflight-ready attempt + timer so a
+    // stale attempt from a previous file can't fire against this one.
+    headless_tools_used_.reset();
+    headless_scan_done_ = false;
+    on_preflight_ready_cb_ = nullptr;
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+
     // Register with NavigationManager for lifecycle callbacks
     NavigationManager::instance().register_overlay_instance(overlay_root_, this);
 
@@ -437,6 +455,12 @@ void PrintSelectDetailView::on_activate() {
         prep_manager_->scan_file_for_operations(current_filename_, current_path_);
     }
 
+    // Headless tools_used scan — runs on ALL platforms (including 2D-only, where
+    // the visual viewer below skips parsing). Provides tools_used + the pre-flight
+    // readiness signal the print-start gate waits on, so prints never hang on
+    // 2D-only devices. Result is typically ready by the time Print is tapped.
+    kick_off_headless_tools_scan();
+
     // Invalidate predictor cache so we pick up any new timing data from completed prints
     if (prep_manager_) {
         prep_manager_->invalidate_predictor_cache();
@@ -468,6 +492,14 @@ void PrintSelectDetailView::on_deactivate() {
     // a late load callback firing fire_on_loaded() would call start_print() on
     // a hidden panel → a ghost print with no UI. Clearing here prevents that.
     on_loaded_cb_ = nullptr;
+
+    // Same protection for the preflight-ready deferral + its safety timer: a late
+    // scan completion (or timeout) must not start a print on a hidden panel.
+    on_preflight_ready_cb_ = nullptr;
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
 
     // Hide any open delete confirmation modal
     hide_delete_confirmation();
@@ -869,21 +901,22 @@ void PrintSelectDetailView::recompute_preflight() {
     // mapping card's already-parsed tool_info_, filtered to the precise
     // tools_used set), compute default mappings, then validate.
     //
-    // Guarded on the parsed gcode: a no-op until the viewer has produced a
-    // tools_used set (before parse there is nothing to validate against).
+    // Guarded on tools_used availability: a no-op until EITHER the viewer has
+    // parsed (full platforms) OR the headless scan has completed (2D-only) — both
+    // feed tools_used_effective(). Before either there is nothing to validate.
     // ------------------------------------------------------------------
-    if (!gcode_viewer_) {
-        return;
-    }
-    auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
-    if (!parsed) {
+    const std::set<int> used = tools_used_effective();
+    if (used.empty() && !headless_scan_done_) {
+        // Nothing parsed yet and no headless result: defer. (An empty set AFTER a
+        // completed headless scan is a legitimate single-extruder result and must
+        // still validate, so we only bail when truly nothing is known.)
         return;
     }
 
     const auto& all_tool_info = filament_mapping_card_.get_tool_info();
     std::vector<helix::GcodeToolInfo> tools;
-    tools.reserve(parsed->tools_used_indices.size());
-    for (int tool : parsed->tools_used_indices) {
+    tools.reserve(used.size());
+    for (int tool : used) {
         if (tool >= 0 && static_cast<size_t>(tool) < all_tool_info.size()) {
             tools.push_back(all_tool_info[static_cast<size_t>(tool)]);
         }
@@ -922,15 +955,25 @@ void PrintSelectDetailView::recompute_preflight() {
                   preflight_result_.has_block());
 }
 
+std::set<int> PrintSelectDetailView::tools_used_effective() const {
+    // Prefer the visual viewer's parsed set (full platforms): it carries the
+    // single-extruder {0} convention from a color palette. Fall back to the
+    // headless scan (2D-only platforms, where the viewer never parses).
+    if (gcode_viewer_) {
+        if (auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_)) {
+            if (!parsed->tools_used_indices.empty()) {
+                return parsed->tools_used_indices;
+            }
+        }
+    }
+    if (headless_tools_used_) {
+        return *headless_tools_used_;
+    }
+    return {};
+}
+
 std::set<int> PrintSelectDetailView::get_tools_used() const {
-    if (!gcode_viewer_) {
-        return {};
-    }
-    auto* parsed = ui_gcode_viewer_get_parsed_file(gcode_viewer_);
-    if (!parsed) {
-        return {};
-    }
-    return parsed->tools_used_indices;
+    return tools_used_effective();
 }
 
 std::map<int, int> PrintSelectDetailView::get_effective_remap() const {
@@ -974,6 +1017,117 @@ void PrintSelectDetailView::fire_on_loaded() {
         on_loaded_cb_ = nullptr;
         cb();
     }
+}
+
+void PrintSelectDetailView::run_when_preflight_ready(std::function<void()> cb) {
+    if (!cb) {
+        return;
+    }
+    // Already ready (viewer parsed or headless scan done): run synchronously.
+    if (is_preflight_ready()) {
+        cb();
+        return;
+    }
+    on_preflight_ready_cb_ = std::move(cb);
+
+    // Arm a one-shot safety timeout so a stuck/failed scan can never wedge the
+    // print. On expiry we fire the deferred attempt anyway (graceful degradation:
+    // print without Part A's optimization rather than never starting).
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+    preflight_ready_timeout_timer_ = lv_timer_create(
+        [](lv_timer_t* t) {
+            auto* self = static_cast<PrintSelectDetailView*>(lv_timer_get_user_data(t));
+            spdlog::warn("[DetailView] Pre-flight readiness timed out — proceeding without "
+                         "tools_used (graceful degradation)");
+            // Mark done so a later readiness signal doesn't double-fire, and so
+            // is_preflight_ready() returns true for the deferred re-entry.
+            self->headless_scan_done_ = true;
+            self->fire_on_preflight_ready();
+        },
+        kPreflightReadyTimeoutMs, this);
+    lv_timer_set_repeat_count(preflight_ready_timeout_timer_, 1);
+}
+
+void PrintSelectDetailView::fire_on_preflight_ready() {
+    if (preflight_ready_timeout_timer_) {
+        lv_timer_delete(preflight_ready_timeout_timer_);
+        preflight_ready_timeout_timer_ = nullptr;
+    }
+    if (on_preflight_ready_cb_) {
+        auto cb = std::move(on_preflight_ready_cb_);
+        on_preflight_ready_cb_ = nullptr;
+        cb();
+    }
+}
+
+void PrintSelectDetailView::kick_off_headless_tools_scan() {
+    headless_scan_done_ = false;
+    headless_tools_used_.reset();
+
+    if (!api_ || current_filename_.empty()) {
+        // No way to scan — mark done with no result so the gate degrades to
+        // "proceed without tools_used" instead of hanging.
+        headless_scan_done_ = true;
+        return;
+    }
+
+    const std::string file_path =
+        current_path_.empty() ? current_filename_ : current_path_ + "/" + current_filename_;
+
+    std::string cache_dir = get_helix_cache_dir("gcode_temp");
+    if (cache_dir.empty()) {
+        spdlog::warn("[DetailView] No cache dir for headless tools scan — degrading gracefully");
+        headless_scan_done_ = true;
+        return;
+    }
+    const std::string scan_path =
+        cache_dir + "/tools_scan_" +
+        std::to_string(std::hash<std::string>{}(file_path)) + ".gcode";
+
+    auto tok = lifetime_.token();
+
+    // Marshals the final state back to the main thread (LVGL + member writes).
+    auto finish = [this, tok](std::set<int> tools) {
+        tok.defer("DetailView::headless_scan_finish",
+                  [this, tools = std::move(tools)]() mutable {
+                      headless_tools_used_ = std::move(tools);
+                      headless_scan_done_ = true;
+                      spdlog::debug("[DetailView] Headless tools_used scan complete: {} tools",
+                                    headless_tools_used_->size());
+                      // Refresh pre-flight using the headless set (no-op on full
+                      // platforms where the viewer parse already populated it).
+                      recompute_preflight();
+                      // Release any deferred print attempt waiting on readiness.
+                      fire_on_preflight_ready();
+                  });
+    };
+
+    // Stream the whole file to disk (memory-safe), then scan it line-by-line off
+    // the main thread. The scan retains ONLY the int set — no geometry — so it is
+    // safe on constrained devices. download_file_to_path runs on the HTTP slow
+    // lane internally; the success/error callbacks run on the HTTP thread, so we
+    // do the (bg-only, no `this`) scan there and marshal the result via tok.defer.
+    api_->transfers().download_file_to_path(
+        "gcodes", file_path, scan_path,
+        [scan_path, finish](const std::string& path) mutable {
+            // HTTP thread: parse to a LOCAL set (no `this` access), then delete the
+            // temp file. The scanner streams from disk and never holds the whole
+            // file in memory.
+            std::set<int> tools = helix::gcode::scan_tools_used_from_file(path);
+            std::remove(scan_path.c_str());
+            finish(std::move(tools));
+        },
+        [scan_path, finish](const MoonrakerError& err) mutable {
+            // HTTP thread: download failed — degrade gracefully with an empty set.
+            spdlog::warn("[DetailView] Headless tools scan download failed: {} — proceeding "
+                         "without tools_used",
+                         err.message);
+            std::remove(scan_path.c_str());
+            finish({});
+        });
 }
 
 bool PrintSelectDetailView::swatches_card_visible_for(size_t tool_count) const {
@@ -1075,6 +1229,9 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                     // Parse + pre-flight are now complete: release any deferred
                     // run_when_loaded() callback (e.g. a print tapped pre-parse).
                     self->fire_on_loaded();
+                    // The viewer parse also satisfies pre-flight readiness on full
+                    // platforms — release any run_when_preflight_ready() attempt.
+                    self->fire_on_preflight_ready();
 
                     // Unpause, show, then reset camera (must be visible for layout)
                     ui_gcode_viewer_set_paused(viewer, false);
@@ -1172,6 +1329,9 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                                 // Parse + pre-flight complete: release any deferred
                                 // run_when_loaded() callback (e.g. a pre-parse print tap).
                                 self->fire_on_loaded();
+                                // Viewer parse also satisfies pre-flight readiness
+                                // on full platforms.
+                                self->fire_on_preflight_ready();
 
                                 // Unpause, show, then reset camera (must be visible for layout)
                                 ui_gcode_viewer_set_paused(viewer, false);

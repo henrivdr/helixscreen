@@ -2510,15 +2510,18 @@ void PrintSelectPanel::start_print(bool force) {
         return;
     }
 
-    // Parse gate: filament pre-flight checks are only valid once the gcode has
-    // been parsed (preflight_result_ is computed in the load callback). If the
-    // user taps Print before parse completes, defer the attempt until the file
-    // is loaded rather than evaluating stale/empty checks. force=true bypasses
-    // (the deferred re-entry and the "Print Anyway" path both call with force).
-    if (!force && detail_view_ && !detail_view_->is_gcode_loaded()) {
-        spdlog::debug("[{}] Print tapped before gcode parse - deferring until loaded",
-                      get_name());
-        detail_view_->run_when_loaded(
+    // Pre-flight gate: filament checks + tools_used are only valid once the file
+    // has been scanned. Readiness arrives via EITHER the visual viewer parse
+    // (full platforms) OR the headless tools_used scan (runs on ALL platforms,
+    // including 2D-only where the viewer skips parsing). Gating on
+    // is_preflight_ready() — NOT is_gcode_loaded(), which never becomes true on
+    // 2D-only and would hang the print forever (the original bug). If Print is
+    // tapped before readiness, defer the attempt; run_when_preflight_ready()
+    // carries a safety timeout so a stuck/failed scan can never wedge the print.
+    // force=true bypasses (deferred re-entry + "Print Anyway" both call with force).
+    if (!force && detail_view_ && !detail_view_->is_preflight_ready()) {
+        spdlog::debug("[{}] Print tapped before pre-flight ready - deferring", get_name());
+        detail_view_->run_when_preflight_ready(
             []() { get_global_print_select_panel().start_print(false); });
         NOTIFY_INFO(lv_tr("Checking filament..."));
         return;

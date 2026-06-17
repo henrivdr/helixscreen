@@ -1989,5 +1989,103 @@ GCodeHeaderMetadata extract_header_metadata_from_content(const std::string& cont
     return metadata;
 }
 
+// ----------------------------------------------------------------------------
+// Lightweight tool-change scan (memory-safe; no geometry model)
+// ----------------------------------------------------------------------------
+
+namespace {
+
+// Decide whether a single raw line is a standalone tool change, and if so the
+// tool index. Semantics mirror GCodeParser::parse_tool_change_command(): strip a
+// trailing `;` comment, trim whitespace, then require exactly `T` + digits with
+// nothing else on the line. Returns -1 when the line is not a tool change.
+int tool_index_for_line(const std::string& raw) {
+    // Strip comment (everything from the first ';').
+    std::string_view sv(raw);
+    size_t comment_pos = sv.find(';');
+    if (comment_pos != std::string_view::npos) {
+        sv = sv.substr(0, comment_pos);
+    }
+
+    // Trim leading/trailing whitespace (covers spaces, tabs, and trailing \r).
+    size_t start = 0;
+    while (start < sv.length() && std::isspace(static_cast<unsigned char>(sv[start]))) {
+        ++start;
+    }
+    size_t end = sv.length();
+    while (end > start && std::isspace(static_cast<unsigned char>(sv[end - 1]))) {
+        --end;
+    }
+    sv = sv.substr(start, end - start);
+
+    // Must start with 'T' and have at least one following character.
+    if (sv.length() < 2 || sv[0] != 'T') {
+        return -1;
+    }
+
+    // Every remaining character must be a digit (standalone Tn only — "T0 X1"
+    // and "TURN" are rejected, matching the full parser).
+    for (size_t i = 1; i < sv.length(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(sv[i]))) {
+            return -1;
+        }
+    }
+
+    // sv[1..] is all digits; parse it. Guard against overflow on absurd input.
+    long value = 0;
+    for (size_t i = 1; i < sv.length(); ++i) {
+        value = value * 10 + (sv[i] - '0');
+        if (value > 100000) {
+            return -1; // implausible tool index — ignore rather than overflow
+        }
+    }
+    return static_cast<int>(value);
+}
+
+} // namespace
+
+std::set<int> scan_tools_used_from_content(const std::string& content) {
+    std::set<int> tools;
+    std::string line;
+    line.reserve(128);
+    for (char ch : content) {
+        if (ch == '\n') {
+            int t = tool_index_for_line(line);
+            if (t >= 0) {
+                tools.insert(t);
+            }
+            line.clear();
+        } else {
+            line.push_back(ch);
+        }
+    }
+    // Trailing line without a final newline.
+    if (!line.empty()) {
+        int t = tool_index_for_line(line);
+        if (t >= 0) {
+            tools.insert(t);
+        }
+    }
+    return tools;
+}
+
+std::set<int> scan_tools_used_from_file(const std::string& filepath) {
+    std::set<int> tools;
+    std::ifstream in(filepath, std::ios::binary);
+    if (!in.is_open()) {
+        return tools;
+    }
+    std::string line;
+    while (std::getline(in, line)) {
+        // std::getline strips the '\n' but leaves a trailing '\r' on CRLF files;
+        // tool_index_for_line() trims it as whitespace.
+        int t = tool_index_for_line(line);
+        if (t >= 0) {
+            tools.insert(t);
+        }
+    }
+    return tools;
+}
+
 } // namespace gcode
 } // namespace helix
