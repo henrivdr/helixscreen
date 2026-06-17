@@ -75,6 +75,13 @@ class DisplayBackendFbdev : public DisplayBackend {
     bool unblank_display() override;
     bool blank_display() override;
 
+    // Real panel power-off for HDMI/fbdev devices without a sysfs/ioctl backlight
+    // (#1049). Uses FBIOBLANK FB_BLANK_POWERDOWN; power_on() restores via
+    // FB_BLANK_UNBLANK + pan reset (see unblank_display()).
+    bool supports_power_off() const override;
+    bool power_off() override;
+    bool power_on() override;
+
     // Configuration
     void set_fb_device(const std::string& path) {
         fb_device_ = path;

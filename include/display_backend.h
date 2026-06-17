@@ -320,6 +320,43 @@ class DisplayBackend {
     }
 
     /**
+     * @brief Report whether this backend can really power the panel down.
+     *
+     * Distinct from blank_display(): blanking (FB_BLANK_NORMAL) merely stops the
+     * scan-out, while power-off (FB_BLANK_POWERDOWN / DPMS off) signals the panel
+     * to drop its backlight/transceiver. Used for HDMI/fbdev devices that have no
+     * sysfs/ioctl backlight (#1049) — when true, idle entry powers the panel off
+     * instead of painting a software black overlay.
+     *
+     * @return true if power_off()/power_on() perform a real hardware power transition
+     */
+    virtual bool supports_power_off() const {
+        return false; // Not supported by default
+    }
+
+    /**
+     * @brief Power the panel down (fbdev FB_BLANK_POWERDOWN / DRM DPMS off).
+     *
+     * Only meaningful when supports_power_off() returns true. The counterpart
+     * power_on() MUST be called before the next render after wake to honor the
+     * #303 wake-race (framebuffer not ready before LVGL renders → black screen).
+     *
+     * @return true if the power-down succeeded
+     */
+    virtual bool power_off() {
+        return false; // Not supported by default
+    }
+
+    /**
+     * @brief Power the panel back on (counterpart to power_off()).
+     *
+     * @return true if the power-on succeeded
+     */
+    virtual bool power_on() {
+        return false; // Not supported by default
+    }
+
+    /**
      * @brief Tell the backend that an external splash process owns the framebuffer.
      *
      * When set, create_display() skips FBIOBLANK and other ioctls that would

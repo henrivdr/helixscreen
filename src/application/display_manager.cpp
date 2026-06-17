@@ -418,6 +418,28 @@ bool DisplayManager::init(const Config& config) {
         }
     }
 
+    // Real panel power-off path (#1049): LAST RESORT only — for devices with NO
+    // controllable backlight (generic HDMI panels / Backlight-None, like the
+    // original #1049 reporter and the CB1). On those, FB_BLANK_POWERDOWN / DRM
+    // connector DPMS-off is the only way to actually cut the panel.
+    //
+    // Any device WITH a usable backlight turns the backlight off instead (the
+    // set_brightness(0) call in enter_sleep()). That is safer and avoids
+    // driver-specific CRTC-disable wedges: on the Snapmaker U1 (working pwm
+    // backlight, but Hardware blank: false + a DPMS-capable DRM connector), DRM
+    // DPMS-off disables the Rockchip VOP2 CRTC and the panel goes PERMANENTLY
+    // black — wake's DPMS-on does NOT reliably re-enable VOP2 (see
+    // assets/config/platform/hooks-snapmaker-u1.sh "DRM CRTC keepalive"). So
+    // gate power-off on having NEITHER a hardware blank NOR a usable backlight.
+    bool has_usable_backlight = m_backlight && m_backlight->is_available();
+    bool backend_can_power_off = m_backend && m_backend->supports_power_off();
+    m_use_power_off =
+        should_use_power_off(m_use_hardware_blank, has_usable_backlight, backend_can_power_off);
+    spdlog::info("[DisplayManager] Display power-off: {} ({})", m_use_power_off,
+                 m_use_power_off ? m_backend->name()
+                                 : (has_usable_backlight ? "backlight off (no panel power-off)"
+                                                         : "software overlay fallback"));
+
     // Force backlight ON at startup - ensures display is visible even if
     // previous instance left it off or in an unknown state
     if (m_backlight && m_backlight->is_available()) {
@@ -564,6 +586,7 @@ void DisplayManager::shutdown() {
     // relative to other LVGL teardown is fragile.
     m_sleep_overlay = nullptr;
     m_use_hardware_blank = false;
+    m_use_power_off = false;
 
     // Release backends
     m_backlight.reset();
@@ -656,6 +679,12 @@ void DisplayManager::enter_sleep(int timeout_sec) {
             m_backend->blank_display();
         }
         method = "hardware blank";
+    } else if (m_use_power_off && m_backend && m_backend->power_off()) {
+        // Real panel power-off (fbdev FB_BLANK_POWERDOWN / DRM DPMS off) for
+        // HDMI/fbdev devices with no hardware backlight blank (#1049). The panel
+        // is actually powered down, so no software overlay is needed. wake_display()
+        // restores power BEFORE lv_refr_now() to honor the #303 wake-race.
+        method = "panel power-off";
     } else {
         // Software overlay path: do NOT call FBIOBLANK — the overlay alone is
         // sufficient and FBIOBLANK can cause a race condition on wake where the
@@ -823,8 +852,15 @@ void DisplayManager::check_display_sleep() {
 #else
         bool has_screensaver = false;
 #endif
+        // Two-stage idle (#1049), both timeouts measured from the same idle clock:
+        //   Dim   → dim the backlight and/or start the screensaver (intermediate)
+        //   Sleep → enter full sleep / power-off (final)
+        // The Sleep>=Dim ordering is guaranteed by DisplaySettingsManager's
+        // coupling (now also enforced on no-backlight + screensaver devices), so
+        // the dim/screensaver branch is reachable before sleep even on the
+        // reporter's no-backlight Pi.
         if (sleep_timeout_sec > 0 && inactive_ms >= sleep_timeout_ms) {
-            // Skip dim, go straight to sleep (sleep timeout <= dim timeout)
+            // Sleep timeout reached — go to full sleep (blank / power-off).
             enter_sleep(sleep_timeout_sec);
         } else if (m_dim_timeout_sec > 0 && inactive_ms >= dim_timeout_ms &&
                    (can_dim || has_screensaver)) {
@@ -856,6 +892,25 @@ void DisplayManager::check_display_sleep() {
                              m_dim_brightness_percent, m_dim_timeout_sec);
             }
         }
+    }
+}
+
+void DisplayManager::restore_display_output() {
+    // Undo whatever enter_sleep() did to the panel output, mirroring its branches.
+    // This must run BEFORE the post-wake lv_refr_now() (#303 wake-race).
+    if (m_use_hardware_blank) {
+        // Hardware path: unblank framebuffer (FBIOBLANK was used during sleep).
+        if (m_backend) {
+            m_backend->unblank_display();
+        }
+    } else if (m_use_power_off && m_backend) {
+        // Power-off path: power the panel back on. A software overlay may also
+        // exist if a prior power_off() failed and fell back — remove it defensively.
+        m_backend->power_on();
+        destroy_sleep_overlay();
+    } else {
+        // Software path: remove the black overlay (no FBIOBLANK to undo).
+        destroy_sleep_overlay();
     }
 }
 
@@ -893,15 +948,10 @@ void DisplayManager::wake_display() {
     if (was_sleeping) {
         disable_input_briefly();
 
-        if (m_use_hardware_blank) {
-            // Hardware path: unblank framebuffer (FBIOBLANK was used during sleep)
-            if (m_backend) {
-                m_backend->unblank_display();
-            }
-        } else {
-            // Software path: remove the black overlay (no FBIOBLANK to undo)
-            destroy_sleep_overlay();
-        }
+        // Restore the panel output (unblank / power-on / remove overlay) BEFORE
+        // the synchronous render below so the framebuffer is ready when LVGL
+        // paints — honoring the #303 black-screen-on-wake race.
+        restore_display_output();
 
         // Force immediate full render after wake. lv_obj_invalidate() alone only
         // marks dirty regions — the actual render happens on the next timer tick,
@@ -990,6 +1040,12 @@ void DisplayManager::set_dim_timeout(int seconds) {
 void DisplayManager::restore_display_on_shutdown() {
     // Clean up software sleep overlay if active
     destroy_sleep_overlay();
+
+    // If we powered the panel down (#1049), bring it back on so the next app
+    // doesn't inherit a powered-off panel.
+    if (m_use_power_off && m_backend) {
+        m_backend->power_on();
+    }
 
     // Clear framebuffer to black so the last rendered frame doesn't persist
     // after the process exits (SIGTERM/SIGINT graceful shutdown)
