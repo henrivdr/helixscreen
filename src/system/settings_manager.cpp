@@ -321,7 +321,9 @@ ToolheadStyle SettingsManager::get_effective_toolhead_style() const {
         return style;
     }
 
-    // Check printer database for native toolhead style first
+    // The printer database's native toolhead_style is authoritative. Map the DB
+    // string straight to the enum so every printer that declares a style is
+    // covered by one lookup (creality_k1/k2 live in the DB).
     Config* config = Config::get_instance();
     if (config) {
         std::string printer_type =
@@ -335,17 +337,13 @@ ToolheadStyle SettingsManager::get_effective_toolhead_style() const {
         }
     }
 
-    // Fall back to heuristic detection
+    // Fall back to heuristic detection only for printers the DB doesn't cover.
+    // PFA/Anthead printers carry no toolhead_style field in the database.
     if (PrinterDetector::is_pfa_printer()) {
         return ToolheadStyle::ANTHEAD;
     }
-    if (PrinterDetector::is_creality_k1()) {
-        return ToolheadStyle::CREALITY_K1;
-    }
-    if (PrinterDetector::is_creality_k2()) {
-        return ToolheadStyle::CREALITY_K2;
-    }
-    // CFS (Creality Filament System) is only on K2 series printers
+    // CFS (Creality Filament System) is only on K2 series printers — a live
+    // backend signal, not derivable from the database.
     auto* backend = AmsState::instance().get_backend();
     if (backend && backend->get_type() == AmsType::CFS) {
         return ToolheadStyle::CREALITY_K2;

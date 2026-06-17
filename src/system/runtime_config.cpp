@@ -101,7 +101,8 @@ bool RuntimeConfig::should_show_runout_modal() const {
         // by swapping spools. Treat them like "no AMS" for runout guidance so
         // the user gets the same Load/Resume/Cancel modal they would on a
         // single-extruder printer. Bypass doesn't apply to tool changers.
-        if (auto* backend = ams.get_backend(0); backend && is_tool_changer(backend->get_type())) {
+        if (auto* backend = ams.get_backend(0);
+            backend && backend->supports_per_tool_spool_assignment()) {
             spdlog::debug("[RuntimeConfig] Tool-changer AMS - showing runout modal");
             return true;
         }

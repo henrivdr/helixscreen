@@ -29,8 +29,10 @@ typedef struct _lv_subject_t lv_subject_t;
 
 #include <any>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -1240,6 +1242,167 @@ class AmsBackend {
      */
     [[nodiscard]] virtual RemapStrategy get_remap_strategy() const {
         return RemapStrategy::None;
+    }
+
+    /**
+     * @brief Whether the backend maintains a persistent message/error queue that the
+     *        UI must explicitly clear when the user dismisses an error.
+     *
+     * AFC keeps a persistent message_queue + error_state that won't clear until
+     * AFC_CLEAR_MESSAGE is sent; without it the error dialog reappears immediately
+     * because AFC keeps reporting ERROR (#497). Other backends have no such queue.
+     *
+     * @return true if clear_message_queue() does meaningful work
+     */
+    [[nodiscard]] virtual bool supports_clear_message_queue() const {
+        return false;
+    }
+
+    /**
+     * @brief Clear the backend's persistent message/error queue.
+     *
+     * Called by the UI when the user dismisses a backend error so the error does
+     * not immediately re-fire. Default is a no-op (NOT_SUPPORTED); backends with a
+     * persistent queue (AFC) override to send the clearing command.
+     *
+     * @return AmsError indicating success/failure
+     */
+    virtual AmsError clear_message_queue() {
+        return AmsErrorHelper::not_supported("Clear message queue");
+    }
+
+    /**
+     * @brief Whether the idle filament-runout guidance modal should be suppressed.
+     *
+     * Some backends (Snapmaker U1) drive load/unload entirely on their own, so an
+     * idle lane going empty — a hand-pull or a lane simply left unloaded — needs no
+     * operator action and the runout-guidance modal is just noise. Backends that
+     * require manual intervention keep the idle modal. Mid-print runout is a
+     * separate path and is unaffected by this flag.
+     *
+     * @return true to suppress the idle runout modal for this backend
+     */
+    [[nodiscard]] virtual bool should_suppress_idle_runout_modal() const {
+        return false;
+    }
+
+    /**
+     * @brief Whether this backend is an AFC (Armored Turtle) system.
+     *
+     * Identity gate for AFC-specific UI sections (e.g. the unload-after-print
+     * toggle in the device-operations overlay) that have no behavioral analogue
+     * on other backends. Only AFC overrides this.
+     *
+     * @return true if this is an AFC backend
+     */
+    [[nodiscard]] virtual bool is_afc_system() const {
+        return false;
+    }
+
+    /**
+     * @brief Whether the backend exposes user-configurable eject parameters
+     *        (distance + velocity) that the UI should surface as sliders.
+     *
+     * QIDI Box lets the user tune the per-lane eject distance and velocity; the
+     * device-operations overlay renders the slider rows only for such backends.
+     *
+     * @return true if eject distance/velocity are configurable for this backend
+     */
+    [[nodiscard]] virtual bool supports_configurable_eject_params() const {
+        return false;
+    }
+
+    /**
+     * @brief Whether each slot has a physical tray/housing to draw in the AMS detail view.
+     *
+     * Selector/hub and box systems have a physical tray; tool changers give each
+     * tool its own independent toolhead with no shared tray/housing, so the tray
+     * graphic is hidden for them.
+     *
+     * @return true if a physical tray should be drawn
+     */
+    [[nodiscard]] virtual bool has_physical_tray() const {
+        return true;
+    }
+
+    /**
+     * @brief Whether the per-slot tool badge ("T0", "T1", ...) should be hidden.
+     *
+     * On tool changers the badge is redundant with the toolhead label shown below
+     * each slot, so it is suppressed. Other backends show it.
+     *
+     * @return true to hide the per-slot tool badge
+     */
+    [[nodiscard]] virtual bool should_hide_slot_tool_badge() const {
+        return false;
+    }
+
+    /**
+     * @brief Whether the backend assigns one spool per tool (tool-changer model).
+     *
+     * Drives the auto-assign-active-spool-to-tool path and the runout-guidance
+     * routing: tool changers have one extruder per slot with no shared hub, so a
+     * runout cannot be auto-resolved by swapping spools. Default mirrors the
+     * existing is_tool_changer(get_type()) classification so behavior is identical;
+     * backends override only if their per-tool model diverges from their type.
+     *
+     * @return true if each tool owns its own spool assignment
+     */
+    [[nodiscard]] virtual bool supports_per_tool_spool_assignment() const {
+        return is_tool_changer(get_type());
+    }
+
+    /**
+     * @brief Whether the backend reports a continuous sync-feedback bias the UI can
+     *        visualize (proportional buffer bias + fault tinting).
+     *
+     * Happy Hare reports printer.mmu.sync_feedback_bias; the value is meaningful
+     * only when > -1.5 (the sentinel for "no bias data"). The buffer meter, path
+     * canvas tinting, and clog-detection buffer page all gate on this. Backends
+     * without a continuous bias signal return false (discrete mode).
+     *
+     * @param info Current system snapshot (carries sync_feedback_bias)
+     * @return true if a proportional sync-feedback bias is available
+     */
+    [[nodiscard]] virtual bool
+    supports_sync_feedback_visualization(const AmsSystemInfo& info) const {
+        (void)info;
+        return false;
+    }
+
+    /**
+     * @brief Klipper object / expected-hardware name for this backend.
+     *
+     * Used when recording expected hardware during wizard setup so the hardware
+     * validator can warn if the AMS disappears. Matches the firmware object name
+     * (e.g. "AFC", "mmu", "toolchanger"). Empty string => not a tracked Klipper
+     * object (e.g. REST-based systems). Default empty; backends override.
+     *
+     * @return Klipper object name, or "" if none
+     */
+    [[nodiscard]] virtual const char* get_klipper_object_name() const {
+        return "";
+    }
+
+    /**
+     * @brief Firmware-native pre-print command sequence (e.g. print_task_config).
+     *
+     * Backends using RemapStrategy::SnapmakerNative emit firmware-native gcode
+     * (SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP) BEFORE PRINT_START. The
+     * caller gates on get_remap_strategy() == SnapmakerNative and sends the
+     * returned gcode. Default returns "" (no native pre-print step); the Snapmaker
+     * backend overrides it.
+     *
+     * @param tools_used Logical tools the gcode body uses
+     * @param remap      Logical tool -> physical head, only for changed tools
+     * @return Newline-joined gcode (no trailing newline), or "" when none
+     */
+    [[nodiscard]] virtual std::string
+    build_preprint_gcode(const std::set<int>& tools_used,
+                         const std::map<int, int>& remap) const {
+        (void)tools_used;
+        (void)remap;
+        return "";
     }
 
     /**

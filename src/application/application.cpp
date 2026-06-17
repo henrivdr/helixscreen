@@ -2647,7 +2647,7 @@ void Application::setup_discovery_callbacks() {
             // JSON). Must run on the UI thread (called from queue_update lambdas).
             auto try_assign_active_spool_to_tool = [](const SpoolInfo& spool) {
                 auto* backend = AmsState::instance().get_backend();
-                if (!backend || !is_tool_changer(backend->get_type()))
+                if (!backend || !backend->supports_per_tool_spool_assignment())
                     return;
 
                 auto& tool_state = helix::ToolState::instance();

@@ -62,7 +62,7 @@ std::string PrinterDiscovery::summary() const {
     if (has_firmware_retraction_)
         caps.push_back("firmware_retraction");
     if (has_mmu_)
-        caps.push_back(mmu_type_ == AmsType::HAPPY_HARE ? "Happy Hare" : "AFC");
+        caps.push_back(ams_type_to_string(mmu_type_));
     if (has_tool_changer_) {
         std::string tc_str = "Tool Changer";
         if (!tool_names_.empty()) {

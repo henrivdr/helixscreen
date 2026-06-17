@@ -160,6 +160,14 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return true;
     }
 
+    // The U1 drives load/unload entirely on its own, so an idle lane going empty
+    // (a hand-pull, or a lane left unloaded) needs no operator action and the
+    // idle runout-guidance modal is just noise. Mid-print runout is a separate
+    // path and is unaffected.
+    [[nodiscard]] bool should_suppress_idle_runout_modal() const override {
+        return true;
+    }
+
     // Snapmaker U1 uses firmware-native print_task_config gcode
     // (SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP) emitted before
     // PRINT_START; no gcode-file rewrite is needed.
@@ -195,7 +203,7 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Returns newline-joined gcode (NO trailing newline), or "" when tools_used is empty.
     // Pure — no api_/network access, trivially unit-testable.
     [[nodiscard]] std::string build_preprint_gcode(const std::set<int>& tools_used,
-                                                   const std::map<int, int>& remap) const;
+                                                   const std::map<int, int>& remap) const override;
 
     // Static parsers (public for testing)
     static ExtruderToolState parse_extruder_state(const nlohmann::json& json);

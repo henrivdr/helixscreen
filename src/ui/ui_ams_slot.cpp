@@ -441,7 +441,7 @@ static void apply_tool_badge(AmsSlotData* data, int mapped_tool, bool is_overrid
 
     // Tool changers: badge is redundant with toolhead label below
     auto* backend = AmsState::instance().get_backend(0);
-    if (backend && backend->get_type() == AmsType::TOOL_CHANGER) {
+    if (backend && backend->should_hide_slot_tool_badge()) {
         lv_obj_add_flag(data->tool_badge_bg, LV_OBJ_FLAG_HIDDEN);
         return;
     }

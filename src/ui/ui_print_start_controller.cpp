@@ -19,7 +19,6 @@
 #include "ui_update_queue.h"
 
 #include "active_print_media_manager.h"
-#include "ams_backend_snapmaker.h"
 #include "ams_state.h"
 #include "app_constants.h"
 #include "color_utils.h"
@@ -377,20 +376,15 @@ void PrintStartController::send_snapmaker_preprint_then(const std::set<int>& too
                                                         std::function<void()> on_done,
                                                         std::function<void()> on_abort) {
     AmsBackend* backend = AmsState::instance().get_backend();
-    auto* sm = dynamic_cast<AmsBackendSnapmaker*>(backend);
-    if (!sm) {
-        // The SnapmakerNative strategy gate uniquely identifies this backend type,
-        // so this should never happen — but fall back to starting rather than
-        // stranding the user if it somehow does.
-        spdlog::error("[PrintStartController] SnapmakerNative strategy but backend is not "
-                      "AmsBackendSnapmaker — starting print without native config");
+    if (!backend) {
+        // No backend — nothing to pre-send; proceed with the start step.
         if (on_done) {
             on_done();
         }
         return;
     }
 
-    std::string gcode = sm->build_preprint_gcode(tools_used, remap);
+    std::string gcode = backend->build_preprint_gcode(tools_used, remap);
 
     if (gcode.empty()) {
         // Nothing the firmware needs (e.g. no parsed tools) — start immediately.

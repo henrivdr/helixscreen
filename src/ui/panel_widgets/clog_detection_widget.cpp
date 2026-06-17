@@ -75,7 +75,7 @@ void ClogDetectionWidget::build_carousel_pages() {
     auto* backend = AmsState::instance().get_backend();
     if (backend) {
         auto info = backend->get_system_info();
-        if (info.type == AmsType::HAPPY_HARE && info.sync_feedback_bias > -1.5f) {
+        if (backend->supports_sync_feedback_visualization(info)) {
             buffer_page_ = lv_obj_create(lv_scr_act());
             lv_obj_set_size(buffer_page_, LV_PCT(100), LV_PCT(100));
             lv_obj_set_style_pad_all(buffer_page_, 0, 0);

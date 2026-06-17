@@ -1650,16 +1650,10 @@ void AmsPanel::show_loading_error_modal() {
                      ams_type_to_string(backend->get_type()));
         backend->cancel();
 
-        // AFC-specific: clear the message from AFC's persistent queue
-        if (backend->get_type() == AmsType::AFC && api_) {
-            api_->execute_gcode(
-                "AFC_CLEAR_MESSAGE",
-                []() { spdlog::debug("[AmsPanel] AFC message queue cleared"); },
-                [](const MoonrakerError& err) {
-                    spdlog::debug("[AmsPanel] AFC_CLEAR_MESSAGE failed (may not be "
-                                  "supported): {}",
-                                  err.message);
-                });
+        // Backends with a persistent message/error queue (AFC) must clear it on
+        // dismiss or the error dialog re-fires immediately (#497).
+        if (backend->supports_clear_message_queue()) {
+            backend->clear_message_queue();
         }
     });
 

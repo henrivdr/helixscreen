@@ -103,6 +103,16 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     // State queries
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] AmsType get_type() const override;
+    [[nodiscard]] bool is_afc_system() const override {
+        return true;
+    }
+    [[nodiscard]] const char* get_klipper_object_name() const override {
+        return "AFC"; // Matches the Klipper object name (uppercase)
+    }
+    [[nodiscard]] bool supports_clear_message_queue() const override {
+        return true;
+    }
+    AmsError clear_message_queue() override;
     [[nodiscard]] bool manages_active_spool() const override {
         return true;
     }

@@ -802,24 +802,7 @@ void ui_wizard_complete() {
             auto& ams = AmsState::instance();
             AmsBackend* backend = ams.get_backend();
             if (backend) {
-                AmsType type = backend->get_type();
-                std::string ams_hw_name;
-                switch (type) {
-                case AmsType::AFC:
-                    ams_hw_name = "AFC"; // Matches the Klipper object name (uppercase)
-                    break;
-                case AmsType::HAPPY_HARE:
-                    ams_hw_name = "mmu"; // Matches the Klipper object name
-                    break;
-                case AmsType::TOOL_CHANGER:
-                    ams_hw_name = "toolchanger"; // Marker for tool changer detection
-                    break;
-                case AmsType::ACE:
-                    ams_hw_name = "ace"; // ACE marker (REST-based, not a Klipper object)
-                    break;
-                default:
-                    break;
-                }
+                std::string ams_hw_name = backend->get_klipper_object_name();
                 if (!ams_hw_name.empty()) {
                     HardwareValidator::add_expected_hardware(config, ams_hw_name);
                     spdlog::info("[Wizard] Added '{}' to expected hardware", ams_hw_name);

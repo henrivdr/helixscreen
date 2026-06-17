@@ -54,6 +54,16 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     // State queries
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] AmsType get_type() const override;
+    [[nodiscard]] const char* get_klipper_object_name() const override {
+        return "mmu"; // Matches the Klipper object name
+    }
+    // Happy Hare reports printer.mmu.sync_feedback_bias; a value > -1.5 means real
+    // bias data is available (the buffer meter, path-canvas tint, and clog buffer
+    // page render proportional bias). -1.5 is the "no data" sentinel.
+    [[nodiscard]] bool
+    supports_sync_feedback_visualization(const AmsSystemInfo& info) const override {
+        return info.sync_feedback_bias > -1.5f;
+    }
     [[nodiscard]] bool manages_active_spool() const override;
     [[nodiscard]] SlotInfo get_slot_info(int slot_index) const override;
 

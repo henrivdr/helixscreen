@@ -268,13 +268,13 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
     lv_subject_set_int(&supports_auto_heat_subject_, backend->supports_auto_heat_on_load() ? 1 : 0);
 
     // AFC-only: the unload-after-print toggle applies only to AFC systems
-    lv_subject_set_int(&is_afc_subject_, backend->get_type() == AmsType::AFC ? 1 : 0);
+    lv_subject_set_int(&is_afc_subject_, backend->is_afc_system() ? 1 : 0);
 
-    // QIDI-only: the eject distance/velocity rows apply only to QIDI Box systems.
-    // Sync the sliders + value displays from the persisted settings.
-    bool is_qidi = backend->get_type() == AmsType::QIDI_BOX;
-    lv_subject_set_int(&is_qidi_subject_, is_qidi ? 1 : 0);
-    if (is_qidi && overlay_) {
+    // The eject distance/velocity rows apply only to backends with configurable
+    // eject params (QIDI Box). Sync the sliders + value displays from settings.
+    bool show_eject_params = backend->supports_configurable_eject_params();
+    lv_subject_set_int(&is_qidi_subject_, show_eject_params ? 1 : 0);
+    if (show_eject_params && overlay_) {
         int eject_distance = SettingsManager::instance().get_qidi_eject_distance();
         int eject_velocity = SettingsManager::instance().get_qidi_eject_velocity();
 

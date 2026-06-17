@@ -58,6 +58,11 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::QIDI_BOX;
     }
+    // QIDI Box exposes user-tunable per-lane eject distance + velocity, which the
+    // device-operations overlay surfaces as slider rows.
+    [[nodiscard]] bool supports_configurable_eject_params() const override {
+        return true;
+    }
     [[nodiscard]] PathTopology get_topology() const override {
         return PathTopology::HUB;
     }

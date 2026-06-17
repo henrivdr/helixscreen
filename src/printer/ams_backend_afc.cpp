@@ -223,6 +223,15 @@ AmsType AmsBackendAfc::get_type() const {
     return AmsType::AFC;
 }
 
+AmsError AmsBackendAfc::clear_message_queue() {
+    // AFC keeps a persistent message_queue + error_state that won't clear until
+    // AFC_CLEAR_MESSAGE is sent. Without this the error dialog reappears
+    // immediately because AFC keeps reporting ERROR (#497). Fire-and-forget: a
+    // failure here is non-fatal (the command may not be supported on older AFC).
+    spdlog::debug("[AMS AFC] Clearing AFC message queue");
+    return execute_gcode("AFC_CLEAR_MESSAGE");
+}
+
 SlotInfo AmsBackendAfc::get_slot_info(int slot_index) const {
     std::lock_guard<std::mutex> lock(mutex_);
 
