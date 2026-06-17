@@ -37,6 +37,9 @@
  * @endcode
  */
 
+// Forward declaration so the modal can grant white-box layout-test access.
+struct ActionPromptModalTestAccess;
+
 namespace helix::ui {
 
 /**
@@ -94,6 +97,9 @@ class ActionPromptModal : public Modal {
     void on_hide() override;
 
   private:
+    // Grants white-box access to button widgets / containers for layout tests.
+    friend struct ::ActionPromptModalTestAccess;
+
     /**
      * @brief Data passed as user_data to button event callbacks
      *
@@ -120,7 +126,15 @@ class ActionPromptModal : public Modal {
     void populate_content();
     void create_text_lines();
     void create_buttons();
-    void create_button(const PromptButton& btn, lv_obj_t* container);
+    /**
+     * @brief Create a single button inside @p container.
+     *
+     * @param equal_width When true (regular buttons, >= 4 of them) the button is
+     *        laid out as an equal-width flex cell (grow=1, width 0) so several
+     *        short labels share one non-wrapping row. When false the legacy
+     *        content-sized layout is used (unchanged for <= 3 regular buttons).
+     */
+    void create_button(const PromptButton& btn, lv_obj_t* container, bool equal_width = false);
     lv_color_t get_button_color(const std::string& color_name);
     void clear_dynamic_content();
 

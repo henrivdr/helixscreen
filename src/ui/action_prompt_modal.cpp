@@ -161,6 +161,26 @@ void ActionPromptModal::create_buttons() {
     bool has_regular_buttons = false;
     int footer_button_count = 0;
 
+    // Count regular (non-footer) buttons up front. With >= 4 of them the legacy
+    // content-sized row_wrap overflows the fixed-width (320px) dialog and the 4th
+    // button wraps to a second line (R2 / #1043). In that case switch the shared
+    // button_container to a non-wrapping row of equal-width cells so they all fit
+    // on ONE line. With <= 3 regular buttons keep the existing row_wrap behaviour
+    // byte-for-byte (this container is shared with L1's recovery modal).
+    int regular_count = 0;
+    for (const auto& btn : prompt_data_.buttons) {
+        if (!btn.is_footer) {
+            ++regular_count;
+        }
+    }
+    const bool equal_width_row = regular_count >= 4;
+    // Set the flow explicitly for BOTH cases so a reused modal instance never
+    // inherits the wrong flow from a previous prompt: row_wrap restores the
+    // legacy <= 3 look (matching the XML default); plain row drives the >= 4
+    // equal-width layout.
+    lv_obj_set_flex_flow(button_container,
+                         equal_width_row ? LV_FLEX_FLOW_ROW : LV_FLEX_FLOW_ROW_WRAP);
+
     // Create buttons based on PromptData
     for (const auto& btn : prompt_data_.buttons) {
         if (btn.is_footer) {
@@ -180,7 +200,7 @@ void ActionPromptModal::create_buttons() {
                 footer_button_count++;
             }
         } else {
-            create_button(btn, button_container);
+            create_button(btn, button_container, equal_width_row);
             has_regular_buttons = true;
         }
     }
@@ -208,7 +228,8 @@ void ActionPromptModal::create_buttons() {
     }
 }
 
-void ActionPromptModal::create_button(const PromptButton& btn, lv_obj_t* container) {
+void ActionPromptModal::create_button(const PromptButton& btn, lv_obj_t* container,
+                                      bool equal_width) {
     lv_obj_t* button = lv_button_create(container);
 
     if (btn.is_footer) {
@@ -216,8 +237,20 @@ void ActionPromptModal::create_button(const PromptButton& btn, lv_obj_t* contain
         lv_obj_set_height(button, lv_pct(100));
         lv_obj_set_flex_grow(button, 1);
         lv_obj_set_style_radius(button, 0, LV_PART_MAIN);
+    } else if (equal_width) {
+        // Regular buttons, >= 4 of them: equal-width cells on a non-wrapping row
+        // (R2 / #1043). grow=1 with width 0 lets short labels ("Lane 1".."Lane 4")
+        // share the fixed-width row instead of overflowing and wrapping. Trim the
+        // horizontal padding to space_sm so the equal cells stay compact; the
+        // label stays centered.
+        lv_obj_set_width(button, 0);
+        lv_obj_set_height(button, theme_manager_get_spacing("space_xl") * 2);
+        lv_obj_set_flex_grow(button, 1);
+        lv_obj_set_style_pad_left(button, theme_manager_get_spacing("space_sm"), LV_PART_MAIN);
+        lv_obj_set_style_pad_right(button, theme_manager_get_spacing("space_sm"), LV_PART_MAIN);
+        lv_obj_set_style_radius(button, 8, LV_PART_MAIN);
     } else {
-        // Regular buttons: content-sized with padding
+        // Regular buttons (<= 3): content-sized with padding (legacy row_wrap)
         lv_obj_set_size(button, LV_SIZE_CONTENT, theme_manager_get_spacing("space_xl") * 2);
         lv_obj_set_style_pad_left(button, theme_manager_get_spacing("space_lg"), LV_PART_MAIN);
         lv_obj_set_style_pad_right(button, theme_manager_get_spacing("space_lg"), LV_PART_MAIN);
