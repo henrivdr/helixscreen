@@ -53,6 +53,38 @@ constexpr std::array<std::string_view, 8> kKnownSubTypes = {
     return token;
 }
 
+// Map a Snapmaker U1 granular channel_state to the operation sub-phase index the
+// step bar renders: 0 = Home, 1 = Select, 2 = Heat, 3 = Move (Retract on unload /
+// Feed on load). The firmware emits these sequentially for both directions as
+// "<load|unload>_<homing|picking|heating|doing>". Any state that is not one of
+// the four active sub-phases (idle, *_finish, preload_*, empty, etc.) maps to -1
+// = "no active step", which resolves the step bar to complete/hidden. Keeping
+// this independent of the AmsAction collapse lets the action stay LOADING/
+// UNLOADING (load-vs-unload) while the phase drives the individual step.
+[[nodiscard]] int channel_state_to_operation_phase(const std::string& state) {
+    // Suffix match so both load_* and unload_* share one table; preload_* and
+    // *_finish deliberately fall through to -1.
+    auto ends_with = [&](std::string_view suffix) {
+        return state.size() > suffix.size() &&
+               state.compare(state.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    // Only the granular sub-phases of an in-progress load/unload carry a phase.
+    const bool is_load = state.rfind("load_", 0) == 0 && state.rfind("preload_", 0) != 0;
+    const bool is_unload = state.rfind("unload_", 0) == 0;
+    if (!is_load && !is_unload) {
+        return -1;
+    }
+    if (ends_with("_homing"))
+        return 0;
+    if (ends_with("_picking"))
+        return 1;
+    if (ends_with("_heating"))
+        return 2;
+    if (ends_with("_doing"))
+        return 3;
+    return -1; // *_finish and anything else: no active step
+}
+
 } // namespace
 
 // ============================================================================
@@ -1031,6 +1063,20 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         // Parse channel_state for load/unload action tracking
                         auto state = ch.value("channel_state", "");
                         auto error = ch.value("channel_error", "ok");
+                        // Mirror the granular firmware sub-phase into the system
+                        // info so the sidebar step bar can show the real
+                        // Home/Select/Heat/Move sequence rather than the coarse
+                        // 2-step view. -1 for any non-active state (idle, finish,
+                        // preload_*, error). Updated only when the firmware
+                        // actually reports a channel_state, so an incremental
+                        // status omitting it doesn't spuriously clear the phase.
+                        if (!state.empty()) {
+                            int new_phase = channel_state_to_operation_phase(state);
+                            if (system_info_.operation_phase != new_phase) {
+                                system_info_.operation_phase = new_phase;
+                                changed = true;
+                            }
+                        }
                         if (error != "ok" && !error.empty() && error != "none") {
                             // Distinguish a genuine load FAILURE from an idle,
                             // never-loaded EMPTY lane. The firmware reports

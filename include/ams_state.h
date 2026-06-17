@@ -290,6 +290,22 @@ class AmsState {
     }
 
     /**
+     * @brief Get the granular operation-phase subject.
+     *
+     * Holds the active load/unload sub-phase for backends that expose one
+     * (currently Snapmaker U1): -1 = none/not-applicable, 0 = Home, 1 = Select,
+     * 2 = Heat, 3 = Move (Retract on unload / Feed on load). Synced from
+     * AmsSystemInfo::operation_phase in sync_from_backend(). Drives the sidebar
+     * step bar's current step on the Snapmaker backend. Static-lifetime
+     * singleton subject — no SubjectLifetime token needed to observe it.
+     *
+     * @return Subject holding the operation phase index
+     */
+    lv_subject_t* get_ams_operation_phase_subject() {
+        return &ams_operation_phase_;
+    }
+
+    /**
      * @brief Get system name subject
      * @return Subject holding AMS system display name (e.g., "Happy Hare", "AFC")
      */
@@ -1162,6 +1178,9 @@ class AmsState {
     // System-level subjects
     lv_subject_t ams_type_;
     lv_subject_t ams_action_;
+    /// Granular load/unload sub-phase (-1=none, 0=Home, 1=Select, 2=Heat,
+    /// 3=Move). Snapmaker U1 only; static-lifetime singleton subject.
+    lv_subject_t ams_operation_phase_;
     lv_subject_t current_slot_;
     lv_subject_t pending_target_slot_;
     lv_subject_t ams_current_tool_;

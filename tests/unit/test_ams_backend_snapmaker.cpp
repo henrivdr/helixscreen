@@ -449,6 +449,39 @@ TEST_CASE("Snapmaker granular load sub-states drive LOADING action",
     }
 }
 
+TEST_CASE("Snapmaker channel_state maps to granular operation_phase",
+          "[ams][snapmaker][phase]") {
+    // The U1 firmware emits four sequential sub-phases per direction
+    // (<load|unload>_<homing|picking|heating|doing>), each many seconds long.
+    // operation_phase mirrors these into a 0..3 index that drives the sidebar's
+    // 4-step bar (0=Home, 1=Select, 2=Heat, 3=Move). All non-active states
+    // (finish/idle/preload_finish) collapse to -1 = "no active step".
+    struct Case {
+        const char* channel_state;
+        int expected_phase;
+    };
+    const Case cases[] = {
+        {"unload_homing", 0},  {"unload_picking", 1}, {"unload_heating", 2},
+        {"unload_doing", 3},   {"load_homing", 0},    {"load_picking", 1},
+        {"load_heating", 2},   {"load_doing", 3},     {"unload_finish", -1},
+        {"load_finish", -1},   {"preload_finish", -1}, {"idle", -1},
+    };
+
+    for (const auto& c : cases) {
+        AmsBackendSnapmaker backend(nullptr, nullptr);
+        // A loaded lane so unload_finish doesn't early-return before the phase
+        // is parsed; filament_detected=true keeps the lane present.
+        json status = json{
+            {"filament_feed left",
+             json{{"extruder2", json{{"filament_detected", true},
+                                     {"channel_state", c.channel_state},
+                                     {"channel_error", "ok"}}}}}};
+        SnapmakerTestAccess::handle_status(backend, status);
+        INFO("channel_state=" << c.channel_state);
+        CHECK(backend.get_system_info().operation_phase == c.expected_phase);
+    }
+}
+
 TEST_CASE("Snapmaker unload_finish resolves UNLOADING to IDLE", "[ams][snapmaker][unload]") {
     AmsBackendSnapmaker backend(nullptr, nullptr);
 

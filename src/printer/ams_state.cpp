@@ -204,6 +204,8 @@ void AmsState::init_subjects(bool register_xml) {
     // System-level subjects
     INIT_SUBJECT_INT(ams_type, static_cast<int>(AmsType::NONE), subjects_, register_xml);
     INIT_SUBJECT_INT(ams_action, static_cast<int>(AmsAction::IDLE), subjects_, register_xml);
+    // Granular load/unload sub-phase (Snapmaker U1). -1 = no active step.
+    INIT_SUBJECT_INT(ams_operation_phase, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(current_slot, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(pending_target_slot, -1, subjects_, register_xml);
     INIT_SUBJECT_INT(ams_current_tool, -1, subjects_, register_xml);
@@ -1060,6 +1062,13 @@ void AmsState::sync_from_backend() {
         spdlog::debug("[AmsState] sync_from_backend: action changed to {} ({})",
                       new_action, ams_action_to_string(info.action));
         lv_subject_set_int(&ams_action_, new_action);
+    }
+    // Granular firmware sub-phase (Snapmaker U1: Home/Select/Heat/Move). Most
+    // backends leave operation_phase at -1, so this is a no-op for them.
+    if (lv_subject_get_int(&ams_operation_phase_) != info.operation_phase) {
+        spdlog::debug("[AmsState] sync_from_backend: operation_phase changed to {}",
+                      info.operation_phase);
+        lv_subject_set_int(&ams_operation_phase_, info.operation_phase);
     }
 
     // Set system name from backend type_name or fallback to type string

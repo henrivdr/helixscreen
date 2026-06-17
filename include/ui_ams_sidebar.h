@@ -138,6 +138,11 @@ class AmsOperationSidebar {
     ObserverGuard extruder_temp_observer_;
     ObserverGuard extruder_target_observer_;
     ObserverGuard color_observer_;
+    // Drives the step bar's current step on the Snapmaker U1 from the granular
+    // firmware phase (Home/Select/Heat/Move) instead of the coarse AmsAction.
+    // ams_operation_phase is a STATIC singleton subject (one per AmsState), so
+    // no SubjectLifetime token is required — cleaned up via reset() in cleanup().
+    ObserverGuard operation_phase_observer_;
 
     // Bypass-after-unload state
     bool pending_bypass_enable_ = false;
@@ -168,6 +173,18 @@ class AmsOperationSidebar {
     void recreate_step_progress_for_operation(StepOperationType op_type);
     void update_step_progress(AmsAction action);
     int get_step_index_for_action(AmsAction action, StepOperationType op_type);
+
+    // True when the active backend is the Snapmaker U1, whose granular firmware
+    // phases drive a dedicated 4-step bar (Home/Select/Heat/Move).
+    static bool active_backend_is_snapmaker();
+
+    // Translate a base op_type (LOAD_FRESH/LOAD_SWAP/UNLOAD) to its Snapmaker
+    // four-phase variant. Pass-through for non-load/unload types.
+    static StepOperationType to_snapmaker_op_type(StepOperationType base);
+
+    // Apply the granular firmware phase (0..3, -1=none) to the current Snapmaker
+    // step bar. No-op unless the current operation is a SNAPMAKER_* stepper.
+    void apply_snapmaker_phase(int phase);
 
     // Re-evaluate step display when extruder temp/target changes (called by observers).
     // Physical heating state overrides AmsAction for step indicator: backends emit

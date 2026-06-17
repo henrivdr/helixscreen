@@ -889,6 +889,14 @@ struct AmsSystemInfo {
     AmsAction action = AmsAction::IDLE; ///< Current operation
     std::string operation_detail;       ///< Detailed operation string
 
+    /// Granular firmware sub-phase of the active load/unload, for backends that
+    /// expose one (currently Snapmaker U1, whose firmware emits sequential
+    /// homing/picking/heating/doing phases). Used to drive a multi-step progress
+    /// bar that mirrors the real firmware sequence instead of the coarse
+    /// AmsAction. -1 = none / not-applicable; 0 = Home, 1 = Select, 2 = Heat,
+    /// 3 = Move (Retract on unload / Feed on load). Default -1.
+    int operation_phase = -1;
+
     // Units
     std::vector<AmsUnit> units; ///< All AMS units
     int total_slots = 0;        ///< Sum of all slots across units

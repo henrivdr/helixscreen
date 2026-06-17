@@ -17,8 +17,25 @@
 enum class StepOperationType {
     LOAD_FRESH, ///< Loading into empty toolhead
     LOAD_SWAP,  ///< Swap: unload current + load new
-    UNLOAD      ///< Explicit unload operation
+    UNLOAD,     ///< Explicit unload operation
+
+    // Snapmaker U1 four-phase steppers. The U1 firmware emits sequential
+    // Home -> Select -> Heat -> Move phases for both load and unload (each many
+    // seconds long), reported via channel_state and surfaced through the
+    // ams_operation_phase subject. These build a distinct 4-step bar and are
+    // driven by the phase subject rather than the coarse AmsAction. The "Move"
+    // step is "Feed filament" on load and "Retract" on unload.
+    SNAPMAKER_LOAD,   ///< U1 load: Home / Select / Heat / Feed
+    SNAPMAKER_UNLOAD  ///< U1 unload: Home / Select / Heat / Retract
 };
+
+/**
+ * @brief Whether an operation type is one of the Snapmaker U1 four-phase
+ *        steppers (driven by ams_operation_phase rather than AmsAction).
+ */
+inline bool is_snapmaker_step_operation(StepOperationType op) {
+    return op == StepOperationType::SNAPMAKER_LOAD || op == StepOperationType::SNAPMAKER_UNLOAD;
+}
 
 /**
  * @brief Result of step operation detection

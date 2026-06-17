@@ -286,6 +286,17 @@ void AmsOperationSidebar::init_observers() {
                 return;
             self->refresh_heat_step_display();
         });
+
+    // Operation-phase observer (Snapmaker U1 only): drives the 4-step bar's
+    // current step directly from the firmware Home/Select/Heat/Move phase.
+    // ams_operation_phase is a static singleton subject → no SubjectLifetime.
+    operation_phase_observer_ = observe_int_sync<AmsOperationSidebar>(
+        AmsState::instance().get_ams_operation_phase_subject(), this,
+        [](AmsOperationSidebar* self, int phase) {
+            if (!self->active_ || !self->sidebar_root_)
+                return;
+            self->apply_snapmaker_phase(phase);
+        });
 }
 
 // ============================================================================
@@ -315,6 +326,8 @@ void AmsOperationSidebar::cleanup() {
     bypass_spool_observer_.reset();
     color_observer_.reset();
     extruder_temp_observer_.reset();
+    extruder_target_observer_.reset();
+    operation_phase_observer_.reset();
 
     // Reset extracted modules AFTER observers — they may have their own observers
     // that reference widget pointers; resetting before our observers could
@@ -519,6 +532,39 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
                                                  "ams_step_progress");
         break;
     }
+
+    // Snapmaker U1 four-phase steppers — built directly from the firmware's real
+    // Home -> Select -> Heat -> Move sequence. The current step is driven by the
+    // ams_operation_phase subject (see apply_snapmaker_phase), not AmsAction, so
+    // these don't participate in the heat-anchor / get_step_index_for_action path.
+    case StepOperationType::SNAPMAKER_LOAD: {
+        // lv_tr() at creation so the labels are translated and picked up by the
+        // string-extraction tooling (the widget stores label text verbatim and
+        // does not translate internally). "Home"/"Select" join the already-
+        // translated "Heat nozzle"/"Feed filament" strings used elsewhere.
+        ui_step_t steps[] = {
+            {lv_tr("Home"), StepState::Pending},
+            {lv_tr("Select"), StepState::Pending},
+            {lv_tr("Heat nozzle"), StepState::Pending},
+            {lv_tr("Feed filament"), StepState::Pending},
+        };
+        current_step_count_ = 4;
+        step_progress_ = ui_step_progress_create(step_progress_container_, steps, 4, false,
+                                                 "ams_step_progress");
+        break;
+    }
+    case StepOperationType::SNAPMAKER_UNLOAD: {
+        ui_step_t steps[] = {
+            {lv_tr("Home"), StepState::Pending},
+            {lv_tr("Select"), StepState::Pending},
+            {lv_tr("Heat nozzle"), StepState::Pending},
+            {lv_tr("Retract"), StepState::Pending},
+        };
+        current_step_count_ = 4;
+        step_progress_ = ui_step_progress_create(step_progress_container_, steps, 4, false,
+                                                 "ams_step_progress");
+        break;
+    }
     }
 
     if (!step_progress_) {
@@ -528,6 +574,41 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
         spdlog::debug("[AmsSidebar] Created step progress: {} steps for op_type={}",
                       current_step_count_, static_cast<int>(op_type));
     }
+}
+
+bool AmsOperationSidebar::active_backend_is_snapmaker() {
+    AmsBackend* backend = AmsState::instance().get_backend();
+    return backend && backend->get_type() == AmsType::SNAPMAKER;
+}
+
+StepOperationType AmsOperationSidebar::to_snapmaker_op_type(StepOperationType base) {
+    switch (base) {
+    case StepOperationType::UNLOAD:
+        return StepOperationType::SNAPMAKER_UNLOAD;
+    case StepOperationType::LOAD_FRESH:
+    case StepOperationType::LOAD_SWAP:
+        return StepOperationType::SNAPMAKER_LOAD;
+    default:
+        return base; // already a SNAPMAKER_* type
+    }
+}
+
+void AmsOperationSidebar::apply_snapmaker_phase(int phase) {
+    if (!active_ || !step_progress_) {
+        return;
+    }
+    if (!is_snapmaker_step_operation(current_operation_type_)) {
+        return;
+    }
+    // phase -1 = no active step (firmware idle / *_finish). The action observer's
+    // show/hide logic handles container visibility at end-of-op; hold the bar
+    // here so a transient -1 between phases doesn't flicker the highlight.
+    if (phase < 0 || phase >= current_step_count_) {
+        return;
+    }
+    spdlog::debug("[AmsSidebar] Snapmaker phase {} → step {} (op_type={})", phase, phase,
+                  static_cast<int>(current_operation_type_));
+    ui_step_progress_set_current(step_progress_, phase);
 }
 
 int AmsOperationSidebar::get_step_index_for_action(AmsAction action, StepOperationType op_type) {
@@ -589,11 +670,23 @@ int AmsOperationSidebar::get_step_index_for_action(AmsAction action, StepOperati
             return -1;
         }
     }
+
+    case StepOperationType::SNAPMAKER_LOAD:
+    case StepOperationType::SNAPMAKER_UNLOAD:
+        // Snapmaker steppers are driven by ams_operation_phase (see
+        // apply_snapmaker_phase), not by AmsAction. Never derive a step here.
+        return -1;
     }
     return -1;
 }
 
 void AmsOperationSidebar::start_operation(StepOperationType op_type, int target_slot) {
+    // Snapmaker U1: build the dedicated 4-phase stepper (Home/Select/Heat/Move)
+    // driven by the firmware phase subject instead of the coarse 2-step bar.
+    if (active_backend_is_snapmaker()) {
+        op_type = to_snapmaker_op_type(op_type);
+    }
+
     spdlog::info("[AmsSidebar] Starting operation: type={}, target_slot={}",
                  static_cast<int>(op_type), target_slot);
 
@@ -630,15 +723,25 @@ void AmsOperationSidebar::update_step_progress(AmsAction action) {
         }
     }
 
+    const bool snapmaker = active_backend_is_snapmaker();
+
     auto detection = detect_step_operation(action, prev_ams_action_, current_operation_type_,
                                            is_external, filament_loaded);
     if (detection.should_recreate) {
-        if (detection.op_type == StepOperationType::LOAD_SWAP &&
+        StepOperationType new_op = detection.op_type;
+        // Snapmaker U1: the pure auto-detect logic yields the coarse
+        // LOAD_*/UNLOAD types; remap to the 4-phase steppers so the firmware
+        // Home/Select/Heat/Move sequence shows. Skip the jump_to_step hint —
+        // the phase subject is the sole step driver for these.
+        if (snapmaker) {
+            new_op = to_snapmaker_op_type(new_op);
+        }
+        if (new_op == StepOperationType::LOAD_SWAP &&
             current_operation_type_ == StepOperationType::UNLOAD) {
             spdlog::debug("[AmsSidebar] Upgrading UNLOAD → LOAD_SWAP");
         }
-        recreate_step_progress_for_operation(detection.op_type);
-        if (detection.jump_to_step >= 0 && step_progress_) {
+        recreate_step_progress_for_operation(new_op);
+        if (!snapmaker && detection.jump_to_step >= 0 && step_progress_) {
             ui_step_progress_set_current(step_progress_, detection.jump_to_step);
         }
     }
@@ -661,6 +764,16 @@ void AmsOperationSidebar::update_step_progress(AmsAction action) {
             ui_step_progress_set_label(step_progress_, 0, lv_tr("Heat nozzle"));
             heat_label_showing_temp_ = false;
         }
+        return;
+    }
+
+    // Snapmaker U1: the granular firmware phase (ams_operation_phase) is the sole
+    // step driver — the heat-anchor and action-derived step logic below is for the
+    // coarse 2-step bar and must NOT run here (it has no Home/Select notion and
+    // would fight the phase observer). Apply the current phase and return.
+    if (snapmaker && is_snapmaker_step_operation(current_operation_type_)) {
+        int phase = lv_subject_get_int(AmsState::instance().get_ams_operation_phase_subject());
+        apply_snapmaker_phase(phase);
         return;
     }
 
