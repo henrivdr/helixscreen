@@ -210,6 +210,32 @@ class FilamentPanel : public PanelBase {
     lv_subject_t purge_10mm_active_subject_;
     lv_subject_t purge_25mm_active_subject_;
 
+    // Per-op button feedback state (int: 0=idle, 1=busy/spinner, 2=done/check).
+    // Drives ui_button bind_op_state so the triggering button shows on-button
+    // progress instead of stacked start/complete toasts. Only one is non-zero at
+    // a time. A pending revert timer resets the active op back to idle after the
+    // brief "done" checkmark.
+    enum class FilamentOp { Load, Unload, Purge, Extrude, Retract };
+    lv_subject_t op_load_state_subject_;
+    lv_subject_t op_unload_state_subject_;
+    lv_subject_t op_purge_state_subject_;
+    lv_subject_t op_extrude_state_subject_;
+    lv_subject_t op_retract_state_subject_;
+    lv_timer_t* op_revert_timer_ = nullptr; ///< shared one-shot timer (min-spinner delay / revert)
+    FilamentOp op_revert_target_ = FilamentOp::Load; ///< which op the timer resets
+    std::optional<FilamentOp> op_in_flight_; ///< op driven by run_filament_macro (one at a time)
+    uint32_t op_busy_started_tick_ = 0;      ///< lv_tick when busy began (min-spinner floor)
+    bool backend_op_active_ = false; ///< true while an AMS-backend op awaits ams_action IDLE
+
+    lv_subject_t* op_state_subject(FilamentOp op);
+    void set_op_state(FilamentOp op, int state);  ///< main-thread: set state subject
+    void op_started(FilamentOp op);               ///< main-thread: → busy (state 1)
+    void op_succeeded(FilamentOp op);             ///< main-thread: → done (after min floor)
+    void op_failed(FilamentOp op);                ///< main-thread: → idle (state 0)
+    void enter_op_done_state(FilamentOp op);      ///< main-thread: → done + arm revert timer
+    void schedule_op_timer(uint32_t delay_ms, lv_timer_cb_t cb); ///< (re)arm shared op timer
+    void cancel_op_revert_timer();
+
     // Purge amount state
     int purge_amount_ = 10; // Default 10mm
 

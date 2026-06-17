@@ -1441,6 +1441,9 @@
         "bind_icon": {
           "type": "string"
         },
+        "bind_op_state": {
+          "type": "string"
+        },
         "long_mode": {
           "type": "enum",
           "enum": "label_long_mode"

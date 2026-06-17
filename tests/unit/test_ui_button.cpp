@@ -8,6 +8,7 @@
  * Tests bind_icon attribute functionality and other ui_button features.
  */
 
+#include "ui_button.h"
 #include "ui_icon_codepoints.h"
 #include "ui_update_queue.h"
 
@@ -259,6 +260,96 @@ TEST_CASE_METHOD(UiButtonTestFixture,
     // After bind_icon processing, icon should show subject value
     REQUIRE(icon != nullptr);
     INFO("bind_icon should override static icon attribute");
+    REQUIRE(strcmp(lv_label_get_text(icon), ui_icon::lookup_codepoint("light")) == 0);
+}
+
+// ============================================================================
+// bind_op_state Tests — int subject drives idle/busy/done icon-slot rendering
+//
+// 0 = idle  → original icon glyph visible, no spinner
+// 1 = busy  → glyph label hidden, animated spinner arc visible in icon slot
+// 2 = done  → "check" glyph visible, no spinner
+// ============================================================================
+
+TEST_CASE_METHOD(UiButtonTestFixture, "ui_button bind_op_state renders idle/busy/done states",
+                 "[ui_button][xml][op_state][quick]") {
+    // Dedicated int subject for op-state binding (0 idle / 1 busy / 2 done)
+    lv_subject_t op_subject;
+    lv_subject_init_int(&op_subject, 0);
+    lv_xml_register_subject(nullptr, "test_op_subject", &op_subject);
+
+    const char* idle_cp = ui_icon::lookup_codepoint("light");
+    const char* check_cp = ui_icon::lookup_codepoint("check");
+    REQUIRE(idle_cp != nullptr);
+    REQUIRE(check_cp != nullptr); // 'check' glyph must exist in the MDI font
+
+    const char* attrs[] = {"text",         "Light", "icon", "light",
+                           "bind_op_state", "test_op_subject", nullptr};
+    lv_obj_t* btn = create_button(attrs);
+    REQUIRE(btn != nullptr);
+    process_lvgl(10);
+
+    // The widget exposes its icon glyph label and (lazily-created) spinner arc.
+    lv_obj_t* icon = ui_button_get_icon(btn);
+    REQUIRE(icon != nullptr);
+
+    // --- State 0: idle — original icon glyph visible, spinner hidden/absent ---
+    INFO("idle: icon glyph should be the original 'light' codepoint");
+    REQUIRE(strcmp(lv_label_get_text(icon), idle_cp) == 0);
+    REQUIRE_FALSE(lv_obj_has_flag(icon, LV_OBJ_FLAG_HIDDEN));
+    {
+        lv_obj_t* arc = ui_button_get_op_spinner(btn);
+        // Spinner may not be created yet, or if created must be hidden in idle.
+        if (arc) {
+            REQUIRE(lv_obj_has_flag(arc, LV_OBJ_FLAG_HIDDEN));
+        }
+    }
+
+    // --- State 1: busy — glyph label hidden, spinner arc visible ---
+    lv_subject_set_int(&op_subject, 1);
+    process_lvgl(10);
+    INFO("busy: glyph label must be hidden");
+    REQUIRE(lv_obj_has_flag(icon, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_t* arc = ui_button_get_op_spinner(btn);
+    INFO("busy: spinner arc must exist and be visible");
+    REQUIRE(arc != nullptr);
+    REQUIRE(lv_obj_check_type(arc, &lv_arc_class));
+    REQUIRE_FALSE(lv_obj_has_flag(arc, LV_OBJ_FLAG_HIDDEN));
+
+    // --- State 2: done — 'check' glyph visible, spinner hidden ---
+    lv_subject_set_int(&op_subject, 2);
+    process_lvgl(10);
+    INFO("done: icon glyph should be the 'check' codepoint");
+    REQUIRE_FALSE(lv_obj_has_flag(icon, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(strcmp(lv_label_get_text(icon), check_cp) == 0);
+    REQUIRE(lv_obj_has_flag(arc, LV_OBJ_FLAG_HIDDEN));
+
+    // --- Back to idle — original glyph restored, spinner hidden ---
+    lv_subject_set_int(&op_subject, 0);
+    process_lvgl(10);
+    INFO("idle (return): original 'light' glyph restored");
+    REQUIRE_FALSE(lv_obj_has_flag(icon, LV_OBJ_FLAG_HIDDEN));
+    REQUIRE(strcmp(lv_label_get_text(icon), idle_cp) == 0);
+    REQUIRE(lv_obj_has_flag(arc, LV_OBJ_FLAG_HIDDEN));
+
+    lv_obj_delete(btn);
+    process_lvgl(5);
+    lv_subject_deinit(&op_subject);
+}
+
+TEST_CASE_METHOD(UiButtonTestFixture,
+                 "ui_button without bind_op_state has no spinner and behaves normally",
+                 "[ui_button][xml][op_state][quick]") {
+    // Backward compatibility: a plain icon button must not gain a spinner.
+    const char* attrs[] = {"text", "Light", "icon", "light", nullptr};
+    lv_obj_t* btn = create_button(attrs);
+    REQUIRE(btn != nullptr);
+    process_lvgl(10);
+
+    REQUIRE(ui_button_get_op_spinner(btn) == nullptr);
+
+    lv_obj_t* icon = ui_button_get_icon(btn);
+    REQUIRE(icon != nullptr);
     REQUIRE(strcmp(lv_label_get_text(icon), ui_icon::lookup_codepoint("light")) == 0);
 }
 
