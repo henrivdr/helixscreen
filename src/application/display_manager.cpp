@@ -418,16 +418,27 @@ bool DisplayManager::init(const Config& config) {
         }
     }
 
-    // Real panel power-off path (#1049): only relevant when there is no hardware
-    // backlight blank. On HDMI/fbdev devices the backend can FB_BLANK_POWERDOWN /
-    // DPMS-off the panel; when unavailable we keep the software-overlay fallback.
-    if (!m_use_hardware_blank) {
-        m_use_power_off = m_backend && m_backend->supports_power_off();
-        spdlog::info("[DisplayManager] Display power-off: {} ({})", m_use_power_off,
-                     m_use_power_off ? m_backend->name() : "software overlay fallback");
-    } else {
-        m_use_power_off = false;
-    }
+    // Real panel power-off path (#1049): LAST RESORT only — for devices with NO
+    // controllable backlight (generic HDMI panels / Backlight-None, like the
+    // original #1049 reporter and the CB1). On those, FB_BLANK_POWERDOWN / DRM
+    // connector DPMS-off is the only way to actually cut the panel.
+    //
+    // Any device WITH a usable backlight turns the backlight off instead (the
+    // set_brightness(0) call in enter_sleep()). That is safer and avoids
+    // driver-specific CRTC-disable wedges: on the Snapmaker U1 (working pwm
+    // backlight, but Hardware blank: false + a DPMS-capable DRM connector), DRM
+    // DPMS-off disables the Rockchip VOP2 CRTC and the panel goes PERMANENTLY
+    // black — wake's DPMS-on does NOT reliably re-enable VOP2 (see
+    // assets/config/platform/hooks-snapmaker-u1.sh "DRM CRTC keepalive"). So
+    // gate power-off on having NEITHER a hardware blank NOR a usable backlight.
+    bool has_usable_backlight = m_backlight && m_backlight->is_available();
+    bool backend_can_power_off = m_backend && m_backend->supports_power_off();
+    m_use_power_off =
+        should_use_power_off(m_use_hardware_blank, has_usable_backlight, backend_can_power_off);
+    spdlog::info("[DisplayManager] Display power-off: {} ({})", m_use_power_off,
+                 m_use_power_off ? m_backend->name()
+                                 : (has_usable_backlight ? "backlight off (no panel power-off)"
+                                                         : "software overlay fallback"));
 
     // Force backlight ON at startup - ensures display is visible even if
     // previous instance left it off or in an unknown state

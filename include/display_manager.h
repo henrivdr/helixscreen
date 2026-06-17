@@ -159,6 +159,29 @@ class DisplayManager {
     // ========================================================================
 
     /**
+     * @brief Decide whether real panel power-off (FB_BLANK_POWERDOWN / DRM DPMS)
+     *        may be used as the sleep mechanism (#1049). Pure, no side effects.
+     *
+     * Power-off is a LAST RESORT — only for devices with NO controllable
+     * backlight (generic HDMI / Backlight-None like the #1049 reporter and CB1),
+     * where it is the only way to actually cut the panel. Any device WITH a
+     * hardware blank OR a usable backlight must NOT power off the panel: it turns
+     * the backlight off instead, which is safer and avoids driver-specific
+     * CRTC-disable wedges (e.g. Snapmaker U1: DRM DPMS-off disables the Rockchip
+     * VOP2 CRTC and never recovers — even though it has a working pwm backlight).
+     *
+     * @param use_hardware_blank        Whether a hardware backlight blank is used
+     * @param has_usable_backlight      Whether a controllable backlight is available
+     * @param backend_supports_power_off Whether the display backend can power off
+     * @return true only when there is neither a hardware blank nor a usable
+     *         backlight AND the backend can power off
+     */
+    static bool should_use_power_off(bool use_hardware_blank, bool has_usable_backlight,
+                                     bool backend_supports_power_off) {
+        return !use_hardware_blank && !has_usable_backlight && backend_supports_power_off;
+    }
+
+    /**
      * @brief Check inactivity and trigger display sleep if timeout exceeded
      *
      * Call this from the main event loop. Uses LVGL's built-in inactivity

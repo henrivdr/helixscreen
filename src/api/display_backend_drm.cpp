@@ -907,6 +907,106 @@ bool DisplayBackendDRM::clear_framebuffer(uint32_t color) {
     return true;
 }
 
+// ============================================================================
+// Real panel power-off via DRM connector DPMS (#1049)
+// ============================================================================
+
+bool DisplayBackendDRM::set_connector_dpms(bool on) {
+    if (!display_) {
+        spdlog::debug("[DRM Backend] DPMS: no display");
+        return false;
+    }
+
+    // Use the DRM master fd LVGL already owns. DPMS modesetting requires DRM
+    // master; LVGL acquired it via drmSetMaster() when it set up the display.
+    // Opening a second (non-master) fd here would be rejected for modesetting.
+    int fd = lv_linux_drm_get_fd(display_);
+    if (fd < 0) {
+        spdlog::warn("[DRM Backend] DPMS: could not obtain DRM master fd from LVGL");
+        return false;
+    }
+
+    drmModeRes* resources = drmModeGetResources(fd);
+    if (!resources) {
+        spdlog::warn("[DRM Backend] DPMS: drmModeGetResources failed: {}", strerror(errno));
+        return false;
+    }
+
+    bool applied = false;
+    for (int i = 0; i < resources->count_connectors && !applied; i++) {
+        drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
+        if (!connector) {
+            continue;
+        }
+
+        if (connector->connection == DRM_MODE_CONNECTED) {
+            // Find this connector's "DPMS" property id by enumerating its props.
+            drmModePropertyPtr dpms_prop = nullptr;
+            uint32_t dpms_prop_id = 0;
+            for (int p = 0; p < connector->count_props; p++) {
+                drmModePropertyPtr prop = drmModeGetProperty(fd, connector->props[p]);
+                if (!prop) {
+                    continue;
+                }
+                if (strcmp(prop->name, "DPMS") == 0) {
+                    dpms_prop = prop;
+                    dpms_prop_id = prop->prop_id;
+                    break;
+                }
+                drmModeFreeProperty(prop);
+            }
+
+            if (dpms_prop_id != 0) {
+                uint64_t value = on ? DRM_MODE_DPMS_ON : DRM_MODE_DPMS_OFF;
+                int rc = drmModeConnectorSetProperty(fd, connector->connector_id, dpms_prop_id,
+                                                     value);
+                if (rc == 0) {
+                    applied = true;
+                    spdlog::info("[DRM Backend] Connector {} DPMS set to {}",
+                                 connector->connector_id, on ? "ON" : "OFF");
+                } else {
+                    spdlog::warn("[DRM Backend] DPMS set on connector {} failed: {}",
+                                 connector->connector_id, strerror(errno));
+                }
+            } else {
+                spdlog::warn("[DRM Backend] Connected connector {} has no DPMS property",
+                             connector->connector_id);
+            }
+
+            if (dpms_prop) {
+                drmModeFreeProperty(dpms_prop);
+            }
+        }
+
+        drmModeFreeConnector(connector);
+    }
+
+    drmModeFreeResources(resources);
+    return applied;
+}
+
+bool DisplayBackendDRM::supports_power_off() const {
+    // Capable when we hold a DRM master fd (we render via LVGL's DRM driver, which
+    // is master). DisplayManager only consults this when there is no hardware
+    // backlight blank; if it returns false the software overlay remains the
+    // fallback. We can't cheaply pre-check the DPMS property here (const, and it
+    // requires enumerating connectors), so report capable whenever the master fd
+    // exists; power_off() returns false and falls back to overlay if DPMS is
+    // actually absent.
+    return display_ != nullptr && lv_linux_drm_get_fd(display_) >= 0;
+}
+
+bool DisplayBackendDRM::power_off() {
+    return set_connector_dpms(false);
+}
+
+bool DisplayBackendDRM::power_on() {
+    // Must run BEFORE the post-wake lv_refr_now() so the panel is live when LVGL
+    // paints — same #303 ordering as the fbdev unblank path. DisplayManager
+    // guarantees this by calling power_on() before lv_refr_now().
+    return set_connector_dpms(true);
+}
+
 /**
  * @brief Check if fbcon is actively bound to a framebuffer vtconsole.
  *

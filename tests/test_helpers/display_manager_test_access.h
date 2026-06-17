@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "backlight_backend.h"
 #include "display_backend.h"
 #include "display_manager.h"
 
@@ -23,6 +24,23 @@ class DisplayManagerTestAccess {
 
     static void set_use_power_off(DisplayManager& dm, bool use_power_off) {
         dm.m_use_power_off = use_power_off;
+    }
+
+    static void set_backlight(DisplayManager& dm, std::unique_ptr<BacklightBackend> backlight) {
+        dm.m_backlight = std::move(backlight);
+    }
+
+    // Run the SAME power-off gate that DisplayManager::init() applies, against the
+    // manager's currently-injected backend/backlight/hardware-blank state. Lets a
+    // test prove the gate's outcome (#1049 U1 regression guard) without a full
+    // init(). Mirrors the init() expression exactly — if the gate is loosened,
+    // this recomputes the loosened value and the guarding test fails.
+    static bool compute_use_power_off(DisplayManager& dm) {
+        bool has_usable_backlight = dm.m_backlight && dm.m_backlight->is_available();
+        bool backend_can_power_off = dm.m_backend && dm.m_backend->supports_power_off();
+        dm.m_use_power_off = DisplayManager::should_use_power_off(
+            dm.m_use_hardware_blank, has_usable_backlight, backend_can_power_off);
+        return dm.m_use_power_off;
     }
 
     static void enter_sleep(DisplayManager& dm, int timeout_sec) {

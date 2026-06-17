@@ -25,6 +25,7 @@
  * via DisplayManager's test hooks.
  */
 
+#include "backlight_backend.h"
 #include "config.h"
 #include "display_backend.h"
 #include "display_manager.h"
@@ -42,7 +43,9 @@ namespace {
 // calls so the idle-entry path can be asserted without real hardware.
 class FakePowerOffBackend : public DisplayBackend {
   public:
-    explicit FakePowerOffBackend(bool supports_power_off) : m_supports(supports_power_off) {}
+    explicit FakePowerOffBackend(bool supports_power_off,
+                                 DisplayBackendType type = DisplayBackendType::FBDEV)
+        : m_supports(supports_power_off), m_type(type) {}
 
     lv_display_t* create_display(int, int) override {
         return nullptr;
@@ -51,7 +54,7 @@ class FakePowerOffBackend : public DisplayBackend {
         return nullptr;
     }
     DisplayBackendType type() const override {
-        return DisplayBackendType::FBDEV;
+        return m_type;
     }
     const char* name() const override {
         return "FakePowerOff";
@@ -88,6 +91,33 @@ class FakePowerOffBackend : public DisplayBackend {
 
   private:
     bool m_supports;
+    DisplayBackendType m_type;
+};
+
+// Fake controllable backlight (e.g. the Snapmaker U1's Sysfs pwm-backlight):
+// is_available() == true, set_brightness(0) cleanly turns the panel off.
+class FakeBacklight : public BacklightBackend {
+  public:
+    explicit FakeBacklight(bool available) : m_available(available) {}
+
+    bool set_brightness(int percent) override {
+        last_brightness = percent;
+        return m_available;
+    }
+    int get_brightness() const override {
+        return m_available ? last_brightness : -1;
+    }
+    bool is_available() const override {
+        return m_available;
+    }
+    const char* name() const override {
+        return "FakeBacklight";
+    }
+
+    int last_brightness = 100;
+
+  private:
+    bool m_available;
 };
 
 } // namespace
@@ -284,4 +314,107 @@ TEST_CASE_METHOD(LVGLTestFixture,
     DisplayManagerTestAccess::restore_display_output(mgr);
     REQUIRE(raw->unblank_calls == 1); // hardware-blank path unblanks, never power_on
     REQUIRE(raw->power_on_calls == 0);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "DRM backend power-off flows through the same generic seam (CB1/Pi HDMI)",
+                 "[application][display][sleep][poweroff][drm][1049]") {
+    // The reporter's Pi and the CB1 verification device render via DRM (DPMS is
+    // the real power-off there). DisplayManager's power-off path is backend-type
+    // agnostic — it calls m_backend->power_off()/power_on() regardless of type —
+    // so a DRM-typed backend reporting supports_power_off() must drive exactly the
+    // same path as the fbdev case. (The actual drmModeConnectorSetProperty DPMS
+    // call lives in DisplayBackendDRM and can't run in CI without a DRM master.)
+    DisplayManager mgr;
+    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true,
+                                                         DisplayBackendType::DRM);
+    FakePowerOffBackend* raw = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false); // no backlight blank (CB1)
+    DisplayManagerTestAccess::set_use_power_off(mgr, raw->supports_power_off());
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+
+    REQUIRE(mgr.is_display_sleeping());
+    REQUIRE(raw->power_off_calls == 1); // DRM DPMS-off path, not the software overlay
+    REQUIRE(raw->blank_calls == 0);
+
+    DisplayManagerTestAccess::restore_display_output(mgr);
+    REQUIRE(raw->power_on_calls == 1); // DPMS-on before lv_refr_now on wake (#303)
+}
+
+// ============================================================================
+// Bug 2 — power-off gate: LAST RESORT only (Snapmaker U1 regression guard)
+// ============================================================================
+
+TEST_CASE("power-off gate: only with NO hardware blank AND NO usable backlight",
+          "[application][display][sleep][poweroff][1049]") {
+    // Pure decision matrix for should_use_power_off(use_hw_blank,
+    // has_usable_backlight, backend_supports_power_off).
+
+    // No hw blank, no backlight, backend can power off → power off (reporter HDMI / CB1).
+    REQUIRE(DisplayManager::should_use_power_off(false, false, true));
+
+    // Usable backlight present → NEVER power off, even with a DPMS-capable backend.
+    // This is the Snapmaker U1 case: a working pwm backlight + a DPMS-capable DRM
+    // connector. DRM DPMS-off there wedges the VOP2 CRTC permanently.
+    REQUIRE_FALSE(DisplayManager::should_use_power_off(false, true, true));
+
+    // Hardware blank present → never power off (AD5M/Allwinner) — unchanged.
+    REQUIRE_FALSE(DisplayManager::should_use_power_off(true, false, true));
+
+    // Backend can't power off → never (falls back to software overlay).
+    REQUIRE_FALSE(DisplayManager::should_use_power_off(false, false, false));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "usable backlight suppresses power-off so enter_sleep dims instead (U1 guard)",
+                 "[application][display][sleep][poweroff][1049]") {
+    // U1: working pwm-backlight (is_available()==true) + a DPMS-capable DRM
+    // backend that reports Hardware blank: false. Without the backlight clause in
+    // the gate, m_use_power_off would become true and DRM DPMS-off would wedge the
+    // VOP2 CRTC. With it, m_use_power_off MUST be false and enter_sleep MUST NOT
+    // call power_off() — it turns the backlight off and uses the software overlay.
+    DisplayManager mgr;
+    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true,
+                                                         DisplayBackendType::DRM);
+    FakePowerOffBackend* raw_backend = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    DisplayManagerTestAccess::set_backlight(mgr,
+                                            std::make_unique<FakeBacklight>(/*available=*/true));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false); // U1 reports no hw blank
+
+    // Run the real init() gate against the injected state.
+    bool use_power_off = DisplayManagerTestAccess::compute_use_power_off(mgr);
+    REQUIRE_FALSE(use_power_off); // the regression guard
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+
+    REQUIRE(mgr.is_display_sleeping());
+    REQUIRE(raw_backend->power_off_calls == 0); // never DPMS-off a backlight device
+    REQUIRE(raw_backend->blank_calls == 0);     // not a hardware-blank device either
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "no usable backlight keeps power-off enabled (reporter HDMI / CB1)",
+                 "[application][display][sleep][poweroff][1049]") {
+    // Backlight-None device with a DPMS-capable backend: power-off is the only way
+    // to cut the panel, so the gate must KEEP it enabled.
+    DisplayManager mgr;
+    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true,
+                                                         DisplayBackendType::DRM);
+    FakePowerOffBackend* raw_backend = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    // Backlight present but NOT available (Backlight-None in production).
+    DisplayManagerTestAccess::set_backlight(mgr,
+                                            std::make_unique<FakeBacklight>(/*available=*/false));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false);
+
+    bool use_power_off = DisplayManagerTestAccess::compute_use_power_off(mgr);
+    REQUIRE(use_power_off);
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+
+    REQUIRE(mgr.is_display_sleeping());
+    REQUIRE(raw_backend->power_off_calls == 1); // power-off still used on no-backlight devices
 }

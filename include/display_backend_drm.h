@@ -83,6 +83,15 @@ class DisplayBackendDRM : public DisplayBackend {
     // Framebuffer operations
     bool clear_framebuffer(uint32_t color) override;
 
+    // Real panel power-off via DRM connector DPMS (#1049). This is the actual
+    // power path for HDMI/no-backlight devices (CB1, Pi) where there is no
+    // sysfs/ioctl backlight and a software overlay leaves the panel lit. Uses the
+    // DRM master fd LVGL already holds (lv_linux_drm_get_fd) — DPMS modesetting
+    // requires master, which the LVGL DRM driver acquired via drmSetMaster().
+    bool supports_power_off() const override;
+    bool power_off() override;
+    bool power_on() override;
+
     // Configuration
     void set_drm_device(const std::string& path) {
         drm_device_ = path;
@@ -120,6 +129,11 @@ class DisplayBackendDRM : public DisplayBackend {
     /// Required on kernel 6.x where sun4i-drm registers DRM fbdev emulation.
     void suppress_console();
     void restore_console();
+
+    /// Drive the active connector's DPMS property (DRM_MODE_DPMS_ON/OFF) using
+    /// the DRM master fd LVGL holds. Returns true if the property was set on the
+    /// connected connector. on=true powers on, on=false powers off (#1049).
+    bool set_connector_dpms(bool on);
 
     std::string drm_device_;
     lv_display_t* display_ = nullptr;

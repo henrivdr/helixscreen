@@ -94,18 +94,74 @@ power-off path must restore + `lv_refr_now()` on wake exactly like the existing 
 ## Status / deferred / risk (2026-06-17)
 
 **Implemented + reviewed-clean + tests green:** Part 1 (coupling) fully. Part 2 power-off seam
-is **fbdev-only** (`FBIOBLANK FB_BLANK_POWERDOWN`). DRM DPMS and the `vcgencmd display_power`
-fallback are **NOT implemented** — DRM/SDL backends inherit the no-op default and fall back to the
-software overlay. The seam (`DisplayBackend::supports_power_off()/power_off()/power_on()`) is in
-place so DRM DPMS can be added later without touching DisplayManager.
+covers fbdev (`FBIOBLANK FB_BLANK_POWERDOWN`) AND now **DRM connector DPMS** (the real path for
+HDMI/no-backlight devices — see Phase 0 below).
 
-**OPEN HARDWARE RISK (unverified):** modern Pi uses the vc4-KMS/DRM driver; `/dev/fb0` is DRM
-**fbdev emulation**. `FBIOBLANK FB_BLANK_POWERDOWN` on the emulated fbdev may NOT actually DPMS-off
-an HDMI panel — the real power-off on a KMS Pi typically needs DRM connector DPMS or
-`vcgencmd display_power 0`. So the fbdev path may be insufficient on exactly the reporter's device
-(Pi 4 + HDMI). **Must hardware-verify on a Pi with an HDMI panel before claiming Bug 2 fixed**; if
-FBIOBLANK doesn't cut the panel, add the `vcgencmd display_power` fallback (reliable on Pi) and/or
-DRM DPMS. Bug 1 (coupling/screensaver) is not subject to this risk.
+### Phase 0 — DRM master + fd investigation (the crux: CASE A)
+
+Findings (verbatim file:line):
+- **Backend on pi32 / CB1:** auto-detect tries **DRM first** (`DisplayBackend::create_auto()`,
+  `src/api/display_backend.cpp:199-296`); `DisplayBackendDRM::is_available()` requires a connected
+  connector (`display_backend_drm.cpp:91-122`). On a Pi 4 / CB1 with HDMI connected, **DRM wins**;
+  fbdev is only the fallback. So the reporter's "software overlay" came from `m_use_hardware_blank=false`
+  with no power-off seam — DRM was the renderer but had no power_off().
+- **helix IS DRM master (firmly).** Both LVGL render paths own the card fd and do KMS modesetting
+  (`drmModeSetCrtc`), which requires master:
+  - **EGL path** (pi32/CB1 default, `HELIX_ENABLE_OPENGLES` → `LV_LINUX_DRM_USE_EGL=1`):
+    `lv_linux_drm_egl.c:486 drm_device_init()` opens the fd (`open(path,O_RDWR)`, :492) and calls
+    `drmSetMaster(ctx->fd)` (:535). driver_data is `lv_drm_ctx_t*`, fd is its first member (`int fd;` :39).
+  - **non-EGL path:** `lv_linux_drm.c drm_setup()` opens the fd; `patches/lvgl-drm-set-master.patch`
+    adds the `drmSetMaster()` retry loop. driver_data is `drm_dev_t*`, fd is its first member (`int fd;` :60).
+  → In-process `drmModeConnectorSetProperty(fd, conn, DPMS, OFF)` on **that** fd is permitted; no
+  second (non-master) fd, no EPERM. **CASE A is correct.**
+- **No public getter for the fd.** Added `lv_linux_drm_get_fd(disp)` via patches mirroring
+  `patches/lvgl-drm-egl-getters.patch` — one impl in each of `lv_linux_drm.c` (non-EGL) and
+  `lv_linux_drm_egl.c` (EGL), declared once in `lv_linux_drm.h` under `#if LV_USE_LINUX_DRM`.
+- **libdrm already linked** for DRM builds (`-ldrm`, `Makefile:660`; `-I/usr/include/libdrm`,
+  `mk/cross.mk`). `xf86drm.h`/`xf86drmMode.h` already included by `display_backend_drm.cpp`.
+
+### CASE A implementation
+`DisplayBackendDRM::supports_power_off()/power_off()/power_on()` use the master fd from
+`lv_linux_drm_get_fd(display_)`: enumerate connectors, find the CONNECTED one, locate its "DPMS"
+property, `drmModeConnectorSetProperty(... DRM_MODE_DPMS_OFF/ON)`. `power_on()` runs before
+`lv_refr_now` on wake (#303). The **fbdev** `FBIOBLANK FB_BLANK_POWERDOWN` path (committed at
+044db95af) stays for genuine fbdev devices (AD5M/AD5X) and is UNAFFECTED.
+
+**Verification target (CB1 .112):** Allwinner, HDMI, `/sys/class/backlight/` EMPTY (reproduces the
+no-backlight condition), `card0-HDMI-A-1: connected`, NO vcgencmd. DRM DPMS is the ONLY real
+power-off there. Verify by reading `/sys/class/drm/card0-HDMI-A-1/dpms` == `Off` after sleep, `On`
+after wake.
+
+**vcgencmd / firmware path: deliberately NOT added.** It is VideoCore/Pi-only (CB1 has no vcgencmd),
+the in-process mailbox "blank screen" tag only blanks the framebuffer (not HDMI DPMS-off — same
+limitation as FBIOBLANK), and DRM DPMS already covers the real devices we can verify. Documenting
+this rather than shipping a path that pretends to power off.
+
+Bug 1 (coupling/screensaver) is not subject to any of this hardware risk.
+
+### Power-off gate is LAST RESORT (Snapmaker U1 regression, hardware-confirmed)
+The `m_use_power_off` gate must require **neither a hardware blank NOR a usable backlight** — not
+just "no hardware blank". The U1 has a working Sysfs pwm-backlight (`set_brightness(0)` cleanly turns
+it off) yet reports `Hardware blank: false` and exposes a DPMS-capable DRM connector. With the
+original gate (`!m_use_hardware_blank`), `m_use_power_off` became true and DRM DPMS-off disabled the
+Rockchip VOP2 CRTC → panel **permanently black**; wake's DPMS-on does not recover it (see
+`assets/config/platform/hooks-snapmaker-u1.sh` "DRM CRTC keepalive"). Fix: pure helper
+`DisplayManager::should_use_power_off(use_hw_blank, has_usable_backlight, backend_supports_power_off)`
+= `!use_hw_blank && !has_usable_backlight && backend_supports_power_off`. Any device with a backlight
+turns the backlight off instead (the existing `set_brightness(0)` in `enter_sleep()` always runs).
+Verified: Backlight-None+DPMS (reporter/CB1) → still power-off; usable backlight (U1) → no power-off;
+hardware-blank (AD5M) → unchanged.
+
+**Implementation status (uncommitted, on top of 044db95af):** LVGL `lv_linux_drm_get_fd()` getter
+added via amended `patches/lvgl-drm-flush-rotation.patch` (`.h` decl + non-EGL `.c` impl) and
+`patches/lvgl-drm-egl-getters.patch` (EGL `.c` impl); patches re-apply cleanly from pristine in
+build order. `DisplayBackendDRM::supports_power_off()/power_off()/power_on()` + `set_connector_dpms()`
+implemented. DisplayManager needed NO change — its power-off path is backend-agnostic. Native build
+(SDL) + tests build clean; DRM TU verified with `-fsyntax-only -Wall -Wextra` against libdrm.
+`./build/bin/helix-tests "[1049]"` green (30 assertions / 8 cases, incl. a DRM-typed power-off test);
+slice `[application],[display],[display_settings],[screensaver],[1049]` green (662/161);
+`bats tests/shell/test_code_lint.bats` all 6 ok (test seams via `DisplayManagerTestAccess`, no
+`_for_testing` in headers). **Still needs CB1 .112 hardware verification** of the dpms sysfs toggle.
 
 ## Process
 - `git rev-parse --abbrev-ref HEAD` == `fix/1049-screensaver-idle-power-off` before EVERY commit.

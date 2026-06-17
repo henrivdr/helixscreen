@@ -27,7 +27,7 @@ index 2a6ca6ed0..2e7d11dbe 100644
  
  /**********************
   *      MACROS
-@@ -256,6 +260,43 @@ void lv_linux_drm_set_mode_cb(lv_display_t * disp, lv_linux_drm_select_mode_cb_t
+@@ -256,6 +260,52 @@ void lv_linux_drm_set_mode_cb(lv_display_t * disp, lv_linux_drm_select_mode_cb_t
      LV_UNUSED(callback);
      LV_LOG_WARN("DRM without EGL support doesn't currently support setting a mode selection callback");
  }
@@ -55,6 +55,15 @@ index 2a6ca6ed0..2e7d11dbe 100644
 +
 +    LV_LOG_INFO("DRM plane has no rotation property");
 +    return 0;
++}
++
++int lv_linux_drm_get_fd(lv_display_t * disp)
++{
++    drm_dev_t * drm_dev = lv_display_get_driver_data(disp);
++    if(drm_dev == NULL) {
++        return -1;
++    }
++    return drm_dev->fd;
 +}
 +
 +void lv_linux_drm_set_rotation(lv_display_t * disp, uint64_t rotation)
@@ -404,7 +413,7 @@ index 5afede049..fa1b28b56 100644
  /**
   * Get the horizontal resolution of a DRM mode
   * @param mode pointer to the DRM mode object
-@@ -118,6 +142,29 @@ int32_t lv_linux_drm_mode_get_refresh_rate(const lv_linux_drm_mode_t * mode);
+@@ -118,6 +142,42 @@ int32_t lv_linux_drm_mode_get_refresh_rate(const lv_linux_drm_mode_t * mode);
   */
  bool lv_linux_drm_mode_is_preferred(const lv_linux_drm_mode_t * mode);
  
@@ -430,6 +439,19 @@ index 5afede049..fa1b28b56 100644
 + */
 +void * lv_linux_drm_get_egl_config(lv_display_t * disp);
 +#endif
++
++/**
++ * Get the open DRM master file descriptor backing a DRM display.
++ *
++ * HelixScreen uses this to issue connector DPMS (drmModeConnectorSetProperty)
++ * on the same master fd LVGL holds — required because DPMS modesetting needs
++ * DRM master, which LVGL already acquired via drmSetMaster() (#1049). Valid for
++ * both the non-EGL (drm_dev_t) and EGL (lv_drm_ctx_t) paths.
++ *
++ * @param disp pointer to the display object
++ * @return the DRM fd (>= 0), or -1 if unavailable
++ */
++int lv_linux_drm_get_fd(lv_display_t * disp);
 +
  /**********************
   *      MACROS
