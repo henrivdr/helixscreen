@@ -345,16 +345,31 @@ static std::string get_project_root() {
     return src.parent_path().parent_path().parent_path().parent_path().string();
 }
 
-static void ensure_data_dir() {
-    static bool done = false;
-    if (!done) {
-        setenv("HELIX_DATA_DIR", get_project_root().c_str(), 0);
-        done = true;
+// RAII: point HELIX_DATA_DIR at the project root for the duration of one test so
+// find_readable() locates seed configs, then restore it. The previous one-shot
+// (setenv + static done flag, never restored) leaked HELIX_DATA_DIR to every
+// subsequent test in the process.
+struct DataDirGuard {
+    std::string saved_;
+    bool had_ = false;
+    DataDirGuard() {
+        if (const char* p = std::getenv("HELIX_DATA_DIR")) {
+            saved_ = p;
+            had_ = true;
+        }
+        setenv("HELIX_DATA_DIR", get_project_root().c_str(), 1);
     }
-}
+    ~DataDirGuard() {
+        if (had_) {
+            setenv("HELIX_DATA_DIR", saved_.c_str(), 1);
+        } else {
+            unsetenv("HELIX_DATA_DIR");
+        }
+    }
+};
 
 TEST_CASE("AD5X preset has required display sleep config", "[application][display][ad5x]") {
-    ensure_data_dir();
+    DataDirGuard data_dir_guard;
     std::string preset_path = helix::find_readable("presets/ad5x.json");
 
     std::ifstream f(preset_path);
@@ -376,7 +391,7 @@ TEST_CASE("AD5X preset has required display sleep config", "[application][displa
 }
 
 TEST_CASE("CC1 preset has required display sleep config", "[application][display][cc1]") {
-    ensure_data_dir();
+    DataDirGuard data_dir_guard;
     std::string preset_path = helix::find_readable("presets/cc1.json");
 
     std::ifstream f(preset_path);
@@ -393,7 +408,7 @@ TEST_CASE("CC1 preset has required display sleep config", "[application][display
 }
 
 TEST_CASE("AD5M preset does NOT disable backlight during sleep", "[application][display][ad5m]") {
-    ensure_data_dir();
+    DataDirGuard data_dir_guard;
     std::string preset_path = helix::find_readable("presets/ad5m.json");
 
     std::ifstream f(preset_path);

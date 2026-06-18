@@ -20,8 +20,19 @@ class PresetConfigFixture {
     std::string saved_data_dir_;
     bool had_config_dir_ = false;
     bool had_data_dir_ = false;
+    bool did_setup_ = false;
+    bool torn_down_ = false;
+
+    // Catch2 invokes the fixture ctor/dtor, NOT SetUp()/TearDown(). Tests call
+    // those manually; a dtor-driven TearDown() is the safety net so a test that
+    // forgets to call TearDown() still restores HELIX_DATA_DIR/HELIX_CONFIG_DIR
+    // (a leak there breaks find_readable() for every later test in the process —
+    // 127 printer_detector failures, macro/grid/theme cascades). Idempotent via
+    // did_setup_/torn_down_ so an explicit TearDown() + the dtor don't double-run.
+    ~PresetConfigFixture() { TearDown(); }
 
     void SetUp() {
+        did_setup_ = true;
         // Create temp directory for test config and presets
         temp_dir = (fs::temp_directory_path() / "helix_preset_test").string();
         fs::create_directories(temp_dir + "/presets");
@@ -80,6 +91,10 @@ class PresetConfigFixture {
     }
 
     void TearDown() {
+        if (!did_setup_ || torn_down_) {
+            return;
+        }
+        torn_down_ = true;
         fs::remove_all(temp_dir);
         if (had_config_dir_) {
             setenv("HELIX_CONFIG_DIR", saved_config_dir_.c_str(), 1);
