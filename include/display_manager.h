@@ -159,6 +159,29 @@ class DisplayManager {
     // ========================================================================
 
     /**
+     * @brief Decide whether real panel power-off (FB_BLANK_POWERDOWN / DRM DPMS)
+     *        may be used as the sleep mechanism (#1049). Pure, no side effects.
+     *
+     * Power-off is a LAST RESORT — only for devices with NO controllable
+     * backlight (generic HDMI / Backlight-None like the #1049 reporter and CB1),
+     * where it is the only way to actually cut the panel. Any device WITH a
+     * hardware blank OR a usable backlight must NOT power off the panel: it turns
+     * the backlight off instead, which is safer and avoids driver-specific
+     * CRTC-disable wedges (e.g. Snapmaker U1: DRM DPMS-off disables the Rockchip
+     * VOP2 CRTC and never recovers — even though it has a working pwm backlight).
+     *
+     * @param use_hardware_blank        Whether a hardware backlight blank is used
+     * @param has_usable_backlight      Whether a controllable backlight is available
+     * @param backend_supports_power_off Whether the display backend can power off
+     * @return true only when there is neither a hardware blank nor a usable
+     *         backlight AND the backend can power off
+     */
+    static bool should_use_power_off(bool use_hardware_blank, bool has_usable_backlight,
+                                     bool backend_supports_power_off) {
+        return !use_hardware_blank && !has_usable_backlight && backend_supports_power_off;
+    }
+
+    /**
      * @brief Check inactivity and trigger display sleep if timeout exceeded
      *
      * Call this from the main event loop. Uses LVGL's built-in inactivity
@@ -438,6 +461,11 @@ class DisplayManager {
     void register_resize_callback(ResizeCallback callback);
 
   private:
+    // Test-only seam (#1049): grants the test harness access to the private
+    // sleep/wake/power-off members so the idle paths can be exercised without a
+    // full init(). See tests/test_helpers/display_manager_test_access.h.
+    friend class DisplayManagerTestAccess;
+
     bool m_initialized = false;
     bool m_shutting_down = false;
     int m_width = 0;
@@ -475,6 +503,11 @@ class DisplayManager {
 
     // Hardware vs software blank strategy
     bool m_use_hardware_blank = false;
+    // Real panel power-off (fbdev FB_BLANK_POWERDOWN / DRM DPMS) for HDMI/fbdev
+    // devices with no hardware backlight blank. When true and the screensaver is
+    // OFF, idle entry powers the panel off instead of painting a software overlay
+    // (#1049). Falls back to the overlay when no backend supports power-off.
+    bool m_use_power_off = false;
     bool m_sleep_backlight_off = true; // Whether to power off backlight during sleep
     lv_obj_t* m_sleep_overlay = nullptr;
 
@@ -497,6 +530,14 @@ class DisplayManager {
      * @param timeout_sec Sleep timeout for logging
      */
     void enter_sleep(int timeout_sec);
+
+    /**
+     * @brief Restore panel output on wake (unblank / power-on / remove overlay).
+     *
+     * Mirrors enter_sleep()'s branch selection. Runs BEFORE the post-wake
+     * lv_refr_now() so the framebuffer is ready when LVGL paints (#303).
+     */
+    void restore_display_output();
 
     /**
      * @brief Create fullscreen black overlay on lv_layer_top() for software sleep

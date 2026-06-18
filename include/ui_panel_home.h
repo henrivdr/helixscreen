@@ -119,11 +119,9 @@ class HomePanel : public PanelBase {
     void setup_widget_gate_observers();
 
     // Panel-level click handlers (not widget-delegated)
-    void handle_printer_status_clicked();
     void handle_ams_clicked();
 
     // Panel-level static callbacks
-    static void printer_status_clicked_cb(lv_event_t* e);
     static void ams_clicked_cb(lv_event_t* e);
     static void on_home_grid_pressed(lv_event_t* e);
     static void on_home_grid_long_press(lv_event_t* e);

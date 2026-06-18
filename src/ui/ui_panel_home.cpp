@@ -103,7 +103,6 @@ void HomePanel::init_subjects() {
     // Widget-specific callbacks (LED, power, temp, network, fan, macro, etc.)
     // are self-registered by each widget in their attach() method.
     register_xml_callbacks({
-        {"printer_status_clicked_cb", printer_status_clicked_cb},
         {"ams_clicked_cb", ams_clicked_cb},
         {"on_home_grid_pressed", on_home_grid_pressed},
         {"on_home_grid_long_press", on_home_grid_long_press},
@@ -793,11 +792,6 @@ void HomePanel::trigger_idle_runout_check() {
 // Panel-level click handlers
 // ============================================================================
 
-void HomePanel::handle_printer_status_clicked() {
-    spdlog::info("[{}] Printer status icon clicked - navigating to advanced settings", get_name());
-    NavigationManager::instance().set_active(PanelId::Advanced);
-}
-
 void HomePanel::handle_ams_clicked() {
     spdlog::info("[{}] AMS indicator clicked - opening AMS panel overlay", get_name());
 
@@ -823,13 +817,6 @@ void HomePanel::handle_ams_clicked() {
 // ============================================================================
 // Static callback trampolines
 // ============================================================================
-
-void HomePanel::printer_status_clicked_cb(lv_event_t* e) {
-    LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] printer_status_clicked_cb");
-    (void)e;
-    get_global_home_panel().handle_printer_status_clicked();
-    LVGL_SAFE_EVENT_CB_END();
-}
 
 void HomePanel::ams_clicked_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] ams_clicked_cb");

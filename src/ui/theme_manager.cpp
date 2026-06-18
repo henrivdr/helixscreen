@@ -9,6 +9,7 @@
 
 #include "border_radius_sizes.h"
 #include "config.h"
+
 #include "helix-xml/src/libs/expat/expat.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/lvgl.h"
@@ -923,9 +924,23 @@ void theme_manager_register_responsive_spacing(lv_display_t* display) {
     // to distinguish micro (480x272) from tiny (480x320) since they share the same
     // horizontal resolution. Register first so auto-discovery silently skips duplicates.
     {
+        // Ultrawide displays (e.g. 1920x480) are very wide but short. The nav bar
+        // is a full-height vertical strip, so its width must track the short
+        // vertical extent — not the horizontal resolution, which would otherwise
+        // select the widest 'large' bar and waste the horizontal space the grid
+        // wants. Detect ultrawide from the aspect ratio directly (the >2.5:1
+        // threshold mirrors LayoutManager::detect) rather than via LayoutManager,
+        // which is not yet initialized when this runs at startup. Mirrors the
+        // height-based selection used for every other responsive token.
+        const bool ultrawide = ver_res > 0 && hor_res > ver_res * 5 / 2;
         const char* nav_suffix;
         if (ver_res <= UI_BREAKPOINT_MICRO_MAX)
             nav_suffix = "_micro";
+        else if (ultrawide)
+            // Ultrawide prioritizes horizontal content space, so keep the vertical
+            // nav strip slim: cap at 'small' and only go narrower on very short
+            // panels. (Icons stay legible — they are centered in the strip.)
+            nav_suffix = (ver_res <= UI_BREAKPOINT_TINY_MAX) ? "_tiny" : "_small";
         else if (hor_res <= 520)
             nav_suffix = "_tiny";
         else if (hor_res <= 900)
