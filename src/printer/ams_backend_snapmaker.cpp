@@ -11,6 +11,7 @@
 #include "pause_cause.h"
 #include "post_op_cooldown_manager.h"
 #include "snapmaker_resume.h"
+#include "ui_toast_manager.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -524,6 +525,16 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     spdlog::info("{} prepare_for_resume: tool {} runout latched — driving AMS load "
                  "(AUTO_FEEDING) before RESUME",
                  backend_log_tag(), slot);
+
+    // AUTO_FEEDING heats + feeds + flushes (~86s) before the resume lands. The
+    // pending-action UI only shows an optimistic spinner with no text, so tell
+    // the user what the wait is — otherwise the long pause reads as a hang.
+    // prepare_for_resume runs on the main thread (resume-button path), so this
+    // toast is safe to raise directly here.
+    ToastManager::instance().show(
+        ToastSeverity::INFO,
+        lv_tr("Refeeding filament — this may take a minute"),
+        /*duration_ms=*/8000);
 
     auto tok = lifetime_.token();
     const char* tag = backend_log_tag();
