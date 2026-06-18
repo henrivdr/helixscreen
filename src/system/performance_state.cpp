@@ -22,6 +22,11 @@ void PerformanceState::init_subjects() {
         return;
     }
 
+    // Fresh lifetime for this generation of subjects. Observers created against
+    // these subjects (e.g. HelixSparkline) hold a weak ref to this token and
+    // release safely once deinit_subjects() flips/resets it. (#816 pattern.)
+    subjects_lifetime_ = std::make_shared<bool>(true);
+
     UI_MANAGED_SUBJECT_INT(s_host_cpu_pct_,         0, "perf_host_cpu_pct",         subjects_);
     UI_MANAGED_SUBJECT_INT(s_host_cpu_pct_present_,  0, "perf_host_cpu_pct_present", subjects_);
     UI_MANAGED_SUBJECT_INT(s_host_cpu_temp_c10_,     0, "perf_host_cpu_temp_c10",    subjects_);
@@ -63,6 +68,15 @@ void PerformanceState::deinit_subjects() {
         history_.clear();
     }
     mcu_subjects_.clear();
+    // Signal subject death to observers (e.g. HelixSparkline) BEFORE freeing the
+    // subjects. Flipping the bool false makes every ObserverGuard holding this
+    // token detect the dead subject even if a shared_ptr copy keeps it alive,
+    // so reset() releases instead of calling lv_observer_remove() on freed
+    // observer nodes (UAF at lv_observer.c:584). Must precede deinit_all().
+    if (subjects_lifetime_) {
+        *subjects_lifetime_ = false;
+        subjects_lifetime_.reset();
+    }
     subjects_.deinit_all();
     initialized_ = false;
 }

@@ -34,14 +34,19 @@ lv_obj_t* HelixSparkline::create(lv_obj_t* parent, const std::string& source) {
     lv_obj_add_event_cb(impl->obj_, on_draw,   LV_EVENT_DRAW_MAIN_END, impl);
     lv_obj_add_event_cb(impl->obj_, on_delete, LV_EVENT_DELETE,        impl);
 
-    // perf_history_tick is a static singleton subject — no SubjectLifetime
-    // token needed (L077 only applies to dynamic per-fan/sensor subjects).
+    // perf_history_tick is NOT a never-freed singleton: PerformanceState
+    // destroys and recreates its subjects on reconnect / printer switch (and
+    // between tests). Pass PerformanceState's subject lifetime so this observer
+    // releases safely when the subject is torn down — otherwise a sparkline that
+    // outlives the subject (e.g. a row condemned via lv_obj_delete_async, then
+    // deleted after deinit_subjects()) would call lv_observer_remove() on a
+    // freed subject → UAF at lv_observer.c:584.
     lv_subject_t* tick = lv_xml_get_subject(nullptr, "perf_history_tick");
     if (tick) {
         impl->tick_observer_ = helix::ui::observe_int_sync<HelixSparkline>(
-            tick, impl, [](HelixSparkline* self, int /*value*/) {
-                self->invalidate_self();
-            });
+            tick, impl,
+            [](HelixSparkline* self, int /*value*/) { self->invalidate_self(); },
+            helix::perf::PerformanceState::instance().subjects_lifetime());
     } else {
         spdlog::debug("[HelixSparkline] perf_history_tick subject not found — "
                       "sparkline for '{}' will not auto-refresh", source);

@@ -6,6 +6,7 @@
 #include "lvgl/lvgl.h"
 #include "performance_source.h"
 #include "subject_managed_panel.h"
+#include "ui_observer_guard.h"
 
 #include <array>
 #include <memory>
@@ -40,6 +41,15 @@ class PerformanceState {
     /// named buffer doesn't exist.
     std::vector<float> read_history(const std::string& name) const;
 
+    /// Lifetime token for the perf subjects. Observers of any perf subject
+    /// (e.g. HelixSparkline on perf_history_tick) MUST pass this to observe_*()
+    /// so their ObserverGuard releases safely instead of calling
+    /// lv_observer_remove() on a freed subject. These subjects are NOT a
+    /// never-freed singleton: deinit_subjects()/init_subjects() destroy and
+    /// recreate them on reconnect, printer switch, and between tests. Null until
+    /// init_subjects() has run.
+    const SubjectLifetime& subjects_lifetime() const { return subjects_lifetime_; }
+
   private:
     friend class PerformanceStateTestAccess;
 
@@ -56,6 +66,10 @@ class PerformanceState {
 
     // ---- Subjects (static set) ----
     SubjectManager subjects_;
+    // Shared lifetime handed to observers of the perf subjects. Reset (and its
+    // bool flipped false) in deinit_subjects() BEFORE the subjects are freed so
+    // ObserverGuard::reset() detects the dead subject. See subjects_lifetime().
+    SubjectLifetime subjects_lifetime_;
     lv_subject_t s_host_cpu_pct_{};
     lv_subject_t s_host_cpu_pct_present_{};
     lv_subject_t s_host_cpu_temp_c10_{};
