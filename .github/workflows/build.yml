@@ -24,7 +24,10 @@ jobs:
     - name: Install dependencies
       uses: nick-fields/retry@v4
       with:
-        timeout_minutes: 5
+        # Bumped to 10 min: slow apt mirrors can push the download phase past a
+        # 5-min cap, and on timeout retry@v4 crashes with "kill EPERM" (Node 24)
+        # instead of retrying — so the longer window keeps us off that path.
+        timeout_minutes: 10
         max_attempts: 3
         command: |
           sudo apt-get update
@@ -179,7 +182,7 @@ jobs:
   build-macos:
     name: Build (macOS 14)
     runs-on: macos-14
-    timeout-minutes: 50
+    timeout-minutes: 65
 
     steps:
     - name: Checkout repository
@@ -239,7 +242,9 @@ jobs:
       run: make venv-setup
 
     - name: Build HelixScreen
-      timeout-minutes: 30
+      # 45 min covers a fully cold build (both deps-cache and ccache missing).
+      # Warm-cache builds finish in a few minutes; this only bites on a cache miss.
+      timeout-minutes: 45
       env:
         CC: ccache clang
         CXX: ccache clang++
