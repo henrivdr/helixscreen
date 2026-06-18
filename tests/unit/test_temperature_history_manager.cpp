@@ -301,8 +301,12 @@ TEST_CASE_METHOD(TemperatureHistoryManagerTestFixture,
     // When: we add one more sample
     int64_t overflow_ts = base_ts + (TemperatureHistoryManager::HISTORY_SIZE *
                                      TemperatureHistoryManager::SAMPLE_INTERVAL_MS);
+    // 3999 deci (399.9°C): a distinct in-range sentinel. NOT 9999 — the history
+    // recorder now rejects temp_deci > 4000 (bogus/disconnect spike, the upper
+    // analog of the drop-to-0 floor reject), so an out-of-range value would be
+    // dropped, not stored. Realistic input per the runtime filter (L093).
     bool overflow_stored = TemperatureHistoryManagerTestAccess::add_sample(*manager_, "extruder",
-                                                                           9999, 2100, overflow_ts);
+                                                                           3999, 2100, overflow_ts);
     REQUIRE(overflow_stored);
 
     // Then: count stays at HISTORY_SIZE (oldest evicted)
@@ -310,7 +314,7 @@ TEST_CASE_METHOD(TemperatureHistoryManagerTestFixture,
 
     // And: newest sample is present
     auto samples = manager_->get_samples("extruder");
-    REQUIRE(samples.back().temp_deci == 9999);
+    REQUIRE(samples.back().temp_deci == 3999);
 
     // And: original first sample (2000) is gone
     REQUIRE(samples.front().temp_deci != 2000);
