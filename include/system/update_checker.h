@@ -219,6 +219,18 @@ class UpdateChecker {
     static std::string get_platform_key();
 
     /**
+     * @brief Map a platform key to its human-readable display name.
+     * @param key  Platform key as returned by get_platform_key().
+     * @return Display name (e.g. "Raspberry Pi", "Creality K1").
+     *         Falls back to @p key itself for unrecognised values.
+     *
+     * Canonical single source of truth for the key→name map; call sites in
+     * debug_bundle_collector.cpp and elsewhere must use this instead of
+     * maintaining their own copies.
+     */
+    static std::string get_platform_display_name(const std::string& key);
+
+    /**
      * @brief Find a local install.sh by searching well-known paths
      * @param extra_search_paths Additional paths to search (prepended to default list)
      * @return Path to install.sh if found, empty string otherwise

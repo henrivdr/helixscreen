@@ -2229,6 +2229,30 @@ std::string UpdateChecker::get_platform_key() {
 #endif
 }
 
+std::string UpdateChecker::get_platform_display_name(const std::string& key) {
+    // Keep in sync with get_platform_key() and the known_platforms test.
+    // debug_bundle_collector.cpp calls this; do NOT add a second copy there.
+    if (key == "pi")
+        return "Raspberry Pi";
+    if (key == "pi32")
+        return "Raspberry Pi (32-bit)";
+    if (key == "x86")
+        return "x86 Desktop";
+    if (key == "ad5m")
+        return "FlashForge Adventurer 5M";
+    if (key == "ad5x")
+        return "FlashForge Adventurer 5X";
+    if (key == "k1")
+        return "Creality K1";
+    if (key == "k2")
+        return "Creality K2 Plus";
+    if (key == "cc1")
+        return "Elegoo Centauri Carbon";
+    if (key == "snapmaker-u1")
+        return "Snapmaker U1";
+    return key;
+}
+
 // ============================================================================
 // Dismissed Version
 // ============================================================================

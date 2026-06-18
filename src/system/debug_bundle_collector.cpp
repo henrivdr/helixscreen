@@ -196,20 +196,11 @@ json DebugBundleCollector::collect(const BundleOptions& options) {
 // different hardware; a wizard pick of "Adventurer 5M Pro" on an AD5X
 // platform is structurally wrong but has no local way to self-correct
 // without reflashing or re-running the wizard.
-static std::string platform_canonical_model(const std::string& platform) {
-    if (platform == "ad5x")
-        return "FlashForge Adventurer 5X";
-    if (platform == "ad5m")
-        return "FlashForge Adventurer 5M";
-    if (platform == "snapmaker-u1")
-        return "Snapmaker U1";
-    if (platform == "k1")
-        return "Creality K1";
-    if (platform == "k2")
-        return "Creality K2 Plus";
-    if (platform == "cc1")
-        return "Elegoo Centauri Carbon";
-    return "";
+//
+// Generic dev/SBC platforms (pi, pi32, x86) have no specific printer hardware
+// to compare against, so platform_model is omitted for them.
+static bool platform_has_printer_hardware(const std::string& key) {
+    return key != "pi" && key != "pi32" && key != "x86";
 }
 
 json DebugBundleCollector::collect_system_info() {
@@ -254,7 +245,10 @@ json DebugBundleCollector::collect_printer_info() {
         // generation should prefer platform_model when it differs from model
         // so AD5X devices stop showing as "5M Pro" in the bundle list.
         const std::string platform = UpdateChecker::get_platform_key();
-        const std::string platform_model = platform_canonical_model(platform);
+        const std::string platform_model =
+            platform_has_printer_hardware(platform)
+                ? UpdateChecker::get_platform_display_name(platform)
+                : std::string{};
         if (!platform_model.empty()) {
             printer["platform_model"] = platform_model;
             // Substring match handles trim variations ("5M" vs "5M Pro"). If

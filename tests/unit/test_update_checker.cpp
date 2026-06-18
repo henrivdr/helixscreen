@@ -1433,3 +1433,35 @@ TEST_CASE("get_platform_key matches compiled binary architecture",
     // Other platforms (k1, k2, ad5x, cc1) may vary — no assertion
 #endif
 }
+
+TEST_CASE("get_platform_display_name returns non-empty string for all known platforms",
+          "[update_checker][platform]") {
+    // Mirror the known_platforms list from "get_platform_key returns a known platform".
+    // Every key that get_platform_key() can return MUST have a display name.
+    // Keep in sync with platform_canonical_model in debug_bundle_collector.cpp
+    // (and UpdateChecker::get_platform_display_name once centralised).
+    std::vector<std::string> known_platforms = {
+        "pi", "pi32", "x86", "ad5m", "k1", "k2", "ad5x", "cc1", "snapmaker-u1"};
+
+    for (const auto& key : known_platforms) {
+        INFO("platform key: " << key);
+        std::string name = UpdateChecker::get_platform_display_name(key);
+        REQUIRE(!name.empty());
+    }
+}
+
+TEST_CASE("get_platform_display_name returns correct strings for known platforms",
+          "[update_checker][platform]") {
+    // Exact display name strings — changing them breaks debug bundle dashboard parsing.
+    REQUIRE(UpdateChecker::get_platform_display_name("pi") == "Raspberry Pi");
+    REQUIRE(UpdateChecker::get_platform_display_name("pi32") == "Raspberry Pi (32-bit)");
+    REQUIRE(UpdateChecker::get_platform_display_name("x86") == "x86 Desktop");
+    REQUIRE(UpdateChecker::get_platform_display_name("ad5m") == "FlashForge Adventurer 5M");
+    REQUIRE(UpdateChecker::get_platform_display_name("ad5x") == "FlashForge Adventurer 5X");
+    REQUIRE(UpdateChecker::get_platform_display_name("k1") == "Creality K1");
+    REQUIRE(UpdateChecker::get_platform_display_name("k2") == "Creality K2 Plus");
+    REQUIRE(UpdateChecker::get_platform_display_name("cc1") == "Elegoo Centauri Carbon");
+    REQUIRE(UpdateChecker::get_platform_display_name("snapmaker-u1") == "Snapmaker U1");
+    // Unknown keys fall back to the key itself.
+    REQUIRE(UpdateChecker::get_platform_display_name("unknown-platform") == "unknown-platform");
+}
