@@ -1560,3 +1560,32 @@ TEST_CASE("QIDI Box current_error clears when slot unblocks",
     });
     REQUIRE_FALSE(backend.current_error().has_value());
 }
+
+// =====================================================================
+// AmsAction::ERROR from BLOCKED lane (AmsErrorBridge hook)
+// =====================================================================
+// AmsErrorBridge fires when a backend's action transitions INTO ERROR and
+// current_error() returns an event. QIDI's parser never set ERROR — it only
+// ever wrote LOADING or IDLE — so the bridge was unreachable in production.
+// Fix: any BLOCKED slot forces action = ERROR with higher precedence than
+// is_tool_change (a mid-flight change on a broken lane is still ERROR).
+
+TEST_CASE("QIDI Box blocked lane sets action to ERROR so AmsErrorBridge fires",
+          "[ams][qidi_box][error-center]") {
+    RecordingQidiBackend backend;
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+
+    // Feed a negative slot (runout-during-print = -3). action must become ERROR.
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1},
+        {"slot0", 1}, {"slot1", -3}, {"slot2", 1}, {"slot3", 1},
+    });
+    REQUIRE(backend.get_system_info().action == AmsAction::ERROR);
+
+    // Feed all-valid slots. action must leave ERROR.
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1},
+        {"slot0", 1}, {"slot1", 1}, {"slot2", 1}, {"slot3", 1},
+    });
+    REQUIRE(backend.get_system_info().action != AmsAction::ERROR);
+}

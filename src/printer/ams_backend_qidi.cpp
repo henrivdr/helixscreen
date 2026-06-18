@@ -507,21 +507,47 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
         unit_ref.slots[i].status = mapped;
     }
 
+    // Determine whether any slot is in a hard error state. A BLOCKED slot must
+    // promote action to ERROR so AmsErrorBridge sees the ERROR transition and
+    // fires current_error(). Precedence: ERROR > LOADING > IDLE — a mid-flight
+    // tool change on a broken lane is still an error.
+    //
+    // action is recomputed whenever the update touches slot state or
+    // is_tool_change so a lane recovering from BLOCKED clears ERROR even
+    // when is_tool_change is absent from the update.
+    auto tool_change_it = variables.find("is_tool_change");
+    const bool has_slot_or_action_key = [&]() {
+        if (tool_change_it != variables.end())
+            return true;
+        for (size_t i = 0; i < unit_ref.slots.size(); ++i) {
+            if (variables.find("slot" + std::to_string(i)) != variables.end())
+                return true;
+        }
+        return false;
+    }();
+
+    if (has_slot_or_action_key) {
+        const bool any_blocked = std::any_of(
+            unit_ref.slots.begin(), unit_ref.slots.end(),
+            [](const SlotInfo& s) { return s.status == SlotStatus::BLOCKED; });
+        const bool is_loading = tool_change_it != variables.end() &&
+                                tool_change_it->is_number_integer() &&
+                                tool_change_it->get<int>() != 0;
+        if (any_blocked) {
+            system_info_.action = AmsAction::ERROR;
+        } else if (is_loading) {
+            system_info_.action = AmsAction::LOADING;
+        } else {
+            system_info_.action = AmsAction::IDLE;
+        }
+    }
+
     // last_load_slot is box_extras.py's authoritative "which slot is in the
     // extruder right now" signal. Two outcomes:
     //   "slot<N>"  → promote slot N to LOADED (covers the case where the
     //                per-slot signal hasn't caught up, e.g. recovery paths)
     //   "slot-1"   → demote any slot still claiming LOADED to AVAILABLE
     //                (nothing is in the extruder anymore)
-    // is_tool_change: box_extras.py sets this to 1 while _BOX_CHANGE_FILAMENT
-    // is mid-flight, clears to 0 on completion. Surface as AmsAction::LOADING
-    // so the UI can show an in-flight indicator. (LOADING is the closest
-    // existing action; there's no TOOL_CHANGING enum value yet.)
-    auto tool_change_it = variables.find("is_tool_change");
-    if (tool_change_it != variables.end() && tool_change_it->is_number_integer()) {
-        system_info_.action =
-            tool_change_it->get<int>() != 0 ? AmsAction::LOADING : AmsAction::IDLE;
-    }
 
     auto load_it = variables.find("last_load_slot");
     if (load_it != variables.end() && load_it->is_string()) {
