@@ -252,6 +252,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
         // while loaded-idle). Chan persists at the physically seated port, so it
         // is the seated-channel authority for active_tool_/current_slot.
         std::optional<int> ifs_chan;
+        // Per-port presence from IFS_STATUS "Ports" (RS-485 silk sensors, 1 entry
+        // per port, index 0 = port 1). The sensor-backed presence truth — present
+        // whenever IFS_STATUS returns clean JSON, independent of the GET_ZCOLOR
+        // SILENT slot lines and of the persisted ffmColor cache. When set, it is
+        // the presence authority (apply_zcolor_result), which makes empty-channel
+        // resurrection from a stale ffmColor structurally impossible (#981).
+        std::optional<std::array<bool, NUM_PORTS>> ifs_ports;
         std::array<std::optional<ZColorSlot>, NUM_PORTS> slots;
     };
 
@@ -513,6 +520,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // unconditionally — independent of has_ifs_vars_ / tool_map_ — because the
     // tool_map_-derived current_slot can disagree with it on the plugin path.
     int seated_chan_ = 0;
+    // Latches true the first time IFS_STATUS "Ports" is observed. Once the
+    // RS-485 silk-sensor presence truth is available, the legacy
+    // Adventurer5M.json ffmColor presence inference must NEVER run — that
+    // inference resurrects an emptied channel from its persisted colour when
+    // GET_ZCOLOR SILENT gets (even falsely) demoted (#981, bundle EE5L8LY2).
+    bool ifs_status_ports_seen_ = false;
     bool external_mode_ = false;                // Bypass/external spool mode
     bool head_filament_ = false;                // Head sensor state
     std::array<bool, NUM_PORTS> dirty_{};       // Per-slot dirty flag to prevent stale overwrites

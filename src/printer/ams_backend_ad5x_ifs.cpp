@@ -2890,6 +2890,37 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // is owned by save_variables and can disagree with the seated port.
             seated_chan_ = chan;
 
+            // IFS_STATUS "Ports" is the RS-485 silk-sensor presence truth and is
+            // the presence authority on native ZMOD. Apply it here — before the
+            // prompt-fallback / slot-line paths — so presence is correct even
+            // when GET_ZCOLOR SILENT degraded to a prompt this turn. Once seen,
+            // it permanently retires the Adventurer5M.json ffmColor inference
+            // (ifs_status_ports_seen_), which is what resurrected emptied
+            // channels from their persisted colour after a SILENT demotion
+            // (#981, bundle EE5L8LY2). Plugin users keep their own per-port
+            // sensors as authority (has_per_port_sensors_), so skip them.
+            if (result.ifs_ports.has_value() && !has_per_port_sensors_) {
+                ifs_status_ports_seen_ = true;
+                const auto& ports = *result.ifs_ports;
+                for (int i = 0; i < NUM_PORTS; ++i) {
+                    const auto idx = static_cast<size_t>(i);
+                    if (port_presence_[idx] == ports[idx]) {
+                        continue;
+                    }
+                    const bool was_present = port_presence_[idx];
+                    port_presence_[idx] = ports[idx];
+                    chan_changed = true;
+                    // present->absent: clear the stale user override so the
+                    // emptied slot doesn't keep a now-gone spool's metadata
+                    // (mirrors the GET_ZCOLOR present->absent path below).
+                    if (was_present && !ports[idx]) {
+                        if (auto* eject_entry = slots_.get_mut(i)) {
+                            clear_override_locked(i, eject_entry->info);
+                        }
+                    }
+                }
+            }
+
             // ifs_chan takes precedence over extruder_slot for active_tool_
             // derivation (gated on !has_ifs_vars_, matching the extruder_slot
             // path below: lessWaste/bambufy own active_tool_ via save_variables).
@@ -2947,6 +2978,9 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                          "old zmod, falling back to Adventurer5M.json polling",
                          backend_log_tag());
         }
+        // Ports presence (if any) was already applied above (it rides the same
+        // clean-JSON response). The prompt itself carries no slot lines, so
+        // there is nothing more to process this turn.
         return;
     }
 
@@ -2976,8 +3010,12 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
 
             // Live per-port sensors (lessWaste/bambufy) are authoritative for
             // presence — don't let zmod's view race against them. Native ZMOD
-            // has no exposed per-port sensor, so we must use zmod's view.
-            if (!has_per_port_sensors_ && port_presence_[idx] != loaded) {
+            // has no exposed per-port sensor, so we use zmod's view — unless this
+            // same response carried IFS_STATUS Ports, which is the sensor-backed
+            // authority and already set presence above; don't let the SILENT slot
+            // lines fight it.
+            if (!has_per_port_sensors_ && !result.ifs_ports.has_value() &&
+                port_presence_[idx] != loaded) {
                 const bool was_present = port_presence_[idx];
                 port_presence_[idx] = loaded;
                 changed = true;
@@ -3123,8 +3161,25 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
                     int state = obj.value("State", -1);
                     std::string ports_str;
                     if (auto ports_it = obj.find("Ports");
-                        ports_it != obj.end() && ports_it->is_array()) {
+                        ports_it != obj.end() && ports_it->is_array() &&
+                        ports_it->size() == NUM_PORTS) {
                         ports_str = ports_it->dump();
+                        // Capture the per-port presence as the sensor-backed
+                        // authority (not just a diagnostic). Each entry is the
+                        // RS-485 silk switch for port i+1.
+                        std::array<bool, NUM_PORTS> ports{};
+                        bool ok = true;
+                        for (int p = 0; p < NUM_PORTS; ++p) {
+                            const auto& v = (*ports_it)[static_cast<size_t>(p)];
+                            if (!v.is_boolean()) {
+                                ok = false;
+                                break;
+                            }
+                            ports[static_cast<size_t>(p)] = v.get<bool>();
+                        }
+                        if (ok) {
+                            result.ifs_ports = ports;
+                        }
                     }
                     spdlog::info("[AMS AD5X-IFS] IFS_STATUS trigger={} Chan={} State={} Ports={}",
                                  reason, *result.ifs_chan, state, ports_str);
@@ -3307,7 +3362,15 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             //     present; empty colour while IDLE == eject + override-clear). The
             //     resurrection bug can't bite here because no GET_ZCOLOR ever
             //     competes for ownership.
-            if (!has_per_port_sensors_ && !zcolor_silent_supported_.load()) {
+            //   * IFS_STATUS Ports seen (ifs_status_ports_seen_): the RS-485
+            //     silk sensors are the presence authority and already own
+            //     port_presence_. The persisted ffmColor must NEVER override
+            //     them — that is the resurrection (#981, bundle EE5L8LY2): a
+            //     SILENT demotion would otherwise let a stale colour repopulate
+            //     an emptied channel. Refresh colours/materials only (above);
+            //     never touch presence here.
+            if (!has_per_port_sensors_ && !zcolor_silent_supported_.load() &&
+                !ifs_status_ports_seen_) {
                 auto& presence = port_presence_[static_cast<size_t>(idx)];
                 if (has_filament_data) {
                     presence = true;

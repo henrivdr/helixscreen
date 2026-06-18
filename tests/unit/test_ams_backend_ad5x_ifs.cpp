@@ -5558,6 +5558,66 @@ TEST_CASE("AD5X IFS unload of the IFS_STATUS-seated slot cuts even when current_
     REQUIRE_FALSE(backend.has_gcode_containing("IFS_F24"));
 }
 
+TEST_CASE("AD5X IFS IFS_STATUS Ports is the presence authority — no resurrection from persisted "
+          "ffmColor after a false SILENT demotion (raza616 #981 EE5L8LY2)",
+          "[ams][ad5x_ifs]") {
+    // Bundle EE5L8LY2 (v0.99.80): ch1 is physically empty, but Adventurer5M.json
+    // persists ffmColor1=#F95D73 / ffmType1=ABS across the unload (zmod never
+    // blanks the colour). The user opened zmod's interactive "Select print
+    // materials" colour menu — a prompt dialog — while a GET_ZCOLOR SILENT=1
+    // query was in flight; HelixScreen misattributed that prompt to its own query
+    // and latched zcolor_silent_supported_=false, demoting a SILENT-capable
+    // device to the legacy JSON presence inference, which then resurrected ch1
+    // from the persisted colour ("Slot 0 status: 1 → 2").
+    //
+    // IFS_STATUS "Ports" carries the RS-485 per-port presence truth — it read
+    // [false,true,true,true] throughout the incident — and rides the same clean-
+    // JSON response (even behind a prompt fallback). It is the presence
+    // authority: once seen, the JSON colour inference must never run, so ch1
+    // stays empty regardless of the SILENT latch or the persisted ffmColor1.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // worst case: already demoted
+
+    // IFS_STATUS reports ch1 empty, ch2-4 loaded — arriving in the SAME response
+    // as a prompt fallback (the user's colour menu collided with our query).
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.is_prompt_fallback = true; // GET_ZCOLOR degraded to a prompt this turn
+    r.ifs_chan = 2;
+    r.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // Ports established presence: ch1 empty, ch2-4 present.
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+    REQUIRE(backend.get_slot_info(1).status != SlotStatus::EMPTY);
+    REQUIRE(backend.get_slot_info(2).status != SlotStatus::EMPTY);
+    REQUIRE(backend.get_slot_info(3).status != SlotStatus::EMPTY);
+
+    // The persisted Adventurer5M.json still carries a colour/type for the empty
+    // ch1. With SILENT latched off, the pre-fix code inferred presence from it
+    // and resurrected ch1. Ports-as-authority must suppress that inference.
+    std::string content = R"({
+        "FFMInfo": {
+            "channel": 2,
+            "ffmColor1": "#F95D73",
+            "ffmColor2": "#FFFFFF",
+            "ffmColor3": "#E53935",
+            "ffmColor4": "#898989",
+            "ffmType1": "ABS",
+            "ffmType2": "PETG",
+            "ffmType3": "PETG",
+            "ffmType4": "PETG"
+        }
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+
+    // ch1 must STAY empty — not resurrected by the persisted colour.
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+    REQUIRE(backend.get_slot_info(1).status != SlotStatus::EMPTY);
+}
+
 // ==========================================================================
 // External CHANGE_ZCOLOR releases a stale locked override — #981
 // (native ZMOD slot colors/types "randomly revert").
