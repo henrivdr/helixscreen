@@ -369,6 +369,10 @@ class Ad5xIfsTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         return b.phase_tracker_.active;
     }
+
+    static void finalize_unload_after_macro(AmsBackendAd5xIfs& b) {
+        b.finalize_unload_after_macro();
+    }
 };
 
 // Helper to build an extruder temperature status frame (mirrors CFS shape:
@@ -3908,6 +3912,10 @@ class GcodeCapturingBackend : public AmsBackendAd5xIfs {
         captured_gcodes.push_back(gcode);
         return AmsErrorHelper::success();
     }
+    AmsError execute_gcode(const std::string& gcode, std::function<void()> /*on_complete*/) override {
+        captured_gcodes.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
     bool any_gcode_starts_with(const std::string& prefix) const {
         for (const auto& g : captured_gcodes) {
             if (g.rfind(prefix, 0) == 0)
@@ -5263,9 +5271,15 @@ class TestableAd5xIfsBackend : public AmsBackendAd5xIfs {
     TestableAd5xIfsBackend() : AmsBackendAd5xIfs(nullptr, nullptr) {}
 
     std::vector<std::string> captured_gcodes;
+    std::function<void()> captured_completion; // on_complete from the 2-arg form
 
     AmsError execute_gcode(const std::string& gcode) override {
         captured_gcodes.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+    AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete) override {
+        captured_gcodes.push_back(gcode);
+        captured_completion = std::move(on_complete);
         return AmsErrorHelper::success();
     }
 
@@ -5477,6 +5491,41 @@ TEST_CASE("AD5X IFS unload_filament dispatches the firmware _IFS_REMOVE_CURRENT_
     REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK_IFS"));
     // The macro self-homes; we must not double-home with our own G28.
     REQUIRE_FALSE(backend.has_gcode_containing("G28"));
+}
+
+TEST_CASE("AD5X IFS unload finalizes to IDLE on the macro completion ack, not the 90s timeout "
+          "(raza616 stuck-on-Retract)",
+          "[ams][ad5x_ifs]") {
+    // The synthesized Retract phase has no sensor event, and the confirming
+    // IFS_STATUS Chan==0 / GET_ZCOLOR query can silently fail on native ZMOD —
+    // leaving the unload stuck at Retract until the 90s timeout flips it to
+    // ERROR (bundle EE5L8LY2). The _IFS_REMOVE_CURRENT_PRUTOK macro's own
+    // completion (gcode ack) is the reliable terminal signal; the dispatch must
+    // carry a completion callback, and that callback must finalize to IDLE.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // no async debounce task
+    Ad5xIfsTestAccess::set_current_slot(backend, 0, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    REQUIRE(backend.unload_filament(0).success());
+
+    // Toolhead unload dispatched WITH a completion callback, and the op is in
+    // flight (phase tracker active, not yet IDLE).
+    REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
+    REQUIRE(backend.captured_completion != nullptr);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+    REQUIRE(backend.get_system_info().action != AmsAction::IDLE);
+
+    // Macro completes -> finalize to IDLE (not ERROR, not stuck at Retract).
+    Ad5xIfsTestAccess::finalize_unload_after_macro(backend);
+
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+
+    // Idempotent: a second finalize (or a late confirming query) is a no-op.
+    Ad5xIfsTestAccess::finalize_unload_after_macro(backend);
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
 }
 
 TEST_CASE("AD5X IFS unload_filament with empty toolhead routes to cold lane eject (7AC4SDEX)",

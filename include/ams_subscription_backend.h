@@ -53,6 +53,12 @@ class AmsSubscriptionBackend : public AmsBackend {
     void emit_event(const std::string& event, const std::string& data = "");
     AmsError check_preconditions() const;
     virtual AmsError execute_gcode(const std::string& gcode);
+    /// Same as execute_gcode(gcode), but invokes @p on_complete when the gcode
+    /// command finishes (Klipper acks the script — i.e. a long macro has fully
+    /// run, not merely been queued). The callback fires on a background thread;
+    /// the caller is responsible for hopping to the main thread. Use this when a
+    /// macro's completion is the reliable terminal signal for an operation.
+    virtual AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete);
 
     /// Query homing status and auto-home (G28) if needed before executing gcode.
     /// Returns immediately — homing and gcode execution happen asynchronously.

@@ -468,6 +468,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     bool apply_phase_action_locked();
     // Set system_info_.operation_detail. Caller must hold mutex_.
     void set_operation_detail_locked(std::string detail);
+    // Finalize a phased toolhead unload to IDLE when the _IFS_REMOVE_CURRENT_PRUTOK
+    // macro completes (its gcode ack). The reliable terminal signal for the
+    // synthesized Retract phase, which has no sensor event of its own — without
+    // it the op sticks until the 90s timeout flips to ERROR (#981, raza616). Takes
+    // mutex_ internally; no-op if the unload already finalized or the op changed.
+    void finalize_unload_after_macro();
 
     int find_first_tool_for_port(int port_1based) const;
 

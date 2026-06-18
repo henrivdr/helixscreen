@@ -239,3 +239,33 @@ AmsError AmsSubscriptionBackend::execute_gcode(const std::string& gcode) {
         MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
     return AmsErrorHelper::success();
 }
+
+AmsError AmsSubscriptionBackend::execute_gcode(const std::string& gcode,
+                                               std::function<void()> on_complete) {
+    if (!api_) {
+        return AmsErrorHelper::not_connected("MoonrakerAPI not available");
+    }
+    const char* tag = backend_log_tag();
+    spdlog::info("{} Executing G-code: {}", tag, gcode);
+    api_->execute_gcode(
+        gcode,
+        [tag, on_complete = std::move(on_complete)]() {
+            spdlog::debug("{} G-code executed successfully", tag);
+            // Fires when the command finishes (Klipper acks the script), so a
+            // long macro has fully run — the reliable completion signal.
+            if (on_complete) {
+                on_complete();
+            }
+        },
+        [tag, gcode](const MoonrakerError& err) {
+            if (err.type == MoonrakerErrorType::TIMEOUT) {
+                spdlog::warn("{} G-code response timed out (may still be running): {}", tag, gcode);
+            } else if (err.type == MoonrakerErrorType::NOT_READY) {
+                spdlog::debug("{} G-code skipped (Klipper halted): {}", tag, gcode);
+            } else {
+                spdlog::error("{} G-code failed: {} - {}", tag, gcode, err.message);
+            }
+        },
+        MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
+    return AmsErrorHelper::success();
+}

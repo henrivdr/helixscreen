@@ -1125,13 +1125,47 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     // the trash drop and leaves the nozzle hot. Verified against the device cfg
     // and ZMOD v1.7.1.
     spdlog::info("{} Unloading filament from toolhead (slot {})", backend_log_tag(), slot_index);
-    auto result = execute_gcode("_IFS_REMOVE_CURRENT_PRUTOK");
+    // Finalize on the macro's own completion (its gcode ack). The synthesized
+    // Retract phase has no sensor event, and the IFS_STATUS Chan==0 / GET_ZCOLOR
+    // confirm can silently fail on native ZMOD — leaving the op stuck at Retract
+    // until the 90s timeout flips it to ERROR (raza616 stuck-on-Retract). The
+    // macro ack is the reliable "unload fully ran" signal. on_complete fires on a
+    // bg thread, so hop to the main thread before touching state.
+    auto token = lifetime_.token();
+    auto result = execute_gcode("_IFS_REMOVE_CURRENT_PRUTOK", [this, token]() {
+        token.defer("Ad5xIfsBackend::unload_macro_complete",
+                    [this]() { finalize_unload_after_macro(); });
+    });
     // Backup re-query: for inactive-slot unloads on native ZMOD the head
     // sensor never changes, so detect_load_unload_completion() won't fire.
     // schedule_zcolor_query() coalesces with any trigger from the gcode
     // stream listener, so this is cheap when they overlap.
     schedule_zcolor_query("toolhead_unload");
     return result;
+}
+
+void AmsBackendAd5xIfs::finalize_unload_after_macro() {
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Only finalize the unload WE started and that is still in flight. If a
+        // confirming IFS_STATUS Chan==0 already finalized it, or the user moved
+        // on to another op, phase_tracker_ is no longer our unload — do nothing.
+        if (phase_tracker_.active && phase_tracker_.is_unload) {
+            spdlog::info("{} Unload macro complete (gcode ack) -> IDLE", backend_log_tag());
+            system_info_.action = AmsAction::IDLE;
+            end_phase_tracking_locked();
+            set_operation_detail_locked("");
+            changed = true;
+        }
+    }
+    if (changed) {
+        PostOpCooldownManager::instance().schedule();
+        // Reconcile presence/colours now that the lane is empty (drives the
+        // present->absent override-clear via GET_ZCOLOR / IFS_STATUS Ports).
+        schedule_zcolor_query("unload_macro_complete");
+        emit_event(EVENT_STATE_CHANGED);
+    }
 }
 
 AmsError AmsBackendAd5xIfs::select_slot(int slot_index) {
