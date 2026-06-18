@@ -1050,19 +1050,19 @@ TEST_CASE("AD5X IFS handles wrapped notify_status_update", "[ams][ad5x_ifs]") {
 TEST_CASE("AD5X IFS action timeout resets stuck operations", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
 
-    SECTION("LOADING resets to IDLE after timeout") {
+    SECTION("LOADING surfaces ERROR after timeout") {
         Ad5xIfsTestAccess::set_action(backend, AmsAction::LOADING);
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
 
         Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     }
 
-    SECTION("UNLOADING resets to IDLE after timeout") {
+    SECTION("UNLOADING surfaces ERROR after timeout") {
         Ad5xIfsTestAccess::set_action(backend, AmsAction::UNLOADING);
 
         Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     }
 
     SECTION("IDLE does not change on timeout check") {
@@ -1079,12 +1079,12 @@ TEST_CASE("AD5X IFS action timeout resets stuck operations", "[ams][ad5x_ifs]") 
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
     }
 
-    SECTION("get_system_info checks timeout on UI poll") {
+    SECTION("get_system_info surfaces ERROR after timeout") {
         Ad5xIfsTestAccess::set_action(backend, AmsAction::LOADING);
         Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
 
         auto sys = backend.get_system_info();
-        REQUIRE(sys.action == AmsAction::IDLE);
+        REQUIRE(sys.action == AmsAction::ERROR);
     }
 }
 
@@ -1191,11 +1191,11 @@ TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
     REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) ==
             "Retracting filament from nozzle");
 
-    // Action timeout backstop finalizes IDLE (firmware parks filament in lane;
-    // no further head transition arrives). Detail clears.
+    // Action timeout backstop surfaces ERROR (firmware did not confirm completion;
+    // detail is preserved as the error context for the error-center bridge).
     Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
-    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend).empty());
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::operation_detail(backend).empty());
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
@@ -1222,10 +1222,10 @@ TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
     REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Purging old filament");
 
-    // Timeout backstop finalizes IDLE.
+    // Timeout backstop surfaces ERROR; detail preserved for error-center bridge.
     Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
-    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend).empty());
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::operation_detail(backend).empty());
 }
 
 TEST_CASE("AD5X IFS phase: RESPOND line sets target before any extruder frame",
@@ -1318,9 +1318,9 @@ TEST_CASE("AD5X IFS phase: HEATING does not finalize before target at 90s",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
 
     // 120s elapsed against the freshly-reset clock, with the 90s non-heating
-    // budget → now finalizes to IDLE.
+    // budget → now surfaces ERROR (operation timed out).
     Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
@@ -5791,9 +5791,9 @@ TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during unload",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 2);
 
-    // Finalize → tracker clears the step (no active step shown).
+    // Timeout → ERROR; tracker clears the step (no active step shown).
     Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == -1);
 }
 
@@ -5814,6 +5814,67 @@ TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during load",
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 2);
 
     Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
-    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == -1);
+}
+
+// ==========================================================================
+// Error-center bridge: IFS surfaces ERROR on timeout, current_error(), recover
+// ==========================================================================
+
+TEST_CASE("AD5X IFS error-center: timeout sets ERROR not IDLE",
+          "[ams][ad5x_ifs][error-center]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    // Advance to CUTTING so a non-IDLE action is in-flight.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+
+    // Timeout fires: must land on ERROR, not IDLE.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+}
+
+TEST_CASE("AD5X IFS error-center: current_error returns CRITICAL IFS event on ERROR",
+          "[ams][ad5x_ifs][error-center]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+
+    auto ev = backend.current_error();
+    REQUIRE(ev.has_value());
+    REQUIRE(ev->severity == helix::ErrorSeverity::CRITICAL);
+    REQUIRE(ev->source == helix::ErrorSource::IFS);
+    REQUIRE(ev->sticky);
+    REQUIRE_FALSE(ev->recovery_actions.empty());
+    REQUIRE(ev->recovery_actions[0].gcode == "IFS_UNLOCK");
+}
+
+TEST_CASE("AD5X IFS error-center: recover() clears ERROR state",
+          "[ams][ad5x_ifs][error-center]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+
+    backend.recover();
+
+    REQUIRE(backend.get_system_info().action != AmsAction::ERROR);
+    REQUIRE_FALSE(backend.current_error().has_value());
+}
+
+TEST_CASE("AD5X IFS error-center: current_error returns nullopt when IDLE",
+          "[ams][ad5x_ifs][error-center]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE_FALSE(backend.current_error().has_value());
 }
