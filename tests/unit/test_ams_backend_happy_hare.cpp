@@ -3326,3 +3326,26 @@ TEST_CASE("Happy Hare classify_error: stale reason_for_pause does not fire when 
     // a non-paused context must defer to the generic classifier.
     CHECK_FALSE(hh.classify_error("!! Clog detected", ctx).has_value());
 }
+
+TEST_CASE("Happy Hare toolchange_phase_template: ops declare ordered phases",
+          "[ams][happy_hare][narration]") {
+    AmsBackendHappyHareTestHelper hh;
+    auto swap = hh.toolchange_phase_template(StepOperationType::LOAD_SWAP);
+    REQUIRE_FALSE(swap.empty());
+    CHECK(swap.front().id == "heat");
+    CHECK(swap.back().id == "load");
+    // Task 3 maps AmsAction → these exact positions; lock them in.
+    REQUIRE(swap.size() == 8);
+    CHECK(swap[5].id == "feed");
+    CHECK(swap[6].id == "purge");
+    // Fresh load skips the unload/cut phases.
+    auto fresh = hh.toolchange_phase_template(StepOperationType::LOAD_FRESH);
+    REQUIRE_FALSE(fresh.empty());
+    bool fresh_has_unload = false;
+    for (const auto& p : fresh) if (p.id == "unload") fresh_has_unload = true;
+    CHECK_FALSE(fresh_has_unload);
+    // Unload op ends at "unload".
+    auto unload = hh.toolchange_phase_template(StepOperationType::UNLOAD);
+    REQUIRE_FALSE(unload.empty());
+    CHECK(unload.back().id == "unload");
+}

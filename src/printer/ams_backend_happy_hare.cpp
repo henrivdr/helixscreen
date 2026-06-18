@@ -1074,6 +1074,39 @@ std::optional<helix::ErrorEvent> AmsBackendHappyHare::classify_error(
     return std::nullopt;
 }
 
+std::vector<AmsBackend::ToolchangePhase>
+AmsBackendHappyHare::toolchange_phase_template(StepOperationType op) const {
+    switch (op) {
+    case StepOperationType::LOAD_SWAP:
+        return {
+            {"heat",     "Heat nozzle",   false},
+            {"form_tip", "Form tip",      true},
+            {"cut",      "Cut tip",       true},
+            {"unload",   "Unload",        false},
+            {"select",   "Select gate",   true},
+            {"feed",     "Load filament", false},
+            {"purge",    "Purge",         true},
+            {"load",     "Load complete", false},
+        };
+    case StepOperationType::LOAD_FRESH:
+        return {
+            {"heat",   "Heat nozzle",   false},
+            {"select", "Select gate",   true},
+            {"feed",   "Load filament", false},
+            {"purge",  "Purge",         true},
+            {"load",   "Load complete", false},
+        };
+    case StepOperationType::UNLOAD:
+        return {
+            {"heat",     "Heat nozzle", false},
+            {"form_tip", "Form tip",    true},
+            {"cut",      "Cut tip",     true},
+            {"unload",   "Unload",      false},
+        };
+    }
+    return {};
+}
+
 void AmsBackendHappyHare::initialize_slots(int gate_count) {
     spdlog::info("[AMS HappyHare] Initializing {} slots across {} units", gate_count, num_units_);
 

@@ -140,6 +140,9 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     classify_error(const std::string& raw_line,
                    const helix::ClassifyContext& ctx) const override;
 
+    [[nodiscard]] std::vector<ToolchangePhase>
+    toolchange_phase_template(StepOperationType op) const override;
+
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
