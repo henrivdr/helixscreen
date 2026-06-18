@@ -13,6 +13,7 @@
 #include "moonraker_types.h"
 #include "printer_recovery_service.h"
 #include "printer_state.h"
+#include "recovery_modal_presenter.h"
 #include "rpc_error_correlation.h"
 #include "ui_modal.h"
 #include "ui_notification.h"
@@ -37,7 +38,7 @@ constexpr const char* kNotifyHandlerName = "gcode_error_notifier";
 constexpr const char* kReplayObserverName = "gcode_store_replay";
 
 /// Maps RecoveryAction.style to PromptButton.color.
-/// "primary" → "primary", "danger" → "error", anything else → "" (neutral).
+/// "primary" -> "primary", "danger" -> "error", anything else -> "" (neutral).
 std::string color_for_style(const std::string& style) {
     if (style == "primary") return "primary";
     if (style == "danger") return "error";
@@ -48,6 +49,8 @@ std::string color_for_style(const std::string& style) {
 /// per-source behavior: CFS faults read "Filament System Error", anything else
 /// the event's own title, falling back to "Printer Error". The classifier
 /// leaves title empty, so the choice is derived from the source here.
+/// NOTE: twin of modal_title_for() in recovery_modal_presenter.cpp (the
+/// MODAL_WITH_RECOVER arm) — keep the CFS title rule in sync across both.
 const char* modal_title_for(const ErrorEvent& e) {
     if (e.source == ErrorSource::CFS) return lv_tr("Filament System Error");
     return e.title.empty() ? lv_tr("Printer Error") : e.title.c_str();
@@ -56,9 +59,9 @@ const char* modal_title_for(const ErrorEvent& e) {
 /// Replay age gate: a latched `!!` older than this in the gcode_store is
 /// considered stale and is NOT re-surfaced on reconnect.
 ///
-/// Sized to cover the legitimate case — an error fired during a brief
+/// Sized to cover the legitimate case -- an error fired during a brief
 /// WebSocket bounce or boot-autostart hiccup that the user genuinely
-/// missed — while killing the stale-after-restart case (#991): a UI
+/// missed -- while killing the stale-after-restart case (#991): a UI
 /// restart on a paused print replayed a 287s-old `[print_task_config]`
 /// error as a blocking modal that sat over the print panel and blocked
 /// Resume. 30s comfortably spans a reconnect blip but is far below the
@@ -78,10 +81,11 @@ double now_unix_seconds() {
 
 }  // namespace
 
-GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client)
-    : api_(api), client_(client) {
+GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client,
+                                   helix::ui::RecoveryModalPresenter& presenter)
+    : api_(api), client_(client), presenter_(presenter) {
     if (!client_) {
-        spdlog::warn("[GcodeErrorRouter] Null client — handlers not registered");
+        spdlog::warn("[GcodeErrorRouter] Null client -- handlers not registered");
         return;
     }
 
@@ -101,7 +105,7 @@ GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client)
                         }));
 
     // Reconnect replay. Fires on WS open + Klippy ready transitions.
-    // bg_cb takes a 0-arg callback fine — the lambda below doesn't need
+    // bg_cb takes a 0-arg callback fine -- the lambda below doesn't need
     // arguments; the wrapper just defers and gen-checks.
     client_->add_connected_observer(
         kReplayObserverName,
@@ -111,7 +115,7 @@ GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client)
 GcodeErrorRouter::~GcodeErrorRouter() {
     // Erase the map entries so no NEW invocations start after this point.
     // In-flight invocations (already past the map lookup, queued for dispatch)
-    // are handled by lifetime_'s generation guard — see the bg_cb usage in
+    // are handled by lifetime_'s generation guard -- see the bg_cb usage in
     // the ctor. lifetime_ destructs after this body returns and invalidates
     // all outstanding tokens, so any deferred body that lands on main after
     // the unregister is silently dropped.
@@ -123,7 +127,7 @@ GcodeErrorRouter::~GcodeErrorRouter() {
 
 bool GcodeErrorRouter::should_surface_replay(double entry_time, double now) {
     // Unavailable/zero timestamp: age cannot be positively determined.
-    // Never suppress a possibly-fresh error on missing data — preserve the
+    // Never suppress a possibly-fresh error on missing data -- preserve the
     // legacy surface-it behavior (the live `!!` path is unaffected by this
     // gate regardless).
     if (entry_time <= 0.0) return true;
@@ -150,7 +154,7 @@ void GcodeErrorRouter::clean_error_text(std::string& text, std::string& out_code
     if (json_start != std::string::npos) {
         // Brace-balance forward from json_start to find the matching close
         // brace, ignoring `{`/`}` inside string literals. nlohmann::parse
-        // requires whole-input — it won't ignore trailing garbage — so we
+        // requires whole-input -- it won't ignore trailing garbage -- so we
         // extract just [json_start, obj_end) before parsing.
         size_t i = json_start;
         int depth = 0;
@@ -206,7 +210,7 @@ void GcodeErrorRouter::clean_error_text(std::string& text, std::string& out_code
                     text = j["msg"].get<std::string>();
                 }
             } catch (...) {
-                // Malformed JSON despite the {"code" prefix — leave text
+                // Malformed JSON despite the {"code" prefix -- leave text
                 // untouched and fall through to heuristic patterns.
             }
         }
@@ -259,79 +263,16 @@ PromptData build_recovery_prompt(const ErrorEvent& e) {
 }
 
 void GcodeErrorRouter::present_recovery_modal(const ErrorEvent& e) {
-    // CRITICAL faults carrying recovery action(s) — rendered as a multi-button
-    // ActionPromptModal built from e.recovery_actions (already populated by the
-    // active backend's classify()). Modal because the AMS step indicator
-    // otherwise hides CFS failures (box driver emits via respond_raw and the
-    // dispatch script still returns success). The key840 "Reset CFS"/
-    // BOX_ERROR_CLEAR one-button flow runs through this generic path too.
-    if (!api_) {
-        ui_notification_error(modal_title_for(e), e.detail.c_str(), /*modal=*/true);
-        return;
-    }
-
-    // Dedup: the AFC jam repeats; don't re-pop the same modal. Only suppress
-    // while the modal is actually on screen — a dismissed-but-ongoing fault
-    // self-heals so it can re-show after backdrop/ESC dismiss.
-    if (recovery_modal_ && recovery_modal_->is_visible() && e.detail == shown_recovery_detail_) {
-        spdlog::debug("[GcodeError] Skipping duplicate recovery modal (still visible): {}",
-                      e.detail);
-        return;
-    }
-
-    if (!recovery_modal_) {
-        recovery_modal_ = std::make_unique<helix::ui::ActionPromptModal>();
-        recovery_modal_->set_gcode_callback([this](const std::string& gcode) {
-            // Runs on the main thread (button tap). Find the action for its log_tag.
-            std::string tag = "GcodeErrorRouter::recovery";
-            for (const auto& a : active_recovery_actions_) {
-                if (a.gcode == gcode) {
-                    tag = a.log_tag;
-                    break;
-                }
-            }
-            shown_recovery_detail_.clear();  // user acted; allow re-show on a new fault
-            spdlog::info("[GcodeError] User tapped recovery: {} ({})", tag, gcode);
-            api_->execute_gcode(
-                gcode, [tag]() { spdlog::info("[Recovery] {} completed", tag); },
-                [tag](const MoonrakerError& err) {
-                    spdlog::error("[Recovery] {} failed: {}", tag, err.message);
-                    ToastManager::instance().show(
-                        ToastSeverity::ERROR,
-                        ("Recovery failed: " + err.user_message()).c_str(), 6000);
-                },
-                MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
-        });
-    }
-
-    active_recovery_actions_ = e.recovery_actions;
-    shown_recovery_detail_ = e.detail;
-
-    // Preserve the CFS/key840 title wording ("Filament System Error") and the
-    // generic "Printer Error" default by sourcing the title from modal_title_for.
-    // build_recovery_prompt only knows e.title (empty for the classifier) and
-    // its own "Printer Error" fallback; modal_title_for encodes the CFS rule.
-    PromptData prompt = build_recovery_prompt(e);
-    if (e.title.empty()) prompt.title = modal_title_for(e);
-    // MODAL_WITH_RECOVER is only emitted for CRITICAL+actions, so this modal is
-    // always an error — restore the red error affordance retired with modal_show_confirmation.
-    prompt.severity = "error";
-
-    lv_obj_t* screen = lv_screen_active();
-    if (!screen || !recovery_modal_->show_prompt(screen, prompt)) {
-        spdlog::warn("[GcodeError] recovery modal show failed; falling back to alert");
-        shown_recovery_detail_.clear();
-        ui_notification_error(modal_title_for(e), e.detail.c_str(), /*modal=*/true);
-    }
+    presenter_.present(e);
 }
 
 void GcodeErrorRouter::present_recover_toast(const ErrorEvent& e) {
-    // key298 — rpi MCU bridge daemon shutdown. firmware_restart alone
+    // key298 -- rpi MCU bridge daemon shutdown. firmware_restart alone
     // can't recover; PrinterRecoveryService bounces klipper_mcu via
     // the platform recovery script. The recovery action carries an EMPTY
-    // gcode (log_tag error_classify::key298_recover) — recovery runs
+    // gcode (log_tag error_classify::key298_recover) -- recovery runs
     // through PrinterRecoveryService, not execute_gcode.
-    if (!api_) return;  // No API client → recovery would be a no-op; nothing actionable to show.
+    if (!api_) return;  // No API client -> recovery would be a no-op; nothing actionable to show.
     MoonrakerAPI* api = api_;
     ToastManager::instance().show_with_action(
         ToastSeverity::ERROR, truncate_for_toast(e.detail).c_str(), lv_tr("Recover"),
@@ -353,7 +294,7 @@ void GcodeErrorRouter::present_recover_toast(const ErrorEvent& e) {
 }
 
 void GcodeErrorRouter::present_deferred_toast(const std::string& text) {
-    // Deferred toast for unclassified errors — gives the late-arrival
+    // Deferred toast for unclassified errors -- gives the late-arrival
     // RPC error response a chance to populate the correlation buffer
     // before we re-check at fire time.
     struct DeferredCtx {
@@ -393,7 +334,7 @@ void GcodeErrorRouter::process_line(const std::string& line) {
     ctx.is_printing = get_printer_state().get_print_job_state() == PrintJobState::PRINTING;
 
     // Ask the active AMS backend first (domain-aware); else the generic
-    // classifier. get_backend() may return nullptr — guarded.
+    // classifier. get_backend() may return nullptr -- guarded.
     std::optional<ErrorEvent> ev;
     if (auto* backend = AmsState::instance().get_backend())
         ev = backend->classify_error(line, ctx);
@@ -416,7 +357,7 @@ void GcodeErrorRouter::process_line(const std::string& line) {
 
     switch (decide_presentation(*ev)) {
         case PresentAs::MODAL:
-            // CRITICAL without a recovery action — see modal_title_for().
+            // CRITICAL without a recovery action -- see modal_title_for().
             ui_notification_error(modal_title_for(*ev), ev->detail.c_str(), /*modal=*/true);
             return;
         case PresentAs::MODAL_WITH_RECOVER:
@@ -498,7 +439,7 @@ void GcodeErrorRouter::on_connected() {
                     "[GcodeError replay] Surfacing prior `!!` (age {:.0f}s, code={}): {}",
                     age, code.empty() ? "-" : code, clean);
 
-                // Replay is always modal — the user was disconnected; a
+                // Replay is always modal -- the user was disconnected; a
                 // transient toast they can miss isn't enough on first
                 // reconnect. Modal dedup-by-title prevents the live
                 // notify_gcode_response (if Klippy re-emits) from

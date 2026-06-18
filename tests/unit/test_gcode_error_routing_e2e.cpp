@@ -40,6 +40,7 @@
 #include "error_classify.h"
 #include "error_event.h"
 #include "gcode_error_router.h"
+#include "recovery_modal_presenter.h"
 #include "printer_state.h"
 #include "ui_modal.h"
 #include "ui_update_queue.h"
@@ -130,7 +131,8 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // stub in the test binary (see header), so it cannot render the modal here
     // — but it MUST classify + route without crashing and reach the MODAL arm.
     // The visible-modal proof is Seam 2 below, against the real modal layer.
-    helix::GcodeErrorRouter router(nullptr, nullptr);
+    helix::ui::RecoveryModalPresenter presenter1(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter1);
     REQUIRE_NOTHROW(GcodeErrorRouterTestAccess::process_line(router, kJamLine));
     helix::ui::UpdateQueue::instance().drain();
 
@@ -226,10 +228,12 @@ TEST_CASE_METHOD(LVGLUITestFixture,
         REQUIRE(helix::decide_presentation(*ev) == helix::PresentAs::MODAL_WITH_RECOVER);
     }
 
-    // Drive the REAL glue. api_ MUST be non-null or present_recovery_modal
-    // short-circuits to the ui_notification_error stub — api() provides
-    // a real MoonrakerAPI, so the show_prompt arm runs.
-    helix::GcodeErrorRouter router(api(), client());
+    // Drive the REAL glue. The presenter now shows the modal regardless of
+    // api_; api() is only needed if the user taps a recovery button (the
+    // button-tap gcode callback is guarded on api_). It provides a real
+    // MoonrakerAPI here so the show_prompt arm and tap path both exercise.
+    helix::ui::RecoveryModalPresenter presenter2(api());
+    helix::GcodeErrorRouter router(api(), client(), presenter2);
     REQUIRE_NOTHROW(GcodeErrorRouterTestAccess::process_line(router, kAfcJam));
     helix::ui::UpdateQueue::instance().drain();
     process_lvgl(50);
@@ -351,7 +355,8 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     // Drive the REAL glue end-to-end. api() is non-null so present_recovery_modal
     // runs the show_prompt arm (not the ui_notification_error stub).
-    helix::GcodeErrorRouter router(api(), client());
+    helix::ui::RecoveryModalPresenter presenter3(api());
+    helix::GcodeErrorRouter router(api(), client(), presenter3);
     REQUIRE_NOTHROW(GcodeErrorRouterTestAccess::process_line(router, "!! Runout detected"));
     helix::ui::UpdateQueue::instance().drain();
     process_lvgl(50);

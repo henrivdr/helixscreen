@@ -22,11 +22,13 @@ class PluginManager;
 }
 namespace helix {
 class ActionPromptManager;
+class AmsErrorBridge;
 class GcodeErrorRouter;
 class GcodeNarrationRouter;
 }
 namespace helix::ui {
 class ActionPromptModal;
+class RecoveryModalPresenter;
 }
 class DisplayManager;
 class SubjectInitializer;
@@ -139,6 +141,12 @@ class Application {
     std::unique_ptr<helix::ActionPromptManager> m_action_prompt_manager;
     std::unique_ptr<helix::ui::ActionPromptModal> m_action_prompt_modal;
 
+    // Source-agnostic modal presenter for CRITICAL recovery errors. Owned here
+    // so Application controls its lifetime independently of GcodeErrorRouter.
+    // Declared BEFORE m_gcode_error_router so it destructs AFTER the router
+    // (Application teardown resets the router first, then the presenter).
+    std::unique_ptr<helix::ui::RecoveryModalPresenter> m_recovery_presenter;
+
     // Surfaces Klipper `!!` / `Error:` lines as modals/toasts and replays
     // the most recent error from gcode_store on (re)connect. Owns the
     // notify_gcode_response and connected-observer registrations.
@@ -148,6 +156,12 @@ class Application {
     // model, updating the toolchange_step subject. Sibling of the error router;
     // owns a SEPARATE notify_gcode_response handler key. Does NOT surface errors.
     std::unique_ptr<helix::GcodeNarrationRouter> m_gcode_narration_router;
+
+    // Observes AmsState's action subject and routes AmsAction::ERROR edges to
+    // m_recovery_presenter. Holds a reference INTO the presenter, so the
+    // presenter must outlive it — declared after m_recovery_presenter (destructs
+    // first) and reset before it at both teardown sites.
+    std::unique_ptr<helix::AmsErrorBridge> m_ams_error_bridge;
 
     // Configuration
     helix::Config* m_config = nullptr; // Singleton, not owned

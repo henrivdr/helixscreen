@@ -1243,6 +1243,17 @@ AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
 // --- Recovery ---
 
 AmsError AmsBackendAd5xIfs::recover() {
+    // Clear any latched ERROR state first — recovery is the explicit user
+    // acknowledgement that the fault is dismissed, regardless of running_ state.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (system_info_.action == AmsAction::ERROR) {
+            spdlog::info("{} Recovery: clearing ERROR state", backend_log_tag());
+            system_info_.action = AmsAction::IDLE;
+            system_info_.operation_detail.clear();
+        }
+    }
+
     auto err = check_preconditions();
     if (!err.success())
         return err;
@@ -1253,6 +1264,17 @@ AmsError AmsBackendAd5xIfs::recover() {
 }
 
 AmsError AmsBackendAd5xIfs::reset() {
+    // Clear any latched ERROR state first — reset is an explicit user recovery
+    // acknowledgement, mirrors the recover() clearing policy.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (system_info_.action == AmsAction::ERROR) {
+            spdlog::info("{} Reset: clearing ERROR state", backend_log_tag());
+            system_info_.action = AmsAction::IDLE;
+            system_info_.operation_detail.clear();
+        }
+    }
+
     auto err = check_preconditions();
     if (!err.success())
         return err;
@@ -1282,6 +1304,24 @@ AmsError AmsBackendAd5xIfs::cancel() {
         }
     }
     return execute_gcode("IFS_UNLOCK");
+}
+
+// --- Error-center bridge ---
+
+std::optional<helix::ErrorEvent> AmsBackendAd5xIfs::current_error() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (system_info_.action != AmsAction::ERROR)
+        return std::nullopt;
+    helix::ErrorEvent e;
+    e.source = helix::ErrorSource::IFS;
+    e.severity = helix::ErrorSeverity::CRITICAL;
+    e.title = lv_tr("Filament System Error");
+    e.detail = system_info_.operation_detail.empty()
+                   ? std::string(lv_tr("Filament operation failed"))
+                   : system_info_.operation_detail;
+    e.sticky = true;
+    e.recovery_actions = {{lv_tr("Recover"), "IFS_UNLOCK", "ifs::unlock", "primary"}};
+    return e;
 }
 
 // --- Backend-driven operation step model ---
@@ -3585,14 +3625,20 @@ void AmsBackendAd5xIfs::check_action_timeout() {
     const int limit = (a == AmsAction::HEATING) ? HEATING_TIMEOUT_SECONDS : ACTION_TIMEOUT_SECONDS;
     auto elapsed = std::chrono::steady_clock::now() - action_start_time_;
     if (elapsed >= std::chrono::seconds(limit)) {
-        spdlog::warn("{} {} timed out after {}s, resetting to IDLE", backend_log_tag(),
+        spdlog::warn("{} {} timed out after {}s, surfacing ERROR", backend_log_tag(),
                      ams_action_to_string(system_info_.action),
                      std::chrono::duration_cast<std::chrono::seconds>(elapsed).count());
-        system_info_.action = AmsAction::IDLE;
+        // Preserve the current operation_detail as the error description so the
+        // error-center bridge can show what was happening when the timeout fired.
+        const std::string timeout_detail =
+            system_info_.operation_detail.empty()
+                ? lv_tr("Filament operation timed out")
+                : system_info_.operation_detail + lv_tr(" (timed out)");
+        system_info_.action = AmsAction::ERROR;
         if (phase_tracker_.active) {
             end_phase_tracking_locked();
-            set_operation_detail_locked("");
         }
+        set_operation_detail_locked(timeout_detail);
     }
 }
 

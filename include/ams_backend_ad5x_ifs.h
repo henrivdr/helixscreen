@@ -5,6 +5,7 @@
 #if HELIX_HAS_IFS
 
 #include "ams_subscription_backend.h"
+#include "error_event.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 #include "slot_registry.h"
@@ -144,6 +145,8 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     AmsError recover() override;
     AmsError reset() override;
     AmsError cancel() override;
+
+    [[nodiscard]] std::optional<helix::ErrorEvent> current_error() const override;
 
     // Backend-driven step model for the right-side vertical operation tracker.
     // The AD5X synthesizes 3 firmware phases (HEATING→CUTTING→UNLOADING /

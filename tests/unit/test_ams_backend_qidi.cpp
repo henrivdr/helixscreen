@@ -1478,3 +1478,114 @@ TEST_CASE("QIDI Box set_slot_info with no palette/vendor data still writes fila"
     REQUIRE(backend.sent.size() == 1);
     REQUIRE(backend.sent[0] == "SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=1");
 }
+
+// ---------------------------------------------------------------------------
+// Error-center bridge: current_error()
+// ---------------------------------------------------------------------------
+
+TEST_CASE("QIDI Box current_error returns nullopt when no slots are blocked",
+          "[ams][qidi_box][error-center]") {
+    RecordingQidiBackend backend;
+    // Default state: all slots UNKNOWN
+    REQUIRE_FALSE(backend.current_error().has_value());
+
+    // Slots with non-BLOCKED statuses also return nullopt
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1}, {"box_count", 1},
+        {"slot0", 1},  // AVAILABLE
+        {"slot1", 2},  // LOADED
+        {"slot2", 0},  // EMPTY
+        {"slot3", 1},  // AVAILABLE
+    });
+    REQUIRE_FALSE(backend.current_error().has_value());
+}
+
+TEST_CASE("QIDI Box current_error returns CRITICAL event for first blocked slot",
+          "[ams][qidi_box][error-center]") {
+    RecordingQidiBackend backend;
+    // slot1 blocked (value -3 = runout-during-print)
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1}, {"box_count", 1},
+        {"slot0", 1},  // AVAILABLE
+        {"slot1", -3}, // BLOCKED
+        {"slot2", 1},  // AVAILABLE
+        {"slot3", 1},  // AVAILABLE
+    });
+
+    auto ev = backend.current_error();
+    REQUIRE(ev.has_value());
+    CHECK(ev->source == helix::ErrorSource::QIDI);
+    CHECK(ev->severity == helix::ErrorSeverity::CRITICAL);
+    CHECK_FALSE(ev->title.empty());
+    CHECK(ev->detail.find("2") != std::string::npos); // 1-based: slot index 1 → lane 2
+    CHECK(ev->sticky);
+    // Recovery has one dismiss affordance — a button-less modal is a non-dismissible
+    // UI trap (RecoveryModalPresenter with 0 buttons hides the button container).
+    CHECK(ev->recovery_actions.size() == 1);
+    CHECK(ev->recovery_actions[0].gcode.find(';') != std::string::npos); // comment/no-op gcode
+}
+
+TEST_CASE("QIDI Box current_error picks the first blocked slot when multiple blocked",
+          "[ams][qidi_box][error-center]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1}, {"box_count", 1},
+        {"slot0", -1}, // BLOCKED (slot-load-fail)
+        {"slot1", -2}, // BLOCKED (extruder-load-fail)
+        {"slot2", 1},
+        {"slot3", 1},
+    });
+
+    auto ev = backend.current_error();
+    REQUIRE(ev.has_value());
+    // First blocked slot is index 0 → lane 1
+    CHECK(ev->detail.find("1") != std::string::npos);
+}
+
+TEST_CASE("QIDI Box current_error clears when slot unblocks",
+          "[ams][qidi_box][error-center]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1}, {"box_count", 1},
+        {"slot0", -1}, // BLOCKED
+        {"slot1", 1}, {"slot2", 1}, {"slot3", 1},
+    });
+    REQUIRE(backend.current_error().has_value());
+
+    // Slot recovers (positive value = AVAILABLE)
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1}, {"box_count", 1},
+        {"slot0", 1}, // was BLOCKED, now AVAILABLE
+        {"slot1", 1}, {"slot2", 1}, {"slot3", 1},
+    });
+    REQUIRE_FALSE(backend.current_error().has_value());
+}
+
+// =====================================================================
+// AmsAction::ERROR from BLOCKED lane (AmsErrorBridge hook)
+// =====================================================================
+// AmsErrorBridge fires when a backend's action transitions INTO ERROR and
+// current_error() returns an event. QIDI's parser never set ERROR — it only
+// ever wrote LOADING or IDLE — so the bridge was unreachable in production.
+// Fix: any BLOCKED slot forces action = ERROR with higher precedence than
+// is_tool_change (a mid-flight change on a broken lane is still ERROR).
+
+TEST_CASE("QIDI Box blocked lane sets action to ERROR so AmsErrorBridge fires",
+          "[ams][qidi_box][error-center]") {
+    RecordingQidiBackend backend;
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+
+    // Feed a negative slot (runout-during-print = -3). action must become ERROR.
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1},
+        {"slot0", 1}, {"slot1", -3}, {"slot2", 1}, {"slot3", 1},
+    });
+    REQUIRE(backend.get_system_info().action == AmsAction::ERROR);
+
+    // Feed all-valid slots. action must leave ERROR.
+    QidiBoxTestAccess::parse_vars(backend, json{
+        {"enable_box", 1},
+        {"slot0", 1}, {"slot1", 1}, {"slot2", 1}, {"slot3", 1},
+    });
+    REQUIRE(backend.get_system_info().action != AmsAction::ERROR);
+}
