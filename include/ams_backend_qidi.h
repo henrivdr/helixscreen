@@ -109,6 +109,8 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     AmsError reset() override;
     AmsError cancel() override;
 
+    [[nodiscard]] std::optional<helix::ErrorEvent> current_error() const override;
+
     // Per-lane eject for non-loaded lanes via FORCE_MOVE on the box_stepper
     // (#1041). Gated on [force_move] enable_force_move being set in the config.
     AmsError eject_lane(int slot_index) override;

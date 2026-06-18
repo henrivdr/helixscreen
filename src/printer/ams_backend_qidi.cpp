@@ -993,6 +993,34 @@ AmsError AmsBackendQidi::cancel() {
     return AmsErrorHelper::not_supported("QIDI Box cancel");
 }
 
+std::optional<helix::ErrorEvent> AmsBackendQidi::current_error() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (system_info_.units.empty()) return std::nullopt;
+    const auto& slots = system_info_.units[0].slots;
+    int blocked = -1;
+    for (int i = 0; i < static_cast<int>(slots.size()); ++i) {
+        if (slots[i].status == SlotStatus::BLOCKED) {
+            blocked = i;
+            break;
+        }
+    }
+    if (blocked < 0) return std::nullopt;
+    helix::ErrorEvent e;
+    e.source   = helix::ErrorSource::QIDI;
+    e.severity = helix::ErrorSeverity::CRITICAL;
+    e.title    = lv_tr("Filament System Error");
+    e.detail   = std::string(lv_tr("Lane ")) + std::to_string(blocked + 1) +
+                 std::string(lv_tr(" is blocked — manual intervention required"));
+    e.sticky   = true;
+    // A CRITICAL event with empty recovery_actions renders via RecoveryModalPresenter
+    // as a button-less ActionPromptModal — non-dismissible UI trap. Provide one
+    // dismiss affordance. The gcode is a Klipper comment (no-op on execute_gcode).
+    // Recovery gcode is absent: QIDI BLOCKED slot clearance is unknown; ships blind
+    // (no QIDI hardware). (prestonbrown/helixscreen#1041)
+    e.recovery_actions = {{lv_tr("OK"), "; qidi-blocked-dismiss", "qidi::dismiss", ""}};
+    return e;
+}
+
 AmsError AmsBackendQidi::eject_lane(int slot_index) {
     spdlog::info("{} eject_lane(slot={})", backend_log_tag(), slot_index);
     {
