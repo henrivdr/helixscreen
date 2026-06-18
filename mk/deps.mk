@@ -312,22 +312,19 @@ libs-clean: libhv-clean sdl2-clean lvgl-clean libnl-clean wpa-clean
 # Library Build Targets
 # =============================================================================
 
+# Per-arch out-of-tree libhv objects + archive (prestonbrown/helixscreen#1058).
+# libhv used to compile objects IN-TREE (lib/libhv/base/hsocket.o etc.) and link
+# lib/libhv/lib/libhv.a, so native (x86_64) and cross (aarch64/arm/mips) builds
+# clobbered each other's .o AND the archive. We patched libhv's Makefile.in to
+# honor OBJDIR/LIBDIR, so each arch's objects land under its own $(BUILD_DIR):
+#   build/libhv-objs/ (native), build/pi/libhv-objs/ (pi), etc.
+# This makes the stomping structurally impossible and retires both the in-tree
+# clean step below and the cross-compile lock (mk/cross.mk).
+LIBHV_OBJDIR := $(abspath $(BUILD_DIR)/libhv-objs)
+
 libhv-build:
 	$(ECHO) "$(CYAN)Building libhv...$(RESET)"
-	$(Q)mkdir -p $(BUILD_DIR)/lib
-	# ALWAYS clean in-tree libhv objects first, for EVERY build (native and cross).
-	# libhv builds in-tree, so a prior build for a DIFFERENT arch leaves stale .o
-	# that leak into this link. The classic case is cross then native: an
-	# `ad5m-docker` build leaves ARM objects in lib/libhv/, then a native
-	# `make test` links them into the host libhv.so → "relocations in generic ELF
-	# (EM: 40) / file in wrong format" (or undefined __time64 across glibc
-	# versions). The cross branch always cleaned for this reason; the native
-	# branches did not, which broke interleaved local builds once
-	# $(LIBHV_LIB):$(PATCHES_STAMP) made this target fire on patch changes too.
-	# -L follows symlinks so worktrees (where $(LIBHV_DIR) may symlink the main
-	# repo's lib/libhv) are cleaned as well.
-	$(Q)echo "$(YELLOW)→ Cleaning libhv (avoid native/cross object mixing)...$(RESET)"
-	$(Q)find -L $(LIBHV_DIR) -type f \( -name '*.o' -o -name '*.a' -o -name '*.so' -o -name '*.dylib' \) -delete 2>/dev/null || true
+	$(Q)mkdir -p $(BUILD_DIR)/lib $(LIBHV_OBJDIR)/lib
 ifneq ($(CROSS_COMPILE),)
 	# Cross-compilation mode.
 	# Pass cross-compiler to configure and make.
@@ -368,9 +365,9 @@ ifneq ($(CROSS_COMPILE),)
 	# paths resolve relative to libhv's own working directory, where they don't
 	# exist, breaking libhv's internal example/test links under test-asan/tsan.
 	if [ -n "$$OPENSSL_ARCHIVES" ]; then \
-		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(MAKE) -j1 -C $(LIBHV_DIR) LDFLAGS= LIBHV_TARGET_TYPE=STATIC OPENSSL_LIBS="$$OPENSSL_ARCHIVES" libhv; \
+		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(MAKE) -j1 -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC OPENSSL_LIBS="$$OPENSSL_ARCHIVES" libhv; \
 	else \
-		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(MAKE) -j1 -C $(LIBHV_DIR) LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv; \
+		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(MAKE) -j1 -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv; \
 	fi
 else ifeq ($(UNAME_S),Darwin)
 	$(Q)cd $(LIBHV_DIR) && \
@@ -382,16 +379,19 @@ else ifeq ($(UNAME_S),Darwin)
 	# because libhv's Makefile doesn't pass `-framework CoreFoundation -framework
 	# Security` (needed by ssl/appletls.o). We only consume libhv as a static
 	# archive anyway, so the dylib is just dead weight that breaks the build.
-	$(Q)MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) $(MAKE) -C $(LIBHV_DIR) LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
+	$(Q)MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
 else
 	$(Q)cd $(LIBHV_DIR) && ./configure --with-http-client $(if $(filter yes,$(ENABLE_SSL)),--with-openssl)
 	# LDFLAGS= override: see cross-compile branch above for rationale. Critical
 	# for test-asan/test-tsan where the parent invokes us with the project's
 	# full LDFLAGS containing `build/lib/lib*.a` paths.
-	$(Q)$(MAKE) -C $(LIBHV_DIR) LDFLAGS= libhv
+	$(Q)$(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= libhv
 endif
-	# Copy built library to architecture-specific output directory
-	$(Q)cp $(LIBHV_DIR)/lib/libhv.a $(BUILD_DIR)/lib/libhv.a 2>/dev/null || \
+	# Copy built library from the per-arch out-of-tree objdir to the architecture-
+	# specific output directory. Falls back to the legacy in-tree locations so an
+	# unexpected build path still resolves.
+	$(Q)cp $(LIBHV_OBJDIR)/lib/libhv.a $(BUILD_DIR)/lib/libhv.a 2>/dev/null || \
+		cp $(LIBHV_DIR)/lib/libhv.a $(BUILD_DIR)/lib/libhv.a 2>/dev/null || \
 		cp $(LIBHV_DIR)/libhv.a $(BUILD_DIR)/lib/libhv.a
 	$(ECHO) "$(GREEN)✓ libhv built: $(BUILD_DIR)/lib/libhv.a$(RESET)"
 
