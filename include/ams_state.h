@@ -14,6 +14,7 @@
 #include "subject_managed_panel.h"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <map>
 #include <memory>
@@ -1064,12 +1065,12 @@ class AmsState {
 
     /// @brief Active toolchange operation (used by the narration router to resolve phases).
     StepOperationType get_active_step_operation() const {
-        return active_step_operation_;
+        return active_step_operation_.load(std::memory_order_relaxed);
     }
 
     /// @brief Set the active toolchange operation kind.
     void set_active_step_operation(StepOperationType op) {
-        active_step_operation_ = op;
+        active_step_operation_.store(op, std::memory_order_relaxed);
     }
 
     /// Set the current toolchange narration phase index (MAIN THREAD ONLY).
@@ -1205,7 +1206,7 @@ class AmsState {
     lv_subject_t toolchange_step_; ///< current narration phase index (-1 = none/idle)
     /// Active toolchange operation for the narration router to resolve a phase
     /// index without a sidebar pointer. Defaults to a swap (most common case).
-    StepOperationType active_step_operation_ = StepOperationType::LOAD_SWAP;
+    std::atomic<StepOperationType> active_step_operation_{StepOperationType::LOAD_SWAP};
     lv_subject_t current_slot_;
     lv_subject_t pending_target_slot_;
     lv_subject_t ams_current_tool_;
