@@ -387,10 +387,13 @@ AmsBackendCfs::AmsBackendCfs(MoonrakerAPI* api, helix::MoonrakerClient* client)
     system_info_.tip_method = TipMethod::CUT;
     system_info_.supports_purge = true;
 
-    // Latch K1 vs K2 macro dialect once. PrinterDetector results are based on
-    // the resolved printer database entry, which is settled by the time the
-    // AMS backend is constructed (printer discovery → detector → backend
-    // create). #968.
+    // Latch K1 vs K2 macro dialect once. PrinterDetector reads the resolved
+    // printer type straight from Config, which is the only source guaranteed
+    // populated this early: the CFS backend is constructed in the discovery
+    // callback (init_subsystems_from_hardware) BEFORE auto_detect_and_save runs.
+    // Reading from Config here is therefore deliberate — do not move this to a
+    // capability snapshot that is populated later in the discovery sequence, or
+    // a saved-type K1/Hi relaunch would mis-route to the K2 dialect. #968.
     //
     // The Creality Hi ships the non-prefixed BOX_* dialect in its box.cfg
     // (BOX_CUT_MATERIAL / BOX_EXTRUDE_MATERIAL / BOX_RETRUDE_MATERIAL /
