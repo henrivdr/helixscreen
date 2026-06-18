@@ -7,6 +7,7 @@
 #include "settings_manager.h"
 
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/fmt.h>
 
 #include <algorithm>
 #include <cctype>
@@ -1009,8 +1010,10 @@ std::optional<helix::ErrorEvent> AmsBackendQidi::current_error() const {
     e.source   = helix::ErrorSource::QIDI;
     e.severity = helix::ErrorSeverity::CRITICAL;
     e.title    = lv_tr("Filament System Error");
-    e.detail   = std::string(lv_tr("Lane ")) + std::to_string(blocked + 1) +
-                 std::string(lv_tr(" is blocked — manual intervention required"));
+    // Single translatable string with a {} placeholder — preserves word order in
+    // locales where the lane number doesn't sit between "Lane" and the predicate.
+    e.detail   = fmt::format(fmt::runtime(lv_tr("Lane {} is blocked — manual intervention required")),
+                             blocked + 1);
     e.sticky   = true;
     // A CRITICAL event with empty recovery_actions renders via RecoveryModalPresenter
     // as a button-less ActionPromptModal — non-dismissible UI trap. Provide one
