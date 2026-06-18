@@ -254,6 +254,14 @@ class AmsBackend {
         return std::nullopt;
     }
 
+    /// Current actionable fault for STATUS-driven backends (no `!!` line).
+    /// Returns nullopt when there is no actionable error, or when a bespoke
+    /// dialog owns the fault. `!!`-driven backends leave the default and use
+    /// classify_error() instead.
+    [[nodiscard]] virtual std::optional<helix::ErrorEvent> current_error() const {
+        return std::nullopt;
+    }
+
     /// One ordered phase in a backend's toolchange narration model.
     struct ToolchangePhase {
         std::string id;       ///< stable key matched from narration, e.g. "brush"

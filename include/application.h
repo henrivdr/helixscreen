@@ -22,6 +22,7 @@ class PluginManager;
 }
 namespace helix {
 class ActionPromptManager;
+class AmsErrorBridge;
 class GcodeErrorRouter;
 class GcodeNarrationRouter;
 }
@@ -155,6 +156,10 @@ class Application {
     // model, updating the toolchange_step subject. Sibling of the error router;
     // owns a SEPARATE notify_gcode_response handler key. Does NOT surface errors.
     std::unique_ptr<helix::GcodeNarrationRouter> m_gcode_narration_router;
+
+    // Observes AmsState's action subject and routes AmsAction::ERROR edges to
+    // m_recovery_presenter. Must outlive m_recovery_presenter — reset before it.
+    std::unique_ptr<helix::AmsErrorBridge> m_ams_error_bridge;
 
     // Configuration
     helix::Config* m_config = nullptr; // Singleton, not owned
