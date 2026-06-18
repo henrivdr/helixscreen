@@ -5,6 +5,7 @@
 
 #include "ams_subscription_backend.h"
 #include "async_lifetime_guard.h"
+#include "error_event.h"
 #include "slot_registry.h"
 
 #include <ctime>
@@ -134,6 +135,14 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     AmsError check_all_gates() override;
     AmsError cancel() override;
 
+    // Error-center: classify a pausing MMU fault into a recovery ErrorEvent.
+    [[nodiscard]] std::optional<helix::ErrorEvent>
+    classify_error(const std::string& raw_line,
+                   const helix::ClassifyContext& ctx) const override;
+
+    [[nodiscard]] std::vector<ToolchangePhase>
+    toolchange_phase_template(StepOperationType op) const override;
+
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
@@ -229,6 +238,14 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     }
 
   private:
+    // Build context-aware recovery actions from live MMU state. Caller holds mutex_.
+    [[nodiscard]] std::vector<helix::RecoveryAction> build_recovery_actions() const;
+
+    // Synthesize a toolchange step index from the current AmsAction and push it
+    // to AmsState's step subject (deferred to the main thread). Happy Hare emits
+    // no // narration, so the backend drives the bar itself. Caller holds mutex_.
+    void sync_narration_step();
+
     /**
      * @brief Parse MMU state from Moonraker JSON
      *

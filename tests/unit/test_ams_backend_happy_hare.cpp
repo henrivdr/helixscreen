@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ams_backend_happy_hare.h"
+#include "ams_state.h"
 #include "ams_types.h"
 #include "hh_defaults.h"
 #include "moonraker_api.h"
+#include "ui_update_queue.h"
 
 #include <algorithm>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
+#include "../lvgl_test_fixture.h"
 #include "hv/json.hpp"
 
 /**
@@ -3243,4 +3246,142 @@ TEST_CASE("Happy Hare config sync action is relabeled, distinct from runtime",
     REQUIRE(config_sync->label == "Sync during printing");
     REQUIRE(runtime_sync->label == "Gear motor synced");
     REQUIRE(runtime_sync->section == "maintenance");
+}
+
+// ============================================================================
+// Error Classification (classify_error / build_recovery_actions)
+// ============================================================================
+
+TEST_CASE("Happy Hare classify_error: runout pause is CRITICAL with recovery",
+          "[ams][happy_hare][error-center]") {
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+
+    // Firmware reports a runout pause via reason_for_pause + action ERROR.
+    nlohmann::json mmu;
+    mmu["action"] = "Error";
+    mmu["filament_pos"] = 8;  // loaded at toolhead
+    mmu["reason_for_pause"] =
+        "Runout detected on gate 0  EndlessSpool mode is off - manual intervention is required";
+    hh.test_parse_mmu_state(mmu);
+
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
+    auto ev = hh.classify_error("!! Runout detected", ctx);
+
+    REQUIRE(ev.has_value());
+    CHECK(ev->source == helix::ErrorSource::HAPPY_HARE);
+    CHECK(ev->severity == helix::ErrorSeverity::CRITICAL);
+    CHECK_FALSE(ev->recovery_actions.empty());
+    // Resume is always offered, first/primary.
+    CHECK(ev->recovery_actions.front().gcode == "RESUME");
+    // Detail carries the descriptive reason, not the bare !! line.
+    CHECK(ev->detail.find("Runout detected on gate 0") != std::string::npos);
+}
+
+TEST_CASE("Happy Hare classify_error: recover gcode reflects loaded state",
+          "[ams][happy_hare][error-center]") {
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+    nlohmann::json mmu;
+    mmu["action"] = "Error";
+    mmu["filament_pos"] = 8;
+    mmu["filament"] = "Loaded";  // pos=8 means at toolhead; make loaded flag match
+    mmu["reason_for_pause"] = "Clog detected";
+    hh.test_parse_mmu_state(mmu);
+
+    helix::ClassifyContext ctx; ctx.is_paused = true;
+    auto ev = hh.classify_error("!! Clog detected", ctx);
+    REQUIRE(ev.has_value());
+    bool has_recover_loaded = false;
+    for (const auto& a : ev->recovery_actions)
+        if (a.gcode == "MMU_RECOVER LOADED=1") has_recover_loaded = true;
+    CHECK(has_recover_loaded);
+}
+
+TEST_CASE("Happy Hare classify_error: non-!! line and non-paused defer to generic",
+          "[ams][happy_hare][error-center]") {
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+    helix::ClassifyContext ctx;  // not paused
+    CHECK_FALSE(hh.classify_error("Error: generic klipper error", ctx).has_value());
+    CHECK_FALSE(hh.classify_error("ok", ctx).has_value());
+    ctx.is_paused = true;  // paused but backend not in error state
+    CHECK_FALSE(hh.classify_error("!! something unrelated", ctx).has_value());
+}
+
+TEST_CASE("Happy Hare classify_error: stale reason_for_pause does not fire when not paused",
+          "[ams][happy_hare][error-center]") {
+    // Regression: the recognized-keyword path must still require ctx.is_paused.
+    // A non-empty reason_for_pause_ holding a recognized keyword ("clog") must
+    // NOT produce a CRITICAL event when the print is not paused.
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+
+    // Populate reason_for_pause_ with a recognized keyword and put HH in ERROR.
+    nlohmann::json mmu;
+    mmu["action"] = "Error";
+    mmu["reason_for_pause"] = "Clog detected on gate 0";
+    hh.test_parse_mmu_state(mmu);
+
+    helix::ClassifyContext ctx;  // is_paused defaults to false
+    // Even with a recognized keyword in the line AND a non-empty reason_for_pause_,
+    // a non-paused context must defer to the generic classifier.
+    CHECK_FALSE(hh.classify_error("!! Clog detected", ctx).has_value());
+}
+
+TEST_CASE("Happy Hare toolchange_phase_template: ops declare ordered phases",
+          "[ams][happy_hare][narration]") {
+    AmsBackendHappyHareTestHelper hh;
+    auto swap = hh.toolchange_phase_template(StepOperationType::LOAD_SWAP);
+    REQUIRE_FALSE(swap.empty());
+    CHECK(swap.front().id == "heat");
+    CHECK(swap.back().id == "load");
+    // Task 3 maps AmsAction → these exact positions; lock them in.
+    REQUIRE(swap.size() == 8);
+    CHECK(swap[5].id == "feed");
+    CHECK(swap[6].id == "purge");
+    // Fresh load skips the unload/cut phases.
+    auto fresh = hh.toolchange_phase_template(StepOperationType::LOAD_FRESH);
+    REQUIRE_FALSE(fresh.empty());
+    bool fresh_has_unload = false;
+    for (const auto& p : fresh) if (p.id == "unload") fresh_has_unload = true;
+    CHECK_FALSE(fresh_has_unload);
+    // Unload op ends at "unload".
+    auto unload = hh.toolchange_phase_template(StepOperationType::UNLOAD);
+    REQUIRE_FALSE(unload.empty());
+    CHECK(unload.back().id == "unload");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "Happy Hare narration: action transitions advance the step subject",
+                 "[ams][happy_hare][narration][ui_integration]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(true);
+    ams.set_active_step_operation(StepOperationType::LOAD_SWAP);
+    ams.set_narration_phase(-1, "");
+
+    auto hh = std::make_unique<AmsBackendHappyHareTestHelper>();
+    hh->initialize_test_gates(4);
+    auto* hh_raw = hh.get();
+    ams.set_backend(std::move(hh));  // backend now reachable for the index subject
+
+    auto feed_action = [&](const char* action) {
+        nlohmann::json mmu;
+        mmu["action"] = action;
+        hh_raw->test_parse_mmu_state(mmu);
+        helix::ui::UpdateQueue::instance().drain();  // flush the deferred set
+    };
+
+    feed_action("Heating");
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 0);  // "heat" = index 0
+
+    feed_action("Loading");
+    // "feed" is index 5 in the LOAD_SWAP template.
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 5);
+
+    feed_action("Purging");
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 6);  // "purge" = index 6
+
+    ams.set_backend(nullptr);
 }

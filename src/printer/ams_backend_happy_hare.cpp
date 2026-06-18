@@ -3,6 +3,7 @@
 
 #include "ams_backend_happy_hare.h"
 
+#include "ams_state.h"
 #include "config.h"
 #include "hh_defaults.h"
 #include "moonraker_api.h"
@@ -11,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 
 using namespace helix;
@@ -403,6 +405,10 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                 }
             }
         }
+
+        // Drive the toolchange step bar from the action transition (HH has no
+        // // narration). Deferred to main thread inside the helper.
+        sync_narration_step();
     }
 
     // Parse filament_pos: printer.mmu.filament_pos
@@ -995,6 +1001,144 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                     entry->info.endless_spool_group = es_groups[i].get<int>();
                 }
             }
+        }
+    }
+}
+
+// ============================================================================
+// Error Classification
+// ============================================================================
+
+std::vector<helix::RecoveryAction> AmsBackendHappyHare::build_recovery_actions() const {
+    // Caller holds mutex_.
+    std::vector<helix::RecoveryAction> actions;
+
+    // Resume after the user clears the fault (always offered, primary).
+    actions.push_back({lv_tr("Resume"), "RESUME", "hh::resume", "primary"});
+
+    // MMU_RECOVER re-syncs HH's filament state; the LOADED/UNLOADED arg must match
+    // reality (HH issue #729). Derive from the live loaded flag.
+    const bool loaded = system_info_.filament_loaded;
+    actions.push_back({lv_tr("Recover"),
+                       loaded ? "MMU_RECOVER LOADED=1" : "MMU_RECOVER UNLOADED=1",
+                       "hh::recover", ""});
+
+    // If filament is at the toolhead, offer an explicit unload.
+    if (loaded) {
+        actions.push_back({lv_tr("Unload"), "MMU_UNLOAD", "hh::unload", ""});
+    }
+
+    // Force-clear the MMU pause lock (last resort).
+    actions.push_back({lv_tr("Unlock"), "MMU_UNLOCK", "hh::unlock", "danger"});
+    return actions;
+}
+
+std::optional<helix::ErrorEvent> AmsBackendHappyHare::classify_error(
+    const std::string& raw_line, const helix::ClassifyContext& ctx) const {
+    // Only `!!` emergency lines are candidates (matches AFC).
+    if (raw_line.size() < 2 || raw_line[0] != '!' || raw_line[1] != '!') {
+        return std::nullopt;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // Happy Hare reports the descriptive cause in reason_for_pause_; prefer it
+    // over the terse !! line for the modal detail.
+    std::string bare = (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3)
+                                                                   : raw_line.substr(2);
+    std::string detail = !reason_for_pause_.empty() ? reason_for_pause_ : bare;
+
+    auto contains_ci = [](const std::string& hay, const char* needle) {
+        std::string h = hay, n = needle;
+        for (auto& c : h) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return h.find(n) != std::string::npos;
+    };
+
+    // A recognized MMU fault: a descriptive reason is present, OR the print is
+    // paused while HH is in its ERROR action. Mirrors AFC's error_state_ gate.
+    const bool hh_error_state = (system_info_.action == AmsAction::ERROR);
+    const bool recognized =
+        contains_ci(detail, "runout") || contains_ci(detail, "clog") ||
+        contains_ci(detail, "encoder") || contains_ci(detail, "jam") ||
+        contains_ci(detail, "manual intervention");
+
+    if (ctx.is_paused && (hh_error_state || (recognized && !reason_for_pause_.empty()))) {
+        helix::ErrorEvent e;
+        e.source = helix::ErrorSource::HAPPY_HARE;
+        e.severity = helix::ErrorSeverity::CRITICAL;
+        e.title = contains_ci(detail, "runout") ? lv_tr("Filament runout")
+                                                 : lv_tr("Filament System Error");
+        e.detail = detail;
+        e.sticky = true;
+        e.recovery_actions = build_recovery_actions();
+        return e;
+    }
+
+    // Not an HH-owned fault — let the generic classifier handle it.
+    return std::nullopt;
+}
+
+std::vector<AmsBackend::ToolchangePhase>
+AmsBackendHappyHare::toolchange_phase_template(StepOperationType op) const {
+    switch (op) {
+    case StepOperationType::LOAD_SWAP:
+        return {
+            {"heat",     "Heat nozzle",   false},
+            {"form_tip", "Form tip",      true},
+            {"cut",      "Cut tip",       true},
+            {"unload",   "Unload",        false},
+            {"select",   "Select gate",   true},
+            {"feed",     "Load filament", false},
+            {"purge",    "Purge",         true},
+            {"load",     "Load complete", false},
+        };
+    case StepOperationType::LOAD_FRESH:
+        return {
+            {"heat",   "Heat nozzle",   false},
+            {"select", "Select gate",   true},
+            {"feed",   "Load filament", false},
+            {"purge",  "Purge",         true},
+            {"load",   "Load complete", false},
+        };
+    case StepOperationType::UNLOAD:
+        return {
+            {"heat",     "Heat nozzle", false},
+            {"form_tip", "Form tip",    true},
+            {"cut",      "Cut tip",     true},
+            {"unload",   "Unload",      false},
+        };
+    }
+    return {};
+}
+
+void AmsBackendHappyHare::sync_narration_step() {
+    // Caller holds mutex_. Map the current action to a phase id.
+    const char* phase_id = nullptr;
+    switch (system_info_.action) {
+    case AmsAction::HEATING:     phase_id = "heat";     break;
+    case AmsAction::FORMING_TIP: phase_id = "form_tip"; break;
+    case AmsAction::CUTTING:     phase_id = "cut";      break;
+    case AmsAction::UNLOADING:   phase_id = "unload";   break;
+    case AmsAction::SELECTING:   phase_id = "select";   break;
+    case AmsAction::LOADING:     phase_id = "feed";     break;
+    case AmsAction::PURGING:     phase_id = "purge";    break;
+    default: break;  // IDLE / CHECKING / ERROR / etc. → no step movement
+    }
+    if (!phase_id) return;
+
+    const auto op = AmsState::instance().get_active_step_operation();
+    const auto tmpl = toolchange_phase_template(op);
+    for (size_t k = 0; k < tmpl.size(); ++k) {
+        if (tmpl[k].id == phase_id) {
+            auto tok = lifetime_.token();
+            const int index = static_cast<int>(k);
+            std::string label = tmpl[k].label;
+            tok.defer("AmsBackendHappyHare::sync_narration_step",
+                      [index, label = std::move(label)]() {
+                          AmsState::instance().set_narration_phase(index, label);
+                      });
+            return;
         }
     }
 }
