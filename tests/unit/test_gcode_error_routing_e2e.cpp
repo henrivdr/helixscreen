@@ -34,6 +34,7 @@
 // Tagged [.ui_integration]: needs the XML component tree on disk (modal_dialog).
 
 #include "ams_backend_afc.h"
+#include "ams_backend_happy_hare.h"
 #include "ams_state.h"
 #include "app_globals.h"
 #include "error_classify.h"
@@ -256,5 +257,121 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     // The router owns its modal and tears it down in its dtor at end-of-scope.
     // AmsState backend is cleared by backend_guard's dtor (exception-safe).
+    process_lvgl(20);
+}
+
+// ---------------------------------------------------------------------------
+// MODAL_WITH_RECOVER path: Happy Hare runout → real recovery modal actually SHOWN.
+//
+// Mirrors the AFC routing-e2e case above. Confirms that an HH-classified `!!`
+// line flows through the SHARED GcodeErrorRouter (no backend-type check in
+// shared code) and arrives at a real recovery modal on screen.
+//
+// The chain exercised end-to-end:
+//   process_line(jam) → AmsBackendHappyHare::classify_error → CRITICAL+HH+actions
+//   → decide_presentation == MODAL_WITH_RECOVER → present_recovery_modal
+//   → ActionPromptModal::show_prompt(lv_screen_active(), prompt)
+//
+// The Happy Hare backend fires classify_error when:
+//   (a) ctx.is_paused is true, AND
+//   (b) the backend has action==ERROR (hh_error_state), OR
+//       reason_for_pause is non-empty and contains a recognised keyword.
+// We satisfy (b) via a Moonraker-envelope status push with action="Error" and a
+// runout reason_for_pause string, which is the same path that fires in production
+// when Happy Hare pauses the print on a runout event.
+
+// Minimal helper — exposes the protected handle_status_update so the e2e test
+// can drive the backend into an error state without accessing test-only code
+// defined in another translation unit (test_ams_backend_happy_hare.cpp).
+class HappyHareE2EHelper : public AmsBackendHappyHare {
+  public:
+    HappyHareE2EHelper(MoonrakerAPI* api, helix::MoonrakerClient* client)
+        : AmsBackendHappyHare(api, client) {}
+
+    // Feed MMU JSON state through the normal notification pipeline.
+    // Replicates AmsBackendHappyHareTestHelper::test_parse_mmu_state.
+    void push_mmu_state(const nlohmann::json& mmu_data) {
+        nlohmann::json notification;
+        nlohmann::json params;
+        params["mmu"] = mmu_data;
+        notification["params"] = nlohmann::json::array({params, 0.0});
+        handle_status_update(notification);
+    }
+};
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Routing E2E: Happy Hare runout pause routes to recovery modal",
+                 "[error-center][routing][happy_hare]") {
+    // Paused printer: classify_error checks ctx.is_paused (must be true to fire).
+    get_printer_state().update_from_status(
+        nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
+    REQUIRE(get_printer_state().is_paused());
+
+    // Install the Happy Hare backend as the ACTIVE AmsState backend.
+    // RAII guard: clear the singleton even if a REQUIRE throws.
+    AmsState::instance().set_backend(
+        std::make_unique<HappyHareE2EHelper>(api(), client()));
+    struct BackendGuard {
+        ~BackendGuard() { AmsState::instance().set_backend(nullptr); }
+    } backend_guard;
+    REQUIRE(AmsState::instance().get_backend() != nullptr);
+
+    // Drive the HH backend into an error state via a Moonraker notification
+    // envelope: params[0]["mmu"] = mmu_data.
+    // action="Error" → system_info_.action == AmsAction::ERROR (hh_error_state=true).
+    // reason_for_pause provides the descriptive detail that classify_error surfaces.
+    nlohmann::json mmu_data;
+    mmu_data["action"]           = "Error";
+    mmu_data["reason_for_pause"] = "Runout detected at toolhead sensor";
+    mmu_data["gate"]             = -1;
+    mmu_data["tool"]             = -1;
+    mmu_data["filament"]         = "Unloaded";
+    mmu_data["enabled"]          = true;
+
+    auto* hh = static_cast<HappyHareE2EHelper*>(AmsState::instance().get_backend());
+    hh->push_mmu_state(mmu_data);
+
+    // Sanity: the backend really classifies this as recoverable CRITICAL (HH source,
+    // non-empty recovery_actions). Fails loudly if the error-state gate regresses.
+    {
+        helix::ClassifyContext ctx;
+        ctx.is_paused   = true;
+        ctx.is_printing = false;
+        auto ev =
+            AmsState::instance().get_backend()->classify_error("!! Runout detected", ctx);
+        REQUIRE(ev.has_value());
+        REQUIRE(ev->severity == helix::ErrorSeverity::CRITICAL);
+        REQUIRE(ev->source == helix::ErrorSource::HAPPY_HARE);
+        REQUIRE_FALSE(ev->recovery_actions.empty());
+        // The detail comes from reason_for_pause, not the terse !! line.
+        REQUIRE(ev->detail.find("Runout") != std::string::npos);
+        // MODAL_WITH_RECOVER (not plain MODAL) because recovery_actions are present.
+        REQUIRE(helix::decide_presentation(*ev) == helix::PresentAs::MODAL_WITH_RECOVER);
+    }
+
+    // Drive the REAL glue end-to-end. api() is non-null so present_recovery_modal
+    // runs the show_prompt arm (not the ui_notification_error stub).
+    helix::GcodeErrorRouter router(api(), client());
+    REQUIRE_NOTHROW(GcodeErrorRouterTestAccess::process_line(router, "!! Runout detected"));
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(50);
+
+    // Assert the recovery modal is actually on screen.
+    REQUIRE(Modal::any_visible());
+    lv_obj_t* screen = lv_screen_active();
+    REQUIRE(screen != nullptr);
+
+    // The title set from e.title ("Filament runout") must appear.
+    const char* title = find_text_containing(screen, lv_tr("Filament runout"));
+    REQUIRE(title != nullptr);
+
+    // Severity affordance: the error icon must be visible (not hidden).
+    lv_obj_t* err_icon = lv_obj_find_by_name(screen, "icon_error");
+    REQUIRE(err_icon != nullptr);
+    REQUIRE_FALSE(lv_obj_has_flag(err_icon, LV_OBJ_FLAG_HIDDEN));
+
+    // A Resume recovery button must be present (always the primary action for HH).
+    REQUIRE(find_text_containing(screen, lv_tr("Resume")) != nullptr);
+
     process_lvgl(20);
 }
