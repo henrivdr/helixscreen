@@ -1058,7 +1058,7 @@ std::optional<helix::ErrorEvent> AmsBackendHappyHare::classify_error(
         contains_ci(detail, "encoder") || contains_ci(detail, "jam") ||
         contains_ci(detail, "manual intervention");
 
-    if ((ctx.is_paused && hh_error_state) || (recognized && !reason_for_pause_.empty())) {
+    if (ctx.is_paused && (hh_error_state || (recognized && !reason_for_pause_.empty()))) {
         helix::ErrorEvent e;
         e.source = helix::ErrorSource::HAPPY_HARE;
         e.severity = helix::ErrorSeverity::CRITICAL;

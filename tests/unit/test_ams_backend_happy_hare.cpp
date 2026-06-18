@@ -3306,3 +3306,23 @@ TEST_CASE("Happy Hare classify_error: non-!! line and non-paused defer to generi
     ctx.is_paused = true;  // paused but backend not in error state
     CHECK_FALSE(hh.classify_error("!! something unrelated", ctx).has_value());
 }
+
+TEST_CASE("Happy Hare classify_error: stale reason_for_pause does not fire when not paused",
+          "[ams][happy_hare][error-center]") {
+    // Regression: the recognized-keyword path must still require ctx.is_paused.
+    // A non-empty reason_for_pause_ holding a recognized keyword ("clog") must
+    // NOT produce a CRITICAL event when the print is not paused.
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+
+    // Populate reason_for_pause_ with a recognized keyword and put HH in ERROR.
+    nlohmann::json mmu;
+    mmu["action"] = "Error";
+    mmu["reason_for_pause"] = "Clog detected on gate 0";
+    hh.test_parse_mmu_state(mmu);
+
+    helix::ClassifyContext ctx;  // is_paused defaults to false
+    // Even with a recognized keyword in the line AND a non-empty reason_for_pause_,
+    // a non-paused context must defer to the generic classifier.
+    CHECK_FALSE(hh.classify_error("!! Clog detected", ctx).has_value());
+}
