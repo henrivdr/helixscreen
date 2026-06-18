@@ -370,8 +370,8 @@ class Ad5xIfsTestAccess {
         return b.phase_tracker_.active;
     }
 
-    static void finalize_unload_after_macro(AmsBackendAd5xIfs& b) {
-        b.finalize_unload_after_macro();
+    static void finalize_op_after_macro(AmsBackendAd5xIfs& b, bool is_unload) {
+        b.finalize_op_after_macro(is_unload);
     }
 };
 
@@ -5518,14 +5518,48 @@ TEST_CASE("AD5X IFS unload finalizes to IDLE on the macro completion ack, not th
     REQUIRE(backend.get_system_info().action != AmsAction::IDLE);
 
     // Macro completes -> finalize to IDLE (not ERROR, not stuck at Retract).
-    Ad5xIfsTestAccess::finalize_unload_after_macro(backend);
+    Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true);
 
     REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 
     // Idempotent: a second finalize (or a late confirming query) is a no-op.
-    Ad5xIfsTestAccess::finalize_unload_after_macro(backend);
+    Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true);
     REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+}
+
+TEST_CASE("AD5X IFS load finalizes to IDLE on the macro completion ack (raza616 stuck-on-Purging)",
+          "[ams][ad5x_ifs]") {
+    // Mirror of the stuck-on-Retract unload fix for the load path. INSERT_PRUTOK_IFS
+    // is a linear, synchronous zmod macro (home → heat → feed → purge); it acks
+    // only after the purge fully runs. The synthesized Purge phase has no sensor
+    // event, and the confirming query can silently fail on native ZMOD — so the
+    // macro ack is the reliable terminal signal. With a null client, ensure_homed_then
+    // dispatches directly through the (overridden) execute_gcode, capturing the
+    // completion callback.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+
+    REQUIRE(backend.load_filament(2).success());
+
+    // Load dispatched the macro WITH a completion callback; op in flight.
+    REQUIRE(backend.has_gcode("INSERT_PRUTOK_IFS PRUTOK=3")); // 0-based slot 2 -> port 3
+    REQUIRE(backend.captured_completion != nullptr);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+    REQUIRE(backend.get_system_info().action != AmsAction::IDLE);
+
+    // Macro completes -> finalize to IDLE (not stuck at Purge).
+    Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/false);
+    REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
+
+    // An unload-ack must NOT finalize a load (and vice versa) — guard by direction.
+    REQUIRE(backend.load_filament(1).success());
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+    Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true); // wrong direction
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));                      // still in flight
+    REQUIRE(backend.get_system_info().action != AmsAction::IDLE);
 }
 
 TEST_CASE("AD5X IFS unload_filament with empty toolhead routes to cold lane eject (7AC4SDEX)",

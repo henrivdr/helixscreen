@@ -1041,7 +1041,18 @@ AmsError AmsBackendAd5xIfs::load_filament(int slot_index) {
     // the action moved IDLE→HEATING above, so a STATE_CHANGED is always due.
     emit_event(EVENT_STATE_CHANGED);
     spdlog::info("{} Loading filament from port {}", backend_log_tag(), port);
-    return ensure_homed_then("INSERT_PRUTOK_IFS PRUTOK=" + std::to_string(port));
+    // Finalize on the macro's own completion (its gcode ack). INSERT_PRUTOK_IFS
+    // is a linear, synchronous zmod macro (home → heat → feed → purge → unclamp);
+    // it acks only after the purge fully runs. Like the unload, the synthesized
+    // Purge phase has no sensor event and the confirming query can silently fail
+    // on native ZMOD — without this the load sticks at Purge until the 90s
+    // timeout flips to ERROR (raza616 stuck-on-Purging). on_complete fires on a
+    // bg thread, so hop to the main thread before touching state.
+    auto token = lifetime_.token();
+    return ensure_homed_then("INSERT_PRUTOK_IFS PRUTOK=" + std::to_string(port), [this, token]() {
+        token.defer("Ad5xIfsBackend::load_macro_complete",
+                    [this]() { finalize_op_after_macro(/*is_unload=*/false); });
+    });
 }
 
 AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
@@ -1134,7 +1145,7 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     auto token = lifetime_.token();
     auto result = execute_gcode("_IFS_REMOVE_CURRENT_PRUTOK", [this, token]() {
         token.defer("Ad5xIfsBackend::unload_macro_complete",
-                    [this]() { finalize_unload_after_macro(); });
+                    [this]() { finalize_op_after_macro(/*is_unload=*/true); });
     });
     // Backup re-query: for inactive-slot unloads on native ZMOD the head
     // sensor never changes, so detect_load_unload_completion() won't fire.
@@ -1144,15 +1155,16 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     return result;
 }
 
-void AmsBackendAd5xIfs::finalize_unload_after_macro() {
+void AmsBackendAd5xIfs::finalize_op_after_macro(bool is_unload) {
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        // Only finalize the unload WE started and that is still in flight. If a
-        // confirming IFS_STATUS Chan==0 already finalized it, or the user moved
-        // on to another op, phase_tracker_ is no longer our unload — do nothing.
-        if (phase_tracker_.active && phase_tracker_.is_unload) {
-            spdlog::info("{} Unload macro complete (gcode ack) -> IDLE", backend_log_tag());
+        // Only finalize the op WE started and that is still in flight. If a
+        // confirming IFS_STATUS / GET_ZCOLOR query already finalized it, or the
+        // user moved on, phase_tracker_ is no longer our op — do nothing.
+        if (phase_tracker_.active && phase_tracker_.is_unload == is_unload) {
+            spdlog::info("{} {} macro complete (gcode ack) -> IDLE", backend_log_tag(),
+                         is_unload ? "Unload" : "Load");
             system_info_.action = AmsAction::IDLE;
             end_phase_tracking_locked();
             set_operation_detail_locked("");
@@ -1161,9 +1173,9 @@ void AmsBackendAd5xIfs::finalize_unload_after_macro() {
     }
     if (changed) {
         PostOpCooldownManager::instance().schedule();
-        // Reconcile presence/colours now that the lane is empty (drives the
-        // present->absent override-clear via GET_ZCOLOR / IFS_STATUS Ports).
-        schedule_zcolor_query("unload_macro_complete");
+        // Reconcile presence/colours now that the lane state changed (drives the
+        // present<->absent override-clear via GET_ZCOLOR / IFS_STATUS Ports).
+        schedule_zcolor_query(is_unload ? "unload_macro_complete" : "load_macro_complete");
         emit_event(EVENT_STATE_CHANGED);
     }
 }

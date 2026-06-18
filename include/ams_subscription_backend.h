@@ -62,7 +62,10 @@ class AmsSubscriptionBackend : public AmsBackend {
 
     /// Query homing status and auto-home (G28) if needed before executing gcode.
     /// Returns immediately — homing and gcode execution happen asynchronously.
-    AmsError ensure_homed_then(std::string gcode);
+    /// @p on_complete (optional) fires when the final gcode command finishes
+    /// (Klipper acks the script), on a background thread; the caller hops to the
+    /// main thread. Use when the gcode's macro completion is the terminal signal.
+    AmsError ensure_homed_then(std::string gcode, std::function<void()> on_complete = nullptr);
 
   protected:
     // --- Hooks for derived classes ---
