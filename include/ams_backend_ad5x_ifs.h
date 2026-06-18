@@ -244,6 +244,10 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
         bool is_old_format = false;      // Slot lines had no /HEX segment
         bool ifs_active = false;         // "IFS: True" in summary line
         bool saw_valid_response = false; // Matched at least one summary or slot line
+        // True when a genuine GET_ZCOLOR summary or slot line was parsed (as
+        // opposed to ONLY the IFS_STATUS JSON). Proves SILENT actually works on
+        // this device, which retires the false prompt-demotion (#981).
+        bool saw_silent_content = false;
         std::optional<int> current_channel;
         std::optional<int> extruder_slot; // 0-based, absent when "None"
         // Seated/engaged channel from IFS_STATUS "Chan" (1-based, 0 = none).
@@ -521,11 +525,15 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // tool_map_-derived current_slot can disagree with it on the plugin path.
     int seated_chan_ = 0;
     // Latches true the first time IFS_STATUS "Ports" is observed. Once the
-    // RS-485 silk-sensor presence truth is available, the legacy
+    // RS-485 silk-sensor presence truth is available, (1) the legacy
     // Adventurer5M.json ffmColor presence inference must NEVER run — that
     // inference resurrects an emptied channel from its persisted colour when
-    // GET_ZCOLOR SILENT gets (even falsely) demoted (#981, bundle EE5L8LY2).
-    bool ifs_status_ports_seen_ = false;
+    // GET_ZCOLOR SILENT gets (even falsely) demoted; and (2) we keep firing
+    // IFS_STATUS even after a SILENT demotion so Ports presence stays live
+    // (query_zcolor_silent / schedule_zcolor_query) (#981, bundle EE5L8LY2).
+    // Atomic: written under mutex_ in apply_zcolor_result, read unlocked in the
+    // schedule/query gates.
+    std::atomic<bool> ifs_status_ports_seen_{false};
     bool external_mode_ = false;                // Bypass/external spool mode
     bool head_filament_ = false;                // Head sensor state
     std::array<bool, NUM_PORTS> dirty_{};       // Per-slot dirty flag to prevent stale overwrites
@@ -578,6 +586,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // return. Mirrors reread_pending_ on schedule_json_reread().
     std::atomic<bool> zcolor_schedule_armed_{false};
     std::atomic<bool> zcolor_silent_supported_{true};
+    // Latches true the first time GET_ZCOLOR SILENT=1 returns genuine silent
+    // content (a summary or slot line — NOT just the IFS_STATUS JSON). Once
+    // confirmed, a later prompt dialog is the user's own interactive zmod colour
+    // menu colliding with our in-flight query, NOT our query degrading, so we no
+    // longer demote zcolor_silent_supported_ on it (#981 false-latch, EE5L8LY2).
+    std::atomic<bool> zcolor_silent_confirmed_{false};
     std::mutex zcolor_buffer_mutex_;
     std::vector<std::string> zcolor_response_buffer_;
     // Diagnostic counter — incremented on every schedule_zcolor_query() call.

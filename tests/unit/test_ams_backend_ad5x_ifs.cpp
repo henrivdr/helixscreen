@@ -2599,6 +2599,40 @@ TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)",
     REQUIRE(backend.get_system_info().current_slot == 3);
 }
 
+TEST_CASE("AD5X IFS a confirmed SILENT device is NOT demoted by a later prompt "
+          "(raza616 #981 false latch, EE5L8LY2)",
+          "[ams][ad5x_ifs]") {
+    // raza616's device supports GET_ZCOLOR SILENT=1 (it returned clean silent
+    // content at boot). Mid-session the user opened zmod's interactive "Select
+    // print materials" colour menu — a prompt dialog — while a SILENT query was
+    // in flight. Pre-fix, HelixScreen attributed that prompt to its own query and
+    // latched zcolor_silent_supported_=false, demoting a capable device to the
+    // resurrection-prone JSON-inference path. Once SILENT has been confirmed
+    // (genuine summary/slot content seen), a later prompt must NOT demote it.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(Ad5xIfsTestAccess::zcolor_silent_supported(backend));
+
+    // A genuine SILENT response with content confirms the device speaks SILENT.
+    AmsBackendAd5xIfs::ZColorSilentResult ok;
+    ok.saw_valid_response = true;
+    ok.saw_silent_content = true; // a GET_ZCOLOR summary/slot line was parsed
+    ok.ifs_active = true;
+    ok.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "FFFFFF"};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, ok);
+    REQUIRE(Ad5xIfsTestAccess::zcolor_silent_supported(backend)); // still supported
+
+    // The user's colour menu prompt (IFS_STATUS rides the same response).
+    AmsBackendAd5xIfs::ZColorSilentResult prompt;
+    prompt.is_prompt_fallback = true;
+    prompt.saw_valid_response = true;
+    prompt.ifs_chan = 2;
+    prompt.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, prompt);
+
+    // NOT demoted — the prompt was external (user menu), not our query degrading.
+    REQUIRE(Ad5xIfsTestAccess::zcolor_silent_supported(backend));
+}
+
 TEST_CASE("AD5X IFS phase: IFS_STATUS Chan=0 after head drop finalizes unload to IDLE",
           "[ams][ad5x_ifs][phase]") {
     // During a tracked unload, after the head sensor drops, an IFS_STATUS with

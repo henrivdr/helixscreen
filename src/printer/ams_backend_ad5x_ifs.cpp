@@ -2741,8 +2741,12 @@ void AmsBackendAd5xIfs::schedule_json_reread() {
 }
 
 void AmsBackendAd5xIfs::schedule_zcolor_query(const char* reason) {
-    if (!zcolor_silent_supported_.load()) {
-        return; // Session flagged unsupported; don't retry.
+    if (!zcolor_silent_supported_.load() && !ifs_status_ports_seen_.load()) {
+        // GET_ZCOLOR SILENT is unsupported AND we have never seen IFS_STATUS
+        // Ports — nothing clean to query, fall to JSON polling. Once IFS_STATUS
+        // Ports has been seen, keep scheduling so IFS_STATUS (clean JSON, no
+        // prompt) refreshes presence even after a SILENT demotion (#981).
+        return;
     }
     zcolor_schedule_count_.fetch_add(1, std::memory_order_relaxed);
     // Diagnostic-only: record which operation wants this refresh. Last-writer-
@@ -2786,7 +2790,13 @@ void AmsBackendAd5xIfs::schedule_zcolor_query(const char* reason) {
 }
 
 void AmsBackendAd5xIfs::query_zcolor_silent() {
-    if (!api_ || !zcolor_silent_supported_.load())
+    if (!api_)
+        return;
+    const bool silent = zcolor_silent_supported_.load();
+    // After a SILENT demotion we still want IFS_STATUS (clean JSON, no prompt) to
+    // keep presence live — but only if the device actually speaks it. With
+    // neither path available, fall to JSON polling.
+    if (!silent && !ifs_status_ports_seen_.load())
         return;
     if (zcolor_query_active_.exchange(true)) {
         // Already in flight — mark pending so finalize will re-schedule.
@@ -2804,20 +2814,34 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
         zcolor_response_buffer_.clear();
     }
 
-    spdlog::debug("{} Querying GET_ZCOLOR SILENT=1", backend_log_tag());
     auto token = lifetime_.token();
 
-    // Also fire IFS_STATUS (fire-and-forget): its respond_info JSON carries the
-    // seated channel ("Chan"), which persists at the loaded port while idle —
-    // unlike GET_ZCOLOR's "Extruder:" feed view that reads "None" when loaded-
-    // idle. zcolor_query_active_ is already set, so the JSON line lands in
-    // zcolor_response_buffer_ and is parsed by parse_zcolor_silent. Clean JSON
-    // (not a prompt dialog), so it works even on old zmod where GET_ZCOLOR
-    // degrades to a prompt-fallback. Routed through the backend's fire-and-forget
-    // execute_gcode() (same call the toolhead unload uses) rather than the
-    // callback-taking MoonrakerAPI overload.
+    // Always fire IFS_STATUS (fire-and-forget): its respond_info JSON carries the
+    // seated channel ("Chan") and per-port presence ("Ports"). Chan persists at
+    // the loaded port while idle — unlike GET_ZCOLOR's "Extruder:" feed view that
+    // reads "None" when loaded-idle. zcolor_query_active_ is already set, so the
+    // JSON line lands in zcolor_response_buffer_ and is parsed by
+    // parse_zcolor_silent. Clean JSON (not a prompt dialog), so it works even on
+    // old zmod where GET_ZCOLOR degrades to a prompt-fallback. Routed through the
+    // backend's fire-and-forget execute_gcode() rather than the callback-taking
+    // MoonrakerAPI overload.
     execute_gcode("IFS_STATUS");
 
+    if (!silent) {
+        // SILENT demoted — IFS_STATUS is the only query this turn. Nothing
+        // drives finalize, so schedule it ourselves after the same collection
+        // window the GET_ZCOLOR callback uses, so the IFS_STATUS response in the
+        // buffer gets parsed + applied (Ports presence stays live, #981).
+        spdlog::debug("{} Querying IFS_STATUS only (SILENT demoted)", backend_log_tag());
+        helix::http::HttpExecutor::fast().submit([this, token]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            token.defer("Ad5xIfsBackend::ifs_status_finalize_apply",
+                        [this]() { finalize_zcolor_response(); });
+        });
+        return;
+    }
+
+    spdlog::debug("{} Querying GET_ZCOLOR SILENT=1", backend_log_tag());
     api_->execute_gcode(
         "GET_ZCOLOR SILENT=1",
         [this, token]() {
@@ -2900,7 +2924,7 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // (#981, bundle EE5L8LY2). Plugin users keep their own per-port
             // sensors as authority (has_per_port_sensors_), so skip them.
             if (result.ifs_ports.has_value() && !has_per_port_sensors_) {
-                ifs_status_ports_seen_ = true;
+                ifs_status_ports_seen_.store(true);
                 const auto& ports = *result.ifs_ports;
                 for (int i = 0; i < NUM_PORTS; ++i) {
                     const auto idx = static_cast<size_t>(i);
@@ -2972,8 +2996,20 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
         }
     }
 
+    // Confirm SILENT works the first time it returns genuine GET_ZCOLOR content
+    // (a summary or slot line, not just the IFS_STATUS JSON). After that, a
+    // prompt is the user's own zmod colour menu colliding with our query, not
+    // our query degrading — so it must not demote a capable device (#981).
+    if (!result.is_prompt_fallback && result.saw_silent_content) {
+        zcolor_silent_confirmed_.store(true);
+    }
+
     if (result.is_prompt_fallback) {
-        if (zcolor_silent_supported_.exchange(false)) {
+        // Only treat the prompt as "GET_ZCOLOR SILENT unsupported" if we have
+        // never seen SILENT actually work. A confirmed device keeps SILENT (and
+        // its presence authority) instead of falling to the resurrection-prone
+        // JSON-inference path (#981 false latch, bundle EE5L8LY2).
+        if (!zcolor_silent_confirmed_.load() && zcolor_silent_supported_.exchange(false)) {
             spdlog::warn("{} zmod returned a prompt dialog for GET_ZCOLOR SILENT=1 — "
                          "old zmod, falling back to Adventurer5M.json polling",
                          backend_log_tag());
@@ -3198,6 +3234,7 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
     for (const auto& line : lines) {
         if (std::regex_match(line, m, summary_re)) {
             result.saw_valid_response = true;
+            result.saw_silent_content = true; // genuine GET_ZCOLOR summary line
             result.ifs_active = (m[2].str() == "True");
             const std::string extruder_part = m[1].str();
 
@@ -3233,6 +3270,7 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
             }
 
             result.saw_valid_response = true;
+            result.saw_silent_content = true; // genuine GET_ZCOLOR slot line
             slot_lines_seen++;
 
             // Slot line body is "MATERIAL" or "MATERIAL/HEX" or "MATERIAL/NAME/HEX".
@@ -3370,7 +3408,7 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             //     an emptied channel. Refresh colours/materials only (above);
             //     never touch presence here.
             if (!has_per_port_sensors_ && !zcolor_silent_supported_.load() &&
-                !ifs_status_ports_seen_) {
+                !ifs_status_ports_seen_.load()) {
                 auto& presence = port_presence_[static_cast<size_t>(idx)];
                 if (has_filament_data) {
                     presence = true;
