@@ -793,6 +793,56 @@ validate_binary_architecture() {
     return 0
 }
 
+# Find a writable, persistent mount dir on a DIFFERENT filesystem than
+# INSTALL_PARENT with room for an off-partition rollback backup.
+#
+# Used when the install partition is too tight to hold the old + new install
+# at once (e.g. K2 /opt: ~240MB, ~81MB free). Relocating the old install to a
+# roomy partition frees the install fs so the new tree can move in, and the
+# off-partition copy serves as the rollback source on failure.
+#
+# Args: NEEDED_MB INSTALL_PARENT
+# Echoes a qualifying candidate dir and returns 0, or echoes nothing and
+# returns 1 if none qualifies. Requires NEEDED_MB + 20 MB free on the candidate.
+detect_rollback_dir() {
+    local needed_mb=$1 install_parent=$2
+    local _candidates _cand _dev _free _install_dev
+
+    # Candidate mounts, overridable for testability.
+    _candidates="${HELIX_ROLLBACK_CANDIDATES:-/mnt/UDISK /usr/data /mnt/data /data /user-resource /oem /userdata /var/tmp}"
+
+    # Filesystem device backing the install partition — candidates on the same
+    # device free no space when we relocate there.
+    _install_dev=$(df -P "$install_parent" 2>/dev/null | tail -1 | awk '{print $1}')
+
+    for _cand in $_candidates; do
+        [ -d "$_cand" ] || continue
+
+        # Must be writable (honor sudo fallback like elsewhere in this file).
+        if touch "$_cand/.helix_rollback_test" 2>/dev/null; then
+            rm -f "$_cand/.helix_rollback_test" 2>/dev/null
+        elif $SUDO touch "$_cand/.helix_rollback_test" 2>/dev/null; then
+            $SUDO rm -f "$_cand/.helix_rollback_test" 2>/dev/null
+        else
+            continue
+        fi
+
+        _dev=$(df -P "$_cand" 2>/dev/null | tail -1 | awk '{print $1}')
+        # Skip tmpfs — volatile RAM, a reboot mid-update loses the rollback.
+        [ "$_dev" = "tmpfs" ] && continue
+        # Skip same filesystem as the install — relocating there frees nothing.
+        [ "$_dev" = "$_install_dev" ] && continue
+
+        _free=$(df "$_cand" 2>/dev/null | tail -1 | awk '{print int($4/1024)}')
+        if [ -n "$_free" ] && [ "$_free" -ge $(( needed_mb + 20 )) ]; then
+            echo "$_cand"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # Extract archive with atomic swap and rollback protection.
 # Dispatches on _ARCHIVE_FORMAT for zip vs tar.gz. Expects the archive already
 # staged at _archive_tmp_path() by download_release() or use_local_tarball().
@@ -1043,23 +1093,75 @@ extract_release() {
         # Standard path (fresh install or non-self-update with sudo access):
         # atomic directory swap via rename in parent directory.
 
-        # Choose backup dir name for atomic swap.
-        # Prefer INSTALL_DIR.old; if it exists and can't be removed (e.g. root-owned
-        # under NoNewPrivileges), fall back to a timestamped name so the swap succeeds.
-        INSTALL_BACKUP="${INSTALL_DIR}.old"
-        if [ -d "$INSTALL_BACKUP" ]; then
-            log_info "Removing stale backup from previous install..."
-            if ! rm -rf "$INSTALL_BACKUP" 2>/dev/null && ! $SUDO rm -rf "$INSTALL_BACKUP" 2>/dev/null; then
-                INSTALL_BACKUP="${INSTALL_DIR}.old.$(date +%s)"
-                log_warn "Could not remove stale .old dir (root-owned?); using $INSTALL_BACKUP instead"
-            fi
-        fi
+        # Sizing: can the install partition hold the old AND new install at once?
+        # On a cramped overlay (e.g. K2 /opt) it can't — the old .old copy plus
+        # the freshly extracted tree exceeds free space and the move-new-in step
+        # fails mid-write with ENOSPC. When tight, relocate the old install to a
+        # roomy persistent partition first (option B) so the install fs has room.
+        local new_install_mb install_parent install_free_mb swap_margin_mb
+        new_install_mb=$(du -ms "$new_install" 2>/dev/null | awk '{print $1}')
+        [ -z "$new_install_mb" ] && new_install_mb=0
 
-        # Atomic swap: move old install to backup
-        if ! $(file_sudo "${INSTALL_DIR}") mv "${INSTALL_DIR}" "$INSTALL_BACKUP"; then
-            log_error "Failed to backup existing installation."
-            rm -rf "$extract_dir"
-            exit 1
+        install_parent=$(dirname "${INSTALL_DIR}")
+        while [ ! -d "$install_parent" ] && [ "$install_parent" != "/" ]; do
+            install_parent=$(dirname "$install_parent")
+        done
+        install_free_mb=$(df "$install_parent" 2>/dev/null | tail -1 | awk '{print int($4/1024)}')
+        [ -z "$install_free_mb" ] && install_free_mb=0
+
+        swap_margin_mb=10
+
+        if [ "$install_free_mb" -lt $(( new_install_mb + swap_margin_mb )) ]; then
+            # Tight: the install partition can't hold old + new simultaneously.
+            roomy=$(detect_rollback_dir "$new_install_mb" "$install_parent") || roomy=""
+            if [ -n "$roomy" ]; then
+                # Relocate the old install OFF the cramped partition to a roomy,
+                # persistent one. The off-partition copy is the rollback source.
+                HELIX_OFFSITE_ROLLBACK_DIR="${roomy}/helixscreen-rollback"
+                INSTALL_BACKUP="${HELIX_OFFSITE_ROLLBACK_DIR}/helixscreen"
+                if [ -e "$INSTALL_BACKUP" ]; then
+                    rm -rf "$INSTALL_BACKUP" 2>/dev/null || $SUDO rm -rf "$INSTALL_BACKUP" 2>/dev/null || true
+                fi
+                if ! $(file_sudo "$roomy") mkdir -p "$HELIX_OFFSITE_ROLLBACK_DIR" 2>/dev/null; then
+                    log_error "Failed to create off-partition rollback dir at ${HELIX_OFFSITE_ROLLBACK_DIR}"
+                    rm -rf "$extract_dir"
+                    exit 1
+                fi
+                log_info "Install partition tight (${install_free_mb}MB free, need ~${new_install_mb}MB); staging rollback backup off-partition at ${HELIX_OFFSITE_ROLLBACK_DIR}"
+
+                # Cross-fs move (copy to roomy + delete) frees the install fs.
+                if ! $(file_sudo "${INSTALL_DIR}") mv "${INSTALL_DIR}" "$INSTALL_BACKUP"; then
+                    log_error "Failed to relocate existing installation off-partition."
+                    rm -rf "$extract_dir"
+                    exit 1
+                fi
+            else
+                # Tight and nowhere safe to back up — never delete the old
+                # install without a working rollback copy. Fail clean.
+                log_error "Not enough space on ${install_parent} (${install_free_mb}MB free) to install this update (~${new_install_mb}MB), and no alternate partition with room for a safe rollback backup was found."
+                log_error "Free up space on ${install_parent} and try again."
+                rm -rf "$extract_dir"
+                exit 1
+            fi
+        else
+            # Roomy: keep the existing same-fs atomic swap behavior.
+            # Prefer INSTALL_DIR.old; if it exists and can't be removed (e.g. root-owned
+            # under NoNewPrivileges), fall back to a timestamped name so the swap succeeds.
+            INSTALL_BACKUP="${INSTALL_DIR}.old"
+            if [ -d "$INSTALL_BACKUP" ]; then
+                log_info "Removing stale backup from previous install..."
+                if ! rm -rf "$INSTALL_BACKUP" 2>/dev/null && ! $SUDO rm -rf "$INSTALL_BACKUP" 2>/dev/null; then
+                    INSTALL_BACKUP="${INSTALL_DIR}.old.$(date +%s)"
+                    log_warn "Could not remove stale .old dir (root-owned?); using $INSTALL_BACKUP instead"
+                fi
+            fi
+
+            # Atomic swap: move old install to backup
+            if ! $(file_sudo "${INSTALL_DIR}") mv "${INSTALL_DIR}" "$INSTALL_BACKUP"; then
+                log_error "Failed to backup existing installation."
+                rm -rf "$extract_dir"
+                exit 1
+            fi
         fi
     fi
 
@@ -1074,6 +1176,16 @@ extract_release() {
             [ -d "${INSTALL_DIR}" ] && $SUDO rm -rf "${INSTALL_DIR}"
             if $SUDO mv "$INSTALL_BACKUP" "${INSTALL_DIR}"; then
                 log_warn "Rollback complete. Previous installation restored."
+                # Off-partition rollback: the cross-fs mv leaves an empty
+                # helixscreen-rollback/ dir behind. Remove it, but ONLY when its
+                # final component is exactly helixscreen-rollback (never a bare
+                # mount root — see the K2 /mnt/UDISK wipe incident).
+                if [ -n "${HELIX_OFFSITE_ROLLBACK_DIR:-}" ]; then
+                    case "$HELIX_OFFSITE_ROLLBACK_DIR" in
+                        */helixscreen-rollback)
+                            rm -rf "$HELIX_OFFSITE_ROLLBACK_DIR" 2>/dev/null || $SUDO rm -rf "$HELIX_OFFSITE_ROLLBACK_DIR" 2>/dev/null || true ;;
+                    esac
+                fi
             else
                 log_error "CRITICAL: Rollback failed! Previous install at $INSTALL_BACKUP"
                 log_error "Manually restore with: mv $INSTALL_BACKUP ${INSTALL_DIR}"
@@ -1257,4 +1369,17 @@ cleanup_old_install() {
             log_info "Cleaned up previous installation backup: $_backup"
         fi
     done
+
+    # Clean the off-partition rollback backup (option B; tight-space upgrades).
+    # CRITICAL SAFETY GUARD: a past incident wiped a K2's /mnt/UDISK mount root
+    # via an unguarded rm -rf. Only ever remove a path whose final component is
+    # exactly "helixscreen-rollback" — never a bare mount root.
+    if [ -n "${HELIX_OFFSITE_ROLLBACK_DIR:-}" ] && [ -d "$HELIX_OFFSITE_ROLLBACK_DIR" ]; then
+        case "$HELIX_OFFSITE_ROLLBACK_DIR" in
+            */helixscreen-rollback)
+                rm -rf "$HELIX_OFFSITE_ROLLBACK_DIR" 2>/dev/null || $SUDO rm -rf "$HELIX_OFFSITE_ROLLBACK_DIR" 2>/dev/null || true
+                log_info "Cleaned up off-partition rollback backup: $HELIX_OFFSITE_ROLLBACK_DIR" ;;
+            *) log_warn "Refusing to remove unexpected rollback path: $HELIX_OFFSITE_ROLLBACK_DIR" ;;
+        esac
+    fi
 }
