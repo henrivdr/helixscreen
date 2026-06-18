@@ -3,6 +3,7 @@
 
 #include "ams_backend_happy_hare.h"
 
+#include "ams_state.h"
 #include "config.h"
 #include "hh_defaults.h"
 #include "moonraker_api.h"
@@ -404,6 +405,10 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                 }
             }
         }
+
+        // Drive the toolchange step bar from the action transition (HH has no
+        // // narration). Deferred to main thread inside the helper.
+        sync_narration_step();
     }
 
     // Parse filament_pos: printer.mmu.filament_pos
@@ -1105,6 +1110,37 @@ AmsBackendHappyHare::toolchange_phase_template(StepOperationType op) const {
         };
     }
     return {};
+}
+
+void AmsBackendHappyHare::sync_narration_step() {
+    // Caller holds mutex_. Map the current action to a phase id.
+    const char* phase_id = nullptr;
+    switch (system_info_.action) {
+    case AmsAction::HEATING:     phase_id = "heat";     break;
+    case AmsAction::FORMING_TIP: phase_id = "form_tip"; break;
+    case AmsAction::CUTTING:     phase_id = "cut";      break;
+    case AmsAction::UNLOADING:   phase_id = "unload";   break;
+    case AmsAction::SELECTING:   phase_id = "select";   break;
+    case AmsAction::LOADING:     phase_id = "feed";     break;
+    case AmsAction::PURGING:     phase_id = "purge";    break;
+    default: break;  // IDLE / CHECKING / ERROR / etc. → no step movement
+    }
+    if (!phase_id) return;
+
+    const auto op = AmsState::instance().get_active_step_operation();
+    const auto tmpl = toolchange_phase_template(op);
+    for (size_t k = 0; k < tmpl.size(); ++k) {
+        if (tmpl[k].id == phase_id) {
+            auto tok = lifetime_.token();
+            const int index = static_cast<int>(k);
+            std::string label = tmpl[k].label;
+            tok.defer("AmsBackendHappyHare::sync_narration_step",
+                      [index, label = std::move(label)]() {
+                          AmsState::instance().set_narration_phase(index, label);
+                      });
+            return;
+        }
+    }
 }
 
 void AmsBackendHappyHare::initialize_slots(int gate_count) {

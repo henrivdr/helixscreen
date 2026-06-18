@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ams_backend_happy_hare.h"
+#include "ams_state.h"
 #include "ams_types.h"
 #include "hh_defaults.h"
 #include "moonraker_api.h"
+#include "ui_update_queue.h"
 
 #include <algorithm>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
+#include "../lvgl_test_fixture.h"
 #include "hv/json.hpp"
 
 /**
@@ -3348,4 +3351,37 @@ TEST_CASE("Happy Hare toolchange_phase_template: ops declare ordered phases",
     auto unload = hh.toolchange_phase_template(StepOperationType::UNLOAD);
     REQUIRE_FALSE(unload.empty());
     CHECK(unload.back().id == "unload");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "Happy Hare narration: action transitions advance the step subject",
+                 "[ams][happy_hare][narration][ui_integration]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(true);
+    ams.set_active_step_operation(StepOperationType::LOAD_SWAP);
+    ams.set_narration_phase(-1, "");
+
+    auto hh = std::make_unique<AmsBackendHappyHareTestHelper>();
+    hh->initialize_test_gates(4);
+    auto* hh_raw = hh.get();
+    ams.set_backend(std::move(hh));  // backend now reachable for the index subject
+
+    auto feed_action = [&](const char* action) {
+        nlohmann::json mmu;
+        mmu["action"] = action;
+        hh_raw->test_parse_mmu_state(mmu);
+        helix::ui::UpdateQueue::instance().drain();  // flush the deferred set
+    };
+
+    feed_action("Heating");
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 0);  // "heat" = index 0
+
+    feed_action("Loading");
+    // "feed" is index 5 in the LOAD_SWAP template.
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 5);
+
+    feed_action("Purging");
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 6);  // "purge" = index 6
+
+    ams.set_backend(nullptr);
 }

@@ -241,6 +241,11 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     // Build context-aware recovery actions from live MMU state. Caller holds mutex_.
     [[nodiscard]] std::vector<helix::RecoveryAction> build_recovery_actions() const;
 
+    // Synthesize a toolchange step index from the current AmsAction and push it
+    // to AmsState's step subject (deferred to the main thread). Happy Hare emits
+    // no // narration, so the backend drives the bar itself. Caller holds mutex_.
+    void sync_narration_step();
+
     /**
      * @brief Parse MMU state from Moonraker JSON
      *
