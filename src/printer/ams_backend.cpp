@@ -160,7 +160,21 @@ create_mock_with_features(int gate_count, MoonrakerClient* mock_client = nullptr
         } else if (ams_type == "htlf_toolchanger" || ams_type == "htlf_tc" || ams_type == "htlf") {
             mock->set_htlf_toolchanger_mode(true);
             spdlog::info("[AMS Backend] Mock HTLF+Toolchanger mode enabled");
+        } else if (ams_type == "snapmaker" || ams_type == "snapswap" || ams_type == "u1") {
+            mock->set_snapmaker_mode(true);
+            spdlog::info("[AMS Backend] Mock Snapmaker U1 mode enabled");
         }
+    }
+
+    // ========================================================================
+    // HELIX_MOCK_REMAP — seed per-tool→slot mapping (test-only)
+    // CSV of "tool:slot" pairs, e.g. "0:3,2:1". Sets each named slot's
+    // firmware tool mapping so FilamentMapper::compute_defaults() resolves the
+    // tool to that slot — lets the two-tone swatch show a non-identity remap.
+    // ========================================================================
+    if (const char* remap_env = std::getenv("HELIX_MOCK_REMAP")) {
+        mock->apply_remap_overrides(remap_env);
+        spdlog::info("[AMS Backend] Mock remap overrides applied: '{}'", remap_env);
     }
 
     // ========================================================================

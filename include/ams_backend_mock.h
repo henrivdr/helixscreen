@@ -167,6 +167,7 @@ class AmsBackendMock : public AmsBackend {
     [[nodiscard]] helix::printer::ToolMappingCapabilities
     get_tool_mapping_capabilities() const override;
     [[nodiscard]] std::vector<int> get_tool_mapping() const override;
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override;
 
     // Device actions
     [[nodiscard]] std::vector<helix::printer::DeviceSection> get_device_sections() const override;
@@ -406,6 +407,26 @@ class AmsBackendMock : public AmsBackend {
      * @param enabled true to enable HTLF+Toolchanger mode
      */
     void set_htlf_toolchanger_mode(bool enabled);
+
+    /**
+     * @brief Set Snapmaker U1 SnapSwap mode (4 slots, PARALLEL, NON-editable
+     *        tool mapping, SnapmakerNative remap strategy).
+     *
+     * Mirrors AmsBackendSnapmaker so the editable FilamentMappingCard hides and
+     * the print-detail color_swatches_row renders the two-tone chips, exactly as
+     * on the device. Test/dev only (gated by HELIX_MOCK_AMS=snapmaker).
+     */
+    void set_snapmaker_mode(bool enabled);
+
+    /**
+     * @brief Seed per-tool→slot firmware mappings from a "tool:slot" CSV.
+     *
+     * e.g. "0:3,2:1" maps tool 0 to slot 3 and tool 2 to slot 1 by setting each
+     * target slot's mapped_tool. FilamentMapper::compute_defaults() then resolves
+     * those tools to those slots (Priority 1: firmware mapping). Test/dev only
+     * (gated by HELIX_MOCK_REMAP).
+     */
+    void apply_remap_overrides(const std::string& csv);
 
     /**
      * @brief Check if ViViD mixed mode is active
@@ -657,6 +678,7 @@ class AmsBackendMock : public AmsBackend {
     bool vivid_mixed_mode_ = false;             ///< Simulate 2x BoxTurtle + 1x ViViD
     bool ifs_mode_ = false;                     ///< Simulate AD5X IFS (4 slots, LINEAR)
     bool htlf_toolchanger_mode_ = false;        ///< Simulate HTLF + Toolchanger mixed topology
+    bool snapmaker_mode_ = false;               ///< Simulate Snapmaker U1 (4 slots, PARALLEL, non-editable)
     std::vector<PathTopology> unit_topologies_; ///< Per-unit topology storage
 
     // Endless spool simulation state

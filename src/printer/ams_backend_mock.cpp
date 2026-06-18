@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <sstream>
 #include <thread>
 
 // Sample filament colors for mock slots
@@ -2290,6 +2291,121 @@ void AmsBackendMock::set_ifs_mode(bool enabled) {
     }
 }
 
+void AmsBackendMock::set_snapmaker_mode(bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    snapmaker_mode_ = enabled;
+    if (!enabled) {
+        return;
+    }
+
+    // Disable conflicting modes — mirror the real AmsBackendSnapmaker shape.
+    tool_changer_mode_ = false;
+    afc_mode_ = false;
+    multi_unit_mode_ = false;
+    mixed_topology_mode_ = false;
+    vivid_mixed_mode_ = false;
+    ifs_mode_ = false;
+    htlf_toolchanger_mode_ = false;
+
+    // 4 slots, PARALLEL topology (each lane is its own toolhead), no tool
+    // mapping editing, no endless spool, no bypass — see AmsBackendSnapmaker.
+    topology_ = PathTopology::PARALLEL;
+    system_info_.type = AmsType::SNAPMAKER;
+    system_info_.type_name = "Snapmaker SnapSwap (Mock)";
+    system_info_.total_slots = 4;
+    system_info_.supports_endless_spool = false;
+    system_info_.supports_tool_mapping = false;
+    system_info_.supports_bypass = false;
+    system_info_.has_hardware_bypass_sensor = false;
+    system_info_.tip_method = TipMethod::NONE;
+
+    // Reinitialize registry as a single SnapSwap unit with 4 lanes.
+    slots_.clear();
+    slots_.initialize("SnapSwap", {"1", "2", "3", "4"});
+
+    // Slot colors are deliberately DIFFERENT from u1_4color_ring.gcode's header
+    // tool colors (#E2DEDB, #080A0D, #F4C032, #E72F1D) so the two-tone swatch
+    // visibly shows intended(top) vs actual(bottom) mismatch.
+    auto populate_slot = [this](int gi, const char* material, uint32_t color,
+                                const char* color_name, SlotStatus status) {
+        auto* entry = slots_.get_mut(gi);
+        if (!entry) {
+            return;
+        }
+        entry->info.slot_index = gi;
+        entry->info.global_index = gi;
+        entry->info.material = material;
+        entry->info.color_rgb = color;
+        entry->info.color_name = color_name;
+        entry->info.status = status;
+        // Fixed 1:1 tool↔slot identity, like the real U1 (overridable via
+        // HELIX_MOCK_REMAP / apply_remap_overrides()).
+        entry->info.mapped_tool = gi;
+        auto mat_info = filament::find_material(material);
+        if (mat_info) {
+            entry->info.nozzle_temp_min = mat_info->nozzle_min;
+            entry->info.nozzle_temp_max = mat_info->nozzle_max;
+            entry->info.bed_temp = mat_info->bed_temp;
+        }
+    };
+    populate_slot(0, "PLA", 0x1E9E4A, "Green", SlotStatus::AVAILABLE);
+    populate_slot(1, "PLA", 0xC71585, "Magenta", SlotStatus::AVAILABLE);
+    populate_slot(2, "PLA", 0x19C3D6, "Cyan", SlotStatus::AVAILABLE);
+    populate_slot(3, "PLA", 0xF08000, "Orange", SlotStatus::AVAILABLE);
+
+    // Set PARALLEL topology on the registry-built unit metadata so
+    // get_system_info() reports it (registry units default to LINEAR).
+    if (!system_info_.units.empty()) {
+        system_info_.units[0].topology = PathTopology::PARALLEL;
+        system_info_.units[0].name = "SnapSwap";
+        system_info_.units[0].display_name = "SnapSwap";
+    }
+
+    system_info_.current_tool = 0;
+    system_info_.current_slot = 0;
+    system_info_.filament_loaded = true;
+}
+
+void AmsBackendMock::apply_remap_overrides(const std::string& csv) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!slots_.is_initialized()) {
+        spdlog::warn("[AmsBackendMock] apply_remap_overrides: registry not initialized; ignoring");
+        return;
+    }
+
+    // First clear any existing firmware mapping so a partial CSV produces a
+    // deterministic result (unlisted tools fall back to color/positional).
+    const int total = system_info_.total_slots;
+    for (int gi = 0; gi < total; ++gi) {
+        if (auto* entry = slots_.get_mut(gi)) {
+            entry->info.mapped_tool = -1;
+        }
+    }
+
+    // Parse "tool:slot" pairs separated by commas. Slot numbers are 0-based
+    // global indices, matching SlotInfo::global_index.
+    std::stringstream ss(csv);
+    std::string pair;
+    while (std::getline(ss, pair, ',')) {
+        auto colon = pair.find(':');
+        if (colon == std::string::npos) {
+            continue;
+        }
+        try {
+            int tool = std::stoi(pair.substr(0, colon));
+            int slot = std::stoi(pair.substr(colon + 1));
+            if (auto* entry = slots_.get_mut(slot)) {
+                entry->info.mapped_tool = tool;
+                spdlog::info("[AmsBackendMock] Remap: T{} -> slot {}", tool, slot);
+            } else {
+                spdlog::warn("[AmsBackendMock] Remap: slot {} out of range", slot);
+            }
+        } catch (const std::exception&) {
+            spdlog::warn("[AmsBackendMock] Remap: bad pair '{}'", pair);
+        }
+    }
+}
+
 void AmsBackendMock::set_htlf_toolchanger_mode(bool enabled) {
     std::lock_guard<std::mutex> lock(mutex_);
     htlf_toolchanger_mode_ = enabled;
@@ -2854,8 +2970,24 @@ helix::printer::ToolMappingCapabilities AmsBackendMock::get_tool_mapping_capabil
         return {false, false, ""};
     }
 
+    // Snapmaker U1: mapping is SUPPORTED (1:1 lanes) but NOT editable from the
+    // UI — the firmware owns it. This hides the inline FilamentMappingCard so the
+    // print-detail color_swatches_row renders the two-tone chips (mirrors the
+    // real AmsBackendSnapmaker, which reports supports_tool_mapping=false).
+    if (snapmaker_mode_) {
+        return {true, false, "Snapmaker native lane mapping (read-only)"};
+    }
+
     // Filament systems support editable tool mapping
     return {true, true, "Mock tool-to-slot mapping"};
+}
+
+AmsBackendMock::RemapStrategy AmsBackendMock::get_remap_strategy() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (snapmaker_mode_) {
+        return RemapStrategy::SnapmakerNative;
+    }
+    return RemapStrategy::None;
 }
 
 std::vector<int> AmsBackendMock::get_tool_mapping() const {

@@ -1045,11 +1045,19 @@ void Application::auto_configure_mock_state() {
                          config->gcode_test_file);
         }
 
-        // Auto-select a file only when explicitly requesting detail view (print-detail)
-        if (m_args.overlays.file_detail && !config->select_file) {
-            config->select_file = RuntimeConfig::DEFAULT_TEST_FILE;
-            spdlog::info("[Auto] Auto-selecting '{}' for print-detail panel",
-                         RuntimeConfig::DEFAULT_TEST_FILE);
+        // When requesting the detail view (print-detail), honor an explicit
+        // --select-file if one was given; otherwise fall back to the default test
+        // file so the panel always has something to render. Never override a
+        // user-requested file with the default (or the first file in the list).
+        if (m_args.overlays.file_detail) {
+            if (!config->select_file) {
+                config->select_file = RuntimeConfig::DEFAULT_TEST_FILE;
+                spdlog::info("[Auto] Auto-selecting '{}' for print-detail panel",
+                             RuntimeConfig::DEFAULT_TEST_FILE);
+            } else {
+                spdlog::info("[Auto] Honoring requested --select-file '{}' for print-detail panel",
+                             config->select_file);
+            }
         }
 
         if (m_args.overlays.history_dashboard) {
