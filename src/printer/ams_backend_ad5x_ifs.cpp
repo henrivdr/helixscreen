@@ -51,6 +51,21 @@ AmsBackendAd5xIfs::AmsBackendAd5xIfs(MoonrakerAPI* api, helix::MoonrakerClient* 
 
 AmsBackendAd5xIfs::~AmsBackendAd5xIfs() = default;
 
+// --- Sensor Ownership (#1054) ---
+
+bool AmsBackendAd5xIfs::owns_filament_sensor(const std::string& bare_name,
+                                             const helix::PrinterDiscovery& discovery) {
+    (void)discovery; // IFS sensor names are fixed patterns; no discovery needed.
+    // Native ZMOD post-hub motion sensor + toolhead switch.
+    if (bare_name == "ifs_motion_sensor" || bare_name == "head_switch_sensor") {
+        return true;
+    }
+    // lessWaste per-port HUB sensors (_ifs_port_sensor_{1..4}) and older ZMOD
+    // per-port motion sensors (_ifs_motion_sensor_N).
+    return bare_name.rfind("_ifs_port_sensor_", 0) == 0 ||
+           bare_name.rfind("_ifs_motion_sensor_", 0) == 0;
+}
+
 // --- Lifecycle ---
 
 void AmsBackendAd5xIfs::on_started() {

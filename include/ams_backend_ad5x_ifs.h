@@ -88,6 +88,17 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     static constexpr int TOOL_MAP_SIZE = 16;
     static constexpr int UNMAPPED_PORT = 5;
 
+    /**
+     * @brief Bare filament-sensor names AD5X IFS owns.
+     *
+     * Native ZMOD post-hub motion sensor ifs_motion_sensor; toolhead
+     * head_switch_sensor; lessWaste per-port _ifs_port_sensor_N; older ZMOD
+     * _ifs_motion_sensor_N. Static and discovery-free; @p discovery is accepted
+     * for signature uniformity. See AmsBackend::sensor_belongs_to_backend (#1054).
+     */
+    static bool owns_filament_sensor(const std::string& bare_name,
+                                     const helix::PrinterDiscovery& discovery);
+
     // --- AmsBackend interface ---
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::AD5X_IFS;

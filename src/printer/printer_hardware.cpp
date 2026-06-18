@@ -3,6 +3,7 @@
 
 #include "printer_hardware.h"
 
+#include "ams_backend.h"
 #include "printer_discovery.h"
 
 #include <spdlog/spdlog.h>
@@ -578,75 +579,10 @@ bool PrinterHardware::is_ams_sensor(const std::string& sensor_name,
     };
     const std::string bare = strip(sensor_name);
 
-    auto ends_with = [](const std::string& s, const std::string& suffix) {
-        return s.size() >= suffix.size() &&
-               s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
-    };
-
-    switch (discovery.mmu_type()) {
-    case AmsType::HAPPY_HARE:
-        // Documented HH sensor names that don't carry the "mmu" substring.
-        // mmu_gate / mmu_pre_gate_N / mmu_gear_N are already caught by the
-        // substring overload via "mmu"/"gate".
-        if (bare == "extruder" || bare == "toolhead" || bare == "filament_tension" ||
-            bare == "filament_compression") {
-            return true;
-        }
-        break;
-
-    case AmsType::AFC:
-        // Fixed names at the extruder.
-        if (bare == "tool_start" || bare == "tool_end") {
-            return true;
-        }
-        // Per-lane sensors are <lane>_prep, <lane>_load, <lane>_selector.
-        for (const auto& lane : discovery.afc_lane_names()) {
-            if (bare == lane + "_prep" || bare == lane + "_load" ||
-                bare == lane + "_selector") {
-                return true;
-            }
-        }
-        // Per-buffer sensors are <buffer>_expanded, <buffer>_compressed.
-        for (const auto& buffer : discovery.afc_buffer_names()) {
-            if (bare == buffer + "_expanded" || bare == buffer + "_compressed") {
-                return true;
-            }
-        }
-        // AFC HTLF units register <unit>_home_pin. The unit name may be
-        // anything; once AFC is the detected backend, the _home_pin suffix
-        // is the unambiguous signal.
-        if (ends_with(bare, "_home_pin")) {
-            return true;
-        }
-        break;
-
-    case AmsType::AD5X_IFS:
-        // lessWaste plugin: per-port HUB sensors as
-        // filament_switch_sensor _ifs_port_sensor_{1..4}.
-        // Native ZMOD: filament_motion_sensor ifs_motion_sensor (single
-        // post-hub boolean), older ZMOD: _ifs_motion_sensor_N.
-        // Toolhead: filament_switch_sensor head_switch_sensor.
-        if (bare == "ifs_motion_sensor" || bare == "head_switch_sensor") {
-            return true;
-        }
-        if (bare.rfind("_ifs_port_sensor_", 0) == 0 ||
-            bare.rfind("_ifs_motion_sensor_", 0) == 0) {
-            return true;
-        }
-        break;
-
-    case AmsType::CFS:
-        // K2 CFS exposes one filament_switch_sensor at the toolhead with
-        // the bare name "filament_sensor". Conventional elsewhere, so
-        // we only suppress it when CFS is the detected backend.
-        if (bare == "filament_sensor") {
-            return true;
-        }
-        break;
-
-    default:
-        break;
-    }
-
-    return false;
+    // Each AMS backend owns the recognition of its conventionally-named
+    // (keyword-free) filament sensors. Dispatching to the backend keeps that
+    // knowledge out of this hardware-introspection class so a new backend does
+    // not have to edit it (#1054). Suppression stays gated on has_mmu() above so
+    // a plain printer's "extruder" runout switch is never hidden.
+    return AmsBackend::sensor_belongs_to_backend(discovery.mmu_type(), bare, discovery);
 }

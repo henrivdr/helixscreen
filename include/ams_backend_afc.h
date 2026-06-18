@@ -100,6 +100,19 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     AmsBackendAfc(MoonrakerAPI* api, helix::MoonrakerClient* client);
     ~AmsBackendAfc() override;
 
+    /**
+     * @brief Bare filament-sensor names AFC owns (no AMS keyword).
+     *
+     * Fixed extruder sensors tool_start / tool_end; per-lane sensors
+     * <lane>_prep / <lane>_load / <lane>_selector for every discovered lane;
+     * per-buffer sensors <buffer>_expanded / <buffer>_compressed for every
+     * discovered buffer; and the HTLF <unit>_home_pin suffix (any unit name).
+     * Reads lane/buffer names from @p discovery. Static; see
+     * AmsBackend::sensor_belongs_to_backend (#1054).
+     */
+    static bool owns_filament_sensor(const std::string& bare_name,
+                                     const helix::PrinterDiscovery& discovery);
+
     // State queries
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] AmsType get_type() const override;

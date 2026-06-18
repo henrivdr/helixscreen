@@ -406,6 +406,17 @@ AmsBackendCfs::AmsBackendCfs(MoonrakerAPI* api, helix::MoonrakerClient* client)
                  macro_variant_ == CfsMacroVariant::K1 ? "K1 (BOX_*)" : "K2 (CR_BOX_*)");
 }
 
+// --- Sensor Ownership (#1054) ---
+
+bool AmsBackendCfs::owns_filament_sensor(const std::string& bare_name,
+                                         const helix::PrinterDiscovery& discovery) {
+    (void)discovery; // CFS owns a single fixed name; no discovery needed.
+    // K2 CFS exposes one filament_switch_sensor at the toolhead with the bare
+    // name "filament_sensor". Conventional elsewhere, so only claimed when CFS
+    // is the detected backend.
+    return bare_name == "filament_sensor";
+}
+
 void AmsBackendCfs::on_started() {
     spdlog::info("[AMS CFS] Backend started — querying initial box state");
 

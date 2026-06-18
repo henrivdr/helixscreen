@@ -21,6 +21,7 @@
 class MoonrakerAPI;
 namespace helix {
 class MoonrakerClient;
+class PrinterDiscovery;
 }
 
 // LVGL subject — forward-declared so backends can expose the subject that drives
@@ -1588,6 +1589,38 @@ class AmsBackend {
      * @param callback Function that receives gcode response lines
      */
     virtual void set_gcode_response_callback(std::function<void(const std::string&)>) {}
+
+    // ========================================================================
+    // Sensor Ownership
+    // ========================================================================
+
+    /**
+     * @brief Whether the backend of @p type owns the filament sensor @p bare_name.
+     *
+     * Replaces the former switch(AmsType) in PrinterHardware::is_ams_sensor that
+     * mapped each backend's conventionally-named (keyword-free) filament sensors.
+     * Each backend that owns named sensors implements a static
+     * owns_filament_sensor(bare, discovery); this dispatcher routes by type so a
+     * new backend declares its patterns in its own translation unit instead of
+     * editing printer_hardware.cpp (#1054).
+     *
+     * Static rather than virtual because the callers (hardware validation,
+     * sensor settings, wizard sensor select) run during discovery — before any
+     * AmsBackend instance exists, and create(AmsType) returns nullptr for real
+     * backends without a live API/client. The recognition is pure name/discovery
+     * pattern matching with no per-instance state, so it needs no backend object.
+     *
+     * Keyword-bearing sensor names (mmu_*, afc_*, lane*, gate*, ...) are handled
+     * by the type-independent substring path in PrinterHardware and are NOT this
+     * method's concern.
+     *
+     * @param type      Detected AMS/MMU backend type
+     * @param bare_name Sensor name with the Klipper object-type prefix stripped
+     * @param discovery Current printer discovery (provides AFC lane/buffer names)
+     * @return true if the backend of @p type claims this sensor name
+     */
+    static bool sensor_belongs_to_backend(AmsType type, const std::string& bare_name,
+                                          const helix::PrinterDiscovery& discovery);
 
     // ========================================================================
     // Factory Method

@@ -23,6 +23,7 @@
 #include "ams_backend_ace.h"
 #include "filament_database.h"
 #include "moonraker_api.h"
+#include "printer_discovery.h"
 #include "runtime_config.h"
 
 #include <spdlog/spdlog.h>
@@ -250,6 +251,41 @@ static std::unique_ptr<AmsBackend> try_create_mock(MoonrakerClient* mock_client 
     return create_mock_with_features(config->mock_ams_gate_count, mock_client);
 }
 #endif
+
+bool AmsBackend::sensor_belongs_to_backend(AmsType type, const std::string& bare_name,
+                                           const helix::PrinterDiscovery& discovery) {
+    // Route to the backend that owns its named (keyword-free) filament sensors.
+    // Each backend declares its own patterns in its translation unit (#1054), so
+    // adding a backend no longer means editing PrinterHardware. Backends with no
+    // named-sensor case (ACE, Tool Changer, Snapmaker, QIDI Box, NONE) fall
+    // through to false — their sensors are caught only by the keyword substring
+    // path in PrinterHardware, exactly as before.
+    switch (type) {
+    case AmsType::HAPPY_HARE:
+        return AmsBackendHappyHare::owns_filament_sensor(bare_name, discovery);
+    case AmsType::AFC:
+        return AmsBackendAfc::owns_filament_sensor(bare_name, discovery);
+    case AmsType::AD5X_IFS:
+#if HELIX_HAS_IFS
+        return AmsBackendAd5xIfs::owns_filament_sensor(bare_name, discovery);
+#else
+        return false;
+#endif
+    case AmsType::CFS:
+#if HELIX_HAS_CFS
+        return printer::AmsBackendCfs::owns_filament_sensor(bare_name, discovery);
+#else
+        return false;
+#endif
+    case AmsType::ACE:
+    case AmsType::TOOL_CHANGER:
+    case AmsType::SNAPMAKER:
+    case AmsType::QIDI_BOX:
+    case AmsType::NONE:
+    default:
+        return false;
+    }
+}
 
 std::unique_ptr<AmsBackend> AmsBackend::create(AmsType detected_type) {
 #ifdef HELIX_ENABLE_MOCKS

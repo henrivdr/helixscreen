@@ -107,6 +107,18 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
   public:
     AmsBackendCfs(MoonrakerAPI* api, helix::MoonrakerClient* client);
 
+    /**
+     * @brief Bare filament-sensor name CFS owns: "filament_sensor".
+     *
+     * K2 CFS exposes one filament_switch_sensor at the toolhead with the bare
+     * name "filament_sensor". This name is conventional elsewhere, so it is
+     * only claimed when CFS is the detected backend. Static and discovery-free;
+     * @p discovery is accepted for signature uniformity. See
+     * AmsBackend::sensor_belongs_to_backend (#1054).
+     */
+    static bool owns_filament_sensor(const std::string& bare_name,
+                                     const helix::PrinterDiscovery& discovery);
+
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::CFS;
     }

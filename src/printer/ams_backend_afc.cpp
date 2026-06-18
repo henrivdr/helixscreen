@@ -12,6 +12,7 @@
 #include "afc_defaults.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
+#include "printer_discovery.h"
 #include "settings_manager.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -74,6 +75,39 @@ AmsBackendAfc::AmsBackendAfc(MoonrakerAPI* api, MoonrakerClient* client)
 
 AmsBackendAfc::~AmsBackendAfc() {
     // lifetime_ destructor calls invalidate() automatically
+}
+
+// ============================================================================
+// Sensor Ownership (#1054)
+// ============================================================================
+
+bool AmsBackendAfc::owns_filament_sensor(const std::string& bare_name,
+                                         const helix::PrinterDiscovery& discovery) {
+    auto ends_with = [](const std::string& s, const std::string& suffix) {
+        return s.size() >= suffix.size() &&
+               s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+
+    // Fixed names at the extruder.
+    if (bare_name == "tool_start" || bare_name == "tool_end") {
+        return true;
+    }
+    // Per-lane sensors are <lane>_prep, <lane>_load, <lane>_selector.
+    for (const auto& lane : discovery.afc_lane_names()) {
+        if (bare_name == lane + "_prep" || bare_name == lane + "_load" ||
+            bare_name == lane + "_selector") {
+            return true;
+        }
+    }
+    // Per-buffer sensors are <buffer>_expanded, <buffer>_compressed.
+    for (const auto& buffer : discovery.afc_buffer_names()) {
+        if (bare_name == buffer + "_expanded" || bare_name == buffer + "_compressed") {
+            return true;
+        }
+    }
+    // AFC HTLF units register <unit>_home_pin. The unit name may be anything;
+    // once AFC is the detected backend, the _home_pin suffix is unambiguous.
+    return ends_with(bare_name, "_home_pin");
 }
 
 // ============================================================================

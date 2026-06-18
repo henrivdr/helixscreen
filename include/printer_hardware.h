@@ -237,7 +237,10 @@ class PrinterHardware {
      * gate, lane, hub, buffer, turtle, ...) when no specific backend is
      * detected or the backend's named sensors don't match.
      *
-     * Backends with explicit named-sensor rules:
+     * Each backend owns the recognition of its named (keyword-free) sensors via
+     * a static owns_filament_sensor(); this method dispatches through
+     * AmsBackend::sensor_belongs_to_backend() (#1054). For reference, the named
+     * sensors are:
      *   - Happy Hare: extruder, toolhead, filament_tension, filament_compression
      *   - AFC: tool_start, tool_end; <lane>_prep/_load/_selector;
      *          <buffer>_expanded/_compressed; HTLF <unit>_home_pin

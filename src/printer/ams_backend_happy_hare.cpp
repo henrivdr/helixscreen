@@ -38,6 +38,20 @@ AmsBackendHappyHare::AmsBackendHappyHare(MoonrakerAPI* api, MoonrakerClient* cli
     spdlog::debug("[AMS HappyHare] Backend created");
 }
 
+// ============================================================================
+// Sensor Ownership (#1054)
+// ============================================================================
+
+bool AmsBackendHappyHare::owns_filament_sensor(const std::string& bare_name,
+                                               const helix::PrinterDiscovery& discovery) {
+    (void)discovery; // Happy Hare's named sensors are fixed; no discovery needed.
+    // Documented HH sensor names that don't carry the "mmu" substring. The
+    // keyword-bearing names (mmu_gate / mmu_pre_gate_N / mmu_gear_N) are caught
+    // by PrinterHardware's substring path.
+    return bare_name == "extruder" || bare_name == "toolhead" || bare_name == "filament_tension" ||
+           bare_name == "filament_compression";
+}
+
 AmsBackendHappyHare::~AmsBackendHappyHare() {
     // lifetime_ destructor calls invalidate() automatically
 }

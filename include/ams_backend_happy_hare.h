@@ -51,6 +51,18 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     AmsBackendHappyHare(MoonrakerAPI* api, helix::MoonrakerClient* client);
     ~AmsBackendHappyHare() override;
 
+    /**
+     * @brief Bare filament-sensor names Happy Hare owns (no AMS keyword).
+     *
+     * extruder, toolhead, filament_tension, filament_compression. The
+     * keyword-bearing sensors (mmu_gate / mmu_pre_gate_N / mmu_gear_N) are
+     * caught by PrinterHardware's substring path, not here. Static and
+     * discovery-free; @p discovery is accepted for signature uniformity with
+     * other backends. See AmsBackend::sensor_belongs_to_backend (#1054).
+     */
+    static bool owns_filament_sensor(const std::string& bare_name,
+                                     const helix::PrinterDiscovery& discovery);
+
     // State queries
     [[nodiscard]] AmsSystemInfo get_system_info() const override;
     [[nodiscard]] AmsType get_type() const override;
