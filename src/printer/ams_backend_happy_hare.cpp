@@ -11,6 +11,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 
 using namespace helix;
@@ -997,6 +998,80 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
             }
         }
     }
+}
+
+// ============================================================================
+// Error Classification
+// ============================================================================
+
+std::vector<helix::RecoveryAction> AmsBackendHappyHare::build_recovery_actions() const {
+    // Caller holds mutex_.
+    std::vector<helix::RecoveryAction> actions;
+
+    // Resume after the user clears the fault (always offered, primary).
+    actions.push_back({lv_tr("Resume"), "RESUME", "hh::resume", "primary"});
+
+    // MMU_RECOVER re-syncs HH's filament state; the LOADED/UNLOADED arg must match
+    // reality (HH issue #729). Derive from the live loaded flag.
+    const bool loaded = system_info_.filament_loaded;
+    actions.push_back({lv_tr("Recover"),
+                       loaded ? "MMU_RECOVER LOADED=1" : "MMU_RECOVER UNLOADED=1",
+                       "hh::recover", ""});
+
+    // If filament is at the toolhead, offer an explicit unload.
+    if (loaded) {
+        actions.push_back({lv_tr("Unload"), "MMU_UNLOAD", "hh::unload", ""});
+    }
+
+    // Force-clear the MMU pause lock (last resort).
+    actions.push_back({lv_tr("Unlock"), "MMU_UNLOCK", "hh::unlock", "danger"});
+    return actions;
+}
+
+std::optional<helix::ErrorEvent> AmsBackendHappyHare::classify_error(
+    const std::string& raw_line, const helix::ClassifyContext& ctx) const {
+    // Only `!!` emergency lines are candidates (matches AFC).
+    if (raw_line.size() < 2 || raw_line[0] != '!' || raw_line[1] != '!') {
+        return std::nullopt;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // Happy Hare reports the descriptive cause in reason_for_pause_; prefer it
+    // over the terse !! line for the modal detail.
+    std::string bare = (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3)
+                                                                   : raw_line.substr(2);
+    std::string detail = !reason_for_pause_.empty() ? reason_for_pause_ : bare;
+
+    auto contains_ci = [](const std::string& hay, const char* needle) {
+        std::string h = hay, n = needle;
+        for (auto& c : h) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return h.find(n) != std::string::npos;
+    };
+
+    // A recognized MMU fault: a descriptive reason is present, OR the print is
+    // paused while HH is in its ERROR action. Mirrors AFC's error_state_ gate.
+    const bool hh_error_state = (system_info_.action == AmsAction::ERROR);
+    const bool recognized =
+        contains_ci(detail, "runout") || contains_ci(detail, "clog") ||
+        contains_ci(detail, "encoder") || contains_ci(detail, "jam") ||
+        contains_ci(detail, "manual intervention");
+
+    if ((ctx.is_paused && hh_error_state) || (recognized && !reason_for_pause_.empty())) {
+        helix::ErrorEvent e;
+        e.source = helix::ErrorSource::HAPPY_HARE;
+        e.severity = helix::ErrorSeverity::CRITICAL;
+        e.title = contains_ci(detail, "runout") ? lv_tr("Filament runout")
+                                                 : lv_tr("Filament System Error");
+        e.detail = detail;
+        e.sticky = true;
+        e.recovery_actions = build_recovery_actions();
+        return e;
+    }
+
+    // Not an HH-owned fault — let the generic classifier handle it.
+    return std::nullopt;
 }
 
 void AmsBackendHappyHare::initialize_slots(int gate_count) {

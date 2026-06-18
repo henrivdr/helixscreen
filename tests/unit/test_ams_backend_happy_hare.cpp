@@ -3244,3 +3244,65 @@ TEST_CASE("Happy Hare config sync action is relabeled, distinct from runtime",
     REQUIRE(runtime_sync->label == "Gear motor synced");
     REQUIRE(runtime_sync->section == "maintenance");
 }
+
+// ============================================================================
+// Error Classification (classify_error / build_recovery_actions)
+// ============================================================================
+
+TEST_CASE("Happy Hare classify_error: runout pause is CRITICAL with recovery",
+          "[ams][happy_hare][error-center]") {
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+
+    // Firmware reports a runout pause via reason_for_pause + action ERROR.
+    nlohmann::json mmu;
+    mmu["action"] = "Error";
+    mmu["filament_pos"] = 8;  // loaded at toolhead
+    mmu["reason_for_pause"] =
+        "Runout detected on gate 0  EndlessSpool mode is off - manual intervention is required";
+    hh.test_parse_mmu_state(mmu);
+
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
+    auto ev = hh.classify_error("!! Runout detected", ctx);
+
+    REQUIRE(ev.has_value());
+    CHECK(ev->source == helix::ErrorSource::HAPPY_HARE);
+    CHECK(ev->severity == helix::ErrorSeverity::CRITICAL);
+    CHECK_FALSE(ev->recovery_actions.empty());
+    // Resume is always offered, first/primary.
+    CHECK(ev->recovery_actions.front().gcode == "RESUME");
+    // Detail carries the descriptive reason, not the bare !! line.
+    CHECK(ev->detail.find("Runout detected on gate 0") != std::string::npos);
+}
+
+TEST_CASE("Happy Hare classify_error: recover gcode reflects loaded state",
+          "[ams][happy_hare][error-center]") {
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+    nlohmann::json mmu;
+    mmu["action"] = "Error";
+    mmu["filament_pos"] = 8;
+    mmu["filament"] = "Loaded";  // pos=8 means at toolhead; make loaded flag match
+    mmu["reason_for_pause"] = "Clog detected";
+    hh.test_parse_mmu_state(mmu);
+
+    helix::ClassifyContext ctx; ctx.is_paused = true;
+    auto ev = hh.classify_error("!! Clog detected", ctx);
+    REQUIRE(ev.has_value());
+    bool has_recover_loaded = false;
+    for (const auto& a : ev->recovery_actions)
+        if (a.gcode == "MMU_RECOVER LOADED=1") has_recover_loaded = true;
+    CHECK(has_recover_loaded);
+}
+
+TEST_CASE("Happy Hare classify_error: non-!! line and non-paused defer to generic",
+          "[ams][happy_hare][error-center]") {
+    AmsBackendHappyHareTestHelper hh;
+    hh.initialize_test_gates(4);
+    helix::ClassifyContext ctx;  // not paused
+    CHECK_FALSE(hh.classify_error("Error: generic klipper error", ctx).has_value());
+    CHECK_FALSE(hh.classify_error("ok", ctx).has_value());
+    ctx.is_paused = true;  // paused but backend not in error state
+    CHECK_FALSE(hh.classify_error("!! something unrelated", ctx).has_value());
+}
