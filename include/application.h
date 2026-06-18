@@ -27,6 +27,7 @@ class GcodeNarrationRouter;
 }
 namespace helix::ui {
 class ActionPromptModal;
+class RecoveryModalPresenter;
 }
 class DisplayManager;
 class SubjectInitializer;
@@ -138,6 +139,12 @@ class Application {
     // Action prompt system (Klipper action:prompt protocol)
     std::unique_ptr<helix::ActionPromptManager> m_action_prompt_manager;
     std::unique_ptr<helix::ui::ActionPromptModal> m_action_prompt_modal;
+
+    // Source-agnostic modal presenter for CRITICAL recovery errors. Owned here
+    // so Application controls its lifetime independently of GcodeErrorRouter.
+    // Declared BEFORE m_gcode_error_router so it destructs AFTER the router
+    // (Application teardown resets the router first, then the presenter).
+    std::unique_ptr<helix::ui::RecoveryModalPresenter> m_recovery_presenter;
 
     // Surfaces Klipper `!!` / `Error:` lines as modals/toasts and replays
     // the most recent error from gcode_store on (re)connect. Owns the

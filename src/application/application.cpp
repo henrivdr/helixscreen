@@ -29,6 +29,7 @@
 #include "environment_config.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
+#include "recovery_modal_presenter.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -3077,11 +3078,20 @@ void Application::init_action_prompt() {
             }
         });
 
+    // Recovery modal presenter: source-agnostic owner of the CRITICAL recovery
+    // modal (AFC jam, CFS key840, etc.). Created before GcodeErrorRouter so the
+    // presenter outlives the router if both are reset in the wrong order.
+    // Not re-created on printer switch — the modal persists across reconnects.
+    if (!m_recovery_presenter) {
+        m_recovery_presenter = std::make_unique<helix::ui::RecoveryModalPresenter>(api);
+    }
+
     // Klipper `!!` / `Error:` lines flow through GcodeErrorRouter, which
     // also replays the most recent gcode_store error when the WS (re)connects
     // (catches errors that fired while HelixScreen was offline). Lives as
     // a member so its dtor unregisters callbacks before MoonrakerClient dies.
-    m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client);
+    m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client,
+                                                                      *m_recovery_presenter);
 
     // Narration router: maps `//` toolchange narration to the active AMS
     // backend's step model and drives the toolchange_step subject. Separate
@@ -3963,8 +3973,10 @@ void Application::tear_down_printer_state() {
     // 17b. Tear down GcodeErrorRouter before MoonrakerClient — its dtor
     //      unregisters the notify_gcode_response handler and the
     //      gcode_store_replay connected observer; both touch the client.
+    //      Reset the router BEFORE the presenter (presenter must outlive router).
     m_gcode_narration_router.reset();
     m_gcode_error_router.reset();
+    m_recovery_presenter.reset();
 
     // 18. Release MoonrakerManager
     m_moonraker.reset();
@@ -4272,8 +4284,10 @@ void Application::shutdown() {
 
     // Tear down GcodeErrorRouter before MoonrakerClient (its dtor unregisters
     // the live + replay callbacks; both touch the client).
+    // Reset the router BEFORE the presenter (presenter must outlive router).
     m_gcode_narration_router.reset();
     m_gcode_error_router.reset();
+    m_recovery_presenter.reset();
 
     // Destroy MoonrakerManager (its ObserverGuards now release without
     // touching freed observer memory thanks to invalidate_all() above).

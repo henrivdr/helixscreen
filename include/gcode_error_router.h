@@ -4,7 +4,6 @@
 #pragma once
 
 #include "action_prompt_manager.h"  // PromptData / PromptButton
-#include "action_prompt_modal.h"    // helix::ui::ActionPromptModal
 #include "async_lifetime_guard.h"
 #include "error_event.h"
 #include "hv/json.hpp"
@@ -23,14 +22,18 @@ struct GcodeErrorRouterTestAccess;
 namespace helix {
 class MoonrakerClient;
 
+namespace ui {
+class RecoveryModalPresenter;
+}  // namespace ui
+
 /// How a classified error should be surfaced to the user. Decided purely
-/// from an ErrorEvent's severity + whether it carries a recovery action,
+/// from an ErrorEvent severity + whether it carries a recovery action,
 /// so the routing decision is unit-testable without LVGL or printer state.
 enum class PresentAs { MODAL, TOAST, TOAST_WITH_RECOVER, MODAL_WITH_RECOVER, NONE };
 
 /// Pure routing function: maps an ErrorEvent to its presentation. In L0,
-/// INFO is not surfaced. CRITICAL → modal (with a recovery button if the
-/// event carries one); WARNING → toast (with a Recover action if present).
+/// INFO is not surfaced. CRITICAL -> modal (with a recovery button if the
+/// event carries one); WARNING -> toast (with a Recover action if present).
 PresentAs decide_presentation(const ErrorEvent& e);
 
 /// Pure: turn an ErrorEvent's recovery actions into a renderable PromptData.
@@ -40,23 +43,23 @@ PromptData build_recovery_prompt(const ErrorEvent& e);
 /// Centralizes Klipper/Moonraker gcode-error surfacing for HelixScreen.
 ///
 /// Two input paths feed in:
-///   1. Live `notify_gcode_response` broadcast — fires once per event.
-///   2. `server.gcode_store` replay on (re)connect — catches errors that
+///   1. Live `notify_gcode_response` broadcast -- fires once per event.
+///   2. `server.gcode_store` replay on (re)connect -- catches errors that
 ///      fired while HelixScreen was offline (broken boot autostart, crash
 ///      recovery, WebSocket bounce). Without this, reconnecting to a
 ///      paused printer shows no error context; the chinglish stays buried
 ///      in klippy.log.
 ///
-/// Translation: `!! {"code":"key849",...}` → `CfsErrorDecoder` →
-/// "Retract failed — filament stuck in connector in unit 1 slot A.
+/// Translation: `!! {"code":"key849",...}` -> `CfsErrorDecoder` ->
+/// "Retract failed -- filament stuck in connector in unit 1 slot A.
 ///  Manually pull the filament back through the connector".
 ///
 /// Routing:
-///   - `key8xx` (CFS hardware) → modal "Filament System Error"
-///   - `key298` (MCU bridge)   → toast with "Recover" action
-///   - other `!!`              → deferred toast (RPC-correlation dedup)
-///   - `Error:` lines          → toast
-///   - replay path             → modal (the user was disconnected; a
+///   - `key8xx` (CFS hardware) -> modal "Filament System Error"
+///   - `key298` (MCU bridge)   -> toast with "Recover" action
+///   - other `!!`              -> deferred toast (RPC-correlation dedup)
+///   - `Error:` lines          -> toast
+///   - replay path             -> modal (the user was disconnected; a
 ///                                transient toast they can miss is not
 ///                                enough on first reconnect)
 ///
@@ -65,7 +68,11 @@ PromptData build_recovery_prompt(const ErrorEvent& e);
 /// owned and must outlive this router.
 class GcodeErrorRouter {
   public:
-    GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client);
+    /// api and client may be nullptr (test/mock builds). presenter must
+    /// outlive this router -- Application owns both and destroys the router
+    /// before the presenter.
+    GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client,
+                     helix::ui::RecoveryModalPresenter& presenter);
     ~GcodeErrorRouter();
 
     GcodeErrorRouter(const GcodeErrorRouter&) = delete;
@@ -85,21 +92,21 @@ class GcodeErrorRouter {
     ///
     /// Returns `true` (surface) when:
     ///   - the age cannot be positively determined (`entry_time <= 0`, an
-    ///     absent/zero timestamp) — we never suppress a possibly-fresh
+    ///     absent/zero timestamp) -- we never suppress a possibly-fresh
     ///     error on missing data, or
     ///   - the error is recent (age <= kReplayMaxAgeSeconds).
     /// Returns `false` (suppress, log at debug) only when age is positively
-    /// known to exceed the threshold — the stale-after-restart case.
+    /// known to exceed the threshold -- the stale-after-restart case.
     static bool should_surface_replay(double entry_time, double now);
 
   private:
     /// Test-only access to the private presentation glue (`process_line`).
-    /// Kept private + friend (L065/L088) so production callers can't bypass
+    /// Kept private + friend (L065/L088) so production callers cannot bypass
     /// the live/replay entry points. The accessor lives in the global
     /// namespace (tests/test_helpers), hence the leading `::`.
     friend struct ::GcodeErrorRouterTestAccess;
 
-    /// Live `notify_gcode_response` handler — runs on the WS thread.
+    /// Live `notify_gcode_response` handler -- runs on the WS thread.
     void on_notify_gcode_response(const nlohmann::json& msg);
 
     /// Fires on every WS connect / Klippy ready transition. Queries
@@ -112,13 +119,12 @@ class GcodeErrorRouter {
     /// lines; this still handles `Error:` for the live caller).
     void process_line(const std::string& line);
 
-    /// CRITICAL error that carries a recovery action: confirmation modal
-    /// with a one-tap fix button (the key840 flow). Runs the
-    /// `e.recovery_actions[0].gcode` on confirm.
+    /// CRITICAL error that carries a recovery action: delegates to the
+    /// shared RecoveryModalPresenter.
     void present_recovery_modal(const ErrorEvent& e);
 
     /// WARNING error that carries a recovery action: toast with a "Recover"
-    /// button (the key298 flow — bounces klipper_mcu via
+    /// button (the key298 flow -- bounces klipper_mcu via
     /// PrinterRecoveryService rather than running a gcode).
     void present_recover_toast(const ErrorEvent& e);
 
@@ -127,26 +133,20 @@ class GcodeErrorRouter {
     void present_deferred_toast(const std::string& text);
 
     /// Bytes-only truncation for transient toasts. Modals always get the
-    /// full text — they wrap to multiple lines.
+    /// full text -- they wrap to multiple lines.
     static std::string truncate_for_toast(std::string text);
 
     MoonrakerAPI* api_;
     MoonrakerClient* client_;
 
+    /// Shared modal presenter. Not owned; must outlive this router.
+    helix::ui::RecoveryModalPresenter& presenter_;
+
     /// Dedup state for the replay path. Multiple WS events can fire the
-    /// connected observer in quick succession (WS open → Klippy ready);
-    /// without this we'd modal the same error twice.
+    /// connected observer in quick succession (WS open -> Klippy ready);
+    /// without this we would modal the same error twice.
     std::mutex replay_mutex_;
     double last_replayed_time_ = 0.0;
-
-    /// Router-owned recovery modal. Reused across faults — created lazily on
-    /// the first MODAL_WITH_RECOVER and reshown via show_prompt(). Declared
-    /// before lifetime_ so it destructs AFTER it: outstanding tokens are
-    /// invalidated first, then the modal tears itself down, so no captured
-    /// `this` (the gcode callback) can fire against a half-destroyed router.
-    std::unique_ptr<helix::ui::ActionPromptModal> recovery_modal_;
-    std::vector<RecoveryAction> active_recovery_actions_;  ///< actions for the in-flight modal
-    std::string shown_recovery_detail_;                    ///< dedup: detail of the visible modal
 
     /// [L072] Generation guard for callbacks captured by MoonrakerClient.
     /// `MoonrakerClient::unregister_method_callback` and
@@ -156,7 +156,7 @@ class GcodeErrorRouter {
     /// fire on a destroyed router. All three registrations route through
     /// `lifetime_.bg_cb(...)`, which queues to main and skips on
     /// generation mismatch. Declared last so it destructs FIRST in member
-    /// teardown — outstanding tokens are invalidated before anything else
+    /// teardown -- outstanding tokens are invalidated before anything else
     /// the body might touch.
     AsyncLifetimeGuard lifetime_;
 };
