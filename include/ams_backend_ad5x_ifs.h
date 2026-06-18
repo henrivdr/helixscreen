@@ -145,6 +145,16 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     AmsError reset() override;
     AmsError cancel() override;
 
+    // Backend-driven step model for the right-side vertical operation tracker.
+    // The AD5X synthesizes 3 firmware phases (HEATING→CUTTING→UNLOADING /
+    // HEATING→LOADING→PURGING) from extruder temp + head sensor in
+    // apply_phase_action_locked(); these expose them as labelled steps + the
+    // current-step subject so the tracker advances instead of falling back to
+    // the legacy coarse AmsAction model.
+    [[nodiscard]] OperationStepModel
+    get_operation_step_model(StepOperationType op) const override;
+    [[nodiscard]] lv_subject_t* get_operation_step_index_subject(StepOperationType op) override;
+
     // User-initiated state refresh. Re-reads Adventurer5M.json (the JSON poll
     // is the primary truth source on both old and new zmod) and schedules a
     // GET_ZCOLOR SILENT=1 follow-up to refresh the active-slot view. Both
@@ -435,9 +445,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     void on_extruder_temp_locked(int temp_deci, int target_deci);
     // Drive the phase machine on a head-sensor transition. Caller holds mutex_.
     void on_head_transition_locked(bool detected);
-    // Recompute system_info_.action + operation_detail from tracker state.
-    // Caller must hold mutex_.
-    void apply_phase_action_locked();
+    // Recompute system_info_.action + operation_detail + operation_phase from
+    // tracker state. Caller must hold mutex_. Returns true when
+    // system_info_.action actually changed — the caller releases mutex_ and
+    // then emits EVENT_STATE_CHANGED (the lock contract requires emit_event with
+    // the lock NOT held; see ams_subscription_backend.h). NOT emitting here is
+    // what left the busy state unpublished until the next ~1.4s status frame.
+    bool apply_phase_action_locked();
     // Set system_info_.operation_detail. Caller must hold mutex_.
     void set_operation_detail_locked(std::string detail);
 

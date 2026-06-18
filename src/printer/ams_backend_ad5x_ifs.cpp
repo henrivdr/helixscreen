@@ -4,6 +4,7 @@
 
 #include "ams_backend_ad5x_ifs.h"
 
+#include "ams_state.h"
 #include "config.h"
 #include "host_identity.h"
 #include "http_executor.h"
@@ -12,7 +13,10 @@
 #include "post_op_cooldown_manager.h"
 #include "ui_temperature_utils.h"
 
+#include <lvgl.h>
 #include <spdlog/spdlog.h>
+
+#include "lvgl/src/others/translation/lv_translation.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -1032,6 +1036,10 @@ AmsError AmsBackendAd5xIfs::load_filament(int slot_index) {
         begin_phase_tracking_locked(/*is_unload=*/false);
         apply_phase_action_locked();
     }
+    // Publish the busy state immediately (lock released) so the sidebar action
+    // buttons hide and the context menu disables before the user can re-tap —
+    // the action moved IDLE→HEATING above, so a STATE_CHANGED is always due.
+    emit_event(EVENT_STATE_CHANGED);
     spdlog::info("{} Loading filament from port {}", backend_log_tag(), port);
     return ensure_homed_then("INSERT_PRUTOK_IFS PRUTOK=" + std::to_string(port));
 }
@@ -1088,6 +1096,13 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
         begin_phase_tracking_locked(/*is_unload=*/true);
         apply_phase_action_locked();
     }
+    // Publish the busy state immediately (lock released) so the sidebar action
+    // buttons hide and the context menu disables before the user can re-tap.
+    // Without this, the busy action wasn't surfaced until the next ~1.4s status
+    // frame, leaving a window where a second tap hit the busy precondition and
+    // produced the confusing "Unload failed: AMS is busy" toast (7L44W2B7). The
+    // action moved IDLE→HEATING above, so a STATE_CHANGED is always due.
+    emit_event(EVENT_STATE_CHANGED);
 
     // Dispatch ZMOD's own toolhead-unload macro rather than reconstructing it.
     // _IFS_REMOVE_CURRENT_PRUTOK is the firmware's "Remove from extruder" button
@@ -1246,8 +1261,42 @@ AmsError AmsBackendAd5xIfs::cancel() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         system_info_.action = AmsAction::IDLE;
+        // Tear down any in-flight phase tracking + clear the step index so the
+        // tracker resets to "no active step" on an explicit cancel.
+        if (phase_tracker_.active) {
+            end_phase_tracking_locked();
+            set_operation_detail_locked("");
+        } else {
+            system_info_.operation_phase = -1;
+        }
     }
     return execute_gcode("IFS_UNLOCK");
+}
+
+// --- Backend-driven operation step model ---
+
+AmsBackend::OperationStepModel
+AmsBackendAd5xIfs::get_operation_step_model(StepOperationType op) const {
+    // The AD5X synthesizes three firmware phases for each direction (see
+    // apply_phase_action_locked): unload = Heat → Cut → Retract, load = Heat →
+    // Feed → Purge. phase_id matches the operation_phase index (0/1/2) the
+    // ams_operation_phase subject carries. Only the Heat step shows a live
+    // nozzle temperature. Labels are wrapped in lv_tr() so they are translated
+    // and picked up by the string-extraction tooling (mirrors Snapmaker).
+    const bool unload = (op == StepOperationType::UNLOAD);
+    OperationStepModel model;
+    model.steps.push_back({lv_tr("Heat nozzle"), 0, false, /*live_temp=*/true});
+    model.steps.push_back({unload ? lv_tr("Cut filament") : lv_tr("Feed filament"), 1, false,
+                           false});
+    model.steps.push_back({unload ? lv_tr("Retract") : lv_tr("Purge"), 2, false, false});
+    return model;
+}
+
+lv_subject_t* AmsBackendAd5xIfs::get_operation_step_index_subject(StepOperationType /*op*/) {
+    // The synthesized phase index (0/1/2) drives the current step directly via
+    // AmsState's operation_phase subject — sync_from_backend() copies
+    // system_info_.operation_phase into it.
+    return AmsState::instance().get_ams_operation_phase_subject();
 }
 
 // --- Configuration ---
@@ -2286,6 +2335,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
     //
     // NOTE: register_zcolor_listener()'s bg-side pre-filter must admit these
     // tokens too (keep in sync — see the comment block there).
+    bool phase_changed = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (phase_tracker_.active) {
@@ -2297,16 +2347,22 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                     phase_tracker_.target_deci = helix::ui::temperature::degrees_to_deci(degrees);
                     spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(),
                                   degrees);
-                    apply_phase_action_locked();
+                    phase_changed = apply_phase_action_locked();
                 }
             } else if (line.find("Unloading filament") != std::string::npos) {
                 phase_tracker_.is_unload = true;
-                apply_phase_action_locked();
+                phase_changed = apply_phase_action_locked();
             } else if (line.find("Loading filament") != std::string::npos) {
                 phase_tracker_.is_unload = false;
-                apply_phase_action_locked();
+                phase_changed = apply_phase_action_locked();
             }
         }
+    }
+    // Lock released — publish the synthesized phase transition so the UI's
+    // ams_action subject + step tracker advance immediately (lock contract:
+    // emit_event must run with mutex_ NOT held).
+    if (phase_changed) {
+        emit_event(EVENT_STATE_CHANGED);
     }
 
     // External-unload presence resurrection. When the user unloads (or loads)
@@ -3290,6 +3346,9 @@ void AmsBackendAd5xIfs::begin_phase_tracking_locked(bool is_unload) {
 
 void AmsBackendAd5xIfs::end_phase_tracking_locked() {
     phase_tracker_ = IfsPhaseTracker{};
+    // Clear the step-tracker index so the right-side vertical tracker shows no
+    // active step once the operation finalizes back to IDLE.
+    system_info_.operation_phase = -1;
 }
 
 void AmsBackendAd5xIfs::on_extruder_temp_locked(int temp_deci, int target_deci) {
@@ -3344,34 +3403,47 @@ void AmsBackendAd5xIfs::on_head_transition_locked(bool detected) {
     schedule_zcolor_query("phase_head_transition");
 }
 
-void AmsBackendAd5xIfs::apply_phase_action_locked() {
+bool AmsBackendAd5xIfs::apply_phase_action_locked() {
     if (!phase_tracker_.active) {
-        return;
+        return false;
     }
 
     AmsAction synth;
     std::string detail;
+    // Step index for the right-side vertical operation tracker. Mirrors the
+    // phase_id values get_operation_step_model() emits: unload
+    // HEATING→0 / CUTTING→1 / UNLOADING→2 ; load HEATING→0 / LOADING→1 / PURGING→2.
+    // AmsState::sync_from_backend() copies this into the ams_operation_phase
+    // subject the tracker observes.
+    int phase_index;
     const int tgt = phase_tracker_.target_deci;
 
     if (phase_tracker_.is_unload) {
         // HEATING → CUTTING → UNLOADING
         if (!phase_tracker_.reached_target_once) {
             synth = AmsAction::HEATING;
+            phase_index = 0;
         } else if (!phase_tracker_.seen_head_drop) {
             synth = AmsAction::CUTTING;
+            phase_index = 1;
         } else {
             synth = AmsAction::UNLOADING;
+            phase_index = 2;
         }
     } else {
         // HEATING → LOADING → PURGING
         if (!phase_tracker_.reached_target_once) {
             synth = AmsAction::HEATING;
+            phase_index = 0;
         } else if (!phase_tracker_.seen_head_rise) {
             synth = AmsAction::LOADING;
+            phase_index = 1;
         } else {
             synth = AmsAction::PURGING;
+            phase_index = 2;
         }
     }
+    system_info_.operation_phase = phase_index;
 
     // Build the per-phase operation_detail. Dynamic (contains live temps), so it
     // is NOT run through lv_tr() — matches recompute_action_detail's priority-1
@@ -3406,6 +3478,7 @@ void AmsBackendAd5xIfs::apply_phase_action_locked() {
         break;
     }
 
+    bool changed = false;
     if (system_info_.action != synth) {
         spdlog::info("{} Phase synth: {} -> {}", backend_log_tag(),
                      ams_action_to_string(system_info_.action), ams_action_to_string(synth));
@@ -3414,8 +3487,10 @@ void AmsBackendAd5xIfs::apply_phase_action_locked() {
         // phase (CUTTING/UNLOADING/LOADING/PURGING) gets its own fresh 90s window
         // rather than inheriting elapsed time from the long heat-up.
         action_start_time_ = std::chrono::steady_clock::now();
+        changed = true;
     }
     set_operation_detail_locked(std::move(detail));
+    return changed;
 }
 
 void AmsBackendAd5xIfs::set_operation_detail_locked(std::string detail) {

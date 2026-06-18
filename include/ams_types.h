@@ -890,11 +890,15 @@ struct AmsSystemInfo {
     std::string operation_detail;       ///< Detailed operation string
 
     /// Granular firmware sub-phase of the active load/unload, for backends that
-    /// expose one (currently Snapmaker U1, whose firmware emits sequential
-    /// homing/picking/heating/doing phases). Used to drive a multi-step progress
-    /// bar that mirrors the real firmware sequence instead of the coarse
-    /// AmsAction. -1 = none / not-applicable; 0 = Home, 1 = Select, 2 = Heat,
-    /// 3 = Move (Retract on unload / Feed on load). Default -1.
+    /// expose one. Used to drive a multi-step progress bar that mirrors the real
+    /// firmware sequence instead of the coarse AmsAction. -1 = none /
+    /// not-applicable. The index meaning is backend-specific and matches that
+    /// backend's get_operation_step_model() phase_id values:
+    ///   - Snapmaker U1 (4 steps): 0 = Home, 1 = Select, 2 = Heat,
+    ///     3 = Move (Retract on unload / Feed on load).
+    ///   - AD5X IFS (3 synthesized steps): 0 = Heat,
+    ///     1 = Cut (unload) / Feed (load), 2 = Retract (unload) / Purge (load).
+    /// Default -1.
     int operation_phase = -1;
 
     // Units

@@ -3,6 +3,8 @@
 
 #include "ams_backend_ad5x_ifs.h"
 #include "ams_backend_afc.h"
+#include "ams_state.h"
+#include "ams_step_operation.h"
 #include "ams_types.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
@@ -341,6 +343,14 @@ class Ad5xIfsTestAccess {
     static std::string operation_detail(const AmsBackendAd5xIfs& b) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         return b.system_info_.operation_detail;
+    }
+
+    // Read the granular operation_phase index the phase machine produced. This
+    // is the generic AmsSystemInfo field AmsState mirrors into the
+    // ams_operation_phase subject the right-side step tracker observes.
+    static int operation_phase(const AmsBackendAd5xIfs& b) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        return b.system_info_.operation_phase;
     }
 
     // Activate the phase tracker directly, bypassing load_filament/unload_filament's
@@ -5600,4 +5610,165 @@ TEST_CASE("AD5X IFS CHANGE_ZCOLOR with no locked override is a harmless no-op (#
     SlotInfo info = backend.get_slot_info(1);
     REQUIRE(info.material == "SILK");
     REQUIRE(info.color_rgb == 0x0DE2A0);
+}
+
+// ==========================================================================
+// Unload busy-state latency: publish the busy action synchronously on dispatch
+// so the sidebar action buttons hide / context menu disables immediately,
+// closing the re-tap window that produced "Unload failed: AMS is busy"
+// (debug bundle 7L44W2B7). The UI observes the backend-agnostic ams_action
+// subject, which AmsState only updates on EVENT_STATE_CHANGED — so the
+// dispatch path MUST emit it, not wait for the next ~1.4s status frame.
+// ==========================================================================
+
+TEST_CASE("AD5X IFS unload publishes busy state + EVENT_STATE_CHANGED on dispatch",
+          "[ams][ad5x_ifs][unload]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    // Filament seated at the toolhead so unload routes to the heated toolhead
+    // unload (not the cold lane-eject early return). current_slot < 0 + head
+    // loaded is the unknown-origin recovery case that falls through.
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::set_current_slot(backend, -1, true);
+
+    int state_changed_events = 0;
+    backend.set_event_callback([&](const std::string& event, const std::string&) {
+        if (event == AmsBackend::EVENT_STATE_CHANGED) {
+            ++state_changed_events;
+        }
+    });
+
+    AmsError err = backend.unload_filament(-1);
+    REQUIRE(err.success());
+
+    // The busy action is published synchronously, BEFORE any temp/sensor frame.
+    REQUIRE(Ad5xIfsTestAccess::action(backend) != AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+    // And an EVENT_STATE_CHANGED fired on dispatch so the ams_action subject
+    // updates immediately — this is the bit that was missing.
+    REQUIRE(state_changed_events >= 1);
+}
+
+TEST_CASE("AD5X IFS load publishes busy state + EVENT_STATE_CHANGED on dispatch",
+          "[ams][ad5x_ifs][load]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+
+    int state_changed_events = 0;
+    backend.set_event_callback([&](const std::string& event, const std::string&) {
+        if (event == AmsBackend::EVENT_STATE_CHANGED) {
+            ++state_changed_events;
+        }
+    });
+
+    AmsError err = backend.load_filament(0);
+    REQUIRE(err.success());
+
+    REQUIRE(Ad5xIfsTestAccess::action(backend) != AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+    REQUIRE(state_changed_events >= 1);
+}
+
+// ==========================================================================
+// Granular step tracker (mirror Snapmaker): the AD5X synthesizes 3 phases for
+// load/unload from extruder temp + head sensor; expose them as a backend step
+// model + the operation_phase subject so the right-side vertical tracker shows
+// "Heat nozzle -> Cut filament -> Retract" (unload) and
+// "Heat nozzle -> Feed filament -> Purge" (load).
+// ==========================================================================
+
+TEST_CASE("AD5X IFS get_operation_step_model UNLOAD is the 3-phase synth sequence",
+          "[ams][ad5x_ifs][stepmodel]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    auto model = backend.get_operation_step_model(StepOperationType::UNLOAD);
+    REQUIRE(model.steps.size() == 3);
+    CHECK(std::string(model.steps[0].label) == "Heat nozzle");
+    CHECK(std::string(model.steps[1].label) == "Cut filament");
+    CHECK(std::string(model.steps[2].label) == "Retract");
+    // phase_id mirrors the synthesized operation_phase index (0/1/2).
+    CHECK(model.steps[0].phase_id == 0);
+    CHECK(model.steps[1].phase_id == 1);
+    CHECK(model.steps[2].phase_id == 2);
+    // Only the heat step shows a live nozzle temperature.
+    CHECK(model.steps[0].live_temp);
+    CHECK_FALSE(model.steps[1].live_temp);
+    CHECK_FALSE(model.steps[2].live_temp);
+}
+
+TEST_CASE("AD5X IFS get_operation_step_model LOAD is the 3-phase synth sequence",
+          "[ams][ad5x_ifs][stepmodel]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    for (auto op : {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP}) {
+        auto model = backend.get_operation_step_model(op);
+        REQUIRE(model.steps.size() == 3);
+        CHECK(std::string(model.steps[0].label) == "Heat nozzle");
+        CHECK(std::string(model.steps[1].label) == "Feed filament");
+        CHECK(std::string(model.steps[2].label) == "Purge");
+        CHECK(model.steps[0].phase_id == 0);
+        CHECK(model.steps[1].phase_id == 1);
+        CHECK(model.steps[2].phase_id == 2);
+        CHECK(model.steps[0].live_temp);
+        CHECK_FALSE(model.steps[1].live_temp);
+        CHECK_FALSE(model.steps[2].live_temp);
+    }
+}
+
+TEST_CASE("AD5X IFS get_operation_step_index_subject is the AmsState phase subject",
+          "[ams][ad5x_ifs][stepmodel]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    for (auto op : {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP,
+                    StepOperationType::UNLOAD}) {
+        CHECK(backend.get_operation_step_index_subject(op) != nullptr);
+        CHECK(backend.get_operation_step_index_subject(op) ==
+              AmsState::instance().get_ams_operation_phase_subject());
+    }
+}
+
+TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during unload",
+          "[ams][ad5x_ifs][phase]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
+    // HEATING → step 0.
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::HEATING);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 0);
+
+    // Reach target → CUTTING → step 1.
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 1);
+
+    // Head drop → UNLOADING → step 2.
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 2);
+
+    // Finalize → tracker clears the step (no active step shown).
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == -1);
+}
+
+TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during load",
+          "[ams][ad5x_ifs][phase]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_head_filament(backend, false);
+
+    Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 0);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 1);
+
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(true));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 2);
+
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
+    REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == -1);
 }
