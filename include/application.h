@@ -158,7 +158,9 @@ class Application {
     std::unique_ptr<helix::GcodeNarrationRouter> m_gcode_narration_router;
 
     // Observes AmsState's action subject and routes AmsAction::ERROR edges to
-    // m_recovery_presenter. Must outlive m_recovery_presenter — reset before it.
+    // m_recovery_presenter. Holds a reference INTO the presenter, so the
+    // presenter must outlive it — declared after m_recovery_presenter (destructs
+    // first) and reset before it at both teardown sites.
     std::unique_ptr<helix::AmsErrorBridge> m_ams_error_bridge;
 
     // Configuration

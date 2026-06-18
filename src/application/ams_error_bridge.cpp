@@ -10,6 +10,8 @@ AmsErrorBridge::AmsErrorBridge(helix::ui::RecoveryModalPresenter& presenter)
     : presenter_(presenter) {}
 
 void AmsErrorBridge::start() {
+    // One-shot: Application calls this once. Re-calling would reinstall the
+    // observer while leaving prev_action_/presented_ stale — don't.
     action_observer_ = helix::ui::observe_int_sync<AmsErrorBridge>(
         AmsState::instance().get_ams_action_subject(),
         this,
