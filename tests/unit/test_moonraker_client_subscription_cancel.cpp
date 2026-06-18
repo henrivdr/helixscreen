@@ -438,7 +438,12 @@ TEST_CASE_METHOD(MoonrakerClientLifecycleFixture,
         REQUIRE(client.cancel_request(99999) == false);
     }
 
-    loop_thread->stop();
+    // Disable reconnect + close on the live loop, then JOIN, before `client`
+    // destructs. Otherwise the loop thread keeps a reconnect timer alive and
+    // fires startConnect() on the freed io after the client is gone (SIGSEGV in
+    // hio_get on the EventLoop thread, surfacing in a later test).
+    client.disconnect();
+    loop_thread->stop(true);
 }
 
 // ============================================================================
@@ -594,7 +599,12 @@ TEST_CASE_METHOD(MoonrakerClientLifecycleFixture,
         }
     }
 
-    loop_thread->stop();
+    // force_reconnect() above scheduled a reconnect timer. Disable reconnect +
+    // close on the live loop, then JOIN, before `client` destructs — otherwise
+    // the timer fires startConnect() on the freed io on the EventLoop thread
+    // after the client is gone (SIGSEGV in hio_get, surfacing in a later test).
+    client.disconnect();
+    loop_thread->stop(true);
 }
 
 // ============================================================================

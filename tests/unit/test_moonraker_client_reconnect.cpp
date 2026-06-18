@@ -119,7 +119,12 @@ TEST_CASE("MoonrakerClient install-once: destruction during pending connect is s
             // before the base hv::WebSocketClient destructor, so any in-flight trampoline
             // sees dg.expired() and bails. No crash expected.
         }
-        loop_thread->stop();
+        // JOIN before scope exit. The client was destroyed above mid-connect; a
+        // bare stop() leaves the loop thread running a reconnect timer that fires
+        // startConnect() on freed io in a later test. stop(true) drains the loop
+        // (the dtor's setReconnect(nullptr) keeps the drained timer from
+        // reconnecting).
+        loop_thread->stop(true);
         REQUIRE(true);
     }
 
@@ -138,7 +143,9 @@ TEST_CASE("MoonrakerClient install-once: destruction during pending connect is s
             // Destroyed while last connect is still pending — dtor must self-cancel the
             // install-once trampolines via destruction_guard_.
         }
-        loop_thread->stop();
+        // JOIN before scope exit (see the section above) — stop(true) drains the
+        // loop so no reconnect timer fires on freed io in a later test.
+        loop_thread->stop(true);
         REQUIRE(true);
     }
 }
