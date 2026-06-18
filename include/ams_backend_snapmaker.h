@@ -196,6 +196,15 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return false;
     }
 
+    // Snapmaker U1's firmware errors if SET_PRINT_USED_EXTRUDERS /
+    // SET_PRINT_EXTRUDER_MAP arrive mid-print, so the config must be sent before
+    // PRINT_START. Always-on (even with no remap) to suppress a spurious-feed
+    // runout — the slicer auto-feeds heads the print doesn't use → empty head →
+    // runout cancel.
+    [[nodiscard]] bool requires_preprint_send() const override {
+        return true;
+    }
+
     // Builds the firmware-native pre-print command sequence for print_task_config.
     // tools_used: logical tools the gcode body uses (ParsedGCodeFile::tools_used_indices).
     // remap:      logical tool -> physical head, ONLY for tools the user changed from identity.

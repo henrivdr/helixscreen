@@ -1386,13 +1386,32 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether this backend must emit firmware-native config gcode BEFORE
+     *        PRINT_START.
+     *
+     * Backends that answer true have PrintStartController call
+     * build_preprint_gcode() and send the result (synchronously gating the print
+     * start) before the print begins. Default false — every backend takes the
+     * unchanged synchronous start path. Snapmaker U1 overrides it true: its
+     * firmware errors if SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP arrive
+     * mid-print, and the pre-send is always-on (even with no remap) to suppress a
+     * spurious-feed runout. This is a backend capability, not a remap-strategy
+     * proxy — the controller no longer compares get_remap_strategy().
+     *
+     * @return true if a pre-print send is required
+     */
+    [[nodiscard]] virtual bool requires_preprint_send() const {
+        return false;
+    }
+
+    /**
      * @brief Firmware-native pre-print command sequence (e.g. print_task_config).
      *
-     * Backends using RemapStrategy::SnapmakerNative emit firmware-native gcode
-     * (SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP) BEFORE PRINT_START. The
-     * caller gates on get_remap_strategy() == SnapmakerNative and sends the
-     * returned gcode. Default returns "" (no native pre-print step); the Snapmaker
-     * backend overrides it.
+     * Backends that answer requires_preprint_send() == true emit firmware-native
+     * gcode (SET_PRINT_USED_EXTRUDERS / SET_PRINT_EXTRUDER_MAP) BEFORE PRINT_START.
+     * The caller gates on requires_preprint_send() and sends the returned gcode.
+     * Default returns "" (no native pre-print step); the Snapmaker backend
+     * overrides it.
      *
      * @param tools_used Logical tools the gcode body uses
      * @param remap      Logical tool -> physical head, only for changed tools

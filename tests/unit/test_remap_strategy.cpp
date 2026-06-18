@@ -158,3 +158,70 @@ TEST_CASE("ACE returns RemapStrategy::None (GcodeRewrite unimplemented)", "[ams]
     AceProbe ace;
     REQUIRE(ace.get_remap_strategy() == AmsBackend::RemapStrategy::None);
 }
+
+// ---------------------------------------------------------------------------
+// requires_preprint_send(): a backend capability that gates whether
+// PrintStartController must emit build_preprint_gcode() BEFORE PRINT_START.
+// Previously the controller proxied this as
+// `get_remap_strategy() == SnapmakerNative` (a backend-type check disguised as
+// a strategy comparison). Only Snapmaker U1 needs the pre-send; everyone else
+// takes the unchanged synchronous start path. Pin each backend so a regression
+// (e.g. accidentally enabling the pre-send for a Native backend) fails here.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Only Snapmaker requires a pre-print send", "[ams][strategy][preprint]") {
+    SECTION("Snapmaker requires the pre-print send") {
+        SnapmakerProbe sm;
+        REQUIRE(sm.requires_preprint_send());
+    }
+    SECTION("AFC does not") {
+        AfcProbe afc;
+        REQUIRE_FALSE(afc.requires_preprint_send());
+    }
+    SECTION("Happy Hare does not") {
+        HappyHareProbe hh;
+        REQUIRE_FALSE(hh.requires_preprint_send());
+    }
+    SECTION("CFS does not") {
+        CfsProbe cfs;
+        REQUIRE_FALSE(cfs.requires_preprint_send());
+    }
+    SECTION("AD5X IFS does not") {
+        Ad5xIfsProbe ad5x;
+        REQUIRE_FALSE(ad5x.requires_preprint_send());
+    }
+    SECTION("ToolChanger does not") {
+        ToolChangerProbe tc;
+        REQUIRE_FALSE(tc.requires_preprint_send());
+    }
+    SECTION("QIDI Box does not") {
+        QidiProbe qidi;
+        REQUIRE_FALSE(qidi.requires_preprint_send());
+    }
+    SECTION("ACE does not") {
+        AceProbe ace;
+        REQUIRE_FALSE(ace.requires_preprint_send());
+    }
+    SECTION("Base default does not") {
+        BaseProbe base;
+        REQUIRE_FALSE(base.requires_preprint_send());
+    }
+}
+
+// The pre-send capability must agree with build_preprint_gcode() being a no-op:
+// a backend that returns "" for all inputs has nothing to send, and one that
+// requires the send must actually produce gcode for a non-empty tool set. This
+// pins the invariant the controller relies on (gate == has-work-to-do).
+TEST_CASE("requires_preprint_send agrees with build_preprint_gcode output",
+          "[ams][strategy][preprint]") {
+    SECTION("Snapmaker: requires send AND emits gcode for a used tool") {
+        SnapmakerProbe sm;
+        REQUIRE(sm.requires_preprint_send());
+        REQUIRE_FALSE(sm.build_preprint_gcode({0}, {}).empty());
+    }
+    SECTION("Native backend: no send AND emits nothing") {
+        AfcProbe afc;
+        REQUIRE_FALSE(afc.requires_preprint_send());
+        REQUIRE(afc.build_preprint_gcode({0, 1, 2}, {{0, 1}}).empty());
+    }
+}

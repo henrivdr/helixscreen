@@ -345,14 +345,15 @@ void PrintStartController::execute_print_start() {
             });
     };
 
-    // Snapmaker U1: emit the firmware-native print_task_config gcode BEFORE the
-    // print starts (it errors mid-print). ALWAYS-ON for U1 — even with no remap —
-    // because SET_PRINT_USED_EXTRUDERS suppresses a spurious-feed runout (the
-    // slicer auto-feeds heads the print doesn't use → empty head → runout cancel).
-    // Only this backend's strategy triggers the pre-send; every other backend
-    // takes the unchanged synchronous start path below.
+    // Some backends (Snapmaker U1) must emit firmware-native print_task_config
+    // gcode BEFORE the print starts (it errors mid-print). ALWAYS-ON for U1 —
+    // even with no remap — because SET_PRINT_USED_EXTRUDERS suppresses a
+    // spurious-feed runout (the slicer auto-feeds heads the print doesn't use →
+    // empty head → runout cancel). Only backends that advertise
+    // requires_preprint_send() trigger the pre-send; every other backend takes
+    // the unchanged synchronous start path below.
     if (AmsBackend* backend = AmsState::instance().get_backend();
-        backend && backend->get_remap_strategy() == AmsBackend::RemapStrategy::SnapmakerNative) {
+        backend && backend->requires_preprint_send()) {
         send_snapmaker_preprint_then(
             detail_view_ ? detail_view_->get_tools_used() : std::set<int>{},
             detail_view_ ? detail_view_->get_effective_remap() : std::map<int, int>{},
@@ -475,11 +476,12 @@ void PrintStartController::initiate_reprint(const std::string& filename, const s
             });
     };
 
-    // Snapmaker U1: emit the firmware-native print_task_config gcode BEFORE the reprint starts,
-    // same as the normal start path. remap is empty (no reprint remap UI) → identity, which
-    // reproduces the spurious-feed fix. On native-send error the modal is shown and on_error runs.
+    // Backends that need a pre-print send (Snapmaker U1) emit the firmware-native
+    // print_task_config gcode BEFORE the reprint starts, same as the normal start
+    // path. remap is empty (no reprint remap UI) → identity, which reproduces the
+    // spurious-feed fix. On native-send error the modal is shown and on_error runs.
     AmsBackend* backend = AmsState::instance().get_backend();
-    if (backend && backend->get_remap_strategy() == AmsBackend::RemapStrategy::SnapmakerNative) {
+    if (backend && backend->requires_preprint_send()) {
         send_snapmaker_preprint_then(tools_used, /*remap=*/{}, start, on_error);
         return; // start fires from the send continuation — do NOT also start here
     }

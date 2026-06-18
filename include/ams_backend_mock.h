@@ -168,6 +168,10 @@ class AmsBackendMock : public AmsBackend {
     get_tool_mapping_capabilities() const override;
     [[nodiscard]] std::vector<int> get_tool_mapping() const override;
     [[nodiscard]] RemapStrategy get_remap_strategy() const override;
+    // Mirrors get_remap_strategy(): when emulating Snapmaker U1 the controller
+    // must run the pre-print send path (a no-op here since the mock does not
+    // override build_preprint_gcode, matching the old strategy-gated behavior).
+    [[nodiscard]] bool requires_preprint_send() const override;
 
     // Device actions
     [[nodiscard]] std::vector<helix::printer::DeviceSection> get_device_sections() const override;

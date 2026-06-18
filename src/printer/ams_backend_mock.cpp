@@ -2990,6 +2990,11 @@ AmsBackendMock::RemapStrategy AmsBackendMock::get_remap_strategy() const {
     return RemapStrategy::None;
 }
 
+bool AmsBackendMock::requires_preprint_send() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapmaker_mode_;
+}
+
 std::vector<int> AmsBackendMock::get_tool_mapping() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
