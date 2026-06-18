@@ -16,14 +16,6 @@
 // Private LVGL header for direct flush_cb capture (matches application.cpp pattern)
 #include "display/lv_display_private.h"
 
-#ifdef HELIX_DISPLAY_FBDEV
-#include "display_backend_fbdev.h"
-#endif
-
-#ifdef HELIX_DISPLAY_DRM
-#include "display_backend_drm.h"
-#endif
-
 #include "app_constants.h"
 #include "ui_effects.h"
 #include "ui_fatal_error.h"
@@ -177,24 +169,13 @@ bool DisplayManager::init(const Config& config) {
         m_backend->set_splash_active(true);
     }
 
-    // Propagate the "user explicitly asked for -s WxH" flag into the concrete
-    // backend so it can log warnings / enqueue toasts on fallback. Neither
-    // setter is virtual (different semantics per backend), so downcast here.
+    // Propagate the "user explicitly asked for -s WxH" flag into the backend so
+    // it can log warnings / enqueue toasts on fallback. Virtual dispatch: only
+    // fbdev/DRM act on it; SDL ignores it.
     auto propagate_size_explicit = [&](DisplayBackend* backend) {
-        if (!backend)
-            return;
-#ifdef HELIX_DISPLAY_DRM
-        if (backend->type() == DisplayBackendType::DRM) {
-            static_cast<DisplayBackendDRM*>(backend)->set_size_was_explicit(
-                config.size_was_explicit);
+        if (backend) {
+            backend->set_size_was_explicit(config.size_was_explicit);
         }
-#endif
-#ifdef HELIX_DISPLAY_FBDEV
-        if (backend->type() == DisplayBackendType::FBDEV) {
-            static_cast<DisplayBackendFbdev*>(backend)->set_size_was_explicit(
-                config.size_was_explicit);
-        }
-#endif
     };
     propagate_size_explicit(m_backend.get());
 
@@ -234,16 +215,11 @@ bool DisplayManager::init(const Config& config) {
         return false;
     }
 
-#ifdef HELIX_DISPLAY_DRM
-    if (m_backend->type() == DisplayBackendType::DRM) {
-        auto* drm = static_cast<DisplayBackendDRM*>(m_backend.get());
-        if (drm->is_gpu_accelerated()) {
-            spdlog::info("[Display] Rendering: GPU-accelerated (OpenGL ES via EGL)");
-        } else {
-            spdlog::info("[Display] Rendering: CPU (DRM dumb buffers)");
-        }
+    if (m_backend->is_gpu_accelerated()) {
+        spdlog::info("[Display] Rendering: GPU-accelerated (OpenGL ES via EGL)");
+    } else if (m_backend->type() == DisplayBackendType::DRM) {
+        spdlog::info("[Display] Rendering: CPU (DRM dumb buffers)");
     }
-#endif
 
     // Unblank display via framebuffer ioctl AFTER creating LVGL display.
     // On AD5M, the FBIOBLANK state may be tied to the fd - calling it after
@@ -1235,10 +1211,7 @@ bool DisplayManager::try_drm_to_fbdev_fallback(lv_display_rotation_t rot, bool s
         if (splash_active) {
             m_backend->set_splash_active(true);
         }
-#ifdef HELIX_DISPLAY_FBDEV
-        static_cast<DisplayBackendFbdev*>(m_backend.get())
-            ->set_size_was_explicit(m_size_was_explicit);
-#endif
+        m_backend->set_size_was_explicit(m_size_was_explicit);
         m_display = m_backend->create_display(m_width, m_height);
     }
     if (!m_display) {

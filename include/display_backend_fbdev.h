@@ -97,7 +97,7 @@ class DisplayBackendFbdev : public DisplayBackend {
      * requested resolution cannot be honored. Must be called before
      * create_display().
      */
-    void set_size_was_explicit(bool explicit_size) {
+    void set_size_was_explicit(bool explicit_size) override {
         size_was_explicit_ = explicit_size;
     }
 

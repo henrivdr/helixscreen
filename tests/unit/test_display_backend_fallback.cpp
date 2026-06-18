@@ -278,6 +278,97 @@ TEST_CASE("DRM backend: empty device string prevents create_display attempt",
 
 #endif // HELIX_DISPLAY_DRM
 
+// ============================================================================
+// Virtual Dispatch Tests (#1055)
+// ============================================================================
+// DisplayManager no longer switches on type()==DRM/FBDEV and downcasts to the
+// concrete backend. It calls set_size_was_explicit() and is_gpu_accelerated()
+// polymorphically. These tests verify the base defaults and that an override
+// is dispatched through the base pointer.
+
+namespace {
+
+// Records whether set_size_was_explicit() was called and with what value;
+// reports a configurable is_gpu_accelerated(). Stands in for the concrete
+// backends so we can verify DisplayManager's virtual calls reach the override.
+class MockCapabilityBackend : public DisplayBackend {
+  public:
+    explicit MockCapabilityBackend(bool gpu) : gpu_(gpu) {}
+
+    lv_display_t* create_display(int, int) override {
+        return nullptr;
+    }
+    lv_indev_t* create_input_pointer() override {
+        return nullptr;
+    }
+    DisplayBackendType type() const override {
+        return DisplayBackendType::FBDEV;
+    }
+    const char* name() const override {
+        return "MockCapability";
+    }
+    bool is_available() const override {
+        return true;
+    }
+
+    void set_size_was_explicit(bool explicit_size) override {
+        size_explicit_called_ = true;
+        size_explicit_value_ = explicit_size;
+    }
+    bool is_gpu_accelerated() const override {
+        return gpu_;
+    }
+
+    bool size_explicit_called_ = false;
+    bool size_explicit_value_ = false;
+
+  private:
+    bool gpu_;
+};
+
+} // namespace
+
+TEST_CASE("Virtual dispatch: set_size_was_explicit reaches override via base pointer",
+          "[display][virtual]") {
+    MockCapabilityBackend backend(false);
+    DisplayBackend* base = &backend;
+
+    base->set_size_was_explicit(true);
+    REQUIRE(backend.size_explicit_called_);
+    REQUIRE(backend.size_explicit_value_ == true);
+
+    base->set_size_was_explicit(false);
+    REQUIRE(backend.size_explicit_value_ == false);
+}
+
+TEST_CASE("Virtual dispatch: base set_size_was_explicit default is a harmless no-op",
+          "[display][virtual]") {
+    // MockSuccessBackend does not override set_size_was_explicit — the base
+    // default must accept the call without effect (SDL behavior).
+    MockSuccessBackend backend(DisplayBackendType::SDL, "SDL");
+    DisplayBackend* base = &backend;
+    REQUIRE_NOTHROW(base->set_size_was_explicit(true));
+}
+
+TEST_CASE("Virtual dispatch: is_gpu_accelerated reflects the override, defaults false",
+          "[display][virtual]") {
+    SECTION("override reporting true") {
+        MockCapabilityBackend gpu(true);
+        DisplayBackend* base = &gpu;
+        REQUIRE(base->is_gpu_accelerated());
+    }
+    SECTION("override reporting false") {
+        MockCapabilityBackend cpu(false);
+        DisplayBackend* base = &cpu;
+        REQUIRE_FALSE(base->is_gpu_accelerated());
+    }
+    SECTION("base default is false (non-DRM backends)") {
+        MockSuccessBackend sdl(DisplayBackendType::SDL, "SDL");
+        DisplayBackend* base = &sdl;
+        REQUIRE_FALSE(base->is_gpu_accelerated());
+    }
+}
+
 TEST_CASE("Backend fallback: all backends exhausted returns failure",
           "[display][fallback][crash_hardening]") {
     // When both DRM and fbdev fail, init() should return false

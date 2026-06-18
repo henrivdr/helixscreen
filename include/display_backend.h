@@ -367,6 +367,30 @@ class DisplayBackend {
     }
 
     /**
+     * @brief Tell the backend the user explicitly requested a size via -s.
+     *
+     * When true, backends that can detect a native resolution (fbdev, DRM) log
+     * warnings and enqueue toasts if the requested resolution cannot be honored.
+     * Must be called before create_display(). Backends without a notion of a
+     * native resolution (SDL) ignore this.
+     */
+    virtual void set_size_was_explicit(bool explicit_size) {
+        (void)explicit_size;
+    }
+
+    /**
+     * @brief Whether GPU-accelerated rendering (EGL/OpenGL ES) is active.
+     *
+     * Only the DRM backend can drive an EGL/GLES path; all other backends
+     * render on the CPU and return false.
+     *
+     * @return true if hardware-accelerated rendering is in use
+     */
+    virtual bool is_gpu_accelerated() const {
+        return false;
+    }
+
+    /**
      * @brief Update touch rotation transform after display rotation changes
      *
      * For fbdev backend, transforms raw evdev touch coordinates to match
