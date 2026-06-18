@@ -5,6 +5,37 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.80] - 2026-06-18
+
+A large release centered on a new error & recovery center, live per-slot filament state across AMS backends, a pre-flight filament-validation gate before printing, on-screen native filament remapping for the Snapmaker U1, QIDI Box stock-firmware filament control, and print-failure (spaghetti) detection on the Snapmaker U1 — plus temperature-graph rendering fixes and WiFi recovery hardening.
+
+### Added
+
+- **Error & recovery center** — AFC/AMS jams and other errors surface as an actionable recovery dialog with context-aware buttons instead of raw error text; errors are routed and styled by severity, and the notification badge reflects the worst unread severity. Toolchange progress shows as a backend-driven step bar.
+- **Live per-slot filament state** — the filament panel binds reactively to live per-slot color, material, and load state across AMS backends, with a two-tone chip showing the gcode-intended color over the actually-loaded color and truthful tool numbers.
+- **Pre-flight filament check before printing** — selecting a file runs a validation that detects empty slots and filament/color mismatches across all AMS backends, labels chips from the real gcode tools, and can block the print or open native remapping from the gate.
+- **Snapmaker U1 on-screen filament remapping** — remap virtual tools to physical heads from the touchscreen using the firmware's native `print_task_config` commands (sent before `PRINT_START`), with a four-phase load/unload step bar (Home / Select / Heat / Feed-Retract) and a shared remap UI used by all backends.
+- **U1 / ACE gcode tool remapper** — a comprehensive tool remapper applied via the HelixPrint plugin, with a per-backend remap strategy.
+- **Print-failure (spaghetti) detection on Snapmaker U1** — a detection framework with a U1 stock-firmware source that flags failures on pause, a per-source enable/policy setting, and a Resume / Abort / Reduce Sensitivity response dialog.
+- **QIDI Box stock-firmware filament control** (prestonbrown/helixscreen#1041) — real load/unload and dryer indication on stock firmware, per-lane eject via `FORCE_MOVE` (gated on `force_move`, with a config hint when unavailable), configurable eject distance/velocity, dryer remember-last, and firmware-capability detection.
+- **Multi-extruder nozzle temperature widget** — a responsive widget showing each nozzle's temperature, collapsing multiplexed AFC/MMU lanes to a single nozzle row.
+- **Real screen power-off on devices without backlight control** (prestonbrown/helixscreen#1049) — in-process DRM connector DPMS power-off and a reachable screensaver on no-backlight devices.
+- **Snapmaker U1 stock firmware support** — HelixScreen autostarts on stock U1 firmware (via the input-event daemon) with per-head seated-filament truth read from `print_task_config`.
+- **Automatic LED control** — LED state is wired into the printer lifecycle, and reprints route through the start controller so the U1 native pre-send applies.
+
+### Fixed
+
+- **Temperature graph rendering** (prestonbrown/helixscreen#979) — the gradient fill now renders under LVGL 9.5 (it was invisible), live curves no longer freeze or go gappy, per-extruder lines stay correct, a drop-to-0 history filter removes spurious dips, and the near-curve gradient is more visible on the U1.
+- **WiFi recovers from a failed bringup** (prestonbrown/helixscreen#1036) instead of dying permanently, detects the `wpa_supplicant` control interface from its `-c`/`-C` arguments, and debounces a transient `AUTH_FAILED` before `CONNECTED` (prestonbrown/helixscreen#1050).
+- **Touch input** (prestonbrown/helixscreen#943, prestonbrown/helixscreen#986) — multi-touch digitizers are scaled correctly and the recalibrate control stays visible on the DRM backend.
+- **No false runout alarms** — empty or never-loaded lanes no longer raise runout or AMS error alarms, and the idle runout modal is suppressed during AMS load/unload.
+- **QIDI Box idle load homes first** (prestonbrown/helixscreen#1041), and **QIDI Q2 is no longer misdetected as an Artillery M1** (prestonbrown/helixscreen#1027) — `algo_app.service` is no longer treated as M1-exclusive.
+- **Per-printer layout reloads on switch.**
+- **Thumbnail/preview robustness** — truncated or non-PNG thumbnail data is rejected before decoding, metadata is fetched on programmatic file selection, and gcode load no longer deadlocks on the display view-mode or leaves a blank preview on re-entry.
+- **Fan control overlay** re-registers before each push; the **error-recovery dialog** is width-responsive and fits 4+ buttons on one row (prestonbrown/helixscreen#1043).
+- **Ultrawide home layout** uses a responsive grid with a slimmer navbar.
+- **Generic LED strips default to white-only** until the Klipper config proves RGB, so the color picker only appears on RGB-capable strips.
+
 ## [0.99.79] - 2026-06-14
 
 ### Added
@@ -4075,6 +4106,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.80]: https://github.com/prestonbrown/helixscreen/compare/v0.99.79...v0.99.80
 [0.99.79]: https://github.com/prestonbrown/helixscreen/compare/v0.99.78...v0.99.79
 [0.99.78]: https://github.com/prestonbrown/helixscreen/compare/v0.99.77...v0.99.78
 [0.99.77]: https://github.com/prestonbrown/helixscreen/compare/v0.99.76...v0.99.77
