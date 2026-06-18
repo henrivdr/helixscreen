@@ -1,0 +1,171 @@
+name: Recover R2 Publish
+
+# Manually (re)publish an already-built GitHub release to R2 when the release
+# workflow's R2 upload failed (e.g. v0.99.80: ENOSPC killed the upload job before
+# the manifest was published, leaving the CDN pinned to the prior version and the
+# release invisible to in-app updaters).
+#
+# Pulls the release artifacts straight from the GitHub release — nothing is
+# rebuilt — regenerates the per-channel manifests, and uploads to R2 in the same
+# L091-safe order as release.yml (tarballs -> manifest -> readback-verify -> zips
+# -> install.sh -> symbol maps), with the manifest readback-verify that makes a
+# bad publish fail loudly.
+#
+# .debug.zst symbols are NOT recovered (CI-only, never uploaded to GitHub); .80
+# crash backtraces will resolve to function names but not source lines.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to republish (e.g. v0.99.80)'
+        required: true
+        type: string
+
+jobs:
+  recover:
+    name: Recover R2 publish
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Validate inputs and resolve version/channels
+      id: meta
+      run: |
+        TAG="${{ inputs.tag }}"
+        case "$TAG" in
+          v[0-9]*) ;;
+          *) echo "::error::tag '$TAG' must look like v0.99.80"; exit 1 ;;
+        esac
+        VERSION="${TAG#v}"
+        # Stable tag (no hyphen) -> stable + dev; prerelease -> beta + dev (matches release.yml)
+        if [[ "$TAG" == *-* ]]; then CHANNELS="beta dev"; else CHANNELS="stable dev"; fi
+        echo "tag=$TAG"           >> $GITHUB_OUTPUT
+        echo "version=$VERSION"   >> $GITHUB_OUTPUT
+        echo "channels=$CHANNELS" >> $GITHUB_OUTPUT
+        echo "Republishing $TAG (v$VERSION) to channels: $CHANNELS"
+
+    - name: Validate R2 configuration
+      run: |
+        [ -n "${{ vars.R2_PUBLIC_URL }}" ] || { echo "::error::R2_PUBLIC_URL not configured"; exit 1; }
+
+    - name: Download release assets from the GitHub release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        mkdir -p release-files
+        gh release download "${{ steps.meta.outputs.tag }}" \
+          --repo "${{ github.repository }}" \
+          --dir release-files \
+          --pattern '*.tar.gz' --pattern '*.zip' \
+          --pattern 'install.sh' --pattern '*.sym.zst'
+        echo "Downloaded:"
+        ls -lh release-files/
+
+    - name: Extract changelog for version
+      id: notes
+      run: |
+        VERSION="${{ steps.meta.outputs.version }}"
+        NOTES=""
+        if [ -f CHANGELOG.md ]; then
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "[" ver "]")) found=1; next }
+            found { print }
+          ' CHANGELOG.md)
+        fi
+        [ -n "$NOTES" ] || NOTES="Release ${{ steps.meta.outputs.tag }}"
+        {
+          echo "notes<<CHANGELOG_EOF"
+          echo "$NOTES"
+          echo "CHANGELOG_EOF"
+        } >> $GITHUB_OUTPUT
+
+    - name: Upload artifacts and manifests to R2
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        R2_BUCKET: ${{ vars.R2_BUCKET_NAME || 'helixscreen-releases' }}
+        R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        RELEASE_NOTES: ${{ steps.notes.outputs.notes }}
+        UPLOAD_CHANNELS: ${{ steps.meta.outputs.channels }}
+      run: |
+        chmod +x scripts/generate-manifest.sh
+
+        # Retry wrapper for transient R2 errors (mirrors release.yml's s3cp).
+        s3cp() {
+          local attempt=1 max=4
+          while true; do
+            if aws s3 cp "$@" --endpoint-url "$R2_ENDPOINT"; then return 0; fi
+            if [ "$attempt" -ge "$max" ]; then
+              echo "::error::aws s3 cp failed after ${max} attempts: $*"; return 1
+            fi
+            echo "aws s3 cp attempt ${attempt} failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10)); attempt=$((attempt + 1))
+          done
+        }
+
+        # 1. Tarballs the manifest references — must land before the manifest.
+        echo "=== Uploading tarballs to releases/v${RELEASE_VERSION}/ ==="
+        for tarball in release-files/*.tar.gz; do
+          [ -f "$tarball" ] || continue
+          s3cp "$tarball" "s3://${R2_BUCKET}/releases/v${RELEASE_VERSION}/$(basename "$tarball")"
+        done
+
+        # 2. Per-channel manifest + readback-verify (the visibility artifact).
+        for CHANNEL in $UPLOAD_CHANNELS; do
+          echo "=== Generating ${CHANNEL} manifest ==="
+          scripts/generate-manifest.sh \
+            --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --notes "$RELEASE_NOTES" \
+            --dir release-files \
+            --base-url "${R2_PUBLIC_URL}/releases/v${RELEASE_VERSION}" \
+            --output "release-files/manifest-${CHANNEL}.json"
+          jq . "release-files/manifest-${CHANNEL}.json"
+
+          echo "Uploading ${CHANNEL}/manifest.json..."
+          s3cp "release-files/manifest-${CHANNEL}.json" \
+            "s3://${R2_BUCKET}/${CHANNEL}/manifest.json" --content-type "application/json"
+
+          echo "Verifying ${CHANNEL}/manifest.json serves v${RELEASE_VERSION}..."
+          served=""
+          for attempt in 1 2 3 4; do
+            served=$(curl -fsS "${R2_PUBLIC_URL}/${CHANNEL}/manifest.json" | jq -r '.version // empty')
+            [ "$served" = "$RELEASE_VERSION" ] && break
+            echo "  attempt ${attempt}: served '${served:-<none>}', expected '${RELEASE_VERSION}'; retrying in 5s..."
+            sleep 5
+          done
+          if [ "$served" != "$RELEASE_VERSION" ]; then
+            echo "::error::${CHANNEL} manifest serves '${served:-<none>}', expected '${RELEASE_VERSION}'"
+            exit 1
+          fi
+          echo "=== ${CHANNEL} manifest uploaded and verified (v${served}) ==="
+        done
+
+        # 3. Zips (Moonraker Update Manager) + install.sh AFTER the manifest.
+        echo "=== Uploading zip artifacts to releases/v${RELEASE_VERSION}/ ==="
+        for zip in release-files/*.zip; do
+          [ -f "$zip" ] || continue
+          s3cp "$zip" "s3://${R2_BUCKET}/releases/v${RELEASE_VERSION}/$(basename "$zip")"
+        done
+        if [ -f release-files/install.sh ]; then
+          echo "Uploading install.sh..."
+          s3cp release-files/install.sh "s3://${R2_BUCKET}/install.sh" \
+            --content-type "text/x-shellscript"
+        fi
+
+        # 4. Symbol maps (.sym.zst already on the GH release). .debug.zst are not
+        #    recoverable here (CI-only), so backtraces resolve to names, not lines.
+        echo "=== Uploading symbol maps to symbols/v${RELEASE_VERSION}/ ==="
+        for sym in release-files/*.sym.zst; do
+          [ -f "$sym" ] || continue
+          s3cp "$sym" "s3://${R2_BUCKET}/symbols/v${RELEASE_VERSION}/$(basename "$sym")" \
+            --content-type "application/zstd"
+        done
+
+        echo "=== Recovery complete ==="
+        for CHANNEL in $UPLOAD_CHANNELS; do
+          echo "  ${CHANNEL}: $(curl -fsS "${R2_PUBLIC_URL}/${CHANNEL}/manifest.json" | jq -rc '{version,tag}')"
+        done
