@@ -301,6 +301,41 @@ TEST_CASE("should_start_print_collector - mid-print attach via print_duration",
     }
 }
 
+TEST_CASE("should_start_print_collector - mid-print error recovery does not restart collector",
+          "[application][print_start]") {
+    // AFC error recovery on a Voron drives PRINTING → ERROR → PRINTING without ever
+    // resetting the print. The recovery transition is non-initial, so the app-boot
+    // mid-print guard does not apply; print_duration carries the real elapsed time of
+    // the underway print. Restarting the collector here wipes phase state and leaves
+    // "Starting Print..." stuck on the Print Status panel (issue #1042).
+    SECTION("ERROR → PRINTING with print_duration>0 → suppress (the #1042 repro)") {
+        REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::ERROR, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/false,
+            /*current_print_duration=*/10645));
+    }
+    SECTION("ERROR → PRINTING with high progress and print_duration>0 → suppress") {
+        REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::ERROR, PrintJobState::PRINTING,
+            /*current_progress=*/63, /*is_initial_transition=*/false,
+            /*current_print_duration=*/10645));
+    }
+    SECTION("ERROR → PRINTING with print_duration=0 → fresh start (error before extrusion)") {
+        // An error that occurred before any extrusion has no elapsed print time, so the
+        // following PRINTING transition is a genuine fresh start and must run the collector.
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::ERROR, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/false,
+            /*current_print_duration=*/0));
+    }
+    SECTION("Fresh STANDBY → PRINTING still starts (guard is not always-false)") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/false,
+            /*current_print_duration=*/0));
+    }
+}
+
 // ============================================================================
 // Shutdown Observer Release Contract (generalized; original: issue #888)
 // ============================================================================

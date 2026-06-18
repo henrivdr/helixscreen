@@ -182,6 +182,13 @@ class MoonrakerManager {
         if (is_initial_transition && (current_progress > 0 || current_print_duration > 0)) {
             return false; // App joined mid-print, skip collector
         }
+        // Recovered mid-print error (e.g. AFC error recovery on a Voron): the print left
+        // PRINTING for ERROR and returned without ever resetting. print_duration > 0 proves
+        // the print was already underway, so the pre-print collector must not restart and
+        // wipe phase state. A genuine reprint passes through STANDBY/COMPLETE/CANCELLED, not ERROR.
+        if (prev_state == helix::PrintJobState::ERROR && current_print_duration > 0) {
+            return false;
+        }
         return true;
     }
 
