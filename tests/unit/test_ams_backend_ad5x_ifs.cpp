@@ -5513,6 +5513,51 @@ TEST_CASE("AD5X IFS unload_filament on a non-active slot ejects that lane, not t
     REQUIRE_FALSE(backend.has_gcode_containing("M109"));
 }
 
+TEST_CASE("AD5X IFS unload of the IFS_STATUS-seated slot cuts even when current_slot disagrees "
+          "(raza616 #981 v0.99.80)",
+          "[ams][ad5x_ifs]") {
+    // raza616 v0.99.80: tapping Unload on the channel physically seated at the
+    // extruder cold-ejected it (IFS_F11, no cut) — "grinds away without removing."
+    //
+    // Mechanism: the unload router keyed off system_info_.current_slot, which is
+    // derived through tool_map_/active_tool_. On the plugin path (has_ifs_vars_),
+    // the IFS_STATUS Chan seated-channel authority is gated out of that derivation
+    // (it persists at the seated port while save_variables _current_tool can go
+    // stale loaded-idle), so current_slot points at a DIFFERENT slot than the one
+    // physically seated. Tapping the seated slot then satisfied
+    // "slot_index != current_slot" and routed to the cold lane eject, which
+    // grinds a seated, un-cut filament instead of the heated toolhead unload.
+    //
+    // Fix: IFS_STATUS Chan is stored unconditionally and the unload router treats
+    // the seated channel as the active slot regardless of the tool_map_-derived
+    // current_slot, so the seated slot always routes to _IFS_REMOVE_CURRENT_PRUTOK.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    // Plugin user: Chan does NOT drive current_slot (gated on !has_ifs_vars_).
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+    // Stale active pointer at slot 0 while channel 4 is the one truly seated.
+    Ad5xIfsTestAccess::set_current_slot(backend, 0, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // IFS_STATUS reports Chan=4 (port 4 = slot 3) as the physically seated channel.
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 4;
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    // current_slot stays stale (0) because the plugin path owns it.
+    REQUIRE(backend.get_system_info().current_slot == 0);
+
+    // User taps Unload on the seated slot 3.
+    REQUIRE(backend.unload_filament(3).success());
+
+    // Must run the heated toolhead unload (cut + retract), NOT the cold lane eject.
+    REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("IFS_F11"));
+    REQUIRE_FALSE(backend.has_gcode_containing("IFS_F24"));
+}
+
 // ==========================================================================
 // External CHANGE_ZCOLOR releases a stale locked override — #981
 // (native ZMOD slot colors/types "randomly revert").

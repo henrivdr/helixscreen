@@ -504,6 +504,12 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     std::array<int, TOOL_MAP_SIZE> tool_map_;   // tool_map_[tool] = port (1-4, 5=unmapped)
     std::array<bool, NUM_PORTS> port_presence_; // Per-port filament sensor state
     int active_tool_ = -1;                      // Current tool (-1 = none)
+    // Physically seated port from IFS_STATUS "Chan" (1-4; 0 = none). Persists at
+    // the seated port while loaded-idle (when GET_ZCOLOR's "Extruder:" reads
+    // None), so it is the seated-channel authority for unload routing. Stored
+    // unconditionally — independent of has_ifs_vars_ / tool_map_ — because the
+    // tool_map_-derived current_slot can disagree with it on the plugin path.
+    int seated_chan_ = 0;
     bool external_mode_ = false;                // Bypass/external spool mode
     bool head_filament_ = false;                // Head sensor state
     std::array<bool, NUM_PORTS> dirty_{};       // Per-slot dirty flag to prevent stale overwrites

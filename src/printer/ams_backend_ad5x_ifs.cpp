@@ -1051,10 +1051,12 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
 
     bool head_loaded;
     int current_slot;
+    int seated_slot; // 0-based slot of the IFS_STATUS-seated port (-1 = none)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         head_loaded = head_filament_;
         current_slot = system_info_.current_slot;
+        seated_slot = seated_chan_ > 0 ? seated_chan_ - 1 : -1;
     }
 
     // A specific slot that is NOT the firmware's active slot is never seated at
@@ -1070,9 +1072,18 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     // pointer while the head is loaded (current_slot < 0) — the unknown-origin
     // recovery case where removing the head is the intended action (see
     // can_unload_from_toolhead()).
-    if (slot_index >= 0 && current_slot >= 0 && slot_index != current_slot) {
-        spdlog::info("{} Unload requested for non-active slot {} (active slot {}) -> cold lane eject",
-                     backend_log_tag(), slot_index, current_slot);
+    //
+    // current_slot is derived through tool_map_/active_tool_; on the plugin path
+    // it is owned by save_variables and can point at the wrong slot loaded-idle.
+    // IFS_STATUS "Chan" is the physically seated port and is trusted directly: if
+    // the tapped slot IS the seated channel, it must take the heated toolhead
+    // unload even when current_slot disagrees — otherwise we cold-eject a seated,
+    // un-cut filament and grind it (raza616 #981, v0.99.80).
+    if (slot_index >= 0 && current_slot >= 0 && slot_index != current_slot &&
+        slot_index != seated_slot) {
+        spdlog::info("{} Unload requested for non-active slot {} (active slot {}, seated slot {}) "
+                     "-> cold lane eject",
+                     backend_log_tag(), slot_index, current_slot, seated_slot);
         return eject_lane(slot_index);
     }
 
@@ -2832,6 +2843,12 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             const int chan = *result.ifs_chan; // 1-based, 0 = none
+
+            // Record the physically seated port unconditionally — the unload
+            // router reads this directly so the seated channel is recognised
+            // even on the plugin path, where the tool_map_-derived current_slot
+            // is owned by save_variables and can disagree with the seated port.
+            seated_chan_ = chan;
 
             // ifs_chan takes precedence over extruder_slot for active_tool_
             // derivation (gated on !has_ifs_vars_, matching the extruder_slot
