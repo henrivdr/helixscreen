@@ -6055,3 +6055,383 @@ TEST_CASE("AD5X IFS error-center: current_error returns nullopt when IDLE",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::IDLE);
     REQUIRE_FALSE(backend.current_error().has_value());
 }
+
+// ==========================================================================
+// FIX 1: firmware-dropped-pointer wrong-lane unload cut (raza616 5HR3HHS6)
+// ==========================================================================
+//
+// current_slot < 0 (firmware dropped its active pointer) while IFS_STATUS
+// "Chan" still reports a physically seated port. A tap on a NON-seated slot
+// must cold-eject that lane, NOT toolhead-cut the seated one. A tap ON the
+// seated slot must still take the heated toolhead unload.
+
+TEST_CASE("AD5X IFS unload of a NON-seated slot cold-ejects when firmware dropped active pointer "
+          "(raza616 5HR3HHS6)",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // no async debounce task
+    // Plugin path: Chan does not drive current_slot (gated on !has_ifs_vars_),
+    // so seated_chan_ can be set independently of current_slot.
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+
+    // IFS_STATUS Chan=2 establishes the seated slot (port 2 -> slot 1).
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 2;
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // Firmware has dropped its active pointer (current_slot = -1) but the head
+    // sensor still reads loaded.
+    Ad5xIfsTestAccess::set_current_slot(backend, -1, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // User taps Unload on slot 3 (NOT the seated slot 1).
+    REQUIRE(backend.unload_filament(3).success());
+
+    // Must cold-eject port 4 (slot 3 + 1), NOT toolhead-cut the seated slot 1.
+    REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=4"));
+    REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=4 LEN=1000 SPEED=1200"));
+    REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=4"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_PRUTOK"));
+}
+
+TEST_CASE("AD5X IFS unload of the seated slot still toolhead-cuts when firmware dropped pointer "
+          "(raza616 5HR3HHS6)",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+
+    // IFS_STATUS Chan=2 -> seated slot 1.
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 2;
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    Ad5xIfsTestAccess::set_current_slot(backend, -1, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // User taps Unload on the seated slot 1 -> heated toolhead unload (cut).
+    REQUIRE(backend.unload_filament(1).success());
+
+    REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
+    REQUIRE_FALSE(backend.has_gcode_containing("IFS_F11"));
+    REQUIRE_FALSE(backend.has_gcode_containing("IFS_F24"));
+}
+
+TEST_CASE("AD5X IFS unload routing regression: active-slot cut + non-active cold-eject preserved "
+          "(FIX 1 existing-guard regression)",
+          "[ams][ad5x_ifs]") {
+    // current_slot >= 0 path must be untouched by the new firmware-dropped branch.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    Ad5xIfsTestAccess::set_current_slot(backend, 2, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    SECTION("active slot still toolhead-cuts") {
+        REQUIRE(backend.unload_filament(2).success());
+        REQUIRE(backend.has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
+        REQUIRE_FALSE(backend.has_gcode_containing("IFS_F11"));
+    }
+
+    SECTION("non-active slot still cold-ejects (existing #981 guard)") {
+        REQUIRE(backend.unload_filament(0).success());
+        REQUIRE(backend.has_gcode("IFS_F24 PRUTOK=1"));
+        REQUIRE(backend.has_gcode("IFS_F11 PRUTOK=1 LEN=1000 SPEED=1200"));
+        REQUIRE(backend.has_gcode("IFS_F39 PRUTOK=1"));
+        REQUIRE_FALSE(backend.has_gcode_containing("REMOVE_CURRENT_PRUTOK"));
+    }
+}
+
+// ==========================================================================
+// FIX 2: eject_lane schedules a status re-read on success
+// ==========================================================================
+
+TEST_CASE("AD5X IFS eject_lane schedules a status re-read on success (FIX 2)",
+          "[ams][ad5x_ifs]") {
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    // Leave zcolor_silent_supported_ at its default (true) so schedule_zcolor_query
+    // passes its gate and bumps the diagnostic schedule counter synchronously.
+    REQUIRE(Ad5xIfsTestAccess::zcolor_silent_supported(backend));
+
+    const uint32_t before = Ad5xIfsTestAccess::zcolor_schedule_count(backend);
+    REQUIRE(backend.eject_lane(1).success());
+
+    // The successful eject must request a fresh status read so the UI refreshes.
+    REQUIRE(Ad5xIfsTestAccess::zcolor_schedule_count(backend) == before + 1);
+}
+
+// ==========================================================================
+// FIX 3: live RS-485 authority blocks stale JSON color/type for present slots
+// ==========================================================================
+
+TEST_CASE("AD5X IFS live authority blocks stale JSON color/type for a present slot (FIX 3)",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Establish the live RS-485 authority via IFS_STATUS Ports (ifs_status_ports_seen_).
+    // Slot 0 (port 1) is present; this is the authoritative presence + colour source.
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 1;
+    r.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "00FF00"};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // Live colour/material the RS-485 source owns.
+    Ad5xIfsTestAccess::set_color(backend, 0, "00FF00");
+    Ad5xIfsTestAccess::set_material(backend, 0, "PLA");
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+
+    // A JSON poll carrying a DIFFERENT stale ffmColor/ffmType arrives.
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "#FFA500",
+            "ffmType1": "Silk"
+        }
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+
+    // The live colour/material must survive — not be resurrected by stale cache.
+    auto info = backend.get_slot_info(0);
+    CHECK(info.color_rgb == 0x00FF00);
+    CHECK(info.material == "PLA");
+}
+
+TEST_CASE("AD5X IFS pre-SILENT JSON still seeds color/type when no live authority (FIX 3 regression)",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    // No live authority: SILENT demoted and IFS_STATUS Ports never seen.
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "#FFA500",
+            "ffmType1": "ABS"
+        }
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+
+    // With no live source competing, the JSON cache IS the authority.
+    auto info = backend.get_slot_info(0);
+    CHECK(info.color_rgb == 0xFFA500);
+    CHECK(info.material == "ABS");
+}
+
+// ==========================================================================
+// FIX 4: clear-spool persists firmware-native '?' / "" sentinels
+// ==========================================================================
+
+TEST_CASE("AD5X IFS write_adventurer_json_local persists '?'/empty sentinels for a cleared slot "
+          "(FIX 4a)",
+          "[ams][ad5x_ifs][local_write]") {
+    Ad5xIfsTmpJsonFile tmp("clear_sentinel",
+                           R"({"FFMInfo":{"ffmColor1":"#FF0000","ffmType1":"PLA"}})");
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_local_adventurer_json_path(backend, tmp.path.string());
+
+    // Cleared slot: empty material, placeholder gray colour (the in-memory
+    // "no colour" sentinel parse_adventurer_json maps empty ffmColor to).
+    Ad5xIfsTestAccess::set_color(backend, 0, "808080");
+    Ad5xIfsTestAccess::set_material(backend, 0, "");
+
+    auto err = Ad5xIfsTestAccess::write_adventurer_json_local(backend, 0);
+    REQUIRE(err.success());
+
+    std::ifstream f(tmp.path);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    auto doc = json::parse(ss.str());
+    CHECK(doc["FFMInfo"]["ffmColor1"] == "");
+    CHECK(doc["FFMInfo"]["ffmType1"] == "?");
+}
+
+TEST_CASE("AD5X IFS write_adventurer_json_local clears colour for an explicitly empty colour "
+          "(FIX 4a)",
+          "[ams][ad5x_ifs][local_write]") {
+    Ad5xIfsTmpJsonFile tmp("clear_empty_color",
+                           R"({"FFMInfo":{"ffmColor2":"#00FF00","ffmType2":"PETG"}})");
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_local_adventurer_json_path(backend, tmp.path.string());
+
+    // Empty colour string and empty material -> both sentinels.
+    Ad5xIfsTestAccess::set_color(backend, 1, "");
+    Ad5xIfsTestAccess::set_material(backend, 1, "");
+
+    auto err = Ad5xIfsTestAccess::write_adventurer_json_local(backend, 1);
+    REQUIRE(err.success());
+
+    std::ifstream f(tmp.path);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    auto doc = json::parse(ss.str());
+    CHECK(doc["FFMInfo"]["ffmColor2"] == "");
+    CHECK(doc["FFMInfo"]["ffmType2"] == "?");
+}
+
+TEST_CASE("AD5X IFS write_adventurer_json_local writes real colour/type for a normal slot "
+          "(FIX 4a regression)",
+          "[ams][ad5x_ifs][local_write]") {
+    Ad5xIfsTmpJsonFile tmp("normal_write", R"({"FFMInfo":{}})");
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    Ad5xIfsTestAccess::set_local_adventurer_json_path(backend, tmp.path.string());
+
+    Ad5xIfsTestAccess::set_color(backend, 2, "AABBCC");
+    Ad5xIfsTestAccess::set_material(backend, 2, "TPU");
+
+    auto err = Ad5xIfsTestAccess::write_adventurer_json_local(backend, 2);
+    REQUIRE(err.success());
+
+    std::ifstream f(tmp.path);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    auto doc = json::parse(ss.str());
+    CHECK(doc["FFMInfo"]["ffmColor3"] == "#AABBCC");
+    CHECK(doc["FFMInfo"]["ffmType3"] == "TPU");
+}
+
+TEST_CASE("AD5X IFS parse_adventurer_json maps firmware '?' ffmType to empty material (FIX 4b)",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Firmware-native unset sentinel for slot 0 (port 1): ffmType '?'.
+    std::string content = R"({
+        "FFMInfo": {
+            "ffmColor1": "",
+            "ffmType1": "?"
+        }
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+
+    // '?' must yield an empty material so the UI renders '--'.
+    auto info = backend.get_slot_info(0);
+    CHECK(info.material.empty());
+}
+
+TEST_CASE("AD5X IFS parse_adventurer_json maps empty ffmType to empty material (FIX 4b)",
+          "[ams][ad5x_ifs]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    std::string content = R"({"FFMInfo": {"ffmColor1": "", "ffmType1": ""}})";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, content);
+    CHECK(backend.get_slot_info(0).material.empty());
+}
+
+// ==========================================================================
+// LABEL/ROUTE CONTRACT: slot_unloads_to_toolhead() (drives the context-menu
+// Unload-vs-Eject label + dispatch) MUST agree with unload_filament()'s actual
+// eject-vs-toolhead routing across the full authority matrix. Any drift would
+// mislabel the button or dispatch the wrong action — the bug raza616 hit
+// (button said "Unload", firmware cut the seated lane). 5HR3HHS6.
+// ==========================================================================
+
+namespace {
+// 0-based slot mapping: port = slot + 1; seated_chan is 1-based (0 = none).
+std::unique_ptr<TestableAd5xIfsBackend> make_routing_backend(int current_slot, int seated_chan,
+                                                             bool head_loaded) {
+    auto backend = std::make_unique<TestableAd5xIfsBackend>();
+    Ad5xIfsTestAccess::set_running(*backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(*backend, false); // no async debounce task
+    // Plugin path so IFS_STATUS Chan sets seated_chan_ WITHOUT driving current_slot,
+    // letting us pin the two authorities independently.
+    Ad5xIfsTestAccess::set_has_ifs_vars(*backend, true);
+    if (seated_chan > 0) {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.ifs_active = true;
+        r.ifs_chan = seated_chan;
+        Ad5xIfsTestAccess::apply_zcolor_result(*backend, r);
+    }
+    Ad5xIfsTestAccess::set_current_slot(*backend, current_slot, /*filament_loaded=*/head_loaded);
+    Ad5xIfsTestAccess::set_head_filament(*backend, head_loaded);
+    return backend;
+}
+
+// Runs the real unload and reports which route it took. Asserts exactly one route.
+bool unload_routed_to_toolhead(TestableAd5xIfsBackend& b, int slot) {
+    REQUIRE(b.unload_filament(slot).success());
+    const bool cut = b.has_gcode_containing("REMOVE_CURRENT_PRUTOK");
+    const bool eject = b.has_gcode_containing("IFS_F11") || b.has_gcode_containing("IFS_F24");
+    REQUIRE(cut != eject); // exactly one route, never both / neither
+    return cut;
+}
+} // namespace
+
+TEST_CASE("AD5X IFS slot_unloads_to_toolhead matches unload routing across the authority matrix",
+          "[ams][ad5x_ifs]") {
+    struct Case {
+        const char* name;
+        int current_slot;
+        int seated_chan; // 1-based, 0 = none
+        bool head_loaded;
+        int slot;
+        bool expect_toolhead; // true = heated cut, false = cold eject
+    };
+    // clang-format off
+    const Case cases[] = {
+        {"known active, tap active -> cut",            2,  0, true,  2, true},
+        {"known active, tap other -> eject",           2,  0, true,  0, false},
+        {"known active disagrees, tap seated -> cut",  2,  4, true,  3, true},  // #981 seated authority
+        {"pointer lost, tap seated -> cut",           -1,  2, true,  1, true},
+        {"pointer lost, tap non-seated -> eject",     -1,  2, true,  3, false}, // raza616 5HR3HHS6
+        {"pointer lost, nothing seated, head -> cut", -1,  0, true,  2, true},  // unknown-origin recovery
+        {"empty toolhead -> eject",                    2,  0, false, 2, false},
+    };
+    // clang-format on
+
+    for (const auto& c : cases) {
+        DYNAMIC_SECTION(c.name) {
+            auto backend = make_routing_backend(c.current_slot, c.seated_chan, c.head_loaded);
+
+            // Predicate (label/dispatch) — must ignore the recovery-broadened hint.
+            const bool pred_true = backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/true);
+            const bool pred_false = backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/false);
+            CHECK(pred_true == c.expect_toolhead);
+            CHECK(pred_false == c.expect_toolhead); // hint is ignored for AD5X
+
+            // Actual routing — the contract: predicate == route taken.
+            const bool routed_toolhead = unload_routed_to_toolhead(*backend, c.slot);
+            CHECK(routed_toolhead == c.expect_toolhead);
+            CHECK(routed_toolhead == pred_true);
+        }
+    }
+}
+
+TEST_CASE("AD5X IFS unload of the active slot via -1 (unload active) toolhead-cuts",
+          "[ams][ad5x_ifs]") {
+    auto backend = make_routing_backend(/*current_slot=*/2, /*seated_chan=*/0, /*head_loaded=*/true);
+    REQUIRE(backend->unload_filament(-1).success());
+    CHECK(backend->has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
+    CHECK_FALSE(backend->has_gcode_containing("IFS_F11"));
+}
+
+TEST_CASE("AD5X IFS eject_lane maps each slot to its 1-based port", "[ams][ad5x_ifs]") {
+    for (int slot = 0; slot < AmsBackendAd5xIfs::NUM_PORTS; ++slot) {
+        DYNAMIC_SECTION("slot " << slot) {
+            TestableAd5xIfsBackend backend;
+            Ad5xIfsTestAccess::set_running(backend, true);
+            Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+            REQUIRE(backend.eject_lane(slot).success());
+            const std::string port = std::to_string(slot + 1);
+            CHECK(backend.has_gcode("IFS_F24 PRUTOK=" + port));
+            CHECK(backend.has_gcode_containing("IFS_F11 PRUTOK=" + port));
+            CHECK(backend.has_gcode("IFS_F39 PRUTOK=" + port));
+        }
+    }
+}
+
+TEST_CASE("AMS base slot_unloads_to_toolhead defaults to the loaded hint (no AD5X override)",
+          "[ams][ad5x_ifs]") {
+    // Non-AD5X backends keep the legacy rule: toolhead unload iff the menu's
+    // is_loaded snapshot says so. AD5X overrides; this guards the default.
+    AmsBackendAfc afc(nullptr, nullptr);
+    CHECK(afc.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+    CHECK_FALSE(afc.slot_unloads_to_toolhead(0, /*loaded_hint=*/false));
+}
