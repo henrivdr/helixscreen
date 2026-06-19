@@ -404,6 +404,7 @@ translations:
   Connected: Connected
   Connected (%s): Connected (%s)
   Connected (no discovery): Connected (no discovery)
+  Connected (system-managed network): Connected (system-managed network)
   Connected to: Connected to
   'Connected to ': 'Connected to '
   Connected! Discovering printer...: Connected! Discovering printer...

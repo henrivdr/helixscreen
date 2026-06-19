@@ -404,6 +404,7 @@
   <translation tag="Connected" en="Connected"/>
   <translation tag="Connected (%s)" en="Connected (%s)"/>
   <translation tag="Connected (no discovery)" en="Connected (no discovery)"/>
+  <translation tag="Connected (system-managed network)" en="Connected (system-managed network)"/>
   <translation tag="Connected to" en="Connected to"/>
   <translation tag="Connected to " en="Connected to "/>
   <translation tag="Connected! Discovering printer..." en="Connected! Discovering printer..."/>

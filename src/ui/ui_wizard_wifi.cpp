@@ -19,6 +19,7 @@
 #include "system/crash_handler.h"
 #include "theme_manager.h"
 #include "wifi_manager.h"
+#include "wifi_ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -986,6 +987,21 @@ void WizardWifiStep::apply_wifi_backend_state() {
         }
     } else {
         crash_handler::breadcrumb::note("wifi", "apply_state_disabled");
+
+        // The managed backend isn't enabled/connected — but the link may still
+        // be up under system management (e.g. a Qidi Q2 boots already connected
+        // and HelixScreen's wpa_supplicant backend can't reach the control
+        // socket). In that case the printer is genuinely online, so show a
+        // "system-managed" connected state instead of painting a hard failure
+        // (helixscreen#1059).
+        helix::ui::wifi::OsWifiLink os_link = helix::ui::wifi::probe_os_wifi_link();
+        if (os_link.has_link) {
+            spdlog::info("[{}] Managed WiFi backend down but OS link is up on '{}' "
+                         "(system-managed)",
+                         get_name(), os_link.iface);
+            crash_handler::breadcrumb::note("wifi", "apply_state_os_link");
+            update_wifi_status(lv_tr("Connected (system-managed network)"));
+        }
     }
 }
 

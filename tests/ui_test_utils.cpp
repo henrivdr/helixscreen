@@ -437,6 +437,20 @@ helix::TemperatureController* get_temperature_controller() {
     return helix::PanelWidgetManager::instance().shared_resource<helix::TemperatureController>();
 }
 
+// Optional hook installed by tests to observe warning toasts (the UI is stubbed
+// out in the test build, so warnings would otherwise be invisible).
+namespace {
+std::function<void(const std::string&)> g_test_warning_hook;
+}
+
+namespace helix {
+namespace ui {
+void set_test_notification_warning_hook(std::function<void(const std::string&)> hook) {
+    g_test_warning_hook = std::move(hook);
+}
+} // namespace ui
+} // namespace helix
+
 // Stub implementations for notification functions (tests don't display UI)
 void ui_notification_init() {
     // No-op in tests
@@ -468,11 +482,17 @@ void ui_notification_success(const char* title, const char* message) {
 
 void ui_notification_warning(const char* message) {
     spdlog::debug("[Test Stub] ui_notification_warning: {}", message ? message : "(null)");
+    if (g_test_warning_hook) {
+        g_test_warning_hook(message ? message : "");
+    }
 }
 
 void ui_notification_warning(const char* title, const char* message) {
     spdlog::debug("[Test Stub] ui_notification_warning: {} - {}", title ? title : "(null)",
                   message ? message : "(null)");
+    if (g_test_warning_hook) {
+        g_test_warning_hook(message ? message : "");
+    }
 }
 
 void ui_notification_error(const char* title, const char* message, bool modal) {
