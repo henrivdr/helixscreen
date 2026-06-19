@@ -36,8 +36,8 @@
 - **Uses**: 4 | **Velocity**: 0.5 | **Learned**: 2025-12-21 | **Last**: 2026-06-12 | **Category**: pattern | **Type**: constraint
 > Text-only buttons: `align="center"` on child. Icon+text with `flex_flow="row"` need all three: `style_flex_main_place="center"` (horiz), `style_flex_cross_place="center"` (cross), `style_flex_track_place="center"` (row position). Without track_place content sits at top.
 
-### [L031] [*****|****-] XML no recompile
-- **Uses**: 100 | **Velocity**: 3.2539355468749998 | **Learned**: 2025-12-27 | **Last**: 2026-05-22 | **Category**: gotcha | **Type**: constraint
+### [L031] [*****|*****] XML no recompile
+- **Uses**: 100 | **Velocity**: 4.253935546875 | **Learned**: 2025-12-27 | **Last**: 2026-06-18 | **Category**: gotcha | **Type**: constraint
 > ui_xml/*.xml loads at RUNTIME — never rebuild for XML-only changes (layout, styling, bindings, event cbs). Just relaunch. Rebuild only for C++ changes.
 
 ### [L039] [**---|*----] Unique XML callback names
@@ -241,8 +241,8 @@
 - **Uses**: 3 | **Velocity**: 1.5 | **Learned**: 2026-06-12 | **Last**: 2026-06-16 | **Category**: gotcha
 > scripts/resolve-backtrace.sh forks one aarch64-linux-gnu-addr2line PER backtrace address against the multi-GB DWARF (pi.debug ~2.6G). addr2line loads DWARF lazily so each child GROWS over time (4G->8G+). If the harness auto-backgrounds the resolver and you 'kill' it, the script's subshell+addr2line children ORPHAN and keep grinding -> RAM erodes with ever-new PIDs invisible to 'pkill -f addr2line' / 'ps -C addr2line' (binary name truncates to 'aarch64-linux-g'). Three parallel YA2GVVXT resolves once ate ~26G+ while a build ran, nearly OOMing the box. RULES: (1) run resolve-backtrace.sh with run_in_background:true from the START so the harness owns the whole process tree; (2) NEVER hand-fork addr2line in a chained shell that can be backgrounded; (3) let ONE resolver finish, don't launch parallel retries; (4) to clean up, kill the PARENT resolve-backtrace.sh PIDs (find via 'pgrep -af resolve-backtrace'), not just children; identify the big procs via /proc/PID/cmdline since the name truncates. The resolver's reliable-frames block prints quickly; the slow part is the stack-scan over all addresses.
 
-### [L091] [*----|***--] Stale-but-200 R2 manifest silently suppresses updates fleet-wide
-- **Uses**: 3 | **Velocity**: 1.5 | **Learned**: 2026-06-12 | **Last**: 2026-06-17 | **Category**: gotcha
+### [L091] [*----|****-] Stale-but-200 R2 manifest silently suppresses updates fleet-wide
+- **Uses**: 4 | **Velocity**: 2.5 | **Learned**: 2026-06-12 | **Last**: 2026-06-18 | **Category**: gotcha
 > If 'new version not showing in check-for-updates on ANY device', it's the source of truth, not per-device: the in-app updater fetches https://releases.helixscreen.org/<channel>/manifest.json FIRST and trusts any HTTP-200 unconditionally (update_checker.cpp fetch_stable_release) -- it only falls back to GitHub on FETCH FAILURE, never on staleness. Root cause of v0.99.76 not appearing: the release.yml 'Upload to R2' job is non-blocking AND its monolithic set -e upload step put the manifest AFTER the large .zip artifacts; a transient 504 on k2.zip aborted the step before the manifest uploaded, so R2 stayed pinned at .75 while the run still showed green. Diagnose: curl the live manifest .version vs the tag; check the 'Upload to R2' job (not just run status). Fix shipped (942bcbd51,d0034b282): upload referenced .tar.gz -> publish manifest -> then zips/symbols, all via s3cp() retry wrapper, then read the manifest back and assert .version==tag so a bad publish fails the release loudly. Lesson: verify the SERVED artifact, never trust upload success; a non-blocking CI job that publishes the source-of-truth is a silent-failure trap.
 
 ### [L092] [**---|****-] make | tail masks exit code; -j hides the real build error
