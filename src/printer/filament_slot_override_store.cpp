@@ -73,7 +73,13 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
     // extra booleans per slot cost nothing on its side.
     j["helix_locked_color"] = o.user_locked_color;
     j["helix_locked_material"] = o.user_locked_material;
-    if (!o.brand.empty()) j["vendor"] = o.brand;
+    if (!o.brand.empty()) {
+        j["vendor"] = o.brand;      // legacy/AFC key
+        j["vendor_name"] = o.brand; // Happy Hare key; the one Orca is most likely
+                                    // to consume as it moves toward vendor-aware
+                                    // matching. Zero-cost alias today (Orca
+                                    // ignores unknown keys).
+    }
     if (o.spoolman_id > 0) j["spool_id"] = o.spoolman_id;
     if (o.updated_at.time_since_epoch().count() > 0) {
         j["scan_time"] = format_iso8601(o.updated_at);
@@ -84,7 +90,10 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
     auto temps = resolved_temps(o);
     if (temps.bed_temp > 0) j["bed_temp"] = temps.bed_temp;
     if (temps.nozzle_temp > 0) j["nozzle_temp"] = temps.nozzle_temp;
-    if (!o.spool_name.empty()) j["spool_name"] = o.spool_name;
+    if (!o.spool_name.empty()) {
+        j["spool_name"] = o.spool_name; // HelixScreen/AFC key
+        j["name"] = o.spool_name;       // Happy Hare key; alias for forward-compat
+    }
     if (o.spoolman_vendor_id > 0) j["spoolman_vendor_id"] = o.spoolman_vendor_id;
     if (o.remaining_weight_g >= 0) j["remaining_weight_g"] = o.remaining_weight_g;
     if (o.total_weight_g >= 0) j["total_weight_g"] = o.total_weight_g;
@@ -139,14 +148,18 @@ from_lane_data_record(const nlohmann::json& j) {
     o.user_locked_color = j.value("helix_locked_color", o.color_set);
     o.user_locked_material =
         j.value("helix_locked_material", !o.material.empty());
-    o.brand = j.value("vendor", "");
+    // Prefer our own `vendor` key; fall back to Happy Hare's `vendor_name` so
+    // alias-only records (e.g. written by HH's mmu_server push_lane_data) read
+    // correctly. Round-trips of our own records stay exact.
+    o.brand = j.value("vendor", j.value("vendor_name", std::string()));
     o.spoolman_id = j.value("spool_id", 0);
     o.bed_temp = j.value("bed_temp", 0);
     o.nozzle_temp = j.value("nozzle_temp", 0);
     if (j.contains("scan_time") && j["scan_time"].is_string()) {
         o.updated_at = parse_iso8601(j["scan_time"].get<std::string>());
     }
-    o.spool_name = j.value("spool_name", "");
+    // Prefer `spool_name`; fall back to Happy Hare's `name` alias.
+    o.spool_name = j.value("spool_name", j.value("name", std::string()));
     o.spoolman_vendor_id = j.value("spoolman_vendor_id", 0);
     o.remaining_weight_g = j.value("remaining_weight_g", -1.0f);
     o.total_weight_g = j.value("total_weight_g", -1.0f);

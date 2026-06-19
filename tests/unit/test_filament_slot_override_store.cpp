@@ -353,6 +353,93 @@ TEST_CASE("FilamentSlotOverrideStore save_async writes AFC-shaped record to lane
     CHECK(stored.contains("scan_time"));  // set by save_async
 }
 
+TEST_CASE("FilamentSlotOverrideStore save_async emits Happy Hare key aliases",
+          "[filament_slot_override][slow]") {
+    // Forward-compat: the writer emits vendor_name (alias of vendor) and name
+    // (alias of spool_name) using Happy Hare's key convention, in addition to
+    // our own keys. Orca is most likely to consume vendor_name for vendor-aware
+    // preset matching as it evolves; unknown keys are ignored today.
+    TmpCacheDir tmp("save_hh_aliases");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    FilamentSlotOverrideStore store(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(store, tmp.path);
+
+    FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.spool_name = "PolyLite PLA Orange";
+
+    bool cb_done = false;
+    store.save_async(0, ovr, [&](bool, std::string) { cb_done = true; });
+    REQUIRE(cb_done);
+
+    auto stored = api.mock_get_db_value("lane_data", "lane1");
+    REQUIRE(!stored.is_null());
+    // Both the original keys and the Happy Hare aliases are present and equal.
+    CHECK(stored["vendor"] == "Polymaker");
+    CHECK(stored["vendor_name"] == "Polymaker");
+    CHECK(stored["spool_name"] == "PolyLite PLA Orange");
+    CHECK(stored["name"] == "PolyLite PLA Orange");
+}
+
+TEST_CASE("FilamentSlotOverrideStore save_async omits aliases when source empty",
+          "[filament_slot_override][slow]") {
+    // The aliases are emitted only alongside their source key — an empty brand
+    // emits neither vendor nor vendor_name; an empty spool_name emits neither
+    // spool_name nor name.
+    TmpCacheDir tmp("save_no_aliases");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    FilamentSlotOverrideStore store(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(store, tmp.path);
+
+    FilamentSlotOverride ovr;
+    ovr.material = "PLA"; // brand + spool_name deliberately left empty
+
+    bool cb_done = false;
+    store.save_async(0, ovr, [&](bool, std::string) { cb_done = true; });
+    REQUIRE(cb_done);
+
+    auto stored = api.mock_get_db_value("lane_data", "lane1");
+    REQUIRE(!stored.is_null());
+    CHECK_FALSE(stored.contains("vendor"));
+    CHECK_FALSE(stored.contains("vendor_name"));
+    CHECK_FALSE(stored.contains("spool_name"));
+    CHECK_FALSE(stored.contains("name"));
+}
+
+TEST_CASE("FilamentSlotOverrideStore load_blocking reads Happy Hare alias-only record",
+          "[filament_slot_override][slow]") {
+    // A record written by Happy Hare's mmu_server.push_lane_data carries
+    // vendor_name / name but NOT vendor / spool_name. The reader must fall back
+    // to the alias keys so these records parse correctly.
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    json hh_lane = {
+        {"lane", "0"},
+        {"material", "PLA"},
+        {"vendor_name", "Bambu"},          // HH key, no "vendor"
+        {"name", "Bambu PLA Basic Black"}, // HH key, no "spool_name"
+    };
+    api.mock_set_db_value("lane_data", "lane1", hh_lane);
+
+    FilamentSlotOverrideStore store(&api, "ifs");
+    auto overrides = store.load_blocking();
+
+    REQUIRE(overrides.count(0) == 1);
+    CHECK(overrides[0].brand == "Bambu");
+    CHECK(overrides[0].spool_name == "Bambu PLA Basic Black");
+}
+
 TEST_CASE("FilamentSlotOverrideStore save_async emits explicit bed/nozzle temps",
           "[filament_slot_override][slow]") {
     TmpCacheDir tmp("save_temps_explicit");

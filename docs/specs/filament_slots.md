@@ -1,6 +1,6 @@
 # Filament Slot Metadata — `lane_data` Convention
 
-**Status**: Informational, v1.2 (2026-06). See [Changelog](#changelog).
+**Status**: Informational, v1.3 (2026-06). See [Changelog](#changelog).
 
 This document describes HelixScreen's use of the `lane_data` Moonraker database
 namespace to share per-slot filament metadata with OrcaSlicer and other tools.
@@ -23,13 +23,22 @@ holds one record per filament lane/slot. AFC writes these records from its
 Klipper plugin; OrcaSlicer reads them (read-only — it never writes back) to
 auto-populate filament presets when sending a print.
 
-> **Happy Hare uses a different path.** Happy Hare lanes are *not* surfaced to
-> OrcaSlicer through `lane_data`. Since OrcaSlicer 2.4.0, Orca reads Happy
-> Hare's live Klipper status object directly (`GET /printer/objects/query?mmu`,
-> fields `gate_status`/`gate_material`/`gate_color`/`gate_temperature`). The
-> user-visible outcome is the same, but it is a separate mechanism outside the
-> scope of this spec. This spec covers the `lane_data` namespace, written by
-> AFC and HelixScreen.
+> **Happy Hare also writes `lane_data`.** Happy Hare's Moonraker component
+> (`components/mmu_server.py`, `push_lane_data`) writes per-lane records into
+> the `lane_data` namespace directly, using key names `vendor_name`, `name`,
+> and `filament_id`. OrcaSlicer prefers this Moonraker `lane_data` source over
+> the legacy live `mmu` Klipper status object (`GET
+> /printer/objects/query?mmu`, fields
+> `gate_status`/`gate_material`/`gate_color`/`gate_temperature`) when the
+> namespace is populated. So Happy Hare is a `lane_data` writer alongside AFC
+> and HelixScreen — its key convention (`vendor_name` / `name`) is the de-facto
+> schema leader, since Orca follows it. HelixScreen emits those keys as aliases
+> (see §3) for forward-compatibility.
+>
+> HelixScreen does **not** write `lane_data` records for AFC or Happy Hare
+> backends — those plugins own their own lane records, and HelixScreen would
+> only clobber them. HelixScreen writes `lane_data` only for backends that have
+> no native `lane_data` writer (IFS, CFS, ACE, Snapmaker).
 
 HelixScreen participates as both reader and writer. When a user edits slot
 metadata in HelixScreen's filament panel (brand, material, color, Spoolman
@@ -58,9 +67,11 @@ The convention is intentionally permissive:
 | OrcaSlicer 2.3.2+ | Reader only — never writes back (filament preset auto-sync) | [MoonrakerPrinterAgent.cpp, PR #12086](https://github.com/OrcaSlicer/OrcaSlicer/pull/12086) |
 | HelixScreen | Reader + writer (this document) | `src/printer/filament_slot_override_store.cpp` |
 
-Happy Hare is intentionally **not** listed here: OrcaSlicer reads Happy Hare
-lanes from the live `mmu` Klipper object, not from `lane_data` (see the note in
-§1).
+Happy Hare also writes this namespace — its Moonraker component
+(`components/mmu_server.py`, `push_lane_data`) emits per-lane records keyed with
+`vendor_name` / `name` / `filament_id`, and OrcaSlicer prefers that Moonraker
+source over the live `mmu` Klipper object when it is populated. See the note in
+§1; HelixScreen mirrors Happy Hare's key names as aliases (§3).
 
 ### Moonraker endpoint
 
@@ -114,12 +125,14 @@ A full HelixScreen-emitted record looks like this:
   "color": "#FF5500",
   "material": "PLA",
   "vendor": "Polymaker",
+  "vendor_name": "Polymaker",
   "spool_id": 42,
   "scan_time": "2026-04-18T12:34:56Z",
   "bed_temp": 60,
   "nozzle_temp": 215,
 
   "spool_name": "PolyLite PLA Orange",
+  "name": "PolyLite PLA Orange",
   "spoolman_vendor_id": 7,
   "remaining_weight_g": 850.0,
   "total_weight_g": 1000.0,
@@ -139,6 +152,7 @@ The top group is AFC-standard. The bottom group is HelixScreen's extensions.
 | `color` | string | optional | `#RRGGBB` hex | Slot color. Leading `#` is conventional; HelixScreen's parser also accepts `0x`-prefixed forms on read. Emitted only when the override carries a non-zero RGB. | User-edited, or firmware-reported on backends where the user has no override. |
 | `material` | string | optional | short code (`PLA`, `PETG`, `ABS`, `TPU`, …) | Material family. Readers should treat unknown values as opaque strings — do NOT silently map them. | User-edited. |
 | `vendor` | string | optional | free-form | Brand / manufacturer. Readers match case-insensitively when pairing with their own filament databases. | User-edited. |
+| `vendor_name` | string | optional | free-form | Alias of `vendor`, mirroring Happy Hare's key convention (`push_lane_data` in `components/mmu_server.py`). Emitted with the same value as `vendor` for forward-compat: as OrcaSlicer moves toward vendor-aware preset matching, `vendor_name` is the key it is most likely to consume. Zero-cost today — Orca ignores unknown keys. HelixScreen's reader accepts either key. | Same as `vendor`. |
 | `spool_id` | integer | optional | positive integer | Spoolman spool ID for the physical spool currently loaded. Omitted when zero. | User-selected from Spoolman, if configured. |
 | `scan_time` | string | optional | ISO-8601 UTC, second precision (`YYYY-MM-DDTHH:MM:SSZ`) | Last time this record was written or scanned. Advisory only — used for conflict avoidance, not for mutual exclusion. Sub-second fractions are truncated. | `std::chrono::system_clock::now()` at save time. |
 | `bed_temp` | integer | optional | Celsius | Recommended bed temperature. | User entry, bound Spoolman spool's filament profile, or HelixScreen's internal material DB (in that priority order). |
@@ -158,6 +172,7 @@ throw on unknown keys).
 | Field | Type | Required | Format / units | Semantics | Source |
 |-------|------|----------|----------------|-----------|--------|
 | `spool_name` | string | optional | free-form | Human-readable name for the spool (e.g. `"PolyLite PLA Orange"`). Distinct from `vendor` + `material` because users often want a friendlier label. | User-edited, or auto-filled from Spoolman. |
+| `name` | string | optional | free-form | Alias of `spool_name`, mirroring Happy Hare's key convention (`push_lane_data` in `components/mmu_server.py`). Emitted with the same value as `spool_name` for forward-compat. HelixScreen's reader accepts either key. | Same as `spool_name`. |
 | `spoolman_vendor_id` | integer | optional | positive integer | Spoolman vendor ID, paired with `spool_id` for full Spoolman round-tripping. Omitted when zero. | From Spoolman when a spool is selected. |
 | `remaining_weight_g` | float | optional | grams | Remaining filament weight. Negative = unset / unknown. | Spoolman, or user-entered. |
 | `total_weight_g` | float | optional | grams | Full-spool nominal weight. Negative = unset / unknown. | Spoolman, or user-entered. |
@@ -327,12 +342,22 @@ Clock skew between the printer and your writer can defeat this; treat
 | HelixScreen | `src/printer/filament_slot_override_store.cpp` | Reader + writer. `to_lane_data_record` / `from_lane_data_record` for record shape; `load_blocking` / `save_async` / `clear_async` for namespace I/O. |
 | OrcaSlicer 2.3.2–2.4.0-beta | `src/slic3r/Utils/MoonrakerPrinterAgent.cpp:727-822` (`fetch_moonraker_filament_data`) | Reader (filament preset auto-sync on print send). Canonical reference for AFC-standard field semantics. Unchanged across this range. |
 | AFC (Armored Turtle) | Klipper plugin | Native writer. See [AFC docs](https://www.armoredturtle.xyz/docs/afc-klipper-add-on/features.html). |
-| Happy Hare | — (does not use `lane_data`) | OrcaSlicer 2.4.0+ reads Happy Hare lanes from the live `mmu` Klipper object via `fetch_hh_filament_info` (`MoonrakerPrinterAgent.cpp:825-950`), not this namespace. |
+| Happy Hare | `components/mmu_server.py` (`push_lane_data`) | Native writer. Writes `lane_data` records keyed with `vendor_name` / `name` / `filament_id`. OrcaSlicer prefers this Moonraker source over the live `mmu` Klipper object (`fetch_hh_filament_info`, `MoonrakerPrinterAgent.cpp:825-950`) when the namespace is populated. HelixScreen mirrors HH's `vendor_name` / `name` key convention as aliases. |
 
 ---
 
 ## Changelog
 
+- **v1.3 (2026-06-18)**: Corrected the Happy Hare description — HH's Moonraker
+  component (`components/mmu_server.py`, `push_lane_data`) writes `lane_data`
+  records directly (keys `vendor_name` / `name` / `filament_id`), and
+  OrcaSlicer prefers that Moonraker source over the live `mmu` Klipper object.
+  HH is now documented as a `lane_data` writer alongside AFC and HelixScreen,
+  not an out-of-scope separate path. HelixScreen now emits `vendor_name` (alias
+  of `vendor`) and `name` (alias of `spool_name`) to mirror HH's key
+  convention for forward-compat (Orca ignores unknown keys), and its reader
+  accepts either spelling. HelixScreen still does **not** write `lane_data` for
+  AFC / Happy Hare backends — those plugins own their own records.
 - **v1.2 (2026-06-09)**: Verified against the OrcaSlicer 2.4.0-beta source
   (`MoonrakerPrinterAgent.cpp`): the `lane_data` namespace and the five consumed
   fields are unchanged from 2.3.2, and OrcaSlicer reads the namespace read-only
