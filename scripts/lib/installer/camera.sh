@@ -212,9 +212,15 @@ except Exception:
 stream = 'http://%s:%s/stream' % (lan_ip, port)
 snap = 'http://%s:%s/snapshot' % (lan_ip, port)
 try:
+    # 'mjpegstreamer-adaptive' (not 'ustreamer'): fluidd/mainsail render MJPEG by
+    # service type and have no 'ustreamer' renderer — it shows "service not
+    # supported!" and never displays frames. ustreamer's /stream + /snapshot are
+    # the standard mjpegstreamer endpoints, so 'mjpegstreamer-adaptive' renders
+    # correctly in both web UIs and still matches HelixScreen's own is_mjpeg
+    # consumer check (which keys on the 'mjpeg' substring).
     req('POST', '/server/webcams/item', {
         'name': name,
-        'service': 'ustreamer',
+        'service': 'mjpegstreamer-adaptive',
         'stream_url': stream,
         'snapshot_url': snap,
         'enabled': True,
