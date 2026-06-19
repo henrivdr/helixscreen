@@ -36,13 +36,19 @@ USTREAMER_BIN="/opt/helixscreen/bin/ustreamer"
 
 start_service() {
     procd_open_instance
-    procd_set_param command "$USTREAMER_BIN" \
-        --device "$DEVICE" \
-        --format MJPEG \
-        --resolution "$RESOLUTION" \
-        --desired-fps "$FPS" \
-        --host 0.0.0.0 \
-        --port "$PORT"
+    # Reclaim the camera before every launch. The stock cam_app grabber is
+    # hotplug-launched by procd on USB enumeration and holds DEVICE exclusively
+    # (single-stream node). The installer kills it once at install time, but it
+    # returns on every reboot — and re-enumerates ahead of START=95 — so without
+    # this, ustreamer loses the race and loops on "CAP: Can't set input channel",
+    # serving its NO LIVE VIDEO placeholder. Killing cam_app inside the respawned
+    # command (then exec'ing ustreamer in the same PID, so procd's respawn
+    # tracking is preserved) makes every boot and every respawn reclaim the node.
+    procd_set_param command /bin/sh -c \
+        "killall cam_app cam_sub_app 2>/dev/null; \
+         exec '$USTREAMER_BIN' --device '$DEVICE' --format MJPEG \
+            --resolution '$RESOLUTION' --desired-fps '$FPS' \
+            --host 0.0.0.0 --port '$PORT'"
     # Restart automatically if ustreamer dies (it has no built-in watchdog).
     procd_set_param respawn
     procd_set_param stdout 1
