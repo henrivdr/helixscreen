@@ -520,6 +520,18 @@ download_release() {
     local platform=$2
     platform=$(get_release_platform "$platform")
 
+    # Normalize to the v-prefixed release tag. Release artifacts live under the
+    # tag at every transport — R2 dir (releases/vX.Y.Z/), versioned tar filename
+    # (helixscreen-<plat>-vX.Y.Z.tar.gz), and the GitHub tag (vX.Y.Z). A bare
+    # version reaches here whenever the caller bypasses get_latest_version's own
+    # normalization: an explicit `--version 0.99.80`, or the in-app updater
+    # passing the manifest's bare `.version` field. Without the `v` every
+    # candidate URL 404s. ("local" placeholder for --local installs is untouched.)
+    case "$version" in
+        v* | local) ;;
+        [0-9]*) version="v${version}" ;;
+    esac
+
     mkdir -p "$TMP_DIR"
     CLEANUP_TMP=true
 
