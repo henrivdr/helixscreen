@@ -456,18 +456,20 @@ describe_hardware() {
     esac
 
     # Hostname + user-dir heuristics for boards without a useful DT model.
-    # `linaro-alip` is the Linaro Debian reference rootfs hostname; QIDI
-    # ships it on the Q2 (and likely Plus 4) running Klipper as `mks`.
-    if [ "$_hostname" = "linaro-alip" ] && [ -d "/home/mks" ]; then
-        echo "QIDI-class SBC (likely Q2/Plus, hostname: $_hostname, user: mks)"
+    # `linaro-alip` is the Linaro Debian reference rootfs hostname; QIDI ships it
+    # on the Q2 (and likely Plus 4) running Klipper as `mks` on firmware 1.1.x.
+    # The June-2026 01.01.02 refactor renamed that user to `qidi` (#1047), so
+    # accept either home dir.
+    if [ "$_hostname" = "linaro-alip" ] && { [ -d "/home/mks" ] || [ -d "/home/qidi" ]; }; then
+        echo "QIDI-class SBC (likely Q2/Plus, hostname: $_hostname, user: mks/qidi)"
         return
     fi
     if [ -d "/home/biqu" ]; then
         echo "BIGTREETECH Pi/CB1 (user: biqu)"
         return
     fi
-    if [ -d "/home/mks" ]; then
-        echo "MKS-branded SBC (user: mks)"
+    if [ -d "/home/mks" ] || [ -d "/home/qidi" ]; then
+        echo "MKS/QIDI-branded SBC (user: mks or qidi)"
         return
     fi
     if [ -d "/home/pi" ] && [ -z "$_model" ]; then
@@ -504,8 +506,10 @@ _resolve_primary_group() {
 }
 
 # QIDI-class SBC fingerprint (Q2, and likely Plus 4): the Linaro Debian
-# reference rootfs hostname `linaro-alip` plus the `mks` user home. This is the
-# same signal get_hardware_label() uses to print "QIDI-class SBC".
+# reference rootfs hostname `linaro-alip` plus the Klipper user home. This is the
+# same signal get_hardware_label() uses to print "QIDI-class SBC". The user is
+# `mks` on firmware 1.1.x and `qidi` on the 01.01.02 refactor (#1047), so accept
+# either home dir.
 #
 # It exists to VETO Artillery M1 detection: the Q2 ships the stock Artillery
 # `algo_app.service`, so algo_app alone cannot tell a Q2 apart from a real M1
@@ -515,7 +519,7 @@ _resolve_primary_group() {
 _is_qidi_class_sbc() {
     local _h=""
     [ -r /etc/hostname ] && _h=$(cat /etc/hostname 2>/dev/null | tr -d '[:space:]')
-    [ "$_h" = "linaro-alip" ] && [ -d /home/mks ]
+    [ "$_h" = "linaro-alip" ] && { [ -d /home/mks ] || [ -d /home/qidi ]; }
 }
 
 # Detect platform
@@ -619,8 +623,8 @@ detect_platform() {
     # confirmed: algo_app.service present, makerbase-client.services absent on a
     # Q2 — prestonbrown/helixscreen#1027). An earlier fix that keyed M1 solely on
     # algo_app therefore still misdetected the Q2 as m1. So we additionally VETO
-    # via the QIDI-class fingerprint (hostname linaro-alip + /home/mks): a Q2
-    # falls through to the normal pi/pi32 arch path below. The M1 hook still
+    # via the QIDI-class fingerprint (hostname linaro-alip + /home/mks or
+    # /home/qidi): a Q2 falls through to the normal pi/pi32 arch path below. The M1 hook still
     # stops both stock services regardless of which fingerprint triggered.
     if [ "$arch" = "aarch64" ] || [ "$arch" = "armv7l" ]; then
         local is_m1=false
@@ -656,9 +660,10 @@ detect_platform() {
             is_arm_sbc=true
         fi
 
-        # 3. Well-known SBC user home directories (MainsailOS, BTT Pi, MKS)
+        # 3. Well-known SBC user home directories (MainsailOS, BTT Pi, MKS, QIDI)
+        #    QIDI is `mks` on firmware 1.1.x and `qidi` on 01.01.02 (#1047).
         if [ "$is_arm_sbc" = false ]; then
-            if [ -d /home/pi ] || [ -d /home/mks ] || [ -d /home/biqu ]; then
+            if [ -d /home/pi ] || [ -d /home/mks ] || [ -d /home/biqu ] || [ -d /home/qidi ]; then
                 is_arm_sbc=true
             fi
         fi
@@ -864,7 +869,7 @@ detect_klipper_user() {
 
     # 4. Well-known users (checked in priority order)
     local known_user
-    for known_user in biqu pi mks; do
+    for known_user in biqu pi mks qidi; do
         if id "$known_user" >/dev/null 2>&1; then
             KLIPPER_USER="$known_user"
             KLIPPER_GROUP=$(_resolve_primary_group "$known_user")
@@ -2395,8 +2400,11 @@ uninstall_forgex() {
 #
 # Known competing screen UIs to stop
 # Includes: GuppyScreen (AD5M/K1), Grumpyscreen (K1/Simple AF), KlipperScreen, FeatherScreen,
-# mksclient (Sovol SV06 Ace stock touchscreen UI)
-COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen mksclient"
+# mksclient (Sovol SV06 Ace stock touchscreen UI), QIDI stock screen (Q2/Plus 4/Max 4
+# firmware 01.01.02+: systemd unit `qidi-client` runs the `qidiclient` binary with
+# Restart=always, so the systemd stop+disable in the loop below is what actually keeps it
+# down; the bare `qidiclient` entry is the process-kill backstop) (#1047).
+COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen mksclient qidi-client qidiclient"
 
 # Wayland compositors that hold the DRM/KMS master. On Armbian/Pi-class boards
 # (e.g. BTT CB1) KlipperScreen commonly runs *inside* one of these; the
@@ -5611,6 +5619,7 @@ MOONRAKER_CONF_PATHS="
 /home/pi/printer_data/config/moonraker.conf
 /home/biqu/printer_data/config/moonraker.conf
 /home/mks/printer_data/config/moonraker.conf
+/home/qidi/printer_data/config/moonraker.conf
 /root/printer_data/config/moonraker.conf
 /opt/config/printer_data/config/moonraker.conf
 /opt/config/moonraker.conf

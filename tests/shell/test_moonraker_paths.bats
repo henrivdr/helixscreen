@@ -70,6 +70,10 @@ setup() {
     echo "$MOONRAKER_CONF_PATHS" | grep -q "/home/mks/"
 }
 
+@test "static paths include /home/qidi/ entry (QIDI 01.01.02 user rename, #1047)" {
+    echo "$MOONRAKER_CONF_PATHS" | grep -q "/home/qidi/"
+}
+
 @test "static paths include AD5X ZMOD /opt/config/printer_data path (#938)" {
     echo "$MOONRAKER_CONF_PATHS" | grep -q "^/opt/config/printer_data/config/moonraker.conf$"
 }

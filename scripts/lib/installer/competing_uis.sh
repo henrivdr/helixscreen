@@ -11,8 +11,11 @@ _HELIX_COMPETING_UIS_SOURCED=1
 
 # Known competing screen UIs to stop
 # Includes: GuppyScreen (AD5M/K1), Grumpyscreen (K1/Simple AF), KlipperScreen, FeatherScreen,
-# mksclient (Sovol SV06 Ace stock touchscreen UI)
-COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen mksclient"
+# mksclient (Sovol SV06 Ace stock touchscreen UI), QIDI stock screen (Q2/Plus 4/Max 4
+# firmware 01.01.02+: systemd unit `qidi-client` runs the `qidiclient` binary with
+# Restart=always, so the systemd stop+disable in the loop below is what actually keeps it
+# down; the bare `qidiclient` entry is the process-kill backstop) (#1047).
+COMPETING_UIS="guppyscreen GuppyScreen grumpyscreen Grumpyscreen KlipperScreen klipperscreen featherscreen FeatherScreen mksclient qidi-client qidiclient"
 
 # Wayland compositors that hold the DRM/KMS master. On Armbian/Pi-class boards
 # (e.g. BTT CB1) KlipperScreen commonly runs *inside* one of these; the

@@ -462,6 +462,58 @@ TEST_CASE("QIDI Box multiple heater_box readings expose the maximum",
     REQUIRE(info.units[0].environment->temperature_c == Catch::Approx(50.0).epsilon(0.01));
 }
 
+// QIDI Q2 firmware 01.01.02.01 (June 2026) refactor: box_config.py declares the
+// dryer thermistor as `temperature_sensor heater_temp_a/b_box<N>` (#1047), but it
+// still creates `heater_generic heater_box<N>`. Box temperature must come from the
+// heater object, NOT the thermistor (which mirrors the heater element and would
+// over-report). A thermistor-only delta must not drive the displayed box temp.
+TEST_CASE("QIDI Box 01.01.02 box temp comes from heater_generic, not heater_temp thermistor",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+
+    // heater_temp thermistor reads hotter than the heater object; it must be
+    // ignored for temperature, so the heater_generic value wins.
+    QidiBoxTestAccess::handle_status(
+        backend, json{
+                     {"temperature_sensor heater_temp_a_box1", json{{"temperature", 99.0}}},
+                     {"heater_generic heater_box1", json{{"temperature", 55.0}}},
+                 });
+
+    auto info = backend.get_system_info();
+    REQUIRE(info.units[0].environment.has_value());
+    REQUIRE(info.units[0].environment->temperature_c == Catch::Approx(55.0).epsilon(0.01));
+}
+
+// An unrelated temperature_sensor (chamber/MCU) must NOT be mistaken for a box
+// dryer thermistor — the "_box" guard keeps it out of the box environment.
+TEST_CASE("QIDI Box non-box temperature_sensor is ignored",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+
+    QidiBoxTestAccess::handle_status(
+        backend, json{{"temperature_sensor Chamber_Thermal_Protection_Sensor",
+                       json{{"temperature", 60.0}}}});
+
+    REQUIRE_FALSE(backend.get_system_info().units[0].environment.has_value());
+}
+
+// Defensive: if the 01.01.02 firmware relocates the humidity field onto a box
+// object other than aht20_f, the backend still surfaces it (best-effort — the
+// exact source is unconfirmed on hardware, #1047).
+TEST_CASE("QIDI Box humidity is read from any matched box object",
+          "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+
+    QidiBoxTestAccess::handle_status(
+        backend, json{{"temperature_sensor heater_temp_a_box1",
+                       json{{"temperature", 30.0}, {"humidity", 22.0}}}});
+
+    auto info = backend.get_system_info();
+    REQUIRE(info.units[0].environment.has_value());
+    REQUIRE(info.units[0].environment->has_humidity);
+    REQUIRE(info.units[0].environment->humidity_pct == Catch::Approx(22.0).epsilon(0.01));
+}
+
 // =====================================================================
 // apply_query_response: bootstrap from printer.objects.query result
 // =====================================================================

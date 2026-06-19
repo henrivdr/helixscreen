@@ -148,6 +148,10 @@ void AmsBackendQidi::on_started() {
                         {"box_extras", nullptr},
                         {"heater_generic heater_box1", nullptr},
                         {"aht20_f heater_box1", nullptr},
+                        // 01.01.02.01 dryer thermistors (#1047); harmless on
+                        // 1.1.1 where these objects don't exist.
+                        {"temperature_sensor heater_temp_a_box1", nullptr},
+                        {"temperature_sensor heater_temp_b_box1", nullptr},
                     })},
     };
 
@@ -342,10 +346,23 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
     // aht20_f heater_box<N> is classified as a humidity-capable sensor by the
     // discovery classifier (alongside bme280/htu21d/sht3x/aht10) and subscribed
     // with the {temperature, humidity} field set, so Moonraker pushes its
-    // humidity here. Confirmed on a stock QIDI Q2: aht20_f heater_box1 reports
-    // {"temperature":27.67,"humidity":16} (#1022).
+    // humidity here. Confirmed on a stock QIDI Q2 (firmware 1.1.1): aht20_f
+    // heater_box1 reports {"temperature":27.67,"humidity":16} (#1022).
+    //
+    // Firmware 01.01.02.01 (June 2026) refactored the box plugins: box_config.py
+    // now declares `temperature_sensor heater_temp_a/b_box<N>` for the dryer
+    // thermistors and no longer declares `aht20_f heater_box<N>` in the readable
+    // source (#1047). box_config.py still creates `heater_generic heater_box<N>`
+    // under the same name, so box TEMPERATURE keeps coming from the heater object
+    // (and the 1.1.1 aht20 ambient) — the heater_temp_*_box thermistors just
+    // mirror the same heater element, so folding them into the displayed temp
+    // would only risk over-reporting it. We therefore match them solely to read
+    // `humidity` from ANY matched box object, in case the refactor relocated the
+    // humidity field there. That humidity source is unconfirmed (we own no QIDI
+    // hardware), so it is best-effort, not a verified path.
     constexpr std::string_view kHeaterPrefix = "heater_generic heater_box";
     constexpr std::string_view kAht20Prefix = "aht20_f heater_box";
+    constexpr std::string_view kBoxTempSensorPrefix = "temperature_sensor heater_temp_";
 
     std::optional<float> max_temp;
     std::optional<float> max_humidity;
@@ -358,14 +375,24 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
         const std::string& key = it.key();
         const bool is_heater = key.rfind(kHeaterPrefix, 0) == 0;
         const bool is_aht = key.rfind(kAht20Prefix, 0) == 0;
-        if (!is_heater && !is_aht) {
+        // 01.01.02.01 dryer thermistor: temperature_sensor heater_temp_a_box<N>
+        // / heater_temp_b_box<N> (the "_box" guard keeps unrelated
+        // temperature_sensor objects out). Matched for humidity only — NOT temp.
+        const bool is_box_temp_sensor = key.rfind(kBoxTempSensorPrefix, 0) == 0 &&
+                                        key.find("_box") != std::string::npos;
+        if (!is_heater && !is_aht && !is_box_temp_sensor) {
             continue;
         }
-        if (auto t_it = it->find("temperature");
-            t_it != it->end() && t_it->is_number()) {
-            const float v = t_it->get<float>();
-            if (!max_temp || v > *max_temp) {
-                max_temp = v;
+        // Box temperature is sourced from the heater object (1.1.1 + 01.01.02) and
+        // the 1.1.1 aht20 ambient sensor only — the heater_temp_*_box thermistors
+        // duplicate the heater element and are deliberately excluded here.
+        if (is_heater || is_aht) {
+            if (auto t_it = it->find("temperature");
+                t_it != it->end() && t_it->is_number()) {
+                const float v = t_it->get<float>();
+                if (!max_temp || v > *max_temp) {
+                    max_temp = v;
+                }
             }
         }
         if (is_heater) {
@@ -377,13 +404,13 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
                 }
             }
         }
-        if (is_aht) {
-            if (auto h_it = it->find("humidity");
-                h_it != it->end() && h_it->is_number()) {
-                const float v = h_it->get<float>();
-                if (!max_humidity || v > *max_humidity) {
-                    max_humidity = v;
-                }
+        // Humidity from any matched box object: aht20_f on 1.1.1, or wherever the
+        // 01.01.02 refactor relocated it (best-effort — see note above).
+        if (auto h_it = it->find("humidity");
+            h_it != it->end() && h_it->is_number()) {
+            const float v = h_it->get<float>();
+            if (!max_humidity || v > *max_humidity) {
+                max_humidity = v;
             }
         }
     }

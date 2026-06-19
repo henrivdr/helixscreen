@@ -18,6 +18,7 @@ MOONRAKER_CONF_PATHS="
 /home/pi/printer_data/config/moonraker.conf
 /home/biqu/printer_data/config/moonraker.conf
 /home/mks/printer_data/config/moonraker.conf
+/home/qidi/printer_data/config/moonraker.conf
 /root/printer_data/config/moonraker.conf
 /opt/config/printer_data/config/moonraker.conf
 /opt/config/moonraker.conf

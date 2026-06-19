@@ -632,6 +632,17 @@ _mock_m1_gate() {
     grep -qE '_is_qidi_class_sbc\(\)' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
 }
 
+# QIDI firmware 01.01.02.01 (June 2026) renamed the Klipper user mks → qidi.
+# _is_qidi_class_sbc must accept either home dir or the Q2 is misdetected as an
+# Artillery M1 on the new firmware (#1047).
+@test "_is_qidi_class_sbc also accepts /home/qidi (01.01.02 user rename, #1047)" {
+    grep -qE '/home/mks.*\|\|.*/home/qidi' "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+}
+
+@test "install.sh (bundled) _is_qidi_class_sbc accepts /home/qidi (#1047)" {
+    grep -qE '/home/mks.*\|\|.*/home/qidi' "$WORKTREE_ROOT/scripts/install.sh"
+}
+
 # ============================================================================
 # get_download_platform() — maps platforms without dedicated release artifacts
 # to a donor platform whose binary is ABI-compatible. Regression coverage for
