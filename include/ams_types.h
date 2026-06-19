@@ -886,6 +886,7 @@ struct AmsSystemInfo {
     int current_toolchange = -1;        ///< Current tool change number (-1=none yet, 0-based)
     int number_of_toolchanges = 0;      ///< Total expected tool changes this print
     bool filament_loaded = false;       ///< Filament at extruder
+    bool filament_runout = false;  ///< CFS: active path empty (box.filament_useup); UI gates display on paused state
     AmsAction action = AmsAction::IDLE; ///< Current operation
     std::string operation_detail;       ///< Detailed operation string
 

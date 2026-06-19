@@ -216,6 +216,11 @@ void AmsState::init_subjects(bool register_xml) {
     if (register_xml)
         lv_xml_register_subject(nullptr, "ams_filament_loaded", &filament_loaded_);
 
+    lv_subject_init_int(&filament_runout_, 0);
+    subjects_.register_subject(&filament_runout_);
+    if (register_xml)
+        lv_xml_register_subject(nullptr, "ams_filament_runout", &filament_runout_);
+
     lv_subject_init_int(&bypass_active_, 0);
     subjects_.register_subject(&bypass_active_);
     if (register_xml)
@@ -1118,6 +1123,16 @@ void AmsState::sync_from_backend() {
     int new_loaded = info.filament_loaded ? 1 : 0;
     if (lv_subject_get_int(&filament_loaded_) != new_loaded) {
         lv_subject_set_int(&filament_loaded_, new_loaded);
+    }
+
+    // Gate the runout indicator on a paused print. The firmware asserts
+    // filament_useup at pre-load print-start too, so only treat it as a runout
+    // when the print is actually paused (a CFS runout pauses; pre-load does not).
+    // Box state polls sub-second, so this stays fresh without observing print state.
+    bool paused = get_printer_state().get_print_job_state() == PrintJobState::PAUSED;
+    int new_runout = (info.filament_runout && paused) ? 1 : 0;
+    if (lv_subject_get_int(&filament_runout_) != new_runout) {
+        lv_subject_set_int(&filament_runout_, new_runout);
     }
     int new_bypass = info.current_slot == -2 ? 1 : 0;
     if (lv_subject_get_int(&bypass_active_) != new_bypass) {

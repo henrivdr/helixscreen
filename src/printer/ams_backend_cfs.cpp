@@ -493,6 +493,11 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
     // Parse filament loaded state (only meaningful when field present)
     info.filament_loaded = box_json.contains("filament") && box_json["filament"].get<int>() != 0;
 
+    // Runout signal: box.filament_useup == 1 means no filament at the box gate.
+    // Raw firmware value here; ams_state gates display on print-paused state to
+    // avoid false positives at pre-load print start (see filament_useup decode).
+    info.filament_runout = box_json.value("filament_useup", 0) != 0;
+
     // Parse tool mapping from "map" object
     if (box_json.contains("map") && box_json["map"].is_object()) {
         // Find maximum tool index to size the mapping vector
@@ -807,6 +812,11 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
             // Only update filament_loaded when the field was actually present
             if (box.contains("filament")) {
                 system_info_.filament_loaded = new_info.filament_loaded;
+            }
+
+            // Update runout flag only when the field was actually present
+            if (box.contains("filament_useup")) {
+                system_info_.filament_runout = new_info.filament_runout;
             }
 
             // Active slot from T{n}.filament field ("A"/"B"/"C"/"D")

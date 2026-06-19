@@ -392,6 +392,10 @@ class AmsState {
         return &filament_loaded_;
     }
 
+    lv_subject_t* get_filament_runout_subject() {
+        return &filament_runout_;
+    }
+
     /**
      * @brief Get bypass active subject
      *
@@ -1211,6 +1215,7 @@ class AmsState {
     lv_subject_t pending_target_slot_;
     lv_subject_t ams_current_tool_;
     lv_subject_t filament_loaded_;
+    lv_subject_t filament_runout_;
     lv_subject_t bypass_active_;
     lv_subject_t external_spool_color_;
     lv_subject_t supports_bypass_;
