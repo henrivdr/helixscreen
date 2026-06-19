@@ -545,6 +545,114 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Upgrade migration: ownership-aware no-stomp + init-script convergence
+# ---------------------------------------------------------------------------
+
+@test "_moonraker_has_our_webcam: true when our 'HelixScreen Camera' entry exists" {
+    skip_if_no_python
+    start_fake_moonraker '[{"name":"HelixScreen Camera","service":"ustreamer","stream_url":"http://x/stream"}]'
+    run _moonraker_has_our_webcam
+    [ "$status" -eq 0 ]
+}
+
+@test "_moonraker_has_our_webcam: false when only a differently-named cam exists" {
+    skip_if_no_python
+    start_fake_moonraker '[{"name":"My Cam","service":"mjpegstreamer","stream_url":"http://x/stream"}]'
+    run _moonraker_has_our_webcam
+    [ "$status" -eq 1 ]
+}
+
+@test "install: upgrade re-registers OUR stale ustreamer cam as mjpegstreamer-adaptive" {
+    skip_if_no_python
+    # Pre-existing install where our webcam is registered with the STALE service
+    # type (ustreamer). It counts as "usable", but it's ours — install must NOT
+    # early-return; it must fall through and re-register with the corrected type.
+    start_fake_moonraker '[{"name":"HelixScreen Camera","service":"ustreamer","stream_url":"http://192.168.1.74:8080/stream"}]'
+    printf '#!/bin/sh\n' > "$INSTALL_DIR/bin/ustreamer"; chmod +x "$INSTALL_DIR/bin/ustreamer"
+    mock_command_script "ip" 'case "$*" in
+        "route get 1.1.1.1") echo "1.1.1.1 dev eth0 src 192.168.1.74";;
+        *) exit 0;;
+    esac'
+
+    run install_camera_k2 "k2"
+    [ "$status" -eq 0 ]
+
+    # Did NOT early-return: a POST re-registering the corrected service type fired.
+    grep -q 'POST /server/webcams/item' "$MR_REQUESTS"
+    grep -q '"service": "mjpegstreamer-adaptive"' "$MR_REQUESTS"
+}
+
+@test "install: leaves a usable THIRD-PARTY camera untouched (early-return)" {
+    skip_if_no_python
+    # Usable cam that is NOT ours — install must early-return and touch nothing.
+    start_fake_moonraker '[{"name":"My Cam","service":"mjpegstreamer","stream_url":"http://x/stream"}]'
+    printf '#!/bin/sh\n' > "$INSTALL_DIR/bin/ustreamer"; chmod +x "$INSTALL_DIR/bin/ustreamer"
+
+    run install_camera_k2 "k2"
+    [ "$status" -eq 0 ]
+    # No webcam REST mutation (only the GETs from the two detect probes).
+    ! grep -q 'POST /server/webcams/item' "$MR_REQUESTS"
+    ! grep -q 'DELETE /server/webcams/item' "$MR_REQUESTS"
+    # No install side effects.
+    [ ! -f "$DISABLED_SERVICES_FILE" ]
+    [ ! -f "$WEBCAM_BACKUP" ]
+    [ ! -f "$CAMERA_MARKER" ]
+    [ ! -f "$HELIX_INITD_DIR/ustreamer" ]
+}
+
+@test "install: init script is overwritten when an existing one differs" {
+    skip_if_no_python
+    start_fake_moonraker '[{"name":"Default","service":"iframe","stream_url":"http://k2/webrtc"}]'
+    printf '#!/bin/sh\n' > "$INSTALL_DIR/bin/ustreamer"; chmod +x "$INSTALL_DIR/bin/ustreamer"
+    mock_command_script "ip" 'case "$*" in
+        "route get 1.1.1.1") echo "1.1.1.1 dev eth0 src 192.168.1.74";;
+        *) exit 0;;
+    esac'
+
+    # Stale init script on disk whose content differs from the bundled source.
+    printf '#!/bin/sh\n# OLD STALE VERSION\n' > "$HELIX_INITD_DIR/ustreamer"
+    chmod +x "$HELIX_INITD_DIR/ustreamer"
+
+    run install_camera_k2 "k2"
+    [ "$status" -eq 0 ]
+
+    # It was migrated to match the current bundled source byte-for-byte.
+    cmp -s "$INSTALL_DIR/config/helixscreen-ustreamer-k2.sh" "$HELIX_INITD_DIR/ustreamer"
+    ! grep -q 'OLD STALE VERSION' "$HELIX_INITD_DIR/ustreamer"
+}
+
+@test "install: init script is NOT rewritten when already current" {
+    skip_if_no_python
+    start_fake_moonraker '[{"name":"Default","service":"iframe","stream_url":"http://k2/webrtc"}]'
+    printf '#!/bin/sh\n' > "$INSTALL_DIR/bin/ustreamer"; chmod +x "$INSTALL_DIR/bin/ustreamer"
+    mock_command_script "ip" 'case "$*" in
+        "route get 1.1.1.1") echo "1.1.1.1 dev eth0 src 192.168.1.74";;
+        *) exit 0;;
+    esac'
+
+    # Pre-seed the init dest with content IDENTICAL to the bundled source. The
+    # install uses `$SUDO cp` (SUDO="" in tests, so a bare `cp`); stub `cp` to
+    # record any invocation that writes the init dest. cmp -s should match, so
+    # the install must take the "already current" branch and never call cp.
+    cp "$INSTALL_DIR/config/helixscreen-ustreamer-k2.sh" "$HELIX_INITD_DIR/ustreamer"
+    chmod +x "$HELIX_INITD_DIR/ustreamer"
+
+    local cp_log="$BATS_TEST_TMPDIR/cp.log"
+    : > "$cp_log"
+    cp() {
+        echo "cp $*" >> "$cp_log"
+        command cp "$@"
+    }
+    export -f cp
+
+    run install_camera_k2 "k2"
+    [ "$status" -eq 0 ]
+
+    # The init dest was never re-copied (no `cp ... $HELIX_INITD_DIR/ustreamer`).
+    ! grep -q "$HELIX_INITD_DIR/ustreamer" "$cp_log"
+}
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

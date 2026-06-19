@@ -3699,6 +3699,30 @@ sys.exit(1)           # none found
 PYEOF
 }
 
+# Returns 0 if moonraker's webcam list contains an entry we installed (its name
+# == $HELIX_WEBCAM_NAME, "HelixScreen Camera"). Lets install_camera_k2 tell our
+# own camera apart from a third-party one: a usable-but-ours camera must NOT
+# short-circuit the function on upgrade (we want to converge it — re-register
+# with the corrected service type, refresh the init script), whereas a usable
+# third-party camera should be left untouched.
+_moonraker_has_our_webcam() {
+    _has_python || return 1
+    "$_PY_BIN" - "$MOONRAKER_URL" "$HELIX_WEBCAM_NAME" <<'PYEOF' 2>/dev/null
+import json, sys, urllib.request
+base, name = sys.argv[1].rstrip('/'), sys.argv[2]
+try:
+    with urllib.request.urlopen(base + '/server/webcams/list', timeout=5) as r:
+        data = json.load(r)
+except Exception:
+    sys.exit(2)  # unreachable -> not "ours" (distinct from found)
+cams = data.get('result', {}).get('webcams', [])
+for c in cams:
+    if c.get('name', '') == name:
+        sys.exit(0)   # our webcam is registered
+sys.exit(1)           # not ours
+PYEOF
+}
+
 # Probe whether ustreamer is listening on the given port (busybox-compatible).
 # Tries python3 socket connect first; falls back to the /snapshot endpoint.
 # Args: $1 = port. Returns 0 if reachable.
@@ -3829,8 +3853,11 @@ install_camera_k2() {
     fi
 
     # (a) DETECT: don't stomp an already-working MJPEG/ustreamer camera.
-    if _moonraker_has_usable_mjpeg; then
-        log_info "Moonraker already exposes a usable MJPEG camera — leaving it untouched"
+    # Leave a third-party working camera alone, but always converge OUR OWN setup
+    # on upgrade (re-register with the corrected service type, refresh the init
+    # script). _moonraker_has_our_webcam() keys on the "HelixScreen Camera" name.
+    if _moonraker_has_usable_mjpeg && ! _moonraker_has_our_webcam; then
+        log_info "Moonraker already exposes a usable MJPEG camera we did not install — leaving it untouched"
         return 0
     fi
 
@@ -3868,10 +3895,19 @@ install_camera_k2() {
         return 0
     fi
 
-    if [ -f "$svc_dest" ]; then
-        log_info "ustreamer init script already installed at $svc_dest"
+    # Overwrite-if-differs (not skip-if-exists) is how upgrades ship init-script
+    # logic fixes — e.g. the newer script reclaims /dev/video0 by killing the
+    # stock cam_app grabber before launching ustreamer (the "NO LIVE VIDEO" fix).
+    # The script's editable config block is just our standard defaults, so
+    # clobbering it on upgrade is acceptable.
+    if [ -f "$svc_dest" ] && cmp -s "$svc_src" "$svc_dest"; then
+        log_info "ustreamer init script already current at $svc_dest"
     else
-        log_info "Installing ustreamer procd init script..."
+        if [ -f "$svc_dest" ]; then
+            log_info "Updating ustreamer init script (migrating to current version)..."
+        else
+            log_info "Installing ustreamer procd init script..."
+        fi
         $SUDO cp "$svc_src" "$svc_dest" 2>/dev/null || \
             log_warn "Could not install ustreamer init at $svc_dest"
         $SUDO chmod +x "$svc_dest" 2>/dev/null || true
