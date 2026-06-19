@@ -2288,7 +2288,11 @@ k1-dynamic-test: k1-dynamic-docker deploy-k1-dynamic-fg
 # Note: K2 hostname does NOT resolve via mDNS - always use IP address
 K2_HOST ?=
 K2_USER ?= root
-K2_DEPLOY_DIR ?= /mnt/UDISK/helixscreen
+# Must match the installer's K2 INSTALL_DIR (scripts/lib/installer/platform.sh:
+# k2 branch → /opt/helixscreen) and the init script's DAEMON_DIR set below.
+# /mnt/UDISK is only KLIPPER_HOME (printer_data/config), NOT the program dir;
+# deploying there left the binary where the daemon never runs it.
+K2_DEPLOY_DIR ?= /opt/helixscreen
 
 # Build SSH target for K2 (lazy evaluation — only errors when deploy targets actually use it)
 K2_SSH_TARGET = $(if $(K2_HOST),$(K2_USER)@$(K2_HOST),$(error K2_HOST is required. K2 does not resolve via mDNS. Use: make deploy-k2 K2_HOST=192.168.x.x))
