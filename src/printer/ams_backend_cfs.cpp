@@ -589,6 +589,7 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
         auto color_arr = unit_json.value("color_value", nlohmann::json::array());
         auto material_arr = unit_json.value("material_type", nlohmann::json::array());
         auto remain_arr = unit_json.value("remain_len", nlohmann::json::array());
+        auto vender_arr = unit_json.value("vender", nlohmann::json::array());
 
         for (int i = 0; i < 4; ++i) {
             SlotInfo slot;
@@ -621,6 +622,20 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
                     if (it != same_material_names.end()) {
                         slot.material = it->second;
                     }
+                }
+            }
+
+            // Brand fallback: the CFS material-DB lookup above populates
+            // slot.brand for known Creality material codes. For RFID spools
+            // whose code isn't in our DB, fall back to the box's own per-slot
+            // "vender" string when it carries a real value (hardware reports
+            // the sentinel "unknown"/"-1" when no RFID vendor data is present).
+            if (slot.brand.empty() && i < static_cast<int>(vender_arr.size()) &&
+                vender_arr[i].is_string()) {
+                std::string vender = vender_arr[i].get<std::string>();
+                if (!vender.empty() && vender != "unknown" && vender != "-1" &&
+                    vender != "None") {
+                    slot.brand = vender;
                 }
             }
 
@@ -732,6 +747,22 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
     if (params.contains("box") && params["box"].is_object()) {
         const auto& box = params["box"];
         spdlog::debug("[AMS CFS] Received box data with {} keys", box.size());
+
+        // Log box.filament_useup transitions with box-local context. Decoded
+        // (2026-06-18, live K2 runout->reload): runout / path-empty signal —
+        // 1 when no filament at the box gate (pre-load, runout), 0 when loaded
+        // and feeding. Reads only the notification's own fields — no
+        // system_info_ access, so no lock needed here. No UI effect yet.
+        if (box.contains("filament_useup") && box["filament_useup"].is_number()) {
+            int useup = box["filament_useup"].get<int>();
+            if (useup != last_filament_useup_) {
+                spdlog::debug("[AMS CFS] filament_useup {} -> {} (box.filament={}, "
+                              "auto_refill={}, enable={})",
+                              last_filament_useup_, useup, box.value("filament", -1),
+                              box.value("auto_refill", -1), box.value("enable", -1));
+                last_filament_useup_ = useup;
+            }
+        }
 
         // Distinguish meaningful updates from noise (e.g., just measuring_wheel).
         // Full updates have "filament"/"map". Unit updates have "T1"/"T2"/etc.

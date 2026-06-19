@@ -352,6 +352,14 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     int last_extruder_temp_deci_ = 0;
     bool last_filament_detected_ = false;
 
+    // Track box.filament_useup transitions. Read-only firmware flag (no BOX_*
+    // setter). Decoded from a live runout->reload cycle on the K2 Plus
+    // (2026-06-18): it is a runout / path-empty signal — 1 when no filament is
+    // established at the box gate (pre-load and runout), 0 when loaded and
+    // feeding. Coincides with the runout pause, clears on reload. Logged at
+    // debug; not yet surfaced to the UI.
+    int last_filament_useup_ = -1;
+
     // Capture op-start state (filament + extruder target). Sets phase_tracker_.active.
     // Caller must hold mutex_.
     void begin_phase_tracking();
