@@ -33,6 +33,21 @@
  */
 void lv_init_safe();
 
+namespace helix {
+namespace ui {
+
+/**
+ * @brief Install a hook invoked by the test ui_notification_warning() stubs.
+ *
+ * Lets a test observe whether a user-facing WiFi warning toast was emitted
+ * (the production path is stubbed to a log-only no-op in tests). Pass nullptr
+ * to clear. The hook receives the formatted warning message.
+ */
+void set_test_notification_warning_hook(std::function<void(const std::string&)> hook);
+
+} // namespace ui
+} // namespace helix
+
 namespace UITest {
 
 /**

@@ -282,6 +282,15 @@ class WiFiManager {
 
     // Timer callbacks (must be static for LVGL)
     static void scan_timer_callback(lv_timer_t* timer);
+
+    // True when the OS reports a live wireless link even though the managed
+    // backend (wpa_supplicant) is unreachable. In that state the link is
+    // genuinely up (printer reachable by IP, no managed control), so the
+    // "scan failed" / "service unavailable" warnings are demoted to debug logs
+    // rather than nagging the user (helixscreen#1059, Qidi Q2). Defaults to the
+    // real sysfs/proc probe; tests inject a stub via WiFiManagerTestAccess.
+    static std::function<bool()> os_link_probe_;
+    static bool os_link_up();
 };
 
 /**

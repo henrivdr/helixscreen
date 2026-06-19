@@ -404,6 +404,7 @@
   <translation tag="Connected" de="Verbunden" en="Connected" es="Conectado" fr="Connecté" it="Connesso" ja="接続済み" pt="Conectado" ru="Подключен" zh="已连接"/>
   <translation tag="Connected (%s)" de="Verbunden (%s)" en="Connected (%s)" es="Conectado (%s)" fr="Connecté (%s)" it="Connesso (%s)" ja="接続済み (%s)" pt="Conectado (%s)" ru="Подключен (%s)" zh="已连接 (%s)"/>
   <translation tag="Connected (no discovery)" de="Verbunden (keine Erkennung)" en="Connected (no discovery)" es="Conectado (sin descubrimiento)" fr="Connecté (sans découverte)" it="Connesso (nessun rilevamento)" ja="接続済み（検出なし）" pt="Conectado (sem descoberta)" ru="Подключен (без обнаружения)" zh="已连接（无发现）"/>
+  <translation tag="Connected (system-managed network)" en="Connected (system-managed network)"/>
   <translation tag="Connected to" de="Verbunden mit" en="Connected to" es="Conectado a" fr="Connecté à" it="Connesso a" ja="接続先" pt="Conectado a" ru="Подключен к" zh="已连接到"/>
   <translation tag="Connected to " de="Verbunden mit " en="Connected to " es="Conectado a " fr="Connecté à " it="Connesso a " ja="接続先: " pt="Conectado a " ru="Подключен к " zh="已连接到 "/>
   <translation tag="Connected! Discovering printer..." de="Verbunden! Drucker wird erkannt..." en="Connected! Discovering printer..." es="¡Conectado! Descubriendo impresora..." fr="Connecté ! Découverte de l&apos;imprimante..." it="Connesso! Rilevamento stampante..." ja="接続完了！プリンターを検出中..." pt="Conectado! Descobrindo impressora..." ru="Подключен! Обнаружение принтера..." zh="已连接！正在发现打印机..."/>

@@ -62,6 +62,43 @@ int wifi_compute_signal_icon_state(int strength_percent, bool secured);
  */
 std::string wifi_get_device_mac(const std::string& interface = "wlan0");
 
+/**
+ * @brief Result of an OS-level wireless link probe.
+ *
+ * Describes whether the kernel reports a wireless interface with an up link,
+ * independent of any managed backend (wpa_supplicant / NetworkManager). This is
+ * the ground truth used as a fallback when the managed backend cannot reach its
+ * control socket but the link is in fact live (helixscreen#1059, Qidi Q2).
+ */
+struct OsWifiLink {
+    bool has_link = false;   ///< Kernel reports the wireless iface link is up.
+    std::string iface;       ///< Name of the wireless iface that was found (first match).
+    bool has_ip = false;     ///< Iface has a non-link-local IPv4 (best-effort).
+};
+
+/**
+ * @brief Probe the OS for a live wireless link, without side effects.
+ *
+ * Enumerates network interfaces under <sysfs_root>/class/net and identifies
+ * wireless ones (a `wireless/` or `phy80211` subdir, or a name listed in
+ * <proc_root>/net/wireless). For the first wireless iface found it reads
+ * `operstate` and `carrier` to decide whether the link is up.
+ *
+ * `has_ip` is filled best-effort via getifaddrs() — but ONLY when probing the
+ * real sysfs root ("/sys"). For a fixture root the live socket table does not
+ * correspond to the fixture, so has_ip is left false and tests should not rely
+ * on it. has_link (operstate/carrier) is the load-bearing signal and is fully
+ * driven by the fixture tree.
+ *
+ * Never shells out to a subprocess; reads only sysfs/proc files and getifaddrs.
+ *
+ * @param sysfs_root Root for /sys reads (default "/sys"; override for tests).
+ * @param proc_root  Root for /proc reads (default "/proc"; override for tests).
+ * @return OsWifiLink with has_link/iface/has_ip populated.
+ */
+OsWifiLink probe_os_wifi_link(const std::string& sysfs_root = "/sys",
+                              const std::string& proc_root = "/proc");
+
 } // namespace wifi
 } // namespace ui
 } // namespace helix

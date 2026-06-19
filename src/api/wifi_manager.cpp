@@ -15,6 +15,7 @@
 
 #include "ui_error_reporting.h"
 #include "ui_update_queue.h"
+#include "wifi_ui_utils.h"
 
 #include "lvgl/lvgl.h"
 #include "safe_log.h"
@@ -31,6 +32,16 @@
 #include <sys/stat.h>
 
 using namespace helix;
+
+// Default OS-level link probe: true when the kernel reports a wireless iface
+// with an up link. Overridable in tests via WiFiManagerTestAccess.
+std::function<bool()> WiFiManager::os_link_probe_ = []() {
+    return helix::ui::wifi::probe_os_wifi_link().has_link;
+};
+
+bool WiFiManager::os_link_up() {
+    return os_link_probe_ && os_link_probe_();
+}
 
 // ============================================================================
 // Constructor / Destructor
@@ -213,7 +224,16 @@ void WiFiManager::start_scan(
     WiFiError scan_result = backend_->trigger_scan();
     if (!scan_result.success()) {
         scan_pending_ = false;
-        NOTIFY_WARNING("WiFi scan failed. Try again.");
+        // If the OS reports the wireless link is actually up, the managed
+        // backend simply can't reach its control socket (the link is system-
+        // managed and live). Nagging the user with a failure toast is wrong —
+        // demote to a debug log (helixscreen#1059).
+        if (os_link_up()) {
+            spdlog::debug("[WiFiManager] Scan trigger failed but OS link is up "
+                          "(system-managed) — suppressing user warning");
+        } else {
+            NOTIFY_WARNING("WiFi scan failed. Try again.");
+        }
     } else {
         spdlog::debug("[WiFiManager] Initial scan triggered successfully");
     }
@@ -382,8 +402,18 @@ bool WiFiManager::set_enabled(bool enabled) {
         // isn't stalled.
         WiFiError result = backend_->start();
         if (!result.success()) {
-            NOTIFY_ERROR("Failed to enable WiFi: {}",
-                         result.user_msg.empty() ? result.technical_msg : result.user_msg);
+            // A live system-managed link (printer reachable by IP) means the
+            // backend just can't reach wpa_supplicant's control socket; the
+            // radio is not actually off. Don't surface a hard error toast for
+            // an unmanageable-but-up link (helixscreen#1059).
+            if (os_link_up()) {
+                spdlog::debug("[WiFiManager] Backend start failed but OS link is up "
+                              "(system-managed) — suppressing user error: {}",
+                              result.user_msg.empty() ? result.technical_msg : result.user_msg);
+            } else {
+                NOTIFY_ERROR("Failed to enable WiFi: {}",
+                             result.user_msg.empty() ? result.technical_msg : result.user_msg);
+            }
         } else {
             spdlog::debug("[WiFiManager] WiFi backend started successfully");
         }
