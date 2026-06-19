@@ -127,6 +127,7 @@ void MoonrakerManager::shutdown() {
     m_print_start_phase_observer.release();
     m_print_bed_target_fallback_observer.release();
     m_print_ext_target_fallback_observer.release();
+    m_print_layer_observer.release();
     m_print_duration_observer.release();
 
     // Destroy client FIRST: its destructor waits for in-flight libhv callbacks
@@ -594,8 +595,10 @@ void MoonrakerManager::init_print_start_collector() {
     // 0 at normal print start, >0 when joining a print already in progress.
     static lv_subject_t* s_progress_subject = nullptr;
     static lv_subject_t* s_print_duration_subject = nullptr;
+    static lv_subject_t* s_layer_current_subject = nullptr;
     s_progress_subject = get_printer_state().get_print_progress_subject();
     s_print_duration_subject = get_printer_state().get_print_duration_subject();
+    s_layer_current_subject = get_printer_state().get_print_layer_current_subject();
 
     // Observer to start/stop collector based on print state
     m_print_start_observer = ObserverGuard(
@@ -678,21 +681,86 @@ void MoonrakerManager::init_print_start_collector() {
         },
         nullptr);
 
-    // First-extrusion signal: when print_stats.print_duration transitions from 0 to
-    // positive, real extrusion has started — pre-print is over. This is printer-
-    // agnostic and handles printers whose PRINT_START macro runs entirely inside the
-    // print_stats.state=printing window (Snapmaker U1, many Klipper setups) where the
-    // state-transition signal fires too early.
+    // Real-first-layer signal (primary): the pre-print → printing hand-off is
+    // gated on print_stats.info.current_layer >= 1, NOT raw extrusion. On the
+    // Snapmaker U1 (and any firmware that purges / auto-feeds during the
+    // print_stats.state=printing window) print_duration goes positive while the
+    // nozzle is still heating and the toolhead is still homing, so a
+    // print_duration-based shortcut dropped the Preparing/Homing phase minutes
+    // early. current_layer is firmware-agnostic and only reaches 1 at the
+    // genuine first layer. See should_complete_preprint().
+    m_print_layer_observer = ObserverGuard(
+        get_printer_state().get_print_layer_current_subject(),
+        [](lv_observer_t*, lv_subject_t* subject) {
+            auto collector = s_collector.lock();
+            if (!collector || !collector->is_active())
+                return;
+            int current_layer = lv_subject_get_int(subject);
+            int print_duration =
+                s_print_duration_subject ? lv_subject_get_int(s_print_duration_subject) : 0;
+            // Discriminate on the STICKY printer capability, NOT the racy
+            // per-print has_real_layer_data (cleared async by
+            // reset_for_new_print() after the collector starts — see
+            // should_complete_preprint()).
+            bool printer_reports_layers = get_printer_state().printer_reports_layers();
+            // Arm the layer-1 edge: latch once we observe current_layer < 1 for
+            // THIS print, so a stale positive carried over from the previous
+            // print (reset_for_new_print() runs async, after the collector goes
+            // active) can't complete the new pre-print phase instantly.
+            collector->note_current_layer(current_layer);
+            if (should_complete_preprint(printer_reports_layers, current_layer, print_duration,
+                                         collector->has_seen_layer_zero())) {
+                spdlog::info("[MoonrakerManager] Authoritative: first real layer detected "
+                             "(current_layer={}, printer_reports_layers={}, seen_zero={}), "
+                             "completing pre-print phase",
+                             current_layer, printer_reports_layers,
+                             collector->has_seen_layer_zero());
+                collector->complete_from_external_signal("first layer");
+            }
+        },
+        nullptr);
+
+    // Fallback for printers that have NEVER reported any layer field this
+    // session (printer_reports_layers sticky-false): when print_duration goes
+    // positive the current_layer subject only carries a progress-derived
+    // estimate, so the layer observer above can't be trusted.
+    // should_complete_preprint() routes those printers back to the original
+    // first-extrusion behavior so they still leave Preparing. When
+    // printer_reports_layers is true this observer is a no-op — the layer
+    // observer owns completion and the print_duration fallback NEVER applies
+    // (the U1 premature-completion regression was this fallback firing during a
+    // layer-reporting printer's pre-print purge).
     m_print_duration_observer = ObserverGuard(
         get_printer_state().get_print_duration_subject(),
         [](lv_observer_t*, lv_subject_t* subject) {
             auto collector = s_collector.lock();
             if (!collector || !collector->is_active())
                 return;
-            if (lv_subject_get_int(subject) > 0) {
-                spdlog::info("[MoonrakerManager] Authoritative: first extrusion detected "
-                             "(print_duration>0), completing pre-print phase");
-                collector->complete_from_external_signal("first extrusion");
+            int print_duration = lv_subject_get_int(subject);
+            int current_layer =
+                s_layer_current_subject ? lv_subject_get_int(s_layer_current_subject) : 0;
+            bool printer_reports_layers = get_printer_state().printer_reports_layers();
+            collector->note_current_layer(current_layer);
+            // Prime/purge phase nudge (layer-reporting printers only): on the
+            // U1 the initial prime line ("G1 X110 E15") extrudes silently — no
+            // gcode_response, and PRINT_PREEXTRUDING only fires for a 2nd tool
+            // mid-print. print_duration going 0->positive while current_layer is
+            // still < 1 is the one observable "priming has begun" signal. Show
+            // "Priming..." WITHOUT completing — completion stays gated on the
+            // genuine current_layer 0->1 edge below / in the layer observer.
+            // Skipped for non-reporting printers: there, print_duration>0 IS the
+            // completion signal (handled by should_complete_preprint), so a
+            // PURGING nudge would just be immediately replaced by COMPLETE.
+            if (printer_reports_layers && print_duration > 0 && current_layer < 1) {
+                collector->note_priming();
+            }
+            if (should_complete_preprint(printer_reports_layers, current_layer, print_duration,
+                                         collector->has_seen_layer_zero())) {
+                spdlog::info("[MoonrakerManager] Authoritative: pre-print complete via "
+                             "print_duration fallback (print_duration={}s, "
+                             "printer_reports_layers={}), completing pre-print phase",
+                             print_duration, printer_reports_layers);
+                collector->complete_from_external_signal("first extrusion (fallback)");
             }
         },
         nullptr);

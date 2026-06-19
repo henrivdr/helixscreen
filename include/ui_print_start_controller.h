@@ -5,6 +5,7 @@
 
 #include "ui_observer_guard.h"
 
+#include "ams_types.h"
 #include "async_lifetime_guard.h"
 #include "filament_mapper.h"
 
@@ -14,6 +15,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Forward declarations
@@ -22,6 +24,7 @@ class PrinterState;
 }
 class MoonrakerAPI;
 struct PrintFileData;
+class PrintStartControllerTestAccess; // test-only friend (global scope)
 
 namespace helix::ui {
 
@@ -161,6 +164,10 @@ class PrintStartController {
     }
 
   private:
+    // Test-only access to the private pre-print filament gate (issue 1: shared
+    // auto-unload suppression on both initiate() and the insufficient path).
+    friend class ::PrintStartControllerTestAccess;
+
     /**
      * @brief Execute the actual print start
      *
@@ -196,9 +203,45 @@ class PrintStartController {
     /**
      * @brief Show filament warning dialog
      *
-     * Called when runout sensor indicates no filament. User can proceed or cancel.
+     * Called when the pre-print filament check finds no filament. User can
+     * proceed or cancel. @p message overrides the default body text — used to
+     * name the specific tool(s)/lane(s) that are empty (AMS lane-truth path).
+     * Empty -> the generic "runout sensor indicates no filament" text (non-AMS).
      */
-    void show_filament_warning();
+    void show_filament_warning(const std::string& message = "");
+
+    /**
+     * @brief Required tools whose AMS lane is genuinely empty (lane truth).
+     *
+     * Scopes the pre-print filament check to the tools the print actually uses
+     * (detail_view_->get_tools_used()) and the effective tool→slot remap
+     * (detail_view_->get_effective_remap()), consulting the AMS backend's
+     * authoritative per-slot presence via
+     * FilamentSensorManager::find_empty_required_lanes(). Returns {} when no AMS
+     * backend manages filament (caller falls back to the aggregate sensor
+     * check). @return (tool_index, slot_index) pairs.
+     */
+    std::vector<std::pair<int, int>> find_empty_required_lanes();
+
+    /// Build the named-tool/lane warning body for show_filament_warning().
+    std::string build_empty_lane_message(const std::vector<std::pair<int, int>>& empty) const;
+
+    /**
+     * @brief Shared pre-print filament-present gate (issue 1).
+     *
+     * Single source of truth for both initiate() and the insufficient-filament
+     * Proceed continuation, so they behave identically:
+     *   1. Backends that auto-unload after a print (AD5X IFS) leave the extruder
+     *      empty by design → suppress the warning entirely.
+     *   2. When an AMS backend manages filament, scope the check to the print's
+     *      tools using lane truth (find_empty_required_lanes) and warn naming the
+     *      offending tool/lane.
+     *   3. Otherwise (non-AMS) fall back to the aggregate runout-sensor check.
+     *
+     * @return true if a warning dialog was shown (caller must return — the
+     *         dialog drives continuation); false to proceed to the next check.
+     */
+    bool check_required_filament_present();
 
     /// Check FilamentMapper results for unresolved tools (replaces raw color comparison)
     std::vector<int> find_unresolved_tools();
@@ -285,6 +328,25 @@ class PrintStartController {
     // === Filament Remap Methods ===
     /// Snapshot current firmware mapping, send remap commands, return true if remaps were sent
     bool apply_filament_remaps();
+
+    /**
+     * @brief Whether to warn the user that their explicit remap can't be honored.
+     *
+     * Pure decision helper for apply_filament_remaps(). A backend that applies
+     * the remap via its firmware-native pre-print path (requires_preprint_send,
+     * e.g. Snapmaker U1) honors the user's choice through build_preprint_gcode()
+     * even though its tool-mapping capabilities report editable=false — so the
+     * "remap not supported" toast is a STALE false alarm and must be suppressed.
+     * Only warn when the backend can NEITHER edit its mapping NOR apply it via a
+     * pre-print send (a backend that genuinely cannot honor the remap at all).
+     *
+     * @param caps              backend->get_tool_mapping_capabilities()
+     * @param applies_via_preprint backend->requires_preprint_send()
+     * @return true if the unsupported-remap warning toast should be shown
+     */
+    [[nodiscard]] static bool
+    should_warn_remap_unsupported(const helix::printer::ToolMappingCapabilities& caps,
+                                  bool applies_via_preprint);
 
     /// Restore original firmware mapping (called on print end)
     void restore_filament_mapping();

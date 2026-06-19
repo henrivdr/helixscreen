@@ -630,6 +630,17 @@ class PrinterState {
     }
 
     /**
+     * @brief Sticky: has this printer EVER reported a real layer field this session?
+     *
+     * Delegated to PrinterPrintState. NOT reset between prints. Used by the
+     * pre-print completion gate (MoonrakerManager::should_complete_preprint) to
+     * pick the real-first-layer path vs the print_duration fallback.
+     */
+    bool printer_reports_layers() const {
+        return print_domain_.printer_reports_layers();
+    }
+
+    /**
      * @brief Set slicer's estimated total print time (from file metadata)
      *
      * Used as fallback for remaining time when print_duration is still 0.

@@ -12,6 +12,7 @@
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
+#include "moonraker_manager.h"
 #include "printer_state.h"
 
 #include <regex>
@@ -441,4 +442,195 @@ TEST_CASE("Layer tracking: progress-based estimation fallback", "[layer_tracking
 
         REQUIRE_FALSE(state.has_real_layer_data());
     }
+}
+
+// ============================================================================
+// Regression: a layer-reporting printer must NEVER fabricate a layer from
+// progress during pre-print.
+//
+// Root cause (Snapmaker U1 premature print-start completion): the progress
+// estimate was gated on the PER-PRINT has_real_layer_data_ flag.
+// reset_for_new_print() clears that flag at the start of every print, and
+// Moonraker's DELTA status updates omit unchanged fields — so while
+// info.current_layer sits at 0 through the entire ~4 min pre-print
+// (homing / bed detect / auto-feed / clean / mesh / prime), the omitted-but-
+// unchanged 0 is never re-observed and has_real_layer_data_ stays false.
+// File progress, however, climbs to ~2% during the prime line, so the estimate
+// fabricated current_layer = max(1, round(0.02 * total)) = 1. That fake "layer
+// 1" tripped MoonrakerManager::should_complete_preprint()'s 0->1 edge ~24 s in,
+// ending "Preparing..." long before the real first model layer.
+//
+// Fix: gate the estimate on the STICKY printer_reports_layers_ capability flag
+// instead. The U1 sends total_layer in print_stats.info at print start, so the
+// sticky flag latches immediately and the estimate is suppressed for the whole
+// session — current_layer holds the authoritative info value (0 through
+// pre-print) and only a genuine info.current_layer = 1 advances it.
+// ============================================================================
+
+TEST_CASE("Layer tracking: layer-reporting printer never estimates during preprint",
+          "[layer_tracking][estimation][snapmaker]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    // --- Print starts. The U1 emits SET_PRINT_STATS_INFO TOTAL_LAYER=10 /
+    //     CURRENT_LAYER=0 in the slicer header, so info carries both fields up
+    //     front. This latches the sticky printer_reports_layers_ capability and
+    //     seeds current_layer at the authoritative 0. ---
+    json start = {{"print_stats",
+                   {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 0}}}}}};
+    state.update_from_status(start);
+
+    REQUIRE(state.printer_reports_layers());
+    REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 0);
+    REQUIRE(lv_subject_get_int(state.get_print_layer_total_subject()) == 10);
+
+    // --- reset_for_new_print() runs (async, after the collector starts). It
+    //     clears the PER-PRINT has_real_layer_data_ flag but NOT the sticky
+    //     capability flag. This is the exact window that used to break. ---
+    state.reset_for_new_print();
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE_FALSE(state.has_real_layer_data());
+    REQUIRE(state.printer_reports_layers()); // sticky — survives reset
+    // Re-seed total (reset cleared current to 0; total survives in the subject
+    // but re-send it the way Moonraker would on the next delta that carries it).
+    json total_only = {{"print_stats", {{"info", {{"total_layer", 10}}}}}};
+    state.update_from_status(total_only);
+
+    SECTION("progress climbing during preprint does NOT fabricate layer 1") {
+        // Pre-print: file progress creeps up (prime line, ~2%) while
+        // info.current_layer is omitted by Moonraker (unchanged 0 → delta drops
+        // it). Before the fix this estimated max(1, round(0.02*10)) = 1.
+        json progress2pct = {{"virtual_sdcard", {{"progress", 0.02}}}};
+        state.update_from_status(progress2pct);
+        REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 0);
+
+        // Progress keeps climbing through the rest of the silent pre-print —
+        // still no estimate, layer stays pinned at the authoritative 0.
+        json progress15pct = {{"virtual_sdcard", {{"progress", 0.15}}}};
+        state.update_from_status(progress15pct);
+        REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 0);
+    }
+
+    SECTION("only the real info.current_layer=1 advances the layer") {
+        // Pre-print progress — no estimate.
+        json progress = {{"virtual_sdcard", {{"progress", 0.05}}}};
+        state.update_from_status(progress);
+        REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 0);
+
+        // The genuine first model layer: slicer emits CURRENT_LAYER=1 → info.
+        json real_layer1 = {{"print_stats", {{"info", {{"current_layer", 1}}}}}};
+        state.update_from_status(real_layer1);
+        REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 1);
+        REQUIRE(state.has_real_layer_data());
+    }
+}
+
+// ============================================================================
+// Sticky printer_reports_layers — survives per-print reset (FIX C, L093)
+// ============================================================================
+// Device-grounded regression: on the Snapmaker U1 the printer reports layers
+// (print_stats.info.total_layer is present from print start), but
+// reset_for_new_print() — which runs when a new print transitions IDLE ->
+// preparing — clears the PER-PRINT has_real_layer_data_ flag. The U1 does not
+// continuously re-emit info.current_layer during pre-print, so has_real_layer_data
+// stays FALSE through the whole purge. The earlier pre-print completion gate
+// discriminated on that racy per-print flag and therefore took the print_duration
+// fallback mid-purge, completing Preparing minutes early. The STICKY
+// printer_reports_layers flag must survive reset_for_new_print() so the gate keeps
+// taking the real-first-layer path. This test drives the ACTUAL print_stats parse
+// path (not the pure helper with hand-picked args), replicating the device sequence.
+
+TEST_CASE("Layer tracking: printer_reports_layers is sticky across reset_for_new_print",
+          "[layer_tracking][print_stats][regression]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    // Sentinel: a fresh session has never seen layer data.
+    REQUIRE_FALSE(state.printer_reports_layers());
+    REQUIRE_FALSE(state.has_real_layer_data());
+
+    // --- Print A: U1 reports total_layer at print start (current_layer arrives later). ---
+    json print_a_start = {
+        {"print_stats", {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 0}}}}}};
+    state.update_from_status(print_a_start);
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    REQUIRE(state.printer_reports_layers()); // latched immediately from total_layer
+    REQUIRE(state.has_real_layer_data());
+
+    // Print A advances and finishes.
+    state.update_from_status(
+        {{"print_stats", {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 10}}}}}});
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    state.update_from_status({{"print_stats", {{"state", "complete"}}}});
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+    // Force phase back to IDLE so the next set_print_start_state triggers the
+    // IDLE -> preparing new-print path (which calls reset_for_new_print()).
+    state.reset_print_start_state();
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+
+    // --- Print B begins: pre-print phase opens. This is the IDLE -> INITIALIZING
+    //     transition that fires reset_for_new_print() in set_print_start_state(). ---
+    lv_subject_set_int(state.get_print_active_subject(), 1);
+    state.set_print_start_state(PrintStartPhase::INITIALIZING, "Preparing Print...", 0);
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+
+    SECTION("reset_for_new_print clears the per-print flag but NOT the sticky one") {
+        // Per-print flag cleared (the U1 hasn't re-emitted current_layer yet)...
+        REQUIRE_FALSE(state.has_real_layer_data());
+        // ...but the sticky printer-capability flag survives.
+        REQUIRE(state.printer_reports_layers());
+    }
+
+    SECTION("Pre-print purge does NOT complete despite has_real_layer_data being false") {
+        // EXACT device state mid-purge: per-print flag false, current_layer 0,
+        // print_duration ticking up from auto-feed/purge. Discriminating on the
+        // sticky flag keeps us on the real-first-layer path → no completion.
+        REQUIRE_FALSE(state.has_real_layer_data());
+        REQUIRE(state.printer_reports_layers());
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/state.printer_reports_layers(),
+            /*current_layer=*/lv_subject_get_int(state.get_print_layer_current_subject()),
+            /*print_duration=*/120, /*seen_layer_zero=*/true));
+    }
+
+    SECTION("Real first layer 0->1 DOES complete once the U1 re-emits current_layer") {
+        // U1 emits current_layer=1 at the real first layer.
+        state.update_from_status(
+            {{"print_stats", {{"state", "printing"}, {"info", {{"current_layer", 1}}}}}});
+        UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+        REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 1);
+        REQUIRE(state.printer_reports_layers());
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/state.printer_reports_layers(),
+            /*current_layer=*/lv_subject_get_int(state.get_print_layer_current_subject()),
+            /*print_duration=*/120, /*seen_layer_zero=*/true));
+    }
+}
+
+TEST_CASE("Layer tracking: never-reporting printer keeps sticky false (fallback preserved)",
+          "[layer_tracking][print_stats][regression]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    // A genuine non-reporter: state updates arrive with NO layer field anywhere.
+    state.update_from_status({{"print_stats", {{"state", "printing"}}}});
+    state.update_from_status({{"virtual_sdcard", {{"progress", 0.10}}}});
+    UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
+
+    REQUIRE_FALSE(state.printer_reports_layers());
+
+    // With the sticky flag false, the print_duration fallback is preserved so
+    // the printer still leaves Preparing on first extrusion.
+    REQUIRE(MoonrakerManager::should_complete_preprint(
+        /*printer_reports_layers=*/state.printer_reports_layers(),
+        /*current_layer=*/0, /*print_duration=*/5, /*seen_layer_zero=*/false));
 }

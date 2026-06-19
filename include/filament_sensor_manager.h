@@ -15,13 +15,17 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Test-only friend (defined in tests/unit/test_runout_empty_lane_scope.cpp) used
 // to set per-sensor roles directly, bypassing the single-RUNOUT exclusivity in
 // set_sensor_role() so multi-lane (Snapmaker) runout scenarios can be exercised.
 class RunoutScopeTestAccess;
+
+class AmsBackend;
 
 namespace helix {
 
@@ -257,6 +261,56 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
     [[nodiscard]] bool has_real_runout() const;
 
     /**
+     * @brief Find required tools whose mapped AMS lane is genuinely empty.
+     *
+     * Scoped, lane-truth pre-print/in-print emptiness check. For each tool in
+     * @p tools_used, resolves the AMS slot it routes to (via @p remap, falling
+     * back to the firmware-default head = clamp(tool, 0..3)) and consults the
+     * active AMS backend's authoritative per-slot presence
+     * (get_slot_info(slot).is_present(), which on Snapmaker U1 reflects
+     * print_task_config.filament_exist[head]). This is deliberately NOT the
+     * per-tool motion sensor, which reads filament_detected=false whenever
+     * filament is staged in the lane but retracted from the toolhead.
+     *
+     * A tool is flagged ONLY when its lane is genuinely not present. Tools whose
+     * lane is present (even if their toolhead motion sensor reads false) are not
+     * flagged. Unused heads (not in @p tools_used) are never considered.
+     *
+     * Returns {} when there is no AMS backend (no lane truth to consult — the
+     * caller should fall back to the aggregate sensor check), when master/sensor
+     * runout protection is disabled, or when @p tools_used is empty.
+     *
+     * @param tools_used Logical tools the print actually uses.
+     * @param remap      Tool→slot remap the print will use (identity if empty).
+     * @return (tool_index, slot_index) pairs for required tools with empty lanes.
+     */
+    [[nodiscard]] std::vector<std::pair<int, int>>
+    find_empty_required_lanes(const std::set<int>& tools_used,
+                              const std::map<int, int>& remap) const;
+
+    /**
+     * @brief Compute the runout-badge encoding scoped to the active print.
+     *
+     * Returns the same -1/0/1/2 encoding the unscoped filament_runout_detected
+     * subject uses, but considering ONLY the tools in @p tools_used and using AMS
+     * lane truth (see find_empty_required_lanes):
+     *   -1 = no runout-role sensor configured, or @p tools_used is empty (no
+     *        opinion — badge hidden)
+     *    0 = at least one required tool's lane is genuinely empty (runout / red)
+     *    1 = every required tool's lane is present (loaded / green)
+     *    2 = runout protection disabled (master or sensor — muted)
+     *
+     * With no AMS backend there is no lane truth, so this falls back to the
+     * aggregate runout-role value (the unscoped behavior), keeping single-
+     * extruder / non-AMS printers unchanged.
+     *
+     * @param tools_used Logical tools the print actually uses.
+     * @param remap      Tool→slot remap the print will use (identity if empty).
+     */
+    [[nodiscard]] int compute_scoped_runout_value(const std::set<int>& tools_used,
+                                                  const std::map<int, int>& remap) const;
+
+    /**
      * @brief Check if motion sensor encoder is active
      *
      * Only applicable for motion sensors during extrusion.
@@ -305,6 +359,30 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
      * @return Subject (int: 0=no filament, 1=detected, -1=no sensor)
      */
     [[nodiscard]] lv_subject_t* get_runout_detected_subject();
+
+    /**
+     * @brief Get subject for the print-scoped runout state (FIX B).
+     *
+     * Same -1/0/1/2 encoding as get_runout_detected_subject(), but scoped to the
+     * active print's used tools using AMS lane truth. The in-print runout badge
+     * binds THIS subject so a tool whose filament is staged in the lane (motion
+     * sensor false) does not flag, and unused empty heads never flag. Drive it
+     * from the active context via set_scoped_runout() — the unscoped subject
+     * stays as-is for non-print contexts.
+     *
+     * @return Subject (int: -1=no opinion, 0=runout, 1=loaded, 2=disabled)
+     */
+    [[nodiscard]] lv_subject_t* get_scoped_runout_subject();
+
+    /**
+     * @brief Publish a print-scoped runout value into the scoped subject.
+     *
+     * Computed by the owner of "the active print's used tools" (PrintStatusPanel)
+     * via compute_scoped_runout_value(). MUST be called on the main LVGL thread.
+     *
+     * @param value -1/0/1/2 (see get_scoped_runout_subject()).
+     */
+    void set_scoped_runout(int value);
 
     /**
      * @brief Get subject for toolhead sensor detected state
@@ -407,6 +485,23 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
      */
     const FilamentSensorConfig* find_config_by_role(FilamentSensorRole role) const;
 
+    /// Result of one scoped lane scan — shared by find_empty_required_lanes()
+    /// and compute_scoped_runout_value() (dedups config lookup + backend fetch +
+    /// availability gate + per-lane scan).
+    struct ScopedRunoutScan {
+        std::vector<std::pair<int, int>> empty_lanes; ///< (tool, slot) genuinely empty
+        ::AmsBackend* backend = nullptr;              ///< active backend (nullptr -> no lane truth)
+        bool no_used_tools = false;                   ///< tools_used was empty
+        bool runout_configured = false;               ///< a RUNOUT-role sensor exists
+        bool runout_enabled = false;                  ///< master && sensor enabled
+        bool sensor_available = false;                ///< fresh status received (freshness gate)
+        bool aggregate_detected = false;              ///< no-backend fallback sensor reading
+    };
+
+    /// Shared scoped lane scan. Caller MUST hold mutex_ (recursive).
+    [[nodiscard]] ScopedRunoutScan scan_required_lanes(const std::set<int>& tools_used,
+                                                       const std::map<int, int>& remap) const;
+
     /**
      * @brief Update all LVGL subjects from current state
      */
@@ -443,6 +538,7 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
     bool subjects_initialized_ = false;
     SubjectManager subjects_;
     lv_subject_t runout_detected_;
+    lv_subject_t scoped_runout_; ///< Print-scoped runout (FIX B); driven by PrintStatusPanel
     lv_subject_t toolhead_detected_;
     lv_subject_t entry_detected_;
     lv_subject_t probe_triggered_;

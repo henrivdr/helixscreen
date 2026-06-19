@@ -503,6 +503,39 @@ void PrintStatusPanel::init_subjects() {
         }
     }
 
+    // Print-scoped runout badge (FIX B): the badge VALUE is AMS lane truth
+    // (filament_exist via is_present), so it must refresh on BOTH triggers:
+    //   1. the motion-sensor runout subject (a sensor edge), and
+    //   2. AMS lane-presence changes (slots_version, bumped whenever slot data
+    //      mutates) — so a lane emptying mid-print without a motion-sensor edge
+    //      still refreshes the badge (issue 2).
+    // The gcode-load / state-change paths also call recompute directly so a
+    // newly-parsed file refreshes the badge even if neither subject moved.
+    {
+        lv_subject_t* s = FilamentSensorManager::instance().get_runout_detected_subject();
+        if (s) {
+            auto token = lifetime_.token();
+            scoped_runout_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this, [token](PrintStatusPanel* self, int) {
+                    if (token.expired())
+                        return;
+                    self->recompute_scoped_runout();
+                });
+        }
+    }
+    {
+        lv_subject_t* s = AmsState::instance().get_slots_version_subject();
+        if (s) {
+            auto token = lifetime_.token();
+            scoped_runout_slots_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this, [token](PrintStatusPanel* self, int) {
+                    if (token.expired())
+                        return;
+                    self->recompute_scoped_runout();
+                });
+        }
+    }
+
     // Animation-settings refresh
     animations_enabled_ = DisplaySettingsManager::instance().get_animations_enabled();
     {
@@ -637,6 +670,8 @@ void PrintStatusPanel::deinit_subjects() {
     breakpoint_observer_.reset();
     filament_sensor_count_observer_.reset();
     ams_slot_count_observer_.reset();
+    scoped_runout_observer_.reset();
+    scoped_runout_slots_observer_.reset();
     toolchange_visible_observer_.reset();
     part_speed_lifetime_.reset();
     part_speed_observer_.reset();
@@ -1383,6 +1418,10 @@ void PrintStatusPanel::load_gcode_file(const char* file_path) {
             // For single-tool, falls back to current AMS color subject.
             self->build_and_apply_tool_colors();
 
+            // The parsed file now carries the tools this print uses — refresh the
+            // print-scoped runout badge (FIX B) so it reflects only those tools.
+            self->recompute_scoped_runout();
+
             // Show viewer if print is active or in terminal state (user can see
             // where print stopped). Only skip in Idle.
             if (self->lifecycle_.want_viewer()) {
@@ -1626,6 +1665,44 @@ std::set<int> PrintStatusPanel::get_tools_used() const {
         return {};
     }
     return parsed->tools_used_indices;
+}
+
+void PrintStatusPanel::recompute_scoped_runout() {
+    if (!subjects_initialized_) {
+        return;
+    }
+    auto& fsm = FilamentSensorManager::instance();
+
+    // Print-end / no-active-print: force the badge hidden. When a print ends and
+    // the parsed file is dropped, get_tools_used() empties → compute returns -1;
+    // but also clear explicitly here so a terminal transition reliably hides the
+    // badge even if tools_used hasn't cleared yet (issue 9).
+    auto state =
+        static_cast<PrintJobState>(lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
+    bool print_active = (state == PrintJobState::PRINTING || state == PrintJobState::PAUSED);
+    if (!print_active) {
+        fsm.set_scoped_runout(-1);
+        return;
+    }
+
+    // Scope the runout badge to the tools the active print uses, with AMS lane
+    // truth. Resolve tool→slot using the SAME mapping the print actually uses —
+    // the applied firmware tool map (backend->get_tool_mapping(), index=tool,
+    // value=slot) — so the badge agrees with the pre-print warning even on
+    // backends that remap HelixScreen-side (AFC). On U1 the firmware map is
+    // identity → reduces to the default head; an empty map falls back to the
+    // firmware default inside FilamentSensorManager.
+    std::map<int, int> applied_remap;
+    if (auto* backend = AmsState::instance().get_backend()) {
+        const auto mapping = backend->get_tool_mapping();
+        for (int tool = 0; tool < static_cast<int>(mapping.size()); ++tool) {
+            if (mapping[tool] >= 0) {
+                applied_remap[tool] = mapping[tool];
+            }
+        }
+    }
+    int value = fsm.compute_scoped_runout_value(get_tools_used(), applied_remap);
+    fsm.set_scoped_runout(value);
 }
 
 void PrintStatusPanel::handle_resize() {
@@ -2270,6 +2347,11 @@ void PrintStatusPanel::on_print_state_changed(PrintJobState job_state) {
     if (!result.state_changed) {
         return;
     }
+
+    // Refresh the print-scoped runout badge (FIX B) on every meaningful state
+    // transition. When a print ends and the viewer's parsed file is dropped,
+    // get_tools_used() empties → scoped value -1 → badge hides.
+    recompute_scoped_runout();
 
     // Note: Badge/Reprint button visibility is now handled via the print_outcome subject,
     // which persists the terminal state (Complete/Cancelled/Error) until a new print starts.

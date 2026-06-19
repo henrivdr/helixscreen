@@ -109,6 +109,10 @@ void FilamentSensorManager::init_subjects() {
     //        runout protection is inactive instead of mistaking a hidden
     //        indicator for "everything is fine".
     UI_MANAGED_SUBJECT_INT(runout_detected_, -1, "filament_runout_detected", subjects_);
+    // Print-scoped runout (FIX B): same encoding as filament_runout_detected but
+    // considers only the active print's used tools (lane truth). Driven by
+    // PrintStatusPanel via set_scoped_runout(); the in-print badge binds this.
+    UI_MANAGED_SUBJECT_INT(scoped_runout_, -1, "filament_runout_scoped", subjects_);
     UI_MANAGED_SUBJECT_INT(toolhead_detected_, -1, "filament_toolhead_detected", subjects_);
     UI_MANAGED_SUBJECT_INT(entry_detected_, -1, "filament_entry_detected", subjects_);
     UI_MANAGED_SUBJECT_INT(probe_triggered_, -1, "probe_triggered", subjects_);
@@ -567,6 +571,146 @@ bool FilamentSensorManager::has_real_runout() const {
     return false;
 }
 
+namespace {
+// Firmware-default head a logical tool routes to with no remap: tools 0..3 map
+// to their identity head, anything else falls back to head 0. Mirrors
+// PrintSelectDetailView::get_effective_remap()'s default_head().
+int default_head_for_tool(int tool) {
+    return (tool >= 0 && tool <= 3) ? tool : 0;
+}
+
+// Resolve the AMS slot a logical tool routes to, honoring an explicit remap.
+int slot_for_tool(int tool, const std::map<int, int>& remap) {
+    auto it = remap.find(tool);
+    if (it != remap.end() && it->second >= 0) {
+        return it->second;
+    }
+    return default_head_for_tool(tool);
+}
+} // namespace
+
+FilamentSensorManager::ScopedRunoutScan
+FilamentSensorManager::scan_required_lanes(const std::set<int>& tools_used,
+                                           const std::map<int, int>& remap) const {
+    // Caller holds mutex_ (recursive). Single source of truth for both
+    // find_empty_required_lanes() and compute_scoped_runout_value() — dedups the
+    // runout-config lookup, backend fetch, availability gate, and per-lane scan.
+    ScopedRunoutScan scan;
+
+    if (tools_used.empty()) {
+        scan.no_used_tools = true;
+        return scan;
+    }
+
+    // Runout protection state. find_config_by_role returns the first RUNOUT
+    // sensor; on multi-lane (Snapmaker) all four share the role, so any one
+    // gating works for the "is runout protection active" question.
+    const auto* runout_cfg = find_config_by_role(FilamentSensorRole::RUNOUT);
+    scan.runout_configured = (runout_cfg != nullptr);
+    if (!runout_cfg) {
+        return scan;
+    }
+    scan.runout_enabled = master_enabled_ && runout_cfg->enabled;
+
+    // Lane truth requires an AMS backend. Scope to the ACTIVE backend (index 0):
+    // get_slot_info() takes a per-backend slot index, and tool→slot remaps are
+    // resolved against that backend. Multi-backend global-slot resolution (AFC
+    // with 2+ units) is a follow-up; until AmsState exposes a global resolver,
+    // a single active backend is the correct, consistent scope.
+    scan.backend = AmsState::instance().get_backend();
+    if (!scan.backend) {
+        // No lane truth — capture the aggregate runout sensor reading so the
+        // caller can fall back to the unscoped behavior (non-AMS printers).
+        if (auto it = states_.find(runout_cfg->klipper_name);
+            it != states_.end() && it->second.available) {
+            scan.sensor_available = true;
+            scan.aggregate_detected = it->second.filament_detected;
+        }
+        return scan;
+    }
+
+    // Freshness gate (FIX issue 8): don't warn from stale filament_exist before
+    // any Moonraker status has been processed. `available` is set true the
+    // moment a sensor is DISCOVERED (the Klipper object exists), so it does NOT
+    // mean "fresh data" — the correct signal is initial_status_received_, set on
+    // the first update_from_status(). (The pre-print check runs on the print
+    // button, long after connection, so the discovery grace period — which only
+    // suppresses startup notification spam — is not the right gate here.)
+    scan.sensor_available = initial_status_received_;
+
+    for (int tool : tools_used) {
+        const int slot = slot_for_tool(tool, remap);
+        const SlotInfo info = scan.backend->get_slot_info(slot);
+
+        // FIX issue 6: an unresolvable slot (no such slot -> slot_index<0) or a
+        // slot whose status is genuinely UNKNOWN is NOT a "lane is empty" event.
+        // Only flag a slot that resolved and reports a known non-present status
+        // (EMPTY). Skipping avoids a false warning for an out-of-range tool.
+        if (info.slot_index < 0 || info.status == SlotStatus::UNKNOWN) {
+            spdlog::debug("[FilamentSensorManager] required tool {} -> slot {} unresolved/unknown "
+                          "(status={}) — not treated as empty",
+                          tool, slot, static_cast<int>(info.status));
+            continue;
+        }
+
+        if (!info.is_present()) {
+            spdlog::debug("[FilamentSensorManager] required tool {} -> lane {} is empty "
+                          "(lane truth)",
+                          tool, slot);
+            scan.empty_lanes.emplace_back(tool, slot);
+        }
+    }
+
+    return scan;
+}
+
+std::vector<std::pair<int, int>>
+FilamentSensorManager::find_empty_required_lanes(const std::set<int>& tools_used,
+                                                 const std::map<int, int>& remap) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+    const ScopedRunoutScan scan = scan_required_lanes(tools_used, remap);
+
+    // No lane truth, no runout protection, or no fresh data -> no genuinely-empty
+    // required lanes to report. The caller falls back to the aggregate sensor
+    // check (non-AMS path) when there is no backend.
+    if (!scan.backend || !scan.runout_enabled || !scan.sensor_available) {
+        return {};
+    }
+    return scan.empty_lanes;
+}
+
+int FilamentSensorManager::compute_scoped_runout_value(const std::set<int>& tools_used,
+                                                       const std::map<int, int>& remap) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+    const ScopedRunoutScan scan = scan_required_lanes(tools_used, remap);
+
+    if (scan.no_used_tools || !scan.runout_configured) {
+        return -1; // No tools to scope, or no runout sensor -> hide.
+    }
+    if (!scan.runout_enabled) {
+        return 2; // Runout protection disabled -> muted.
+    }
+
+    if (!scan.backend) {
+        // No lane truth: fall back to the aggregate runout-role value so single-
+        // extruder / non-AMS printers behave exactly as the unscoped subject.
+        if (!scan.sensor_available) {
+            return -1; // Sensor transiently unavailable -> hide.
+        }
+        return scan.aggregate_detected ? 1 : 0;
+    }
+
+    // Lane truth not yet fresh -> no opinion rather than a premature red badge.
+    if (!scan.sensor_available) {
+        return -1;
+    }
+
+    // 0 (runout/red) if ANY required lane is genuinely empty, else 1 (loaded).
+    return scan.empty_lanes.empty() ? 1 : 0;
+}
+
 bool FilamentSensorManager::is_motion_active() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
@@ -776,6 +920,18 @@ void FilamentSensorManager::set_state_change_callback(StateChangeCallback callba
 
 lv_subject_t* FilamentSensorManager::get_runout_detected_subject() {
     return &runout_detected_;
+}
+
+lv_subject_t* FilamentSensorManager::get_scoped_runout_subject() {
+    return &scoped_runout_;
+}
+
+void FilamentSensorManager::set_scoped_runout(int value) {
+    if (!subjects_initialized_) {
+        return;
+    }
+    // Caller (PrintStatusPanel) drives this on the main LVGL thread.
+    lv_subject_set_int(&scoped_runout_, value);
 }
 
 lv_subject_t* FilamentSensorManager::get_toolhead_detected_subject() {

@@ -945,34 +945,42 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 action-code signals route to correct 
 
     PrintStartProfile::MatchResult result;
 
-    // Each "// Success: Set action code <CODE>" line was observed verbatim in
-    // the 2026-05-19 capture. The mapping below is what the user actually
-    // sees; getting the message strings right matters because there is no
-    // other surface that explains which preprint sub-phase is running.
+    // Each line below was captured VERBATIM from Moonraker's gcode_store on the
+    // 2026-06-18 reprint of lid_PLA_6m28s (heads 0+3). The message text is the
+    // only surface that explains which pre-print sub-phase is running, so the
+    // exact strings matter.
+    //
+    // Two action-code verb forms appear in the real stream and BOTH must route:
+    //   "// Success: Set action code <CODE>"
+    //   "// Success: Changed main state to PRINTING with action <CODE>"
+    // PRINT_BED_DETECTING arrives ONLY via the second form (evidence:
+    // "// Success: Changed main state to PRINTING with action PRINT_BED_DETECTING"
+    // at 23:23:26), which the pre-2026-06-18 profile missed entirely.
     struct ActionCase {
         std::string line;
         PrintStartPhase expected_phase;
         const char* expected_message;
     };
     std::vector<ActionCase> cases = {
-        {"// Success: Set action code BED_PREHEATING",
-         PrintStartPhase::HEATING_BED, "Heating Bed..."},
-        {"// Success: Set action code BED_PRESCANNING",
-         PrintStartPhase::BED_MESH, "Pre-scanning Bed..."},
-        {"// Success: Set action code BED_LEVELING",
-         PrintStartPhase::BED_MESH, "Levelling Bed..."},
-        {"// Success: Set action code DETECT_PLATE",
-         PrintStartPhase::BED_MESH, "Detecting Plate..."},
-        {"// Success: Set action code PRINT_BED_DETECTING",
-         PrintStartPhase::BED_MESH, "Inspecting Bed..."},
+        // --- "Set action code" verb (evidence: gcode_store 23:24:27..23:31:00) ---
         {"// Success: Set action code PRINT_SWITCH_CHECKING",
-         PrintStartPhase::INITIALIZING, "Checking Extruder..."},
-        {"// Success: Set action code PRINT_PREEXTRUDING",
-         PrintStartPhase::PURGING, "Pre-extruding..."},
-        {"// Success: Set action code PRINT_RESUMING",
-         PrintStartPhase::INITIALIZING, "Resuming Print..."},
+         PrintStartPhase::INITIALIZING, "Checking extruders..."},
+        {"// Success: Set action code PRINT_AUTO_FEEDING",
+         PrintStartPhase::INITIALIZING, "Loading filament..."},
         {"// Success: Set action code PRINT_REPLENISHING",
-         PrintStartPhase::INITIALIZING, "Replenishing Filament..."},
+         PrintStartPhase::INITIALIZING, "Replenishing filament..."},
+        {"// Success: Set action code DETECT_PLATE",
+         PrintStartPhase::BED_MESH, "Detecting plate..."},
+        {"// Success: Set action code PRINT_PREEXTRUDING",
+         PrintStartPhase::PURGING, "Priming..."},
+        // --- "Changed main state to PRINTING with action" verb
+        //     (evidence: gcode_store 23:23:26) ---
+        {"// Success: Changed main state to PRINTING with action PRINT_BED_DETECTING",
+         PrintStartPhase::BED_MESH, "Inspecting bed..."},
+        {"// Success: Changed main state to PRINTING with action PRINT_SWITCH_CHECKING",
+         PrintStartPhase::INITIALIZING, "Checking extruders..."},
+        {"// Success: Changed main state to PRINTING with action DETECT_PLATE",
+         PrintStartPhase::BED_MESH, "Detecting plate..."},
     };
 
     for (const auto& c : cases) {
@@ -982,22 +990,23 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 action-code signals route to correct 
         REQUIRE(result.message == c.expected_message);
     }
 
-    // IDLE action codes intentionally have no mapping — they bracket
-    // every real phase and should not steer the UI.
+    // IDLE action codes intentionally have no mapping — they bracket every real
+    // phase ("// Success: Set action code IDLE" / "...with action IDLE") and
+    // must NOT steer the UI.
     REQUIRE_FALSE(profile->try_match_signal(
         "// Success: Set action code IDLE", result));
+    REQUIRE_FALSE(profile->try_match_signal(
+        "// Success: Changed main state to PRINTING with action IDLE", result));
 
-    // Future Snapmaker firmware revisions may emit action codes we
-    // don't know about yet; they must fall through cleanly (no false
-    // match into an unrelated phase).
+    // Future Snapmaker firmware revisions may emit action codes we don't know
+    // about yet; they must fall through cleanly (no false match).
     REQUIRE_FALSE(profile->try_match_signal(
         "// Success: Set action code FOO_UNKNOWN", result));
 
-    // try_match_signal trims trailing whitespace (parser handles \r
-    // line endings from some firmware variants).
+    // try_match_signal trims trailing whitespace (\r from some firmware variants).
     REQUIRE(profile->try_match_signal(
-        "// Success: Set action code BED_PREHEATING\r", result));
-    REQUIRE(result.phase == PrintStartPhase::HEATING_BED);
+        "// Success: Set action code DETECT_PLATE\r", result));
+    REQUIRE(result.phase == PrintStartPhase::BED_MESH);
 }
 
 TEST_CASE("PrintStartProfile: snapmaker_u1 response patterns match real preprint lines",
@@ -1011,30 +1020,86 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 response patterns match real preprint
     PrintStartProfile::MatchResult result;
 
     // Klipper emits one of these per axis-trigger during G28. Both flavours
-    // (single axis, both axes) appeared in the capture. The pattern must
-    // anchor on the prefix so generic "trigger" strings don't false-match.
+    // (single axis, both axes) appeared in the capture. The pattern anchors on
+    // the prefix so generic "trigger" strings don't false-match.
+    // Evidence (gcode_store 23:23:08 / 23:23:13):
+    //   "// trigger_mcu_pos: {'stepper_y': 7794, 'stepper_x': -97442}"
+    //   "// trigger_mcu_pos: {'stepper_x': -97378, 'stepper_y': 4660}"
     REQUIRE(profile->try_match_pattern(
-        "// trigger_mcu_pos: {'stepper_y': 29734, 'stepper_x': 26265}", result));
+        "// trigger_mcu_pos: {'stepper_y': 7794, 'stepper_x': -97442}", result));
     REQUIRE(result.phase == PrintStartPhase::HOMING);
+    REQUIRE(result.message == "Homing axes...");
 
     REQUIRE(profile->try_match_pattern(
-        "// trigger_mcu_pos: {'stepper_x': -1832, 'stepper_y': -1561}", result));
+        "// trigger_mcu_pos: {'stepper_x': -97378, 'stepper_y': 4660}", result));
     REQUIRE(result.phase == PrintStartPhase::HOMING);
 
-    // Single-point Z probe before bed mesh. Snapmaker writes the probe
-    // origin via this signature once per probe initiation.
+    // Initial single-point Z touch right AFTER homing, BEFORE bed mesh — it
+    // fires at the very start of the sequence (evidence: gcode_store 23:23:14
+    // "// probe_start_x: 5.32188, probe_start_y: 4.87969", immediately after
+    // the trigger_mcu_pos homing lines and ~3.5 min before the actual mesh).
+    // It used to be mislabelled "Z Calibration..." under BED_MESH, which made
+    // the UI show bed-mesh-flavoured text during homing. It now belongs to
+    // HOMING / "Probing Z...".
     REQUIRE(profile->try_match_pattern(
-        "// probe_start_x: 5.30000, probe_start_y: 4.90156", result));
+        "// probe_start_x: 5.32188, probe_start_y: 4.87969", result));
+    REQUIRE(result.phase == PrintStartPhase::HOMING);
+    REQUIRE(result.message == "Probing Z...");
+
+    // End-of-mesh marker (evidence: gcode_store
+    // "// z_mesh_complete: 0.02573436601557052"). The per-probe "probe at x:..."
+    // lines are consumed by the collector's mesh counter, not the profile;
+    // z_mesh_complete is the END boundary in the response stream.
+    REQUIRE(profile->try_match_pattern(
+        "// z_mesh_complete: 0.02573436601557052", result));
     REQUIRE(result.phase == PrintStartPhase::BED_MESH);
+    REQUIRE(result.message == "Bed mesh...");
 
-    // Negative cases — these must NOT match (they used to under the
-    // pre-2026-05-19 profile which keyed on command names that never
-    // actually appear in gcode_response).
+    // Mesh START boundary — bed_mesh.py emits "// z offset:" right before the
+    // first mesh probe (evidence: gcode_store 20:21:26 "// z offset: -0.05",
+    // immediately preceding "// probe at x: 129.915, y: 125.560 is z=..."). This
+    // relabels the display from the prior BED_MESH sub-phase ("Detecting plate")
+    // to "Bed mesh" at the moment the real mesh begins — fixing the device bug
+    // where only the END marker fired and the stale label persisted through the
+    // whole mesh.
+    REQUIRE(profile->try_match_pattern("// z offset: -0.05", result));
+    REQUIRE(result.phase == PrintStartPhase::BED_MESH);
+    REQUIRE(result.message == "Bed mesh...");
+
+    // Negative cases — these must NOT match. FEED_AUTO / FLOW_CALIBRATE /
+    // BED_MESH_CALIBRATE / *_CLEAN_NOZZLE are klippy-internal only and never
+    // appear in Moonraker's gcode_store, so the profile must not key on them.
     REQUIRE_FALSE(profile->try_match_pattern("G28 X Y", result));
     REQUIRE_FALSE(profile->try_match_pattern("M109 S250", result));
     REQUIRE_FALSE(profile->try_match_pattern("BED_MESH_CALIBRATE", result));
     REQUIRE_FALSE(profile->try_match_pattern("VORON_PURGE", result));
     REQUIRE_FALSE(profile->try_match_pattern("CLEAN_NOZZLE", result));
+    REQUIRE_FALSE(profile->try_match_pattern(
+        "// [feed] FEED_AUTO MODULE=left CHANNEL=1 LOAD=1 PRINTING=1 EXTRUDER=0", result));
+}
+
+TEST_CASE("PrintStartProfile: snapmaker_u1 carries no silent_progression",
+          "[profile][print][snapmaker]") {
+    auto profile = get_snapmaker_u1_profile();
+    REQUIRE(profile != nullptr);
+    if (profile->name().find("Snapmaker") == std::string::npos) {
+        SKIP("snapmaker_u1.json not available");
+    }
+
+    // silent_progression is intentionally EMPTY on the U1. The signal-less
+    // clean/mesh/prime stretch is real, but the collector's temps_ready timer
+    // fires unreliably on this firmware: the U1 reports state=printing the
+    // instant the SD job opens and idles ~90s before any action code, with
+    // heater targets set/cleared throughout (ext_target=0 during the early idle
+    // gap makes temps_ready trivially true). A temps-ready-based PURGING nudge
+    // would announce "Priming..." before the printer has even homed (live U1
+    // finding 2026-06-11). The gap is left to the last action-code phase +
+    // weighted progress instead. Guards against re-introducing the timer.
+    REQUIRE(profile->silent_progression().empty());
+
+    // Adaptive meshing must stay on — the U1 slicer overrides MESH_MIN/MAX so
+    // the configfile probe_count (169) hugely overstates the real ~16 probes.
+    REQUIRE(profile->adaptive_meshing());
 }
 
 TEST_CASE("PrintStartProfile: snapmaker_u1 phase weights sum reasonably",
@@ -1045,11 +1110,15 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 phase weights sum reasonably",
         SKIP("snapmaker_u1.json not available");
     }
 
-    REQUIRE(profile->get_phase_weight(PrintStartPhase::HOMING) == 5);
-    REQUIRE(profile->get_phase_weight(PrintStartPhase::HEATING_BED) == 25);
-    REQUIRE(profile->get_phase_weight(PrintStartPhase::HEATING_NOZZLE) == 20);
-    REQUIRE(profile->get_phase_weight(PrintStartPhase::BED_MESH) == 35);
-    REQUIRE(profile->get_phase_weight(PrintStartPhase::INITIALIZING) == 5);
+    // Weights tuned from the REAL 2026-06-18 timeline: heating dominates wall
+    // time (bed 60C + nozzle 220C span almost the whole ~4 min), bed work
+    // (inspect ~1 min + plate detect + mesh ~1 min) is the next chunk, and the
+    // tool-switch / auto-feed / replenish steps land under INITIALIZING.
+    REQUIRE(profile->get_phase_weight(PrintStartPhase::HOMING) == 6);
+    REQUIRE(profile->get_phase_weight(PrintStartPhase::HEATING_BED) == 22);
+    REQUIRE(profile->get_phase_weight(PrintStartPhase::HEATING_NOZZLE) == 22);
+    REQUIRE(profile->get_phase_weight(PrintStartPhase::INITIALIZING) == 14);
+    REQUIRE(profile->get_phase_weight(PrintStartPhase::BED_MESH) == 26);
     REQUIRE(profile->get_phase_weight(PrintStartPhase::CLEANING) == 5);
     REQUIRE(profile->get_phase_weight(PrintStartPhase::PURGING) == 5);
 }

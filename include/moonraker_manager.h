@@ -179,10 +179,97 @@ class MoonrakerManager {
         // print time from the initial subscription payload. Progress alone is
         // insufficient because the print_state_enum_ observer fires synchronously
         // before virtual_sdcard / display_status update progress in the same tick.
-        if (is_initial_transition && (current_progress > 0 || current_print_duration > 0)) {
-            return false; // App joined mid-print, skip collector
+        //
+        // BUT: the skip must only apply when prev_state is the genuinely-ambiguous
+        // boot case (STANDBY — the printer was idle, so a high progress/duration
+        // can only mean we joined an already-running print). A transition into
+        // PRINTING from a TERMINAL state (COMPLETE / CANCELLED / ERROR) is
+        // unambiguously a fresh, user-started reprint — even on the first
+        // transition after boot. After an app restart with a just-finished print
+        // still in print_stats, progress stays pinned at a stale 100% from the
+        // terminal Complete state; the old unconditional skip then suppressed the
+        // collector on the very next reprint (Complete(3) -> Printing(1),
+        // progress=100%, initial=true), so a reprint-after-restart got no
+        // pre-print phase tracking. Gating on prev==STANDBY fixes that while still
+        // skipping the real boot-into-active-print case (which presents as
+        // STANDBY -> PRINTING).
+        bool prev_is_terminal = (prev_state == helix::PrintJobState::COMPLETE ||
+                                 prev_state == helix::PrintJobState::CANCELLED ||
+                                 prev_state == helix::PrintJobState::ERROR);
+        if (is_initial_transition && !prev_is_terminal &&
+            (current_progress > 0 || current_print_duration > 0)) {
+            return false; // App joined mid-print (booted into a running print), skip collector
         }
         return true;
+    }
+
+    /**
+     * @brief Decide whether the pre-print phase should end (hand off to printing)
+     *
+     * The pre-print → printing hand-off must be gated on the REAL first layer,
+     * not raw extrusion. On firmwares whose PRINT_START purges / auto-feeds
+     * during the print_stats.state=printing window (Snapmaker U1, and many
+     * Klipper setups), print_duration goes positive while the nozzle is still
+     * heating and the toolhead is still homing — so the old "first extrusion"
+     * (print_duration > 0) shortcut dropped the Preparing/Homing phase minutes
+     * early. The firmware-agnostic real-first-layer signal is
+     * print_stats.info.current_layer >= 1.
+     *
+     * Edge-relative, NOT absolute-level: on back-to-back prints the previous
+     * print leaves current_layer at a stale positive value (e.g. 250) and
+     * reset_for_new_print() — which zeroes it — is dispatched asynchronously,
+     * AFTER the collector becomes active. A pure `current_layer >= 1` level
+     * read would fire on that stale 250 and complete the NEW print's pre-print
+     * phase instantly (the very regression this fix cures). `seen_layer_zero`
+     * closes that window: completion requires that the collector has observed
+     * current_layer == 0 since THIS print started, so only a genuine 0 -> >=1
+     * transition within this print completes it. The old print_duration trigger
+     * was naturally edge-based (0 -> positive); this restores that property for
+     * the layer signal.
+     *
+     * Branch discriminator is the STICKY printer_reports_layers, NOT the
+     * per-print has_real_layer_data. reset_for_new_print() clears
+     * has_real_layer_data to false AFTER the collector starts, and a
+     * layer-reporting printer that doesn't continuously re-emit
+     * info.current_layer during pre-print (Snapmaker U1) leaves it false through
+     * the whole purge. Discriminating on that racy per-print flag therefore took
+     * the print_duration fallback DURING pre-print on the U1 — the exact
+     * premature-completion bug. printer_reports_layers latches true on the first
+     * layer field ever seen this session (the U1 sends total_layer at print
+     * start) and never resets, so a layer-reporting printer ALWAYS takes the
+     * real-first-layer path and NEVER the print_duration fallback.
+     *
+     * Fallback: printers that have NEVER reported any layer field all session
+     * (printer_reports_layers == false) have no trustworthy current_layer — the
+     * subject only carries a progress-derived ESTIMATE that can read >= 1 during
+     * pre-print. For those we keep the old behavior and complete on first
+     * extrusion (print_duration > 0) so they still leave Preparing.
+     *
+     * @param printer_reports_layers STICKY: has the printer ever reported a real
+     *        layer field (info.current_layer / info.total_layer /
+     *        virtual_sdcard.layer) this session. Never reset between prints.
+     * @param current_layer Current layer (real when printer_reports_layers true)
+     * @param print_duration Klipper print_stats.print_duration in seconds
+     * @param seen_layer_zero Whether the collector has observed current_layer==0
+     *        since the current print started (arms the layer-1 edge). Ignored on
+     *        the non-reporting fallback path.
+     * @return true if the pre-print phase should be marked COMPLETE
+     */
+    static inline bool should_complete_preprint(bool printer_reports_layers, int current_layer,
+                                                int print_duration, bool seen_layer_zero) {
+        if (printer_reports_layers) {
+            // Authoritative: only a genuine 0 -> >=1 transition within this
+            // print ends Preparing. seen_layer_zero rejects a stale positive
+            // carried over from the previous print before reset_for_new_print()
+            // has zeroed the subject. The print_duration fallback is NEVER used
+            // for a layer-reporting printer — that was the U1 regression.
+            return seen_layer_zero && current_layer >= 1;
+        }
+        // Printer never reported a layer field — fall back to the old
+        // first-extrusion signal so genuine non-reporters still complete.
+        // current_layer is only a progress-derived estimate here, so
+        // seen_layer_zero is irrelevant.
+        return print_duration > 0;
     }
 
     /**
@@ -221,10 +308,15 @@ class MoonrakerManager {
     SubjectLifetime m_print_bed_target_fallback_lifetime;
     ObserverGuard m_print_bed_target_fallback_observer;
     ObserverGuard m_print_ext_target_fallback_observer;
-    // First-extrusion completion: when print_duration transitions 0 -> positive while
-    // the collector is active, the pre-print phase is definitively over. This is the
-    // authoritative signal for printers whose PRINT_START macro runs inside the
-    // print_stats.state=printing window (Snapmaker U1, many Klipper setups).
+    // Pre-print completion observers. The hand-off to the printing phase is
+    // gated on the REAL first layer (print_stats.info.current_layer >= 1) — see
+    // should_complete_preprint(). The layer observer is the primary signal; the
+    // print_duration observer is retained as the fallback for printers that
+    // never report real layer data (its body now defers to
+    // should_complete_preprint() instead of completing on print_duration > 0
+    // unconditionally — which fired during pre-print purge/auto-feed on the
+    // Snapmaker U1).
+    ObserverGuard m_print_layer_observer;
     ObserverGuard m_print_duration_observer;
 
     // Macro modification manager (PRINT_START wizard integration)
