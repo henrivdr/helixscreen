@@ -258,21 +258,31 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
     // clears the head sensor (#995), while live signals enable real-time accuracy.
     const bool is_loaded = pending_is_loaded_ || slot_is_loaded_live;
 
-    // Determine eject mode: not loaded to toolhead, but filament is in the lane,
+    // Whether this slot's unload action is a heated toolhead unload (true) or a
+    // cold per-lane eject (false). Defaults to is_loaded for most backends; AD5X
+    // IFS refines it with seated-channel authority so a NON-seated lane reads
+    // "Eject" even when the firmware dropped its active-slot pointer and
+    // is_loaded was broadened by the recovery clause (raza616, 5HR3HHS6). This
+    // drives both the button label and the dispatched action (handle_unload).
+    const bool toolhead_unload =
+        backend_ ? backend_->slot_unloads_to_toolhead(slot_index, is_loaded) : is_loaded;
+
+    // Determine eject mode: not a toolhead unload, but filament is in the lane,
     // and backend supports per-lane eject (AFC, Happy Hare, AD5X IFS)
     bool supports_eject = backend_ && backend_->supports_lane_eject();
-    eject_mode_ = supports_eject && !is_loaded && slot_has_filament;
+    eject_mode_ = supports_eject && !toolhead_unload && slot_has_filament;
 
     // Determine force-eject/recover mode: idle lane reporting EMPTY, but backend
     // supports a cold presence-ignoring retract (AD5X IFS only) to recover a
     // snapped chunk stuck in the lane (#996). Mutually exclusive with eject_mode_:
     // eject requires filament present, force-eject requires the lane empty.
     bool slot_empty = !slot_has_filament;
-    force_eject_mode_ = backend_ && backend_->supports_force_eject() && !is_loaded && slot_empty;
+    force_eject_mode_ =
+        backend_ && backend_->supports_force_eject() && !toolhead_unload && slot_empty;
 
     // Update the unload/eject button label and state
     bool unload_eject_enabled = false;
-    if (is_loaded) {
+    if (toolhead_unload) {
         // Loaded to toolhead → "Unload" enabled (disabled when NOT loaded)
         unload_eject_enabled = !system_busy;
     } else if (eject_mode_ || force_eject_mode_) {

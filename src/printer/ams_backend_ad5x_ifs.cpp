@@ -1098,6 +1098,20 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
         return eject_lane(slot_index);
     }
 
+    // Firmware dropped its active pointer (current_slot < 0) but IFS_STATUS still
+    // reports a physically seated port. Trust Chan as the seated authority: a tap
+    // on a NON-seated slot must cold-eject that lane, not toolhead-cut the seated
+    // one (raza616 wrong-lane heat+cut, bundle 5HR3HHS6). A tap ON the seated slot
+    // falls through to the heated toolhead unload below. When neither authority
+    // knows the seated slot (both < 0) we keep the existing unknown-origin recovery
+    // (toolhead cut) untouched.
+    if (slot_index >= 0 && current_slot < 0 && seated_slot >= 0 && slot_index != seated_slot) {
+        spdlog::info("{} Unload requested for non-seated slot {} (no active slot, seated slot {}) "
+                     "-> cold lane eject",
+                     backend_log_tag(), slot_index, seated_slot);
+        return eject_lane(slot_index);
+    }
+
     // No filament seated at the nozzle: the toolhead unload would be a firmware
     // no-op. IFS_REMOVE_CURRENT_PRUTOK — and the _IFS_REMOVE_CURRENT_PRUTOK macro
     // that wraps it — early-returns when get_extruder_sensor() reads empty
@@ -1135,7 +1149,9 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     // would home a SECOND time), and never the bare Python command — that skips
     // the trash drop and leaves the nozzle hot. Verified against the device cfg
     // and ZMOD v1.7.1.
-    spdlog::info("{} Unloading filament from toolhead (slot {})", backend_log_tag(), slot_index);
+    spdlog::info("{} Unloading filament from toolhead (slot {}, current_slot {}, seated_slot {}, "
+                 "head_loaded {})",
+                 backend_log_tag(), slot_index, current_slot, seated_slot, head_loaded);
     // Finalize on the macro's own completion (its gcode ack). The synthesized
     // Retract phase has no sensor event, and the IFS_STATUS Chan==0 / GET_ZCOLOR
     // confirm can silently fail on native ZMOD — leaving the op stuck at Retract
@@ -1153,6 +1169,32 @@ AmsError AmsBackendAd5xIfs::unload_filament(int slot_index) {
     // stream listener, so this is cheap when they overlap.
     schedule_zcolor_query("toolhead_unload");
     return result;
+}
+
+bool AmsBackendAd5xIfs::slot_unloads_to_toolhead(int slot_index, bool /*loaded_hint*/) const {
+    int current_slot;
+    int seated_slot;
+    bool head_loaded;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        current_slot = system_info_.current_slot;
+        seated_slot = seated_chan_ > 0 ? seated_chan_ - 1 : -1;
+        head_loaded = head_filament_;
+    }
+    // MUST mirror unload_filament()'s eject-vs-toolhead routing so the context
+    // menu labels and dispatches the action correctly (Eject vs Unload). Any
+    // divergence is caught by the "label matches routing" unit test. The
+    // recovery-broadened loaded_hint (can_unload_from_toolhead returns true for
+    // every slot when current_slot < 0 && head loaded) is intentionally ignored
+    // here — the seated channel is the authority.
+    if (slot_index >= 0 && current_slot >= 0 && slot_index != current_slot &&
+        slot_index != seated_slot)
+        return false; // cold lane eject (existing #981 guard)
+    if (slot_index >= 0 && current_slot < 0 && seated_slot >= 0 && slot_index != seated_slot)
+        return false; // firmware dropped pointer, seated known -> cold eject (5HR3HHS6)
+    if (!head_loaded)
+        return false; // empty toolhead -> cold lane eject
+    return true;      // heated toolhead unload (cut)
 }
 
 void AmsBackendAd5xIfs::finalize_op_after_macro(bool is_unload) {
@@ -1283,7 +1325,10 @@ AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
     if (!err.success()) {
         return err;
     }
-    return execute_gcode("IFS_F39 PRUTOK=" + port_str);
+    AmsError err39 = execute_gcode("IFS_F39 PRUTOK=" + port_str);
+    if (err39.success())
+        schedule_zcolor_query("eject_lane");
+    return err39;
 }
 
 // --- Recovery ---
@@ -1887,13 +1932,12 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json(int slot_index) {
         material = materials_[idx];
     }
 
-    if (hex.empty())
-        hex = "808080";
-    if (material.empty())
-        material = "PLA";
-
-    // Add # prefix for JSON file format
-    std::string hex_with_hash = "#" + hex;
+    // Persist firmware-native sentinels for an unset entry: live stock ZMOD
+    // FFMInfo uses ffmColor='' and ffmType='?' for "no filament". Our in-memory
+    // "no colour" placeholder is 808080 (parse_adventurer_json maps empty
+    // ffmColor -> 808080), so collapse both empty and the placeholder to "".
+    const std::string color_field = (hex.empty() || hex == "808080") ? std::string{} : ("#" + hex);
+    const std::string type_field = material.empty() ? std::string{"?"} : material;
 
     spdlog::info("{} Writing slot {} to Adventurer5M.json (native ZMOD)", backend_log_tag(), port);
 
@@ -1904,7 +1948,7 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json(int slot_index) {
 
     api_->transfers().download_file(
         "config", "Adventurer5M.json",
-        [this, token, port, hex_with_hash, material, result, done](const std::string& content) {
+        [this, token, port, color_field, type_field, result, done](const std::string& content) {
             if (token.expired()) { // L081_OK: sync wait wrapper called from main; defer would
                                    // deadlock against caller
                 *result =
@@ -1931,8 +1975,8 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json(int slot_index) {
             }
 
             // Update the slot
-            doc["FFMInfo"]["ffmColor" + std::to_string(port)] = hex_with_hash;
-            doc["FFMInfo"]["ffmType" + std::to_string(port)] = material;
+            doc["FFMInfo"]["ffmColor" + std::to_string(port)] = color_field;
+            doc["FFMInfo"]["ffmType" + std::to_string(port)] = type_field;
 
             // Serialize with indentation to match zmod's format
             std::string updated = doc.dump(4);
@@ -1986,11 +2030,11 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json_local(int slot_index) {
         hex = colors_[idx];
         material = materials_[idx];
     }
-    if (hex.empty())
-        hex = "808080";
-    if (material.empty())
-        material = "PLA";
-    const std::string hex_with_hash = "#" + hex;
+    // Persist firmware-native sentinels for an unset entry (see
+    // write_adventurer_json): ffmColor='' and ffmType='?'. The 808080 placeholder
+    // is our in-memory "no colour" sentinel and must also collapse to "".
+    const std::string color_field = (hex.empty() || hex == "808080") ? std::string{} : ("#" + hex);
+    const std::string type_field = material.empty() ? std::string{"?"} : material;
 
     // Read-modify-write. An empty / unparseable existing file is treated as
     // "fresh start with empty FFMInfo" so we auto-repair the bricked-printer
@@ -2018,8 +2062,8 @@ AmsError AmsBackendAd5xIfs::write_adventurer_json_local(int slot_index) {
     if (!doc.contains("FFMInfo") || !doc["FFMInfo"].is_object()) {
         doc["FFMInfo"] = json::object();
     }
-    doc["FFMInfo"]["ffmColor" + std::to_string(port)] = hex_with_hash;
-    doc["FFMInfo"]["ffmType" + std::to_string(port)] = material;
+    doc["FFMInfo"]["ffmColor" + std::to_string(port)] = color_field;
+    doc["FFMInfo"]["ffmType" + std::to_string(port)] = type_field;
 
     const std::string updated = doc.dump(4);
 
@@ -3408,12 +3452,35 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             if (type_it != ffm.end() && type_it->is_string()) {
                 type = type_it->get<std::string>();
             }
+            // Firmware-native unset sentinel: live stock ZMOD writes ffmType='?'
+            // for an entry with no assigned material. Map it to empty so the UI
+            // renders '--' rather than a literal '?'.
+            if (type == "?")
+                type.clear();
 
             int idx = port - 1;
             if (dirty_[static_cast<size_t>(idx)])
                 continue;
-            colors_[static_cast<size_t>(idx)] = hex;
-            materials_[static_cast<size_t>(idx)] = type;
+            // Once the live RS-485 authority is established (a GET_ZCOLOR SILENT
+            // response actually confirmed, or IFS_STATUS Ports seen), zmod's
+            // persisted ffmColor/ffmType are a stale cache it never blanks on
+            // eject/swap. For a slot the live source owns (present), let GET_ZCOLOR
+            // be the colour/material authority; the JSON cache otherwise resurrected
+            // an old type/colour between live queries (raza616 "menu shows
+            // silk/orange after PLA swap into the same slot", 5HR3HHS6). Pre-SILENT /
+            // JSON-only zmod keeps seeding from JSON (no live source competes).
+            //
+            // NOTE: gates on zcolor_silent_confirmed_ (latched only after a genuine
+            // SILENT reply), NOT the optimistic-by-default zcolor_silent_supported_
+            // — the latter is true before any query has run, which would wrongly
+            // suppress the JSON seed on a fresh backend that has no live truth yet.
+            const bool live_owns =
+                (zcolor_silent_confirmed_.load() || ifs_status_ports_seen_.load()) &&
+                port_presence_[static_cast<size_t>(idx)];
+            if (!live_owns) {
+                colors_[static_cast<size_t>(idx)] = hex;
+                materials_[static_cast<size_t>(idx)] = type;
+            }
 
             // Build a per-slot signature (count + color + material) so the
             // "Loaded N slots" line below logs at INFO only when the parsed

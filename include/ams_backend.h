@@ -709,6 +709,26 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether the unload action on this slot performs a heated toolhead
+     *        unload (true) versus a cold per-lane eject (false).
+     *
+     * The context menu uses this to label the action "Unload" vs "Eject" and to
+     * dispatch the matching request. The default mirrors the legacy rule — a
+     * toolhead unload only when the menu already considers the slot loaded.
+     * AD5X IFS overrides it with seated-channel (IFS_STATUS Chan) authority so a
+     * NON-seated lane reads "Eject" even when the firmware has dropped its
+     * active-slot pointer and the recovery-broadened loaded_hint says otherwise.
+     *
+     * @param slot_index  Slot to query (0-based)
+     * @param loaded_hint The menu's computed is_loaded snapshot for this slot
+     * @return true if a heated toolhead unload should be offered/dispatched
+     */
+    [[nodiscard]] virtual bool slot_unloads_to_toolhead(int slot_index, bool loaded_hint) const {
+        (void)slot_index;
+        return loaded_hint;
+    }
+
+    /**
      * @brief Whether the backend can position the selector at a gate without loading.
      * @return true if select_gate() is implemented (selector-based systems only).
      */

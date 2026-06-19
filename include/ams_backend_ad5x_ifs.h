@@ -123,6 +123,11 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // the firmware still considers seated.
     [[nodiscard]] bool can_unload_from_toolhead(int slot_index) const override;
 
+    // Seated-channel-aware: a non-seated lane cold-ejects, so the menu reads
+    // "Eject" even when the firmware dropped its active pointer. Mirrors
+    // unload_filament()'s eject-vs-toolhead routing (drift-guarded by test).
+    [[nodiscard]] bool slot_unloads_to_toolhead(int slot_index, bool loaded_hint) const override;
+
     AmsError load_filament(int slot_index) override;
     AmsError unload_filament(int slot_index = -1) override;
     AmsError select_slot(int slot_index) override;
