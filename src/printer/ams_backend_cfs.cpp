@@ -490,8 +490,12 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
     info.supports_endless_spool = box_json.value("auto_refill", 0) != 0;
     info.supports_tool_mapping = true;
 
-    // Parse filament loaded state (only meaningful when field present)
-    info.filament_loaded = box_json.contains("filament") && box_json["filament"].get<int>() != 0;
+    // box.filament is a stale active-lane SELECTION index, NOT a "filament
+    // loaded" truth — it retains a lane number even when nothing is loaded,
+    // producing phantom "loaded from lane N". The authoritative loaded signal
+    // is the toolhead sensor (filament_switch_sensor filament_sensor), handled
+    // in handle_status_update. Leave filament_loaded false here.
+    info.filament_loaded = false;
 
     // Runout signal: box.filament_useup == 1 means no filament at the box gate.
     // Raw firmware value here; ams_state gates display on print-paused state to
@@ -657,8 +661,13 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
                 }
             }
 
-            // Derive status
-            if (color_str == "-1" || color_str == "None") {
+            // Derive status. color_value is latched RFID data: it reads the
+            // sentinel "-1"/"None"/"unknown" for a removed spool or a
+            // physically-present untagged (3rd-party) spool. Treat all three as
+            // "no RFID presence" so a stale/untagged color doesn't fake an
+            // AVAILABLE bay. A user override later promotes assigned bays back
+            // to AVAILABLE (see apply_overrides).
+            if (color_str == "-1" || color_str == "None" || color_str == "unknown") {
                 slot.status = SlotStatus::EMPTY;
             } else if (slot.remaining_length_m <= 0.0f && remain_str != "-1") {
                 slot.status = SlotStatus::EMPTY;
@@ -809,22 +818,29 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
                 system_info_.tool_to_slot_map = std::move(new_info.tool_to_slot_map);
             }
 
-            // Only update filament_loaded when the field was actually present
-            if (box.contains("filament")) {
-                system_info_.filament_loaded = new_info.filament_loaded;
-            }
+            // Deliberately do NOT touch filament_loaded here. box.filament is a
+            // selection index, not a loaded flag (see parse_box_status). The
+            // toolhead-sensor branch below is the sole writer of
+            // filament_loaded — a box update lacking the sensor param must not
+            // clobber the sensor-derived value.
 
             // Update runout flag only when the field was actually present
             if (box.contains("filament_useup")) {
                 system_info_.filament_runout = new_info.filament_runout;
             }
 
-            // Active slot from T{n}.filament field ("A"/"B"/"C"/"D")
+            // Active slot from T{n}.filament field ("A"/"B"/"C"/"D"). When the
+            // notification carried per-unit lane data but no unit reports an
+            // active lane (current_slot < 0) and we're not mid-load, clear the
+            // active selection. Driven solely by the per-unit T{n}.filament
+            // letter — not box.filament, which is a stale selection index, not
+            // a loaded flag. Gate on has_unit_data so a partial top-level-only
+            // update (e.g. box:{filament:N} during a tool change) can't clobber
+            // a still-valid active slot.
             if (new_info.current_slot >= 0) {
                 system_info_.current_slot = new_info.current_slot;
                 system_info_.current_tool = new_info.current_tool;
-            } else if (box.contains("filament") && !new_info.filament_loaded &&
-                       system_info_.action != AmsAction::LOADING) {
+            } else if (has_unit_data && system_info_.action != AmsAction::LOADING) {
                 system_info_.current_slot = -1;
                 system_info_.current_tool = -1;
             }
@@ -1857,6 +1873,16 @@ void AmsBackendCfs::apply_overrides(SlotInfo& slot, int slot_index) {
         slot.color_name = o.color_name;
     if (!o.material.empty())
         slot.material = o.material;
+
+    // Trust the user's assignment for presence. Untagged 3rd-party spools
+    // always read RFID -1, so firmware reports the bay EMPTY even though a
+    // spool is physically present. If the override carries a real assignment,
+    // the user has told us a spool is in this bay — promote it to AVAILABLE.
+    const bool real_assignment = o.spoolman_id > 0 || !o.material.empty() ||
+                                 !o.brand.empty() || !o.spool_name.empty() || o.color_set;
+    if (real_assignment && slot.status == SlotStatus::EMPTY) {
+        slot.status = SlotStatus::AVAILABLE;
+    }
 }
 
 void AmsBackendCfs::check_hardware_event_clear(SlotInfo& slot, int slot_index,

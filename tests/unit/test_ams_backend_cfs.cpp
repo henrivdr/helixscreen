@@ -965,15 +965,17 @@ TEST_CASE("CFS backend has environment sensors", "[ams][cfs]") {
 TEST_CASE("CFS parse_box_status infers active slot from tool map", "[ams][cfs]") {
     auto status = make_cfs_status_json();
 
-    SECTION("filament loaded with valid tool map → current_slot from T0 mapping") {
+    SECTION("box.filament is NOT treated as a loaded flag; tool map still parsed") {
         auto info = AmsBackendCfs::parse_box_status(status["box"]);
-        // box.filament = 1 and map has T1A→T1A (slot 0 mapped to slot 0)
-        REQUIRE(info.filament_loaded == true);
+        // box.filament = 1 is a stale active-lane SELECTION index, not a
+        // "filament loaded" truth. parse_box_status must NOT infer loaded-ness
+        // from it — the toolhead sensor is the sole authority (Fix 1).
+        REQUIRE(info.filament_loaded == false);
         REQUIRE(info.tool_to_slot_map.size() >= 1);
         REQUIRE(info.tool_to_slot_map[0] == 0); // T1A = slot 0
     }
 
-    SECTION("filament not loaded → no active slot inferred") {
+    SECTION("box.filament = 0 also yields filament_loaded == false") {
         status["box"]["filament"] = 0;
         auto info = AmsBackendCfs::parse_box_status(status["box"]);
         REQUIRE(info.filament_loaded == false);
@@ -1638,4 +1640,157 @@ TEST_CASE("CFS override preserved across unchanged parses",
 
     // Override map itself survived.
     CHECK(CfsTestAccess::get_override(backend, 0).has_value());
+}
+
+// =============================================================================
+// Presence/loaded-truth fixes. The firmware `box` object's RFID-derived fields
+// (color_value/material_type) latch stale data and read sentinels for untagged
+// 3rd-party spools, and box.filament is a SELECTION index — not a loaded flag.
+// =============================================================================
+
+// Fix 2: a latched/untagged color_value == "unknown" (with no remaining length)
+// must NOT be treated as a present spool. A real hex color still reads AVAILABLE.
+TEST_CASE("CFS parse: color_value 'unknown' is EMPTY, real hex is AVAILABLE", "[ams][cfs]") {
+    // Slot 0: untagged spool — RFID reports sentinel "unknown" / "-1" with no
+    // remaining length. Slot 1: a genuine hex color with remaining length.
+    json box = make_single_unit_box({"-1", "101001", "-1", "-1"},
+                                    {"unknown", "0FFFFFF", "-1", "-1"});
+    box["T1"]["remain_len"] = json::array({"-1", "57", "-1", "-1"});
+
+    auto info = AmsBackendCfs::parse_box_status(box);
+    REQUIRE(info.units.size() == 1);
+
+    SECTION("'unknown' color → EMPTY") {
+        REQUIRE(info.units[0].slots[0].status == SlotStatus::EMPTY);
+    }
+    SECTION("real hex color + length → AVAILABLE") {
+        REQUIRE(info.units[0].slots[1].status == SlotStatus::AVAILABLE);
+    }
+}
+
+// Fix 1: box.filament is a stale active-lane SELECTION pointer, NOT a loaded
+// flag. With box.filament=1 but T1.filament="None" and no toolhead sensor, the
+// system must report current_slot == -1 and filament_loaded == false.
+TEST_CASE("CFS: box.filament selection index does not fake a loaded slot", "[ams][cfs]") {
+    CfsTmpCacheDir tmp("presence_box_filament");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+    AmsBackendCfs backend(&api, nullptr);
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // box.filament = 1 (a lane is "selected"), but no lane is active
+    // (T1.filament = "None") and there is no toolhead sensor in this update.
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
+    box["filament"] = 1;
+    box["T1"]["filament"] = "None";
+    CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+
+    auto sys = backend.get_system_info();
+    REQUIRE(sys.current_slot == -1);
+    REQUIRE(sys.filament_loaded == false);
+}
+
+// Fix 1c regression guard: a partial top-level-only box update (e.g.
+// box:{filament:N} when a lane is selected during a tool change) carries no
+// per-unit lane data, so it must NOT clear a still-valid active slot. The clear
+// is gated on has_unit_data.
+TEST_CASE("CFS: partial box.filament update does not clear active slot", "[ams][cfs]") {
+    CfsTmpCacheDir tmp("presence_partial_no_clobber");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+    AmsBackendCfs backend(&api, nullptr);
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // 1) Full update with lane A active → current_slot = 0.
+    json full = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                     {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
+    full["T1"]["filament"] = "A";
+    CfsTestAccess::handle_status(backend, make_cfs_notification(full));
+    REQUIRE(backend.get_system_info().current_slot == 0);
+
+    // 2) Partial top-level-only update (selection index changes, no T-unit
+    //    data). Must leave the active slot untouched.
+    json partial = json::object();
+    partial["filament"] = 2;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(partial));
+
+    REQUIRE(backend.get_system_info().current_slot == 0);
+}
+
+// Fix 1 regression guard: the toolhead sensor is the SOLE writer of
+// filament_loaded. A sensor update sets it true; a SUBSEQUENT box-only update
+// (carrying box.filament but no sensor param) must NOT clobber it back to false.
+TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded",
+          "[ams][cfs]") {
+    CfsTmpCacheDir tmp("presence_sensor_authority");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+    AmsBackendCfs backend(&api, nullptr);
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // 1) Toolhead sensor trips: filament present at the nozzle.
+    json sensor_update = json{
+        {"params",
+         json::array({json{{"filament_switch_sensor filament_sensor",
+                            {{"filament_detected", true}}}},
+                      0})}};
+    CfsTestAccess::handle_status(backend, sensor_update);
+    REQUIRE(backend.get_system_info().filament_loaded == true);
+
+    // 2) A box-only update (no sensor param) arrives. box.filament is present
+    //    but is a selection index, not a loaded flag — it must NOT reset
+    //    filament_loaded.
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0000000", "0FFFFFF", "00A2989", "0C12E1F"});
+    box["filament"] = 0;
+    box["T1"]["filament"] = "None";
+    CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+
+    REQUIRE(backend.get_system_info().filament_loaded == true);
+}
+
+// Fix 3: trust the user's assignment. An untagged spool always reads RFID -1,
+// so firmware reports the bay EMPTY. When the user has assigned filament to
+// that bay (override carries real data), the bay is PRESENT (AVAILABLE).
+TEST_CASE("CFS: user override promotes an RFID-empty bay to AVAILABLE", "[ams][cfs]") {
+    CfsTmpCacheDir tmp("presence_override_trust");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+    AmsBackendCfs backend(&api, nullptr);
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // User assigned PLA to slot 0 (untagged spool).
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.material = "PLA";
+    CfsTestAccess::seed_override(backend, 0, ovr);
+
+    // Firmware reports slot 0 EMPTY (RFID -1 / no length), slots 1-3 EMPTY too.
+    json box = make_single_unit_box({"-1", "-1", "-1", "-1"},
+                                    {"-1", "-1", "-1", "-1"});
+    box["T1"]["remain_len"] = json::array({"-1", "-1", "-1", "-1"});
+    CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+
+    SECTION("assigned bay is promoted to AVAILABLE") {
+        REQUIRE(backend.get_slot_info(0).status == SlotStatus::AVAILABLE);
+    }
+    SECTION("control: unassigned empty bay stays EMPTY") {
+        REQUIRE(backend.get_slot_info(1).status == SlotStatus::EMPTY);
+    }
 }
