@@ -206,6 +206,70 @@ TEST_CASE("should_start_print_collector - fresh print start", "[application][pri
                                                            PrintJobState::PRINTING, 0, false));
 }
 
+TEST_CASE("should_start_print_collector - reprint after restart with stale terminal progress",
+          "[application][print_start][regression]") {
+    // On-device bug: after an app restart with a just-completed print still in
+    // print_stats, progress stays pinned at a stale 100% from the terminal
+    // Complete state. The first user-started reprint then transitions
+    // Complete(3) -> Printing(1) with progress=100%, initial=true. The old
+    // unconditional mid-print-join skip fired here → collector skipped → NO
+    // pre-print phase tracking on the reprint. A transition INTO printing from a
+    // TERMINAL state (Complete/Cancelled/Error) is unambiguously a fresh
+    // user-started print, so the skip must NOT apply regardless of stale
+    // progress/duration.
+    SECTION("Complete -> Printing with stale progress=100, initial=true → STARTS") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::COMPLETE, PrintJobState::PRINTING,
+            /*current_progress=*/100, /*is_initial_transition=*/true,
+            /*current_print_duration=*/0));
+    }
+    SECTION("Cancelled -> Printing with stale progress + duration, initial=true → STARTS") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::CANCELLED, PrintJobState::PRINTING,
+            /*current_progress=*/57, /*is_initial_transition=*/true,
+            /*current_print_duration=*/600));
+    }
+    SECTION("Error -> Printing with stale progress, initial=true → STARTS") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::ERROR, PrintJobState::PRINTING,
+            /*current_progress=*/42, /*is_initial_transition=*/true,
+            /*current_print_duration=*/0));
+    }
+    SECTION("Cancelled -> Printing progress=0 initial=true → STARTS (unchanged)") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::CANCELLED, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/true,
+            /*current_print_duration=*/0));
+    }
+}
+
+TEST_CASE("should_start_print_collector - boot into running print still suppressed",
+          "[application][print_start][regression]") {
+    // The genuine boot-into-active-print case presents as STANDBY -> PRINTING
+    // (printer was idle when we booted) with stale progress/duration from the
+    // running print. STANDBY is NOT terminal, so the mid-print-join skip must
+    // STILL fire — otherwise we'd show "Preparing Print" partway through a real
+    // print we joined at boot.
+    SECTION("Standby -> Printing progress>0 initial=true → SUPPRESSED") {
+        REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/45, /*is_initial_transition=*/true,
+            /*current_print_duration=*/0));
+    }
+    SECTION("Standby -> Printing print_duration>0 (progress=0) initial=true → SUPPRESSED") {
+        REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/true,
+            /*current_print_duration=*/10645));
+    }
+    SECTION("Standby -> Printing progress=0 duration=0 initial=true → STARTS (fresh start)") {
+        REQUIRE(MoonrakerManager::should_start_print_collector(
+            PrintJobState::STANDBY, PrintJobState::PRINTING,
+            /*current_progress=*/0, /*is_initial_transition=*/true,
+            /*current_print_duration=*/0));
+    }
+}
+
 TEST_CASE("should_start_print_collector - mid-print detection (app boot only)",
           "[application][print_start]") {
     // App boots, finds print already running (initial transition with progress > 0)
@@ -337,6 +401,139 @@ TEST_CASE("should_start_print_collector - mid-print error recovery does not rest
 }
 
 // ============================================================================
+// Pre-print Completion Gate (should_complete_preprint)
+// ============================================================================
+// FIX C: the pre-print → printing hand-off must be gated on the REAL first
+// layer (print_stats.info.current_layer >= 1), NOT raw print_duration. On the
+// Snapmaker U1 (and any firmware whose PRINT_START purges/auto-feeds during
+// the print_stats.state=printing window) print_duration goes >0 while the
+// nozzle is still heating/homing, so the old "first extrusion" shortcut ended
+// the Preparing phase minutes early. Printers that never report real layer
+// data keep the old print_duration fallback so they still complete.
+
+TEST_CASE("should_complete_preprint - layer-reporting printer waits for layer 1",
+          "[application][print_start]") {
+    // U1 case: printer reports layers (sticky true), pre-print extrusion drives
+    // print_duration > 0 while current_layer is still 0. Must NOT complete.
+    // seen_layer_zero is true here (the fresh 0 for this print was observed).
+    SECTION("Pre-print extrusion (print_duration>0, current_layer==0) does NOT complete") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/0, /*print_duration=*/42,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("Long pre-print purge still does NOT complete while layer==0") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/0, /*print_duration=*/600,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("First real layer (current_layer==1) DOES complete once zero was seen") {
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/1, /*print_duration=*/42,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("Any layer >= 1 completes once zero was seen (later observation)") {
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/5, /*print_duration=*/100,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("Layer 1 with print_duration still 0 completes (layer is authoritative)") {
+        // current_layer can lead print_duration on some firmwares — the real
+        // first layer is the signal, not extrusion timing.
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/1, /*print_duration=*/0,
+            /*seen_layer_zero=*/true));
+    }
+}
+
+TEST_CASE("should_complete_preprint - layer-reporting printer NEVER uses print_duration fallback",
+          "[application][print_start][regression]") {
+    // L093 device-realism regression: this replicates the EXACT on-device U1
+    // pre-print state, where the prior unit tests fed a convenient value and
+    // missed the bug. On the U1 the printer reports layers (sticky true, because
+    // print_stats.info.total_layer is present from print start), the slicer
+    // auto-feed/purge drives print_duration > 0 while current_layer is still 0
+    // and the nozzle is still heating. The earlier fix discriminated on the racy
+    // per-print has_real_layer_data, which reset_for_new_print() had transiently
+    // cleared to false → the print_duration fallback fired mid-purge ("first
+    // extrusion (fallback)") and dropped Preparing minutes early. With the sticky
+    // discriminator a layer-reporting printer must NEVER take the print_duration
+    // fallback — only the real 0->>=1 edge completes it.
+    SECTION("Sticky-true + current_layer=0 + print_duration>0 → does NOT complete (the bug)") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/0, /*print_duration=*/120,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("Sticky-true, big purge duration, layer still 0 → does NOT complete") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/0, /*print_duration=*/900,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("Sticky-true, the real first layer edge 0->1 → completes") {
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/1, /*print_duration=*/120,
+            /*seen_layer_zero=*/true));
+    }
+}
+
+TEST_CASE("should_complete_preprint - stale layer from previous print does NOT complete",
+          "[application][print_start][regression]") {
+    // Back-to-back prints: the previous print ended at e.g. current_layer=250
+    // with the printer reporting layers (sticky true). reset_for_new_print()
+    // (which zeroes the layer subject) is dispatched async AFTER
+    // collector->start(), so there is a window where the collector is active but
+    // current_layer still reads 250 and we have NOT yet observed a fresh 0
+    // (seen_layer_zero=false). A pure level read would complete the new print's
+    // pre-print phase instantly — the exact regression. The seen_layer_zero edge
+    // guard must reject it.
+    SECTION("Stale layer 250, zero not yet observed → does NOT complete") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/250, /*print_duration=*/0,
+            /*seen_layer_zero=*/false));
+    }
+    SECTION("Stale layer 250 WITH pre-print extrusion (duration>0) → still does NOT complete") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/250, /*print_duration=*/30,
+            /*seen_layer_zero=*/false));
+    }
+    SECTION("Even current_layer==1 does NOT complete before a fresh 0 was observed") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/1, /*print_duration=*/0,
+            /*seen_layer_zero=*/false));
+    }
+    SECTION("After reset zeroes the layer (seen_layer_zero=true), layer 1 completes normally") {
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/true, /*current_layer=*/1, /*print_duration=*/0,
+            /*seen_layer_zero=*/true));
+    }
+}
+
+TEST_CASE("should_complete_preprint - non-layer-reporting printer falls back to print_duration",
+          "[application][print_start]") {
+    // A printer that has NEVER emitted SET_PRINT_STATS_INFO / virtual_sdcard.layer
+    // this session (printer_reports_layers sticky-false) must keep the OLD
+    // behavior: complete on first extrusion. Otherwise it would never leave
+    // Preparing (its current_layer is only a progress-derived estimate, not a
+    // real signal). seen_layer_zero is irrelevant on this fallback path.
+    SECTION("print_duration>0 completes when printer never reported layers") {
+        REQUIRE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/false, /*current_layer=*/0, /*print_duration=*/3,
+            /*seen_layer_zero=*/false));
+    }
+    SECTION("print_duration==0 does NOT complete when printer never reported layers") {
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/false, /*current_layer=*/0, /*print_duration=*/0,
+            /*seen_layer_zero=*/true));
+    }
+    SECTION("Estimated layer >= 1 alone does NOT complete (estimate is not a real signal)") {
+        // For a non-reporting printer current_layer is progress-derived and can
+        // read >=1 during pre-print; only print_duration is trusted here.
+        REQUIRE_FALSE(MoonrakerManager::should_complete_preprint(
+            /*printer_reports_layers=*/false, /*current_layer=*/2, /*print_duration=*/0,
+            /*seen_layer_zero=*/true));
+    }
+}
+
+// ============================================================================
 // Shutdown Observer Release Contract (generalized; original: issue #888)
 // ============================================================================
 // `Application::shutdown()` deinit's all PrinterState subjects via
@@ -437,7 +634,7 @@ const std::vector<ShutdownObserverContract>& shutdown_observer_classes() {
     static const std::vector<ShutdownObserverContract> contracts = {
         {"include/moonraker_manager.h", "src/application/moonraker_manager.cpp",
          "MoonrakerManager", "shutdown",
-         /*min_expected_members=*/5},
+         /*min_expected_members=*/6},
     };
     return contracts;
 }

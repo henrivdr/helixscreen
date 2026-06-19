@@ -310,6 +310,19 @@ class PrinterPrintState {
     }
 
     /**
+     * @brief Sticky: has this printer EVER reported a real layer field this session?
+     *
+     * True once any of print_stats.info.current_layer, print_stats.info.total_layer,
+     * or virtual_sdcard.layer has been observed at least once. NOT reset between
+     * prints (printer capability, not per-print state). Used by the pre-print
+     * completion gate to choose the real-first-layer path vs the print_duration
+     * fallback without racing reset_for_new_print(). See printer_reports_layers_.
+     */
+    bool printer_reports_layers() const {
+        return printer_reports_layers_;
+    }
+
+    /**
      * @brief True when Klipper's virtual_sdcard is actively playing back gcode.
      *
      * Distinct from PrintJobState — `state=="paused"` can coexist with
@@ -523,7 +536,27 @@ class PrinterPrintState {
     // Layer tracking: true when real layer data received from print_stats.info or gcode fallback.
     // When false, current_layer is estimated from progress * total_layers.
     // Atomic: written from background thread (gcode fallback), read from main thread (UI).
+    // NOTE: this is PER-PRINT — reset_for_new_print() clears it to false, and it
+    // is transiently false at the start of each print until info.current_layer is
+    // re-observed. Do NOT use it to decide whether a printer reports layers at
+    // all; use printer_reports_layers_ for that (see below).
     std::atomic<bool> has_real_layer_data_{false};
+
+    // STICKY printer capability: true once ANY real layer field
+    // (print_stats.info.current_layer, print_stats.info.total_layer, or
+    // virtual_sdcard.layer) has been observed at least once this SESSION. Unlike
+    // has_real_layer_data_, this is a printer property, NOT per-print — it is
+    // never cleared by reset_for_new_print(). The pre-print → printing hand-off
+    // (PrintStartCollector via MoonrakerManager::should_complete_preprint) uses
+    // this to choose between the real-first-layer gate and the print_duration
+    // fallback. Using the per-print flag there caused premature completion on the
+    // Snapmaker U1: reset_for_new_print() clears has_real_layer_data_ AFTER the
+    // collector starts, and the U1 doesn't continuously re-emit current_layer
+    // during pre-print, so the flag stayed false through the purge and the
+    // print_duration fallback fired mid-pre-print. total_layer is present from
+    // print start on the U1, so this sticky flag latches immediately and stays
+    // true. Atomic: written from the status-update thread, read from main thread.
+    std::atomic<bool> printer_reports_layers_{false};
 
     // virtual_sdcard.is_active — true while Klipper is actively playing back
     // gcode from the SD/file. Distinct from PrintJobState (a print can be

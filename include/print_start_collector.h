@@ -111,6 +111,48 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     void complete_from_external_signal(const char* source);
 
     /**
+     * @brief Record an observed current_layer value for this print
+     *
+     * Arms the layer-1 completion edge: the first time current_layer is seen at
+     * 0 (or below 1) since this print started, the collector latches
+     * layer_zero_seen_. The pre-print → printing hand-off requires this latch so
+     * a stale positive layer carried over from the previous print (before
+     * reset_for_new_print() has zeroed the subject) can't complete the new
+     * print's pre-print phase. See MoonrakerManager::should_complete_preprint().
+     *
+     * @param current_layer The layer value just observed
+     */
+    void note_current_layer(int current_layer) {
+        if (current_layer < 1) {
+            layer_zero_seen_.store(true, std::memory_order_relaxed);
+        }
+    }
+
+    /**
+     * @brief Whether current_layer==0 has been observed since this print started
+     */
+    [[nodiscard]] bool has_seen_layer_zero() const {
+        return layer_zero_seen_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Mark the prime/purge line as in progress (phase UPDATE, not completion)
+     *
+     * Called when print_stats.print_duration first goes positive while the real
+     * first layer has NOT yet been reached (current_layer < 1). On firmwares
+     * whose prime/purge line emits no observable gcode_response (Snapmaker U1:
+     * the initial "G1 X110 E15" prime extrudes silently; the PRINT_PREEXTRUDING
+     * action code only fires for a SECOND tool mid-print), print_duration going
+     * 0->positive is the one real, observable signal that priming has begun.
+     *
+     * This advances the displayed phase to PURGING ("Priming...") but does NOT
+     * complete the pre-print phase — completion stays gated on the genuine
+     * current_layer 0->1 edge (MoonrakerManager::should_complete_preprint). A
+     * no-op once already at COMPLETE or PURGING.
+     */
+    void note_priming();
+
+    /**
      * @brief Set the print start profile for pattern/signal matching
      *
      * Must be called before start(). Ignored if the collector is active.
@@ -376,6 +418,14 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // thread (on_gcode_response) and read from the main thread
     // (check_fallback_completion).
     std::atomic<bool> real_signal_seen_{false};
+
+    // Latched true the first time current_layer is observed < 1 since this
+    // print started. Arms the layer-1 completion edge so a stale positive layer
+    // from the previous print (before reset_for_new_print() zeroes the subject)
+    // can't trigger the pre-print → printing hand-off. Reset in start()/reset().
+    // Written/read on the main thread (LVGL observer callbacks); atomic for
+    // consistency with the other cross-method flags above.
+    std::atomic<bool> layer_zero_seen_{false};
 
     // LVGL timer for periodic ETA updates (main thread only)
     lv_timer_t* eta_timer_ = nullptr;

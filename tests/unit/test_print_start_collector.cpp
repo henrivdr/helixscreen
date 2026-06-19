@@ -1428,6 +1428,59 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
 }
 
 TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
+                 "Layer-zero edge: stale positive layer does not arm completion until a fresh 0",
+                 "[print][collector][completion][regression]") {
+    // FIX C hardening: the pre-print → printing hand-off is gated on a genuine
+    // 0 -> >=1 transition (MoonrakerManager::should_complete_preprint with
+    // seen_layer_zero). The collector tracks the "seen zero" latch. On
+    // back-to-back prints the layer subject still holds a stale positive from
+    // the prior print until reset_for_new_print() runs async — note_current_layer
+    // must NOT latch on that stale positive, only on a freshly observed value < 1.
+
+    set_all_temps(0, 0, 0, 0);
+    collector().start();
+    drain_async_updates();
+
+    SECTION("Fresh collector has not seen layer zero") {
+        REQUIRE_FALSE(collector().has_seen_layer_zero());
+    }
+
+    SECTION("Stale positive layer (250) does NOT arm the edge") {
+        collector().note_current_layer(250); // stale carryover from prior print
+        REQUIRE_FALSE(collector().has_seen_layer_zero());
+    }
+
+    SECTION("A freshly observed layer 0 arms the edge; subsequent >=1 keeps it armed") {
+        collector().note_current_layer(250); // stale, ignored
+        REQUIRE_FALSE(collector().has_seen_layer_zero());
+        collector().note_current_layer(0); // fresh post-reset zero
+        REQUIRE(collector().has_seen_layer_zero());
+        collector().note_current_layer(1); // first real layer — latch stays
+        REQUIRE(collector().has_seen_layer_zero());
+    }
+
+    SECTION("reset() clears the latch for the next print") {
+        collector().note_current_layer(0);
+        REQUIRE(collector().has_seen_layer_zero());
+        collector().reset();
+        drain_async_updates();
+        REQUIRE_FALSE(collector().has_seen_layer_zero());
+    }
+
+    SECTION("A new start() clears the latch even if the subject holds a stale positive") {
+        collector().note_current_layer(0);
+        REQUIRE(collector().has_seen_layer_zero());
+        collector().stop();
+        // Simulate the stale-layer carryover: subject reads a positive value
+        // from the prior print at the moment the next print's collector starts.
+        lv_subject_set_int(state().get_print_layer_current_subject(), 250);
+        collector().start();
+        drain_async_updates();
+        REQUIRE_FALSE(collector().has_seen_layer_zero());
+    }
+}
+
+TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
                  "Fallback completion: progress threshold no longer triggers COMPLETE",
                  "[print][collector][fallback][completion]") {
     // Progress-threshold heuristic has been removed — authoritative signals handle
@@ -2100,11 +2153,13 @@ TEST_CASE_METHOD(VoronCollectorFixture,
 }
 
 // ============================================================================
-// Snapmaker U1 sub-phase counter regression — the U1 routes four distinct
-// probe operations (Pre-scanning, Levelling, Detecting Plate, Inspecting
-// Bed) through one BED_MESH phase enum, switching only the message between
-// them. The probe counter must reset between sub-phases so the displayed
-// "(N/M)" doesn't accumulate to "(20/16)".
+// Snapmaker U1 sub-phase counter regression — the U1 routes multiple distinct
+// probe operations (Inspecting Bed, Detecting Plate, the bed mesh proper)
+// through one BED_MESH phase enum, switching only the message between them. The
+// probe counter must reset between sub-phases so the displayed "(N/M)" doesn't
+// accumulate to "(20/16)". Sub-phase action codes are the REAL ones captured
+// from the U1 gcode_store on 2026-06-18 (PRINT_BED_DETECTING → "Inspecting
+// bed...", DETECT_PLATE → "Detecting plate...").
 // ============================================================================
 
 namespace {
@@ -2128,49 +2183,49 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     collector().start();
     drain_async_updates();
 
-    // Sub-phase 1: Pre-scanning. Three probes → "Pre-scanning Bed (3)".
-    feed_gcode("// Success: Set action code BED_PRESCANNING");
+    // Sub-phase 1: Inspecting bed. Three probes → "Inspecting bed (3)".
+    feed_gcode("// Success: Set action code PRINT_BED_DETECTING");
     REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
     feed_gcode("// probe at 10.000,10.000 is z=-0.100000");
     feed_gcode("// probe at 50.000,10.000 is z=-0.105000");
     feed_gcode("// probe at 90.000,10.000 is z=-0.110000");
 
-    std::string after_prescan = get_current_message();
-    INFO("After pre-scan: " << after_prescan);
-    REQUIRE(after_prescan.find("Pre-scanning") != std::string::npos);
-    REQUIRE(after_prescan.find("(3") != std::string::npos);
+    std::string after_inspect = get_current_message();
+    INFO("After inspect: " << after_inspect);
+    REQUIRE(after_inspect.find("Inspecting") != std::string::npos);
+    REQUIRE(after_inspect.find("(3") != std::string::npos);
 
-    // Sub-phase 2: Levelling. Counter MUST reset — five probes here should
-    // display "(1)".."(5)", not "(4)".."(8)".
-    feed_gcode("// Success: Set action code BED_LEVELING");
+    // Sub-phase 2: Detecting plate. Counter MUST reset — three probes here
+    // should display "(1)".."(3)", not "(4)".."(6)".
+    feed_gcode("// Success: Set action code DETECT_PLATE");
     feed_gcode("// probe at 10.000,10.000 is z=-0.200000");
 
-    std::string after_first_level_probe = get_current_message();
-    INFO("After first levelling probe: " << after_first_level_probe);
-    REQUIRE(after_first_level_probe.find("Levelling") != std::string::npos);
-    // Must NOT carry the 3 pre-scan probes
-    REQUIRE(after_first_level_probe.find("(4") == std::string::npos);
-    REQUIRE(after_first_level_probe.find("(1") != std::string::npos);
+    std::string after_first_detect_probe = get_current_message();
+    INFO("After first detect probe: " << after_first_detect_probe);
+    REQUIRE(after_first_detect_probe.find("Detecting") != std::string::npos);
+    // Must NOT carry the 3 inspect probes
+    REQUIRE(after_first_detect_probe.find("(4") == std::string::npos);
+    REQUIRE(after_first_detect_probe.find("(1") != std::string::npos);
 
     feed_gcode("// probe at 50.000,10.000 is z=-0.205000");
     feed_gcode("// probe at 90.000,10.000 is z=-0.210000");
 
-    std::string after_level = get_current_message();
-    INFO("After three levelling probes: " << after_level);
-    REQUIRE(after_level.find("Levelling") != std::string::npos);
-    REQUIRE(after_level.find("(3") != std::string::npos);
-    REQUIRE(after_level.find("(6") == std::string::npos);
+    std::string after_detect = get_current_message();
+    INFO("After three detect probes: " << after_detect);
+    REQUIRE(after_detect.find("Detecting") != std::string::npos);
+    REQUIRE(after_detect.find("(3") != std::string::npos);
+    REQUIRE(after_detect.find("(6") == std::string::npos);
 
-    // Sub-phase 3: Detecting Plate. Counter resets again.
-    feed_gcode("// Success: Set action code DETECT_PLATE");
+    // Sub-phase 3: back to Inspecting bed (message change resets again).
+    feed_gcode("// Success: Set action code PRINT_BED_DETECTING");
     feed_gcode("// probe at 100.000,100.000 is z=-0.300000");
 
-    std::string after_detect = get_current_message();
-    INFO("After detect probe: " << after_detect);
-    REQUIRE(after_detect.find("Detecting") != std::string::npos);
-    REQUIRE(after_detect.find("(1") != std::string::npos);
-    REQUIRE(after_detect.find("(4") == std::string::npos);
-    REQUIRE(after_detect.find("(7") == std::string::npos);
+    std::string after_reinspect = get_current_message();
+    INFO("After re-inspect probe: " << after_reinspect);
+    REQUIRE(after_reinspect.find("Inspecting") != std::string::npos);
+    REQUIRE(after_reinspect.find("(1") != std::string::npos);
+    REQUIRE(after_reinspect.find("(4") == std::string::npos);
+    REQUIRE(after_reinspect.find("(7") == std::string::npos);
 }
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
@@ -2179,15 +2234,15 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     collector().start();
     drain_async_updates();
 
-    feed_gcode("// Success: Set action code BED_PRESCANNING");
+    feed_gcode("// Success: Set action code PRINT_BED_DETECTING");
     feed_gcode("// probe at 10.000,10.000 is z=-0.100000");
 
     std::string msg = get_current_message();
     INFO("Sub-phase label: " << msg);
-    // Trailing ellipsis stripped before the count: "Pre-scanning Bed (1)",
-    // not "Pre-scanning Bed... (1)".
-    REQUIRE(msg.find("Pre-scanning Bed (") != std::string::npos);
-    REQUIRE(msg.find("Bed... (") == std::string::npos);
+    // Trailing ellipsis stripped before the count: "Inspecting bed (1)",
+    // not "Inspecting bed... (1)".
+    REQUIRE(msg.find("Inspecting bed (") != std::string::npos);
+    REQUIRE(msg.find("bed... (") == std::string::npos);
 }
 
 // ============================================================================
@@ -2195,11 +2250,14 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 //
 // The U1's firmware sets print_stats.state="printing" the instant the SD job
 // opens, then idles for ~90s before emitting its first real action code. The
-// real PRINT_START sequence is fully signalled via "// Success: Set action
-// code X" lines (PRINT_SWITCH_CHECKING → DETECT_PLATE → BED_PREHEATING →
-// BED_PRESCANNING → BED_LEVELING → ... → PRINT_PREEXTRUDING). It does NOT run
-// silent cleaning/purge macros, and temps-ready fires unreliably mid-sequence
-// (heater targets are set and cleared throughout). So:
+// pre-print sequence is signalled via two action-code verb forms — "// Success:
+// Set action code X" and "// Success: Changed main state to PRINTING with
+// action X" — in the real order captured 2026-06-18:
+// PRINT_BED_DETECTING → PRINT_SWITCH_CHECKING → PRINT_AUTO_FEEDING → DETECT_PLATE
+// → (silent clean + mesh + prime) → PRINT_PREEXTRUDING (on tool-change). The
+// signal-less clean/mesh/prime stretch does NOT get a temps-ready timer:
+// heater targets are set and cleared throughout (ext_target=0 during the early
+// idle gap), so temps-ready fires unreliably. So:
 //   1. The profile must carry NO silent_progression entries — a temps-ready
 //      timer would announce "Purging..." ~45s before the printer homes.
 //   2. Once a real firmware signal has been seen, the proactive temperature
@@ -2330,16 +2388,117 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 
     // Same action code twice in a row must NOT reset the counter — only
     // a *change* in message resets.
-    feed_gcode("// Success: Set action code BED_LEVELING");
+    feed_gcode("// Success: Set action code DETECT_PLATE");
     feed_gcode("// probe at 10.000,10.000 is z=-0.100000");
     feed_gcode("// probe at 50.000,10.000 is z=-0.105000");
-    feed_gcode("// Success: Set action code BED_LEVELING"); // same message
+    feed_gcode("// Success: Set action code DETECT_PLATE"); // same message
     feed_gcode("// probe at 90.000,10.000 is z=-0.110000");
 
     std::string msg = get_current_message();
-    INFO("After repeated BED_LEVELING: " << msg);
+    INFO("After repeated DETECT_PLATE: " << msg);
     REQUIRE(msg.find("(3") != std::string::npos);
     REQUIRE(msg.find("(1)") == std::string::npos);
+}
+
+// ============================================================================
+// Snapmaker U1: the real bed mesh runs AFTER "Detecting plate" with no action
+// code of its own — only the bed_mesh.py "// z offset:" line (emitted at mesh
+// start) and "// z_mesh_complete:" (at the end) reach gcode_response. Without a
+// mesh-start signal the "Detecting plate" label persisted through the entire
+// real mesh (device-observed bug). "// z offset:" must relabel BED_MESH to
+// "Bed mesh" and reset the probe counter, so probes count "(1)".."(n)" under
+// the correct label. Real lines captured 2026-06-18 (gcode_store 20:21:26 /
+// 20:21:30):  "// z offset: -0.05"  then  "// probe at x: 129.915, y: 125.560
+// is z=299.043333".
+// ============================================================================
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: z offset relabels Detecting plate -> Bed mesh and resets counter",
+                 "[print][collector][snapmaker][bed_mesh]") {
+    collector().start();
+    drain_async_updates();
+
+    // Plate detect runs first, counting its own probes.
+    feed_gcode("// Success: Set action code DETECT_PLATE");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    feed_gcode("// probe at x: 13.000, y: 220.000 is z=-0.321667");
+    feed_gcode("// probe at x: 13.000, y: 233.000 is z=-0.369167");
+    {
+        std::string msg = get_current_message();
+        INFO("During plate detect: " << msg);
+        REQUIRE(msg.find("Detecting") != std::string::npos);
+        REQUIRE(msg.find("(2") != std::string::npos);
+    }
+
+    // The real mesh starts: "// z offset:" must switch the label to "Bed mesh"
+    // (NOT stay on "Detecting plate") even though BED_MESH was already detected.
+    feed_gcode("// z offset: -0.05");
+    {
+        std::string msg = get_current_message();
+        INFO("After z offset: " << msg);
+        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+        REQUIRE(msg.find("Bed mesh") != std::string::npos);
+        REQUIRE(msg.find("Detecting") == std::string::npos);
+    }
+
+    // Mesh probes now count from 1 under "Bed mesh" (counter reset on the
+    // sub-phase message change — must NOT carry the 2 plate-detect probes).
+    feed_gcode("// probe at x: 129.915, y: 125.560 is z=299.043333");
+    {
+        std::string msg = get_current_message();
+        INFO("First mesh probe: " << msg);
+        REQUIRE(msg.find("Bed mesh") != std::string::npos);
+        REQUIRE(msg.find("(1") != std::string::npos);
+        REQUIRE(msg.find("(3") == std::string::npos);
+    }
+
+    // z_mesh_complete keeps the label on "Bed mesh".
+    feed_gcode("// z_mesh_complete: -0.02573436601557052");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    REQUIRE(get_current_message().find("Bed mesh") != std::string::npos);
+}
+
+// ============================================================================
+// Snapmaker U1: the initial prime/purge line ("G1 X110 E15") extrudes with NO
+// observable gcode_response (PRINT_PREEXTRUDING only fires for a 2nd tool
+// mid-print). print_stats.print_duration going 0->positive while current_layer
+// is still < 1 is the one real, observable "priming has begun" signal. The
+// collector must show PURGING "Priming..." but must NOT complete the pre-print
+// phase — completion stays gated on the genuine current_layer 0->1 edge.
+// ============================================================================
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: note_priming shows Priming without completing pre-print",
+                 "[print][collector][snapmaker][preprint]") {
+    collector().start();
+    drain_async_updates();
+
+    // Sequence has reached the mesh, pre-layer-1.
+    feed_gcode("// z offset: -0.05");
+    feed_gcode("// z_mesh_complete: -0.02573436601557052");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+
+    // print_duration went positive (prime extrusion) while current_layer < 1.
+    collector().note_priming();
+    drain_async_updates();
+    INFO("After note_priming: phase=" << static_cast<int>(get_current_phase())
+                                      << " msg=" << get_current_message());
+    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
+    REQUIRE(get_current_message().find("Priming") != std::string::npos);
+
+    // CRITICAL: priming is a phase UPDATE, not completion. It must NOT advance to
+    // COMPLETE — that only happens on the real first-layer (current_layer 0->1).
+    REQUIRE(get_current_phase() != PrintStartPhase::COMPLETE);
+
+    // A second note_priming is a no-op (already PURGING) and still not COMPLETE.
+    collector().note_priming();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
+
+    // The genuine first-layer signal completes it (as before).
+    collector().complete_from_external_signal("first layer");
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::COMPLETE);
 }
 
 // ============================================================================

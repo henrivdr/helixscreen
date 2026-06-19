@@ -13,6 +13,11 @@ class PrinterPrintStateTestAccess {
     static void reset_extra(PrinterPrintState& pps) {
         pps.estimated_print_time_ = 0;
         pps.has_real_layer_data_ = false;
+        // Sticky printer capability — session-scoped in production (survives
+        // reset_for_new_print, cleared only on a fresh session). The test
+        // reset() simulates a fresh session on the shared PrinterState
+        // singleton, so clear it here for cross-test isolation.
+        pps.printer_reports_layers_ = false;
         pps.slicer_progress_ = 0.0;
         pps.slicer_progress_active_ = false;
         pps.smoothed_remaining_ = 0.0;

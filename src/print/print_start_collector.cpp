@@ -122,6 +122,12 @@ void PrintStartCollector::start() {
         temps_ready_time_ = {};
         silent_progression_idx_ = 0;
         real_signal_seen_.store(false, std::memory_order_relaxed);
+        // Arm the layer-1 completion edge fresh for this print. The current
+        // subject value may be a stale positive carried over from the previous
+        // print (reset_for_new_print() runs async, after start()), so we do NOT
+        // seed layer_zero_seen_ from it — only a freshly observed current_layer<1
+        // (post-reset) latches it. See MoonrakerManager::should_complete_preprint().
+        layer_zero_seen_.store(false, std::memory_order_relaxed);
         // Snapshot stale subject values so fallbacks only trigger on real changes
         baseline_layer_ = lv_subject_get_int(state_.get_print_layer_current_subject());
         baseline_progress_ = lv_subject_get_int(state_.get_print_progress_subject());
@@ -329,6 +335,7 @@ void PrintStartCollector::reset() {
         temps_ready_time_ = {};
         silent_progression_idx_ = 0;
         real_signal_seen_.store(false, std::memory_order_relaxed);
+        layer_zero_seen_.store(false, std::memory_order_relaxed);
     }
     fallbacks_enabled_.store(false);
 
@@ -359,6 +366,28 @@ void PrintStartCollector::complete_from_external_signal(const char* source) {
     }
     spdlog::info("[PrintStartCollector] External completion signal: {}", source);
     update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
+}
+
+void PrintStartCollector::note_priming() {
+    if (!active_.load()) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        // Don't regress out of COMPLETE, and don't re-announce once already
+        // showing PURGING. update_phase() also guards COMPLETE→COMPLETE, but we
+        // must not flip a finished pre-print back to "Priming...".
+        if (current_phase_ == PrintStartPhase::COMPLETE ||
+            current_phase_ == PrintStartPhase::PURGING) {
+            return;
+        }
+    }
+    spdlog::info("[PrintStartCollector] print_duration positive pre-layer-1 → Priming");
+    // Mark as a real signal so the proactive temperature heuristic stays gated
+    // off (the firmware/extrusion is authoritative here), then advance the
+    // displayed phase. NOT a completion — that stays on the current_layer edge.
+    real_signal_seen_.store(true, std::memory_order_relaxed);
+    update_phase(PrintStartPhase::PURGING, lv_tr("Priming..."));
 }
 
 void PrintStartCollector::check_fallback_completion() {
@@ -430,8 +459,9 @@ void PrintStartCollector::check_fallback_completion() {
     // temperature alone. It is GATED OFF the moment any real firmware signal is
     // observed (real_signal_seen_): on signal-rich firmwares like the Snapmaker
     // U1 the bed/nozzle sit below target for almost all of preparation while the
-    // firmware narrates Homing → DETECT_PLATE → BED_PREHEATING → ... via action
-    // codes, so an ungated proactive detector fires "Heating Bed"/"Heating
+    // firmware narrates Homing → PRINT_BED_DETECTING → PRINT_SWITCH_CHECKING →
+    // DETECT_PLATE → ... via action codes, so an ungated proactive detector
+    // fires "Heating Bed"/"Heating
     // Nozzle" on nearly every tick and stomps the real, ordered phases. Once the
     // firmware is talking it is authoritative; proactive must stay silent.
     bool is_temp_detected_phase =
@@ -943,16 +973,29 @@ void PrintStartCollector::check_phase_patterns(const std::string& line) {
     PrintStartProfile::MatchResult match;
     if (profile_->try_match_pattern(line, match)) {
         real_signal_seen_.store(true, std::memory_order_relaxed);
-        // Only update if this is a new phase
-        bool is_new_phase = false;
+        // Update when this is a NEW phase, OR when it's a BED_MESH sub-phase
+        // *message* change while already in BED_MESH. The latter is what lets a
+        // mesh-start signal (Snapmaker U1 "// z offset:") relabel the display
+        // from a prior BED_MESH sub-phase (e.g. "Detecting plate") to "Bed
+        // mesh" even though the BED_MESH enum was already detected — without
+        // it, the previous sub-phase label persists through the whole real mesh
+        // because response_patterns otherwise fire once per enum value.
+        // maybe_reset_for_mesh_subphase_locked() (inside update_phase) resets
+        // the probe counter on the message change so the "(n)" count restarts.
+        bool should_update = false;
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             if (detected_phases_.find(match.phase) == detected_phases_.end()) {
                 detected_phases_.insert(match.phase);
-                is_new_phase = true;
+                should_update = true;
+            } else if (match.phase == PrintStartPhase::BED_MESH &&
+                       current_phase_ == PrintStartPhase::BED_MESH &&
+                       trim_trailing_ellipsis(match.message) !=
+                           trim_trailing_ellipsis(current_mesh_message_)) {
+                should_update = true;
             }
         }
-        if (is_new_phase) {
+        if (should_update) {
             if (profile_->progress_mode() == PrintStartProfile::ProgressMode::SEQUENTIAL) {
                 update_phase(match.phase, match.message, match.progress);
             } else {
@@ -1089,8 +1132,8 @@ bool PrintStartCollector::check_k2_cfs_signal(const std::string& line) {
 /// Reset mesh probe counters when entering BED_MESH or when the BED_MESH
 /// status message changes (sub-phase transition on firmwares that route
 /// multiple distinct probe operations through one phase enum, e.g.
-/// Snapmaker U1: Pre-scanning → Levelling → Detecting Plate → Inspecting
-/// Bed). Caller must hold state_mutex_.
+/// Snapmaker U1: Inspecting bed → Detecting plate → Bed mesh). Caller must
+/// hold state_mutex_.
 void PrintStartCollector::maybe_reset_for_mesh_subphase_locked(PrintStartPhase next_phase,
                                                                const std::string& next_message) {
     if (next_phase != PrintStartPhase::BED_MESH) {

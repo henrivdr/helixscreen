@@ -561,6 +561,13 @@ class PrintStatusPanel : public OverlayBase {
     /// Mirrors PrintSelectDetailView::get_tools_used(). Empty if no parsed file.
     std::set<int> get_tools_used() const;
 
+    /// @brief Recompute the print-scoped runout badge value (FIX B).
+    /// Scopes FilamentSensorManager's runout state to the active print's used
+    /// tools using AMS lane truth and publishes it into filament_runout_scoped,
+    /// which the in-print filament_sensor_indicator binds. Runs on the main
+    /// thread (observer callbacks + gcode-load paths).
+    void recompute_scoped_runout();
+
     //
     // === Static Trampolines ===
     //
@@ -650,6 +657,8 @@ class PrintStatusPanel : public OverlayBase {
     ObserverGuard filament_sensor_count_observer_;
     ObserverGuard ams_slot_count_observer_;
     ObserverGuard toolchange_visible_observer_;
+    ObserverGuard scoped_runout_observer_;       ///< Recomputes scoped runout badge on sensor edge
+    ObserverGuard scoped_runout_slots_observer_; ///< ...and on AMS lane-presence change (slots_version)
 
     // Lazy fan control overlay (created on first click; Task 9 wires the push).
     lv_obj_t* fan_control_panel_ = nullptr;

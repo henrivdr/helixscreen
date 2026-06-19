@@ -12,22 +12,27 @@
 <component>
   <api>
     <prop name="size" type="string" default="sm"/>
+    <!-- Which runout subject drives the indicator. Defaults to the global,
+         all-sensors-aggregate "filament_runout_detected". The in-print status
+         panel passes "filament_runout_scoped" so the badge only reflects the
+         tools the active print uses (lane truth), not every loaded sensor. -->
+    <prop name="subject" type="subject" default="filament_runout_detected"/>
   </api>
   <view name="filament_sensor_indicator"
         extends="lv_obj" width="content" height="content" style_pad_all="0" scrollable="false">
     <!-- Hidden only when no sensor configured (value=-1) -->
-    <bind_flag_if_eq subject="filament_runout_detected" flag="hidden" ref_value="-1"/>
+    <bind_flag_if_eq subject="$subject" flag="hidden" ref_value="-1"/>
     <!-- Loaded: green nozzle -->
     <icon src="filament" size="$size" variant="success">
-      <bind_flag_if_not_eq subject="filament_runout_detected" flag="hidden" ref_value="1"/>
+      <bind_flag_if_not_eq subject="$subject" flag="hidden" ref_value="1"/>
     </icon>
     <!-- Empty: red nozzle-alert -->
     <icon src="filament_alert" size="$size" variant="danger">
-      <bind_flag_if_not_eq subject="filament_runout_detected" flag="hidden" ref_value="0"/>
+      <bind_flag_if_not_eq subject="$subject" flag="hidden" ref_value="0"/>
     </icon>
     <!-- Sensor disabled: muted nozzle (runout protection is off) -->
     <icon src="filament" size="$size" variant="disabled">
-      <bind_flag_if_not_eq subject="filament_runout_detected" flag="hidden" ref_value="2"/>
+      <bind_flag_if_not_eq subject="$subject" flag="hidden" ref_value="2"/>
     </icon>
   </view>
 </component>

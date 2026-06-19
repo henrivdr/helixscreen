@@ -388,6 +388,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                     spdlog::info("[LayerTracker] Receiving real layer data from print_stats.info");
                     has_real_layer_data_ = true;
                 }
+                printer_reports_layers_ = true; // sticky printer capability
                 if (current_layer != lv_subject_get_int(&print_layer_current_)) {
                     spdlog::debug("[LayerTracker] current_layer={} (from print_stats.info)",
                                   current_layer);
@@ -398,6 +399,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
 
             if (info.contains("total_layer") && info["total_layer"].is_number()) {
                 int total_layer = info["total_layer"].get<int>();
+                printer_reports_layers_ = true; // sticky printer capability (U1 sends this at start)
                 if (total_layer != lv_subject_get_int(&print_layer_total_)) {
                     spdlog::debug("[LayerTracker] total_layer={} (from print_stats.info)",
                                   total_layer);
@@ -641,6 +643,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                     spdlog::info("[LayerTracker] Receiving real layer data from virtual_sdcard");
                     has_real_layer_data_ = true;
                 }
+                printer_reports_layers_ = true; // sticky printer capability
                 if (vsd_layer != lv_subject_get_int(&print_layer_current_)) {
                     spdlog::debug("[LayerTracker] current_layer={} (from virtual_sdcard)",
                                   vsd_layer);
@@ -650,14 +653,31 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
             if (!total_layer_from_info && sdcard.contains("layer_count") &&
                 sdcard["layer_count"].is_number_integer()) {
                 int vsd_total = sdcard["layer_count"].get<int>();
+                printer_reports_layers_ = true; // sticky printer capability
                 if (vsd_total != lv_subject_get_int(&print_layer_total_)) {
                     spdlog::debug("[LayerTracker] total_layer={} (from virtual_sdcard)", vsd_total);
                     lv_subject_set_int(&print_layer_total_, vsd_total);
                 }
             }
 
-            // Layer estimation fallback: linear interpolation from file progress
-            if (!has_real_layer_data_) {
+            // Layer estimation fallback: linear interpolation from file progress.
+            //
+            // Gate on the STICKY printer_reports_layers_ capability, NOT the
+            // per-print has_real_layer_data_ flag. A printer that has ever
+            // reported a real layer field (the U1 sends total_layer in
+            // print_stats.info from print start) must NEVER fabricate a layer
+            // from progress: reset_for_new_print() clears has_real_layer_data_
+            // at the start of each print, and Moonraker DELTA updates omit the
+            // unchanged info.current_layer=0 throughout pre-print, so that flag
+            // stays false while file progress climbs. The old gate then
+            // estimated current_layer=1 from ~2% progress mid-pre-print, which
+            // tripped the pre-print→printing hand-off
+            // (MoonrakerManager::should_complete_preprint) ~24s in. With the
+            // sticky gate, current_layer holds the authoritative info value (0
+            // through pre-print) and only a genuine info.current_layer>=1
+            // advances it. Estimation remains available for printers that never
+            // report any real layer data (printer_reports_layers_ stays false).
+            if (!printer_reports_layers_) {
                 auto current_state =
                     static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
                 bool is_terminal_state = (current_state == PrintJobState::COMPLETE ||
@@ -762,6 +782,7 @@ void PrinterPrintState::set_print_layer_current(int layer) {
             spdlog::info("[LayerTracker] Receiving real layer data from gcode response");
             has_real_layer_data_ = true;
         }
+        printer_reports_layers_ = true; // sticky printer capability
         if (lv_subject_get_int(&print_layer_current_) != layer) {
             lv_subject_set_int(&print_layer_current_, layer);
         }

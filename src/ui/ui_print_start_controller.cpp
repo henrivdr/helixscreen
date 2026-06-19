@@ -176,28 +176,11 @@ void PrintStartController::initiate() {
         }
     }
 
-    // Check if runout sensor shows no filament (pre-print warning).
-    // Backends that auto-unload the toolhead after each print (e.g. AD5X IFS)
-    // leave the extruder empty by design, so the runout sensor reading
-    // "no filament" at print-start is expected and the warning is noise.
-    auto& sensor_mgr = helix::FilamentSensorManager::instance();
-    bool suppress_runout_warning = false;
-    auto& ams_state = AmsState::instance();
-    for (int i = 0; i < ams_state.backend_count(); ++i) {
-        if (auto* backend = ams_state.get_backend(i);
-            backend && backend->auto_unloads_after_print()) {
-            suppress_runout_warning = true;
-            break;
-        }
-    }
-    if (!suppress_runout_warning && sensor_mgr.is_master_enabled() &&
-        sensor_mgr.is_sensor_available(helix::FilamentSensorRole::RUNOUT) &&
-        !sensor_mgr.is_filament_detected(helix::FilamentSensorRole::RUNOUT)) {
-        // No filament detected - show warning dialog
-        // Button stays disabled - dialog will handle continuation or re-enable on cancel
-        spdlog::info("[PrintStartController] Runout sensor shows no filament - showing pre-print "
-                     "warning");
-        show_filament_warning();
+    // Pre-print filament-present check (auto-unload suppression + AMS lane truth
+    // / non-AMS aggregate fallback). Shared with the insufficient-filament
+    // continuation so both paths behave identically. Returns true if a warning
+    // dialog was shown — the dialog drives continuation, so we return here.
+    if (check_required_filament_present()) {
         return;
     }
 
@@ -493,19 +476,108 @@ void PrintStartController::initiate_reprint(const std::string& filename, const s
 // Filament Warning Dialog
 // ============================================================================
 
-void PrintStartController::show_filament_warning() {
+std::vector<std::pair<int, int>> PrintStartController::find_empty_required_lanes() {
+    if (!detail_view_) {
+        return {};
+    }
+    return helix::FilamentSensorManager::instance().find_empty_required_lanes(
+        detail_view_->get_tools_used(), detail_view_->get_effective_remap());
+}
+
+std::string PrintStartController::build_empty_lane_message(
+    const std::vector<std::pair<int, int>>& empty) const {
+    // Name the offending tool(s) and the AMS lane each routes to so the user
+    // knows exactly which lane to load. Lane numbers are 1-based for display
+    // (slot 0 -> "Lane 1") to match the rest of the slot UI.
+    std::string message;
+    if (empty.size() == 1) {
+        message = fmt::format(lv_tr("Tool {} → Lane {}: no filament loaded."), empty[0].first,
+                              empty[0].second + 1);
+    } else {
+        message = lv_tr("These tools have no filament loaded:");
+        message += "\n\n";
+        for (const auto& [tool, slot] : empty) {
+            message += fmt::format("  {} {} {} → {} {}\n", LV_SYMBOL_BULLET, lv_tr("Tool"),
+                                   tool, lv_tr("Lane"), slot + 1);
+        }
+    }
+    message += "\n\n";
+    message += lv_tr("Start print anyway?");
+    return message;
+}
+
+bool PrintStartController::check_required_filament_present() {
+    auto& sensor_mgr = helix::FilamentSensorManager::instance();
+    auto& ams_state = AmsState::instance();
+
+    // Backends that auto-unload the toolhead after each print (e.g. AD5X IFS)
+    // leave the extruder empty by design, so a "no filament" reading at
+    // print-start is expected and the warning is noise. ANY such backend
+    // suppresses the warning (matches initiate()'s original intent).
+    bool suppress_runout_warning = false;
+    bool ams_manages_filament = false;
+    for (int i = 0; i < ams_state.backend_count(); ++i) {
+        if (auto* backend = ams_state.get_backend(i)) {
+            ams_manages_filament = true;
+            if (backend->auto_unloads_after_print()) {
+                suppress_runout_warning = true;
+            }
+        }
+    }
+    if (suppress_runout_warning) {
+        return false;
+    }
+
+    // AMS lane-truth path: scope the check to the tools the print actually uses
+    // and consult the backend's authoritative per-slot presence (Snapmaker U1:
+    // print_task_config.filament_exist[head]) instead of the aggregate motion
+    // sensors. Avoids two false positives: a used head whose filament is staged
+    // in the lane but retracted from the toolhead, and unused empty heads. The
+    // lane scan is scoped to the ACTIVE backend (index 0), matching
+    // FilamentSensorManager's per-backend slot indexing.
+    if (ams_manages_filament && ams_state.get_backend()) {
+        auto empty = find_empty_required_lanes();
+        if (!empty.empty()) {
+            spdlog::info("[PrintStartController] {} required tool(s) have an empty lane - "
+                         "showing pre-print warning",
+                         empty.size());
+            show_filament_warning(build_empty_lane_message(empty));
+            return true;
+        }
+        return false;
+    }
+
+    // Non-AMS / no-active-backend fallback: aggregate runout-sensor check (unchanged).
+    if (sensor_mgr.is_master_enabled() &&
+        sensor_mgr.is_sensor_available(helix::FilamentSensorRole::RUNOUT) &&
+        !sensor_mgr.is_filament_detected(helix::FilamentSensorRole::RUNOUT)) {
+        spdlog::info("[PrintStartController] Runout sensor shows no filament - showing pre-print "
+                     "warning");
+        show_filament_warning();
+        return true;
+    }
+
+    return false;
+}
+
+void PrintStartController::show_filament_warning(const std::string& message) {
     // Close any existing dialog first
     if (filament_warning_modal_) {
         helix::ui::modal_hide(filament_warning_modal_);
         filament_warning_modal_ = nullptr;
     }
 
+    // modal_show_confirmation copies the message string into the dialog's label
+    // (via the XML attribute path), so pass it directly — no static buffer, no
+    // truncation of long multi-tool / translated messages.
+    const char* body = message.empty()
+                           ? lv_tr("The runout sensor indicates no filament is loaded. "
+                                   "Start print anyway?")
+                           : message.c_str();
+
     filament_warning_modal_ = helix::ui::modal_show_confirmation(
-        lv_tr("No Filament Detected"),
-        lv_tr("The runout sensor indicates no filament is loaded. "
-              "Start print anyway?"),
-        ModalSeverity::Warning, lv_tr("Start Print"), on_filament_warning_proceed_static,
-        on_filament_warning_cancel_static, this);
+        lv_tr("No Filament Detected"), body, ModalSeverity::Warning, lv_tr("Start Print"),
+        on_filament_warning_proceed_static, on_filament_warning_cancel_static, this);
 
     if (!filament_warning_modal_) {
         spdlog::error("[PrintStartController] Failed to create filament warning dialog");
@@ -600,12 +672,10 @@ void PrintStartController::on_insufficient_filament_proceed_static(lv_event_t* e
         self->insufficient_filament_modal_ = nullptr;
     }
 
-    // Continue the existing pre-print chain: runout sensor check next.
-    auto& sensor_mgr = helix::FilamentSensorManager::instance();
-    if (sensor_mgr.is_master_enabled() &&
-        sensor_mgr.is_sensor_available(helix::FilamentSensorRole::RUNOUT) &&
-        !sensor_mgr.is_filament_detected(helix::FilamentSensorRole::RUNOUT)) {
-        self->show_filament_warning();
+    // Continue the existing pre-print chain: filament-present check next. Uses
+    // the SAME shared gate as initiate() so the auto-unload suppression (AD5X
+    // IFS) and AMS lane truth apply identically here.
+    if (self->check_required_filament_present()) {
         return;
     }
     auto unresolved = self->find_unresolved_tools();
@@ -1019,6 +1089,19 @@ void PrintStartController::on_material_mismatch_cancel_static(lv_event_t* e) {
 // Filament Remap Lifecycle
 // ============================================================================
 
+bool PrintStartController::should_warn_remap_unsupported(
+    const helix::printer::ToolMappingCapabilities& caps, bool applies_via_preprint) {
+    // A backend that applies the remap via its firmware-native pre-print path
+    // (Snapmaker U1) honors the user's choice through build_preprint_gcode()
+    // even though caps.editable is false — so the toast would be a stale false
+    // alarm. Only warn when the backend can neither edit its mapping nor apply
+    // it via a pre-print send.
+    if (applies_via_preprint) {
+        return false;
+    }
+    return !caps.supported || !caps.editable;
+}
+
 bool PrintStartController::apply_filament_remaps() {
     if (!detail_view_) {
         return false;
@@ -1074,16 +1157,26 @@ bool PrintStartController::apply_filament_remaps() {
         return false;
     }
 
-    // Backend reports supported but not editable. User-supplied explicit
-    // remaps cannot be honored; surface a toast so the failure is visible
-    // instead of silently ignoring the choice.
+    // Backends that apply the remap via their firmware-native pre-print path
+    // (Snapmaker U1: requires_preprint_send → build_preprint_gcode emits
+    // SET_PRINT_EXTRUDER_MAP / SET_PRINT_USED_EXTRUDERS) honor the user's choice
+    // even though their tool-mapping capabilities report editable=false. For
+    // those, skip the generic set_tool_mapping() path SILENTLY — the pre-print
+    // send (fired later from execute_print_start) does the work. Only warn when
+    // the backend can NEITHER edit its mapping NOR apply it via a pre-print send.
     auto caps = backend->get_tool_mapping_capabilities();
-    if (!caps.supported || !caps.editable) {
-        spdlog::warn("[PrintStartController] Backend (idx={}) does not support editable tool "
-                     "mapping — {} explicit remap(s) will be ignored",
-                     backend_idx, mappings.size());
-        NOTIFY_WARNING("Filament remap not supported on this printer — print will use "
-                       "the firmware's current tool mapping");
+    if (!caps.editable) {
+        if (should_warn_remap_unsupported(caps, backend->requires_preprint_send())) {
+            spdlog::warn("[PrintStartController] Backend (idx={}) does not support editable tool "
+                         "mapping — {} explicit remap(s) will be ignored",
+                         backend_idx, mappings.size());
+            NOTIFY_WARNING("Filament remap not supported on this printer — print will use "
+                           "the firmware's current tool mapping");
+        } else {
+            spdlog::debug("[PrintStartController] Backend (idx={}) applies remap via its "
+                          "pre-print path — skipping generic remap send (no warning)",
+                          backend_idx);
+        }
         return false;
     }
 
