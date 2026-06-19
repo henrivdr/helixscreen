@@ -72,6 +72,25 @@ TEST_CASE("MemoryThresholds for good device honors RSS floor on small good devic
     REQUIRE(t.critical_rss_kb == info.total_kb * 50 / 100);
 }
 
+TEST_CASE("MemoryThresholds: 512MB-class AD5X classifies as good, not normal",
+          "[memory_monitor]") {
+    // AD5X is physically 512MB but reports ~473MB usable after firmware reserves
+    // kernel/CMA/framebuffer. It must land in the "good" tier (growth 5MB/5min,
+    // RSS floors) rather than "normal" (growth 3MB/5min) so a 512MB board is not
+    // bucketed with 256-448MB devices.
+    MemoryInfo info;
+    info.total_kb = 473 * 1024;
+    info.available_kb = 380 * 1024;
+
+    REQUIRE(info.is_good_device());
+    REQUIRE_FALSE(info.is_normal_device());
+    REQUIRE_FALSE(info.is_constrained_device());
+
+    auto t = MemoryThresholds::for_device(info);
+    REQUIRE(t.warn_rss_kb == 180u * 1024); // good-tier floor, not the 120MB normal value
+    REQUIRE(t.growth_5min_kb == 5u * 1024);
+}
+
 // =============================================================================
 // compute_pressure_level() — pure function tests
 // =============================================================================
@@ -117,16 +136,54 @@ TEST_CASE("compute_pressure_level: critical when RSS exceeds critical threshold"
     REQUIRE(level == MemoryPressureLevel::critical);
 }
 
-TEST_CASE("compute_pressure_level: elevated from growth", "[memory_monitor]") {
+TEST_CASE("compute_pressure_level: elevated from growth when near RSS limit", "[memory_monitor]") {
     MemoryInfo sys;
     sys.total_kb = 2048 * 1024;
     sys.available_kb = 1500 * 1024;
     auto t = MemoryThresholds::for_device(sys);
 
     MemoryStats stats;
-    stats.vm_rss_kb = 50 * 1024; // Under RSS thresholds
+    // Already past half the warn threshold — fast growth here IS a signal.
+    stats.vm_rss_kb = t.warn_rss_kb / 2 + 1024;
 
     int64_t growth = static_cast<int64_t>(t.growth_5min_kb) + 1024;
+
+    auto level = compute_pressure_level(stats, t, MemoryPressureLevel::none, sys, growth);
+    REQUIRE(level == MemoryPressureLevel::elevated);
+}
+
+TEST_CASE("compute_pressure_level: growth ignored when device is healthy", "[memory_monitor]") {
+    // The AD5X print-start regression: 512MB-class device, RSS ~48MB, ~360MB
+    // free, +13MB/5min from the 3D viewer load. RSS is far below warn_rss/2 and
+    // available is far above 2x warn_available, so growth must NOT escalate.
+    MemoryInfo sys;
+    sys.total_kb = 473 * 1024; // AD5X reports ~473MB usable of 512MB physical
+    sys.available_kb = 358 * 1024;
+    auto t = MemoryThresholds::for_device(sys);
+
+    MemoryStats stats;
+    stats.vm_rss_kb = 48 * 1024; // Healthy: ~10% of total, well under warn_rss/2
+
+    int64_t growth = 13 * 1024; // +13MB over 5min — exceeds the threshold
+
+    REQUIRE(growth > static_cast<int64_t>(t.growth_5min_kb));
+    auto level = compute_pressure_level(stats, t, MemoryPressureLevel::none, sys, growth);
+    REQUIRE(level == MemoryPressureLevel::none);
+}
+
+TEST_CASE("compute_pressure_level: growth still warns constrained device under load",
+          "[memory_monitor]") {
+    // AD5M 128MB: RSS climbing during a print sits above warn_rss/2 (15MB), so
+    // rapid growth correctly escalates — this is where it actually matters.
+    MemoryInfo sys;
+    sys.total_kb = 110 * 1024; // AD5M ~110MB usable
+    sys.available_kb = 50 * 1024;
+    auto t = MemoryThresholds::for_device(sys);
+
+    MemoryStats stats;
+    stats.vm_rss_kb = 25 * 1024; // Above warn_rss/2 (15MB) but under warn_rss (30MB)
+
+    int64_t growth = static_cast<int64_t>(t.growth_5min_kb) + 512;
 
     auto level = compute_pressure_level(stats, t, MemoryPressureLevel::none, sys, growth);
     REQUIRE(level == MemoryPressureLevel::elevated);

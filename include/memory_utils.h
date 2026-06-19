@@ -59,9 +59,16 @@ struct MemoryInfo {
     size_t available_kb = 0; ///< Available memory in KB (free + buffers/cache)
     size_t free_kb = 0;      ///< Strictly free memory in KB
 
-    // RAM tier thresholds (total system RAM)
-    static constexpr size_t TIER_CONSTRAINED_KB = 256 * 1024;          ///< < 256MB = constrained
-    static constexpr size_t TIER_NORMAL_KB = 512 * 1024;               ///< < 512MB = normal
+    // RAM tier thresholds (total system RAM).
+    //
+    // Boundaries are set BELOW the nominal DRAM size to account for firmware-
+    // reserved memory (kernel, CMA, framebuffer): a board with N MB physical
+    // reports ~5-15% less as usable total. Without this headroom a 512MB device
+    // (AD5X reports ~470MB) would mis-classify as "normal" and inherit the tight
+    // 3MB/5min growth threshold meant for 256-512MB boards, spuriously warning
+    // on the one-time 3D viewer load at print start.
+    static constexpr size_t TIER_CONSTRAINED_KB = 256 * 1024;          ///< < 256MB usable = constrained (AD5M, K1C)
+    static constexpr size_t TIER_NORMAL_KB = 448 * 1024;               ///< 256-448MB usable = normal; >=448MB (512MB-class, e.g. AD5X) = good
     static constexpr size_t TIER_FORCE_STREAMING_KB = 2ULL * 1024 * 1024; ///< <= 2GB = force streaming
 
     /// Check if available memory is low (< 64MB available right now)
@@ -74,12 +81,12 @@ struct MemoryInfo {
         return total_kb < TIER_CONSTRAINED_KB;
     }
 
-    /// Device tier: normal (256-512MB total) - Pi 3, low-end Pi 4
+    /// Device tier: normal (256-448MB usable) - Pi 3, low-end Pi 4
     bool is_normal_device() const {
         return total_kb >= TIER_CONSTRAINED_KB && total_kb < TIER_NORMAL_KB;
     }
 
-    /// Device tier: good (> 512MB total) - Desktop, Pi 4 2GB+
+    /// Device tier: good (>= 448MB usable) - 512MB-class (AD5X), Desktop, Pi 4 2GB+
     bool is_good_device() const {
         return total_kb >= TIER_NORMAL_KB;
     }

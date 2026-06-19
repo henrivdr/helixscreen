@@ -245,8 +245,21 @@ MemoryPressureLevel compute_pressure_level(const MemoryStats& stats,
         }
     }
 
-    // Growth rate (may trigger elevated)
-    if (growth_kb > static_cast<int64_t>(thresholds.growth_5min_kb)) {
+    // Growth rate (may trigger elevated) — but ONLY when the device is already
+    // approaching its limits. A fast one-time climb is benign when there is
+    // ample headroom and must not warn: the 3D G-code viewer loading at print
+    // start adds ~13MB over 5 minutes, which on a 512MB-class AD5X (RSS ~48MB,
+    // hundreds of MB free) is well under every absolute band. Before this gate,
+    // every AD5X print start emitted a spurious `elevated` telemetry warning.
+    //
+    // Genuinely tight devices (AD5M 128MB, RSS baseline ~20MB vs warn_rss 30MB)
+    // sit above warn_rss/2 essentially all the time, so growth still escalates
+    // there — exactly where rapid growth actually matters.
+    const bool near_rss_limit = stats.vm_rss_kb >= thresholds.warn_rss_kb / 2;
+    const bool low_available =
+        sys_info.available_kb > 0 && sys_info.available_kb <= thresholds.warn_available_kb * 2;
+    if ((near_rss_limit || low_available) &&
+        growth_kb > static_cast<int64_t>(thresholds.growth_5min_kb)) {
         if (level < MemoryPressureLevel::elevated) {
             level = MemoryPressureLevel::elevated;
         }
