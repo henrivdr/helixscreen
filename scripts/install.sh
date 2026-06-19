@@ -6087,6 +6087,133 @@ _camera_backup_file()  { echo "${INSTALL_DIR}/config/.webcams_backup.json"; }
 # Our webcam entry name in moonraker.
 HELIX_WEBCAM_NAME="HelixScreen Camera"
 
+# Marker recording which moonraker.conf we reversibly commented out the
+# community "K2-Camera-main" mod's [webcam Default] iframe entry in (so uninstall
+# can un-comment it). Lives in INSTALL_DIR/config; one conf path per line.
+_k2cam_marker_file() { echo "${INSTALL_DIR}/config/.k2cam_webcam_disabled"; }
+
+# The reversible prefix used to comment out the K2-Camera-main [webcam Default]
+# block. Uninstall strips this exact prefix back off.
+K2CAM_DISABLE_PREFIX="#helix-k2cam-disabled# "
+
+# Detect the community "K2-Camera-main" mod. It REPLACES Moonraker (backs up
+# /usr/share/moonraker -> /usr/share/moonraker_backup, drops in its own copy)
+# and ships an iframe camera viewer whose [webcam Default] entry conflicts with
+# HelixScreen's ustreamer camera. Signature = the mod's source dir OR its
+# Moonraker backup exists. Paths are env-overridable so the BATS suite can point
+# them at temp dirs. Returns 0 if detected, 1 otherwise.
+_detect_k2_camera_mod() {
+    local k2cam_dir k2cam_mr_backup
+    k2cam_dir="${HELIX_K2CAM_DIR:-/root/K2-Camera-main}"
+    k2cam_mr_backup="${HELIX_K2CAM_MR_BACKUP:-/usr/share/moonraker_backup}"
+    [ -d "$k2cam_dir" ] || [ -d "$k2cam_mr_backup" ]
+}
+
+# Locate the moonraker.conf that actually contains the [webcam Default] iframe
+# entry. Search order: find_moonraker_conf (if available), then the K2-Camera
+# Moonraker location, then the standard MOONRAKER_CONF_PATHS. The base for the
+# K2-Camera location and the standard paths is env-overridable for tests via
+# HELIX_K2CAM_MR_DIR. Echoes the first existing file whose contents contain a
+# "[webcam Default]" line, or empty.
+_locate_k2cam_webcam_conf() {
+    local mr_dir candidate conf
+    mr_dir="${HELIX_K2CAM_MR_DIR:-/usr/share/moonraker}"
+
+    # find_moonraker_conf is defined in moonraker.sh; it may not be sourced in
+    # every context, so guard the call.
+    if command -v find_moonraker_conf >/dev/null 2>&1; then
+        candidate="$(find_moonraker_conf 2>/dev/null)"
+        if [ -n "$candidate" ] && [ -f "$candidate" ] && \
+            grep -q '^\[webcam Default\]' "$candidate" 2>/dev/null; then
+            echo "$candidate"
+            return 0
+        fi
+    fi
+
+    # The K2-Camera-main Moonraker copy keeps its conf here.
+    candidate="${mr_dir}/moonraker.conf"
+    if [ -f "$candidate" ] && grep -q '^\[webcam Default\]' "$candidate" 2>/dev/null; then
+        echo "$candidate"
+        return 0
+    fi
+
+    # Standard search paths (defined in moonraker.sh).
+    for conf in ${MOONRAKER_CONF_PATHS:-}; do
+        if [ -f "$conf" ] && grep -q '^\[webcam Default\]' "$conf" 2>/dev/null; then
+            echo "$conf"
+            return 0
+        fi
+    done
+
+    echo ""
+}
+
+# Restart Moonraker so a moonraker.conf change takes effect. Finds the init
+# script via _initd_dir (or /etc/init.d/moonraker) and `restart`s it (guarded,
+# errors ignored). If no init script is found, warn that a manual restart is
+# needed.
+_restart_moonraker() {
+    local initd script
+    initd="$(_initd_dir)"
+    for script in "${initd}/moonraker" "/etc/init.d/moonraker"; do
+        if [ -x "$script" ] || [ -f "$script" ]; then
+            $SUDO "$script" restart 2>/dev/null || true
+            return 0
+        fi
+    done
+    log_warn "Could not find a Moonraker init script — restart Moonraker manually for the camera change to take effect."
+    return 0
+}
+
+# Reversibly comment out the K2-Camera-main [webcam Default] iframe section in
+# whichever moonraker.conf contains it, record the affected path for reversal,
+# and restart Moonraker. Comments the block from the "[webcam Default]" header
+# through the line before the next "[section]" header / a blank line / EOF, by
+# prefixing each line with K2CAM_DISABLE_PREFIX. Idempotent: lines already
+# prefixed are skipped, and the marker is not duplicated.
+_disable_k2cam_webcam() {
+    local conf marker tmp
+    conf="$(_locate_k2cam_webcam_conf)"
+    if [ -z "$conf" ]; then
+        log_warn "K2-Camera-main detected, but no moonraker.conf with a [webcam Default] entry was found — nothing to disable."
+        return 0
+    fi
+
+    # Comment the [webcam Default] block via awk (robust for the section range).
+    tmp="$(mktemp)"
+    awk -v pfx="$K2CAM_DISABLE_PREFIX" '
+        BEGIN { in_block = 0 }
+        # Already-disabled lines: pass through untouched (idempotent).
+        index($0, pfx) == 1 { print; next }
+        # Header of the block: enter, comment it.
+        /^\[webcam Default\]/ { in_block = 1; print pfx $0; next }
+        in_block {
+            # End of the block: next section header, a blank line, then stop.
+            if ($0 ~ /^\[/ || $0 ~ /^[[:space:]]*$/) { in_block = 0; print; next }
+            print pfx $0; next
+        }
+        { print }
+    ' "$conf" > "$tmp"
+
+    if [ -s "$tmp" ]; then
+        $(file_sudo "$conf") cp "$tmp" "$conf" 2>/dev/null || \
+            log_warn "Could not write commented [webcam Default] back to $conf"
+    fi
+    rm -f "$tmp"
+
+    # Record the affected conf path for reversal (idempotent — no duplicates).
+    marker="$(_k2cam_marker_file)"
+    if [ -n "${INSTALL_DIR:-}" ] && [ ! -d "${INSTALL_DIR}/config" ]; then
+        $(file_sudo "${INSTALL_DIR}") mkdir -p "${INSTALL_DIR}/config"
+    fi
+    if [ ! -f "$marker" ] || ! grep -qF "$conf" "$marker" 2>/dev/null; then
+        echo "$conf" | $(file_sudo "${INSTALL_DIR}/config") tee -a "$marker" >/dev/null
+    fi
+
+    log_info "Commented the K2-Camera-main [webcam Default] entry in $conf (reversible)."
+    _restart_moonraker
+}
+
 # Detect the K2's primary LAN IPv4 address (busybox-compatible).
 # Strategy:
 #   1. `ip route get 1.1.1.1` and pull the "src <addr>" field (the address the
@@ -6290,6 +6417,19 @@ install_camera_k2() {
 
     log_info "Configuring K2 ustreamer camera..."
 
+    # (a0) DETECT the community "K2-Camera-main" mod and reversibly disable its
+    # conflicting [webcam Default] iframe entry. Runs BEFORE the usable-MJPEG
+    # early-return so it fires even when our camera is already set up. We do NOT
+    # undo their Moonraker swap — that's their restore.sh's job.
+    if _detect_k2_camera_mod; then
+        log_warn "Detected the community 'K2-Camera-main' mod (it replaces Moonraker and"
+        log_warn "ships an iframe camera viewer that conflicts with HelixScreen's camera)."
+        log_warn "Disabling its conflicting [webcam Default] iframe entry (reversible)."
+        log_warn "To fully remove the mod and restore stock Moonraker, run:"
+        log_warn "    /root/K2-Camera-main/restore.sh"
+        _disable_k2cam_webcam
+    fi
+
     # (a) DETECT: don't stomp an already-working MJPEG/ustreamer camera.
     if _moonraker_has_usable_mjpeg; then
         log_info "Moonraker already exposes a usable MJPEG camera — leaving it untouched"
@@ -6490,6 +6630,29 @@ PYEOF
         fi
         $(file_sudo "$backup") rm -f "$backup" 2>/dev/null || true
         $(file_sudo "$marker") rm -f "$marker" 2>/dev/null || true
+    fi
+
+    # (c) Re-enable the K2-Camera-main [webcam Default] entry we commented out, if
+    # any. For each recorded conf path, strip the K2CAM_DISABLE_PREFIX back off,
+    # then restart Moonraker so it takes effect. Finally remove the marker.
+    local k2cam_marker conf tmp restored=false
+    k2cam_marker="$(_k2cam_marker_file)"
+    if [ -f "$k2cam_marker" ]; then
+        while IFS= read -r conf; do
+            [ -n "$conf" ] || continue
+            [ -f "$conf" ] || continue
+            log_info "Re-enabling the K2-Camera-main [webcam Default] entry in $conf..."
+            tmp="$(mktemp)"
+            sed "s/^${K2CAM_DISABLE_PREFIX}//" "$conf" > "$tmp"
+            if [ -s "$tmp" ]; then
+                $(file_sudo "$conf") cp "$tmp" "$conf" 2>/dev/null || \
+                    log_warn "Could not un-comment [webcam Default] in $conf"
+                restored=true
+            fi
+            rm -f "$tmp"
+        done < "$k2cam_marker"
+        [ "$restored" = true ] && _restart_moonraker
+        $(file_sudo "$k2cam_marker") rm -f "$k2cam_marker" 2>/dev/null || true
     fi
 
     log_success "K2 ustreamer camera removed (stock WebRTC re-enabled on reboot)"

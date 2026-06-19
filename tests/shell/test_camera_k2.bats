@@ -316,10 +316,12 @@ teardown() {
     [ -f "$CAMERA_MARKER" ]
 
     # Moonraker saw a DELETE of Default and a POST registering our ustreamer cam.
+    # The webcam is registered as mjpegstreamer-adaptive (not ustreamer) so
+    # fluidd/mainsail render it — see the service-type note in camera.sh.
     grep -q 'DELETE /server/webcams/item?name=Default' "$MR_REQUESTS"
     grep -q 'POST /server/webcams/item' "$MR_REQUESTS"
     grep -q 'http://192.168.1.74:8080/stream' "$MR_REQUESTS"
-    grep -q '"service": "ustreamer"' "$MR_REQUESTS"
+    grep -q '"service": "mjpegstreamer-adaptive"' "$MR_REQUESTS"
 }
 
 @test "install: idempotent re-run does not reinstall init or re-record disables" {
@@ -402,6 +404,144 @@ teardown() {
     [ ! -f "$INSTALL_DIR/bin/ustreamer" ]
     # No webcam REST calls when there was no migration marker.
     [ ! -s "$MR_REQUESTS" ] || ! grep -q 'webcams/item' "$MR_REQUESTS"
+}
+
+# ---------------------------------------------------------------------------
+# K2-Camera-main community mod: detection + reversible conflict resolution
+# ---------------------------------------------------------------------------
+
+@test "_detect_k2_camera_mod: true when the mod source dir exists" {
+    export HELIX_K2CAM_DIR="$BATS_TEST_TMPDIR/K2-Camera-main"
+    export HELIX_K2CAM_MR_BACKUP="$BATS_TEST_TMPDIR/moonraker_backup"
+    mkdir -p "$HELIX_K2CAM_DIR"
+    run _detect_k2_camera_mod
+    [ "$status" -eq 0 ]
+}
+
+@test "_detect_k2_camera_mod: true when only the Moonraker backup exists" {
+    export HELIX_K2CAM_DIR="$BATS_TEST_TMPDIR/K2-Camera-main"
+    export HELIX_K2CAM_MR_BACKUP="$BATS_TEST_TMPDIR/moonraker_backup"
+    mkdir -p "$HELIX_K2CAM_MR_BACKUP"
+    run _detect_k2_camera_mod
+    [ "$status" -eq 0 ]
+}
+
+@test "_detect_k2_camera_mod: false when neither signature is present" {
+    export HELIX_K2CAM_DIR="$BATS_TEST_TMPDIR/K2-Camera-main"
+    export HELIX_K2CAM_MR_BACKUP="$BATS_TEST_TMPDIR/moonraker_backup"
+    run _detect_k2_camera_mod
+    [ "$status" -eq 1 ]
+}
+
+@test "_disable_k2cam_webcam: comments the [webcam Default] block and is idempotent" {
+    # Stub the Moonraker restart so we don't touch the host init system.
+    _restart_moonraker() { :; }
+
+    local mr_dir="$BATS_TEST_TMPDIR/usr/share/moonraker"
+    mkdir -p "$mr_dir"
+    export HELIX_K2CAM_MR_DIR="$mr_dir"
+    local conf="$mr_dir/moonraker.conf"
+    cat > "$conf" <<'EOF'
+[server]
+host: 0.0.0.0
+
+[webcam Default]
+service: iframe
+stream_url: /camera.html
+snapshot_url: /snapshot.html
+
+[authorization]
+trusted_clients:
+EOF
+
+    _disable_k2cam_webcam
+
+    # Every line of the [webcam Default] block (header through the line before
+    # the blank line) is now prefixed.
+    grep -q '^#helix-k2cam-disabled# \[webcam Default\]' "$conf"
+    grep -q '^#helix-k2cam-disabled# service: iframe' "$conf"
+    grep -q '^#helix-k2cam-disabled# stream_url: /camera.html' "$conf"
+    grep -q '^#helix-k2cam-disabled# snapshot_url: /snapshot.html' "$conf"
+    # Adjacent sections are untouched.
+    grep -q '^\[server\]' "$conf"
+    grep -q '^\[authorization\]' "$conf"
+
+    # Marker records the affected conf path.
+    grep -qF "$conf" "$(_k2cam_marker_file)"
+
+    # Idempotent: a second pass must not double-comment.
+    _disable_k2cam_webcam
+    [ "$(grep -c '^#helix-k2cam-disabled# #helix-k2cam-disabled#' "$conf")" -eq 0 ]
+    [ "$(grep -c '^#helix-k2cam-disabled# \[webcam Default\]' "$conf")" -eq 1 ]
+    # Marker not duplicated.
+    [ "$(grep -cF "$conf" "$(_k2cam_marker_file)")" -eq 1 ]
+}
+
+@test "uninstall: un-comments the K2-Camera-main [webcam Default] block (round-trip)" {
+    _restart_moonraker() { :; }
+
+    local mr_dir="$BATS_TEST_TMPDIR/usr/share/moonraker"
+    mkdir -p "$mr_dir"
+    export HELIX_K2CAM_MR_DIR="$mr_dir"
+    local conf="$mr_dir/moonraker.conf"
+    local original
+    original=$(cat <<'EOF'
+[server]
+host: 0.0.0.0
+
+[webcam Default]
+service: iframe
+stream_url: /camera.html
+
+[authorization]
+trusted_clients:
+EOF
+)
+    printf '%s\n' "$original" > "$conf"
+
+    # Disable, then uninstall should restore byte-for-byte.
+    _disable_k2cam_webcam
+    grep -q '^#helix-k2cam-disabled# \[webcam Default\]' "$conf"
+
+    # No prior ustreamer install state — only the k2cam marker matters here.
+    rm -f "$CAMERA_MARKER" "$WEBCAM_BACKUP"
+
+    run uninstall_camera_k2 "k2"
+    [ "$status" -eq 0 ]
+
+    # The disable prefix is gone; content matches the original.
+    ! grep -q 'helix-k2cam-disabled' "$conf"
+    [ "$(cat "$conf")" = "$original" ]
+    # Marker cleaned up.
+    [ ! -f "$(_k2cam_marker_file)" ]
+}
+
+@test "install_camera_k2: detects the mod and disables its [webcam Default] entry" {
+    _restart_moonraker() { :; }
+
+    # Mod signature present (source dir).
+    export HELIX_K2CAM_DIR="$BATS_TEST_TMPDIR/K2-Camera-main"
+    export HELIX_K2CAM_MR_BACKUP="$BATS_TEST_TMPDIR/moonraker_backup_absent"
+    mkdir -p "$HELIX_K2CAM_DIR"
+
+    local mr_dir="$BATS_TEST_TMPDIR/usr/share/moonraker"
+    mkdir -p "$mr_dir"
+    export HELIX_K2CAM_MR_DIR="$mr_dir"
+    local conf="$mr_dir/moonraker.conf"
+    cat > "$conf" <<'EOF'
+[webcam Default]
+service: iframe
+stream_url: /camera.html
+EOF
+
+    # No ustreamer binary -> install returns early after the k2cam step, which is
+    # fine: the k2cam disable runs before that early-return.
+    rm -f "$INSTALL_DIR/bin/ustreamer"
+
+    run install_camera_k2 "k2"
+    [ "$status" -eq 0 ]
+    grep -q '^#helix-k2cam-disabled# \[webcam Default\]' "$conf"
+    grep -qF "$conf" "$(_k2cam_marker_file)"
 }
 
 # ---------------------------------------------------------------------------
