@@ -5,6 +5,26 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.81] - 2026-06-18
+
+### Added
+
+- **Status-driven error recovery** — AMS/IFS/QIDI errors detected from live printer status (not just gcode error lines) now open the recovery dialog automatically, so a blocked or jammed lane surfaces an actionable prompt even when the firmware emits no error text.
+- **Happy Hare toolchange narration** — multi-material toolchanges on Happy Hare/MMU show a live phase description and offer recovery actions when a toolchange error occurs.
+- **CFS empty-spool runout indicator** — a spool running empty is surfaced as a paused-gated runout indicator, with a vendor/brand fallback for the box's material.
+
+### Fixed
+
+- **K2 camera survives upgrades** — existing installs migrate to the corrected camera service type and init script on upgrade; the webcam registers as `mjpegstreamer-adaptive` so HelixScreen and Fluidd can display it; the stock `cam_app` is released from `/dev/video0` on each start; and a conflicting community K2-Camera-main mod is detected and disabled with a warning.
+- **AD5X IFS load/unload reliability** (prestonbrown/helixscreen#981) — load and unload finalize on the macro completion ack instead of waiting out a 90-second timeout (no more stuck-on-Purging); channel presence is driven by `IFS_STATUS` ports so emptied channels no longer reappear; a seated-channel unload routes to a toolhead cut instead of a cold eject; and a user color-menu prompt no longer silences live status.
+- **U1 pre-print accuracy** — lane-truth runout detection, a scoped filament badge, a real first-layer hand-off, a remap toast, and a richer phase display; plus a toast during `AUTO_FEEDING` resume so the ~86-second refeed isn't a silent hang (prestonbrown/helixscreen#991).
+- **Self-update on tight-space devices** — the installer relocates the old install off a cramped partition before updating.
+- **Pre-print collector** no longer restarts on mid-print error recovery (prestonbrown/helixscreen#1042).
+
+### Changed
+
+- **Happy Hare filament metadata** — lane data now emits `vendor_name`/`name` aliases for OrcaSlicer schema parity.
+
 ## [0.99.80] - 2026-06-18
 
 A large release centered on a new error & recovery center, live per-slot filament state across AMS backends, a pre-flight filament-validation gate before printing, on-screen native filament remapping for the Snapmaker U1, QIDI Box stock-firmware filament control, and print-failure (spaghetti) detection on the Snapmaker U1 — plus temperature-graph rendering fixes and WiFi recovery hardening.
@@ -4106,6 +4126,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.81]: https://github.com/prestonbrown/helixscreen/compare/v0.99.80...v0.99.81
 [0.99.80]: https://github.com/prestonbrown/helixscreen/compare/v0.99.79...v0.99.80
 [0.99.79]: https://github.com/prestonbrown/helixscreen/compare/v0.99.78...v0.99.79
 [0.99.78]: https://github.com/prestonbrown/helixscreen/compare/v0.99.77...v0.99.78
