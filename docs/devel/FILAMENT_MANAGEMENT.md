@@ -233,10 +233,9 @@ panel — not a slicer-to-printer write.
 
 All HelixScreen-managed AMS backends write the AFC-standard `lane_data`
 record on edit, so every one of them round-trips to OrcaSlicer with no
-additional configuration. **Verified against OrcaSlicer 2.4.0-beta** (source:
-`MoonrakerPrinterAgent.cpp`): the namespace and consumed fields (`lane`,
-`color`, `material`, `bed_temp`, `nozzle_temp`) are unchanged from 2.3.2, so
-nothing on the HelixScreen side needs to change for 2.4.0.
+additional configuration. **Verified against OrcaSlicer upstream/main
+(post-2.4.0-beta nightly)**, source `MoonrakerPrinterAgent.cpp`
+`fetch_moonraker_filament_data()`.
 
 | Backend | Writer | How OrcaSlicer picks it up |
 |---------|--------|----------------------------|
@@ -245,16 +244,48 @@ nothing on the HelixScreen side needs to change for 2.4.0.
 | ACE (Anycubic ACE Pro) | HelixScreen (`FilamentSlotOverrideStore`) | `lane_data` namespace |
 | CFS (Creality K2) | HelixScreen (`FilamentSlotOverrideStore`) | `lane_data` namespace |
 | AFC / Box Turtle | AFC's own Klipper plugin | `lane_data` namespace (AFC is the originator) |
-| Happy Hare | Happy Hare's own Klipper plugin | **Live `mmu` object**, not `lane_data` — Orca 2.4.0+ reads `/printer/objects/query?mmu` |
+| Happy Hare | Happy Hare's own Klipper plugin (`components/mmu_server.py` `push_lane_data`) | `lane_data` namespace — Orca prefers it over the live `mmu` object |
 | Tool Changer | (not applicable — no per-slot metadata) | N/A |
 
 IFS, Snapmaker, ACE, and CFS share the `FilamentSlotOverrideStore`
-infrastructure and publish to `lane_data`; AFC writes `lane_data` via its own
-Klipper plugin. **Happy Hare is the exception**: OrcaSlicer does not read it
-from `lane_data` at all — since 2.4.0 Orca reads HH lanes directly from the
-live `mmu` Klipper status object (gate arrays). HelixScreen doesn't manage
-that path; HH and Klipper expose the object on their own. The user-visible
-outcome is the same across all sources, but the mechanism differs for HH.
+infrastructure and publish to `lane_data`; AFC and Happy Hare each write
+`lane_data` via their own Klipper plugins. **HelixScreen never writes
+`lane_data` for the AFC or Happy Hare backends** — those plugins own their
+records, and HelixScreen's AFC/HH backends route user edits through G-code
+(`SET_COLOR`/`SET_MATERIAL`, `MMU_GATE_MAP`) only, so there is no clobber risk.
+(Earlier docs said HH reached Orca solely via the live `mmu` Klipper object.
+That is outdated: HH's `push_lane_data` now writes the namespace directly and
+Orca prefers it; the `mmu` object is the fallback.)
+
+#### Schema lineage and what Orca actually matches on
+
+- **AFC pioneered the base schema** — keys `color` / `material` / `bed_temp` /
+  `nozzle_temp` / `scan_time` / `td` / `lane` / `spool_id`, DB key 1-based
+  (`lane1`…), inner `lane` field 0-based. AFC emits **no** vendor field.
+- **Happy Hare extended it** with `vendor_name`, `name`, and `filament_id`
+  (`push_lane_data`). HH's `filament_id` is a **Spoolman** DB id, not an
+  OrcaSlicer preset id.
+- **OrcaSlicer reads only `lane` / `material` / `color` / `bed_temp` /
+  `nozzle_temp`**, and matches a lane to a filament preset **by the `material`
+  type string alone** (`filament_id_by_type`, falling back to generic
+  OrcaFilamentLibrary ids like `OGFL99`). It ignores `vendor`, `vendor_name`,
+  and `filament_id` today, and never writes `lane_data` back. So brand has no
+  effect on the slicer's preset pick — "Generic PLA" and "Elegoo PLA+" both
+  resolve to a generic PLA preset. Emit canonical material strings (`PLA`,
+  `PETG`, `ABS`…); marketing names won't match.
+
+#### Forward-compat aliases (`vendor_name` / `name`)
+
+HelixScreen's writer (`to_lane_data_record()` in
+`filament_slot_override_store.cpp`) emits **both** key spellings: `vendor`
+(AFC-style base) **and** `vendor_name` (HH extension), plus `spool_name` **and**
+`name`. It's unsettled which spelling Orca will consume when it eventually adds
+vendor-aware matching, so emitting both is a zero-cost hedge — Orca ignores
+unknown keys. The reader tolerantly falls back to the HH aliases. **Do not add
+a HelixScreen-side `filament_id` resolver:** Orca reads the field from nowhere,
+there is no deterministic (vendor, material) → Orca `setting_id` catalog (the
+ids number in the hundreds and churn across releases), and we do not ship a
+forked OrcaSlicer that could add the read path.
 
 ---
 
