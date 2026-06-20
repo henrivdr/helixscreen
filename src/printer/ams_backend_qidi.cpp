@@ -6,8 +6,8 @@
 #include "macro_param_cache.h"
 #include "settings_manager.h"
 
-#include <spdlog/spdlog.h>
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cctype>
@@ -117,8 +117,8 @@ AmsBackendQidi::AmsBackendQidi(MoonrakerAPI* api, helix::MoonrakerClient* client
     dryer_info_.max_duration_min = 720;
     dryer_info_.supports_fan_control = false;
 
-    spdlog::debug("{} Backend constructed ({} slots, write-path always on)",
-                  backend_log_tag(), NUM_SLOTS);
+    spdlog::debug("{} Backend constructed ({} slots, write-path always on)", backend_log_tag(),
+                  NUM_SLOTS);
 }
 
 AmsBackendQidi::~AmsBackendQidi() = default;
@@ -156,17 +156,12 @@ void AmsBackendQidi::on_started() {
     };
 
     auto token = lifetime_.token();
-    client_->send_jsonrpc(
-        "printer.objects.query", params,
-        [this, token](nlohmann::json response) {
-            // [L081] Mechanism C: defer member access to main thread.
-            token.defer("AmsBackendQidi::on_started_apply",
-                        [this, response = std::move(response)]() {
-                            apply_query_response(response);
-                        });
-        });
-    spdlog::info("{} Bootstrap query issued for save_variables + box_extras",
-                 backend_log_tag());
+    client_->send_jsonrpc("printer.objects.query", params, [this, token](nlohmann::json response) {
+        // [L081] Mechanism C: defer member access to main thread.
+        token.defer("AmsBackendQidi::on_started_apply",
+                    [this, response = std::move(response)]() { apply_query_response(response); });
+    });
+    spdlog::info("{} Bootstrap query issued for save_variables + box_extras", backend_log_tag());
 
     // Query printer.configfile.settings to refine dryer_info_.max_temp_c from
     // the real Klipper settable ceiling (max_temp or target_max_temp_heater_generic).
@@ -181,8 +176,7 @@ void AmsBackendQidi::on_started() {
                                 [this, response = std::move(response)]() {
                                     try {
                                         const auto& settings =
-                                            response["result"]["status"]["configfile"]
-                                                    ["settings"];
+                                            response["result"]["status"]["configfile"]["settings"];
                                         apply_config_settings(settings);
                                         emit_event(EVENT_STATE_CHANGED);
                                     } catch (const nlohmann::json::exception& e) {
@@ -192,8 +186,7 @@ void AmsBackendQidi::on_started() {
                                 });
             },
             [this](const MoonrakerError& err) {
-                spdlog::warn("{} configfile query failed: {}", backend_log_tag(),
-                             err.message);
+                spdlog::warn("{} configfile query failed: {}", backend_log_tag(), err.message);
             });
     }
 
@@ -320,8 +313,7 @@ void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {
     if (settable_max) {
         std::lock_guard<std::mutex> lock(mutex_);
         dryer_info_.max_temp_c = *settable_max;
-        spdlog::info("{} Box dryer max temp from config: {}°C", backend_log_tag(),
-                     *settable_max);
+        spdlog::info("{} Box dryer max temp from config: {}°C", backend_log_tag(), *settable_max);
     }
 
     // Lane eject (#1041) is a FORCE_MOVE on the box_stepper, which Klipper rejects
@@ -329,8 +321,7 @@ void AmsBackendQidi::apply_config_settings(const nlohmann::json& settings) {
     // so we never offer an eject button that would just error.
     bool force_move = false;
     if (auto fm = settings.find("force_move"); fm != settings.end() && fm->is_object()) {
-        if (auto en = fm->find("enable_force_move");
-            en != fm->end() && en->is_boolean()) {
+        if (auto en = fm->find("enable_force_move"); en != fm->end() && en->is_boolean()) {
             force_move = en->get<bool>();
         }
     }
@@ -349,17 +340,18 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
     // humidity here. Confirmed on a stock QIDI Q2 (firmware 1.1.1): aht20_f
     // heater_box1 reports {"temperature":27.67,"humidity":16} (#1022).
     //
-    // Firmware 01.01.02.01 (June 2026) refactored the box plugins: box_config.py
-    // now declares `temperature_sensor heater_temp_a/b_box<N>` for the dryer
-    // thermistors and no longer declares `aht20_f heater_box<N>` in the readable
-    // source (#1047). box_config.py still creates `heater_generic heater_box<N>`
-    // under the same name, so box TEMPERATURE keeps coming from the heater object
-    // (and the 1.1.1 aht20 ambient) — the heater_temp_*_box thermistors just
-    // mirror the same heater element, so folding them into the displayed temp
-    // would only risk over-reporting it. We therefore match them solely to read
-    // `humidity` from ANY matched box object, in case the refactor relocated the
-    // humidity field there. That humidity source is unconfirmed (we own no QIDI
-    // hardware), so it is best-effort, not a verified path.
+    // Firmware 01.01.02.01 (June 2026) refactored the box plugins additively:
+    // box_config.py ADDS `temperature_sensor heater_temp_a/b_box<N>` for the
+    // dryer thermistors while KEEPING `aht20_f heater_box<N>` and
+    // `heater_generic heater_box<N>` under the same names. Confirmed against a
+    // real 01.01.02.01 machine's printer.objects.list (#1047) — aht20_f survives,
+    // so box humidity keeps coming from the same object as on 1.1.1 (the primary
+    // path below). The new heater_temp_*_box thermistors just mirror the heater
+    // element, so we deliberately exclude them from the displayed TEMPERATURE to
+    // avoid over-reporting; we match them only as a belt-and-suspenders extra
+    // place to look for `humidity`, harmless if absent. (One gap remains: the
+    // objects list proves aht20_f exists on 01.01.02.01 but not that it still
+    // publishes a humidity *field* — unverified, we own no QIDI hardware.)
     constexpr std::string_view kHeaterPrefix = "heater_generic heater_box";
     constexpr std::string_view kAht20Prefix = "aht20_f heater_box";
     constexpr std::string_view kBoxTempSensorPrefix = "temperature_sensor heater_temp_";
@@ -378,8 +370,8 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
         // 01.01.02.01 dryer thermistor: temperature_sensor heater_temp_a_box<N>
         // / heater_temp_b_box<N> (the "_box" guard keeps unrelated
         // temperature_sensor objects out). Matched for humidity only — NOT temp.
-        const bool is_box_temp_sensor = key.rfind(kBoxTempSensorPrefix, 0) == 0 &&
-                                        key.find("_box") != std::string::npos;
+        const bool is_box_temp_sensor =
+            key.rfind(kBoxTempSensorPrefix, 0) == 0 && key.find("_box") != std::string::npos;
         if (!is_heater && !is_aht && !is_box_temp_sensor) {
             continue;
         }
@@ -387,8 +379,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
         // the 1.1.1 aht20 ambient sensor only — the heater_temp_*_box thermistors
         // duplicate the heater element and are deliberately excluded here.
         if (is_heater || is_aht) {
-            if (auto t_it = it->find("temperature");
-                t_it != it->end() && t_it->is_number()) {
+            if (auto t_it = it->find("temperature"); t_it != it->end() && t_it->is_number()) {
                 const float v = t_it->get<float>();
                 if (!max_temp || v > *max_temp) {
                     max_temp = v;
@@ -396,8 +387,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
             }
         }
         if (is_heater) {
-            if (auto tgt_it = it->find("target");
-                tgt_it != it->end() && tgt_it->is_number()) {
+            if (auto tgt_it = it->find("target"); tgt_it != it->end() && tgt_it->is_number()) {
                 const float v = tgt_it->get<float>();
                 if (!max_target || v > *max_target) {
                     max_target = v;
@@ -406,8 +396,7 @@ void AmsBackendQidi::apply_heater_status(const nlohmann::json& notification) {
         }
         // Humidity from any matched box object: aht20_f on 1.1.1, or wherever the
         // 01.01.02 refactor relocated it (best-effort — see note above).
-        if (auto h_it = it->find("humidity");
-            h_it != it->end() && h_it->is_number()) {
+        if (auto h_it = it->find("humidity"); h_it != it->end() && h_it->is_number()) {
             const float v = h_it->get<float>();
             if (!max_humidity || v > *max_humidity) {
                 max_humidity = v;
@@ -554,9 +543,9 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     }();
 
     if (has_slot_or_action_key) {
-        const bool any_blocked = std::any_of(
-            unit_ref.slots.begin(), unit_ref.slots.end(),
-            [](const SlotInfo& s) { return s.status == SlotStatus::BLOCKED; });
+        const bool any_blocked =
+            std::any_of(unit_ref.slots.begin(), unit_ref.slots.end(),
+                        [](const SlotInfo& s) { return s.status == SlotStatus::BLOCKED; });
         const bool is_loading = tool_change_it != variables.end() &&
                                 tool_change_it->is_number_integer() &&
                                 tool_change_it->get<int>() != 0;
@@ -1049,7 +1038,8 @@ AmsError AmsBackendQidi::cancel() {
 
 std::optional<helix::ErrorEvent> AmsBackendQidi::current_error() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (system_info_.units.empty()) return std::nullopt;
+    if (system_info_.units.empty())
+        return std::nullopt;
     const auto& slots = system_info_.units[0].slots;
     int blocked = -1;
     for (int i = 0; i < static_cast<int>(slots.size()); ++i) {
@@ -1058,16 +1048,17 @@ std::optional<helix::ErrorEvent> AmsBackendQidi::current_error() const {
             break;
         }
     }
-    if (blocked < 0) return std::nullopt;
+    if (blocked < 0)
+        return std::nullopt;
     helix::ErrorEvent e;
-    e.source   = helix::ErrorSource::QIDI;
+    e.source = helix::ErrorSource::QIDI;
     e.severity = helix::ErrorSeverity::CRITICAL;
-    e.title    = lv_tr("Filament System Error");
+    e.title = lv_tr("Filament System Error");
     // Single translatable string with a {} placeholder — preserves word order in
     // locales where the lane number doesn't sit between "Lane" and the predicate.
-    e.detail   = fmt::format(fmt::runtime(lv_tr("Lane {} is blocked — manual intervention required")),
-                             blocked + 1);
-    e.sticky   = true;
+    e.detail = fmt::format(fmt::runtime(lv_tr("Lane {} is blocked — manual intervention required")),
+                           blocked + 1);
+    e.sticky = true;
     // A CRITICAL event with empty recovery_actions renders via RecoveryModalPresenter
     // as a button-less ActionPromptModal — non-dismissible UI trap. Provide one
     // dismiss affordance. The gcode is a Klipper comment (no-op on execute_gcode).
@@ -1226,8 +1217,8 @@ AmsError AmsBackendQidi::set_slot_info(int slot_index, const SlotInfo& info, boo
     bool wrote_any = false;
 
     if (fila_id > 0) {
-        execute_gcode("SAVE_VARIABLE VARIABLE=filament_slot" + suffix + " VALUE=" +
-                      std::to_string(fila_id));
+        execute_gcode("SAVE_VARIABLE VARIABLE=filament_slot" + suffix +
+                      " VALUE=" + std::to_string(fila_id));
         wrote_any = true;
     } else {
         spdlog::warn("{} set_slot_info: no fila match for material='{}' — "
@@ -1235,15 +1226,15 @@ AmsError AmsBackendQidi::set_slot_info(int slot_index, const SlotInfo& info, boo
                      backend_log_tag(), info.material);
     }
     if (have_palette && color_id > 0) {
-        execute_gcode("SAVE_VARIABLE VARIABLE=color_slot" + suffix + " VALUE=" +
-                      std::to_string(color_id));
+        execute_gcode("SAVE_VARIABLE VARIABLE=color_slot" + suffix +
+                      " VALUE=" + std::to_string(color_id));
         wrote_any = true;
     }
     // vendor_id 0 is the legitimate "Generic" id, so only the empty-map case
     // (have_vendors == false) suppresses the write.
     if (have_vendors) {
-        execute_gcode("SAVE_VARIABLE VARIABLE=vendor_slot" + suffix + " VALUE=" +
-                      std::to_string(vendor_id));
+        execute_gcode("SAVE_VARIABLE VARIABLE=vendor_slot" + suffix +
+                      " VALUE=" + std::to_string(vendor_id));
         wrote_any = true;
     }
 
@@ -1258,7 +1249,8 @@ AmsError AmsBackendQidi::set_slot_info(int slot_index, const SlotInfo& info, boo
 }
 
 AmsError AmsBackendQidi::set_tool_mapping(int tool_number, int slot_index) {
-    spdlog::info("{} set_tool_mapping(tool={}, slot={})", backend_log_tag(), tool_number, slot_index);
+    spdlog::info("{} set_tool_mapping(tool={}, slot={})", backend_log_tag(), tool_number,
+                 slot_index);
     if (tool_number < 0) {
         return AmsErrorHelper::not_supported("QIDI Box: tool number out of range");
     }
@@ -1350,9 +1342,8 @@ AmsError AmsBackendQidi::start_drying(float temp_c, int duration_min, int fan_pc
         if (hours < 1) {
             hours = 1;
         }
-        return execute_gcode("ENABLE_BOX_DRY BOX=" + std::to_string(box) +
-                             " TEMP=" + std::to_string(temp_i) +
-                             " END_TIME=" + std::to_string(hours));
+        return execute_gcode("ENABLE_BOX_DRY BOX=" + std::to_string(box) + " TEMP=" +
+                             std::to_string(temp_i) + " END_TIME=" + std::to_string(hours));
     }
     return execute_gcode("SET_HEATER_TEMPERATURE HEATER=heater_box" + std::to_string(box) +
                          " TARGET=" + std::to_string(temp_i));
