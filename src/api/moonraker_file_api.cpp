@@ -310,7 +310,11 @@ std::vector<FileInfo> MoonrakerFileAPI::parse_file_list(const json& response) {
         for (const auto& dir : result["dirs"]) {
             FileInfo info;
             if (dir.contains("dirname")) {
-                info.filename = dir["dirname"].get<std::string>();
+                // FlashForge's Moonraker fork returns a root-relative path here
+                // ("Feinkost/Gridfinity") where stock Moonraker returns a leaf;
+                // normalize so the path navigator doesn't double the parent
+                // segment ("Feinkost/Feinkost/Gridfinity", bundle TJVQDCZ6).
+                info.filename = moonraker_path_leaf(dir["dirname"].get<std::string>());
                 info.is_dir = true;
             }
             if (dir.contains("modified")) {
@@ -327,7 +331,10 @@ std::vector<FileInfo> MoonrakerFileAPI::parse_file_list(const json& response) {
         for (const auto& file : result["files"]) {
             FileInfo info;
             if (file.contains("filename")) {
-                info.filename = file["filename"].get<std::string>();
+                // See dirs branch above: FlashForge prefixes the folder path onto
+                // this field; normalize to the leaf so the per-file path the panel
+                // builds (current_path + "/" + filename) doesn't double.
+                info.filename = moonraker_path_leaf(file["filename"].get<std::string>());
             }
             if (file.contains("path")) {
                 info.path = file["path"].get<std::string>();

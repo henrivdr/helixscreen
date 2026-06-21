@@ -28,6 +28,31 @@ class MoonrakerClient;
 } // namespace helix
 
 /**
+ * @brief Final path component of a Moonraker directory/file name.
+ *
+ * Stock Moonraker returns bare leaf names in the `dirname`/`filename` fields of
+ * server.files.get_directory (e.g. "Gridfinity"). FlashForge's Moonraker fork
+ * (Adventurer 5X) instead returns paths relative to the gcodes root
+ * (e.g. "Feinkost/Gridfinity"). Stored verbatim, those got concatenated onto the
+ * already-current path by the Print Files navigator, producing a doubled segment
+ * ("Feinkost/Feinkost/Gridfinity") that the server reports as missing and the
+ * panel then retried forever (debug bundle TJVQDCZ6).
+ *
+ * Normalizing to the leaf lets navigation append a single segment correctly.
+ * It is a no-op for stock leaf names (leaf in -> leaf out), and tolerates a
+ * trailing slash, so no other printer is affected.
+ */
+inline std::string moonraker_path_leaf(const std::string& name) {
+    size_t end = name.find_last_not_of('/');
+    if (end == std::string::npos) {
+        return std::string(); // empty, or all slashes
+    }
+    size_t slash = name.find_last_of('/', end);
+    size_t start = (slash == std::string::npos) ? 0 : slash + 1;
+    return name.substr(start, end - start + 1);
+}
+
+/**
  * @brief File Management API operations via Moonraker
  *
  * Provides high-level operations for listing, querying, and managing files

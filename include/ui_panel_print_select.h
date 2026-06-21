@@ -23,7 +23,9 @@
 #include "subject_managed_panel.h"
 #include "usb_backend.h"
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <ctime>
 #include <memory>
@@ -115,6 +117,30 @@ inline bool refresh_should_skip(bool in_flight, bool force,
         return false;
     }
     return (now - started_at) < stuck_threshold;
+}
+
+/**
+ * @brief Decide whether a failed directory refresh should fall back to root.
+ *
+ * If the current directory no longer exists on the server, retrying it refreshes
+ * nothing and the panel wedges (it re-requested a phantom doubled path every few
+ * seconds in debug bundle TJVQDCZ6). When Moonraker reports the directory as
+ * missing, drop back to root instead. Only reset when NOT already at root: if
+ * root itself ever errors, resetting again would loop.
+ *
+ * Moonraker's file_manager raises "Directory does not exist (...)" (HTTP 400);
+ * the message is server-side English and not localized, so a case-insensitive
+ * substring match is safe. Extracted as a pure function so it can be tested
+ * without the full PrintSelectPanel/LVGL fixture.
+ */
+inline bool dir_error_should_reset_to_root(const std::string& error_message, bool at_root) {
+    if (at_root) {
+        return false; // nowhere to fall back to; avoid an infinite reset loop
+    }
+    std::string lower = error_message;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.find("does not exist") != std::string::npos;
 }
 
 /**

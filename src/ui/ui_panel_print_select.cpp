@@ -669,8 +669,19 @@ void PrintSelectPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
         });
     file_provider_->set_on_error([self, token = self->lifetime_.token()](const std::string& error) {
         LOG_ERROR_INTERNAL("[{}] File list refresh error: {}", self->get_name(), error);
-        token.defer([self]() {
+        token.defer([self, error]() {
             self->refresh_in_flight_ = false;
+            if (dir_error_should_reset_to_root(error, self->path_navigator_.is_at_root())) {
+                // The current directory no longer exists on the server (e.g. a
+                // FlashForge path-doubling artifact). Retrying it would wedge the
+                // panel, so fall back to root instead of looping (TJVQDCZ6).
+                spdlog::warn("[{}] Current directory missing ('{}'); falling back to root",
+                             self->get_name(), error);
+                self->path_navigator_.reset();
+                self->current_path_.clear();
+                self->refresh_files(/*force=*/true);
+                return;
+            }
             NOTIFY_ERROR(lv_tr("Failed to refresh file list"));
         });
     });
@@ -1849,9 +1860,8 @@ void PrintSelectPanel::set_selected_file(const char* filename, const char* thumb
     //
     // Resolution order: (1) proven card .bin if present, (2) cached PNG when no
     // .bin exists yet, (3) nullptr sentinel handled by the has_real block below.
-    const bool have_bin =
-        thumbnail_src && thumbnail_src[0] != '\0' &&
-        !helix::ui::PrintSelectCardView::is_placeholder_thumbnail(thumbnail_src);
+    const bool have_bin = thumbnail_src && thumbnail_src[0] != '\0' &&
+                          !helix::ui::PrintSelectCardView::is_placeholder_thumbnail(thumbnail_src);
     std::string detail_src;
     if (have_bin) {
         detail_src = thumbnail_src;
@@ -2704,16 +2714,14 @@ void PrintSelectPanel::apply_remap(const std::vector<helix::ToolMapping>& update
         }
 
         std::string filename(selected_filename_buffer_);
-        std::string file_path =
-            current_path_.empty() ? filename : current_path_ + "/" + filename;
+        std::string file_path = current_path_.empty() ? filename : current_path_ + "/" + filename;
 
         spdlog::info("[{}] Applying gcode remap: {} tool(s) for {}", get_name(), remap.size(),
                      file_path);
         // The pipeline guards identity remaps internally (prints the original
         // unmodified when nothing changed).
-        prep->modify_and_print_with_remap(file_path, remap, [this]() {
-            PrintStatusPanel::push_overlay(parent_screen_);
-        });
+        prep->modify_and_print_with_remap(
+            file_path, remap, [this]() { PrintStatusPanel::push_overlay(parent_screen_); });
         break;
     }
 
@@ -2727,8 +2735,8 @@ void PrintSelectPanel::apply_remap(const std::vector<helix::ToolMapping>& update
         for (const auto& m : updated) {
             if (m.tool_index >= 0 && m.mapped_slot >= 0 &&
                 m.mapped_slot != default_head(m.tool_index)) {
-                spdlog::debug("[{}] U1 remap applied: tool {} -> head {}", get_name(),
-                              m.tool_index, m.mapped_slot);
+                spdlog::debug("[{}] U1 remap applied: tool {} -> head {}", get_name(), m.tool_index,
+                              m.mapped_slot);
             }
         }
         if (detail_view_) {
