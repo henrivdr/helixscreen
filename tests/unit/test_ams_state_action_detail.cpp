@@ -16,12 +16,13 @@
  * label refreshes without waiting for the next sync_from_backend().
  */
 
+#include "ui_update_queue.h"
+
 #include "../lvgl_test_fixture.h"
 #include "ams_state.h"
 #include "ams_types.h"
 #include "app_globals.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -32,14 +33,12 @@ namespace {
 
 // Helper: read the current ams_action_detail subject string.
 std::string detail_text() {
-    return std::string(
-        lv_subject_get_string(AmsState::instance().get_ams_action_detail_subject()));
+    return std::string(lv_subject_get_string(AmsState::instance().get_ams_action_detail_subject()));
 }
 
 // Helper: set print state via Moonraker-side subject + drain queue.
 void set_print_state(PrintJobState state) {
-    lv_subject_set_int(get_printer_state().get_print_state_enum_subject(),
-                       static_cast<int>(state));
+    lv_subject_set_int(get_printer_state().get_print_state_enum_subject(), static_cast<int>(state));
     helix::ui::UpdateQueue::instance().drain();
 }
 
@@ -50,8 +49,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "AmsState::ams_action_detail priority",
     auto& ams = AmsState::instance();
     auto& printer = get_printer_state();
 
-    ams.init_subjects(false);
+    // PrinterState MUST be initialized before AmsState: AmsState's
+    // install_print_state_observer() binds to PrinterState's print_state_enum
+    // subject, which must already be live. This mirrors the production init
+    // order in subject_initializer.cpp (PrinterState first, then AmsState).
     printer.init_subjects(false);
+    ams.init_subjects(false);
 
     // Start in a known clean baseline.
     set_print_state(PrintJobState::STANDBY);

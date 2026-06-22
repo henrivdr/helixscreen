@@ -13,7 +13,6 @@
 
 #include "ams_state.h"
 
-#include "observer_factory.h"
 #include "ui_color_picker.h"
 #include "ui_update_queue.h"
 
@@ -21,6 +20,7 @@
 #include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
+#include "observer_factory.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "runtime_config.h"
@@ -185,13 +185,21 @@ void AmsState::init_subjects(bool register_xml) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (initialized_) {
-        // Even on a re-entry no-op, make sure the print-state observer is
-        // attached. Tests share the singleton across cases; a prior test may
-        // have initialized AmsState before PrinterState was ready (so the
-        // observer was never installed) — re-attach here.
-        if (!print_state_observer_) {
-            install_print_state_observer();
-        }
+        // Re-entry on the shared singleton: always rebind the print-state
+        // observer to PrinterState's *current* print_state_enum subject.
+        //
+        // A `if (!print_state_observer_)` guard is NOT sufficient: PrinterState
+        // can deinit+reinit its subjects between cases (LVGLUITestFixture does
+        // this; production soft-restart can too). lv_subject_deinit() frees our
+        // observer node, but ObserverGuard::operator bool() only checks for a
+        // non-null observer pointer — it stays truthy with a dangling pointer to
+        // the freed/recreated subject, so the guard would skip re-install and
+        // the label would never recompute on print-state changes.
+        //
+        // install_print_state_observer() is idempotent (reset()s the prior
+        // guard, then rebinds to the current subject with the current lifetime
+        // token), so calling it unconditionally is safe and self-healing.
+        install_print_state_observer();
         return;
     }
 
@@ -650,8 +658,8 @@ int AmsState::add_backend(std::unique_ptr<AmsBackend> backend) {
             auto sink = std::make_unique<helix::AmsSlotSink>(index, slot);
             handles.push_back(tracker.register_sink(std::move(sink)));
         }
-        spdlog::debug("[AMS State] Registered {} consumption sinks for backend {}",
-                      slot_count, index);
+        spdlog::debug("[AMS State] Registered {} consumption sinks for backend {}", slot_count,
+                      index);
     }
 
     // Update backend count subject for UI binding
@@ -1065,8 +1073,8 @@ void AmsState::sync_from_backend() {
     }
     int new_action = static_cast<int>(info.action);
     if (lv_subject_get_int(&ams_action_) != new_action) {
-        spdlog::debug("[AmsState] sync_from_backend: action changed to {} ({})",
-                      new_action, ams_action_to_string(info.action));
+        spdlog::debug("[AmsState] sync_from_backend: action changed to {} ({})", new_action,
+                      ams_action_to_string(info.action));
         lv_subject_set_int(&ams_action_, new_action);
     }
     // Granular firmware sub-phase (Snapmaker U1: Home/Select/Heat/Move). Most
@@ -1580,8 +1588,7 @@ void AmsState::on_backend_event(int backend_index, const std::string& event,
 
     auto queue_sync = [backend_index](bool full_sync, int slot_index) {
         helix::ui::queue_update(
-            "AmsState::on_backend_event",
-            [backend_index, full_sync, slot_index]() {
+            "AmsState::on_backend_event", [backend_index, full_sync, slot_index]() {
                 // Skip if shutdown is in progress - AmsState singleton may be destroyed
                 if (s_shutdown_flag.load(std::memory_order_acquire)) {
                     return;
