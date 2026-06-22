@@ -323,16 +323,25 @@ class ModalStack {
     // Delete modal widgets and clear tracking (used during teardown after lv_anim_delete_all)
     void clear() {
         for (auto& entry : stack_) {
-            if (entry.backdrop) {
-                // Cancel animations before deletion — exit animation exec callbacks
-                // trigger lv_obj_set_style_*() which crashes on freed objects
-                lv_anim_delete(entry.backdrop, nullptr);
-                lv_obj_t* dialog = lv_obj_get_child(entry.backdrop, 0);
-                if (dialog) {
-                    lv_anim_delete(dialog, nullptr);
-                }
-                lv_obj_delete(entry.backdrop);
+            // Skip backdrops that LVGL already freed. A modal whose exit
+            // animation never completed stays in the stack as exiting=true with
+            // its remove() still owed to exit_animation_done(). If the backdrop's
+            // ancestor (e.g. the screen it was created on) is deleted first, LVGL
+            // frees the backdrop as part of that subtree — leaving a stale stack
+            // entry that points at freed memory. Deleting it again walks a
+            // poisoned object (obj->class_p) and crashes. Guard the same way
+            // exit_animation_done() and ~Modal already do (lv_obj_is_valid).
+            if (!entry.backdrop || !lv_obj_is_valid(entry.backdrop)) {
+                continue;
             }
+            // Cancel animations before deletion — exit animation exec callbacks
+            // trigger lv_obj_set_style_*() which crashes on freed objects
+            lv_anim_delete(entry.backdrop, nullptr);
+            lv_obj_t* dialog = lv_obj_get_child(entry.backdrop, 0);
+            if (dialog) {
+                lv_anim_delete(dialog, nullptr);
+            }
+            lv_obj_delete(entry.backdrop);
         }
         stack_.clear();
     }
