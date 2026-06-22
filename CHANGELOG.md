@@ -5,6 +5,20 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.82] - 2026-06-22
+
+### Fixed
+
+- **AD5X IFS reliability** (prestonbrown/helixscreen#981) — a seated channel unloads via the toolhead instead of attempting a cold eject; ejected channels refresh correctly; filament color/type authority is honored; and stale slot sentinels are cleared.
+- **CFS slot presence** — a slot is shown as loaded based on physical signals plus your assignment rather than a latched RFID read, so a removed spool no longer lingers as present.
+- **QIDI Q2 firmware support** (prestonbrown/helixscreen#1047) — works with the QIDI Q2 `01.01.02` firmware refactor.
+- **WiFi status accuracy** (prestonbrown/helixscreen#1059) — when the backend can't reach `wpa_supplicant`, a system-managed link is shown as connected instead of being painted as a hard failure.
+- **AD5X memory reporting** — corrects the AD5X memory tier and gates low-memory growth warnings on absolute health, reducing false warnings.
+- **FlashForge file browsing** — root-relative directory names are normalized so directory listings resolve correctly.
+- **Performance overlay crash** (prestonbrown/helixscreen#1061) — fixes a render crash on 32-bit devices caused by an unresolved-layout draw.
+- **Installer release matching** — a bare version is normalized to a `v`-prefixed tag when resolving a release download.
+- **Modal teardown crash** — closing a modal whose exit animation is still in flight no longer risks a crash when the screen is torn down first.
+
 ## [0.99.81] - 2026-06-18
 
 ### Added
@@ -4126,6 +4140,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.82]: https://github.com/prestonbrown/helixscreen/compare/v0.99.81...v0.99.82
 [0.99.81]: https://github.com/prestonbrown/helixscreen/compare/v0.99.80...v0.99.81
 [0.99.80]: https://github.com/prestonbrown/helixscreen/compare/v0.99.79...v0.99.80
 [0.99.79]: https://github.com/prestonbrown/helixscreen/compare/v0.99.78...v0.99.79
