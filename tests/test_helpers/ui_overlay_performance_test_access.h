@@ -11,8 +11,9 @@ class UiOverlayPerformanceTestAccess {
     /// again after the LVGL display has been reinitialized.
     static void reset(UiOverlayPerformance& o) {
         o.mcu_names_observer_.reset();
-        o.root_     = nullptr;
+        o.root_ = nullptr;
         o.mcu_card_ = nullptr;
+        o.last_mcu_names_.clear();
     }
 };
 

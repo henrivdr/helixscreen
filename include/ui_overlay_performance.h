@@ -5,6 +5,7 @@
 #include "ui_observer_guard.h"
 
 #include "lvgl/lvgl.h"
+
 #include <string>
 #include <vector>
 
@@ -27,7 +28,9 @@ class UiOverlayPerformance {
     static UiOverlayPerformance& instance();
 
     lv_obj_t* create(lv_obj_t* parent);
-    lv_obj_t* root() { return root_; }
+    lv_obj_t* root() {
+        return root_;
+    }
 
   private:
     friend class UiOverlayPerformanceTestAccess;
@@ -36,8 +39,15 @@ class UiOverlayPerformance {
 
     void rebuild_mcu_rows();
 
-    lv_obj_t* root_     = nullptr;
+    lv_obj_t* root_ = nullptr;
     lv_obj_t* mcu_card_ = nullptr;
+
+    // Last perf_mcu_names value applied to the rows. perf_mcu_names is
+    // re-published on essentially every perf sample even when the MCU set is
+    // unchanged; gating rebuild_mcu_rows() on a real change to this string
+    // avoids tearing down + recreating content-sized rows on every sample
+    // (the source of the 32-bit LV_COORD_MAX render crash — see #1061).
+    std::string last_mcu_names_;
 
     // Observer on perf_mcu_names (static subject — no SubjectLifetime needed [L077]).
     ObserverGuard mcu_names_observer_;
