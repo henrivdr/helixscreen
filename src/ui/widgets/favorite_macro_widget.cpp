@@ -14,6 +14,7 @@
 #include "app_globals.h"
 #include "device_display_name.h"
 #include "favorite_macro_config.h"
+#include "favorite_macro_config_modal.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "macro_executor.h"
 #include "macro_param_cache.h"
@@ -40,6 +41,17 @@ void register_favorite_macro_widgets() {
                              FavoriteMacroWidget::picker_backdrop_cb);
     lv_xml_register_event_cb(nullptr, "fav_macro_picker_done_cb",
                              FavoriteMacroWidget::picker_done_cb);
+    helix::register_favorite_macro_config_subjects();
+    lv_xml_register_event_cb(nullptr, "fav_macro_config_close_cb",
+                             FavoriteMacroConfigModal::close_cb);
+    lv_xml_register_event_cb(nullptr, "fav_macro_config_skip_cb",
+                             FavoriteMacroConfigModal::skip_params_cb);
+    lv_xml_register_event_cb(nullptr, "fav_macro_config_tab_macro_cb",
+                             FavoriteMacroConfigModal::tab_macro_cb);
+    lv_xml_register_event_cb(nullptr, "fav_macro_config_tab_appearance_cb",
+                             FavoriteMacroConfigModal::tab_appearance_cb);
+    lv_xml_register_event_cb(nullptr, "fav_macro_config_tab_options_cb",
+                             FavoriteMacroConfigModal::tab_options_cb);
 }
 } // namespace helix
 

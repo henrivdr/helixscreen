@@ -5,12 +5,19 @@
 
 #include "ui_button.h"
 #include "ui_card.h"
+#include "ui_dialog.h"
 #include "ui_icon.h"
+#include "ui_switch.h"
 #include "ui_temp_display.h"
 #include "ui_text.h"
 #include "ui_text_input.h"
 
 #include "spdlog/spdlog.h"
+
+// Forward declaration — defined in favorite_macro_widget.cpp, not exported in any header.
+namespace helix {
+void register_favorite_macro_widgets();
+} // namespace helix
 
 using namespace helix;
 
@@ -161,7 +168,8 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     // Add new widget registrations, XML components, event-cb no-ops, or theme
     // setup calls here when introducing new test-only XML primitives. Everything
     // in this helper runs exactly once per process.
-    if (s_global_registered) return;
+    if (s_global_registered)
+        return;
 
     spdlog::debug("[XMLTestFixture] First-time initialization of global XML registrations");
 
@@ -186,14 +194,11 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     lv_xml_register_event_cb(nullptr, "", xml_test_noop_event_callback);
     lv_xml_register_event_cb(nullptr, "on_header_back_clicked", xml_test_noop_event_callback);
     // Nozzle temp panel callbacks
-    lv_xml_register_event_cb(nullptr, "on_nozzle_preset_off_clicked",
-                             xml_test_noop_event_callback);
-    lv_xml_register_event_cb(nullptr, "on_nozzle_preset_pla_clicked",
-                             xml_test_noop_event_callback);
+    lv_xml_register_event_cb(nullptr, "on_nozzle_preset_off_clicked", xml_test_noop_event_callback);
+    lv_xml_register_event_cb(nullptr, "on_nozzle_preset_pla_clicked", xml_test_noop_event_callback);
     lv_xml_register_event_cb(nullptr, "on_nozzle_preset_petg_clicked",
                              xml_test_noop_event_callback);
-    lv_xml_register_event_cb(nullptr, "on_nozzle_preset_abs_clicked",
-                             xml_test_noop_event_callback);
+    lv_xml_register_event_cb(nullptr, "on_nozzle_preset_abs_clicked", xml_test_noop_event_callback);
     lv_xml_register_event_cb(nullptr, "on_nozzle_custom_clicked", xml_test_noop_event_callback);
     // Bed temp panel callbacks
     lv_xml_register_event_cb(nullptr, "on_bed_preset_off_clicked", xml_test_noop_event_callback);
@@ -201,6 +206,18 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     lv_xml_register_event_cb(nullptr, "on_bed_preset_petg_clicked", xml_test_noop_event_callback);
     lv_xml_register_event_cb(nullptr, "on_bed_preset_abs_clicked", xml_test_noop_event_callback);
     lv_xml_register_event_cb(nullptr, "on_bed_custom_clicked", xml_test_noop_event_callback);
+
+    // Register widgets needed by favorite_macro_config_modal
+    ui_dialog_register();
+    ui_switch_register();
+    // Register favorite macro widget callbacks, subjects, and the new modal component
+    helix::register_favorite_macro_widgets();
+    // Register no-op for optional setting_toggle_row info button callback
+    lv_xml_register_event_cb(nullptr, "on_setting_info_clicked", xml_test_noop_event_callback);
+    // Register components used by the modal
+    lv_xml_register_component_from_file("A:ui_xml/divider_horizontal.xml");
+    lv_xml_register_component_from_file("A:ui_xml/setting_toggle_row.xml");
+    lv_xml_register_component_from_file("A:ui_xml/favorite_macro_config_modal.xml");
 
     s_global_registered = true;
 }
