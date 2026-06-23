@@ -26,7 +26,7 @@ make venv-setup     # Python venv with pypng/lz4
 ### Debian/Ubuntu
 ```bash
 sudo apt install cmake bear imagemagick python3 python3-venv clang make npm \
-    shellcheck bats libnl-3-dev libnl-genl-3-dev libssl-dev
+    shellcheck bats libnl-3-dev libnl-genl-3-dev libssl-dev libusb-1.0-0-dev
 npm install && make venv-setup
 ```
 
