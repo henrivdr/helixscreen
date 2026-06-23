@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "macro_param_cache.h"
 #include "macro_param_modal.h"
 #include "panel_widget.h"
@@ -61,9 +61,10 @@ class FavoriteMacroWidget : public PanelWidget {
     lv_obj_t* icon_label_ = nullptr;
     lv_obj_t* name_label_ = nullptr;
 
-    std::string macro_name_;  ///< Assigned macro (e.g., "CLEAN_NOZZLE")
-    std::string icon_name_;   ///< Custom icon name, empty = "play" default
-    uint32_t icon_color_ = 0; ///< Custom icon color (RGB), 0 = theme secondary
+    std::string macro_name_;         ///< Assigned macro (e.g., "CLEAN_NOZZLE")
+    std::string icon_name_;          ///< Custom icon name, empty = "play" default
+    uint32_t icon_color_ = 0;        ///< Custom icon color (RGB), 0 = theme secondary
+    bool skip_param_prompt_ = false; ///< Run directly without the parameter-entry modal
     helix::AsyncLifetimeGuard lifetime_;
 
     // Picker context menu
@@ -83,6 +84,7 @@ class FavoriteMacroWidget : public PanelWidget {
     void select_macro(const std::string& name);
     void select_icon(const std::string& name);
     void select_color(uint32_t color);
+    void select_skip_param(bool enabled);
 
     void populate_macro_list(lv_obj_t* list, const std::vector<std::string>& macros);
     void populate_icon_grid(lv_obj_t* grid);

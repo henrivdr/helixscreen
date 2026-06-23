@@ -79,6 +79,23 @@
         <lv_obj name="color_grid" width="100%" height="content"
                 flex_flow="row_wrap" style_pad_all="#space_xs" style_pad_gap="#space_xs"
                 scrollable="false"/>
+
+        <!-- Run-directly toggle: skip the parameter-entry popup for this macro.
+             Lives in the right column (shorter than the macro list) so it stays
+             within the card's capped height on small screens. State + handler
+             wired in C++ (FavoriteMacroWidget::show_macro_picker). -->
+        <lv_obj width="100%" height="1" style_bg_color="#text_muted" style_bg_opa="38"
+                style_pad_all="0" scrollable="false" clickable="false" event_bubble="true"/>
+        <lv_obj width="100%" height="content"
+                flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center"
+                style_pad_all="0" style_pad_gap="#space_sm"
+                scrollable="false" clickable="false" event_bubble="true">
+          <text_small text="Run without parameter prompt"
+                      translation_tag="Run without parameter prompt"
+                      width="1" flex_grow="1"
+                      clickable="false" event_bubble="true"/>
+          <ui_switch name="skip_params_toggle" size="small"/>
+        </lv_obj>
       </lv_obj>
     </lv_obj>
   </view>

@@ -7,6 +7,7 @@
 #include "ui_fonts.h"
 #include "ui_icon.h"
 #include "ui_icon_codepoints.h"
+#include "ui_modal.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -19,7 +20,6 @@
 #include "panel_widget_registry.h"
 #include "safety_settings_manager.h"
 #include "theme_manager.h"
-#include "ui_modal.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -228,8 +228,12 @@ void FavoriteMacroWidget::set_config(const nlohmann::json& config) {
     if (config.contains("color") && config["color"].is_number_unsigned()) {
         icon_color_ = config["color"].get<uint32_t>();
     }
-    spdlog::debug("[FavoriteMacroWidget] Config: {}={} icon={} color=0x{:06X}", widget_id_,
-                  macro_name_, icon_name_.empty() ? "default" : icon_name_, icon_color_);
+    if (config.contains("skip_param_prompt") && config["skip_param_prompt"].is_boolean()) {
+        skip_param_prompt_ = config["skip_param_prompt"].get<bool>();
+    }
+    spdlog::debug("[FavoriteMacroWidget] Config: {}={} icon={} color=0x{:06X} skip_params={}",
+                  widget_id_, macro_name_, icon_name_.empty() ? "default" : icon_name_, icon_color_,
+                  skip_param_prompt_);
 }
 
 void FavoriteMacroWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
@@ -375,9 +379,12 @@ void FavoriteMacroWidget::save_config() {
         config["icon"] = icon_name_;
     if (icon_color_ != 0)
         config["color"] = icon_color_;
+    if (skip_param_prompt_)
+        config["skip_param_prompt"] = true;
     save_widget_config(config);
-    spdlog::debug("[FavoriteMacroWidget] Saved config: {}={} icon={} color=0x{:06X}", widget_id_,
-                  macro_name_, icon_name_.empty() ? "default" : icon_name_, icon_color_);
+    spdlog::debug("[FavoriteMacroWidget] Saved config: {}={} icon={} color=0x{:06X} skip_params={}",
+                  widget_id_, macro_name_, icon_name_.empty() ? "default" : icon_name_, icon_color_,
+                  skip_param_prompt_);
 }
 
 void FavoriteMacroWidget::fetch_and_execute() {
@@ -414,17 +421,27 @@ void FavoriteMacroWidget::fetch_and_execute() {
 
     auto cached = MacroParamCache::instance().get(macro_name_);
 
+    // "Run without parameter prompt" favorites — and macros with genuinely no
+    // params — execute with empty params and never show the parameter-entry
+    // modal. Macros registered via Klipper's register_command report UNKNOWN
+    // params (no gcode_macro template to parse), which would otherwise force the
+    // popup on every tap regardless of the confirm setting; the per-widget
+    // toggle lets the user opt out of it.
+    bool run_without_params =
+        skip_param_prompt_ || cached.knowledge == MacroParamKnowledge::KNOWN_NO_PARAMS;
+
     // Optional run-confirmation gate (Settings → Safety toggle, default on).
-    // Only applies to KNOWN_NO_PARAMS — for KNOWN_PARAMS / UNKNOWN, the param
-    // modal is itself the implicit confirmation step. Mirrors MacrosPanel logic.
-    if (cached.knowledge == MacroParamKnowledge::KNOWN_NO_PARAMS && parent_screen_ &&
+    // Only applies when running without a param modal — for KNOWN_PARAMS /
+    // UNKNOWN the param modal is itself the implicit confirmation step. Mirrors
+    // MacrosPanel logic.
+    if (run_without_params && parent_screen_ &&
         helix::SafetySettingsManager::instance().get_macro_require_confirmation()) {
         auto* ctx = new MacroExecCtx{macro_name_, api, parent_screen_};
         std::string display = helix::get_display_name(macro_name_, helix::DeviceType::MACRO);
         std::string msg = fmt::format(lv_tr("Run {}?"), display);
-        lv_obj_t* dialog = helix::ui::modal_show_confirmation(
-            lv_tr("Run Macro?"), msg.c_str(), ::ModalSeverity::Info, lv_tr("Run"), run_confirm_cb,
-            run_cancel_cb, ctx);
+        lv_obj_t* dialog = helix::ui::modal_show_confirmation(lv_tr("Run Macro?"), msg.c_str(),
+                                                              ::ModalSeverity::Info, lv_tr("Run"),
+                                                              run_confirm_cb, run_cancel_cb, ctx);
         if (dialog) {
             lv_obj_add_event_cb(dialog, ctx_delete_cb, LV_EVENT_DELETE, ctx);
         } else {
@@ -433,7 +450,12 @@ void FavoriteMacroWidget::fetch_and_execute() {
         return;
     }
 
-    // No (additional) confirmation required — dispatch directly.
+    if (run_without_params) {
+        helix::execute_macro_gcode(api, macro_name_, {}, "[FavoriteMacroWidget]");
+        return;
+    }
+
+    // Has params (and not skipped) — show the parameter-entry modal.
     run_macro_after_confirm({macro_name_, api, parent_screen_});
 }
 
@@ -500,6 +522,25 @@ void FavoriteMacroWidget::show_macro_picker() {
         populate_icon_grid(picker_icon_grid_);
     if (picker_color_grid_)
         populate_color_grid(picker_color_grid_);
+
+    // Wire the "run without parameter prompt" toggle to current state + handler.
+    if (lv_obj_t* skip_toggle = lv_obj_find_by_name(picker_backdrop_, "skip_params_toggle")) {
+        if (skip_param_prompt_)
+            lv_obj_add_state(skip_toggle, LV_STATE_CHECKED);
+        else
+            lv_obj_remove_state(skip_toggle, LV_STATE_CHECKED);
+        lv_obj_add_event_cb(
+            skip_toggle,
+            [](lv_event_t* e) {
+                LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroWidget] skip_toggle_cb");
+                auto* target = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+                bool on = lv_obj_has_state(target, LV_STATE_CHECKED);
+                if (FavoriteMacroWidget::s_active_picker_)
+                    FavoriteMacroWidget::s_active_picker_->select_skip_param(on);
+                LVGL_SAFE_EVENT_CB_END();
+            },
+            LV_EVENT_VALUE_CHANGED, nullptr);
+    }
 
     s_active_picker_ = this;
 
@@ -603,6 +644,12 @@ void FavoriteMacroWidget::select_color(uint32_t color) {
     save_config();
     refresh_picker_highlights();
     spdlog::info("[FavoriteMacroWidget] {} selected color: 0x{:06X}", widget_id_, color);
+}
+
+void FavoriteMacroWidget::select_skip_param(bool enabled) {
+    skip_param_prompt_ = enabled;
+    save_config();
+    spdlog::info("[FavoriteMacroWidget] {} run-without-prompt: {}", widget_id_, enabled);
 }
 
 void FavoriteMacroWidget::populate_macro_list(lv_obj_t* list,
