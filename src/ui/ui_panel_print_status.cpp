@@ -775,9 +775,10 @@ lv_obj_t* PrintStatusPanel::create(lv_obj_t* parent) {
                 auto* panel = static_cast<PrintStatusPanel*>(ud);
                 panel->show_gcode_viewer(false);
                 panel->lifecycle_.set_gcode_loaded(false);
-                // Viewer geometry is gone; the widgets no longer show the file,
-                // so the next ensure_preview_current() must reload.
-                panel->displayed_file_.clear();
+                // Viewer geometry is gone; clear the GCODE marker so the next
+                // ensure_preview_current() reloads it. The thumbnail (fallback)
+                // survives, so its marker is left intact.
+                panel->gcode_displayed_file_.clear();
             },
             this);
     } else {
@@ -1036,10 +1037,10 @@ void PrintStatusPanel::on_deactivate() {
             state != PrintState::Preparing) {
             ui_gcode_viewer_clear(gcode_viewer_);
             lifecycle_.set_gcode_loaded(false);
-            // Viewer geometry is gone; drop the displayed marker so the next
-            // ensure_preview_current() (on re-activation) reloads. The thumbnail
-            // re-fetch is a cache hit (file stays on disk).
-            displayed_file_.clear();
+            // Viewer geometry is gone; drop the GCODE marker so the next
+            // ensure_preview_current() (on re-activation) reloads it. The
+            // thumbnail survives, so its marker is left intact.
+            gcode_displayed_file_.clear();
             spdlog::debug("[{}] Cleared gcode viewer on deactivate (terminal state)", get_name());
         }
     }
@@ -1107,11 +1108,12 @@ void PrintStatusPanel::on_ui_destroyed() {
     is_active_ = false;
     lifecycle_.set_gcode_loaded(false);
     complete_view_mode_ = false;
-    // The widget tree is gone, so nothing is displayed. Clearing the single
-    // source of truth forces ensure_preview_current() to reload on next open
+    // The widget tree is gone, so nothing is displayed. Clearing both markers
+    // forces ensure_preview_current() to reload thumbnail + gcode on next open
     // after destroy-on-close. pending_gcode_filename_ is a stale timer payload
     // for a now-deleted viewer — drop it too.
     displayed_file_.clear();
+    gcode_displayed_file_.clear();
     pending_gcode_filename_.clear();
 }
 
@@ -1403,11 +1405,12 @@ void PrintStatusPanel::load_gcode_file(const char* file_path) {
             // Mark G-code as successfully loaded (enables viewer mode on state changes)
             self->lifecycle_.set_gcode_loaded(true);
             // The viewer now holds the current print's geometry. Record the
-            // effective filename as displayed so ensure_preview_current() treats
-            // the viewer as current on re-entry.
-            self->displayed_file_ = self->thumbnail_source_filename_.empty()
-                                        ? self->current_print_filename_
-                                        : self->thumbnail_source_filename_;
+            // effective filename as the GCODE marker so ensure_preview_current()
+            // treats the viewer as current on re-entry. (The thumbnail marker is
+            // recorded independently by the thumbnail path.)
+            self->gcode_displayed_file_ = self->thumbnail_source_filename_.empty()
+                                              ? self->current_print_filename_
+                                              : self->thumbnail_source_filename_;
 
             // Override extrusion colors with AMS filament colors.
             // For multi-tool prints, applies per-tool AMS slot colors.
@@ -2360,8 +2363,8 @@ void PrintStatusPanel::on_print_state_changed(PrintJobState job_state) {
     // Clear thumbnail and G-code tracking when print ends
     if (result.print_ended) {
         if (!thumbnail_source_filename_.empty() || !displayed_file_.empty() ||
-            lifecycle_.gcode_loaded() || !temp_gcode_path_.empty() ||
-            !pending_gcode_filename_.empty()) {
+            !gcode_displayed_file_.empty() || lifecycle_.gcode_loaded() ||
+            !temp_gcode_path_.empty() || !pending_gcode_filename_.empty()) {
             spdlog::debug("[{}] Clearing thumbnail/gcode tracking (print ended)", get_name());
             // Cancel pending deferred G-code load (print is over)
             if (gcode_load_timer_) {
@@ -3315,15 +3318,21 @@ void PrintStatusPanel::set_filename(const char* filename) {
     // PrintStatusPanel only needs to load local resources (gcode viewer, local thumbnail)
 
     // When the effective filename CHANGES, the widgets are showing the old file
-    // (or nothing). Clear the displayed marker so ensure_preview_current() sees
-    // the mismatch and reloads both the thumbnail and gcode. Idempotent: a
-    // repeated observer fire with the same effective filename leaves
-    // displayed_file_ untouched and ensure_preview_current() becomes a no-op if
-    // the widgets already hold valid content.
+    // (or nothing). Clear each stale per-asset marker so ensure_preview_current()
+    // sees the mismatch and reloads that asset. Each marker is cleared only when
+    // ITS OWN asset is stale — the thumbnail can already be current while the
+    // gcode viewer still holds the previous print, so clearing them together
+    // would force a needless thumbnail re-fetch. Idempotent: a repeated observer
+    // fire with the same effective filename leaves the markers untouched and
+    // ensure_preview_current() becomes a no-op if the widgets already hold valid
+    // content.
     if (!effective_filename.empty() && effective_filename != displayed_file_) {
         // Clear stale cached thumbnail from previous print
         cached_thumbnail_path_.clear();
         displayed_file_.clear();
+    }
+    if (!effective_filename.empty() && effective_filename != gcode_displayed_file_) {
+        gcode_displayed_file_.clear();
     }
     ensure_preview_current();
 }
@@ -3341,13 +3350,14 @@ void PrintStatusPanel::ensure_preview_current() {
 
     bool want_viewer = lifecycle_.want_viewer();
 
-    helix::ui::PreviewAction action = helix::ui::decide_preview_action(
-        displayed_file_, desired, thumbnail_has_src, gcode_has_content, want_viewer);
+    helix::ui::PreviewAction action =
+        helix::ui::decide_preview_action(displayed_file_, gcode_displayed_file_, desired,
+                                         thumbnail_has_src, gcode_has_content, want_viewer);
 
-    spdlog::debug("[{}] ensure_preview_current: displayed='{}' desired='{}' thumb_src={} "
-                  "gcode_content={} want_viewer={} -> load_thumb={} load_gcode={}",
-                  get_name(), displayed_file_, desired, thumbnail_has_src, gcode_has_content,
-                  want_viewer, action.load_thumbnail, action.load_gcode);
+    spdlog::debug("[{}] ensure_preview_current: thumb_file='{}' gcode_file='{}' desired='{}' "
+                  "thumb_src={} gcode_content={} want_viewer={} -> load_thumb={} load_gcode={}",
+                  get_name(), displayed_file_, gcode_displayed_file_, desired, thumbnail_has_src,
+                  gcode_has_content, want_viewer, action.load_thumbnail, action.load_gcode);
 
     if (desired.empty()) {
         return; // Nothing to show.
@@ -3369,8 +3379,8 @@ void PrintStatusPanel::ensure_preview_current() {
 
     if (action.load_gcode) {
         // Queue the (expensive) gcode download. The deferred timer debounces and
-        // load_gcode_file's success callback records displayed_file_. Schedule
-        // immediately when active; otherwise on_activate() runs this again.
+        // load_gcode_file's success callback records gcode_displayed_file_.
+        // Schedule immediately when active; otherwise on_activate() runs this again.
         pending_gcode_filename_ = desired;
         if (is_active_) {
             schedule_deferred_gcode_load();

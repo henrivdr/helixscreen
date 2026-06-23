@@ -28,8 +28,15 @@ struct PreviewAction {
  * is driven by real widget state rather than intent bools, re-entry is
  * self-healing: a blank widget always reloads.
  *
- * @param displayed_file    File whose content is CURRENTLY in the widgets
- *                          ("" = none/blank).
+ * @param thumbnail_displayed_file File whose content is CURRENTLY in the
+ *                          thumbnail widget ("" = none/blank).
+ * @param gcode_displayed_file     File whose geometry is CURRENTLY in the gcode
+ *                          viewer ("" = none/blank). Tracked separately from the
+ *                          thumbnail: the thumbnail subject observer can advance
+ *                          its marker (even while the panel is hidden) long
+ *                          before the deferred gcode load runs, so the gcode
+ *                          mismatch MUST be computed against this marker, not the
+ *                          thumbnail's, or a stale render is left on screen.
  * @param desired_file      The current print's effective filename
  *                          ("" = nothing to show).
  * @param thumbnail_has_src Does the thumbnail widget currently have an image
@@ -39,7 +46,8 @@ struct PreviewAction {
  *                          print state (independent of the render-mode setting).
  * @return Which resources to (re)load.
  */
-inline PreviewAction decide_preview_action(const std::string& displayed_file,
+inline PreviewAction decide_preview_action(const std::string& thumbnail_displayed_file,
+                                           const std::string& gcode_displayed_file,
                                            const std::string& desired_file, bool thumbnail_has_src,
                                            bool gcode_has_content, bool want_viewer) {
     PreviewAction action{false, false};
@@ -49,21 +57,27 @@ inline PreviewAction decide_preview_action(const std::string& displayed_file,
         return action;
     }
 
-    const bool file_mismatch = (displayed_file != desired_file);
+    // The two assets are reconciled against their OWN markers. The thumbnail's
+    // marker can advance to the new print before the gcode viewer's does (the
+    // thumbnail subject observer fires even while the panel is hidden, while the
+    // gcode load is deferred and only scheduled when active), so a shared marker
+    // would let the thumbnail mask a stale gcode render from the previous print.
+    const bool thumbnail_mismatch = (thumbnail_displayed_file != desired_file);
+    const bool gcode_mismatch = (gcode_displayed_file != desired_file);
 
     // Thumbnail is always the fallback content beneath the viewer. (Re)load it
-    // whenever the displayed file differs from desired or the widget is blank.
-    if (file_mismatch || !thumbnail_has_src) {
+    // whenever its displayed file differs from desired or the widget is blank.
+    if (thumbnail_mismatch || !thumbnail_has_src) {
         action.load_thumbnail = true;
     }
 
     // Gcode geometry (re)loads whenever the lifecycle wants the viewer and the
-    // file differs or the viewer holds no geometry. Do NOT gate on the current
+    // viewer's file differs or it holds no geometry. Do NOT gate on the current
     // view-mode subject: the mode only flips to 3D/2D AFTER the gcode loads, so
     // gating here would deadlock the load and pin the preview to the thumbnail.
     // The render-mode setting (thumbnail-only / 3D-disabled) is enforced
     // downstream in load_gcode_for_viewing().
-    if (want_viewer && (file_mismatch || !gcode_has_content)) {
+    if (want_viewer && (gcode_mismatch || !gcode_has_content)) {
         action.load_gcode = true;
     }
 

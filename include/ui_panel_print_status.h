@@ -433,13 +433,20 @@ class PrintStatusPanel : public OverlayBase {
     // When set, load_thumbnail_for_file() uses this instead of the actual filename
     std::string thumbnail_source_filename_;
 
-    // Single source of truth: the effective filename whose content is CURRENTLY
-    // shown in the preview widgets (thumbnail + gcode viewer). Empty when the
-    // widgets show nothing. Cleared in lockstep with widget destruction
-    // (on_ui_destroyed) and viewer geometry clearing (clear callback) so the
-    // reconciliation in ensure_preview_current() never trusts a stale "showing
-    // X" claim against a blank widget.
-    std::string displayed_file_;
+    // Per-asset "what is on screen" markers. The thumbnail (fallback image) and
+    // the gcode viewer (3D/2D geometry) load on independent paths with very
+    // different latencies — the thumbnail subject observer can advance its marker
+    // even while the panel is hidden, while the gcode load is deferred and only
+    // scheduled when active. A SINGLE shared marker let the thumbnail mask a
+    // stale gcode render from the previous print (metadata+thumbnail correct, 3D
+    // render still the old model), so the two are tracked separately and
+    // reconciled independently in ensure_preview_current(). Empty when that
+    // widget shows nothing; cleared in lockstep with widget destruction
+    // (on_ui_destroyed) and geometry clearing (clear callback) so the
+    // reconciliation never trusts a stale "showing X" claim against a blank
+    // widget.
+    std::string displayed_file_;       // file whose image is in the thumbnail
+    std::string gcode_displayed_file_; // file whose geometry is in the viewer
 
     // Deferred G-code loading: filename to load when panel becomes visible
     // Set in set_filename(), consumed in on_activate() - avoids downloading
