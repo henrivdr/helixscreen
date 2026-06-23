@@ -43,3 +43,19 @@ TEST_CASE("favorite macro config tolerates wrong json types", "[macro][favorite_
     REQUIRE(c.macro.empty());
     REQUIRE(c.skip_param_prompt == false);
 }
+
+TEST_CASE("favorite macro config always writes macro key even when empty",
+          "[macro][favorite_config]") {
+    FavoriteMacroConfig c; // all defaults: empty macro
+    auto j = favorite_macro_config_to_json(c);
+    REQUIRE(j.contains("macro"));
+    REQUIRE(j["macro"] == "");
+}
+
+TEST_CASE("favorite macro config rejects negative color", "[macro][favorite_config]") {
+    nlohmann::json j;
+    j["macro"] = "G28";
+    j["color"] = -5;
+    auto c = favorite_macro_config_from_json(j);
+    REQUIRE(c.color == 0u);
+}
