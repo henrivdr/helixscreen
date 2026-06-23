@@ -251,15 +251,17 @@ echo ""
 # NOTE: clang-format versions differ between local (macOS Homebrew) and CI (Ubuntu)
 # which can cause false positives. Use pre-commit hook for local enforcement.
 echo "🎨 Checking code formatting (clang-format)..."
-# Resolve clang-format to the version CI enforces (clang-format 18 — see
-# .github/workflows/quality.yml; "Version must match .clang-format expectations").
-# Preference order: $CLANG_FORMAT override, clang-format-18 on PATH, the project
-# .venv (pip clang-format==18.x, shared into worktrees), then bare clang-format.
-# Auto-fix only runs when the resolved binary is v18, so a mismatched local
-# clang-format (e.g. Homebrew's newer release) can never reflow whole files.
+# Resolve clang-format to the EXACT pinned wheel (clang-format==18.1.8 in
+# requirements.txt, installed into .venv by `make deps`). Preference order:
+# $CLANG_FORMAT override, then the project .venv (the single source of truth —
+# byte-identical on every OS + CI), then a system clang-format-18, then bare
+# clang-format. The .venv wins over the system binary so a machine's Homebrew
+# (newer) or distro (older 18.1.x patch) clang-format never affects formatting.
+# Auto-fix only runs when the resolved binary is v18, so a non-18 fallback can
+# never reflow whole files.
 CF_BIN=""
 CF_VER=""
-for cf_cand in "${CLANG_FORMAT:-}" clang-format-18 "$REPO_ROOT/.venv/bin/clang-format" clang-format; do
+for cf_cand in "${CLANG_FORMAT:-}" "$REPO_ROOT/.venv/bin/clang-format" clang-format-18 clang-format; do
   [ -n "$cf_cand" ] || continue
   command -v "$cf_cand" >/dev/null 2>&1 || [ -x "$cf_cand" ] || continue
   cf_v="$("$cf_cand" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
