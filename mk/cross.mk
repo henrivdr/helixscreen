@@ -1272,43 +1272,43 @@ docker-toolchains: docker-toolchain-pi docker-toolchain-pi32 docker-toolchain-ad
 
 docker-toolchain-pi: ensure-buildx
 	@echo "$(CYAN)Building Raspberry Pi toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-pi -f docker/Dockerfile.pi docker/
+	$(Q)docker buildx build --network=host -t helixscreen/toolchain-pi -f docker/Dockerfile.pi docker/
 
 docker-toolchain-pi32: ensure-buildx
 	@echo "$(CYAN)Building Raspberry Pi 32-bit toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-pi32 -f docker/Dockerfile.pi32 docker/
+	$(Q)docker buildx build --network=host -t helixscreen/toolchain-pi32 -f docker/Dockerfile.pi32 docker/
 
 docker-toolchain-ad5m: ensure-buildx
 	@echo "$(CYAN)Building Adventurer 5M toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build --platform linux/amd64 -t helixscreen/toolchain-ad5m -f docker/Dockerfile.ad5m docker/
+	$(Q)docker buildx build --platform linux/amd64 --network=host -t helixscreen/toolchain-ad5m -f docker/Dockerfile.ad5m docker/
 
 docker-toolchain-ad5x: ensure-buildx
 	@echo "$(CYAN)Building Adventurer 5X toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-ad5x -f docker/Dockerfile.ad5x docker/
+	$(Q)docker buildx build --network=host -t helixscreen/toolchain-ad5x -f docker/Dockerfile.ad5x docker/
 
 docker-toolchain-cc1: ensure-buildx
 	@echo "$(CYAN)Building Centauri Carbon 1 toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build --platform linux/amd64 -t helixscreen/toolchain-cc1 -f docker/Dockerfile.cc1 docker/
+	$(Q)docker buildx build --platform linux/amd64 --network=host -t helixscreen/toolchain-cc1 -f docker/Dockerfile.cc1 docker/
 
 docker-toolchain-k1: ensure-buildx
 	@echo "$(CYAN)Building MIPS32 K1 toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-k1 -f docker/Dockerfile.k1 docker/
+	$(Q)docker buildx build --network=host -t helixscreen/toolchain-k1 -f docker/Dockerfile.k1 docker/
 
 docker-toolchain-k1-dynamic: ensure-buildx
 	@echo "$(CYAN)Building Creality K1 series (dynamic) toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-k1-dynamic -f docker/Dockerfile.k1-dynamic docker/
+	$(Q)docker buildx build --network=host -t helixscreen/toolchain-k1-dynamic -f docker/Dockerfile.k1-dynamic docker/
 
 docker-toolchain-k2: ensure-buildx
 	@echo "$(CYAN)Building Creality K2 series toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build --platform linux/amd64 -t helixscreen/toolchain-k2 -f docker/Dockerfile.k2 docker/
+	$(Q)docker buildx build --network=host --platform linux/amd64 -t helixscreen/toolchain-k2 -f docker/Dockerfile.k2 docker/
 
 docker-toolchain-snapmaker-u1: ensure-buildx
 	@echo "$(CYAN)Building Snapmaker U1 toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build -t helixscreen/toolchain-snapmaker-u1 -f docker/Dockerfile.snapmaker-u1 docker/
+	$(Q)docker buildx build --network=host -t helixscreen/toolchain-snapmaker-u1 -f docker/Dockerfile.snapmaker-u1 docker/
 
 docker-toolchain-x86: ensure-buildx
 	@echo "$(CYAN)Building x86_64 Debian toolchain Docker image...$(RESET)"
-	$(Q)docker buildx build --platform linux/amd64 -t helixscreen/toolchain-x86 -f docker/Dockerfile.x86 docker/
+	$(Q)docker buildx build --network=host --platform linux/amd64 -t helixscreen/toolchain-x86 -f docker/Dockerfile.x86 docker/
 
 # Display cross-compilation info (alias for help-cross)
 cross-info: help-cross
