@@ -2,11 +2,10 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "ui_timer_guard.h"
 
 #include "lvgl/lvgl.h"
+#include "wizard_step.h"
 
 #include <atomic>
 #include <memory>
@@ -40,10 +39,18 @@
 class WizardLanguageChooserStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::Language; }
-    const char* component_name() const override { return "wizard_language_chooser"; }
-    const char* log_name() const override { return "Wizard Language Chooser"; }
-    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override { return should_skip(); }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::Language;
+    }
+    const char* component_name() const override {
+        return "wizard_language_chooser";
+    }
+    const char* log_name() const override {
+        return "Wizard Language Chooser";
+    }
+    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override {
+        return should_skip();
+    }
 
     WizardLanguageChooserStep();
     ~WizardLanguageChooserStep();

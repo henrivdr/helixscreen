@@ -3,6 +3,10 @@
 
 #include "gcode_error_router.h"
 
+#include "ui_modal.h"
+#include "ui_notification.h"
+#include "ui_toast_manager.h"
+
 #include "ams_state.h"
 #include "app_globals.h"
 #include "error_classify.h"
@@ -15,9 +19,6 @@
 #include "printer_state.h"
 #include "recovery_modal_presenter.h"
 #include "rpc_error_correlation.h"
-#include "ui_modal.h"
-#include "ui_notification.h"
-#include "ui_toast_manager.h"
 
 #if HELIX_HAS_CFS
 #include "ams_backend_cfs.h"
@@ -40,9 +41,11 @@ constexpr const char* kReplayObserverName = "gcode_store_replay";
 /// Maps RecoveryAction.style to PromptButton.color.
 /// "primary" -> "primary", "danger" -> "error", anything else -> "" (neutral).
 std::string color_for_style(const std::string& style) {
-    if (style == "primary") return "primary";
-    if (style == "danger") return "error";
-    return "";  // neutral / theme default
+    if (style == "primary")
+        return "primary";
+    if (style == "danger")
+        return "error";
+    return ""; // neutral / theme default
 }
 
 /// Title for a plain CRITICAL modal (no recovery action). Preserves the prior
@@ -52,7 +55,8 @@ std::string color_for_style(const std::string& style) {
 /// NOTE: twin of modal_title_for() in recovery_modal_presenter.cpp (the
 /// MODAL_WITH_RECOVER arm) — keep the CFS title rule in sync across both.
 const char* modal_title_for(const ErrorEvent& e) {
-    if (e.source == ErrorSource::CFS) return lv_tr("Filament System Error");
+    if (e.source == ErrorSource::CFS)
+        return lv_tr("Filament System Error");
     return e.title.empty() ? lv_tr("Printer Error") : e.title.c_str();
 }
 
@@ -74,12 +78,11 @@ constexpr double kReplayMaxAgeSeconds = 30.0;
 constexpr int kReplayFetchCount = 50;
 
 double now_unix_seconds() {
-    return std::chrono::duration<double>(
-               std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
 
-}  // namespace
+} // namespace
 
 GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client,
                                    helix::ui::RecoveryModalPresenter& presenter)
@@ -100,9 +103,7 @@ GcodeErrorRouter::GcodeErrorRouter(MoonrakerAPI* api, MoonrakerClient* client,
     client_->register_method_callback(
         "notify_gcode_response", kNotifyHandlerName,
         lifetime_.bg_cb("GcodeErrorRouter::on_notify",
-                        [this](const nlohmann::json& msg) {
-                            on_notify_gcode_response(msg);
-                        }));
+                        [this](const nlohmann::json& msg) { on_notify_gcode_response(msg); }));
 
     // Reconnect replay. Fires on WS open + Klippy ready transitions.
     // bg_cb takes a 0-arg callback fine -- the lambda below doesn't need
@@ -130,12 +131,14 @@ bool GcodeErrorRouter::should_surface_replay(double entry_time, double now) {
     // Never suppress a possibly-fresh error on missing data -- preserve the
     // legacy surface-it behavior (the live `!!` path is unaffected by this
     // gate regardless).
-    if (entry_time <= 0.0) return true;
+    if (entry_time <= 0.0)
+        return true;
 
     const double age = now - entry_time;
     // Clock skew or an entry stamped in the (apparent) future reads as a
     // negative age; treat as fresh rather than silently suppressing.
-    if (age <= kReplayMaxAgeSeconds) return true;
+    if (age <= kReplayMaxAgeSeconds)
+        return true;
 
     spdlog::debug("[GcodeError replay] Skipping stale `!!` (age {:.0f}s)", age);
     return false;
@@ -196,9 +199,8 @@ void GcodeErrorRouter::clean_error_text(std::string& text, std::string& out_code
                         values = j["values"];
                     }
 #if HELIX_HAS_CFS
-                    if (auto friendly =
-                            printer::CfsErrorDecoder::lookup_message_with_values(
-                                out_code, values)) {
+                    if (auto friendly = printer::CfsErrorDecoder::lookup_message_with_values(
+                            out_code, values)) {
                         text = friendly->first + ". " + friendly->second;
                         return;
                     }
@@ -245,13 +247,14 @@ PresentAs decide_presentation(const ErrorEvent& e) {
         return has_recover ? PresentAs::MODAL_WITH_RECOVER : PresentAs::MODAL;
     if (e.severity == ErrorSeverity::WARNING)
         return has_recover ? PresentAs::TOAST_WITH_RECOVER : PresentAs::TOAST;
-    return PresentAs::NONE;  // INFO not surfaced in L0
+    return PresentAs::NONE; // INFO not surfaced in L0
 }
 
 PromptData build_recovery_prompt(const ErrorEvent& e) {
     PromptData p;
     p.title = e.title.empty() ? std::string(lv_tr("Printer Error")) : e.title;
-    if (!e.detail.empty()) p.text_lines.push_back(e.detail);
+    if (!e.detail.empty())
+        p.text_lines.push_back(e.detail);
     for (const auto& a : e.recovery_actions) {
         PromptButton b;
         b.label = a.label;
@@ -272,23 +275,24 @@ void GcodeErrorRouter::present_recover_toast(const ErrorEvent& e) {
     // the platform recovery script. The recovery action carries an EMPTY
     // gcode (log_tag error_classify::key298_recover) -- recovery runs
     // through PrinterRecoveryService, not execute_gcode.
-    if (!api_) return;  // No API client -> recovery would be a no-op; nothing actionable to show.
+    if (!api_)
+        return; // No API client -> recovery would be a no-op; nothing actionable to show.
     MoonrakerAPI* api = api_;
     ToastManager::instance().show_with_action(
         ToastSeverity::ERROR, truncate_for_toast(e.detail).c_str(), lv_tr("Recover"),
         [](void* ud) {
             auto* a = static_cast<MoonrakerAPI*>(ud);
-            if (!a) return;
+            if (!a)
+                return;
             spdlog::info("[GcodeError] User tapped Recover for key298");
             PrinterRecoveryService recovery(a);
-            recovery.recover(
-                []() { spdlog::info("[Recovery] Auto-recovery initiated"); },
-                [](const MoonrakerError& err) {
-                    spdlog::error("[Recovery] Auto-recovery failed: {}", err.message);
-                    ToastManager::instance().show(
-                        ToastSeverity::ERROR,
-                        ("Recovery failed: " + err.user_message()).c_str(), 6000);
-                });
+            recovery.recover([]() { spdlog::info("[Recovery] Auto-recovery initiated"); },
+                             [](const MoonrakerError& err) {
+                                 spdlog::error("[Recovery] Auto-recovery failed: {}", err.message);
+                                 ToastManager::instance().show(
+                                     ToastSeverity::ERROR,
+                                     ("Recovery failed: " + err.user_message()).c_str(), 6000);
+                             });
         },
         api, /*duration_ms=*/15000);
 }
@@ -307,10 +311,9 @@ void GcodeErrorRouter::present_deferred_toast(const std::string& text) {
             auto* c = static_cast<DeferredCtx*>(lv_timer_get_user_data(timer));
             if (c) {
                 if (rpc_error_correlation::was_recently_handled(c->clean)) {
-                    spdlog::info(
-                        "[GcodeError] Suppressing deferred `!!` toast "
-                        "(caller-handled RPC error arrived after): {}",
-                        c->clean);
+                    spdlog::info("[GcodeError] Suppressing deferred `!!` toast "
+                                 "(caller-handled RPC error arrived after): {}",
+                                 c->clean);
                 } else {
                     ui_notification_error("Klipper Error", c->short_form.c_str(),
                                           /*modal=*/false);
@@ -324,7 +327,8 @@ void GcodeErrorRouter::present_deferred_toast(const std::string& text) {
 }
 
 void GcodeErrorRouter::process_line(const std::string& line) {
-    if (line.empty()) return;
+    if (line.empty())
+        return;
 
     // Build classify context from current printer state. process_line runs
     // on the MAIN thread (the ctor's lifetime_.bg_cb wrapper defers the
@@ -338,12 +342,13 @@ void GcodeErrorRouter::process_line(const std::string& line) {
     std::optional<ErrorEvent> ev;
     if (auto* backend = AmsState::instance().get_backend())
         ev = backend->classify_error(line, ctx);
-    if (!ev) ev = error_classify::classify(line, ctx);
-    if (!ev) return;
+    if (!ev)
+        ev = error_classify::classify(line, ctx);
+    if (!ev)
+        return;
 
-    spdlog::error("[GcodeError] sev={} src={} code={}: {}",
-                  static_cast<int>(ev->severity), static_cast<int>(ev->source),
-                  ev->code.empty() ? "-" : ev->code, ev->detail);
+    spdlog::error("[GcodeError] sev={} src={} code={}: {}", static_cast<int>(ev->severity),
+                  static_cast<int>(ev->source), ev->code.empty() ? "-" : ev->code, ev->detail);
 
     // Cross-source dedup: when an RPC caller triggered the gcode that
     // emitted this error, the caller's error_cb already surfaced a
@@ -356,21 +361,21 @@ void GcodeErrorRouter::process_line(const std::string& line) {
     }
 
     switch (decide_presentation(*ev)) {
-        case PresentAs::MODAL:
-            // CRITICAL without a recovery action -- see modal_title_for().
-            ui_notification_error(modal_title_for(*ev), ev->detail.c_str(), /*modal=*/true);
-            return;
-        case PresentAs::MODAL_WITH_RECOVER:
-            present_recovery_modal(*ev);
-            return;
-        case PresentAs::TOAST_WITH_RECOVER:
-            present_recover_toast(*ev);
-            return;
-        case PresentAs::TOAST:
-            present_deferred_toast(ev->detail);
-            return;
-        case PresentAs::NONE:
-            return;
+    case PresentAs::MODAL:
+        // CRITICAL without a recovery action -- see modal_title_for().
+        ui_notification_error(modal_title_for(*ev), ev->detail.c_str(), /*modal=*/true);
+        return;
+    case PresentAs::MODAL_WITH_RECOVER:
+        present_recovery_modal(*ev);
+        return;
+    case PresentAs::TOAST_WITH_RECOVER:
+        present_recover_toast(*ev);
+        return;
+    case PresentAs::TOAST:
+        present_deferred_toast(ev->detail);
+        return;
+    case PresentAs::NONE:
+        return;
     }
 }
 
@@ -396,7 +401,8 @@ void GcodeErrorRouter::on_notify_gcode_response(const nlohmann::json& msg) {
 }
 
 void GcodeErrorRouter::on_connected() {
-    if (!client_) return;
+    if (!client_)
+        return;
     // [L072] get_gcode_store's success callback fires on the WS thread when
     // Moonraker responds. The request tracker holds the callback for the
     // duration of the RPC, so a late response delivered after our dtor would
@@ -407,54 +413,54 @@ void GcodeErrorRouter::on_connected() {
         lifetime_.bg_cb(
             "GcodeErrorRouter::replay_response",
             [this](const std::vector<GcodeStoreEntry>& entries) {
-            // gcode_store is oldest-first; walk reverse for newest.
-            for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
-                if (it->type != "response") continue;
-                const std::string& raw = it->message;
-                if (raw.size() < 3 || raw[0] != '!' || raw[1] != '!') continue;
+                // gcode_store is oldest-first; walk reverse for newest.
+                for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+                    if (it->type != "response")
+                        continue;
+                    const std::string& raw = it->message;
+                    if (raw.size() < 3 || raw[0] != '!' || raw[1] != '!')
+                        continue;
 
-                const double now = now_unix_seconds();
-                if (!should_surface_replay(it->time, now)) {
-                    // should_surface_replay logs the stale skip at debug.
-                    return;
-                }
-                const double age = now - it->time;
-
-                {
-                    std::lock_guard<std::mutex> lock(replay_mutex_);
-                    if (it->time == last_replayed_time_) {
-                        spdlog::debug("[GcodeError replay] Already replayed t={}",
-                                      it->time);
+                    const double now = now_unix_seconds();
+                    if (!should_surface_replay(it->time, now)) {
+                        // should_surface_replay logs the stale skip at debug.
                         return;
                     }
-                    last_replayed_time_ = it->time;
+                    const double age = now - it->time;
+
+                    {
+                        std::lock_guard<std::mutex> lock(replay_mutex_);
+                        if (it->time == last_replayed_time_) {
+                            spdlog::debug("[GcodeError replay] Already replayed t={}", it->time);
+                            return;
+                        }
+                        last_replayed_time_ = it->time;
+                    }
+
+                    std::string clean =
+                        (raw.size() > 3 && raw[2] == ' ') ? raw.substr(3) : raw.substr(2);
+                    std::string code;
+                    clean_error_text(clean, code);
+
+                    spdlog::info(
+                        "[GcodeError replay] Surfacing prior `!!` (age {:.0f}s, code={}): {}", age,
+                        code.empty() ? "-" : code, clean);
+
+                    // Replay is always modal -- the user was disconnected; a
+                    // transient toast they can miss isn't enough on first
+                    // reconnect. Modal dedup-by-title prevents the live
+                    // notify_gcode_response (if Klippy re-emits) from
+                    // duplicating.
+                    const char* title = (code.size() >= 4 && code.compare(0, 4, "key8") == 0)
+                                            ? lv_tr("Filament System Error")
+                                            : lv_tr("Printer Error");
+                    ui_notification_error(title, clean.c_str(), /*modal=*/true);
+                    return;
                 }
-
-                std::string clean =
-                    (raw.size() > 3 && raw[2] == ' ') ? raw.substr(3) : raw.substr(2);
-                std::string code;
-                clean_error_text(clean, code);
-
-                spdlog::info(
-                    "[GcodeError replay] Surfacing prior `!!` (age {:.0f}s, code={}): {}",
-                    age, code.empty() ? "-" : code, clean);
-
-                // Replay is always modal -- the user was disconnected; a
-                // transient toast they can miss isn't enough on first
-                // reconnect. Modal dedup-by-title prevents the live
-                // notify_gcode_response (if Klippy re-emits) from
-                // duplicating.
-                const char* title =
-                    (code.size() >= 4 && code.compare(0, 4, "key8") == 0)
-                        ? lv_tr("Filament System Error")
-                        : lv_tr("Printer Error");
-                ui_notification_error(title, clean.c_str(), /*modal=*/true);
-                return;
-            }
-        }),
+            }),
         [](const MoonrakerError& err) {
             spdlog::debug("[GcodeError replay] gcode_store query failed: {}", err.message);
         });
 }
 
-}  // namespace helix
+} // namespace helix

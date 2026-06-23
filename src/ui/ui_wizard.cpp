@@ -123,7 +123,8 @@ static void ui_wizard_purge_subtree_anims(lv_obj_t* root);
 // at this fix). The recursion descends through children only; for the
 // initial call we visit the root just for `lv_anim_delete`.
 static void ui_wizard_purge_subtree_anims_recursive(lv_obj_t* obj) {
-    if (!obj) return;
+    if (!obj)
+        return;
     lv_obj_enable_style_refresh(false);
     lv_obj_remove_style_all(obj);
     lv_obj_enable_style_refresh(true);
@@ -135,7 +136,8 @@ static void ui_wizard_purge_subtree_anims_recursive(lv_obj_t* obj) {
 }
 
 static void ui_wizard_purge_subtree_anims(lv_obj_t* root) {
-    if (!root) return;
+    if (!root)
+        return;
     // Cancel anims targeting the root itself (var == root) but DO NOT
     // strip its styles — root survives the upcoming lv_obj_clean.
     lv_anim_delete(root, nullptr);
@@ -151,7 +153,8 @@ static void ui_wizard_purge_subtree_anims(lv_obj_t* root) {
 // The caller sets navigating=true first; the callback path clears it when
 // navigate_to_step finishes.
 static void navigate_to_step_async_cb(void* data) {
-    auto step = static_cast<helix::wizard::StepId>(static_cast<int>(reinterpret_cast<intptr_t>(data)));
+    auto step =
+        static_cast<helix::wizard::StepId>(static_cast<int>(reinterpret_cast<intptr_t>(data)));
     ui_wizard_navigate_to_step(step);
 }
 

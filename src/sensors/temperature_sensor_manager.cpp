@@ -151,8 +151,9 @@ void TemperatureSensorManager::discover(const std::vector<std::string>& klipper_
             spdlog::trace("[TemperatureSensorManager] Expiring lifetime token for orphaned "
                           "sensor: {}",
                           name);
-            if (subj->lifetime) *subj->lifetime = false; // Signal death (#816)
-            subj->lifetime.reset(); // Phase 1: expire before deinit
+            if (subj->lifetime)
+                *subj->lifetime = false; // Signal death (#816)
+            subj->lifetime.reset();      // Phase 1: expire before deinit
         }
     }
     for (auto it = temp_subjects_.begin(); it != temp_subjects_.end();) {
@@ -207,12 +208,10 @@ void TemperatureSensorManager::update_from_status(const nlohmann::json& status) 
                 state.temperature = it->get<float>();
             }
             // target / speed are temperature_fan-only.
-            if (auto it = sensor_data.find("target");
-                it != sensor_data.end() && it->is_number()) {
+            if (auto it = sensor_data.find("target"); it != sensor_data.end() && it->is_number()) {
                 state.target = it->get<float>();
             }
-            if (auto it = sensor_data.find("speed");
-                it != sensor_data.end() && it->is_number()) {
+            if (auto it = sensor_data.find("speed"); it != sensor_data.end() && it->is_number()) {
                 state.speed = it->get<float>();
             }
 
@@ -346,7 +345,8 @@ void TemperatureSensorManager::deinit_subjects() {
         // ObserverGuards detect dead subjects even with outstanding shared_ptr
         // copies held by other services. (#816)
         for (auto& [name, subj] : temp_subjects_) {
-            if (subj && subj->lifetime) *subj->lifetime = false;
+            if (subj && subj->lifetime)
+                *subj->lifetime = false;
         }
         temp_subjects_.clear();
 

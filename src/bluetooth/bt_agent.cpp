@@ -14,8 +14,8 @@
  * headless kiosk device) and auto-accepts all pairing requests.
  */
 
-#include "bt_context.h"
 #include "bluetooth_plugin.h"
+#include "bt_context.h"
 
 #include <cstdio>
 #include <cstring>
@@ -30,7 +30,7 @@ static int agent_release(sd_bus_message* m, void* /*userdata*/, sd_bus_error* /*
 }
 
 static int agent_request_confirmation(sd_bus_message* m, void* /*userdata*/,
-                                       sd_bus_error* /*error*/) {
+                                      sd_bus_error* /*error*/) {
     const char* device = nullptr;
     uint32_t passkey = 0;
     sd_bus_message_read(m, "ou", &device, &passkey);
@@ -40,7 +40,7 @@ static int agent_request_confirmation(sd_bus_message* m, void* /*userdata*/,
 }
 
 static int agent_request_authorization(sd_bus_message* m, void* /*userdata*/,
-                                        sd_bus_error* /*error*/) {
+                                       sd_bus_error* /*error*/) {
     const char* device = nullptr;
     sd_bus_message_read(m, "o", &device);
     fprintf(stderr, "[bt] agent: RequestAuthorization for %s — auto-accepting\n",
@@ -48,8 +48,7 @@ static int agent_request_authorization(sd_bus_message* m, void* /*userdata*/,
     return sd_bus_reply_method_return(m, "");
 }
 
-static int agent_authorize_service(sd_bus_message* m, void* /*userdata*/,
-                                    sd_bus_error* /*error*/) {
+static int agent_authorize_service(sd_bus_message* m, void* /*userdata*/, sd_bus_error* /*error*/) {
     const char* device = nullptr;
     const char* uuid = nullptr;
     sd_bus_message_read(m, "os", &device, &uuid);
@@ -84,8 +83,8 @@ extern "C" int helix_bt_register_agent(helix_bt_context* ctx) {
     try {
         ctx->bus_thread->run_sync([&](sd_bus* bus) {
             // Export the Agent1 object
-            r = sd_bus_add_object_vtable(bus, &ctx->agent_slot, kAgentPath,
-                                          "org.bluez.Agent1", agent_vtable, ctx);
+            r = sd_bus_add_object_vtable(bus, &ctx->agent_slot, kAgentPath, "org.bluez.Agent1",
+                                         agent_vtable, ctx);
             if (r < 0) {
                 fprintf(stderr, "[bt] agent: failed to add vtable: %s\n", strerror(-r));
                 return;
@@ -93,9 +92,9 @@ extern "C" int helix_bt_register_agent(helix_bt_context* ctx) {
 
             // Register with AgentManager1
             sd_bus_error error = SD_BUS_ERROR_NULL;
-            r = sd_bus_call_method(bus, "org.bluez", "/org/bluez",
-                                    "org.bluez.AgentManager1", "RegisterAgent",
-                                    &error, nullptr, "os", kAgentPath, "NoInputNoOutput");
+            r = sd_bus_call_method(bus, "org.bluez", "/org/bluez", "org.bluez.AgentManager1",
+                                   "RegisterAgent", &error, nullptr, "os", kAgentPath,
+                                   "NoInputNoOutput");
             if (r < 0) {
                 fprintf(stderr, "[bt] agent: RegisterAgent failed: %s\n",
                         error.message ? error.message : strerror(-r));
@@ -108,9 +107,8 @@ extern "C" int helix_bt_register_agent(helix_bt_context* ctx) {
 
             // Make us the default agent
             error = SD_BUS_ERROR_NULL;
-            r = sd_bus_call_method(bus, "org.bluez", "/org/bluez",
-                                    "org.bluez.AgentManager1", "RequestDefaultAgent",
-                                    &error, nullptr, "o", kAgentPath);
+            r = sd_bus_call_method(bus, "org.bluez", "/org/bluez", "org.bluez.AgentManager1",
+                                   "RequestDefaultAgent", &error, nullptr, "o", kAgentPath);
             if (r < 0) {
                 fprintf(stderr, "[bt] agent: RequestDefaultAgent failed: %s\n",
                         error.message ? error.message : strerror(-r));
@@ -138,9 +136,8 @@ extern "C" void helix_bt_unregister_agent(helix_bt_context* ctx) {
     try {
         ctx->bus_thread->run_sync([ctx](sd_bus* bus) {
             sd_bus_error error = SD_BUS_ERROR_NULL;
-            sd_bus_call_method(bus, "org.bluez", "/org/bluez",
-                                "org.bluez.AgentManager1", "UnregisterAgent",
-                                &error, nullptr, "o", kAgentPath);
+            sd_bus_call_method(bus, "org.bluez", "/org/bluez", "org.bluez.AgentManager1",
+                               "UnregisterAgent", &error, nullptr, "o", kAgentPath);
             sd_bus_error_free(&error);
 
             if (ctx->agent_slot) {

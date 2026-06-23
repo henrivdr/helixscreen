@@ -1275,7 +1275,8 @@ void SpoolWizardOverlay::load_filaments() {
         [this](const MoonrakerError& err) {
             spdlog::warn("[SpoolWizard] Failed to fetch filaments: {}", err.message);
             helix::ui::queue_update([this]() {
-                if (cleanup_called()) return;
+                if (cleanup_called())
+                    return;
                 if (subjects_initialized_) {
                     lv_subject_set_int(&filaments_loading_subject_, 0);
                     lv_subject_set_int(&filament_count_subject_, 0);

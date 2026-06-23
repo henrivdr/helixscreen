@@ -114,7 +114,7 @@ TEST_CASE("is_likely_label_printer - null and empty", "[bluetooth][discovery]") 
 TEST_CASE("is_likely_label_printer - Brother QL series", "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("QL-800"));
     REQUIRE(is_likely_label_printer("QL-820NWB"));
-    REQUIRE(is_likely_label_printer("ql-700"));  // case insensitive prefix
+    REQUIRE(is_likely_label_printer("ql-700")); // case insensitive prefix
 }
 
 TEST_CASE("is_likely_label_printer - Brother PT series", "[bluetooth][discovery]") {
@@ -132,7 +132,7 @@ TEST_CASE("is_likely_label_printer - Brother RJ series", "[bluetooth][discovery]
 
 TEST_CASE("is_likely_label_printer - Phomemo by name prefix", "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("Phomemo M110"));
-    REQUIRE(is_likely_label_printer("phomemo"));  // case insensitive
+    REQUIRE(is_likely_label_printer("phomemo")); // case insensitive
 }
 
 TEST_CASE("is_likely_label_printer - Phomemo model codes", "[bluetooth][discovery]") {
@@ -191,28 +191,33 @@ TEST_CASE("is_label_printer_uuid - mixed case prefix chars match SPP", "[bluetoo
     REQUIRE(is_label_printer_uuid("00001101-abcd-1000-8000-00805f9b34fb"));
 }
 
-TEST_CASE("is_label_printer_uuid - mixed case prefix chars match Phomemo", "[bluetooth][discovery]") {
+TEST_CASE("is_label_printer_uuid - mixed case prefix chars match Phomemo",
+          "[bluetooth][discovery]") {
     REQUIRE(is_label_printer_uuid("0000FF00-ABCD-1000-8000-00805f9b34fb"));
     REQUIRE(is_label_printer_uuid("0000fF00-abcd-1000-8000-00805f9b34fb"));
 }
 
-TEST_CASE("is_label_printer_uuid - strings shorter than 8 chars always reject", "[bluetooth][discovery]") {
+TEST_CASE("is_label_printer_uuid - strings shorter than 8 chars always reject",
+          "[bluetooth][discovery]") {
     REQUIRE_FALSE(is_label_printer_uuid("0"));
-    REQUIRE_FALSE(is_label_printer_uuid("0000110"));   // 7 chars — one short of SPP prefix
-    REQUIRE_FALSE(is_label_printer_uuid("0000ff0"));   // 7 chars — one short of Phomemo prefix
-    REQUIRE_FALSE(is_label_printer_uuid("1234567"));   // 7 chars — unrelated
+    REQUIRE_FALSE(is_label_printer_uuid("0000110")); // 7 chars — one short of SPP prefix
+    REQUIRE_FALSE(is_label_printer_uuid("0000ff0")); // 7 chars — one short of Phomemo prefix
+    REQUIRE_FALSE(is_label_printer_uuid("1234567")); // 7 chars — unrelated
 }
 
-TEST_CASE("is_label_printer_uuid - exact 8-char SPP prefix without dash suffix matches", "[bluetooth][discovery]") {
+TEST_CASE("is_label_printer_uuid - exact 8-char SPP prefix without dash suffix matches",
+          "[bluetooth][discovery]") {
     // The function only inspects the first 8 chars; no dash is required
     REQUIRE(is_label_printer_uuid("00001101"));
 }
 
-TEST_CASE("is_label_printer_uuid - exact 8-char Phomemo prefix without dash suffix matches", "[bluetooth][discovery]") {
+TEST_CASE("is_label_printer_uuid - exact 8-char Phomemo prefix without dash suffix matches",
+          "[bluetooth][discovery]") {
     REQUIRE(is_label_printer_uuid("0000ff00"));
 }
 
-TEST_CASE("is_label_printer_uuid - partial prefix match off by one digit rejects", "[bluetooth][discovery]") {
+TEST_CASE("is_label_printer_uuid - partial prefix match off by one digit rejects",
+          "[bluetooth][discovery]") {
     // Differs at position 7: '1' vs '2'
     REQUIRE_FALSE(is_label_printer_uuid("00001102-0000-1000-8000-00805f9b34fb"));
     // Differs at position 7: '0' vs '1' in Phomemo prefix
@@ -235,12 +240,13 @@ TEST_CASE("uuid_is_ble - mixed case Phomemo prefix matches", "[bluetooth][discov
 }
 
 TEST_CASE("uuid_is_ble - strings shorter than 8 chars reject", "[bluetooth][discovery]") {
-    REQUIRE_FALSE(uuid_is_ble("0000ff0"));   // 7 chars
+    REQUIRE_FALSE(uuid_is_ble("0000ff0")); // 7 chars
     REQUIRE_FALSE(uuid_is_ble("0000"));
     REQUIRE_FALSE(uuid_is_ble("0"));
 }
 
-TEST_CASE("uuid_is_ble - exact 8-char Phomemo prefix without dash matches", "[bluetooth][discovery]") {
+TEST_CASE("uuid_is_ble - exact 8-char Phomemo prefix without dash matches",
+          "[bluetooth][discovery]") {
     REQUIRE(uuid_is_ble("0000ff00"));
 }
 
@@ -258,26 +264,30 @@ TEST_CASE("uuid_is_ble - unrelated non-empty strings reject", "[bluetooth][disco
 // is_likely_label_printer — case insensitivity
 // ============================================================================
 
-TEST_CASE("is_likely_label_printer - QL prefix case insensitive variants", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - QL prefix case insensitive variants",
+          "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("QL-820NWB"));
     REQUIRE(is_likely_label_printer("ql-820nwb"));
     REQUIRE(is_likely_label_printer("Ql-820NWB"));
     REQUIRE(is_likely_label_printer("qL-700"));
 }
 
-TEST_CASE("is_likely_label_printer - PT prefix case insensitive variants", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - PT prefix case insensitive variants",
+          "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("PT-P710BT"));
     REQUIRE(is_likely_label_printer("pt-p710bt"));
     REQUIRE(is_likely_label_printer("Pt-P710BT"));
 }
 
-TEST_CASE("is_likely_label_printer - TD prefix case insensitive variants", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - TD prefix case insensitive variants",
+          "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("TD-4550DNWB"));
     REQUIRE(is_likely_label_printer("td-4550dnwb"));
     REQUIRE(is_likely_label_printer("Td-4550DNWB"));
 }
 
-TEST_CASE("is_likely_label_printer - RJ prefix case insensitive variants", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - RJ prefix case insensitive variants",
+          "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("RJ-4250WB"));
     REQUIRE(is_likely_label_printer("rj-4250wb"));
     REQUIRE(is_likely_label_printer("Rj-4250WB"));
@@ -327,37 +337,40 @@ TEST_CASE("is_likely_label_printer - single letters alone do not match", "[bluet
     REQUIRE_FALSE(is_likely_label_printer("q"));
 }
 
-TEST_CASE("is_likely_label_printer - M/Q followed by non-digit do not match", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - M/Q followed by non-digit do not match",
+          "[bluetooth][discovery]") {
     REQUIRE_FALSE(is_likely_label_printer("Ma"));
     REQUIRE_FALSE(is_likely_label_printer("Qa"));
-    REQUIRE_FALSE(is_likely_label_printer("M-110"));   // hyphen is not a digit
+    REQUIRE_FALSE(is_likely_label_printer("M-110")); // hyphen is not a digit
     REQUIRE_FALSE(is_likely_label_printer("Q-30"));
-    REQUIRE_FALSE(is_likely_label_printer("M "));      // space is not a digit
+    REQUIRE_FALSE(is_likely_label_printer("M ")); // space is not a digit
 }
 
 TEST_CASE("is_likely_label_printer - QL without dash does not match", "[bluetooth][discovery]") {
     // The prefix check is "QL-" (3 chars including dash); bare "QL" must not match
     REQUIRE_FALSE(is_likely_label_printer("QL"));
     REQUIRE_FALSE(is_likely_label_printer("ql"));
-    REQUIRE_FALSE(is_likely_label_printer("QL800"));   // no dash
+    REQUIRE_FALSE(is_likely_label_printer("QL800")); // no dash
 }
 
-TEST_CASE("is_likely_label_printer - PT/TD/RJ without dash do not match", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - PT/TD/RJ without dash do not match",
+          "[bluetooth][discovery]") {
     REQUIRE_FALSE(is_likely_label_printer("PT"));
-    REQUIRE_FALSE(is_likely_label_printer("PTX710"));  // no dash
+    REQUIRE_FALSE(is_likely_label_printer("PTX710")); // no dash
     REQUIRE_FALSE(is_likely_label_printer("TD"));
-    REQUIRE_FALSE(is_likely_label_printer("TD4550"));  // no dash
+    REQUIRE_FALSE(is_likely_label_printer("TD4550")); // no dash
     REQUIRE_FALSE(is_likely_label_printer("RJ"));
-    REQUIRE_FALSE(is_likely_label_printer("RJ4250"));  // no dash
+    REQUIRE_FALSE(is_likely_label_printer("RJ4250")); // no dash
 }
 
 TEST_CASE("is_likely_label_printer - B2 alone is too short for B21", "[bluetooth][discovery]") {
     // "B21" prefix check requires exactly 3 chars; "B2" is only 2
     REQUIRE_FALSE(is_likely_label_printer("B2"));
-    REQUIRE_FALSE(is_likely_label_printer("B2X"));     // third char is not '1'
+    REQUIRE_FALSE(is_likely_label_printer("B2X")); // third char is not '1'
 }
 
-TEST_CASE("is_likely_label_printer - whitespace-only name does not match", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - whitespace-only name does not match",
+          "[bluetooth][discovery]") {
     REQUIRE_FALSE(is_likely_label_printer(" "));
     REQUIRE_FALSE(is_likely_label_printer("   "));
     REQUIRE_FALSE(is_likely_label_printer("\t"));
@@ -429,14 +442,16 @@ TEST_CASE("is_likely_label_printer - keyword 'label' alone matches", "[bluetooth
     REQUIRE(is_likely_label_printer("Label"));
 }
 
-TEST_CASE("is_likely_label_printer - keyword 'label' embedded in longer name", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - keyword 'label' embedded in longer name",
+          "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("My Label Maker"));
     REQUIRE(is_likely_label_printer("BT Label Writer"));
     REQUIRE(is_likely_label_printer("BLUETOOTH LABEL"));
     REQUIRE(is_likely_label_printer("label_device_01"));
 }
 
-TEST_CASE("is_likely_label_printer - keyword 'printer' case insensitive", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - keyword 'printer' case insensitive",
+          "[bluetooth][discovery]") {
     REQUIRE(is_likely_label_printer("Thermal Printer XYZ"));
     REQUIRE(is_likely_label_printer("thermal printer xyz"));
     REQUIRE(is_likely_label_printer("PRINTER"));
@@ -462,7 +477,8 @@ TEST_CASE("is_likely_label_printer - audio devices rejected", "[bluetooth][disco
     REQUIRE_FALSE(is_likely_label_printer("Sony WH-1000XM5"));
 }
 
-TEST_CASE("is_likely_label_printer - trackers and misc BT devices rejected", "[bluetooth][discovery]") {
+TEST_CASE("is_likely_label_printer - trackers and misc BT devices rejected",
+          "[bluetooth][discovery]") {
     REQUIRE_FALSE(is_likely_label_printer("Tile Tracker"));
     REQUIRE_FALSE(is_likely_label_printer("AirTag"));
     REQUIRE_FALSE(is_likely_label_printer("Galaxy SmartTag"));
@@ -517,7 +533,8 @@ TEST_CASE("name_suggests_ble - null and empty", "[bluetooth][discovery]") {
     REQUIRE_FALSE(name_suggests_ble(""));
 }
 
-TEST_CASE("name_suggests_ble - Phomemo devices are NOT BLE (need SPP for printing)", "[bluetooth][discovery]") {
+TEST_CASE("name_suggests_ble - Phomemo devices are NOT BLE (need SPP for printing)",
+          "[bluetooth][discovery]") {
     REQUIRE_FALSE(name_suggests_ble("M110"));
     REQUIRE_FALSE(name_suggests_ble("M120"));
     REQUIRE_FALSE(name_suggests_ble("Q199E45E0775722"));

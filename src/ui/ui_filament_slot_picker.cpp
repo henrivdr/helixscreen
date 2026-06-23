@@ -126,8 +126,7 @@ void FilamentSlotPicker::create_slot_row(lv_obj_t* list, int index,
     // ui_xml/components/filament_slot_picker_row.xml — tune visuals there
     // without rebuilding. C++ fills in colors, label text, warn visibility,
     // and the selected-state highlight.
-    auto* row = static_cast<lv_obj_t*>(
-        lv_xml_create(list, "filament_slot_picker_row", nullptr));
+    auto* row = static_cast<lv_obj_t*>(lv_xml_create(list, "filament_slot_picker_row", nullptr));
     if (!row) {
         return;
     }

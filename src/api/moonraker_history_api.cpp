@@ -3,12 +3,13 @@
 
 #include "moonraker_history_api.h"
 
+#include "ui_format_utils.h"
+
 #include "display_settings_manager.h"
-#include "moonraker_api_internal.h"
 #include "format_utils.h"
 #include "locale_formats.h"
+#include "moonraker_api_internal.h"
 #include "moonraker_client.h"
-#include "ui_format_utils.h"
 
 #include <spdlog/spdlog.h>
 

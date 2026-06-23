@@ -332,10 +332,9 @@ void PrintExcludeObjectManager::exclude_undo_timer_cb(lv_timer_t* timer) {
                 // diverges from what it told us via gcode.script return.
             },
             [self, token, object_name](const MoonrakerError& err) {
-                token.defer("PrintExcludeObjectManager::dispatch_rpc_error",
-                            [self, object_name, err]() {
-                                self->on_exclude_rpc_error(object_name, err);
-                            });
+                token.defer(
+                    "PrintExcludeObjectManager::dispatch_rpc_error",
+                    [self, object_name, err]() { self->on_exclude_rpc_error(object_name, err); });
             });
     } else {
         spdlog::warn("[PrintExcludeObjectManager] No API available - simulating exclusion");
@@ -445,19 +444,17 @@ void PrintExcludeObjectManager::on_exclude_rpc_error(const std::string& object_n
     // we were called on — lifetime_.defer is safe from the main thread and tok.defer
     // would have handled the background case via the dispatch path.
     auto defer_tok = lifetime_.token();
-    defer_tok.defer("PrintExcludeObjectManager::exclude_error",
-                    [this, object_name, user_msg = err.user_message()]() {
-                        awaiting_confirmation_.erase(object_name);
-                        NOTIFY_ERROR(lv_tr("Failed to exclude '{}': {}"), object_name, user_msg);
+    defer_tok.defer("PrintExcludeObjectManager::exclude_error", [this, object_name,
+                                                                 user_msg = err.user_message()]() {
+        awaiting_confirmation_.erase(object_name);
+        NOTIFY_ERROR(lv_tr("Failed to exclude '{}': {}"), object_name, user_msg);
 
-                        if (gcode_viewer_) {
-                            ui_gcode_viewer_set_excluded_objects(gcode_viewer_,
-                                                                 excluded_objects_);
-                            spdlog::debug(
-                                "[PrintExcludeObjectManager] Reverted visual exclusion for '{}'",
-                                object_name);
-                        }
-                    });
+        if (gcode_viewer_) {
+            ui_gcode_viewer_set_excluded_objects(gcode_viewer_, excluded_objects_);
+            spdlog::debug("[PrintExcludeObjectManager] Reverted visual exclusion for '{}'",
+                          object_name);
+        }
+    });
 }
 
 } // namespace helix::ui

@@ -2,15 +2,14 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
-#include "moonraker_api.h"
-#include "static_subject_registry.h"
 #include "ui_observer_guard.h"
 #include "ui_update_queue.h"
 
-#include <lvgl/lvgl.h>
+#include "async_lifetime_guard.h"
+#include "moonraker_api.h"
+#include "static_subject_registry.h"
 
-#include "hv/json.hpp"
+#include <lvgl/lvgl.h>
 
 #include <memory>
 #include <mutex>
@@ -18,15 +17,17 @@
 #include <unordered_map>
 #include <vector>
 
+#include "hv/json.hpp"
+
 namespace helix {
 
 /**
  * @brief Metadata about a discovered Moonraker sensor
  */
 struct SensorInfo {
-    std::string id;            ///< Sensor identifier (e.g. "ina219_power")
-    std::string friendly_name; ///< Human-readable name from Moonraker
-    std::string type;          ///< Sensor type (e.g. "INA219")
+    std::string id;                      ///< Sensor identifier (e.g. "ina219_power")
+    std::string friendly_name;           ///< Human-readable name from Moonraker
+    std::string type;                    ///< Sensor type (e.g. "INA219")
     std::vector<std::string> value_keys; ///< Value keys reported (e.g. "power", "voltage")
 };
 
@@ -57,8 +58,7 @@ class SensorState {
     void set_sensors(const std::vector<SensorInfo>& sensors);
 
     /// Set discovered sensors with initial values applied atomically
-    void set_sensors(const std::vector<SensorInfo>& sensors,
-                     const nlohmann::json& initial_values);
+    void set_sensors(const std::vector<SensorInfo>& sensors, const nlohmann::json& initial_values);
 
     /// Get value subject for a sensor+key pair. Returns nullptr if not found.
     lv_subject_t* get_value_subject(const std::string& sensor_id, const std::string& key,
@@ -123,7 +123,6 @@ class SensorState {
     std::unordered_map<std::string, SensorEntry> sensors_;
     bool subjects_initialized_ = false;
     helix::AsyncLifetimeGuard lifetime_;
-
 };
 
 } // namespace helix

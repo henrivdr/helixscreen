@@ -91,8 +91,8 @@ struct NiimbotPrintJob {
 /// @param density    Print density (1-5, default 3)
 /// @param label_type Label type (default: WithGaps)
 NiimbotPrintJob niimbot_build_print_job(const LabelBitmap& bitmap, const LabelSize& size,
-                                         uint8_t density = 3,
-                                         NiimbotLabelType label_type = NiimbotLabelType::WithGaps);
+                                        uint8_t density = 3,
+                                        NiimbotLabelType label_type = NiimbotLabelType::WithGaps);
 
 /// Supported label sizes for Niimbot B21 (384px wide, 203 DPI)
 std::vector<LabelSize> niimbot_b21_sizes();
@@ -103,4 +103,4 @@ std::vector<LabelSize> niimbot_d11_sizes();
 /// Select sizes based on device name (D11/D110 → narrow, else B21 wide)
 std::vector<LabelSize> niimbot_sizes_for_model(const std::string& device_name);
 
-}  // namespace helix::label
+} // namespace helix::label

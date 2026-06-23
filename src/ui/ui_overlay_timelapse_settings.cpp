@@ -6,6 +6,7 @@
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
 #include "ui_nav_manager.h"
+
 #include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "runtime_config.h"
@@ -167,12 +168,12 @@ void TimelapseSettingsOverlay::fetch_settings() {
     auto tok = lifetime_.token();
     api_->timelapse().get_timelapse_settings(
         [this, tok](const TimelapseSettings& settings) {
-            if (tok.expired()) return;
+            if (tok.expired())
+                return;
             tok.defer([this, settings]() {
-                spdlog::info(
-                    "[{}] Got timelapse settings: enabled={} mode={} fps={} autorender={}",
-                    get_name(), settings.enabled, settings.mode, settings.output_framerate,
-                    settings.autorender);
+                spdlog::info("[{}] Got timelapse settings: enabled={} mode={} fps={} autorender={}",
+                             get_name(), settings.enabled, settings.mode, settings.output_framerate,
+                             settings.autorender);
 
                 current_settings_ = settings;
                 settings_loaded_ = true;
@@ -206,7 +207,8 @@ void TimelapseSettingsOverlay::fetch_settings() {
             });
         },
         [this, tok](const MoonrakerError& error) {
-            if (tok.expired()) return;
+            if (tok.expired())
+                return;
             tok.defer([this, error]() {
                 spdlog::error("[{}] Failed to fetch timelapse settings: {}", get_name(),
                               error.message);

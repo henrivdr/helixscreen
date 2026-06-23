@@ -15,8 +15,8 @@
 #if HELIX_HAS_LABEL_PRINTER
 #include "ui_settings_label_printer.h"
 #endif
-#include "ui_settings_barcode_scanner.h"
 #include "ui_button.h"
+#include "ui_settings_barcode_scanner.h"
 #include "ui_spoolman_setup.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
@@ -922,45 +922,42 @@ void SpoolmanOverlay::remove_spoolman_config() {
             std::string modified =
                 helix::MoonrakerConfigManager::remove_section(content, "spoolman");
             // Marshal upload call to main thread before touching api_.
-            token.defer("SpoolmanOverlay::remove_upload",
-                        [this, token, modified = std::move(modified)]() mutable {
-                            api_->transfers().upload_file(
-                                "config", "helixscreen.conf", modified,
-                                [this, token]() {
-                                    if (token.expired())
-                                        return;
-                                    token.defer([this]() {
-                                        set_setup_status(lv_tr("Restarting Moonraker..."));
-                                    });
-                                    EmergencyStopOverlay::instance().suppress_recovery_dialog(
-                                        RecoverySuppression::LONG);
-                                    api_->restart_moonraker(
-                                        [this, token]() {
-                                            if (token.expired())
-                                                return;
-                                            token.defer([this]() {
-                                                ToastManager::instance().show(
-                                                    ToastSeverity::SUCCESS,
-                                                    lv_tr("Spoolman removed."), 3000);
-                                            });
-                                        },
-                                        [this, token](const MoonrakerError&) {
-                                            if (token.expired())
-                                                return;
-                                            token.defer([this]() {
-                                                set_setup_status(
-                                                    lv_tr("Failed to restart Moonraker."), true);
-                                            });
-                                        });
-                                },
-                                [this, token](const MoonrakerError&) {
-                                    if (token.expired())
-                                        return;
-                                    token.defer([this]() {
-                                        set_setup_status(lv_tr("Failed to save config."), true);
-                                    });
+            token.defer("SpoolmanOverlay::remove_upload", [this, token,
+                                                           modified =
+                                                               std::move(modified)]() mutable {
+                api_->transfers().upload_file(
+                    "config", "helixscreen.conf", modified,
+                    [this, token]() {
+                        if (token.expired())
+                            return;
+                        token.defer(
+                            [this]() { set_setup_status(lv_tr("Restarting Moonraker...")); });
+                        EmergencyStopOverlay::instance().suppress_recovery_dialog(
+                            RecoverySuppression::LONG);
+                        api_->restart_moonraker(
+                            [this, token]() {
+                                if (token.expired())
+                                    return;
+                                token.defer([this]() {
+                                    ToastManager::instance().show(ToastSeverity::SUCCESS,
+                                                                  lv_tr("Spoolman removed."), 3000);
                                 });
-                        });
+                            },
+                            [this, token](const MoonrakerError&) {
+                                if (token.expired())
+                                    return;
+                                token.defer([this]() {
+                                    set_setup_status(lv_tr("Failed to restart Moonraker."), true);
+                                });
+                            });
+                    },
+                    [this, token](const MoonrakerError&) {
+                        if (token.expired())
+                            return;
+                        token.defer(
+                            [this]() { set_setup_status(lv_tr("Failed to save config."), true); });
+                    });
+            });
         },
         [this, token](const MoonrakerError&) {
             if (token.expired())

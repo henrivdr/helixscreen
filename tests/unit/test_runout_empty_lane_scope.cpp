@@ -21,6 +21,8 @@
  * FilamentSensorManager fed via update_from_status().
  */
 
+#include "ui_update_queue.h"
+
 #include "../helix_test_fixture.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "ams_backend_snapmaker.h"
@@ -32,7 +34,6 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/fmt/fmt.h>
 
@@ -101,9 +102,8 @@ json make_feed_status(const std::array<bool, 4>& detected) {
     json left = json::object();
     for (int i = 0; i < 4; ++i) {
         std::string key = (i == 0) ? "extruder0" : fmt::format("extruder{}", i);
-        left[key] = json{{"filament_detected", detected[i]},
-                         {"channel_state", "idle"},
-                         {"channel_error", "ok"}};
+        left[key] = json{
+            {"filament_detected", detected[i]}, {"channel_state", "idle"}, {"channel_error", "ok"}};
     }
     return json{{"filament_feed left", left}};
 }
@@ -130,7 +130,9 @@ struct ScopedSnapmakerBackend {
         backend = be.get();
         AmsState::instance().set_backend(std::move(be));
     }
-    ~ScopedSnapmakerBackend() { AmsState::instance().set_backend(nullptr); }
+    ~ScopedSnapmakerBackend() {
+        AmsState::instance().set_backend(nullptr);
+    }
 
     void set_lane_presence(const std::array<bool, 4>& detected) {
         RunoutScopeTestAccess::handle_status(*backend, make_feed_status(detected));
@@ -173,8 +175,8 @@ void setup_four_lane_sensors_no_status(FilamentSensorManager& fsm) {
     }
     fsm.discover_sensors(names);
     for (int i = 0; i < 4; ++i) {
-        RunoutScopeTestAccess::force_role(fsm, fmt::format("filament_motion_sensor e{}_filament", i),
-                                          FilamentSensorRole::RUNOUT);
+        RunoutScopeTestAccess::force_role(
+            fsm, fmt::format("filament_motion_sensor e{}_filament", i), FilamentSensorRole::RUNOUT);
     }
 }
 
@@ -252,7 +254,8 @@ TEST_CASE("has_real_runout: no AMS backend -> behaves like has_any_runout", "[ru
     fsm.discover_sensors({"filament_switch_sensor fsensor"});
     fsm.set_sensor_role("filament_switch_sensor fsensor", FilamentSensorRole::RUNOUT);
     fsm.set_sensor_enabled("filament_switch_sensor fsensor", true);
-    fsm.update_from_status(json{{"filament_switch_sensor fsensor", json{{"filament_detected", true}}}});
+    fsm.update_from_status(
+        json{{"filament_switch_sensor fsensor", json{{"filament_detected", true}}}});
     drain();
     CHECK_FALSE(fsm.has_real_runout());
 
@@ -365,7 +368,7 @@ TEST_CASE("scoped runout: multi-tool print, one required lane empty -> only that
 
     auto empty = fsm.find_empty_required_lanes(tools_used, identity);
     REQUIRE(empty.size() == 1);
-    CHECK(empty[0].first == 2);  // only tool 2 flagged
+    CHECK(empty[0].first == 2); // only tool 2 flagged
     CHECK(empty[0].second == 2);
     CHECK(fsm.compute_scoped_runout_value(tools_used, identity) == 0);
 }
@@ -442,13 +445,15 @@ TEST_CASE("scoped runout: no AMS backend -> falls back to aggregate runout (unch
     // consult) — the print-start controller falls back to the aggregate sensor
     // check, which is the unchanged non-AMS path. The badge value mirrors the
     // unscoped runout subject in that case.
-    fsm.update_from_status(json{{"filament_switch_sensor fsensor", json{{"filament_detected", false}}}});
+    fsm.update_from_status(
+        json{{"filament_switch_sensor fsensor", json{{"filament_detected", false}}}});
     drain();
     CHECK(fsm.find_empty_required_lanes({0}, {}).empty());
     // No backend -> compute_scoped_runout_value defers to the aggregate role value (0 = runout).
     CHECK(fsm.compute_scoped_runout_value({0}, {}) == 0);
 
-    fsm.update_from_status(json{{"filament_switch_sensor fsensor", json{{"filament_detected", true}}}});
+    fsm.update_from_status(
+        json{{"filament_switch_sensor fsensor", json{{"filament_detected", true}}}});
     drain();
     CHECK(fsm.compute_scoped_runout_value({0}, {}) == 1);
 }
@@ -478,8 +483,9 @@ TEST_CASE("scoped runout (issue 6): unresolvable/UNKNOWN slot is NOT flagged emp
     CHECK(fsm.compute_scoped_runout_value({0}, remap) == 1);
 }
 
-TEST_CASE("scoped runout (issue 6): out-of-range tool default head resolves, real empty still flags",
-          "[runout][scope][print-start]") {
+TEST_CASE(
+    "scoped runout (issue 6): out-of-range tool default head resolves, real empty still flags",
+    "[runout][scope][print-start]") {
     HelixTestFixture fx;
     ScopedSnapmakerBackend backend;
     auto& fsm = FilamentSensorManager::instance();

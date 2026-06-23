@@ -14,12 +14,12 @@
 #include "moonraker_discovery_sequence.h"
 #include "printer_discovery.h"
 
-#include "../catch_amalgamated.hpp"
-#include "hv/json.hpp"
-
 #include <algorithm>
 #include <string>
 #include <vector>
+
+#include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using helix::MoonrakerDiscoverySequence;
 using helix::PrinterDiscovery;
@@ -182,8 +182,8 @@ TEST_CASE("Subscription: temp sensors narrow to {temperature, humidity}",
     // sensors (Happy Hare filament dryer) stream %RH; temperature-only sensors
     // simply have Moonraker omit the absent field. Narrowing contract: no MORE
     // than these two fields stream back.
-    for (const auto& s : {"temperature_sensor enclosure", "tmc2240 stepper_x",
-                          "tmc5160 stepper_y"}) {
+    for (const auto& s :
+         {"temperature_sensor enclosure", "tmc2240 stepper_x", "tmc5160 stepper_y"}) {
         CAPTURE(s);
         REQUIRE(has_field(subs, s, "temperature"));
         REQUIRE(has_field(subs, s, "humidity"));
@@ -222,8 +222,8 @@ TEST_CASE("Subscription: fan field shape varies by object type", "[moonraker][su
     json subs = fx.build();
 
     SECTION("standard fans: {speed}") {
-        for (const auto& f :
-             {"fan", "heater_fan hotend_fan", "fan_generic part_cooling", "controller_fan board_fan"}) {
+        for (const auto& f : {"fan", "heater_fan hotend_fan", "fan_generic part_cooling",
+                              "controller_fan board_fan"}) {
             CAPTURE(f);
             REQUIRE(has_field(subs, f, "speed"));
             REQUIRE(subs[f].size() == 1);
@@ -363,8 +363,7 @@ TEST_CASE("Subscription: bed_mesh covers moonraker_advanced_api parser",
     REQUIRE(has_field(subs, "bed_mesh", "profiles"));
 }
 
-TEST_CASE("Subscription: exclude_object covers printer_state reads",
-          "[moonraker][subscription]") {
+TEST_CASE("Subscription: exclude_object covers printer_state reads", "[moonraker][subscription]") {
     DiscoveryFixture fx;
     json subs = fx.build();
 
@@ -373,8 +372,7 @@ TEST_CASE("Subscription: exclude_object covers printer_state reads",
     REQUIRE(has_field(subs, "exclude_object", "current_object"));
 }
 
-TEST_CASE("Subscription: calibration objects narrow to read fields",
-          "[moonraker][subscription]") {
+TEST_CASE("Subscription: calibration objects narrow to read fields", "[moonraker][subscription]") {
     DiscoveryFixture fx;
     json subs = fx.build();
 
@@ -407,8 +405,7 @@ TEST_CASE("Subscription: firmware_retraction subscribed only when discovered",
     }
 }
 
-TEST_CASE("Subscription: filament + width sensors narrow correctly",
-          "[moonraker][subscription]") {
+TEST_CASE("Subscription: filament + width sensors narrow correctly", "[moonraker][subscription]") {
     DiscoveryFixture fx;
     fx.add("filament_switch_sensor runout", {"filament_sensor"});
     fx.add("filament_motion_sensor encoder", {"filament_sensor"});
@@ -464,8 +461,7 @@ TEST_CASE("Subscription: toolchanger + per-tool fields cover ToolState reads",
     }
 }
 
-TEST_CASE("Subscription: print-start macros narrow to boolean flags",
-          "[moonraker][subscription]") {
+TEST_CASE("Subscription: print-start macros narrow to boolean flags", "[moonraker][subscription]") {
     DiscoveryFixture fx;
     json subs = fx.build();
 
@@ -486,8 +482,7 @@ TEST_CASE("Subscription: dropped objects (idle_timeout, system_stats) absent",
     REQUIRE_FALSE(subs.contains("system_stats"));
 }
 
-TEST_CASE("Subscription: fan_feedback subscribed only when present",
-          "[moonraker][subscription]") {
+TEST_CASE("Subscription: fan_feedback subscribed only when present", "[moonraker][subscription]") {
     SECTION("absent on hardware without fan_feedback") {
         DiscoveryFixture fx;
         json subs = fx.build();
@@ -547,7 +542,8 @@ TEST_CASE("Subscription: MCU objects narrow to PerformanceSource reads",
         }
     }
 
-    SECTION("MCU subscription coexists with heater/print_stats — the v0.99.68 outage was about replacement") {
+    SECTION("MCU subscription coexists with heater/print_stats — the v0.99.68 outage was about "
+            "replacement") {
         DiscoveryFixture fx;
         fx.add("mcu", {"mcu"});
         fx.add("mcu host", {"mcu"});

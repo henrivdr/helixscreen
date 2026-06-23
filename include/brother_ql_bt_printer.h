@@ -17,8 +17,7 @@ class BrotherQLBluetoothPrinter : public ILabelPrinter {
     void set_device(const std::string& mac, int channel = 1);
 
     [[nodiscard]] std::string name() const override;
-    void print(const LabelBitmap& bitmap, const LabelSize& size,
-               PrintCallback callback) override;
+    void print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) override;
     [[nodiscard]] std::vector<LabelSize> supported_sizes() const override;
 
   private:
@@ -26,4 +25,4 @@ class BrotherQLBluetoothPrinter : public ILabelPrinter {
     int channel_ = 1;
 };
 
-}  // namespace helix::label
+} // namespace helix::label

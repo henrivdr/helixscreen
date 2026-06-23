@@ -1165,8 +1165,7 @@ TEST_CASE("AD5X IFS motion sensor completes load/unload", "[ams][ad5x_ifs]") {
 // 20b. Phase tracker — live load/unload progress feedback
 // ==========================================================================
 
-TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)", "[ams][ad5x_ifs][phase]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     // Filament present at the toolhead before unload begins.
     Ad5xIfsTestAccess::set_head_filament(backend, true);
@@ -1192,8 +1191,7 @@ TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
     // Head sensor drops (cut + retract started) → UNLOADING.
     Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
-    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) ==
-            "Retracting filament from nozzle");
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Retracting filament from nozzle");
 
     // Action timeout backstop surfaces ERROR (firmware did not confirm completion;
     // detail is preserved as the error context for the error-center bridge).
@@ -1203,8 +1201,7 @@ TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
-TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)", "[ams][ad5x_ifs][phase]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     // Fresh load: no filament at the toolhead initially.
     Ad5xIfsTestAccess::set_head_filament(backend, false);
@@ -1239,8 +1236,7 @@ TEST_CASE("AD5X IFS phase: RESPOND line sets target before any extruder frame",
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
 
     // Firmware emits the heat target via RESPOND before the first temp tick.
-    Ad5xIfsTestAccess::on_gcode_response_line(
-        backend, "// Heating the nozzle to 240 degrees");
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Heating the nozzle to 240 degrees");
 
     // Detail should reflect the parsed 240°C target even with no extruder frame.
     REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Heating nozzle to 240°C");
@@ -1250,15 +1246,13 @@ TEST_CASE("AD5X IFS phase: RESPOND line sets target before any extruder frame",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
 }
 
-TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation", "[ams][ad5x_ifs][phase]") {
     SECTION("\"Unloading filament\" marks an unload op") {
         AmsBackendAd5xIfs backend(nullptr, nullptr);
         Ad5xIfsTestAccess::set_head_filament(backend, true);
         // Begin as a load, then a RESPOND line corrects the direction to unload.
         Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
-        Ad5xIfsTestAccess::on_gcode_response_line(backend,
-                                                  "// Unloading filament from IFS");
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Unloading filament from IFS");
         // Reaching target on an unload op → CUTTING (not LOADING).
         Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
@@ -1269,8 +1263,7 @@ TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation",
         Ad5xIfsTestAccess::set_head_filament(backend, false);
         // Begin as an unload, then a RESPOND line corrects the direction to load.
         Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
-        Ad5xIfsTestAccess::on_gcode_response_line(backend,
-                                                  "// Loading filament into IFS");
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Loading filament into IFS");
         // Reaching target on a load op → LOADING (not CUTTING).
         Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
@@ -1358,8 +1351,7 @@ static AmsBackendAd5xIfs::ZColorSilentResult make_zcolor(std::optional<int> extr
     return r;
 }
 
-TEST_CASE("AD5X IFS phase: zcolor quick-finish unload (head drop seen)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: zcolor quick-finish unload (head drop seen)", "[ams][ad5x_ifs][phase]") {
     // After the unload physically progresses past the cut (head drop), a fresh
     // GET_ZCOLOR with no extruder slot is the early terminal signal — finalize
     // to IDLE within ~1s instead of waiting out the 90s timeout backstop.
@@ -1398,8 +1390,7 @@ TEST_CASE("AD5X IFS phase: zcolor does NOT finalize before head transition",
     REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
-TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)", "[ams][ad5x_ifs][phase]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_head_filament(backend, false);
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
@@ -1417,8 +1408,7 @@ TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)",
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
-TEST_CASE("AD5X IFS phase: zcolor invalid response does not finalize",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: zcolor invalid response does not finalize", "[ams][ad5x_ifs][phase]") {
     // A junk read (saw_valid_response=false) must never finalize the op — even
     // after a head transition. apply_zcolor_result early-returns on it.
     AmsBackendAd5xIfs backend(nullptr, nullptr);
@@ -2055,8 +2045,7 @@ TEST_CASE("AD5X IFS emptied channel is not resurrected by a JSON edit to another
 // there would be NO presence source at all (every channel stuck EMPTY). So when
 // SILENT is unsupported, parse_adventurer_json must resume the legacy inference.
 
-TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
 
@@ -2093,8 +2082,7 @@ TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference",
 // loads next. That cleanup used to ride on parse_adventurer_json's presence
 // inference; it now rides on apply_zcolor_result's present->absent transition.
 
-TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
 
@@ -2578,8 +2566,7 @@ TEST_CASE("AD5X IFS IFS_STATUS Chan is seated authority over stale Extruder: Non
     REQUIRE_FALSE(backend.can_unload_from_toolhead(2));
 }
 
-TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)", "[ams][ad5x_ifs]") {
     // On old zmod, GET_ZCOLOR SILENT=1 degrades to an action:prompt dialog
     // (is_prompt_fallback). IFS_STATUS rides the same buffer as clean JSON
     // (respond_info, not a dialog), so its Chan must still drive the seated slot
@@ -3912,7 +3899,8 @@ class GcodeCapturingBackend : public AmsBackendAd5xIfs {
         captured_gcodes.push_back(gcode);
         return AmsErrorHelper::success();
     }
-    AmsError execute_gcode(const std::string& gcode, std::function<void()> /*on_complete*/) override {
+    AmsError execute_gcode(const std::string& gcode,
+                           std::function<void()> /*on_complete*/) override {
         captured_gcodes.push_back(gcode);
         return AmsErrorHelper::success();
     }
@@ -4683,8 +4671,8 @@ TEST_CASE("AD5X IFS coalesces a burst of color-change triggers into one debounce
 
     constexpr int kBurst = 20;
     for (int i = 0; i < kBurst; ++i) {
-        Ad5xIfsTestAccess::on_gcode_response_line(
-            backend, "// CHANGE_ZCOLOR SLOT=2 HEX=F72224 TYPE=PLA");
+        Ad5xIfsTestAccess::on_gcode_response_line(backend,
+                                                  "// CHANGE_ZCOLOR SLOT=2 HEX=F72224 TYPE=PLA");
     }
 
     // Every trigger is seen (diagnostic counter rises by the full burst)...
@@ -5378,7 +5366,8 @@ TEST_CASE("AD5X IFS eject_lane port mapping is 1-based", "[ams][ad5x_ifs]") {
     REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=4");
 }
 
-TEST_CASE("AD5X IFS eject_lane uses the lane material's tube length / ifs speed", "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS eject_lane uses the lane material's tube length / ifs speed",
+          "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
 
@@ -5558,7 +5547,7 @@ TEST_CASE("AD5X IFS load finalizes to IDLE on the macro completion ack (raza616 
     REQUIRE(backend.load_filament(1).success());
     REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
     Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true); // wrong direction
-    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));                      // still in flight
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));                       // still in flight
     REQUIRE(backend.get_system_info().action != AmsAction::IDLE);
 }
 
@@ -5940,8 +5929,8 @@ TEST_CASE("AD5X IFS get_operation_step_model LOAD is the 3-phase synth sequence"
 TEST_CASE("AD5X IFS get_operation_step_index_subject is the AmsState phase subject",
           "[ams][ad5x_ifs][stepmodel]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
-    for (auto op : {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP,
-                    StepOperationType::UNLOAD}) {
+    for (auto op :
+         {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP, StepOperationType::UNLOAD}) {
         CHECK(backend.get_operation_step_index_subject(op) != nullptr);
         CHECK(backend.get_operation_step_index_subject(op) ==
               AmsState::instance().get_ams_operation_phase_subject());
@@ -5999,8 +5988,7 @@ TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during load",
 // Error-center bridge: IFS surfaces ERROR on timeout, current_error(), recover
 // ==========================================================================
 
-TEST_CASE("AD5X IFS error-center: timeout sets ERROR not IDLE",
-          "[ams][ad5x_ifs][error-center]") {
+TEST_CASE("AD5X IFS error-center: timeout sets ERROR not IDLE", "[ams][ad5x_ifs][error-center]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_head_filament(backend, true);
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
@@ -6033,8 +6021,7 @@ TEST_CASE("AD5X IFS error-center: current_error returns CRITICAL IFS event on ER
     REQUIRE(ev->recovery_actions[0].gcode == "IFS_UNLOCK");
 }
 
-TEST_CASE("AD5X IFS error-center: recover() clears ERROR state",
-          "[ams][ad5x_ifs][error-center]") {
+TEST_CASE("AD5X IFS error-center: recover() clears ERROR state", "[ams][ad5x_ifs][error-center]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_head_filament(backend, true);
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
@@ -6153,8 +6140,7 @@ TEST_CASE("AD5X IFS unload routing regression: active-slot cut + non-active cold
 // FIX 2: eject_lane schedules a status re-read on success
 // ==========================================================================
 
-TEST_CASE("AD5X IFS eject_lane schedules a status re-read on success (FIX 2)",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS eject_lane schedules a status re-read on success (FIX 2)", "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
     // Leave zcolor_silent_supported_ at its default (true) so schedule_zcolor_query
@@ -6206,8 +6192,9 @@ TEST_CASE("AD5X IFS live authority blocks stale JSON color/type for a present sl
     CHECK(info.material == "PLA");
 }
 
-TEST_CASE("AD5X IFS pre-SILENT JSON still seeds color/type when no live authority (FIX 3 regression)",
-          "[ams][ad5x_ifs]") {
+TEST_CASE(
+    "AD5X IFS pre-SILENT JSON still seeds color/type when no live authority (FIX 3 regression)",
+    "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     // No live authority: SILENT demoted and IFS_STATUS Ports never seen.
     Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
@@ -6392,7 +6379,8 @@ TEST_CASE("AD5X IFS slot_unloads_to_toolhead matches unload routing across the a
 
             // Predicate (label/dispatch) — must ignore the recovery-broadened hint.
             const bool pred_true = backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/true);
-            const bool pred_false = backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/false);
+            const bool pred_false =
+                backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/false);
             CHECK(pred_true == c.expect_toolhead);
             CHECK(pred_false == c.expect_toolhead); // hint is ignored for AD5X
 
@@ -6406,7 +6394,8 @@ TEST_CASE("AD5X IFS slot_unloads_to_toolhead matches unload routing across the a
 
 TEST_CASE("AD5X IFS unload of the active slot via -1 (unload active) toolhead-cuts",
           "[ams][ad5x_ifs]") {
-    auto backend = make_routing_backend(/*current_slot=*/2, /*seated_chan=*/0, /*head_loaded=*/true);
+    auto backend =
+        make_routing_backend(/*current_slot=*/2, /*seated_chan=*/0, /*head_loaded=*/true);
     REQUIRE(backend->unload_filament(-1).success());
     CHECK(backend->has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
     CHECK_FALSE(backend->has_gcode_containing("IFS_F11"));

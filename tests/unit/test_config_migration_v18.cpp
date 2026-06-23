@@ -62,8 +62,12 @@ class MigrationV18Fixture {
     }
 
   public:
-    MigrationV18Fixture() { SetUp(); }
-    ~MigrationV18Fixture() { TearDown(); }
+    MigrationV18Fixture() {
+        SetUp();
+    }
+    ~MigrationV18Fixture() {
+        TearDown();
+    }
 };
 
 } // namespace

@@ -70,7 +70,7 @@ class WifiBackendNetworkManager : public WifiBackend {
     // ========================================================================
 
     std::atomic<bool> running_{false};
-    std::mutex start_mutex_; // Serializes start() against concurrent start_async()
+    std::mutex start_mutex_;     // Serializes start() against concurrent start_async()
     std::string wifi_interface_; ///< Detected WiFi interface (e.g., "wlan0")
 
     // Event system (thread-safe)
@@ -206,8 +206,8 @@ class WifiBackendNetworkManager : public WifiBackend {
 
     // Result of one nmcli connect attempt (fork/exec, captures stderr).
     struct ConnectAttempt {
-        int exit_code = -1;      // -1 = internal failure (fork/pipe/timeout)
-        bool timed_out = false;  // true => killed after CONNECT_TIMEOUT_SECONDS
+        int exit_code = -1;     // -1 = internal failure (fork/pipe/timeout)
+        bool timed_out = false; // true => killed after CONNECT_TIMEOUT_SECONDS
         std::string stderr_out;
     };
 

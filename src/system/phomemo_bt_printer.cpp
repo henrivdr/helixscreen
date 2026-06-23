@@ -3,11 +3,13 @@
 #if HELIX_HAS_LABEL_PRINTER
 
 #include "phomemo_bt_printer.h"
+
+#include "ui_update_queue.h"
+
 #include "bluetooth_loader.h"
 #include "bt_print_utils.h"
 #include "phomemo_printer.h"
 #include "phomemo_protocol.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 
@@ -29,12 +31,13 @@ std::vector<LabelSize> PhomemoBluetoothPrinter::supported_sizes() const {
 }
 
 void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
-                                     PrintCallback callback) {
+                                    PrintCallback callback) {
     auto& loader = helix::bluetooth::BluetoothLoader::instance();
     if (!loader.is_available()) {
         spdlog::error("Phomemo BT: Bluetooth not available");
         helix::ui::queue_update([callback]() {
-            if (callback) callback(false, "Bluetooth not available");
+            if (callback)
+                callback(false, "Bluetooth not available");
         });
         return;
     }
@@ -42,7 +45,8 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
     if (mac_.empty()) {
         spdlog::error("Phomemo BT: No device configured");
         helix::ui::queue_update([callback]() {
-            if (callback) callback(false, "Bluetooth device not configured");
+            if (callback)
+                callback(false, "Bluetooth device not configured");
         });
         return;
     }
@@ -58,56 +62,59 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
     // if it escapes an LVGL event frame (#724, #837, [L083]).
     try {
         std::thread([mac, use_spp, commands = std::move(commands), callback]() {
-        bool success = false;
-        std::string error;
+            bool success = false;
+            std::string error;
 
-        if (use_spp) {
-            auto result = helix::bluetooth::rfcomm_send(mac, 1, commands, "Phomemo BT");
-            success = result.success;
-            error = std::move(result.error);
-        } else {
-            // BLE GATT path
-            auto& loader = helix::bluetooth::BluetoothLoader::instance();
-            auto* ctx = loader.init();
-            if (!ctx) {
-                error = "Failed to initialize Bluetooth context";
-                spdlog::error("Phomemo BT: {}", error);
+            if (use_spp) {
+                auto result = helix::bluetooth::rfcomm_send(mac, 1, commands, "Phomemo BT");
+                success = result.success;
+                error = std::move(result.error);
             } else {
-                int handle = loader.connect_ble(ctx, mac.c_str(), PHOMEMO_WRITE_UUID);
-                if (handle < 0) {
-                    const char* err = loader.last_error ? loader.last_error(ctx) : "unknown error";
-                    error = fmt::format("BLE connect failed: {}", err);
+                // BLE GATT path
+                auto& loader = helix::bluetooth::BluetoothLoader::instance();
+                auto* ctx = loader.init();
+                if (!ctx) {
+                    error = "Failed to initialize Bluetooth context";
                     spdlog::error("Phomemo BT: {}", error);
                 } else {
-                    int ret = loader.ble_write(ctx, handle,
-                                               commands.data(),
-                                               static_cast<int>(commands.size()));
-                    if (ret < 0) {
-                        const char* err = loader.last_error ? loader.last_error(ctx) : "unknown error";
-                        error = fmt::format("BLE write failed: {}", err);
+                    int handle = loader.connect_ble(ctx, mac.c_str(), PHOMEMO_WRITE_UUID);
+                    if (handle < 0) {
+                        const char* err =
+                            loader.last_error ? loader.last_error(ctx) : "unknown error";
+                        error = fmt::format("BLE connect failed: {}", err);
                         spdlog::error("Phomemo BT: {}", error);
                     } else {
-                        success = true;
-                        spdlog::warn("Phomemo BT: sent {} bytes via BLE", commands.size());
+                        int ret = loader.ble_write(ctx, handle, commands.data(),
+                                                   static_cast<int>(commands.size()));
+                        if (ret < 0) {
+                            const char* err =
+                                loader.last_error ? loader.last_error(ctx) : "unknown error";
+                            error = fmt::format("BLE write failed: {}", err);
+                            spdlog::error("Phomemo BT: {}", error);
+                        } else {
+                            success = true;
+                            spdlog::warn("Phomemo BT: sent {} bytes via BLE", commands.size());
+                        }
+                        loader.disconnect(ctx, handle);
                     }
-                    loader.disconnect(ctx, handle);
+                    loader.deinit(ctx);
                 }
-                loader.deinit(ctx);
             }
-        }
 
-        helix::ui::queue_update([callback, success, error]() {
-            if (callback) callback(success, error);
-        });
+            helix::ui::queue_update([callback, success, error]() {
+                if (callback)
+                    callback(success, error);
+            });
         }).detach();
     } catch (const std::system_error& e) {
         spdlog::error("Phomemo BT: failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
-            if (callback) callback(false, "System busy — please try again");
+            if (callback)
+                callback(false, "System busy — please try again");
         });
     }
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

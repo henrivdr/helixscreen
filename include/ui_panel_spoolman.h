@@ -79,7 +79,6 @@ class SpoolmanPanel : public OverlayBase {
     // ========== Flags ==========
     bool callbacks_registered_ = false;
 
-
     // ========== State ==========
     std::vector<SpoolInfo> cached_spools_;
     std::vector<SpoolInfo> filtered_spools_; ///< Filtered view of cached_spools_
@@ -87,7 +86,7 @@ class SpoolmanPanel : public OverlayBase {
 
     // ========== Search ==========
     std::string search_query_;
-    std::string selected_location_;       ///< Currently selected location filter ("" = All)
+    std::string selected_location_;           ///< Currently selected location filter ("" = All)
     bool updating_location_dropdown_ = false; ///< Guard against dropdown event feedback loop
     lv_timer_t* search_debounce_timer_ = nullptr;
     static constexpr uint32_t SEARCH_DEBOUNCE_MS = 300;

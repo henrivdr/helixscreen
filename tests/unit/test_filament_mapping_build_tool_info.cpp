@@ -48,7 +48,8 @@ TEST_CASE("build_tool_info: one entry per tool with sequential indices",
 
 TEST_CASE("build_tool_info: count is max(colors, materials)", "[filament][mapping][tool_info]") {
     SECTION("more colors than materials") {
-        auto tools = FilamentMappingCard::build_tool_info({"#111111", "#222222", "#333333"}, {"PLA"});
+        auto tools =
+            FilamentMappingCard::build_tool_info({"#111111", "#222222", "#333333"}, {"PLA"});
         REQUIRE(tools.size() == 3);
         CHECK(tools[0].material == "PLA");
         CHECK(tools[1].material.empty());

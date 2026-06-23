@@ -13,11 +13,11 @@
 
 #include "../helix_test_fixture.h"
 #include "../lvgl_test_fixture.h"
-#include "src/ui/panel_widgets/print_status_widget.h"
-
 #include "app_globals.h"
 #include "panel_widget_manager.h"
 #include "printer_state.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
+
 #include "../catch_amalgamated.hpp"
 
 using namespace helix;

@@ -13,7 +13,6 @@
 
 #include "printer_state.h"
 
-#include "system/crash_handler.h"
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
@@ -33,6 +32,7 @@
 #include "runtime_config.h"
 #include "settings_manager.h"
 #include "static_subject_registry.h"
+#include "system/crash_handler.h"
 #include "temperature_sensor_manager.h"
 #include "timelapse_state.h"
 #include "unit_conversions.h"
@@ -548,15 +548,15 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
     // api->hardware_ which can be written by other queued callbacks (#799).
     static int s_set_hardware_n = 0;
     long sh_n = static_cast<long>(++s_set_hardware_n);
-    crash_handler::breadcrumb::note(
-        "disc", "sh_entry", static_cast<long>(hardware.macros().size()));
+    crash_handler::breadcrumb::note("disc", "sh_entry",
+                                    static_cast<long>(hardware.macros().size()));
 
     spdlog::debug("[PrinterState] set_hardware: has_probe={}", hardware.has_probe());
 
     // Store for later access by UI (e.g., chamber assignment dropdowns)
     discovery_ = std::move(hardware);
-    crash_handler::breadcrumb::note(
-        "disc", "sh_moved", static_cast<long>(discovery_.macros().size()));
+    crash_handler::breadcrumb::note("disc", "sh_moved",
+                                    static_cast<long>(discovery_.macros().size()));
 
     // Pass auto-detected hardware to the override layer
     crash_handler::breadcrumb::note("disc", "pre_co_set", sh_n);
@@ -904,9 +904,8 @@ void PrinterState::set_printer_type_internal(const std::string& type) {
     const char* strategy_names[] = {"probe_calibrate", "firmware_managed", "endstop"};
     spdlog::info(
         "[PrinterState] Printer type set to: '{}' (pre_print_options: {}, priming={}, z_cal={})",
-        type,
-        pre_print_option_set_.empty() ? "none" : pre_print_option_set_.macro_name, has_priming,
-        strategy_names[static_cast<int>(z_offset_calibration_strategy_)]);
+        type, pre_print_option_set_.empty() ? "none" : pre_print_option_set_.macro_name,
+        has_priming, strategy_names[static_cast<int>(z_offset_calibration_strategy_)]);
 }
 
 void PrinterState::apply_dynamic_options() {
@@ -914,8 +913,7 @@ void PrinterState::apply_dynamic_options() {
     // this method is idempotent and handles capability changes (e.g.
     // moonraker-timelapse plugin going from absent to present).
     pre_print_option_set_.options.erase(
-        std::remove_if(pre_print_option_set_.options.begin(),
-                       pre_print_option_set_.options.end(),
+        std::remove_if(pre_print_option_set_.options.begin(), pre_print_option_set_.options.end(),
                        [](const PrePrintOption& opt) { return opt.id == "timelapse"; }),
         pre_print_option_set_.options.end());
 

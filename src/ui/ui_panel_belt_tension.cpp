@@ -209,8 +209,8 @@ void BeltTensionPanel::init_subjects() {
     UI_MANAGED_SUBJECT_INT(has_strobe_subject_, 0, "bt_has_strobe", subjects_);
 
     // Strobe subjects
-    UI_MANAGED_SUBJECT_STRING(strobe_freq_subject_, strobe_freq_buf_, "100.0 Hz",
-                              "bt_strobe_freq", subjects_);
+    UI_MANAGED_SUBJECT_STRING(strobe_freq_subject_, strobe_freq_buf_, "100.0 Hz", "bt_strobe_freq",
+                              subjects_);
     UI_MANAGED_SUBJECT_STRING(strobe_instruction_subject_, strobe_instruction_buf_,
                               "Adjust belt tension until the belt appears stationary",
                               "bt_strobe_instruction", subjects_);
@@ -512,7 +512,8 @@ void BeltTensionPanel::handle_strobe_clicked() {
     spdlog::info("[BeltTension] Strobe mode clicked");
 
     if (!detected_hw_.has_pwm_led) {
-        ToastManager::instance().show(ToastSeverity::WARNING, "No PWM LED detected for strobe mode");
+        ToastManager::instance().show(ToastSeverity::WARNING,
+                                      "No PWM LED detected for strobe mode");
         return;
     }
 
@@ -568,8 +569,8 @@ void BeltTensionPanel::handle_retry_clicked() {
 
 void BeltTensionPanel::on_sweep_complete(const helix::calibration::BeltTensionResult& result) {
     spdlog::info("[BeltTension] Sweep complete: A={:.1f}Hz B={:.1f}Hz delta={:.1f}Hz sim={:.0f}%",
-                 result.path_a.peak_frequency, result.path_b.peak_frequency,
-                 result.frequency_delta, result.similarity_percent);
+                 result.path_a.peak_frequency, result.path_b.peak_frequency, result.frequency_delta,
+                 result.similarity_percent);
 
     last_result_ = result;
     populate_results(result);
@@ -644,4 +645,3 @@ void BeltTensionPanel::update_strobe_display() {
     }
     lv_subject_notify(&strobe_instruction_subject_);
 }
-

@@ -491,8 +491,7 @@ TEST_CASE("NM backend: is_polkit_permission_error", "[network][nm][polkit]") {
     }
 
     SECTION("Detects polkit keyword") {
-        CHECK(TestableNMBackend::is_polkit_permission_error(
-            "polkit: authorization check failed"));
+        CHECK(TestableNMBackend::is_polkit_permission_error("polkit: authorization check failed"));
     }
 
     SECTION("Detects NetworkManager D-Bus denial") {

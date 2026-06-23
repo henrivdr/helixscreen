@@ -311,7 +311,8 @@ class PrintStatusPanel : public OverlayBase {
     lv_subject_t chamber_status_subject_;
     lv_subject_t speed_subject_;
     lv_subject_t flow_subject_;
-    lv_subject_t view_toggle_icon_subject_; ///< MDI codepoint for btn_view_toggle_icon (cube/layers)
+    lv_subject_t
+        view_toggle_icon_subject_; ///< MDI codepoint for btn_view_toggle_icon (cube/layers)
 
     // Preparing state subjects
     lv_subject_t preparing_visible_subject_;   // int: 1 if preparing, 0 otherwise
@@ -403,9 +404,9 @@ class PrintStatusPanel : public OverlayBase {
     char chamber_status_buf_[16] = "";
     char speed_buf_[32] = "100%";
     char flow_buf_[32] = "100%";
-    char objects_text_buf_[32] = "";                 ///< "X of Y obj" buffer
-    char view_toggle_icon_buf_[8] = "";              ///< View toggle icon codepoint (cube/layers)
-    char print_pause_reason_buf_[256] = "";          ///< Reason line shown under "Print Paused"
+    char objects_text_buf_[32] = "";        ///< "X of Y obj" buffer
+    char view_toggle_icon_buf_[8] = "";     ///< View toggle icon codepoint (cube/layers)
+    char print_pause_reason_buf_[256] = ""; ///< Reason line shown under "Print Paused"
 
     //
     // === Instance State ===
@@ -510,17 +511,17 @@ class PrintStatusPanel : public OverlayBase {
     // === Private Helpers ===
     //
 
-    void bind_fan_observers();         ///< Reclassify + rebind on fans_version
+    void bind_fan_observers(); ///< Reclassify + rebind on fans_version
     void rebind_single_fan(ObserverGuard& guard, SubjectLifetime& lt,
-                           const std::string& object_name,
-                           const char* speed_label_widget_name,
+                           const std::string& object_name, const char* speed_label_widget_name,
                            const char* icon_widget_name);
     void update_fan_speed_display(const char* label_name, const char* icon_name, int speed);
     void refresh_fan_animations();
-    void recompute_fans_fit();         ///< Height-based row visibility (fans_fit_subject_)
-    void recompute_fans_density();     ///< Width-based content tier (fan_row_density_subject_)
-    void recompute_aux_composites();   ///< Compute 3 aux_*_visible from aux_present + density
-    void recompute_aux_composites_for_measurement(int density, bool aux_present); ///< Measurement helper
+    void recompute_fans_fit();       ///< Height-based row visibility (fans_fit_subject_)
+    void recompute_fans_density();   ///< Width-based content tier (fan_row_density_subject_)
+    void recompute_aux_composites(); ///< Compute 3 aux_*_visible from aux_present + density
+    void recompute_aux_composites_for_measurement(int density,
+                                                  bool aux_present); ///< Measurement helper
 
     void update_all_displays();
     void show_gcode_viewer(bool show);
@@ -638,8 +639,9 @@ class PrintStatusPanel : public OverlayBase {
     ObserverGuard gcode_render_mode_observer_; ///< Watches settings changes to update viewer mode
     ObserverGuard print_outcome_observer_;     ///< Drives show_{complete,cancelled,error}_overlay
     ObserverGuard end_overlay_dismissed_observer_; ///< Ditto; second input to the same recompute
-    ObserverGuard print_message_observer_;     ///< Drives pause reason text from print_stats.message
-    ObserverGuard pending_action_observer_; ///< observes PrintControlButtons' print_pending_action for the paused overlay
+    ObserverGuard print_message_observer_;  ///< Drives pause reason text from print_stats.message
+    ObserverGuard pending_action_observer_; ///< observes PrintControlButtons' print_pending_action
+                                            ///< for the paused overlay
 
     // Per-fan speed observers — each watches a DYNAMIC subject, so a paired
     // SubjectLifetime is mandatory (see [L084]: lifetime must outlive observer).
@@ -657,8 +659,9 @@ class PrintStatusPanel : public OverlayBase {
     ObserverGuard filament_sensor_count_observer_;
     ObserverGuard ams_slot_count_observer_;
     ObserverGuard toolchange_visible_observer_;
-    ObserverGuard scoped_runout_observer_;       ///< Recomputes scoped runout badge on sensor edge
-    ObserverGuard scoped_runout_slots_observer_; ///< ...and on AMS lane-presence change (slots_version)
+    ObserverGuard scoped_runout_observer_; ///< Recomputes scoped runout badge on sensor edge
+    ObserverGuard
+        scoped_runout_slots_observer_; ///< ...and on AMS lane-presence change (slots_version)
 
     // Lazy fan control overlay (created on first click; Task 9 wires the push).
     lv_obj_t* fan_control_panel_ = nullptr;

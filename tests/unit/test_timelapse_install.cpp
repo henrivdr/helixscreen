@@ -3,10 +3,11 @@
 
 #include "ui_overlay_timelapse_install.h"
 
+#include "moonraker_config_manager.h"
+
 #include <string>
 
 #include "../catch_amalgamated.hpp"
-#include "moonraker_config_manager.h"
 
 // ============================================================================
 // has_timelapse_section
@@ -158,8 +159,8 @@ TEST_CASE("append_timelapse_config: result is valid with has_timelapse_section",
 
 TEST_CASE("MoonrakerConfigManager produces valid timelapse config", "[timelapse][config_manager]") {
     std::string content = "";
-    auto result = helix::MoonrakerConfigManager::add_section(
-        content, "timelapse", {}, "Timelapse - added by HelixScreen");
+    auto result = helix::MoonrakerConfigManager::add_section(content, "timelapse", {},
+                                                             "Timelapse - added by HelixScreen");
     result = helix::MoonrakerConfigManager::add_section(
         result, "update_manager timelapse",
         {{"type", "git_repo"},
@@ -179,18 +180,19 @@ TEST_CASE("Timelapse config can coexist with spoolman config", "[timelapse][conf
     std::string content = "";
     content = helix::MoonrakerConfigManager::add_section(
         content, "spoolman", {{"server", "http://1.2.3.4:7912"}}, "Spoolman");
-    content = helix::MoonrakerConfigManager::add_section(
-        content, "timelapse", {}, "Timelapse");
+    content = helix::MoonrakerConfigManager::add_section(content, "timelapse", {}, "Timelapse");
     content = helix::MoonrakerConfigManager::add_section(
         content, "update_manager timelapse",
         {{"type", "git_repo"}, {"path", "~/moonraker-timelapse"}});
 
     REQUIRE(helix::MoonrakerConfigManager::has_section(content, "spoolman") == true);
     REQUIRE(helix::MoonrakerConfigManager::has_section(content, "timelapse") == true);
-    REQUIRE(helix::MoonrakerConfigManager::has_section(content, "update_manager timelapse") == true);
+    REQUIRE(helix::MoonrakerConfigManager::has_section(content, "update_manager timelapse") ==
+            true);
 
     auto without_spoolman = helix::MoonrakerConfigManager::remove_section(content, "spoolman");
     REQUIRE(helix::MoonrakerConfigManager::has_section(without_spoolman, "spoolman") == false);
     REQUIRE(helix::MoonrakerConfigManager::has_section(without_spoolman, "timelapse") == true);
-    REQUIRE(helix::MoonrakerConfigManager::has_section(without_spoolman, "update_manager timelapse") == true);
+    REQUIRE(helix::MoonrakerConfigManager::has_section(without_spoolman,
+                                                       "update_manager timelapse") == true);
 }

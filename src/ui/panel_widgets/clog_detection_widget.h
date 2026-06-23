@@ -13,7 +13,7 @@ namespace helix {
 namespace ui {
 class UiClogMeter;
 class UiBufferMeter;
-}
+} // namespace ui
 
 /// Panel widget for filament health monitoring on the home panel.
 /// Shows a carousel with clog arc meter and optional buffer meter pages.
@@ -31,7 +31,9 @@ class ClogDetectionWidget : public PanelWidget {
         return "clog_detection";
     }
 
-    bool has_edit_configure() const override { return true; }
+    bool has_edit_configure() const override {
+        return true;
+    }
     bool on_edit_configure() override;
 
   private:

@@ -994,8 +994,8 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
         .fans = {"chamber_fan"},
         .leds = {},
         .hostname = "",
-        .printer_objects = {"box", "motor_control", "fan_feedback", "load_ai",
-                            "filament_rack", "heater_generic chamber_heater"},
+        .printer_objects = {"box", "motor_control", "fan_feedback", "load_ai", "filament_rack",
+                            "heater_generic chamber_heater"},
         .steppers = {},
         .kinematics = "corexy",
         .build_volume = {}};
@@ -2559,8 +2559,7 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.confidence >= 60);
 }
 
-TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: Anycubic Kobra 3 with hostname",
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Anycubic Kobra 3 with hostname",
                  "[printer][real_world][anycubic]") {
     PrinterHardwareData hardware{
         .heaters = {"extruder", "heater_bed"},
@@ -2661,8 +2660,7 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.confidence >= 60);
 }
 
-TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: Anycubic Kobra S1 Max by chamber + ACE",
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Anycubic Kobra S1 Max by chamber + ACE",
                  "[printer][real_world][anycubic]") {
     // Kobra S1 Max: enclosed CoreXY with a heated chamber (its exclusive
     // discriminator over the S1) plus ACE, on the HC32F460.

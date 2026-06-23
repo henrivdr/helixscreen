@@ -57,7 +57,8 @@ void PrinterFanState::deinit_subjects() {
     // Signal subject death FIRST — sets bool to false so ALL ObserverGuards detect
     // dead subjects, then clear the map to release shared_ptr references. (#816)
     for (auto& [name, lifetime] : fan_speed_lifetimes_) {
-        if (lifetime) *lifetime = false;
+        if (lifetime)
+            *lifetime = false;
     }
     fan_speed_lifetimes_.clear();
 
@@ -285,8 +286,7 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
         auto* config = Config::get_instance();
         std::string custom_name;
         if (config) {
-            custom_name = config->get<std::string>(
-                config->df() + "fans/names/" + obj_name, "");
+            custom_name = config->get<std::string>(config->df() + "fans/names/" + obj_name, "");
         }
         if (!custom_name.empty()) {
             info.display_name = custom_name;
@@ -294,7 +294,8 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
             std::string role_name = get_role_display_name(obj_name);
             info.display_name =
                 role_name.empty() ? get_display_name(obj_name, DeviceType::FAN) : role_name;
-            info.display_name = disambiguate_chamber_fan_name(obj_name, info.type, info.display_name);
+            info.display_name =
+                disambiguate_chamber_fan_name(obj_name, info.type, info.display_name);
         }
 
         spdlog::trace("[PrinterFanState] Registered fan: {} -> \"{}\" (type={}, controllable={})",
@@ -331,7 +332,8 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
     for (auto& [name, lifetime] : fan_speed_lifetimes_) {
         if (new_lifetimes.find(name) == new_lifetimes.end()) {
             spdlog::trace("[PrinterFanState] Expiring lifetime token for orphaned fan: {}", name);
-            if (lifetime) *lifetime = false;
+            if (lifetime)
+                *lifetime = false;
             lifetime.reset();
         }
     }

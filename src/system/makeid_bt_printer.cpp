@@ -51,7 +51,7 @@ static bool rfcomm_write(int fd, const uint8_t* data, size_t len) {
 }
 
 static int rfcomm_read(int fd, uint8_t* buf, int buf_len, int timeout_ms) {
-    struct pollfd pfd{};
+    struct pollfd pfd {};
     pfd.fd = fd;
     pfd.events = POLLIN;
     int ret = poll(&pfd, 1, timeout_ms);
@@ -67,7 +67,7 @@ static int rfcomm_read(int fd, uint8_t* buf, int buf_len, int timeout_ms) {
 static void rfcomm_drain(int fd) {
     uint8_t junk[256];
     while (true) {
-        struct pollfd pfd{};
+        struct pollfd pfd {};
         pfd.fd = fd;
         pfd.events = POLLIN;
         if (poll(&pfd, 1, 50) <= 0)
@@ -233,89 +233,89 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
     // if it escapes an LVGL event frame (#724, #837, [L083]).
     try {
         std::thread([mac, job = std::move(job), callback]() {
-        std::lock_guard<std::mutex> lock(s_print_mutex);
-        auto& loader = helix::bluetooth::BluetoothLoader::instance();
-        bool success = false;
-        std::string error;
+            std::lock_guard<std::mutex> lock(s_print_mutex);
+            auto& loader = helix::bluetooth::BluetoothLoader::instance();
+            bool success = false;
+            std::string error;
 
-        int fd = ensure_connected(loader, mac);
-        if (fd < 0) {
-            error = "RFCOMM connect failed";
-        } else if (!wait_for_ready(fd)) {
-            error = "Printer not ready";
-        } else {
-            bool ok = true;
-            // Send ALL chunks rapidly — no delay. The printer buffers all
-            // data before physically printing (confirmed via snoop of the
-            // MakeID-Life app). Inter-chunk delays cause gaps.
-            for (size_t i = 0; i < job.chunks.size(); i++) {
-                const auto& frame = job.chunks[i];
-                spdlog::debug("MakeID BT: chunk[{}] ({} bytes)", i, frame.size());
+            int fd = ensure_connected(loader, mac);
+            if (fd < 0) {
+                error = "RFCOMM connect failed";
+            } else if (!wait_for_ready(fd)) {
+                error = "Printer not ready";
+            } else {
+                bool ok = true;
+                // Send ALL chunks rapidly — no delay. The printer buffers all
+                // data before physically printing (confirmed via snoop of the
+                // MakeID-Life app). Inter-chunk delays cause gaps.
+                for (size_t i = 0; i < job.chunks.size(); i++) {
+                    const auto& frame = job.chunks[i];
+                    spdlog::debug("MakeID BT: chunk[{}] ({} bytes)", i, frame.size());
 
-                if (!rfcomm_write(fd, frame.data(), frame.size())) {
-                    error = fmt::format("Write failed at chunk {}", i);
-                    ok = false;
-                    cleanup_connection();
-                    break;
-                }
-
-                // Read ACK for this chunk
-                auto resp = read_response(fd, fmt::format("chunk[{}]", i).c_str(), 5000);
-                if (resp.status == MakeIdResponseStatus::Resend) {
-                    // Resend once
                     if (!rfcomm_write(fd, frame.data(), frame.size())) {
-                        error = fmt::format("Resend write failed at chunk {}", i);
+                        error = fmt::format("Write failed at chunk {}", i);
                         ok = false;
                         cleanup_connection();
                         break;
                     }
-                    resp = read_response(fd, fmt::format("chunk[{}] resend", i).c_str(), 5000);
-                }
-                if (resp.status == MakeIdResponseStatus::Error) {
-                    error = fmt::format("Error at chunk {} (code={})", i, resp.error_code);
-                    ok = false;
-                    break;
-                }
-            }
 
-            // After last chunk: poll with handshake until printer finishes
-            // (snoop shows app polls ~20-30 times during physical printing)
-            if (ok) {
-                constexpr int max_print_polls = 60;
-                bool print_finished = false;
-                auto poll_pkt = makeid_build_handshake(MakeIdHandshakeState::Search);
-                for (int poll = 0; poll < max_print_polls; poll++) {
-                    rfcomm_write(fd, poll_pkt.data(), poll_pkt.size());
-                    auto resp = read_response(fd, "print-wait", 2000);
-                    if (resp.status == MakeIdResponseStatus::Success && !resp.is_printing) {
-                        spdlog::info("MakeID BT: print finished after {} polls", poll);
-                        print_finished = true;
+                    // Read ACK for this chunk
+                    auto resp = read_response(fd, fmt::format("chunk[{}]", i).c_str(), 5000);
+                    if (resp.status == MakeIdResponseStatus::Resend) {
+                        // Resend once
+                        if (!rfcomm_write(fd, frame.data(), frame.size())) {
+                            error = fmt::format("Resend write failed at chunk {}", i);
+                            ok = false;
+                            cleanup_connection();
+                            break;
+                        }
+                        resp = read_response(fd, fmt::format("chunk[{}] resend", i).c_str(), 5000);
+                    }
+                    if (resp.status == MakeIdResponseStatus::Error) {
+                        error = fmt::format("Error at chunk {} (code={})", i, resp.error_code);
+                        ok = false;
                         break;
                     }
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 }
-                if (!print_finished) {
-                    spdlog::error("MakeID BT: print-wait timed out after {} polls",
-                                  max_print_polls);
-                    ok = false;
-                    error = "Print timed out waiting for completion";
-                }
-            }
-            if (ok) {
-                auto cancel = makeid_build_handshake(MakeIdHandshakeState::Cancel);
-                rfcomm_write(fd, cancel.data(), cancel.size());
-                read_response(fd, "cancel", 2000);
-                success = true;
-                spdlog::warn("MakeID BT: print complete");
-            }
-        }
 
-        if (!error.empty())
-            spdlog::error("MakeID BT: {}", error);
-        helix::ui::queue_update([callback, success, error]() {
-            if (callback)
-                callback(success, error);
-        });
+                // After last chunk: poll with handshake until printer finishes
+                // (snoop shows app polls ~20-30 times during physical printing)
+                if (ok) {
+                    constexpr int max_print_polls = 60;
+                    bool print_finished = false;
+                    auto poll_pkt = makeid_build_handshake(MakeIdHandshakeState::Search);
+                    for (int poll = 0; poll < max_print_polls; poll++) {
+                        rfcomm_write(fd, poll_pkt.data(), poll_pkt.size());
+                        auto resp = read_response(fd, "print-wait", 2000);
+                        if (resp.status == MakeIdResponseStatus::Success && !resp.is_printing) {
+                            spdlog::info("MakeID BT: print finished after {} polls", poll);
+                            print_finished = true;
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    }
+                    if (!print_finished) {
+                        spdlog::error("MakeID BT: print-wait timed out after {} polls",
+                                      max_print_polls);
+                        ok = false;
+                        error = "Print timed out waiting for completion";
+                    }
+                }
+                if (ok) {
+                    auto cancel = makeid_build_handshake(MakeIdHandshakeState::Cancel);
+                    rfcomm_write(fd, cancel.data(), cancel.size());
+                    read_response(fd, "cancel", 2000);
+                    success = true;
+                    spdlog::warn("MakeID BT: print complete");
+                }
+            }
+
+            if (!error.empty())
+                spdlog::error("MakeID BT: {}", error);
+            helix::ui::queue_update([callback, success, error]() {
+                if (callback)
+                    callback(success, error);
+            });
         }).detach();
     } catch (const std::system_error& e) {
         spdlog::error("MakeID BT: failed to spawn print thread: {}", e.what());

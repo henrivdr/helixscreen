@@ -3,19 +3,19 @@
 
 #include "ui_settings_material_temps.h"
 
-#include "app_globals.h"
-#include "moonraker_api.h"
 #include "ui_callback_helpers.h"
 #include "ui_event_safety.h"
+#include "ui_fonts.h"
 #include "ui_nav_manager.h"
+#include "ui_toast_manager.h"
 #include "ui_utils.h"
 
+#include "app_globals.h"
 #include "filament_database.h"
 #include "material_settings_manager.h"
+#include "moonraker_api.h"
 #include "static_panel_registry.h"
 #include "theme_manager.h"
-#include "ui_fonts.h"
-#include "ui_toast_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -410,18 +410,16 @@ void MaterialTempsOverlay::handle_save() {
 
     // Validate ranges
     if (nozzle_min < 100 || nozzle_max < 100 || nozzle_min > 500 || nozzle_max > 500) {
-        ToastManager::instance().show(ToastSeverity::WARNING,
-                                      "Nozzle temp must be 100-500°C", 3000);
+        ToastManager::instance().show(ToastSeverity::WARNING, "Nozzle temp must be 100-500°C",
+                                      3000);
         return;
     }
     if (bed_temp < 0 || bed_temp > 200) {
-        ToastManager::instance().show(ToastSeverity::WARNING,
-                                      "Bed temp must be 0-200°C", 3000);
+        ToastManager::instance().show(ToastSeverity::WARNING, "Bed temp must be 0-200°C", 3000);
         return;
     }
     if (nozzle_min > nozzle_max) {
-        ToastManager::instance().show(ToastSeverity::WARNING,
-                                      "Nozzle min cannot exceed max", 3000);
+        ToastManager::instance().show(ToastSeverity::WARNING, "Nozzle min cannot exceed max", 3000);
         return;
     }
 
@@ -429,9 +427,12 @@ void MaterialTempsOverlay::handle_save() {
     filament::MaterialOverride ovr;
     for (const auto& mat : filament::MATERIALS) {
         if (std::string_view(mat.name) == editing_material_) {
-            if (nozzle_min != mat.nozzle_min) ovr.nozzle_min = nozzle_min;
-            if (nozzle_max != mat.nozzle_max) ovr.nozzle_max = nozzle_max;
-            if (bed_temp != mat.bed_temp) ovr.bed_temp = bed_temp;
+            if (nozzle_min != mat.nozzle_min)
+                ovr.nozzle_min = nozzle_min;
+            if (nozzle_max != mat.nozzle_max)
+                ovr.nozzle_max = nozzle_max;
+            if (bed_temp != mat.bed_temp)
+                ovr.bed_temp = bed_temp;
             break;
         }
     }
@@ -441,8 +442,8 @@ void MaterialTempsOverlay::handle_save() {
         uint32_t sel = lv_dropdown_get_selected(macro_dropdown_);
         if (sel < macro_names_.size() && !macro_names_[sel].empty()) {
             ovr.preheat_macro = macro_names_[sel];
-            bool switch_checked = macro_heating_switch_ &&
-                                  lv_obj_has_state(macro_heating_switch_, LV_STATE_CHECKED);
+            bool switch_checked =
+                macro_heating_switch_ && lv_obj_has_state(macro_heating_switch_, LV_STATE_CHECKED);
             if (!switch_checked) {
                 ovr.macro_handles_heating = false;
             }
@@ -506,7 +507,8 @@ void MaterialTempsOverlay::handle_reset_defaults() {
 // ============================================================================
 
 void MaterialTempsOverlay::populate_macro_dropdown() {
-    if (!macro_dropdown_) return;
+    if (!macro_dropdown_)
+        return;
 
     macro_names_.clear();
     macro_names_.push_back(""); // Index 0 = "None" (empty string = no macro)
@@ -520,7 +522,8 @@ void MaterialTempsOverlay::populate_macro_dropdown() {
         std::sort(sorted.begin(), sorted.end());
 
         for (const auto& name : sorted) {
-            if (!name.empty() && name[0] == '_') continue; // Skip system macros
+            if (!name.empty() && name[0] == '_')
+                continue; // Skip system macros
             macro_names_.push_back(name);
             options += "\n";
             options += name;
@@ -531,7 +534,8 @@ void MaterialTempsOverlay::populate_macro_dropdown() {
 }
 
 void MaterialTempsOverlay::handle_macro_dropdown_changed() {
-    if (!macro_dropdown_) return;
+    if (!macro_dropdown_)
+        return;
 
     uint32_t sel = lv_dropdown_get_selected(macro_dropdown_);
     bool has_macro = sel < macro_names_.size() && !macro_names_[sel].empty();

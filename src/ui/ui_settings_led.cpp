@@ -223,7 +223,8 @@ void LedSettingsOverlay::populate_macro_devices() {
     // callbacks (dropdown change, remove/add/edit/save buttons) where the event-
     // firing widget is a child of the container being cleaned (issue #80).
     helix::ui::queue_update("LedSettingsOverlay::populate_macro_devices", [this]() {
-        if (cleanup_called()) return;
+        if (cleanup_called())
+            return;
         populate_macro_devices_impl();
     });
 }
@@ -1002,7 +1003,8 @@ void LedSettingsOverlay::populate_led_chips() {
     // SAFETY: Defer the clean+rebuild. Called from handle_led_chip_toggle() where
     // the clicked chip is a child of chip_container being cleaned (issue #80).
     helix::ui::queue_update([this]() {
-        if (cleanup_called()) return;
+        if (cleanup_called())
+            return;
         populate_led_chips_impl();
     });
 }
@@ -1491,7 +1493,8 @@ void LedSettingsOverlay::rebuild_contextual_controls(const std::string& state_ke
                 auto* data = static_cast<WledSliderData*>(lv_obj_get_user_data(s));
                 if (data) {
                     int value = lv_slider_get_value(s);
-                    lv_label_set_text(data->label, fmt::format(lv_tr("Preset ID: {}"), value).c_str());
+                    lv_label_set_text(data->label,
+                                      fmt::format(lv_tr("Preset ID: {}"), value).c_str());
                     get_led_settings_overlay().handle_wled_preset_selected(data->key, value);
                 }
                 LVGL_SAFE_EVENT_CB_END();

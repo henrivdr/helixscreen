@@ -71,9 +71,9 @@ std::string wifi_get_device_mac(const std::string& interface = "wlan0");
  * control socket but the link is in fact live (helixscreen#1059, Qidi Q2).
  */
 struct OsWifiLink {
-    bool has_link = false;   ///< Kernel reports the wireless iface link is up.
-    std::string iface;       ///< Name of the wireless iface that was found (first match).
-    bool has_ip = false;     ///< Iface has a non-link-local IPv4 (best-effort).
+    bool has_link = false; ///< Kernel reports the wireless iface link is up.
+    std::string iface;     ///< Name of the wireless iface that was found (first match).
+    bool has_ip = false;   ///< Iface has a non-link-local IPv4 (best-effort).
 };
 
 /**

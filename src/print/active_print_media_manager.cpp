@@ -250,8 +250,7 @@ void ActivePrintMediaManager::load_thumbnail_for_file(const std::string& filenam
                     printer_state_.set_print_layer_total(static_cast<int>(metadata.layer_count));
                     spdlog::debug("[ActivePrintMediaManager] Set total layers from metadata: {}",
                                   metadata.layer_count);
-                } else if (lv_subject_get_int(printer_state_.get_print_layer_total_subject()) >
-                           0) {
+                } else if (lv_subject_get_int(printer_state_.get_print_layer_total_subject()) > 0) {
                     // Retry pass: an earlier attempt already filled the layer
                     // total (gcode header scan) — don't re-download the header.
                     spdlog::debug("[ActivePrintMediaManager] Layer total already set, "
@@ -403,19 +402,18 @@ void ActivePrintMediaManager::load_thumbnail_for_file(const std::string& filenam
             // Moonraker hasn't finished scanning a just-uploaded file
             // (OrcaSlicer upload-and-print) or on transient RPC failures.
             std::string message = err.message;
-            tok.defer("ActivePrintMediaManager::on_metadata_error",
-                      [this, current_gen, filename, metadata_filename,
-                       message = std::move(message)]() {
-                          if (current_gen !=
-                              thumbnail_load_generation_.load(std::memory_order_relaxed)) {
-                              return; // superseded by a newer load
-                          }
-                          spdlog::warn("[ActivePrintMediaManager] Thumbnail metadata fetch failed "
-                                       "for '{}' (attempt {}/{}): {}",
-                                       metadata_filename, thumbnail_retry_count_ + 1,
-                                       kMaxThumbnailAttempts, message);
-                          schedule_thumbnail_retry(filename);
-                      });
+            tok.defer(
+                "ActivePrintMediaManager::on_metadata_error",
+                [this, current_gen, filename, metadata_filename, message = std::move(message)]() {
+                    if (current_gen != thumbnail_load_generation_.load(std::memory_order_relaxed)) {
+                        return; // superseded by a newer load
+                    }
+                    spdlog::warn("[ActivePrintMediaManager] Thumbnail metadata fetch failed "
+                                 "for '{}' (attempt {}/{}): {}",
+                                 metadata_filename, thumbnail_retry_count_ + 1,
+                                 kMaxThumbnailAttempts, message);
+                    schedule_thumbnail_retry(filename);
+                });
         },
         true // silent - don't trigger RPC_ERROR event/toast
     );
@@ -620,12 +618,10 @@ void ActivePrintMediaManager::handle_filelist_changed(const std::string& action,
 
     // Metadata lookups use the resolved filename, so match against both forms.
     const std::string metadata_filename = resolve_gcode_filename(last_effective_filename_);
-    const bool item_matches =
-        !item_path.empty() &&
-        (item_path == metadata_filename || item_path == last_effective_filename_);
-    const bool source_matches =
-        !source_path.empty() &&
-        (source_path == metadata_filename || source_path == last_effective_filename_);
+    const bool item_matches = !item_path.empty() && (item_path == metadata_filename ||
+                                                     item_path == last_effective_filename_);
+    const bool source_matches = !source_path.empty() && (source_path == metadata_filename ||
+                                                         source_path == last_effective_filename_);
 
     if (action == "move_file" && !item_matches && source_matches) {
         // The printing file was moved/renamed: its metadata now lives under

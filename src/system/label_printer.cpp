@@ -9,9 +9,12 @@ namespace helix {
 
 const char* label_preset_name(LabelPreset preset) {
     switch (preset) {
-    case LabelPreset::STANDARD: return "Standard";
-    case LabelPreset::COMPACT:  return "Compact";
-    case LabelPreset::MINIMAL:  return "QR Only";
+    case LabelPreset::STANDARD:
+        return "Standard";
+    case LabelPreset::COMPACT:
+        return "Compact";
+    case LabelPreset::MINIMAL:
+        return "QR Only";
     }
     return "Standard";
 }

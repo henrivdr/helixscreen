@@ -165,8 +165,7 @@ void SpoolmanListView::create_spacers() {
 // Row Configuration
 // ============================================================================
 
-void SpoolmanListView::configure_row(RowWidgets& rw, const SpoolInfo& spool,
-                                     int active_spool_id) {
+void SpoolmanListView::configure_row(RowWidgets& rw, const SpoolInfo& spool, int active_spool_id) {
     if (!rw.root) {
         return;
     }
@@ -247,8 +246,8 @@ void SpoolmanListView::populate(const std::vector<SpoolInfo>& spools, int active
         return;
     }
 
-    spdlog::debug("[SpoolmanListView] Populating with {} spools (preserve_scroll={})", spools.size(),
-                  preserve_scroll);
+    spdlog::debug("[SpoolmanListView] Populating with {} spools (preserve_scroll={})",
+                  spools.size(), preserve_scroll);
 
     // Initialize pool on first call
     if (pool_.empty()) {

@@ -143,25 +143,23 @@ void MacroModificationManager::check_and_notify() {
             // L081 Mechanism C: previously did inline member writes
             // (analyzing_, cached_analysis_) and a show_configure_toast()
             // (LVGL) on the bg thread (analyzer's HTTP cb). Marshal to main.
-            token.defer("MacroModificationManager::analyze_success",
-                        [this, analysis, wizard_config]() {
-                            analyzing_ = false;
-                            cached_analysis_ = analysis;
+            token.defer(
+                "MacroModificationManager::analyze_success", [this, analysis, wizard_config]() {
+                    analyzing_ = false;
+                    cached_analysis_ = analysis;
 
-                            if (!analysis.found) {
-                                spdlog::debug(
-                                    "[MacroModificationManager] No PRINT_START macro found");
-                                return;
-                            }
+                    if (!analysis.found) {
+                        spdlog::debug("[MacroModificationManager] No PRINT_START macro found");
+                        return;
+                    }
 
-                            if (should_show_notification(analysis, wizard_config)) {
-                                show_configure_toast();
-                            } else {
-                                spdlog::debug(
-                                    "[MacroModificationManager] No notification needed "
-                                    "(already configured or no uncontrollable ops)");
-                            }
-                        });
+                    if (should_show_notification(analysis, wizard_config)) {
+                        show_configure_toast();
+                    } else {
+                        spdlog::debug("[MacroModificationManager] No notification needed "
+                                      "(already configured or no uncontrollable ops)");
+                    }
+                });
         },
         [this, token](const MoonrakerError& error) {
             token.defer("MacroModificationManager::analyze_error", [this, error]() {
@@ -188,52 +186,45 @@ void MacroModificationManager::analyze_and_launch_wizard() {
         [this, token](const PrintStartAnalysis& analysis) {
             // L081 Mechanism C: ToastManager::show + launch_wizard are LVGL.
             // Marshal to main via tok.defer (analyzer cb runs on HTTP thread).
-            token.defer("MacroModificationManager::launch_wizard_success",
-                        [this, analysis]() {
-                            analyzing_ = false;
-                            cached_analysis_ = analysis;
+            token.defer("MacroModificationManager::launch_wizard_success", [this, analysis]() {
+                analyzing_ = false;
+                cached_analysis_ = analysis;
 
-                            if (!analysis.found) {
-                                ToastManager::instance().show(
-                                    ToastSeverity::INFO,
-                                    lv_tr("No PRINT_START macro found"), 3000);
-                                return;
-                            }
+                if (!analysis.found) {
+                    ToastManager::instance().show(ToastSeverity::INFO,
+                                                  lv_tr("No PRINT_START macro found"), 3000);
+                    return;
+                }
 
-                            size_t uncontrollable = 0;
-                            for (const auto* op : analysis.get_uncontrollable_operations()) {
-                                if (op->category != PrintStartOpCategory::HOMING) {
-                                    uncontrollable++;
-                                }
-                            }
+                size_t uncontrollable = 0;
+                for (const auto* op : analysis.get_uncontrollable_operations()) {
+                    if (op->category != PrintStartOpCategory::HOMING) {
+                        uncontrollable++;
+                    }
+                }
 
-                            if (uncontrollable == 0) {
-                                ToastManager::instance().show(
-                                    ToastSeverity::SUCCESS,
-                                    lv_tr("Your print start is already fully configured!"),
-                                    3000);
+                if (uncontrollable == 0) {
+                    ToastManager::instance().show(
+                        ToastSeverity::SUCCESS,
+                        lv_tr("Your print start is already fully configured!"), 3000);
 
-                                auto cfg = load_config();
-                                cfg.configured = true;
-                                cfg.macro_hash = compute_hash(analysis.raw_gcode);
-                                save_config(cfg);
-                                return;
-                            }
+                    auto cfg = load_config();
+                    cfg.configured = true;
+                    cfg.macro_hash = compute_hash(analysis.raw_gcode);
+                    save_config(cfg);
+                    return;
+                }
 
-                            launch_wizard();
-                        });
+                launch_wizard();
+            });
         },
         [this, token](const MoonrakerError& error) {
-            token.defer("MacroModificationManager::launch_wizard_error",
-                        [this, error]() {
-                            analyzing_ = false;
-                            spdlog::warn(
-                                "[MacroModificationManager] Analysis failed: {}",
-                                error.message);
-                            ToastManager::instance().show(
-                                ToastSeverity::ERROR,
-                                lv_tr("Failed to analyze PRINT_START macro"), 3000);
-                        });
+            token.defer("MacroModificationManager::launch_wizard_error", [this, error]() {
+                analyzing_ = false;
+                spdlog::warn("[MacroModificationManager] Analysis failed: {}", error.message);
+                ToastManager::instance().show(ToastSeverity::ERROR,
+                                              lv_tr("Failed to analyze PRINT_START macro"), 3000);
+            });
         });
 }
 
@@ -367,7 +358,8 @@ void MacroModificationManager::launch_wizard() {
     auto token = lifetime_.token();
 
     wizard_->set_complete_callback([this, token](bool applied, size_t operations_enhanced) {
-        if (token.expired()) return;
+        if (token.expired())
+            return;
         on_wizard_complete(applied, operations_enhanced);
     });
 

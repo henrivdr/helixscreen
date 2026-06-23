@@ -27,6 +27,5 @@
 /// @param cy Center Y position (center of entire print head)
 /// @param filament_color Color of loaded filament (or gray/black for default)
 /// @param scale_unit Base scaling unit (typically from theme space_md)
-void draw_nozzle_stealthburner(lv_layer_t* layer, int32_t cx, int32_t cy,
-                               lv_color_t filament_color, int32_t scale_unit,
-                               lv_opa_t opa = LV_OPA_COVER);
+void draw_nozzle_stealthburner(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t filament_color,
+                               int32_t scale_unit, lv_opa_t opa = LV_OPA_COVER);

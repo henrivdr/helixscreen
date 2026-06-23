@@ -9,10 +9,10 @@
 namespace helix::tour {
 
 enum class TooltipAnchor {
-    Center,           ///< No target — tooltip screen-centered
+    Center, ///< No target — tooltip screen-centered
     PreferBelow,
     PreferAbove,
-    PreferRight,      ///< Typical for navbar buttons (tooltip to the right of left-side navbar)
+    PreferRight, ///< Typical for navbar buttons (tooltip to the right of left-side navbar)
     PreferLeft,
 };
 
@@ -37,4 +37,4 @@ std::vector<TourStep> build_tour_steps(bool has_ams);
 /// Convenience: queries `AmsState::instance().backend_count() > 0`.
 bool hardware_has_ams();
 
-}  // namespace helix::tour
+} // namespace helix::tour

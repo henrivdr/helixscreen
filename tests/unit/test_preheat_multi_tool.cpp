@@ -74,7 +74,8 @@ TEST_CASE("PreheatWidget: collect_preheat_heaters returns single tool heater for
 // collect_preheat_heaters: skips tools with no valid heater
 // ============================================================================
 
-TEST_CASE("PreheatWidget: collect_preheat_heaters skips tools with no heater", "[preheat][panel_widget]") {
+TEST_CASE("PreheatWidget: collect_preheat_heaters skips tools with no heater",
+          "[preheat][panel_widget]") {
     auto tools = make_test_tools(3);
     // Tool 1 has neither extruder_name nor heater_name
     tools[1].extruder_name = std::nullopt;
@@ -126,7 +127,8 @@ TEST_CASE("PreheatWidget: collect_preheat_heaters returns empty for out-of-range
 // collect_preheat_heaters: empty tools
 // ============================================================================
 
-TEST_CASE("PreheatWidget: collect_preheat_heaters handles empty tools vector", "[preheat][panel_widget]") {
+TEST_CASE("PreheatWidget: collect_preheat_heaters handles empty tools vector",
+          "[preheat][panel_widget]") {
     std::vector<ToolInfo> tools;
 
     auto heaters = PreheatWidget::collect_preheat_heaters(tools, -1);

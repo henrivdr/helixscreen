@@ -4,13 +4,14 @@
 #if HELIX_HAS_LABEL_PRINTER
 
 #include "ipp_printer.h"
+
+#include "ui_update_queue.h"
+
 #include "http_executor.h"
+#include "hv/requests.h"
 #include "ipp_protocol.h"
 #include "pwg_raster.h"
 #include "sheet_label_layout.h"
-#include "ui_update_queue.h"
-
-#include "hv/requests.h"
 
 #include <spdlog/spdlog.h>
 
@@ -24,7 +25,7 @@ std::string IppPrinter::name() const {
 }
 
 void IppPrinter::set_target(const std::string& host, uint16_t port,
-                             const std::string& resource_path) {
+                            const std::string& resource_path) {
     host_ = host;
     port_ = port;
     resource_path_ = resource_path;
@@ -56,8 +57,7 @@ std::vector<LabelSize> IppPrinter::supported_sizes_static() {
     return sizes;
 }
 
-void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
-                        PrintCallback callback) {
+void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) {
     // Capture all state by copy for the detached thread
     auto host = host_;
     auto port = port_;
@@ -68,45 +68,39 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
 
     if (host.empty()) {
         spdlog::error("IPP Printer: no target host configured");
-        helix::ui::queue_update([callback]() {
-            callback(false, "No target printer configured");
-        });
+        helix::ui::queue_update([callback]() { callback(false, "No target printer configured"); });
         return;
     }
 
-    spdlog::warn("IPP Printer: printing to {}:{}/{}, template={}, count={}, start={}",
-                 host, port, resource_path, template_index, label_count, start_position);
+    spdlog::warn("IPP Printer: printing to {}:{}/{}, template={}, count={}, start={}", host, port,
+                 resource_path, template_index, label_count, start_position);
 
     // Route through HttpExecutor::fast() bounded pool — raw std::thread spawn
     // crashes with std::terminate on AD5M under thread exhaustion (#724, #837).
-    helix::http::HttpExecutor::fast().submit(
-        [host, port, resource_path, template_index, label_count,
-         start_position, bitmap, size, callback]() {
+    helix::http::HttpExecutor::fast().submit([host, port, resource_path, template_index,
+                                              label_count, start_position, bitmap, size,
+                                              callback]() {
         try {
             // Get the sheet template
             const auto& templates = label::get_sheet_templates();
-            if (template_index < 0 ||
-                template_index >= static_cast<int>(templates.size())) {
-                std::string err = fmt::format(
-                    "Invalid sheet template index: {} (have {})",
-                    template_index, templates.size());
+            if (template_index < 0 || template_index >= static_cast<int>(templates.size())) {
+                std::string err = fmt::format("Invalid sheet template index: {} (have {})",
+                                              template_index, templates.size());
                 spdlog::error("IPP Printer: {}", err);
-                helix::ui::queue_update([callback, err]() {
-                    callback(false, err);
-                });
+                helix::ui::queue_update([callback, err]() { callback(false, err); });
                 return;
             }
             const auto& tmpl = templates[template_index];
             auto paper_size = tmpl.paper;
 
-            spdlog::debug("IPP Printer: using template '{}' ({}x{} grid, {} paper)",
-                          tmpl.name, tmpl.columns, tmpl.rows,
+            spdlog::debug("IPP Printer: using template '{}' ({}x{} grid, {} paper)", tmpl.name,
+                          tmpl.columns, tmpl.rows,
                           paper_size == label::PaperSize::LETTER ? "Letter" : "A4");
 
             // Tile labels onto a full page
             constexpr int dpi = 300;
-            auto page_bitmap = label::tile_labels_on_page(
-                bitmap, tmpl, label_count, start_position, dpi);
+            auto page_bitmap =
+                label::tile_labels_on_page(bitmap, tmpl, label_count, start_position, dpi);
 
             // Get page dimensions for PWG header
             auto page_dims = label::get_page_dimensions(paper_size, dpi);
@@ -123,16 +117,14 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
             params.num_colors = 1;
 
             auto pwg_data = helix::pwg::generate(page_bitmap, params);
-            spdlog::info("IPP Printer: generated {} bytes of PWG Raster data",
-                         pwg_data.size());
+            spdlog::info("IPP Printer: generated {} bytes of PWG Raster data", pwg_data.size());
 
             // Build IPP request
             auto printer_uri = ipp::make_printer_uri(host, port, resource_path);
             auto media_keyword = label::get_pwg_media_keyword(paper_size);
 
-            auto request = ipp::build_print_job(
-                printer_uri, "HelixScreen Label", "image/pwg-raster",
-                media_keyword);
+            auto request = ipp::build_print_job(printer_uri, "HelixScreen Label",
+                                                "image/pwg-raster", media_keyword);
 
             // Add job attributes
             request.begin_job_attributes();
@@ -140,8 +132,7 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
 
             // Encode IPP request with PWG document data
             auto ipp_body = request.encode_with_data(pwg_data);
-            spdlog::debug("IPP Printer: encoded IPP request: {} bytes total",
-                          ipp_body.size());
+            spdlog::debug("IPP Printer: encoded IPP request: {} bytes total", ipp_body.size());
 
             // HTTP POST via libhv
             auto url = fmt::format("http://{}:{}/{}", host, port, resource_path);
@@ -151,59 +142,44 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
             req->url = url;
             req->timeout = 30;
             req->SetHeader("Content-Type", "application/ipp");
-            req->body.assign(
-                reinterpret_cast<const char*>(ipp_body.data()),
-                ipp_body.size());
+            req->body.assign(reinterpret_cast<const char*>(ipp_body.data()), ipp_body.size());
 
             auto resp = requests::request(req);
 
             if (resp == nullptr) {
-                std::string err = fmt::format(
-                    "Connection failed to {}:{}", host, port);
+                std::string err = fmt::format("Connection failed to {}:{}", host, port);
                 spdlog::error("IPP Printer: {}", err);
-                helix::ui::queue_update([callback, err]() {
-                    callback(false, err);
-                });
+                helix::ui::queue_update([callback, err]() { callback(false, err); });
                 return;
             }
 
             if (resp->status_code != 200) {
-                std::string err = fmt::format(
-                    "HTTP error: {} {}", static_cast<int>(resp->status_code),
-                    resp->status_message());
+                std::string err =
+                    fmt::format("HTTP error: {} {}", static_cast<int>(resp->status_code),
+                                resp->status_message());
                 spdlog::error("IPP Printer: {}", err);
-                helix::ui::queue_update([callback, err]() {
-                    callback(false, err);
-                });
+                helix::ui::queue_update([callback, err]() { callback(false, err); });
                 return;
             }
 
             // Parse IPP response
-            auto ipp_resp = ipp::parse_response(
-                reinterpret_cast<const uint8_t*>(resp->body.data()),
-                resp->body.size());
+            auto ipp_resp = ipp::parse_response(reinterpret_cast<const uint8_t*>(resp->body.data()),
+                                                resp->body.size());
 
             if (!ipp_resp.is_success()) {
-                std::string err = fmt::format(
-                    "IPP error: {}", ipp_resp.status_message());
+                std::string err = fmt::format("IPP error: {}", ipp_resp.status_message());
                 spdlog::error("IPP Printer: {}", err);
-                helix::ui::queue_update([callback, err]() {
-                    callback(false, err);
-                });
+                helix::ui::queue_update([callback, err]() { callback(false, err); });
                 return;
             }
 
             spdlog::warn("IPP Printer: print job submitted successfully");
-            helix::ui::queue_update([callback]() {
-                callback(true, "");
-            });
+            helix::ui::queue_update([callback]() { callback(true, ""); });
 
         } catch (const std::exception& e) {
             std::string err = fmt::format("Exception: {}", e.what());
             spdlog::error("IPP Printer: {}", err);
-            helix::ui::queue_update([callback, err]() {
-                callback(false, err);
-            });
+            helix::ui::queue_update([callback, err]() { callback(false, err); });
         }
     });
 }

@@ -12,11 +12,12 @@
 
 #include "ams_backend_ace.h"
 
+#include "ui_toast_manager.h"
+#include "ui_update_queue.h"
+
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "post_op_cooldown_manager.h"
-#include "ui_toast_manager.h"
-#include "ui_update_queue.h"
 #include "spdlog/spdlog.h"
 
 #include <chrono>
@@ -44,7 +45,7 @@ AmsBackendAce::AmsBackendAce(MoonrakerAPI* api, MoonrakerClient* client)
     dryer_info_.allows_during_print = false;
     dryer_info_.min_temp_c = 35.0f;
     dryer_info_.max_temp_c = 55.0f;
-    dryer_info_.max_duration_min = 720;       // 12 hours
+    dryer_info_.max_duration_min = 720; // 12 hours
     dryer_info_.supports_fan_control = false;
 }
 
@@ -101,17 +102,14 @@ void AmsBackendAce::on_started() {
             // info_fetched_, emit_event, start_rest_fallback) to main thread.
             // `this` capture is safe because the defer body checks the token
             // and skips if the owner has been destroyed.
-            token.defer("AmsBackendAce::on_started_query",
-                        [this, response]() {
+            token.defer("AmsBackendAce::on_started_query", [this, response]() {
                 // Prefer the native `filament_hub` key; fall back to the
                 // community `ace` key. Pick whichever is a non-empty object.
                 const json* ace_data = nullptr;
                 const char* matched_key = nullptr;
-                if (response.contains("result") &&
-                    response["result"].contains("status")) {
+                if (response.contains("result") && response["result"].contains("status")) {
                     const auto& status = response["result"]["status"];
-                    if (status.contains("filament_hub") &&
-                        status["filament_hub"].is_object() &&
+                    if (status.contains("filament_hub") && status["filament_hub"].is_object() &&
                         !status["filament_hub"].empty()) {
                         ace_data = &status["filament_hub"];
                         matched_key = "filament_hub";
@@ -158,7 +156,8 @@ void AmsBackendAce::on_stopping() {
 }
 
 void AmsBackendAce::handle_status_update(const json& notification) {
-    if (use_rest_fallback_) return; // Using REST polling, ignore subscriptions
+    if (use_rest_fallback_)
+        return; // Using REST polling, ignore subscriptions
 
     // notify_status_update format: {"params": [{...}, timestamp]}
     const json* status = &notification;
@@ -166,7 +165,8 @@ void AmsBackendAce::handle_status_update(const json& notification) {
         !notification["params"].empty()) {
         status = &notification["params"][0];
     }
-    if (!status->is_object()) return;
+    if (!status->is_object())
+        return;
 
     // Native Anycubic GoKlipper publishes under `filament_hub`; community
     // ValgACE under `ace`. Prefer filament_hub, fall back to ace.
@@ -178,7 +178,8 @@ void AmsBackendAce::handle_status_update(const json& notification) {
                !(*status)["ace"].empty()) {
         ace_data = &(*status)["ace"];
     }
-    if (!ace_data) return;
+    if (!ace_data)
+        return;
 
     parse_ace_object(*ace_data);
     emit_event(EVENT_STATE_CHANGED);
@@ -371,8 +372,7 @@ AmsError AmsBackendAce::unload_filament(int /*slot_index*/) {
                     if (!system_info_.units.empty() && system_info_.current_slot >= 0) {
                         auto& unit = system_info_.units[0];
                         auto si = static_cast<size_t>(system_info_.current_slot);
-                        if (si < unit.slots.size() &&
-                            unit.slots[si].status == SlotStatus::LOADED) {
+                        if (si < unit.slots.size() && unit.slots[si].status == SlotStatus::LOADED) {
                             unit.slots[si].status = SlotStatus::AVAILABLE;
                         }
                     }
@@ -452,8 +452,7 @@ AmsError AmsBackendAce::set_slot_info(int slot_index, const SlotInfo& info, bool
         std::lock_guard<std::mutex> lock(mutex_);
 
         // Validate slot index
-        if (system_info_.units.empty() ||
-            slot_index < 0 ||
+        if (system_info_.units.empty() || slot_index < 0 ||
             slot_index >= static_cast<int>(system_info_.units[0].slots.size())) {
             return AmsErrorHelper::invalid_slot(slot_index, 0);
         }
@@ -500,8 +499,8 @@ AmsError AmsBackendAce::set_slot_info(int slot_index, const SlotInfo& info, bool
         }
     }
 
-    spdlog::info("[ACE] Updated slot {} info (persist={}): {} {}",
-                 slot_index, persist, info.material, info.color_name);
+    spdlog::info("[ACE] Updated slot {} info (persist={}): {} {}", slot_index, persist,
+                 info.material, info.color_name);
 
     if (persist && override_store_) {
         // Re-read from overrides_ under the lock to pick up the staged copy.
@@ -519,8 +518,7 @@ AmsError AmsBackendAce::set_slot_info(int slot_index, const SlotInfo& info, bool
         // the scheduled save by design.
         const std::string tag = backend_log_tag();
         override_store_->save_async(
-            slot_index, ovr_to_save,
-            [tag, slot_index](bool success, const std::string& err) {
+            slot_index, ovr_to_save, [tag, slot_index](bool success, const std::string& err) {
                 if (!success) {
                     spdlog::warn("{} Override persist failed for slot {}: {}", tag, slot_index,
                                  err);
@@ -717,7 +715,8 @@ void AmsBackendAce::parse_ace_object(const json& data) {
 
             for (size_t i = 0; i < slots_arr.size(); ++i) {
                 const auto& slot_json = slots_arr[i];
-                if (!slot_json.is_object()) continue;
+                if (!slot_json.is_object())
+                    continue;
 
                 auto& slot = unit.slots[i];
                 slot.slot_index = static_cast<int>(i);
@@ -914,8 +913,7 @@ uint32_t AmsBackendAce::parse_slot_color(const json& color_val) {
             uint8_t r = static_cast<uint8_t>(color_val[0].get<int>());
             uint8_t g = static_cast<uint8_t>(color_val[1].get<int>());
             uint8_t b = static_cast<uint8_t>(color_val[2].get<int>());
-            return (static_cast<uint32_t>(r) << 16) |
-                   (static_cast<uint32_t>(g) << 8) |
+            return (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) |
                    static_cast<uint32_t>(b);
         } catch (const std::exception& e) {
             spdlog::debug("[ACE] Failed to parse color array: {}", e.what());
@@ -968,7 +966,8 @@ void AmsBackendAce::start_rest_fallback() {
 }
 
 void AmsBackendAce::stop_rest_fallback() {
-    if (!use_rest_fallback_) return;
+    if (!use_rest_fallback_)
+        return;
 
     rest_stop_requested_.store(true);
     {
@@ -1038,16 +1037,14 @@ void AmsBackendAce::poll_info() {
         // we enqueue the parse defer first, then signal state->done + cv on the
         // bg thread before returning. The defer becomes a no-op if the owner
         // has been destroyed; the poll_info caller is unblocked either way.
-        token.defer("AmsBackendAce::poll_info_apply",
-                    [this, resp]() {
+        token.defer("AmsBackendAce::poll_info_apply", [this, resp]() {
             if (resp.success && resp.data.contains("result")) {
                 parse_info_response(resp.data["result"]);
                 info_fetched_.store(true);
                 info_fetch_failures_ = 0;
             } else {
                 int failures = ++info_fetch_failures_;
-                spdlog::debug("[ACE] /server/ace/info attempt {} failed: {}", failures,
-                              resp.error);
+                spdlog::debug("[ACE] /server/ace/info attempt {} failed: {}", failures, resp.error);
                 if (failures == MAX_INFO_FETCH_FAILURES) {
                     spdlog::warn("[ACE] Moonraker bridge not available at /server/ace/info after "
                                  "{} attempts. BunnyACE/DuckACE users need to install ValgACE's "
@@ -1359,23 +1356,56 @@ std::vector<helix::printer::DeviceAction> AmsBackendAce::get_device_actions() co
     using DA = helix::printer::DeviceAction;
     using AT = helix::printer::ActionType;
     return {
-        DA{"ace_manual_feed", "Manual Feed", "", "filament_control",
+        DA{"ace_manual_feed",
+           "Manual Feed",
+           "",
+           "filament_control",
            "Feed filament from current slot",
-           AT::BUTTON, {}, {}, 0, 100, "", -1, true, ""},
-        DA{"ace_manual_retract", "Manual Retract", "", "filament_control",
+           AT::BUTTON,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
+        DA{"ace_manual_retract",
+           "Manual Retract",
+           "",
+           "filament_control",
            "Retract filament to current slot",
-           AT::BUTTON, {}, {}, 0, 100, "", -1, true, ""},
-        DA{"ace_feed_assist_toggle", "Feed Assist", "", "maintenance",
+           AT::BUTTON,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
+        DA{"ace_feed_assist_toggle",
+           "Feed Assist",
+           "",
+           "maintenance",
            "Enable feed assist for active slot during printing",
-           AT::TOGGLE, {}, {}, 0, 100, "", -1, true, ""},
+           AT::TOGGLE,
+           {},
+           {},
+           0,
+           100,
+           "",
+           -1,
+           true,
+           ""},
     };
 }
 
-AmsError AmsBackendAce::execute_device_action(const std::string& action_id,
-                                                  const std::any& value) {
+AmsError AmsBackendAce::execute_device_action(const std::string& action_id, const std::any& value) {
     if (action_id == "ace_manual_feed") {
         int slot = get_current_slot();
-        if (slot < 0) slot = 0;
+        if (slot < 0)
+            slot = 0;
         static constexpr int MANUAL_FEED_LENGTH = 50;
         static constexpr int MANUAL_FEED_SPEED = 50;
         return execute_gcode("ACE_FEED INDEX=" + std::to_string(slot) +
@@ -1385,7 +1415,8 @@ AmsError AmsBackendAce::execute_device_action(const std::string& action_id,
 
     if (action_id == "ace_manual_retract") {
         int slot = get_current_slot();
-        if (slot < 0) slot = 0;
+        if (slot < 0)
+            slot = 0;
         static constexpr int MANUAL_RETRACT_LENGTH = 50;
         static constexpr int MANUAL_RETRACT_SPEED = 50;
         return execute_gcode("ACE_RETRACT INDEX=" + std::to_string(slot) +
@@ -1395,7 +1426,8 @@ AmsError AmsBackendAce::execute_device_action(const std::string& action_id,
 
     if (action_id == "ace_feed_assist_toggle") {
         int slot = get_current_slot();
-        if (slot < 0) slot = 0;
+        if (slot < 0)
+            slot = 0;
 
         bool enable = true;
         if (value.has_value()) {
@@ -1454,8 +1486,8 @@ void AmsBackendAce::apply_overrides(SlotInfo& slot, int slot_index) {
         slot.material = o.material;
 }
 
-void AmsBackendAce::check_hardware_event_clear(SlotInfo& slot, int slot_index,
-                                               SlotStatus prev, SlotStatus curr) {
+void AmsBackendAce::check_hardware_event_clear(SlotInfo& slot, int slot_index, SlotStatus prev,
+                                               SlotStatus curr) {
     // ACE has no RFID UID to track. Detect "new spool inserted" as a status
     // transition from EMPTY -> present (AVAILABLE / LOADED). A LOADED ->
     // EMPTY transition is NOT a swap — the user may reinsert the same spool.
@@ -1507,20 +1539,19 @@ void AmsBackendAce::clear_override_locked(int slot_index, SlotInfo& slot) {
         // this returns (MR tracker ~60s) and potentially after the backend
         // itself is gone. Same rationale as save_async.
         const std::string tag = backend_log_tag();
-        override_store_->clear_async(
-            slot_index, [tag, slot_index](bool ok, std::string err) {
-                if (!ok) {
-                    spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
-                }
-            });
+        override_store_->clear_async(slot_index, [tag, slot_index](bool ok, std::string err) {
+            if (!ok) {
+                spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
+            }
+        });
     }
 }
 
 void AmsBackendAce::clear_slot_override(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto* slot = system_info_.units.empty() ? nullptr
-                                                : system_info_.units[0].get_slot(slot_index);
+        auto* slot =
+            system_info_.units.empty() ? nullptr : system_info_.units[0].get_slot(slot_index);
         if (!slot) {
             spdlog::warn("{} clear_slot_override: no slot entry for index {}", backend_log_tag(),
                          slot_index);

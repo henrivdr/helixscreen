@@ -1246,19 +1246,15 @@ void ControlsPanel::handle_home_all() {
         // bg_cb defers the whole callback body to the main thread atomically —
         // no bare bg-thread expired() check (L081 Mechanism C, hit on v0.99.60/ad5x).
         api_->motion().home_axes(
-            "",
-            lifetime_.bg_cb("ControlsPanel::home_all_ok",
-                            [this]() { operation_guard_.end(); }),
-            lifetime_.bg_cb("ControlsPanel::home_all_err",
-                            [this](const MoonrakerError& err) {
-                                operation_guard_.end();
-                                if (err.type == MoonrakerErrorType::TIMEOUT) {
-                                    NOTIFY_WARNING(lv_tr(
-                                        "Homing may still be running — response timed out"));
-                                } else {
-                                    NOTIFY_ERROR(lv_tr("Homing failed: {}"), err.user_message());
-                                }
-                            }));
+            "", lifetime_.bg_cb("ControlsPanel::home_all_ok", [this]() { operation_guard_.end(); }),
+            lifetime_.bg_cb("ControlsPanel::home_all_err", [this](const MoonrakerError& err) {
+                operation_guard_.end();
+                if (err.type == MoonrakerErrorType::TIMEOUT) {
+                    NOTIFY_WARNING(lv_tr("Homing may still be running — response timed out"));
+                } else {
+                    NOTIFY_ERROR(lv_tr("Homing failed: {}"), err.user_message());
+                }
+            }));
     }
 }
 

@@ -1,13 +1,13 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../lvgl_test_fixture.h"
 #include "ams_backend_afc.h"
 #include "ams_state.h"
 #include "ams_types.h"
+#include "config.h"
 #include "error_event.h"
 #include "moonraker_api.h"
-
-#include "config.h"
 #include "settings_manager.h"
 
 #include <algorithm>
@@ -16,7 +16,6 @@
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
 
 using namespace helix;
 /**
@@ -3333,8 +3332,7 @@ TEST_CASE("AFC get_type returns AFC", "[ams][afc][spoolman]") {
 // by a per-printer setting: get_afc_unload_after_print() (default false). The
 // pre-print runout warning is suppressed only when the setting is enabled.
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "AFC auto_unloads_after_print defaults to false (setting off)",
+TEST_CASE_METHOD(LVGLTestFixture, "AFC auto_unloads_after_print defaults to false (setting off)",
                  "[ams][afc][capability]") {
     helix::Config::get_instance();
     helix::SettingsManager::instance().init_subjects();
@@ -3346,8 +3344,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(helper.auto_unloads_after_print() == false);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "AFC auto_unloads_after_print returns true when setting enabled",
+TEST_CASE_METHOD(LVGLTestFixture, "AFC auto_unloads_after_print returns true when setting enabled",
                  "[ams][afc][capability]") {
     helix::Config::get_instance();
     helix::SettingsManager::instance().init_subjects();
@@ -3362,8 +3359,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(helper.auto_unloads_after_print() == false);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "SettingsManager afc_unload_after_print round-trips and persists",
+TEST_CASE_METHOD(LVGLTestFixture, "SettingsManager afc_unload_after_print round-trips and persists",
                  "[ams][afc][settings]") {
     helix::Config* config = helix::Config::get_instance();
     auto& settings = helix::SettingsManager::instance();
@@ -4307,8 +4303,7 @@ static const char* kJamLine =
 TEST_CASE("AFC jam with toolhead loaded offers Unload not Eject", "[ams][afc][classify]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
-    helper.feed_afc_extruder("extruder",
-                             {{"tool_start_status", true}, {"lane_loaded", "lane2"}});
+    helper.feed_afc_extruder("extruder", {{"tool_start_status", true}, {"lane_loaded", "lane2"}});
 
     helix::ClassifyContext ctx;
     ctx.is_paused = true;
@@ -4317,14 +4312,14 @@ TEST_CASE("AFC jam with toolhead loaded offers Unload not Eject", "[ams][afc][cl
     REQUIRE(e.has_value());
     REQUIRE(e->severity == helix::ErrorSeverity::CRITICAL);
     REQUIRE(e->source == helix::ErrorSource::AFC);
-    REQUIRE(e->detail.find("reload filament manually") != std::string::npos);  // full text
+    REQUIRE(e->detail.find("reload filament manually") != std::string::npos); // full text
 
     auto has = [&](const std::string& label) {
         return std::any_of(e->recovery_actions.begin(), e->recovery_actions.end(),
                            [&](const helix::RecoveryAction& a) { return a.label == label; });
     };
     REQUIRE(has("Resume"));
-    REQUIRE(has("Unload"));   // toolhead loaded -> Unload (closes R1)
+    REQUIRE(has("Unload")); // toolhead loaded -> Unload (closes R1)
     REQUIRE(has("Recover"));
     REQUIRE_FALSE(has("Eject"));
 }
@@ -4332,8 +4327,7 @@ TEST_CASE("AFC jam with toolhead loaded offers Unload not Eject", "[ams][afc][cl
 TEST_CASE("AFC jam with empty toolhead offers Eject not Unload", "[ams][afc][classify]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
-    helper.feed_afc_extruder("extruder",
-                             {{"tool_start_status", false}, {"lane_loaded", "lane2"}});
+    helper.feed_afc_extruder("extruder", {{"tool_start_status", false}, {"lane_loaded", "lane2"}});
 
     helix::ClassifyContext ctx;
     ctx.is_paused = true;
@@ -4345,7 +4339,7 @@ TEST_CASE("AFC jam with empty toolhead offers Eject not Unload", "[ams][afc][cla
                            [&](const helix::RecoveryAction& a) { return a.label == label; });
     };
     REQUIRE(has("Resume"));
-    REQUIRE(has("Eject"));      // empty toolhead -> Eject
+    REQUIRE(has("Eject")); // empty toolhead -> Eject
     REQUIRE_FALSE(has("Unload"));
     REQUIRE(has("Recover"));
 }
@@ -4363,13 +4357,13 @@ TEST_CASE("AFC catch-all: paused + error_state + unknown !! is CRITICAL AFC",
     REQUIRE(e.has_value());
     REQUIRE(e->severity == helix::ErrorSeverity::CRITICAL);
     REQUIRE(e->source == helix::ErrorSource::AFC);
-    REQUIRE_FALSE(e->recovery_actions.empty());  // std actions attached
+    REQUIRE_FALSE(e->recovery_actions.empty()); // std actions attached
 }
 
 TEST_CASE("AFC defers when not paused and no error_state", "[ams][afc][classify]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
-    helix::ClassifyContext ctx;  // idle, no error_state fed
+    helix::ClassifyContext ctx; // idle, no error_state fed
     REQUIRE_FALSE(helper.classify_error("!! Some AFC fault", ctx).has_value());
 }
 
@@ -4385,29 +4379,37 @@ TEST_CASE("AFC ignores non-error lines", "[ams][afc][classify]") {
 TEST_CASE("AFC narration maps purge to purge not feed (S1)", "[unit][ams][afc][narration]") {
     AmsBackendAfcTestHelper afc;
     REQUIRE(afc.match_narration_phase("Purge") == std::optional<std::string>("purge"));
-    REQUIRE(afc.match_narration_phase("Purging old filament") == std::optional<std::string>("purge"));
-    REQUIRE(afc.match_narration_phase("Loading lane 2 to hub") == std::optional<std::string>("feed"));
+    REQUIRE(afc.match_narration_phase("Purging old filament") ==
+            std::optional<std::string>("purge"));
+    REQUIRE(afc.match_narration_phase("Loading lane 2 to hub") ==
+            std::optional<std::string>("feed"));
 }
-TEST_CASE("AFC narration recognizes brush/clean/cut/poop/kick (S2)", "[unit][ams][afc][narration]") {
+TEST_CASE("AFC narration recognizes brush/clean/cut/poop/kick (S2)",
+          "[unit][ams][afc][narration]") {
     AmsBackendAfcTestHelper afc;
-    REQUIRE(afc.match_narration_phase("AFC_Brush: Clean Nozzle") == std::optional<std::string>("clean"));
+    REQUIRE(afc.match_narration_phase("AFC_Brush: Clean Nozzle") ==
+            std::optional<std::string>("clean"));
     REQUIRE(afc.match_narration_phase("Move to Brush") == std::optional<std::string>("brush"));
     REQUIRE(afc.match_narration_phase("Cutting tip") == std::optional<std::string>("cut"));
     REQUIRE(afc.match_narration_phase("Poop") == std::optional<std::string>("poop"));
     REQUIRE(afc.match_narration_phase("Kick") == std::optional<std::string>("kick"));
-    REQUIRE(afc.match_narration_phase("lane 2 is now loaded in toolhead") == std::optional<std::string>("load"));
+    REQUIRE(afc.match_narration_phase("lane 2 is now loaded in toolhead") ==
+            std::optional<std::string>("load"));
 }
 TEST_CASE("AFC narration ignores unrelated lines", "[unit][ams][afc][narration]") {
     AmsBackendAfcTestHelper afc;
     REQUIRE_FALSE(afc.match_narration_phase("Klipper state: ready").has_value());
     REQUIRE_FALSE(afc.match_narration_phase("").has_value());
 }
-TEST_CASE("AFC LOAD_SWAP template ordering puts purge after feed, brush after purge", "[unit][ams][afc][narration]") {
+TEST_CASE("AFC LOAD_SWAP template ordering puts purge after feed, brush after purge",
+          "[unit][ams][afc][narration]") {
     AmsBackendAfcTestHelper afc;
     auto tmpl = afc.toolchange_phase_template(StepOperationType::LOAD_SWAP);
     REQUIRE_FALSE(tmpl.empty());
     auto idx = [&](const std::string& id) {
-        for (size_t i = 0; i < tmpl.size(); ++i) if (tmpl[i].id == id) return static_cast<int>(i);
+        for (size_t i = 0; i < tmpl.size(); ++i)
+            if (tmpl[i].id == id)
+                return static_cast<int>(i);
         return -1;
     };
     REQUIRE(idx("heat") == 0);

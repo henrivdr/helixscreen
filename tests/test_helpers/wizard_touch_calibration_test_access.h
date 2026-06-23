@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "touch_calibration_panel.h"
 #include "ui_wizard_touch_calibration.h"
+
+#include "touch_calibration_panel.h"
 
 /**
  * @brief Test-only access to WizardTouchCalibrationStep internals.

@@ -29,7 +29,6 @@ namespace helix::gcode {
  * @return true if the line was a recognized filament-color line AND at least
  *         one valid `#RRGGBB[AA]` token was extracted; false otherwise.
  */
-bool parse_filament_color_palette(std::string_view line,
-                                  std::vector<std::string>& out_palette);
+bool parse_filament_color_palette(std::string_view line, std::vector<std::string>& out_palette);
 
 } // namespace helix::gcode

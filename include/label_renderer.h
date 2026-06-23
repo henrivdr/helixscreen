@@ -14,8 +14,7 @@ namespace helix {
 class LabelRenderer {
   public:
     /// Render a complete label for the given spool
-    static LabelBitmap render(const SpoolInfo& spool, LabelPreset preset,
-                              const LabelSize& size);
+    static LabelBitmap render(const SpoolInfo& spool, LabelPreset preset, const LabelSize& size);
 };
 
 } // namespace helix

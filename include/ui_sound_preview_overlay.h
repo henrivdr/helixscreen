@@ -17,7 +17,9 @@ class SoundPreviewOverlay : public OverlayBase {
     void register_callbacks() override;
     lv_obj_t* create(lv_obj_t* parent) override;
 
-    const char* get_name() const override { return "Preview Sounds"; }
+    const char* get_name() const override {
+        return "Preview Sounds";
+    }
 
     void on_activate() override;
     void on_deactivate() override;

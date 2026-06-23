@@ -169,12 +169,10 @@ void ColorSensorManager::update_from_status(const nlohmann::json& status) {
             ColorSensorState old_state = state;
 
             // Guard against subscription-restricted nulls (type_error.302).
-            if (auto it = sensor_data.find("color");
-                it != sensor_data.end() && it->is_string()) {
+            if (auto it = sensor_data.find("color"); it != sensor_data.end() && it->is_string()) {
                 state.color_hex = it->get<std::string>();
             }
-            if (auto it = sensor_data.find("td");
-                it != sensor_data.end() && it->is_number()) {
+            if (auto it = sensor_data.find("td"); it != sensor_data.end() && it->is_number()) {
                 state.transmission_distance = it->get<float>();
             }
 

@@ -5,6 +5,7 @@
 #include "ui_observer_guard.h"
 
 #include "lvgl/lvgl.h"
+
 #include <string>
 
 namespace helix {
@@ -35,8 +36,8 @@ class HelixSparkline {
     static void on_delete(lv_event_t* e);
     void invalidate_self();
 
-    lv_obj_t*     obj_ = nullptr;
-    std::string   source_;
+    lv_obj_t* obj_ = nullptr;
+    std::string source_;
     ObserverGuard tick_observer_; // dtor calls reset() automatically (L085)
 };
 

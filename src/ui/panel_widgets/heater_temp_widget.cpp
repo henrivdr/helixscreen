@@ -6,7 +6,6 @@
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
 #include "ui_nav_manager.h"
-#include "temperature_service.h"
 #include "ui_temperature_utils.h"
 #include "ui_utils.h"
 
@@ -15,6 +14,7 @@
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
+#include "temperature_service.h"
 
 #include <spdlog/spdlog.h>
 
@@ -25,7 +25,10 @@ namespace helix {
 
 const HeaterTempWidget::Config& nozzle_temp_config() {
     static const HeaterTempWidget::Config cfg{
-        "temperature", "temp_btn", "nozzle_icon_glyph", "[NozzleTempWidget]",
+        "temperature",
+        "temp_btn",
+        "nozzle_icon_glyph",
+        "[NozzleTempWidget]",
         TempGraphOverlay::Mode::Nozzle,
         [](PrinterState& p) { return p.get_active_extruder_temp_subject(); },
         [](PrinterState& p) { return p.get_active_extruder_target_subject(); }};
@@ -34,7 +37,10 @@ const HeaterTempWidget::Config& nozzle_temp_config() {
 
 const HeaterTempWidget::Config& bed_temp_config() {
     static const HeaterTempWidget::Config cfg{
-        "bed_temperature", "bed_temp_btn", "bed_icon_glyph", "[BedTempWidget]",
+        "bed_temperature",
+        "bed_temp_btn",
+        "bed_icon_glyph",
+        "[BedTempWidget]",
         TempGraphOverlay::Mode::Bed,
         [](PrinterState& p) { return p.get_bed_temp_subject(); },
         [](PrinterState& p) { return p.get_bed_target_subject(); }};
@@ -43,7 +49,10 @@ const HeaterTempWidget::Config& bed_temp_config() {
 
 const HeaterTempWidget::Config& chamber_temp_config() {
     static const HeaterTempWidget::Config cfg{
-        "chamber_temperature", "chamber_temp_btn", "chamber_icon_glyph", "[ChamberTempWidget]",
+        "chamber_temperature",
+        "chamber_temp_btn",
+        "chamber_icon_glyph",
+        "[ChamberTempWidget]",
         TempGraphOverlay::Mode::Chamber,
         [](PrinterState& p) { return p.get_chamber_temp_subject(); },
         [](PrinterState& p) { return p.get_chamber_target_subject(); }};
@@ -103,12 +112,12 @@ void HeaterTempWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
     using helix::ui::observe_int_sync;
     auto token = lifetime_.token();
 
-    temp_observer_ = observe_int_sync<HeaterTempWidget>(
-        cfg_.temp_getter(printer_state_), this, [token](HeaterTempWidget* self, int temp) {
-            if (token.expired())
-                return;
-            self->on_temp_changed(temp);
-        });
+    temp_observer_ = observe_int_sync<HeaterTempWidget>(cfg_.temp_getter(printer_state_), this,
+                                                        [token](HeaterTempWidget* self, int temp) {
+                                                            if (token.expired())
+                                                                return;
+                                                            self->on_temp_changed(temp);
+                                                        });
     target_observer_ = observe_int_sync<HeaterTempWidget>(
         cfg_.target_getter(printer_state_), this, [token](HeaterTempWidget* self, int target) {
             if (token.expired())

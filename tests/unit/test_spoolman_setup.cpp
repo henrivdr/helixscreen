@@ -79,7 +79,7 @@ TEST_CASE("SpoolmanSetup::build_spoolman_config_entries", "[spoolman_setup]") {
     SECTION("config entry URL matches build_url") {
         std::string host = "spoolman.local";
         std::string port = "8080";
-        auto entries     = SpoolmanSetup::build_spoolman_config_entries(host, port);
+        auto entries = SpoolmanSetup::build_spoolman_config_entries(host, port);
         REQUIRE_FALSE(entries.empty());
         CHECK(entries[0].second == SpoolmanSetup::build_url(host, port));
     }
@@ -105,7 +105,8 @@ TEST_CASE("SpoolmanSetup::parse_url_components", "[spoolman_setup]") {
     }
 
     SECTION("strips trailing path") {
-        auto [host, port] = SpoolmanSetup::parse_url_components("http://192.168.1.100:7912/api/v1/health");
+        auto [host, port] =
+            SpoolmanSetup::parse_url_components("http://192.168.1.100:7912/api/v1/health");
         CHECK(host == "192.168.1.100");
         CHECK(port == "7912");
     }
@@ -119,8 +120,8 @@ TEST_CASE("SpoolmanSetup::parse_url_components", "[spoolman_setup]") {
     SECTION("round-trip: build_url then parse_url_components") {
         std::string orig_host = "192.168.1.100";
         std::string orig_port = "7912";
-        std::string url       = SpoolmanSetup::build_url(orig_host, orig_port);
-        auto [host, port]     = SpoolmanSetup::parse_url_components(url);
+        std::string url = SpoolmanSetup::build_url(orig_host, orig_port);
+        auto [host, port] = SpoolmanSetup::parse_url_components(url);
         CHECK(host == orig_host);
         CHECK(port == orig_port);
     }
@@ -128,8 +129,8 @@ TEST_CASE("SpoolmanSetup::parse_url_components", "[spoolman_setup]") {
     SECTION("round-trip with non-default port") {
         std::string orig_host = "spoolman.local";
         std::string orig_port = "8080";
-        std::string url       = SpoolmanSetup::build_url(orig_host, orig_port);
-        auto [host, port]     = SpoolmanSetup::parse_url_components(url);
+        std::string url = SpoolmanSetup::build_url(orig_host, orig_port);
+        auto [host, port] = SpoolmanSetup::parse_url_components(url);
         CHECK(host == orig_host);
         CHECK(port == orig_port);
     }

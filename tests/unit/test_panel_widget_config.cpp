@@ -1708,8 +1708,8 @@ namespace {
 
 /// Find an entry by id within a vector. Returns nullptr if missing.
 const PanelWidgetEntry* find_entry(const std::vector<PanelWidgetEntry>& v, const char* id) {
-    auto it = std::find_if(v.begin(), v.end(),
-                           [id](const PanelWidgetEntry& e) { return e.id == id; });
+    auto it =
+        std::find_if(v.begin(), v.end(), [id](const PanelWidgetEntry& e) { return e.id == id; });
     return it == v.end() ? nullptr : &*it;
 }
 

@@ -3,16 +3,17 @@
 
 #pragma once
 
-#include "panel_widget.h"
-#include "temp_graph_controller.h"
 #include "ui_modal.h"
 
-#include "hv/json.hpp"
+#include "panel_widget.h"
+#include "temp_graph_controller.h"
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "hv/json.hpp"
 
 namespace helix {
 
@@ -34,13 +35,19 @@ class TempGraphWidget : public PanelWidget {
     void attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) override;
     void detach() override;
     std::string get_component_name() const override;
-    const char* id() const override { return instance_id_.c_str(); }
+    const char* id() const override {
+        return instance_id_.c_str();
+    }
     void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override;
     void on_activate() override;
     void on_deactivate() override;
-    bool has_edit_configure() const override { return true; }
+    bool has_edit_configure() const override {
+        return true;
+    }
     bool on_edit_configure() override;
-    bool supports_reuse() const override { return true; }
+    bool supports_reuse() const override {
+        return true;
+    }
 
     /// Map grid size to appropriate feature flags
     static uint32_t features_for_size(int colspan, int rowspan);
@@ -98,8 +105,12 @@ class TempGraphWidget : public PanelWidget {
         TempGraphConfigModal(const nlohmann::json& config, SaveCallback on_save);
         ~TempGraphConfigModal() override = default;
 
-        const char* get_name() const override { return "Temperature Graph Config"; }
-        const char* component_name() const override { return "temp_graph_config_modal"; }
+        const char* get_name() const override {
+            return "Temperature Graph Config";
+        }
+        const char* component_name() const override {
+            return "temp_graph_config_modal";
+        }
 
         /// Map a Klipper object key to its user-facing label.
         /// Public so the outer widget can label graph series with the same
@@ -113,10 +124,10 @@ class TempGraphWidget : public PanelWidget {
       private:
         /// Per-row state for sensor toggles
         struct SensorRow {
-            std::string name;       ///< Klipper sensor key
-            std::string display;    ///< Human-readable name
+            std::string name;    ///< Klipper sensor key
+            std::string display; ///< Human-readable name
             bool enabled = true;
-            int color_idx = 0;      ///< Index into TEMP_GRAPH_SERIES_COLORS palette
+            int color_idx = 0; ///< Index into TEMP_GRAPH_SERIES_COLORS palette
             lv_obj_t* swatch = nullptr;
             lv_obj_t* sw = nullptr;
         };

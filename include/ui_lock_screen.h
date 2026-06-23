@@ -20,7 +20,7 @@ namespace helix::ui {
  *   lock_digit_clicked, lock_backspace_clicked, lock_confirm_clicked
  */
 class LockScreenOverlay {
-public:
+  public:
     static LockScreenOverlay& instance();
 
     /** Show the lock screen overlay. No-op if already visible. */
@@ -40,7 +40,7 @@ public:
     // Public so the animation completed callback can call it
     void clear_digits();
 
-private:
+  private:
     LockScreenOverlay() = default;
 
     void create_overlay();

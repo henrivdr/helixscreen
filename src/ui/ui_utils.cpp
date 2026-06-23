@@ -78,4 +78,3 @@ const char* ui_brightness_to_lightbulb_icon(int brightness) {
     }
     return "lightbulb_on"; // 100%
 }
-

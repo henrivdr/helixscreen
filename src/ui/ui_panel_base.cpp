@@ -3,12 +3,13 @@
 
 #include "ui_panel_base.h"
 
+#include "ui_nav_manager.h"
+#include "ui_utils.h"
+
 #include "helix-xml/src/xml/lv_xml.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
 #include "theme_manager.h"
-#include "ui_nav_manager.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 

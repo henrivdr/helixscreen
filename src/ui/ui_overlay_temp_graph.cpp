@@ -7,6 +7,7 @@
 #include "ui_error_reporting.h"
 #include "ui_heater_config.h"
 #include "ui_nav_manager.h"
+#include "ui_temperature_utils.h"
 #include "ui_utils.h"
 
 #include "app_globals.h"
@@ -20,7 +21,6 @@
 #include "temperature_sensor_types.h"
 #include "temperature_service.h"
 #include "theme_manager.h"
-#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -176,8 +176,7 @@ void TempGraphOverlay::on_activate() {
         cfg.axis_size = "sm";
         cfg.initial_features = TEMP_GRAPH_FEATURE_LINES | TEMP_GRAPH_FEATURE_TARGET_LINES |
                                TEMP_GRAPH_FEATURE_Y_AXIS | TEMP_GRAPH_FEATURE_X_AXIS |
-                               TEMP_GRAPH_FEATURE_GRADIENTS |
-                               TEMP_GRAPH_FEATURE_TARGET_HISTORY;
+                               TEMP_GRAPH_FEATURE_GRADIENTS | TEMP_GRAPH_FEATURE_TARGET_HISTORY;
         cfg.series = std::move(specs);
         controller_ = std::make_unique<helix::TempGraphController>(graph_container_, cfg);
 
@@ -372,8 +371,8 @@ void TempGraphOverlay::apply_default_visibility() {
     for (auto& s : series_) {
         switch (mode_) {
         case Mode::GraphOnly:
-            s.visible = (s.heater_name.find("extruder") == 0) ||
-                        (s.heater_name == "heater_bed") || (s.heater_name == "chamber");
+            s.visible = (s.heater_name.find("extruder") == 0) || (s.heater_name == "heater_bed") ||
+                        (s.heater_name == "chamber");
             break;
         case Mode::Nozzle:
             // Match any extruder (extruder, extruder1, etc.)
@@ -664,8 +663,9 @@ void TempGraphOverlay::on_temp_graph_preset_clicked(lv_event_t* e) {
                   static_cast<int>(type));
 
     // Update local state
-    self->temp_control_panel_->set_heater(type, self->temp_control_panel_->heater(type).current,
-                                          helix::ui::temperature::degrees_to_deci(data.preset_value));
+    self->temp_control_panel_->set_heater(
+        type, self->temp_control_panel_->heater(type).current,
+        helix::ui::temperature::degrees_to_deci(data.preset_value));
 
     // Send via the controller — it resolves the klipper name internally (chamber
     // never sends a stale HEATER=chamber) and shows the standard error toast.

@@ -526,8 +526,8 @@ AmsError AmsBackendToolChanger::set_tool_mapping(int tool_number, int slot_index
     std::ostringstream cmd;
     cmd << "ASSIGN_TOOL TOOL=" << physical_tool_name << " N=" << tool_number;
 
-    spdlog::info("[AMS ToolChanger] Remapping T{} -> physical {} (slot {})",
-                 tool_number, physical_tool_name, slot_index);
+    spdlog::info("[AMS ToolChanger] Remapping T{} -> physical {} (slot {})", tool_number,
+                 physical_tool_name, slot_index);
     return execute_gcode(cmd.str());
 }
 
@@ -568,8 +568,8 @@ AmsError AmsBackendToolChanger::reset_tool_mappings() {
     for (const auto& [tool_num, tool_name] : remaps_needed) {
         std::ostringstream cmd;
         cmd << "ASSIGN_TOOL TOOL=" << tool_name << " N=" << tool_num;
-        spdlog::info("[AMS ToolChanger] Resetting T{} -> physical {} (identity)",
-                     tool_num, tool_name);
+        spdlog::info("[AMS ToolChanger] Resetting T{} -> physical {} (identity)", tool_num,
+                     tool_name);
         auto err = execute_gcode(cmd.str());
         if (err.result != AmsResult::SUCCESS) {
             last_error = err;

@@ -58,7 +58,9 @@ class IPanelLifecycle {
      *
      * @return true if rebuilt, false if skipped (not yet shown, not this instance, etc.)
      */
-    virtual bool rebuild() { return false; }
+    virtual bool rebuild() {
+        return false;
+    }
 
     /**
      * @brief Get human-readable name for logging

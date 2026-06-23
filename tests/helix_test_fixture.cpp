@@ -3,15 +3,16 @@
 
 #include "helix_test_fixture.h"
 
+#include "ui_modal.h"
+#include "ui_nav_manager.h"
+#include "ui_test_utils.h"
+#include "ui_update_queue.h"
+
 #include "async_lifetime_guard.h"
 #include "config.h"
 #include "src/ui/panel_widgets/print_status_widget.h"
 #include "system_settings_manager.h"
 #include "test_helpers/print_control_buttons_test_access.h"
-#include "ui_modal.h"
-#include "ui_nav_manager.h"
-#include "ui_test_utils.h"
-#include "ui_update_queue.h"
 
 #include <cstdlib>
 

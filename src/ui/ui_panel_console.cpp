@@ -3,11 +3,6 @@
 
 #include "ui_panel_console.h"
 
-#include "console_filter_engine.h"
-#include "observer_factory.h"
-#include "printer_detector.h"
-#include "printer_state.h"
-#include "settings_manager.h"
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
@@ -21,8 +16,13 @@
 #include "ui_utils.h"
 
 #include "app_globals.h"
+#include "console_filter_engine.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
+#include "observer_factory.h"
+#include "printer_detector.h"
+#include "printer_state.h"
+#include "settings_manager.h"
 #include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
@@ -167,7 +167,7 @@ std::string format_timestamp(double timestamp) {
     } else {
         t = std::time(nullptr);
     }
-    struct tm tm_buf{};
+    struct tm tm_buf {};
     localtime_r(&t, &tm_buf);
     char buf[12];
     std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d ", tm_buf.tm_hour, tm_buf.tm_min,

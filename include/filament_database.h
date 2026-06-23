@@ -43,8 +43,8 @@ struct MaterialOverride {
     std::optional<int> nozzle_min;
     std::optional<int> nozzle_max;
     std::optional<int> bed_temp;
-    std::optional<std::string> preheat_macro;        ///< Klipper macro name (uppercase canonical form)
-    std::optional<bool> macro_handles_heating;       ///< true = macro replaces SET_HEATER_TEMPERATURE
+    std::optional<std::string> preheat_macro;  ///< Klipper macro name (uppercase canonical form)
+    std::optional<bool> macro_handles_heating; ///< true = macro replaces SET_HEATER_TEMPERATURE
 };
 
 /**
@@ -242,9 +242,12 @@ inline std::optional<MaterialInfo> find_material(std::string_view name) {
             MaterialInfo result = mat;
             const auto* ovr = get_material_override(mat.name);
             if (ovr) {
-                if (ovr->nozzle_min) result.nozzle_min = *ovr->nozzle_min;
-                if (ovr->nozzle_max) result.nozzle_max = *ovr->nozzle_max;
-                if (ovr->bed_temp) result.bed_temp = *ovr->bed_temp;
+                if (ovr->nozzle_min)
+                    result.nozzle_min = *ovr->nozzle_min;
+                if (ovr->nozzle_max)
+                    result.nozzle_max = *ovr->nozzle_max;
+                if (ovr->bed_temp)
+                    result.bed_temp = *ovr->bed_temp;
             }
             return result;
         }
@@ -436,19 +439,15 @@ struct MaterialComfortRange {
 inline const MaterialComfortRange* get_comfort_range(const std::string& material) {
     //                                material  good   warn  dry°C  hours
     static const MaterialComfortRange ranges[] = {
-        {"PLA",   50.0f, 65.0f, 55,  4},
-        {"PETG",  40.0f, 55.0f, 65,  6},
-        {"ABS",   35.0f, 50.0f, 80,  4},
-        {"ASA",   35.0f, 50.0f, 80,  4},
-        {"PA",    20.0f, 35.0f, 70,  8},
-        {"Nylon", 20.0f, 35.0f, 70,  8},
-        {"TPU",   40.0f, 55.0f, 55,  4},
-        {"PC",    30.0f, 45.0f, 80,  8},
-        {"PVA",   15.0f, 30.0f, 45,  4},
-        {"HIPS",  40.0f, 55.0f, 70,  4},
+        {"PLA", 50.0f, 65.0f, 55, 4}, {"PETG", 40.0f, 55.0f, 65, 6},
+        {"ABS", 35.0f, 50.0f, 80, 4}, {"ASA", 35.0f, 50.0f, 80, 4},
+        {"PA", 20.0f, 35.0f, 70, 8},  {"Nylon", 20.0f, 35.0f, 70, 8},
+        {"TPU", 40.0f, 55.0f, 55, 4}, {"PC", 30.0f, 45.0f, 80, 8},
+        {"PVA", 15.0f, 30.0f, 45, 4}, {"HIPS", 40.0f, 55.0f, 70, 4},
     };
     for (const auto& r : ranges) {
-        if (material == r.material) return &r;
+        if (material == r.material)
+            return &r;
     }
     return nullptr;
 }

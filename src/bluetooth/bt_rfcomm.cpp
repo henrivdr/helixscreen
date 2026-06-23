@@ -8,21 +8,20 @@
  * Returns an fd that can be written to directly (same as a TCP socket).
  */
 
-#include "bt_context.h"
 #include "bluetooth_plugin.h"
+#include "bt_context.h"
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <sys/socket.h>
+#include <unistd.h>
 
-extern "C" int helix_bt_connect_rfcomm(helix_bt_context* ctx, const char* mac, int channel)
-{
-    if (!ctx) return -EINVAL;
+extern "C" int helix_bt_connect_rfcomm(helix_bt_context* ctx, const char* mac, int channel) {
+    if (!ctx)
+        return -EINVAL;
     if (!mac) {
         std::lock_guard<std::mutex> lock(ctx->mutex);
         ctx->last_error = "null MAC address";

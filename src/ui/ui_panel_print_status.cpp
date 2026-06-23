@@ -9,10 +9,10 @@
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
 #include "ui_exclude_object_map_view.h"
+#include "ui_fan_control_overlay.h"
 #include "ui_filename_utils.h"
 #include "ui_gcode_viewer.h"
 #include "ui_modal.h"
-#include "ui_fan_control_overlay.h"
 #include "ui_nav_manager.h"
 #include "ui_overlay_temp_graph.h"
 #include "ui_panel_common.h"
@@ -22,8 +22,6 @@
 #include "ui_temperature_utils.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
-#include "ui/fan_spin_animation.h"
-#include "ui/ui_widget_helpers.h"
 
 #include "ams_state.h"
 #include "app_constants.h"
@@ -40,9 +38,9 @@
 #include "memory_monitor.h"
 #include "memory_utils.h"
 #include "moonraker_api.h"
-#include "print_status_preview_decision.h"
 #include "observer_factory.h"
 #include "preprint_predictor.h"
+#include "print_status_preview_decision.h"
 #include "printer_state.h"
 #include "runtime_config.h"
 #include "static_panel_registry.h"
@@ -51,6 +49,8 @@
 #include "thumbnail_cache.h"
 #include "thumbnail_processor.h"
 #include "tool_state.h"
+#include "ui/fan_spin_animation.h"
+#include "ui/ui_widget_helpers.h"
 #include "wizard_config_paths.h"
 
 #include <spdlog/spdlog.h>
@@ -422,21 +422,23 @@ void PrintStatusPanel::init_subjects() {
 
     // Density + composite subjects for 3-tier adaptive content.
     UI_MANAGED_SUBJECT_INT(fan_row_density_subject_, 0, "print_status_fan_row_density", subjects_);
-    UI_MANAGED_SUBJECT_INT(aux_icon_visible_subject_, 0, "print_status_aux_icon_visible", subjects_);
-    UI_MANAGED_SUBJECT_INT(aux_full_visible_subject_, 0, "print_status_aux_full_visible", subjects_);
+    UI_MANAGED_SUBJECT_INT(aux_icon_visible_subject_, 0, "print_status_aux_icon_visible",
+                           subjects_);
+    UI_MANAGED_SUBJECT_INT(aux_full_visible_subject_, 0, "print_status_aux_full_visible",
+                           subjects_);
     UI_MANAGED_SUBJECT_INT(aux_short_visible_subject_, 0, "print_status_aux_short_visible",
                            subjects_);
 
     // Fan classification refresh on discovery
     {
         auto token = lifetime_.token();
-        fans_version_observer_ = observe_int_sync<PrintStatusPanel>(
-            printer_state_.get_fans_version_subject(), this,
-            [token](PrintStatusPanel* self, int /*v*/) {
-                if (token.expired())
-                    return;
-                self->bind_fan_observers();
-            });
+        fans_version_observer_ =
+            observe_int_sync<PrintStatusPanel>(printer_state_.get_fans_version_subject(), this,
+                                               [token](PrintStatusPanel* self, int /*v*/) {
+                                                   if (token.expired())
+                                                       return;
+                                                   self->bind_fan_observers();
+                                               });
     }
 
     // Density + fit recompute on breakpoint change
@@ -444,9 +446,8 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* bp = lv_xml_get_subject(nullptr, "ui_breakpoint");
         if (bp) {
             auto token = lifetime_.token();
-            breakpoint_observer_ = observe_int_sync<PrintStatusPanel>(
-                bp, this,
-                [token](PrintStatusPanel* self, int) {
+            breakpoint_observer_ =
+                observe_int_sync<PrintStatusPanel>(bp, this, [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_fans_density();
@@ -460,9 +461,8 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = lv_xml_get_subject(nullptr, "filament_sensor_count");
         if (s) {
             auto token = lifetime_.token();
-            filament_sensor_count_observer_ = observe_int_sync<PrintStatusPanel>(
-                s, this,
-                [token](PrintStatusPanel* self, int) {
+            filament_sensor_count_observer_ =
+                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_fans_density();
@@ -476,9 +476,8 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = lv_xml_get_subject(nullptr, "ams_slot_count");
         if (s) {
             auto token = lifetime_.token();
-            ams_slot_count_observer_ = observe_int_sync<PrintStatusPanel>(
-                s, this,
-                [token](PrintStatusPanel* self, int) {
+            ams_slot_count_observer_ =
+                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_fans_density();
@@ -492,9 +491,8 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = lv_xml_get_subject(nullptr, "toolchange_visible");
         if (s) {
             auto token = lifetime_.token();
-            toolchange_visible_observer_ = observe_int_sync<PrintStatusPanel>(
-                s, this,
-                [token](PrintStatusPanel* self, int) {
+            toolchange_visible_observer_ =
+                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_fans_density();
@@ -515,8 +513,8 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = FilamentSensorManager::instance().get_runout_detected_subject();
         if (s) {
             auto token = lifetime_.token();
-            scoped_runout_observer_ = observe_int_sync<PrintStatusPanel>(
-                s, this, [token](PrintStatusPanel* self, int) {
+            scoped_runout_observer_ =
+                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_scoped_runout();
@@ -527,8 +525,8 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = AmsState::instance().get_slots_version_subject();
         if (s) {
             auto token = lifetime_.token();
-            scoped_runout_slots_observer_ = observe_int_sync<PrintStatusPanel>(
-                s, this, [token](PrintStatusPanel* self, int) {
+            scoped_runout_slots_observer_ =
+                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_scoped_runout();
@@ -921,8 +919,8 @@ lv_obj_t* PrintStatusPanel::create(lv_obj_t* parent) {
     // ui_buffer_meter.cpp:52 and ui_ams_mini_status.cpp:540).
     lv_obj_t* controls_section = lv_obj_find_by_name(overlay_root_, "controls_section");
     if (controls_section) {
-        lv_obj_add_event_cb(controls_section, on_controls_size_changed,
-                            LV_EVENT_SIZE_CHANGED, this);
+        lv_obj_add_event_cb(controls_section, on_controls_size_changed, LV_EVENT_SIZE_CHANGED,
+                            this);
         spdlog::debug("[{}] Registered SIZE_CHANGED on controls_section", get_name());
     } else {
         spdlog::warn("[{}] controls_section not found — SIZE_CHANGED not wired", get_name());
@@ -996,11 +994,10 @@ void PrintStatusPanel::on_activate() {
     // settle after on_activate() un-hides the panel.
     {
         auto token = lifetime_.token();
-        token.defer("PrintStatusPanel::on_activate_fan_row_recompute",
-                    [this]() {
-                        recompute_fans_density();
-                        recompute_fans_fit();
-                    });
+        token.defer("PrintStatusPanel::on_activate_fan_row_recompute", [this]() {
+            recompute_fans_density();
+            recompute_fans_fit();
+        });
     }
 
     crash_handler::breadcrumb::note("pstat_act", "exit");
@@ -1331,8 +1328,7 @@ void PrintStatusPanel::show_exclude_map_view() {
     side_list_ = std::make_unique<helix::ui::ExcludeObjectSideList>();
     side_list_->set_close_callback([this]() { hide_exclude_map_view(); });
     side_list_->set_gcode_viewer(gcode_viewer_);
-    side_list_->create(overlay_content, &printer_state_, exclude_manager_.get(),
-                       kSideListWidthPct);
+    side_list_->create(overlay_content, &printer_state_, exclude_manager_.get(), kSideListWidthPct);
 
     // Tapping an object in the viewer should request exclude, mirroring the
     // side list's row taps. Installed regardless of current view mode so that
@@ -1677,8 +1673,8 @@ void PrintStatusPanel::recompute_scoped_runout() {
     // the parsed file is dropped, get_tools_used() empties → compute returns -1;
     // but also clear explicitly here so a terminal transition reliably hides the
     // badge even if tools_used hasn't cleared yet (issue 9).
-    auto state =
-        static_cast<PrintJobState>(lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
+    auto state = static_cast<PrintJobState>(
+        lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
     bool print_active = (state == PrintJobState::PRINTING || state == PrintJobState::PAUSED);
     if (!print_active) {
         fsm.set_scoped_runout(-1);
@@ -1924,12 +1920,12 @@ void PrintStatusPanel::bind_fan_observers() {
     hotend_fan_name_ = primary.hotend;
     aux_fan_name_ = primary.aux;
 
-    rebind_single_fan(part_speed_observer_, part_speed_lifetime_,
-                      part_fan_name_, "part_fan_speed", "part_fan_icon");
-    rebind_single_fan(hotend_speed_observer_, hotend_speed_lifetime_,
-                      hotend_fan_name_, "hotend_fan_speed", "hotend_fan_icon");
-    rebind_single_fan(aux_speed_observer_, aux_speed_lifetime_,
-                      aux_fan_name_, "aux_fan_speed", "aux_fan_icon");
+    rebind_single_fan(part_speed_observer_, part_speed_lifetime_, part_fan_name_, "part_fan_speed",
+                      "part_fan_icon");
+    rebind_single_fan(hotend_speed_observer_, hotend_speed_lifetime_, hotend_fan_name_,
+                      "hotend_fan_speed", "hotend_fan_icon");
+    rebind_single_fan(aux_speed_observer_, aux_speed_lifetime_, aux_fan_name_, "aux_fan_speed",
+                      "aux_fan_icon");
 
     // Aux cluster visibility — subject drives XML bind_flag_if_eq
     lv_subject_set_int(&aux_fan_present_subject_, aux_fan_name_.empty() ? 0 : 1);
@@ -1937,14 +1933,14 @@ void PrintStatusPanel::bind_fan_observers() {
     // Recompute composite aux subjects (icon/full/short) with updated aux_present.
     recompute_aux_composites();
 
-    spdlog::debug("[{}] Bound fans: part='{}' hotend='{}' aux='{}'", get_name(),
-                  part_fan_name_, hotend_fan_name_, aux_fan_name_);
+    spdlog::debug("[{}] Bound fans: part='{}' hotend='{}' aux='{}'", get_name(), part_fan_name_,
+                  hotend_fan_name_, aux_fan_name_);
 }
 
 void PrintStatusPanel::rebind_single_fan(ObserverGuard& guard, SubjectLifetime& lt,
-                                          const std::string& object_name,
-                                          const char* speed_label_widget_name,
-                                          const char* icon_widget_name) {
+                                         const std::string& object_name,
+                                         const char* speed_label_widget_name,
+                                         const char* icon_widget_name) {
     if (object_name.empty()) {
         update_fan_speed_display(speed_label_widget_name, icon_widget_name, 0);
         return;
@@ -1968,12 +1964,11 @@ void PrintStatusPanel::rebind_single_fan(ObserverGuard& guard, SubjectLifetime& 
         lt);
 
     // Seed initial value — observer fires only on change
-    update_fan_speed_display(speed_label_widget_name, icon_widget_name,
-                              lv_subject_get_int(subj));
+    update_fan_speed_display(speed_label_widget_name, icon_widget_name, lv_subject_get_int(subj));
 }
 
-void PrintStatusPanel::update_fan_speed_display(const char* label_name,
-                                                  const char* icon_name, int speed) {
+void PrintStatusPanel::update_fan_speed_display(const char* label_name, const char* icon_name,
+                                                int speed) {
     if (!overlay_root_)
         return;
     lv_obj_t* label = lv_obj_find_by_name(overlay_root_, label_name);
@@ -2042,7 +2037,7 @@ void PrintStatusPanel::recompute_fans_density() {
     lv_obj_t* controls = lv_obj_find_by_name(overlay_root_, "controls_section");
     if (!fan_row || !controls) {
         spdlog::debug("[{}] recompute_fans_density: fan_row={} controls={}", get_name(),
-                     fmt::ptr(fan_row), fmt::ptr(controls));
+                      fmt::ptr(fan_row), fmt::ptr(controls));
         return;
     }
 
@@ -2075,8 +2070,8 @@ void PrintStatusPanel::recompute_fans_density() {
             lv_obj_add_flag(fan_row, LV_OBJ_FLAG_HIDDEN);
 
         spdlog::debug("[{}] fan_row natural widths: full={} med={} compact={}", get_name(),
-                     fan_row_natural_width_[0], fan_row_natural_width_[1],
-                     fan_row_natural_width_[2]);
+                      fan_row_natural_width_[0], fan_row_natural_width_[1],
+                      fan_row_natural_width_[2]);
 
         if (fan_row_natural_width_[0] <= 0) {
             spdlog::info("[{}] widths zero — retrying on next tick", get_name());
@@ -2104,9 +2099,8 @@ void PrintStatusPanel::recompute_fans_density() {
 
     int current = lv_subject_get_int(&fan_row_density_subject_);
     spdlog::debug("[{}] fan_row_density check: current={} next={} controls_w={} widths=[{},{},{}]",
-                 get_name(), current, next_density, controls_w,
-                 fan_row_natural_width_[0], fan_row_natural_width_[1],
-                 fan_row_natural_width_[2]);
+                  get_name(), current, next_density, controls_w, fan_row_natural_width_[0],
+                  fan_row_natural_width_[1], fan_row_natural_width_[2]);
     if (next_density != current) {
         lv_subject_set_int(&fan_row_density_subject_, next_density);
         recompute_aux_composites();
@@ -2123,7 +2117,7 @@ void PrintStatusPanel::recompute_fans_fit() {
     lv_obj_t* fan_row = lv_obj_find_by_name(overlay_root_, "print_status_fan_row");
     if (!controls || !fan_row) {
         spdlog::debug("[{}] recompute_fans_fit: controls={} fan_row={}", get_name(),
-                     fmt::ptr(controls), fmt::ptr(fan_row));
+                      fmt::ptr(controls), fmt::ptr(fan_row));
         return;
     }
 
@@ -2202,9 +2196,9 @@ void PrintStatusPanel::recompute_fans_fit() {
             next = 1;
     }
     if (next != current) {
-        spdlog::debug(
-            "[{}] fans_fit {} -> {} (controls_h={}, used={}, available={}, needed={})",
-            get_name(), current, next, controls_h, used, available, fan_row_natural_height_);
+        spdlog::debug("[{}] fans_fit {} -> {} (controls_h={}, used={}, available={}, needed={})",
+                      get_name(), current, next, controls_h, used, available,
+                      fan_row_natural_height_);
         lv_subject_set_int(&fans_fit_subject_, next);
     }
 }
@@ -2215,11 +2209,10 @@ void PrintStatusPanel::on_controls_size_changed(lv_event_t* e) {
     auto* self = static_cast<PrintStatusPanel*>(lv_event_get_user_data(e));
     if (self) {
         auto token = self->lifetime_.token();
-        token.defer("PrintStatusPanel::size_changed_recompute",
-                    [self]() {
-                        self->recompute_fans_density();
-                        self->recompute_fans_fit();
-                    });
+        token.defer("PrintStatusPanel::size_changed_recompute", [self]() {
+            self->recompute_fans_density();
+            self->recompute_fans_fit();
+        });
     }
     LVGL_SAFE_EVENT_CB_END();
 }
@@ -3009,8 +3002,7 @@ void PrintStatusPanel::load_thumbnail_for_file(const std::string& filename) {
             // (thumbnail_load_generation_, get_name(), api_, cached_thumbnail_path_
             // via the inner cb) and dispatches to LVGL-touching code paths. Run
             // it on the main thread.
-            token.defer("PrintStatusPanel::metadata_apply",
-                        [this, token, current_gen, metadata]() {
+            token.defer("PrintStatusPanel::metadata_apply", [this, token, current_gen, metadata]() {
                 // Check if this callback is still relevant
                 if (current_gen != thumbnail_load_generation_) {
                     spdlog::trace("[{}] Stale metadata callback (gen {} != {}), ignoring",
@@ -3057,8 +3049,8 @@ void PrintStatusPanel::load_thumbnail_for_file(const std::string& filename) {
                         // thumbnail_load_generation_/get_name(); fetch may
                         // invoke us off the main thread depending on cache
                         // state. Marshal the whole body.
-                        token.defer("PrintStatusPanel::thumbnail_apply",
-                                    [this, current_gen, lvgl_path]() {
+                        token.defer("PrintStatusPanel::thumbnail_apply", [this, current_gen,
+                                                                          lvgl_path]() {
                             // Generation check (we passed nullptr for the cache's
                             // own generation tracking).
                             if (current_gen != thumbnail_load_generation_) {
@@ -3075,21 +3067,18 @@ void PrintStatusPanel::load_thumbnail_for_file(const std::string& filename) {
 
                             if (print_thumbnail_) {
                                 lv_image_set_src(print_thumbnail_, lvgl_path.c_str());
-                                spdlog::info("[{}] Thumbnail loaded and displayed: {}",
-                                             get_name(), lvgl_path);
+                                spdlog::info("[{}] Thumbnail loaded and displayed: {}", get_name(),
+                                             lvgl_path);
                             } else {
-                                spdlog::info(
-                                    "[{}] Thumbnail cached (panel not yet displayed): {}",
-                                    get_name(), lvgl_path);
+                                spdlog::info("[{}] Thumbnail cached (panel not yet displayed): {}",
+                                             get_name(), lvgl_path);
                             }
                         });
                     },
                     [this, token](const std::string& error) {
                         // L081 Mechanism C: defer to access get_name() on main.
-                        token.defer("PrintStatusPanel::thumbnail_fetch_error",
-                                    [this, error]() {
-                            spdlog::warn("[{}] Failed to fetch thumbnail: {}", get_name(),
-                                         error);
+                        token.defer("PrintStatusPanel::thumbnail_fetch_error", [this, error]() {
+                            spdlog::warn("[{}] Failed to fetch thumbnail: {}", get_name(), error);
                         });
                     });
             });
@@ -3189,8 +3178,8 @@ void PrintStatusPanel::load_gcode_for_viewing(const std::string& filename) {
     api_->files().get_file_metadata(
         metadata_filename,
         [this, token, filename, temp_path](const FileMetadata& metadata) {
-            token.defer("PrintStatusPanel::gcode_metadata_ok",
-                        [this, filename, temp_path, metadata]() {
+            token.defer("PrintStatusPanel::gcode_metadata_ok", [this, filename, temp_path,
+                                                                metadata]() {
                 if (!helix::is_gcode_2d_streaming_safe(metadata.size)) {
                     auto mem = helix::get_system_memory_info();
                     spdlog::warn("[{}] G-code too large for 2D streaming: file={} bytes, available "
@@ -3212,8 +3201,7 @@ void PrintStatusPanel::load_gcode_for_viewing(const std::string& filename) {
                 api_->transfers().download_file_to_path(
                     "gcodes", filename, temp_path,
                     [this, inner_token, temp_path](const std::string& path) {
-                        inner_token.defer("PrintStatusPanel::gcode_download_ok",
-                                          [this, path]() {
+                        inner_token.defer("PrintStatusPanel::gcode_download_ok", [this, path]() {
                             temp_gcode_path_ = path;
                             spdlog::debug("[{}] Streamed G-code to disk, loading into viewer: {}",
                                           get_name(), path);
@@ -3221,20 +3209,20 @@ void PrintStatusPanel::load_gcode_for_viewing(const std::string& filename) {
                         });
                     },
                     [this, inner_token, filename](const MoonrakerError& err) {
-                        inner_token.defer("PrintStatusPanel::gcode_download_err",
-                                          [this, filename, err]() {
-                            spdlog::warn("[{}] Failed to stream G-code for viewing '{}': {}",
-                                         get_name(), filename, err.message);
-                            show_gcode_viewer(false);
-                        });
+                        inner_token.defer(
+                            "PrintStatusPanel::gcode_download_err", [this, filename, err]() {
+                                spdlog::warn("[{}] Failed to stream G-code for viewing '{}': {}",
+                                             get_name(), filename, err.message);
+                                show_gcode_viewer(false);
+                            });
                     });
             });
         },
         [this, token, filename](const MoonrakerError& err) {
-            token.defer("PrintStatusPanel::gcode_metadata_err",
-                        [this, filename, err]() {
-                spdlog::debug("[{}] Failed to get G-code metadata for '{}': {} - skipping 3D render",
-                              get_name(), filename, err.message);
+            token.defer("PrintStatusPanel::gcode_metadata_err", [this, filename, err]() {
+                spdlog::debug(
+                    "[{}] Failed to get G-code metadata for '{}': {} - skipping 3D render",
+                    get_name(), filename, err.message);
                 show_gcode_viewer(false);
             });
         },
@@ -3348,8 +3336,7 @@ void PrintStatusPanel::ensure_preview_current() {
     // Read ACTUAL widget state — not intent bools, which can lie after a
     // destroy-on-close / memory-reclaim cycle. This is what makes re-entry
     // self-healing.
-    bool thumbnail_has_src =
-        print_thumbnail_ && lv_image_get_src(print_thumbnail_) != nullptr;
+    bool thumbnail_has_src = print_thumbnail_ && lv_image_get_src(print_thumbnail_) != nullptr;
     bool gcode_has_content = gcode_viewer_ && ui_gcode_viewer_has_content(gcode_viewer_);
 
     bool want_viewer = lifecycle_.want_viewer();

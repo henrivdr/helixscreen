@@ -5,7 +5,8 @@
 
 #include "label_printer_utils.h"
 
-#include "lvgl.h"
+#include "ui_update_queue.h"
+
 #include "bluetooth_loader.h"
 #include "brother_pt_bt_printer.h"
 #include "brother_pt_protocol.h"
@@ -18,6 +19,7 @@
 #include "ipp_printer.h"
 #include "label_printer_settings.h"
 #include "label_renderer.h"
+#include "lvgl.h"
 #include "makeid_bt_printer.h"
 #include "makeid_protocol.h"
 #include "niimbot_bt_printer.h"
@@ -26,16 +28,14 @@
 #include "phomemo_printer.h"
 #include "safe_resolve.h"
 #include "sheet_label_layout.h"
-#include "ui_update_queue.h"
 #include "usb_printer_detector.h"
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cctype>
-
 #include <sys/socket.h>
 #include <unistd.h>
-
-#include <spdlog/spdlog.h>
 
 namespace helix {
 
@@ -48,13 +48,13 @@ static helix::label::BrotherQLMedia query_brother_media_tcp(const std::string& h
     if (sockfd < 0)
         return media;
 
-    struct timeval tv{};
+    struct timeval tv {};
     tv.tv_sec = 5;
     setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     // Safe DNS resolution (avoids glibc __check_pf crash on ARM)
-    struct sockaddr_in addr{};
+    struct sockaddr_in addr {};
     if (helix::safe_resolve(host, port, addr) != 0) {
         close(sockfd);
         return media;
@@ -75,9 +75,9 @@ static helix::label::BrotherQLMedia query_brother_media_tcp(const std::string& h
     if (n == 32) {
         media = helix::label::brother_ql_parse_status(status, 32);
         if (media.valid) {
-            spdlog::info("[LabelPrinter] Detected Brother QL media: {}mm{}",
-                         media.width_mm,
-                         media.length_mm > 0 ? fmt::format("x{}mm", media.length_mm) : " continuous");
+            spdlog::info("[LabelPrinter] Detected Brother QL media: {}mm{}", media.width_mm,
+                         media.length_mm > 0 ? fmt::format("x{}mm", media.length_mm)
+                                             : " continuous");
         }
     }
     return media;
@@ -113,8 +113,8 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
         sizes = BrotherQLPrinter::supported_sizes_static();
     }
 
-    int size_idx = std::clamp(settings.get_label_size_index(), 0,
-                              static_cast<int>(sizes.size()) - 1);
+    int size_idx =
+        std::clamp(settings.get_label_size_index(), 0, static_cast<int>(sizes.size()) - 1);
     const auto& label_size = sizes[size_idx];
     auto preset = static_cast<LabelPreset>(
         std::clamp(settings.get_label_preset(), 0, static_cast<int>(LabelPreset::MINIMAL)));
@@ -135,15 +135,15 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
     if (!is_brother_net) {
         bitmap = LabelRenderer::render(spool, preset, label_size);
         if (bitmap.empty()) {
-            if (callback) callback(false, "Failed to render label");
+            if (callback)
+                callback(false, "Failed to render label");
             return;
         }
     }
 
     if (is_ipp) {
         static IppPrinter ipp_printer;
-        ipp_printer.set_target(settings.get_printer_address(),
-                               settings.get_printer_port(),
+        ipp_printer.set_target(settings.get_printer_address(), settings.get_printer_port(),
                                "ipp/print");
         ipp_printer.set_sheet_template(size_idx);
         ipp_printer.set_label_count(settings.get_label_count());
@@ -168,7 +168,8 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
                          detected[0].product_name);
         } else if (!found) {
             helix::ui::queue_update([callback]() {
-                if (callback) callback(false, "No USB printer detected");
+                if (callback)
+                    callback(false, "No USB printer detected");
             });
             return;
         }
@@ -227,16 +228,15 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
                                  media.width_mm,
                                  media.length_mm > 0 ? fmt::format("x{}mm", media.length_mm) : "");
                     // Fall back to user-selected size
-                    int idx = std::clamp(
-                        LabelPrinterSettingsManager::instance().get_label_size_index(),
-                        0, static_cast<int>(sizes.size()) - 1);
+                    int idx =
+                        std::clamp(LabelPrinterSettingsManager::instance().get_label_size_index(),
+                                   0, static_cast<int>(sizes.size()) - 1);
                     actual_size = sizes[idx];
                 }
             } else {
                 spdlog::warn("[LabelPrinter] Could not detect media, using selected size");
-                int idx = std::clamp(
-                    LabelPrinterSettingsManager::instance().get_label_size_index(),
-                    0, static_cast<int>(sizes.size()) - 1);
+                int idx = std::clamp(LabelPrinterSettingsManager::instance().get_label_size_index(),
+                                     0, static_cast<int>(sizes.size()) - 1);
                 actual_size = sizes[idx];
             }
 
@@ -250,7 +250,8 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
             auto bitmap = LabelRenderer::render(spool, actual_preset, actual_size);
             if (bitmap.empty()) {
                 helix::ui::queue_update([callback]() {
-                    if (callback) callback(false, "Failed to render label");
+                    if (callback)
+                        callback(false, "Failed to render label");
                 });
                 return;
             }

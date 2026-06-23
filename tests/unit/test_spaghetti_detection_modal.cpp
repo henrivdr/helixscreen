@@ -16,8 +16,7 @@
 // allocate each modal and let process_lvgl() drain the queued self-delete. A
 // stack-allocated modal would double-free here, so do NOT switch these to stack.
 
-TEST_CASE_METHOD(LVGLUITestFixture,
-                 "SpaghettiDetectionModal shows message + invokes callbacks",
+TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal shows message + invokes callbacks",
                  "[detection][modal][.ui_integration]") {
     int resumed = 0, aborted = 0, tuned = 0;
 

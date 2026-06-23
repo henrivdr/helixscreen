@@ -20,8 +20,8 @@ namespace helix {
 // ============================================================================
 
 static const std::vector<KnownUsbPrinter> s_known_printers = {
-    {0x0483, 0x5740, "Phomemo M110"},  // STM32 CDC-ACM variant
-    {0x0493, 0x8760, "Phomemo M110"},  // Original USB variant
+    {0x0483, 0x5740, "Phomemo M110"}, // STM32 CDC-ACM variant
+    {0x0493, 0x8760, "Phomemo M110"}, // Original USB variant
     // Future printers added here
 };
 
@@ -72,7 +72,7 @@ std::vector<UsbPrinterInfo> UsbPrinterDetector::scan() {
     int rc = libusb_init(&ctx);
     if (rc != 0) {
         spdlog::warn("usb-detect: libusb_init failed: {}",
-                      libusb_strerror(static_cast<libusb_error>(rc)));
+                     libusb_strerror(static_cast<libusb_error>(rc)));
         return results;
     }
 
@@ -80,7 +80,7 @@ std::vector<UsbPrinterInfo> UsbPrinterDetector::scan() {
     ssize_t count = libusb_get_device_list(ctx, &device_list);
     if (count < 0) {
         spdlog::warn("usb-detect: libusb_get_device_list failed: {}",
-                      libusb_strerror(static_cast<libusb_error>(count)));
+                     libusb_strerror(static_cast<libusb_error>(count)));
         libusb_exit(ctx);
         return results;
     }
@@ -108,19 +108,17 @@ std::vector<UsbPrinterInfo> UsbPrinterDetector::scan() {
             libusb_device_handle* handle = nullptr;
             if (libusb_open(dev, &handle) == 0) {
                 unsigned char buf[256] = {};
-                int len = libusb_get_string_descriptor_ascii(
-                    handle, desc.iSerialNumber, buf, sizeof(buf));
+                int len = libusb_get_string_descriptor_ascii(handle, desc.iSerialNumber, buf,
+                                                             sizeof(buf));
                 if (len > 0) {
-                    info.serial.assign(reinterpret_cast<char*>(buf),
-                                       static_cast<size_t>(len));
+                    info.serial.assign(reinterpret_cast<char*>(buf), static_cast<size_t>(len));
                 }
                 libusb_close(handle);
             }
         }
 
         spdlog::debug("usb-detect: found {} (VID:{:04x} PID:{:04x}) bus:{} addr:{} serial:{}",
-                       info.product_name, info.vid, info.pid,
-                       info.bus, info.address, info.serial);
+                      info.product_name, info.vid, info.pid, info.bus, info.address, info.serial);
 
         results.push_back(std::move(info));
     }
@@ -161,9 +159,8 @@ void UsbPrinterDetector::start_polling(DetectionCallback callback, int interval_
     last_detected_.clear();
     first_scan_ = true;
 
-    poll_timer_ = lv_timer_create(
-        [](lv_timer_t* t) { poll_timer_cb(t); },
-        static_cast<uint32_t>(interval_ms), this);
+    poll_timer_ = lv_timer_create([](lv_timer_t* t) { poll_timer_cb(t); },
+                                  static_cast<uint32_t>(interval_ms), this);
 
     spdlog::debug("usb-detect: started polling every {}ms", interval_ms);
 
@@ -195,8 +192,8 @@ bool UsbPrinterDetector::results_equal(std::vector<UsbPrinterInfo> a,
     std::sort(a.begin(), a.end(), cmp);
     std::sort(b.begin(), b.end(), cmp);
     for (size_t i = 0; i < a.size(); i++) {
-        if (a[i].vid != b[i].vid || a[i].pid != b[i].pid ||
-            a[i].bus != b[i].bus || a[i].address != b[i].address) {
+        if (a[i].vid != b[i].vid || a[i].pid != b[i].pid || a[i].bus != b[i].bus ||
+            a[i].address != b[i].address) {
             return false;
         }
     }

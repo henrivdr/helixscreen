@@ -45,12 +45,16 @@ class Step {
     virtual StepId id() const = 0;
     virtual const char* component_name() const = 0; // e.g. "wizard_heater_select"
     virtual const char* log_name() const = 0;
-    virtual bool should_skip(const StepContext&) const { return false; }
+    virtual bool should_skip(const StepContext&) const {
+        return false;
+    }
     virtual void init_subjects() = 0;
     virtual void register_callbacks() = 0;
     virtual lv_obj_t* create(lv_obj_t* parent) = 0;
     virtual void cleanup() = 0;
-    virtual bool is_validated() const { return true; }
+    virtual bool is_validated() const {
+        return true;
+    }
 };
 
 const char* to_string(StepId); // for logs/debug

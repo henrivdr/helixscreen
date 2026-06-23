@@ -261,9 +261,11 @@ TEST_CASE("Legacy mini graph wrapper", "[scaling][legacy]") {
 
 TEST_CASE("Custom scale parameters", "[scaling][params]") {
     SECTION("Widget uses different thresholds") {
-        constexpr TempGraphScaleParams widget_p{
-            .step = 50.0f, .floor = 100.0f, .ceiling = 400.0f,
-            .expand_threshold = 0.90f, .shrink_threshold = 0.50f};
+        constexpr TempGraphScaleParams widget_p{.step = 50.0f,
+                                                .floor = 100.0f,
+                                                .ceiling = 400.0f,
+                                                .expand_threshold = 0.90f,
+                                                .shrink_threshold = 0.50f};
 
         // More aggressive expand (90% vs 80%)
         float result = calculate_temp_graph_y_max(200.0f, 175.0f, 175.0f, widget_p);

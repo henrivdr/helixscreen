@@ -15,10 +15,10 @@
 #include "../../include/moonraker_client.h"
 #include "hv/EventLoopThread.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <atomic>
 #include <memory>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -36,7 +36,7 @@ struct UnconnectedClient {
     }
 
     std::shared_ptr<hv::EventLoopThread> loop_;
-    std::unique_ptr<MoonrakerClient>     client_;
+    std::unique_ptr<MoonrakerClient> client_;
 };
 
 } // namespace
@@ -46,8 +46,7 @@ TEST_CASE("add_connected_observer does not fire immediately when disconnected",
     UnconnectedClient u;
 
     auto fired = std::make_shared<std::atomic<int>>(0);
-    u.client_->add_connected_observer("test_handler",
-                                      [fired]() { fired->fetch_add(1); });
+    u.client_->add_connected_observer("test_handler", [fired]() { fired->fetch_add(1); });
 
     REQUIRE(fired->load() == 0);
 }
@@ -66,7 +65,7 @@ TEST_CASE("add_connected_observer replaces previous callback for the same handle
           "[moonraker][client][connected_observer][eventloop][slow]") {
     UnconnectedClient u;
 
-    auto first_fired  = std::make_shared<std::atomic<int>>(0);
+    auto first_fired = std::make_shared<std::atomic<int>>(0);
     auto second_fired = std::make_shared<std::atomic<int>>(0);
 
     u.client_->add_connected_observer("test_handler",

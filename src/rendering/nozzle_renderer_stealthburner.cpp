@@ -393,8 +393,8 @@ static void draw_polygon(lv_layer_t* layer, const lv_point_t* pts, int cnt, lv_c
 // Main Drawing Function
 // ============================================================================
 
-void draw_nozzle_stealthburner(lv_layer_t* layer, int32_t cx, int32_t cy,
-                               lv_color_t filament_color, int32_t scale_unit, lv_opa_t opa) {
+void draw_nozzle_stealthburner(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t filament_color,
+                               int32_t scale_unit, lv_opa_t opa) {
     // The design space is 1000x1000, but the actual toolhead spans about
     // 440 units wide (280-720) and 850 units tall (78-928)
     // Stealthburner is larger than Bambu toolhead, so render at 2x

@@ -8,7 +8,6 @@
 
 #include "ui_settings_help.h"
 
-#include "first_run_tour.h"
 #include "ui_callback_helpers.h"
 #include "ui_debug_bundle_modal.h"
 #include "ui_event_safety.h"
@@ -16,6 +15,7 @@
 #include "ui_nav_manager.h"
 #include "ui_settings_about.h"
 
+#include "first_run_tour.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "static_panel_registry.h"
 

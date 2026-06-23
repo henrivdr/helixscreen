@@ -1,11 +1,12 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_panel_print_status.h"
+
 #include "../helix_test_fixture.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "app_globals.h"
 #include "printer_fan_state.h"
-#include "ui_panel_print_status.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -33,8 +34,8 @@ TEST_CASE_METHOD(HelixTestFixture, "classify_primary_fans picks first of each ty
     PrinterFanState state;
     std::vector<FanInfo> fans;
     fans.push_back({"fan", "Part", FanType::PART_COOLING, 50, true, std::nullopt});
-    fans.push_back({"heater_fan hotend_fan", "Hotend", FanType::HEATER_FAN, 80, false,
-                    std::nullopt});
+    fans.push_back(
+        {"heater_fan hotend_fan", "Hotend", FanType::HEATER_FAN, 80, false, std::nullopt});
     fans.push_back({"fan_generic chamber", "Chamber", FanType::GENERIC_FAN, 0, true, std::nullopt});
     PrinterFanStateTestAccess::set_fans(state, fans);
 
@@ -68,10 +69,11 @@ TEST_CASE_METHOD(HelixTestFixture, "classify_primary_fans picks first not extras
     REQUIRE(state.classify_primary_fans().part == "fan");
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "classify_primary_fans treats controller/temp/generic/output as aux",
+TEST_CASE_METHOD(HelixTestFixture,
+                 "classify_primary_fans treats controller/temp/generic/output as aux",
                  "[fan_state][drift]") {
     for (FanType aux_type : {FanType::CONTROLLER_FAN, FanType::TEMPERATURE_FAN,
-                              FanType::GENERIC_FAN, FanType::OUTPUT_PIN_FAN}) {
+                             FanType::GENERIC_FAN, FanType::OUTPUT_PIN_FAN}) {
         PrinterFanState state;
         std::vector<FanInfo> fans;
         fans.push_back({"fan_x", "X", aux_type, 0, false, std::nullopt});
@@ -106,15 +108,14 @@ struct FanPanelFixture : public HelixTestFixture {
     PrintStatusPanel panel;
 };
 
-TEST_CASE_METHOD(HelixTestFixture,
-                 "classify_primary_fans via global PrinterState fans_ live path",
+TEST_CASE_METHOD(HelixTestFixture, "classify_primary_fans via global PrinterState fans_ live path",
                  "[print_status][fans]") {
     // Drive through the global PrinterState's fan_state member (live path).
     auto& fs = PrinterStateTestAccess::get_fan_state(get_printer_state());
     std::vector<FanInfo> fans;
     fans.push_back({"fan", "Part", FanType::PART_COOLING, 75, true, std::nullopt});
-    fans.push_back({"heater_fan hotend_fan", "Hotend", FanType::HEATER_FAN, 100, false,
-                    std::nullopt});
+    fans.push_back(
+        {"heater_fan hotend_fan", "Hotend", FanType::HEATER_FAN, 100, false, std::nullopt});
     fans.push_back({"fan_generic exhaust", "Exhaust", FanType::GENERIC_FAN, 0, true, std::nullopt});
     PrinterFanStateTestAccess::set_fans(fs, fans);
 
@@ -127,8 +128,7 @@ TEST_CASE_METHOD(HelixTestFixture,
     PrinterFanStateTestAccess::set_fans(fs, {});
 }
 
-TEST_CASE_METHOD(FanPanelFixture,
-                 "init_subjects registers all fan section subjects",
+TEST_CASE_METHOD(FanPanelFixture, "init_subjects registers all fan section subjects",
                  "[print_status][fans]") {
     // After init_subjects() the six fan-section subjects must be findable in
     // the global XML subject registry.
@@ -140,8 +140,7 @@ TEST_CASE_METHOD(FanPanelFixture,
     REQUIRE(lv_xml_get_subject(nullptr, "print_status_aux_short_visible") != nullptr);
 }
 
-TEST_CASE_METHOD(FanPanelFixture,
-                 "fans_fit subject defaults to 0 (hidden) after init_subjects",
+TEST_CASE_METHOD(FanPanelFixture, "fans_fit subject defaults to 0 (hidden) after init_subjects",
                  "[print_status][fans]") {
     // The fan row must stay hidden (0) until recompute_fans_fit fires after
     // the widget tree is attached.  A non-zero default would flash the row.
@@ -156,15 +155,15 @@ TEST_CASE_METHOD(FanPanelFixture,
     // density=0 (full): icon+label+val — aux_icon_visible=1, full=1, short=0
     PrintStatusPanelTestAccess::recompute_aux_composites(panel, 0, true);
 
-    auto* icon  = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
-    auto* full  = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
+    auto* icon = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
+    auto* full = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
     auto* shortt = lv_xml_get_subject(nullptr, "print_status_aux_short_visible");
-    REQUIRE(icon  != nullptr);
-    REQUIRE(full  != nullptr);
+    REQUIRE(icon != nullptr);
+    REQUIRE(full != nullptr);
     REQUIRE(shortt != nullptr);
 
-    REQUIRE(lv_subject_get_int(icon)   == 1);
-    REQUIRE(lv_subject_get_int(full)   == 1);
+    REQUIRE(lv_subject_get_int(icon) == 1);
+    REQUIRE(lv_subject_get_int(full) == 1);
     REQUIRE(lv_subject_get_int(shortt) == 0);
 }
 
@@ -174,27 +173,26 @@ TEST_CASE_METHOD(FanPanelFixture,
     // density=1 (medium): label+val — icon hidden, full visible, short hidden
     PrintStatusPanelTestAccess::recompute_aux_composites(panel, 1, true);
 
-    auto* icon  = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
-    auto* full  = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
+    auto* icon = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
+    auto* full = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
     auto* shortt = lv_xml_get_subject(nullptr, "print_status_aux_short_visible");
 
-    REQUIRE(lv_subject_get_int(icon)   == 0);
-    REQUIRE(lv_subject_get_int(full)   == 1);
+    REQUIRE(lv_subject_get_int(icon) == 0);
+    REQUIRE(lv_subject_get_int(full) == 1);
     REQUIRE(lv_subject_get_int(shortt) == 0);
 }
 
-TEST_CASE_METHOD(FanPanelFixture,
-                 "recompute_aux_composites: density=2, aux present -> short only",
+TEST_CASE_METHOD(FanPanelFixture, "recompute_aux_composites: density=2, aux present -> short only",
                  "[print_status][fans]") {
     // density=2 (compact): single-letter+val — icon hidden, full hidden, short visible
     PrintStatusPanelTestAccess::recompute_aux_composites(panel, 2, true);
 
-    auto* icon  = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
-    auto* full  = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
+    auto* icon = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
+    auto* full = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
     auto* shortt = lv_xml_get_subject(nullptr, "print_status_aux_short_visible");
 
-    REQUIRE(lv_subject_get_int(icon)   == 0);
-    REQUIRE(lv_subject_get_int(full)   == 0);
+    REQUIRE(lv_subject_get_int(icon) == 0);
+    REQUIRE(lv_subject_get_int(full) == 0);
     REQUIRE(lv_subject_get_int(shortt) == 1);
 }
 
@@ -205,13 +203,13 @@ TEST_CASE_METHOD(FanPanelFixture,
     for (int d : {0, 1, 2}) {
         PrintStatusPanelTestAccess::recompute_aux_composites(panel, d, false);
 
-        auto* icon  = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
-        auto* full  = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
+        auto* icon = lv_xml_get_subject(nullptr, "print_status_aux_icon_visible");
+        auto* full = lv_xml_get_subject(nullptr, "print_status_aux_full_visible");
         auto* shortt = lv_xml_get_subject(nullptr, "print_status_aux_short_visible");
 
         INFO("density=" << d);
-        REQUIRE(lv_subject_get_int(icon)   == 0);
-        REQUIRE(lv_subject_get_int(full)   == 0);
+        REQUIRE(lv_subject_get_int(icon) == 0);
+        REQUIRE(lv_subject_get_int(full) == 0);
         REQUIRE(lv_subject_get_int(shortt) == 0);
     }
 }

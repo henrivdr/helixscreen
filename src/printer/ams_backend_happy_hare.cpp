@@ -1019,8 +1019,7 @@ std::vector<helix::RecoveryAction> AmsBackendHappyHare::build_recovery_actions()
     // MMU_RECOVER re-syncs HH's filament state; the LOADED/UNLOADED arg must match
     // reality (HH issue #729). Derive from the live loaded flag.
     const bool loaded = system_info_.filament_loaded;
-    actions.push_back({lv_tr("Recover"),
-                       loaded ? "MMU_RECOVER LOADED=1" : "MMU_RECOVER UNLOADED=1",
+    actions.push_back({lv_tr("Recover"), loaded ? "MMU_RECOVER LOADED=1" : "MMU_RECOVER UNLOADED=1",
                        "hh::recover", ""});
 
     // If filament is at the toolhead, offer an explicit unload.
@@ -1033,8 +1032,9 @@ std::vector<helix::RecoveryAction> AmsBackendHappyHare::build_recovery_actions()
     return actions;
 }
 
-std::optional<helix::ErrorEvent> AmsBackendHappyHare::classify_error(
-    const std::string& raw_line, const helix::ClassifyContext& ctx) const {
+std::optional<helix::ErrorEvent>
+AmsBackendHappyHare::classify_error(const std::string& raw_line,
+                                    const helix::ClassifyContext& ctx) const {
     // Only `!!` emergency lines are candidates (matches AFC).
     if (raw_line.size() < 2 || raw_line[0] != '!' || raw_line[1] != '!') {
         return std::nullopt;
@@ -1044,31 +1044,32 @@ std::optional<helix::ErrorEvent> AmsBackendHappyHare::classify_error(
 
     // Happy Hare reports the descriptive cause in reason_for_pause_; prefer it
     // over the terse !! line for the modal detail.
-    std::string bare = (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3)
-                                                                   : raw_line.substr(2);
+    std::string bare =
+        (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3) : raw_line.substr(2);
     std::string detail = !reason_for_pause_.empty() ? reason_for_pause_ : bare;
 
     auto contains_ci = [](const std::string& hay, const char* needle) {
         std::string h = hay, n = needle;
-        for (auto& c : h) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : h)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : n)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         return h.find(n) != std::string::npos;
     };
 
     // A recognized MMU fault: a descriptive reason is present, OR the print is
     // paused while HH is in its ERROR action. Mirrors AFC's error_state_ gate.
     const bool hh_error_state = (system_info_.action == AmsAction::ERROR);
-    const bool recognized =
-        contains_ci(detail, "runout") || contains_ci(detail, "clog") ||
-        contains_ci(detail, "encoder") || contains_ci(detail, "jam") ||
-        contains_ci(detail, "manual intervention");
+    const bool recognized = contains_ci(detail, "runout") || contains_ci(detail, "clog") ||
+                            contains_ci(detail, "encoder") || contains_ci(detail, "jam") ||
+                            contains_ci(detail, "manual intervention");
 
     if (ctx.is_paused && (hh_error_state || (recognized && !reason_for_pause_.empty()))) {
         helix::ErrorEvent e;
         e.source = helix::ErrorSource::HAPPY_HARE;
         e.severity = helix::ErrorSeverity::CRITICAL;
         e.title = contains_ci(detail, "runout") ? lv_tr("Filament runout")
-                                                 : lv_tr("Filament System Error");
+                                                : lv_tr("Filament System Error");
         e.detail = detail;
         e.sticky = true;
         e.recovery_actions = build_recovery_actions();
@@ -1084,29 +1085,23 @@ AmsBackendHappyHare::toolchange_phase_template(StepOperationType op) const {
     switch (op) {
     case StepOperationType::LOAD_SWAP:
         return {
-            {"heat",     "Heat nozzle",   false},
-            {"form_tip", "Form tip",      true},
-            {"cut",      "Cut tip",       true},
-            {"unload",   "Unload",        false},
-            {"select",   "Select gate",   true},
-            {"feed",     "Load filament", false},
-            {"purge",    "Purge",         true},
-            {"load",     "Load complete", false},
+            {"heat", "Heat nozzle", false},  {"form_tip", "Form tip", true},
+            {"cut", "Cut tip", true},        {"unload", "Unload", false},
+            {"select", "Select gate", true}, {"feed", "Load filament", false},
+            {"purge", "Purge", true},        {"load", "Load complete", false},
         };
     case StepOperationType::LOAD_FRESH:
         return {
-            {"heat",   "Heat nozzle",   false},
-            {"select", "Select gate",   true},
-            {"feed",   "Load filament", false},
-            {"purge",  "Purge",         true},
-            {"load",   "Load complete", false},
+            {"heat", "Heat nozzle", false},   {"select", "Select gate", true},
+            {"feed", "Load filament", false}, {"purge", "Purge", true},
+            {"load", "Load complete", false},
         };
     case StepOperationType::UNLOAD:
         return {
-            {"heat",     "Heat nozzle", false},
-            {"form_tip", "Form tip",    true},
-            {"cut",      "Cut tip",     true},
-            {"unload",   "Unload",      false},
+            {"heat", "Heat nozzle", false},
+            {"form_tip", "Form tip", true},
+            {"cut", "Cut tip", true},
+            {"unload", "Unload", false},
         };
     }
     return {};
@@ -1116,16 +1111,32 @@ void AmsBackendHappyHare::sync_narration_step() {
     // Caller holds mutex_. Map the current action to a phase id.
     const char* phase_id = nullptr;
     switch (system_info_.action) {
-    case AmsAction::HEATING:     phase_id = "heat";     break;
-    case AmsAction::FORMING_TIP: phase_id = "form_tip"; break;
-    case AmsAction::CUTTING:     phase_id = "cut";      break;
-    case AmsAction::UNLOADING:   phase_id = "unload";   break;
-    case AmsAction::SELECTING:   phase_id = "select";   break;
-    case AmsAction::LOADING:     phase_id = "feed";     break;
-    case AmsAction::PURGING:     phase_id = "purge";    break;
-    default: break;  // IDLE / CHECKING / ERROR / etc. → no step movement
+    case AmsAction::HEATING:
+        phase_id = "heat";
+        break;
+    case AmsAction::FORMING_TIP:
+        phase_id = "form_tip";
+        break;
+    case AmsAction::CUTTING:
+        phase_id = "cut";
+        break;
+    case AmsAction::UNLOADING:
+        phase_id = "unload";
+        break;
+    case AmsAction::SELECTING:
+        phase_id = "select";
+        break;
+    case AmsAction::LOADING:
+        phase_id = "feed";
+        break;
+    case AmsAction::PURGING:
+        phase_id = "purge";
+        break;
+    default:
+        break; // IDLE / CHECKING / ERROR / etc. → no step movement
     }
-    if (!phase_id) return;
+    if (!phase_id)
+        return;
 
     const auto op = AmsState::instance().get_active_step_operation();
     const auto tmpl = toolchange_phase_template(op);
@@ -1388,7 +1399,8 @@ bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& par
             heaters.push_back(filament_heater_name_);
         }
         for (const auto& h : filament_heaters_) {
-            if (!h.empty()) heaters.push_back(h);
+            if (!h.empty())
+                heaters.push_back(h);
         }
     }
     if (heaters.empty()) {
@@ -1408,11 +1420,13 @@ bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& par
         if (auto t = h_it->find("temperature"); t != h_it->end() && t->is_number()) {
             const float temp = t->get<float>();
             heater_temp_[hname] = temp;
-            if (hname == primary) dryer_info_.current_temp_c = temp;
+            if (hname == primary)
+                dryer_info_.current_temp_c = temp;
             any = true;
         }
         if (auto tg = h_it->find("target"); tg != h_it->end() && tg->is_number()) {
-            if (hname == primary) dryer_info_.target_temp_c = tg->get<float>();
+            if (hname == primary)
+                dryer_info_.target_temp_c = tg->get<float>();
         }
     }
     return any;
@@ -1425,9 +1439,11 @@ bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& 
     std::vector<std::string> sensors;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!environment_sensor_name_.empty()) sensors.push_back(environment_sensor_name_);
+        if (!environment_sensor_name_.empty())
+            sensors.push_back(environment_sensor_name_);
         for (const auto& s : environment_sensors_) {
-            if (!s.empty()) sensors.push_back(s);
+            if (!s.empty())
+                sensors.push_back(s);
         }
     }
     if (sensors.empty()) {
@@ -1445,7 +1461,8 @@ bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& 
         if (auto sp = sname.find(' '); sp != std::string::npos) {
             const std::string bare = sname.substr(sp + 1);
             if (!bare.empty()) {
-                for (const char* chip : {"bme280", "htu21d", "sht3x", "aht10", "aht20_f", "aht20"}) {
+                for (const char* chip :
+                     {"bme280", "htu21d", "sht3x", "aht10", "aht20_f", "aht20"}) {
                     candidates.push_back(std::string(chip) + " " + bare);
                 }
             }
@@ -1482,7 +1499,8 @@ static std::vector<std::string> parse_hh_config_list(const nlohmann::json& v) {
         for (const auto& e : v) {
             if (e.is_string()) {
                 std::string s = trim(e.get<std::string>());
-                if (!s.empty()) out.push_back(std::move(s));
+                if (!s.empty())
+                    out.push_back(std::move(s));
             }
         }
     } else if (v.is_string()) {
@@ -1490,10 +1508,12 @@ static std::vector<std::string> parse_hh_config_list(const nlohmann::json& v) {
         size_t start = 0;
         while (start <= str.size()) {
             const size_t comma = str.find(',', start);
-            std::string tok =
-                trim(str.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
-            if (!tok.empty()) out.push_back(std::move(tok));
-            if (comma == std::string::npos) break;
+            std::string tok = trim(
+                str.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+            if (!tok.empty())
+                out.push_back(std::move(tok));
+            if (comma == std::string::npos)
+                break;
             start = comma + 1;
         }
     }
@@ -1504,8 +1524,7 @@ void AmsBackendHappyHare::apply_heater_config(const nlohmann::json& settings) {
     // Parse [mmu_machine] filament_heater — the Klipper heater_generic object name.
     if (settings.contains("mmu_machine") && settings["mmu_machine"].is_object()) {
         const auto& mmu_machine = settings["mmu_machine"];
-        if (mmu_machine.contains("filament_heater") &&
-            mmu_machine["filament_heater"].is_string()) {
+        if (mmu_machine.contains("filament_heater") && mmu_machine["filament_heater"].is_string()) {
             std::lock_guard<std::mutex> lock(mutex_);
             filament_heater_name_ = mmu_machine["filament_heater"].get<std::string>();
             spdlog::info("[AMS HappyHare] Filament heater: {}", filament_heater_name_);
@@ -1585,23 +1604,20 @@ void AmsBackendHappyHare::query_heater_config_from_config() {
         [this, token](nlohmann::json response) {
             // L081 Mechanism C: defer member access (filament_heater_name_, dryer_info_)
             // to main thread.
-            token.defer("AmsBackendHappyHare::heater_config_apply",
-                        [this, response = std::move(response)]() {
-                            try {
-                                const auto& settings =
-                                    response["result"]["status"]["configfile"]["settings"];
-                                apply_heater_config(settings);
-                                emit_event(EVENT_STATE_CHANGED);
-                            } catch (const nlohmann::json::exception& e) {
-                                spdlog::warn(
-                                    "[AMS HappyHare] Failed to parse configfile for heater: {}",
-                                    e.what());
-                            }
-                        });
+            token.defer("AmsBackendHappyHare::heater_config_apply", [this, response = std::move(
+                                                                               response)]() {
+                try {
+                    const auto& settings = response["result"]["status"]["configfile"]["settings"];
+                    apply_heater_config(settings);
+                    emit_event(EVENT_STATE_CHANGED);
+                } catch (const nlohmann::json::exception& e) {
+                    spdlog::warn("[AMS HappyHare] Failed to parse configfile for heater: {}",
+                                 e.what());
+                }
+            });
         },
         [](const MoonrakerError& err) {
-            spdlog::warn("[AMS HappyHare] Failed to query configfile for heater: {}",
-                         err.message);
+            spdlog::warn("[AMS HappyHare] Failed to query configfile for heater: {}", err.message);
         });
 }
 

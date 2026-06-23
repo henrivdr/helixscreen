@@ -35,10 +35,10 @@ enum class UiBreakpoint : int32_t {
 #define UI_BREAKPOINT_TINY_MAX 390   // height 273-390 → TINY (480x320)
 #define UI_BREAKPOINT_SMALL_MAX 460  // height 391-460 → SMALL (480x400, 1920x440)
 #define UI_BREAKPOINT_MEDIUM_MAX 550 // height 461-550 → MEDIUM (800x480)
-#define UI_BREAKPOINT_LARGE_MAX                                                                    \
-    700 // height 551-700 → LARGE (1024x600)
-#define UI_BREAKPOINT_XLARGE_MAX 1000 // height 701-1000 → XLARGE
-                                      // height >1000 → XXLARGE (1440p, 4K)
+#define UI_BREAKPOINT_LARGE_MAX 700  // height 551-700 → LARGE (1024x600)
+#define UI_BREAKPOINT_XLARGE_MAX                                                                   \
+    1000 // height 701-1000 → XLARGE
+         // height >1000 → XXLARGE (1440p, 4K)
 
 /// Convert a UiBreakpoint enum to its underlying integer index (for array access).
 constexpr inline int32_t to_int(UiBreakpoint bp) {

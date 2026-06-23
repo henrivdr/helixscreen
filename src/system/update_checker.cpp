@@ -176,8 +176,7 @@ bool parse_github_release(const json& j, UpdateChecker::ReleaseInfo& info, std::
         size_t zip_size = 0;
         for (const auto& asset : j["assets"]) {
             std::string name = asset.value("name", "");
-            if (name.find(platform_prefix) == 0 &&
-                name.find(".tar.gz") != std::string::npos) {
+            if (name.find(platform_prefix) == 0 && name.find(".tar.gz") != std::string::npos) {
                 info.download_url = asset.value("browser_download_url", "");
                 info.download_bytes = asset.value("size", static_cast<size_t>(0));
                 spdlog::info("[UpdateChecker] Selected asset: {} ({} bytes)", name,
@@ -364,8 +363,7 @@ void populate_release_urls_from_manifest(const json& platform_asset,
         info.sha256 = json_string_or_empty(platform_asset, "zip_sha256");
         // Manifest currently only carries `size` for the legacy tar.gz; if a
         // future schema adds `zip_size` we'll prefer it here.
-        info.download_bytes = platform_asset.value("zip_size",
-                                                   platform_asset.value("size", 0ULL));
+        info.download_bytes = platform_asset.value("zip_size", platform_asset.value("size", 0ULL));
     } else {
         info.download_url = json_string_or_empty(platform_asset, "url");
         info.sha256 = json_string_or_empty(platform_asset, "sha256");
@@ -495,7 +493,7 @@ void cleanup_stale_old_install() {
     }
 
     std::string old_dir = install_root + ".old";
-    struct stat st{};
+    struct stat st {};
     if (stat(old_dir.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
         return; // no .old directory
     }
@@ -815,7 +813,7 @@ static const char* const DOWNLOAD_FILENAME_ZIP = "helixscreen-update.zip";
 
 // Check if a directory is writable and return available bytes (0 on failure)
 static uint64_t get_available_space(const std::string& dir) {
-    struct statvfs stat{};
+    struct statvfs stat {};
     if (statvfs(dir.c_str(), &stat) != 0) {
         return 0;
     }
@@ -904,9 +902,9 @@ std::string UpdateChecker::get_download_path(DownloadPathDiag* diag,
     // Evaluate all candidates — pick the one with the most free space.
     // Track best across all writable dirs (even those below threshold) so we
     // can produce an actionable error message when no candidate qualifies.
-    std::string best_dir;            // best dir meeting threshold (used for return)
+    std::string best_dir; // best dir meeting threshold (used for return)
     uint64_t best_space = 0;
-    std::string best_dir_overall;    // best writable dir regardless of threshold (for diag)
+    std::string best_dir_overall; // best writable dir regardless of threshold (for diag)
     uint64_t best_space_overall = 0;
 
     for (const auto& dir : candidates) {
@@ -1406,7 +1404,7 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
             std::string fallback_dir = AppConstants::Update::backup_fallback_dir();
             safe_exec({mkdir_bin, "-p", fallback_dir});
 
-            struct stat st{};
+            struct stat st {};
             if (stat(config_src.c_str(), &st) == 0) {
                 int ret = safe_exec({cp_bin, "-f", config_src, config_bak});
                 if (ret == 0) {
@@ -1481,15 +1479,15 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
     // own child processes, all writing during the install window.  5 MB is
     // ~10× the log's worst case and leaves enough room that "passed the
     // probe" means the FS is genuinely healthy, not marginal.
-    constexpr uint64_t kMinInstallLogFreeBytes = 5 * 1024 * 1024;  // 5 MB
+    constexpr uint64_t kMinInstallLogFreeBytes = 5 * 1024 * 1024; // 5 MB
 
     std::string install_log = "/var/log/helixscreen-install.log";
     {
         auto probe = helix::system::probe_log_path_writable(install_log, kMinInstallLogFreeBytes);
         if (!probe.ok) {
             const std::string fallback = tarball_path + ".install.log";
-            flog_warn("[UpdateChecker] {} not writable ({}), falling back to {}",
-                      install_log, probe.error, fallback);
+            flog_warn("[UpdateChecker] {} not writable ({}), falling back to {}", install_log,
+                      probe.error, fallback);
             install_log = fallback;
             probe = helix::system::probe_log_path_writable(install_log, kMinInstallLogFreeBytes);
             if (!probe.ok) {
@@ -1511,7 +1509,7 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
                   geteuid(), getpid());
     }
     {
-        struct stat st{};
+        struct stat st {};
         if (stat(tarball_path.c_str(), &st) == 0) {
             flog_info("[UpdateChecker] tarball size: {} bytes", st.st_size);
         } else {
@@ -1573,11 +1571,8 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
             bool exited = false;
 
             static constexpr const char* install_message_keys[] = {
-                "Still working...",
-                "Almost there...",
-                "Just a bit more...",
-                "Hang tight...",
-                "Finishing up...",
+                "Still working...", "Almost there...", "Just a bit more...",
+                "Hang tight...",    "Finishing up...",
             };
             constexpr int num_messages =
                 sizeof(install_message_keys) / sizeof(install_message_keys[0]);
@@ -1627,7 +1622,7 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
         // Read install log: emit to spdlog, and capture the last error/warning
         // line to show in the UI (the user can't see the log file from the touchscreen).
         {
-            struct stat log_stat{};
+            struct stat log_stat {};
             if (stat(install_log.c_str(), &log_stat) == 0) {
                 flog_info("[UpdateChecker] Install log exists: {} bytes", log_stat.st_size);
             } else {
@@ -2063,8 +2058,7 @@ void UpdateChecker::check_for_updates(Callback callback) {
             });
         }
         if (cb_to_fire) {
-            helix::ui::queue_update(
-                [cb_to_fire]() { cb_to_fire(Status::Error, std::nullopt); });
+            helix::ui::queue_update([cb_to_fire]() { cb_to_fire(Status::Error, std::nullopt); });
         }
     }
 }

@@ -348,8 +348,7 @@ void grid_to_pixel(const GridPos& pos, int32_t& px, int32_t& py) {
 }
 
 /// Interpolate between two grid positions and return pixel coords
-void lerp_grid_to_pixel(const GridPos& from, const GridPos& to, float t, int32_t& px,
-                        int32_t& py) {
+void lerp_grid_to_pixel(const GridPos& from, const GridPos& to, float t, int32_t& px, int32_t& py) {
     float fx = static_cast<float>(from.x) + (static_cast<float>(to.x - from.x)) * t;
     float fy = static_cast<float>(from.y) + (static_cast<float>(to.y - from.y)) * t;
     px = g_grid.offset_x + static_cast<int32_t>(fx * CELL_SIZE + CELL_SIZE / 2);
@@ -432,7 +431,8 @@ SoundDefinition make_sfx(std::vector<SoundStep> steps) {
 
 void play_sfx_eat() {
     auto& sm = SoundManager::instance();
-    if (!sm.has_backend()) return;
+    if (!sm.has_backend())
+        return;
     SoundStep s;
     s.freq_hz = 440;
     s.duration_ms = 80;
@@ -445,7 +445,8 @@ void play_sfx_eat() {
 
 void play_sfx_die() {
     auto& sm = SoundManager::instance();
-    if (!sm.has_backend()) return;
+    if (!sm.has_backend())
+        return;
     SoundStep s;
     s.freq_hz = 220;
     s.duration_ms = 200;
@@ -458,7 +459,8 @@ void play_sfx_die() {
 
 void play_sfx_speedup() {
     auto& sm = SoundManager::instance();
-    if (!sm.has_backend()) return;
+    if (!sm.has_backend())
+        return;
     // C5→E5→G5 arpeggio
     SoundStep s1, s2, s3;
     s1.freq_hz = 523;
@@ -475,7 +477,8 @@ void play_sfx_speedup() {
 
 void play_sfx_start() {
     auto& sm = SoundManager::instance();
-    if (!sm.has_backend()) return;
+    if (!sm.has_backend())
+        return;
     // C4→G4 rising interval
     SoundStep s1, s2;
     s1.freq_hz = 262;
@@ -908,7 +911,7 @@ void draw_cb(lv_event_t* e) {
             death_elapsed <= DEATH_FLASH_DURATION + DEATH_SHRINK_DURATION) {
             death_shrinking = true;
             death_shrink_progress = static_cast<float>(death_elapsed - DEATH_FLASH_DURATION) /
-                                   static_cast<float>(DEATH_SHRINK_DURATION);
+                                    static_cast<float>(DEATH_SHRINK_DURATION);
         }
     }
 
@@ -997,8 +1000,7 @@ void draw_cb(lv_event_t* e) {
         case Direction::DOWN:
             ex1 = hx - eye_offset;
             ex2 = hx + eye_offset;
-            ey1 = ey2 =
-                hy + (g_game.direction == Direction::UP ? -eye_offset / 2 : eye_offset / 2);
+            ey1 = ey2 = hy + (g_game.direction == Direction::UP ? -eye_offset / 2 : eye_offset / 2);
             break;
         case Direction::LEFT:
         case Direction::RIGHT:
@@ -1078,8 +1080,8 @@ void draw_cb(lv_event_t* e) {
     // Show game over label after DEATH_CARD_TIME (fade in over ~200ms)
     if (g_game.game_over && g_render.death_start_ms > 0 && death_elapsed >= DEATH_CARD_TIME) {
         if (g_gameover_label && lv_obj_has_flag(g_gameover_label, LV_OBJ_FLAG_HIDDEN)) {
-            bool new_high =
-                g_game.score > 0 && g_game.score >= g_game.high_score; // already saved in show_game_over
+            bool new_high = g_game.score > 0 &&
+                            g_game.score >= g_game.high_score; // already saved in show_game_over
             char buf[96];
             if (new_high) {
                 snprintf(buf, sizeof(buf), "NEW HIGH SCORE!\n%d\nTap to play again", g_game.score);
@@ -1093,8 +1095,10 @@ void draw_cb(lv_event_t* e) {
         if (g_gameover_label) {
             uint32_t fade_elapsed = death_elapsed - DEATH_CARD_TIME;
             uint32_t fade_duration = DEATH_INPUT_READY_TIME - DEATH_CARD_TIME; // ~300ms
-            float fade = LV_MIN(1.0f, static_cast<float>(fade_elapsed) / static_cast<float>(fade_duration));
-            lv_obj_set_style_opa(g_gameover_label, static_cast<lv_opa_t>(LV_OPA_COVER * fade), LV_PART_MAIN);
+            float fade =
+                LV_MIN(1.0f, static_cast<float>(fade_elapsed) / static_cast<float>(fade_duration));
+            lv_obj_set_style_opa(g_gameover_label, static_cast<lv_opa_t>(LV_OPA_COVER * fade),
+                                 LV_PART_MAIN);
         }
     }
 }
@@ -1276,8 +1280,7 @@ void create_dpad(lv_obj_t* parent) {
     int32_t base_y = -20;
 
     g_dpad_up = create_dpad_button(parent, DPAD_CHEVRON_UP, LV_ALIGN_BOTTOM_MID, cx, base_y - 100);
-    g_dpad_down =
-        create_dpad_button(parent, DPAD_CHEVRON_DOWN, LV_ALIGN_BOTTOM_MID, cx, base_y);
+    g_dpad_down = create_dpad_button(parent, DPAD_CHEVRON_DOWN, LV_ALIGN_BOTTOM_MID, cx, base_y);
     g_dpad_left =
         create_dpad_button(parent, DPAD_CHEVRON_LEFT, LV_ALIGN_BOTTOM_MID, cx - 52, base_y - 50);
     g_dpad_right =

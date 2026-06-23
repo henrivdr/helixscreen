@@ -248,8 +248,8 @@ class WiFiManager {
     lv_timer_t* auth_fail_grace_timer_ = nullptr;
     std::string pending_auth_error_;
     void start_auth_fail_grace(const std::string& error); // arm/restart grace window
-    void cancel_auth_fail_grace();                         // CONNECTED preempted the failure
-    void deliver_auth_failure();                           // grace elapsed — failure is real
+    void cancel_auth_fail_grace();                        // CONNECTED preempted the failure
+    void deliver_auth_failure();                          // grace elapsed — failure is real
     static void auth_fail_grace_timer_cb(lv_timer_t* timer);
 
     // Event handling

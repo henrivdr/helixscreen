@@ -2,8 +2,9 @@
 
 #include "macro_fan_analyzer.h"
 
-#include <cctype>
 #include <spdlog/spdlog.h>
+
+#include <cctype>
 
 namespace helix {
 

@@ -318,15 +318,13 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
                 type = MoonrakerClientMock::PrinterType::GENERIC_BEDSLINGER;
                 type_name = "Generic Bedslinger";
             } else if (t != "voron_24") {
-                spdlog::warn(
-                    "[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
-                    "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
-                    "k1, ad5m, generic_corexy, generic_bedslinger, multi_extruder.",
-                    t);
+                spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
+                             "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
+                             "k1, ad5m, generic_corexy, generic_bedslinger, multi_extruder.",
+                             t);
             }
         }
-        spdlog::info("[MoonrakerManager] Creating MOCK client ({}, {}x speed)",
-                     type_name, speedup);
+        spdlog::info("[MoonrakerManager] Creating MOCK client ({}, {}x speed)", type_name, speedup);
         auto mock = std::make_unique<MoonrakerClientMock>(type, speedup);
 
         // HELIX_MOCK_AUTO_PRINT=1 — boot straight into an active mock print so
@@ -338,8 +336,7 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         if (auto_print_env && auto_print_env[0] && std::string(auto_print_env) != "0") {
             get_runtime_config()->mock_auto_start_print = true;
             if (!get_runtime_config()->gcode_test_file) {
-                get_runtime_config()->gcode_test_file =
-                    RuntimeConfig::get_default_test_file_path();
+                get_runtime_config()->gcode_test_file = RuntimeConfig::get_default_test_file_path();
             }
             spdlog::info("[MoonrakerManager] HELIX_MOCK_AUTO_PRINT set — mock will "
                          "auto-start a print on connect");
@@ -377,10 +374,9 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
     if (auto* mock_client = dynamic_cast<MoonrakerClientMock*>(m_client.get())) {
         auto* backend = AmsState::instance().get_backend();
         if (auto* ams_mock = dynamic_cast<AmsBackendMock*>(backend)) {
-            mock_client->add_active_gcode_tool_observer(
-                [ams_mock](int tool, uint32_t color) {
-                    ams_mock->on_simulated_gcode_tool_changed(tool, color);
-                });
+            mock_client->add_active_gcode_tool_observer([ams_mock](int tool, uint32_t color) {
+                ams_mock->on_simulated_gcode_tool_changed(tool, color);
+            });
             spdlog::info("[MoonrakerManager] Mock AMS backend subscribed to simulator's "
                          "active-gcode-tool notifications");
         }
@@ -627,8 +623,7 @@ void MoonrakerManager::init_print_start_collector() {
 
             // Use helper function for testable decision logic
             if (should_start_print_collector(s_prev_print_state, new_state, current_progress,
-                                             s_is_initial_transition,
-                                             current_print_duration)) {
+                                             s_is_initial_transition, current_print_duration)) {
                 if (!collector->is_active()) {
                     collector->reset();
                     collector->start();

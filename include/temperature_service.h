@@ -22,7 +22,7 @@
 namespace helix {
 class PrinterState;
 class TemperatureController;
-}
+} // namespace helix
 class MoonrakerAPI;
 class TemperatureService;
 

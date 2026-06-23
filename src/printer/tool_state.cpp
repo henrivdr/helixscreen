@@ -11,10 +11,10 @@
 
 #include "tool_state.h"
 
-#include "data_root_resolver.h"
 #include "ui_update_queue.h"
 
 #include "ams_state.h"
+#include "data_root_resolver.h"
 #include "json_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
@@ -199,8 +199,7 @@ void ToolState::init_tools(const helix::PrinterDiscovery& hardware) {
 }
 
 void ToolState::set_ams_topology(const ToolTopology& topo) {
-    bool needs_rebuild = !ams_topology_active_ ||
-                         ams_topology_tool_count_ != topo.tool_count ||
+    bool needs_rebuild = !ams_topology_active_ || ams_topology_tool_count_ != topo.tool_count ||
                          ams_topology_tool_to_slot_ != topo.tool_to_slot ||
                          ams_topology_tool_name_prefix_ != topo.tool_name_prefix;
 
@@ -223,9 +222,8 @@ void ToolState::set_ams_topology(const ToolTopology& topo) {
             t.index = i;
             t.name = ::fmt::format("{}{}", topo.tool_name_prefix, i);
             t.backend_index = topo.backend_index;
-            t.backend_slot = (i < static_cast<int>(topo.tool_to_slot.size()))
-                                 ? topo.tool_to_slot[i]
-                                 : -1;
+            t.backend_slot =
+                (i < static_cast<int>(topo.tool_to_slot.size())) ? topo.tool_to_slot[i] : -1;
             if (i < static_cast<int>(previous.size())) {
                 // Carry over hardware mappings init_tools set up.
                 t.extruder_name = previous[i].extruder_name;
@@ -655,8 +653,8 @@ void ToolState::save_spool_json() const {
             ofs << json_data.dump(2);
             ofs.flush();
             if (!ofs.good()) {
-                spdlog::error("[ToolState] Failed to write spool JSON to {}: {}",
-                              tmp_path.string(), strerror(errno));
+                spdlog::error("[ToolState] Failed to write spool JSON to {}: {}", tmp_path.string(),
+                              strerror(errno));
                 std::remove(tmp_path.c_str());
                 return;
             }

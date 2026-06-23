@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "catch_amalgamated.hpp"
 #include "error_event.h"
+
+#include "catch_amalgamated.hpp"
 
 using helix::ErrorEvent;
 using helix::ErrorSeverity;
@@ -8,7 +9,7 @@ using helix::ErrorSource;
 
 TEST_CASE("ErrorEvent defaults are safe", "[error-center][model]") {
     ErrorEvent e;
-    REQUIRE(e.severity == ErrorSeverity::WARNING);   // conservative default
+    REQUIRE(e.severity == ErrorSeverity::WARNING); // conservative default
     REQUIRE(e.source == ErrorSource::GENERIC);
     REQUIRE(e.title.empty());
     REQUIRE(e.detail.empty());
@@ -22,11 +23,13 @@ using helix::ClassifyContext;
 using helix::error_classify::classify;
 
 TEST_CASE("uncoded jam !! while paused is CRITICAL", "[error-center][classify]") {
-    ClassifyContext ctx; ctx.is_paused = true;
+    ClassifyContext ctx;
+    ctx.is_paused = true;
     auto e = classify("!! Toolhead runout detected by tool_end sensor, but upstream "
                       "sensors still detect filament. Possible filament break or jam "
                       "at the toolhead. Please clear the jam and reload filament "
-                      "manually, then resume the print.", ctx);
+                      "manually, then resume the print.",
+                      ctx);
     REQUIRE(e.has_value());
     REQUIRE(e->severity == helix::ErrorSeverity::CRITICAL);
     REQUIRE(e->source == helix::ErrorSource::GENERIC);
@@ -86,7 +89,7 @@ TEST_CASE("non-error line yields nullopt", "[error-center][classify]") {
 
 TEST_CASE("RecoveryAction carries an optional style", "[error-center][model]") {
     helix::RecoveryAction a;
-    REQUIRE(a.style.empty());                 // default neutral
+    REQUIRE(a.style.empty()); // default neutral
     helix::RecoveryAction b{"Resume", "RESUME", "afc::resume", "primary"};
     REQUIRE(b.style == "primary");
     REQUIRE(b.gcode == "RESUME");

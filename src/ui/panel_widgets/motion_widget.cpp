@@ -47,8 +47,8 @@ void MotionWidget::detach() {
 }
 
 void MotionWidget::handle_click() {
-    helix::ui::lazy_create_and_push_overlay<MotionPanel>(
-        get_global_motion_panel, motion_panel_, parent_screen_, "Motion", "MotionWidget");
+    helix::ui::lazy_create_and_push_overlay<MotionPanel>(get_global_motion_panel, motion_panel_,
+                                                         parent_screen_, "Motion", "MotionWidget");
 }
 
 void MotionWidget::clicked_cb(lv_event_t* e) {

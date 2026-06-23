@@ -137,8 +137,7 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
 
     // Error-center: classify a pausing MMU fault into a recovery ErrorEvent.
     [[nodiscard]] std::optional<helix::ErrorEvent>
-    classify_error(const std::string& raw_line,
-                   const helix::ClassifyContext& ctx) const override;
+    classify_error(const std::string& raw_line, const helix::ClassifyContext& ctx) const override;
 
     [[nodiscard]] std::vector<ToolchangePhase>
     toolchange_phase_template(StepOperationType op) const override;
@@ -370,10 +369,12 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     // for per-unit resolution in get_system_info().
     std::string filament_heater_name_;    ///< scalar [mmu_machine] filament_heater (primary heater)
     std::string environment_sensor_name_; ///< scalar [mmu_machine] environment_sensor
-    std::vector<std::string> filament_heaters_;    ///< per-gate heaters (plural), empty if shared
-    std::vector<std::string> environment_sensors_; ///< per-gate env sensors (plural), empty if shared
-    std::map<std::string, float> heater_temp_;     ///< live temp (°C) keyed by heater object name
-    std::map<std::string, float> sensor_humidity_; ///< live humidity (%RH) keyed by env-sensor object name
+    std::vector<std::string> filament_heaters_; ///< per-gate heaters (plural), empty if shared
+    std::vector<std::string>
+        environment_sensors_;                  ///< per-gate env sensors (plural), empty if shared
+    std::map<std::string, float> heater_temp_; ///< live temp (°C) keyed by heater object name
+    std::map<std::string, float>
+        sensor_humidity_; ///< live humidity (%RH) keyed by env-sensor object name
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)

@@ -13,6 +13,9 @@
 
 #include "spoolman_manager.h"
 
+#include "ui_toast_manager.h"
+#include "ui_update_queue.h"
+
 #include "ams_state.h"
 #include "app_globals.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -21,8 +24,6 @@
 #include "printer_state.h"
 #include "runtime_config.h"
 #include "static_subject_registry.h"
-#include "ui_toast_manager.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 
@@ -67,8 +68,7 @@ void SpoolmanManager::init_subjects() {
         get_printer_state().get_print_state_enum_subject(), this,
         [](SpoolmanManager* self, int state) {
             auto print_state = static_cast<PrintJobState>(state);
-            if (print_state == PrintJobState::PRINTING ||
-                print_state == PrintJobState::COMPLETE ||
+            if (print_state == PrintJobState::PRINTING || print_state == PrintJobState::COMPLETE ||
                 print_state == PrintJobState::PAUSED) {
                 spdlog::debug(
                     "[SpoolmanManager] Print state changed to {}, refreshing Spoolman weights",
@@ -193,150 +193,153 @@ void SpoolmanManager::refresh_spoolman_weights() {
         int slot_count = backend->get_system_info().total_slots;
 
         for (int i = 0; i < slot_count; ++i) {
-        SlotInfo slot = backend->get_slot_info(i);
-        if (slot.spoolman_id > 0) {
-            ++linked_count;
-            int slot_index = i;
-            int spoolman_id = slot.spoolman_id;
+            SlotInfo slot = backend->get_slot_info(i);
+            if (slot.spoolman_id > 0) {
+                ++linked_count;
+                int slot_index = i;
+                int spoolman_id = slot.spoolman_id;
 
-            api_->spoolman().get_spoolman_spool(
-                spoolman_id,
-                [slot_index, spoolman_id, local_weight](const std::optional<SpoolInfo>& spool_opt) {
-                    if (!spool_opt.has_value()) {
-                        spdlog::warn("[SpoolmanManager] Spoolman spool {} not found", spoolman_id);
-                        return;
-                    }
-
-                    const SpoolInfo& spool = spool_opt.value();
-
-                    // Data to pass to UI thread
-                    struct WeightUpdate {
-                        int slot_index;
-                        int expected_spoolman_id; // To verify slot wasn't reassigned
-                        float remaining_weight_g;
-                        float total_weight_g;
-                        bool local_weight; // Backend tracks remaining weight locally
-                    };
-
-                    auto update_data = std::make_unique<WeightUpdate>(WeightUpdate{
-                        slot_index, spoolman_id, static_cast<float>(spool.remaining_weight_g),
-                        static_cast<float>(spool.initial_weight_g), local_weight});
-
-                    helix::ui::queue_update<WeightUpdate>(std::move(update_data), [](WeightUpdate*
-                                                                                         d) {
-                        // Skip if shutdown is in progress
-                        if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                api_->spoolman().get_spoolman_spool(
+                    spoolman_id,
+                    [slot_index, spoolman_id,
+                     local_weight](const std::optional<SpoolInfo>& spool_opt) {
+                        if (!spool_opt.has_value()) {
+                            spdlog::warn("[SpoolmanManager] Spoolman spool {} not found",
+                                         spoolman_id);
                             return;
                         }
 
-                        SpoolmanManager& mgr = SpoolmanManager::instance();
-                        std::lock_guard<std::recursive_mutex> lock(mgr.mutex_);
+                        const SpoolInfo& spool = spool_opt.value();
 
-                        // Success response — reset circuit breaker (on UI thread)
-                        if (mgr.consecutive_failures_ > 0) {
-                            spdlog::info("[SpoolmanManager] Spoolman recovered after {} failures",
-                                         mgr.consecutive_failures_);
-                        }
-                        mgr.consecutive_failures_ = 0;
-                        mgr.unavailable_notified_ = false;
+                        // Data to pass to UI thread
+                        struct WeightUpdate {
+                            int slot_index;
+                            int expected_spoolman_id; // To verify slot wasn't reassigned
+                            float remaining_weight_g;
+                            float total_weight_g;
+                            bool local_weight; // Backend tracks remaining weight locally
+                        };
 
-                        AmsState& ams = AmsState::instance();
-                        auto* primary = ams.get_backend(0);
-                        if (!primary) {
-                            return;
-                        }
+                        auto update_data = std::make_unique<WeightUpdate>(WeightUpdate{
+                            slot_index, spoolman_id, static_cast<float>(spool.remaining_weight_g),
+                            static_cast<float>(spool.initial_weight_g), local_weight});
 
-                        // Get current slot info and verify it wasn't reassigned
-                        SlotInfo slot = primary->get_slot_info(d->slot_index);
-                        if (slot.spoolman_id != d->expected_spoolman_id) {
+                        helix::ui::queue_update<
+                            WeightUpdate>(std::move(update_data), [](WeightUpdate* d) {
+                            // Skip if shutdown is in progress
+                            if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                                return;
+                            }
+
+                            SpoolmanManager& mgr = SpoolmanManager::instance();
+                            std::lock_guard<std::recursive_mutex> lock(mgr.mutex_);
+
+                            // Success response — reset circuit breaker (on UI thread)
+                            if (mgr.consecutive_failures_ > 0) {
+                                spdlog::info(
+                                    "[SpoolmanManager] Spoolman recovered after {} failures",
+                                    mgr.consecutive_failures_);
+                            }
+                            mgr.consecutive_failures_ = 0;
+                            mgr.unavailable_notified_ = false;
+
+                            AmsState& ams = AmsState::instance();
+                            auto* primary = ams.get_backend(0);
+                            if (!primary) {
+                                return;
+                            }
+
+                            // Get current slot info and verify it wasn't reassigned
+                            SlotInfo slot = primary->get_slot_info(d->slot_index);
+                            if (slot.spoolman_id != d->expected_spoolman_id) {
+                                spdlog::debug(
+                                    "[SpoolmanManager] Slot {} spoolman_id changed ({} -> {}), "
+                                    "skipping stale weight update",
+                                    d->slot_index, d->expected_spoolman_id, slot.spoolman_id);
+                                return;
+                            }
+
+                            // When backend tracks weight locally, only update total_weight
+                            // (initial weight from Spoolman). Preserve the backend's
+                            // remaining_weight which is more accurate than Spoolman's.
+                            float new_remaining =
+                                d->local_weight ? slot.remaining_weight_g : d->remaining_weight_g;
+
+                            // Skip update if weights haven't changed (avoids UI refresh cascade)
+                            if (slot.remaining_weight_g == new_remaining &&
+                                slot.total_weight_g == d->total_weight_g) {
+                                spdlog::trace("[SpoolmanManager] Slot {} weights unchanged "
+                                              "({:.0f}g / {:.0f}g)",
+                                              d->slot_index, new_remaining, d->total_weight_g);
+                                return;
+                            }
+
+                            // Update weights and set back.
+                            // CRITICAL: persist=false prevents an infinite feedback loop.
+                            // With persist=true, set_slot_info sends G-code to firmware
+                            // (e.g., SET_WEIGHT for AFC, MMU_GATE_MAP for Happy Hare).
+                            // Firmware then emits a status_update WebSocket event, which
+                            // triggers sync_from_backend -> refresh_spoolman_weights ->
+                            // set_slot_info again, ad infinitum. With 4 AFC lanes this
+                            // fires 16+ G-code commands per cycle and saturates the CPU.
+                            // Since these weights come FROM Spoolman (an external source),
+                            // there's no need to write them back to firmware.
+                            slot.remaining_weight_g = new_remaining;
+                            slot.total_weight_g = d->total_weight_g;
+                            primary->set_slot_info(d->slot_index, slot, /*persist=*/false);
+                            ams.bump_slots_version();
+
                             spdlog::debug(
-                                "[SpoolmanManager] Slot {} spoolman_id changed ({} -> {}), "
-                                "skipping stale weight update",
-                                d->slot_index, d->expected_spoolman_id, slot.spoolman_id);
-                            return;
-                        }
+                                "[SpoolmanManager] Updated slot {} weights: {:.0f}g / {:.0f}g{}",
+                                d->slot_index, new_remaining, d->total_weight_g,
+                                d->local_weight ? " (local remaining)" : "");
+                        });
+                    },
+                    [spoolman_id](const MoonrakerError& err) {
+                        spdlog::warn("[SpoolmanManager] Failed to fetch Spoolman spool {}: {}",
+                                     spoolman_id, err.message);
 
-                        // When backend tracks weight locally, only update total_weight
-                        // (initial weight from Spoolman). Preserve the backend's
-                        // remaining_weight which is more accurate than Spoolman's.
-                        float new_remaining =
-                            d->local_weight ? slot.remaining_weight_g : d->remaining_weight_g;
+                        // Track failure for circuit breaker (post to UI thread for
+                        // thread-safe access to SpoolmanManager and ToastManager)
+                        helix::ui::queue_update([]() {
+                            if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                                return;
+                            }
 
-                        // Skip update if weights haven't changed (avoids UI refresh cascade)
-                        if (slot.remaining_weight_g == new_remaining &&
-                            slot.total_weight_g == d->total_weight_g) {
-                            spdlog::trace(
-                                "[SpoolmanManager] Slot {} weights unchanged ({:.0f}g / {:.0f}g)",
-                                d->slot_index, new_remaining, d->total_weight_g);
-                            return;
-                        }
+                            SpoolmanManager& mgr = SpoolmanManager::instance();
+                            std::lock_guard<std::recursive_mutex> lock(mgr.mutex_);
 
-                        // Update weights and set back.
-                        // CRITICAL: persist=false prevents an infinite feedback loop.
-                        // With persist=true, set_slot_info sends G-code to firmware
-                        // (e.g., SET_WEIGHT for AFC, MMU_GATE_MAP for Happy Hare).
-                        // Firmware then emits a status_update WebSocket event, which
-                        // triggers sync_from_backend -> refresh_spoolman_weights ->
-                        // set_slot_info again, ad infinitum. With 4 AFC lanes this
-                        // fires 16+ G-code commands per cycle and saturates the CPU.
-                        // Since these weights come FROM Spoolman (an external source),
-                        // there's no need to write them back to firmware.
-                        slot.remaining_weight_g = new_remaining;
-                        slot.total_weight_g = d->total_weight_g;
-                        primary->set_slot_info(d->slot_index, slot, /*persist=*/false);
-                        ams.bump_slots_version();
+                            mgr.consecutive_failures_++;
 
-                        spdlog::debug(
-                            "[SpoolmanManager] Updated slot {} weights: {:.0f}g / {:.0f}g{}",
-                            d->slot_index, new_remaining, d->total_weight_g,
-                            d->local_weight ? " (local remaining)" : "");
-                    });
-                },
-                [spoolman_id](const MoonrakerError& err) {
-                    spdlog::warn("[SpoolmanManager] Failed to fetch Spoolman spool {}: {}",
-                                 spoolman_id, err.message);
+                            if (mgr.consecutive_failures_ >= CB_FAILURE_THRESHOLD) {
+                                mgr.cb_open_ = true;
+                                mgr.cb_tripped_at_ms_ = lv_tick_get();
+                                spdlog::warn(
+                                    "[SpoolmanManager] Spoolman circuit breaker OPEN after {} "
+                                    "failures, backing off {}s",
+                                    mgr.consecutive_failures_, CB_BACKOFF_MS / 1000);
 
-                    // Track failure for circuit breaker (post to UI thread for
-                    // thread-safe access to SpoolmanManager and ToastManager)
-                    helix::ui::queue_update([]() {
-                        if (s_shutdown_flag.load(std::memory_order_acquire)) {
-                            return;
-                        }
-
-                        SpoolmanManager& mgr = SpoolmanManager::instance();
-                        std::lock_guard<std::recursive_mutex> lock(mgr.mutex_);
-
-                        mgr.consecutive_failures_++;
-
-                        if (mgr.consecutive_failures_ >= CB_FAILURE_THRESHOLD) {
-                            mgr.cb_open_ = true;
-                            mgr.cb_tripped_at_ms_ = lv_tick_get();
-                            spdlog::warn(
-                                "[SpoolmanManager] Spoolman circuit breaker OPEN after {} "
-                                "failures, backing off {}s",
-                                mgr.consecutive_failures_, CB_BACKOFF_MS / 1000);
-
-                            // Notify user once per outage — only if Spoolman is
-                            // actually configured (avoid confusing toast on printers
-                            // that never set up Spoolman)
-                            if (!mgr.unavailable_notified_) {
-                                mgr.unavailable_notified_ = true;
-                                auto* subj =
-                                    lv_xml_get_subject(nullptr, "printer_has_spoolman");
-                                if (subj && lv_subject_get_int(subj) == 1) {
-                                    // i18n: Spoolman is a product name, do not translate
-                                    ToastManager::instance().show(
-                                        ToastSeverity::WARNING,
-                                        lv_tr("Spoolman unavailable — filament weights "
-                                              "may be stale"),
-                                        6000);
+                                // Notify user once per outage — only if Spoolman is
+                                // actually configured (avoid confusing toast on printers
+                                // that never set up Spoolman)
+                                if (!mgr.unavailable_notified_) {
+                                    mgr.unavailable_notified_ = true;
+                                    auto* subj =
+                                        lv_xml_get_subject(nullptr, "printer_has_spoolman");
+                                    if (subj && lv_subject_get_int(subj) == 1) {
+                                        // i18n: Spoolman is a product name, do not translate
+                                        ToastManager::instance().show(
+                                            ToastSeverity::WARNING,
+                                            lv_tr("Spoolman unavailable — filament weights "
+                                                  "may be stale"),
+                                            6000);
+                                    }
                                 }
                             }
-                        }
-                    });
-                },
-                /*silent=*/true);
-        }
+                        });
+                    },
+                    /*silent=*/true);
+            }
         }
     } // if (backend)
 

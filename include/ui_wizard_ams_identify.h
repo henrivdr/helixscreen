@@ -3,10 +3,9 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
+#include "wizard_step.h"
 
 #include <string>
 
@@ -35,10 +34,18 @@
 class WizardAmsIdentifyStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::AmsIdentify; }
-    const char* component_name() const override { return "wizard_ams_identify"; }
-    const char* log_name() const override { return "Wizard AMS Identify"; }
-    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::AmsIdentify;
+    }
+    const char* component_name() const override {
+        return "wizard_ams_identify";
+    }
+    const char* log_name() const override {
+        return "Wizard AMS Identify";
+    }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override {
+        return ctx.preset.skip_hardware || should_skip();
+    }
 
     WizardAmsIdentifyStep();
     ~WizardAmsIdentifyStep();

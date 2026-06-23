@@ -30,9 +30,8 @@
 
 #pragma once
 
-#include "lvgl/lvgl.h"
-
 #include "helix/xml/scoped_subject_registry.h"
+#include "lvgl/lvgl.h"
 
 /**
  * @brief Initialize an integer subject with optional XML registration

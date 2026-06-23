@@ -283,7 +283,7 @@ TEST_CASE_METHOD(UiButtonTestFixture, "ui_button bind_op_state renders idle/busy
     REQUIRE(idle_cp != nullptr);
     REQUIRE(check_cp != nullptr); // 'check' glyph must exist in the MDI font
 
-    const char* attrs[] = {"text",         "Light", "icon", "light",
+    const char* attrs[] = {"text",          "Light",           "icon", "light",
                            "bind_op_state", "test_op_subject", nullptr};
     lv_obj_t* btn = create_button(attrs);
     REQUIRE(btn != nullptr);

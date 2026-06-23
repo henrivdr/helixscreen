@@ -404,16 +404,15 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                             spdlog::info("[Moonraker Client] Timelapse component detected");
                             get_printer_state().set_timelapse_available(true);
                         }
-
                     }
                 }
 
-                // Fire-and-forget webcam detection - independent of components list.
-                // Skipped on platforms without a camera widget (HELIX_HAS_CAMERA=0:
-                // AD5M/AD5X/CC1/K1/K2/MIPS/SnapmakerU1). On AD5X specifically, the
-                // firmware's H.264 codec driver crashes the kernel on v4l2_open
-                // (dma_coherent_mem_available NULL deref → process killed by SIGBUS),
-                // so even probing for a webcam is unwanted.
+            // Fire-and-forget webcam detection - independent of components list.
+            // Skipped on platforms without a camera widget (HELIX_HAS_CAMERA=0:
+            // AD5M/AD5X/CC1/K1/K2/MIPS/SnapmakerU1). On AD5X specifically, the
+            // firmware's H.264 codec driver crashes the kernel on v4l2_open
+            // (dma_coherent_mem_available NULL deref → process killed by SIGBUS),
+            // so even probing for a webcam is unwanted.
 #if HELIX_HAS_CAMERA
                 client_.send_jsonrpc(
                     "server.webcams.list", json::object(),
@@ -947,8 +946,7 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     const PrinterDiscovery& hw, const std::vector<std::string>& heaters,
     const std::vector<std::string>& sensors, const std::vector<std::string>& fans,
     const std::vector<std::string>& leds, const std::vector<std::string>& afc_objects,
-    const std::vector<std::string>& filament_sensors,
-    const std::vector<std::string>& mcus) {
+    const std::vector<std::string>& filament_sensors, const std::vector<std::string>& mcus) {
     json subscription_objects;
 
     // Core non-optional objects — narrow each to the fields HelixScreen
@@ -957,8 +955,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // motion_report) update on every motion step (~100Hz during a print) —
     // nullptr would have us receiving every internal field per step.
     subscription_objects["print_stats"] =
-        json::array({"state", "filename", "filament_used", "print_duration",
-                     "total_duration", "estimated_time", "info", "message"});
+        json::array({"state", "filename", "filament_used", "print_duration", "total_duration",
+                     "estimated_time", "info", "message"});
     // virtual_sdcard.progress drives the progress bar. layer / layer_count
     // are the FALLBACK source for layer tracking — preferred source is
     // print_stats.info.{current_layer,total_layer} (slicer-supplied via
@@ -973,8 +971,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     subscription_objects["toolhead"] =
         json::array({"position", "homed_axes", "kinematics", "extruder", "max_velocity",
                      "axis_minimum", "axis_maximum"});
-    subscription_objects["gcode_move"] = json::array(
-        {"gcode_position", "speed", "speed_factor", "extrude_factor", "homing_origin"});
+    subscription_objects["gcode_move"] =
+        json::array({"gcode_position", "speed", "speed_factor", "extrude_factor", "homing_origin"});
     subscription_objects["motion_report"] = json::array({"live_extruder_velocity"});
     subscription_objects["display_status"] = json::array({"message", "progress"});
 
@@ -1129,37 +1127,49 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // parse_afc_buffer / parse_afc_extruder / parse_afc_unit_object in
     // src/printer/ams_backend_afc.cpp. Keep these in sync when adding parser
     // fields.
-    static const json afc_state_fields = json::array(
-        {"connected",      "bypass_state",        "quiet_mode",
-         "current_load",   "current_lane",        "current_state",
-         "current_tool",   "current_toolchange",  "error_state",
-         "filament_loaded", "lane_loaded",        "led_state",
-         "message",        "name",                "number_of_toolchanges",
-         "num_extruders",  "status",              "system",
-         "tool_sensor_after_extruder",            "tool_stn",
-         "tool_stn_unload",                       "type",
-         "units",          "lanes",               "hubs",
-         "extruders",      "buffers"});
-    static const json afc_stepper_fields = json::array(
-        {"buffer_status", "color",         "dist_hub",     "extruder",
-         "filament_status", "hub",         "load",         "loaded_to_hub",
-         "map",           "material",      "prep",         "runout_lane",
-         "spool_id",      "status",        "tool_loaded",  "weight"});
+    static const json afc_state_fields = json::array({"connected",
+                                                      "bypass_state",
+                                                      "quiet_mode",
+                                                      "current_load",
+                                                      "current_lane",
+                                                      "current_state",
+                                                      "current_tool",
+                                                      "current_toolchange",
+                                                      "error_state",
+                                                      "filament_loaded",
+                                                      "lane_loaded",
+                                                      "led_state",
+                                                      "message",
+                                                      "name",
+                                                      "number_of_toolchanges",
+                                                      "num_extruders",
+                                                      "status",
+                                                      "system",
+                                                      "tool_sensor_after_extruder",
+                                                      "tool_stn",
+                                                      "tool_stn_unload",
+                                                      "type",
+                                                      "units",
+                                                      "lanes",
+                                                      "hubs",
+                                                      "extruders",
+                                                      "buffers"});
+    static const json afc_stepper_fields =
+        json::array({"buffer_status", "color", "dist_hub", "extruder", "filament_status", "hub",
+                     "load", "loaded_to_hub", "map", "material", "prep", "runout_lane", "spool_id",
+                     "status", "tool_loaded", "weight"});
     static const json afc_hub_fields = json::array({"state", "afc_bowden_length"});
     static const json afc_buffer_fields = json::array(
-        {"state", "distance_to_fault", "error_sensitivity",
-         "fault_detection_enabled", "lanes"});
+        {"state", "distance_to_fault", "error_sensitivity", "fault_detection_enabled", "lanes"});
     static const json afc_extruder_fields =
         json::array({"lane_loaded", "tool_end_status", "tool_start_status"});
-    static const json afc_unit_fields =
-        json::array({"lanes", "extruders", "hubs", "buffers"});
+    static const json afc_unit_fields = json::array({"lanes", "extruders", "hubs", "buffers"});
 
     for (const auto& afc_obj : afc_objects) {
         // Top-level "AFC" (no space, no underscore-suffix) — system state
         if (afc_obj == "AFC" || afc_obj == "afc") {
             subscription_objects[afc_obj] = afc_state_fields;
-        } else if (afc_obj.rfind("AFC_stepper ", 0) == 0 ||
-                   afc_obj.rfind("AFC_lane ", 0) == 0) {
+        } else if (afc_obj.rfind("AFC_stepper ", 0) == 0 || afc_obj.rfind("AFC_lane ", 0) == 0) {
             subscription_objects[afc_obj] = afc_stepper_fields;
         } else if (afc_obj.rfind("AFC_hub ", 0) == 0) {
             subscription_objects[afc_obj] = afc_hub_fields;
@@ -1238,14 +1248,9 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     if (hw.has_tool_changer()) {
         subscription_objects["toolchanger"] =
             json::array({"status", "tool_number", "tool_numbers"});
-        static const json tool_fields = json::array({"active",
-                                                     "mounted",
-                                                     "detect_state",
-                                                     "gcode_x_offset",
-                                                     "gcode_y_offset",
-                                                     "gcode_z_offset",
-                                                     "extruder",
-                                                     "fan"});
+        static const json tool_fields =
+            json::array({"active", "mounted", "detect_state", "gcode_x_offset", "gcode_y_offset",
+                         "gcode_z_offset", "extruder", "fan"});
         for (const auto& tool_name : hw.tool_names()) {
             subscription_objects["tool " + tool_name] = tool_fields;
         }
@@ -1291,16 +1296,15 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
 
     // Step 5: Subscribe to all discovered objects + core objects. The pure
     // helper builds the full objects map; per-section logging stays here.
-    json subscription_objects = build_subscription_objects(
-        hw, heaters_, sensors_, fans_, leds_, afc_objects_, filament_sensors_, mcus_);
+    json subscription_objects = build_subscription_objects(hw, heaters_, sensors_, fans_, leds_,
+                                                           afc_objects_, filament_sensors_, mcus_);
 
     if (!mcus_.empty()) {
         spdlog::info("[Moonraker Client] Subscribing to {} MCU object(s): {}", mcus_.size(),
                      json(mcus_).dump());
     }
 
-    spdlog::info("[Moonraker Client] Subscribing to {} fans: {}", fans_.size(),
-                 json(fans_).dump());
+    spdlog::info("[Moonraker Client] Subscribing to {} fans: {}", fans_.size(), json(fans_).dump());
     if (hw.has_fan_feedback()) {
         spdlog::debug("[MoonrakerDiscoverySequence] Subscribing to fan_feedback for RPM data");
     }

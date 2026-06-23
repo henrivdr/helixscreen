@@ -34,13 +34,19 @@ struct FileListNotificationState {
     bool has_files = false;
 
     /// Mirrors show_detail_view()
-    void show_detail_view() { detail_view_open = true; }
+    void show_detail_view() {
+        detail_view_open = true;
+    }
 
     /// Mirrors hide_detail_view()
-    void hide_detail_view() { detail_view_open = false; }
+    void hide_detail_view() {
+        detail_view_open = false;
+    }
 
     /// Mirrors on_deactivate() — MUST clear detail_view_open_
-    void on_deactivate() { detail_view_open = false; }
+    void on_deactivate() {
+        detail_view_open = false;
+    }
 
     /// Mirrors notify_filelist_changed handler — returns true if refresh runs
     bool on_filelist_changed() {
@@ -70,7 +76,6 @@ struct FileListNotificationState {
 
 TEST_CASE("Detail view open flag cleared on deactivation",
           "[print_select][detail_view][deactivate]") {
-
     SECTION("Navigate away via navbar with detail view open clears flag") {
         FileListNotificationState state;
         state.first_activation = false;

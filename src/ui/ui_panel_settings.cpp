@@ -12,8 +12,8 @@
 #include "ui_info_qr_modal.h"
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
-#include "ui_overlay_performance.h"
 #include "ui_overlay_network_settings.h"
+#include "ui_overlay_performance.h"
 #include "ui_overlay_timelapse_settings.h"
 #include "ui_panel_history_dashboard.h"
 #include "ui_panel_memory_stats.h"
@@ -766,7 +766,8 @@ void SettingsPanel::populate_info_rows() {
     // first paint shows the current host:port (otherwise it's the em-dash default
     // until ChangeHostModal fires its completion callback).
     Config* config = Config::get_instance();
-    if (!config) return;
+    if (!config)
+        return;
 
     std::string host = config->get<std::string>(config->df() + "moonraker_host", "");
     if (!host.empty()) {

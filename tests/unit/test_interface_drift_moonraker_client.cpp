@@ -5,16 +5,16 @@
 // method and neither helix::MoonrakerClient nor MoonrakerClientMock provides it,
 // MoonrakerClientMock becomes abstract and this fails to build.
 
-#include "../catch_amalgamated.hpp"
 #include "i_moonraker_client.h"
+
+#include "../catch_amalgamated.hpp"
 
 #ifdef HELIX_ENABLE_MOCKS
 #include "moonraker_client_mock.h"
 
 #include <type_traits>
 
-TEST_CASE("MoonrakerClientMock satisfies helix::IMoonrakerClient interface",
-          "[compile][drift]") {
+TEST_CASE("MoonrakerClientMock satisfies helix::IMoonrakerClient interface", "[compile][drift]") {
     static_assert(std::is_base_of_v<helix::IMoonrakerClient, MoonrakerClientMock>,
                   "MoonrakerClientMock must derive from helix::IMoonrakerClient");
     static_assert(!std::is_abstract_v<MoonrakerClientMock>,

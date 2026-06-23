@@ -418,74 +418,74 @@ void PrintStartEnhancer::apply_enhancements(MoonrakerAPI* api, const std::string
             // (create_backup cb fires on HTTP bg thread). If token is expired,
             // the deferred lambda will be skipped — `this` is dead so op_flag
             // is moot.
-            token.defer(
-                "PrintStartEnhancer::apply_modify_step",
-                [this, api, macro_name, config_file, approved, backup_filename, on_progress,
-                 on_complete, safe_error, token, op_flag]() {
-                    spdlog::debug("[PrintStartEnhancer] Backup created: {}", backup_filename);
+            token.defer("PrintStartEnhancer::apply_modify_step", [this, api, macro_name,
+                                                                  config_file, approved,
+                                                                  backup_filename, on_progress,
+                                                                  on_complete, safe_error, token,
+                                                                  op_flag]() {
+                spdlog::debug("[PrintStartEnhancer] Backup created: {}", backup_filename);
 
-                    // Step 2: Download, modify, upload config
-                    if (on_progress) {
-                        on_progress("Modifying configuration", 2, 4);
-                    }
+                // Step 2: Download, modify, upload config
+                if (on_progress) {
+                    on_progress("Modifying configuration", 2, 4);
+                }
 
-                    modify_and_upload_config(
-                        api, macro_name, config_file, approved,
-                        [this, api, backup_filename, on_progress, on_complete, safe_error, token,
-                         op_flag](size_t ops, size_t lines) {
-                            // L081 Mechanism C: defer chained this-> work to main thread.
-                            token.defer(
-                                "PrintStartEnhancer::apply_restart_step",
-                                [this, api, backup_filename, ops, lines, on_progress, on_complete,
-                                 safe_error, token, op_flag]() {
-                                    spdlog::debug(
-                                        "[PrintStartEnhancer] Config modified: {} ops, {} lines",
-                                        ops, lines);
+                modify_and_upload_config(
+                    api, macro_name, config_file, approved,
+                    [this, api, backup_filename, on_progress, on_complete, safe_error, token,
+                     op_flag](size_t ops, size_t lines) {
+                        // L081 Mechanism C: defer chained this-> work to main thread.
+                        token.defer(
+                            "PrintStartEnhancer::apply_restart_step",
+                            [this, api, backup_filename, ops, lines, on_progress, on_complete,
+                             safe_error, token, op_flag]() {
+                                spdlog::debug(
+                                    "[PrintStartEnhancer] Config modified: {} ops, {} lines", ops,
+                                    lines);
 
-                                    // Step 3: Restart Klipper
-                                    if (on_progress) {
-                                        on_progress("Restarting Klipper", 3, 4);
-                                    }
+                                // Step 3: Restart Klipper
+                                if (on_progress) {
+                                    on_progress("Restarting Klipper", 3, 4);
+                                }
 
-                                    restart_klipper(
-                                        api,
-                                        [backup_filename, ops, lines, on_progress, on_complete,
-                                         token, op_flag]() {
-                                            // L081 Mechanism C: defer to main thread so
-                                            // op_flag (member pointer) and on_complete
-                                            // run safely.
-                                            token.defer(
-                                                "PrintStartEnhancer::apply_complete_step",
-                                                [backup_filename, ops, lines, on_progress,
-                                                 on_complete, op_flag]() {
-                                                    // Clear operation flag on success
-                                                    if (op_flag)
-                                                        op_flag->store(false);
+                                restart_klipper(
+                                    api,
+                                    [backup_filename, ops, lines, on_progress, on_complete, token,
+                                     op_flag]() {
+                                        // L081 Mechanism C: defer to main thread so
+                                        // op_flag (member pointer) and on_complete
+                                        // run safely.
+                                        token.defer("PrintStartEnhancer::apply_complete_step",
+                                                    [backup_filename, ops, lines, on_progress,
+                                                     on_complete, op_flag]() {
+                                                        // Clear operation flag on success
+                                                        if (op_flag)
+                                                            op_flag->store(false);
 
-                                                    spdlog::info("[PrintStartEnhancer] Klipper "
-                                                                 "restart initiated");
+                                                        spdlog::info("[PrintStartEnhancer] Klipper "
+                                                                     "restart initiated");
 
-                                                    // Step 4: Complete
-                                                    if (on_progress) {
-                                                        on_progress("Complete", 4, 4);
-                                                    }
+                                                        // Step 4: Complete
+                                                        if (on_progress) {
+                                                            on_progress("Complete", 4, 4);
+                                                        }
 
-                                                    EnhancementResult result;
-                                                    result.success = true;
-                                                    result.backup_filename = backup_filename;
-                                                    result.operations_enhanced = ops;
-                                                    result.lines_added = lines;
+                                                        EnhancementResult result;
+                                                        result.success = true;
+                                                        result.backup_filename = backup_filename;
+                                                        result.operations_enhanced = ops;
+                                                        result.lines_added = lines;
 
-                                                    if (on_complete) {
-                                                        on_complete(result);
-                                                    }
-                                                });
-                                        },
-                                        safe_error);
-                                });
-                        },
-                        safe_error);
-                });
+                                                        if (on_complete) {
+                                                            on_complete(result);
+                                                        }
+                                                    });
+                                    },
+                                    safe_error);
+                            });
+                    },
+                    safe_error);
+            });
         },
         safe_error);
 }
@@ -520,12 +520,11 @@ void PrintStartEnhancer::restore_from_backup(MoonrakerAPI* api, const std::strin
         [this, api, on_complete, safe_error, token]() {
             // L081 Mechanism C: defer chained this-> work to main thread
             // (copy_file cb fires on HTTP bg thread).
-            token.defer("PrintStartEnhancer::restore_restart",
-                        [this, api, on_complete, safe_error]() {
-                            spdlog::debug(
-                                "[PrintStartEnhancer] Backup restored, restarting Klipper");
-                            restart_klipper(api, on_complete, safe_error);
-                        });
+            token.defer(
+                "PrintStartEnhancer::restore_restart", [this, api, on_complete, safe_error]() {
+                    spdlog::debug("[PrintStartEnhancer] Backup restored, restarting Klipper");
+                    restart_klipper(api, on_complete, safe_error);
+                });
         },
         safe_error);
 }
@@ -562,8 +561,7 @@ void PrintStartEnhancer::list_backups(
         [on_complete, token](const std::vector<FileInfo>& file_infos) {
             // Defer to main: lifetime check is atomic there, and on_complete's
             // own `this` capture (owned by the caller) is only safe on main.
-            token.defer("PrintStartEnhancer::list_backups",
-                        [on_complete, file_infos]() {
+            token.defer("PrintStartEnhancer::list_backups", [on_complete, file_infos]() {
                 std::vector<std::string> backups;
                 for (const auto& info : file_infos) {
                     if (info.filename.find("printer.cfg.backup.") == 0) {
@@ -610,106 +608,107 @@ void PrintStartEnhancer::modify_and_upload_config(
             // string ops on a config file); detector hates a bare bg-thread
             // expired check, and on_success/on_error capture caller state
             // that's only safe to touch from main.
-            token.defer("PrintStartEnhancer::modify_and_upload_config",
-                        [api, macro_name, source_file, enhancements, on_success, on_error,
-                         content]() {
-            // Find the macro section
-            std::string section_start = "[gcode_macro " + macro_name + "]";
+            token.defer("PrintStartEnhancer::modify_and_upload_config", [api, macro_name,
+                                                                         source_file, enhancements,
+                                                                         on_success, on_error,
+                                                                         content]() {
+                // Find the macro section
+                std::string section_start = "[gcode_macro " + macro_name + "]";
 
-            // Case-insensitive search
-            std::string content_lower = content;
-            std::string section_lower = section_start;
-            std::transform(content_lower.begin(), content_lower.end(), content_lower.begin(),
-                           ::tolower);
-            std::transform(section_lower.begin(), section_lower.end(), section_lower.begin(),
-                           ::tolower);
+                // Case-insensitive search
+                std::string content_lower = content;
+                std::string section_lower = section_start;
+                std::transform(content_lower.begin(), content_lower.end(), content_lower.begin(),
+                               ::tolower);
+                std::transform(section_lower.begin(), section_lower.end(), section_lower.begin(),
+                               ::tolower);
 
-            size_t section_pos = content_lower.find(section_lower);
-            if (section_pos == std::string::npos) {
-                if (on_error) {
-                    MoonrakerError err;
-                    err.type = MoonrakerErrorType::VALIDATION_ERROR;
-                    err.message = "Macro " + macro_name + " not found in " + source_file;
-                    on_error(err);
+                size_t section_pos = content_lower.find(section_lower);
+                if (section_pos == std::string::npos) {
+                    if (on_error) {
+                        MoonrakerError err;
+                        err.type = MoonrakerErrorType::VALIDATION_ERROR;
+                        err.message = "Macro " + macro_name + " not found in " + source_file;
+                        on_error(err);
+                    }
+                    return;
                 }
-                return;
-            }
 
-            // Find the end of this macro section FIRST (next [section] or EOF)
-            // This ensures we don't accidentally find gcode: in a DIFFERENT section
-            size_t section_end = content.find("\n[", section_pos + 1);
-            if (section_end == std::string::npos) {
-                section_end = content.size();
-            }
-
-            // Find the gcode: line WITHIN this section's bounds
-            size_t gcode_pos = content_lower.find("gcode:", section_pos);
-            if (gcode_pos == std::string::npos || gcode_pos >= section_end) {
-                if (on_error) {
-                    MoonrakerError err;
-                    err.type = MoonrakerErrorType::VALIDATION_ERROR;
-                    err.message = "No gcode: found in macro " + macro_name;
-                    on_error(err);
+                // Find the end of this macro section FIRST (next [section] or EOF)
+                // This ensures we don't accidentally find gcode: in a DIFFERENT section
+                size_t section_end = content.find("\n[", section_pos + 1);
+                if (section_end == std::string::npos) {
+                    section_end = content.size();
                 }
-                return;
-            }
 
-            // Extract the macro gcode (everything from gcode: to section_end)
-            size_t gcode_content_start = content.find('\n', gcode_pos);
-            if (gcode_content_start == std::string::npos) {
-                gcode_content_start = gcode_pos + 6; // After "gcode:"
-            } else {
-                gcode_content_start++; // Skip the newline
-            }
-
-            std::string macro_gcode =
-                content.substr(gcode_content_start, section_end - gcode_content_start);
-
-            // Apply enhancements
-            std::string modified_gcode = apply_to_source(macro_gcode, enhancements);
-
-            // Validate the result
-            if (!validate_jinja2_syntax(modified_gcode)) {
-                if (on_error) {
-                    MoonrakerError err;
-                    err.type = MoonrakerErrorType::VALIDATION_ERROR;
-                    err.message = "Generated code has syntax errors";
-                    on_error(err);
+                // Find the gcode: line WITHIN this section's bounds
+                size_t gcode_pos = content_lower.find("gcode:", section_pos);
+                if (gcode_pos == std::string::npos || gcode_pos >= section_end) {
+                    if (on_error) {
+                        MoonrakerError err;
+                        err.type = MoonrakerErrorType::VALIDATION_ERROR;
+                        err.message = "No gcode: found in macro " + macro_name;
+                        on_error(err);
+                    }
+                    return;
                 }
-                return;
-            }
 
-            // Reconstruct the config file
-            std::string modified_content;
-            modified_content.reserve(content.size() + modified_gcode.size());
-            modified_content += content.substr(0, gcode_content_start);
-            modified_content += modified_gcode;
-            modified_content += content.substr(section_end);
+                // Extract the macro gcode (everything from gcode: to section_end)
+                size_t gcode_content_start = content.find('\n', gcode_pos);
+                if (gcode_content_start == std::string::npos) {
+                    gcode_content_start = gcode_pos + 6; // After "gcode:"
+                } else {
+                    gcode_content_start++; // Skip the newline
+                }
 
-            // Count lines added
-            size_t original_lines = std::count(macro_gcode.begin(), macro_gcode.end(), '\n');
-            size_t new_lines = std::count(modified_gcode.begin(), modified_gcode.end(), '\n');
-            size_t lines_added = (new_lines > original_lines) ? new_lines - original_lines : 0;
+                std::string macro_gcode =
+                    content.substr(gcode_content_start, section_end - gcode_content_start);
 
-            spdlog::debug("[PrintStartEnhancer] Modified config: {} → {} lines (+{})",
-                          original_lines, new_lines, lines_added);
+                // Apply enhancements
+                std::string modified_gcode = apply_to_source(macro_gcode, enhancements);
 
-            // Upload modified config
-            // Note: upload_file takes (root, path, content, on_success, on_error)
-            api->transfers().upload_file(
-                "config", source_file, modified_content,
-                [enhancements, lines_added, on_success]() {
-                    size_t ops_count = 0;
-                    for (const auto& e : enhancements) {
-                        if (e.user_approved) {
-                            ops_count++;
+                // Validate the result
+                if (!validate_jinja2_syntax(modified_gcode)) {
+                    if (on_error) {
+                        MoonrakerError err;
+                        err.type = MoonrakerErrorType::VALIDATION_ERROR;
+                        err.message = "Generated code has syntax errors";
+                        on_error(err);
+                    }
+                    return;
+                }
+
+                // Reconstruct the config file
+                std::string modified_content;
+                modified_content.reserve(content.size() + modified_gcode.size());
+                modified_content += content.substr(0, gcode_content_start);
+                modified_content += modified_gcode;
+                modified_content += content.substr(section_end);
+
+                // Count lines added
+                size_t original_lines = std::count(macro_gcode.begin(), macro_gcode.end(), '\n');
+                size_t new_lines = std::count(modified_gcode.begin(), modified_gcode.end(), '\n');
+                size_t lines_added = (new_lines > original_lines) ? new_lines - original_lines : 0;
+
+                spdlog::debug("[PrintStartEnhancer] Modified config: {} → {} lines (+{})",
+                              original_lines, new_lines, lines_added);
+
+                // Upload modified config
+                // Note: upload_file takes (root, path, content, on_success, on_error)
+                api->transfers().upload_file(
+                    "config", source_file, modified_content,
+                    [enhancements, lines_added, on_success]() {
+                        size_t ops_count = 0;
+                        for (const auto& e : enhancements) {
+                            if (e.user_approved) {
+                                ops_count++;
+                            }
                         }
-                    }
-                    if (on_success) {
-                        on_success(ops_count, lines_added);
-                    }
-                },
-                on_error);
+                        if (on_success) {
+                            on_success(ops_count, lines_added);
+                        }
+                    },
+                    on_error);
             });
         },
         on_error);

@@ -72,7 +72,7 @@ TEST_CASE("should_force_streaming returns false when total_kb is 0 (unknown)", "
 TEST_CASE("Testable overload returns true for small file on 2GB device", "[gcode]") {
     // Even a tiny file should stream on a low-RAM device
     auto mem = make_mem(2 * GB_KB, 512 * KB); // 2GB total, 512MB available
-    size_t small_file = 100 * KB;              // 100KB file
+    size_t small_file = 100 * KB;             // 100KB file
     REQUIRE(should_use_gcode_streaming(small_file, mem));
 }
 
@@ -81,7 +81,7 @@ TEST_CASE("Testable overload uses threshold logic for 8GB device", "[gcode]") {
     // threshold = (4GB * 0.40) / 15 expansion = ~109MB
     // A 1MB file should NOT trigger streaming
     auto mem = make_mem(8 * GB_KB, 4 * GB_KB); // 8GB total, 4GB available
-    size_t small_file = 1 * MB;                 // 1MB file
+    size_t small_file = 1 * MB;                // 1MB file
     REQUIRE_FALSE(should_use_gcode_streaming(small_file, mem));
 }
 
@@ -90,7 +90,7 @@ TEST_CASE("Testable overload streams large file on 8GB device", "[gcode]") {
     // threshold = (4GB * 0.40) / 15 = ~109MB
     // A 200MB file SHOULD trigger streaming
     auto mem = make_mem(8 * GB_KB, 4 * GB_KB); // 8GB total, 4GB available
-    size_t large_file = 200 * MB;               // 200MB file
+    size_t large_file = 200 * MB;              // 200MB file
     REQUIRE(should_use_gcode_streaming(large_file, mem));
 }
 

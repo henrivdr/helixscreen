@@ -38,15 +38,15 @@ constexpr uint32_t AMS_DEFAULT_SLOT_COLOR = 0x808080;
  * extruder, rather than a filament path to a shared toolhead.
  */
 enum class AmsType {
-    NONE = 0,        ///< No AMS detected
-    HAPPY_HARE = 1,  ///< Happy Hare MMU (mmu object in Moonraker)
-    AFC = 2,         ///< AFC-Klipper-Add-On (afc object, lane_data database)
-    ACE = 3,     ///< AnyCubic ACE Pro (ValgACE/BunnyACE/DuckACE Klipper drivers)
+    NONE = 0,         ///< No AMS detected
+    HAPPY_HARE = 1,   ///< Happy Hare MMU (mmu object in Moonraker)
+    AFC = 2,          ///< AFC-Klipper-Add-On (afc object, lane_data database)
+    ACE = 3,          ///< AnyCubic ACE Pro (ValgACE/BunnyACE/DuckACE Klipper drivers)
     TOOL_CHANGER = 4, ///< Physical tool changer (viesturz/klipper-toolchanger)
     AD5X_IFS = 5,     ///< FlashForge AD5X IFS (Intelligent Filament Switching)
-    CFS = 6,           ///< Creality Filament System (K2 series, RS-485)
-    SNAPMAKER = 7,     ///< Snapmaker U1 SnapSwap toolchanger
-    QIDI_BOX = 8       ///< QIDI Box filament changer (PLUS4, Q2, MAX4 — hub AMS, 4 slots chainable to 16)
+    CFS = 6,          ///< Creality Filament System (K2 series, RS-485)
+    SNAPMAKER = 7,    ///< Snapmaker U1 SnapSwap toolchanger
+    QIDI_BOX = 8 ///< QIDI Box filament changer (PLUS4, Q2, MAX4 — hub AMS, 4 slots chainable to 16)
 };
 
 /**
@@ -564,7 +564,7 @@ struct SlotError {
 struct EnvironmentData {
     float temperature_c = 0.0f; ///< Temperature in Celsius
     float humidity_pct = 0.0f;  ///< Relative humidity percentage (0-100)
-    bool has_humidity = false;   ///< true when backend provides humidity sensor
+    bool has_humidity = false;  ///< true when backend provides humidity sensor
 };
 
 /// Error targeting level for multi-level error reporting
@@ -577,13 +577,13 @@ enum class AmsAlertLevel { SLOT, UNIT, SYSTEM };
  * a persistent alert condition reported by the backend hardware.
  */
 struct AmsAlert {
-    std::string message;      ///< Human-readable error message
-    std::string hint;         ///< Actionable troubleshooting text
-    std::string error_code;   ///< Backend-specific code: "CFS-843", "AFC-LANE_ERROR"
+    std::string message;    ///< Human-readable error message
+    std::string hint;       ///< Actionable troubleshooting text
+    std::string error_code; ///< Backend-specific code: "CFS-843", "AFC-LANE_ERROR"
     AmsAlertLevel level = AmsAlertLevel::SYSTEM;
     SlotError::Severity severity = SlotError::Severity::ERROR;
-    int unit_index = -1;      ///< For UNIT/SLOT level (-1 = N/A)
-    int slot_index = -1;      ///< For SLOT level (-1 = N/A)
+    int unit_index = -1; ///< For UNIT/SLOT level (-1 = N/A)
+    int slot_index = -1; ///< For SLOT level (-1 = N/A)
 };
 
 /**
@@ -595,8 +595,8 @@ struct AmsAlert {
  */
 struct BufferHealth {
     bool fault_detection_enabled = false; ///< Whether buffer fault detection is active
-    float distance_to_fault = -1.0f;     ///< Distance to fault in mm (-1 = not tracking/null)
-    float error_sensitivity = 0.0f;      ///< AFC sensitivity (1-10), 0 = not reported
+    float distance_to_fault = -1.0f;      ///< Distance to fault in mm (-1 = not tracking/null)
+    float error_sensitivity = 0.0f;       ///< AFC sensitivity (1-10), 0 = not reported
     std::string state;                    ///< Buffer state (e.g., "Advancing", "Trailing")
 
     /// Compute fault threshold from error_sensitivity: (11 - sensitivity) * 10 mm
@@ -620,7 +620,9 @@ struct BufferHealth {
     }
 
     /// Whether the danger level warrants a warning indicator
-    bool is_warning() const { return danger_value() > 75; }
+    bool is_warning() const {
+        return danger_value() > 75;
+    }
 };
 
 /**
@@ -648,9 +650,10 @@ struct SlotInfo {
     int bed_temp = 0;        ///< Recommended bed temp (°C)
 
     // Tool mapping
-    int mapped_tool = -1; ///< Which tool this slot maps to (-1=none)
+    int mapped_tool = -1;               ///< Which tool this slot maps to (-1=none)
     bool tool_mapping_override = false; ///< True if user manually remapped this slot's tool
-    std::string extruder_name; ///< Physical extruder name (e.g., "extruder2") for shared-extruder dedup
+    std::string
+        extruder_name; ///< Physical extruder name (e.g., "extruder2") for shared-extruder dedup
 
     // Spoolman integration
     int spoolman_id = 0;           ///< Spoolman spool ID (0=not tracked)
@@ -723,10 +726,10 @@ struct AmsUnit {
     std::vector<SlotInfo> slots; ///< Slot information
 
     // Unit-level status
-    bool connected = false;       ///< Unit communication status
-    std::string firmware_version; ///< Firmware version if available
+    bool connected = false;                     ///< Unit communication status
+    std::string firmware_version;               ///< Firmware version if available
     std::string serial_number;                  ///< Hardware serial number
-    std::optional<EnvironmentData> environment;  ///< Per-unit temp/humidity (nullopt = no sensors)
+    std::optional<EnvironmentData> environment; ///< Per-unit temp/humidity (nullopt = no sensors)
 
     // Sensors (Happy Hare)
     bool has_encoder = false;         ///< Has filament encoder
@@ -838,16 +841,17 @@ inline SpoolmanMode spoolman_mode_from_string(std::string_view str) {
 /// Encoder-based clog detection (Happy Hare mmu.encoder.*)
 struct EncoderClogInfo {
     bool enabled = false;
-    int flow_rate = -1;          // 0-100% (-1=unavailable)
-    int detection_mode = 0;      // 0=unknown, 1=manual, 2=auto
-    float desired_headroom = 0;  // target headroom (mm)
-    float detection_length = 0;  // total detection distance (mm)
-    float headroom = 0;          // current headroom (mm)
-    float min_headroom = 0;      // minimum headroom reached (mm)
+    int flow_rate = -1;         // 0-100% (-1=unavailable)
+    int detection_mode = 0;     // 0=unknown, 1=manual, 2=auto
+    float desired_headroom = 0; // target headroom (mm)
+    float detection_length = 0; // total detection distance (mm)
+    float headroom = 0;         // current headroom (mm)
+    float min_headroom = 0;     // minimum headroom reached (mm)
 
     /// Get clog percentage: 0=full headroom, 100=clogged
     [[nodiscard]] int get_clog_pct() const {
-        if (detection_length <= 0) return 0;
+        if (detection_length <= 0)
+            return 0;
         float used = detection_length - headroom;
         int pct = static_cast<int>((used / detection_length) * 100.0f + 0.5f);
         return std::clamp(pct, 0, 100);
@@ -863,10 +867,10 @@ struct EncoderClogInfo {
 struct FlowguardInfo {
     bool enabled = false;
     bool active = false;
-    std::string trigger;      // "CLOG", "TANGLE", or ""
-    float level = 0;          // -1.0 (tangle) to +1.0 (clog)
+    std::string trigger; // "CLOG", "TANGLE", or ""
+    float level = 0;     // -1.0 (tangle) to +1.0 (clog)
     float max_clog = 0;
-    float max_tangle = 0;     // negative value
+    float max_tangle = 0; // negative value
 };
 
 /**
@@ -880,13 +884,14 @@ struct AmsSystemInfo {
     std::string version;   ///< System version string
 
     // Current state
-    int current_tool = -1;              ///< Active tool (-1=none, -2=bypass for HH)
-    int current_slot = -1;              ///< Active slot (-1=none, -2=bypass for HH)
-    int pending_target_slot = -1;       ///< Target slot during tool change (-1=none)
-    int current_toolchange = -1;        ///< Current tool change number (-1=none yet, 0-based)
-    int number_of_toolchanges = 0;      ///< Total expected tool changes this print
-    bool filament_loaded = false;       ///< Filament at extruder
-    bool filament_runout = false;  ///< CFS: active path empty (box.filament_useup); UI gates display on paused state
+    int current_tool = -1;         ///< Active tool (-1=none, -2=bypass for HH)
+    int current_slot = -1;         ///< Active slot (-1=none, -2=bypass for HH)
+    int pending_target_slot = -1;  ///< Target slot during tool change (-1=none)
+    int current_toolchange = -1;   ///< Current tool change number (-1=none yet, 0-based)
+    int number_of_toolchanges = 0; ///< Total expected tool changes this print
+    bool filament_loaded = false;  ///< Filament at extruder
+    bool filament_runout =
+        false; ///< CFS: active path empty (box.filament_useup); UI gates display on paused state
     AmsAction action = AmsAction::IDLE; ///< Current operation
     std::string operation_detail;       ///< Detailed operation string
 
@@ -927,10 +932,10 @@ struct AmsSystemInfo {
     int encoder_flow_rate = -1;      ///< Encoder flow rate (-1=unavailable)
     EncoderClogInfo encoder_info;    ///< Encoder-based clog detection state
     FlowguardInfo flowguard_info;    ///< Flowguard clog/tangle detection state
-    float sync_feedback_flow_rate = -1;    ///< Sync feedback flow rate
-    float sync_feedback_bias = -2;         ///< Modelled bias [-1.0,1.0], -2=unavailable
-    float sync_feedback_bias_raw = -2;     ///< Raw sensor bias [-1.0,1.0], -2=unavailable
-    float toolchange_purge_volume = 0;     ///< Slicer purge volume for toolchanges
+    float sync_feedback_flow_rate = -1; ///< Sync feedback flow rate
+    float sync_feedback_bias = -2;      ///< Modelled bias [-1.0,1.0], -2=unavailable
+    float sync_feedback_bias_raw = -2;  ///< Raw sensor bias [-1.0,1.0], -2=unavailable
+    float toolchange_purge_volume = 0;  ///< Slicer purge volume for toolchanges
 
     // Tool-to-slot mapping (Happy Hare uses "gate" internally)
     std::vector<int> tool_to_slot_map; ///< tool_to_slot_map[tool] = slot

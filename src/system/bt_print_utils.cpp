@@ -154,7 +154,7 @@ RfcommSendResult rfcomm_send_receive(const std::string& mac, int fallback_channe
         result.response.resize(response_len);
         size_t total_read = 0;
 
-        struct pollfd pfd{};
+        struct pollfd pfd {};
         pfd.fd = fd;
         pfd.events = POLLIN;
 

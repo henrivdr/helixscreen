@@ -20,6 +20,7 @@
 #include "ui_update_queue.h"
 
 #include "ams_backend_cfs.h"
+#include "ams_error_bridge.h"
 #include "app_constants.h"
 #include "asset_manager.h"
 #include "cjk_font_manager.h"
@@ -27,10 +28,8 @@
 #include "display/lv_display_private.h"
 #include "display_manager.h"
 #include "environment_config.h"
-#include "ams_error_bridge.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
-#include "recovery_modal_presenter.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -47,6 +46,7 @@
 #include "power_device_state.h"
 #include "print_history_manager.h"
 #include "printer_recovery_service.h"
+#include "recovery_modal_presenter.h"
 #include "rpc_error_correlation.h"
 #include "screenshot.h"
 #include "sensor_state.h"
@@ -169,7 +169,6 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_translation.h"
 #include "hv/hlog.h" // libhv logging - sync level with spdlog
-#include "hv/json.hpp"
 #include "logging_init.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "lvgl_log_handler.h"
@@ -192,6 +191,8 @@
 
 #include <lvgl/src/misc/cache/instance/lv_image_cache.h>
 #include <spdlog/spdlog.h>
+
+#include "hv/json.hpp"
 
 #ifdef HELIX_DISPLAY_SDL
 #include <SDL.h>
@@ -1642,15 +1643,13 @@ bool Application::init_panel_subjects() {
             // TODO(detection): attach latest camera frame when a stream is active
             modal->set_detection(e.message, nullptr);
             modal->set_on_resume([] {
-                get_moonraker_api()->job().resume_print([] {},
-                                                        [](const MoonrakerError&) {});
+                get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
             });
             modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
             modal->set_on_tune([] {
                 get_moonraker_client()->send_jsonrpc(
                     "printer.gcode.script",
-                    nlohmann::json{{"script",
-                                    "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
+                    nlohmann::json{{"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
                     [](const nlohmann::json&) {}, [](const MoonrakerError&) {});
             });
             modal->show(lv_screen_active());
@@ -2023,8 +2022,8 @@ bool Application::run_wizard() {
     // Clamp to a valid StepId range so an out-of-range debug value lands on a real
     // step (the last one) instead of a blank wizard from a bogus enum cast.
     if (initial_step < 0 || initial_step >= helix::wizard::kStepCount) {
-        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping",
-                     initial_step, helix::wizard::kStepCount);
+        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping", initial_step,
+                     helix::wizard::kStepCount);
         initial_step = (initial_step < 0) ? 0 : helix::wizard::kStepCount - 1;
     }
     // Map it to a StepId for the registry-driven wizard.
@@ -3091,8 +3090,8 @@ void Application::init_action_prompt() {
     // also replays the most recent gcode_store error when the WS (re)connects
     // (catches errors that fired while HelixScreen was offline). Lives as
     // a member so its dtor unregisters callbacks before MoonrakerClient dies.
-    m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client,
-                                                                      *m_recovery_presenter);
+    m_gcode_error_router =
+        std::make_unique<helix::GcodeErrorRouter>(api, client, *m_recovery_presenter);
 
     // Narration router: maps `//` toolchange narration to the active AMS
     // backend's step model and drives the toolchange_step subject. Separate

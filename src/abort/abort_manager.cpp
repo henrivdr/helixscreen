@@ -4,6 +4,7 @@
 
 #include "ui_callback_helpers.h"
 #include "ui_effects.h"
+#include "ui_emergency_stop.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -13,7 +14,6 @@
 #include "printer_state.h"
 #include "safety_settings_manager.h"
 #include "static_panel_registry.h"
-#include "ui_emergency_stop.h"
 
 #include <spdlog/spdlog.h>
 

@@ -10,9 +10,9 @@
 
 #include "logging_init.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <string>
+
+#include "../catch_amalgamated.hpp"
 
 using helix::logging::pattern_for_sink;
 using helix::logging::SinkKind;

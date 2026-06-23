@@ -1,11 +1,12 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
 #include "ams_backend.h"
 #include "ams_state.h"
 #include "lvgl_test_fixture.h"
 #include "tool_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -28,8 +29,7 @@ struct ToolStateFixture : public LVGLTestFixture {
 
 } // namespace
 
-TEST_CASE_METHOD(ToolStateFixture,
-                 "[ToolState][ams-topology] set_ams_topology populates 15 tools",
+TEST_CASE_METHOD(ToolStateFixture, "[ToolState][ams-topology] set_ams_topology populates 15 tools",
                  "[tool-state][ams][ams-topology]") {
     ToolTopology topo;
     topo.tool_count = 15;
@@ -57,8 +57,7 @@ TEST_CASE_METHOD(ToolStateFixture,
     topo.tool_name_prefix = "T";
     ToolState::instance().set_ams_topology(topo);
     UpdateQueue::instance().drain();
-    int initial_version =
-        lv_subject_get_int(ToolState::instance().get_tools_version_subject());
+    int initial_version = lv_subject_get_int(ToolState::instance().get_tools_version_subject());
 
     topo.active_tool = 2;
     ToolState::instance().set_ams_topology(topo);
@@ -73,8 +72,7 @@ TEST_CASE_METHOD(ToolStateFixture,
     REQUIRE(ToolState::instance().tools()[0].name == "T0");
 }
 
-TEST_CASE_METHOD(ToolStateFixture,
-                 "[ToolState][ams-topology] clear_ams_topology releases override",
+TEST_CASE_METHOD(ToolStateFixture, "[ToolState][ams-topology] clear_ams_topology releases override",
                  "[tool-state][ams][ams-topology]") {
     ToolTopology topo;
     topo.tool_count = 6;
@@ -118,9 +116,10 @@ TEST_CASE_METHOD(ToolStateFixture,
     UpdateQueue::instance().drain();
 }
 
-TEST_CASE_METHOD(ToolStateFixture,
-                 "[ToolState][ams-topology] update_from_status is ignored when AMS owns active tool",
-                 "[tool-state][ams][ams-topology]") {
+TEST_CASE_METHOD(
+    ToolStateFixture,
+    "[ToolState][ams-topology] update_from_status is ignored when AMS owns active tool",
+    "[tool-state][ams][ams-topology]") {
     helix::ToolTopology topo;
     topo.tool_count = 4;
     topo.active_tool = 2;
@@ -157,11 +156,8 @@ namespace {
 // (4 named tools T0..T3, 4 extruder heaters). Goes through the same
 // parse_objects path Klipper hits in production — no friends required.
 helix::PrinterDiscovery make_toolchanger_discovery() {
-    nlohmann::json objects = {
-        "toolchanger",
-        "tool T0", "tool T1", "tool T2", "tool T3",
-        "extruder", "extruder1", "extruder2", "extruder3"
-    };
+    nlohmann::json objects = {"toolchanger", "tool T0",   "tool T1",   "tool T2",  "tool T3",
+                              "extruder",    "extruder1", "extruder2", "extruder3"};
     helix::PrinterDiscovery disc;
     disc.parse_objects(objects);
     return disc;
@@ -271,28 +267,24 @@ TEST_CASE_METHOD(ToolStateFixture,
     // but the per-tool loop MUST update .mounted / .gcode_x_offset.
     nlohmann::json status = {
         {"toolchanger", {{"tool_number", 99}}}, // Should be ignored — out-of-range proves it
-        {"tool T0", {
-            {"active", false},
-            {"mounted", true},
-            {"gcode_x_offset", 0.0},
-            {"gcode_y_offset", 0.0},
-            {"gcode_z_offset", 0.0}
-        }},
-        {"tool T1", {
-            {"active", false},
-            {"mounted", true},
-            {"gcode_x_offset", 12.5},
-            {"gcode_y_offset", -3.25},
-            {"gcode_z_offset", 0.0}
-        }},
-        {"tool T2", {
-            {"active", false},
-            {"mounted", false},
-            {"gcode_x_offset", 0.0},
-            {"gcode_y_offset", 0.0},
-            {"gcode_z_offset", 0.0}
-        }}
-    };
+        {"tool T0",
+         {{"active", false},
+          {"mounted", true},
+          {"gcode_x_offset", 0.0},
+          {"gcode_y_offset", 0.0},
+          {"gcode_z_offset", 0.0}}},
+        {"tool T1",
+         {{"active", false},
+          {"mounted", true},
+          {"gcode_x_offset", 12.5},
+          {"gcode_y_offset", -3.25},
+          {"gcode_z_offset", 0.0}}},
+        {"tool T2",
+         {{"active", false},
+          {"mounted", false},
+          {"gcode_x_offset", 0.0},
+          {"gcode_y_offset", 0.0},
+          {"gcode_z_offset", 0.0}}}};
     ts.update_from_status(status);
     UpdateQueue::instance().drain();
 

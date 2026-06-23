@@ -4,10 +4,11 @@
 // into the AxisBounds struct exposed via get_axis_bounds(). The bounds feed
 // the jog-clamp soft-stop in MotionPanel::jog().
 
-#include "../catch_amalgamated.hpp"
 #include "../helix_test_fixture.h"
-#include "hv/json.hpp"
 #include "printer_motion_state.h"
+
+#include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using helix::AxisBounds;
 using helix::PrinterMotionState;
@@ -24,8 +25,7 @@ class BoundsFixture : public HelixTestFixture {
 
 } // namespace
 
-TEST_CASE_METHOD(BoundsFixture, "AxisBounds defaults to all-unset",
-                 "[motion][bounds]") {
+TEST_CASE_METHOD(BoundsFixture, "AxisBounds defaults to all-unset", "[motion][bounds]") {
     AxisBounds b = state.get_axis_bounds();
     REQUIRE_FALSE(b.has_x);
     REQUIRE_FALSE(b.has_y);
@@ -36,9 +36,9 @@ TEST_CASE_METHOD(BoundsFixture, "AxisBounds populates from toolhead.axis_min/max
                  "[motion][bounds]") {
     state.init_subjects(false); // no XML registration in test
 
-    json status = {{"toolhead",
-                    {{"axis_minimum", {0.0, 0.0, 0.0, 0.0}},
-                     {"axis_maximum", {235.0, 235.0, 250.0, 0.0}}}}};
+    json status = {
+        {"toolhead",
+         {{"axis_minimum", {0.0, 0.0, 0.0, 0.0}}, {"axis_maximum", {235.0, 235.0, 250.0, 0.0}}}}};
     state.update_from_status(status);
 
     AxisBounds b = state.get_axis_bounds();
@@ -56,8 +56,7 @@ TEST_CASE_METHOD(BoundsFixture, "AxisBounds populates from toolhead.axis_min/max
 TEST_CASE_METHOD(BoundsFixture, "AxisBounds ignores arrays shorter than 3 entries",
                  "[motion][bounds]") {
     state.init_subjects(false);
-    json status = {
-        {"toolhead", {{"axis_minimum", {0.0}}, {"axis_maximum", {235.0, 235.0}}}}};
+    json status = {{"toolhead", {{"axis_minimum", {0.0}}, {"axis_maximum", {235.0, 235.0}}}}};
     state.update_from_status(status);
     AxisBounds b = state.get_axis_bounds();
     REQUIRE_FALSE(b.has_x);
@@ -65,8 +64,7 @@ TEST_CASE_METHOD(BoundsFixture, "AxisBounds ignores arrays shorter than 3 entrie
     REQUIRE_FALSE(b.has_z);
 }
 
-TEST_CASE_METHOD(BoundsFixture, "AxisBounds reset on deinit (reconnect path)",
-                 "[motion][bounds]") {
+TEST_CASE_METHOD(BoundsFixture, "AxisBounds reset on deinit (reconnect path)", "[motion][bounds]") {
     state.init_subjects(false);
     state.update_from_status({{"toolhead",
                                {{"axis_minimum", {-10.0, -10.0, 0.0, 0.0}},

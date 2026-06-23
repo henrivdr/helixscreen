@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_heater_config.h" // helix::HeaterType, HEATER_TYPE_COUNT
+
 #include "async_lifetime_guard.h"
 #include "heater_limits.h"
 #include "moonraker_error.h"
-#include "ui_heater_config.h" // helix::HeaterType, HEATER_TYPE_COUNT
 
 #include <array>
 #include <functional>
@@ -20,10 +21,10 @@ namespace helix {
 
 /// Preset target temperatures (°C) for a single heater.
 struct HeaterPresets {
-    int off  = 0;
-    int pla  = 0;
+    int off = 0;
+    int pla = 0;
     int petg = 0;
-    int abs  = 0;
+    int abs = 0;
 };
 
 /// Options for a heater set-target call.
@@ -96,7 +97,9 @@ class TemperatureController {
     std::array<HeaterModel, HEATER_TYPE_COUNT> model_{};
     AsyncLifetimeGuard lifetime_;
 
-    static int idx(HeaterType t) { return static_cast<int>(t); }
+    static int idx(HeaterType t) {
+        return static_cast<int>(t);
+    }
 
     PrinterState& state_;
     MoonrakerAPI* api_;

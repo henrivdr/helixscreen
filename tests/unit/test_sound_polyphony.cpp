@@ -30,7 +30,9 @@ class MockBackend : public SoundBackend {
         last_amp = a;
         last_duty = d;
     }
-    void silence() override { silence_calls++; }
+    void silence() override {
+        silence_calls++;
+    }
 };
 
 } // namespace

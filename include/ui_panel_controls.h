@@ -234,14 +234,15 @@ class ControlsPanel : public PanelBase {
     ObserverGuard fan_observer_;
     ObserverGuard fans_version_observer_;      // Multi-fan list changes
     ObserverGuard temp_sensor_count_observer_; // Temp sensor list changes
-    SubjectLifetime chamber_temp_lifetime_;              // Lifetime token for chamber temp subject
-    SubjectLifetime chamber_target_lifetime_;            // Lifetime token for raw heater target subject
-    SubjectLifetime chamber_effective_target_lifetime_;  // Lifetime token for effective target subject
-    SubjectLifetime chamber_mode_lifetime_;              // Lifetime token for chamber mode subject
-    ObserverGuard chamber_temp_observer_;                // Chamber temperature observer
-    ObserverGuard chamber_target_observer_;              // Chamber raw heater target observer (keypad seed)
-    ObserverGuard chamber_effective_target_observer_;    // Chamber effective target observer (status)
-    ObserverGuard chamber_mode_observer_;                // Chamber M141 control mode observer
+    SubjectLifetime chamber_temp_lifetime_;    // Lifetime token for chamber temp subject
+    SubjectLifetime chamber_target_lifetime_;  // Lifetime token for raw heater target subject
+    SubjectLifetime
+        chamber_effective_target_lifetime_; // Lifetime token for effective target subject
+    SubjectLifetime chamber_mode_lifetime_; // Lifetime token for chamber mode subject
+    ObserverGuard chamber_temp_observer_;   // Chamber temperature observer
+    ObserverGuard chamber_target_observer_; // Chamber raw heater target observer (keypad seed)
+    ObserverGuard chamber_effective_target_observer_; // Chamber effective target observer (status)
+    ObserverGuard chamber_mode_observer_;             // Chamber M141 control mode observer
 
     bool fans_rebuild_pending_ = false; ///< Coalesces rapid fans_version observer notifications
     bool temps_rebuild_pending_ =
@@ -562,24 +563,24 @@ void ControlsPanel::show_temperature_keypad(const char* title, int cached_target
                                             int default_initial, int max_temp) {
     spdlog::debug("[{}] Opening {} keypad", get_name(), title);
 
-    int initial_deci =
-        cached_target > 0 ? cached_target : helix::ui::temperature::degrees_to_deci(default_initial);
-    ui_keypad_config_t config = {.initial_value = static_cast<float>(
-                                     helix::ui::temperature::deci_to_degrees(initial_deci)),
-                                 .min_value = 0.0f,
-                                 .max_value = static_cast<float>(max_temp),
-                                 .title_label = lv_tr(title),
-                                 .unit_label = "°C",
-                                 .allow_decimal = false,
-                                 .allow_negative = false,
-                                 .callback =
-                                     [](float value, void* user_data) {
-                                         auto* self = static_cast<ControlsPanel*>(user_data);
-                                         if (self) {
-                                             (self->*Handler)(value);
-                                         }
-                                     },
-                                 .user_data = this};
+    int initial_deci = cached_target > 0 ? cached_target
+                                         : helix::ui::temperature::degrees_to_deci(default_initial);
+    ui_keypad_config_t config = {
+        .initial_value = static_cast<float>(helix::ui::temperature::deci_to_degrees(initial_deci)),
+        .min_value = 0.0f,
+        .max_value = static_cast<float>(max_temp),
+        .title_label = lv_tr(title),
+        .unit_label = "°C",
+        .allow_decimal = false,
+        .allow_negative = false,
+        .callback =
+            [](float value, void* user_data) {
+                auto* self = static_cast<ControlsPanel*>(user_data);
+                if (self) {
+                    (self->*Handler)(value);
+                }
+            },
+        .user_data = this};
 
     ui_keypad_show(&config);
 }

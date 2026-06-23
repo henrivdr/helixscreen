@@ -269,8 +269,7 @@ class MoonrakerDiscoverySequence {
         const PrinterDiscovery& hw, const std::vector<std::string>& heaters,
         const std::vector<std::string>& sensors, const std::vector<std::string>& fans,
         const std::vector<std::string>& leds, const std::vector<std::string>& afc_objects,
-        const std::vector<std::string>& filament_sensors,
-        const std::vector<std::string>& mcus);
+        const std::vector<std::string>& filament_sensors, const std::vector<std::string>& mcus);
 
   private:
     MoonrakerClient& client_;

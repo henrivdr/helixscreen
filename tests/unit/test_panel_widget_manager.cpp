@@ -459,10 +459,9 @@ TEST_CASE_METHOD(XMLTestFixture,
     const auto* clock_def = helix::find_widget_def("clock");
     REQUIRE(clock_def != nullptr);
     WidgetFactory original_clock_factory = clock_def->factory;
-    helix::register_widget_factory(
-        "clock", [](const std::string&) -> std::unique_ptr<PanelWidget> {
-            return std::make_unique<GridRebuildSpyWidget>();
-        });
+    helix::register_widget_factory("clock", [](const std::string&) -> std::unique_ptr<PanelWidget> {
+        return std::make_unique<GridRebuildSpyWidget>();
+    });
 
     const std::string panel_id = "test_grid_rebuild_race";
 
@@ -553,8 +552,7 @@ TEST_CASE_METHOD(HelixTestFixture,
 
     cfg->add_printer("printer-A", nlohmann::json::object());
     cfg->add_printer("printer-B", nlohmann::json::object());
-    cfg->set<nlohmann::json>("/printers/printer-A/panel_widgets/home",
-                             make_home_layout("network"));
+    cfg->set<nlohmann::json>("/printers/printer-A/panel_widgets/home", make_home_layout("network"));
     cfg->set<nlohmann::json>("/printers/printer-B/panel_widgets/home",
                              make_home_layout("shutdown"));
 

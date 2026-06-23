@@ -13,15 +13,14 @@
 // a nullptr api/client probe — mirroring SnapmakerProbe in test_remap_strategy.cpp.
 
 #include "ams_backend_snapmaker.h"
-
 #include "filament_mapper.h"
-
-#include "../catch_amalgamated.hpp"
 
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
+
+#include "../catch_amalgamated.hpp"
 
 namespace {
 
@@ -40,8 +39,7 @@ TEST_CASE("Snapmaker build_preprint_gcode used-extruders only (identity map)",
     SnapmakerProbe sm;
 
     SECTION("two non-contiguous tools, no remap") {
-        REQUIRE(sm.build_preprint_gcode({0, 2}, {}) ==
-                "SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,2");
+        REQUIRE(sm.build_preprint_gcode({0, 2}, {}) == "SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,2");
     }
 
     SECTION("all four heads, no remap") {
@@ -100,8 +98,7 @@ TEST_CASE("Snapmaker build_preprint_gcode extended tool defaults to head 0",
 // get_effective_remap() identity-filters, so only tool 0 yields an entry
 // {0,1}; tool 2 stays identity (head 2). build_preprint_gcode then emits one
 // SET_PRINT_EXTRUDER_MAP line plus the recomputed used-heads {1,2}.
-TEST_CASE("Snapmaker build_preprint_gcode 2-color remap tool0->head1",
-          "[snapmaker][preprint]") {
+TEST_CASE("Snapmaker build_preprint_gcode 2-color remap tool0->head1", "[snapmaker][preprint]") {
     SnapmakerProbe sm;
     REQUIRE(sm.build_preprint_gcode({0, 2}, {{0, 1}}) ==
             "SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=1\n"

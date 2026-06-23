@@ -676,13 +676,13 @@ class AmsBackendMock : public AmsBackend {
     bool tool_changer_mode_ = false; ///< Simulate tool changer instead of filament system
 
     // AFC mode (alternative to Happy Hare simulation)
-    bool afc_mode_ = false;                     ///< Simulate AFC Box Turtle instead of Happy Hare
-    bool multi_unit_mode_ = false;              ///< Simulate multi-unit AFC (2x Box Turtle)
-    bool mixed_topology_mode_ = false;          ///< Simulate mixed topology (BT + 2x OpenAMS)
-    bool vivid_mixed_mode_ = false;             ///< Simulate 2x BoxTurtle + 1x ViViD
-    bool ifs_mode_ = false;                     ///< Simulate AD5X IFS (4 slots, LINEAR)
-    bool htlf_toolchanger_mode_ = false;        ///< Simulate HTLF + Toolchanger mixed topology
-    bool snapmaker_mode_ = false;               ///< Simulate Snapmaker U1 (4 slots, PARALLEL, non-editable)
+    bool afc_mode_ = false;              ///< Simulate AFC Box Turtle instead of Happy Hare
+    bool multi_unit_mode_ = false;       ///< Simulate multi-unit AFC (2x Box Turtle)
+    bool mixed_topology_mode_ = false;   ///< Simulate mixed topology (BT + 2x OpenAMS)
+    bool vivid_mixed_mode_ = false;      ///< Simulate 2x BoxTurtle + 1x ViViD
+    bool ifs_mode_ = false;              ///< Simulate AD5X IFS (4 slots, LINEAR)
+    bool htlf_toolchanger_mode_ = false; ///< Simulate HTLF + Toolchanger mixed topology
+    bool snapmaker_mode_ = false; ///< Simulate Snapmaker U1 (4 slots, PARALLEL, non-editable)
     std::vector<PathTopology> unit_topologies_; ///< Per-unit topology storage
 
     // Endless spool simulation state

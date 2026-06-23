@@ -3,13 +3,12 @@
 #include "filament_mapper.h"
 
 #include "filament_database.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
-
-#include "lvgl/src/others/translation/lv_translation.h"
 
 namespace helix {
 
@@ -27,22 +26,19 @@ std::string FilamentMapper::format_slot_label(const AvailableSlot& slot) {
     if (slot.unit_display_name.empty()) {
         // Single-unit: "Slot 2" or "Slot 2: PLA"
         if (material_str) {
-            snprintf(buf, sizeof(buf), "%s %d: %s",
-                     lv_tr("Slot"), slot.local_slot_index + 1, material_str);
+            snprintf(buf, sizeof(buf), "%s %d: %s", lv_tr("Slot"), slot.local_slot_index + 1,
+                     material_str);
         } else {
-            snprintf(buf, sizeof(buf), "%s %d",
-                     lv_tr("Slot"), slot.local_slot_index + 1);
+            snprintf(buf, sizeof(buf), "%s %d", lv_tr("Slot"), slot.local_slot_index + 1);
         }
     } else {
         // Multi-unit: "Turtle 1 · Slot 2" or "Turtle 1 · Slot 2: PLA"
         // unit_display_name is not translated — it's a user-configured AFC name
         if (material_str) {
-            snprintf(buf, sizeof(buf), "%s \xc2\xb7 %s %d: %s",
-                     slot.unit_display_name.c_str(),
+            snprintf(buf, sizeof(buf), "%s \xc2\xb7 %s %d: %s", slot.unit_display_name.c_str(),
                      lv_tr("Slot"), slot.local_slot_index + 1, material_str);
         } else {
-            snprintf(buf, sizeof(buf), "%s \xc2\xb7 %s %d",
-                     slot.unit_display_name.c_str(),
+            snprintf(buf, sizeof(buf), "%s \xc2\xb7 %s %d", slot.unit_display_name.c_str(),
                      lv_tr("Slot"), slot.local_slot_index + 1);
         }
     }
@@ -103,8 +99,7 @@ bool FilamentMapper::materials_match(const std::string& a, const std::string& b)
     }
 
     // Case-insensitive exact match
-    if (a.size() == b.size() &&
-        std::equal(a.begin(), a.end(), b.begin(), [](char ca, char cb) {
+    if (a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char ca, char cb) {
             return std::tolower(static_cast<unsigned char>(ca)) ==
                    std::tolower(static_cast<unsigned char>(cb));
         })) {
@@ -119,8 +114,8 @@ bool FilamentMapper::materials_match(const std::string& a, const std::string& b)
 }
 
 SlotKey FilamentMapper::find_closest_color_slot(uint32_t target_color,
-                                                 const std::string& target_material,
-                                                 const std::vector<AvailableSlot>& slots) {
+                                                const std::string& target_material,
+                                                const std::vector<AvailableSlot>& slots) {
     SlotKey best_key{-1, -1};
     int best_distance = COLOR_MATCH_TOLERANCE + 1; // Must be within tolerance
 
@@ -141,10 +136,8 @@ SlotKey FilamentMapper::find_closest_color_slot(uint32_t target_color,
     return best_key;
 }
 
-std::vector<ToolMapping> FilamentMapper::compute_defaults(
-    const std::vector<GcodeToolInfo>& tools,
-    const std::vector<AvailableSlot>& slots) {
-
+std::vector<ToolMapping> FilamentMapper::compute_defaults(const std::vector<GcodeToolInfo>& tools,
+                                                          const std::vector<AvailableSlot>& slots) {
     std::vector<ToolMapping> mappings;
     mappings.reserve(tools.size());
 
@@ -184,7 +177,8 @@ std::vector<ToolMapping> FilamentMapper::compute_defaults(
         }
 
         // Priority 2: Color match
-        auto [slot_idx, backend_idx] = find_closest_color_slot(tool.color_rgb, tool.material, slots);
+        auto [slot_idx, backend_idx] =
+            find_closest_color_slot(tool.color_rgb, tool.material, slots);
         if (slot_idx >= 0) {
             mapping.mapped_slot = slot_idx;
             mapping.mapped_backend = backend_idx;
@@ -212,8 +206,7 @@ std::vector<ToolMapping> FilamentMapper::compute_defaults(
             for (const auto& slot : slots) {
                 if (slot.slot_index == tool_idx && slot.backend_index == 0) {
                     auto key = slot.key();
-                    if (std::find(used_slots.begin(), used_slots.end(), key) ==
-                        used_slots.end()) {
+                    if (std::find(used_slots.begin(), used_slots.end(), key) == used_slots.end()) {
                         mapping.mapped_slot = slot.slot_index;
                         mapping.mapped_backend = slot.backend_index;
                         mapping.reason = ToolMapping::MatchReason::COLOR_MATCH;
@@ -230,8 +223,7 @@ std::vector<ToolMapping> FilamentMapper::compute_defaults(
             if (mapping.mapped_slot < 0) {
                 for (const auto& slot : slots) {
                     auto key = slot.key();
-                    if (std::find(used_slots.begin(), used_slots.end(), key) ==
-                        used_slots.end()) {
+                    if (std::find(used_slots.begin(), used_slots.end(), key) == used_slots.end()) {
                         mapping.mapped_slot = slot.slot_index;
                         mapping.mapped_backend = slot.backend_index;
                         mapping.reason = ToolMapping::MatchReason::COLOR_MATCH;
@@ -258,10 +250,9 @@ std::vector<ToolMapping> FilamentMapper::compute_defaults(
     return mappings;
 }
 
-std::vector<ToolMapping> FilamentMapper::use_current_assignments(
-    const std::vector<GcodeToolInfo>& tools,
-    const std::vector<AvailableSlot>& slots) {
-
+std::vector<ToolMapping>
+FilamentMapper::use_current_assignments(const std::vector<GcodeToolInfo>& tools,
+                                        const std::vector<AvailableSlot>& slots) {
     std::vector<ToolMapping> mappings;
     mappings.reserve(tools.size());
 

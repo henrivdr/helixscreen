@@ -10,9 +10,8 @@
 
 #include "ui_error_reporting.h"
 #include "ui_event_safety.h"
-#include "ui_nav_manager.h"
-
 #include "ui_keyboard_manager.h"
+#include "ui_nav_manager.h"
 
 #include "ams_backend.h"
 #include "ams_state.h"
@@ -109,8 +108,8 @@ void AmsEnvironmentOverlay::init_subjects() {
             snprintf(name, sizeof(name), "ams_env_comfort_%d_text", i);
             UI_MANAGED_SUBJECT_STRING(comfort_text_[i], comfort_text_buf_[i], "", name, subjects_);
         }
-        UI_MANAGED_SUBJECT_STRING(start_stop_text_subject_, start_stop_text_buf_,
-                                  "Start Drying", "ams_env_overlay_start_stop_text", subjects_);
+        UI_MANAGED_SUBJECT_STRING(start_stop_text_subject_, start_stop_text_buf_, "Start Drying",
+                                  "ams_env_overlay_start_stop_text", subjects_);
         UI_MANAGED_SUBJECT_STRING(preset_text_subject_, preset_text_buf_, "",
                                   "ams_env_overlay_preset_text", subjects_);
     });
@@ -140,8 +139,7 @@ lv_obj_t* AmsEnvironmentOverlay::create(lv_obj_t* parent) {
         lv_xml_register_component_from_file("A:ui_xml/ams_environment_overlay.xml");
     }
 
-    overlay_ = static_cast<lv_obj_t*>(
-        lv_xml_create(parent, "ams_environment_overlay", nullptr));
+    overlay_ = static_cast<lv_obj_t*>(lv_xml_create(parent, "ams_environment_overlay", nullptr));
     if (!overlay_) {
         spdlog::error("[{}] Failed to create overlay from XML", get_name());
         return nullptr;
@@ -203,7 +201,8 @@ void AmsEnvironmentOverlay::show(lv_obj_t* parent_screen, int unit_index) {
     Config* config = Config::get_instance();
     if (temp_input_) {
         char buf[8];
-        snprintf(buf, sizeof(buf), "%d", config->get<int>(config->df() + "ams/dryer_last_temp", 55));
+        snprintf(buf, sizeof(buf), "%d",
+                 config->get<int>(config->df() + "ams/dryer_last_temp", 55));
         lv_textarea_set_text(temp_input_, buf);
     }
     if (duration_input_) {
@@ -235,7 +234,8 @@ void AmsEnvironmentOverlay::update_from_backend() {
 
     if (!backend) {
         spdlog::warn("[{}] No backend available", get_name());
-        snprintf(title_text_buf_, sizeof(title_text_buf_), "%s", lv_tr("No Multi-Filament System connected"));
+        snprintf(title_text_buf_, sizeof(title_text_buf_), "%s",
+                 lv_tr("No Multi-Filament System connected"));
         lv_subject_copy_string(&title_text_subject_, title_text_buf_);
         lv_subject_set_int(&dryer_visible_subject_, 0);
         lv_subject_set_int(&no_dryer_visible_subject_, 1);
@@ -252,12 +252,12 @@ void AmsEnvironmentOverlay::update_from_backend() {
         if (!unit.display_name.empty()) {
             snprintf(title_text_buf_, sizeof(title_text_buf_), "%s", unit.display_name.c_str());
         } else {
-            snprintf(title_text_buf_, sizeof(title_text_buf_), "%s %s %d",
-                     info.type_name.c_str(), lv_tr("Unit"), unit_index_ + 1);
+            snprintf(title_text_buf_, sizeof(title_text_buf_), "%s %s %d", info.type_name.c_str(),
+                     lv_tr("Unit"), unit_index_ + 1);
         }
     } else {
-        snprintf(title_text_buf_, sizeof(title_text_buf_), "%s %s %d",
-                 info.type_name.c_str(), lv_tr("Unit"), unit_index_ + 1);
+        snprintf(title_text_buf_, sizeof(title_text_buf_), "%s %s %d", info.type_name.c_str(),
+                 lv_tr("Unit"), unit_index_ + 1);
     }
     lv_subject_copy_string(&title_text_subject_, title_text_buf_);
 
@@ -280,8 +280,12 @@ void AmsEnvironmentOverlay::update_from_backend() {
 
     // Update temperature display (current temp always in temp_text, target in target_temp_text)
     if (has_env) {
-        float display_temp = (dryer.active && dryer.current_temp_c > 0) ? dryer.current_temp_c : temp_c;
-        snprintf(temp_text_buf_, sizeof(temp_text_buf_), "%.0f\xC2\xB0""C", display_temp);
+        float display_temp =
+            (dryer.active && dryer.current_temp_c > 0) ? dryer.current_temp_c : temp_c;
+        snprintf(temp_text_buf_, sizeof(temp_text_buf_),
+                 "%.0f\xC2\xB0"
+                 "C",
+                 display_temp);
     } else {
         snprintf(temp_text_buf_, sizeof(temp_text_buf_), "--");
     }
@@ -289,7 +293,9 @@ void AmsEnvironmentOverlay::update_from_backend() {
 
     // Target temp (shown via XML visibility binding when drying_active=1)
     if (dryer.active && dryer.target_temp_c > 0) {
-        snprintf(target_temp_text_buf_, sizeof(target_temp_text_buf_), "%.0f\xC2\xB0""C",
+        snprintf(target_temp_text_buf_, sizeof(target_temp_text_buf_),
+                 "%.0f\xC2\xB0"
+                 "C",
                  dryer.target_temp_c);
     } else {
         target_temp_text_buf_[0] = '\0';
@@ -314,8 +320,8 @@ void AmsEnvironmentOverlay::update_from_backend() {
     if (dryer.active) {
         int hours = dryer.remaining_min / 60;
         int mins = dryer.remaining_min % 60;
-        snprintf(drying_text_buf_, sizeof(drying_text_buf_), "%s: %d:%02d %s",
-                 lv_tr("Drying"), hours, mins, lv_tr("left"));
+        snprintf(drying_text_buf_, sizeof(drying_text_buf_), "%s: %d:%02d %s", lv_tr("Drying"),
+                 hours, mins, lv_tr("left"));
         lv_subject_copy_string(&drying_text_subject_, drying_text_buf_);
 
         int progress = dryer.get_progress_pct();
@@ -334,7 +340,9 @@ void AmsEnvironmentOverlay::update_from_backend() {
     // Update temp range label with backend limits (e.g., "Temp °C (35-55)")
     if (temp_range_label_ && dryer.supported) {
         char range_buf[32];
-        snprintf(range_buf, sizeof(range_buf), "Temp \xC2\xB0""C (%d\xe2\x80\x93%d)",
+        snprintf(range_buf, sizeof(range_buf),
+                 "Temp \xC2\xB0"
+                 "C (%d\xe2\x80\x93%d)",
                  static_cast<int>(dryer.min_temp_c), static_cast<int>(dryer.max_temp_c));
         lv_label_set_text(temp_range_label_, range_buf);
     }
@@ -397,10 +405,12 @@ void AmsEnvironmentOverlay::update_comfort_text(float humidity_pct) {
     // Update subjects for each comfort row (up to MAX_COMFORT_ROWS)
     int row_idx = 0;
     for (const auto& mat_name : loaded_materials) {
-        if (row_idx >= MAX_COMFORT_ROWS) break;
+        if (row_idx >= MAX_COMFORT_ROWS)
+            break;
 
         const auto* range = filament::get_comfort_range(mat_name.c_str());
-        if (!range) continue;
+        if (!range)
+            continue;
 
         const char* status_text;
         int status_val; // 0=OK, 1=Marginal, 2=Too humid
@@ -460,8 +470,8 @@ void AmsEnvironmentOverlay::populate_presets() {
         }
         char buf[64];
         int hours = preset.duration_min / 60;
-        snprintf(buf, sizeof(buf), "%s %g°C/%dh",
-                 preset.name.c_str(), clamp_preset_temp(preset.temp_c, dryer), hours);
+        snprintf(buf, sizeof(buf), "%s %g°C/%dh", preset.name.c_str(),
+                 clamp_preset_temp(preset.temp_c, dryer), hours);
         options += buf;
     }
 
@@ -503,8 +513,8 @@ void AmsEnvironmentOverlay::apply_preset(int index) {
         lv_textarea_set_text(duration_input_, buf);
     }
 
-    spdlog::debug("[{}] Applied preset: {} ({}°C, {}min)",
-                  get_name(), preset.name, preset.temp_c, preset.duration_min);
+    spdlog::debug("[{}] Applied preset: {} ({}°C, {}min)", get_name(), preset.name, preset.temp_c,
+                  preset.duration_min);
 }
 
 void AmsEnvironmentOverlay::auto_select_preset() {
@@ -530,7 +540,8 @@ void AmsEnvironmentOverlay::auto_select_preset() {
     for (int i = 0; i < unit.slot_count; ++i) {
         int gi = unit.first_slot_global_index + i;
         SlotInfo slot = backend->get_slot_info(gi);
-        if (slot.material.empty()) continue;
+        if (slot.material.empty())
+            continue;
 
         const auto* range = filament::get_comfort_range(slot.material);
         if (range && range->dry_temp_c > 0 && range->dry_temp_c < lowest_dry_temp) {
@@ -600,31 +611,34 @@ void AmsEnvironmentOverlay::on_start_stop_clicked(lv_event_t* e) {
 
             if (overlay.temp_input_) {
                 const char* text = lv_textarea_get_text(overlay.temp_input_);
-                if (text && text[0]) temp_c = static_cast<float>(atoi(text));
+                if (text && text[0])
+                    temp_c = static_cast<float>(atoi(text));
             }
             if (overlay.duration_input_) {
                 const char* text = lv_textarea_get_text(overlay.duration_input_);
-                if (text && text[0]) duration_min = atoi(text);
+                if (text && text[0])
+                    duration_min = atoi(text);
             }
 
             // Clamp temperature to backend-reported limits
-            if (temp_c < dryer.min_temp_c) temp_c = dryer.min_temp_c;
-            if (temp_c > dryer.max_temp_c) temp_c = dryer.max_temp_c;
+            if (temp_c < dryer.min_temp_c)
+                temp_c = dryer.min_temp_c;
+            if (temp_c > dryer.max_temp_c)
+                temp_c = dryer.max_temp_c;
 
             // Clamp duration to backend limit
             if (duration_min > dryer.max_duration_min)
                 duration_min = dryer.max_duration_min;
-            if (duration_min <= 0) duration_min = 240;
+            if (duration_min <= 0)
+                duration_min = 240;
 
-            spdlog::info("[AmsEnvironmentOverlay] Starting drying: {}°C for {}min",
-                         temp_c, duration_min);
+            spdlog::info("[AmsEnvironmentOverlay] Starting drying: {}°C for {}min", temp_c,
+                         duration_min);
 
-            AmsError result =
-                backend->start_drying(temp_c, duration_min, -1, overlay.unit_index_);
+            AmsError result = backend->start_drying(temp_c, duration_min, -1, overlay.unit_index_);
             if (result.success()) {
                 // Remember the chosen values so the next open restores them.
-                config->set<int>(config->df() + "ams/dryer_last_temp",
-                                 static_cast<int>(temp_c));
+                config->set<int>(config->df() + "ams/dryer_last_temp", static_cast<int>(temp_c));
                 config->set<int>(config->df() + "ams/dryer_last_duration", duration_min);
                 config->save();
                 NOTIFY_INFO("{}", lv_tr("Drying started"));

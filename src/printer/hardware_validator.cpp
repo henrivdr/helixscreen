@@ -483,8 +483,8 @@ void HardwareValidator::validate_configured_hardware(Config* config,
         std::string aux_fan = config->get<std::string>(config->df() + "fans/aux", "");
         if (!aux_fan.empty() && !contains_name(fans, aux_fan) &&
             !is_hardware_optional(config, aux_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                aux_fan, HardwareType::FAN, "Configured aux fan not found"));
+            result.expected_missing.push_back(
+                HardwareIssue::warning(aux_fan, HardwareType::FAN, "Configured aux fan not found"));
         }
     } catch (...) {
     }
@@ -835,8 +835,8 @@ void HardwareValidator::log_ignored_hardware(Config* config) {
             }
             joined << names[i];
         }
-        spdlog::info("[HardwareValidator] {} hardware item(s) silenced (ignored): {}",
-                     names.size(), joined.str());
+        spdlog::info("[HardwareValidator] {} hardware item(s) silenced (ignored): {}", names.size(),
+                     joined.str());
     } catch (const std::exception& e) {
         spdlog::trace("[HardwareValidator] Error reading optional list: {}", e.what());
     }

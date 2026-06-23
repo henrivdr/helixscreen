@@ -35,33 +35,37 @@ static const uint16_t kAmigaPeriods[] = {
 };
 // clang-format on
 
-static constexpr int kNumPeriodEntries = static_cast<int>(sizeof(kAmigaPeriods) / sizeof(kAmigaPeriods[0]));
+static constexpr int kNumPeriodEntries =
+    static_cast<int>(sizeof(kAmigaPeriods) / sizeof(kAmigaPeriods[0]));
 
 /// Find the nearest note number (1-based) for an Amiga period value.
 /// Returns 0 if the period is 0 or out of range.
 static uint8_t period_to_note(uint16_t period) {
-    if (period == 0) return 0;
+    if (period == 0)
+        return 0;
 
     // Search for closest match — periods decrease as note number increases
     int best_idx = -1;
     uint16_t best_diff = 0xFFFF;
 
     for (int i = 0; i < kNumPeriodEntries; ++i) {
-        uint16_t diff = (period > kAmigaPeriods[i]) ? (period - kAmigaPeriods[i])
-                                                     : (kAmigaPeriods[i] - period);
+        uint16_t diff =
+            (period > kAmigaPeriods[i]) ? (period - kAmigaPeriods[i]) : (kAmigaPeriods[i] - period);
         if (diff < best_diff) {
             best_diff = diff;
             best_idx = i;
         }
     }
 
-    if (best_idx < 0) return 0;
+    if (best_idx < 0)
+        return 0;
     // Note numbers are 1-based
     return static_cast<uint8_t>(best_idx + 1);
 }
 
 uint16_t TrackerModule::note_to_period(uint8_t note) {
-    if (note == 0 || note > kNumPeriodEntries) return 0;
+    if (note == 0 || note > kNumPeriodEntries)
+        return 0;
     return kAmigaPeriods[note - 1];
 }
 
@@ -132,7 +136,8 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
     for (size_t i = 0; i < kOrderTableSize; ++i) {
         uint8_t pat = data[kOrderTableOffset + i];
         mod.order[i] = pat;
-        if (i < song_length && pat > max_pattern) max_pattern = pat;
+        if (i < song_length && pat > max_pattern)
+            max_pattern = pat;
     }
 
     size_t num_patterns = static_cast<size_t>(max_pattern) + 1;
@@ -160,7 +165,8 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
             for (size_t ch = 0; ch < kChannels; ++ch) {
                 size_t cell_offset = pat_offset + row * kBytesPerRow + ch * kBytesPerCell;
                 if (cell_offset + 3 >= size) {
-                    spdlog::warn("[TrackerModule] MOD truncated at pattern {} row {} ch {}", p, row, ch);
+                    spdlog::warn("[TrackerModule] MOD truncated at pattern {} row {} ch {}", p, row,
+                                 ch);
                     truncated = true;
                     break;
                 }
@@ -197,21 +203,35 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
 
     // Amiga PAL clock for C4 rate calculation
     static constexpr double kAmigaPalClock = 3546895.0;
-    static constexpr double kC4Period = 428.0;  // period for C-4
+    static constexpr double kC4Period = 428.0; // period for C-4
 
     // Finetune period multipliers (ProTracker finetune table)
     // Finetune -8..+7 corresponds to slight period adjustments
     static constexpr double kFinetuneMultiplier[] = {
         // 0    1       2       3       4       5       6       7
-        1.0000, 0.9930, 0.9860, 0.9790, 0.9724, 0.9659, 0.9593, 0.9529,
+        1.0000,
+        0.9930,
+        0.9860,
+        0.9790,
+        0.9724,
+        0.9659,
+        0.9593,
+        0.9529,
         // -8   -7      -6      -5      -4      -3      -2      -1
-        1.0595, 1.0524, 1.0453, 1.0383, 1.0313, 1.0245, 1.0178, 1.0088,
+        1.0595,
+        1.0524,
+        1.0453,
+        1.0383,
+        1.0313,
+        1.0245,
+        1.0178,
+        1.0088,
     };
 
     struct InstrumentHeader {
-        uint16_t sample_length_words;  // in 16-bit words
-        int8_t finetune;               // -8..+7
-        uint8_t volume;                // 0..64
+        uint16_t sample_length_words; // in 16-bit words
+        int8_t finetune;              // -8..+7
+        uint8_t volume;               // 0..64
         uint16_t loop_start_words;
         uint16_t loop_length_words;
     };
@@ -221,23 +241,25 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
 
     for (size_t i = 0; i < kNumInstruments; ++i) {
         size_t inst_offset = 20 + i * kInstrumentSize;
-        if (inst_offset + 29 >= size) break;
+        if (inst_offset + 29 >= size)
+            break;
 
         auto& hdr = inst_headers[i];
-        hdr.sample_length_words = static_cast<uint16_t>((data[inst_offset + 22] << 8) |
-                                                         data[inst_offset + 23]);
+        hdr.sample_length_words =
+            static_cast<uint16_t>((data[inst_offset + 22] << 8) | data[inst_offset + 23]);
         uint8_t finetune_raw = data[inst_offset + 24] & 0x0F;
         hdr.finetune = (finetune_raw >= 8) ? static_cast<int8_t>(finetune_raw - 16)
                                            : static_cast<int8_t>(finetune_raw);
         hdr.volume = data[inst_offset + 25];
-        if (hdr.volume > 64) hdr.volume = 64;
-        hdr.loop_start_words = static_cast<uint16_t>((data[inst_offset + 26] << 8) |
-                                                      data[inst_offset + 27]);
-        hdr.loop_length_words = static_cast<uint16_t>((data[inst_offset + 28] << 8) |
-                                                       data[inst_offset + 29]);
+        if (hdr.volume > 64)
+            hdr.volume = 64;
+        hdr.loop_start_words =
+            static_cast<uint16_t>((data[inst_offset + 26] << 8) | data[inst_offset + 27]);
+        hdr.loop_length_words =
+            static_cast<uint16_t>((data[inst_offset + 28] << 8) | data[inst_offset + 29]);
 
         TrackerInstrument& inst = mod.instruments[i];
-        inst.waveform = Waveform::SQUARE;  // fallback for synth mode
+        inst.waveform = Waveform::SQUARE; // fallback for synth mode
         inst.volume = static_cast<float>(hdr.volume) / 64.0f;
         inst.finetune = static_cast<float>(hdr.finetune) / 8.0f;
 
@@ -257,7 +279,8 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
     for (size_t i = 0; i < kNumInstruments; ++i) {
         const auto& hdr = inst_headers[i];
         size_t sample_bytes = static_cast<size_t>(hdr.sample_length_words) * 2;
-        if (sample_bytes == 0) continue;
+        if (sample_bytes == 0)
+            continue;
 
         if (sample_data_offset + sample_bytes > size) {
             spdlog::debug("tracker: MOD instrument {} sample data truncated "
@@ -265,7 +288,8 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
                           i + 1, sample_bytes, sample_data_offset, size);
             // Take what we can
             sample_bytes = size - sample_data_offset;
-            if (sample_bytes == 0) break;
+            if (sample_bytes == 0)
+                break;
         }
 
         auto& inst = mod.instruments[i];
@@ -280,8 +304,7 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
         if (inst.loop_start >= sample_bytes) {
             inst.loop_start = 0;
             inst.loop_length = 0;
-        } else if (inst.loop_length > 0 &&
-                   inst.loop_start + inst.loop_length > sample_bytes) {
+        } else if (inst.loop_length > 0 && inst.loop_start + inst.loop_length > sample_bytes) {
             inst.loop_length = static_cast<uint32_t>(sample_bytes) - inst.loop_start;
         }
 
@@ -300,13 +323,15 @@ std::optional<TrackerModule> parse_mod(const uint8_t* data, size_t size) {
 // ---------------------------------------------------------------------------
 
 float TrackerModule::note_to_freq(uint8_t note) {
-    if (note == 0) return 0.0f;
+    if (note == 0)
+        return 0.0f;
     // A-4 = note 58, 440 Hz. Equal temperament.
     return 440.0f * std::pow(2.0f, (static_cast<float>(note) - 58.0f) / 12.0f);
 }
 
 std::optional<TrackerModule> TrackerModule::load_from_memory(const uint8_t* data, size_t size) {
-    if (!data || size == 0) return std::nullopt;
+    if (!data || size == 0)
+        return std::nullopt;
 
     static constexpr size_t k4MB = 4 * 1024 * 1024;
     if (size > k4MB) {
@@ -319,8 +344,7 @@ std::optional<TrackerModule> TrackerModule::load_from_memory(const uint8_t* data
     }
 
     // Check MED magic first — "MMD0", "MMD1", "MMD2", "MMD3"
-    if (data[0] == 'M' && data[1] == 'M' && data[2] == 'D' &&
-        (data[3] >= '0' && data[3] <= '3')) {
+    if (data[0] == 'M' && data[1] == 'M' && data[2] == 'D' && (data[3] >= '0' && data[3] <= '3')) {
         spdlog::debug("tracker: detected MED format (MMD{})", data[3]);
         return parse_med(data, size);
     }
@@ -348,6 +372,6 @@ std::optional<TrackerModule> TrackerModule::load(const std::string& path) {
     return load_from_memory(buf.data(), buf.size());
 }
 
-}  // namespace helix::audio
+} // namespace helix::audio
 
-#endif  // HELIX_HAS_TRACKER
+#endif // HELIX_HAS_TRACKER

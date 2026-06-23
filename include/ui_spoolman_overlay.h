@@ -293,8 +293,6 @@ class SpoolmanOverlay : public OverlayBase {
     lv_obj_t* connect_btn_ = nullptr;
     lv_obj_t* setup_card_ = nullptr;
     lv_obj_t* status_card_ = nullptr;
-
-
 };
 
 /**

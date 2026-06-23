@@ -25,11 +25,11 @@ class ActionPromptManager;
 class AmsErrorBridge;
 class GcodeErrorRouter;
 class GcodeNarrationRouter;
-}
+} // namespace helix
 namespace helix::ui {
 class ActionPromptModal;
 class RecoveryModalPresenter;
-}
+} // namespace helix::ui
 class DisplayManager;
 class SubjectInitializer;
 class MoonrakerManager;

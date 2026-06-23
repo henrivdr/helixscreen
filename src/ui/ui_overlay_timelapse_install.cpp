@@ -416,13 +416,13 @@ void TimelapseInstallOverlay::download_and_modify_config() {
                         });
                         return;
                     }
-                    tok.defer("TimelapseInstallOverlay::write_helix_with_moonraker",
-                              [this, helix = helix_content,
-                               moonraker = moonraker_content]() mutable {
-                                  if (!wizard_active_)
-                                      return;
-                                  write_timelapse_config(helix, moonraker);
-                              });
+                    tok.defer(
+                        "TimelapseInstallOverlay::write_helix_with_moonraker",
+                        [this, helix = helix_content, moonraker = moonraker_content]() mutable {
+                            if (!wizard_active_)
+                                return;
+                            write_timelapse_config(helix, moonraker);
+                        });
                 },
                 [this, tok, moonraker_content](const MoonrakerError& err) {
                     if (err.type == MoonrakerErrorType::FILE_NOT_FOUND) {

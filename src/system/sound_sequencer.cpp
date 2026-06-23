@@ -243,9 +243,12 @@ void SoundSequencer::tick(float dt_ms) {
 
     if (step.lfo.rate > 0 && step.lfo.depth > 0) {
         float lfo_val = compute_lfo(step.lfo, elapsed);
-        if (step.lfo.target == "freq") freq += lfo_val;
-        else if (step.lfo.target == "amplitude") amplitude += lfo_val;
-        else if (step.lfo.target == "duty") duty += lfo_val;
+        if (step.lfo.target == "freq")
+            freq += lfo_val;
+        else if (step.lfo.target == "amplitude")
+            amplitude += lfo_val;
+        else if (step.lfo.target == "duty")
+            duty += lfo_val;
     }
 
     amplitude *= AudioSettingsManager::instance().get_volume_scaled();
@@ -387,17 +390,22 @@ void SoundSequencer::publish_note_for_step(const SoundStep& step) {
         if (step.lfo.rate > 0 && step.lfo.depth > 0) {
             event.lfo_rate = step.lfo.rate;
             event.lfo_depth = step.lfo.depth;
-            if (step.lfo.target == "freq") event.lfo_target = 1;
-            else if (step.lfo.target == "amplitude") event.lfo_target = 2;
-            else if (step.lfo.target == "duty") event.lfo_target = 3;
+            if (step.lfo.target == "freq")
+                event.lfo_target = 1;
+            else if (step.lfo.target == "amplitude")
+                event.lfo_target = 2;
+            else if (step.lfo.target == "duty")
+                event.lfo_target = 3;
         }
 
         // Filter
         if (!step.filter.type.empty()) {
             event.filter_cutoff = step.filter.cutoff;
             event.filter_sweep_to = step.filter.sweep_to;
-            if (step.filter.type == "lowpass") event.filter_type = 1;
-            else if (step.filter.type == "highpass") event.filter_type = 2;
+            if (step.filter.type == "lowpass")
+                event.filter_type = 1;
+            else if (step.filter.type == "highpass")
+                event.filter_type = 2;
         }
 
         if (step.chord_count > 0) {

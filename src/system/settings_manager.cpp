@@ -182,8 +182,8 @@ void SettingsManager::init_subjects() {
     // Per-source policy for Snapmaker U1 built-in detector (default: 2 = DeferToSource)
     int detection_policy_u1 = config->get<int>("/detection/policy_u1", 2);
     detection_policy_u1 = std::clamp(detection_policy_u1, 0, 2);
-    UI_MANAGED_SUBJECT_INT(detection_policy_u1_subject_, detection_policy_u1,
-                           "detection_policy_u1", subjects_);
+    UI_MANAGED_SUBJECT_INT(detection_policy_u1_subject_, detection_policy_u1, "detection_policy_u1",
+                           subjects_);
 
     // Chamber assignment (default: "auto" = use name heuristics).
     // Legacy paths (printer/chamber_{sensor,heater}) moved to the canonical flat paths
@@ -529,8 +529,8 @@ void SettingsManager::set_console_filter_temps(bool enabled) {
 }
 
 bool SettingsManager::get_console_filter_firmware_noise() const {
-    return lv_subject_get_int(
-               const_cast<lv_subject_t*>(&console_filter_firmware_noise_subject_)) != 0;
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&console_filter_firmware_noise_subject_)) !=
+           0;
 }
 
 void SettingsManager::set_console_filter_firmware_noise(bool enabled) {
@@ -543,8 +543,8 @@ void SettingsManager::set_console_filter_firmware_noise(bool enabled) {
 
 std::vector<std::string> SettingsManager::get_console_filter_user_add() const {
     try {
-        return Config::get_instance()->get<std::vector<std::string>>(
-            "/console/filter_user_add", std::vector<std::string>{});
+        return Config::get_instance()->get<std::vector<std::string>>("/console/filter_user_add",
+                                                                     std::vector<std::string>{});
     } catch (const std::exception& e) {
         spdlog::warn("[SettingsManager] /console/filter_user_add malformed, ignoring: {}",
                      e.what());
@@ -554,8 +554,8 @@ std::vector<std::string> SettingsManager::get_console_filter_user_add() const {
 
 std::vector<std::string> SettingsManager::get_console_filter_user_remove() const {
     try {
-        return Config::get_instance()->get<std::vector<std::string>>(
-            "/console/filter_user_remove", std::vector<std::string>{});
+        return Config::get_instance()->get<std::vector<std::string>>("/console/filter_user_remove",
+                                                                     std::vector<std::string>{});
     } catch (const std::exception& e) {
         spdlog::warn("[SettingsManager] /console/filter_user_remove malformed, ignoring: {}",
                      e.what());

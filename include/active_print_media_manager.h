@@ -144,7 +144,7 @@ class ActivePrintMediaManager {
     int thumbnail_retry_count_ = 0;         ///< Retries scheduled for the current filename
     std::string retry_filename_;            ///< Filename the pending retry is for
     uint32_t retry_generation_ = 0;         ///< Load generation the pending retry belongs to
-    bool thumbnail_loaded_ = false; ///< Thumbnail successfully loaded for current filename
+    bool thumbnail_loaded_ = false;         ///< Thumbnail successfully loaded for current filename
 
     MoonrakerAPI* listener_api_ = nullptr; ///< API the method callbacks are registered on
     std::string filelist_handler_name_;

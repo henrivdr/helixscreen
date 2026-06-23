@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_heating_animator.h"
 #include "ui_observer_guard.h"
 #include "ui_overlay_temp_graph.h"
 
+#include "async_lifetime_guard.h"
 #include "panel_widget.h"
 
 class TemperatureService;
@@ -34,10 +34,10 @@ class HeaterTempWidget : public PanelWidget {
     using SubjectGetter = lv_subject_t* (*)(PrinterState&);
 
     struct Config {
-        const char* widget_id;     // PanelWidget id() (e.g. "bed_temperature")
-        const char* button_name;   // ui_button name in the XML component
-        const char* icon_name;     // icon glyph name to animate
-        const char* log_tag;       // spdlog prefix, e.g. "[BedTemperatureWidget]"
+        const char* widget_id;   // PanelWidget id() (e.g. "bed_temperature")
+        const char* button_name; // ui_button name in the XML component
+        const char* icon_name;   // icon glyph name to animate
+        const char* log_tag;     // spdlog prefix, e.g. "[BedTemperatureWidget]"
         TempGraphOverlay::Mode mode;
         SubjectGetter temp_getter;   // current temperature subject
         SubjectGetter target_getter; // target temperature subject

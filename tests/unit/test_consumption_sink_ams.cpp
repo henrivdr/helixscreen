@@ -1,6 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "ams_types.h"
@@ -9,10 +12,8 @@
 #include "filament_consumption_tracker.h"
 #include "filament_consumption_tracker_test_access.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
 
 using helix::AmsSlotSink;
 using helix::FilamentConsumptionTracker;
@@ -70,8 +71,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE(sink.is_trackable());
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: skipped when remaining_weight_g is unknown",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: skipped when remaining_weight_g is unknown",
                  "[consumption_sink][ams]") {
     SlotInfo info = mock->get_slot_info(0);
     info.remaining_weight_g = -1.0f;
@@ -82,8 +82,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE_FALSE(sink.is_trackable());
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: skipped when spoolman_id is set",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: skipped when spoolman_id is set",
                  "[consumption_sink][ams]") {
     SlotInfo info = mock->get_slot_info(0);
     info.spoolman_id = 42;
@@ -94,8 +93,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE_FALSE(sink.is_trackable());
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: skipped when material density unresolvable",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: skipped when material density unresolvable",
                  "[consumption_sink][ams]") {
     SlotInfo info = mock->get_slot_info(0);
     info.material = "UnknownNovelMaterial9000";
@@ -106,8 +104,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE_FALSE(sink.is_trackable());
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: skipped when backend declares native tracking",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: skipped when backend declares native tracking",
                  "[consumption_sink][ams]") {
     mock->set_tracks_consumption_natively_for_testing(true);
 
@@ -116,8 +113,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE_FALSE(sink.is_trackable());
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: apply_delta decrements remaining_weight_g",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: apply_delta decrements remaining_weight_g",
                  "[consumption_sink][ams]") {
     AmsSlotSink sink(backend_idx, 0);
     sink.snapshot(0.0f);
@@ -129,8 +125,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE(after.remaining_weight_g > 496.0f);
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: apply_delta clamps remaining at zero",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: apply_delta clamps remaining at zero",
                  "[consumption_sink][ams]") {
     SlotInfo seed = mock->get_slot_info(0);
     seed.remaining_weight_g = 5.0f;
@@ -146,8 +141,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE(after.remaining_weight_g == 0.0f);
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: other slots untouched by neighbor's apply_delta",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: other slots untouched by neighbor's apply_delta",
                  "[consumption_sink][ams]") {
     // Seed slot 1 with a known weight so we can confirm it stays.
     SlotInfo info1 = mock->get_slot_info(1);
@@ -164,8 +158,7 @@ TEST_CASE_METHOD(AmsSlotSinkFixture,
     REQUIRE(mock->get_slot_info(1).remaining_weight_g == 750.0f);
 }
 
-TEST_CASE_METHOD(AmsSlotSinkFixture,
-                 "AmsSlotSink: external write mid-tick rebaselines",
+TEST_CASE_METHOD(AmsSlotSinkFixture, "AmsSlotSink: external write mid-tick rebaselines",
                  "[consumption_sink][ams]") {
     AmsSlotSink sink(backend_idx, 0);
     sink.snapshot(0.0f);
@@ -239,8 +232,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(idx == 0);
 
     // After add_backend, kSlots sinks should have been registered.
-    REQUIRE(FilamentConsumptionTrackerTestAccess::sink_count() >=
-            static_cast<std::size_t>(kSlots));
+    REQUIRE(FilamentConsumptionTrackerTestAccess::sink_count() >= static_cast<std::size_t>(kSlots));
 
     ams.clear_backends();
     // After clear_backends, slot sinks should be gone (but an external sink may

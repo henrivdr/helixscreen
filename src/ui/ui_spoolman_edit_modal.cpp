@@ -605,8 +605,7 @@ void SpoolEditModal::handle_print_label() {
         } else {
             spdlog::error("[SpoolEditModal] Print failed: {}", error);
             ToastManager::instance().show(ToastSeverity::ERROR,
-                                          helix::friendly_label_printer_error(error).c_str(),
-                                          5000);
+                                          helix::friendly_label_printer_error(error).c_str(), 5000);
         }
     };
 

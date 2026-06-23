@@ -23,7 +23,8 @@ using helix::ui::PrintSelectCardView;
 // is_placeholder_thumbnail
 // ============================================================================
 
-TEST_CASE("CardView: is_placeholder_thumbnail treats empty path as placeholder", "[ui][card_view]") {
+TEST_CASE("CardView: is_placeholder_thumbnail treats empty path as placeholder",
+          "[ui][card_view]") {
     REQUIRE(PrintSelectCardView::is_placeholder_thumbnail(""));
 }
 

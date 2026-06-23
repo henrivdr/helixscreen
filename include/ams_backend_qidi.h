@@ -127,8 +127,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     // --- Dryer / box-heater control (issue #1019) ---
     [[nodiscard]] DryerInfo get_dryer_info() const override;
-    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
-                          int unit = 0) override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
 
   protected:
@@ -184,8 +183,8 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     // Firmware-capability flags (see detect_firmware_capabilities()). Optimistic
     // defaults match verified Q2 1.1.1 stock firmware so tests and a discovery
     // race never downgrade off the known-good path.
-    bool fw_has_m603_ = true;         ///< M603 stock unload macro present
-    bool fw_has_clear_nozzle_ = true; ///< CLEAR_NOZZLE post-load wipe macro present
+    bool fw_has_m603_ = true;            ///< M603 stock unload macro present
+    bool fw_has_clear_nozzle_ = true;    ///< CLEAR_NOZZLE post-load wipe macro present
     bool fw_force_move_enabled_ = false; ///< [force_move] enable_force_move -> lane eject
 
     /// Raw RFID indices read from save_variables. Per-slot side-table so we
@@ -201,7 +200,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     // Dryer state for the box PTC heater (issue #1019).
     DryerInfo dryer_info_;
-    std::time_t dry_end_epoch_ = 0;      ///< Absolute drying end time (epoch s), 0 = none
+    std::time_t dry_end_epoch_ = 0;       ///< Absolute drying end time (epoch s), 0 = none
     bool drying_timer_supported_ = false; ///< box_extras drying timer seen -> use ENABLE_BOX_DRY
     std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
 
@@ -245,8 +244,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     /// Nearest palette entry to `rgb` by squared RGB distance. Returns 0 when
     /// the palette is empty.
-    static int resolve_color_id(const std::map<int, std::uint32_t>& palette,
-                                std::uint32_t rgb);
+    static int resolve_color_id(const std::map<int, std::uint32_t>& palette, std::uint32_t rgb);
 
     /// Vendor id from a case-insensitive name match against `vendors`. Falls
     /// back to the id whose name is "Generic" (case-insensitive) if present,

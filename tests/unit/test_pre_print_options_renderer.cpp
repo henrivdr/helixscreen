@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ui_pre_print_options_renderer.h"
+#include "ui_print_preparation_manager.h"
 
-#include "../catch_amalgamated.hpp"
 #include "../lvgl_test_fixture.h"
-
 #include "pre_print_option.h"
 #include "printer_detector.h"
-#include "ui_print_preparation_manager.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix::ui;
 
@@ -74,7 +74,8 @@ PrePrintOptionSet make_multi_category_set() {
 
 } // namespace
 
-TEST_CASE_METHOD(LVGLTestFixture, "PrePrintOptionsRenderer: empty option set leaves container empty",
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "PrePrintOptionsRenderer: empty option set leaves container empty",
                  "[print_file_detail][pre_print_options]") {
     PrePrintOptionsRenderer renderer;
     lv_obj_t* container = lv_obj_create(test_screen());
@@ -114,8 +115,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "PrePrintOptionsRenderer: single-category set 
     REQUIRE(lv_obj_get_child_count(container) == 1);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "PrePrintOptionsRenderer: multi-category set emits flat row list",
+TEST_CASE_METHOD(LVGLTestFixture, "PrePrintOptionsRenderer: multi-category set emits flat row list",
                  "[print_file_detail][pre_print_options]") {
     PrePrintOptionsRenderer renderer;
     lv_obj_t* container = lv_obj_create(test_screen());
@@ -124,8 +124,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
     renderer.populate(container, set, nullptr, nullptr);
 
     REQUIRE(renderer.row_count() == 3);
-    REQUIRE(renderer.rendered_ids() == std::vector<std::string>{"bed_mesh", "nozzle_clean",
-                                                                "ai_detect"});
+    REQUIRE(renderer.rendered_ids() ==
+            std::vector<std::string>{"bed_mesh", "nozzle_clean", "ai_detect"});
 
     // 3 rows, no category subheaders — the section title comes from the
     // surrounding XML card, not the renderer.
@@ -246,8 +246,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     }
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "PrePrintOptionsRenderer: K1C live DB entry produces one row",
+TEST_CASE_METHOD(LVGLTestFixture, "PrePrintOptionsRenderer: K1C live DB entry produces one row",
                  "[print_file_detail][pre_print_options][db]") {
     auto set = PrinterDetector::get_pre_print_option_set("Creality K1C");
     REQUIRE_FALSE(set.empty());
@@ -283,8 +282,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(renderer.get_switch("ai_detect") != nullptr);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "PrePrintOptionsRenderer: label_key wins over humanize_id",
+TEST_CASE_METHOD(LVGLTestFixture, "PrePrintOptionsRenderer: label_key wins over humanize_id",
                  "[print_file_detail][pre_print_options][label]") {
     // When `label_key` is present, the renderer must look it up via lv_tr
     // and never fall through to the humanize_id path. We verify by giving
@@ -299,7 +297,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     set.macro_name = "START_PRINT";
 
     PrePrintOption keyed;
-    keyed.id = "weirdId123"; // humanize_id would emit "WeirdId123"
+    keyed.id = "weirdId123";                        // humanize_id would emit "WeirdId123"
     keyed.label_key = "pre_print_option.foo.label"; // not in en.yml; lv_tr returns it as-is
     keyed.category = PrePrintCategory::Mechanical;
     keyed.order = 10;
@@ -348,8 +346,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(unkeyed_text == "AI Detect");
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "PrePrintOptionsRenderer: clear() drops rows and resets subjects",
+TEST_CASE_METHOD(LVGLTestFixture, "PrePrintOptionsRenderer: clear() drops rows and resets subjects",
                  "[print_file_detail][pre_print_options]") {
     PrePrintOptionsRenderer renderer;
     lv_obj_t* container = lv_obj_create(test_screen());
@@ -402,7 +399,6 @@ TEST_CASE_METHOD(LVGLTestFixture,
         // The provider returns -1 for unknown ids (renderer.get_state default),
         // and the manager has no cached options without a printer_state, so
         // the result is NOT_APPLICABLE.
-        REQUIRE(manager.get_option_state("does_not_exist") ==
-                PrePrintOptionState::NOT_APPLICABLE);
+        REQUIRE(manager.get_option_state("does_not_exist") == PrePrintOptionState::NOT_APPLICABLE);
     }
 }

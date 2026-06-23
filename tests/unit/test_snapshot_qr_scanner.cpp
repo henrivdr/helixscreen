@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "qr_decoder.h"
 #include "snapshot_qr_scanner.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 

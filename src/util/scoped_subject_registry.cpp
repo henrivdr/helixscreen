@@ -10,7 +10,7 @@ namespace {
 // libhv event loops / WebSocket workers; keeping this thread-local prevents
 // cross-thread races if a scoped registration ever escapes the test thread.
 thread_local lv_xml_component_scope_t* g_active_scope = nullptr;
-}
+} // namespace
 
 ScopedSubjectRegistryOverride::ScopedSubjectRegistryOverride(lv_xml_component_scope_t* scope)
     : previous_(g_active_scope) {

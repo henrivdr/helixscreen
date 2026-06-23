@@ -286,8 +286,10 @@ void FilamentPanel::init_subjects() {
         UI_MANAGED_SUBJECT_INT(op_load_state_subject_, 0, "filament_op_load_state", subjects_);
         UI_MANAGED_SUBJECT_INT(op_unload_state_subject_, 0, "filament_op_unload_state", subjects_);
         UI_MANAGED_SUBJECT_INT(op_purge_state_subject_, 0, "filament_op_purge_state", subjects_);
-        UI_MANAGED_SUBJECT_INT(op_extrude_state_subject_, 0, "filament_op_extrude_state", subjects_);
-        UI_MANAGED_SUBJECT_INT(op_retract_state_subject_, 0, "filament_op_retract_state", subjects_);
+        UI_MANAGED_SUBJECT_INT(op_extrude_state_subject_, 0, "filament_op_extrude_state",
+                               subjects_);
+        UI_MANAGED_SUBJECT_INT(op_retract_state_subject_, 0, "filament_op_retract_state",
+                               subjects_);
 
         // Preset button temperature label subjects (populated from filament DB in setup)
         static constexpr const char* preset_subject_names[] = {
@@ -907,7 +909,7 @@ void FilamentPanel::handle_purge_amount_select(int amount) {
 // always valid — no AsyncLifetimeGuard needed here [L012].
 // ============================================================================
 
-constexpr uint32_t OP_DONE_REVERT_MS = 1500;   ///< how long the "done" checkmark shows
+constexpr uint32_t OP_DONE_REVERT_MS = 1500;     ///< how long the "done" checkmark shows
 constexpr uint32_t MIN_SPINNER_VISIBLE_MS = 500; ///< floor so instant ops still flash a spinner
 
 lv_subject_t* FilamentPanel::op_state_subject(FilamentOp op) {

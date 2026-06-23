@@ -32,7 +32,7 @@ parse_raw_macro_params(const std::string& raw_text);
 /// Result from macro parameter modal: inline params and variable overrides
 struct MacroParamResult {
     std::map<std::string, std::string> params;    ///< Inline params (MACRO KEY=VALUE)
-    std::map<std::string, std::string> variables;  ///< Variable overrides (SET_GCODE_VARIABLE)
+    std::map<std::string, std::string> variables; ///< Variable overrides (SET_GCODE_VARIABLE)
 };
 
 /// Callback invoked when user confirms macro execution with parameters

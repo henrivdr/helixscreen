@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "cjk_font_manager.h"
+
 #include "ui_fonts.h"
 
 #include "spdlog/spdlog.h"
 
 #ifndef HELIX_MAX_FONT_TIER
-#define HELIX_MAX_FONT_TIER 6  // default: all tiers (micro=0 .. xxlarge=6)
+#define HELIX_MAX_FONT_TIER 6 // default: all tiers (micro=0 .. xxlarge=6)
 #endif
 
 namespace helix::system {
@@ -138,7 +139,8 @@ bool CjkFontManager::load() {
 }
 
 void CjkFontManager::unload() {
-    if (!loaded_) return;
+    if (!loaded_)
+        return;
 
     spdlog::info("[CjkFontManager] Unloading {} CJK fonts", loaded_fonts_.size());
 
@@ -156,4 +158,4 @@ void CjkFontManager::shutdown() {
     unload();
 }
 
-}  // namespace helix::system
+} // namespace helix::system

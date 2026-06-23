@@ -18,10 +18,10 @@
 #include "moonraker_request.h"
 #include "moonraker_request_tracker.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <atomic>
 #include <stdexcept>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -75,8 +75,8 @@ TEST_CASE("route_response absorbs exceptions thrown from error_callback",
     MoonrakerRequestTracker tracker;
     auto entered = std::make_shared<std::atomic<int>>(0);
 
-    MoonrakerRequestTrackerTestAccess::inject_request(
-        tracker, /*id=*/101, make_request_with_throwing_error_cb(entered));
+    MoonrakerRequestTrackerTestAccess::inject_request(tracker, /*id=*/101,
+                                                      make_request_with_throwing_error_cb(entered));
 
     // Server-side RPC error response — triggers error_callback path.
     json error_response = {

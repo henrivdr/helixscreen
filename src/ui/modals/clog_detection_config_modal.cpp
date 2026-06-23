@@ -56,11 +56,11 @@ void ClogDetectionConfigModal::init_subjects() {
                            sizeof(det_length_text_buf_), "---");
 
     // Per-button boolean subjects for bind_style selected/unselected
-    lv_subject_init_int(&src_auto_active_, 1);     // auto selected by default
+    lv_subject_init_int(&src_auto_active_, 1); // auto selected by default
     lv_subject_init_int(&src_encoder_active_, 0);
     lv_subject_init_int(&src_flowguard_active_, 0);
     lv_subject_init_int(&src_afc_active_, 0);
-    lv_subject_init_int(&mode_auto_active_, 1);    // auto selected by default
+    lv_subject_init_int(&mode_auto_active_, 1); // auto selected by default
     lv_subject_init_int(&mode_manual_active_, 0);
 
     // Register globally so XML bindings find them
@@ -180,8 +180,8 @@ void ClogDetectionConfigModal::on_ok() {
     if (detection_mode_ != original_detection_mode_ || detection_mode_ == 1)
         send_detection_mode_gcode(detection_mode_, detection_length_);
 
-    spdlog::info("[ClogConfig] Saved: source={}, mode={}, threshold={}, det_length={:.1f}",
-                 source_, detection_mode_, danger_threshold_, detection_length_);
+    spdlog::info("[ClogConfig] Saved: source={}, mode={}, threshold={}, det_length={:.1f}", source_,
+                 detection_mode_, danger_threshold_, detection_length_);
     hide();
 }
 
@@ -245,8 +245,8 @@ void ClogDetectionConfigModal::send_detection_mode_gcode(int mode, float det_len
     }
     char cmd[96];
     if (mode == 1 && det_length > 0) {
-        snprintf(cmd, sizeof(cmd), "MMU_TEST_CONFIG clog_detection=%d detection_length=%.1f",
-                 mode, det_length);
+        snprintf(cmd, sizeof(cmd), "MMU_TEST_CONFIG clog_detection=%d detection_length=%.1f", mode,
+                 det_length);
     } else {
         snprintf(cmd, sizeof(cmd), "MMU_TEST_CONFIG clog_detection=%d", mode);
     }

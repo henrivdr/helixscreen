@@ -33,7 +33,7 @@ namespace {
 
 // RAII scratch directory under $TMPDIR (or /tmp).  Cleaned up on destruction.
 class ScratchDir {
-public:
+  public:
     ScratchDir() {
         const char* base = std::getenv("TMPDIR");
         std::string templ = std::string(base ? base : "/tmp") + "/log_path_probe_XXXXXX";
@@ -45,7 +45,8 @@ public:
         path_ = buf.data();
     }
     ~ScratchDir() {
-        if (path_.empty()) return;
+        if (path_.empty())
+            return;
         // Best-effort: chmod back to 0700 in case a test made it read-only,
         // unlink any leftover files, then rmdir.
         ::chmod(path_.c_str(), 0700);
@@ -53,21 +54,26 @@ public:
         if (d) {
             while (auto* e = ::readdir(d)) {
                 std::string name = e->d_name;
-                if (name == "." || name == "..") continue;
+                if (name == "." || name == "..")
+                    continue;
                 ::unlink((path_ + "/" + name).c_str());
             }
             ::closedir(d);
         }
         ::rmdir(path_.c_str());
     }
-    const std::string& path() const { return path_; }
-    std::string file(const std::string& name) const { return path_ + "/" + name; }
+    const std::string& path() const {
+        return path_;
+    }
+    std::string file(const std::string& name) const {
+        return path_ + "/" + name;
+    }
 
-private:
+  private:
     std::string path_;
 };
 
-}  // namespace
+} // namespace
 
 TEST_CASE("probe_log_path_writable: happy path", "[log_path_probe]") {
     ScratchDir dir;
@@ -80,7 +86,7 @@ TEST_CASE("probe_log_path_writable: happy path", "[log_path_probe]") {
     REQUIRE(result.error.empty());
 
     // Probe wrote the sentinel; file exists and is non-empty.
-    struct stat st{};
+    struct stat st {};
     REQUIRE(::stat(log.c_str(), &st) == 0);
     REQUIRE(st.st_size > 0);
 }
@@ -97,7 +103,7 @@ TEST_CASE("probe_log_path_writable: rejects insufficient free space", "[log_path
     REQUIRE_THAT(result.error, Catch::Matchers::ContainsSubstring("bytes free"));
 
     // Headroom check fails *before* open() — no stub file should exist.
-    struct stat st{};
+    struct stat st {};
     REQUIRE(::stat(log.c_str(), &st) != 0);
 }
 
@@ -121,7 +127,7 @@ TEST_CASE("probe_log_path_writable: read-only directory", "[log_path_probe]") {
 
     ScratchDir dir;
     const std::string log = dir.file("install.log");
-    REQUIRE(::chmod(dir.path().c_str(), 0500) == 0);  // r-x------
+    REQUIRE(::chmod(dir.path().c_str(), 0500) == 0); // r-x------
 
     auto result = probe_log_path_writable(log, 0);
 

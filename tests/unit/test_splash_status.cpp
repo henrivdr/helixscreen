@@ -3,8 +3,9 @@
 // Unit tests for the boot-splash lifetime/status policy (include/splash_status.h).
 // Pure logic — no LVGL, no fbdev, no filesystem.
 
-#include "catch_amalgamated.hpp"
 #include "splash_status.h"
+
+#include "catch_amalgamated.hpp"
 
 using helix::splash::compose_splash_status;
 using helix::splash::parse_meminfo_available_kb;
@@ -25,8 +26,7 @@ TEST_CASE("splash lifetime: no heartbeat preserves legacy 30s cap", "[splash][li
     REQUIRE(splash_should_continue(p, start, start + 31, -1) == false);
 }
 
-TEST_CASE("splash lifetime: a heartbeat keeps it alive past the legacy cap",
-          "[splash][lifetime]") {
+TEST_CASE("splash lifetime: a heartbeat keeps it alive past the legacy cap", "[splash][lifetime]") {
     SplashLifetimePolicy p;
     const long start = 1000;
 
@@ -36,7 +36,8 @@ TEST_CASE("splash lifetime: a heartbeat keeps it alive past the legacy cap",
 }
 
 TEST_CASE("splash lifetime: stays up after heartbeats stop, until the backstop "
-          "(covers gate-end -> UI first paint)", "[splash][lifetime]") {
+          "(covers gate-end -> UI first paint)",
+          "[splash][lifetime]") {
     SplashLifetimePolicy p; // 30 / 180
     const long start = 1000;
 
@@ -71,11 +72,10 @@ TEST_CASE("splash lifetime: monotonic math is immune to a wall-clock jump", "[sp
 }
 
 TEST_CASE("parse_meminfo_available_kb extracts MemAvailable", "[splash][memory]") {
-    const std::string meminfo =
-        "MemTotal:         107264 kB\n"
-        "MemFree:           12880 kB\n"
-        "MemAvailable:      34216 kB\n"
-        "Buffers:            1024 kB\n";
+    const std::string meminfo = "MemTotal:         107264 kB\n"
+                                "MemFree:           12880 kB\n"
+                                "MemAvailable:      34216 kB\n"
+                                "Buffers:            1024 kB\n";
     REQUIRE(parse_meminfo_available_kb(meminfo) == 34216);
 
     // Absent field -> -1 (caller must not enforce a floor on an unknown value).

@@ -3,10 +3,11 @@
 
 #include "printer_recovery_service.h"
 
+#include "ui_update_queue.h"
+
 #include "app_globals.h"
 #include "http_executor.h"
 #include "moonraker_api.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 
@@ -25,9 +26,11 @@ namespace {
 // we should surface to the user.
 bool firmware_restart_unrecoverable(const MoonrakerError& err) {
     // 503 — Klippy Host not connected (the most common case)
-    if (err.code == 503) return true;
+    if (err.code == 503)
+        return true;
     // -32601 — Method not found (older Moonraker that doesn't expose it)
-    if (err.code == -32601) return true;
+    if (err.code == -32601)
+        return true;
     return false;
 }
 
@@ -35,13 +38,15 @@ bool firmware_restart_unrecoverable(const MoonrakerError& err) {
 
 bool PrinterRecoveryService::local_recovery_available() {
     const auto path = local_recovery_script_path();
-    if (path.empty()) return false;
+    if (path.empty())
+        return false;
     return ::access(path.c_str(), X_OK) == 0;
 }
 
 std::string PrinterRecoveryService::local_recovery_script_path() {
     const std::string root = app_get_install_root();
-    if (root.empty()) return "";
+    if (root.empty())
+        return "";
     return root + "/bin/helix-recover.sh";
 }
 
@@ -51,9 +56,11 @@ void PrinterRecoveryService::run_local_recovery(SuccessCallback on_success,
     if (script.empty() || ::access(script.c_str(), X_OK) != 0) {
         spdlog::info("[Recovery] local script not present ({}) — skipping local exec",
                      script.empty() ? "no install root" : script);
-        on_error(MoonrakerError{MoonrakerErrorType::VALIDATION_ERROR, -1,
+        on_error(MoonrakerError{MoonrakerErrorType::VALIDATION_ERROR,
+                                -1,
                                 "Local recovery script not installed",
-                                "helix_recover_local", {}});
+                                "helix_recover_local",
+                                {}});
         return;
     }
 
@@ -65,13 +72,14 @@ void PrinterRecoveryService::run_local_recovery(SuccessCallback on_success,
         if (pid < 0) {
             const int e = errno;
             spdlog::error("[Recovery] fork() for helix-recover.sh failed: {}", strerror(e));
-            ui::queue_update("PrinterRecoveryService::run_local_recovery(fork-fail)",
-                             [on_error, e]() {
-                                 on_error(MoonrakerError{
-                                     MoonrakerErrorType::UNKNOWN, -1,
-                                     std::string("Local recovery fork failed: ") + strerror(e),
-                                     "helix_recover_local", {}});
-                             });
+            ui::queue_update("PrinterRecoveryService::run_local_recovery(fork-fail)", [on_error,
+                                                                                       e]() {
+                on_error(MoonrakerError{MoonrakerErrorType::UNKNOWN,
+                                        -1,
+                                        std::string("Local recovery fork failed: ") + strerror(e),
+                                        "helix_recover_local",
+                                        {}});
+            });
             return;
         }
         if (pid == 0) {
@@ -90,32 +98,34 @@ void PrinterRecoveryService::run_local_recovery(SuccessCallback on_success,
         if (::waitpid(pid, &status, 0) < 0) {
             const int e = errno;
             spdlog::error("[Recovery] waitpid() failed: {}", strerror(e));
-            ui::queue_update("PrinterRecoveryService::run_local_recovery(wait-fail)",
-                             [on_error, e]() {
-                                 on_error(MoonrakerError{
-                                     MoonrakerErrorType::UNKNOWN, -1,
-                                     std::string("Local recovery wait failed: ") + strerror(e),
-                                     "helix_recover_local", {}});
-                             });
+            ui::queue_update("PrinterRecoveryService::run_local_recovery(wait-fail)", [on_error,
+                                                                                       e]() {
+                on_error(MoonrakerError{MoonrakerErrorType::UNKNOWN,
+                                        -1,
+                                        std::string("Local recovery wait failed: ") + strerror(e),
+                                        "helix_recover_local",
+                                        {}});
+            });
             return;
         }
 
         const bool ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
         const int rc = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        spdlog::info("[Recovery] helix-recover.sh exit: status={} (rc={})",
-                     ok ? "ok" : "FAILED", rc);
-        ui::queue_update("PrinterRecoveryService::run_local_recovery(done)",
-                         [ok, rc, on_success, on_error]() {
-                             if (ok) {
-                                 on_success();
-                             } else {
-                                 on_error(MoonrakerError{
-                                     MoonrakerErrorType::UNKNOWN, rc,
-                                     "Local recovery script returned non-zero (rc=" +
-                                         std::to_string(rc) + ")",
-                                     "helix_recover_local", {}});
-                             }
-                         });
+        spdlog::info("[Recovery] helix-recover.sh exit: status={} (rc={})", ok ? "ok" : "FAILED",
+                     rc);
+        ui::queue_update(
+            "PrinterRecoveryService::run_local_recovery(done)", [ok, rc, on_success, on_error]() {
+                if (ok) {
+                    on_success();
+                } else {
+                    on_error(MoonrakerError{
+                        MoonrakerErrorType::UNKNOWN,
+                        rc,
+                        "Local recovery script returned non-zero (rc=" + std::to_string(rc) + ")",
+                        "helix_recover_local",
+                        {}});
+                }
+            });
     });
 }
 
@@ -137,8 +147,8 @@ void PrinterRecoveryService::recover(SuccessCallback on_success, ErrorCallback o
     auto run_services_restart = [api, on_success, on_error]() {
         spdlog::info("[Recovery] Falling back to machine.services.restart klipper");
         api->restart_service("klipper", on_success, [on_error](const MoonrakerError& err) {
-            spdlog::warn("[Recovery] services.restart klipper failed: {} (code={})",
-                         err.message, err.code);
+            spdlog::warn("[Recovery] services.restart klipper failed: {} (code={})", err.message,
+                         err.code);
             on_error(err);
         });
     };
@@ -163,19 +173,18 @@ void PrinterRecoveryService::recover(SuccessCallback on_success, ErrorCallback o
     // -32601) and unexpected failures, but escalate identically — the user
     // clicked "restart" and we should exhaust the chain before giving up.
     spdlog::info("[Recovery] Trying printer.firmware_restart");
-    api_->restart_firmware(on_success,
-                           [run_local_then_services](const MoonrakerError& err) {
-                               if (firmware_restart_unrecoverable(err)) {
-                                   spdlog::info("[Recovery] firmware_restart not viable "
-                                                "(code={} msg='{}') — escalating",
-                                                err.code, err.message);
-                               } else {
-                                   spdlog::warn("[Recovery] firmware_restart hard-failed: {} — "
-                                                "escalating anyway",
-                                                err.message);
-                               }
-                               run_local_then_services();
-                           });
+    api_->restart_firmware(on_success, [run_local_then_services](const MoonrakerError& err) {
+        if (firmware_restart_unrecoverable(err)) {
+            spdlog::info("[Recovery] firmware_restart not viable "
+                         "(code={} msg='{}') — escalating",
+                         err.code, err.message);
+        } else {
+            spdlog::warn("[Recovery] firmware_restart hard-failed: {} — "
+                         "escalating anyway",
+                         err.message);
+        }
+        run_local_then_services();
+    });
 }
 
 } // namespace helix

@@ -6,7 +6,6 @@
 #include "gcode_geometry_builder.h"
 
 #include "color_utils.h"
-
 #include "config.h"
 #include "geometry_budget_manager.h"
 
@@ -896,7 +895,8 @@ GeometryBuilder::generate_ribbon_vertices(const ToolpathSegment& segment, Ribbon
     uint32_t rgb = compute_segment_color(segment, quant.min_bounds.z, quant.max_bounds.z);
     static const std::string empty_obj_name;
     const std::string& seg_obj_name =
-        current_gcode_ ? current_gcode_->get_object_name(segment.object_name_index) : empty_obj_name;
+        current_gcode_ ? current_gcode_->get_object_name(segment.object_name_index)
+                       : empty_obj_name;
     if (!highlighted_objects_.empty() && !seg_obj_name.empty() &&
         highlighted_objects_.count(seg_obj_name) > 0) {
         constexpr float HIGHLIGHT_BRIGHTNESS = 1.8f;

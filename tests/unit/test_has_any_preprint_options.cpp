@@ -18,13 +18,14 @@
  * `PrinterState`, which is the only path that actually drives the inputs.
  */
 
+#include "ui_update_queue.h"
+
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
 

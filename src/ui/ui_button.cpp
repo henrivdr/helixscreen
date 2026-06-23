@@ -981,8 +981,7 @@ void ui_button_apply(lv_xml_parser_state_t* state, const char** attrs) {
     // 0=idle (original icon glyph), 1=busy (animated spinner in the icon slot),
     // 2=done ("check" glyph). Requires an icon to render into.
     const char* bind_op_state = lv_xml_get_value_of(attrs, "bind_op_state");
-    if (bind_op_state && bind_op_state[0] != '\0' && data &&
-        data->magic == UiButtonData::MAGIC) {
+    if (bind_op_state && bind_op_state[0] != '\0' && data && data->magic == UiButtonData::MAGIC) {
         if (!data->icon) {
             spdlog::warn("[ui_button] bind_op_state '{}' ignored — button has no icon",
                          bind_op_state);

@@ -226,7 +226,8 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         lv_subject_set_int(&is_qidi_subject_, 0);
         system_info_buf_[0] = '\0';
         lv_subject_copy_string(&system_info_subject_, system_info_buf_);
-        snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("No Multi-Filament System connected"));
+        snprintf(status_buf_, sizeof(status_buf_), "%s",
+                 lv_tr("No Multi-Filament System connected"));
         lv_subject_copy_string(&status_subject_, status_buf_);
 
         if (section_list_container_) {
@@ -282,7 +283,8 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         if (dist_slider) {
             lv_slider_set_value(dist_slider, eject_distance, LV_ANIM_OFF);
         }
-        snprintf(qidi_eject_distance_buf_, sizeof(qidi_eject_distance_buf_), "%d mm", eject_distance);
+        snprintf(qidi_eject_distance_buf_, sizeof(qidi_eject_distance_buf_), "%d mm",
+                 eject_distance);
         lv_subject_copy_string(&qidi_eject_distance_display_subject_, qidi_eject_distance_buf_);
 
         auto* vel_slider = lv_obj_find_by_name(overlay_, "qidi_eject_velocity_slider");

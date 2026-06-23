@@ -13,8 +13,6 @@
 #include "ui_panel_spoolman.h"
 #include "ui_toast_manager.h"
 
-#include "panel_widgets/shutdown_widget.h"
-
 #include "app_globals.h"
 #include "config.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -22,6 +20,7 @@
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "moonraker_manager.h"
+#include "panel_widgets/shutdown_widget.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
 #include "ui/ui_lazy_panel_helper.h"
@@ -135,9 +134,8 @@ void AdvancedPanel::handle_macros_clicked() {
 }
 
 void AdvancedPanel::handle_console_clicked() {
-    helix::ui::lazy_create_and_push_overlay<ConsolePanel>(get_global_console_panel, console_panel_,
-                                                          parent_screen_, "Console", get_name(),
-                                                          true);
+    helix::ui::lazy_create_and_push_overlay<ConsolePanel>(
+        get_global_console_panel, console_panel_, parent_screen_, "Console", get_name(), true);
 }
 
 void AdvancedPanel::handle_history_clicked() {
@@ -245,8 +243,7 @@ void AdvancedPanel::on_advanced_power_clicked(lv_event_t* /*e*/) {
 
 void AdvancedPanel::handle_power_clicked() {
     spdlog::debug("[{}] Power row clicked — opening shutdown dialog", get_name());
-    helix::show_shutdown_dialog(api_, shutdown_modal_, shutdown_lifetime_,
-                                lv_screen_active());
+    helix::show_shutdown_dialog(api_, shutdown_modal_, shutdown_lifetime_, lv_screen_active());
 }
 
 // ============================================================================

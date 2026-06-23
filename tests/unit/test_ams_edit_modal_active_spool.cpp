@@ -158,8 +158,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "handle_save clears active spool when spool un
     REQUIRE(api.spoolman_mock().get_mock_active_spool_id() == 0);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "handle_save re-syncs active spool on unchanged linked save",
+TEST_CASE_METHOD(LVGLTestFixture, "handle_save re-syncs active spool on unchanged linked save",
                  "[ams_edit_modal][spoolman][active_spool]") {
     PrinterState state;
     MoonrakerClientMock client;

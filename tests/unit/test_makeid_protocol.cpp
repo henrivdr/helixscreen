@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "makeid_protocol.h"
 
 #include <cstring>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix::label;
 
@@ -17,11 +17,11 @@ TEST_CASE("makeid_build_frame - handshake frame structure", "[makeid][protocol]"
 
     // [0x66 LEN_LO LEN_HI CMD STATE CHECKSUM]
     REQUIRE(frame.size() == 6);
-    REQUIRE(frame[0] == 0x66);                                           // magic
-    REQUIRE(frame[1] == 0x06);                                           // length low
-    REQUIRE(frame[2] == 0x00);                                           // length high
-    REQUIRE(frame[3] == static_cast<uint8_t>(MakeIdCmd::Handshake));     // 0x10
-    REQUIRE(frame[4] == static_cast<uint8_t>(MakeIdHandshakeState::Search));  // 0x00
+    REQUIRE(frame[0] == 0x66);                                               // magic
+    REQUIRE(frame[1] == 0x06);                                               // length low
+    REQUIRE(frame[2] == 0x00);                                               // length high
+    REQUIRE(frame[3] == static_cast<uint8_t>(MakeIdCmd::Handshake));         // 0x10
+    REQUIRE(frame[4] == static_cast<uint8_t>(MakeIdHandshakeState::Search)); // 0x00
 }
 
 TEST_CASE("makeid_build_frame - checksum is negated sum", "[makeid][protocol]") {
@@ -40,7 +40,7 @@ TEST_CASE("makeid_build_frame - cancel handshake", "[makeid][protocol]") {
     auto frame = makeid_build_handshake(MakeIdHandshakeState::Cancel);
 
     REQUIRE(frame.size() == 6);
-    REQUIRE(frame[4] == static_cast<uint8_t>(MakeIdHandshakeState::Cancel));  // 0x03
+    REQUIRE(frame[4] == static_cast<uint8_t>(MakeIdHandshakeState::Cancel)); // 0x03
 
     // Verify checksum
     uint8_t sum = 0;
@@ -57,7 +57,8 @@ TEST_CASE("makeid_build_frame - cancel handshake", "[makeid][protocol]") {
 TEST_CASE("makeid_checksum - known values", "[makeid][protocol]") {
     // Handshake search: [0x66, 0x06, 0x00, 0x10, 0x00] -> sum = 0x7C -> checksum = 0x84
     std::vector<uint8_t> data = {0x66, 0x06, 0x00, 0x10, 0x00};
-    REQUIRE(makeid_checksum(data.data(), data.size()) == static_cast<uint8_t>(-(0x66 + 0x06 + 0x00 + 0x10 + 0x00)));
+    REQUIRE(makeid_checksum(data.data(), data.size()) ==
+            static_cast<uint8_t>(-(0x66 + 0x06 + 0x00 + 0x10 + 0x00)));
 }
 
 // ============================================================================
@@ -67,7 +68,7 @@ TEST_CASE("makeid_checksum - known values", "[makeid][protocol]") {
 TEST_CASE("makeid_parse_response - success", "[makeid][protocol]") {
     // Build a 36-byte response with error_code=0, no flags
     std::vector<uint8_t> resp(36, 0x00);
-    resp[3] = 0x10;  // response to handshake
+    resp[3] = 0x10; // response to handshake
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Success);
@@ -76,7 +77,7 @@ TEST_CASE("makeid_parse_response - success", "[makeid][protocol]") {
 
 TEST_CASE("makeid_parse_response - wait flag", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[4] = 0x80;  // bit 7 = wait
+    resp[4] = 0x80; // bit 7 = wait
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Wait);
@@ -84,7 +85,7 @@ TEST_CASE("makeid_parse_response - wait flag", "[makeid][protocol]") {
 
 TEST_CASE("makeid_parse_response - resend flag", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[4] = 0x40;  // bit 6 = resend
+    resp[4] = 0x40; // bit 6 = resend
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Resend);
@@ -92,7 +93,7 @@ TEST_CASE("makeid_parse_response - resend flag", "[makeid][protocol]") {
 
 TEST_CASE("makeid_parse_response - error code", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[4] = 0x03;  // error code 3 = label over
+    resp[4] = 0x03; // error code 3 = label over
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Error);
@@ -101,7 +102,7 @@ TEST_CASE("makeid_parse_response - error code", "[makeid][protocol]") {
 
 TEST_CASE("makeid_parse_response - error code 23 is success", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[4] = 23;  // error code 23 = no error (same as 0)
+    resp[4] = 23; // error code 23 = no error (same as 0)
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Success);
@@ -116,7 +117,7 @@ TEST_CASE("makeid_parse_response - too short returns resend", "[makeid][protocol
 
 TEST_CASE("makeid_parse_response - null response (0x11)", "[makeid][protocol]") {
     std::vector<uint8_t> resp(8, 0x00);
-    resp[3] = 0x11;  // null response marker
+    resp[3] = 0x11; // null response marker
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Null);
@@ -124,7 +125,7 @@ TEST_CASE("makeid_parse_response - null response (0x11)", "[makeid][protocol]") 
 
 TEST_CASE("makeid_parse_response - is_printing flag", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[35] = 0x80;  // bit 7 = isPrinting
+    resp[35] = 0x80; // bit 7 = isPrinting
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.is_printing);
@@ -132,7 +133,7 @@ TEST_CASE("makeid_parse_response - is_printing flag", "[makeid][protocol]") {
 
 TEST_CASE("makeid_parse_response - cancel state", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[35] = 0x60;  // bits 5-6 = 3 = cancel
+    resp[35] = 0x60; // bits 5-6 = 3 = cancel
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Exit);
@@ -140,7 +141,7 @@ TEST_CASE("makeid_parse_response - cancel state", "[makeid][protocol]") {
 
 TEST_CASE("makeid_parse_response - pause state", "[makeid][protocol]") {
     std::vector<uint8_t> resp(36, 0x00);
-    resp[35] = 0x20;  // bits 5-6 = 1 = pause
+    resp[35] = 0x20; // bits 5-6 = 1 = pause
 
     auto result = makeid_parse_response(resp.data(), resp.size());
     REQUIRE(result.status == MakeIdResponseStatus::Pause);
@@ -152,7 +153,7 @@ TEST_CASE("makeid_parse_response - pause state", "[makeid][protocol]") {
 
 TEST_CASE("makeid_build_print_frame - header structure", "[makeid][protocol]") {
     // Create a small bitmap chunk: 8 pixels wide (1 byte), 4 rows
-    std::vector<uint8_t> bitmap_data(4, 0xFF);  // 4 bytes = 1 byte/row * 4 rows
+    std::vector<uint8_t> bitmap_data(4, 0xFF); // 4 bytes = 1 byte/row * 4 rows
 
     MakeIdPrintParams params;
     params.darkness = 15;
@@ -164,9 +165,9 @@ TEST_CASE("makeid_build_print_frame - header structure", "[makeid][protocol]") {
 
     auto frame = makeid_build_print_frame(bitmap_data, params);
 
-    REQUIRE(frame.size() >= 18);  // 17 header + at least 1 byte payload + checksum
-    REQUIRE(frame[0] == 0x66);    // magic
-    REQUIRE(frame[3] == 0x1B);    // print data command
+    REQUIRE(frame.size() >= 18); // 17 header + at least 1 byte payload + checksum
+    REQUIRE(frame[0] == 0x66);   // magic
+    REQUIRE(frame[3] == 0x1B);   // print data command
 
     // Darkness in bits 0-4 of byte 4
     REQUIRE((frame[4] & 0x1F) == 15);
@@ -225,7 +226,7 @@ TEST_CASE("makeid_build_print_frame - large frame length uses both bytes", "[mak
     uint16_t stored_len = frame[1] | (frame[2] << 8);
     REQUIRE(stored_len == frame.size());
     REQUIRE(stored_len > 255);
-    REQUIRE(frame[2] > 0);  // high byte must be non-zero
+    REQUIRE(frame[2] > 0); // high byte must be non-zero
 }
 
 // ============================================================================
@@ -248,7 +249,7 @@ TEST_CASE("makeid_encode_bitmap - basic MSB-first packing", "[makeid][protocol]"
     // Column-major memcpy: [0xFF, 0x00]
     auto& chunk = chunks[0];
     REQUIRE(chunk.height == 1);
-    REQUIRE(chunk.data.size() >= 2);  // may be LZO-compressed, but at minimum 2 bytes input
+    REQUIRE(chunk.data.size() >= 2); // may be LZO-compressed, but at minimum 2 bytes input
 
     // We test the raw (pre-LZO) encoding via a separate helper
 }
@@ -372,7 +373,7 @@ TEST_CASE("makeid_build_print_job - produces valid frame sequence", "[makeid][pr
 
     MakeIdPrintJobConfig config;
     config.darkness = 10;
-    config.printer_width_bytes = 12;  // 96px / 8
+    config.printer_width_bytes = 12; // 96px / 8
     config.max_rows_per_chunk = 56;
 
     auto job = makeid_build_print_job(bmp, size, config);
@@ -411,7 +412,9 @@ TEST_CASE("makeid_build_print_job - 40-row image fits in one chunk", "[makeid][p
     REQUIRE(job.chunks[0][15] == 0);
 }
 
-TEST_CASE("makeid_build_print_job - tall image produces multiple chunks with correct remaining count", "[makeid][protocol]") {
+TEST_CASE(
+    "makeid_build_print_job - tall image produces multiple chunks with correct remaining count",
+    "[makeid][protocol]") {
     LabelBitmap bmp(96, 120);
     LabelSize size{"12x100mm", 96, 800, 203, 0x01, 12, 100};
 

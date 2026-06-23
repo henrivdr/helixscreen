@@ -371,8 +371,8 @@ std::vector<helix::RecoveryAction> AmsBackendAfc::build_recovery_actions() const
         actions.push_back({lv_tr("Unload"), "TOOL_UNLOAD", "afc::tool_unload", ""});
     } else if (!current_lane_name_.empty()) {
         // Empty toolhead but a lane is selected — eject that lane.
-        actions.push_back({lv_tr("Eject"), "LANE_UNLOAD LANE=" + current_lane_name_,
-                           "afc::lane_unload", ""});
+        actions.push_back(
+            {lv_tr("Eject"), "LANE_UNLOAD LANE=" + current_lane_name_, "afc::lane_unload", ""});
     }
 
     // Reset/re-prep all lanes (last resort).
@@ -380,8 +380,9 @@ std::vector<helix::RecoveryAction> AmsBackendAfc::build_recovery_actions() const
     return actions;
 }
 
-std::optional<helix::ErrorEvent> AmsBackendAfc::classify_error(
-    const std::string& raw_line, const helix::ClassifyContext& ctx) const {
+std::optional<helix::ErrorEvent>
+AmsBackendAfc::classify_error(const std::string& raw_line,
+                              const helix::ClassifyContext& ctx) const {
     // Only `!!` emergency lines are candidates.
     if (raw_line.size() < 2 || raw_line[0] != '!' || raw_line[1] != '!') {
         return std::nullopt;
@@ -390,8 +391,8 @@ std::optional<helix::ErrorEvent> AmsBackendAfc::classify_error(
     std::lock_guard<std::mutex> lock(mutex_);
 
     // Strip the "!! " prefix for the detail text.
-    std::string detail = (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3)
-                                                                      : raw_line.substr(2);
+    std::string detail =
+        (raw_line.size() > 3 && raw_line[2] == ' ') ? raw_line.substr(3) : raw_line.substr(2);
 
     auto contains_ci = [](const std::string& hay, const char* needle) {
         std::string h = hay;
@@ -439,14 +440,10 @@ AmsBackendAfc::toolchange_phase_template(StepOperationType op) const {
     switch (op) {
     case StepOperationType::LOAD_SWAP:
         return {
-            {"heat", "Heat nozzle", false},
-            {"cut", "Cut tip", true},
-            {"poop", "Purge to bucket", true},
-            {"kick", "Kick away", true},
-            {"feed", "Feed filament", false},
-            {"purge", "Purge", true},
-            {"brush", "Brush nozzle", true},
-            {"clean", "Clean nozzle", true},
+            {"heat", "Heat nozzle", false},    {"cut", "Cut tip", true},
+            {"poop", "Purge to bucket", true}, {"kick", "Kick away", true},
+            {"feed", "Feed filament", false},  {"purge", "Purge", true},
+            {"brush", "Brush nozzle", true},   {"clean", "Clean nozzle", true},
             {"load", "Load complete", false},
         };
     case StepOperationType::LOAD_FRESH:

@@ -33,6 +33,11 @@
 //
 // Tagged [.ui_integration]: needs the XML component tree on disk (modal_dialog).
 
+#include "ui_modal.h"
+#include "ui_update_queue.h"
+
+#include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/gcode_error_router_test_access.h"
 #include "ams_backend_afc.h"
 #include "ams_backend_happy_hare.h"
 #include "ams_state.h"
@@ -40,15 +45,9 @@
 #include "error_classify.h"
 #include "error_event.h"
 #include "gcode_error_router.h"
-#include "recovery_modal_presenter.h"
-#include "printer_state.h"
-#include "ui_modal.h"
-#include "ui_update_queue.h"
-
-#include "../lvgl_ui_test_fixture.h"
-#include "../test_helpers/gcode_error_router_test_access.h"
-
 #include "lvgl/lvgl.h"
+#include "printer_state.h"
+#include "recovery_modal_presenter.h"
 
 #include <cstring>
 #include <string>
@@ -71,14 +70,17 @@ const char* kJamDetail = kJamLine.c_str() + 3;
 // modal_dialog.xml names the message label "dialog_message"; the substring walk
 // is robust to the text landing on any label inside the scrollable content.
 const char* find_text_containing(lv_obj_t* node, const char* needle) {
-    if (!node) return nullptr;
+    if (!node)
+        return nullptr;
     if (lv_obj_check_type(node, &lv_label_class)) {
         const char* txt = lv_label_get_text(node);
-        if (txt && std::strstr(txt, needle)) return txt;
+        if (txt && std::strstr(txt, needle))
+            return txt;
     }
     uint32_t n = lv_obj_get_child_count(node);
     for (uint32_t i = 0; i < n; ++i) {
-        if (const char* hit = find_text_containing(lv_obj_get_child(node, i), needle)) return hit;
+        if (const char* hit = find_text_containing(lv_obj_get_child(node, i), needle))
+            return hit;
     }
     return nullptr;
 }
@@ -92,8 +94,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // Mark the singleton printer paused — process_line reads
     // get_printer_state().is_paused() into ClassifyContext, which makes an
     // uncoded `!!` CRITICAL, which decide_presentation maps to MODAL.
-    get_printer_state().update_from_status(
-        nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
+    get_printer_state().update_from_status(nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
     REQUIRE(get_printer_state().is_paused());
 
     // Reproduce process_line's classification path verbatim: same context
@@ -101,8 +102,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // performs before it reaches the PresentAs::MODAL arm.
     helix::ClassifyContext ctx;
     ctx.is_paused = get_printer_state().is_paused();
-    ctx.is_printing =
-        get_printer_state().get_print_job_state() == helix::PrintJobState::PRINTING;
+    ctx.is_printing = get_printer_state().get_print_job_state() == helix::PrintJobState::PRINTING;
 
     auto ev = helix::error_classify::classify(kJamLine, ctx);
     REQUIRE(ev.has_value());
@@ -189,20 +189,20 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "AFC jam while paused drives the recovery modal to actually show",
                  "[error-center][routing][integration][ui_integration]") {
     // Paused printer: process_line reads is_paused() into the ClassifyContext.
-    get_printer_state().update_from_status(
-        nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
+    get_printer_state().update_from_status(nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
     REQUIRE(get_printer_state().is_paused());
 
     // Install an AFC backend as the ACTIVE AmsState backend so process_line's
     // `AmsState::instance().get_backend()->classify_error(...)` resolves to the
     // AFC classifier (not the generic fallback). A fresh backend is enough: the
     // jam branch is text-driven (tool_end + jam/break/runout), no live state.
-    AmsState::instance().set_backend(
-        std::make_unique<AmsBackendAfc>(api(), client()));
+    AmsState::instance().set_backend(std::make_unique<AmsBackendAfc>(api(), client()));
     // RAII guard: clear the AmsState singleton backend even if a REQUIRE throws,
     // so it never leaks into subsequent tests in the same run.
     struct BackendGuard {
-        ~BackendGuard() { AmsState::instance().set_backend(nullptr); }
+        ~BackendGuard() {
+            AmsState::instance().set_backend(nullptr);
+        }
     } backend_guard;
     REQUIRE(AmsState::instance().get_backend() != nullptr);
 
@@ -303,20 +303,19 @@ class HappyHareE2EHelper : public AmsBackendHappyHare {
     }
 };
 
-TEST_CASE_METHOD(LVGLUITestFixture,
-                 "Routing E2E: Happy Hare runout pause routes to recovery modal",
+TEST_CASE_METHOD(LVGLUITestFixture, "Routing E2E: Happy Hare runout pause routes to recovery modal",
                  "[error-center][routing][happy_hare]") {
     // Paused printer: classify_error checks ctx.is_paused (must be true to fire).
-    get_printer_state().update_from_status(
-        nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
+    get_printer_state().update_from_status(nlohmann::json{{"pause_resume", {{"is_paused", true}}}});
     REQUIRE(get_printer_state().is_paused());
 
     // Install the Happy Hare backend as the ACTIVE AmsState backend.
     // RAII guard: clear the singleton even if a REQUIRE throws.
-    AmsState::instance().set_backend(
-        std::make_unique<HappyHareE2EHelper>(api(), client()));
+    AmsState::instance().set_backend(std::make_unique<HappyHareE2EHelper>(api(), client()));
     struct BackendGuard {
-        ~BackendGuard() { AmsState::instance().set_backend(nullptr); }
+        ~BackendGuard() {
+            AmsState::instance().set_backend(nullptr);
+        }
     } backend_guard;
     REQUIRE(AmsState::instance().get_backend() != nullptr);
 
@@ -325,12 +324,12 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // action="Error" → system_info_.action == AmsAction::ERROR (hh_error_state=true).
     // reason_for_pause provides the descriptive detail that classify_error surfaces.
     nlohmann::json mmu_data;
-    mmu_data["action"]           = "Error";
+    mmu_data["action"] = "Error";
     mmu_data["reason_for_pause"] = "Runout detected at toolhead sensor";
-    mmu_data["gate"]             = -1;
-    mmu_data["tool"]             = -1;
-    mmu_data["filament"]         = "Unloaded";
-    mmu_data["enabled"]          = true;
+    mmu_data["gate"] = -1;
+    mmu_data["tool"] = -1;
+    mmu_data["filament"] = "Unloaded";
+    mmu_data["enabled"] = true;
 
     auto* hh = static_cast<HappyHareE2EHelper*>(AmsState::instance().get_backend());
     hh->push_mmu_state(mmu_data);
@@ -339,10 +338,9 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // non-empty recovery_actions). Fails loudly if the error-state gate regresses.
     {
         helix::ClassifyContext ctx;
-        ctx.is_paused   = true;
+        ctx.is_paused = true;
         ctx.is_printing = false;
-        auto ev =
-            AmsState::instance().get_backend()->classify_error("!! Runout detected", ctx);
+        auto ev = AmsState::instance().get_backend()->classify_error("!! Runout detected", ctx);
         REQUIRE(ev.has_value());
         REQUIRE(ev->severity == helix::ErrorSeverity::CRITICAL);
         REQUIRE(ev->source == helix::ErrorSource::HAPPY_HARE);

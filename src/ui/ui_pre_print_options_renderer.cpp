@@ -3,11 +3,11 @@
 
 #include "ui_pre_print_options_renderer.h"
 
-#include "theme_manager.h"
 #include "ui_switch.h"
 #include "ui_utils.h"
 
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
 

@@ -3,13 +3,13 @@
 
 #include "timelapse_state.h"
 
-#include "app_globals.h"
-#include "printer_state.h"
 #include "ui_error_reporting.h"
 #include "ui_format_utils.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
+#include "app_globals.h"
+#include "printer_state.h"
 #include "state/subject_macros.h"
 #include "static_subject_registry.h"
 
@@ -121,8 +121,8 @@ void TimelapseState::handle_timelapse_event(const nlohmann::json& event) {
         if (status == "running") {
             // Show start toast on first progress event
             if (last_notified_progress_ < 0) {
-                ToastManager::instance().show(ToastSeverity::INFO,
-                                              lv_tr("Rendering timelapse..."), 3000);
+                ToastManager::instance().show(ToastSeverity::INFO, lv_tr("Rendering timelapse..."),
+                                              3000);
             }
             last_notified_progress_ = progress;
 

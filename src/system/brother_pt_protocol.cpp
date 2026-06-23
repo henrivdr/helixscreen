@@ -10,12 +10,12 @@
 namespace helix::label {
 
 static constexpr std::array<BrotherPTTapeInfo, 6> TAPE_TABLE = {{
-    {4,  24, 52},   // 3.5mm (status byte = 4)
-    {6,  32, 48},   // 6mm
-    {9,  50, 39},   // 9mm
-    {12, 70, 29},   // 12mm
-    {18, 112, 8},   // 18mm
-    {24, 128, 0},   // 24mm
+    {4, 24, 52},  // 3.5mm (status byte = 4)
+    {6, 32, 48},  // 6mm
+    {9, 50, 39},  // 9mm
+    {12, 70, 29}, // 12mm
+    {18, 112, 8}, // 18mm
+    {24, 128, 0}, // 24mm
 }};
 
 const BrotherPTTapeInfo* brother_pt_get_tape_info(int width_mm) {
@@ -31,9 +31,13 @@ std::optional<LabelSize> brother_pt_label_size_for_tape(int width_mm) {
     if (!info)
         return std::nullopt;
     std::string name = (width_mm == 4) ? "3.5mm" : std::to_string(width_mm) + "mm";
-    return LabelSize{name, info->printable_pins, 0, 180,
-                     0x01,  // media_type: laminated TZe (default)
-                     static_cast<uint8_t>(width_mm), 0};
+    return LabelSize{name,
+                     info->printable_pins,
+                     0,
+                     180,
+                     0x01, // media_type: laminated TZe (default)
+                     static_cast<uint8_t>(width_mm),
+                     0};
 }
 
 std::vector<uint8_t> brother_pt_build_status_request() {
@@ -66,12 +70,18 @@ BrotherPTMedia brother_pt_parse_status(const uint8_t* data, size_t len) {
 }
 
 std::string brother_pt_error_string(const BrotherPTMedia& media) {
-    if (media.error_info_1 & 0x01) return "No media installed";
-    if (media.error_info_1 & 0x04) return "Cutter jam";
-    if (media.error_info_1 & 0x08) return "Weak battery";
-    if (media.error_info_2 & 0x01) return "Wrong media";
-    if (media.error_info_2 & 0x10) return "Cover open";
-    if (media.error_info_2 & 0x20) return "Overheating";
+    if (media.error_info_1 & 0x01)
+        return "No media installed";
+    if (media.error_info_1 & 0x04)
+        return "Cutter jam";
+    if (media.error_info_1 & 0x08)
+        return "Weak battery";
+    if (media.error_info_2 & 0x01)
+        return "Wrong media";
+    if (media.error_info_2 & 0x10)
+        return "Cover open";
+    if (media.error_info_2 & 0x20)
+        return "Overheating";
     return "";
 }
 
@@ -107,8 +117,7 @@ std::vector<uint8_t> brother_pt_packbits_compress(const uint8_t* data, size_t le
     return out;
 }
 
-std::vector<uint8_t> brother_pt_build_raster(const LabelBitmap& bitmap,
-                                              int tape_width_mm) {
+std::vector<uint8_t> brother_pt_build_raster(const LabelBitmap& bitmap, int tape_width_mm) {
     const auto* tape = brother_pt_get_tape_info(tape_width_mm);
     if (!tape)
         return {};
@@ -139,17 +148,17 @@ std::vector<uint8_t> brother_pt_build_raster(const LabelBitmap& bitmap,
     cmd.push_back(0x1B);
     cmd.push_back(0x69);
     cmd.push_back(0x7A);
-    cmd.push_back(0x86);  // valid flags: media type + width + quality
-    cmd.push_back(0x01);  // media type: laminated TZe
+    cmd.push_back(0x86); // valid flags: media type + width + quality
+    cmd.push_back(0x01); // media type: laminated TZe
     cmd.push_back(static_cast<uint8_t>(tape_width_mm));
-    cmd.push_back(0x00);  // length (continuous)
+    cmd.push_back(0x00); // length (continuous)
     // Raster line count (LE 32-bit)
     cmd.push_back(static_cast<uint8_t>(bmp_h & 0xFF));
     cmd.push_back(static_cast<uint8_t>((bmp_h >> 8) & 0xFF));
     cmd.push_back(static_cast<uint8_t>((bmp_h >> 16) & 0xFF));
     cmd.push_back(static_cast<uint8_t>((bmp_h >> 24) & 0xFF));
-    cmd.push_back(0x00);  // page number
-    cmd.push_back(0x00);  // reserved
+    cmd.push_back(0x00); // page number
+    cmd.push_back(0x00); // reserved
 
     // 5. Auto-cut — ESC i M (0x00 = no auto-cut, PT-P300BT has manual cut only)
     cmd.push_back(0x1B);
@@ -213,8 +222,8 @@ std::vector<uint8_t> brother_pt_build_raster(const LabelBitmap& bitmap,
         if (all_white) {
             cmd.push_back(0x5A);
         } else {
-            auto compressed = brother_pt_packbits_compress(padded_row.data(),
-                                                            BROTHER_PT_RASTER_ROW_BYTES);
+            auto compressed =
+                brother_pt_packbits_compress(padded_row.data(), BROTHER_PT_RASTER_ROW_BYTES);
             cmd.push_back(0x47);
             cmd.push_back(static_cast<uint8_t>(compressed.size() & 0xFF));
             cmd.push_back(static_cast<uint8_t>((compressed.size() >> 8) & 0xFF));
@@ -229,6 +238,6 @@ std::vector<uint8_t> brother_pt_build_raster(const LabelBitmap& bitmap,
     return cmd;
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

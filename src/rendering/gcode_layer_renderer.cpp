@@ -1254,13 +1254,12 @@ void GCodeLayerRenderer::render_segment(lv_layer_t* layer, const ToolpathSegment
         // infill is dimmed so it sits faintly behind the walls. The translucency comes
         // from the 40% ghost-cache blit, not from darkening the color toward black.
         lv_color_t model_color = color_extrusion_;
-        const int bright_pct = is_ghost_solid_surface(seg.feature_type)
-                                   ? kGhostWallBrightPercent
-                                   : kGhostInfillBrightPercent;
-        base_color = lv_color_make(
-            wash_to_white(model_color.red, kGhostWashPercent) * bright_pct / 100,
-            wash_to_white(model_color.green, kGhostWashPercent) * bright_pct / 100,
-            wash_to_white(model_color.blue, kGhostWashPercent) * bright_pct / 100);
+        const int bright_pct = is_ghost_solid_surface(seg.feature_type) ? kGhostWallBrightPercent
+                                                                        : kGhostInfillBrightPercent;
+        base_color =
+            lv_color_make(wash_to_white(model_color.red, kGhostWashPercent) * bright_pct / 100,
+                          wash_to_white(model_color.green, kGhostWashPercent) * bright_pct / 100,
+                          wash_to_white(model_color.blue, kGhostWashPercent) * bright_pct / 100);
     } else {
         base_color = get_segment_color(seg);
     }

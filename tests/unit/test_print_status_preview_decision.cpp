@@ -17,11 +17,11 @@
  * always reload because it compares against widget reality.
  */
 
+#include "print_status_preview_decision.h"
+
 #include <string>
 
 #include "../catch_amalgamated.hpp"
-
-#include "print_status_preview_decision.h"
 
 using helix::ui::decide_preview_action;
 using helix::ui::PreviewAction;

@@ -175,12 +175,12 @@ TEST_CASE("KeypadInput digit limit transitions", "[keypad]") {
         kp.append_digit(1);
         kp.append_digit(2);
         kp.append_digit(3);
-        CHECK_FALSE(kp.append_digit(4));  // blocked at 3
+        CHECK_FALSE(kp.append_digit(4)); // blocked at 3
         REQUIRE(kp.append_dot());
-        REQUIRE(kp.append_digit(4));  // now allowed (5 digit limit)
+        REQUIRE(kp.append_digit(4)); // now allowed (5 digit limit)
         REQUIRE(kp.append_digit(5));
         CHECK(std::string(kp.buf) == "123.45");
-        CHECK_FALSE(kp.append_digit(6));  // blocked at 5
+        CHECK_FALSE(kp.append_digit(6)); // blocked at 5
     }
 
     SECTION("backspace below limit allows re-entry") {

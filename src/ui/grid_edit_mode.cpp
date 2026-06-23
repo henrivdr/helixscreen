@@ -133,7 +133,8 @@ void GridEditMode::exit() {
     // corrupts LVGL's child list iteration (#814).
     auto save = save_cb_;
     schedule_deferred_rebuild([save]() {
-        if (save) save();
+        if (save)
+            save();
     });
 
     container_ = nullptr;
@@ -410,9 +411,8 @@ void GridEditMode::create_selection_chrome(lv_obj_t* widget) {
     // Chrome button size/icon scale responsively — a fixed 36/24 pair dominates
     // the 480x272 micro viewport.
     lv_subject_t* chrome_bp_subj = theme_manager_get_breakpoint_subject();
-    const UiBreakpoint chrome_bp = chrome_bp_subj
-                                       ? as_breakpoint(lv_subject_get_int(chrome_bp_subj))
-                                       : UiBreakpoint::Medium;
+    const UiBreakpoint chrome_bp =
+        chrome_bp_subj ? as_breakpoint(lv_subject_get_int(chrome_bp_subj)) : UiBreakpoint::Medium;
     int BTN_SIZE = 36;
     const lv_font_t* chrome_icon_font = &mdi_icons_24;
     switch (chrome_bp) {
@@ -649,7 +649,8 @@ void GridEditMode::sync_config_from_screen() {
 
 void GridEditMode::schedule_deferred_rebuild(std::function<void()> post_rebuild) {
     if (!rebuild_cb_) {
-        if (post_rebuild) post_rebuild();
+        if (post_rebuild)
+            post_rebuild();
         return;
     }
     // Heap-allocate the callbacks so lv_async_call can carry them as void*.
@@ -687,7 +688,8 @@ void GridEditMode::schedule_deferred_rebuild(std::function<void()> post_rebuild)
             if (indev) {
                 lv_indev_reset(indev, nullptr);
             }
-            if (c->post) c->post();
+            if (c->post)
+                c->post();
             delete c;
         },
         ctx);
@@ -1971,8 +1973,7 @@ void GridEditMode::commit_resize_with_snap(const ResizeResult& result) {
                 }
                 lv_obj_update_layout(self->container_);
                 for (uint32_t i = 0; i < lv_obj_get_child_count(self->container_); ++i) {
-                    lv_obj_t* child =
-                        lv_obj_get_child(self->container_, static_cast<int32_t>(i));
+                    lv_obj_t* child = lv_obj_get_child(self->container_, static_cast<int32_t>(i));
                     if (!child) {
                         continue;
                     }
