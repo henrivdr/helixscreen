@@ -1588,10 +1588,6 @@
     },
     "notification_badge": {
       "attributes": {
-        "variant": {
-          "type": "enum",
-          "enum": "ui_variant"
-        },
         "text": {
           "type": "string"
         },
@@ -1638,6 +1634,9 @@
           "type": "string"
         },
         "bind_target": {
+          "type": "string"
+        },
+        "bind_mode": {
           "type": "string"
         },
         "event_cb": {
@@ -3193,8 +3192,6 @@
     "preset_swatch_size",
     "preview_offset_y",
     "primary",
-    "print_column_width",
-    "printer_column_width",
     "row_height",
     "screen_bg",
     "screw_indicator_height",

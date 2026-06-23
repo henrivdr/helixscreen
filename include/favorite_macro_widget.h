@@ -10,19 +10,20 @@
 #include "macro_param_modal.h"
 #include "panel_widget.h"
 
-#include <map>
+#include <memory>
 #include <string>
-#include <vector>
 
 class MoonrakerAPI;
 
 namespace helix {
 
+class FavoriteMacroConfigModal;
+
 /// Home panel widget for one-tap macro execution.
 /// Uses the multi_instance system: base ID "favorite_macro" with dynamic
 /// instance IDs like "favorite_macro:1", "favorite_macro:3", etc.
-/// Tap executes assigned macro; configure button opens macro picker.
-/// When unconfigured, tap also opens picker.
+/// Tap executes assigned macro; configure button opens config modal.
+/// When unconfigured, tap also opens config modal.
 class FavoriteMacroWidget : public PanelWidget {
   public:
     /// @param instance_id e.g. "favorite_macro:1"
@@ -49,8 +50,6 @@ class FavoriteMacroWidget : public PanelWidget {
 
     // Static event callbacks (XML-registered)
     static void clicked_cb(lv_event_t* e);
-    static void picker_backdrop_cb(lv_event_t* e);
-    static void picker_done_cb(lv_event_t* e);
 
   private:
     std::string widget_id_; ///< Instance ID, e.g. "favorite_macro:1"
@@ -67,11 +66,7 @@ class FavoriteMacroWidget : public PanelWidget {
     bool skip_param_prompt_ = false; ///< Run directly without the parameter-entry modal
     helix::AsyncLifetimeGuard lifetime_;
 
-    // Picker context menu
-    lv_obj_t* picker_backdrop_ = nullptr;
-    lv_obj_t* picker_icon_grid_ = nullptr;
-    lv_obj_t* picker_color_grid_ = nullptr;
-    lv_obj_t* picker_macro_list_ = nullptr;
+    std::unique_ptr<FavoriteMacroConfigModal> config_modal_;
 
     MoonrakerAPI* get_api() const;
 
@@ -79,20 +74,7 @@ class FavoriteMacroWidget : public PanelWidget {
     void save_config();
 
     void fetch_and_execute();
-    void show_macro_picker();
-    void dismiss_macro_picker();
-    void select_macro(const std::string& name);
-    void select_icon(const std::string& name);
-    void select_color(uint32_t color);
-    void select_skip_param(bool enabled);
-
-    void populate_macro_list(lv_obj_t* list, const std::vector<std::string>& macros);
-    void populate_icon_grid(lv_obj_t* grid);
-    void populate_color_grid(lv_obj_t* grid);
-    void refresh_picker_highlights();
-
-    // Static active instance for picker event routing
-    static FavoriteMacroWidget* s_active_picker_;
+    void open_config_modal();
 };
 
 } // namespace helix
