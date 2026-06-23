@@ -8,6 +8,16 @@
     <prop name="modified_date" type="string"/>
     <prop name="print_time" type="string"/>
   </api>
+  <styles>
+    <!-- Small column widths for responsive list view -->    
+    <style name="col_size_width_small" width="45" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false" />
+    <style name="col_modified_width_small" width="77" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false" />
+    <style name="col_time_width_small" width="50" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false" />
+    <!-- Default column widths -->    
+    <style name="col_size_width" width="80" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false" />
+    <style name="col_modified_width" width="130" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false" />
+    <style name="col_time_width" width="90" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false" />
+  </styles>
   <!-- List row container (children pass clicks through to parent) -->
   <view name="list_row"
         extends="lv_obj" width="100%" height="content" style_bg_color="#card_bg" style_bg_opa="255"
@@ -16,7 +26,7 @@
         style_flex_cross_place="center" clickable="true">
     <!-- Filename (flex-grow, left-aligned) -->
     <text_small name="row_filename"
-                width="510" text="$filename" style_text_align="left" long_mode="dots" flex_grow="1" style_pad_all="0"
+                width="530" text="$filename" style_text_align="left" long_mode="scroll_circular" flex_grow="1" style_pad_all="0"
                 clickable="false"/>
     <!-- Status (70px, centered) - contains icons for print history -->
     <lv_obj name="row_status"
@@ -39,13 +49,26 @@
     </lv_obj>
     <!-- Size (80px, right-aligned) -->
     <text_small name="row_size"
-                width="80" text="$file_size" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false"/>
+                 text="$file_size">
+      <style name="col_size_width"/>
+      <!-- Hide size column for smaller screens -->
+      <!-- <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>  -->
+      <!-- Use small width for smaller screens -->
+      <bind_style_if_lt subject="ui_breakpoint" name="col_size_width_small" ref_value="2"/>
+    </text_small>
     <!-- Modified date (130px, right-aligned) -->
-    <text_small name="row_modified"
-                width="130" text="$modified_date" style_text_align="right" flex_grow="0" style_pad_all="0"
-                clickable="false"/>
+    <text_small name="row_modified" 
+                text="$modified_date">
+      <style name="col_modified_width"/>
+      <!-- Use small width for smaller screens -->
+      <bind_style_if_lt subject="ui_breakpoint" name="col_modified_width_small" ref_value="2"/>
+    </text_small>
     <!-- Print time (90px, right-aligned) -->
     <text_small name="row_print_time"
-                width="90" text="$print_time" style_text_align="right" flex_grow="0" style_pad_all="0" clickable="false"/>
+                text="$print_time">
+      <style name="col_time_width"/>
+      <!-- Use small width for smaller screens -->
+      <bind_style_if_lt subject="ui_breakpoint" name="col_time_width_small" ref_value="2"/> 
+    </text_small>
   </view>
 </component>

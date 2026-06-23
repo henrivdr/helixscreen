@@ -10,16 +10,23 @@
     <px name="list_row_gap" value="4"/>
     <px name="list_header_padding" value="8"/>
     <px name="list_sort_icon_size" value="16"/>
-    <!-- Column min widths for responsive list view -->
-    <px name="col_status_width" value="70"/>
-    <px name="col_size_width" value="80"/>
-    <px name="col_modified_width" value="130"/>
-    <px name="col_time_width" value="90"/>
     <!-- Metadata dimensions for cards -->
     <px name="metadata_row_height" value="24"/>
     <!-- Minimum widths to prevent text crushing -->
     <px name="metadata_label_min_width" value="30"/>
   </consts>
+  <styles>
+    <!-- Smaller column widths for small screens -->    
+    <style name="col_status_width_small" width="60"/>
+    <style name="col_size_width_small" width="55"/>
+    <style name="col_modified_width_small" width="77"/>
+    <style name="col_time_width_small" width="55"/>
+    <!-- Default column widths -->
+    <style name="col_status_width" width="70"/>
+    <style name="col_size_width" width="80"/>
+    <style name="col_modified_width" width="130"/>
+    <style name="col_time_width" width="90"/>    
+  </styles>  
   <view name="print_select_panel_root"
         extends="lv_obj" width="100%" height="100%" style_pad_all="0" style_pad_gap="0" style_border_width="0"
         flex_flow="column">
@@ -93,7 +100,7 @@
       <bind_flag_if_eq subject="print_select_view_mode" flag="hidden" ref_value="0"/>
       <!-- Column headers -->
       <lv_obj name="list_header"
-              width="100%" height="content" style_pad_left="#nav_padding" style_pad_right="#nav_padding"
+              width="100%" height="content" style_pad_left="#space_md" style_pad_right="#space_md"
               style_pad_top="#space_xs" style_pad_bottom="#space_sm" flex_flow="row" style_flex_main_place="start"
               style_flex_cross_place="center">
         <!-- Filename header (flex-grow) -->
@@ -106,39 +113,48 @@
         </ui_button>
         <!-- Status header (non-sortable) -->
         <lv_obj name="header_status"
-                width="#col_status_width" height="content" style_pad_all="#list_header_padding" flex_flow="row"
+                height="content" style_pad_all="#list_header_padding" flex_flow="row"
                 style_flex_main_place="center" style_flex_cross_place="center">
+          <style name="col_status_width"/>
+          <bind_style_if_lt subject="ui_breakpoint" name="col_status_width_small" ref_value="2"/> # Use smaller size on small screens.
           <text_body name="header_status_label" text="Status" translation_tag="Status" style_text_align="center"/>
         </lv_obj>
         <!-- Size header -->
         <ui_button name="header_size"
-                   width="#col_size_width" height="content" text="Size" translation_tag="Size" variant="ghost" flex_flow="row"
-                   style_pad_column="#space_xs" style_flex_main_place="center" style_flex_cross_place="center">
+                   height="content" text="Size" translation_tag="Size" variant="ghost" flex_flow="row"
+                   style_pad_column="#space_xs" style_flex_main_place="left" style_flex_cross_place="center">
+          <style name="col_size_width"/>
+          <bind_style_if_lt subject="ui_breakpoint" name="col_size_width_small" ref_value="2"/> # Use smaller size on small screens.
           <event_cb trigger="clicked" callback="on_print_select_header_size"/>
           <icon name="header_size_icon_up" src="arrow_up" size="xs" variant="primary" hidden="true"/>
           <icon name="header_size_icon_down" src="arrow_down" size="xs" variant="primary" hidden="true"/>
+          <!-- <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/> # Hide size column on small screens.           -->
         </ui_button>
         <!-- Modified header -->
         <ui_button name="header_modified"
-                   width="#col_modified_width" height="content" text="Modified" translation_tag="Modified" variant="ghost" flex_flow="row"
-                   style_pad_column="#space_xs" style_flex_main_place="center" style_flex_cross_place="center">
+                   height="content" text="Modified" translation_tag="Modified" variant="ghost" flex_flow="row"
+                   style_pad_column="#space_xs" style_flex_main_place="left" style_flex_cross_place="center">
+          <style name="col_modified_width"/>
+          <bind_style_if_lt subject="ui_breakpoint" name="col_modified_width_small" ref_value="2"/> # Use smaller size on small screens.
           <event_cb trigger="clicked" callback="on_print_select_header_modified"/>
           <icon name="header_modified_icon_up" src="arrow_up" size="xs" variant="primary" hidden="true"/>
-          <icon name="header_modified_icon_down" src="arrow_down" size="xs" variant="primary" hidden="true"/>
+          <icon name="header_modified_icon_down" src="arrow_down" size="xs" variant="primary" hidden="true"/>          
         </ui_button>
         <!-- Print Time header -->
         <ui_button name="header_print_time"
-                   width="#col_time_width" height="content" text="Time" translation_tag="Time" variant="ghost" flex_flow="row"
-                   style_pad_column="#space_xs" style_flex_main_place="center" style_flex_cross_place="center">
+                   height="content" text="Time" translation_tag="Time" variant="ghost" flex_flow="row"
+                   style_pad_column="#space_xs" style_flex_main_place="left" style_flex_cross_place="center">
+          <style name="col_time_width"/>
+          <bind_style_if_lt subject="ui_breakpoint" name="col_time_width_small" ref_value="2"/> # Use smaller size on small screens.
           <event_cb trigger="clicked" callback="on_print_select_header_print_time"/>
           <icon name="header_print_time_icon_up" src="arrow_up" size="xs" variant="primary" hidden="true"/>
-          <icon name="header_print_time_icon_down" src="arrow_down" size="xs" variant="primary" hidden="true"/>
+          <icon name="header_print_time_icon_down" src="arrow_down" size="xs" variant="primary" hidden="true"/>          
         </ui_button>
       </lv_obj>
       <!-- Scrollable list rows container -->
       <lv_obj name="list_rows_container"
-              width="100%" height="100%" style_pad_left="#nav_padding" style_pad_right="#nav_padding" style_pad_top="0"
-              style_pad_bottom="#nav_padding" style_pad_gap="#space_sm" flex_flow="column" scrollable="true"
+              width="100%" height="100%" style_pad_left="" style_pad_right="#space_md" style_pad_top="0"
+              style_pad_bottom="#space_md" style_pad_gap="#space_sm" flex_flow="column" scrollable="true"
               flex_grow="1">
         <!-- List rows will be dynamically added here via C++ -->
       </lv_obj>
