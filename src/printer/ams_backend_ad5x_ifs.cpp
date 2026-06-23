@@ -4,19 +4,18 @@
 
 #include "ams_backend_ad5x_ifs.h"
 
+#include "ui_temperature_utils.h"
+
 #include "ams_state.h"
 #include "config.h"
 #include "host_identity.h"
 #include "http_executor.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "post_op_cooldown_manager.h"
-#include "ui_temperature_utils.h"
 
-#include <lvgl.h>
 #include <spdlog/spdlog.h>
-
-#include "lvgl/src/others/translation/lv_translation.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -24,6 +23,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <lvgl.h>
 #include <regex>
 #include <sstream>
 #include <thread>
@@ -370,8 +370,7 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
             AmsAction before = system_info_.action;
             std::string detail_before = system_info_.operation_detail;
             on_extruder_temp_locked(last_extruder_temp_deci_, last_extruder_target_deci_);
-            if (system_info_.action != before ||
-                system_info_.operation_detail != detail_before) {
+            if (system_info_.action != before || system_info_.operation_detail != detail_before) {
                 state_changed = true;
             }
         }
@@ -1428,8 +1427,8 @@ AmsBackendAd5xIfs::get_operation_step_model(StepOperationType op) const {
     const bool unload = (op == StepOperationType::UNLOAD);
     OperationStepModel model;
     model.steps.push_back({lv_tr("Heat nozzle"), 0, false, /*live_temp=*/true});
-    model.steps.push_back({unload ? lv_tr("Cut filament") : lv_tr("Feed filament"), 1, false,
-                           false});
+    model.steps.push_back(
+        {unload ? lv_tr("Cut filament") : lv_tr("Feed filament"), 1, false, false});
     model.steps.push_back({unload ? lv_tr("Retract") : lv_tr("Purge"), 2, false, false});
     return model;
 }
@@ -2486,8 +2485,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                 int degrees = std::atoi(m[1].str().c_str());
                 if (degrees > 0) {
                     phase_tracker_.target_deci = helix::ui::temperature::degrees_to_deci(degrees);
-                    spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(),
-                                  degrees);
+                    spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(), degrees);
                     phase_changed = apply_phase_action_locked();
                 }
             } else if (line.find("Unloading filament") != std::string::npos) {
@@ -2616,9 +2614,12 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                 }
             }
         }
-        spdlog::debug("{} Detected external color change in gcode stream, "
-                      "scheduling re-read + zcolor query",
-                      backend_log_tag());
+        // Count the detection rather than logging per line — zmod re-emits
+        // CHANGE_ZCOLOR on every edit, so one user action floods the stream with
+        // trigger lines (24 in a 3s window in bundle UQG4RNUA). schedule_*()
+        // already coalesce the actual work; reread_apply logs a single
+        // consolidated line carrying this count when the debounced re-read fires.
+        ++external_change_burst_count_;
         schedule_json_reread();
         schedule_zcolor_query("external_change_zcolor");
         return false;
@@ -2709,10 +2710,9 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             // String .find() on the LOCAL line only — no member access on the
             // bg thread (L081/L072 safe). Must mirror the parse triggers in
             // on_gcode_response_line.
-            const bool is_phase_token =
-                (line.find("Heating the nozzle to") != std::string::npos ||
-                 line.find("Unloading filament") != std::string::npos ||
-                 line.find("Loading filament") != std::string::npos);
+            const bool is_phase_token = (line.find("Heating the nozzle to") != std::string::npos ||
+                                         line.find("Unloading filament") != std::string::npos ||
+                                         line.find("Loading filament") != std::string::npos);
             if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token &&
                 !is_extruder_commit) {
                 return;
@@ -2823,8 +2823,17 @@ void AmsBackendAd5xIfs::schedule_json_reread() {
         // which itself touches api_ and member state.
         token.defer("Ad5xIfsBackend::reread_apply", [this]() {
             reread_pending_.store(false);
-            spdlog::debug("{} Re-reading Adventurer5M.json after external change",
-                          backend_log_tag());
+            const int n = external_change_burst_count_;
+            external_change_burst_count_ = 0;
+            if (n > 0) {
+                spdlog::debug("{} Detected {} external color change(s) in gcode stream — "
+                              "re-reading Adventurer5M.json + querying zcolor",
+                              backend_log_tag(), n);
+            } else {
+                // Reread scheduled by a non-stream trigger (klippy_ready, etc.).
+                spdlog::debug("{} Re-reading Adventurer5M.json after external change",
+                              backend_log_tag());
+            }
             read_adventurer_json();
         });
     });
@@ -2932,6 +2941,14 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
     }
 
     spdlog::debug("{} Querying GET_ZCOLOR SILENT=1", backend_log_tag());
+    // silent=true: this is a background color-state poll. Klipper runs gcode
+    // serially, so when a physical IFS operation stalls (e.g. "Purging old
+    // filament timed out"), this poll queues behind it on the printer and hits
+    // the 60s RPC timeout — which would otherwise raise a scary user-facing
+    // "Printer command 'printer.gcode.script' timed out" toast on top of the
+    // real filament-error modal the user is already seeing (bundles AS394UHU /
+    // UQG4RNUA). The error callback below still logs + clears the in-flight flag
+    // so the next trigger re-arms the poll. Mirrors get_sensors() / EXCLUDE_OBJECT.
     api_->execute_gcode(
         "GET_ZCOLOR SILENT=1",
         [this, token]() {
@@ -2955,7 +2972,8 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
                 spdlog::warn("{} GET_ZCOLOR SILENT=1 failed: {}", backend_log_tag(), msg);
                 zcolor_query_active_.store(false);
             });
-        });
+        },
+        /*timeout_ms=*/0, /*silent=*/true);
 }
 
 void AmsBackendAd5xIfs::finalize_zcolor_response() {
@@ -3061,8 +3079,7 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             if (phase_tracker_.active) {
                 const bool progressed = phase_tracker_.is_unload ? phase_tracker_.seen_head_drop
                                                                  : phase_tracker_.seen_head_rise;
-                const bool reached_end =
-                    phase_tracker_.is_unload ? (chan == 0) : (chan > 0);
+                const bool reached_end = phase_tracker_.is_unload ? (chan == 0) : (chan > 0);
                 if (progressed && reached_end) {
                     spdlog::info("{} Phase: IFS_STATUS Chan={} confirms {} complete -> IDLE",
                                  backend_log_tag(), chan,
@@ -3236,8 +3253,7 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
 }
 
 AmsBackendAd5xIfs::ZColorSilentResult
-AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
-                                       const char* reason) {
+AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines, const char* reason) {
     ZColorSilentResult result;
 
     // Regexes compiled once per call; parsing is off the hot path.
@@ -3286,9 +3302,9 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
                     // next field bundle proves Chan's loaded-idle behavior.
                     int state = obj.value("State", -1);
                     std::string ports_str;
-                    if (auto ports_it = obj.find("Ports");
-                        ports_it != obj.end() && ports_it->is_array() &&
-                        ports_it->size() == NUM_PORTS) {
+                    if (auto ports_it = obj.find("Ports"); ports_it != obj.end() &&
+                                                           ports_it->is_array() &&
+                                                           ports_it->size() == NUM_PORTS) {
                         ports_str = ports_it->dump();
                         // Capture the per-port presence as the sensor-backed
                         // authority (not just a diagnostic). Each entry is the

@@ -159,8 +159,7 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // apply_phase_action_locked(); these expose them as labelled steps + the
     // current-step subject so the tracker advances instead of falling back to
     // the legacy coarse AmsAction model.
-    [[nodiscard]] OperationStepModel
-    get_operation_step_model(StepOperationType op) const override;
+    [[nodiscard]] OperationStepModel get_operation_step_model(StepOperationType op) const override;
     [[nodiscard]] lv_subject_t* get_operation_step_index_subject(StepOperationType op) override;
 
     // User-initiated state refresh. Re-reads Adventurer5M.json (the JSON poll
@@ -445,8 +444,8 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // initiated action changes), detect_load_unload_completion preserves the
     // historical snap-to-IDLE on a head transition.
     struct IfsPhaseTracker {
-        bool active = false;        // true between begin and finalize
-        bool is_unload = false;     // unload vs load direction
+        bool active = false;              // true between begin and finalize
+        bool is_unload = false;           // unload vs load direction
         bool reached_target_once = false; // current temp ever within ~0.5°C of target
         bool seen_head_drop = false;      // head sensor true→false (cut/retract started)
         bool seen_head_rise = false;      // head sensor false→true (filament reached nozzle)
@@ -547,9 +546,9 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // Atomic: written under mutex_ in apply_zcolor_result, read unlocked in the
     // schedule/query gates.
     std::atomic<bool> ifs_status_ports_seen_{false};
-    bool external_mode_ = false;                // Bypass/external spool mode
-    bool head_filament_ = false;                // Head sensor state
-    std::array<bool, NUM_PORTS> dirty_{};       // Per-slot dirty flag to prevent stale overwrites
+    bool external_mode_ = false;          // Bypass/external spool mode
+    bool head_filament_ = false;          // Head sensor state
+    std::array<bool, NUM_PORTS> dirty_{}; // Per-slot dirty flag to prevent stale overwrites
 
     helix::printer::SlotRegistry slots_;
 
@@ -577,6 +576,16 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // is the discriminator, not key presence.
     bool ifs_macro_confirmed_missing_ = true;
     std::atomic<bool> reread_pending_{false};
+
+    // Main-thread-only: counts external color-change detections in the gcode
+    // stream since the last coalesced re-read fired. zmod re-emits CHANGE_ZCOLOR
+    // on every edit, so a single user action produces a burst of trigger lines
+    // (24 in a 3s window in bundle UQG4RNUA). Rather than log one line each, the
+    // count is folded into a single consolidated line when reread_apply runs.
+    // Both the increment (on_gcode_response_line) and the read/reset
+    // (reread_apply) run on the main thread via the UpdateQueue, so no atomic is
+    // needed.
+    int external_change_burst_count_ = 0;
 
     // Signature (count + per-slot color/material) of the slots parsed from the
     // last Adventurer5M.json read. Native ZMOD re-reads the file on every sensor
