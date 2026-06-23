@@ -7,6 +7,7 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "panel_widget_config.h"
 #include "panel_widget_manager.h"
+#include "static_subject_registry.h"
 
 #include <spdlog/spdlog.h>
 
@@ -27,6 +28,11 @@ void register_favorite_macro_config_subjects() {
     lv_subject_init_int(&s_skip_subject, 0);
     lv_xml_register_subject(nullptr, "fav_macro_config_tab", &s_tab_subject);
     lv_xml_register_subject(nullptr, "fav_macro_skip_params", &s_skip_subject);
+    StaticSubjectRegistry::instance().register_deinit("FavoriteMacroConfigSubjects", []() {
+        lv_subject_deinit(&s_tab_subject);
+        lv_subject_deinit(&s_skip_subject);
+        s_subjects_registered = false;
+    });
     s_subjects_registered = true;
 }
 
@@ -60,8 +66,6 @@ void FavoriteMacroConfigModal::persist() {
 }
 
 void FavoriteMacroConfigModal::on_show() {
-    if (dialog())
-        lv_obj_set_user_data(dialog(), this);
     load_config();
     macro_list_ = lv_obj_find_by_name(dialog(), "macro_list");
     icon_grid_ = lv_obj_find_by_name(dialog(), "icon_grid");

@@ -6,8 +6,6 @@
 #include <functional>
 #include <string>
 
-#include "hv/json.hpp"
-
 class MoonrakerAPI;
 
 namespace helix {
