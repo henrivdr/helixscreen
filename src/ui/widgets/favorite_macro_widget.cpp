@@ -13,6 +13,7 @@
 
 #include "app_globals.h"
 #include "device_display_name.h"
+#include "favorite_macro_config.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "macro_executor.h"
 #include "macro_param_cache.h"
@@ -213,24 +214,16 @@ FavoriteMacroWidget::~FavoriteMacroWidget() {
 }
 
 void FavoriteMacroWidget::set_config(const nlohmann::json& config) {
-    if (config.contains("macro") && config["macro"].is_string()) {
-        macro_name_ = config["macro"].get<std::string>();
+    auto c = helix::favorite_macro_config_from_json(config);
+    macro_name_ = c.macro;
+    // Validate icon against codepoints — reject stale/invalid names
+    if (c.icon.empty() || ui_icon::lookup_codepoint(c.icon.c_str())) {
+        icon_name_ = c.icon;
+    } else {
+        spdlog::warn("[FavoriteMacroWidget] Unknown icon '{}' in config, using default", c.icon);
     }
-    if (config.contains("icon") && config["icon"].is_string()) {
-        std::string icon = config["icon"].get<std::string>();
-        // Validate icon exists in codepoints — reject stale/invalid names
-        if (icon.empty() || ui_icon::lookup_codepoint(icon.c_str())) {
-            icon_name_ = std::move(icon);
-        } else {
-            spdlog::warn("[FavoriteMacroWidget] Unknown icon '{}' in config, using default", icon);
-        }
-    }
-    if (config.contains("color") && config["color"].is_number_unsigned()) {
-        icon_color_ = config["color"].get<uint32_t>();
-    }
-    if (config.contains("skip_param_prompt") && config["skip_param_prompt"].is_boolean()) {
-        skip_param_prompt_ = config["skip_param_prompt"].get<bool>();
-    }
+    icon_color_ = c.color;
+    skip_param_prompt_ = c.skip_param_prompt;
     spdlog::debug("[FavoriteMacroWidget] Config: {}={} icon={} color=0x{:06X} skip_params={}",
                   widget_id_, macro_name_, icon_name_.empty() ? "default" : icon_name_, icon_color_,
                   skip_param_prompt_);
@@ -373,15 +366,8 @@ void FavoriteMacroWidget::update_display() {
 }
 
 void FavoriteMacroWidget::save_config() {
-    nlohmann::json config;
-    config["macro"] = macro_name_;
-    if (!icon_name_.empty())
-        config["icon"] = icon_name_;
-    if (icon_color_ != 0)
-        config["color"] = icon_color_;
-    if (skip_param_prompt_)
-        config["skip_param_prompt"] = true;
-    save_widget_config(config);
+    helix::FavoriteMacroConfig c{macro_name_, icon_name_, icon_color_, skip_param_prompt_};
+    save_widget_config(helix::favorite_macro_config_to_json(c));
     spdlog::debug("[FavoriteMacroWidget] Saved config: {}={} icon={} color=0x{:06X} skip_params={}",
                   widget_id_, macro_name_, icon_name_.empty() ? "default" : icon_name_, icon_color_,
                   skip_param_prompt_);
