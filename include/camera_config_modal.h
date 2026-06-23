@@ -8,10 +8,10 @@
 
 #include "ui_modal.h"
 
-#include "hv/json.hpp"
-
 #include <functional>
 #include <string>
+
+#include "hv/json.hpp"
 
 namespace helix {
 
@@ -34,8 +34,12 @@ class CameraConfigModal : public Modal {
                       SaveCallback on_save = nullptr);
     ~CameraConfigModal() override;
 
-    const char* get_name() const override { return "Camera Config"; }
-    const char* component_name() const override { return "camera_config_modal"; }
+    const char* get_name() const override {
+        return "Camera Config";
+    }
+    const char* component_name() const override {
+        return "camera_config_modal";
+    }
 
     // Static event callbacks — registered once in register_camera_widget()
     static void on_rotate_0(lv_event_t* e);
@@ -58,9 +62,15 @@ class CameraConfigModal : public Modal {
     std::string widget_id_;
     std::string panel_id_;
     SaveCallback on_save_;
-    int rotation_ = 0;    // 0, 90, 180, 270
+    int rotation_ = 0; // 0, 90, 180, 270
     bool flip_h_ = false;
     bool flip_v_ = false;
+
+    // Active instance for static event-callback routing. Only one camera config
+    // modal is open at a time (owned by the single CameraWidget). Avoids walking
+    // the parent chain for user_data, which can land on a ui_button's own
+    // user_data and miscast (L069).
+    static CameraConfigModal* s_active_;
 
     // C++-owned subjects for XML bindings
     bool subjects_initialized_ = false;
