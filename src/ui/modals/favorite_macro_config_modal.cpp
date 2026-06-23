@@ -79,24 +79,28 @@ void FavoriteMacroConfigModal::on_show() {
 }
 
 void FavoriteMacroConfigModal::tab_macro_cb(lv_event_t* e) {
+    (void)e;
     LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroConfigModal] tab_macro_cb");
     lv_subject_set_int(&s_tab_subject, 0);
     LVGL_SAFE_EVENT_CB_END();
 }
 
 void FavoriteMacroConfigModal::tab_appearance_cb(lv_event_t* e) {
+    (void)e;
     LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroConfigModal] tab_appearance_cb");
     lv_subject_set_int(&s_tab_subject, 1);
     LVGL_SAFE_EVENT_CB_END();
 }
 
 void FavoriteMacroConfigModal::tab_options_cb(lv_event_t* e) {
+    (void)e;
     LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroConfigModal] tab_options_cb");
     lv_subject_set_int(&s_tab_subject, 2);
     LVGL_SAFE_EVENT_CB_END();
 }
 
 void FavoriteMacroConfigModal::close_cb(lv_event_t* e) {
+    (void)e;
     LVGL_SAFE_EVENT_CB_BEGIN("[FavoriteMacroConfigModal] close_cb");
     if (s_active_)
         s_active_->hide();
