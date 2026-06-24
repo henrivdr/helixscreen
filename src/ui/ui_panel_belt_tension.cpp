@@ -436,7 +436,7 @@ void BeltTensionPanel::on_hardware_detected(const helix::calibration::BeltTensio
     if (hw.has_pwm_led) {
         snprintf(hw_led_buf_, sizeof(hw_led_buf_), lv_tr("Available (%s)"), hw.pwm_led_pin.c_str());
     } else {
-        snprintf(hw_led_buf_, sizeof(hw_led_buf_), lv_tr("Not found (use phone app)"));
+        snprintf(hw_led_buf_, sizeof(hw_led_buf_), "%s", lv_tr("Not found (use phone app)"));
     }
     lv_subject_notify(&hw_led_subject_);
 
@@ -461,7 +461,8 @@ void BeltTensionPanel::handle_start_clicked() {
 
     set_view_state(ViewState::PROGRESS);
     lv_subject_set_int(&progress_subject_, 0);
-    snprintf(progress_label_buf_, sizeof(progress_label_buf_), lv_tr("Starting measurement..."));
+    snprintf(progress_label_buf_, sizeof(progress_label_buf_), "%s",
+             lv_tr("Starting measurement..."));
     lv_subject_notify(&progress_label_subject_);
 
     auto tok = lifetime_.token();
@@ -632,7 +633,7 @@ void BeltTensionPanel::update_strobe_display() {
     // Update instruction text based on hardware capabilities
     bool has_led = calibrator_ && calibrator_->get_hardware().has_pwm_led;
     if (has_led) {
-        snprintf(strobe_instruction_buf_, sizeof(strobe_instruction_buf_),
+        snprintf(strobe_instruction_buf_, sizeof(strobe_instruction_buf_), "%s",
                  lv_tr("Watch the belt under the strobe LED. "
                        "Adjust frequency until the belt appears stationary — "
                        "that is the resonant frequency."));

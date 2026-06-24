@@ -32,7 +32,7 @@ using namespace helix;
 
 PowerPanel::PowerPanel(PrinterState& printer_state, MoonrakerAPI* api)
     : PanelBase(printer_state, api) {
-    std::snprintf(status_buf_, sizeof(status_buf_), lv_tr("Loading devices..."));
+    std::snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("Loading devices..."));
     load_selected_devices();
 }
 
@@ -110,13 +110,13 @@ void PowerPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
 void PowerPanel::fetch_devices() {
     if (!api_) {
         spdlog::warn("[{}] No MoonrakerAPI available - cannot fetch devices", get_name());
-        std::snprintf(status_buf_, sizeof(status_buf_), lv_tr("Not connected to printer"));
+        std::snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("Not connected to printer"));
         lv_subject_copy_string(&status_subject_, status_buf_);
         return;
     }
 
     spdlog::debug("[{}] Fetching power devices...", get_name());
-    std::snprintf(status_buf_, sizeof(status_buf_), lv_tr("Loading devices..."));
+    std::snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("Loading devices..."));
     lv_subject_copy_string(&status_subject_, status_buf_);
 
     auto token = lifetime_.token();
@@ -137,7 +137,8 @@ void PowerPanel::fetch_devices() {
             auto msg = err.message;
             token.defer("PowerPanel::fetch_error", [this, msg]() {
                 spdlog::error("[{}] Failed to fetch power devices: {}", get_name(), msg);
-                std::snprintf(status_buf_, sizeof(status_buf_), lv_tr("Failed to load devices"));
+                std::snprintf(status_buf_, sizeof(status_buf_), "%s",
+                              lv_tr("Failed to load devices"));
                 lv_subject_copy_string(&status_subject_, status_buf_);
             });
         });

@@ -419,6 +419,9 @@
         "placeholder_text": {
           "type": "string"
         },
+        "placeholder_tag": {
+          "type": "string"
+        },
         "one_line": {
           "type": "bool"
         },
@@ -1758,6 +1761,9 @@
           "type": "string"
         },
         "options": {
+          "type": "string"
+        },
+        "options_tag": {
           "type": "string"
         },
         "text_format": {
