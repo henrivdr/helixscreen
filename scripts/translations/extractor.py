@@ -26,8 +26,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Set, Dict, List, Tuple, Optional
 
-# Attributes that contain translatable text
-TEXT_ATTRIBUTES = {"text", "label", "description", "title", "subtitle"}
+# Attributes that contain translatable text.
+# placeholder_tag is the explicit translation key for text-input placeholders
+# (mirrors how label/label_tag and text/translation_tag pair up); the textarea
+# parser resolves it via lv_tr() at runtime. Non-translatable example/format
+# placeholders (IPs, numerics, URLs) are dropped later by the skip patterns.
+TEXT_ATTRIBUTES = {"text", "label", "description", "title", "subtitle", "placeholder_tag"}
 
 # Patterns to skip
 VARIABLE_PATTERN = re.compile(r"\$\w+")  # $variable

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <translations languages="en">
+  <translation tag=" (timed out)" en=" (timed out)"/>
   <translation tag=" elapsed · " en=" elapsed · "/>
   <translation tag=" frames" en=" frames"/>
   <translation tag=" left" en=" left"/>
@@ -142,6 +143,7 @@
   <translation tag="Anonymous usage statistics" en="Anonymous usage statistics"/>
   <translation tag="Any notes..." en="Any notes..."/>
   <translation tag="App Background" en="App Background"/>
+  <translation tag="Appearance" en="Appearance"/>
   <translation tag="Apply" en="Apply"/>
   <translation tag="Apply Changes" en="Apply Changes"/>
   <translation tag="Applying Changes" en="Applying Changes"/>
@@ -473,7 +475,9 @@
   <translation tag="Custom" en="Custom"/>
   <translation tag="Custom..." en="Custom..."/>
   <translation tag="Customize Macro" en="Customize Macro"/>
+  <translation tag="Customize Macro Button" en="Customize Macro Button"/>
   <translation tag="Customize preset temperatures" en="Customize preset temperatures"/>
+  <translation tag="Cut filament" en="Cut filament"/>
   <translation tag="Cutter jam" en="Cutter jam"/>
   <translation tag="Cutting" en="Cutting"/>
   <translation tag="Cutting filament..." en="Cutting filament..."/>
@@ -584,6 +588,7 @@
   <translation tag="Ended" en="Ended"/>
   <translation tag="Enhancement Complete!" en="Enhancement Complete!"/>
   <translation tag="Enhancement Failed" en="Enhancement Failed"/>
+  <translation tag="Enter G-code command..." en="Enter G-code command..."/>
   <translation tag="Enter New PIN" en="Enter New PIN"/>
   <translation tag="Enter PIN" en="Enter PIN"/>
   <translation tag="Enter WiFi Password" en="Enter WiFi Password"/>
@@ -736,7 +741,9 @@
   <translation tag="Filament is pulling tight" en="Filament is pulling tight"/>
   <translation tag="Filament load failed: {}" en="Filament load failed: {}"/>
   <translation tag="Filament loaded" en="Filament loaded"/>
+  <translation tag="Filament operation failed" en="Filament operation failed"/>
   <translation tag="Filament operation timed out" en="Filament operation timed out"/>
+  <translation tag="Filament runout" en="Filament runout"/>
   <translation tag="Filament runout and motion detection sensors" en="Filament runout and motion detection sensors"/>
   <translation tag="Filament tension is balanced" en="Filament tension is balanced"/>
   <translation tag="Filament tracking &amp; label printing" en="Filament tracking &amp; label printing"/>
@@ -939,6 +946,8 @@
   <translation tag="Label printed" en="Label printed"/>
   <translation tag="Labels" en="Labels"/>
   <translation tag="Labels Per Sheet" en="Labels Per Sheet"/>
+  <translation tag="Lane" en="Lane"/>
+  <translation tag="Lane {} is blocked — manual intervention required" en="Lane {} is blocked — manual intervention required"/>
   <translation tag="Language" en="Language"/>
   <translation tag="Language, theme, brightness, and sound" en="Language, theme, brightness, and sound"/>
   <translation tag="Last" en="Last"/>
@@ -1222,6 +1231,7 @@
   <translation tag="Optimize Your Printing" en="Optimize Your Printing"/>
   <translation tag="Optimizes temperature control for stable, consistent heating." en="Optimizes temperature control for stable, consistent heating."/>
   <translation tag="Optional - select your main lighting source, or skip if your printer doesn&apos;t have one" en="Optional - select your main lighting source, or skip if your printer doesn&apos;t have one"/>
+  <translation tag="Options" en="Options"/>
   <translation tag="Or Enter Manually" en="Or Enter Manually"/>
   <translation tag="Oscillating... cycle %d/%d" en="Oscillating... cycle %d/%d"/>
   <translation tag="Out of range" en="Out of range"/>
@@ -1323,6 +1333,7 @@
   <translation tag="Previous" en="Previous"/>
   <translation tag="Price" en="Price"/>
   <translation tag="Primary" en="Primary"/>
+  <translation tag="Priming..." en="Priming..."/>
   <translation tag="Print" en="Print"/>
   <translation tag="Print Anyway" en="Print Anyway"/>
   <translation tag="Print Cancelled" en="Print Cancelled"/>
@@ -1430,6 +1441,8 @@
   <translation tag="Quick Button 4" en="Quick Button 4"/>
   <translation tag="Quick actions, calibration, speed" en="Quick actions, calibration, speed"/>
   <translation tag="RSS:" en="RSS:"/>
+  <translation tag="Raspberry Pi" en="Raspberry Pi"/>
+  <translation tag="Raspberry Pi (32-bit)" en="Raspberry Pi (32-bit)"/>
   <translation tag="Re-probe" en="Re-probe"/>
   <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." en="Re-syncs Happy Hare&apos;s tracked state with the hardware."/>
   <translation tag="Ready" en="Ready"/>
@@ -1453,6 +1466,7 @@
   <translation tag="Reduce Sensitivity" en="Reduce Sensitivity"/>
   <translation tag="Reduce ringing and ghosting artifacts" en="Reduce ringing and ghosting artifacts"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" en="Reduce vibration artifacts like ringing and ghosting"/>
+  <translation tag="Refeeding filament — this may take a minute" en="Refeeding filament — this may take a minute"/>
   <translation tag="Refill the spool, then Resume." en="Refill the spool, then Resume."/>
   <translation tag="Refresh" en="Refresh"/>
   <translation tag="Refresh Interval" en="Refresh Interval"/>
@@ -1537,6 +1551,7 @@
   <translation tag="Run Macro?" en="Run Macro?"/>
   <translation tag="Run a Klipper macro when preheating this material" en="Run a Klipper macro when preheating this material"/>
   <translation tag="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)" en="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)"/>
+  <translation tag="Run without parameter prompt" en="Run without parameter prompt"/>
   <translation tag="Run {}?" en="Run {}?"/>
   <translation tag="Running {}..." en="Running {}..."/>
   <translation tag="Runout Sensor" en="Runout Sensor"/>
@@ -1733,6 +1748,7 @@
   <translation tag="Start Probing" en="Start Probing"/>
   <translation tag="Start at" en="Start at"/>
   <translation tag="Start failed" en="Start failed"/>
+  <translation tag="Start print anyway?" en="Start print anyway?"/>
   <translation tag="Started" en="Started"/>
   <translation tag="Starting Print..." en="Starting Print..."/>
   <translation tag="Starting..." en="Starting..."/>
@@ -1825,6 +1841,7 @@
   <translation tag="Theme changes apply after restart." en="Theme changes apply after restart."/>
   <translation tag="Theme reset to defaults" en="Theme reset to defaults"/>
   <translation tag="These tools have incompatible materials loaded:" en="These tools have incompatible materials loaded:"/>
+  <translation tag="These tools have no filament loaded:" en="These tools have no filament loaded:"/>
   <translation tag="These tools have no matching filament loaded:" en="These tools have no matching filament loaded:"/>
   <translation tag="This calibration uses the paper friction method to set your Z-offset." en="This calibration uses the paper friction method to set your Z-offset."/>
   <translation tag="This cannot be undone." en="This cannot be undone."/>
@@ -1870,6 +1887,7 @@
   <translation tag="Tool" en="Tool"/>
   <translation tag="Tool Changer" en="Tool Changer"/>
   <translation tag="Tool change failed: {}" en="Tool change failed: {}"/>
+  <translation tag="Tool {} → Lane {}: no filament loaded." en="Tool {} → Lane {}: no filament loaded."/>
   <translation tag="Toolhead Style" en="Toolhead Style"/>
   <translation tag="Toolhead jam" en="Toolhead jam"/>
   <translation tag="Toolhead, G-code, limits, and materials" en="Toolhead, G-code, limits, and materials"/>
@@ -1920,6 +1938,7 @@
   <translation tag="Unloading filament..." en="Unloading filament..."/>
   <translation tag="Unloading... click again to load slot {}" en="Unloading... click again to load slot {}"/>
   <translation tag="Unloads After Print" en="Unloads After Print"/>
+  <translation tag="Unlock" en="Unlock"/>
   <translation tag="Unmapped" en="Unmapped"/>
   <translation tag="Unretract Extra" en="Unretract Extra"/>
   <translation tag="Unretract Speed" en="Unretract Speed"/>

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <translations languages="ru">
+  <translation tag=" (timed out)" ru=" (время ожидания истекло)"/>
   <translation tag=" elapsed · " ru=" истёк · "/>
   <translation tag=" frames" ru=" кадров"/>
   <translation tag=" left" ru=" осталось"/>
@@ -142,6 +143,7 @@
   <translation tag="Anonymous usage statistics" ru="Анонимная статистика использования"/>
   <translation tag="Any notes..." ru="Заметки..."/>
   <translation tag="App Background" ru="Фон приложения"/>
+  <translation tag="Appearance" ru="Внешний вид"/>
   <translation tag="Apply" ru="Применить"/>
   <translation tag="Apply Changes" ru="Применить изменения"/>
   <translation tag="Applying Changes" ru="Применение изменений"/>
@@ -473,7 +475,9 @@
   <translation tag="Custom" ru="Свой"/>
   <translation tag="Custom..." ru="Настроить..."/>
   <translation tag="Customize Macro" ru="Настроить макрос"/>
+  <translation tag="Customize Macro Button" ru="Настроить кнопку макроса"/>
   <translation tag="Customize preset temperatures" ru="Настройка пресетов температур"/>
+  <translation tag="Cut filament" ru="Обрезать филамент"/>
   <translation tag="Cutter jam" ru="Замятие резака"/>
   <translation tag="Cutting" ru="Резка"/>
   <translation tag="Cutting filament..." ru="Обрезка филамента..."/>
@@ -584,6 +588,7 @@
   <translation tag="Ended" ru="Завершено"/>
   <translation tag="Enhancement Complete!" ru="Улучшение завершено!"/>
   <translation tag="Enhancement Failed" ru="Ошибка улучшения"/>
+  <translation tag="Enter G-code command..." ru="Введите команду G-code..."/>
   <translation tag="Enter New PIN" ru="Введите новый PIN"/>
   <translation tag="Enter PIN" ru="Введите PIN"/>
   <translation tag="Enter WiFi Password" ru="Введите пароль WiFi"/>
@@ -736,7 +741,9 @@
   <translation tag="Filament is pulling tight" ru="Филамент натянут"/>
   <translation tag="Filament load failed: {}" ru="Ошибка загрузки филамента: {}"/>
   <translation tag="Filament loaded" ru="Филамент загружен"/>
+  <translation tag="Filament operation failed" ru="Операция с филаментом не удалась"/>
   <translation tag="Filament operation timed out" ru="Операция с филаментом — время ожидания истекло"/>
+  <translation tag="Filament runout" ru="Окончание филамента"/>
   <translation tag="Filament runout and motion detection sensors" ru="Датчики окончания и движения филамента"/>
   <translation tag="Filament tension is balanced" ru="Натяжение филамента сбалансировано"/>
   <translation tag="Filament tracking &amp; label printing" ru="Учёт филамента и печать этикеток"/>
@@ -939,6 +946,8 @@
   <translation tag="Label printed" ru="Этикетка напечатана"/>
   <translation tag="Labels" ru="Этикетки"/>
   <translation tag="Labels Per Sheet" ru="Этикеток на листе"/>
+  <translation tag="Lane" ru="Слот"/>
+  <translation tag="Lane {} is blocked — manual intervention required" ru="Слот {} заблокирован — требуется ручное вмешательство"/>
   <translation tag="Language" ru="Язык"/>
   <translation tag="Language, theme, brightness, and sound" ru="Язык, тема, яркость и звук"/>
   <translation tag="Last" ru="Последняя"/>
@@ -1222,6 +1231,7 @@
   <translation tag="Optimize Your Printing" ru="Оптимизируйте вашу печать"/>
   <translation tag="Optimizes temperature control for stable, consistent heating." ru="Оптимизирует контроль температуры для стабильного и равномерного нагрева."/>
   <translation tag="Optional - select your main lighting source, or skip if your printer doesn&apos;t have one" ru="Необязательно — выберите основной источник освещения или пропустите, если его нет"/>
+  <translation tag="Options" ru="Параметры"/>
   <translation tag="Or Enter Manually" ru="Или введите вручную"/>
   <translation tag="Oscillating... cycle %d/%d" ru="Осцилляция... цикл %d/%d"/>
   <translation tag="Out of range" ru="Вне диапазона"/>
@@ -1323,6 +1333,7 @@
   <translation tag="Previous" ru="Назад"/>
   <translation tag="Price" ru="Цена"/>
   <translation tag="Primary" ru="Основной"/>
+  <translation tag="Priming..." ru="Грунтование..."/>
   <translation tag="Print" ru="Печать"/>
   <translation tag="Print Anyway" ru="Всё равно печатать"/>
   <translation tag="Print Cancelled" ru="Печать отменена"/>
@@ -1430,6 +1441,8 @@
   <translation tag="Quick Button 4" ru="Быстрая кнопка 4"/>
   <translation tag="Quick actions, calibration, speed" ru="Быстрые действия, калибровка, скорость"/>
   <translation tag="RSS:" ru="RSS:"/>
+  <translation tag="Raspberry Pi" ru="Raspberry Pi"/>
+  <translation tag="Raspberry Pi (32-bit)" ru="Raspberry Pi (32-bit)"/>
   <translation tag="Re-probe" ru="Перепроверить"/>
   <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." ru="Повторно синхронизирует отслеживаемое состояние Happy Hare с оборудованием."/>
   <translation tag="Ready" ru="Готов"/>
@@ -1453,6 +1466,7 @@
   <translation tag="Reduce Sensitivity" ru="Снизить чувствительность"/>
   <translation tag="Reduce ringing and ghosting artifacts" ru="Уменьшить артефакты звона и двоения"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" ru="Уменьшить артефакты вибрации, такие как звон и двоение"/>
+  <translation tag="Refeeding filament — this may take a minute" ru="Повторная подача филамента — это может занять минуту"/>
   <translation tag="Refill the spool, then Resume." ru="Пополните катушку, затем нажмите «Продолжить»."/>
   <translation tag="Refresh" ru="Обновить"/>
   <translation tag="Refresh Interval" ru="Интервал обновления"/>
@@ -1537,6 +1551,7 @@
   <translation tag="Run Macro?" ru="Запустить макрос?"/>
   <translation tag="Run a Klipper macro when preheating this material" ru="Запускать макрос Klipper при преднагреве этого материала"/>
   <translation tag="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)" ru="Выполнять загрузку/выгрузку филамента даже при холодном сопле (для макросов, которые сами нагревают сопло)"/>
+  <translation tag="Run without parameter prompt" ru="Запускать без запроса параметров"/>
   <translation tag="Run {}?" ru="Запустить {}?"/>
   <translation tag="Running {}..." ru="Выполнение {}..."/>
   <translation tag="Runout Sensor" ru="Датчик окончания"/>
@@ -1733,6 +1748,7 @@
   <translation tag="Start Probing" ru="Начать зондирование"/>
   <translation tag="Start at" ru="Начать с"/>
   <translation tag="Start failed" ru="Ошибка запуска"/>
+  <translation tag="Start print anyway?" ru="Всё равно начать печать?"/>
   <translation tag="Started" ru="Начато"/>
   <translation tag="Starting Print..." ru="Запуск печати..."/>
   <translation tag="Starting..." ru="Запуск..."/>
@@ -1825,6 +1841,7 @@
   <translation tag="Theme changes apply after restart." ru="Изменения темы применяются после перезапуска."/>
   <translation tag="Theme reset to defaults" ru="Тема сброшена к настройкам по умолчанию"/>
   <translation tag="These tools have incompatible materials loaded:" ru="В этих инструментах загружены несовместимые материалы:"/>
+  <translation tag="These tools have no filament loaded:" ru="В эти инструменты не загружен филамент:"/>
   <translation tag="These tools have no matching filament loaded:" ru="В этих инструментах нет подходящего филамента:"/>
   <translation tag="This calibration uses the paper friction method to set your Z-offset." ru="Эта калибровка использует метод трения бумаги об сопло для установки Z-смещения."/>
   <translation tag="This cannot be undone." ru="Это действие нельзя отменить."/>
@@ -1870,6 +1887,7 @@
   <translation tag="Tool" ru="Инструмент"/>
   <translation tag="Tool Changer" ru="Сменщик инструментов"/>
   <translation tag="Tool change failed: {}" ru="Ошибка смены инструмента: {}"/>
+  <translation tag="Tool {} → Lane {}: no filament loaded." ru="Инструмент {} → Слот {}: филамент не загружен."/>
   <translation tag="Toolhead Style" ru="Стиль печатающей головки"/>
   <translation tag="Toolhead jam" ru="Замятие в печатающей головке"/>
   <translation tag="Toolhead, G-code, limits, and materials" ru="Печатающая головка, G-code, лимиты и материалы"/>
@@ -1920,6 +1938,7 @@
   <translation tag="Unloading filament..." ru="Выгрузка филамента..."/>
   <translation tag="Unloading... click again to load slot {}" ru="Выгрузка... нажмите ещё раз для загрузки слота {}"/>
   <translation tag="Unloads After Print" ru="Выгрузка после печати"/>
+  <translation tag="Unlock" ru="Разблокировать"/>
   <translation tag="Unmapped" ru="Не назначен"/>
   <translation tag="Unretract Extra" ru="Дополнительная подача"/>
   <translation tag="Unretract Speed" ru="Скорость возврата"/>

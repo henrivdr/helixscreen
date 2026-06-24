@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <translations languages="zh">
+  <translation tag=" (timed out)" zh="（超时）"/>
   <translation tag=" elapsed · " zh=" 已用 · "/>
   <translation tag=" frames" zh=" 帧"/>
   <translation tag=" left" zh=" 剩余"/>
@@ -142,6 +143,7 @@
   <translation tag="Anonymous usage statistics" zh="匿名使用统计"/>
   <translation tag="Any notes..." zh="备注..."/>
   <translation tag="App Background" zh="应用背景"/>
+  <translation tag="Appearance" zh="外观"/>
   <translation tag="Apply" zh="应用"/>
   <translation tag="Apply Changes" zh="应用更改"/>
   <translation tag="Applying Changes" zh="正在应用更改"/>
@@ -473,7 +475,9 @@
   <translation tag="Custom" zh="自定义"/>
   <translation tag="Custom..." zh="自定义..."/>
   <translation tag="Customize Macro" zh="自定义宏"/>
+  <translation tag="Customize Macro Button" zh="自定义宏按钮"/>
   <translation tag="Customize preset temperatures" zh="自定义预设温度"/>
+  <translation tag="Cut filament" zh="切断耗材"/>
   <translation tag="Cutter jam" zh="切刀卡住"/>
   <translation tag="Cutting" zh="切割中"/>
   <translation tag="Cutting filament..." zh="正在切断耗材..."/>
@@ -584,6 +588,7 @@
   <translation tag="Ended" zh="已结束"/>
   <translation tag="Enhancement Complete!" zh="增强完成！"/>
   <translation tag="Enhancement Failed" zh="增强失败"/>
+  <translation tag="Enter G-code command..." zh="输入 G-code 命令..."/>
   <translation tag="Enter New PIN" zh="输入新 PIN"/>
   <translation tag="Enter PIN" zh="输入 PIN"/>
   <translation tag="Enter WiFi Password" zh="输入 WiFi 密码"/>
@@ -736,7 +741,9 @@
   <translation tag="Filament is pulling tight" zh="耗材拉紧"/>
   <translation tag="Filament load failed: {}" zh="耗材加载失败: {}"/>
   <translation tag="Filament loaded" zh="耗材已加载"/>
+  <translation tag="Filament operation failed" zh="耗材操作失败"/>
   <translation tag="Filament operation timed out" zh="耗材操作超时"/>
+  <translation tag="Filament runout" zh="耗材用尽"/>
   <translation tag="Filament runout and motion detection sensors" zh="耗材用尽和运动检测传感器"/>
   <translation tag="Filament tension is balanced" zh="耗材张力平衡"/>
   <translation tag="Filament tracking &amp; label printing" zh="耗材跟踪和标签打印"/>
@@ -939,6 +946,8 @@
   <translation tag="Label printed" zh="标签已打印"/>
   <translation tag="Labels" zh="标签"/>
   <translation tag="Labels Per Sheet" zh="每页标签数"/>
+  <translation tag="Lane" zh="料仓"/>
+  <translation tag="Lane {} is blocked — manual intervention required" zh="料仓 {} 被阻塞 — 需要手动干预"/>
   <translation tag="Language" zh="语言"/>
   <translation tag="Language, theme, brightness, and sound" zh="语言、主题、亮度和声音"/>
   <translation tag="Last" zh="最近"/>
@@ -1222,6 +1231,7 @@
   <translation tag="Optimize Your Printing" zh="优化您的打印"/>
   <translation tag="Optimizes temperature control for stable, consistent heating." zh="优化温度控制，实现稳定一致的加热。"/>
   <translation tag="Optional - select your main lighting source, or skip if your printer doesn&apos;t have one" zh="可选 - 选择主照明源，如打印机没有可跳过"/>
+  <translation tag="Options" zh="选项"/>
   <translation tag="Or Enter Manually" zh="或手动输入"/>
   <translation tag="Oscillating... cycle %d/%d" zh="振荡中... 循环 %d/%d"/>
   <translation tag="Out of range" zh="超出范围"/>
@@ -1323,6 +1333,7 @@
   <translation tag="Previous" zh="上一步"/>
   <translation tag="Price" zh="价格"/>
   <translation tag="Primary" zh="主要"/>
+  <translation tag="Priming..." zh="正在预挤..."/>
   <translation tag="Print" zh="打印"/>
   <translation tag="Print Anyway" zh="仍要打印"/>
   <translation tag="Print Cancelled" zh="打印已取消"/>
@@ -1430,6 +1441,8 @@
   <translation tag="Quick Button 4" zh="快捷按钮 4"/>
   <translation tag="Quick actions, calibration, speed" zh="快捷操作、校准、速度"/>
   <translation tag="RSS:" zh="RSS："/>
+  <translation tag="Raspberry Pi" zh="Raspberry Pi"/>
+  <translation tag="Raspberry Pi (32-bit)" zh="Raspberry Pi (32-bit)"/>
   <translation tag="Re-probe" zh="重新探测"/>
   <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." zh="将 Happy Hare 跟踪的状态与硬件重新同步。"/>
   <translation tag="Ready" zh="就绪"/>
@@ -1453,6 +1466,7 @@
   <translation tag="Reduce Sensitivity" zh="降低灵敏度"/>
   <translation tag="Reduce ringing and ghosting artifacts" zh="减少振纹和残影"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" zh="减少振纹和残影等振动伪影"/>
+  <translation tag="Refeeding filament — this may take a minute" zh="正在重新进料 — 这可能需要一分钟"/>
   <translation tag="Refill the spool, then Resume." zh="重新装满料盘，然后恢复。"/>
   <translation tag="Refresh" zh="刷新"/>
   <translation tag="Refresh Interval" zh="刷新间隔"/>
@@ -1537,6 +1551,7 @@
   <translation tag="Run Macro?" zh="运行宏？"/>
   <translation tag="Run a Klipper macro when preheating this material" zh="预热此材料时运行 Klipper 宏"/>
   <translation tag="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)" zh="即使喷嘴处于冷态也执行耗材加载/卸载（适用于自行加热喷嘴的宏）"/>
+  <translation tag="Run without parameter prompt" zh="运行时不提示参数"/>
   <translation tag="Run {}?" zh="运行 {}？"/>
   <translation tag="Running {}..." zh="正在运行 {}..."/>
   <translation tag="Runout Sensor" zh="断料传感器"/>
@@ -1733,6 +1748,7 @@
   <translation tag="Start Probing" zh="开始探测"/>
   <translation tag="Start at" zh="从第"/>
   <translation tag="Start failed" zh="启动失败"/>
+  <translation tag="Start print anyway?" zh="仍要开始打印吗？"/>
   <translation tag="Started" zh="已开始"/>
   <translation tag="Starting Print..." zh="正在启动打印..."/>
   <translation tag="Starting..." zh="正在启动..."/>
@@ -1825,6 +1841,7 @@
   <translation tag="Theme changes apply after restart." zh="主题更改在重启后生效。"/>
   <translation tag="Theme reset to defaults" zh="主题已重置为默认值"/>
   <translation tag="These tools have incompatible materials loaded:" zh="这些工具加载了不兼容的材料："/>
+  <translation tag="These tools have no filament loaded:" zh="以下工具未加载耗材:"/>
   <translation tag="These tools have no matching filament loaded:" zh="以下工具未加载匹配的耗材："/>
   <translation tag="This calibration uses the paper friction method to set your Z-offset." zh="此校准使用纸张摩擦法设置 Z 偏移。"/>
   <translation tag="This cannot be undone." zh="此操作无法撤销。"/>
@@ -1870,6 +1887,7 @@
   <translation tag="Tool" zh="工具"/>
   <translation tag="Tool Changer" zh="换刀器"/>
   <translation tag="Tool change failed: {}" zh="工具切换失败: {}"/>
+  <translation tag="Tool {} → Lane {}: no filament loaded." zh="工具 {} → 料仓 {}: 未加载耗材。"/>
   <translation tag="Toolhead Style" zh="工具头样式"/>
   <translation tag="Toolhead jam" zh="工具头堵塞"/>
   <translation tag="Toolhead, G-code, limits, and materials" zh="打印头、G代码、限制和材料"/>
@@ -1920,6 +1938,7 @@
   <translation tag="Unloading filament..." zh="正在卸载耗材..."/>
   <translation tag="Unloading... click again to load slot {}" zh="正在卸载... 再次点击加载槽位 {}"/>
   <translation tag="Unloads After Print" zh="打印后卸载"/>
+  <translation tag="Unlock" zh="解锁"/>
   <translation tag="Unmapped" zh="未映射"/>
   <translation tag="Unretract Extra" zh="回抽恢复额外量"/>
   <translation tag="Unretract Speed" zh="回抽恢复速度"/>

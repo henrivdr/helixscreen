@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <translations languages="es">
+  <translation tag=" (timed out)" es=" (tiempo agotado)"/>
   <translation tag=" elapsed · " es=" transcurrido · "/>
   <translation tag=" frames" es=" fotogramas"/>
   <translation tag=" left" es=" restante"/>
@@ -142,6 +143,7 @@
   <translation tag="Anonymous usage statistics" es="Estadísticas de uso anónimas"/>
   <translation tag="Any notes..." es="Notas..."/>
   <translation tag="App Background" es="Fondo de la Aplicación"/>
+  <translation tag="Appearance" es="Apariencia"/>
   <translation tag="Apply" es="Aplicar"/>
   <translation tag="Apply Changes" es="Aplicar Cambios"/>
   <translation tag="Applying Changes" es="Aplicando Cambios"/>
@@ -473,7 +475,9 @@
   <translation tag="Custom" es="Personalizado"/>
   <translation tag="Custom..." es="Personalizado..."/>
   <translation tag="Customize Macro" es="Personalizar Macro"/>
+  <translation tag="Customize Macro Button" es="Personalizar Botón de Macro"/>
   <translation tag="Customize preset temperatures" es="Personalizar temperaturas preestablecidas"/>
+  <translation tag="Cut filament" es="Cortar filamento"/>
   <translation tag="Cutter jam" es="Atasco del cortador"/>
   <translation tag="Cutting" es="Cortando"/>
   <translation tag="Cutting filament..." es="Cortando filamento..."/>
@@ -584,6 +588,7 @@
   <translation tag="Ended" es="Terminado"/>
   <translation tag="Enhancement Complete!" es="¡Mejora Completa!"/>
   <translation tag="Enhancement Failed" es="Mejora Fallida"/>
+  <translation tag="Enter G-code command..." es="Ingrese comando G-code..."/>
   <translation tag="Enter New PIN" es="Ingrese Nuevo PIN"/>
   <translation tag="Enter PIN" es="Ingrese PIN"/>
   <translation tag="Enter WiFi Password" es="Ingrese Contraseña WiFi"/>
@@ -736,7 +741,9 @@
   <translation tag="Filament is pulling tight" es="El filamento está tirando tenso"/>
   <translation tag="Filament load failed: {}" es="Error al cargar filamento: {}"/>
   <translation tag="Filament loaded" es="Filamento cargado"/>
+  <translation tag="Filament operation failed" es="Falló la operación de filamento"/>
   <translation tag="Filament operation timed out" es="Operación de filamento — tiempo de espera agotado"/>
+  <translation tag="Filament runout" es="Filamento agotado"/>
   <translation tag="Filament runout and motion detection sensors" es="Sensores de detección de agotamiento y movimiento de filamento"/>
   <translation tag="Filament tension is balanced" es="La tensión del filamento está equilibrada"/>
   <translation tag="Filament tracking &amp; label printing" es="Seguimiento de filamento e impresión de etiquetas"/>
@@ -939,6 +946,8 @@
   <translation tag="Label printed" es="Etiqueta impresa"/>
   <translation tag="Labels" es="Etiquetas"/>
   <translation tag="Labels Per Sheet" es="Etiquetas por hoja"/>
+  <translation tag="Lane" es="Carril"/>
+  <translation tag="Lane {} is blocked — manual intervention required" es="El carril {} está bloqueado — se requiere intervención manual"/>
   <translation tag="Language" es="Idioma"/>
   <translation tag="Language, theme, brightness, and sound" es="Idioma, tema, brillo y sonido"/>
   <translation tag="Last" es="Última"/>
@@ -1222,6 +1231,7 @@
   <translation tag="Optimize Your Printing" es="Optimice su Impresión"/>
   <translation tag="Optimizes temperature control for stable, consistent heating." es="Optimiza el control de temperatura para un calentamiento estable y consistente."/>
   <translation tag="Optional - select your main lighting source, or skip if your printer doesn&apos;t have one" es="Opcional - selecciona tu fuente de iluminación principal, u omite si tu impresora no tiene una"/>
+  <translation tag="Options" es="Opciones"/>
   <translation tag="Or Enter Manually" es="O Ingrese Manualmente"/>
   <translation tag="Oscillating... cycle %d/%d" es="Oscilando... ciclo %d/%d"/>
   <translation tag="Out of range" es="Fuera de rango"/>
@@ -1323,6 +1333,7 @@
   <translation tag="Previous" es="Anterior"/>
   <translation tag="Price" es="Precio"/>
   <translation tag="Primary" es="Primario"/>
+  <translation tag="Priming..." es="Cebando..."/>
   <translation tag="Print" es="Imprimir"/>
   <translation tag="Print Anyway" es="Imprimir de todos modos"/>
   <translation tag="Print Cancelled" es="Impresión Cancelada"/>
@@ -1430,6 +1441,8 @@
   <translation tag="Quick Button 4" es="Botón Rápido 4"/>
   <translation tag="Quick actions, calibration, speed" es="Acciones rápidas, calibración, velocidad"/>
   <translation tag="RSS:" es="RSS:"/>
+  <translation tag="Raspberry Pi" es="Raspberry Pi"/>
+  <translation tag="Raspberry Pi (32-bit)" es="Raspberry Pi (32-bit)"/>
   <translation tag="Re-probe" es="Re-sondear"/>
   <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." es="Vuelve a sincronizar el estado registrado de Happy Hare con el hardware."/>
   <translation tag="Ready" es="Listo"/>
@@ -1453,6 +1466,7 @@
   <translation tag="Reduce Sensitivity" es="Reducir sensibilidad"/>
   <translation tag="Reduce ringing and ghosting artifacts" es="Reducir artefactos de resonancia y fantasma"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" es="Reducir artefactos de vibración como resonancia y fantasma"/>
+  <translation tag="Refeeding filament — this may take a minute" es="Realimentando filamento — esto puede tardar un minuto"/>
   <translation tag="Refill the spool, then Resume." es="Rellene la bobina y luego Reanude."/>
   <translation tag="Refresh" es="Actualizar"/>
   <translation tag="Refresh Interval" es="Intervalo de Actualización"/>
@@ -1537,6 +1551,7 @@
   <translation tag="Run Macro?" es="¿Ejecutar macro?"/>
   <translation tag="Run a Klipper macro when preheating this material" es="Ejecutar un macro de Klipper al precalentar este material"/>
   <translation tag="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)" es="Ejecutar la carga/descarga de filamento incluso con la boquilla fría (para macros que calientan la boquilla por sí mismas)"/>
+  <translation tag="Run without parameter prompt" es="Ejecutar sin solicitud de parámetros"/>
   <translation tag="Run {}?" es="¿Ejecutar {}?"/>
   <translation tag="Running {}..." es="Ejecutando {}..."/>
   <translation tag="Runout Sensor" es="Sensor de Agotamiento"/>
@@ -1733,6 +1748,7 @@
   <translation tag="Start Probing" es="Iniciar Sondeo"/>
   <translation tag="Start at" es="Comenzar en"/>
   <translation tag="Start failed" es="Inicio fallido"/>
+  <translation tag="Start print anyway?" es="¿Iniciar la impresión de todos modos?"/>
   <translation tag="Started" es="Iniciado"/>
   <translation tag="Starting Print..." es="Iniciando impresión..."/>
   <translation tag="Starting..." es="Iniciando..."/>
@@ -1825,6 +1841,7 @@
   <translation tag="Theme changes apply after restart." es="Los cambios de tema se aplican después de reiniciar."/>
   <translation tag="Theme reset to defaults" es="Tema restablecido a valores predeterminados"/>
   <translation tag="These tools have incompatible materials loaded:" es="Estas herramientas tienen materiales incompatibles cargados:"/>
+  <translation tag="These tools have no filament loaded:" es="Estas herramientas no tienen filamento cargado:"/>
   <translation tag="These tools have no matching filament loaded:" es="Estas herramientas no tienen filamento compatible cargado:"/>
   <translation tag="This calibration uses the paper friction method to set your Z-offset." es="Esta calibración usa el método de fricción de papel para establecer su Z-offset."/>
   <translation tag="This cannot be undone." es="Esta acción no se puede deshacer."/>
@@ -1870,6 +1887,7 @@
   <translation tag="Tool" es="Herramienta"/>
   <translation tag="Tool Changer" es="Cambiador de Herramientas"/>
   <translation tag="Tool change failed: {}" es="Error al cambiar herramienta: {}"/>
+  <translation tag="Tool {} → Lane {}: no filament loaded." es="Herramienta {} → Carril {}: no hay filamento cargado."/>
   <translation tag="Toolhead Style" es="Estilo de Cabezal"/>
   <translation tag="Toolhead jam" es="Atasco del cabezal"/>
   <translation tag="Toolhead, G-code, limits, and materials" es="Cabezal, G-code, límites y materiales"/>
@@ -1920,6 +1938,7 @@
   <translation tag="Unloading filament..." es="Descargando filamento..."/>
   <translation tag="Unloading... click again to load slot {}" es="Descargando... toque de nuevo para cargar ranura {}"/>
   <translation tag="Unloads After Print" es="Descarga después de imprimir"/>
+  <translation tag="Unlock" es="Desbloquear"/>
   <translation tag="Unmapped" es="Sin mapear"/>
   <translation tag="Unretract Extra" es="Extra de Des-retracción"/>
   <translation tag="Unretract Speed" es="Velocidad de Des-retracción"/>

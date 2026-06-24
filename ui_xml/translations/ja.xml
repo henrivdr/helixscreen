@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <translations languages="ja">
+  <translation tag=" (timed out)" ja="（タイムアウト）"/>
   <translation tag=" elapsed · " ja=" 経過 · "/>
   <translation tag=" frames" ja=" フレーム"/>
   <translation tag=" left" ja=" 残り"/>
@@ -142,6 +143,7 @@
   <translation tag="Anonymous usage statistics" ja="匿名の使用統計"/>
   <translation tag="Any notes..." ja="メモ..."/>
   <translation tag="App Background" ja="アプリ背景"/>
+  <translation tag="Appearance" ja="外観"/>
   <translation tag="Apply" ja="適用"/>
   <translation tag="Apply Changes" ja="変更を適用"/>
   <translation tag="Applying Changes" ja="変更を適用中"/>
@@ -473,7 +475,9 @@
   <translation tag="Custom" ja="カスタム"/>
   <translation tag="Custom..." ja="カスタム..."/>
   <translation tag="Customize Macro" ja="マクロをカスタマイズ"/>
+  <translation tag="Customize Macro Button" ja="マクロボタンをカスタマイズ"/>
   <translation tag="Customize preset temperatures" ja="プリセット温度をカスタマイズ"/>
+  <translation tag="Cut filament" ja="フィラメントを切断"/>
   <translation tag="Cutter jam" ja="カッター詰まり"/>
   <translation tag="Cutting" ja="カット中"/>
   <translation tag="Cutting filament..." ja="フィラメントを切断中..."/>
@@ -584,6 +588,7 @@
   <translation tag="Ended" ja="終了"/>
   <translation tag="Enhancement Complete!" ja="改善完了！"/>
   <translation tag="Enhancement Failed" ja="改善失敗"/>
+  <translation tag="Enter G-code command..." ja="G-code コマンドを入力..."/>
   <translation tag="Enter New PIN" ja="新しい PIN を入力"/>
   <translation tag="Enter PIN" ja="PIN を入力"/>
   <translation tag="Enter WiFi Password" ja="WiFi パスワードを入力"/>
@@ -736,7 +741,9 @@
   <translation tag="Filament is pulling tight" ja="フィラメントが引っ張られています"/>
   <translation tag="Filament load failed: {}" ja="フィラメントの装填に失敗しました: {}"/>
   <translation tag="Filament loaded" ja="フィラメントを装填しました"/>
+  <translation tag="Filament operation failed" ja="フィラメント操作に失敗しました"/>
   <translation tag="Filament operation timed out" ja="フィラメント操作がタイムアウトしました"/>
+  <translation tag="Filament runout" ja="フィラメント切れ"/>
   <translation tag="Filament runout and motion detection sensors" ja="フィラメント切れとモーション検出センサー"/>
   <translation tag="Filament tension is balanced" ja="フィラメントの張力が均衡しています"/>
   <translation tag="Filament tracking &amp; label printing" ja="フィラメント追跡とラベル印刷"/>
@@ -939,6 +946,8 @@
   <translation tag="Label printed" ja="ラベル印刷完了"/>
   <translation tag="Labels" ja="ラベル"/>
   <translation tag="Labels Per Sheet" ja="シートあたりのラベル数"/>
+  <translation tag="Lane" ja="レーン"/>
+  <translation tag="Lane {} is blocked — manual intervention required" ja="レーン {} がブロックされています — 手動での対応が必要です"/>
   <translation tag="Language" ja="言語"/>
   <translation tag="Language, theme, brightness, and sound" ja="言語、テーマ、明るさ、サウンド"/>
   <translation tag="Last" ja="最後"/>
@@ -1222,6 +1231,7 @@
   <translation tag="Optimize Your Printing" ja="印刷を最適化"/>
   <translation tag="Optimizes temperature control for stable, consistent heating." ja="安定した一貫性のある加熱のために温度制御を最適化します。"/>
   <translation tag="Optional - select your main lighting source, or skip if your printer doesn&apos;t have one" ja="任意 - メイン照明を選択するか、照明がない場合はスキップしてください"/>
+  <translation tag="Options" ja="オプション"/>
   <translation tag="Or Enter Manually" ja="または手動で入力"/>
   <translation tag="Oscillating... cycle %d/%d" ja="振動中... サイクル %d/%d"/>
   <translation tag="Out of range" ja="範囲外"/>
@@ -1323,6 +1333,7 @@
   <translation tag="Previous" ja="前へ"/>
   <translation tag="Price" ja="価格"/>
   <translation tag="Primary" ja="プライマリ"/>
+  <translation tag="Priming..." ja="プライミング中..."/>
   <translation tag="Print" ja="印刷"/>
   <translation tag="Print Anyway" ja="それでも印刷"/>
   <translation tag="Print Cancelled" ja="印刷キャンセル"/>
@@ -1430,6 +1441,8 @@
   <translation tag="Quick Button 4" ja="クイックボタン4"/>
   <translation tag="Quick actions, calibration, speed" ja="クイックアクション、キャリブレーション、速度"/>
   <translation tag="RSS:" ja="RSS:"/>
+  <translation tag="Raspberry Pi" ja="Raspberry Pi"/>
+  <translation tag="Raspberry Pi (32-bit)" ja="Raspberry Pi (32-bit)"/>
   <translation tag="Re-probe" ja="再プローブ"/>
   <translation tag="Re-syncs Happy Hare&apos;s tracked state with the hardware." ja="Happy Hare が追跡している状態をハードウェアと再同期します。"/>
   <translation tag="Ready" ja="準備完了"/>
@@ -1453,6 +1466,7 @@
   <translation tag="Reduce Sensitivity" ja="感度を下げる"/>
   <translation tag="Reduce ringing and ghosting artifacts" ja="リンギングとゴーストのアーティファクトを軽減"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" ja="リンギングやゴーストなどの振動アーティファクトを軽減"/>
+  <translation tag="Refeeding filament — this may take a minute" ja="フィラメントを再供給中 — 少々時間がかかる場合があります"/>
   <translation tag="Refill the spool, then Resume." ja="スプールを補充してから再開してください。"/>
   <translation tag="Refresh" ja="更新"/>
   <translation tag="Refresh Interval" ja="更新間隔"/>
@@ -1537,6 +1551,7 @@
   <translation tag="Run Macro?" ja="マクロを実行しますか？"/>
   <translation tag="Run a Klipper macro when preheating this material" ja="この素材の予熱時に Klipper マクロを実行"/>
   <translation tag="Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves)" ja="ノズルがコールドの状態でもフィラメントの装填/取り出しを実行（ノズルを自身で加熱するマクロ向け）"/>
+  <translation tag="Run without parameter prompt" ja="パラメータ入力なしで実行"/>
   <translation tag="Run {}?" ja="{} を実行しますか？"/>
   <translation tag="Running {}..." ja="{} を実行中..."/>
   <translation tag="Runout Sensor" ja="フィラメント切れセンサー"/>
@@ -1733,6 +1748,7 @@
   <translation tag="Start Probing" ja="プローブ開始"/>
   <translation tag="Start at" ja="開始位置"/>
   <translation tag="Start failed" ja="開始に失敗"/>
+  <translation tag="Start print anyway?" ja="それでも印刷を開始しますか？"/>
   <translation tag="Started" ja="開始"/>
   <translation tag="Starting Print..." ja="印刷開始中..."/>
   <translation tag="Starting..." ja="開始中..."/>
@@ -1825,6 +1841,7 @@
   <translation tag="Theme changes apply after restart." ja="テーマの変更は再起動後に適用されます。"/>
   <translation tag="Theme reset to defaults" ja="テーマをデフォルトにリセットしました"/>
   <translation tag="These tools have incompatible materials loaded:" ja="これらのツールには互換性のない素材がロードされています:"/>
+  <translation tag="These tools have no filament loaded:" ja="これらのツールにフィラメントが装填されていません:"/>
   <translation tag="These tools have no matching filament loaded:" ja="これらのツールに一致するフィラメントが装填されていません:"/>
   <translation tag="This calibration uses the paper friction method to set your Z-offset." ja="このキャリブレーションは紙の摩擦方式を使用して Z-offset を設定します。"/>
   <translation tag="This cannot be undone." ja="この操作は元に戻せません。"/>
@@ -1870,6 +1887,7 @@
   <translation tag="Tool" ja="ツール"/>
   <translation tag="Tool Changer" ja="ツールチェンジャー"/>
   <translation tag="Tool change failed: {}" ja="ツール変更に失敗しました: {}"/>
+  <translation tag="Tool {} → Lane {}: no filament loaded." ja="ツール {} → レーン {}: フィラメントが装填されていません。"/>
   <translation tag="Toolhead Style" ja="ツールヘッドスタイル"/>
   <translation tag="Toolhead jam" ja="ツールヘッドの詰まり"/>
   <translation tag="Toolhead, G-code, limits, and materials" ja="ツールヘッド、Gコード、制限、材料"/>
@@ -1920,6 +1938,7 @@
   <translation tag="Unloading filament..." ja="フィラメントを排出中..."/>
   <translation tag="Unloading... click again to load slot {}" ja="アンロード中... もう一度クリックでスロット {} を装填"/>
   <translation tag="Unloads After Print" ja="印刷後にアンロード"/>
+  <translation tag="Unlock" ja="ロック解除"/>
   <translation tag="Unmapped" ja="未割当"/>
   <translation tag="Unretract Extra" ja="アンリトラクト追加量"/>
   <translation tag="Unretract Speed" ja="アンリトラクト速度"/>
