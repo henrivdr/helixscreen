@@ -2590,6 +2590,52 @@ TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)", "
     REQUIRE(backend.get_system_info().current_slot == 3);
 }
 
+TEST_CASE("AD5X IFS native ZMOD: IFS_STATUS Chan resolves the loaded slot without a populated "
+          "tool map (raza616 loaded-status defect, bundle UQG4RNUA)",
+          "[ams][ad5x_ifs]") {
+    // Native ZMOD has no lessWaste/bambufy _IFS_VARS, so parse_save_variables
+    // never populates tool_map_ — it stays all-UNMAPPED. The seated channel from
+    // IFS_STATUS ("Chan") is therefore the ONLY authority for which slot is
+    // loaded. Pre-fix, recompute_current_slot_locked laundered the seated channel
+    // through the empty tool_map_ (find_first_tool_for_port -> -1 -> active_tool_
+    // -1 -> current_slot -1), pinning current_slot at -1 for the whole session.
+    // slot_is_actively_loaded is (slot == current_slot && filament_loaded), so it
+    // was ALWAYS false even with filament demonstrably at the toolhead — the UI
+    // showed "not loaded" and disabled Unload right after a successful load
+    // (bundle UQG4RNUA: Chan=1, head sensor detected, current_slot stuck at -1).
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Production native path: has_ifs_vars_ defaults false and NO set_tool_mapping
+    // is ever called — that 1:1 map is exactly what the field device lacks.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_ifs_vars(backend));
+
+    // Filament physically at the toolhead. handle_status also sets
+    // system_info_.filament_loaded (= head_filament_) via the state_changed path.
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(true));
+    REQUIRE(backend.is_filament_loaded());
+
+    // Firmware reports port 1 seated (matches the bundle's IFS_STATUS).
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 1; // 1-based seated channel -> slot 0
+    r.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, true, false, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // The seated channel — not the empty tool_map_ — resolves the loaded slot.
+    REQUIRE(backend.get_system_info().current_slot == 0);
+    REQUIRE(backend.slot_is_actively_loaded(0));
+    REQUIRE_FALSE(backend.slot_is_actively_loaded(1));
+
+    // A later Chan=0 (nothing seated) correctly clears the loaded slot.
+    AmsBackendAd5xIfs::ZColorSilentResult cleared;
+    cleared.saw_valid_response = true;
+    cleared.ifs_chan = 0;
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, cleared);
+    REQUIRE(backend.get_system_info().current_slot == -1);
+    REQUIRE_FALSE(backend.slot_is_actively_loaded(0));
+}
+
 TEST_CASE("AD5X IFS a confirmed SILENT device is NOT demoted by a later prompt "
           "(raza616 #981 false latch, EE5L8LY2)",
           "[ams][ad5x_ifs]") {

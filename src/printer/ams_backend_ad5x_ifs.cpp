@@ -3820,6 +3820,18 @@ int AmsBackendAd5xIfs::find_first_tool_for_port(int port_1based) const {
 }
 
 void AmsBackendAd5xIfs::recompute_current_slot_locked() {
+    // Native ZMOD (no lessWaste/bambufy _IFS_VARS) never populates tool_map_ — it
+    // stays all-UNMAPPED, so the active_tool_ -> tool_map_ round-trip below
+    // collapses to -1 and current_slot would be pinned at -1 forever, leaving
+    // every slot "not loaded" (slot_is_actively_loaded) even with filament
+    // demonstrably seated at the toolhead. The IFS_STATUS "Chan" (seated_chan_)
+    // is the direct, sensor-backed seated authority there, and it survives a
+    // timed-out GET_ZCOLOR (it only updates on a fresh successful read), so it is
+    // the correct source for the loaded slot on the native path.
+    if (!has_ifs_vars_) {
+        system_info_.current_slot = seated_chan_ > 0 ? seated_chan_ - 1 : -1;
+        return;
+    }
     if (active_tool_ >= 0 && active_tool_ < TOOL_MAP_SIZE) {
         int port = tool_map_[static_cast<size_t>(active_tool_)];
         if (port >= 1 && port <= NUM_PORTS) {
