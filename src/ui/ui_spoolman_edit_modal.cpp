@@ -163,8 +163,8 @@ void SpoolEditModal::populate_fields() {
         return;
     }
 
-    // Title
-    lv_obj_t* title = find_widget("spool_title");
+    // Title — modal_header names its title widget "header_title".
+    lv_obj_t* title = find_widget("header_title");
     if (title) {
         std::string title_text = "Edit Spool #" + std::to_string(working_spool_.id);
         lv_label_set_text(title, title_text.c_str());
