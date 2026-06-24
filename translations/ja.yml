@@ -1,6 +1,6 @@
 locale: ja
 translations:
-  ' (timed out)': '（タイムアウト）'
+  ' (timed out)': （タイムアウト）
   ' elapsed · ': ' 経過 · '
   ' frames': ' フレーム'
   ' left': ' 残り'
@@ -605,6 +605,7 @@ translations:
   Enter WiFi Password: WiFi パスワードを入力
   'Enter a name for your custom theme:': 'カスタムテーマの名前を入力してください:'
   Enter a name to save this profile: このプロファイルを保存する名前を入力
+  Enter network name: 'ネットワーク名を入力'
   Enter password: パスワードを入力
   Enter printer IP address first: 先にプリンターのIPアドレスを入力してください
   Enter the IP address and port of your Spoolman server.: Spoolman サーバーのIPアドレスとポートを入力してください。
@@ -669,6 +670,7 @@ translations:
   Failed to load G-code preview: G-code プレビューの読み込みに失敗しました
   Failed to load fan configuration screen: ファン設定画面の読み込みに失敗しました
   Failed to load fan control overlay: ファン制御オーバーレイの読み込みに失敗しました
+  Failed to load filament sensor configuration screen. Please restart the application.: 'フィラメントセンサー設定画面の読み込みに失敗しました。アプリケーションを再起動してください。'
   'Failed to load filament: {}': 'フィラメントの装填に失敗しました: {}'
   Failed to load file details: ファイル詳細の読み込みに失敗しました
   Failed to load history: 履歴の読み込みに失敗しました
@@ -1712,6 +1714,7 @@ translations:
     の改善にご協力ください。個人データは一切収集されません。
   'Share this code in Discord or support:': 'このコードをDiscordまたはサポートで共有してください:'
   Sheet Label Print: シートラベル印刷
+  Shelf A: '棚A'
   'Shininess:': '光沢:'
   Show Printer Switcher: プリンター切替を表示
   Show Sections: セクションを表示
@@ -2081,6 +2084,7 @@ translations:
   Widget Labels: ウィジェットラベル
   Width: 幅
   Wifi: Wi-Fi
+  Wizard Error: 'ウィザードエラー'
   Wrong PIN: PIN が違います
   Wrong media: 不正なメディア
   X: X
@@ -2186,6 +2190,7 @@ translations:
   '{} command timed out': '{} コマンドがタイムアウトしました'
   '{} complete': '{} 完了'
   '{} heater turned off': '{} ヒーターをオフにしました'
+  '{} lanes': '{} レーン'
   '{} macro not configured': '{} マクロが未設定です'
   '{} may cause unintended changes. Are you sure?': '{} は意図しない変更を引き起こす可能性があります。よろしいですか？'
   '{} more taps to {} beta features': あと{}回タップでベータ機能を{}

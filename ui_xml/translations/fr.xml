@@ -594,6 +594,7 @@
   <translation tag="Enter WiFi Password" fr="Entrez le mot de passe WiFi"/>
   <translation tag="Enter a name for your custom theme:" fr="Entrez un nom pour votre thème personnalisé :"/>
   <translation tag="Enter a name to save this profile" fr="Entrez un nom pour enregistrer ce profil"/>
+  <translation tag="Enter network name" fr="Saisir le nom du réseau"/>
   <translation tag="Enter password" fr="Entrez le mot de passe"/>
   <translation tag="Enter printer IP address first" fr="Entrez d&apos;abord l&apos;adresse IP de l&apos;imprimante"/>
   <translation tag="Enter the IP address and port of your Spoolman server." fr="Entrez l&apos;adresse IP et le port de votre serveur Spoolman."/>
@@ -658,6 +659,7 @@
   <translation tag="Failed to load G-code preview" fr="Échec du chargement de l&apos;aperçu G-code"/>
   <translation tag="Failed to load fan configuration screen" fr="Échec du chargement de la configuration ventilateur"/>
   <translation tag="Failed to load fan control overlay" fr="Échec du chargement du contrôle ventilateur"/>
+  <translation tag="Failed to load filament sensor configuration screen. Please restart the application." fr="Échec du chargement de l&apos;écran de configuration du capteur de filament. Veuillez redémarrer l&apos;application."/>
   <translation tag="Failed to load filament: {}" fr="Échec du chargement du filament : {}"/>
   <translation tag="Failed to load file details" fr="Échec du chargement des détails du fichier"/>
   <translation tag="Failed to load history" fr="Échec du chargement de l&apos;historique"/>
@@ -1672,6 +1674,7 @@
   <translation tag="Share anonymous usage statistics to help us make HelixScreen better. No personal data is ever collected." fr="Partagez des statistiques d&apos;utilisation anonymes pour nous aider à améliorer HelixScreen. Aucune donnée personnelle n&apos;est jamais collectée."/>
   <translation tag="Share this code in Discord or support:" fr="Partagez ce code sur Discord ou au support :"/>
   <translation tag="Sheet Label Print" fr="Impression d&apos;étiquettes sur feuille"/>
+  <translation tag="Shelf A" fr="Étagère A"/>
   <translation tag="Shininess:" fr="Brillance :"/>
   <translation tag="Show Printer Switcher" fr="Afficher le sélecteur d&apos;imprimante"/>
   <translation tag="Show Sections" fr="Afficher les sections"/>
@@ -2013,6 +2016,7 @@
   <translation tag="Widget Labels" fr="Libellés des widgets"/>
   <translation tag="Width" fr="Largeur"/>
   <translation tag="Wifi" fr="Wi-Fi"/>
+  <translation tag="Wizard Error" fr="Erreur de l&apos;assistant"/>
   <translation tag="Wrong PIN" fr="PIN incorrect"/>
   <translation tag="Wrong media" fr="Mauvais média"/>
   <translation tag="X" fr="X"/>
@@ -2113,6 +2117,7 @@
   <translation tag="{} command timed out" fr="Délai d&apos;attente dépassé pour la commande {}"/>
   <translation tag="{} complete" fr="{} terminé"/>
   <translation tag="{} heater turned off" fr="Chauffage {} désactivé"/>
+  <translation tag="{} lanes" fr="{} voies"/>
   <translation tag="{} macro not configured" fr="Macro {} non configurée"/>
   <translation tag="{} may cause unintended changes. Are you sure?" fr="{} peut entraîner des modifications non souhaitées. Êtes-vous sûr ?"/>
   <translation tag="{} more taps to {} beta features" fr="{} appuis supplémentaires pour {} les fonctionnalités bêta"/>

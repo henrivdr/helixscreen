@@ -680,6 +680,7 @@ translations:
     Thema ein:'
   Enter a name to save this profile: Geben Sie einen Namen ein, um dieses Profil zu
     speichern
+  Enter network name: 'Netzwerknamen eingeben'
   Enter password: Passwort eingeben
   Enter printer IP address first: Zuerst Drucker-IP-Adresse eingeben
   Enter the IP address and port of your Spoolman server.: Geben Sie die IP-Adresse
@@ -757,6 +758,7 @@ translations:
   Failed to load fan configuration screen: Lüfterkonfiguration konnte nicht geladen
     werden
   Failed to load fan control overlay: Lüftersteuerung konnte nicht geladen werden
+  Failed to load filament sensor configuration screen. Please restart the application.: 'Konfigurationsbildschirm für Filamentsensor konnte nicht geladen werden. Bitte starten Sie die Anwendung neu.'
   'Failed to load filament: {}': 'Filament konnte nicht geladen werden: {}'
   Failed to load file details: Dateidetails konnten nicht geladen werden
   Failed to load history: Verlauf konnte nicht geladen werden
@@ -1907,6 +1909,7 @@ translations:
     persönliche Daten erfasst.
   'Share this code in Discord or support:': 'Code in Discord oder Support teilen:'
   Sheet Label Print: Blatt-Etikettendruck
+  Shelf A: 'Regal A'
   'Shininess:': 'Glanz:'
   Show Printer Switcher: Druckerumschalter anzeigen
   Show Sections: Abschnitte anzeigen
@@ -2190,7 +2193,8 @@ translations:
   Tool: Werkzeug
   Tool Changer: Werkzeugwechsler
   'Tool change failed: {}': 'Werkzeugwechsel fehlgeschlagen: {}'
-  'Tool {} → Lane {}: no filament loaded.': 'Werkzeug {} → Spur {}: kein Filament geladen.'
+  'Tool {} → Lane {}: no filament loaded.': 'Werkzeug {} → Spur {}: kein Filament
+    geladen.'
   Toolhead Style: Toolhead-Stil
   Toolhead jam: Werkzeugkopf-Stau
   Toolhead, G-code, limits, and materials: Druckkopf, G-Code, Grenzen und Materialien
@@ -2336,6 +2340,7 @@ translations:
   Widget Labels: Widget-Beschriftungen
   Width: Breite
   Wifi: WLAN
+  Wizard Error: 'Assistentenfehler'
   Wrong PIN: Falsche PIN
   Wrong media: Falsches Medium
   X: X
@@ -2461,6 +2466,7 @@ translations:
   '{} command timed out': Befehl {} – Zeitüberschreitung
   '{} complete': '{} abgeschlossen'
   '{} heater turned off': '{}-Heizung ausgeschaltet'
+  '{} lanes': '{} Spuren'
   '{} macro not configured': '{}-Makro nicht konfiguriert'
   '{} may cause unintended changes. Are you sure?': '{} kann unbeabsichtigte Änderungen
     verursachen. Sind Sie sicher?'

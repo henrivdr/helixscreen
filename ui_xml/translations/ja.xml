@@ -594,6 +594,7 @@
   <translation tag="Enter WiFi Password" ja="WiFi パスワードを入力"/>
   <translation tag="Enter a name for your custom theme:" ja="カスタムテーマの名前を入力してください:"/>
   <translation tag="Enter a name to save this profile" ja="このプロファイルを保存する名前を入力"/>
+  <translation tag="Enter network name" ja="ネットワーク名を入力"/>
   <translation tag="Enter password" ja="パスワードを入力"/>
   <translation tag="Enter printer IP address first" ja="先にプリンターのIPアドレスを入力してください"/>
   <translation tag="Enter the IP address and port of your Spoolman server." ja="Spoolman サーバーのIPアドレスとポートを入力してください。"/>
@@ -658,6 +659,7 @@
   <translation tag="Failed to load G-code preview" ja="G-code プレビューの読み込みに失敗しました"/>
   <translation tag="Failed to load fan configuration screen" ja="ファン設定画面の読み込みに失敗しました"/>
   <translation tag="Failed to load fan control overlay" ja="ファン制御オーバーレイの読み込みに失敗しました"/>
+  <translation tag="Failed to load filament sensor configuration screen. Please restart the application." ja="フィラメントセンサー設定画面の読み込みに失敗しました。アプリケーションを再起動してください。"/>
   <translation tag="Failed to load filament: {}" ja="フィラメントの装填に失敗しました: {}"/>
   <translation tag="Failed to load file details" ja="ファイル詳細の読み込みに失敗しました"/>
   <translation tag="Failed to load history" ja="履歴の読み込みに失敗しました"/>
@@ -1672,6 +1674,7 @@
   <translation tag="Share anonymous usage statistics to help us make HelixScreen better. No personal data is ever collected." ja="匿名の使用統計を共有して、HelixScreen の改善にご協力ください。個人データは一切収集されません。"/>
   <translation tag="Share this code in Discord or support:" ja="このコードをDiscordまたはサポートで共有してください:"/>
   <translation tag="Sheet Label Print" ja="シートラベル印刷"/>
+  <translation tag="Shelf A" ja="棚A"/>
   <translation tag="Shininess:" ja="光沢:"/>
   <translation tag="Show Printer Switcher" ja="プリンター切替を表示"/>
   <translation tag="Show Sections" ja="セクションを表示"/>
@@ -2013,6 +2016,7 @@
   <translation tag="Widget Labels" ja="ウィジェットラベル"/>
   <translation tag="Width" ja="幅"/>
   <translation tag="Wifi" ja="Wi-Fi"/>
+  <translation tag="Wizard Error" ja="ウィザードエラー"/>
   <translation tag="Wrong PIN" ja="PIN が違います"/>
   <translation tag="Wrong media" ja="不正なメディア"/>
   <translation tag="X" ja="X"/>
@@ -2113,6 +2117,7 @@
   <translation tag="{} command timed out" ja="{} コマンドがタイムアウトしました"/>
   <translation tag="{} complete" ja="{} 完了"/>
   <translation tag="{} heater turned off" ja="{} ヒーターをオフにしました"/>
+  <translation tag="{} lanes" ja="{} レーン"/>
   <translation tag="{} macro not configured" ja="{} マクロが未設定です"/>
   <translation tag="{} may cause unintended changes. Are you sure?" ja="{} は意図しない変更を引き起こす可能性があります。よろしいですか？"/>
   <translation tag="{} more taps to {} beta features" ja="あと{}回タップでベータ機能を{}"/>

@@ -1,6 +1,6 @@
 locale: zh
 translations:
-  ' (timed out)': '（超时）'
+  ' (timed out)': （超时）
   ' elapsed · ': ' 已用 · '
   ' frames': ' 帧'
   ' left': ' 剩余'
@@ -600,6 +600,7 @@ translations:
   Enter WiFi Password: 输入 WiFi 密码
   'Enter a name for your custom theme:': 输入自定义主题名称：
   Enter a name to save this profile: 输入名称以保存此配置
+  Enter network name: '输入网络名称'
   Enter password: 输入密码
   Enter printer IP address first: 请先输入打印机 IP 地址
   Enter the IP address and port of your Spoolman server.: 输入 Spoolman 服务器的 IP 地址和端口。
@@ -666,6 +667,7 @@ translations:
   Failed to load G-code preview: 加载 G-code 预览失败
   Failed to load fan configuration screen: 加载风扇配置界面失败
   Failed to load fan control overlay: 加载风扇控制面板失败
+  Failed to load filament sensor configuration screen. Please restart the application.: '无法加载耗材传感器配置界面。请重启应用程序。'
   'Failed to load filament: {}': 加载耗材失败：{}
   Failed to load file details: 加载文件详情失败
   Failed to load history: 加载历史记录失败
@@ -1707,6 +1709,7 @@ translations:
     HelixScreen。绝不会收集任何个人数据。
   'Share this code in Discord or support:': 请将此代码分享至 Discord 或支持渠道：
   Sheet Label Print: 标签纸打印
+  Shelf A: '货架A'
   'Shininess:': 光泽度：
   Show Printer Switcher: 显示打印机切换器
   Show Sections: 显示区段
@@ -2075,6 +2078,7 @@ translations:
   Widget Labels: 小组件标签
   Width: 宽度
   Wifi: Wi-Fi
+  Wizard Error: '向导错误'
   Wrong PIN: PIN 错误
   Wrong media: 介质错误
   X: X
@@ -2179,6 +2183,7 @@ translations:
   '{} command timed out': '{} 命令超时'
   '{} complete': '{} 完成'
   '{} heater turned off': '{} 加热器已关闭'
+  '{} lanes': '{} 个料仓'
   '{} macro not configured': '{} 宏未配置'
   '{} may cause unintended changes. Are you sure?': '{} 可能导致意外更改。确定吗？'
   '{} more taps to {} beta features': 再点击 {} 次以{}测试功能

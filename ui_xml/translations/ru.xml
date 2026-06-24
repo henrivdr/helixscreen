@@ -594,6 +594,7 @@
   <translation tag="Enter WiFi Password" ru="Введите пароль WiFi"/>
   <translation tag="Enter a name for your custom theme:" ru="Введите название для вашей темы:"/>
   <translation tag="Enter a name to save this profile" ru="Введите имя для сохранения профиля"/>
+  <translation tag="Enter network name" ru="Введите имя сети"/>
   <translation tag="Enter password" ru="Введите пароль"/>
   <translation tag="Enter printer IP address first" ru="Сначала введите IP-адрес принтера"/>
   <translation tag="Enter the IP address and port of your Spoolman server." ru="Введите IP-адрес и порт вашего сервера Spoolman."/>
@@ -658,6 +659,7 @@
   <translation tag="Failed to load G-code preview" ru="Не удалось загрузить предпросмотр G-code"/>
   <translation tag="Failed to load fan configuration screen" ru="Не удалось загрузить экран настройки вентилятора"/>
   <translation tag="Failed to load fan control overlay" ru="Не удалось загрузить управление вентилятором"/>
+  <translation tag="Failed to load filament sensor configuration screen. Please restart the application." ru="Не удалось загрузить экран настройки датчика филамента. Перезапустите приложение."/>
   <translation tag="Failed to load filament: {}" ru="Не удалось загрузить филамент: {}"/>
   <translation tag="Failed to load file details" ru="Не удалось загрузить данные файла"/>
   <translation tag="Failed to load history" ru="Не удалось загрузить историю"/>
@@ -1672,6 +1674,7 @@
   <translation tag="Share anonymous usage statistics to help us make HelixScreen better. No personal data is ever collected." ru="Делитесь анонимной статистикой использования, чтобы помочь нам улучшить HelixScreen. Персональные данные никогда не собираются."/>
   <translation tag="Share this code in Discord or support:" ru="Поделитесь этим кодом в Discord или с поддержкой:"/>
   <translation tag="Sheet Label Print" ru="Печать этикеток на листе"/>
+  <translation tag="Shelf A" ru="Полка A"/>
   <translation tag="Shininess:" ru="Блеск:"/>
   <translation tag="Show Printer Switcher" ru="Показывать переключатель принтеров"/>
   <translation tag="Show Sections" ru="Показать разделы"/>
@@ -2013,6 +2016,7 @@
   <translation tag="Widget Labels" ru="Подписи виджетов"/>
   <translation tag="Width" ru="Ширина"/>
   <translation tag="Wifi" ru="Wi-Fi"/>
+  <translation tag="Wizard Error" ru="Ошибка мастера"/>
   <translation tag="Wrong PIN" ru="Неверный PIN"/>
   <translation tag="Wrong media" ru="Неверный носитель"/>
   <translation tag="X" ru="X"/>
@@ -2113,6 +2117,7 @@
   <translation tag="{} command timed out" ru="Время команды {} истекло"/>
   <translation tag="{} complete" ru="{} завершено"/>
   <translation tag="{} heater turned off" ru="Нагреватель {} выключен"/>
+  <translation tag="{} lanes" ru="{} слотов"/>
   <translation tag="{} macro not configured" ru="Макрос {} не настроен"/>
   <translation tag="{} may cause unintended changes. Are you sure?" ru="{} может привести к непреднамеренным изменениям. Вы уверены?"/>
   <translation tag="{} more taps to {} beta features" ru="{} нажатий до {} бета-функций"/>

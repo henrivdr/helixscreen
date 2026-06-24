@@ -653,6 +653,7 @@ translations:
   Enter WiFi Password: Enter WiFi Password
   'Enter a name for your custom theme:': 'Enter a name for your custom theme:'
   Enter a name to save this profile: Enter a name to save this profile
+  Enter network name: Enter network name
   Enter password: Enter password
   Enter printer IP address first: Enter printer IP address first
   Enter the IP address and port of your Spoolman server.: Enter the IP address and
@@ -727,6 +728,8 @@ translations:
   Failed to load G-code preview: Failed to load G-code preview
   Failed to load fan configuration screen: Failed to load fan configuration screen
   Failed to load fan control overlay: Failed to load fan control overlay
+  Failed to load filament sensor configuration screen. Please restart the application.: Failed
+    to load filament sensor configuration screen. Please restart the application.
   'Failed to load filament: {}': 'Failed to load filament: {}'
   Failed to load file details: Failed to load file details
   Failed to load history: Failed to load history
@@ -1855,6 +1858,7 @@ translations:
     is ever collected.
   'Share this code in Discord or support:': 'Share this code in Discord or support:'
   Sheet Label Print: Sheet Label Print
+  Shelf A: Shelf A
   'Shininess:': 'Shininess:'
   Show Printer Switcher: Show Printer Switcher
   Show Sections: Show Sections
@@ -2275,6 +2279,7 @@ translations:
   Widget Labels: Widget Labels
   Width: Width
   Wifi: Wifi
+  Wizard Error: Wizard Error
   Wrong PIN: Wrong PIN
   Wrong media: Wrong media
   X: X
@@ -2394,6 +2399,7 @@ translations:
   '{} command timed out': '{} command timed out'
   '{} complete': '{} complete'
   '{} heater turned off': '{} heater turned off'
+  '{} lanes': '{} lanes'
   '{} macro not configured': '{} macro not configured'
   '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes.
     Are you sure?'

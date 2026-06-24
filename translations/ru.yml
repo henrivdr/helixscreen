@@ -667,6 +667,7 @@ translations:
   Enter WiFi Password: Введите пароль WiFi
   'Enter a name for your custom theme:': 'Введите название для вашей темы:'
   Enter a name to save this profile: Введите имя для сохранения профиля
+  Enter network name: 'Введите имя сети'
   Enter password: Введите пароль
   Enter printer IP address first: Сначала введите IP-адрес принтера
   Enter the IP address and port of your Spoolman server.: Введите IP-адрес и порт
@@ -741,6 +742,7 @@ translations:
   Failed to load G-code preview: Не удалось загрузить предпросмотр G-code
   Failed to load fan configuration screen: Не удалось загрузить экран настройки вентилятора
   Failed to load fan control overlay: Не удалось загрузить управление вентилятором
+  Failed to load filament sensor configuration screen. Please restart the application.: 'Не удалось загрузить экран настройки датчика филамента. Перезапустите приложение.'
   'Failed to load filament: {}': 'Не удалось загрузить филамент: {}'
   Failed to load file details: Не удалось загрузить данные файла
   Failed to load history: Не удалось загрузить историю
@@ -1069,7 +1071,8 @@ translations:
   Labels: Этикетки
   Labels Per Sheet: Этикеток на листе
   Lane: Слот
-  Lane {} is blocked — manual intervention required: Слот {} заблокирован — требуется ручное вмешательство
+  Lane {} is blocked — manual intervention required: Слот {} заблокирован — требуется
+    ручное вмешательство
   Language: Язык
   Language, theme, brightness, and sound: Язык, тема, яркость и звук
   Last: Последняя
@@ -1645,7 +1648,8 @@ translations:
   Reduce ringing and ghosting artifacts: Уменьшить артефакты звона и двоения
   Reduce vibration artifacts like ringing and ghosting: Уменьшить артефакты вибрации,
     такие как звон и двоение
-  Refeeding filament — this may take a minute: Повторная подача филамента — это может занять минуту
+  Refeeding filament — this may take a minute: Повторная подача филамента — это может
+    занять минуту
   Refill the spool, then Resume.: Пополните катушку, затем нажмите «Продолжить».
   Refresh: Обновить
   Refresh Interval: Интервал обновления
@@ -1880,6 +1884,7 @@ translations:
   'Share this code in Discord or support:': 'Поделитесь этим кодом в Discord или с
     поддержкой:'
   Sheet Label Print: Печать этикеток на листе
+  Shelf A: 'Полка A'
   'Shininess:': 'Блеск:'
   Show Printer Switcher: Показывать переключатель принтеров
   Show Sections: Показать разделы
@@ -2161,7 +2166,8 @@ translations:
   Tool: Инструмент
   Tool Changer: Сменщик инструментов
   'Tool change failed: {}': 'Ошибка смены инструмента: {}'
-  'Tool {} → Lane {}: no filament loaded.': 'Инструмент {} → Слот {}: филамент не загружен.'
+  'Tool {} → Lane {}: no filament loaded.': 'Инструмент {} → Слот {}: филамент не
+    загружен.'
   Toolhead Style: Стиль печатающей головки
   Toolhead jam: Замятие в печатающей головке
   Toolhead, G-code, limits, and materials: Печатающая головка, G-code, лимиты и материалы
@@ -2303,6 +2309,7 @@ translations:
   Widget Labels: Подписи виджетов
   Width: Ширина
   Wifi: Wi-Fi
+  Wizard Error: 'Ошибка мастера'
   Wrong PIN: Неверный PIN
   Wrong media: Неверный носитель
   X: X
@@ -2427,6 +2434,7 @@ translations:
   '{} command timed out': Время команды {} истекло
   '{} complete': '{} завершено'
   '{} heater turned off': Нагреватель {} выключен
+  '{} lanes': '{} слотов'
   '{} macro not configured': Макрос {} не настроен
   '{} may cause unintended changes. Are you sure?': '{} может привести к непреднамеренным
     изменениям. Вы уверены?'

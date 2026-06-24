@@ -91,7 +91,7 @@
           <lv_obj height="content"
                   flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
             <text_small text="Location" translation_tag="Location"/>
-            <text_input name="field_location" width="100%" placeholder="Shelf A" max_length="64">
+            <text_input name="field_location" width="100%" placeholder="Shelf A" placeholder_tag="Shelf A" max_length="64">
               <event_cb trigger="value_changed" callback="spoolman_edit_field_changed_cb"/>
             </text_input>
           </lv_obj>

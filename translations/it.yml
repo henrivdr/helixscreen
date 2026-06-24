@@ -675,6 +675,7 @@ translations:
   Enter WiFi Password: Inserisci password WiFi
   'Enter a name for your custom theme:': 'Inserisci un nome per il tuo tema personalizzato:'
   Enter a name to save this profile: Inserisci un nome per salvare questo profilo
+  Enter network name: 'Inserisci il nome della rete'
   Enter password: Inserisci password
   Enter printer IP address first: Inserire prima l'indirizzo IP della stampante
   Enter the IP address and port of your Spoolman server.: Inserisci indirizzo IP e
@@ -751,6 +752,7 @@ translations:
   Failed to load fan configuration screen: Impossibile caricare schermata configurazione
     ventola
   Failed to load fan control overlay: Impossibile caricare controllo ventola
+  Failed to load filament sensor configuration screen. Please restart the application.: 'Impossibile caricare la schermata di configurazione del sensore filamento. Riavvia l''applicazione.'
   'Failed to load filament: {}': 'Caricamento filamento fallito: {}'
   Failed to load file details: Impossibile caricare dettagli file
   Failed to load history: Caricamento cronologia fallito
@@ -1082,8 +1084,8 @@ translations:
   Labels: Etichette
   Labels Per Sheet: Etichette per foglio
   Lane: Corsia
-  Lane {} is blocked — manual intervention required: Corsia {} bloccata — intervento manuale
-    richiesto
+  Lane {} is blocked — manual intervention required: Corsia {} bloccata — intervento
+    manuale richiesto
   Language: Lingua
   Language, theme, brightness, and sound: Lingua, tema, luminosità e suono
   Last: Ultima
@@ -1904,6 +1906,7 @@ translations:
   'Share this code in Discord or support:': 'Condividi questo codice su Discord o
     al supporto:'
   Sheet Label Print: Stampa etichette su foglio
+  Shelf A: 'Scaffale A'
   'Shininess:': 'Lucentezza:'
   Show Printer Switcher: Mostra selettore stampante
   Show Sections: Mostra sezioni
@@ -2338,6 +2341,7 @@ translations:
   Widget Labels: Etichette widget
   Width: Larghezza
   Wifi: Wi-Fi
+  Wizard Error: 'Errore procedura guidata'
   Wrong PIN: PIN errato
   Wrong media: Supporto errato
   X: X
@@ -2462,6 +2466,7 @@ translations:
   '{} command timed out': Comando {} scaduto
   '{} complete': '{} completato'
   '{} heater turned off': Riscaldatore {} spento
+  '{} lanes': '{} corsie'
   '{} macro not configured': Macro {} non configurata
   '{} may cause unintended changes. Are you sure?': '{} potrebbe causare modifiche
     indesiderate. Sei sicuro?'

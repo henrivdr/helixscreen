@@ -594,6 +594,7 @@
   <translation tag="Enter WiFi Password" en="Enter WiFi Password"/>
   <translation tag="Enter a name for your custom theme:" en="Enter a name for your custom theme:"/>
   <translation tag="Enter a name to save this profile" en="Enter a name to save this profile"/>
+  <translation tag="Enter network name" en="Enter network name"/>
   <translation tag="Enter password" en="Enter password"/>
   <translation tag="Enter printer IP address first" en="Enter printer IP address first"/>
   <translation tag="Enter the IP address and port of your Spoolman server." en="Enter the IP address and port of your Spoolman server."/>
@@ -658,6 +659,7 @@
   <translation tag="Failed to load G-code preview" en="Failed to load G-code preview"/>
   <translation tag="Failed to load fan configuration screen" en="Failed to load fan configuration screen"/>
   <translation tag="Failed to load fan control overlay" en="Failed to load fan control overlay"/>
+  <translation tag="Failed to load filament sensor configuration screen. Please restart the application." en="Failed to load filament sensor configuration screen. Please restart the application."/>
   <translation tag="Failed to load filament: {}" en="Failed to load filament: {}"/>
   <translation tag="Failed to load file details" en="Failed to load file details"/>
   <translation tag="Failed to load history" en="Failed to load history"/>
@@ -1672,6 +1674,7 @@
   <translation tag="Share anonymous usage statistics to help us make HelixScreen better. No personal data is ever collected." en="Share anonymous usage statistics to help us make HelixScreen better. No personal data is ever collected."/>
   <translation tag="Share this code in Discord or support:" en="Share this code in Discord or support:"/>
   <translation tag="Sheet Label Print" en="Sheet Label Print"/>
+  <translation tag="Shelf A" en="Shelf A"/>
   <translation tag="Shininess:" en="Shininess:"/>
   <translation tag="Show Printer Switcher" en="Show Printer Switcher"/>
   <translation tag="Show Sections" en="Show Sections"/>
@@ -2013,6 +2016,7 @@
   <translation tag="Widget Labels" en="Widget Labels"/>
   <translation tag="Width" en="Width"/>
   <translation tag="Wifi" en="Wifi"/>
+  <translation tag="Wizard Error" en="Wizard Error"/>
   <translation tag="Wrong PIN" en="Wrong PIN"/>
   <translation tag="Wrong media" en="Wrong media"/>
   <translation tag="X" en="X"/>
@@ -2113,6 +2117,7 @@
   <translation tag="{} command timed out" en="{} command timed out"/>
   <translation tag="{} complete" en="{} complete"/>
   <translation tag="{} heater turned off" en="{} heater turned off"/>
+  <translation tag="{} lanes" en="{} lanes"/>
   <translation tag="{} macro not configured" en="{} macro not configured"/>
   <translation tag="{} may cause unintended changes. Are you sure?" en="{} may cause unintended changes. Are you sure?"/>
   <translation tag="{} more taps to {} beta features" en="{} more taps to {} beta features"/>

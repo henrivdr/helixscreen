@@ -677,6 +677,7 @@ translations:
   Enter WiFi Password: Ingrese Contraseña WiFi
   'Enter a name for your custom theme:': 'Ingrese un nombre para su tema personalizado:'
   Enter a name to save this profile: Ingrese un nombre para guardar este perfil
+  Enter network name: 'Ingrese el nombre de la red'
   Enter password: Ingrese contraseña
   Enter printer IP address first: Ingrese la dirección IP de la impresora primero
   Enter the IP address and port of your Spoolman server.: Ingrese la dirección IP
@@ -753,6 +754,7 @@ translations:
   Failed to load fan configuration screen: Error al cargar pantalla de configuración
     de ventilador
   Failed to load fan control overlay: Error al cargar control de ventilador
+  Failed to load filament sensor configuration screen. Please restart the application.: 'No se pudo cargar la pantalla de configuración del sensor de filamento. Reinicie la aplicación.'
   'Failed to load filament: {}': 'Error al cargar filamento: {}'
   Failed to load file details: Error al cargar detalles del archivo
   Failed to load history: Error al cargar historial
@@ -1081,8 +1083,8 @@ translations:
   Labels: Etiquetas
   Labels Per Sheet: Etiquetas por hoja
   Lane: Carril
-  Lane {} is blocked — manual intervention required: El carril {} está bloqueado — se
-    requiere intervención manual
+  Lane {} is blocked — manual intervention required: El carril {} está bloqueado —
+    se requiere intervención manual
   Language: Idioma
   Language, theme, brightness, and sound: Idioma, tema, brillo y sonido
   Last: Última
@@ -1902,6 +1904,7 @@ translations:
     datos personales.
   'Share this code in Discord or support:': 'Comparte este código en Discord o soporte:'
   Sheet Label Print: Impresión de etiquetas en hoja
+  Shelf A: 'Estante A'
   'Shininess:': 'Brillo:'
   Show Printer Switcher: Mostrar selector de impresora
   Show Sections: Mostrar Secciones
@@ -2115,7 +2118,8 @@ translations:
   Theme reset to defaults: Tema restablecido a valores predeterminados
   'These tools have incompatible materials loaded:': 'Estas herramientas tienen materiales
     incompatibles cargados:'
-  'These tools have no filament loaded:': 'Estas herramientas no tienen filamento cargado:'
+  'These tools have no filament loaded:': 'Estas herramientas no tienen filamento
+    cargado:'
   'These tools have no matching filament loaded:': 'Estas herramientas no tienen filamento
     compatible cargado:'
   This calibration uses the paper friction method to set your Z-offset.: Esta calibración
@@ -2335,6 +2339,7 @@ translations:
   Widget Labels: Etiquetas de Widgets
   Width: Ancho
   Wifi: Wifi
+  Wizard Error: 'Error del asistente'
   Wrong PIN: PIN incorrecto
   Wrong media: Medio incorrecto
   X: X
@@ -2458,6 +2463,7 @@ translations:
   '{} command timed out': Tiempo agotado del comando {}
   '{} complete': '{} completado'
   '{} heater turned off': Calentador {} apagado
+  '{} lanes': '{} carriles'
   '{} macro not configured': Macro {} no configurado
   '{} may cause unintended changes. Are you sure?': '{} puede causar cambios no deseados.
     ¿Estás seguro?'

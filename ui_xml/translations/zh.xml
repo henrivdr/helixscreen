@@ -594,6 +594,7 @@
   <translation tag="Enter WiFi Password" zh="输入 WiFi 密码"/>
   <translation tag="Enter a name for your custom theme:" zh="输入自定义主题名称："/>
   <translation tag="Enter a name to save this profile" zh="输入名称以保存此配置"/>
+  <translation tag="Enter network name" zh="输入网络名称"/>
   <translation tag="Enter password" zh="输入密码"/>
   <translation tag="Enter printer IP address first" zh="请先输入打印机 IP 地址"/>
   <translation tag="Enter the IP address and port of your Spoolman server." zh="输入 Spoolman 服务器的 IP 地址和端口。"/>
@@ -658,6 +659,7 @@
   <translation tag="Failed to load G-code preview" zh="加载 G-code 预览失败"/>
   <translation tag="Failed to load fan configuration screen" zh="加载风扇配置界面失败"/>
   <translation tag="Failed to load fan control overlay" zh="加载风扇控制面板失败"/>
+  <translation tag="Failed to load filament sensor configuration screen. Please restart the application." zh="无法加载耗材传感器配置界面。请重启应用程序。"/>
   <translation tag="Failed to load filament: {}" zh="加载耗材失败：{}"/>
   <translation tag="Failed to load file details" zh="加载文件详情失败"/>
   <translation tag="Failed to load history" zh="加载历史记录失败"/>
@@ -1672,6 +1674,7 @@
   <translation tag="Share anonymous usage statistics to help us make HelixScreen better. No personal data is ever collected." zh="分享匿名使用统计数据，帮助我们改进 HelixScreen。绝不会收集任何个人数据。"/>
   <translation tag="Share this code in Discord or support:" zh="请将此代码分享至 Discord 或支持渠道："/>
   <translation tag="Sheet Label Print" zh="标签纸打印"/>
+  <translation tag="Shelf A" zh="货架A"/>
   <translation tag="Shininess:" zh="光泽度："/>
   <translation tag="Show Printer Switcher" zh="显示打印机切换器"/>
   <translation tag="Show Sections" zh="显示区段"/>
@@ -2013,6 +2016,7 @@
   <translation tag="Widget Labels" zh="小组件标签"/>
   <translation tag="Width" zh="宽度"/>
   <translation tag="Wifi" zh="Wi-Fi"/>
+  <translation tag="Wizard Error" zh="向导错误"/>
   <translation tag="Wrong PIN" zh="PIN 错误"/>
   <translation tag="Wrong media" zh="介质错误"/>
   <translation tag="X" zh="X"/>
@@ -2113,6 +2117,7 @@
   <translation tag="{} command timed out" zh="{} 命令超时"/>
   <translation tag="{} complete" zh="{} 完成"/>
   <translation tag="{} heater turned off" zh="{} 加热器已关闭"/>
+  <translation tag="{} lanes" zh="{} 个料仓"/>
   <translation tag="{} macro not configured" zh="{} 宏未配置"/>
   <translation tag="{} may cause unintended changes. Are you sure?" zh="{} 可能导致意外更改。确定吗？"/>
   <translation tag="{} more taps to {} beta features" zh="再点击 {} 次以{}测试功能"/>
