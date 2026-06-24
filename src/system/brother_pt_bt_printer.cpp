@@ -11,6 +11,7 @@
 #include "bt_print_utils.h"
 #include "label_printer_settings.h"
 #include "label_renderer.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "spoolman_types.h"
 
 #include <spdlog/spdlog.h>
@@ -52,7 +53,7 @@ void BrotherPTBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize
         spdlog::error("[Brother PT BT] Bluetooth not available");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth not available");
+                callback(false, lv_tr("Bluetooth not available"));
         });
         return;
     }
@@ -61,7 +62,7 @@ void BrotherPTBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize
         spdlog::error("[Brother PT BT] No device configured");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth device not configured");
+                callback(false, lv_tr("Bluetooth device not configured"));
         });
         return;
     }
@@ -70,7 +71,7 @@ void BrotherPTBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize
     if (commands.empty()) {
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Unsupported tape width");
+                callback(false, lv_tr("Unsupported tape width"));
         });
         return;
     }
@@ -97,7 +98,7 @@ void BrotherPTBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize
         spdlog::error("[Brother PT BT] Failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "System busy — please try again");
+                callback(false, lv_tr("System busy — please try again"));
         });
     }
 }
@@ -109,7 +110,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
         spdlog::error("[Brother PT BT] Bluetooth not available");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth not available");
+                callback(false, lv_tr("Bluetooth not available"));
         });
         return;
     }
@@ -118,7 +119,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
         spdlog::error("[Brother PT BT] No device configured");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth device not configured");
+                callback(false, lv_tr("Bluetooth device not configured"));
         });
         return;
     }
@@ -135,7 +136,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
             if (!ctx) {
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Failed to initialize Bluetooth");
+                        callback(false, lv_tr("Failed to initialize Bluetooth"));
                 });
                 return;
             }
@@ -147,7 +148,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 spdlog::error("[Brother PT BT] No RFCOMM channel resolved for {}", mac);
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Could not resolve printer RFCOMM channel");
+                        callback(false, lv_tr("Could not resolve printer RFCOMM channel"));
                 });
                 return;
             }
@@ -168,7 +169,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 const char* err = loader.last_error ? loader.last_error(ctx) : "Unknown error";
                 helix::ui::queue_update([callback, e = std::string(err)]() {
                     if (callback)
-                        callback(false, "RFCOMM connect failed: " + e);
+                        callback(false, lv_tr("RFCOMM connect failed: ") + e);
                 });
                 return;
             }
@@ -183,7 +184,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Failed to send status request");
+                        callback(false, lv_tr("Failed to send status request"));
                 });
                 return;
             }
@@ -198,7 +199,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Failed to read printer status");
+                        callback(false, lv_tr("Failed to read printer status"));
                 });
                 return;
             }
@@ -208,7 +209,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Invalid status response from printer");
+                        callback(false, lv_tr("Invalid status response from printer"));
                 });
                 return;
             }
@@ -227,7 +228,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "No tape detected in printer");
+                        callback(false, lv_tr("No tape detected in printer"));
                 });
                 return;
             }
@@ -238,7 +239,8 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback, w = media.width_mm]() {
                     if (callback)
-                        callback(false, "Unsupported tape width: " + std::to_string(w) + "mm");
+                        callback(false,
+                                 lv_tr("Unsupported tape width: ") + std::to_string(w) + "mm");
                 });
                 return;
             }
@@ -257,7 +259,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Failed to render label");
+                        callback(false, lv_tr("Failed to render label"));
                 });
                 return;
             }
@@ -268,7 +270,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                 cleanup();
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Failed to build raster data");
+                        callback(false, lv_tr("Failed to build raster data"));
                 });
                 return;
             }
@@ -287,7 +289,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                     cleanup();
                     helix::ui::queue_update([callback]() {
                         if (callback)
-                            callback(false, "Failed to send print data");
+                            callback(false, lv_tr("Failed to send print data"));
                     });
                     return;
                 }
@@ -309,7 +311,8 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
                     cleanup();
                     helix::ui::queue_update([callback, cerr]() {
                         if (callback)
-                            callback(false, cerr.empty() ? "Print error" : cerr);
+                            callback(false,
+                                     cerr.empty() ? std::string(lv_tr("Print error")) : cerr);
                     });
                     return;
                 }
@@ -326,7 +329,7 @@ void BrotherPTBluetoothPrinter::print_spool(const SpoolInfo& spool, LabelPreset 
         spdlog::error("[Brother PT BT] Failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "System busy — please try again");
+                callback(false, lv_tr("System busy — please try again"));
         });
     }
 }

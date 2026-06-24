@@ -9,6 +9,7 @@
 #include "bluetooth_loader.h"
 #include "bt_print_utils.h"
 #include "label_printer_settings.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "makeid_protocol.h"
 
 #include <spdlog/spdlog.h>
@@ -204,14 +205,14 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
     if (!loader.is_available()) {
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth not available");
+                callback(false, lv_tr("Bluetooth not available"));
         });
         return;
     }
     if (mac_.empty()) {
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth device not configured");
+                callback(false, lv_tr("Bluetooth device not configured"));
         });
         return;
     }
@@ -240,9 +241,9 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
 
             int fd = ensure_connected(loader, mac);
             if (fd < 0) {
-                error = "RFCOMM connect failed";
+                error = lv_tr("RFCOMM connect failed");
             } else if (!wait_for_ready(fd)) {
-                error = "Printer not ready";
+                error = lv_tr("Printer not ready");
             } else {
                 bool ok = true;
                 // Send ALL chunks rapidly — no delay. The printer buffers all
@@ -253,7 +254,7 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
                     spdlog::debug("MakeID BT: chunk[{}] ({} bytes)", i, frame.size());
 
                     if (!rfcomm_write(fd, frame.data(), frame.size())) {
-                        error = fmt::format("Write failed at chunk {}", i);
+                        error = fmt::format(lv_tr("Write failed at chunk {}"), i);
                         ok = false;
                         cleanup_connection();
                         break;
@@ -264,7 +265,7 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
                     if (resp.status == MakeIdResponseStatus::Resend) {
                         // Resend once
                         if (!rfcomm_write(fd, frame.data(), frame.size())) {
-                            error = fmt::format("Resend write failed at chunk {}", i);
+                            error = fmt::format(lv_tr("Resend write failed at chunk {}"), i);
                             ok = false;
                             cleanup_connection();
                             break;
@@ -272,7 +273,8 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
                         resp = read_response(fd, fmt::format("chunk[{}] resend", i).c_str(), 5000);
                     }
                     if (resp.status == MakeIdResponseStatus::Error) {
-                        error = fmt::format("Error at chunk {} (code={})", i, resp.error_code);
+                        error =
+                            fmt::format(lv_tr("Error at chunk {} (code={})"), i, resp.error_code);
                         ok = false;
                         break;
                     }
@@ -298,7 +300,7 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
                         spdlog::error("MakeID BT: print-wait timed out after {} polls",
                                       max_print_polls);
                         ok = false;
-                        error = "Print timed out waiting for completion";
+                        error = lv_tr("Print timed out waiting for completion");
                     }
                 }
                 if (ok) {
@@ -321,7 +323,7 @@ void MakeIdBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& s
         spdlog::error("MakeID BT: failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "System busy — please try again");
+                callback(false, lv_tr("System busy — please try again"));
         });
     }
 }

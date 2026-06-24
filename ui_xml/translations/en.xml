@@ -18,6 +18,7 @@
   <translation tag="%u layers" en="%u layers"/>
   <translation tag="%zu changes" en="%zu changes"/>
   <translation tag="%zu events queued" en="%zu events queued"/>
+  <translation tag="%zu plugins failed to load" en="%zu plugins failed to load"/>
   <translation tag="(incompatible)" en="(incompatible)"/>
   <translation tag="(multi-tool)" en="(multi-tool)"/>
   <translation tag="(none detected)" en="(none detected)"/>
@@ -82,6 +83,7 @@
   <translation tag="A" en="A"/>
   <translation tag="ABS" en="ABS"/>
   <translation tag="ACCELEROMETERS" en="ACCELEROMETERS"/>
+  <translation tag="ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support." en="ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support."/>
   <translation tag="ACTIONS" en="ACTIONS"/>
   <translation tag="ADXL" en="ADXL"/>
   <translation tag="AFC" en="AFC"/>
@@ -93,6 +95,7 @@
   <translation tag="AFC reset complete" en="AFC reset complete"/>
   <translation tag="AFC reset failed" en="AFC reset failed"/>
   <translation tag="AFC retracts filament from the toolhead at end of print" en="AFC retracts filament from the toolhead at end of print"/>
+  <translation tag="AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later." en="AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later."/>
   <translation tag="ALL DEVICES" en="ALL DEVICES"/>
   <translation tag="AMS" en="AMS"/>
   <translation tag="AMS Active: " en="AMS Active: "/>
@@ -154,6 +157,7 @@
   <translation tag="An error occurred during measurement." en="An error occurred during measurement."/>
   <translation tag="An error occurred during probing." en="An error occurred during probing."/>
   <translation tag="An error occurred while loading filament." en="An error occurred while loading filament."/>
+  <translation tag="An internal error occurred. The app continues running — please send a debug bundle from Settings &gt; About if it repeats." en="An internal error occurred. The app continues running — please send a debug bundle from Settings &gt; About if it repeats."/>
   <translation tag="An unexpected printer error occurred." en="An unexpected printer error occurred."/>
   <translation tag="An update is available" en="An update is available"/>
   <translation tag="Android logcat" en="Android logcat"/>
@@ -163,6 +167,7 @@
   <translation tag="Anonymous usage statistics" en="Anonymous usage statistics"/>
   <translation tag="Any notes..." en="Any notes..."/>
   <translation tag="App Background" en="App Background"/>
+  <translation tag="App startup encountered an error. Some features may be unavailable." en="App startup encountered an error. Some features may be unavailable."/>
   <translation tag="Appearance" en="Appearance"/>
   <translation tag="Apply" en="Apply"/>
   <translation tag="Apply Changes" en="Apply Changes"/>
@@ -181,10 +186,12 @@
   <translation tag="Auto-Detect" en="Auto-Detect"/>
   <translation tag="Auto-Heat on Load" en="Auto-Heat on Load"/>
   <translation tag="Auto-detect" en="Auto-detect"/>
+  <translation tag="Auto-install only works on local Moonraker" en="Auto-install only works on local Moonraker"/>
   <translation tag="Auto-lock" en="Auto-lock"/>
   <translation tag="Auto-poll for weight updates" en="Auto-poll for weight updates"/>
   <translation tag="Auto-probe or manually check screw heights" en="Auto-probe or manually check screw heights"/>
   <translation tag="Auto-render video" en="Auto-render video"/>
+  <translation tag="Auto-uninstall only works on local Moonraker" en="Auto-uninstall only works on local Moonraker"/>
   <translation tag="Automatic" en="Automatic"/>
   <translation tag="Automatic Heater Control Calibration" en="Automatic Heater Control Calibration"/>
   <translation tag="Automatic LED Control" en="Automatic LED Control"/>
@@ -196,6 +203,9 @@
   <translation tag="Average" en="Average"/>
   <translation tag="BEACON" en="BEACON"/>
   <translation tag="BETA" en="BETA"/>
+  <translation tag="BLE connect failed: {}" en="BLE connect failed: {}"/>
+  <translation tag="BLE write failed at packet {}: {}" en="BLE write failed at packet {}: {}"/>
+  <translation tag="BLE write failed: {}" en="BLE write failed: {}"/>
   <translation tag="BLTouch Controls" en="BLTouch Controls"/>
   <translation tag="BLUETOOTH PRINTERS" en="BLUETOOTH PRINTERS"/>
   <translation tag="BLUETOOTH SCANNERS" en="BLUETOOTH SCANNERS"/>
@@ -237,6 +247,7 @@
   <translation tag="Black" en="Black"/>
   <translation tag="Blocked" en="Blocked"/>
   <translation tag="Bluetooth" en="Bluetooth"/>
+  <translation tag="Bluetooth device not configured" en="Bluetooth device not configured"/>
   <translation tag="Bluetooth initialization failed" en="Bluetooth initialization failed"/>
   <translation tag="Bluetooth is not available on this device" en="Bluetooth is not available on this device"/>
   <translation tag="Bluetooth not available" en="Bluetooth not available"/>
@@ -374,6 +385,7 @@
   <translation tag="Checking slots..." en="Checking slots..."/>
   <translation tag="Checking timelapse plugin..." en="Checking timelapse plugin..."/>
   <translation tag="Checking webcam" en="Checking webcam"/>
+  <translation tag="Checking..." en="Checking..."/>
   <translation tag="Choose 12-hour or 24-hour time display" en="Choose 12-hour or 24-hour time display"/>
   <translation tag="Choose Spool" en="Choose Spool"/>
   <translation tag="Choose an existing filament, or tap + New to create one." en="Choose an existing filament, or tap + New to create one."/>
@@ -448,6 +460,7 @@
   <translation tag="Connected Time" en="Connected Time"/>
   <translation tag="Connected to" en="Connected to"/>
   <translation tag="Connected to " en="Connected to "/>
+  <translation tag="Connected to {}" en="Connected to {}"/>
   <translation tag="Connected! Discovering printer..." en="Connected! Discovering printer..."/>
   <translation tag="Connected, discovering..." en="Connected, discovering..."/>
   <translation tag="Connecting Camera..." en="Connecting Camera..."/>
@@ -456,8 +469,10 @@
   <translation tag="Connecting to network..." en="Connecting to network..."/>
   <translation tag="Connecting..." en="Connecting..."/>
   <translation tag="Connection" en="Connection"/>
+  <translation tag="Connection Failed" en="Connection Failed"/>
   <translation tag="Connection Stability" en="Connection Stability"/>
   <translation tag="Connection failed" en="Connection failed"/>
+  <translation tag="Connection failed to {}:{}" en="Connection failed to {}:{}"/>
   <translation tag="Connection failed. Check IP/port and try again." en="Connection failed. Check IP/port and try again."/>
   <translation tag="Connection failed. Check credentials." en="Connection failed. Check credentials."/>
   <translation tag="Connection failed. Check password." en="Connection failed. Check password."/>
@@ -483,7 +498,10 @@
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." en="Could not analyze PRINT_START macro. Some print options may be unavailable."/>
   <translation tag="Could not check webcam status.\nCheck printer connection." en="Could not check webcam status.\nCheck printer connection."/>
   <translation tag="Could not forget device" en="Could not forget device"/>
+  <translation tag="Could not load printer database" en="Could not load printer database"/>
+  <translation tag="Could not parse tips database" en="Could not parse tips database"/>
   <translation tag="Could not reach Spoolman at" en="Could not reach Spoolman at"/>
+  <translation tag="Could not resolve printer RFCOMM channel" en="Could not resolve printer RFCOMM channel"/>
   <translation tag="Could not start Bluetooth discovery" en="Could not start Bluetooth discovery"/>
   <translation tag="Could not verify Spoolman status. Moonraker may still be restarting." en="Could not verify Spoolman status. Moonraker may still be restarting."/>
   <translation tag="Couldn&apos;t update Spoolman — saved locally" en="Couldn&apos;t update Spoolman — saved locally"/>
@@ -500,6 +518,7 @@
   <translation tag="Create backup of %s before applying" en="Create backup of %s before applying"/>
   <translation tag="Create video when print completes" en="Create video when print completes"/>
   <translation tag="Creating spool..." en="Creating spool..."/>
+  <translation tag="Critical hardware missing: {}" en="Critical hardware missing: {}"/>
   <translation tag="Current / Target" en="Current / Target"/>
   <translation tag="Current Configuration" en="Current Configuration"/>
   <translation tag="Current Frequency" en="Current Frequency"/>
@@ -577,6 +596,7 @@
   <translation tag="Display &amp; Sound" en="Display &amp; Sound"/>
   <translation tag="Display Mode" en="Display Mode"/>
   <translation tag="Display Sleep" en="Display Sleep"/>
+  <translation tag="Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer resolution in /boot/firmware/config.txt for best results." en="Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer resolution in /boot/firmware/config.txt for best results."/>
   <translation tag="Display: " en="Display: "/>
   <translation tag="Do not power off your printer." en="Do not power off your printer."/>
   <translation tag="Do not touch the printer during calibration" en="Do not touch the printer during calibration"/>
@@ -589,6 +609,7 @@
   <translation tag="Download update?" en="Download update?"/>
   <translation tag="Download v{}?" en="Download v{}?"/>
   <translation tag="Downloading..." en="Downloading..."/>
+  <translation tag="Downloading... {:.1f}/{:.1f} MB" en="Downloading... {:.1f}/{:.1f} MB"/>
   <translation tag="Draw a ripple at each touch — helps diagnose offsets" en="Draw a ripple at each touch — helps diagnose offsets"/>
   <translation tag="Drive Cal" en="Drive Cal"/>
   <translation tag="Drop shadow strength (0 = disabled)" en="Drop shadow strength (0 = disabled)"/>
@@ -641,6 +662,8 @@
   <translation tag="Enabled" en="Enabled"/>
   <translation tag="Encoder" en="Encoder"/>
   <translation tag="Ended" en="Ended"/>
+  <translation tag="Enhanced {} operation in PRINT_START" en="Enhanced {} operation in PRINT_START"/>
+  <translation tag="Enhanced {} operations in PRINT_START" en="Enhanced {} operations in PRINT_START"/>
   <translation tag="Enhancement Complete!" en="Enhancement Complete!"/>
   <translation tag="Enhancement Failed" en="Enhancement Failed"/>
   <translation tag="Enter Current PIN" en="Enter Current PIN"/>
@@ -655,9 +678,23 @@
   <translation tag="Enter printer IP address first" en="Enter printer IP address first"/>
   <translation tag="Enter the IP address and port of your Spoolman server." en="Enter the IP address and port of your Spoolman server."/>
   <translation tag="Error" en="Error"/>
+  <translation tag="Error at chunk {} (code={})" en="Error at chunk {} (code={})"/>
   <translation tag="Error loading file" en="Error loading file"/>
+  <translation tag="Error loading printing tips" en="Error loading printing tips"/>
   <translation tag="Error saving printer settings: {}" en="Error saving printer settings: {}"/>
   <translation tag="Error state" en="Error state"/>
+  <translation tag="Error: %s" en="Error: %s"/>
+  <translation tag="Error: Cannot update while printing" en="Error: Cannot update while printing"/>
+  <translation tag="Error: Checksum mismatch" en="Error: Checksum mismatch"/>
+  <translation tag="Error: Corrupt download" en="Error: Corrupt download"/>
+  <translation tag="Error: Download failed" en="Error: Download failed"/>
+  <translation tag="Error: Installer not found" en="Error: Installer not found"/>
+  <translation tag="Error: Invalid download" en="Error: Invalid download"/>
+  <translation tag="Error: No update available" en="Error: No update available"/>
+  <translation tag="Error: Not enough disk space" en="Error: Not enough disk space"/>
+  <translation tag="Error: Verification failed" en="Error: Verification failed"/>
+  <translation tag="Error: Wrong architecture" en="Error: Wrong architecture"/>
+  <translation tag="Error: `unzip` not installed" en="Error: `unzip` not installed"/>
   <translation tag="Escalate to emergency stop if cancel doesn&apos;t respond" en="Escalate to emergency stop if cancel doesn&apos;t respond"/>
   <translation tag="Escalation Timeout" en="Escalation Timeout"/>
   <translation tag="Est. Duration" en="Est. Duration"/>
@@ -665,6 +702,7 @@
   <translation tag="Ethernet" en="Ethernet"/>
   <translation tag="Events appear here after sessions and prints" en="Events appear here after sessions and prints"/>
   <translation tag="Excellent Accuracy" en="Excellent Accuracy"/>
+  <translation tag="Exception: {}" en="Exception: {}"/>
   <translation tag="Exclude" en="Exclude"/>
   <translation tag="Excluded" en="Excluded"/>
   <translation tag="Exclusion cancelled" en="Exclusion cancelled"/>
@@ -699,6 +737,7 @@
   <translation tag="Failed to analyze PRINT_START macro" en="Failed to analyze PRINT_START macro"/>
   <translation tag="Failed to apply limits" en="Failed to apply limits"/>
   <translation tag="Failed to apply settings" en="Failed to apply settings"/>
+  <translation tag="Failed to build raster data" en="Failed to build raster data"/>
   <translation tag="Failed to cancel: {}" en="Failed to cancel: {}"/>
   <translation tag="Failed to clear print state: {}" en="Failed to clear print state: {}"/>
   <translation tag="Failed to connect to &apos;{}&apos;: {}" en="Failed to connect to &apos;{}&apos;: {}"/>
@@ -718,6 +757,8 @@
   <translation tag="Failed to enable tuning tower" en="Failed to enable tuning tower"/>
   <translation tag="Failed to exclude &apos;{}&apos;: {}" en="Failed to exclude &apos;{}&apos;: {}"/>
   <translation tag="Failed to get limits" en="Failed to get limits"/>
+  <translation tag="Failed to initialize Bluetooth" en="Failed to initialize Bluetooth"/>
+  <translation tag="Failed to initialize Bluetooth context" en="Failed to initialize Bluetooth context"/>
   <translation tag="Failed to load G-code preview" en="Failed to load G-code preview"/>
   <translation tag="Failed to load devices" en="Failed to load devices"/>
   <translation tag="Failed to load fan configuration screen" en="Failed to load fan configuration screen"/>
@@ -741,8 +782,10 @@
   <translation tag="Failed to read config." en="Failed to read config."/>
   <translation tag="Failed to read config. Check connection." en="Failed to read config. Check connection."/>
   <translation tag="Failed to read moonraker.conf." en="Failed to read moonraker.conf."/>
+  <translation tag="Failed to read printer status" en="Failed to read printer status"/>
   <translation tag="Failed to refresh file list" en="Failed to refresh file list"/>
   <translation tag="Failed to remap G-code: {}" en="Failed to remap G-code: {}"/>
+  <translation tag="Failed to render label" en="Failed to render label"/>
   <translation tag="Failed to reprint: {}" en="Failed to reprint: {}"/>
   <translation tag="Failed to reset flow: {}" en="Failed to reset flow: {}"/>
   <translation tag="Failed to reset speed: {}" en="Failed to reset speed: {}"/>
@@ -762,6 +805,8 @@
   <translation tag="Failed to save spool" en="Failed to save spool"/>
   <translation tag="Failed to save theme file" en="Failed to save theme file"/>
   <translation tag="Failed to send command: {}" en="Failed to send command: {}"/>
+  <translation tag="Failed to send print data" en="Failed to send print data"/>
+  <translation tag="Failed to send status request" en="Failed to send status request"/>
   <translation tag="Failed to set active spool" en="Failed to set active spool"/>
   <translation tag="Failed to set bed temp: {}" en="Failed to set bed temp: {}"/>
   <translation tag="Failed to set chamber temp: {}" en="Failed to set chamber temp: {}"/>
@@ -772,7 +817,9 @@
   <translation tag="Failed to set {} temp: {}" en="Failed to set {} temp: {}"/>
   <translation tag="Failed to show confirmation dialog" en="Failed to show confirmation dialog"/>
   <translation tag="Failed to start calibration" en="Failed to start calibration"/>
+  <translation tag="Failed to start installer: " en="Failed to start installer: "/>
   <translation tag="Failed to start print: {}" en="Failed to start print: {}"/>
+  <translation tag="Failed to start uninstaller: " en="Failed to start uninstaller: "/>
   <translation tag="Failed to toggle %s" en="Failed to toggle %s"/>
   <translation tag="Failed to toggle timelapse: {}" en="Failed to toggle timelapse: {}"/>
   <translation tag="Failed to turn off heaters: {}" en="Failed to turn off heaters: {}"/>
@@ -813,6 +860,7 @@
   <translation tag="Filament operation timed out" en="Filament operation timed out"/>
   <translation tag="Filament runout" en="Filament runout"/>
   <translation tag="Filament runout and motion detection sensors" en="Filament runout and motion detection sensors"/>
+  <translation tag="Filament sensor available for runout detection" en="Filament sensor available for runout detection"/>
   <translation tag="Filament tension is balanced" en="Filament tension is balanced"/>
   <translation tag="Filament tracking &amp; label printing" en="Filament tracking &amp; label printing"/>
   <translation tag="Filament tracking and inventory" en="Filament tracking and inventory"/>
@@ -871,6 +919,7 @@
   <translation tag="H" en="H"/>
   <translation tag="HOST" en="HOST"/>
   <translation tag="HTTP Code" en="HTTP Code"/>
+  <translation tag="HTTP error: {} {}" en="HTTP error: {} {}"/>
   <translation tag="HUMIDITY SENSORS" en="HUMIDITY SENSORS"/>
   <translation tag="Hang on, we&apos;ll be right back!" en="Hang on, we&apos;ll be right back!"/>
   <translation tag="Happy Hare MMU" en="Happy Hare MMU"/>
@@ -953,6 +1002,7 @@
   <translation tag="IMPORT FROM USB" en="IMPORT FROM USB"/>
   <translation tag="IP Address / Hostname" en="IP Address / Hostname"/>
   <translation tag="IP:" en="IP:"/>
+  <translation tag="IPP error: {}" en="IPP error: {}"/>
   <translation tag="Icon" en="Icon"/>
   <translation tag="Idle" en="Idle"/>
   <translation tag="If Moonraker is local or your screen is attached to the printer directly, we&apos;ll connect automatically" en="If Moonraker is local or your screen is attached to the printer directly, we&apos;ll connect automatically"/>
@@ -984,18 +1034,26 @@
   <translation tag="Install Root" en="Install Root"/>
   <translation tag="Install Update" en="Install Update"/>
   <translation tag="Install plugin" en="Install plugin"/>
+  <translation tag="Install script not found. Use the remote install command instead." en="Install script not found. Use the remote install command instead."/>
   <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history." en="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history."/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" en="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:"/>
   <translation tag="Install the timelapse plugin via SSH,\nthen tap \&quot;Check Again\&quot;." en="Install the timelapse plugin via SSH,\nthen tap \&quot;Check Again\&quot;."/>
   <translation tag="Install timelapse plugin" en="Install timelapse plugin"/>
   <translation tag="Installation Failed" en="Installation Failed"/>
+  <translation tag="Installation failed" en="Installation failed"/>
+  <translation tag="Installation failed. Check logs for details." en="Installation failed. Check logs for details."/>
+  <translation tag="Installation failed: " en="Installation failed: "/>
   <translation tag="Installation takes about 30 seconds." en="Installation takes about 30 seconds."/>
+  <translation tag="Installation timed out" en="Installation timed out"/>
+  <translation tag="Installation timed out. The script may be stuck." en="Installation timed out. The script may be stuck."/>
   <translation tag="Installing..." en="Installing..."/>
   <translation tag="Intensity" en="Intensity"/>
   <translation tag="Interactive probe calibration" en="Interactive probe calibration"/>
   <translation tag="Internal error: API not available" en="Internal error: API not available"/>
   <translation tag="Internal error: no scan result" en="Internal error: no scan result"/>
   <translation tag="Invalid port number" en="Invalid port number"/>
+  <translation tag="Invalid sheet template index: {} (have {})" en="Invalid sheet template index: {} (have {})"/>
+  <translation tag="Invalid status response from printer" en="Invalid status response from printer"/>
   <translation tag="Issue description" en="Issue description"/>
   <translation tag="Job Queue" en="Job Queue"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." en="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests."/>
@@ -1008,6 +1066,7 @@
   <translation tag="Keyboard Test (Gboard-style)" en="Keyboard Test (Gboard-style)"/>
   <translation tag="Kinematics" en="Kinematics"/>
   <translation tag="Klipper" en="Klipper"/>
+  <translation tag="Klipper Error" en="Klipper Error"/>
   <translation tag="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart." en="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart."/>
   <translation tag="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart." en="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart."/>
   <translation tag="Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error." en="Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error."/>
@@ -1021,6 +1080,7 @@
   <translation tag="LED Settings" en="LED Settings"/>
   <translation tag="LED Strip" en="LED Strip"/>
   <translation tag="LED on at Start" en="LED on at Start"/>
+  <translation tag="LED strip available for lighting control" en="LED strip available for lighting control"/>
   <translation tag="LEDs" en="LEDs"/>
   <translation tag="LEDs controlled by the light button" en="LEDs controlled by the light button"/>
   <translation tag="LOADED" en="LOADED"/>
@@ -1241,6 +1301,7 @@
   <translation tag="No Power Devices" en="No Power Devices"/>
   <translation tag="No Spool" en="No Spool"/>
   <translation tag="No Spools" en="No Spools"/>
+  <translation tag="No USB printer detected" en="No USB printer detected"/>
   <translation tag="No USB printers found" en="No USB printers found"/>
   <translation tag="No buffer data available" en="No buffer data available"/>
   <translation tag="No camera — use USB barcode scanner" en="No camera — use USB barcode scanner"/>
@@ -1286,6 +1347,8 @@
   <translation tag="No sensors detected" en="No sensors detected"/>
   <translation tag="No spool assigned" en="No spool assigned"/>
   <translation tag="No spools found — tap to retry" en="No spools found — tap to retry"/>
+  <translation tag="No tape detected in printer" en="No tape detected in printer"/>
+  <translation tag="No target printer configured" en="No target printer configured"/>
   <translation tag="No timelapse videos found" en="No timelapse videos found"/>
   <translation tag="No vendors found" en="No vendors found"/>
   <translation tag="No webcam detected.\nA webcam is required for timelapse." en="No webcam detected.\nA webcam is required for timelapse."/>
@@ -1335,6 +1398,7 @@
   <translation tag="Objects" en="Objects"/>
   <translation tag="Off" en="Off"/>
   <translation tag="Off:" en="Off:"/>
+  <translation tag="Off\nFlying Toasters\nStarfield\n3D Pipes" en="Off\nFlying Toasters\nStarfield\n3D Pipes"/>
   <translation tag="On" en="On"/>
   <translation tag="On and Off macros must be different" en="On and Off macros must be different"/>
   <translation tag="On/Off" en="On/Off"/>
@@ -1374,6 +1438,8 @@
   <translation tag="PRE-PRINT STEPS" en="PRE-PRINT STEPS"/>
   <translation tag="PRINT OPTIONS" en="PRINT OPTIONS"/>
   <translation tag="PRINTERS" en="PRINTERS"/>
+  <translation tag="PRINT_START has {} skippable operation" en="PRINT_START has {} skippable operation"/>
+  <translation tag="PRINT_START has {} skippable operations" en="PRINT_START has {} skippable operations"/>
   <translation tag="PROBE SENSORS" en="PROBE SENSORS"/>
   <translation tag="Pair" en="Pair"/>
   <translation tag="Pair Bluetooth Printer" en="Pair Bluetooth Printer"/>
@@ -1431,7 +1497,9 @@
   <translation tag="Plugin disabled" en="Plugin disabled"/>
   <translation tag="Plugin installed successfully" en="Plugin installed successfully"/>
   <translation tag="Plugin installed successfully." en="Plugin installed successfully."/>
+  <translation tag="Plugin installed successfully. Moonraker is restarting..." en="Plugin installed successfully. Moonraker is restarting..."/>
   <translation tag="Plugin not responding after restart.\nIt may need more time to load." en="Plugin not responding after restart.\nIt may need more time to load."/>
+  <translation tag="Plugin uninstalled successfully." en="Plugin uninstalled successfully."/>
   <translation tag="Plugins" en="Plugins"/>
   <translation tag="Plugins are discovered on application startup" en="Plugins are discovered on application startup"/>
   <translation tag="Point camera at QR code on spool" en="Point camera at QR code on spool"/>
@@ -1485,6 +1553,8 @@
   <translation tag="Print Time" en="Print Time"/>
   <translation tag="Print Tuning" en="Print Tuning"/>
   <translation tag="Print Was Terminated" en="Print Was Terminated"/>
+  <translation tag="Print didn&apos;t start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X})" en="Print didn&apos;t start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X})"/>
+  <translation tag="Print error" en="Print error"/>
   <translation tag="Print failed" en="Print failed"/>
   <translation tag="Print issue detected" en="Print issue detected"/>
   <translation tag="Print preparation failed: {}" en="Print preparation failed: {}"/>
@@ -1492,6 +1562,7 @@
   <translation tag="Print server rejected the job — check printer status" en="Print server rejected the job — check printer status"/>
   <translation tag="Print setup failed" en="Print setup failed"/>
   <translation tag="Print setup failed: internal error" en="Print setup failed: internal error"/>
+  <translation tag="Print timed out waiting for completion" en="Print timed out waiting for completion"/>
   <translation tag="Printer" en="Printer"/>
   <translation tag="Printer Error" en="Printer Error"/>
   <translation tag="Printer Firmware Disconnected" en="Printer Firmware Disconnected"/>
@@ -1511,11 +1582,15 @@
   <translation tag="Printer Setup: Touch Calibration" en="Printer Setup: Touch Calibration"/>
   <translation tag="Printer Shutdown" en="Printer Shutdown"/>
   <translation tag="Printer Type" en="Printer Type"/>
+  <translation tag="Printer accepted job but isn&apos;t printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X})" en="Printer accepted job but isn&apos;t printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X})"/>
+  <translation tag="Printer database format error" en="Printer database format error"/>
+  <translation tag="Printer database is corrupt" en="Printer database is corrupt"/>
   <translation tag="Printer didn&apos;t respond — make sure it&apos;s on and in range" en="Printer didn&apos;t respond — make sure it&apos;s on and in range"/>
   <translation tag="Printer doesn&apos;t expose the expected service — wrong device?" en="Printer doesn&apos;t expose the expected service — wrong device?"/>
   <translation tag="Printer image set to auto-detect" en="Printer image set to auto-detect"/>
   <translation tag="Printer is not paired — pair it first" en="Printer is not paired — pair it first"/>
   <translation tag="Printer name" en="Printer name"/>
+  <translation tag="Printer not ready" en="Printer not ready"/>
   <translation tag="Printer ready" en="Printer ready"/>
   <translation tag="Printer:" en="Printer:"/>
   <translation tag="Printer: " en="Printer: "/>
@@ -1573,6 +1648,8 @@
   <translation tag="Quick Button 3" en="Quick Button 3"/>
   <translation tag="Quick Button 4" en="Quick Button 4"/>
   <translation tag="Quick actions, calibration, speed" en="Quick actions, calibration, speed"/>
+  <translation tag="RFCOMM connect failed" en="RFCOMM connect failed"/>
+  <translation tag="RFCOMM connect failed: " en="RFCOMM connect failed: "/>
   <translation tag="RSS" en="RSS"/>
   <translation tag="RSS:" en="RSS:"/>
   <translation tag="Raspberry Pi" en="Raspberry Pi"/>
@@ -1599,6 +1676,7 @@
   <translation tag="Recover MMU state?" en="Recover MMU state?"/>
   <translation tag="Recovering AFC system..." en="Recovering AFC system..."/>
   <translation tag="Recovery failed" en="Recovery failed"/>
+  <translation tag="Recovery failed: " en="Recovery failed: "/>
   <translation tag="Reduce Sensitivity" en="Reduce Sensitivity"/>
   <translation tag="Reduce ringing and ghosting artifacts" en="Reduce ringing and ghosting artifacts"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" en="Reduce vibration artifacts like ringing and ghosting"/>
@@ -1629,8 +1707,10 @@
   <translation tag="Report saved to crash_report.txt" en="Report saved to crash_report.txt"/>
   <translation tag="Reprint" en="Reprint"/>
   <translation tag="Reprint Last" en="Reprint Last"/>
+  <translation tag="Request Failed" en="Request Failed"/>
   <translation tag="Require confirmation before emergency stop" en="Require confirmation before emergency stop"/>
   <translation tag="Requires Moonraker-Timelapse plugin" en="Requires Moonraker-Timelapse plugin"/>
+  <translation tag="Resend write failed at chunk {}" en="Resend write failed at chunk {}"/>
   <translation tag="Reset" en="Reset"/>
   <translation tag="Reset Home Screen?" en="Reset Home Screen?"/>
   <translation tag="Reset Speed &amp; Flow to 100%" en="Reset Speed &amp; Flow to 100%"/>
@@ -1701,6 +1781,7 @@
   <translation tag="STOP" en="STOP"/>
   <translation tag="STYLE PROPERTIES" en="STYLE PROPERTIES"/>
   <translation tag="SWITCH SENSORS" en="SWITCH SENSORS"/>
+  <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." en="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot."/>
   <translation tag="Safety &amp; Notifications" en="Safety &amp; Notifications"/>
   <translation tag="Sample" en="Sample"/>
   <translation tag="Sample %d/%d" en="Sample %d/%d"/>
@@ -1860,6 +1941,7 @@
   <translation tag="Sounds" en="Sounds"/>
   <translation tag="Source" en="Source"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" en="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti detected — print paused" en="Spaghetti detected — print paused"/>
   <translation tag="Speaker" en="Speaker"/>
   <translation tag="Specular:" en="Specular:"/>
   <translation tag="Speed" en="Speed"/>
@@ -1891,6 +1973,7 @@
   <translation tag="Spoolman: %zu/%zu Spool%s" en="Spoolman: %zu/%zu Spool%s"/>
   <translation tag="Square Corner Velocity" en="Square Corner Velocity"/>
   <translation tag="Stable" en="Stable"/>
+  <translation tag="Stable\nBeta\nDev" en="Stable\nBeta\nDev"/>
   <translation tag="Standard" en="Standard"/>
   <translation tag="Standby" en="Standby"/>
   <translation tag="Starfield" en="Starfield"/>
@@ -1906,6 +1989,7 @@
   <translation tag="Start print anyway?" en="Start print anyway?"/>
   <translation tag="Started" en="Started"/>
   <translation tag="Starting Print..." en="Starting Print..."/>
+  <translation tag="Starting download..." en="Starting download..."/>
   <translation tag="Starting measurement..." en="Starting measurement..."/>
   <translation tag="Starting..." en="Starting..."/>
   <translation tag="Startup Brightness" en="Startup Brightness"/>
@@ -1944,6 +2028,9 @@
   <translation tag="Sysfs" en="Sysfs"/>
   <translation tag="System" en="System"/>
   <translation tag="System Keyboard" en="System Keyboard"/>
+  <translation tag="System busy — please try again" en="System busy — please try again"/>
+  <translation tag="System busy — try again" en="System busy — try again"/>
+  <translation tag="System default" en="System default"/>
   <translation tag="System detected" en="System detected"/>
   <translation tag="T%d has no filament loaded — this print will run out." en="T%d has no filament loaded — this print will run out."/>
   <translation tag="T%d needs filament in slot %d, which is empty — this print will run out." en="T%d needs filament in slot %d, which is empty — this print will run out."/>
@@ -2044,9 +2131,13 @@
   <translation tag="Timelapse plugin installed!" en="Timelapse plugin installed!"/>
   <translation tag="Timelapse plugin is already installed!" en="Timelapse plugin is already installed!"/>
   <translation tag="Timelapse plugin is installed!" en="Timelapse plugin is installed!"/>
+  <translation tag="Timelapse render failed" en="Timelapse render failed"/>
+  <translation tag="Timelapse render failed: {}" en="Timelapse render failed: {}"/>
   <translation tag="Timelapse rendered successfully" en="Timelapse rendered successfully"/>
   <translation tag="Timezone" en="Timezone"/>
   <translation tag="Tip:" en="Tip:"/>
+  <translation tag="Tips database format error" en="Tips database format error"/>
+  <translation tag="Tips database not found" en="Tips database not found"/>
   <translation tag="Toggle" en="Toggle"/>
   <translation tag="Toggle (fire-and-forget)" en="Toggle (fire-and-forget)"/>
   <translation tag="Toggle Feature" en="Toggle Feature"/>
@@ -2090,11 +2181,17 @@
   <translation tag="UI Sounds" en="UI Sounds"/>
   <translation tag="USB" en="USB"/>
   <translation tag="USB DEVICES" en="USB DEVICES"/>
+  <translation tag="USB drive connected" en="USB drive connected"/>
+  <translation tag="USB drive removed" en="USB drive removed"/>
   <translation tag="USB printer access denied — check permissions" en="USB printer access denied — check permissions"/>
   <translation tag="Understanding Results" en="Understanding Results"/>
   <translation tag="Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY, Path A and B should be within a few Hz of each other." en="Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY, Path A and B should be within a few Hz of each other."/>
   <translation tag="Uninstall HelixPrint Plugin" en="Uninstall HelixPrint Plugin"/>
+  <translation tag="Uninstall script not found." en="Uninstall script not found."/>
   <translation tag="Uninstall: Coming soon" en="Uninstall: Coming soon"/>
+  <translation tag="Uninstallation failed. Check logs for details." en="Uninstallation failed. Check logs for details."/>
+  <translation tag="Uninstallation failed: " en="Uninstallation failed: "/>
+  <translation tag="Uninstallation timed out. The script may be stuck." en="Uninstallation timed out. The script may be stuck."/>
   <translation tag="Unit" en="Unit"/>
   <translation tag="Unit " en="Unit "/>
   <translation tag="Unknown" en="Unknown"/>
@@ -2118,7 +2215,10 @@
   <translation tag="Unmapped" en="Unmapped"/>
   <translation tag="Unretract Extra" en="Unretract Extra"/>
   <translation tag="Unretract Speed" en="Unretract Speed"/>
+  <translation tag="Unsupported tape width" en="Unsupported tape width"/>
+  <translation tag="Unsupported tape width: " en="Unsupported tape width: "/>
   <translation tag="Up" en="Up"/>
+  <translation tag="Up to date" en="Up to date"/>
   <translation tag="Update" en="Update"/>
   <translation tag="Update Available" en="Update Available"/>
   <translation tag="Update Channel" en="Update Channel"/>
@@ -2144,6 +2244,8 @@
   <translation tag="Vendor already exists" en="Vendor already exists"/>
   <translation tag="Vendor:" en="Vendor:"/>
   <translation tag="Verify" en="Verify"/>
+  <translation tag="Verifying SHA256 checksum..." en="Verifying SHA256 checksum..."/>
+  <translation tag="Verifying download..." en="Verifying download..."/>
   <translation tag="Verifying timelapse plugin..." en="Verifying timelapse plugin..."/>
   <translation tag="Verifying..." en="Verifying..."/>
   <translation tag="Version" en="Version"/>
@@ -2153,6 +2255,7 @@
   <translation tag="Vibration" en="Vibration"/>
   <translation tag="Vibration compensation active" en="Vibration compensation active"/>
   <translation tag="Video playback speed" en="Video playback speed"/>
+  <translation tag="View" en="View"/>
   <translation tag="View Changelog" en="View Changelog"/>
   <translation tag="View Full History" en="View Full History"/>
   <translation tag="View Presets" en="View Presets"/>
@@ -2190,14 +2293,17 @@
   <translation tag="WiFi Disabled" en="WiFi Disabled"/>
   <translation tag="WiFi Enabled" en="WiFi Enabled"/>
   <translation tag="WiFi Network" en="WiFi Network"/>
+  <translation tag="WiFi Unavailable" en="WiFi Unavailable"/>
   <translation tag="WiFi and Ethernet configuration" en="WiFi and Ethernet configuration"/>
   <translation tag="WiFi control unavailable" en="WiFi control unavailable"/>
   <translation tag="WiFi hardware unavailable" en="WiFi hardware unavailable"/>
   <translation tag="WiFi unavailable" en="WiFi unavailable"/>
+  <translation tag="WiFi was configured but hardware is not available. Check system configuration." en="WiFi was configured but hardware is not available. Check system configuration."/>
   <translation tag="Widget Labels" en="Widget Labels"/>
   <translation tag="Width" en="Width"/>
   <translation tag="Wifi" en="Wifi"/>
   <translation tag="Wizard Error" en="Wizard Error"/>
+  <translation tag="Write failed at chunk {}" en="Write failed at chunk {}"/>
   <translation tag="Wrong PIN" en="Wrong PIN"/>
   <translation tag="Wrong media" en="Wrong media"/>
   <translation tag="X" en="X"/>
@@ -2250,9 +2356,11 @@
   <translation tag="Z:" en="Z:"/>
   <translation tag="Z: 0.000" en="Z: 0.000"/>
   <translation tag="Zoom" en="Zoom"/>
+  <translation tag="\&quot;%s\&quot; failed to load" en="\&quot;%s\&quot; failed to load"/>
   <translation tag="bed" en="bed"/>
   <translation tag="by Preston Brown" en="by Preston Brown"/>
   <translation tag="chamber heater" en="chamber heater"/>
+  <translation tag="complete" en="complete"/>
   <translation tag="cores" en="cores"/>
   <translation tag="disable" en="disable"/>
   <translation tag="disabled" en="disabled"/>
@@ -2262,11 +2370,13 @@
   <translation tag="elapsed" en="elapsed"/>
   <translation tag="enable" en="enable"/>
   <translation tag="enabled" en="enabled"/>
+  <translation tag="error" en="error"/>
   <translation tag="extruder" en="extruder"/>
   <translation tag="extruder(s)" en="extruder(s)"/>
   <translation tag="extruders" en="extruders"/>
   <translation tag="fans" en="fans"/>
   <translation tag="heated bed" en="heated bed"/>
+  <translation tag="idle" en="idle"/>
   <translation tag="layers" en="layers"/>
   <translation tag="left" en="left"/>
   <translation tag="mm before clog" en="mm before clog"/>
@@ -2281,6 +2391,7 @@
   <translation tag="prints" en="prints"/>
   <translation tag="remaining" en="remaining"/>
   <translation tag="remaining before clog detection triggers" en="remaining before clog detection triggers"/>
+  <translation tag="rendering" en="rendering"/>
   <translation tag="set to" en="set to"/>
   <translation tag="slots)" en="slots)"/>
   <translation tag="started" en="started"/>
@@ -2304,16 +2415,25 @@
   <translation tag="tour.step.welcome.body" en="Let&apos;s take a quick tour so you can find things fast."/>
   <translation tag="tour.step.welcome.title" en="Welcome to HelixScreen"/>
   <translation tag="used" en="used"/>
+  <translation tag="v%s available" en="v%s available"/>
+  <translation tag="v{} installed! Restarting..." en="v{} installed! Restarting..."/>
   <translation tag="v{} is available. Tap to update." en="v{} is available. Tap to update."/>
   <translation tag="you have" en="you have"/>
+  <translation tag="{} LED strips available" en="{} LED strips available"/>
   <translation tag="{} axis homed" en="{} axis homed"/>
   <translation tag="{} command timed out" en="{} command timed out"/>
   <translation tag="{} complete" en="{} complete"/>
+  <translation tag="{} configured item not found" en="{} configured item not found"/>
+  <translation tag="{} configured items not found" en="{} configured items not found"/>
+  <translation tag="{} critical hardware issues" en="{} critical hardware issues"/>
+  <translation tag="{} filament sensors available" en="{} filament sensors available"/>
   <translation tag="{} heater turned off" en="{} heater turned off"/>
   <translation tag="{} lanes" en="{} lanes"/>
   <translation tag="{} macro not configured" en="{} macro not configured"/>
   <translation tag="{} may cause unintended changes. Are you sure?" en="{} may cause unintended changes. Are you sure?"/>
   <translation tag="{} more taps to {} beta features" en="{} more taps to {} beta features"/>
+  <translation tag="{} new hardware available" en="{} new hardware available"/>
   <translation tag="{} preset{}" en="{} preset{}"/>
   <translation tag="{} target set to {}°C" en="{} target set to {}°C"/>
+  <translation tag="{} — response timed out" en="{} — response timed out"/>
 </translations>

@@ -1301,9 +1301,9 @@ void DisplayManager::warn_fbdev_high_dpi() {
                  m_width, m_height, kHighDpiThreshold);
     char toast_msg[256];
     snprintf(toast_msg, sizeof(toast_msg),
-             "Display resolution is very high (%dx%d). Text may appear small. "
-             "Reduce framebuffer resolution in /boot/firmware/config.txt for "
-             "best results.",
+             lv_tr("Display resolution is very high (%dx%d). Text may appear small. "
+                   "Reduce framebuffer resolution in /boot/firmware/config.txt for "
+                   "best results."),
              m_width, m_height);
     helix::PendingStartupWarnings::instance().enqueue(
         helix::PendingStartupWarnings::Severity::WARNING, toast_msg);

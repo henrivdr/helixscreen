@@ -18,6 +18,7 @@ translations:
   '%u layers': '%u layers'
   '%zu changes': '%zu changes'
   '%zu events queued': '%zu events queued'
+  '%zu plugins failed to load': '%zu plugins failed to load'
   (incompatible): (incompatible)
   (multi-tool): (multi-tool)
   (none detected): (none detected)
@@ -83,6 +84,8 @@ translations:
   A: A
   ABS: ABS
   ACCELEROMETERS: ACCELEROMETERS
+  ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support.: ACE
+    Moonraker bridge not found. Install ace_status.py from ValgACE for full support.
   ACTIONS: ACTIONS
   ADXL: ADXL
   AFC: AFC
@@ -95,6 +98,8 @@ translations:
   AFC reset failed: AFC reset failed
   AFC retracts filament from the toolhead at end of print: AFC retracts filament from
     the toolhead at end of print
+  AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later.: AFC
+    version {} may have compatibility issues. Please upgrade to v1.0.35 or later.
   ALL DEVICES: ALL DEVICES
   AMS: AMS
   'AMS Active: ': 'AMS Active: '
@@ -165,6 +170,9 @@ translations:
   An error occurred during measurement.: An error occurred during measurement.
   An error occurred during probing.: An error occurred during probing.
   An error occurred while loading filament.: An error occurred while loading filament.
+  An internal error occurred. The app continues running — please send a debug bundle from Settings > About if it repeats.: An
+    internal error occurred. The app continues running — please send a debug bundle
+    from Settings > About if it repeats.
   An unexpected printer error occurred.: An unexpected printer error occurred.
   An update is available: An update is available
   Android logcat: Android logcat
@@ -174,6 +182,8 @@ translations:
   Anonymous usage statistics: Anonymous usage statistics
   Any notes...: Any notes...
   App Background: App Background
+  App startup encountered an error. Some features may be unavailable.: App startup
+    encountered an error. Some features may be unavailable.
   Appearance: Appearance
   Apply: Apply
   Apply Changes: Apply Changes
@@ -196,10 +206,13 @@ translations:
   Auto-Detect: Auto-Detect
   Auto-Heat on Load: Auto-Heat on Load
   Auto-detect: Auto-detect
+  Auto-install only works on local Moonraker: Auto-install only works on local Moonraker
   Auto-lock: Auto-lock
   Auto-poll for weight updates: Auto-poll for weight updates
   Auto-probe or manually check screw heights: Auto-probe or manually check screw heights
   Auto-render video: Auto-render video
+  Auto-uninstall only works on local Moonraker: Auto-uninstall only works on local
+    Moonraker
   Automatic: Automatic
   Automatic Heater Control Calibration: Automatic Heater Control Calibration
   Automatic LED Control: Automatic LED Control
@@ -211,6 +224,9 @@ translations:
   Average: Average
   BEACON: BEACON
   BETA: BETA
+  'BLE connect failed: {}': 'BLE connect failed: {}'
+  'BLE write failed at packet {}: {}': 'BLE write failed at packet {}: {}'
+  'BLE write failed: {}': 'BLE write failed: {}'
   BLTouch Controls: BLTouch Controls
   BLUETOOTH PRINTERS: BLUETOOTH PRINTERS
   BLUETOOTH SCANNERS: BLUETOOTH SCANNERS
@@ -252,6 +268,7 @@ translations:
   Black: Black
   Blocked: Blocked
   Bluetooth: Bluetooth
+  Bluetooth device not configured: Bluetooth device not configured
   Bluetooth initialization failed: Bluetooth initialization failed
   Bluetooth is not available on this device: Bluetooth is not available on this device
   Bluetooth not available: Bluetooth not available
@@ -414,6 +431,7 @@ translations:
   Checking slots...: Checking slots...
   Checking timelapse plugin...: Checking timelapse plugin...
   Checking webcam: Checking webcam
+  Checking...: Checking...
   Choose 12-hour or 24-hour time display: Choose 12-hour or 24-hour time display
   Choose Spool: Choose Spool
   Choose an existing filament, or tap + New to create one.: Choose an existing filament,
@@ -499,6 +517,7 @@ translations:
   Connected Time: Connected Time
   Connected to: Connected to
   'Connected to ': 'Connected to '
+  Connected to {}: Connected to {}
   Connected! Discovering printer...: Connected! Discovering printer...
   Connected, discovering...: Connected, discovering...
   Connecting Camera...: Connecting Camera...
@@ -507,8 +526,10 @@ translations:
   Connecting to network...: Connecting to network...
   Connecting...: Connecting...
   Connection: Connection
+  Connection Failed: Connection Failed
   Connection Stability: Connection Stability
   Connection failed: Connection failed
+  Connection failed to {}:{}: Connection failed to {}:{}
   Connection failed. Check IP/port and try again.: Connection failed. Check IP/port
     and try again.
   Connection failed. Check credentials.: Connection failed. Check credentials.
@@ -538,7 +559,10 @@ translations:
   Could not check webcam status.\nCheck printer connection.: Could not check webcam
     status.\nCheck printer connection.
   Could not forget device: Could not forget device
+  Could not load printer database: Could not load printer database
+  Could not parse tips database: Could not parse tips database
   Could not reach Spoolman at: Could not reach Spoolman at
+  Could not resolve printer RFCOMM channel: Could not resolve printer RFCOMM channel
   Could not start Bluetooth discovery: Could not start Bluetooth discovery
   Could not verify Spoolman status. Moonraker may still be restarting.: Could not
     verify Spoolman status. Moonraker may still be restarting.
@@ -556,6 +580,7 @@ translations:
   Create backup of %s before applying: Create backup of %s before applying
   Create video when print completes: Create video when print completes
   Creating spool...: Creating spool...
+  'Critical hardware missing: {}': 'Critical hardware missing: {}'
   Current / Target: Current / Target
   Current Configuration: Current Configuration
   Current Frequency: Current Frequency
@@ -634,6 +659,10 @@ translations:
   Display & Sound: Display & Sound
   Display Mode: Display Mode
   Display Sleep: Display Sleep
+  ? Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer
+    resolution in /boot/firmware/config.txt for best results.
+  : Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer
+    resolution in /boot/firmware/config.txt for best results.
   'Display: ': 'Display: '
   Do not power off your printer.: Do not power off your printer.
   Do not touch the printer during calibration: Do not touch the printer during calibration
@@ -646,6 +675,7 @@ translations:
   Download update?: Download update?
   Download v{}?: Download v{}?
   Downloading...: Downloading...
+  Downloading... {:.1f}/{:.1f} MB: Downloading... {:.1f}/{:.1f} MB
   Draw a ripple at each touch — helps diagnose offsets: Draw a ripple at each touch
     — helps diagnose offsets
   Drive Cal: Drive Cal
@@ -702,6 +732,8 @@ translations:
   Enabled: Enabled
   Encoder: Encoder
   Ended: Ended
+  Enhanced {} operation in PRINT_START: Enhanced {} operation in PRINT_START
+  Enhanced {} operations in PRINT_START: Enhanced {} operations in PRINT_START
   Enhancement Complete!: Enhancement Complete!
   Enhancement Failed: Enhancement Failed
   Enter Current PIN: Enter Current PIN
@@ -717,9 +749,23 @@ translations:
   Enter the IP address and port of your Spoolman server.: Enter the IP address and
     port of your Spoolman server.
   Error: Error
+  Error at chunk {} (code={}): Error at chunk {} (code={})
   Error loading file: Error loading file
+  Error loading printing tips: Error loading printing tips
   'Error saving printer settings: {}': 'Error saving printer settings: {}'
   Error state: Error state
+  'Error: %s': 'Error: %s'
+  'Error: Cannot update while printing': 'Error: Cannot update while printing'
+  'Error: Checksum mismatch': 'Error: Checksum mismatch'
+  'Error: Corrupt download': 'Error: Corrupt download'
+  'Error: Download failed': 'Error: Download failed'
+  'Error: Installer not found': 'Error: Installer not found'
+  'Error: Invalid download': 'Error: Invalid download'
+  'Error: No update available': 'Error: No update available'
+  'Error: Not enough disk space': 'Error: Not enough disk space'
+  'Error: Verification failed': 'Error: Verification failed'
+  'Error: Wrong architecture': 'Error: Wrong architecture'
+  'Error: `unzip` not installed': 'Error: `unzip` not installed'
   Escalate to emergency stop if cancel doesn't respond: Escalate to emergency stop
     if cancel doesn't respond
   Escalation Timeout: Escalation Timeout
@@ -729,6 +775,7 @@ translations:
   Events appear here after sessions and prints: Events appear here after sessions
     and prints
   Excellent Accuracy: Excellent Accuracy
+  'Exception: {}': 'Exception: {}'
   Exclude: Exclude
   Excluded: Excluded
   Exclusion cancelled: Exclusion cancelled
@@ -766,6 +813,7 @@ translations:
   Failed to analyze PRINT_START macro: Failed to analyze PRINT_START macro
   Failed to apply limits: Failed to apply limits
   Failed to apply settings: Failed to apply settings
+  Failed to build raster data: Failed to build raster data
   'Failed to cancel: {}': 'Failed to cancel: {}'
   'Failed to clear print state: {}': 'Failed to clear print state: {}'
   'Failed to connect to ''{}'': {}': 'Failed to connect to ''{}'': {}'
@@ -789,6 +837,8 @@ translations:
   Failed to enable tuning tower: Failed to enable tuning tower
   'Failed to exclude ''{}'': {}': 'Failed to exclude ''{}'': {}'
   Failed to get limits: Failed to get limits
+  Failed to initialize Bluetooth: Failed to initialize Bluetooth
+  Failed to initialize Bluetooth context: Failed to initialize Bluetooth context
   Failed to load G-code preview: Failed to load G-code preview
   Failed to load devices: Failed to load devices
   Failed to load fan configuration screen: Failed to load fan configuration screen
@@ -813,8 +863,10 @@ translations:
   Failed to read config.: Failed to read config.
   Failed to read config. Check connection.: Failed to read config. Check connection.
   Failed to read moonraker.conf.: Failed to read moonraker.conf.
+  Failed to read printer status: Failed to read printer status
   Failed to refresh file list: Failed to refresh file list
   'Failed to remap G-code: {}': 'Failed to remap G-code: {}'
+  Failed to render label: Failed to render label
   'Failed to reprint: {}': 'Failed to reprint: {}'
   'Failed to reset flow: {}': 'Failed to reset flow: {}'
   'Failed to reset speed: {}': 'Failed to reset speed: {}'
@@ -834,6 +886,8 @@ translations:
   Failed to save spool: Failed to save spool
   Failed to save theme file: Failed to save theme file
   'Failed to send command: {}': 'Failed to send command: {}'
+  Failed to send print data: Failed to send print data
+  Failed to send status request: Failed to send status request
   Failed to set active spool: Failed to set active spool
   'Failed to set bed temp: {}': 'Failed to set bed temp: {}'
   'Failed to set chamber temp: {}': 'Failed to set chamber temp: {}'
@@ -844,7 +898,9 @@ translations:
   'Failed to set {} temp: {}': 'Failed to set {} temp: {}'
   Failed to show confirmation dialog: Failed to show confirmation dialog
   Failed to start calibration: Failed to start calibration
+  'Failed to start installer: ': 'Failed to start installer: '
   'Failed to start print: {}': 'Failed to start print: {}'
+  'Failed to start uninstaller: ': 'Failed to start uninstaller: '
   Failed to toggle %s: Failed to toggle %s
   'Failed to toggle timelapse: {}': 'Failed to toggle timelapse: {}'
   'Failed to turn off heaters: {}': 'Failed to turn off heaters: {}'
@@ -889,6 +945,8 @@ translations:
   Filament runout: Filament runout
   Filament runout and motion detection sensors: Filament runout and motion detection
     sensors
+  Filament sensor available for runout detection: Filament sensor available for runout
+    detection
   Filament tension is balanced: Filament tension is balanced
   Filament tracking & label printing: Filament tracking & label printing
   Filament tracking and inventory: Filament tracking and inventory
@@ -952,6 +1010,7 @@ translations:
   H: H
   HOST: HOST
   HTTP Code: HTTP Code
+  'HTTP error: {} {}': 'HTTP error: {} {}'
   HUMIDITY SENSORS: HUMIDITY SENSORS
   Hang on, we'll be right back!: Hang on, we'll be right back!
   Happy Hare MMU: Happy Hare MMU
@@ -1047,6 +1106,7 @@ translations:
   IMPORT FROM USB: IMPORT FROM USB
   IP Address / Hostname: IP Address / Hostname
   'IP:': 'IP:'
+  'IPP error: {}': 'IPP error: {}'
   Icon: Icon
   Idle: Idle
   If Moonraker is local or your screen is attached to the printer directly, we'll connect automatically: If
@@ -1085,6 +1145,8 @@ translations:
   Install Root: Install Root
   Install Update: Install Update
   Install plugin: Install plugin
+  Install script not found. Use the remote install command instead.: Install script
+    not found. Use the remote install command instead.
   Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Install
     the HelixPrint plugin in Advanced settings to remap filament without affecting
     print history.
@@ -1095,13 +1157,23 @@ translations:
     plugin via SSH,\nthen tap \"Check Again\".
   Install timelapse plugin: Install timelapse plugin
   Installation Failed: Installation Failed
+  Installation failed: Installation failed
+  Installation failed. Check logs for details.: Installation failed. Check logs for
+    details.
+  'Installation failed: ': 'Installation failed: '
   Installation takes about 30 seconds.: Installation takes about 30 seconds.
+  Installation timed out: Installation timed out
+  Installation timed out. The script may be stuck.: Installation timed out. The script
+    may be stuck.
   Installing...: Installing...
   Intensity: Intensity
   Interactive probe calibration: Interactive probe calibration
   'Internal error: API not available': 'Internal error: API not available'
   'Internal error: no scan result': 'Internal error: no scan result'
   Invalid port number: Invalid port number
+  'Invalid sheet template index: {} (have {})': 'Invalid sheet template index: {}
+    (have {})'
+  Invalid status response from printer: Invalid status response from printer
   Issue description: Issue description
   Job Queue: Job Queue
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Join
@@ -1116,6 +1188,7 @@ translations:
   Keyboard Test (Gboard-style): Keyboard Test (Gboard-style)
   Kinematics: Kinematics
   Klipper: Klipper
+  Klipper Error: Klipper Error
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Klipper
     firmware has disconnected from the host. Try restarting Klipper or performing
     a firmware restart.
@@ -1136,6 +1209,7 @@ translations:
   LED Settings: LED Settings
   LED Strip: LED Strip
   LED on at Start: LED on at Start
+  LED strip available for lighting control: LED strip available for lighting control
   LEDs: LEDs
   LEDs controlled by the light button: LEDs controlled by the light button
   LOADED: LOADED
@@ -1376,6 +1450,7 @@ translations:
   No Power Devices: No Power Devices
   No Spool: No Spool
   No Spools: No Spools
+  No USB printer detected: No USB printer detected
   No USB printers found: No USB printers found
   No buffer data available: No buffer data available
   No camera — use USB barcode scanner: No camera — use USB barcode scanner
@@ -1426,6 +1501,8 @@ translations:
   No sensors detected: No sensors detected
   No spool assigned: No spool assigned
   No spools found — tap to retry: No spools found — tap to retry
+  No tape detected in printer: No tape detected in printer
+  No target printer configured: No target printer configured
   No timelapse videos found: No timelapse videos found
   No vendors found: No vendors found
   No webcam detected.\nA webcam is required for timelapse.: No webcam detected.\nA
@@ -1476,6 +1553,7 @@ translations:
   Objects: Objects
   'Off': 'Off'
   'Off:': 'Off:'
+  Off\nFlying Toasters\nStarfield\n3D Pipes: Off\nFlying Toasters\nStarfield\n3D Pipes
   'On': 'On'
   On and Off macros must be different: On and Off macros must be different
   On/Off: On/Off
@@ -1520,6 +1598,8 @@ translations:
   PRE-PRINT STEPS: PRE-PRINT STEPS
   PRINT OPTIONS: PRINT OPTIONS
   PRINTERS: PRINTERS
+  PRINT_START has {} skippable operation: PRINT_START has {} skippable operation
+  PRINT_START has {} skippable operations: PRINT_START has {} skippable operations
   PROBE SENSORS: PROBE SENSORS
   Pair: Pair
   Pair Bluetooth Printer: Pair Bluetooth Printer
@@ -1585,8 +1665,11 @@ translations:
   Plugin disabled: Plugin disabled
   Plugin installed successfully: Plugin installed successfully
   Plugin installed successfully.: Plugin installed successfully.
+  Plugin installed successfully. Moonraker is restarting...: Plugin installed successfully.
+    Moonraker is restarting...
   Plugin not responding after restart.\nIt may need more time to load.: Plugin not
     responding after restart.\nIt may need more time to load.
+  Plugin uninstalled successfully.: Plugin uninstalled successfully.
   Plugins: Plugins
   Plugins are discovered on application startup: Plugins are discovered on application
     startup
@@ -1641,6 +1724,9 @@ translations:
   Print Time: Print Time
   Print Tuning: Print Tuning
   Print Was Terminated: Print Was Terminated
+  Print didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X}): Print
+    didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X})
+  Print error: Print error
   Print failed: Print failed
   Print issue detected: Print issue detected
   'Print preparation failed: {}': 'Print preparation failed: {}'
@@ -1649,6 +1735,7 @@ translations:
     job — check printer status
   Print setup failed: Print setup failed
   'Print setup failed: internal error': 'Print setup failed: internal error'
+  Print timed out waiting for completion: Print timed out waiting for completion
   Printer: Printer
   Printer Error: Printer Error
   Printer Firmware Disconnected: Printer Firmware Disconnected
@@ -1668,6 +1755,11 @@ translations:
   'Printer Setup: Touch Calibration': 'Printer Setup: Touch Calibration'
   Printer Shutdown: Printer Shutdown
   Printer Type: Printer Type
+  Printer accepted job but isn't printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X}): Printer
+    accepted job but isn't printing — check cover, paper, and label type (firmware
+    status=0x{:02X} error=0x{:02X})
+  Printer database format error: Printer database format error
+  Printer database is corrupt: Printer database is corrupt
   Printer didn't respond — make sure it's on and in range: Printer didn't respond
     — make sure it's on and in range
   Printer doesn't expose the expected service — wrong device?: Printer doesn't expose
@@ -1675,6 +1767,7 @@ translations:
   Printer image set to auto-detect: Printer image set to auto-detect
   Printer is not paired — pair it first: Printer is not paired — pair it first
   Printer name: Printer name
+  Printer not ready: Printer not ready
   Printer ready: Printer ready
   'Printer:': 'Printer:'
   'Printer: ': 'Printer: '
@@ -1737,6 +1830,8 @@ translations:
   Quick Button 3: Quick Button 3
   Quick Button 4: Quick Button 4
   Quick actions, calibration, speed: Quick actions, calibration, speed
+  RFCOMM connect failed: RFCOMM connect failed
+  'RFCOMM connect failed: ': 'RFCOMM connect failed: '
   RSS: RSS
   'RSS:': 'RSS:'
   Raspberry Pi: Raspberry Pi
@@ -1766,6 +1861,7 @@ translations:
   Recover MMU state?: Recover MMU state?
   Recovering AFC system...: Recovering AFC system...
   Recovery failed: Recovery failed
+  'Recovery failed: ': 'Recovery failed: '
   Reduce Sensitivity: Reduce Sensitivity
   Reduce ringing and ghosting artifacts: Reduce ringing and ghosting artifacts
   Reduce vibration artifacts like ringing and ghosting: Reduce vibration artifacts
@@ -1799,9 +1895,11 @@ translations:
   Report saved to crash_report.txt: Report saved to crash_report.txt
   Reprint: Reprint
   Reprint Last: Reprint Last
+  Request Failed: Request Failed
   Require confirmation before emergency stop: Require confirmation before emergency
     stop
   Requires Moonraker-Timelapse plugin: Requires Moonraker-Timelapse plugin
+  Resend write failed at chunk {}: Resend write failed at chunk {}
   Reset: Reset
   Reset Home Screen?: Reset Home Screen?
   Reset Speed & Flow to 100%: Reset Speed & Flow to 100%
@@ -1879,6 +1977,10 @@ translations:
   STOP: STOP
   STYLE PROPERTIES: STYLE PROPERTIES
   SWITCH SENSORS: SWITCH SENSORS
+  ? Safe Mode active. The printer connection is disabled because the app kept crashing
+    on startup. Open Settings to fix the issue, then reboot.
+  : Safe Mode active. The printer connection is disabled because the app kept crashing
+    on startup. Open Settings to fix the issue, then reboot.
   Safety & Notifications: Safety & Notifications
   Sample: Sample
   Sample %d/%d: Sample %d/%d
@@ -2067,6 +2169,7 @@ translations:
   Source: Source
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod by Markus 'Captain'
     Kaarlonen
+  Spaghetti detected — print paused: Spaghetti detected — print paused
   Speaker: Speaker
   'Specular:': 'Specular:'
   Speed: Speed
@@ -2100,6 +2203,7 @@ translations:
   'Spoolman: %zu/%zu Spool%s': 'Spoolman: %zu/%zu Spool%s'
   Square Corner Velocity: Square Corner Velocity
   Stable: Stable
+  Stable\nBeta\nDev: Stable\nBeta\nDev
   Standard: Standard
   Standby: Standby
   Starfield: Starfield
@@ -2115,6 +2219,7 @@ translations:
   Start print anyway?: Start print anyway?
   Started: Started
   Starting Print...: Starting Print...
+  Starting download...: Starting download...
   Starting measurement...: Starting measurement...
   Starting...: Starting...
   Startup Brightness: Startup Brightness
@@ -2159,6 +2264,9 @@ translations:
   Sysfs: Sysfs
   System: System
   System Keyboard: System Keyboard
+  System busy — please try again: System busy — please try again
+  System busy — try again: System busy — try again
+  System default: System default
   System detected: System detected
   T%d has no filament loaded — this print will run out.: T%d has no filament loaded
     — this print will run out.
@@ -2313,9 +2421,13 @@ translations:
   Timelapse plugin installed!: Timelapse plugin installed!
   Timelapse plugin is already installed!: Timelapse plugin is already installed!
   Timelapse plugin is installed!: Timelapse plugin is installed!
+  Timelapse render failed: Timelapse render failed
+  'Timelapse render failed: {}': 'Timelapse render failed: {}'
   Timelapse rendered successfully: Timelapse rendered successfully
   Timezone: Timezone
   'Tip:': 'Tip:'
+  Tips database format error: Tips database format error
+  Tips database not found: Tips database not found
   Toggle: Toggle
   Toggle (fire-and-forget): Toggle (fire-and-forget)
   Toggle Feature: Toggle Feature
@@ -2361,6 +2473,8 @@ translations:
   UI Sounds: UI Sounds
   USB: USB
   USB DEVICES: USB DEVICES
+  USB drive connected: USB drive connected
+  USB drive removed: USB drive removed
   USB printer access denied — check permissions: USB printer access denied — check
     permissions
   Understanding Results: Understanding Results
@@ -2373,7 +2487,13 @@ translations:
     resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY,
     Path A and B should be within a few Hz of each other.
   Uninstall HelixPrint Plugin: Uninstall HelixPrint Plugin
+  Uninstall script not found.: Uninstall script not found.
   'Uninstall: Coming soon': 'Uninstall: Coming soon'
+  Uninstallation failed. Check logs for details.: Uninstallation failed. Check logs
+    for details.
+  'Uninstallation failed: ': 'Uninstallation failed: '
+  Uninstallation timed out. The script may be stuck.: Uninstallation timed out. The
+    script may be stuck.
   Unit: Unit
   'Unit ': 'Unit '
   Unknown: Unknown
@@ -2399,7 +2519,10 @@ translations:
   Unmapped: Unmapped
   Unretract Extra: Unretract Extra
   Unretract Speed: Unretract Speed
+  Unsupported tape width: Unsupported tape width
+  'Unsupported tape width: ': 'Unsupported tape width: '
   Up: Up
+  Up to date: Up to date
   Update: Update
   Update Available: Update Available
   Update Channel: Update Channel
@@ -2426,6 +2549,8 @@ translations:
   Vendor already exists: Vendor already exists
   'Vendor:': 'Vendor:'
   Verify: Verify
+  Verifying SHA256 checksum...: Verifying SHA256 checksum...
+  Verifying download...: Verifying download...
   Verifying timelapse plugin...: Verifying timelapse plugin...
   Verifying...: Verifying...
   Version: Version
@@ -2435,6 +2560,7 @@ translations:
   Vibration: Vibration
   Vibration compensation active: Vibration compensation active
   Video playback speed: Video playback speed
+  View: View
   View Changelog: View Changelog
   View Full History: View Full History
   View Presets: View Presets
@@ -2485,14 +2611,18 @@ translations:
   WiFi Disabled: WiFi Disabled
   WiFi Enabled: WiFi Enabled
   WiFi Network: WiFi Network
+  WiFi Unavailable: WiFi Unavailable
   WiFi and Ethernet configuration: WiFi and Ethernet configuration
   WiFi control unavailable: WiFi control unavailable
   WiFi hardware unavailable: WiFi hardware unavailable
   WiFi unavailable: WiFi unavailable
+  WiFi was configured but hardware is not available. Check system configuration.: WiFi
+    was configured but hardware is not available. Check system configuration.
   Widget Labels: Widget Labels
   Width: Width
   Wifi: Wifi
   Wizard Error: Wizard Error
+  Write failed at chunk {}: Write failed at chunk {}
   Wrong PIN: Wrong PIN
   Wrong media: Wrong media
   X: X
@@ -2557,9 +2687,11 @@ translations:
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
   Zoom: Zoom
+  \"%s\" failed to load: \"%s\" failed to load
   bed: bed
   by Preston Brown: by Preston Brown
   chamber heater: chamber heater
+  complete: complete
   cores: cores
   disable: disable
   disabled: disabled
@@ -2569,11 +2701,13 @@ translations:
   elapsed: elapsed
   enable: enable
   enabled: enabled
+  error: error
   extruder: extruder
   extruder(s): extruder(s)
   extruders: extruders
   fans: fans
   heated bed: heated bed
+  idle: idle
   layers: layers
   left: left
   mm before clog: mm before clog
@@ -2589,6 +2723,7 @@ translations:
   prints: prints
   remaining: remaining
   remaining before clog detection triggers: remaining before clog detection triggers
+  rendering: rendering
   set to: set to
   slots): slots)
   started: started
@@ -2618,16 +2753,25 @@ translations:
   tour.step.welcome.body: Let's take a quick tour so you can find things fast.
   tour.step.welcome.title: Welcome to HelixScreen
   used: used
+  v%s available: v%s available
+  v{} installed! Restarting...: v{} installed! Restarting...
   v{} is available. Tap to update.: v{} is available. Tap to update.
   you have: you have
+  '{} LED strips available': '{} LED strips available'
   '{} axis homed': '{} axis homed'
   '{} command timed out': '{} command timed out'
   '{} complete': '{} complete'
+  '{} configured item not found': '{} configured item not found'
+  '{} configured items not found': '{} configured items not found'
+  '{} critical hardware issues': '{} critical hardware issues'
+  '{} filament sensors available': '{} filament sensors available'
   '{} heater turned off': '{} heater turned off'
   '{} lanes': '{} lanes'
   '{} macro not configured': '{} macro not configured'
   '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes.
     Are you sure?'
   '{} more taps to {} beta features': '{} more taps to {} beta features'
+  '{} new hardware available': '{} new hardware available'
   '{} preset{}': '{} preset{}'
   '{} target set to {}°C': '{} target set to {}°C'
+  '{} — response timed out': '{} — response timed out'

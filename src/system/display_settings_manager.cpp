@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "display_manager.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
 #include "spdlog/spdlog.h"
@@ -677,7 +678,7 @@ void DisplaySettingsManager::set_bed_mesh_render_mode(int mode) {
 }
 
 const char* DisplaySettingsManager::get_bed_mesh_render_mode_options() {
-    return BED_MESH_RENDER_MODE_OPTIONS_TEXT;
+    return lv_tr(BED_MESH_RENDER_MODE_OPTIONS_TEXT);
 }
 
 int DisplaySettingsManager::get_gcode_render_mode() const {
@@ -701,7 +702,7 @@ void DisplaySettingsManager::set_gcode_render_mode(int mode) {
 }
 
 const char* DisplaySettingsManager::get_gcode_render_mode_options() {
-    return GCODE_RENDER_MODE_OPTIONS_TEXT;
+    return lv_tr(GCODE_RENDER_MODE_OPTIONS_TEXT);
 }
 
 TimeFormat DisplaySettingsManager::get_time_format() const {
@@ -721,7 +722,7 @@ void DisplaySettingsManager::set_time_format(TimeFormat format) {
 }
 
 const char* DisplaySettingsManager::get_time_format_options() {
-    return TIME_FORMAT_OPTIONS_TEXT;
+    return lv_tr(TIME_FORMAT_OPTIONS_TEXT);
 }
 
 // =============================================================================
@@ -803,7 +804,7 @@ void DisplaySettingsManager::set_screensaver_type(int type) {
 }
 
 const char* DisplaySettingsManager::get_screensaver_type_options() {
-    return "Off\nFlying Toasters\nStarfield\n3D Pipes";
+    return lv_tr("Off\nFlying Toasters\nStarfield\n3D Pipes");
 }
 #endif
 
@@ -838,7 +839,7 @@ bool DisplaySettingsManager::get_bed_mesh_show_zero_plane() const {
 // =============================================================================
 
 const char* DisplaySettingsManager::get_display_dim_options() {
-    return DIM_OPTIONS_TEXT;
+    return lv_tr(DIM_OPTIONS_TEXT);
 }
 
 int DisplaySettingsManager::dim_seconds_to_index(int seconds) {
@@ -863,7 +864,7 @@ int DisplaySettingsManager::index_to_dim_seconds(int index) {
 // =============================================================================
 
 const char* DisplaySettingsManager::get_display_sleep_options() {
-    return SLEEP_OPTIONS_TEXT;
+    return lv_tr(SLEEP_OPTIONS_TEXT);
 }
 
 int DisplaySettingsManager::sleep_seconds_to_index(int seconds) {

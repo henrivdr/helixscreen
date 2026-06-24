@@ -4,10 +4,11 @@ translations:
   ' elapsed · ': ' decorrido · '
   ' frames': ' quadros'
   ' left': ' restante'
-  '%.1f Hz difference': 'Diferença de %.1f Hz'
+  '%.1f Hz difference': Diferença de %.1f Hz
   '%d additional fan%s': '%d ventoinha%s adicional'
   '%d disabled': '%d desativado'
-  '%d failed to load - see details below': '%d falhou ao carregar - veja os detalhes abaixo'
+  '%d failed to load - see details below': '%d falhou ao carregar - veja os detalhes
+    abaixo'
   '%d more sensors': '%d sensores adicionais'
   '%d of %d plugins loaded': '%d de %d plugins carregados'
   '%d plugins loaded': '%d plugins carregados'
@@ -18,10 +19,11 @@ translations:
   '%u layers': '%u camadas'
   '%zu changes': '%zu alterações'
   '%zu events queued': '%zu eventos na fila'
-  (incompatible): '(incompatível)'
-  (multi-tool): '(multiferramenta)'
-  (none detected): '(nenhum detectado)'
-  (unnamed): '(sem nome)'
+  '%zu plugins failed to load': '%zu plugins falharam ao carregar'
+  (incompatible): (incompatível)
+  (multi-tool): (multiferramenta)
+  (none detected): (nenhum detectado)
+  (unnamed): (sem nome)
   + Add: + Adicionar
   + Add Preset: + Adicionar Predefinição
   + Add Printer: + Adicionar Impressora
@@ -38,7 +40,7 @@ translations:
   --°C: --°C
   -0.5 Hz: -0,5 Hz
   0 = computed: 0 = calculado
-  0 events queued: '0 eventos na fila'
+  0 events queued: 0 eventos na fila
   0 slots: '{0} Slots'
   0.4-2mm direct drive, 4-6mm bowden: 0.4-2mm direct drive, 4-6mm bowden
   0°: 0°
@@ -49,7 +51,7 @@ translations:
   1 min ago: há 1 min
   1 minute: 1 minuto
   1 more tap to {} beta features: Mais 1 toque para {} recursos beta
-  1 plugin loaded: '1 plugin carregado'
+  1 plugin loaded: 1 plugin carregado
   1. Printer homes and probes the bed: 1. A impressora faz home e sonda a mesa
   1. Printer will home and probe each screw: 1. A impressora fará home e sondará cada
     parafuso
@@ -87,6 +89,7 @@ translations:
   A: A
   ABS: ABS
   ACCELEROMETERS: ACELERÔMETROS
+  ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support.: 'Ponte ACE do Moonraker não encontrada. Instale ace_status.py do ValgACE para suporte completo.'
   ACTIONS: AÇÕES
   ADXL: ADXL
   AFC: AFC
@@ -99,6 +102,7 @@ translations:
   AFC reset failed: Falha no reinício AFC
   AFC retracts filament from the toolhead at end of print: AFC retrai o filamento
     do cabeçote ao final da impressão
+  AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later.: 'A versão {} do AFC pode ter problemas de compatibilidade. Atualize para a v1.0.35 ou posterior.'
   ALL DEVICES: TODOS OS DISPOSITIVOS
   AMS: AMS
   'AMS Active: ': 'AMS Ativo: '
@@ -134,7 +138,8 @@ translations:
   Add Widget: Adicionar Widget
   Added to Spoolman: Adicionado ao Spoolman
   Address: Endereço
-  Adjust belt tension until the belt appears stationary: 'Ajuste a tensão da correia até que ela pareça parada'
+  Adjust belt tension until the belt appears stationary: Ajuste a tensão da correia
+    até que ela pareça parada
   Adjust screen brightness level: Ajustar nível de brilho da tela
   Adjust screws, then re-probe.: Ajuste os parafusos, depois sonde novamente.
   Adjust until belt appears frozen: Ajustar até a correia parecer congelada
@@ -150,8 +155,8 @@ translations:
   All: Todos
   All Devices: Todos os Dispositivos
   All axes homed: Todos os eixos referenciados
-  All fields are required: 'Todos os campos são obrigatórios'
-  All plugins loaded successfully: 'Todos os plugins carregados com sucesso'
+  All fields are required: Todos os campos são obrigatórios
+  All plugins loaded successfully: Todos os plugins carregados com sucesso
   Allow cold load/unload: Permitir carregar/descarregar a frio
   Allow display to sleep during active prints: Permitir suspensão da tela durante
     impressões
@@ -165,10 +170,12 @@ translations:
   An accelerometer was detected on your printer.: Um acelerômetro foi detectado na
     sua impressora.
   An error occurred during calibration.: Ocorreu um erro durante a calibração.
-  An error occurred during filament loading.: 'Ocorreu um erro durante o carregamento do filamento.'
-  An error occurred during measurement.: 'Ocorreu um erro durante a medição.'
+  An error occurred during filament loading.: Ocorreu um erro durante o carregamento
+    do filamento.
+  An error occurred during measurement.: Ocorreu um erro durante a medição.
   An error occurred during probing.: Ocorreu um erro durante a sondagem.
   An error occurred while loading filament.: Ocorreu um erro ao carregar o filamento.
+  An internal error occurred. The app continues running — please send a debug bundle from Settings > About if it repeats.: 'Ocorreu um erro interno. O aplicativo continua em execução — envie um pacote de depuração em Configurações > Sobre se isso se repetir.'
   An unexpected printer error occurred.: Ocorreu um erro inesperado na impressora.
   An update is available: Uma atualização está disponível
   Android logcat: Logcat do Android
@@ -179,6 +186,7 @@ translations:
   Anonymous usage statistics: Estatísticas de uso anônimas
   Any notes...: Alguma nota...
   App Background: Fundo do Aplicativo
+  App startup encountered an error. Some features may be unavailable.: 'A inicialização do aplicativo encontrou um erro. Alguns recursos podem estar indisponíveis.'
   Appearance: Aparência
   Apply: Aplicar
   Apply Changes: Aplicar Alterações
@@ -202,22 +210,27 @@ translations:
   Auto-Detect: Auto-Detectar
   Auto-Heat on Load: Aquecer Automaticamente ao Carregar
   Auto-detect: Auto-detectar
+  Auto-install only works on local Moonraker: 'A instalação automática só funciona no Moonraker local'
   Auto-lock: Bloqueio automático
   Auto-poll for weight updates: Consultar peso automaticamente
   Auto-probe or manually check screw heights: Sondagem automática ou verificação manual
     da altura dos parafusos
   Auto-render video: Renderizar vídeo automaticamente
+  Auto-uninstall only works on local Moonraker: 'A desinstalação automática só funciona no Moonraker local'
   Automatic: Automático
   Automatic Heater Control Calibration: Calibração Automática de Controle de Aquecedor
   Automatic LED Control: Controle Automático de LED
   Aux: Aux
   Available: Disponível
-  Available (%s): 'Disponível (%s)'
+  Available (%s): Disponível (%s)
   Available Networks: Redes Disponíveis
   Available networks: Redes disponíveis
   Average: Média
   BEACON: BEACON
   BETA: BETA
+  'BLE connect failed: {}': 'Falha ao conectar BLE: {}'
+  'BLE write failed at packet {}: {}': 'Falha na escrita BLE no pacote {}: {}'
+  'BLE write failed: {}': 'Falha na escrita BLE: {}'
   BLTouch Controls: Controles BLTouch
   BLUETOOTH PRINTERS: IMPRESSORAS BLUETOOTH
   BLUETOOTH SCANNERS: LEITORES BLUETOOTH
@@ -244,12 +257,12 @@ translations:
   Bed is Level!: Mesa Nivelada!
   Bed mesh operation timed out: Malha da mesa — tempo esgotado
   Bed target set to {}°C: Mesa configurada para {}°C
-  Bed temp must be 0-200°C: 'A temperatura da mesa deve ser 0-200°C'
+  Bed temp must be 0-200°C: A temperatura da mesa deve ser 0-200°C
   Bed warming timed out: Aquecimento da mesa — tempo esgotado
   Bed °C: Mesa °C
   'Bed:': 'Mesa:'
-  Belt A frequency locked: 'Frequência da correia A travada'
-  Belt B frequency locked: 'Frequência da correia B travada'
+  Belt A frequency locked: Frequência da correia A travada
+  Belt B frequency locked: Frequência da correia B travada
   Belt Tension: Tensão da correia
   Belt Tension Check: Verificação de tensão da correia
   Belt tension looks good!: A tensão da correia parece boa!
@@ -259,6 +272,7 @@ translations:
   Black: Preto
   Blocked: Bloqueado
   Bluetooth: Bluetooth
+  Bluetooth device not configured: 'Dispositivo Bluetooth não configurado'
   Bluetooth initialization failed: Falha na inicialização do Bluetooth
   Bluetooth is not available on this device: Bluetooth não está disponível neste dispositivo
   Bluetooth not available: Bluetooth não disponível
@@ -344,7 +358,8 @@ translations:
     ser aplicada no display SDL
   Calibration started: Calibração iniciada
   Calibration timed out. Please try again.: Tempo esgotado. Tente novamente.
-  Calibrator not initialized. Try reopening the panel.: 'Calibrador não inicializado. Tente reabrir o painel.'
+  Calibrator not initialized. Try reopening the panel.: Calibrador não inicializado.
+    Tente reabrir o painel.
   Camera: Câmera
   Can't connect — try forgetting and re-pairing the printer: Não foi possível conectar
     — tente esquecer e parear a impressora novamente
@@ -378,7 +393,7 @@ translations:
   Cartographer scan calibrate sent — use Z-Offset panel to adjust: Cartographer calibração
     de varredura enviada — use o painel Z-Offset para ajustar
   Cartographer touch calibrate sent: Cartographer calibração por toque enviada
-  Category: 'Categoria'
+  Category: Categoria
   Center QR code in frame: Centralize o código QR no quadro
   'Chamb:': 'Câmara:'
   Chamber: Câmara
@@ -421,11 +436,12 @@ translations:
   Checking accelerometer...: Verificando acelerômetro...
   Checking filament...: Verificando filamento...
   Checking for plugin...: Verificando plugin...
-  Checking for webcam...: 'Verificando webcam...'
-  Checking plugin: 'Verificando plugin'
+  Checking for webcam...: Verificando webcam...
+  Checking plugin: Verificando plugin
   Checking slots...: Verificando slots...
   Checking timelapse plugin...: Verificando plugin de timelapse...
-  Checking webcam: 'Verificando webcam'
+  Checking webcam: Verificando webcam
+  Checking...: 'Verificando...'
   Choose 12-hour or 24-hour time display: Escolha exibição de hora em 12 ou 24 horas
   Choose Spool: Escolher bobina
   Choose an existing filament, or tap + New to create one.: Escolha um filamento existente
@@ -458,7 +474,7 @@ translations:
   Closer = more squish | Farther = less squish: Mais perto = mais compressão | Mais
     longe = menos compressão
   Coarse: Grosso
-  Code: 'Código'
+  Code: Código
   Coil Temperature: Temperatura da Bobina
   Collect logs and system info for support: Coletar logs e informações do sistema
     para suporte
@@ -471,7 +487,7 @@ translations:
   Complete: Concluído
   Complete!: Concluído!
   Completed: Concluído
-  Completed in %d probe%s: 'Concluído em %d sondagem%s'
+  Completed in %d probe%s: Concluído em %d sondagem%s
   Completed prints will appear here: Impressões concluídas aparecerão aqui
   Computing calibration...: Calculando calibração...
   Config Dir: Diretório de Configuração
@@ -483,7 +499,7 @@ translations:
   Configure Fan Widget: Configurar Widget de Ventoinha
   Configure G10/G11 firmware retraction: Configurar retração de firmware G10/G11
   Configure Graph: Configurar Gráfico
-  Configure Moonraker: 'Configurar Moonraker'
+  Configure Moonraker: Configurar Moonraker
   Configure PRINT_START: Configurar PRINT_START
   Configure Spoolman integration and weight sync settings.: Configurar integração
     com Spoolman e configurações de sincronização de peso.
@@ -499,7 +515,7 @@ translations:
   Configure your printer's cooling fans: Configure as ventoinhas de resfriamento da
     sua impressora
   Configuring Moonraker...: Configurando Moonraker...
-  Confirm PIN: 'Confirmar PIN'
+  Confirm PIN: Confirmar PIN
   Confirm before running macros: Confirmar antes de executar macros
   Connect: Conectar
   Connect a USB label printer first: Conecte primeiro uma impressora de etiquetas
@@ -510,12 +526,13 @@ translations:
     e execute:'
   Connected: Conectado
   Connected (%s): Conectado (%s)
-  Connected (auto-sweep): 'Conectado (varredura automática)'
+  Connected (auto-sweep): Conectado (varredura automática)
   Connected (no discovery): Conectado (sem descoberta)
   Connected (system-managed network): Conectado (rede gerenciada pelo sistema)
-  Connected Time: 'Tempo Conectado'
+  Connected Time: Tempo Conectado
   Connected to: Conectado a
   'Connected to ': 'Conectado a '
+  Connected to {}: 'Conectado a {}'
   Connected! Discovering printer...: Conectado! Descobrindo impressora...
   Connected, discovering...: Conectado, descobrindo...
   Connecting Camera...: Conectando câmera...
@@ -524,8 +541,10 @@ translations:
   Connecting to network...: Conectando à rede...
   Connecting...: Conectando...
   Connection: Conexão
-  Connection Stability: 'Estabilidade da Conexão'
+  Connection Failed: 'Conexão Falhou'
+  Connection Stability: Estabilidade da Conexão
   Connection failed: Conexão falhou
+  Connection failed to {}:{}: 'Falha na conexão com {}:{}'
   Connection failed. Check IP/port and try again.: Conexão falhou. Verifique o IP/porta
     e tente novamente.
   Connection failed. Check credentials.: Conexão falhou. Verifique as credenciais.
@@ -535,10 +554,10 @@ translations:
     sucesso para continuar
   Connection successful!: Conexão bem-sucedida!
   Connection timeout: Tempo de conexão esgotado
-  Connects: 'Conexões'
+  Connects: Conexões
   Console: Console
   Console Settings: Configurações do Console
-  Context: 'Contexto'
+  Context: Contexto
   Control optional print start features: Controlar recursos opcionais de início de
     impressão
   Control power relays and smart outlets: Controlar relés e tomadas inteligentes
@@ -557,14 +576,17 @@ translations:
   Could not check webcam status.\nCheck printer connection.: Não foi possível verificar
     status da webcam.\nVerifique a conexão da impressora.
   Could not forget device: Não foi possível esquecer o dispositivo
+  Could not load printer database: 'Não foi possível carregar o banco de dados de impressoras'
+  Could not parse tips database: 'Não foi possível analisar o banco de dados de dicas'
   Could not reach Spoolman at: Não foi possível alcançar o Spoolman em
+  Could not resolve printer RFCOMM channel: 'Não foi possível resolver o canal RFCOMM da impressora'
   Could not start Bluetooth discovery: Não foi possível iniciar a descoberta Bluetooth
   Could not verify Spoolman status. Moonraker may still be restarting.: Não foi possível
     verificar o status do Spoolman. O Moonraker pode ainda estar reiniciando.
   Couldn't update Spoolman — saved locally: Não foi possível atualizar o Spoolman
     — salvo localmente
   Cover open: Tampa aberta
-  Crash Report: 'Relatório de Falha'
+  Crash Report: Relatório de Falha
   Crash report sent — thank you!: Relatório de erro enviado — obrigado!
   Creality CFS: Creality CFS
   Creality K1: Creality K1
@@ -576,6 +598,7 @@ translations:
   Create backup of %s before applying: Criar backup de %s antes de aplicar
   Create video when print completes: Criar vídeo quando a impressão terminar
   Creating spool...: Criando carretel...
+  'Critical hardware missing: {}': 'Hardware crítico ausente: {}'
   Current / Target: Atual / Alvo
   Current Configuration: Configuração Atual
   Current Frequency: Frequência atual
@@ -623,20 +646,20 @@ translations:
   Delete File?: Excluir Arquivo?
   Delete Profile?: Excluir Perfil?
   Delete Spool?: Excluir Carretel?
-  Delete Video: 'Excluir Vídeo'
-  Delete {}?: 'Excluir {}?'
+  Delete Video: Excluir Vídeo
+  Delete {}?: Excluir {}?
   'Delta:': 'Delta:'
   Deploy: Implantar
   Describe the issue (optional): Descreva o problema (opcional)
   Detailed: Detalhado
   Detecting printer type...: Detectando tipo de impressora...
-  Detecting...: 'Detectando...'
+  Detecting...: Detectando...
   Detection Length: Comprimento de Detecção
   Detection Mode: Modo de Detecção
   Dev: Dev
   Dev channel requires dev_url in config: Canal dev requer dev_url na configuração
   Device: Dispositivo
-  Device name: 'Nome do dispositivo'
+  Device name: Nome do dispositivo
   Device name is required: Nome do dispositivo é obrigatório
   'Device: ': 'Dispositivo: '
   Disable: Desabilitar
@@ -646,14 +669,18 @@ translations:
   Discard: Descartar
   Discard Changes?: Descartar Alterações?
   Disconnected: Desconectado
-  Disconnected Time: 'Tempo Desconectado'
-  Disconnects: 'Desconexões'
+  Disconnected Time: Tempo Desconectado
+  Disconnects: Desconexões
   Discord Community: Comunidade Discord
   Discovered Printers: Impressoras Descobertas
   Dismiss: Dispensar
   Display & Sound: Tela e som
   Display Mode: Modo de Exibição
   Display Sleep: Suspensão da Tela
+  ? Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer
+    resolution in /boot/firmware/config.txt for best results.
+  : 'A resolução da tela é muito alta (%dx%d). O texto pode aparecer pequeno. Reduza
+    a resolução do framebuffer em /boot/firmware/config.txt para melhores resultados.'
   'Display: ': 'Tela: '
   Do not power off your printer.: Não desligue sua impressora.
   Do not touch the printer during calibration: Não toque na impressora durante a calibração
@@ -666,6 +693,7 @@ translations:
   Download update?: Baixar atualização?
   Download v{}?: Baixar v{}?
   Downloading...: Baixando...
+  Downloading... {:.1f}/{:.1f} MB: 'Baixando... {:.1f}/{:.1f} MB'
   Draw a ripple at each touch — helps diagnose offsets: Desenha uma onda em cada toque
     — ajuda a diagnosticar deslocamentos
   Drive Cal: Cal de Drive
@@ -690,7 +718,7 @@ translations:
   'Edit Spool #{}': 'Editar Bobina #{}'
   Edit Theme Colors: Editar Cores do Tema
   Edit Theme Colors (Modified): Editar Cores do Tema (Modificado)
-  Effect: 'Efeito'
+  Effect: Efeito
   Effects: Efeitos
   Eject: Ejetar
   Eject Distance: Distância de Ejeção
@@ -722,9 +750,11 @@ translations:
   Enabled: Habilitado
   Encoder: Encoder
   Ended: Finalizado
+  Enhanced {} operation in PRINT_START: '{} operação aprimorada no PRINT_START'
+  Enhanced {} operations in PRINT_START: '{} operações aprimoradas no PRINT_START'
   Enhancement Complete!: Aprimoramento Concluído!
   Enhancement Failed: Aprimoramento Falhou
-  Enter Current PIN: 'Digite o PIN Atual'
+  Enter Current PIN: Digite o PIN Atual
   Enter G-code command...: Digite o comando G-code...
   Enter New PIN: Digite o Novo PIN
   Enter PIN: Digite o PIN
@@ -737,30 +767,45 @@ translations:
   Enter the IP address and port of your Spoolman server.: Insira o endereço IP e a
     porta do seu servidor Spoolman.
   Error: Erro
+  Error at chunk {} (code={}): 'Erro no fragmento {} (code={})'
   Error loading file: Erro ao carregar arquivo
+  Error loading printing tips: 'Erro ao carregar dicas de impressão'
   'Error saving printer settings: {}': 'Erro ao salvar configurações da impressora:
     {}'
   Error state: Estado de erro
+  'Error: %s': 'Erro: %s'
+  'Error: Cannot update while printing': 'Erro: Não é possível atualizar durante a impressão'
+  'Error: Checksum mismatch': 'Erro: Checksum não corresponde'
+  'Error: Corrupt download': 'Erro: Download corrompido'
+  'Error: Download failed': 'Erro: Download falhou'
+  'Error: Installer not found': 'Erro: Instalador não encontrado'
+  'Error: Invalid download': 'Erro: Download inválido'
+  'Error: No update available': 'Erro: Nenhuma atualização disponível'
+  'Error: Not enough disk space': 'Erro: Espaço em disco insuficiente'
+  'Error: Verification failed': 'Erro: Verificação falhou'
+  'Error: Wrong architecture': 'Erro: Arquitetura incorreta'
+  'Error: `unzip` not installed': 'Erro: `unzip` não instalado'
   Escalate to emergency stop if cancel doesn't respond: Escalar para parada de emergência
     se cancelar não responder
   Escalation Timeout: Tempo de Escalação
-  Est. Duration: 'Duração Est.'
+  Est. Duration: Duração Est.
   Estimating...: Estimando...
   Ethernet: Ethernet
   Events appear here after sessions and prints: Eventos aparecem aqui após sessões
     e impressões
   Excellent Accuracy: Precisão Excelente
+  'Exception: {}': 'Exceção: {}'
   Exclude: Excluir
   Excluded: Excluído
   Exclusion cancelled: Exclusão cancelada
   Execute printer macros: Executar macros da impressora
   Exhaust Fan: Ventoinha de Exaustão
-  Exit Code: 'Código de Saída'
+  Exit Code: Código de Saída
   Explore how the selected palette shapes text, controls, and status colors.: Explore
     como a paleta selecionada molda texto, controles e cores de status.
   Explore palette and preview: Explorar paleta e visualizar
   External: Externo
-  External Filament: 'Filamento Externo'
+  External Filament: Filamento Externo
   External Spool: Bobina externa
   External spool cleared: Bobina externa removida
   External spool updated: Bobina externa atualizada
@@ -787,6 +832,7 @@ translations:
   Failed to analyze PRINT_START macro: Falha ao analisar macro PRINT_START
   Failed to apply limits: Falha ao aplicar limites
   Failed to apply settings: Falha ao aplicar configurações
+  Failed to build raster data: 'Falha ao construir os dados raster'
   'Failed to cancel: {}': 'Falha ao cancelar: {}'
   'Failed to clear print state: {}': 'Falha ao limpar estado de impressão: {}'
   'Failed to connect to ''{}'': {}': 'Falha ao conectar a ''{}'': {}'
@@ -810,8 +856,10 @@ translations:
   Failed to enable tuning tower: Falha ao habilitar torre de ajuste
   'Failed to exclude ''{}'': {}': 'Falha ao excluir ''{}'': {}'
   Failed to get limits: Falha ao obter limites
+  Failed to initialize Bluetooth: 'Falha ao inicializar o Bluetooth'
+  Failed to initialize Bluetooth context: 'Falha ao inicializar o contexto Bluetooth'
   Failed to load G-code preview: Falha ao carregar visualização G-code
-  Failed to load devices: 'Falha ao carregar dispositivos'
+  Failed to load devices: Falha ao carregar dispositivos
   Failed to load fan configuration screen: Falha ao carregar tela de configuração
     da ventoinha
   Failed to load fan control overlay: Falha ao carregar controle da ventoinha
@@ -836,8 +884,10 @@ translations:
   Failed to read config. Check connection.: Falha ao ler configuração. Verifique a
     conexão.
   Failed to read moonraker.conf.: Falha ao ler moonraker.conf.
+  Failed to read printer status: 'Falha ao ler o status da impressora'
   Failed to refresh file list: Falha ao atualizar lista de arquivos
   'Failed to remap G-code: {}': 'Falha ao remapear G-code: {}'
+  Failed to render label: 'Falha ao renderizar a etiqueta'
   'Failed to reprint: {}': 'Falha ao reimprimir: {}'
   'Failed to reset flow: {}': 'Falha ao redefinir fluxo: {}'
   'Failed to reset speed: {}': 'Falha ao redefinir velocidade: {}'
@@ -857,6 +907,8 @@ translations:
   Failed to save spool: Falha ao salvar carretel
   Failed to save theme file: Falha ao salvar arquivo do tema
   'Failed to send command: {}': 'Falha ao enviar comando: {}'
+  Failed to send print data: 'Falha ao enviar os dados de impressão'
+  Failed to send status request: 'Falha ao enviar a solicitação de status'
   Failed to set active spool: Falha ao definir carretel ativo
   'Failed to set bed temp: {}': 'Falha ao definir temp. da mesa: {}'
   'Failed to set chamber temp: {}': 'Falha ao definir temp. da câmara: {}'
@@ -867,8 +919,10 @@ translations:
   'Failed to set {} temp: {}': 'Falha ao definir temp. de {}: {}'
   Failed to show confirmation dialog: Falha ao exibir diálogo de confirmação
   Failed to start calibration: Falha ao iniciar calibração
+  'Failed to start installer: ': 'Falha ao iniciar o instalador: '
   'Failed to start print: {}': 'Falha ao iniciar impressão: {}'
-  Failed to toggle %s: 'Falha ao alternar %s'
+  'Failed to start uninstaller: ': 'Falha ao iniciar o desinstalador: '
+  Failed to toggle %s: Falha ao alternar %s
   'Failed to toggle timelapse: {}': 'Falha ao alternar timelapse: {}'
   'Failed to turn off heaters: {}': 'Falha ao desligar aquecedores: {}'
   'Failed to unload: {}': 'Falha ao descarregar: {}'
@@ -880,7 +934,7 @@ translations:
   Failed to update phase tracking: Falha ao atualizar rastreamento de fase
   'Failed to upload modified G-code: {}': 'Falha ao enviar G-code modificado: {}'
   'Failed to upload remapped G-code: {}': 'Falha ao enviar G-code remapeado: {}'
-  Fan: 'Ventoinha'
+  Fan: Ventoinha
   Fan Calibration: Calibração da Ventoinha
   Fan Transfer: Transferência da Ventoinha
   'Fan control failed: {}': 'Falha no controle da ventoinha: {}'
@@ -912,6 +966,7 @@ translations:
   Filament runout: Fim de filamento
   Filament runout and motion detection sensors: Sensores de detecção de fim de filamento
     e movimento
+  Filament sensor available for runout detection: 'Sensor de filamento disponível para detecção de fim de filamento'
   Filament tension is balanced: A tensão do filamento está equilibrada
   Filament tracking & label printing: Rastreamento de filamento e impressão de etiquetas
   Filament tracking and inventory: Rastreamento e inventário de filamento
@@ -920,7 +975,7 @@ translations:
   FilamentSensor: Sensor de Filamento
   File: Arquivo
   File Info: Informações do Arquivo
-  File Size: 'Tamanho do Arquivo'
+  File Size: Tamanho do Arquivo
   Filename: Nome do Arquivo
   'Fill: 100% / 75% / 40% / 10%': 'Preenchimento: 100% / 75% / 40% / 10%'
   Fine: Fino
@@ -952,9 +1007,12 @@ translations:
   ? 'Frequency Delta: Difference between Path A and B. Ideally under 5 Hz; over 15
     Hz needs adjustment.\n\nPath Similarity: How closely the vibration profiles match.
     Above 90% is excellent; below 70% suggests uneven tension.'
-  : 'Delta de Frequência: Diferença entre o Caminho A e B. Idealmente abaixo de 5 Hz; acima de 15 Hz precisa de ajuste.\n\nSimilaridade de Caminho: O quão próximos os perfis de vibração coincidem. Acima de 90% é excelente; abaixo de 70% sugere tensão desigual.'
+  : 'Delta de Frequência: Diferença entre o Caminho A e B. Idealmente abaixo de 5
+    Hz; acima de 15 Hz precisa de ajuste.\n\nSimilaridade de Caminho: O quão próximos
+    os perfis de vibração coincidem. Acima de 90% é excelente; abaixo de 70% sugere
+    tensão desigual.'
   From Buffer: Do buffer
-  From Version: 'Da Versão'
+  From Version: Da Versão
   Front: Frente
   Full: Completo
   G-code Console: Console G-code
@@ -972,7 +1030,8 @@ translations:
   Guides and reference: Guias e referência
   H: H
   HOST: Host
-  HTTP Code: 'Código HTTP'
+  HTTP Code: Código HTTP
+  'HTTP error: {} {}': 'Erro HTTP: {} {}'
   HUMIDITY SENSORS: SENSORES DE UMIDADE
   Hang on, we'll be right back!: Aguarde, já voltamos!
   Happy Hare MMU: Happy Hare MMU
@@ -981,7 +1040,7 @@ translations:
   Hardware Health: Saúde do Hardware
   Hardware Issues: Problemas de Hardware
   Hardware Name: Nome do Hardware
-  Hardware Profile: 'Perfil de Hardware'
+  Hardware Profile: Perfil de Hardware
   Hardware is validated on startup and reconnection: O hardware é validado na inicialização
     e reconexão
   Hardware marked as optional: Hardware marcado como opcional
@@ -1031,7 +1090,7 @@ translations:
   Help improve HelixScreen?: Ajudar a melhorar o HelixScreen?
   Hide Firmware Noise: Ocultar Ruído do Firmware
   Hide Temperature Reports: Ocultar Relatórios de Temperatura
-  High Water Mark: 'Marca de Pico'
+  High Water Mark: Marca de Pico
   Home: Início
   Home failed: Homing falhou
   Home selector: Fazer home do seletor
@@ -1047,7 +1106,8 @@ translations:
   Homing may still be running — response timed out: O homing pode ainda estar em execução
     — tempo esgotado
   Homing timed out: Homing — tempo esgotado
-  Homing timed out — printer may still be homing: 'Tempo de referenciamento esgotado — a impressora ainda pode estar referenciando'
+  Homing timed out — printer may still be homing: Tempo de referenciamento esgotado
+    — a impressora ainda pode estar referenciando
   Homing...: Posicionando...
   Horizontal: Horizontal
   Horizontal Progress (Leveling Wizard): Progresso Horizontal (Assistente de Nivelamento)
@@ -1064,10 +1124,13 @@ translations:
   How the toolhead icon appears: Como o ícone do cabeçote aparece
   Humidity: Umidade
   Hyperlapse: Hyperlapse
-  Hyperlapse captures frames at fixed time intervals. Good for very long prints.: 'O Hyperlapse captura quadros em intervalos de tempo fixos. Bom para impressões muito longas.'
+  Hyperlapse captures frames at fixed time intervals. Good for very long prints.: O
+    Hyperlapse captura quadros em intervalos de tempo fixos. Bom para impressões muito
+    longas.
   IMPORT FROM USB: IMPORTAR DO USB
   IP Address / Hostname: Endereço IP / Hostname
   'IP:': 'IP:'
+  'IPP error: {}': 'Erro IPP: {}'
   Icon: Ícone
   Idle: Ocioso
   If Moonraker is local or your screen is attached to the printer directly, we'll connect automatically: Se
@@ -1081,7 +1144,8 @@ translations:
   In Progress: Em Andamento
   Inactive: Inativo
   Include Klipper/Moonraker logs: Incluir logs do Klipper/Moonraker
-  'Incompatible materials: {} cannot use {} as backup': 'Materiais incompatíveis: {} não pode usar {} como reserva'
+  'Incompatible materials: {} cannot use {} as backup': 'Materiais incompatíveis:
+    {} não pode usar {} como reserva'
   Indexing G-code...: Indexando G-code...
   Info: Info
   Initializing...: Inicializando...
@@ -1104,7 +1168,8 @@ translations:
   Install Plugin: Instalar Plugin
   Install Root: Raiz de Instalação
   Install Update: Instalar Atualização
-  Install plugin: 'Instalar plugin'
+  Install plugin: Instalar plugin
+  Install script not found. Use the remote install command instead.: 'Script de instalação não encontrado. Use o comando de instalação remota.'
   Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Instale
     o plugin HelixPrint nas configurações Avançadas para remapear o filamento sem
     afetar o histórico de impressão.
@@ -1115,13 +1180,20 @@ translations:
     de timelapse via SSH,\ndepois toque em "Verificar novamente".
   Install timelapse plugin: Instalar plugin de timelapse
   Installation Failed: Instalação Falhou
+  Installation failed: 'A instalação falhou'
+  Installation failed. Check logs for details.: 'A instalação falhou. Verifique os logs para detalhes.'
+  'Installation failed: ': 'A instalação falhou: '
   Installation takes about 30 seconds.: A instalação leva cerca de 30 segundos.
+  Installation timed out: 'A instalação — tempo esgotado'
+  Installation timed out. The script may be stuck.: 'A instalação — tempo esgotado. O script pode estar travado.'
   Installing...: Instalando...
   Intensity: Intensidade
   Interactive probe calibration: Calibração interativa de sonda
   'Internal error: API not available': 'Erro interno: API não disponível'
   'Internal error: no scan result': 'Erro interno: sem resultado de análise'
   Invalid port number: Número de porta inválido
+  'Invalid sheet template index: {} (have {})': 'Índice de modelo de folha inválido: {} (tem {})'
+  Invalid status response from printer: 'Resposta de status inválida da impressora'
   Issue description: Descrição do problema
   Job Queue: Fila de Trabalhos
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Participe
@@ -1136,6 +1208,7 @@ translations:
   Keyboard Test (Gboard-style): Teste de Teclado (estilo Gboard)
   Kinematics: Cinemática
   Klipper: Klipper
+  Klipper Error: 'Erro do Klipper'
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: O
     firmware Klipper desconectou do host. Tente reiniciar o Klipper ou realizar um
     firmware restart.
@@ -1153,12 +1226,13 @@ translations:
   Klipper will restart to apply new settings.: Klipper será reiniciado para aplicar
     as novas configurações.
   'Klipper: ': 'Klipper: '
-  Klippy Errors: 'Erros do Klippy'
-  Klippy Shutdowns: 'Desligamentos do Klippy'
+  Klippy Errors: Erros do Klippy
+  Klippy Shutdowns: Desligamentos do Klippy
   LED SELECTION: SELEÇÃO DE LED
   LED Settings: Configurações de LED
   LED Strip: Fita de LED
   LED on at Start: LED Ligado ao Iniciar
+  LED strip available for lighting control: 'Fita de LED disponível para controle de iluminação'
   LEDs: LEDs
   LEDs controlled by the light button: LEDs controlados pelo botão de luz
   LOADED: CARREGADO
@@ -1180,7 +1254,8 @@ translations:
   Later: Depois
   Layer: Camada
   Layer Height: Altura da Camada
-  Layer Macro captures one frame per layer change. Best for most prints.: 'A Macro de Camada captura um quadro por mudança de camada. Melhor para a maioria das impressões.'
+  Layer Macro captures one frame per layer change. Best for most prints.: A Macro
+    de Camada captura um quadro por mudança de camada. Melhor para a maioria das impressões.
   Layer mode captures one frame per layer change. Best for most prints.: O modo por
     camada captura um quadro por mudança de camada. Melhor para a maioria das impressões.
   'Layer:': 'Camada:'
@@ -1209,7 +1284,7 @@ translations:
   Loading Error: Erro de Carregamento
   Loading Filament...: Carregando Filamento...
   Loading G-code...: Carregando G-code...
-  Loading devices...: 'Carregando dispositivos...'
+  Loading devices...: Carregando dispositivos...
   Loading filament ({}mm)...: Carregando filamento ({}mm)...
   Loading filament...: Carregando filamento...
   Loading filaments...: Carregando filamentos...
@@ -1217,7 +1292,7 @@ translations:
   Loading spools...: Carregando carretéis...
   Loading vendors...: Carregando fornecedores...
   Loading...: Carregando...
-  Locale: 'Localidade'
+  Locale: Localidade
   'Locale: ': 'Localidade: '
   Location: Localização
   Lock: Bloquear
@@ -1227,7 +1302,7 @@ translations:
   Locked during print: Bloqueado durante impressão
   Log Level: Nível de log
   Logs: Registros
-  Longest Disconnect: 'Maior Desconexão'
+  Longest Disconnect: Maior Desconexão
   Loosen Path A belt.: Afrouxar a correia do Caminho A.
   Loosen Path B belt.: Afrouxar a correia do Caminho B.
   Lost connection during print — try again: Conexão perdida durante a impressão —
@@ -1239,7 +1314,7 @@ translations:
   MACRO DEVICES: DISPOSITIVOS DE MACRO
   MAIN POWER BUTTON: BOTÃO DE ENERGIA PRINCIPAL
   MANUAL: MANUAL
-  MB RAM: 'MB RAM'
+  MB RAM: MB RAM
   MCU: MCU
   MCU, host, and auxiliary temperature monitoring: Monitoramento de temperatura MCU,
     host e auxiliar
@@ -1308,12 +1383,12 @@ translations:
   Measure belt path frequencies: Medir frequências dos caminhos de correia
   Measured: Medido
   Measurement Failed: Medição falhou
-  Measuring Path A... %d%%: 'Medindo Caminho A... %d%%'
-  Measuring Path B... %d%%: 'Medindo Caminho B... %d%%'
+  Measuring Path A... %d%%: Medindo Caminho A... %d%%
+  Measuring Path B... %d%%: Medindo Caminho B... %d%%
   Mechanical setup: Configuração mecânica
   Memory: Memória
   Memory (MB): Memória (MB)
-  Memory Snapshot: 'Captura de Memória'
+  Memory Snapshot: Captura de Memória
   Mesh Complete: Malha Concluída
   Mesh saved as '{}': Malha salva como '{}'
   Method: Método
@@ -1382,8 +1457,8 @@ translations:
   New profile name: Novo nome do perfil
   Next: Próximo
   Niimbot (Bluetooth): Niimbot (Bluetooth)
-  'No': 'Não'
-  No API connection: 'Sem conexão com a API'
+  'No': Não
+  No API connection: Sem conexão com a API
   No Bluetooth printer selected — pick one in settings: Nenhuma impressora Bluetooth
     selecionada — escolha uma nas configurações
   No Bluetooth printers found: Nenhuma impressora Bluetooth encontrada
@@ -1398,10 +1473,11 @@ translations:
   No Multi-Filament System connected: Nenhum sistema multi-filamento conectado
   No Multi-Filament System connected.: Nenhum sistema multi-filamento conectado.
   No PRINT_START macro found: Macro PRINT_START não encontrada
-  No PWM LED detected for strobe mode: 'Nenhum LED PWM detectado para o modo estroboscópico'
+  No PWM LED detected for strobe mode: Nenhum LED PWM detectado para o modo estroboscópico
   No Power Devices: Sem Dispositivos de Energia
   No Spool: Sem bobina
   No Spools: Sem Carretéis
+  No USB printer detected: 'Nenhuma impressora USB detectada'
   No USB printers found: Nenhuma impressora USB encontrada
   No buffer data available: Nenhum dado de buffer disponível
   No camera — use USB barcode scanner: Sem câmera — use leitor de código de barras
@@ -1409,7 +1485,7 @@ translations:
   No changes selected.\n\nClick Cancel to close.: Nenhuma alteração selecionada.\n\nClique
     em Cancelar para fechar.
   No changes to revert: Nenhuma alteração para reverter
-  No color: 'Sem cor'
+  No color: Sem cor
   No dryer available. Store filament in a sealed dry box with desiccant for best results.: Nenhum
     secador disponível. Armazene o filamento em uma caixa seca selada com dessecante
     para melhores resultados.
@@ -1425,7 +1501,7 @@ translations:
   No jobs in queue: Nenhum trabalho na fila
   No light configured. Set up in Settings > LED Settings.: Nenhuma luz configurada.
     Configure em Ajustes > Configuração LED.
-  No macro devices configured: 'Nenhum dispositivo de macro configurado'
+  No macro devices configured: Nenhum dispositivo de macro configurado
   No macros available: Nenhuma macro disponível
   No macros found: Nenhuma macro encontrada
   No matching prints: Nenhuma impressão correspondente
@@ -1437,10 +1513,10 @@ translations:
   No networks found: Nenhuma rede encontrada
   No notifications: Sem notificações
   No objects defined for this print: Nenhum objeto definido para esta impressão
-  No plugins: 'Sem plugins'
-  No plugins discovered: 'Nenhum plugin descoberto'
+  No plugins: Sem plugins
+  No plugins discovered: Nenhum plugin descoberto
   No plugins found: Nenhum plugin encontrado
-  No presets configured: 'Nenhuma predefinição configurada'
+  No presets configured: Nenhuma predefinição configurada
   No preview: Sem visualização
   No print history found: Nenhum histórico de impressão
   No print history yet: Ainda sem histórico de impressão
@@ -1454,12 +1530,14 @@ translations:
   No sensors detected: Nenhum sensor detectado
   No spool assigned: Nenhuma bobina atribuída
   No spools found — tap to retry: Nenhuma bobina encontrada — toque para tentar novamente
+  No tape detected in printer: 'Nenhuma fita detectada na impressora'
+  No target printer configured: 'Nenhuma impressora de destino configurada'
   No timelapse videos found: Nenhum vídeo timelapse encontrado
   No vendors found: Nenhum fornecedor encontrado
   No webcam detected.\nA webcam is required for timelapse.: Nenhuma webcam detectada.\nUma
     webcam é necessária para timelapse.
   None: Nenhum
-  None (disable): 'Nenhum (desativar)'
+  None (disable): Nenhum (desativar)
   Not Enough Filament: Filamento Insuficiente
   Not Now: Agora Não
   Not calibrated: Não calibrado
@@ -1467,9 +1545,9 @@ translations:
   Not connected: Não conectado
   Not connected to printer: Não conectado à impressora
   Not connected to printer.: Não conectado à impressora.
-  Not detected: 'Não detectado'
-  Not found (strobe only): 'Não encontrado (apenas estroboscópico)'
-  Not found (use phone app): 'Não encontrado (use o app do celular)'
+  Not detected: Não detectado
+  Not found (strobe only): Não encontrado (apenas estroboscópico)
+  Not found (use phone app): Não encontrado (use o app do celular)
   Not yet calibrated: Ainda não calibrado
   Notes: Notas
   Notes (optional): Notas (opcional)
@@ -1488,9 +1566,9 @@ translations:
   Nozzle Temperature: Temperatura do Bico
   Nozzle Temps: Temps do bico
   Nozzle heater turned off: Aquecedor do bico desligado
-  Nozzle min cannot exceed max: 'O mínimo do bico não pode exceder o máximo'
+  Nozzle min cannot exceed max: O mínimo do bico não pode exceder o máximo
   Nozzle target set to {}°C: Bico configurado para {}°C
-  Nozzle temp must be 100-500°C: 'A temperatura do bico deve ser 100-500°C'
+  Nozzle temp must be 100-500°C: A temperatura do bico deve ser 100-500°C
   Nozzle °C: Bico °C
   'Nozzle:': 'Bico:'
   OD: OD
@@ -1504,9 +1582,10 @@ translations:
   Objects: Objetos
   'Off': Desligado
   'Off:': 'Desligado:'
+  Off\nFlying Toasters\nStarfield\n3D Pipes: 'Desligado\nTorradeiras Voadoras\nCampo Estelar\nCanos 3D'
   'On': Ligado
   On and Off macros must be different: Macros de Ligar e Desligar devem ser diferentes
-  On/Off: 'Liga/Desliga'
+  On/Off: Liga/Desliga
   On/Off (state-aware): Ligar/Desligar (com estado)
   'On:': 'Ligado:'
   One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: Uma
@@ -1526,29 +1605,31 @@ translations:
   Or Enter Manually: Ou Digite Manualmente
   Oscillating... cycle %d/%d: Oscilando... ciclo %d/%d
   Out of range: Fora do intervalo
-  Outcome: 'Resultado'
+  Outcome: Resultado
   Output Device: Dispositivo de Saída
   Output Mode: Modo de Saída
   Output Pin: Pino de Saída
   Overheating: Superaquecimento
   'Overlay Visits: ': 'Visitas de Sobreposição: '
-  Overlays Opened: 'Sobreposições Abertas'
+  Overlays Opened: Sobreposições Abertas
   Override auto-detection if your chamber sensor or heater isn't named 'chamber'.: Substituir
     auto-detecção se seu sensor ou aquecedor da câmara não se chama 'chamber'.
   P: P
   PA: PA
   PETG: PETG
   PID: PID
-  PIN must be 4-6 digits: 'O PIN deve ter 4-6 dígitos'
-  PIN removed: 'PIN removido'
-  PIN set: 'PIN definido'
-  PINs don't match: 'Os PINs não coincidem'
+  PIN must be 4-6 digits: O PIN deve ter 4-6 dígitos
+  PIN removed: PIN removido
+  PIN set: PIN definido
+  PINs don't match: Os PINs não coincidem
   PLA: PLA
   PLA - Black: PLA - Preto
   POWER: ENERGIA
   PRE-PRINT STEPS: ETAPAS PRÉ-IMPRESSÃO
   PRINT OPTIONS: OPÇÕES DE IMPRESSÃO
   PRINTERS: IMPRESSORAS
+  PRINT_START has {} skippable operation: 'PRINT_START tem {} operação opcional'
+  PRINT_START has {} skippable operations: 'PRINT_START tem {} operações opcionais'
   PROBE SENSORS: SENSORES DE SONDA
   Pair: Parear
   Pair Bluetooth Printer: Parear Impressora Bluetooth
@@ -1561,7 +1642,7 @@ translations:
     e ligá-lo novamente, depois toque em Pair novamente.
   Pairing failed: Falha ao parear
   Pairing...: Pareando...
-  Panel Usage: 'Uso do Painel'
+  Panel Usage: Uso do Painel
   Paper Test Calibration: Calibração por Teste de Papel
   Parameters: Parâmetros
   Part: Peça
@@ -1595,17 +1676,17 @@ translations:
   'Place image files (PNG, JPEG, BMP, GIF) in config/custom_images/. Max size: 2048×2048 pixels.': 'Coloque
     arquivos de imagem (PNG, JPEG, BMP, GIF) em config/custom_images/. Tamanho máx.:
     2048×2048 pixels.'
-  Place plugins in the plugins directory: 'Coloque os plugins no diretório de plugins'
+  Place plugins in the plugins directory: Coloque os plugins no diretório de plugins
   Place plugins in the plugins directory to extend HelixScreen: Coloque plugins no
     diretório de plugins para estender o HelixScreen
   Placed: Colocado
-  Platform: 'Plataforma'
+  Platform: Plataforma
   'Platform: ': 'Plataforma: '
   Play / stop Crockett's Theme: Reproduzir / parar Crockett's Theme
   Please enter a theme name: Por favor, digite um nome para o tema
   Please enter a valid port (1-65535).: Insira uma porta válida (1-65535).
   Please enter an IP address or hostname.: Insira um endereço IP ou hostname.
-  Please fill in the highlighted fields: 'Por favor, preencha os campos destacados'
+  Please fill in the highlighted fields: Por favor, preencha os campos destacados
   Please wait while the printer homes and probes.: Por favor, aguarde enquanto a impressora
     faz home e sonda.
   Please wait while the printer probes each screw position.: Por favor, aguarde enquanto
@@ -1614,8 +1695,10 @@ translations:
   Plugin disabled: Plugin desabilitado
   Plugin installed successfully: Plugin instalado com sucesso
   Plugin installed successfully.: Plugin instalado com sucesso.
+  Plugin installed successfully. Moonraker is restarting...: 'Plugin instalado com sucesso. O Moonraker está reiniciando...'
   Plugin not responding after restart.\nIt may need more time to load.: Plugin não
     responde após reinício.\nPode precisar de mais tempo para carregar.
+  Plugin uninstalled successfully.: 'Plugin desinstalado com sucesso.'
   Plugins: Plugins
   Plugins are discovered on application startup: Plugins são descobertos na inicialização
     do aplicativo
@@ -1663,14 +1746,16 @@ translations:
   Print Label: Imprimir Etiqueta
   Print Library: Biblioteca de impressão
   Print Objects: Objetos de Impressão
-  Print Outcome: 'Resultado da Impressão'
+  Print Outcome: Resultado da Impressão
   Print Paused: Impressão Pausada
   Print Speed: Velocidade de Impressão
-  Print Start: 'Início da Impressão'
+  Print Start: Início da Impressão
   Print Status: Status da Impressão
   Print Time: Tempo de Impressão
   Print Tuning: Ajuste de Impressão
   Print Was Terminated: A impressão foi terminada
+  Print didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X}): 'A impressão não iniciou — a impressora pode estar ocupada ou offline (B3 polls={}, status=0x{:02X}, error=0x{:02X})'
+  Print error: 'Erro de impressão'
   Print failed: Impressão falhou
   Print issue detected: Problema de impressão detectado
   'Print preparation failed: {}': 'Falha na preparação da impressão: {}'
@@ -1680,6 +1765,7 @@ translations:
   Print setup failed: Falha na configuração da impressão
   'Print setup failed: internal error': 'Falha na configuração da impressão: erro
     interno'
+  Print timed out waiting for completion: 'A impressão — tempo esgotado aguardando a conclusão'
   Printer: Impressora
   Printer Error: Erro da Impressora
   Printer Firmware Disconnected: Firmware da Impressora Desconectado
@@ -1699,6 +1785,9 @@ translations:
   'Printer Setup: Touch Calibration': 'Config. Impressora: Calibração Touch'
   Printer Shutdown: Desligamento da Impressora
   Printer Type: Tipo de Impressora
+  Printer accepted job but isn't printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X}): 'A impressora aceitou o trabalho mas não está imprimindo — verifique a tampa, o papel e o tipo de etiqueta (firmware status=0x{:02X} error=0x{:02X})'
+  Printer database format error: 'Erro de formato do banco de dados de impressoras'
+  Printer database is corrupt: 'O banco de dados de impressoras está corrompido'
   Printer didn't respond — make sure it's on and in range: A impressora não respondeu
     — certifique-se de que está ligada e ao alcance
   Printer doesn't expose the expected service — wrong device?: A impressora não expõe
@@ -1707,6 +1796,7 @@ translations:
   Printer is not paired — pair it first: A impressora não está pareada — pareie-a
     primeiro
   Printer name: Nome da impressora
+  Printer not ready: 'Impressora não está pronta'
   Printer ready: Impressora pronta
   'Printer:': 'Impressora:'
   'Printer: ': 'Impressora: '
@@ -1769,7 +1859,9 @@ translations:
   Quick Button 3: Botão Rápido 3
   Quick Button 4: Botão Rápido 4
   Quick actions, calibration, speed: Ações rápidas, calibração, velocidade
-  RSS: 'RSS'
+  RFCOMM connect failed: 'Falha ao conectar RFCOMM'
+  'RFCOMM connect failed: ': 'Falha ao conectar RFCOMM: '
+  RSS: RSS
   'RSS:': 'RSS:'
   Raspberry Pi: Raspberry Pi
   Raspberry Pi (32-bit): Raspberry Pi (32-bit)
@@ -1778,8 +1870,8 @@ translations:
     do Happy Hare com o hardware.
   Ready: Pronto
   Ready to Apply: Pronto para Aplicar
-  Ready to load: 'Pronto para carregar'
-  Reason: 'Motivo'
+  Ready to load: Pronto para carregar
+  Reason: Motivo
   'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': 'Motivo:
     {}\n\nA impressora não pode retomar esta impressão. Reiniciar do início?'
   Reboot: Reiniciar
@@ -1799,6 +1891,7 @@ translations:
   Recover MMU state?: Recuperar estado do MMU?
   Recovering AFC system...: Recuperando sistema AFC...
   Recovery failed: Recuperação falhou
+  'Recovery failed: ': 'A recuperação falhou: '
   Reduce Sensitivity: Reduzir Sensibilidade
   Reduce ringing and ghosting artifacts: Reduzir artefatos de ringing e ghosting
   Reduce vibration artifacts like ringing and ghosting: Reduzir artefatos de vibração
@@ -1832,9 +1925,11 @@ translations:
   Report saved to crash_report.txt: Relatório salvo em crash_report.txt
   Reprint: Reimprimir
   Reprint Last: Reimprimir última
+  Request Failed: 'Solicitação Falhou'
   Require confirmation before emergency stop: Exigir confirmação antes da parada de
     emergência
   Requires Moonraker-Timelapse plugin: Requer plugin Moonraker-Timelapse
+  Resend write failed at chunk {}: 'Falha ao reenviar a escrita no fragmento {}'
   Reset: Resetar
   Reset Home Screen?: Redefinir tela inicial?
   Reset Speed & Flow to 100%: Resetar Velocidade & Fluxo para 100%
@@ -1850,7 +1945,7 @@ translations:
   Restart Firmware?: Reiniciar firmware?
   Restart HelixScreen: Reiniciar HelixScreen
   Restart Klipper: Reiniciar Klipper
-  Restart Moonraker: 'Reiniciar Moonraker'
+  Restart Moonraker: Reiniciar Moonraker
   Restart Now: Reiniciar Agora
   Restart Required: Reinício Necessário
   'Restart failed: not connected': 'Reinício falhou: não conectado'
@@ -1913,6 +2008,11 @@ translations:
   STOP: PARAR
   STYLE PROPERTIES: PROPRIEDADES DE ESTILO
   SWITCH SENSORS: SENSORES DE CHAVE
+  ? Safe Mode active. The printer connection is disabled because the app kept crashing
+    on startup. Open Settings to fix the issue, then reboot.
+  : 'Modo Seguro ativo. A conexão com a impressora está desativada porque o aplicativo
+    continuou travando na inicialização. Abra as Configurações para corrigir o problema
+    e reinicie.'
   Safety & Notifications: Segurança e notificações
   Sample: Amostra
   Sample %d/%d: Amostra %d/%d
@@ -1957,7 +2057,7 @@ translations:
   Scanning for networks...: Escaneando redes...
   Scanning...: Escaneando...
   'Score: 0': 'Pontuação: 0'
-  Screen Blank: 'Tela Apagada'
+  Screen Blank: Tela Apagada
   Screen Dim: Escurecimento da Tela
   Screen dims to lower brightness after period of inactivity: A tela escurece para
     menor brilho após período de inatividade
@@ -1996,7 +2096,7 @@ translations:
   Select macro for fourth button: Selecionar macro para o quarto botão
   Select macro for second button: Selecionar macro para o segundo botão
   Select macro for third button: Selecionar macro para o terceiro botão
-  Select material to begin: 'Selecione o material para começar'
+  Select material to begin: Selecione o material para começar
   Select sensor: Selecionar sensor
   Select slot: Selecionar slot
   'Select slot failed: {}': 'Falha ao selecionar slot: {}'
@@ -2026,22 +2126,24 @@ translations:
     HelixScreen rastreia o estado.
   Server Setup: Configuração do Servidor
   Servo: Servo
-  Session Duration: 'Duração da Sessão'
-  Session Start: 'Início da Sessão'
+  Session Duration: Duração da Sessão
+  Session Start: Início da Sessão
   'Set ': 'Definir '
   Set Active: Definir Ativo
   Set PIN: Definir PIN
   ? 'Set a phone strobe app to %.1f Hz and aim at the belt. Adjust until the belt
     appears stationary.\n\nRecommended apps:\n  Android: Strobily, Strobe Light\n  iOS:
     Strobe Light Tachometer, myStroboscope'
-  : 'Configure um app estroboscópico do celular para %.1f Hz e aponte para a correia. Ajuste até que a correia pareça parada.\n\nApps recomendados:\n  Android: Strobily, Strobe Light\n  iOS: Strobe Light Tachometer, myStroboscope'
+  : 'Configure um app estroboscópico do celular para %.1f Hz e aponte para a correia.
+    Ajuste até que a correia pareça parada.\n\nApps recomendados:\n  Android: Strobily,
+    Strobe Light\n  iOS: Strobe Light Tachometer, myStroboscope'
   Set local timezone for time display: Definir fuso horário local para exibição
   Set logging verbosity for troubleshooting: Definir nível de detalhe do log para
     solução de problemas
   Set up your label printer in Settings: Configure sua impressora de etiquetas em
     Configurações
   Settings: Configurações
-  Settings Snapshot: 'Captura de Configurações'
+  Settings Snapshot: Captura de Configurações
   Settings reset to defaults. Restarting...: Configurações restauradas para os padrões.
     Reiniciando...
   Setup Complete!: Configuração Concluída!
@@ -2079,7 +2181,7 @@ translations:
   Shutting down screen...: Desligando tela...
   Shutting down...: Desligando...
   Side: Lateral
-  Signal: 'Sinal'
+  Signal: Sinal
   'Signal #': 'Sinal #'
   Single toggle macro. State is not tracked.: Macro de alternância única. O estado
     não é rastreado.
@@ -2087,12 +2189,12 @@ translations:
   Skip: Pular
   Sleep While Printing: Suspender Durante Impressão
   Sleep adjusted to match dim timeout: Tempo de suspensão ajustado
-  Slicer: 'Fatiador'
+  Slicer: Fatiador
   Slot: Slot
-  Slot %d: 'Slot %d'
-  Slot %d Filament: 'Filamento do Slot %d'
+  Slot %d: Slot %d
+  Slot %d Filament: Filamento do Slot %d
   Slot 1: Slot 1
-  Slot {}: 'Slot {}'
+  Slot {}: Slot {}
   Slot {} spool cleared: Bobina do slot {} removida
   Slot {} updated: Slot {} atualizado
   Small labels help keep controls calm and focused.: Rótulos pequenos ajudam a manter
@@ -2109,6 +2211,7 @@ translations:
   Source: Fonte
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod por Markus 'Captain'
     Kaarlonen
+  Spaghetti detected — print paused: 'Espaguete detectado — impressão pausada'
   Speaker: Alto-falante
   'Specular:': 'Especular:'
   Speed: Velocidade
@@ -2142,6 +2245,7 @@ translations:
   'Spoolman: %zu/%zu Spool%s': 'Spoolman: %zu/%zu Bobina%s'
   Square Corner Velocity: Velocidade em Cantos Retos
   Stable: Estável
+  Stable\nBeta\nDev: 'Estável\nBeta\nDev'
   Standard: Padrão
   Standby: Em Espera
   Starfield: Campo Estelar
@@ -2157,7 +2261,8 @@ translations:
   Start print anyway?: Iniciar impressão mesmo assim?
   Started: Iniciado
   Starting Print...: Iniciando impressão...
-  Starting measurement...: 'Iniciando medição...'
+  Starting download...: 'Iniciando download...'
+  Starting measurement...: Iniciando medição...
   Starting...: Iniciando...
   Startup Brightness: Brilho na inicialização
   Startup, auto-control, and macro devices: Inicialização, controle automático e dispositivos
@@ -2204,6 +2309,9 @@ translations:
   Sysfs: Sysfs
   System: Sistema
   System Keyboard: Teclado do Sistema
+  System busy — please try again: 'Sistema ocupado — tente novamente'
+  System busy — try again: 'Sistema ocupado — tente novamente'
+  System default: 'Padrão do sistema'
   System detected: Sistema detectado
   T%d has no filament loaded — this print will run out.: T%d não tem filamento carregado
     — esta impressão vai acabar.
@@ -2216,7 +2324,7 @@ translations:
   TOOLS: FERRAMENTAS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Leva 3-5 min. Não interrompa.
-  Tap + to add: 'Toque em + para adicionar'
+  Tap + to add: Toque em + para adicionar
   Tap again to confirm this orientation: Toque novamente para confirmar esta orientação
   Tap anywhere if this text is right-side up: Toque em qualquer lugar se este texto
     estiver correto
@@ -2228,20 +2336,20 @@ translations:
   Tap to show keyboard...: Toque para mostrar o teclado...
   Target Frequency: Frequência alvo
   Target Temperature: Temperatura Alvo
-  Target Version: 'Versão Alvo'
+  Target Version: Versão Alvo
   Telemetry: Telemetria
   Telemetry Data: Dados de Telemetria
-  Telemetry Disabled: 'Telemetria Desativada'
-  Telemetry Enabled: 'Telemetria Ativada'
+  Telemetry Disabled: Telemetria Desativada
+  Telemetry Enabled: Telemetria Ativada
   Telemetry queue cleared: Fila de telemetria limpa
   Temp: Temp
   Temp Compensation: Compensação de Temp
   Temp °C: Temp °C
-  Temp °C (%d–%d): 'Temp °C (%d–%d)'
+  Temp °C (%d–%d): Temp °C (%d–%d)
   Temperature: Temperatura
   Temperature Graph Config: Config do Gráfico de Temperatura
   Temperatures: Temperaturas
-  Temperatures saved: 'Temperaturas salvas'
+  Temperatures saved: Temperaturas salvas
   Template: Modelo
   Temporary adjustment for this print, unless saved on Controls panel: Ajuste temporário
     para esta impressão, a menos que salvo no painel de Controles
@@ -2272,7 +2380,10 @@ translations:
     When the belt appears to stand still (frozen), you have found the resonant frequency.\n\nUse
     the frequency buttons to sweep through values until the belt looks stationary,
     then lock the reading.
-  : 'O motor vibra a correia enquanto uma luz estroboscópica pisca na mesma frequência. Quando a correia parecer parada (congelada), você encontrou a frequência de ressonância.\n\nUse os botões de frequência para varrer os valores até que a correia pareça parada, então trave a leitura.'
+  : O motor vibra a correia enquanto uma luz estroboscópica pisca na mesma frequência.
+    Quando a correia parecer parada (congelada), você encontrou a frequência de ressonância.\n\nUse
+    os botões de frequência para varrer os valores até que a correia pareça parada,
+    então trave a leitura.
   The printer halted this print and cannot resume it. Restart from the beginning?: A
     impressora parou esta impressão e não pode retomá-la. Reiniciar do início?
   The printer rejected the filament configuration. The print was not started.: A impressora
@@ -2361,9 +2472,13 @@ translations:
   Timelapse plugin installed!: Plugin de timelapse instalado!
   Timelapse plugin is already installed!: Plugin de timelapse já está instalado!
   Timelapse plugin is installed!: Plugin de timelapse está instalado!
+  Timelapse render failed: 'A renderização do timelapse falhou'
+  'Timelapse render failed: {}': 'A renderização do timelapse falhou: {}'
   Timelapse rendered successfully: Timelapse renderizado com sucesso
   Timezone: Fuso horário
   'Tip:': 'Dica:'
+  Tips database format error: 'Erro de formato do banco de dados de dicas'
+  Tips database not found: 'Banco de dados de dicas não encontrado'
   Toggle: Alternar
   Toggle (fire-and-forget): Alternar (sem rastreamento)
   Toggle Feature: Alternar Recurso
@@ -2377,7 +2492,7 @@ translations:
   Toolhead Style: Estilo do Cabeçote
   Toolhead jam: Atolamento do cabeçote
   Toolhead, G-code, limits, and materials: Cabeçote, G-code, limites e materiais
-  Tools Used: 'Ferramentas Usadas'
+  Tools Used: Ferramentas Usadas
   'Tools: ': 'Ferramentas: '
   Top: Topo
   Total Prints: Total de Impressões
@@ -2393,7 +2508,7 @@ translations:
   TouchCalibration: Calibração do Toque
   Trace: Rastreamento
   Travels: Deslocamentos
-  Trigger: 'Gatilho'
+  Trigger: Gatilho
   'Troubleshooting:': 'Solução de Problemas:'
   Try adjusting your search or filters: Tente ajustar sua busca ou filtros
   Tune: Ajustar
@@ -2406,10 +2521,12 @@ translations:
   Type: Tipo
   Type to preview input field...: Digite para visualizar o campo de entrada...
   'Type:': 'Tipo:'
-  T{} shares slot with T{}: 'T{} compartilha o slot com T{}'
+  T{} shares slot with T{}: T{} compartilha o slot com T{}
   UI Sounds: Sons da Interface
   USB: USB
   USB DEVICES: DISPOSITIVOS USB
+  USB drive connected: 'Unidade USB conectada'
+  USB drive removed: 'Unidade USB removida'
   USB printer access denied — check permissions: Acesso à impressora USB negado —
     verifique as permissões
   Understanding Results: Entender resultados
@@ -2417,16 +2534,24 @@ translations:
     artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the
     resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY,
     Path A and B should be within a few Hz of each other.
-  : 'A tensão desigual da correia causa artefatos de impressão como deslocamentos de camada, VFAs (artefatos verticais finos) e ringing.\n\nEsta ferramenta vibra cada caminho de correia e mede a frequência de ressonância \u2014 frequências coincidentes significam tensão equilibrada.\n\nPara CoreXY, o Caminho A e B devem estar a poucos Hz um do outro.'
+  : A tensão desigual da correia causa artefatos de impressão como deslocamentos de
+    camada, VFAs (artefatos verticais finos) e ringing.\n\nEsta ferramenta vibra cada
+    caminho de correia e mede a frequência de ressonância \u2014 frequências coincidentes
+    significam tensão equilibrada.\n\nPara CoreXY, o Caminho A e B devem estar a poucos
+    Hz um do outro.
   Uninstall HelixPrint Plugin: Desinstalar Plugin HelixPrint
+  Uninstall script not found.: 'Script de desinstalação não encontrado.'
   'Uninstall: Coming soon': 'Desinstalar: Em breve'
+  Uninstallation failed. Check logs for details.: 'A desinstalação falhou. Verifique os logs para detalhes.'
+  'Uninstallation failed: ': 'A desinstalação falhou: '
+  Uninstallation timed out. The script may be stuck.: 'A desinstalação — tempo esgotado. O script pode estar travado.'
   Unit: Unidade
   'Unit ': 'Unidade '
   Unknown: Desconhecido
-  Unknown Event: 'Evento Desconhecido'
+  Unknown Event: Evento Desconhecido
   Unknown Spool: Carretel Desconhecido
   Unknown Step: Etapa Desconhecida
-  Unknown error: 'Erro desconhecido'
+  Unknown error: Erro desconhecido
   Unlink: Desvincular
   Unload: Descarregar
   Unload Filament: Descarregar Filamento
@@ -2445,12 +2570,15 @@ translations:
   Unmapped: Não mapeado
   Unretract Extra: Extra de Desretração
   Unretract Speed: Velocidade de Desretração
+  Unsupported tape width: 'Largura de fita não suportada'
+  'Unsupported tape width: ': 'Largura de fita não suportada: '
   Up: Para cima
+  Up to date: 'Atualizado'
   Update: Atualizar
   Update Available: Atualização Disponível
   Update Channel: Canal de Atualização
   Update Failed: Atualização Falhou
-  Update Success: 'Atualização Bem-sucedida'
+  Update Success: Atualização Bem-sucedida
   Update installed!: Atualização instalada!
   Update your security PIN: Atualize seu PIN de segurança
   Updating Configuration...: Atualizando Configuração...
@@ -2458,20 +2586,22 @@ translations:
   Upload Debug Bundle: Enviar Bundle de Debug
   Upload Failed: Falha no Envio
   Upload gcode files to get started: Faça upload de arquivos gcode para começar
-  Uptime: 'Tempo Ativo'
+  Uptime: Tempo Ativo
   Use Android native keyboard for text input: Usar teclado nativo do Android para
     entrada de texto
   Use G10/G11 firmware retraction: Usar retração de firmware G10/G11
   Use printer type to select image: Usar tipo de impressora para selecionar imagem
-  VM Peak: 'Pico de VM'
-  VM Size: 'Tamanho de VM'
+  VM Peak: Pico de VM
+  VM Size: Tamanho de VM
   Value must be between {:.0f} and {:.0f}: O valor deve estar entre {:.0f} e {:.0f}
   Velocity and acceleration limits: Limites de velocidade e aceleração
   Vendor: Fabricante
   Vendor Name: Nome do Fornecedor
   Vendor already exists: Fabricante já existe
   'Vendor:': 'Fornecedor:'
-  Verify: 'Verificar'
+  Verify: Verificar
+  Verifying SHA256 checksum...: 'Verificando checksum SHA256...'
+  Verifying download...: 'Verificando download...'
   Verifying timelapse plugin...: Verificando plugin de timelapse...
   Verifying...: Verificando...
   Version: Versão
@@ -2481,6 +2611,7 @@ translations:
   Vibration: Vibração
   Vibration compensation active: Compensação de vibração ativa
   Video playback speed: Velocidade de reprodução do vídeo
+  View: 'Visualizar'
   View Changelog: Ver Registro de Alterações
   View Full History: Ver Histórico Completo
   View Presets: Ver Predefinições
@@ -2496,7 +2627,7 @@ translations:
   Volume: Volume
   WIDTH SENSORS: SENSORES DE LARGURA
   WLED: WLED
-  WLED Preset: 'Predefinição WLED'
+  WLED Preset: Predefinição WLED
   Waiting for Moonraker...: Aguardando Moonraker...
   Waiting for bed to reach temperature for accurate calibration.: Aguardando a mesa
     atingir a temperatura para calibração precisa.
@@ -2504,7 +2635,9 @@ translations:
   Warming Bed...: Aquecendo Mesa...
   Warn: Aviso
   Warning: Aviso
-  Watch the belt under the strobe LED. Adjust frequency until the belt appears stationary — that is the resonant frequency.: 'Observe a correia sob o LED estroboscópico. Ajuste a frequência até que a correia pareça parada — essa é a frequência de ressonância.'
+  Watch the belt under the strobe LED. Adjust frequency until the belt appears stationary — that is the resonant frequency.: Observe
+    a correia sob o LED estroboscópico. Ajuste a frequência até que a correia pareça
+    parada — essa é a frequência de ressonância.
   Weak battery: Bateria fraca
   Webcam: Webcam
   Website (optional): Site (opcional)
@@ -2530,14 +2663,17 @@ translations:
   WiFi Disabled: WiFi Desativado
   WiFi Enabled: WiFi Ativado
   WiFi Network: Rede WiFi
+  WiFi Unavailable: 'WiFi Indisponível'
   WiFi and Ethernet configuration: Configuração de WiFi e Ethernet
   WiFi control unavailable: Controle WiFi indisponível
   WiFi hardware unavailable: Hardware WiFi indisponível
   WiFi unavailable: WiFi indisponível
+  WiFi was configured but hardware is not available. Check system configuration.: 'O WiFi foi configurado mas o hardware não está disponível. Verifique a configuração do sistema.'
   Widget Labels: Rótulos de Widgets
   Width: Largura
   Wifi: Wi-Fi
   Wizard Error: Erro do assistente
+  Write failed at chunk {}: 'Falha na escrita no fragmento {}'
   Wrong PIN: PIN incorreto
   Wrong media: Mídia incorreta
   X: X
@@ -2555,7 +2691,7 @@ translations:
   'Y jog failed: {}': 'Falha no movimento Y: {}'
   'Y:': 'Y:'
   Year: Ano
-  'Yes': 'Sim'
+  'Yes': Sim
   ? You can now skip these operations when starting prints.\n\nLook for the new options
     in the print details before starting each print.\n\nA backup of your config was
     saved automatically.
@@ -2602,23 +2738,27 @@ translations:
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
   Zoom: Zoom
+  \"%s\" failed to load: '\"%s\" falhou ao carregar'
   bed: mesa
   by Preston Brown: by Preston Brown
-  chamber heater: 'aquecedor da câmara'
-  cores: 'núcleos'
+  chamber heater: aquecedor da câmara
+  complete: 'concluído'
+  cores: núcleos
   disable: desabilitar
   disabled: desabilitado
   e.g. Jet Black: ex. Preto Fosco
-  e.g. NAME=my_var VALUE=123: 'ex. NAME=minha_var VALUE=123'
+  e.g. NAME=my_var VALUE=123: ex. NAME=minha_var VALUE=123
   e.g. Polymaker: ex. Polymaker
   elapsed: decorrido
   enable: habilitar
   enabled: habilitado
-  extruder: 'extrusor'
-  extruder(s): 'extrusor(es)'
-  extruders: 'extrusores'
-  fans: 'ventoinhas'
-  heated bed: 'mesa aquecida'
+  error: 'erro'
+  extruder: extrusor
+  extruder(s): extrusor(es)
+  extruders: extrusores
+  fans: ventoinhas
+  heated bed: mesa aquecida
+  idle: 'ocioso'
   layers: camadas
   left: restante
   mm before clog: mm antes da obstrução
@@ -2635,12 +2775,13 @@ translations:
   remaining: restante
   remaining before clog detection triggers: restante antes da detecção de obstrução
     ser acionada
+  rendering: 'renderizando'
   set to: definido para
-  slots): 'slots)'
+  slots): slots)
   started: iniciado
-  steppers: 'motores de passo'
+  steppers: motores de passo
   tall: de altura
-  tool(s): 'ferramenta(s)'
+  tool(s): ferramenta(s)
   tour.step.advanced.body: Macros, console G-code, ferramentas de calibração (PID,
     input shaper, z-offset), atualizações de firmware e utilitários de desenvolvedor.
   tour.step.advanced.title: Avançado
@@ -2668,16 +2809,25 @@ translations:
     com facilidade.
   tour.step.welcome.title: Bem-vindo ao HelixScreen
   used: usado
+  v%s available: 'v%s disponível'
+  v{} installed! Restarting...: 'v{} instalado! Reiniciando...'
   v{} is available. Tap to update.: v{} disponível. Toque para atualizar.
   you have: você tem
+  '{} LED strips available': '{} fitas de LED disponíveis'
   '{} axis homed': Eixo {} referenciado
   '{} command timed out': Comando {} expirou
   '{} complete': '{} concluído'
+  '{} configured item not found': '{} item configurado não encontrado'
+  '{} configured items not found': '{} itens configurados não encontrados'
+  '{} critical hardware issues': '{} problemas críticos de hardware'
+  '{} filament sensors available': '{} sensores de filamento disponíveis'
   '{} heater turned off': Aquecedor {} desligado
   '{} lanes': '{} lanes'
   '{} macro not configured': Macro {} não configurado
   '{} may cause unintended changes. Are you sure?': '{} pode causar alterações não
     intencionais. Tem certeza?'
   '{} more taps to {} beta features': Mais {} toques para {} recursos beta
+  '{} new hardware available': '{} novo hardware disponível'
   '{} preset{}': '{} predefinição{}'
   '{} target set to {}°C': '{} configurado para {}°C'
+  '{} — response timed out': '{} — tempo esgotado'

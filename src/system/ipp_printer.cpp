@@ -10,6 +10,7 @@
 #include "http_executor.h"
 #include "hv/requests.h"
 #include "ipp_protocol.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "pwg_raster.h"
 #include "sheet_label_layout.h"
 
@@ -68,7 +69,8 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCa
 
     if (host.empty()) {
         spdlog::error("IPP Printer: no target host configured");
-        helix::ui::queue_update([callback]() { callback(false, "No target printer configured"); });
+        helix::ui::queue_update(
+            [callback]() { callback(false, lv_tr("No target printer configured")); });
         return;
     }
 
@@ -84,7 +86,7 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCa
             // Get the sheet template
             const auto& templates = label::get_sheet_templates();
             if (template_index < 0 || template_index >= static_cast<int>(templates.size())) {
-                std::string err = fmt::format("Invalid sheet template index: {} (have {})",
+                std::string err = fmt::format(lv_tr("Invalid sheet template index: {} (have {})"),
                                               template_index, templates.size());
                 spdlog::error("IPP Printer: {}", err);
                 helix::ui::queue_update([callback, err]() { callback(false, err); });
@@ -147,7 +149,7 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCa
             auto resp = requests::request(req);
 
             if (resp == nullptr) {
-                std::string err = fmt::format("Connection failed to {}:{}", host, port);
+                std::string err = fmt::format(lv_tr("Connection failed to {}:{}"), host, port);
                 spdlog::error("IPP Printer: {}", err);
                 helix::ui::queue_update([callback, err]() { callback(false, err); });
                 return;
@@ -155,7 +157,7 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCa
 
             if (resp->status_code != 200) {
                 std::string err =
-                    fmt::format("HTTP error: {} {}", static_cast<int>(resp->status_code),
+                    fmt::format(lv_tr("HTTP error: {} {}"), static_cast<int>(resp->status_code),
                                 resp->status_message());
                 spdlog::error("IPP Printer: {}", err);
                 helix::ui::queue_update([callback, err]() { callback(false, err); });
@@ -167,7 +169,7 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCa
                                                 resp->body.size());
 
             if (!ipp_resp.is_success()) {
-                std::string err = fmt::format("IPP error: {}", ipp_resp.status_message());
+                std::string err = fmt::format(lv_tr("IPP error: {}"), ipp_resp.status_message());
                 spdlog::error("IPP Printer: {}", err);
                 helix::ui::queue_update([callback, err]() { callback(false, err); });
                 return;
@@ -177,7 +179,7 @@ void IppPrinter::print(const LabelBitmap& bitmap, const LabelSize& size, PrintCa
             helix::ui::queue_update([callback]() { callback(true, ""); });
 
         } catch (const std::exception& e) {
-            std::string err = fmt::format("Exception: {}", e.what());
+            std::string err = fmt::format(lv_tr("Exception: {}"), e.what());
             spdlog::error("IPP Printer: {}", err);
             helix::ui::queue_update([callback, err]() { callback(false, err); });
         }

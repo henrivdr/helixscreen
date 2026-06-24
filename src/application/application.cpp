@@ -809,8 +809,8 @@ int Application::run(int argc, char** argv) {
         if (s_safe_mode_active) {
             ToastManager::instance().show(
                 ToastSeverity::WARNING,
-                "Safe Mode active. The printer connection is disabled because the app "
-                "kept crashing on startup. Open Settings to fix the issue, then reboot.",
+                lv_tr("Safe Mode active. The printer connection is disabled because the app "
+                      "kept crashing on startup. Open Settings to fix the issue, then reboot."),
                 0 /* sticky */);
         }
 
@@ -901,7 +901,7 @@ int Application::run(int argc, char** argv) {
         try {
             ToastManager::instance().show(
                 ToastSeverity::ERROR,
-                "App startup encountered an error. Some features may be unavailable.",
+                lv_tr("App startup encountered an error. Some features may be unavailable."),
                 0 /* sticky */);
         } catch (...) {
             // Toast failure is non-fatal; the user still gets a working main loop.
@@ -1632,7 +1632,7 @@ bool Application::init_panel_subjects() {
                 return;
             if (p == DetectionPolicy::NotifyOnly) {
                 ToastManager::instance().show(ToastSeverity::WARNING,
-                                              "Spaghetti detected — print paused", 8000);
+                                              lv_tr("Spaghetti detected — print paused"), 8000);
                 return;
             }
             // DeferToSource: show the response modal. The modal self-deletes via its
@@ -1892,11 +1892,11 @@ bool Application::init_plugins() {
             auto* ctx = new PluginDisableContext{m_plugin_manager.get(), errors[0].plugin_id};
 
             char toast_msg[96];
-            snprintf(toast_msg, sizeof(toast_msg), "\"%s\" failed to load",
+            snprintf(toast_msg, sizeof(toast_msg), lv_tr("\"%s\" failed to load"),
                      errors[0].plugin_id.c_str());
 
             ToastManager::instance().show_with_action(
-                ToastSeverity::WARNING, toast_msg, "Disable",
+                ToastSeverity::WARNING, toast_msg, lv_tr("Disable"),
                 [](void* user_data) {
                     auto* ctx = static_cast<PluginDisableContext*>(user_data);
                     if (ctx->manager && ctx->manager->disable_plugin(ctx->plugin_id)) {
@@ -1909,10 +1909,11 @@ bool Application::init_plugins() {
         } else {
             // Multiple failures: Show [Manage] button to open Settings > Plugins
             char toast_msg[64];
-            snprintf(toast_msg, sizeof(toast_msg), "%zu plugins failed to load", errors.size());
+            snprintf(toast_msg, sizeof(toast_msg), lv_tr("%zu plugins failed to load"),
+                     errors.size());
 
             ToastManager::instance().show_with_action(
-                ToastSeverity::WARNING, toast_msg, "Manage",
+                ToastSeverity::WARNING, toast_msg, lv_tr("Manage"),
                 [](void* /*user_data*/) {
                     NavigationManager::instance().set_active(PanelId::Settings);
                     get_global_settings_panel().handle_plugins_clicked();
@@ -3193,8 +3194,9 @@ void Application::check_wifi_availability() {
 
     auto wifi = get_wifi_manager();
     if (wifi && !wifi->has_hardware()) {
-        NOTIFY_ERROR_MODAL("WiFi Unavailable", "WiFi was configured but hardware is not available. "
-                                               "Check system configuration.");
+        NOTIFY_ERROR_MODAL(lv_tr("WiFi Unavailable"),
+                           lv_tr("WiFi was configured but hardware is not available. "
+                                 "Check system configuration."));
     }
 }
 
@@ -3469,8 +3471,8 @@ int Application::main_loop() {
             try {
                 ToastManager::instance().show(
                     ToastSeverity::ERROR,
-                    "An internal error occurred. The app continues running — "
-                    "please send a debug bundle from Settings > About if it repeats.",
+                    lv_tr("An internal error occurred. The app continues running — "
+                          "please send a debug bundle from Settings > About if it repeats."),
                     8000);
             } catch (...) {
                 // Toast subsystem itself in trouble — keep running anyway.
@@ -3763,7 +3765,7 @@ void Application::switch_printer(const std::string& printer_id) {
     // Show toast with the new printer name
     std::string printer_name =
         m_config->get<std::string>(m_config->df() + "printer_name", printer_id);
-    std::string toast_msg = "Connected to " + printer_name;
+    std::string toast_msg = fmt::format(fmt::runtime(lv_tr("Connected to {}")), printer_name);
     ToastManager::instance().show(ToastSeverity::INFO, toast_msg.c_str());
 
     m_soft_restart_in_progress = false;

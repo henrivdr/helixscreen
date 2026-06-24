@@ -8,6 +8,7 @@
 
 #include "bluetooth_loader.h"
 #include "bt_print_utils.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "phomemo_printer.h"
 #include "phomemo_protocol.h"
 
@@ -37,7 +38,7 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
         spdlog::error("Phomemo BT: Bluetooth not available");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth not available");
+                callback(false, lv_tr("Bluetooth not available"));
         });
         return;
     }
@@ -46,7 +47,7 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
         spdlog::error("Phomemo BT: No device configured");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth device not configured");
+                callback(false, lv_tr("Bluetooth device not configured"));
         });
         return;
     }
@@ -74,14 +75,14 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
                 auto& loader = helix::bluetooth::BluetoothLoader::instance();
                 auto* ctx = loader.init();
                 if (!ctx) {
-                    error = "Failed to initialize Bluetooth context";
+                    error = lv_tr("Failed to initialize Bluetooth context");
                     spdlog::error("Phomemo BT: {}", error);
                 } else {
                     int handle = loader.connect_ble(ctx, mac.c_str(), PHOMEMO_WRITE_UUID);
                     if (handle < 0) {
                         const char* err =
                             loader.last_error ? loader.last_error(ctx) : "unknown error";
-                        error = fmt::format("BLE connect failed: {}", err);
+                        error = fmt::format(lv_tr("BLE connect failed: {}"), err);
                         spdlog::error("Phomemo BT: {}", error);
                     } else {
                         int ret = loader.ble_write(ctx, handle, commands.data(),
@@ -89,7 +90,7 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
                         if (ret < 0) {
                             const char* err =
                                 loader.last_error ? loader.last_error(ctx) : "unknown error";
-                            error = fmt::format("BLE write failed: {}", err);
+                            error = fmt::format(lv_tr("BLE write failed: {}"), err);
                             spdlog::error("Phomemo BT: {}", error);
                         } else {
                             success = true;
@@ -110,7 +111,7 @@ void PhomemoBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
         spdlog::error("Phomemo BT: failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "System busy — please try again");
+                callback(false, lv_tr("System busy — please try again"));
         });
     }
 }

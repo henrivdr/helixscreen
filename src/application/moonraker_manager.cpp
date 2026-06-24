@@ -415,9 +415,9 @@ void MoonrakerManager::register_callbacks() {
 
     // Register event handler for UI notifications
     m_client->register_event_handler([this](const MoonrakerEvent& evt) {
-        const char* title = "Printer Error"; // Default title (never nullptr!)
+        const char* title = lv_tr("Printer Error"); // Default title (never nullptr!)
         if (evt.type == MoonrakerEventType::CONNECTION_FAILED) {
-            title = "Connection Failed";
+            title = lv_tr("Connection Failed");
         } else if (evt.type == MoonrakerEventType::KLIPPY_DISCONNECTED) {
             // Route through unified recovery dialog (same dialog as SHUTDOWN state)
             // Suppression checks are handled inside show_recovery_for()
@@ -428,7 +428,7 @@ void MoonrakerManager::register_callbacks() {
             EmergencyStopOverlay::instance().show_recovery_for(RecoveryReason::SHUTDOWN);
             return;
         } else if (evt.type == MoonrakerEventType::RPC_ERROR) {
-            title = "Request Failed";
+            title = lv_tr("Request Failed");
         }
 
         // Suppress expected transient events during startup grace period

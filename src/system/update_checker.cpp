@@ -999,7 +999,8 @@ void UpdateChecker::start_download() {
     auto job_state = get_printer_state().get_print_job_state();
     if (job_state == PrintJobState::PRINTING || job_state == PrintJobState::PAUSED) {
         spdlog::warn("[UpdateChecker] Cannot download update while printing");
-        report_download_status(DownloadStatus::Error, 0, "Error: Cannot update while printing",
+        report_download_status(DownloadStatus::Error, 0,
+                               lv_tr("Error: Cannot update while printing"),
                                "Stop the print before installing updates");
         TelemetryManager::instance().record_update_failure("print_in_progress", "",
                                                            get_platform_key());
@@ -1012,7 +1013,7 @@ void UpdateChecker::start_download() {
         spdlog::error("[UpdateChecker] start_download() called without cached update info");
         // Unlock before report_download_status (it also acquires mutex_)
         lock.unlock();
-        report_download_status(DownloadStatus::Error, 0, "Error: No update available",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: No update available"),
                                "No update information cached");
         TelemetryManager::instance().record_update_failure("no_cached_update", "",
                                                            get_platform_key());
@@ -1033,7 +1034,7 @@ void UpdateChecker::start_download() {
     }
 
     download_cancelled_ = false;
-    report_download_status(DownloadStatus::Downloading, 0, "Starting download...");
+    report_download_status(DownloadStatus::Downloading, 0, lv_tr("Starting download..."));
 
     // Wrap — pthread_create EAGAIN under thread exhaustion throws
     // std::system_error; if this is invoked from a UI event-cb frame the
@@ -1042,7 +1043,7 @@ void UpdateChecker::start_download() {
         download_thread_ = std::thread(&UpdateChecker::do_download, this);
     } catch (const std::system_error& e) {
         spdlog::error("[UpdateChecker] Failed to spawn download thread: {}", e.what());
-        report_download_status(DownloadStatus::Error, 0, "System busy — try again");
+        report_download_status(DownloadStatus::Error, 0, lv_tr("System busy — try again"));
     }
 }
 
@@ -1071,7 +1072,7 @@ void UpdateChecker::do_download() {
     if (path_is_zip(url) && !tool_available("unzip")) {
         spdlog::error("[UpdateChecker] `unzip` is required to install updates "
                       "but is not installed on this system");
-        report_download_status(DownloadStatus::Error, 0, "Error: `unzip` not installed",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: `unzip` not installed"),
                                "Run: sudo apt-get install unzip — then retry the update");
         TelemetryManager::instance().record_update_failure("missing_unzip", version,
                                                            get_platform_key());
@@ -1093,7 +1094,8 @@ void UpdateChecker::do_download() {
             detail = fmt::format("Need {} MB free; {} has {:.0f} MB. Free up disk space and retry.",
                                  need_mb, diag.best_dir, have_mb);
         }
-        report_download_status(DownloadStatus::Error, 0, "Error: Not enough disk space", detail);
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Not enough disk space"),
+                               detail);
         TelemetryManager::instance().record_update_failure("no_disk_space", version,
                                                            get_platform_key());
         return;
@@ -1125,7 +1127,8 @@ void UpdateChecker::do_download() {
         if (percent - current >= 2 || percent == 100) {
             auto mb_received = static_cast<double>(received) / (1024.0 * 1024.0);
             auto mb_total = static_cast<double>(total) / (1024.0 * 1024.0);
-            auto text = fmt::format("Downloading... {:.1f}/{:.1f} MB", mb_received, mb_total);
+            auto text =
+                fmt::format(lv_tr("Downloading... {:.1f}/{:.1f} MB"), mb_received, mb_total);
             report_download_status(DownloadStatus::Downloading, percent, text);
         }
     };
@@ -1143,7 +1146,7 @@ void UpdateChecker::do_download() {
     if (result == 0) {
         spdlog::error("[UpdateChecker] Download failed from {}", url);
         std::remove(download_path.c_str()); // Clean up partial download
-        report_download_status(DownloadStatus::Error, 0, "Error: Download failed",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Download failed"),
                                "Failed to download update file");
         TelemetryManager::instance().record_update_failure("download_failed", version,
                                                            get_platform_key());
@@ -1154,7 +1157,7 @@ void UpdateChecker::do_download() {
     if (result < 1024 * 1024) {
         spdlog::error("[UpdateChecker] Downloaded file too small: {} bytes", result);
         std::remove(download_path.c_str());
-        report_download_status(DownloadStatus::Error, 0, "Error: Invalid download",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Invalid download"),
                                "Downloaded file is too small");
         TelemetryManager::instance().record_update_failure(
             "file_too_small", version, get_platform_key(), -1, static_cast<int64_t>(result));
@@ -1163,7 +1166,7 @@ void UpdateChecker::do_download() {
     if (result > 150 * 1024 * 1024) {
         spdlog::error("[UpdateChecker] Downloaded file too large: {} bytes", result);
         std::remove(download_path.c_str());
-        report_download_status(DownloadStatus::Error, 0, "Error: Invalid download",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Invalid download"),
                                "Downloaded file is too large");
         TelemetryManager::instance().record_update_failure(
             "file_too_large", version, get_platform_key(), -1, static_cast<int64_t>(result));
@@ -1171,7 +1174,7 @@ void UpdateChecker::do_download() {
     }
 
     spdlog::info("[UpdateChecker] Download complete: {} bytes", result);
-    report_download_status(DownloadStatus::Verifying, 100, "Verifying download...");
+    report_download_status(DownloadStatus::Verifying, 100, lv_tr("Verifying download..."));
 
     // Verify archive integrity (fork/exec to avoid shell injection)
     int ret;
@@ -1183,7 +1186,7 @@ void UpdateChecker::do_download() {
     if (ret != 0) {
         spdlog::error("[UpdateChecker] Archive verification failed");
         std::remove(download_path.c_str());
-        report_download_status(DownloadStatus::Error, 0, "Error: Corrupt download",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Corrupt download"),
                                "Downloaded file failed integrity check");
         TelemetryManager::instance().record_update_failure(
             "corrupt_download", version, get_platform_key(), -1, static_cast<int64_t>(result));
@@ -1196,7 +1199,7 @@ void UpdateChecker::do_download() {
     if (!validate_elf_architecture(download_path)) {
         spdlog::error("[UpdateChecker] Downloaded update is for wrong architecture!");
         std::remove(download_path.c_str());
-        report_download_status(DownloadStatus::Error, 0, "Error: Wrong architecture",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Wrong architecture"),
                                "Downloaded binary doesn't match this device's architecture");
         TelemetryManager::instance().record_update_failure("wrong_architecture", version,
                                                            get_platform_key());
@@ -1215,12 +1218,14 @@ void UpdateChecker::do_download() {
         if (expected_sha256.empty()) {
             spdlog::info("[UpdateChecker] No SHA256 hash available, skipping verification");
         } else {
-            report_download_status(DownloadStatus::Verifying, 100, "Verifying SHA256 checksum...");
+            report_download_status(DownloadStatus::Verifying, 100,
+                                   lv_tr("Verifying SHA256 checksum..."));
             auto actual_sha256 = helix::compute_file_sha256(download_path);
             if (actual_sha256.empty()) {
                 spdlog::error("[UpdateChecker] Failed to compute SHA256 of {}", download_path);
                 std::remove(download_path.c_str());
-                report_download_status(DownloadStatus::Error, 0, "Error: Verification failed",
+                report_download_status(DownloadStatus::Error, 0,
+                                       lv_tr("Error: Verification failed"),
                                        "Could not compute checksum of downloaded file");
                 TelemetryManager::instance().record_update_failure("sha256_compute_failed", version,
                                                                    get_platform_key());
@@ -1231,7 +1236,7 @@ void UpdateChecker::do_download() {
                 spdlog::error("[UpdateChecker] SHA256 mismatch! expected={} actual={}",
                               expected_sha256, actual_sha256);
                 std::remove(download_path.c_str());
-                report_download_status(DownloadStatus::Error, 0, "Error: Checksum mismatch",
+                report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Checksum mismatch"),
                                        "Downloaded file does not match expected checksum");
                 TelemetryManager::instance().record_update_failure("sha256_mismatch", version,
                                                                    get_platform_key());
@@ -1458,7 +1463,7 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
 
     if (install_script.empty()) {
         flog_error("[UpdateChecker] Cannot find install.sh");
-        report_download_status(DownloadStatus::Error, 0, "Error: Installer not found",
+        report_download_status(DownloadStatus::Error, 0, lv_tr("Error: Installer not found"),
                                "Cannot locate install.sh script");
         TelemetryManager::instance().record_update_failure("installer_not_found", version,
                                                            get_platform_key());
@@ -1673,7 +1678,8 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
     if (ret != 0) {
         flog_error("[UpdateChecker] Install script failed with code {}", ret);
         // Build a user-visible error message with detail from the install log
-        std::string ui_text = timed_out ? "Installation timed out" : "Installation failed";
+        std::string ui_text =
+            timed_out ? lv_tr("Installation timed out") : lv_tr("Installation failed");
         const auto& detail = !last_error_line.empty() ? last_error_line : last_warning_line;
         if (!detail.empty()) {
             ui_text += "\n" + detail;
@@ -1745,7 +1751,7 @@ void UpdateChecker::do_install(const std::string& tarball_path) {
     }
 
     report_download_status(DownloadStatus::Complete, 100,
-                           "v" + version + " installed! Restarting...");
+                           fmt::format(lv_tr("v{} installed! Restarting..."), version));
 
     // Restart strategy depends on whether we're supervised.
     // _exit(0) is used in all cases to avoid racing with destructors on other
@@ -2033,7 +2039,7 @@ void UpdateChecker::check_for_updates(Callback callback) {
         helix::ui::queue_update([this]() {
             lv_subject_set_int(&checking_subject_, 1);
             lv_subject_set_int(&status_subject_, static_cast<int>(Status::Checking));
-            lv_subject_copy_string(&version_text_subject_, "Checking...");
+            lv_subject_copy_string(&version_text_subject_, lv_tr("Checking..."));
         });
     }
 
@@ -2721,15 +2727,16 @@ void UpdateChecker::report_result(Status status, std::optional<ReleaseInfo> info
             lv_subject_set_int(&checking_subject_, 0); // Done checking
 
             if (status == Status::UpdateAvailable && info) {
-                snprintf(version_text_buf_, sizeof(version_text_buf_), "v%s available",
+                snprintf(version_text_buf_, sizeof(version_text_buf_), lv_tr("v%s available"),
                          info->version.c_str());
                 lv_subject_copy_string(&version_text_subject_, version_text_buf_);
                 lv_subject_copy_string(&new_version_subject_, info->version.c_str());
             } else if (status == Status::UpToDate) {
-                lv_subject_copy_string(&version_text_subject_, "Up to date");
+                lv_subject_copy_string(&version_text_subject_, lv_tr("Up to date"));
                 lv_subject_copy_string(&new_version_subject_, "");
             } else if (status == Status::Error) {
-                snprintf(version_text_buf_, sizeof(version_text_buf_), "Error: %s", error.c_str());
+                snprintf(version_text_buf_, sizeof(version_text_buf_), lv_tr("Error: %s"),
+                         error.c_str());
                 lv_subject_copy_string(&version_text_subject_, version_text_buf_);
                 lv_subject_copy_string(&new_version_subject_, "");
             }

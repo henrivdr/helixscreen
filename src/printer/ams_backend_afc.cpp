@@ -1766,8 +1766,8 @@ void AmsBackendAfc::detect_afc_version() {
                         // Warn if AFC version is older than minimum supported
                         if (!version_at_least("1.0.35")) {
                             auto warning =
-                                fmt::format("AFC version {} may have compatibility issues. "
-                                            "Please upgrade to v1.0.35 or later.",
+                                fmt::format(lv_tr("AFC version {} may have compatibility issues. "
+                                                  "Please upgrade to v1.0.35 or later."),
                                             afc_version_);
                             spdlog::warn("[AMS AFC] {}", warning);
                             helix::ui::modal_show_alert(lv_tr("AFC Version Warning"),
@@ -2271,7 +2271,7 @@ AmsError AmsBackendAfc::execute_gcode_notify(const std::string& gcode,
                 spdlog::warn("[AMS AFC] G-code response timed out (may still be running): {}",
                              gcode);
                 if (!error_prefix.empty()) {
-                    NOTIFY_WARNING("{} — response timed out", error_prefix);
+                    NOTIFY_WARNING(lv_tr("{} — response timed out"), error_prefix);
                 }
             } else if (!error_prefix.empty()) {
                 NOTIFY_ERROR("{}: {}", error_prefix, err.message);

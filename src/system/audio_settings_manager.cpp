@@ -4,6 +4,7 @@
 #include "audio_settings_manager.h"
 
 #include "config.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "spdlog/spdlog.h"
 #include "static_subject_registry.h"
 
@@ -170,5 +171,5 @@ void AudioSettingsManager::set_completion_alert_mode(CompletionAlertMode mode) {
 }
 
 const char* AudioSettingsManager::get_completion_alert_options() {
-    return COMPLETION_ALERT_OPTIONS_TEXT;
+    return lv_tr(COMPLETION_ALERT_OPTIONS_TEXT);
 }

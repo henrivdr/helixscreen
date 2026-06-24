@@ -33,11 +33,12 @@ void TimelapseState::init_subjects(bool register_xml) {
     spdlog::trace("[TimelapseState] Initializing subjects (register_xml={})", register_xml);
 
     std::memset(timelapse_render_status_buf_, 0, sizeof(timelapse_render_status_buf_));
-    std::strcpy(timelapse_render_status_buf_, "idle");
+    std::strncpy(timelapse_render_status_buf_, lv_tr("idle"),
+                 sizeof(timelapse_render_status_buf_) - 1);
     std::memset(timelapse_capture_info_buf_, 0, sizeof(timelapse_capture_info_buf_));
 
     INIT_SUBJECT_INT(timelapse_render_progress, 0, subjects_, register_xml);
-    INIT_SUBJECT_STRING(timelapse_render_status, "idle", subjects_, register_xml);
+    INIT_SUBJECT_STRING(timelapse_render_status, lv_tr("idle"), subjects_, register_xml);
     INIT_SUBJECT_INT(timelapse_frame_count, 0, subjects_, register_xml);
     INIT_SUBJECT_STRING(timelapse_capture_info, "", subjects_, register_xml);
 
@@ -128,7 +129,7 @@ void TimelapseState::handle_timelapse_event(const nlohmann::json& event) {
 
             helix::ui::queue_update([this, progress]() {
                 lv_subject_set_int(&timelapse_render_progress_, progress);
-                lv_subject_copy_string(&timelapse_render_status_, "rendering");
+                lv_subject_copy_string(&timelapse_render_status_, lv_tr("rendering"));
             });
 
             spdlog::debug("[TimelapseState] Render progress: {}%", progress);
@@ -144,7 +145,7 @@ void TimelapseState::handle_timelapse_event(const nlohmann::json& event) {
             helix::ui::queue_update([this, filename, cb = std::move(cb)]() {
                 lv_subject_set_int(&timelapse_render_progress_, 0);
                 lv_subject_set_int(&timelapse_frame_count_, 0);
-                lv_subject_copy_string(&timelapse_render_status_, "complete");
+                lv_subject_copy_string(&timelapse_render_status_, lv_tr("complete"));
                 lv_subject_copy_string(&timelapse_capture_info_, "");
                 if (cb) {
                     cb(filename);
@@ -159,13 +160,13 @@ void TimelapseState::handle_timelapse_event(const nlohmann::json& event) {
 
         } else if (status == "error") {
             helix::ui::queue_update(
-                [this]() { lv_subject_copy_string(&timelapse_render_status_, "error"); });
+                [this]() { lv_subject_copy_string(&timelapse_render_status_, lv_tr("error")); });
 
             last_notified_progress_ = -1;
             if (!error_msg.empty()) {
-                NOTIFY_ERROR("Timelapse render failed: {}", error_msg);
+                NOTIFY_ERROR(lv_tr("Timelapse render failed: {}"), error_msg);
             } else {
-                NOTIFY_ERROR("Timelapse render failed");
+                NOTIFY_ERROR(lv_tr("Timelapse render failed"));
             }
 
             spdlog::error("[TimelapseState] Render error: {}", error_msg);
@@ -184,7 +185,7 @@ void TimelapseState::reset() {
     helix::ui::queue_update([this]() {
         lv_subject_set_int(&timelapse_frame_count_, 0);
         lv_subject_set_int(&timelapse_render_progress_, 0);
-        lv_subject_copy_string(&timelapse_render_status_, "idle");
+        lv_subject_copy_string(&timelapse_render_status_, lv_tr("idle"));
         lv_subject_copy_string(&timelapse_capture_info_, "");
     });
 

@@ -136,7 +136,7 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
         bitmap = LabelRenderer::render(spool, preset, label_size);
         if (bitmap.empty()) {
             if (callback)
-                callback(false, "Failed to render label");
+                callback(false, lv_tr("Failed to render label"));
             return;
         }
     }
@@ -169,7 +169,7 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
         } else if (!found) {
             helix::ui::queue_update([callback]() {
                 if (callback)
-                    callback(false, "No USB printer detected");
+                    callback(false, lv_tr("No USB printer detected"));
             });
             return;
         }
@@ -251,7 +251,7 @@ void print_spool_label(const SpoolInfo& spool, PrintCallback callback) {
             if (bitmap.empty()) {
                 helix::ui::queue_update([callback]() {
                     if (callback)
-                        callback(false, "Failed to render label");
+                        callback(false, lv_tr("Failed to render label"));
                 });
                 return;
             }

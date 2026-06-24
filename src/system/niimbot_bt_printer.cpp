@@ -7,6 +7,7 @@
 #include "ui_update_queue.h"
 
 #include "bluetooth_loader.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "niimbot_protocol.h"
 
 #include <spdlog/spdlog.h>
@@ -156,7 +157,7 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
         spdlog::error("Niimbot BT: Bluetooth not available");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth not available");
+                callback(false, lv_tr("Bluetooth not available"));
         });
         return;
     }
@@ -165,7 +166,7 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
         spdlog::error("Niimbot BT: No device configured");
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "Bluetooth device not configured");
+                callback(false, lv_tr("Bluetooth device not configured"));
         });
         return;
     }
@@ -231,7 +232,7 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
             if (handle < 0) {
                 std::string err =
                     s_last_connect_error.empty() ? "unknown error" : s_last_connect_error;
-                error = fmt::format("BLE connect failed: {}", err);
+                error = fmt::format(lv_tr("BLE connect failed: {}"), err);
                 spdlog::error("Niimbot BT: {}", error);
             } else {
                 // Send all packets sequentially with inter-packet delay
@@ -243,7 +244,7 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
                     if (ret < 0) {
                         const char* err =
                             loader.last_error ? loader.last_error(s_ctx) : "unknown error";
-                        error = fmt::format("BLE write failed at packet {}: {}", i, err);
+                        error = fmt::format(lv_tr("BLE write failed at packet {}: {}"), i, err);
                         spdlog::error("Niimbot BT: {}", error);
                         write_ok = false;
                         // Connection is broken — clear persistent state so we reconnect next time
@@ -377,9 +378,9 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
                             // the firmware status bytes for diagnosis.
                             if (!saw_progress && b3_polls_seen >= 8) {
                                 error = fmt::format(
-                                    "Printer accepted job but isn't printing — check cover, "
-                                    "paper, and label type (firmware status=0x{:02X} "
-                                    "error=0x{:02X})",
+                                    lv_tr("Printer accepted job but isn't printing — check cover, "
+                                          "paper, and label type (firmware status=0x{:02X} "
+                                          "error=0x{:02X})"),
                                     last_ext_state, last_ext_error);
                                 spdlog::error("Niimbot BT: {}", error);
                                 // Still issue PrintEnd so the buffered job is cleared.
@@ -397,9 +398,10 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
                     // rather than reporting success and showing a "Test label printed"
                     // toast for a print that never happened.
                     if (!saw_progress) {
-                        error = fmt::format("Print didn't start — printer may be busy or offline "
-                                            "(B3 polls={}, status=0x{:02X}, error=0x{:02X})",
-                                            b3_polls_seen, last_ext_state, last_ext_error);
+                        error =
+                            fmt::format(lv_tr("Print didn't start — printer may be busy or offline "
+                                              "(B3 polls={}, status=0x{:02X}, error=0x{:02X})"),
+                                        b3_polls_seen, last_ext_state, last_ext_error);
                         spdlog::error("Niimbot BT: {}", error);
                         if (!print_end_sent) {
                             auto end_pkt =
@@ -447,7 +449,7 @@ void NiimbotBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& 
         spdlog::error("Niimbot BT: failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
             if (callback)
-                callback(false, "System busy — please try again");
+                callback(false, lv_tr("System busy — please try again"));
         });
     }
 }

@@ -4,6 +4,8 @@
 
 #include "brother_pt_protocol.h"
 
+#include "lvgl/src/others/translation/lv_translation.h"
+
 #include <algorithm>
 #include <array>
 
@@ -71,17 +73,17 @@ BrotherPTMedia brother_pt_parse_status(const uint8_t* data, size_t len) {
 
 std::string brother_pt_error_string(const BrotherPTMedia& media) {
     if (media.error_info_1 & 0x01)
-        return "No media installed";
+        return lv_tr("No media installed");
     if (media.error_info_1 & 0x04)
-        return "Cutter jam";
+        return lv_tr("Cutter jam");
     if (media.error_info_1 & 0x08)
-        return "Weak battery";
+        return lv_tr("Weak battery");
     if (media.error_info_2 & 0x01)
-        return "Wrong media";
+        return lv_tr("Wrong media");
     if (media.error_info_2 & 0x10)
-        return "Cover open";
+        return lv_tr("Cover open");
     if (media.error_info_2 & 0x20)
-        return "Overheating";
+        return lv_tr("Overheating");
     return "";
 }
 

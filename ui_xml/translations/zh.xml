@@ -18,6 +18,7 @@
   <translation tag="%u layers" zh="%u 层"/>
   <translation tag="%zu changes" zh="%zu 项更改"/>
   <translation tag="%zu events queued" zh="%zu 个事件已排队"/>
+  <translation tag="%zu plugins failed to load" zh="%zu 个插件加载失败"/>
   <translation tag="(incompatible)" zh="(不兼容)"/>
   <translation tag="(multi-tool)" zh="(多工具)"/>
   <translation tag="(none detected)" zh="(未检测到)"/>
@@ -82,6 +83,7 @@
   <translation tag="A" zh="辅"/>
   <translation tag="ABS" zh="ABS"/>
   <translation tag="ACCELEROMETERS" zh="加速度计"/>
+  <translation tag="ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support." zh="未找到 ACE Moonraker 桥接。请从 ValgACE 安装 ace_status.py 以获得完整支持。"/>
   <translation tag="ACTIONS" zh="操作"/>
   <translation tag="ADXL" zh="ADXL"/>
   <translation tag="AFC" zh="AFC"/>
@@ -93,6 +95,7 @@
   <translation tag="AFC reset complete" zh="AFC重置完成"/>
   <translation tag="AFC reset failed" zh="AFC重置失败"/>
   <translation tag="AFC retracts filament from the toolhead at end of print" zh="AFC 在打印结束时将耗材从工具头退出"/>
+  <translation tag="AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later." zh="AFC 版本 {} 可能存在兼容性问题。请升级到 v1.0.35 或更高版本。"/>
   <translation tag="ALL DEVICES" zh="所有设备"/>
   <translation tag="AMS" zh="AMS"/>
   <translation tag="AMS Active: " zh="AMS 已激活: "/>
@@ -154,6 +157,7 @@
   <translation tag="An error occurred during measurement." zh="测量时发生错误。"/>
   <translation tag="An error occurred during probing." zh="探测过程中发生错误。"/>
   <translation tag="An error occurred while loading filament." zh="加载耗材时发生错误。"/>
+  <translation tag="An internal error occurred. The app continues running — please send a debug bundle from Settings &gt; About if it repeats." zh="发生了内部错误。应用程序继续运行 — 如果反复出现，请从设置 &gt; 关于发送调试捆绑包。"/>
   <translation tag="An unexpected printer error occurred." zh="发生了意外的打印机错误。"/>
   <translation tag="An update is available" zh="有可用更新"/>
   <translation tag="Android logcat" zh="Android logcat"/>
@@ -163,6 +167,7 @@
   <translation tag="Anonymous usage statistics" zh="匿名使用统计"/>
   <translation tag="Any notes..." zh="备注..."/>
   <translation tag="App Background" zh="应用背景"/>
+  <translation tag="App startup encountered an error. Some features may be unavailable." zh="应用程序启动时遇到错误。某些功能可能不可用。"/>
   <translation tag="Appearance" zh="外观"/>
   <translation tag="Apply" zh="应用"/>
   <translation tag="Apply Changes" zh="应用更改"/>
@@ -181,10 +186,12 @@
   <translation tag="Auto-Detect" zh="自动检测"/>
   <translation tag="Auto-Heat on Load" zh="加载时自动加热"/>
   <translation tag="Auto-detect" zh="自动检测"/>
+  <translation tag="Auto-install only works on local Moonraker" zh="自动安装仅适用于本地 Moonraker"/>
   <translation tag="Auto-lock" zh="自动锁定"/>
   <translation tag="Auto-poll for weight updates" zh="自动轮询重量更新"/>
   <translation tag="Auto-probe or manually check screw heights" zh="自动探测或手动检查螺丝高度"/>
   <translation tag="Auto-render video" zh="自动渲染视频"/>
+  <translation tag="Auto-uninstall only works on local Moonraker" zh="自动卸载仅适用于本地 Moonraker"/>
   <translation tag="Automatic" zh="自动"/>
   <translation tag="Automatic Heater Control Calibration" zh="自动加热控制校准"/>
   <translation tag="Automatic LED Control" zh="自动 LED 控制"/>
@@ -196,6 +203,9 @@
   <translation tag="Average" zh="平均值"/>
   <translation tag="BEACON" zh="BEACON"/>
   <translation tag="BETA" zh="BETA"/>
+  <translation tag="BLE connect failed: {}" zh="BLE 连接失败: {}"/>
+  <translation tag="BLE write failed at packet {}: {}" zh="BLE 在数据包 {} 处写入失败: {}"/>
+  <translation tag="BLE write failed: {}" zh="BLE 写入失败: {}"/>
   <translation tag="BLTouch Controls" zh="BLTouch 控制"/>
   <translation tag="BLUETOOTH PRINTERS" zh="蓝牙打印机"/>
   <translation tag="BLUETOOTH SCANNERS" zh="蓝牙扫描器"/>
@@ -237,6 +247,7 @@
   <translation tag="Black" zh="黑色"/>
   <translation tag="Blocked" zh="已阻塞"/>
   <translation tag="Bluetooth" zh="蓝牙"/>
+  <translation tag="Bluetooth device not configured" zh="蓝牙设备未配置"/>
   <translation tag="Bluetooth initialization failed" zh="蓝牙初始化失败"/>
   <translation tag="Bluetooth is not available on this device" zh="此设备不支持蓝牙"/>
   <translation tag="Bluetooth not available" zh="蓝牙不可用"/>
@@ -374,6 +385,7 @@
   <translation tag="Checking slots..." zh="正在检查料仓..."/>
   <translation tag="Checking timelapse plugin..." zh="正在检查延时摄影插件..."/>
   <translation tag="Checking webcam" zh="正在检查摄像头"/>
+  <translation tag="Checking..." zh="检查中..."/>
   <translation tag="Choose 12-hour or 24-hour time display" zh="选择 12 小时制或 24 小时制"/>
   <translation tag="Choose Spool" zh="选择线轴"/>
   <translation tag="Choose an existing filament, or tap + New to create one." zh="选择已有耗材，或点击 + 新建来创建。"/>
@@ -448,6 +460,7 @@
   <translation tag="Connected Time" zh="已连接时长"/>
   <translation tag="Connected to" zh="已连接到"/>
   <translation tag="Connected to " zh="已连接到 "/>
+  <translation tag="Connected to {}" zh="已连接到 {}"/>
   <translation tag="Connected! Discovering printer..." zh="已连接！正在发现打印机..."/>
   <translation tag="Connected, discovering..." zh="已连接，正在发现..."/>
   <translation tag="Connecting Camera..." zh="正在连接摄像头..."/>
@@ -456,8 +469,10 @@
   <translation tag="Connecting to network..." zh="正在连接网络..."/>
   <translation tag="Connecting..." zh="正在连接..."/>
   <translation tag="Connection" zh="连接"/>
+  <translation tag="Connection Failed" zh="连接失败"/>
   <translation tag="Connection Stability" zh="连接稳定性"/>
   <translation tag="Connection failed" zh="连接失败"/>
+  <translation tag="Connection failed to {}:{}" zh="连接 {}:{} 失败"/>
   <translation tag="Connection failed. Check IP/port and try again." zh="连接失败。请检查 IP/端口并重试。"/>
   <translation tag="Connection failed. Check credentials." zh="连接失败，请检查凭据。"/>
   <translation tag="Connection failed. Check password." zh="连接失败。请检查密码。"/>
@@ -483,7 +498,10 @@
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." zh="无法分析 PRINT_START 宏。部分打印选项可能不可用。"/>
   <translation tag="Could not check webcam status.\nCheck printer connection." zh="无法检查摄像头状态。\n请检查打印机连接。"/>
   <translation tag="Could not forget device" zh="无法忘记设备"/>
+  <translation tag="Could not load printer database" zh="无法加载打印机数据库"/>
+  <translation tag="Could not parse tips database" zh="无法解析提示数据库"/>
   <translation tag="Could not reach Spoolman at" zh="无法连接 Spoolman："/>
+  <translation tag="Could not resolve printer RFCOMM channel" zh="无法解析打印机 RFCOMM 通道"/>
   <translation tag="Could not start Bluetooth discovery" zh="无法启动蓝牙发现"/>
   <translation tag="Could not verify Spoolman status. Moonraker may still be restarting." zh="无法验证 Spoolman 状态。Moonraker 可能仍在重启中。"/>
   <translation tag="Couldn&apos;t update Spoolman — saved locally" zh="无法更新 Spoolman — 已保存在本地"/>
@@ -500,6 +518,7 @@
   <translation tag="Create backup of %s before applying" zh="应用前创建 %s 的备份"/>
   <translation tag="Create video when print completes" zh="打印完成时创建视频"/>
   <translation tag="Creating spool..." zh="正在创建料盘…"/>
+  <translation tag="Critical hardware missing: {}" zh="缺少关键硬件: {}"/>
   <translation tag="Current / Target" zh="当前 / 目标"/>
   <translation tag="Current Configuration" zh="当前配置"/>
   <translation tag="Current Frequency" zh="当前频率"/>
@@ -577,6 +596,7 @@
   <translation tag="Display &amp; Sound" zh="显示与声音"/>
   <translation tag="Display Mode" zh="显示模式"/>
   <translation tag="Display Sleep" zh="显示休眠"/>
+  <translation tag="Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer resolution in /boot/firmware/config.txt for best results." zh="显示分辨率非常高 (%dx%d)。文本可能显得很小。为获得最佳效果，请在 /boot/firmware/config.txt 中降低帧缓冲分辨率。"/>
   <translation tag="Display: " zh="显示: "/>
   <translation tag="Do not power off your printer." zh="请勿关闭打印机电源。"/>
   <translation tag="Do not touch the printer during calibration" zh="校准期间请勿触碰打印机"/>
@@ -589,6 +609,7 @@
   <translation tag="Download update?" zh="下载更新？"/>
   <translation tag="Download v{}?" zh="下载 v{}？"/>
   <translation tag="Downloading..." zh="下载中..."/>
+  <translation tag="Downloading... {:.1f}/{:.1f} MB" zh="下载中... {:.1f}/{:.1f} MB"/>
   <translation tag="Draw a ripple at each touch — helps diagnose offsets" zh="在每次触摸时绘制涟漪 — 有助于诊断偏移"/>
   <translation tag="Drive Cal" zh="驱动校准"/>
   <translation tag="Drop shadow strength (0 = disabled)" zh="阴影强度（0 = 禁用）"/>
@@ -641,6 +662,8 @@
   <translation tag="Enabled" zh="已启用"/>
   <translation tag="Encoder" zh="编码器"/>
   <translation tag="Ended" zh="已结束"/>
+  <translation tag="Enhanced {} operation in PRINT_START" zh="增强了 PRINT_START 中的 {} 项操作"/>
+  <translation tag="Enhanced {} operations in PRINT_START" zh="增强了 PRINT_START 中的 {} 项操作"/>
   <translation tag="Enhancement Complete!" zh="增强完成！"/>
   <translation tag="Enhancement Failed" zh="增强失败"/>
   <translation tag="Enter Current PIN" zh="输入当前 PIN 码"/>
@@ -655,9 +678,23 @@
   <translation tag="Enter printer IP address first" zh="请先输入打印机 IP 地址"/>
   <translation tag="Enter the IP address and port of your Spoolman server." zh="输入 Spoolman 服务器的 IP 地址和端口。"/>
   <translation tag="Error" zh="错误"/>
+  <translation tag="Error at chunk {} (code={})" zh="区块 {} 出错 (code={})"/>
   <translation tag="Error loading file" zh="加载文件出错"/>
+  <translation tag="Error loading printing tips" zh="加载打印提示出错"/>
   <translation tag="Error saving printer settings: {}" zh="保存打印机设置出错: {}"/>
   <translation tag="Error state" zh="错误状态"/>
+  <translation tag="Error: %s" zh="错误: %s"/>
+  <translation tag="Error: Cannot update while printing" zh="错误: 打印时无法更新"/>
+  <translation tag="Error: Checksum mismatch" zh="错误: 校验和不匹配"/>
+  <translation tag="Error: Corrupt download" zh="错误: 下载损坏"/>
+  <translation tag="Error: Download failed" zh="错误: 下载失败"/>
+  <translation tag="Error: Installer not found" zh="错误: 未找到安装程序"/>
+  <translation tag="Error: Invalid download" zh="错误: 下载无效"/>
+  <translation tag="Error: No update available" zh="错误: 无可用更新"/>
+  <translation tag="Error: Not enough disk space" zh="错误: 磁盘空间不足"/>
+  <translation tag="Error: Verification failed" zh="错误: 验证失败"/>
+  <translation tag="Error: Wrong architecture" zh="错误: 架构错误"/>
+  <translation tag="Error: `unzip` not installed" zh="错误: 未安装 `unzip`"/>
   <translation tag="Escalate to emergency stop if cancel doesn&apos;t respond" zh="如果取消无响应则升级为紧急停止"/>
   <translation tag="Escalation Timeout" zh="升级超时"/>
   <translation tag="Est. Duration" zh="预计时长"/>
@@ -665,6 +702,7 @@
   <translation tag="Ethernet" zh="以太网"/>
   <translation tag="Events appear here after sessions and prints" zh="会话和打印后事件将显示在此处"/>
   <translation tag="Excellent Accuracy" zh="精度极佳"/>
+  <translation tag="Exception: {}" zh="异常: {}"/>
   <translation tag="Exclude" zh="排除"/>
   <translation tag="Excluded" zh="已排除"/>
   <translation tag="Exclusion cancelled" zh="排除已取消"/>
@@ -699,6 +737,7 @@
   <translation tag="Failed to analyze PRINT_START macro" zh="分析 PRINT_START 宏失败"/>
   <translation tag="Failed to apply limits" zh="应用限制失败"/>
   <translation tag="Failed to apply settings" zh="应用设置失败"/>
+  <translation tag="Failed to build raster data" zh="构建栅格数据失败"/>
   <translation tag="Failed to cancel: {}" zh="取消失败: {}"/>
   <translation tag="Failed to clear print state: {}" zh="无法清除打印状态：{}"/>
   <translation tag="Failed to connect to &apos;{}&apos;: {}" zh="无法连接到 &apos;{}&apos;: {}"/>
@@ -718,6 +757,8 @@
   <translation tag="Failed to enable tuning tower" zh="启用调优塔失败"/>
   <translation tag="Failed to exclude &apos;{}&apos;: {}" zh="排除 &apos;{}&apos; 失败: {}"/>
   <translation tag="Failed to get limits" zh="获取限制失败"/>
+  <translation tag="Failed to initialize Bluetooth" zh="初始化蓝牙失败"/>
+  <translation tag="Failed to initialize Bluetooth context" zh="初始化蓝牙上下文失败"/>
   <translation tag="Failed to load G-code preview" zh="加载 G-code 预览失败"/>
   <translation tag="Failed to load devices" zh="加载设备失败"/>
   <translation tag="Failed to load fan configuration screen" zh="加载风扇配置界面失败"/>
@@ -741,8 +782,10 @@
   <translation tag="Failed to read config." zh="读取配置失败。"/>
   <translation tag="Failed to read config. Check connection." zh="读取配置失败。请检查连接。"/>
   <translation tag="Failed to read moonraker.conf." zh="读取 moonraker.conf 失败。"/>
+  <translation tag="Failed to read printer status" zh="读取打印机状态失败"/>
   <translation tag="Failed to refresh file list" zh="刷新文件列表失败"/>
   <translation tag="Failed to remap G-code: {}" zh="重新映射 G-code 失败：{}"/>
+  <translation tag="Failed to render label" zh="渲染标签失败"/>
   <translation tag="Failed to reprint: {}" zh="重新打印失败: {}"/>
   <translation tag="Failed to reset flow: {}" zh="重置流量失败: {}"/>
   <translation tag="Failed to reset speed: {}" zh="重置速度失败: {}"/>
@@ -762,6 +805,8 @@
   <translation tag="Failed to save spool" zh="保存料盘失败"/>
   <translation tag="Failed to save theme file" zh="保存主题文件失败"/>
   <translation tag="Failed to send command: {}" zh="发送命令失败: {}"/>
+  <translation tag="Failed to send print data" zh="发送打印数据失败"/>
+  <translation tag="Failed to send status request" zh="发送状态请求失败"/>
   <translation tag="Failed to set active spool" zh="设置活动料盘失败"/>
   <translation tag="Failed to set bed temp: {}" zh="设置热床温度失败: {}"/>
   <translation tag="Failed to set chamber temp: {}" zh="设置腔体温度失败: {}"/>
@@ -772,7 +817,9 @@
   <translation tag="Failed to set {} temp: {}" zh="设置 {} 温度失败: {}"/>
   <translation tag="Failed to show confirmation dialog" zh="显示确认对话框失败"/>
   <translation tag="Failed to start calibration" zh="启动校准失败"/>
+  <translation tag="Failed to start installer: " zh="启动安装程序失败: "/>
   <translation tag="Failed to start print: {}" zh="开始打印失败: {}"/>
+  <translation tag="Failed to start uninstaller: " zh="启动卸载程序失败: "/>
   <translation tag="Failed to toggle %s" zh="切换 %s 失败"/>
   <translation tag="Failed to toggle timelapse: {}" zh="切换延时摄影失败: {}"/>
   <translation tag="Failed to turn off heaters: {}" zh="关闭加热器失败: {}"/>
@@ -813,6 +860,7 @@
   <translation tag="Filament operation timed out" zh="耗材操作超时"/>
   <translation tag="Filament runout" zh="耗材用尽"/>
   <translation tag="Filament runout and motion detection sensors" zh="耗材用尽和运动检测传感器"/>
+  <translation tag="Filament sensor available for runout detection" zh="耗材传感器可用于耗尽检测"/>
   <translation tag="Filament tension is balanced" zh="耗材张力平衡"/>
   <translation tag="Filament tracking &amp; label printing" zh="耗材跟踪和标签打印"/>
   <translation tag="Filament tracking and inventory" zh="耗材跟踪和库存"/>
@@ -871,6 +919,7 @@
   <translation tag="H" zh="头"/>
   <translation tag="HOST" zh="主机"/>
   <translation tag="HTTP Code" zh="HTTP 代码"/>
+  <translation tag="HTTP error: {} {}" zh="HTTP 错误: {} {}"/>
   <translation tag="HUMIDITY SENSORS" zh="湿度传感器"/>
   <translation tag="Hang on, we&apos;ll be right back!" zh="请稍候，马上回来！"/>
   <translation tag="Happy Hare MMU" zh="Happy Hare MMU"/>
@@ -953,6 +1002,7 @@
   <translation tag="IMPORT FROM USB" zh="从 USB 导入"/>
   <translation tag="IP Address / Hostname" zh="IP 地址 / 主机名"/>
   <translation tag="IP:" zh="IP："/>
+  <translation tag="IPP error: {}" zh="IPP 错误: {}"/>
   <translation tag="Icon" zh="图标"/>
   <translation tag="Idle" zh="空闲"/>
   <translation tag="If Moonraker is local or your screen is attached to the printer directly, we&apos;ll connect automatically" zh="如果 Moonraker 在本地或屏幕直接连接到打印机，将自动连接"/>
@@ -984,18 +1034,26 @@
   <translation tag="Install Root" zh="安装根目录"/>
   <translation tag="Install Update" zh="安装更新"/>
   <translation tag="Install plugin" zh="安装插件"/>
+  <translation tag="Install script not found. Use the remote install command instead." zh="未找到安装脚本。请改用远程安装命令。"/>
   <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history." zh="在高级设置中安装 HelixPrint 插件，即可在不影响打印历史的情况下重新映射耗材。"/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" zh="安装 HelixPrint 插件以启用快速 G-code 修改。通过 SSH 在打印机上运行此命令："/>
   <translation tag="Install the timelapse plugin via SSH,\nthen tap \&quot;Check Again\&quot;." zh="通过SSH安装延时摄影插件，\n然后点击&quot;重新检查&quot;。"/>
   <translation tag="Install timelapse plugin" zh="安装延时摄影插件"/>
   <translation tag="Installation Failed" zh="安装失败"/>
+  <translation tag="Installation failed" zh="安装失败"/>
+  <translation tag="Installation failed. Check logs for details." zh="安装失败。请查看日志了解详情。"/>
+  <translation tag="Installation failed: " zh="安装失败: "/>
   <translation tag="Installation takes about 30 seconds." zh="安装大约需要 30 秒。"/>
+  <translation tag="Installation timed out" zh="安装超时"/>
+  <translation tag="Installation timed out. The script may be stuck." zh="安装超时。脚本可能已卡住。"/>
   <translation tag="Installing..." zh="正在安装..."/>
   <translation tag="Intensity" zh="强度"/>
   <translation tag="Interactive probe calibration" zh="交互式探针校准"/>
   <translation tag="Internal error: API not available" zh="内部错误: API 不可用"/>
   <translation tag="Internal error: no scan result" zh="内部错误: 无扫描结果"/>
   <translation tag="Invalid port number" zh="无效的端口号"/>
+  <translation tag="Invalid sheet template index: {} (have {})" zh="标签纸模板索引无效: {} (实际有 {})"/>
+  <translation tag="Invalid status response from printer" zh="打印机返回的状态响应无效"/>
   <translation tag="Issue description" zh="问题描述"/>
   <translation tag="Job Queue" zh="任务队列"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." zh="加入 HelixScreen 的 Discord 社区，参与讨论、获取技巧、故障排除帮助和功能请求。"/>
@@ -1008,6 +1066,7 @@
   <translation tag="Keyboard Test (Gboard-style)" zh="键盘测试（Gboard 风格）"/>
   <translation tag="Kinematics" zh="运动学"/>
   <translation tag="Klipper" zh="Klipper"/>
+  <translation tag="Klipper Error" zh="Klipper 错误"/>
   <translation tag="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart." zh="Klipper 固件已与主机断开连接。请尝试重启 Klipper 或执行固件重启。"/>
   <translation tag="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart." zh="Klipper 已进入错误状态。这通常是由 MCU 连接失败或配置错误引起的。请尝试固件重启。"/>
   <translation tag="Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error." zh="Klipper 已进入关机状态。这可能是由于紧急停止、热失控或配置错误引起的。"/>
@@ -1021,6 +1080,7 @@
   <translation tag="LED Settings" zh="LED 设置"/>
   <translation tag="LED Strip" zh="LED 灯带"/>
   <translation tag="LED on at Start" zh="启动时开启 LED"/>
+  <translation tag="LED strip available for lighting control" zh="LED 灯带可用于照明控制"/>
   <translation tag="LEDs" zh="LED"/>
   <translation tag="LEDs controlled by the light button" zh="由灯光按钮控制的 LED"/>
   <translation tag="LOADED" zh="已加载"/>
@@ -1241,6 +1301,7 @@
   <translation tag="No Power Devices" zh="无电源设备"/>
   <translation tag="No Spool" zh="无料盘"/>
   <translation tag="No Spools" zh="无料盘"/>
+  <translation tag="No USB printer detected" zh="未检测到 USB 打印机"/>
   <translation tag="No USB printers found" zh="未找到 USB 打印机"/>
   <translation tag="No buffer data available" zh="无可用缓冲区数据"/>
   <translation tag="No camera — use USB barcode scanner" zh="无摄像头 — 请使用 USB 条码扫描器"/>
@@ -1286,6 +1347,8 @@
   <translation tag="No sensors detected" zh="未检测到传感器"/>
   <translation tag="No spool assigned" zh="未分配料盘"/>
   <translation tag="No spools found — tap to retry" zh="未找到料盘 - 点击重试"/>
+  <translation tag="No tape detected in printer" zh="打印机中未检测到标签带"/>
+  <translation tag="No target printer configured" zh="未配置目标打印机"/>
   <translation tag="No timelapse videos found" zh="未找到延时视频"/>
   <translation tag="No vendors found" zh="未找到供应商"/>
   <translation tag="No webcam detected.\nA webcam is required for timelapse." zh="未检测到摄像头。\n延时摄影需要摄像头。"/>
@@ -1335,6 +1398,7 @@
   <translation tag="Objects" zh="对象"/>
   <translation tag="Off" zh="关"/>
   <translation tag="Off:" zh="关:"/>
+  <translation tag="Off\nFlying Toasters\nStarfield\n3D Pipes" zh="关\n飞行烤面包机\n星空\n3D 管道"/>
   <translation tag="On" zh="开"/>
   <translation tag="On and Off macros must be different" zh="开和关的宏必须不同"/>
   <translation tag="On/Off" zh="开/关"/>
@@ -1374,6 +1438,8 @@
   <translation tag="PRE-PRINT STEPS" zh="打印前步骤"/>
   <translation tag="PRINT OPTIONS" zh="打印选项"/>
   <translation tag="PRINTERS" zh="打印机"/>
+  <translation tag="PRINT_START has {} skippable operation" zh="PRINT_START 有 {} 项可跳过的操作"/>
+  <translation tag="PRINT_START has {} skippable operations" zh="PRINT_START 有 {} 项可跳过的操作"/>
   <translation tag="PROBE SENSORS" zh="探针传感器"/>
   <translation tag="Pair" zh="配对"/>
   <translation tag="Pair Bluetooth Printer" zh="配对蓝牙打印机"/>
@@ -1431,7 +1497,9 @@
   <translation tag="Plugin disabled" zh="插件已禁用"/>
   <translation tag="Plugin installed successfully" zh="插件安装成功"/>
   <translation tag="Plugin installed successfully." zh="插件安装成功。"/>
+  <translation tag="Plugin installed successfully. Moonraker is restarting..." zh="插件安装成功。Moonraker 正在重启..."/>
   <translation tag="Plugin not responding after restart.\nIt may need more time to load." zh="重启后插件无响应。\n可能需要更多时间加载。"/>
+  <translation tag="Plugin uninstalled successfully." zh="插件卸载成功。"/>
   <translation tag="Plugins" zh="插件"/>
   <translation tag="Plugins are discovered on application startup" zh="插件在应用程序启动时被发现"/>
   <translation tag="Point camera at QR code on spool" zh="将摄像头对准料盘上的 QR 码"/>
@@ -1485,6 +1553,8 @@
   <translation tag="Print Time" zh="打印时间"/>
   <translation tag="Print Tuning" zh="打印调优"/>
   <translation tag="Print Was Terminated" zh="打印已终止"/>
+  <translation tag="Print didn&apos;t start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X})" zh="打印未开始 — 打印机可能繁忙或离线 (B3 polls={}, status=0x{:02X}, error=0x{:02X})"/>
+  <translation tag="Print error" zh="打印错误"/>
   <translation tag="Print failed" zh="打印失败"/>
   <translation tag="Print issue detected" zh="检测到打印问题"/>
   <translation tag="Print preparation failed: {}" zh="打印准备失败: {}"/>
@@ -1492,6 +1562,7 @@
   <translation tag="Print server rejected the job — check printer status" zh="打印服务器拒绝了任务 — 请检查打印机状态"/>
   <translation tag="Print setup failed" zh="打印设置失败"/>
   <translation tag="Print setup failed: internal error" zh="打印设置失败：内部错误"/>
+  <translation tag="Print timed out waiting for completion" zh="等待打印完成超时"/>
   <translation tag="Printer" zh="打印机"/>
   <translation tag="Printer Error" zh="打印机错误"/>
   <translation tag="Printer Firmware Disconnected" zh="打印机固件已断开"/>
@@ -1511,11 +1582,15 @@
   <translation tag="Printer Setup: Touch Calibration" zh="打印机设置：触摸校准"/>
   <translation tag="Printer Shutdown" zh="打印机关机"/>
   <translation tag="Printer Type" zh="打印机类型"/>
+  <translation tag="Printer accepted job but isn&apos;t printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X})" zh="打印机已接受作业但未开始打印 — 请检查盖板、纸张和标签类型 (firmware status=0x{:02X} error=0x{:02X})"/>
+  <translation tag="Printer database format error" zh="打印机数据库格式错误"/>
+  <translation tag="Printer database is corrupt" zh="打印机数据库已损坏"/>
   <translation tag="Printer didn&apos;t respond — make sure it&apos;s on and in range" zh="打印机无响应 — 请确保已开机且在范围内"/>
   <translation tag="Printer doesn&apos;t expose the expected service — wrong device?" zh="打印机未提供预期的服务 — 设备是否有误？"/>
   <translation tag="Printer image set to auto-detect" zh="打印机图片已设为自动检测"/>
   <translation tag="Printer is not paired — pair it first" zh="打印机未配对 — 请先进行配对"/>
   <translation tag="Printer name" zh="打印机名称"/>
+  <translation tag="Printer not ready" zh="打印机未就绪"/>
   <translation tag="Printer ready" zh="打印机就绪"/>
   <translation tag="Printer:" zh="打印机:"/>
   <translation tag="Printer: " zh="打印机: "/>
@@ -1573,6 +1648,8 @@
   <translation tag="Quick Button 3" zh="快捷按钮 3"/>
   <translation tag="Quick Button 4" zh="快捷按钮 4"/>
   <translation tag="Quick actions, calibration, speed" zh="快捷操作、校准、速度"/>
+  <translation tag="RFCOMM connect failed" zh="RFCOMM 连接失败"/>
+  <translation tag="RFCOMM connect failed: " zh="RFCOMM 连接失败: "/>
   <translation tag="RSS" zh="RSS"/>
   <translation tag="RSS:" zh="RSS："/>
   <translation tag="Raspberry Pi" zh="Raspberry Pi"/>
@@ -1599,6 +1676,7 @@
   <translation tag="Recover MMU state?" zh="恢复 MMU 状态？"/>
   <translation tag="Recovering AFC system..." zh="AFC系统恢复中..."/>
   <translation tag="Recovery failed" zh="恢复失败"/>
+  <translation tag="Recovery failed: " zh="恢复失败: "/>
   <translation tag="Reduce Sensitivity" zh="降低灵敏度"/>
   <translation tag="Reduce ringing and ghosting artifacts" zh="减少振纹和残影"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" zh="减少振纹和残影等振动伪影"/>
@@ -1629,8 +1707,10 @@
   <translation tag="Report saved to crash_report.txt" zh="报告已保存到 crash_report.txt"/>
   <translation tag="Reprint" zh="重新打印"/>
   <translation tag="Reprint Last" zh="重印上次"/>
+  <translation tag="Request Failed" zh="请求失败"/>
   <translation tag="Require confirmation before emergency stop" zh="紧急停止前需要确认"/>
   <translation tag="Requires Moonraker-Timelapse plugin" zh="需要 Moonraker-Timelapse 插件"/>
+  <translation tag="Resend write failed at chunk {}" zh="区块 {} 重发写入失败"/>
   <translation tag="Reset" zh="重置"/>
   <translation tag="Reset Home Screen?" zh="重置主屏幕？"/>
   <translation tag="Reset Speed &amp; Flow to 100%" zh="重置速度和流量为 100%"/>
@@ -1701,6 +1781,7 @@
   <translation tag="STOP" zh="停止"/>
   <translation tag="STYLE PROPERTIES" zh="样式属性"/>
   <translation tag="SWITCH SENSORS" zh="开关传感器"/>
+  <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." zh="安全模式已激活。由于应用程序在启动时反复崩溃，打印机连接已被禁用。请打开设置以解决问题，然后重启。"/>
   <translation tag="Safety &amp; Notifications" zh="安全与通知"/>
   <translation tag="Sample" zh="样本"/>
   <translation tag="Sample %d/%d" zh="样本 %d/%d"/>
@@ -1860,6 +1941,7 @@
   <translation tag="Sounds" zh="声音"/>
   <translation tag="Source" zh="来源"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" zh="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti detected — print paused" zh="检测到拉丝故障 — 打印已暂停"/>
   <translation tag="Speaker" zh="扬声器"/>
   <translation tag="Specular:" zh="镜面反射："/>
   <translation tag="Speed" zh="速度"/>
@@ -1891,6 +1973,7 @@
   <translation tag="Spoolman: %zu/%zu Spool%s" zh="Spoolman: %zu/%zu 个线轴%s"/>
   <translation tag="Square Corner Velocity" zh="直角转弯速度"/>
   <translation tag="Stable" zh="稳定版"/>
+  <translation tag="Stable\nBeta\nDev" zh="稳定版\n测试版\n开发版"/>
   <translation tag="Standard" zh="标准"/>
   <translation tag="Standby" zh="待机"/>
   <translation tag="Starfield" zh="星空"/>
@@ -1906,6 +1989,7 @@
   <translation tag="Start print anyway?" zh="仍要开始打印吗？"/>
   <translation tag="Started" zh="已开始"/>
   <translation tag="Starting Print..." zh="正在启动打印..."/>
+  <translation tag="Starting download..." zh="正在开始下载..."/>
   <translation tag="Starting measurement..." zh="正在开始测量..."/>
   <translation tag="Starting..." zh="正在启动..."/>
   <translation tag="Startup Brightness" zh="启动亮度"/>
@@ -1944,6 +2028,9 @@
   <translation tag="Sysfs" zh="Sysfs"/>
   <translation tag="System" zh="系统"/>
   <translation tag="System Keyboard" zh="系统键盘"/>
+  <translation tag="System busy — please try again" zh="系统繁忙 — 请重试"/>
+  <translation tag="System busy — try again" zh="系统繁忙 — 请重试"/>
+  <translation tag="System default" zh="系统默认"/>
   <translation tag="System detected" zh="检测到系统"/>
   <translation tag="T%d has no filament loaded — this print will run out." zh="T%d 未加载耗材 —— 此次打印将会耗尽耗材。"/>
   <translation tag="T%d needs filament in slot %d, which is empty — this print will run out." zh="T%d 需要 %d 号料仓中的耗材，但该料仓为空 —— 此次打印将会耗尽耗材。"/>
@@ -2044,9 +2131,13 @@
   <translation tag="Timelapse plugin installed!" zh="延时摄影插件已安装！"/>
   <translation tag="Timelapse plugin is already installed!" zh="延时摄影插件已安装！"/>
   <translation tag="Timelapse plugin is installed!" zh="延时摄影插件已安装！"/>
+  <translation tag="Timelapse render failed" zh="延时摄影渲染失败"/>
+  <translation tag="Timelapse render failed: {}" zh="延时摄影渲染失败: {}"/>
   <translation tag="Timelapse rendered successfully" zh="延时视频渲染成功"/>
   <translation tag="Timezone" zh="时区"/>
   <translation tag="Tip:" zh="提示："/>
+  <translation tag="Tips database format error" zh="提示数据库格式错误"/>
+  <translation tag="Tips database not found" zh="未找到提示数据库"/>
   <translation tag="Toggle" zh="切换"/>
   <translation tag="Toggle (fire-and-forget)" zh="切换（无状态跟踪）"/>
   <translation tag="Toggle Feature" zh="切换功能"/>
@@ -2090,11 +2181,17 @@
   <translation tag="UI Sounds" zh="界面声音"/>
   <translation tag="USB" zh="USB"/>
   <translation tag="USB DEVICES" zh="USB 设备"/>
+  <translation tag="USB drive connected" zh="U 盘已连接"/>
+  <translation tag="USB drive removed" zh="U 盘已移除"/>
   <translation tag="USB printer access denied — check permissions" zh="USB 打印机访问被拒绝 — 请检查权限"/>
   <translation tag="Understanding Results" zh="了解结果"/>
   <translation tag="Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY, Path A and B should be within a few Hz of each other." zh="皮带张力不均会导致层错位、VFA(垂直细纹)和振纹等打印瑕疵。\n\n此工具会振动每条皮带路径并测量共振频率 \u2014 频率匹配意味着张力均衡。\n\n对于 CoreXY,路径 A 与 B 应相差在几 Hz 以内。"/>
   <translation tag="Uninstall HelixPrint Plugin" zh="卸载 HelixPrint 插件"/>
+  <translation tag="Uninstall script not found." zh="未找到卸载脚本。"/>
   <translation tag="Uninstall: Coming soon" zh="卸载: 即将推出"/>
+  <translation tag="Uninstallation failed. Check logs for details." zh="卸载失败。请查看日志了解详情。"/>
+  <translation tag="Uninstallation failed: " zh="卸载失败: "/>
+  <translation tag="Uninstallation timed out. The script may be stuck." zh="卸载超时。脚本可能已卡住。"/>
   <translation tag="Unit" zh="单元"/>
   <translation tag="Unit " zh="单元 "/>
   <translation tag="Unknown" zh="未知"/>
@@ -2118,7 +2215,10 @@
   <translation tag="Unmapped" zh="未映射"/>
   <translation tag="Unretract Extra" zh="回抽恢复额外量"/>
   <translation tag="Unretract Speed" zh="回抽恢复速度"/>
+  <translation tag="Unsupported tape width" zh="不支持的标签带宽度"/>
+  <translation tag="Unsupported tape width: " zh="不支持的标签带宽度: "/>
   <translation tag="Up" zh="向上"/>
+  <translation tag="Up to date" zh="已是最新"/>
   <translation tag="Update" zh="更新"/>
   <translation tag="Update Available" zh="有可用更新"/>
   <translation tag="Update Channel" zh="更新通道"/>
@@ -2144,6 +2244,8 @@
   <translation tag="Vendor already exists" zh="供应商已存在"/>
   <translation tag="Vendor:" zh="供应商："/>
   <translation tag="Verify" zh="验证"/>
+  <translation tag="Verifying SHA256 checksum..." zh="正在验证 SHA256 校验和..."/>
+  <translation tag="Verifying download..." zh="正在验证下载..."/>
   <translation tag="Verifying timelapse plugin..." zh="正在验证延时摄影插件..."/>
   <translation tag="Verifying..." zh="验证中..."/>
   <translation tag="Version" zh="版本"/>
@@ -2153,6 +2255,7 @@
   <translation tag="Vibration" zh="振动"/>
   <translation tag="Vibration compensation active" zh="振动补偿已启用"/>
   <translation tag="Video playback speed" zh="视频播放速度"/>
+  <translation tag="View" zh="查看"/>
   <translation tag="View Changelog" zh="查看更新日志"/>
   <translation tag="View Full History" zh="查看完整历史"/>
   <translation tag="View Presets" zh="查看预设"/>
@@ -2190,14 +2293,17 @@
   <translation tag="WiFi Disabled" zh="WiFi 已禁用"/>
   <translation tag="WiFi Enabled" zh="WiFi 已启用"/>
   <translation tag="WiFi Network" zh="WiFi 网络"/>
+  <translation tag="WiFi Unavailable" zh="WiFi 不可用"/>
   <translation tag="WiFi and Ethernet configuration" zh="WiFi 和以太网配置"/>
   <translation tag="WiFi control unavailable" zh="WiFi 控制不可用"/>
   <translation tag="WiFi hardware unavailable" zh="WiFi 硬件不可用"/>
   <translation tag="WiFi unavailable" zh="WiFi 不可用"/>
+  <translation tag="WiFi was configured but hardware is not available. Check system configuration." zh="已配置 WiFi 但硬件不可用。请检查系统配置。"/>
   <translation tag="Widget Labels" zh="小组件标签"/>
   <translation tag="Width" zh="宽度"/>
   <translation tag="Wifi" zh="Wi-Fi"/>
   <translation tag="Wizard Error" zh="向导错误"/>
+  <translation tag="Write failed at chunk {}" zh="区块 {} 写入失败"/>
   <translation tag="Wrong PIN" zh="PIN 错误"/>
   <translation tag="Wrong media" zh="介质错误"/>
   <translation tag="X" zh="X"/>
@@ -2250,9 +2356,11 @@
   <translation tag="Z:" zh="Z:"/>
   <translation tag="Z: 0.000" zh="Z: 0.000"/>
   <translation tag="Zoom" zh="缩放"/>
+  <translation tag="\&quot;%s\&quot; failed to load" zh="\&quot;%s\&quot; 加载失败"/>
   <translation tag="bed" zh="热床"/>
   <translation tag="by Preston Brown" zh="by Preston Brown"/>
   <translation tag="chamber heater" zh="腔体加热器"/>
+  <translation tag="complete" zh="完成"/>
   <translation tag="cores" zh="核心"/>
   <translation tag="disable" zh="禁用"/>
   <translation tag="disabled" zh="已禁用"/>
@@ -2262,11 +2370,13 @@
   <translation tag="elapsed" zh="已用时"/>
   <translation tag="enable" zh="启用"/>
   <translation tag="enabled" zh="已启用"/>
+  <translation tag="error" zh="错误"/>
   <translation tag="extruder" zh="挤出机"/>
   <translation tag="extruder(s)" zh="挤出机"/>
   <translation tag="extruders" zh="挤出机"/>
   <translation tag="fans" zh="风扇"/>
   <translation tag="heated bed" zh="热床"/>
+  <translation tag="idle" zh="空闲"/>
   <translation tag="layers" zh="层"/>
   <translation tag="left" zh="剩余"/>
   <translation tag="mm before clog" zh="毫米后堵料"/>
@@ -2281,6 +2391,7 @@
   <translation tag="prints" zh="打印次数"/>
   <translation tag="remaining" zh="剩余"/>
   <translation tag="remaining before clog detection triggers" zh="剩余即触发堵料检测"/>
+  <translation tag="rendering" zh="渲染中"/>
   <translation tag="set to" zh="设置为"/>
   <translation tag="slots)" zh="个料仓)"/>
   <translation tag="started" zh="已启动"/>
@@ -2304,16 +2415,25 @@
   <translation tag="tour.step.welcome.body" zh="让我们快速浏览一下，帮助您快速找到所需内容。"/>
   <translation tag="tour.step.welcome.title" zh="欢迎使用 HelixScreen"/>
   <translation tag="used" zh="已使用"/>
+  <translation tag="v%s available" zh="v%s 可用"/>
+  <translation tag="v{} installed! Restarting..." zh="已安装 v{}！正在重启..."/>
   <translation tag="v{} is available. Tap to update." zh="v{} 可用。点击以更新。"/>
   <translation tag="you have" zh="您有"/>
+  <translation tag="{} LED strips available" zh="{} 条 LED 灯带可用"/>
   <translation tag="{} axis homed" zh="{} 轴已归位"/>
   <translation tag="{} command timed out" zh="{} 命令超时"/>
   <translation tag="{} complete" zh="{} 完成"/>
+  <translation tag="{} configured item not found" zh="未找到 {} 个已配置的项目"/>
+  <translation tag="{} configured items not found" zh="未找到 {} 个已配置的项目"/>
+  <translation tag="{} critical hardware issues" zh="{} 个关键硬件问题"/>
+  <translation tag="{} filament sensors available" zh="{} 个耗材传感器可用"/>
   <translation tag="{} heater turned off" zh="{} 加热器已关闭"/>
   <translation tag="{} lanes" zh="{} 个料仓"/>
   <translation tag="{} macro not configured" zh="{} 宏未配置"/>
   <translation tag="{} may cause unintended changes. Are you sure?" zh="{} 可能导致意外更改。确定吗？"/>
   <translation tag="{} more taps to {} beta features" zh="再点击 {} 次以{}测试功能"/>
+  <translation tag="{} new hardware available" zh="{} 个新硬件可用"/>
   <translation tag="{} preset{}" zh="{} 个预设{}"/>
   <translation tag="{} target set to {}°C" zh="{} 目标已设为 {}°C"/>
+  <translation tag="{} — response timed out" zh="{} — 响应超时"/>
 </translations>

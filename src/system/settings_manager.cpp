@@ -11,6 +11,7 @@
 #include "display_settings_manager.h"
 #include "input_settings_manager.h"
 #include "led/led_controller.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "material_settings_manager.h"
 #include "moonraker_client.h"
 #include "printer_detector.h"
@@ -303,7 +304,7 @@ void SettingsManager::set_z_movement_style(ZMovementStyle style) {
 }
 
 const char* SettingsManager::get_z_movement_style_options() {
-    return Z_MOVEMENT_STYLE_OPTIONS_TEXT;
+    return lv_tr(Z_MOVEMENT_STYLE_OPTIONS_TEXT);
 }
 
 // =============================================================================

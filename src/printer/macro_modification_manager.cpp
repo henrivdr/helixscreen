@@ -12,6 +12,7 @@
 #include "moonraker_api.h"
 #include "printer_state.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <functional>
@@ -317,14 +318,15 @@ void MacroModificationManager::show_configure_toast() {
     // Use get_uncontrollable_operations() which excludes HOMING (same as wizard)
     size_t uncontrollable = cached_analysis_.get_uncontrollable_operations().size();
 
-    char message[128];
-    snprintf(message, sizeof(message), "PRINT_START has %zu skippable operation%s", uncontrollable,
-             uncontrollable == 1 ? "" : "s");
+    std::string message =
+        fmt::format(uncontrollable == 1 ? lv_tr("PRINT_START has {} skippable operation")
+                                        : lv_tr("PRINT_START has {} skippable operations"),
+                    uncontrollable);
 
     // Show toast with Configure action
     // Using raw pointer for callback since toast lifetime is short
     ToastManager::instance().show_with_action(
-        ToastSeverity::INFO, message, "Configure",
+        ToastSeverity::INFO, message.c_str(), lv_tr("Configure"),
         [](void* user_data) {
             auto* manager = static_cast<MacroModificationManager*>(user_data);
             if (manager) {
@@ -382,10 +384,11 @@ void MacroModificationManager::on_wizard_complete(bool applied, size_t operation
         cfg.macro_hash = compute_hash(cached_analysis_.raw_gcode);
         save_config(cfg);
 
-        char message[128];
-        snprintf(message, sizeof(message), "Enhanced %zu operation%s in PRINT_START",
-                 operations_enhanced, operations_enhanced == 1 ? "" : "s");
-        ToastManager::instance().show(ToastSeverity::SUCCESS, message, 4000);
+        std::string message =
+            fmt::format(operations_enhanced == 1 ? lv_tr("Enhanced {} operation in PRINT_START")
+                                                 : lv_tr("Enhanced {} operations in PRINT_START"),
+                        operations_enhanced);
+        ToastManager::instance().show(ToastSeverity::SUCCESS, message.c_str(), 4000);
     }
 
     // Clean up wizard

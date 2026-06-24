@@ -286,13 +286,15 @@ void GcodeErrorRouter::present_recover_toast(const ErrorEvent& e) {
                 return;
             spdlog::info("[GcodeError] User tapped Recover for key298");
             PrinterRecoveryService recovery(a);
-            recovery.recover([]() { spdlog::info("[Recovery] Auto-recovery initiated"); },
-                             [](const MoonrakerError& err) {
-                                 spdlog::error("[Recovery] Auto-recovery failed: {}", err.message);
-                                 ToastManager::instance().show(
-                                     ToastSeverity::ERROR,
-                                     ("Recovery failed: " + err.user_message()).c_str(), 6000);
-                             });
+            recovery.recover(
+                []() { spdlog::info("[Recovery] Auto-recovery initiated"); },
+                [](const MoonrakerError& err) {
+                    spdlog::error("[Recovery] Auto-recovery failed: {}", err.message);
+                    ToastManager::instance().show(
+                        ToastSeverity::ERROR,
+                        (std::string(lv_tr("Recovery failed: ")) + err.user_message()).c_str(),
+                        6000);
+                });
         },
         api, /*duration_ms=*/15000);
 }
@@ -315,7 +317,7 @@ void GcodeErrorRouter::present_deferred_toast(const std::string& text) {
                                  "(caller-handled RPC error arrived after): {}",
                                  c->clean);
                 } else {
-                    ui_notification_error("Klipper Error", c->short_form.c_str(),
+                    ui_notification_error(lv_tr("Klipper Error"), c->short_form.c_str(),
                                           /*modal=*/false);
                 }
                 delete c;

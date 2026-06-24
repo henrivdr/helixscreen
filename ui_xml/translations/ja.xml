@@ -18,6 +18,7 @@
   <translation tag="%u layers" ja="%uレイヤー"/>
   <translation tag="%zu changes" ja="%zu件の変更"/>
   <translation tag="%zu events queued" ja="%zu 件のイベントを待機中"/>
+  <translation tag="%zu plugins failed to load" ja="%zu 個のプラグインの読み込みに失敗しました"/>
   <translation tag="(incompatible)" ja="(非対応)"/>
   <translation tag="(multi-tool)" ja="(マルチツール)"/>
   <translation tag="(none detected)" ja="(検出なし)"/>
@@ -82,6 +83,7 @@
   <translation tag="A" ja="A"/>
   <translation tag="ABS" ja="ABS"/>
   <translation tag="ACCELEROMETERS" ja="加速度センサー"/>
+  <translation tag="ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support." ja="ACE Moonraker ブリッジが見つかりません。完全なサポートには ValgACE から ace_status.py をインストールしてください。"/>
   <translation tag="ACTIONS" ja="アクション"/>
   <translation tag="ADXL" ja="ADXL"/>
   <translation tag="AFC" ja="AFC"/>
@@ -93,6 +95,7 @@
   <translation tag="AFC reset complete" ja="AFCリセット完了"/>
   <translation tag="AFC reset failed" ja="AFCリセット失敗"/>
   <translation tag="AFC retracts filament from the toolhead at end of print" ja="AFCは印刷終了時にツールヘッドからフィラメントを引き戻します"/>
+  <translation tag="AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later." ja="AFC バージョン {} には互換性の問題がある可能性があります。v1.0.35 以降にアップグレードしてください。"/>
   <translation tag="ALL DEVICES" ja="すべてのデバイス"/>
   <translation tag="AMS" ja="AMS"/>
   <translation tag="AMS Active: " ja="AMS 有効: "/>
@@ -154,6 +157,7 @@
   <translation tag="An error occurred during measurement." ja="測定中にエラーが発生しました。"/>
   <translation tag="An error occurred during probing." ja="プローブ中にエラーが発生しました。"/>
   <translation tag="An error occurred while loading filament." ja="フィラメントの装填中にエラーが発生しました。"/>
+  <translation tag="An internal error occurred. The app continues running — please send a debug bundle from Settings &gt; About if it repeats." ja="内部エラーが発生しました。アプリは引き続き動作します。問題が繰り返される場合は、設定 &gt; バージョン情報 からデバッグバンドルを送信してください。"/>
   <translation tag="An unexpected printer error occurred." ja="予期しないプリンターエラーが発生しました。"/>
   <translation tag="An update is available" ja="更新があります"/>
   <translation tag="Android logcat" ja="Android logcat"/>
@@ -163,6 +167,7 @@
   <translation tag="Anonymous usage statistics" ja="匿名の使用統計"/>
   <translation tag="Any notes..." ja="メモ..."/>
   <translation tag="App Background" ja="アプリ背景"/>
+  <translation tag="App startup encountered an error. Some features may be unavailable." ja="アプリの起動中にエラーが発生しました。一部の機能が利用できない場合があります。"/>
   <translation tag="Appearance" ja="外観"/>
   <translation tag="Apply" ja="適用"/>
   <translation tag="Apply Changes" ja="変更を適用"/>
@@ -181,10 +186,12 @@
   <translation tag="Auto-Detect" ja="自動検出"/>
   <translation tag="Auto-Heat on Load" ja="装填時に自動加熱"/>
   <translation tag="Auto-detect" ja="自動検出"/>
+  <translation tag="Auto-install only works on local Moonraker" ja="自動インストールはローカルの Moonraker でのみ動作します"/>
   <translation tag="Auto-lock" ja="自動ロック"/>
   <translation tag="Auto-poll for weight updates" ja="重量更新の自動ポーリング"/>
   <translation tag="Auto-probe or manually check screw heights" ja="自動プローブまたは手動でネジの高さを確認"/>
   <translation tag="Auto-render video" ja="動画を自動レンダリング"/>
+  <translation tag="Auto-uninstall only works on local Moonraker" ja="自動アンインストールはローカルの Moonraker でのみ動作します"/>
   <translation tag="Automatic" ja="自動"/>
   <translation tag="Automatic Heater Control Calibration" ja="自動ヒーター制御キャリブレーション"/>
   <translation tag="Automatic LED Control" ja="自動LED制御"/>
@@ -196,6 +203,9 @@
   <translation tag="Average" ja="平均"/>
   <translation tag="BEACON" ja="BEACON"/>
   <translation tag="BETA" ja="BETA"/>
+  <translation tag="BLE connect failed: {}" ja="BLE 接続に失敗しました: {}"/>
+  <translation tag="BLE write failed at packet {}: {}" ja="パケット {} で BLE 書き込みに失敗しました: {}"/>
+  <translation tag="BLE write failed: {}" ja="BLE 書き込みに失敗しました: {}"/>
   <translation tag="BLTouch Controls" ja="BLTouchコントロール"/>
   <translation tag="BLUETOOTH PRINTERS" ja="BLUETOOTH PRINTERS"/>
   <translation tag="BLUETOOTH SCANNERS" ja="BLUETOOTH SCANNERS"/>
@@ -237,6 +247,7 @@
   <translation tag="Black" ja="ブラック"/>
   <translation tag="Blocked" ja="ブロック中"/>
   <translation tag="Bluetooth" ja="Bluetooth"/>
+  <translation tag="Bluetooth device not configured" ja="Bluetooth デバイスが設定されていません"/>
   <translation tag="Bluetooth initialization failed" ja="Bluetooth の初期化に失敗しました"/>
   <translation tag="Bluetooth is not available on this device" ja="このデバイスでは Bluetooth を利用できません"/>
   <translation tag="Bluetooth not available" ja="Bluetooth が利用できません"/>
@@ -374,6 +385,7 @@
   <translation tag="Checking slots..." ja="スロットを確認中..."/>
   <translation tag="Checking timelapse plugin..." ja="タイムラプスプラグインを確認中..."/>
   <translation tag="Checking webcam" ja="ウェブカメラを確認中"/>
+  <translation tag="Checking..." ja="確認中..."/>
   <translation tag="Choose 12-hour or 24-hour time display" ja="12時間表示または24時間表示を選択"/>
   <translation tag="Choose Spool" ja="スプールを選択"/>
   <translation tag="Choose an existing filament, or tap + New to create one." ja="既存のフィラメントを選択するか、+ 新規をタップして作成してください。"/>
@@ -448,6 +460,7 @@
   <translation tag="Connected Time" ja="接続時間"/>
   <translation tag="Connected to" ja="接続先"/>
   <translation tag="Connected to " ja="接続先: "/>
+  <translation tag="Connected to {}" ja="{} に接続しました"/>
   <translation tag="Connected! Discovering printer..." ja="接続完了！プリンターを検出中..."/>
   <translation tag="Connected, discovering..." ja="接続済み、検出中..."/>
   <translation tag="Connecting Camera..." ja="カメラに接続中..."/>
@@ -456,8 +469,10 @@
   <translation tag="Connecting to network..." ja="ネットワークに接続中..."/>
   <translation tag="Connecting..." ja="接続中..."/>
   <translation tag="Connection" ja="接続"/>
+  <translation tag="Connection Failed" ja="接続に失敗しました"/>
   <translation tag="Connection Stability" ja="接続の安定性"/>
   <translation tag="Connection failed" ja="接続に失敗しました"/>
+  <translation tag="Connection failed to {}:{}" ja="{}:{} への接続に失敗しました"/>
   <translation tag="Connection failed. Check IP/port and try again." ja="接続に失敗しました。IPアドレス/ポートを確認して再試行してください。"/>
   <translation tag="Connection failed. Check credentials." ja="接続に失敗しました。認証情報を確認してください。"/>
   <translation tag="Connection failed. Check password." ja="接続に失敗しました。パスワードを確認してください。"/>
@@ -483,7 +498,10 @@
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." ja="PRINT_START マクロを分析できませんでした。一部の印刷オプションが利用できない場合があります。"/>
   <translation tag="Could not check webcam status.\nCheck printer connection." ja="ウェブカメラの状態を確認できませんでした。\nプリンター接続を確認してください。"/>
   <translation tag="Could not forget device" ja="デバイスの登録を解除できませんでした"/>
+  <translation tag="Could not load printer database" ja="プリンターデータベースを読み込めませんでした"/>
+  <translation tag="Could not parse tips database" ja="ヒントデータベースを解析できませんでした"/>
   <translation tag="Could not reach Spoolman at" ja="Spoolman に接続できません:"/>
+  <translation tag="Could not resolve printer RFCOMM channel" ja="プリンターの RFCOMM チャンネルを解決できませんでした"/>
   <translation tag="Could not start Bluetooth discovery" ja="Bluetooth の検出を開始できませんでした"/>
   <translation tag="Could not verify Spoolman status. Moonraker may still be restarting." ja="Spoolman のステータスを確認できませんでした。Moonraker がまだ再起動中の可能性があります。"/>
   <translation tag="Couldn&apos;t update Spoolman — saved locally" ja="Spoolman を更新できませんでした — ローカルに保存しました"/>
@@ -500,6 +518,7 @@
   <translation tag="Create backup of %s before applying" ja="適用前に %s のバックアップを作成"/>
   <translation tag="Create video when print completes" ja="印刷完了時に動画を作成"/>
   <translation tag="Creating spool..." ja="スプールを作成中..."/>
+  <translation tag="Critical hardware missing: {}" ja="重要なハードウェアがありません: {}"/>
   <translation tag="Current / Target" ja="現在 / 目標"/>
   <translation tag="Current Configuration" ja="現在の設定"/>
   <translation tag="Current Frequency" ja="現在の周波数"/>
@@ -577,6 +596,7 @@
   <translation tag="Display &amp; Sound" ja="ディスプレイとサウンド"/>
   <translation tag="Display Mode" ja="表示モード"/>
   <translation tag="Display Sleep" ja="ディスプレイスリープ"/>
+  <translation tag="Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer resolution in /boot/firmware/config.txt for best results." ja="ディスプレイ解像度が非常に高くなっています (%dx%d)。テキストが小さく表示される場合があります。最良の結果を得るには、/boot/firmware/config.txt でフレームバッファ解像度を下げてください。"/>
   <translation tag="Display: " ja="ディスプレイ: "/>
   <translation tag="Do not power off your printer." ja="プリンターの電源を切らないでください。"/>
   <translation tag="Do not touch the printer during calibration" ja="キャリブレーション中はプリンターに触れないでください"/>
@@ -589,6 +609,7 @@
   <translation tag="Download update?" ja="アップデートをダウンロードしますか？"/>
   <translation tag="Download v{}?" ja="v{}をダウンロードしますか？"/>
   <translation tag="Downloading..." ja="ダウンロード中..."/>
+  <translation tag="Downloading... {:.1f}/{:.1f} MB" ja="ダウンロード中... {:.1f}/{:.1f} MB"/>
   <translation tag="Draw a ripple at each touch — helps diagnose offsets" ja="タッチごとに波紋を描画 — ズレの診断に役立ちます"/>
   <translation tag="Drive Cal" ja="ドライブキャリブレーション"/>
   <translation tag="Drop shadow strength (0 = disabled)" ja="影の強さ (0 = 無効)"/>
@@ -641,6 +662,8 @@
   <translation tag="Enabled" ja="有効"/>
   <translation tag="Encoder" ja="エンコーダー"/>
   <translation tag="Ended" ja="終了"/>
+  <translation tag="Enhanced {} operation in PRINT_START" ja="PRINT_START 内の {} 操作を強化しました"/>
+  <translation tag="Enhanced {} operations in PRINT_START" ja="PRINT_START 内の {} 操作を強化しました"/>
   <translation tag="Enhancement Complete!" ja="改善完了！"/>
   <translation tag="Enhancement Failed" ja="改善失敗"/>
   <translation tag="Enter Current PIN" ja="現在の PIN を入力"/>
@@ -655,9 +678,23 @@
   <translation tag="Enter printer IP address first" ja="先にプリンターのIPアドレスを入力してください"/>
   <translation tag="Enter the IP address and port of your Spoolman server." ja="Spoolman サーバーのIPアドレスとポートを入力してください。"/>
   <translation tag="Error" ja="エラー"/>
+  <translation tag="Error at chunk {} (code={})" ja="チャンク {} でエラー (code={})"/>
   <translation tag="Error loading file" ja="ファイルの読み込みエラー"/>
+  <translation tag="Error loading printing tips" ja="印刷ヒントの読み込みエラー"/>
   <translation tag="Error saving printer settings: {}" ja="プリンター設定の保存エラー: {}"/>
   <translation tag="Error state" ja="エラー状態"/>
+  <translation tag="Error: %s" ja="エラー: %s"/>
+  <translation tag="Error: Cannot update while printing" ja="エラー: 印刷中は更新できません"/>
+  <translation tag="Error: Checksum mismatch" ja="エラー: チェックサムが一致しません"/>
+  <translation tag="Error: Corrupt download" ja="エラー: ダウンロードが破損しています"/>
+  <translation tag="Error: Download failed" ja="エラー: ダウンロードに失敗しました"/>
+  <translation tag="Error: Installer not found" ja="エラー: インストーラーが見つかりません"/>
+  <translation tag="Error: Invalid download" ja="エラー: 無効なダウンロード"/>
+  <translation tag="Error: No update available" ja="エラー: 利用可能な更新がありません"/>
+  <translation tag="Error: Not enough disk space" ja="エラー: ディスク容量が不足しています"/>
+  <translation tag="Error: Verification failed" ja="エラー: 検証に失敗しました"/>
+  <translation tag="Error: Wrong architecture" ja="エラー: アーキテクチャが正しくありません"/>
+  <translation tag="Error: `unzip` not installed" ja="エラー: `unzip` がインストールされていません"/>
   <translation tag="Escalate to emergency stop if cancel doesn&apos;t respond" ja="キャンセルが応答しない場合は緊急停止にエスカレート"/>
   <translation tag="Escalation Timeout" ja="エスカレーションタイムアウト"/>
   <translation tag="Est. Duration" ja="予想時間"/>
@@ -665,6 +702,7 @@
   <translation tag="Ethernet" ja="イーサネット"/>
   <translation tag="Events appear here after sessions and prints" ja="セッションと印刷の後にイベントがここに表示されます"/>
   <translation tag="Excellent Accuracy" ja="非常に高精度"/>
+  <translation tag="Exception: {}" ja="例外: {}"/>
   <translation tag="Exclude" ja="除外"/>
   <translation tag="Excluded" ja="除外"/>
   <translation tag="Exclusion cancelled" ja="除外がキャンセルされました"/>
@@ -699,6 +737,7 @@
   <translation tag="Failed to analyze PRINT_START macro" ja="PRINT_START マクロの解析に失敗しました"/>
   <translation tag="Failed to apply limits" ja="制限の適用に失敗しました"/>
   <translation tag="Failed to apply settings" ja="設定の適用に失敗しました"/>
+  <translation tag="Failed to build raster data" ja="ラスターデータの構築に失敗しました"/>
   <translation tag="Failed to cancel: {}" ja="キャンセルに失敗しました: {}"/>
   <translation tag="Failed to clear print state: {}" ja="印刷状態をクリアできませんでした: {}"/>
   <translation tag="Failed to connect to &apos;{}&apos;: {}" ja="&apos;{}&apos; への接続に失敗しました: {}"/>
@@ -718,6 +757,8 @@
   <translation tag="Failed to enable tuning tower" ja="チューニングタワーの有効化に失敗しました"/>
   <translation tag="Failed to exclude &apos;{}&apos;: {}" ja="&apos;{}&apos; の除外に失敗しました: {}"/>
   <translation tag="Failed to get limits" ja="制限の取得に失敗しました"/>
+  <translation tag="Failed to initialize Bluetooth" ja="Bluetooth の初期化に失敗しました"/>
+  <translation tag="Failed to initialize Bluetooth context" ja="Bluetooth コンテキストの初期化に失敗しました"/>
   <translation tag="Failed to load G-code preview" ja="G-code プレビューの読み込みに失敗しました"/>
   <translation tag="Failed to load devices" ja="デバイスの読み込みに失敗しました"/>
   <translation tag="Failed to load fan configuration screen" ja="ファン設定画面の読み込みに失敗しました"/>
@@ -741,8 +782,10 @@
   <translation tag="Failed to read config." ja="設定の読み込みに失敗しました。"/>
   <translation tag="Failed to read config. Check connection." ja="設定の読み込みに失敗しました。接続を確認してください。"/>
   <translation tag="Failed to read moonraker.conf." ja="moonraker.confの読み込みに失敗しました。"/>
+  <translation tag="Failed to read printer status" ja="プリンターステータスの読み込みに失敗しました"/>
   <translation tag="Failed to refresh file list" ja="ファイルリストの更新に失敗しました"/>
   <translation tag="Failed to remap G-code: {}" ja="G-codeのリマップに失敗しました: {}"/>
+  <translation tag="Failed to render label" ja="ラベルのレンダリングに失敗しました"/>
   <translation tag="Failed to reprint: {}" ja="再印刷に失敗しました: {}"/>
   <translation tag="Failed to reset flow: {}" ja="フローのリセットに失敗しました: {}"/>
   <translation tag="Failed to reset speed: {}" ja="速度のリセットに失敗しました: {}"/>
@@ -762,6 +805,8 @@
   <translation tag="Failed to save spool" ja="スプールの保存に失敗しました"/>
   <translation tag="Failed to save theme file" ja="テーマファイルの保存に失敗しました"/>
   <translation tag="Failed to send command: {}" ja="コマンドの送信に失敗しました: {}"/>
+  <translation tag="Failed to send print data" ja="印刷データの送信に失敗しました"/>
+  <translation tag="Failed to send status request" ja="ステータス要求の送信に失敗しました"/>
   <translation tag="Failed to set active spool" ja="アクティブスプールの設定に失敗しました"/>
   <translation tag="Failed to set bed temp: {}" ja="ベッド温度の設定に失敗しました: {}"/>
   <translation tag="Failed to set chamber temp: {}" ja="チャンバー温度の設定に失敗しました: {}"/>
@@ -772,7 +817,9 @@
   <translation tag="Failed to set {} temp: {}" ja="{} 温度の設定に失敗しました: {}"/>
   <translation tag="Failed to show confirmation dialog" ja="確認ダイアログの表示に失敗しました"/>
   <translation tag="Failed to start calibration" ja="キャリブレーションの開始に失敗しました"/>
+  <translation tag="Failed to start installer: " ja="インストーラーの起動に失敗しました: "/>
   <translation tag="Failed to start print: {}" ja="印刷の開始に失敗しました: {}"/>
+  <translation tag="Failed to start uninstaller: " ja="アンインストーラーの起動に失敗しました: "/>
   <translation tag="Failed to toggle %s" ja="%s の切り替えに失敗しました"/>
   <translation tag="Failed to toggle timelapse: {}" ja="タイムラプスの切替に失敗しました: {}"/>
   <translation tag="Failed to turn off heaters: {}" ja="ヒーターのオフに失敗しました: {}"/>
@@ -813,6 +860,7 @@
   <translation tag="Filament operation timed out" ja="フィラメント操作がタイムアウトしました"/>
   <translation tag="Filament runout" ja="フィラメント切れ"/>
   <translation tag="Filament runout and motion detection sensors" ja="フィラメント切れとモーション検出センサー"/>
+  <translation tag="Filament sensor available for runout detection" ja="フィラメント切れ検出用のフィラメントセンサーが利用可能です"/>
   <translation tag="Filament tension is balanced" ja="フィラメントの張力が均衡しています"/>
   <translation tag="Filament tracking &amp; label printing" ja="フィラメント追跡とラベル印刷"/>
   <translation tag="Filament tracking and inventory" ja="フィラメント追跡と在庫管理"/>
@@ -871,6 +919,7 @@
   <translation tag="H" ja="H"/>
   <translation tag="HOST" ja="ホスト"/>
   <translation tag="HTTP Code" ja="HTTP コード"/>
+  <translation tag="HTTP error: {} {}" ja="HTTP エラー: {} {}"/>
   <translation tag="HUMIDITY SENSORS" ja="湿度センサー"/>
   <translation tag="Hang on, we&apos;ll be right back!" ja="しばらくお待ちください。すぐに戻ります！"/>
   <translation tag="Happy Hare MMU" ja="Happy Hare MMU"/>
@@ -953,6 +1002,7 @@
   <translation tag="IMPORT FROM USB" ja="USBからインポート"/>
   <translation tag="IP Address / Hostname" ja="IPアドレス / ホスト名"/>
   <translation tag="IP:" ja="IP:"/>
+  <translation tag="IPP error: {}" ja="IPP エラー: {}"/>
   <translation tag="Icon" ja="アイコン"/>
   <translation tag="Idle" ja="アイドル"/>
   <translation tag="If Moonraker is local or your screen is attached to the printer directly, we&apos;ll connect automatically" ja="Moonraker がローカルまたは画面がプリンターに直接接続されている場合、自動的に接続します"/>
@@ -984,18 +1034,26 @@
   <translation tag="Install Root" ja="インストールルート"/>
   <translation tag="Install Update" ja="更新をインストール"/>
   <translation tag="Install plugin" ja="プラグインをインストール"/>
+  <translation tag="Install script not found. Use the remote install command instead." ja="インストールスクリプトが見つかりません。代わりにリモートインストールコマンドを使用してください。"/>
   <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history." ja="印刷履歴に影響を与えずにフィラメントをリマップするには、詳細設定でHelixPrintプラグインをインストールしてください。"/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" ja="高速 G-code 修正を有効にするために HelixPrint プラグインをインストールしてください。プリンターで SSH 経由でこのコマンドを実行してください:"/>
   <translation tag="Install the timelapse plugin via SSH,\nthen tap \&quot;Check Again\&quot;." ja="SSHでタイムラプスプラグインをインストールし、\n「再確認」をタップしてください。"/>
   <translation tag="Install timelapse plugin" ja="タイムラプスプラグインをインストール"/>
   <translation tag="Installation Failed" ja="インストール失敗"/>
+  <translation tag="Installation failed" ja="インストールに失敗しました"/>
+  <translation tag="Installation failed. Check logs for details." ja="インストールに失敗しました。詳細はログを確認してください。"/>
+  <translation tag="Installation failed: " ja="インストールに失敗しました: "/>
   <translation tag="Installation takes about 30 seconds." ja="インストールには約30秒かかります。"/>
+  <translation tag="Installation timed out" ja="インストールがタイムアウトしました"/>
+  <translation tag="Installation timed out. The script may be stuck." ja="インストールがタイムアウトしました。スクリプトが停止している可能性があります。"/>
   <translation tag="Installing..." ja="インストール中..."/>
   <translation tag="Intensity" ja="強度"/>
   <translation tag="Interactive probe calibration" ja="インタラクティブプローブキャリブレーション"/>
   <translation tag="Internal error: API not available" ja="内部エラー: API を利用できません"/>
   <translation tag="Internal error: no scan result" ja="内部エラー: スキャン結果がありません"/>
   <translation tag="Invalid port number" ja="無効なポート番号"/>
+  <translation tag="Invalid sheet template index: {} (have {})" ja="無効なシートテンプレートインデックス: {} (現在 {})"/>
+  <translation tag="Invalid status response from printer" ja="プリンターからの無効なステータス応答"/>
   <translation tag="Issue description" ja="問題の説明"/>
   <translation tag="Job Queue" ja="ジョブキュー"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." ja="Discord で HelixScreen コミュニティに参加して、ディスカッション、ヒント、トラブルシューティング支援、機能リクエストを共有しましょう。"/>
@@ -1008,6 +1066,7 @@
   <translation tag="Keyboard Test (Gboard-style)" ja="キーボードテスト（Gboard風）"/>
   <translation tag="Kinematics" ja="キネマティクス"/>
   <translation tag="Klipper" ja="Klipper"/>
+  <translation tag="Klipper Error" ja="Klipper エラー"/>
   <translation tag="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart." ja="Klipper ファームウェアがホストから切断されました。Klipper を再起動するか、ファームウェア再起動を実行してみてください。"/>
   <translation tag="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart." ja="Klipper がエラー状態になりました。これは通常、MCU 接続の失敗または設定エラーが原因です。ファームウェア再起動を試してください。"/>
   <translation tag="Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error." ja="Klipper がシャットダウン状態になりました。緊急停止、熱暴走、または設定エラーが原因の可能性があります。"/>
@@ -1021,6 +1080,7 @@
   <translation tag="LED Settings" ja="LED設定"/>
   <translation tag="LED Strip" ja="LEDストリップ"/>
   <translation tag="LED on at Start" ja="起動時LED点灯"/>
+  <translation tag="LED strip available for lighting control" ja="照明制御用の LED ストリップが利用可能です"/>
   <translation tag="LEDs" ja="LED"/>
   <translation tag="LEDs controlled by the light button" ja="ライトボタンで制御される LED"/>
   <translation tag="LOADED" ja="装填済み"/>
@@ -1241,6 +1301,7 @@
   <translation tag="No Power Devices" ja="電源デバイスなし"/>
   <translation tag="No Spool" ja="スプールなし"/>
   <translation tag="No Spools" ja="スプールなし"/>
+  <translation tag="No USB printer detected" ja="USB プリンターが検出されません"/>
   <translation tag="No USB printers found" ja="USBプリンターが見つかりません"/>
   <translation tag="No buffer data available" ja="バッファーデータがありません"/>
   <translation tag="No camera — use USB barcode scanner" ja="カメラなし — USB バーコードスキャナーを使用してください"/>
@@ -1286,6 +1347,8 @@
   <translation tag="No sensors detected" ja="センサーが検出されませんでした"/>
   <translation tag="No spool assigned" ja="スプール未割当"/>
   <translation tag="No spools found — tap to retry" ja="スプールが見つかりません — タップして再試行"/>
+  <translation tag="No tape detected in printer" ja="プリンターにテープが検出されません"/>
+  <translation tag="No target printer configured" ja="対象プリンターが設定されていません"/>
   <translation tag="No timelapse videos found" ja="タイムラプス動画が見つかりません"/>
   <translation tag="No vendors found" ja="ベンダーが見つかりません"/>
   <translation tag="No webcam detected.\nA webcam is required for timelapse." ja="ウェブカメラが検出されませんでした。\nタイムラプスにはウェブカメラが必要です。"/>
@@ -1335,6 +1398,7 @@
   <translation tag="Objects" ja="オブジェクト"/>
   <translation tag="Off" ja="オフ"/>
   <translation tag="Off:" ja="オフ:"/>
+  <translation tag="Off\nFlying Toasters\nStarfield\n3D Pipes" ja="オフ\nFlying Toasters\nStarfield\n3D Pipes"/>
   <translation tag="On" ja="オン"/>
   <translation tag="On and Off macros must be different" ja="オンとオフのマクロは異なるものにしてください"/>
   <translation tag="On/Off" ja="オン/オフ"/>
@@ -1374,6 +1438,8 @@
   <translation tag="PRE-PRINT STEPS" ja="印刷前の手順"/>
   <translation tag="PRINT OPTIONS" ja="印刷オプション"/>
   <translation tag="PRINTERS" ja="プリンター"/>
+  <translation tag="PRINT_START has {} skippable operation" ja="PRINT_START にはスキップ可能な操作が {} 個あります"/>
+  <translation tag="PRINT_START has {} skippable operations" ja="PRINT_START にはスキップ可能な操作が {} 個あります"/>
   <translation tag="PROBE SENSORS" ja="プローブセンサー"/>
   <translation tag="Pair" ja="ペアリング"/>
   <translation tag="Pair Bluetooth Printer" ja="Bluetooth プリンターをペアリング"/>
@@ -1431,7 +1497,9 @@
   <translation tag="Plugin disabled" ja="プラグインが無効になりました"/>
   <translation tag="Plugin installed successfully" ja="プラグインが正常にインストールされました"/>
   <translation tag="Plugin installed successfully." ja="プラグインが正常にインストールされました。"/>
+  <translation tag="Plugin installed successfully. Moonraker is restarting..." ja="プラグインが正常にインストールされました。Moonraker を再起動中..."/>
   <translation tag="Plugin not responding after restart.\nIt may need more time to load." ja="再起動後にプラグインが応答しません。\n読み込みに時間がかかる場合があります。"/>
+  <translation tag="Plugin uninstalled successfully." ja="プラグインが正常にアンインストールされました。"/>
   <translation tag="Plugins" ja="プラグイン"/>
   <translation tag="Plugins are discovered on application startup" ja="プラグインはアプリケーション起動時に検出されます"/>
   <translation tag="Point camera at QR code on spool" ja="スプールの QR コードにカメラを向けてください"/>
@@ -1485,6 +1553,8 @@
   <translation tag="Print Time" ja="印刷時間"/>
   <translation tag="Print Tuning" ja="印刷チューニング"/>
   <translation tag="Print Was Terminated" ja="印刷が中止されました"/>
+  <translation tag="Print didn&apos;t start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X})" ja="印刷が開始されませんでした — プリンターがビジー状態またはオフラインの可能性があります (B3 polls={}, status=0x{:02X}, error=0x{:02X})"/>
+  <translation tag="Print error" ja="印刷エラー"/>
   <translation tag="Print failed" ja="印刷失敗"/>
   <translation tag="Print issue detected" ja="印刷の問題を検出しました"/>
   <translation tag="Print preparation failed: {}" ja="印刷準備に失敗しました: {}"/>
@@ -1492,6 +1562,7 @@
   <translation tag="Print server rejected the job — check printer status" ja="印刷サーバーがジョブを拒否しました — プリンターの状態を確認してください"/>
   <translation tag="Print setup failed" ja="印刷のセットアップに失敗しました"/>
   <translation tag="Print setup failed: internal error" ja="印刷のセットアップに失敗しました: 内部エラー"/>
+  <translation tag="Print timed out waiting for completion" ja="印刷の完了待ちでタイムアウトしました"/>
   <translation tag="Printer" ja="プリンター"/>
   <translation tag="Printer Error" ja="プリンターエラー"/>
   <translation tag="Printer Firmware Disconnected" ja="プリンターファームウェア切断"/>
@@ -1511,11 +1582,15 @@
   <translation tag="Printer Setup: Touch Calibration" ja="プリンター設定: タッチキャリブレーション"/>
   <translation tag="Printer Shutdown" ja="プリンターシャットダウン"/>
   <translation tag="Printer Type" ja="プリンタータイプ"/>
+  <translation tag="Printer accepted job but isn&apos;t printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X})" ja="プリンターはジョブを受け付けましたが印刷していません — カバー、用紙、ラベルの種類を確認してください (firmware status=0x{:02X} error=0x{:02X})"/>
+  <translation tag="Printer database format error" ja="プリンターデータベースの形式エラー"/>
+  <translation tag="Printer database is corrupt" ja="プリンターデータベースが破損しています"/>
   <translation tag="Printer didn&apos;t respond — make sure it&apos;s on and in range" ja="プリンターが応答しません — 電源が入っており通信範囲内にあることを確認してください"/>
   <translation tag="Printer doesn&apos;t expose the expected service — wrong device?" ja="プリンターが想定されるサービスを公開していません — デバイスが違う可能性があります"/>
   <translation tag="Printer image set to auto-detect" ja="プリンター画像を自動検出に設定しました"/>
   <translation tag="Printer is not paired — pair it first" ja="プリンターがペアリングされていません — 先にペアリングしてください"/>
   <translation tag="Printer name" ja="プリンター名"/>
+  <translation tag="Printer not ready" ja="プリンターの準備ができていません"/>
   <translation tag="Printer ready" ja="プリンター準備完了"/>
   <translation tag="Printer:" ja="プリンター:"/>
   <translation tag="Printer: " ja="プリンター: "/>
@@ -1573,6 +1648,8 @@
   <translation tag="Quick Button 3" ja="クイックボタン3"/>
   <translation tag="Quick Button 4" ja="クイックボタン4"/>
   <translation tag="Quick actions, calibration, speed" ja="クイックアクション、キャリブレーション、速度"/>
+  <translation tag="RFCOMM connect failed" ja="RFCOMM 接続に失敗しました"/>
+  <translation tag="RFCOMM connect failed: " ja="RFCOMM 接続に失敗しました: "/>
   <translation tag="RSS" ja="RSS"/>
   <translation tag="RSS:" ja="RSS:"/>
   <translation tag="Raspberry Pi" ja="Raspberry Pi"/>
@@ -1599,6 +1676,7 @@
   <translation tag="Recover MMU state?" ja="MMU の状態を復旧しますか？"/>
   <translation tag="Recovering AFC system..." ja="AFCシステムを復旧中..."/>
   <translation tag="Recovery failed" ja="復旧失敗"/>
+  <translation tag="Recovery failed: " ja="復旧に失敗しました: "/>
   <translation tag="Reduce Sensitivity" ja="感度を下げる"/>
   <translation tag="Reduce ringing and ghosting artifacts" ja="リンギングとゴーストのアーティファクトを軽減"/>
   <translation tag="Reduce vibration artifacts like ringing and ghosting" ja="リンギングやゴーストなどの振動アーティファクトを軽減"/>
@@ -1629,8 +1707,10 @@
   <translation tag="Report saved to crash_report.txt" ja="crash_report.txt にレポートを保存しました"/>
   <translation tag="Reprint" ja="再印刷"/>
   <translation tag="Reprint Last" ja="前回を再印刷"/>
+  <translation tag="Request Failed" ja="要求に失敗しました"/>
   <translation tag="Require confirmation before emergency stop" ja="緊急停止前に確認を求める"/>
   <translation tag="Requires Moonraker-Timelapse plugin" ja="Moonraker-Timelapse プラグインが必要です"/>
+  <translation tag="Resend write failed at chunk {}" ja="チャンク {} で再送信の書き込みに失敗しました"/>
   <translation tag="Reset" ja="リセット"/>
   <translation tag="Reset Home Screen?" ja="ホーム画面をリセットしますか？"/>
   <translation tag="Reset Speed &amp; Flow to 100%" ja="速度とフローを100%にリセット"/>
@@ -1701,6 +1781,7 @@
   <translation tag="STOP" ja="停止"/>
   <translation tag="STYLE PROPERTIES" ja="スタイルプロパティ"/>
   <translation tag="SWITCH SENSORS" ja="スイッチセンサー"/>
+  <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ja="セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。"/>
   <translation tag="Safety &amp; Notifications" ja="安全と通知"/>
   <translation tag="Sample" ja="サンプル"/>
   <translation tag="Sample %d/%d" ja="サンプル %d/%d"/>
@@ -1860,6 +1941,7 @@
   <translation tag="Sounds" ja="サウンド"/>
   <translation tag="Source" ja="ソース"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" ja="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti detected — print paused" ja="スパゲッティを検出しました — 印刷を一時停止しました"/>
   <translation tag="Speaker" ja="スピーカー"/>
   <translation tag="Specular:" ja="スペキュラー:"/>
   <translation tag="Speed" ja="速度"/>
@@ -1891,6 +1973,7 @@
   <translation tag="Spoolman: %zu/%zu Spool%s" ja="Spoolman: %zu/%zu 個のスプール%s"/>
   <translation tag="Square Corner Velocity" ja="直角コーナー速度"/>
   <translation tag="Stable" ja="安定版"/>
+  <translation tag="Stable\nBeta\nDev" ja="安定版\nベータ\n開発版"/>
   <translation tag="Standard" ja="スタンダード"/>
   <translation tag="Standby" ja="スタンバイ"/>
   <translation tag="Starfield" ja="星空"/>
@@ -1906,6 +1989,7 @@
   <translation tag="Start print anyway?" ja="それでも印刷を開始しますか？"/>
   <translation tag="Started" ja="開始"/>
   <translation tag="Starting Print..." ja="印刷開始中..."/>
+  <translation tag="Starting download..." ja="ダウンロードを開始中..."/>
   <translation tag="Starting measurement..." ja="測定を開始中..."/>
   <translation tag="Starting..." ja="開始中..."/>
   <translation tag="Startup Brightness" ja="起動時の明るさ"/>
@@ -1944,6 +2028,9 @@
   <translation tag="Sysfs" ja="Sysfs"/>
   <translation tag="System" ja="システム"/>
   <translation tag="System Keyboard" ja="システムキーボード"/>
+  <translation tag="System busy — please try again" ja="システムがビジー状態です — もう一度お試しください"/>
+  <translation tag="System busy — try again" ja="システムがビジー状態です — もう一度お試しください"/>
+  <translation tag="System default" ja="システムデフォルト"/>
   <translation tag="System detected" ja="システムを検出しました"/>
   <translation tag="T%d has no filament loaded — this print will run out." ja="T%d にフィラメントが装填されていません — この印刷は途中で切れます。"/>
   <translation tag="T%d needs filament in slot %d, which is empty — this print will run out." ja="T%d はスロット %d のフィラメントを必要としますが、空です — この印刷は途中で切れます。"/>
@@ -2044,9 +2131,13 @@
   <translation tag="Timelapse plugin installed!" ja="タイムラプスプラグインをインストールしました！"/>
   <translation tag="Timelapse plugin is already installed!" ja="タイムラプスプラグインは既にインストール済みです！"/>
   <translation tag="Timelapse plugin is installed!" ja="タイムラプスプラグインがインストールされています！"/>
+  <translation tag="Timelapse render failed" ja="タイムラプスのレンダリングに失敗しました"/>
+  <translation tag="Timelapse render failed: {}" ja="タイムラプスのレンダリングに失敗しました: {}"/>
   <translation tag="Timelapse rendered successfully" ja="タイムラプスのレンダリングが完了しました"/>
   <translation tag="Timezone" ja="タイムゾーン"/>
   <translation tag="Tip:" ja="ヒント:"/>
+  <translation tag="Tips database format error" ja="ヒントデータベースの形式エラー"/>
+  <translation tag="Tips database not found" ja="ヒントデータベースが見つかりません"/>
   <translation tag="Toggle" ja="トグル"/>
   <translation tag="Toggle (fire-and-forget)" ja="トグル（状態追跡なし）"/>
   <translation tag="Toggle Feature" ja="機能を切り替え"/>
@@ -2090,11 +2181,17 @@
   <translation tag="UI Sounds" ja="UIサウンド"/>
   <translation tag="USB" ja="USB"/>
   <translation tag="USB DEVICES" ja="USBデバイス"/>
+  <translation tag="USB drive connected" ja="USB ドライブが接続されました"/>
+  <translation tag="USB drive removed" ja="USB ドライブが取り外されました"/>
   <translation tag="USB printer access denied — check permissions" ja="USB プリンターへのアクセスが拒否されました — 権限を確認してください"/>
   <translation tag="Understanding Results" ja="結果の理解"/>
   <translation tag="Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY, Path A and B should be within a few Hz of each other." ja="ベルト張力が不均一だと、レイヤーシフトや VFA(垂直微細アーティファクト)、リンギングなどの印刷不良が発生します。\n\nこのツールは各ベルトパスを振動させて共振周波数を測定します — 周波数が一致していれば張力が均等であることを意味します。\n\nCoreXY では、パス A と B は数 Hz 以内に収まっている必要があります。"/>
   <translation tag="Uninstall HelixPrint Plugin" ja="HelixPrint プラグインをアンインストール"/>
+  <translation tag="Uninstall script not found." ja="アンインストールスクリプトが見つかりません。"/>
   <translation tag="Uninstall: Coming soon" ja="アンインストール: 近日公開"/>
+  <translation tag="Uninstallation failed. Check logs for details." ja="アンインストールに失敗しました。詳細はログを確認してください。"/>
+  <translation tag="Uninstallation failed: " ja="アンインストールに失敗しました: "/>
+  <translation tag="Uninstallation timed out. The script may be stuck." ja="アンインストールがタイムアウトしました。スクリプトが停止している可能性があります。"/>
   <translation tag="Unit" ja="ユニット"/>
   <translation tag="Unit " ja="ユニット "/>
   <translation tag="Unknown" ja="不明"/>
@@ -2118,7 +2215,10 @@
   <translation tag="Unmapped" ja="未割当"/>
   <translation tag="Unretract Extra" ja="アンリトラクト追加量"/>
   <translation tag="Unretract Speed" ja="アンリトラクト速度"/>
+  <translation tag="Unsupported tape width" ja="サポートされていないテープ幅"/>
+  <translation tag="Unsupported tape width: " ja="サポートされていないテープ幅: "/>
   <translation tag="Up" ja="上へ"/>
+  <translation tag="Up to date" ja="最新の状態です"/>
   <translation tag="Update" ja="更新"/>
   <translation tag="Update Available" ja="更新あり"/>
   <translation tag="Update Channel" ja="更新チャンネル"/>
@@ -2144,6 +2244,8 @@
   <translation tag="Vendor already exists" ja="ベンダーはすでに存在します"/>
   <translation tag="Vendor:" ja="ベンダー："/>
   <translation tag="Verify" ja="確認"/>
+  <translation tag="Verifying SHA256 checksum..." ja="SHA256 チェックサムを検証中..."/>
+  <translation tag="Verifying download..." ja="ダウンロードを検証中..."/>
   <translation tag="Verifying timelapse plugin..." ja="タイムラプスプラグインを確認中..."/>
   <translation tag="Verifying..." ja="検証中..."/>
   <translation tag="Version" ja="バージョン"/>
@@ -2153,6 +2255,7 @@
   <translation tag="Vibration" ja="振動"/>
   <translation tag="Vibration compensation active" ja="振動補正が有効です"/>
   <translation tag="Video playback speed" ja="動画再生速度"/>
+  <translation tag="View" ja="表示"/>
   <translation tag="View Changelog" ja="変更履歴を表示"/>
   <translation tag="View Full History" ja="全履歴を表示"/>
   <translation tag="View Presets" ja="プリセットを表示"/>
@@ -2190,14 +2293,17 @@
   <translation tag="WiFi Disabled" ja="WiFi 無効"/>
   <translation tag="WiFi Enabled" ja="WiFi 有効"/>
   <translation tag="WiFi Network" ja="WiFi ネットワーク"/>
+  <translation tag="WiFi Unavailable" ja="WiFi を利用できません"/>
   <translation tag="WiFi and Ethernet configuration" ja="WiFi とイーサネットの設定"/>
   <translation tag="WiFi control unavailable" ja="WiFi 制御は利用できません"/>
   <translation tag="WiFi hardware unavailable" ja="WiFi ハードウェアが利用できません"/>
   <translation tag="WiFi unavailable" ja="WiFi が利用できません"/>
+  <translation tag="WiFi was configured but hardware is not available. Check system configuration." ja="WiFi は設定されていますが、ハードウェアが利用できません。システム設定を確認してください。"/>
   <translation tag="Widget Labels" ja="ウィジェットラベル"/>
   <translation tag="Width" ja="幅"/>
   <translation tag="Wifi" ja="Wi-Fi"/>
   <translation tag="Wizard Error" ja="ウィザードエラー"/>
+  <translation tag="Write failed at chunk {}" ja="チャンク {} で書き込みに失敗しました"/>
   <translation tag="Wrong PIN" ja="PIN が違います"/>
   <translation tag="Wrong media" ja="不正なメディア"/>
   <translation tag="X" ja="X"/>
@@ -2250,9 +2356,11 @@
   <translation tag="Z:" ja="Z:"/>
   <translation tag="Z: 0.000" ja="Z: 0.000"/>
   <translation tag="Zoom" ja="ズーム"/>
+  <translation tag="\&quot;%s\&quot; failed to load" ja="\&quot;%s\&quot; の読み込みに失敗しました"/>
   <translation tag="bed" ja="ベッド"/>
   <translation tag="by Preston Brown" ja="by Preston Brown"/>
   <translation tag="chamber heater" ja="チャンバーヒーター"/>
+  <translation tag="complete" ja="完了"/>
   <translation tag="cores" ja="コア"/>
   <translation tag="disable" ja="無効化"/>
   <translation tag="disabled" ja="無効"/>
@@ -2262,11 +2370,13 @@
   <translation tag="elapsed" ja="経過"/>
   <translation tag="enable" ja="有効化"/>
   <translation tag="enabled" ja="有効"/>
+  <translation tag="error" ja="エラー"/>
   <translation tag="extruder" ja="エクストルーダー"/>
   <translation tag="extruder(s)" ja="エクストルーダー"/>
   <translation tag="extruders" ja="エクストルーダー"/>
   <translation tag="fans" ja="ファン"/>
   <translation tag="heated bed" ja="ヒートベッド"/>
+  <translation tag="idle" ja="アイドル"/>
   <translation tag="layers" ja="レイヤー"/>
   <translation tag="left" ja="残り"/>
   <translation tag="mm before clog" ja="詰まりまでの距離 (mm)"/>
@@ -2281,6 +2391,7 @@
   <translation tag="prints" ja="印刷"/>
   <translation tag="remaining" ja="残り"/>
   <translation tag="remaining before clog detection triggers" ja="残りで詰まり検出が作動します"/>
+  <translation tag="rendering" ja="レンダリング中"/>
   <translation tag="set to" ja="に設定"/>
   <translation tag="slots)" ja="スロット)"/>
   <translation tag="started" ja="開始"/>
@@ -2304,16 +2415,25 @@
   <translation tag="tour.step.welcome.body" ja="機能をすぐに見つけられるよう、簡単なツアーを始めましょう。"/>
   <translation tag="tour.step.welcome.title" ja="HelixScreen へようこそ"/>
   <translation tag="used" ja="使用"/>
+  <translation tag="v%s available" ja="v%s が利用可能です"/>
+  <translation tag="v{} installed! Restarting..." ja="v{} をインストールしました！再起動中..."/>
   <translation tag="v{} is available. Tap to update." ja="v{} が利用可能です。タップして更新してください。"/>
   <translation tag="you have" ja="現在は"/>
+  <translation tag="{} LED strips available" ja="{} 個の LED ストリップが利用可能です"/>
   <translation tag="{} axis homed" ja="{} 軸がホーミング済み"/>
   <translation tag="{} command timed out" ja="{} コマンドがタイムアウトしました"/>
   <translation tag="{} complete" ja="{} 完了"/>
+  <translation tag="{} configured item not found" ja="設定された項目 {} 個が見つかりません"/>
+  <translation tag="{} configured items not found" ja="設定された項目 {} 個が見つかりません"/>
+  <translation tag="{} critical hardware issues" ja="{} 個の重要なハードウェアの問題"/>
+  <translation tag="{} filament sensors available" ja="{} 個のフィラメントセンサーが利用可能です"/>
   <translation tag="{} heater turned off" ja="{} ヒーターをオフにしました"/>
   <translation tag="{} lanes" ja="{} レーン"/>
   <translation tag="{} macro not configured" ja="{} マクロが未設定です"/>
   <translation tag="{} may cause unintended changes. Are you sure?" ja="{} は意図しない変更を引き起こす可能性があります。よろしいですか？"/>
   <translation tag="{} more taps to {} beta features" ja="あと{}回タップでベータ機能を{}"/>
+  <translation tag="{} new hardware available" ja="{} 個の新しいハードウェアが利用可能です"/>
   <translation tag="{} preset{}" ja="{} 個のプリセット{}"/>
   <translation tag="{} target set to {}°C" ja="{} 目標温度を {}°C に設定しました"/>
+  <translation tag="{} — response timed out" ja="{} — 応答タイムアウト"/>
 </translations>

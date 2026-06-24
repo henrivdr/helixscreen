@@ -8,6 +8,7 @@
 #include "app_globals.h"
 #include "config.h"
 #include "data_root_resolver.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "print_start_analyzer.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
@@ -69,7 +70,7 @@ struct PrinterDatabase {
             const std::string db_path = helix::find_readable("printer_database.json");
             std::ifstream file(db_path);
             if (!file.is_open()) {
-                NOTIFY_ERROR("Could not load printer database");
+                NOTIFY_ERROR(lv_tr("Could not load printer database"));
                 LOG_ERROR_INTERNAL("[PrinterDetector] Failed to open {}", db_path);
                 return false;
             }
@@ -79,7 +80,7 @@ struct PrinterDatabase {
             spdlog::debug("[PrinterDetector] Loaded bundled printer database version {}",
                           data.value("version", "unknown"));
         } catch (const std::exception& e) {
-            NOTIFY_ERROR("Printer database format error");
+            NOTIFY_ERROR(lv_tr("Printer database format error"));
             LOG_ERROR_INTERNAL("[PrinterDetector] Failed to parse printer database: {}", e.what());
             return false;
         }
@@ -694,7 +695,7 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
         PrinterDetectionResult runner_up{"", 0, ""};
 
         if (!g_database.data.contains("printers") || !g_database.data["printers"].is_array()) {
-            NOTIFY_ERROR("Printer database is corrupt");
+            NOTIFY_ERROR(lv_tr("Printer database is corrupt"));
             LOG_ERROR_INTERNAL(
                 "[PrinterDetector] Invalid database format: missing 'printers' array");
             return {"", 0, "Invalid printer database format"};

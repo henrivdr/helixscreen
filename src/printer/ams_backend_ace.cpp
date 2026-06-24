@@ -15,6 +15,7 @@
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "post_op_cooldown_manager.h"
@@ -1057,8 +1058,8 @@ void AmsBackendAce::poll_info() {
                     helix::ui::queue_update([]() {
                         ToastManager::instance().show(
                             ToastSeverity::WARNING,
-                            "ACE Moonraker bridge not found. Install ace_status.py "
-                            "from ValgACE for full support.",
+                            lv_tr("ACE Moonraker bridge not found. Install ace_status.py "
+                                  "from ValgACE for full support."),
                             6000);
                     });
                 }
