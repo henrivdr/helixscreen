@@ -131,6 +131,20 @@ translation-coverage:
 		exit 1; \
 	fi
 
+# Regenerate the terminology glossary (translations/GLOSSARY.md) from the YAML.
+# The glossary pins canonical per-language renderings of recurring terms so
+# translators (human or agent) stay consistent. Run after adding/translating
+# strings that introduce or change a canonical term.
+.PHONY: translation-glossary
+translation-glossary:
+	$(ECHO) "$(CYAN)Regenerating translation glossary...$(RESET)"
+	$(Q)if [ -x "$(VENV_PYTHON_TRANS)" ]; then \
+		$(VENV_PYTHON_TRANS) $(TRANS_SYNC_SCRIPT) glossary; \
+	else \
+		echo "$(RED)✗ Python venv not available - run 'make venv-setup'$(RESET)"; \
+		exit 1; \
+	fi
+
 # Find obsolete translation keys (not used in XML)
 .PHONY: translation-obsolete
 translation-obsolete:
