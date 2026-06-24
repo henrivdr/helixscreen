@@ -120,9 +120,9 @@ endif
 else
 # Phase 2: Actual build (only runs when _PARALLEL_CHECKED is set)
 ifdef PI_DUAL_LINK
-all: apply-patches generate-fonts $(TRANS_GEN_C) splash watchdog $(TARGET) $(FBDEV_TARGET) verify-fbdev strip-both bluetooth-plugin
+all: apply-patches generate-fonts $(TRANS_XML) splash watchdog $(TARGET) $(FBDEV_TARGET) verify-fbdev strip-both bluetooth-plugin
 else
-all: apply-patches generate-fonts $(TRANS_GEN_C) splash watchdog $(TARGET) strip bluetooth-plugin
+all: apply-patches generate-fonts $(TRANS_XML) splash watchdog $(TARGET) strip bluetooth-plugin
 endif
 	$(ECHO) "$(GREEN)$(BOLD)✓ Build complete!$(RESET)"
 	$(ECHO) "$(CYAN)Run with: $(YELLOW)./$(TARGET)$(RESET)"

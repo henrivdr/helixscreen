@@ -58,8 +58,11 @@ $(TRANS_LANG_STAMP)-update:
 	@:
 
 # Generate translations from YAML master files
-# Creates: translations.xml, lv_i18n_translations.c, lv_i18n_translations.h
-$(TRANS_GEN_C) $(TRANS_GEN_H) $(TRANS_XML): $(TRANS_YAML) $(TRANS_SCRIPT) $(TRANS_LANG_STAMP)
+# Creates: translations.xml + per-locale <lang>.xml (the runtime translation
+# packs). The legacy lv_i18n .c/.h table is no longer emitted — it was never
+# compiled or linked (runtime uses LVGL's lv_translation_* API on the XML).
+# To regenerate it on demand, run generate_translations.py --emit-lv-i18n.
+$(TRANS_XML): $(TRANS_YAML) $(TRANS_SCRIPT) $(TRANS_LANG_STAMP)
 	$(ECHO) "$(CYAN)Generating translations from YAML...$(if $(HELIX_LANG), (HELIX_LANG=$(HELIX_LANG)))$(RESET)"
 	$(Q)mkdir -p $(TRANS_GEN_DIR)
 	$(Q)if [ -x "$(VENV_PYTHON_TRANS)" ] && $(VENV_PYTHON_TRANS) -c "import yaml" 2>/dev/null; then \
@@ -68,9 +71,9 @@ $(TRANS_GEN_C) $(TRANS_GEN_H) $(TRANS_XML): $(TRANS_YAML) $(TRANS_SCRIPT) $(TRAN
 	elif python3 -c "import yaml" 2>/dev/null; then \
 		python3 $(TRANS_SCRIPT) $(TRANS_LANG_FLAG); \
 		echo "$(GREEN)✓ Translations generated (system python3)$(RESET)"; \
-	elif [ -f "$(TRANS_GEN_C)" ] && [ -f "$(TRANS_GEN_H)" ]; then \
+	elif [ -f "$(TRANS_XML)" ]; then \
 		echo "$(YELLOW)⚠ Python venv not available - using existing generated translations$(RESET)"; \
-		touch $(TRANS_GEN_C) $(TRANS_GEN_H) $(TRANS_XML); \
+		touch $(TRANS_XML); \
 	else \
 		echo "$(RED)✗ Python with yaml not available and no generated files - run 'make venv-setup'$(RESET)"; \
 		exit 1; \
