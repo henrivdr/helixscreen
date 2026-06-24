@@ -5,7 +5,7 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.99.83] - 2026-06-24
+## [0.99.84] - 2026-06-24
 
 ### Added
 
@@ -4158,7 +4158,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
-[0.99.83]: https://github.com/prestonbrown/helixscreen/compare/v0.99.82...v0.99.83
+[0.99.84]: https://github.com/prestonbrown/helixscreen/compare/v0.99.82...v0.99.84
 [0.99.82]: https://github.com/prestonbrown/helixscreen/compare/v0.99.81...v0.99.82
 [0.99.81]: https://github.com/prestonbrown/helixscreen/compare/v0.99.80...v0.99.81
 [0.99.80]: https://github.com/prestonbrown/helixscreen/compare/v0.99.79...v0.99.80
