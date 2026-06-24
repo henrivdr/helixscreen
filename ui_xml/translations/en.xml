@@ -46,6 +46,7 @@
   <translation tag="1 event queued" en="1 event queued"/>
   <translation tag="1 hour ago" en="1 hour ago"/>
   <translation tag="1 layer" en="1 layer"/>
+  <translation tag="1 min" en="1 min"/>
   <translation tag="1 min ago" en="1 min ago"/>
   <translation tag="1 minute" en="1 minute"/>
   <translation tag="1 more tap to {} beta features" en="1 more tap to {} beta features"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" en="120 seconds"/>
   <translation tag="15 seconds" en="15 seconds"/>
   <translation tag="180°" en="180°"/>
+  <translation tag="2 min" en="2 min"/>
   <translation tag="2 minutes" en="2 minutes"/>
   <translation tag="2. Place paper between nozzle and bed" en="2. Place paper between nozzle and bed"/>
   <translation tag="2. Results show how much to turn each screw" en="2. Results show how much to turn each screw"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" en="3D View"/>
   <translation tag="4. Paper should move but with resistance" en="4. Paper should move but with resistance"/>
   <translation tag="4. Repeat until bed is level" en="4. Repeat until bed is level"/>
+  <translation tag="5 min" en="5 min"/>
   <translation tag="5 minutes" en="5 minutes"/>
   <translation tag="50W" en="50W"/>
   <translation tag="5V" en="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" en="Enter password"/>
   <translation tag="Enter printer IP address first" en="Enter printer IP address first"/>
   <translation tag="Enter the IP address and port of your Spoolman server." en="Enter the IP address and port of your Spoolman server."/>
+  <translation tag="Entry" en="Entry"/>
   <translation tag="Error" en="Error"/>
   <translation tag="Error at chunk {} (code={})" en="Error at chunk {} (code={})"/>
   <translation tag="Error loading file" en="Error loading file"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" en="Excellent Accuracy"/>
   <translation tag="Exception: {}" en="Exception: {}"/>
   <translation tag="Exclude" en="Exclude"/>
+  <translation tag="Exclude Object?" en="Exclude Object?"/>
   <translation tag="Excluded" en="Excluded"/>
   <translation tag="Exclusion cancelled" en="Exclusion cancelled"/>
   <translation tag="Execute printer macros" en="Execute printer macros"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" en="Flat Concentric Rings (existing ams_slot)"/>
   <translation tag="Flip" en="Flip"/>
   <translation tag="Flow" en="Flow"/>
+  <translation tag="Flow Compensation" en="Flow Compensation"/>
   <translation tag="Flow Rate" en="Flow Rate"/>
   <translation tag="Flow change failed: {}" en="Flow change failed: {}"/>
   <translation tag="Flowguard" en="Flowguard"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" en="Run without parameter prompt"/>
   <translation tag="Run {}?" en="Run {}?"/>
   <translation tag="Running {}..." en="Running {}..."/>
+  <translation tag="Runout" en="Runout"/>
   <translation tag="Runout Sensor" en="Runout Sensor"/>
   <translation tag="SETTINGS" en="SETTINGS"/>
   <translation tag="SHIPPED IMAGES" en="SHIPPED IMAGES"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." en="Scanning for networks..."/>
   <translation tag="Scanning..." en="Scanning..."/>
   <translation tag="Score: 0" en="Score: 0"/>
+  <translation tag="Screen" en="Screen"/>
   <translation tag="Screen Blank" en="Screen Blank"/>
   <translation tag="Screen Dim" en="Screen Dim"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" en="Screen dims to lower brightness after period of inactivity"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" en="Stop Drying"/>
   <translation tag="Stop Print?" en="Stop Print?"/>
   <translation tag="Stop failed" en="Stop failed"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." en="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds."/>
   <translation tag="Stops all motion. Requires firmware restart." en="Stops all motion. Requires firmware restart."/>
   <translation tag="Stow" en="Stow"/>
   <translation tag="Strobe LED" en="Strobe LED"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" en="Tool Changer"/>
   <translation tag="Tool change failed: {}" en="Tool change failed: {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." en="Tool {} → Lane {}: no filament loaded."/>
+  <translation tag="Toolhead" en="Toolhead"/>
   <translation tag="Toolhead Style" en="Toolhead Style"/>
   <translation tag="Toolhead jam" en="Toolhead jam"/>
   <translation tag="Toolhead, G-code, limits, and materials" en="Toolhead, G-code, limits, and materials"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" en="WIDTH SENSORS"/>
   <translation tag="WLED" en="WLED"/>
   <translation tag="WLED Preset" en="WLED Preset"/>
+  <translation tag="WPA/WPA2" en="WPA/WPA2"/>
+  <translation tag="WPA3" en="WPA3"/>
   <translation tag="Waiting for Moonraker..." en="Waiting for Moonraker..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." en="Waiting for bed to reach temperature for accurate calibration."/>
   <translation tag="Warm Bed" en="Warm Bed"/>

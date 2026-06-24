@@ -46,6 +46,7 @@ translations:
   1 event queued: 1 个事件排队中
   1 hour ago: 1小时前
   1 layer: 1 层
+  1 min: '1分钟'
   1 min ago: 1分钟前
   1 minute: 1 分钟
   1 more tap to {} beta features: 再点击 1 次以{}测试功能
@@ -57,6 +58,7 @@ translations:
   120 seconds: 120 秒
   15 seconds: 15 秒
   180°: 180°
+  2 min: '2分钟'
   2 minutes: 2 分钟
   2. Place paper between nozzle and bed: 2. 将纸张放在喷嘴和热床之间
   2. Results show how much to turn each screw: 2. 结果显示每个螺丝需要旋转多少
@@ -73,6 +75,7 @@ translations:
   3D View: 3D 视图
   4. Paper should move but with resistance: 4. 纸张应能移动但有阻力
   4. Repeat until bed is level: 4. 重复直到热床水平
+  5 min: '5分钟'
   5 minutes: 5 分钟
   50W: 50W
   5V: 5V
@@ -83,7 +86,8 @@ translations:
   A: 辅
   ABS: ABS
   ACCELEROMETERS: 加速度计
-  ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support.: '未找到 ACE Moonraker 桥接。请从 ValgACE 安装 ace_status.py 以获得完整支持。'
+  ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support.: 未找到
+    ACE Moonraker 桥接。请从 ValgACE 安装 ace_status.py 以获得完整支持。
   ACTIONS: 操作
   ADXL: ADXL
   AFC: AFC
@@ -95,7 +99,8 @@ translations:
   AFC reset complete: AFC重置完成
   AFC reset failed: AFC重置失败
   AFC retracts filament from the toolhead at end of print: AFC 在打印结束时将耗材从工具头退出
-  AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later.: 'AFC 版本 {} 可能存在兼容性问题。请升级到 v1.0.35 或更高版本。'
+  AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later.: AFC
+    版本 {} 可能存在兼容性问题。请升级到 v1.0.35 或更高版本。
   ALL DEVICES: 所有设备
   AMS: AMS
   'AMS Active: ': 'AMS 已激活: '
@@ -157,7 +162,8 @@ translations:
   An error occurred during measurement.: 测量时发生错误。
   An error occurred during probing.: 探测过程中发生错误。
   An error occurred while loading filament.: 加载耗材时发生错误。
-  An internal error occurred. The app continues running — please send a debug bundle from Settings > About if it repeats.: '发生了内部错误。应用程序继续运行 — 如果反复出现，请从设置 > 关于发送调试捆绑包。'
+  An internal error occurred. The app continues running — please send a debug bundle from Settings > About if it repeats.: 发生了内部错误。应用程序继续运行
+    — 如果反复出现，请从设置 > 关于发送调试捆绑包。
   An unexpected printer error occurred.: 发生了意外的打印机错误。
   An update is available: 有可用更新
   Android logcat: Android logcat
@@ -167,7 +173,7 @@ translations:
   Anonymous usage statistics: 匿名使用统计
   Any notes...: 备注...
   App Background: 应用背景
-  App startup encountered an error. Some features may be unavailable.: '应用程序启动时遇到错误。某些功能可能不可用。'
+  App startup encountered an error. Some features may be unavailable.: 应用程序启动时遇到错误。某些功能可能不可用。
   Appearance: 外观
   Apply: 应用
   Apply Changes: 应用更改
@@ -187,12 +193,12 @@ translations:
   Auto-Detect: 自动检测
   Auto-Heat on Load: 加载时自动加热
   Auto-detect: 自动检测
-  Auto-install only works on local Moonraker: '自动安装仅适用于本地 Moonraker'
+  Auto-install only works on local Moonraker: 自动安装仅适用于本地 Moonraker
   Auto-lock: 自动锁定
   Auto-poll for weight updates: 自动轮询重量更新
   Auto-probe or manually check screw heights: 自动探测或手动检查螺丝高度
   Auto-render video: 自动渲染视频
-  Auto-uninstall only works on local Moonraker: '自动卸载仅适用于本地 Moonraker'
+  Auto-uninstall only works on local Moonraker: 自动卸载仅适用于本地 Moonraker
   Automatic: 自动
   Automatic Heater Control Calibration: 自动加热控制校准
   Automatic LED Control: 自动 LED 控制
@@ -248,7 +254,7 @@ translations:
   Black: 黑色
   Blocked: 已阻塞
   Bluetooth: 蓝牙
-  Bluetooth device not configured: '蓝牙设备未配置'
+  Bluetooth device not configured: 蓝牙设备未配置
   Bluetooth initialization failed: 蓝牙初始化失败
   Bluetooth is not available on this device: 此设备不支持蓝牙
   Bluetooth not available: 蓝牙不可用
@@ -388,7 +394,7 @@ translations:
   Checking slots...: 正在检查料仓...
   Checking timelapse plugin...: 正在检查延时摄影插件...
   Checking webcam: 正在检查摄像头
-  Checking...: '检查中...'
+  Checking...: 检查中...
   Choose 12-hour or 24-hour time display: 选择 12 小时制或 24 小时制
   Choose Spool: 选择线轴
   Choose an existing filament, or tap + New to create one.: 选择已有耗材，或点击 + 新建来创建。
@@ -463,7 +469,7 @@ translations:
   Connected Time: 已连接时长
   Connected to: 已连接到
   'Connected to ': '已连接到 '
-  Connected to {}: '已连接到 {}'
+  Connected to {}: 已连接到 {}
   Connected! Discovering printer...: 已连接！正在发现打印机...
   Connected, discovering...: 已连接，正在发现...
   Connecting Camera...: 正在连接摄像头...
@@ -472,10 +478,10 @@ translations:
   Connecting to network...: 正在连接网络...
   Connecting...: 正在连接...
   Connection: 连接
-  Connection Failed: '连接失败'
+  Connection Failed: 连接失败
   Connection Stability: 连接稳定性
   Connection failed: 连接失败
-  Connection failed to {}:{}: '连接 {}:{} 失败'
+  Connection failed to {}:{}: 连接 {}:{} 失败
   Connection failed. Check IP/port and try again.: 连接失败。请检查 IP/端口并重试。
   Connection failed. Check credentials.: 连接失败，请检查凭据。
   Connection failed. Check password.: 连接失败。请检查密码。
@@ -502,10 +508,10 @@ translations:
     PRINT_START 宏。部分打印选项可能不可用。
   Could not check webcam status.\nCheck printer connection.: 无法检查摄像头状态。\n请检查打印机连接。
   Could not forget device: 无法忘记设备
-  Could not load printer database: '无法加载打印机数据库'
-  Could not parse tips database: '无法解析提示数据库'
+  Could not load printer database: 无法加载打印机数据库
+  Could not parse tips database: 无法解析提示数据库
   Could not reach Spoolman at: 无法连接 Spoolman：
-  Could not resolve printer RFCOMM channel: '无法解析打印机 RFCOMM 通道'
+  Could not resolve printer RFCOMM channel: 无法解析打印机 RFCOMM 通道
   Could not start Bluetooth discovery: 无法启动蓝牙发现
   Could not verify Spoolman status. Moonraker may still be restarting.: 无法验证 Spoolman
     状态。Moonraker 可能仍在重启中。
@@ -617,7 +623,7 @@ translations:
   Download update?: 下载更新？
   Download v{}?: 下载 v{}？
   Downloading...: 下载中...
-  Downloading... {:.1f}/{:.1f} MB: '下载中... {:.1f}/{:.1f} MB'
+  Downloading... {:.1f}/{:.1f} MB: 下载中... {:.1f}/{:.1f} MB
   Draw a ripple at each touch — helps diagnose offsets: 在每次触摸时绘制涟漪 — 有助于诊断偏移
   Drive Cal: 驱动校准
   Drop shadow strength (0 = disabled): 阴影强度（0 = 禁用）
@@ -670,8 +676,8 @@ translations:
   Enabled: 已启用
   Encoder: 编码器
   Ended: 已结束
-  Enhanced {} operation in PRINT_START: '增强了 PRINT_START 中的 {} 项操作'
-  Enhanced {} operations in PRINT_START: '增强了 PRINT_START 中的 {} 项操作'
+  Enhanced {} operation in PRINT_START: 增强了 PRINT_START 中的 {} 项操作
+  Enhanced {} operations in PRINT_START: 增强了 PRINT_START 中的 {} 项操作
   Enhancement Complete!: 增强完成！
   Enhancement Failed: 增强失败
   Enter Current PIN: 输入当前 PIN 码
@@ -685,10 +691,11 @@ translations:
   Enter password: 输入密码
   Enter printer IP address first: 请先输入打印机 IP 地址
   Enter the IP address and port of your Spoolman server.: 输入 Spoolman 服务器的 IP 地址和端口。
+  Entry: '入口'
   Error: 错误
-  Error at chunk {} (code={}): '区块 {} 出错 (code={})'
+  Error at chunk {} (code={}): 区块 {} 出错 (code={})
   Error loading file: 加载文件出错
-  Error loading printing tips: '加载打印提示出错'
+  Error loading printing tips: 加载打印提示出错
   'Error saving printer settings: {}': '保存打印机设置出错: {}'
   Error state: 错误状态
   'Error: %s': '错误: %s'
@@ -712,6 +719,7 @@ translations:
   Excellent Accuracy: 精度极佳
   'Exception: {}': '异常: {}'
   Exclude: 排除
+  Exclude Object?: '排除对象？'
   Excluded: 已排除
   Exclusion cancelled: 排除已取消
   Execute printer macros: 执行打印机宏
@@ -745,7 +753,7 @@ translations:
   Failed to analyze PRINT_START macro: 分析 PRINT_START 宏失败
   Failed to apply limits: 应用限制失败
   Failed to apply settings: 应用设置失败
-  Failed to build raster data: '构建栅格数据失败'
+  Failed to build raster data: 构建栅格数据失败
   'Failed to cancel: {}': '取消失败: {}'
   'Failed to clear print state: {}': 无法清除打印状态：{}
   'Failed to connect to ''{}'': {}': '无法连接到 ''{}'': {}'
@@ -767,8 +775,8 @@ translations:
   Failed to enable tuning tower: 启用调优塔失败
   'Failed to exclude ''{}'': {}': '排除 ''{}'' 失败: {}'
   Failed to get limits: 获取限制失败
-  Failed to initialize Bluetooth: '初始化蓝牙失败'
-  Failed to initialize Bluetooth context: '初始化蓝牙上下文失败'
+  Failed to initialize Bluetooth: 初始化蓝牙失败
+  Failed to initialize Bluetooth context: 初始化蓝牙上下文失败
   Failed to load G-code preview: 加载 G-code 预览失败
   Failed to load devices: 加载设备失败
   Failed to load fan configuration screen: 加载风扇配置界面失败
@@ -792,10 +800,10 @@ translations:
   Failed to read config.: 读取配置失败。
   Failed to read config. Check connection.: 读取配置失败。请检查连接。
   Failed to read moonraker.conf.: 读取 moonraker.conf 失败。
-  Failed to read printer status: '读取打印机状态失败'
+  Failed to read printer status: 读取打印机状态失败
   Failed to refresh file list: 刷新文件列表失败
   'Failed to remap G-code: {}': 重新映射 G-code 失败：{}
-  Failed to render label: '渲染标签失败'
+  Failed to render label: 渲染标签失败
   'Failed to reprint: {}': '重新打印失败: {}'
   'Failed to reset flow: {}': '重置流量失败: {}'
   'Failed to reset speed: {}': '重置速度失败: {}'
@@ -815,8 +823,8 @@ translations:
   Failed to save spool: 保存料盘失败
   Failed to save theme file: 保存主题文件失败
   'Failed to send command: {}': '发送命令失败: {}'
-  Failed to send print data: '发送打印数据失败'
-  Failed to send status request: '发送状态请求失败'
+  Failed to send print data: 发送打印数据失败
+  Failed to send status request: 发送状态请求失败
   Failed to set active spool: 设置活动料盘失败
   'Failed to set bed temp: {}': '设置热床温度失败: {}'
   'Failed to set chamber temp: {}': '设置腔体温度失败: {}'
@@ -870,7 +878,7 @@ translations:
   Filament operation timed out: 耗材操作超时
   Filament runout: 耗材用尽
   Filament runout and motion detection sensors: 耗材用尽和运动检测传感器
-  Filament sensor available for runout detection: '耗材传感器可用于耗尽检测'
+  Filament sensor available for runout detection: 耗材传感器可用于耗尽检测
   Filament tension is balanced: 耗材张力平衡
   Filament tracking & label printing: 耗材跟踪和标签打印
   Filament tracking and inventory: 耗材跟踪和库存
@@ -894,6 +902,7 @@ translations:
   Flat Concentric Rings (existing ams_slot): 扁平同心环（现有 ams_slot）
   Flip: 翻转
   Flow: 流量
+  Flow Compensation: '流量补偿'
   Flow Rate: 流量
   'Flow change failed: {}': '流量更改失败: {}'
   Flowguard: 流量保护
@@ -1053,7 +1062,7 @@ translations:
   Install Root: 安装根目录
   Install Update: 安装更新
   Install plugin: 安装插件
-  Install script not found. Use the remote install command instead.: '未找到安装脚本。请改用远程安装命令。'
+  Install script not found. Use the remote install command instead.: 未找到安装脚本。请改用远程安装命令。
   Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: 在高级设置中安装
     HelixPrint 插件，即可在不影响打印历史的情况下重新映射耗材。
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 安装
@@ -1061,12 +1070,12 @@ translations:
   Install the timelapse plugin via SSH,\nthen tap \"Check Again\".: 通过SSH安装延时摄影插件，\n然后点击"重新检查"。
   Install timelapse plugin: 安装延时摄影插件
   Installation Failed: 安装失败
-  Installation failed: '安装失败'
-  Installation failed. Check logs for details.: '安装失败。请查看日志了解详情。'
+  Installation failed: 安装失败
+  Installation failed. Check logs for details.: 安装失败。请查看日志了解详情。
   'Installation failed: ': '安装失败: '
   Installation takes about 30 seconds.: 安装大约需要 30 秒。
-  Installation timed out: '安装超时'
-  Installation timed out. The script may be stuck.: '安装超时。脚本可能已卡住。'
+  Installation timed out: 安装超时
+  Installation timed out. The script may be stuck.: 安装超时。脚本可能已卡住。
   Installing...: 正在安装...
   Intensity: 强度
   Interactive probe calibration: 交互式探针校准
@@ -1074,7 +1083,7 @@ translations:
   'Internal error: no scan result': '内部错误: 无扫描结果'
   Invalid port number: 无效的端口号
   'Invalid sheet template index: {} (have {})': '标签纸模板索引无效: {} (实际有 {})'
-  Invalid status response from printer: '打印机返回的状态响应无效'
+  Invalid status response from printer: 打印机返回的状态响应无效
   Issue description: 问题描述
   Job Queue: 任务队列
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: 加入
@@ -1088,7 +1097,7 @@ translations:
   Keyboard Test (Gboard-style): 键盘测试（Gboard 风格）
   Kinematics: 运动学
   Klipper: Klipper
-  Klipper Error: 'Klipper 错误'
+  Klipper Error: Klipper 错误
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Klipper
     固件已与主机断开连接。请尝试重启 Klipper 或执行固件重启。
   ? Klipper has entered an error state. This is typically caused by an MCU connection
@@ -1106,7 +1115,7 @@ translations:
   LED Settings: LED 设置
   LED Strip: LED 灯带
   LED on at Start: 启动时开启 LED
-  LED strip available for lighting control: 'LED 灯带可用于照明控制'
+  LED strip available for lighting control: LED 灯带可用于照明控制
   LEDs: LED
   LEDs controlled by the light button: 由灯光按钮控制的 LED
   LOADED: 已加载
@@ -1331,7 +1340,7 @@ translations:
   No Power Devices: 无电源设备
   No Spool: 无料盘
   No Spools: 无料盘
-  No USB printer detected: '未检测到 USB 打印机'
+  No USB printer detected: 未检测到 USB 打印机
   No USB printers found: 未找到 USB 打印机
   No buffer data available: 无可用缓冲区数据
   No camera — use USB barcode scanner: 无摄像头 — 请使用 USB 条码扫描器
@@ -1377,8 +1386,8 @@ translations:
   No sensors detected: 未检测到传感器
   No spool assigned: 未分配料盘
   No spools found — tap to retry: 未找到料盘 - 点击重试
-  No tape detected in printer: '打印机中未检测到标签带'
-  No target printer configured: '未配置目标打印机'
+  No tape detected in printer: 打印机中未检测到标签带
+  No target printer configured: 未配置目标打印机
   No timelapse videos found: 未找到延时视频
   No vendors found: 未找到供应商
   No webcam detected.\nA webcam is required for timelapse.: 未检测到摄像头。\n延时摄影需要摄像头。
@@ -1428,7 +1437,7 @@ translations:
   Objects: 对象
   'Off': 关
   'Off:': '关:'
-  Off\nFlying Toasters\nStarfield\n3D Pipes: '关\n飞行烤面包机\n星空\n3D 管道'
+  Off\nFlying Toasters\nStarfield\n3D Pipes: 关\n飞行烤面包机\n星空\n3D 管道
   'On': 开
   On and Off macros must be different: 开和关的宏必须不同
   On/Off: 开/关
@@ -1470,8 +1479,8 @@ translations:
   PRE-PRINT STEPS: 打印前步骤
   PRINT OPTIONS: 打印选项
   PRINTERS: 打印机
-  PRINT_START has {} skippable operation: 'PRINT_START 有 {} 项可跳过的操作'
-  PRINT_START has {} skippable operations: 'PRINT_START 有 {} 项可跳过的操作'
+  PRINT_START has {} skippable operation: PRINT_START 有 {} 项可跳过的操作
+  PRINT_START has {} skippable operations: PRINT_START 有 {} 项可跳过的操作
   PROBE SENSORS: 探针传感器
   Pair: 配对
   Pair Bluetooth Printer: 配对蓝牙打印机
@@ -1533,9 +1542,9 @@ translations:
   Plugin disabled: 插件已禁用
   Plugin installed successfully: 插件安装成功
   Plugin installed successfully.: 插件安装成功。
-  Plugin installed successfully. Moonraker is restarting...: '插件安装成功。Moonraker 正在重启...'
+  Plugin installed successfully. Moonraker is restarting...: 插件安装成功。Moonraker 正在重启...
   Plugin not responding after restart.\nIt may need more time to load.: 重启后插件无响应。\n可能需要更多时间加载。
-  Plugin uninstalled successfully.: '插件卸载成功。'
+  Plugin uninstalled successfully.: 插件卸载成功。
   Plugins: 插件
   Plugins are discovered on application startup: 插件在应用程序启动时被发现
   Point camera at QR code on spool: 将摄像头对准料盘上的 QR 码
@@ -1589,8 +1598,9 @@ translations:
   Print Time: 打印时间
   Print Tuning: 打印调优
   Print Was Terminated: 打印已终止
-  Print didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X}): '打印未开始 — 打印机可能繁忙或离线 (B3 polls={}, status=0x{:02X}, error=0x{:02X})'
-  Print error: '打印错误'
+  Print didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X}): 打印未开始
+    — 打印机可能繁忙或离线 (B3 polls={}, status=0x{:02X}, error=0x{:02X})
+  Print error: 打印错误
   Print failed: 打印失败
   Print issue detected: 检测到打印问题
   'Print preparation failed: {}': '打印准备失败: {}'
@@ -1598,7 +1608,7 @@ translations:
   Print server rejected the job — check printer status: 打印服务器拒绝了任务 — 请检查打印机状态
   Print setup failed: 打印设置失败
   'Print setup failed: internal error': 打印设置失败：内部错误
-  Print timed out waiting for completion: '等待打印完成超时'
+  Print timed out waiting for completion: 等待打印完成超时
   Printer: 打印机
   Printer Error: 打印机错误
   Printer Firmware Disconnected: 打印机固件已断开
@@ -1618,15 +1628,16 @@ translations:
   'Printer Setup: Touch Calibration': 打印机设置：触摸校准
   Printer Shutdown: 打印机关机
   Printer Type: 打印机类型
-  Printer accepted job but isn't printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X}): '打印机已接受作业但未开始打印 — 请检查盖板、纸张和标签类型 (firmware status=0x{:02X} error=0x{:02X})'
-  Printer database format error: '打印机数据库格式错误'
-  Printer database is corrupt: '打印机数据库已损坏'
+  Printer accepted job but isn't printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X}): 打印机已接受作业但未开始打印
+    — 请检查盖板、纸张和标签类型 (firmware status=0x{:02X} error=0x{:02X})
+  Printer database format error: 打印机数据库格式错误
+  Printer database is corrupt: 打印机数据库已损坏
   Printer didn't respond — make sure it's on and in range: 打印机无响应 — 请确保已开机且在范围内
   Printer doesn't expose the expected service — wrong device?: 打印机未提供预期的服务 — 设备是否有误？
   Printer image set to auto-detect: 打印机图片已设为自动检测
   Printer is not paired — pair it first: 打印机未配对 — 请先进行配对
   Printer name: 打印机名称
-  Printer not ready: '打印机未就绪'
+  Printer not ready: 打印机未就绪
   Printer ready: 打印机就绪
   'Printer:': '打印机:'
   'Printer: ': '打印机: '
@@ -1684,7 +1695,7 @@ translations:
   Quick Button 3: 快捷按钮 3
   Quick Button 4: 快捷按钮 4
   Quick actions, calibration, speed: 快捷操作、校准、速度
-  RFCOMM connect failed: 'RFCOMM 连接失败'
+  RFCOMM connect failed: RFCOMM 连接失败
   'RFCOMM connect failed: ': 'RFCOMM 连接失败: '
   RSS: RSS
   'RSS:': RSS：
@@ -1743,10 +1754,10 @@ translations:
   Report saved to crash_report.txt: 报告已保存到 crash_report.txt
   Reprint: 重新打印
   Reprint Last: 重印上次
-  Request Failed: '请求失败'
+  Request Failed: 请求失败
   Require confirmation before emergency stop: 紧急停止前需要确认
   Requires Moonraker-Timelapse plugin: 需要 Moonraker-Timelapse 插件
-  Resend write failed at chunk {}: '区块 {} 重发写入失败'
+  Resend write failed at chunk {}: 区块 {} 重发写入失败
   Reset: 重置
   Reset Home Screen?: 重置主屏幕？
   Reset Speed & Flow to 100%: 重置速度和流量为 100%
@@ -1808,6 +1819,7 @@ translations:
   Run without parameter prompt: 运行时不提示参数
   Run {}?: 运行 {}？
   Running {}...: 正在运行 {}...
+  Runout: '用尽'
   Runout Sensor: 断料传感器
   SETTINGS: 设置
   SHIPPED IMAGES: 内置图片
@@ -1859,6 +1871,7 @@ translations:
   Scanning for networks...: 正在扫描网络...
   Scanning...: 正在扫描...
   'Score: 0': '得分: 0'
+  Screen: '屏幕'
   Screen Blank: 屏幕熄灭
   Screen Dim: 屏幕变暗
   Screen dims to lower brightness after period of inactivity: 一段时间不活动后屏幕会降低亮度
@@ -1989,7 +2002,7 @@ translations:
   Source: 来源
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod by Markus 'Captain'
     Kaarlonen
-  Spaghetti detected — print paused: '检测到拉丝故障 — 打印已暂停'
+  Spaghetti detected — print paused: 检测到拉丝故障 — 打印已暂停
   Speaker: 扬声器
   'Specular:': 镜面反射：
   Speed: 速度
@@ -2021,7 +2034,7 @@ translations:
   'Spoolman: %zu/%zu Spool%s': 'Spoolman: %zu/%zu 个线轴%s'
   Square Corner Velocity: 直角转弯速度
   Stable: 稳定版
-  Stable\nBeta\nDev: '稳定版\n测试版\n开发版'
+  Stable\nBeta\nDev: 稳定版\n测试版\n开发版
   Standard: 标准
   Standby: 待机
   Starfield: 星空
@@ -2037,7 +2050,7 @@ translations:
   Start print anyway?: 仍要开始打印吗？
   Started: 已开始
   Starting Print...: 正在启动打印...
-  Starting download...: '正在开始下载...'
+  Starting download...: 正在开始下载...
   Starting measurement...: 正在开始测量...
   Starting...: 正在启动...
   Startup Brightness: 启动亮度
@@ -2054,6 +2067,7 @@ translations:
   Stop Drying: 停止干燥
   Stop Print?: 停止打印？
   Stop failed: 停止失败
+  Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds.: '停止打印 \"{}\"？\n\n5秒后将无法撤销。'
   Stops all motion. Requires firmware restart.: 停止所有运动。需要固件重启。
   Stow: 收回
   Strobe LED: 频闪LED
@@ -2077,9 +2091,9 @@ translations:
   Sysfs: Sysfs
   System: 系统
   System Keyboard: 系统键盘
-  System busy — please try again: '系统繁忙 — 请重试'
-  System busy — try again: '系统繁忙 — 请重试'
-  System default: '系统默认'
+  System busy — please try again: 系统繁忙 — 请重试
+  System busy — try again: 系统繁忙 — 请重试
+  System default: 系统默认
   System detected: 检测到系统
   T%d has no filament loaded — this print will run out.: T%d 未加载耗材 —— 此次打印将会耗尽耗材。
   T%d needs filament in slot %d, which is empty — this print will run out.: T%d 需要
@@ -2203,13 +2217,13 @@ translations:
   Timelapse plugin installed!: 延时摄影插件已安装！
   Timelapse plugin is already installed!: 延时摄影插件已安装！
   Timelapse plugin is installed!: 延时摄影插件已安装！
-  Timelapse render failed: '延时摄影渲染失败'
+  Timelapse render failed: 延时摄影渲染失败
   'Timelapse render failed: {}': '延时摄影渲染失败: {}'
   Timelapse rendered successfully: 延时视频渲染成功
   Timezone: 时区
   'Tip:': 提示：
-  Tips database format error: '提示数据库格式错误'
-  Tips database not found: '未找到提示数据库'
+  Tips database format error: 提示数据库格式错误
+  Tips database not found: 未找到提示数据库
   Toggle: 切换
   Toggle (fire-and-forget): 切换（无状态跟踪）
   Toggle Feature: 切换功能
@@ -2219,6 +2233,7 @@ translations:
   Tool Changer: 换刀器
   'Tool change failed: {}': '工具切换失败: {}'
   'Tool {} → Lane {}: no filament loaded.': '工具 {} → 料仓 {}: 未加载耗材。'
+  Toolhead: '工具头'
   Toolhead Style: 工具头样式
   Toolhead jam: 工具头堵塞
   Toolhead, G-code, limits, and materials: 打印头、G代码、限制和材料
@@ -2254,8 +2269,8 @@ translations:
   UI Sounds: 界面声音
   USB: USB
   USB DEVICES: USB 设备
-  USB drive connected: 'U 盘已连接'
-  USB drive removed: 'U 盘已移除'
+  USB drive connected: U 盘已连接
+  USB drive removed: U 盘已移除
   USB printer access denied — check permissions: USB 打印机访问被拒绝 — 请检查权限
   Understanding Results: 了解结果
   ? Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine
@@ -2265,11 +2280,11 @@ translations:
   : 皮带张力不均会导致层错位、VFA(垂直细纹)和振纹等打印瑕疵。\n\n此工具会振动每条皮带路径并测量共振频率 \u2014 频率匹配意味着张力均衡。\n\n对于
     CoreXY,路径 A 与 B 应相差在几 Hz 以内。
   Uninstall HelixPrint Plugin: 卸载 HelixPrint 插件
-  Uninstall script not found.: '未找到卸载脚本。'
+  Uninstall script not found.: 未找到卸载脚本。
   'Uninstall: Coming soon': '卸载: 即将推出'
-  Uninstallation failed. Check logs for details.: '卸载失败。请查看日志了解详情。'
+  Uninstallation failed. Check logs for details.: 卸载失败。请查看日志了解详情。
   'Uninstallation failed: ': '卸载失败: '
-  Uninstallation timed out. The script may be stuck.: '卸载超时。脚本可能已卡住。'
+  Uninstallation timed out. The script may be stuck.: 卸载超时。脚本可能已卡住。
   Unit: 单元
   'Unit ': '单元 '
   Unknown: 未知
@@ -2293,10 +2308,10 @@ translations:
   Unmapped: 未映射
   Unretract Extra: 回抽恢复额外量
   Unretract Speed: 回抽恢复速度
-  Unsupported tape width: '不支持的标签带宽度'
+  Unsupported tape width: 不支持的标签带宽度
   'Unsupported tape width: ': '不支持的标签带宽度: '
   Up: 向上
-  Up to date: '已是最新'
+  Up to date: 已是最新
   Update: 更新
   Update Available: 有可用更新
   Update Channel: 更新通道
@@ -2322,8 +2337,8 @@ translations:
   Vendor already exists: 供应商已存在
   'Vendor:': 供应商：
   Verify: 验证
-  Verifying SHA256 checksum...: '正在验证 SHA256 校验和...'
-  Verifying download...: '正在验证下载...'
+  Verifying SHA256 checksum...: 正在验证 SHA256 校验和...
+  Verifying download...: 正在验证下载...
   Verifying timelapse plugin...: 正在验证延时摄影插件...
   Verifying...: 验证中...
   Version: 版本
@@ -2333,7 +2348,7 @@ translations:
   Vibration: 振动
   Vibration compensation active: 振动补偿已启用
   Video playback speed: 视频播放速度
-  View: '查看'
+  View: 查看
   View Changelog: 查看更新日志
   View Full History: 查看完整历史
   View Presets: 查看预设
@@ -2349,6 +2364,8 @@ translations:
   WIDTH SENSORS: 宽度传感器
   WLED: WLED
   WLED Preset: WLED 预设
+  WPA/WPA2: 'WPA/WPA2'
+  WPA3: 'WPA3'
   Waiting for Moonraker...: 正在等待 Moonraker...
   Waiting for bed to reach temperature for accurate calibration.: 等待热床达到温度以进行精确校准。
   Warm Bed: 预热热床
@@ -2377,17 +2394,18 @@ translations:
   WiFi Disabled: WiFi 已禁用
   WiFi Enabled: WiFi 已启用
   WiFi Network: WiFi 网络
-  WiFi Unavailable: 'WiFi 不可用'
+  WiFi Unavailable: WiFi 不可用
   WiFi and Ethernet configuration: WiFi 和以太网配置
   WiFi control unavailable: WiFi 控制不可用
   WiFi hardware unavailable: WiFi 硬件不可用
   WiFi unavailable: WiFi 不可用
-  WiFi was configured but hardware is not available. Check system configuration.: '已配置 WiFi 但硬件不可用。请检查系统配置。'
+  WiFi was configured but hardware is not available. Check system configuration.: 已配置
+    WiFi 但硬件不可用。请检查系统配置。
   Widget Labels: 小组件标签
   Width: 宽度
   Wifi: Wi-Fi
   Wizard Error: 向导错误
-  Write failed at chunk {}: '区块 {} 写入失败'
+  Write failed at chunk {}: 区块 {} 写入失败
   Wrong PIN: PIN 错误
   Wrong media: 介质错误
   X: X
@@ -2444,11 +2462,11 @@ translations:
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
   Zoom: 缩放
-  \"%s\" failed to load: '\"%s\" 加载失败'
+  \"%s\" failed to load: \"%s\" 加载失败
   bed: 热床
   by Preston Brown: by Preston Brown
   chamber heater: 腔体加热器
-  complete: '完成'
+  complete: 完成
   cores: 核心
   disable: 禁用
   disabled: 已禁用
@@ -2458,13 +2476,13 @@ translations:
   elapsed: 已用时
   enable: 启用
   enabled: 已启用
-  error: '错误'
+  error: 错误
   extruder: 挤出机
   extruder(s): 挤出机
   extruders: 挤出机
   fans: 风扇
   heated bed: 热床
-  idle: '空闲'
+  idle: 空闲
   layers: 层
   left: 剩余
   mm before clog: 毫米后堵料
@@ -2479,7 +2497,7 @@ translations:
   prints: 打印次数
   remaining: 剩余
   remaining before clog detection triggers: 剩余即触发堵料检测
-  rendering: '渲染中'
+  rendering: 渲染中
   set to: 设置为
   slots): 个料仓)
   started: 已启动
@@ -2503,16 +2521,16 @@ translations:
   tour.step.welcome.body: 让我们快速浏览一下，帮助您快速找到所需内容。
   tour.step.welcome.title: 欢迎使用 HelixScreen
   used: 已使用
-  v%s available: 'v%s 可用'
-  v{} installed! Restarting...: '已安装 v{}！正在重启...'
+  v%s available: v%s 可用
+  v{} installed! Restarting...: 已安装 v{}！正在重启...
   v{} is available. Tap to update.: v{} 可用。点击以更新。
   you have: 您有
   '{} LED strips available': '{} 条 LED 灯带可用'
   '{} axis homed': '{} 轴已归位'
   '{} command timed out': '{} 命令超时'
   '{} complete': '{} 完成'
-  '{} configured item not found': '未找到 {} 个已配置的项目'
-  '{} configured items not found': '未找到 {} 个已配置的项目'
+  '{} configured item not found': 未找到 {} 个已配置的项目
+  '{} configured items not found': 未找到 {} 个已配置的项目
   '{} critical hardware issues': '{} 个关键硬件问题'
   '{} filament sensors available': '{} 个耗材传感器可用'
   '{} heater turned off': '{} 加热器已关闭'

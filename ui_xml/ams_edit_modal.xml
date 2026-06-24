@@ -231,7 +231,7 @@
         <ui_split_button name="btn_spool_actions"
                          height="#button_height" variant="secondary"
                          icon="qrcode_scan" text="Scan QR Code"
-                         options="Scan QR Code&#10;Spool Details&#10;Unlink" show_selection="false"
+                         options="Scan QR Code&#10;Spool Details&#10;Unlink" options_tag="Scan QR Code&#10;Spool Details&#10;Unlink" show_selection="false"
                          hidden="true">
           <event_cb trigger="clicked" callback="ams_edit_spool_actions_clicked_cb"/>
           <event_cb trigger="value_changed" callback="ams_edit_spool_actions_changed_cb"/>

@@ -46,6 +46,7 @@
   <translation tag="1 event queued" fr="1 événement en attente"/>
   <translation tag="1 hour ago" fr="il y a 1 heure"/>
   <translation tag="1 layer" fr="1 couche"/>
+  <translation tag="1 min" fr="1 min"/>
   <translation tag="1 min ago" fr="il y a 1 min"/>
   <translation tag="1 minute" fr="1 minute"/>
   <translation tag="1 more tap to {} beta features" fr="1 appui supplémentaire pour {} les fonctionnalités bêta"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" fr="120 secondes"/>
   <translation tag="15 seconds" fr="15 secondes"/>
   <translation tag="180°" fr="180°"/>
+  <translation tag="2 min" fr="2 min"/>
   <translation tag="2 minutes" fr="2 minutes"/>
   <translation tag="2. Place paper between nozzle and bed" fr="2. Placez du papier entre la buse et le plateau"/>
   <translation tag="2. Results show how much to turn each screw" fr="2. Les résultats indiquent combien tourner chaque vis"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" fr="Vue 3D"/>
   <translation tag="4. Paper should move but with resistance" fr="4. Le papier doit bouger mais avec résistance"/>
   <translation tag="4. Repeat until bed is level" fr="4. Répétez jusqu&apos;à ce que le plateau soit niveau"/>
+  <translation tag="5 min" fr="5 min"/>
   <translation tag="5 minutes" fr="5 minutes"/>
   <translation tag="50W" fr="50W"/>
   <translation tag="5V" fr="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" fr="Entrez le mot de passe"/>
   <translation tag="Enter printer IP address first" fr="Entrez d&apos;abord l&apos;adresse IP de l&apos;imprimante"/>
   <translation tag="Enter the IP address and port of your Spoolman server." fr="Entrez l&apos;adresse IP et le port de votre serveur Spoolman."/>
+  <translation tag="Entry" fr="Entrée"/>
   <translation tag="Error" fr="Erreur"/>
   <translation tag="Error at chunk {} (code={})" fr="Erreur au bloc {} (code={})"/>
   <translation tag="Error loading file" fr="Erreur lors du chargement du fichier"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" fr="Excellente précision"/>
   <translation tag="Exception: {}" fr="Exception : {}"/>
   <translation tag="Exclude" fr="Exclure"/>
+  <translation tag="Exclude Object?" fr="Exclure l&apos;objet ?"/>
   <translation tag="Excluded" fr="Exclu"/>
   <translation tag="Exclusion cancelled" fr="Exclusion annulée"/>
   <translation tag="Execute printer macros" fr="Exécuter les macros de l&apos;imprimante"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" fr="Anneaux concentriques plats (ams_slot existant)"/>
   <translation tag="Flip" fr="Retourner"/>
   <translation tag="Flow" fr="Débit"/>
+  <translation tag="Flow Compensation" fr="Compensation de débit"/>
   <translation tag="Flow Rate" fr="Débit"/>
   <translation tag="Flow change failed: {}" fr="Échec du changement de débit : {}"/>
   <translation tag="Flowguard" fr="Flowguard"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" fr="Exécuter sans demande de paramètre"/>
   <translation tag="Run {}?" fr="Exécuter {} ?"/>
   <translation tag="Running {}..." fr="Exécution de {}..."/>
+  <translation tag="Runout" fr="Fin de filament"/>
   <translation tag="Runout Sensor" fr="Capteur de fin de filament"/>
   <translation tag="SETTINGS" fr="PARAMÈTRES"/>
   <translation tag="SHIPPED IMAGES" fr="IMAGES FOURNIES"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." fr="Recherche de réseaux..."/>
   <translation tag="Scanning..." fr="Recherche..."/>
   <translation tag="Score: 0" fr="Score : 0"/>
+  <translation tag="Screen" fr="Écran"/>
   <translation tag="Screen Blank" fr="Extinction de lécran"/>
   <translation tag="Screen Dim" fr="Atténuation de l&apos;écran"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" fr="L&apos;écran s&apos;atténue après une période d&apos;inactivité"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" fr="Arrêter le séchage"/>
   <translation tag="Stop Print?" fr="Arrêter l&apos;impression ?"/>
   <translation tag="Stop failed" fr="Échec de l&apos;arrêt"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." fr="Arrêter l&apos;impression de \&quot;{}\&quot; ?\n\nCette action sera irréversible après 5 secondes."/>
   <translation tag="Stops all motion. Requires firmware restart." fr="Arrête tout mouvement. Nécessite un redémarrage du firmware."/>
   <translation tag="Stow" fr="Ranger"/>
   <translation tag="Strobe LED" fr="LED stroboscopique"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" fr="Changeur d&apos;outils"/>
   <translation tag="Tool change failed: {}" fr="Échec du changement d&apos;outil : {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." fr="Outil {} → Voie {} : aucun filament chargé."/>
+  <translation tag="Toolhead" fr="Tête d&apos;outil"/>
   <translation tag="Toolhead Style" fr="Style de tête d&apos;outil"/>
   <translation tag="Toolhead jam" fr="Bourrage de la tête d&apos;outil"/>
   <translation tag="Toolhead, G-code, limits, and materials" fr="Tête d&apos;outil, G-code, limites et matériaux"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" fr="CAPTEURS DE LARGEUR"/>
   <translation tag="WLED" fr="WLED"/>
   <translation tag="WLED Preset" fr="Préréglage WLED"/>
+  <translation tag="WPA/WPA2" fr="WPA/WPA2"/>
+  <translation tag="WPA3" fr="WPA3"/>
   <translation tag="Waiting for Moonraker..." fr="En attente de Moonraker..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." fr="En attente que le plateau atteigne la température pour une calibration précise."/>
   <translation tag="Warm Bed" fr="Préchauffer le plateau"/>

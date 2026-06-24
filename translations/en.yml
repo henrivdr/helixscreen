@@ -46,6 +46,7 @@ translations:
   1 event queued: 1 event queued
   1 hour ago: 1 hour ago
   1 layer: 1 layer
+  1 min: 1 min
   1 min ago: 1 min ago
   1 minute: 1 minute
   1 more tap to {} beta features: 1 more tap to {} beta features
@@ -57,6 +58,7 @@ translations:
   120 seconds: 120 seconds
   15 seconds: 15 seconds
   180°: 180°
+  2 min: 2 min
   2 minutes: 2 minutes
   2. Place paper between nozzle and bed: 2. Place paper between nozzle and bed
   2. Results show how much to turn each screw: 2. Results show how much to turn each
@@ -74,6 +76,7 @@ translations:
   3D View: 3D View
   4. Paper should move but with resistance: 4. Paper should move but with resistance
   4. Repeat until bed is level: 4. Repeat until bed is level
+  5 min: 5 min
   5 minutes: 5 minutes
   50W: 50W
   5V: 5V
@@ -748,6 +751,7 @@ translations:
   Enter printer IP address first: Enter printer IP address first
   Enter the IP address and port of your Spoolman server.: Enter the IP address and
     port of your Spoolman server.
+  Entry: Entry
   Error: Error
   Error at chunk {} (code={}): Error at chunk {} (code={})
   Error loading file: Error loading file
@@ -777,6 +781,7 @@ translations:
   Excellent Accuracy: Excellent Accuracy
   'Exception: {}': 'Exception: {}'
   Exclude: Exclude
+  Exclude Object?: Exclude Object?
   Excluded: Excluded
   Exclusion cancelled: Exclusion cancelled
   Execute printer macros: Execute printer macros
@@ -970,6 +975,7 @@ translations:
   Flat Concentric Rings (existing ams_slot): Flat Concentric Rings (existing ams_slot)
   Flip: Flip
   Flow: Flow
+  Flow Compensation: Flow Compensation
   Flow Rate: Flow Rate
   'Flow change failed: {}': 'Flow change failed: {}'
   Flowguard: Flowguard
@@ -1967,6 +1973,7 @@ translations:
   Run without parameter prompt: Run without parameter prompt
   Run {}?: Run {}?
   Running {}...: Running {}...
+  Runout: Runout
   Runout Sensor: Runout Sensor
   SETTINGS: SETTINGS
   SHIPPED IMAGES: SHIPPED IMAGES
@@ -2023,6 +2030,7 @@ translations:
   Scanning for networks...: Scanning for networks...
   Scanning...: Scanning...
   'Score: 0': 'Score: 0'
+  Screen: Screen
   Screen Blank: Screen Blank
   Screen Dim: Screen Dim
   Screen dims to lower brightness after period of inactivity: Screen dims to lower
@@ -2236,6 +2244,8 @@ translations:
   Stop Drying: Stop Drying
   Stop Print?: Stop Print?
   Stop failed: Stop failed
+  Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds.: Stop printing \"{}\"?\n\nThis
+    cannot be undone after 5 seconds.
   Stops all motion. Requires firmware restart.: Stops all motion. Requires firmware
     restart.
   Stow: Stow
@@ -2437,6 +2447,7 @@ translations:
   Tool Changer: Tool Changer
   'Tool change failed: {}': 'Tool change failed: {}'
   'Tool {} → Lane {}: no filament loaded.': 'Tool {} → Lane {}: no filament loaded.'
+  Toolhead: Toolhead
   Toolhead Style: Toolhead Style
   Toolhead jam: Toolhead jam
   Toolhead, G-code, limits, and materials: Toolhead, G-code, limits, and materials
@@ -2576,6 +2587,8 @@ translations:
   WIDTH SENSORS: WIDTH SENSORS
   WLED: WLED
   WLED Preset: WLED Preset
+  WPA/WPA2: WPA/WPA2
+  WPA3: WPA3
   Waiting for Moonraker...: Waiting for Moonraker...
   Waiting for bed to reach temperature for accurate calibration.: Waiting for bed
     to reach temperature for accurate calibration.

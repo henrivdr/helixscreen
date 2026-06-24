@@ -46,6 +46,7 @@
   <translation tag="1 event queued" ru="1 событие в очереди"/>
   <translation tag="1 hour ago" ru="1 ч. назад"/>
   <translation tag="1 layer" ru="1 слой"/>
+  <translation tag="1 min" ru="1 мин"/>
   <translation tag="1 min ago" ru="1 мин. назад"/>
   <translation tag="1 minute" ru="1 минута"/>
   <translation tag="1 more tap to {} beta features" ru="1 нажатие до {} бета-функций"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" ru="120 секунд"/>
   <translation tag="15 seconds" ru="15 секунд"/>
   <translation tag="180°" ru="180°"/>
+  <translation tag="2 min" ru="2 мин"/>
   <translation tag="2 minutes" ru="2 минуты"/>
   <translation tag="2. Place paper between nozzle and bed" ru="2. Положите бумагу между соплом и столом"/>
   <translation tag="2. Results show how much to turn each screw" ru="2. Результаты покажут, насколько повернуть каждый винт"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" ru="3D вид"/>
   <translation tag="4. Paper should move but with resistance" ru="4. Бумага должна двигаться, но с сопротивлением"/>
   <translation tag="4. Repeat until bed is level" ru="4. Повторяйте, пока стол не выровняется"/>
+  <translation tag="5 min" ru="5 мин"/>
   <translation tag="5 minutes" ru="5 минут"/>
   <translation tag="50W" ru="50W"/>
   <translation tag="5V" ru="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" ru="Введите пароль"/>
   <translation tag="Enter printer IP address first" ru="Сначала введите IP-адрес принтера"/>
   <translation tag="Enter the IP address and port of your Spoolman server." ru="Введите IP-адрес и порт вашего сервера Spoolman."/>
+  <translation tag="Entry" ru="Вход"/>
   <translation tag="Error" ru="Ошибка"/>
   <translation tag="Error at chunk {} (code={})" ru="Ошибка в блоке {} (код={})"/>
   <translation tag="Error loading file" ru="Ошибка загрузки файла"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" ru="Отличная точность"/>
   <translation tag="Exception: {}" ru="Исключение: {}"/>
   <translation tag="Exclude" ru="Исключить"/>
+  <translation tag="Exclude Object?" ru="Исключить объект?"/>
   <translation tag="Excluded" ru="Исключён"/>
   <translation tag="Exclusion cancelled" ru="Исключение отменено"/>
   <translation tag="Execute printer macros" ru="Выполнить макросы принтера"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" ru="Плоские концентрические кольца (существующий ams_slot)"/>
   <translation tag="Flip" ru="Отразить"/>
   <translation tag="Flow" ru="Поток"/>
+  <translation tag="Flow Compensation" ru="Компенсация потока"/>
   <translation tag="Flow Rate" ru="Множитель потока"/>
   <translation tag="Flow change failed: {}" ru="Ошибка изменения потока: {}"/>
   <translation tag="Flowguard" ru="Flowguard"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" ru="Запускать без запроса параметров"/>
   <translation tag="Run {}?" ru="Запустить {}?"/>
   <translation tag="Running {}..." ru="Выполнение {}..."/>
+  <translation tag="Runout" ru="Окончание"/>
   <translation tag="Runout Sensor" ru="Датчик окончания"/>
   <translation tag="SETTINGS" ru="НАСТРОЙКИ"/>
   <translation tag="SHIPPED IMAGES" ru="ВСТРОЕННЫЕ ИЗОБРАЖЕНИЯ"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." ru="Поиск сетей..."/>
   <translation tag="Scanning..." ru="Сканирование..."/>
   <translation tag="Score: 0" ru="Счёт: 0"/>
+  <translation tag="Screen" ru="Экран"/>
   <translation tag="Screen Blank" ru="Гашение экрана"/>
   <translation tag="Screen Dim" ru="Затемнение экрана"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" ru="Экран затемняется после периода простоя"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" ru="Остановить сушку"/>
   <translation tag="Stop Print?" ru="Остановить печать?"/>
   <translation tag="Stop failed" ru="Ошибка остановки"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." ru="Остановить печать \&quot;{}\&quot;?\n\nЭто нельзя будет отменить через 5 секунд."/>
   <translation tag="Stops all motion. Requires firmware restart." ru="Останавливает всё движение. Требуется перезапуск прошивки."/>
   <translation tag="Stow" ru="Убрать"/>
   <translation tag="Strobe LED" ru="Стробоскоп"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" ru="Сменщик инструментов"/>
   <translation tag="Tool change failed: {}" ru="Ошибка смены инструмента: {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." ru="Инструмент {} → Слот {}: филамент не загружен."/>
+  <translation tag="Toolhead" ru="Печатающая головка"/>
   <translation tag="Toolhead Style" ru="Стиль печатающей головки"/>
   <translation tag="Toolhead jam" ru="Замятие в печатающей головке"/>
   <translation tag="Toolhead, G-code, limits, and materials" ru="Печатающая головка, G-code, лимиты и материалы"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" ru="ДАТЧИКИ ШИРИНЫ"/>
   <translation tag="WLED" ru="WLED"/>
   <translation tag="WLED Preset" ru="Пресет WLED"/>
+  <translation tag="WPA/WPA2" ru="WPA/WPA2"/>
+  <translation tag="WPA3" ru="WPA3"/>
   <translation tag="Waiting for Moonraker..." ru="Ожидание Moonraker..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." ru="Ожидание нагрева стола для точной калибровки."/>
   <translation tag="Warm Bed" ru="Прогреть стол"/>

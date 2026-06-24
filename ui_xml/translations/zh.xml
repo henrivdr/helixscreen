@@ -46,6 +46,7 @@
   <translation tag="1 event queued" zh="1 个事件排队中"/>
   <translation tag="1 hour ago" zh="1小时前"/>
   <translation tag="1 layer" zh="1 层"/>
+  <translation tag="1 min" zh="1分钟"/>
   <translation tag="1 min ago" zh="1分钟前"/>
   <translation tag="1 minute" zh="1 分钟"/>
   <translation tag="1 more tap to {} beta features" zh="再点击 1 次以{}测试功能"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" zh="120 秒"/>
   <translation tag="15 seconds" zh="15 秒"/>
   <translation tag="180°" zh="180°"/>
+  <translation tag="2 min" zh="2分钟"/>
   <translation tag="2 minutes" zh="2 分钟"/>
   <translation tag="2. Place paper between nozzle and bed" zh="2. 将纸张放在喷嘴和热床之间"/>
   <translation tag="2. Results show how much to turn each screw" zh="2. 结果显示每个螺丝需要旋转多少"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" zh="3D 视图"/>
   <translation tag="4. Paper should move but with resistance" zh="4. 纸张应能移动但有阻力"/>
   <translation tag="4. Repeat until bed is level" zh="4. 重复直到热床水平"/>
+  <translation tag="5 min" zh="5分钟"/>
   <translation tag="5 minutes" zh="5 分钟"/>
   <translation tag="50W" zh="50W"/>
   <translation tag="5V" zh="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" zh="输入密码"/>
   <translation tag="Enter printer IP address first" zh="请先输入打印机 IP 地址"/>
   <translation tag="Enter the IP address and port of your Spoolman server." zh="输入 Spoolman 服务器的 IP 地址和端口。"/>
+  <translation tag="Entry" zh="入口"/>
   <translation tag="Error" zh="错误"/>
   <translation tag="Error at chunk {} (code={})" zh="区块 {} 出错 (code={})"/>
   <translation tag="Error loading file" zh="加载文件出错"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" zh="精度极佳"/>
   <translation tag="Exception: {}" zh="异常: {}"/>
   <translation tag="Exclude" zh="排除"/>
+  <translation tag="Exclude Object?" zh="排除对象？"/>
   <translation tag="Excluded" zh="已排除"/>
   <translation tag="Exclusion cancelled" zh="排除已取消"/>
   <translation tag="Execute printer macros" zh="执行打印机宏"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" zh="扁平同心环（现有 ams_slot）"/>
   <translation tag="Flip" zh="翻转"/>
   <translation tag="Flow" zh="流量"/>
+  <translation tag="Flow Compensation" zh="流量补偿"/>
   <translation tag="Flow Rate" zh="流量"/>
   <translation tag="Flow change failed: {}" zh="流量更改失败: {}"/>
   <translation tag="Flowguard" zh="流量保护"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" zh="运行时不提示参数"/>
   <translation tag="Run {}?" zh="运行 {}？"/>
   <translation tag="Running {}..." zh="正在运行 {}..."/>
+  <translation tag="Runout" zh="用尽"/>
   <translation tag="Runout Sensor" zh="断料传感器"/>
   <translation tag="SETTINGS" zh="设置"/>
   <translation tag="SHIPPED IMAGES" zh="内置图片"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." zh="正在扫描网络..."/>
   <translation tag="Scanning..." zh="正在扫描..."/>
   <translation tag="Score: 0" zh="得分: 0"/>
+  <translation tag="Screen" zh="屏幕"/>
   <translation tag="Screen Blank" zh="屏幕熄灭"/>
   <translation tag="Screen Dim" zh="屏幕变暗"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" zh="一段时间不活动后屏幕会降低亮度"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" zh="停止干燥"/>
   <translation tag="Stop Print?" zh="停止打印？"/>
   <translation tag="Stop failed" zh="停止失败"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." zh="停止打印 \&quot;{}\&quot;？\n\n5秒后将无法撤销。"/>
   <translation tag="Stops all motion. Requires firmware restart." zh="停止所有运动。需要固件重启。"/>
   <translation tag="Stow" zh="收回"/>
   <translation tag="Strobe LED" zh="频闪LED"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" zh="换刀器"/>
   <translation tag="Tool change failed: {}" zh="工具切换失败: {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." zh="工具 {} → 料仓 {}: 未加载耗材。"/>
+  <translation tag="Toolhead" zh="工具头"/>
   <translation tag="Toolhead Style" zh="工具头样式"/>
   <translation tag="Toolhead jam" zh="工具头堵塞"/>
   <translation tag="Toolhead, G-code, limits, and materials" zh="打印头、G代码、限制和材料"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" zh="宽度传感器"/>
   <translation tag="WLED" zh="WLED"/>
   <translation tag="WLED Preset" zh="WLED 预设"/>
+  <translation tag="WPA/WPA2" zh="WPA/WPA2"/>
+  <translation tag="WPA3" zh="WPA3"/>
   <translation tag="Waiting for Moonraker..." zh="正在等待 Moonraker..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." zh="等待热床达到温度以进行精确校准。"/>
   <translation tag="Warm Bed" zh="预热热床"/>

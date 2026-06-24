@@ -19,7 +19,7 @@ translations:
   '%u layers': '%u слоёв'
   '%zu changes': '%zu изменений'
   '%zu events queued': '%zu событий в очереди'
-  '%zu plugins failed to load': 'Не удалось загрузить %zu плагинов'
+  '%zu plugins failed to load': Не удалось загрузить %zu плагинов
   (incompatible): (несовместимо)
   (multi-tool): (мультиинструмент)
   (none detected): (не обнаружено)
@@ -48,6 +48,7 @@ translations:
   1 event queued: 1 событие в очереди
   1 hour ago: 1 ч. назад
   1 layer: 1 слой
+  1 min: '1 мин'
   1 min ago: 1 мин. назад
   1 minute: 1 минута
   1 more tap to {} beta features: 1 нажатие до {} бета-функций
@@ -60,6 +61,7 @@ translations:
   120 seconds: 120 секунд
   15 seconds: 15 секунд
   180°: 180°
+  2 min: '2 мин'
   2 minutes: 2 минуты
   2. Place paper between nozzle and bed: 2. Положите бумагу между соплом и столом
   2. Results show how much to turn each screw: 2. Результаты покажут, насколько повернуть
@@ -78,6 +80,7 @@ translations:
   3D View: 3D вид
   4. Paper should move but with resistance: 4. Бумага должна двигаться, но с сопротивлением
   4. Repeat until bed is level: 4. Повторяйте, пока стол не выровняется
+  5 min: '5 мин'
   5 minutes: 5 минут
   50W: 50W
   5V: 5V
@@ -88,7 +91,8 @@ translations:
   A: A
   ABS: ABS
   ACCELEROMETERS: АКСЕЛЕРОМЕТРЫ
-  ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support.: 'Мост ACE Moonraker не найден. Установите ace_status.py из ValgACE для полной поддержки.'
+  ACE Moonraker bridge not found. Install ace_status.py from ValgACE for full support.: Мост
+    ACE Moonraker не найден. Установите ace_status.py из ValgACE для полной поддержки.
   ACTIONS: ДЕЙСТВИЯ
   ADXL: ADXL
   AFC: AFC
@@ -101,7 +105,8 @@ translations:
   AFC reset failed: Ошибка сброса AFC
   AFC retracts filament from the toolhead at end of print: AFC выгружает филамент
     из печатающей головки по завершении печати
-  AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later.: 'Версия AFC {} может иметь проблемы совместимости. Обновите до v1.0.35 или новее.'
+  AFC version {} may have compatibility issues. Please upgrade to v1.0.35 or later.: Версия
+    AFC {} может иметь проблемы совместимости. Обновите до v1.0.35 или новее.
   ALL DEVICES: ВСЕ УСТРОЙСТВА
   AMS: AMS
   'AMS Active: ': 'AMS активен: '
@@ -172,7 +177,9 @@ translations:
   An error occurred during probing.: Во время зондирования произошла ошибка.
   An error occurred while loading filament.: Во время загрузки филамента произошла
     ошибка.
-  An internal error occurred. The app continues running — please send a debug bundle from Settings > About if it repeats.: 'Произошла внутренняя ошибка. Приложение продолжает работать — отправьте отладочный пакет из «Настройки > О программе», если она повторится.'
+  An internal error occurred. The app continues running — please send a debug bundle from Settings > About if it repeats.: Произошла
+    внутренняя ошибка. Приложение продолжает работать — отправьте отладочный пакет
+    из «Настройки > О программе», если она повторится.
   An unexpected printer error occurred.: Произошла непредвиденная ошибка принтера.
   An update is available: Доступно обновление
   Android logcat: Android logcat
@@ -183,7 +190,8 @@ translations:
   Anonymous usage statistics: Анонимная статистика использования
   Any notes...: Заметки...
   App Background: Фон приложения
-  App startup encountered an error. Some features may be unavailable.: 'При запуске приложения произошла ошибка. Некоторые функции могут быть недоступны.'
+  App startup encountered an error. Some features may be unavailable.: При запуске
+    приложения произошла ошибка. Некоторые функции могут быть недоступны.
   Appearance: Внешний вид
   Apply: Применить
   Apply Changes: Применить изменения
@@ -206,13 +214,15 @@ translations:
   Auto-Detect: Автоопределение
   Auto-Heat on Load: Автонагрев при загрузке
   Auto-detect: Автоопределение
-  Auto-install only works on local Moonraker: 'Автоустановка работает только с локальным Moonraker'
+  Auto-install only works on local Moonraker: Автоустановка работает только с локальным
+    Moonraker
   Auto-lock: Автоблокировка
   Auto-poll for weight updates: Автоопрос обновлений веса
   Auto-probe or manually check screw heights: Автозондирование или ручная проверка
     высоты винтов
   Auto-render video: Автоматический рендер видео
-  Auto-uninstall only works on local Moonraker: 'Автоудаление работает только с локальным Moonraker'
+  Auto-uninstall only works on local Moonraker: Автоудаление работает только с локальным
+    Moonraker
   Automatic: Автоматический
   Automatic Heater Control Calibration: Автоматическая калибровка нагревателя
   Automatic LED Control: Автоматическое управление LED
@@ -268,7 +278,7 @@ translations:
   Black: Чёрный
   Blocked: Заблокирован
   Bluetooth: Bluetooth
-  Bluetooth device not configured: 'Устройство Bluetooth не настроено'
+  Bluetooth device not configured: Устройство Bluetooth не настроено
   Bluetooth initialization failed: Ошибка инициализации Bluetooth
   Bluetooth is not available on this device: Bluetooth недоступен на этом устройстве
   Bluetooth not available: Bluetooth недоступен
@@ -435,7 +445,7 @@ translations:
   Checking slots...: Проверка слотов...
   Checking timelapse plugin...: Проверка плагина таймлапса...
   Checking webcam: Проверка веб-камеры
-  Checking...: 'Проверка...'
+  Checking...: Проверка...
   Choose 12-hour or 24-hour time display: Выберите 12-часовой или 24-часовой формат
     времени
   Choose Spool: Выбрать катушку
@@ -522,7 +532,7 @@ translations:
   Connected Time: Время подключения
   Connected to: Подключен к
   'Connected to ': 'Подключен к '
-  Connected to {}: 'Подключен к {}'
+  Connected to {}: Подключен к {}
   Connected! Discovering printer...: Подключен! Обнаружение принтера...
   Connected, discovering...: Подключен, обнаружение...
   Connecting Camera...: Подключение камеры...
@@ -531,10 +541,10 @@ translations:
   Connecting to network...: Подключение к сети...
   Connecting...: Подключение...
   Connection: Соединение
-  Connection Failed: 'Ошибка подключения'
+  Connection Failed: Ошибка подключения
   Connection Stability: Стабильность подключения
   Connection failed: Ошибка подключения
-  Connection failed to {}:{}: 'Не удалось подключиться к {}:{}'
+  Connection failed to {}:{}: Не удалось подключиться к {}:{}
   Connection failed. Check IP/port and try again.: Ошибка подключения. Проверьте IP/порт
     и попробуйте снова.
   Connection failed. Check credentials.: Ошибка подключения. Проверьте учётные данные.
@@ -566,10 +576,10 @@ translations:
   Could not check webcam status.\nCheck printer connection.: Не удалось проверить
     статус веб-камеры.\nПроверьте подключение принтера.
   Could not forget device: Не удалось забыть устройство
-  Could not load printer database: 'Не удалось загрузить базу данных принтеров'
-  Could not parse tips database: 'Не удалось разобрать базу данных советов'
+  Could not load printer database: Не удалось загрузить базу данных принтеров
+  Could not parse tips database: Не удалось разобрать базу данных советов
   Could not reach Spoolman at: Не удалось связаться со Spoolman по адресу
-  Could not resolve printer RFCOMM channel: 'Не удалось определить RFCOMM-канал принтера'
+  Could not resolve printer RFCOMM channel: Не удалось определить RFCOMM-канал принтера
   Could not start Bluetooth discovery: Не удалось запустить поиск Bluetooth
   Could not verify Spoolman status. Moonraker may still be restarting.: Не удалось
     проверить статус Spoolman. Moonraker может ещё перезапускаться.
@@ -669,7 +679,8 @@ translations:
   Display Sleep: Спящий режим экрана
   ? Display resolution is very high (%dx%d). Text may appear small. Reduce framebuffer
     resolution in /boot/firmware/config.txt for best results.
-  : 'Разрешение дисплея очень высокое (%dx%d). Текст может казаться мелким. Для лучшего результата уменьшите разрешение фреймбуфера в /boot/firmware/config.txt.'
+  : Разрешение дисплея очень высокое (%dx%d). Текст может казаться мелким. Для лучшего
+    результата уменьшите разрешение фреймбуфера в /boot/firmware/config.txt.
   'Display: ': 'Дисплей: '
   Do not power off your printer.: Не выключайте принтер.
   Do not touch the printer during calibration: Не трогайте принтер во время калибровки
@@ -682,7 +693,7 @@ translations:
   Download update?: Загрузить обновление?
   Download v{}?: Загрузить v{}?
   Downloading...: Загрузка...
-  Downloading... {:.1f}/{:.1f} MB: 'Загрузка... {:.1f}/{:.1f} МБ'
+  Downloading... {:.1f}/{:.1f} MB: Загрузка... {:.1f}/{:.1f} МБ
   Draw a ripple at each touch — helps diagnose offsets: Рисовать круг при каждом касании
     — помогает диагностировать смещения
   Drive Cal: Кал. привода
@@ -740,8 +751,8 @@ translations:
   Enabled: Включено
   Encoder: Энкодер
   Ended: Завершено
-  Enhanced {} operation in PRINT_START: 'Улучшена {} операция в PRINT_START'
-  Enhanced {} operations in PRINT_START: 'Улучшено {} операций в PRINT_START'
+  Enhanced {} operation in PRINT_START: Улучшена {} операция в PRINT_START
+  Enhanced {} operations in PRINT_START: Улучшено {} операций в PRINT_START
   Enhancement Complete!: Улучшение завершено!
   Enhancement Failed: Ошибка улучшения
   Enter Current PIN: Введите текущий PIN
@@ -756,10 +767,11 @@ translations:
   Enter printer IP address first: Сначала введите IP-адрес принтера
   Enter the IP address and port of your Spoolman server.: Введите IP-адрес и порт
     вашего сервера Spoolman.
+  Entry: 'Вход'
   Error: Ошибка
-  Error at chunk {} (code={}): 'Ошибка в блоке {} (код={})'
+  Error at chunk {} (code={}): Ошибка в блоке {} (код={})
   Error loading file: Ошибка загрузки файла
-  Error loading printing tips: 'Ошибка загрузки советов по печати'
+  Error loading printing tips: Ошибка загрузки советов по печати
   'Error saving printer settings: {}': 'Ошибка сохранения настроек принтера: {}'
   Error state: Состояние ошибки
   'Error: %s': 'Ошибка: %s'
@@ -785,6 +797,7 @@ translations:
   Excellent Accuracy: Отличная точность
   'Exception: {}': 'Исключение: {}'
   Exclude: Исключить
+  Exclude Object?: 'Исключить объект?'
   Excluded: Исключён
   Exclusion cancelled: Исключение отменено
   Execute printer macros: Выполнить макросы принтера
@@ -821,7 +834,7 @@ translations:
   Failed to analyze PRINT_START macro: Не удалось проанализировать макрос PRINT_START
   Failed to apply limits: Не удалось применить ограничения
   Failed to apply settings: Не удалось применить настройки
-  Failed to build raster data: 'Не удалось построить растровые данные'
+  Failed to build raster data: Не удалось построить растровые данные
   'Failed to cancel: {}': 'Не удалось отменить: {}'
   'Failed to clear print state: {}': 'Не удалось очистить состояние печати: {}'
   'Failed to connect to ''{}'': {}': 'Не удалось подключиться к ''{}'': {}'
@@ -845,8 +858,8 @@ translations:
   Failed to enable tuning tower: Не удалось включить башню настройки
   'Failed to exclude ''{}'': {}': 'Не удалось исключить ''{}'': {}'
   Failed to get limits: Не удалось получить ограничения
-  Failed to initialize Bluetooth: 'Не удалось инициализировать Bluetooth'
-  Failed to initialize Bluetooth context: 'Не удалось инициализировать контекст Bluetooth'
+  Failed to initialize Bluetooth: Не удалось инициализировать Bluetooth
+  Failed to initialize Bluetooth context: Не удалось инициализировать контекст Bluetooth
   Failed to load G-code preview: Не удалось загрузить предпросмотр G-code
   Failed to load devices: Не удалось загрузить устройства
   Failed to load fan configuration screen: Не удалось загрузить экран настройки вентилятора
@@ -872,10 +885,10 @@ translations:
   Failed to read config. Check connection.: Не удалось прочитать конфигурацию. Проверьте
     подключение.
   Failed to read moonraker.conf.: Не удалось прочитать moonraker.conf.
-  Failed to read printer status: 'Не удалось прочитать статус принтера'
+  Failed to read printer status: Не удалось прочитать статус принтера
   Failed to refresh file list: Не удалось обновить список файлов
   'Failed to remap G-code: {}': 'Не удалось переназначить G-code: {}'
-  Failed to render label: 'Не удалось отрендерить этикетку'
+  Failed to render label: Не удалось отрендерить этикетку
   'Failed to reprint: {}': 'Не удалось перепечатать: {}'
   'Failed to reset flow: {}': 'Не удалось сбросить поток: {}'
   'Failed to reset speed: {}': 'Не удалось сбросить скорость: {}'
@@ -895,8 +908,8 @@ translations:
   Failed to save spool: Не удалось сохранить катушку
   Failed to save theme file: Не удалось сохранить файл темы
   'Failed to send command: {}': 'Не удалось отправить команду: {}'
-  Failed to send print data: 'Не удалось отправить данные печати'
-  Failed to send status request: 'Не удалось отправить запрос статуса'
+  Failed to send print data: Не удалось отправить данные печати
+  Failed to send status request: Не удалось отправить запрос статуса
   Failed to set active spool: Не удалось установить активную катушку
   'Failed to set bed temp: {}': 'Не удалось задать темп. стола: {}'
   'Failed to set chamber temp: {}': 'Не удалось установить температуру камеры: {}'
@@ -955,7 +968,8 @@ translations:
   Filament operation timed out: Операция с филаментом — время ожидания истекло
   Filament runout: Окончание филамента
   Filament runout and motion detection sensors: Датчики окончания и движения филамента
-  Filament sensor available for runout detection: 'Датчик филамента доступен для обнаружения окончания'
+  Filament sensor available for runout detection: Датчик филамента доступен для обнаружения
+    окончания
   Filament tension is balanced: Натяжение филамента сбалансировано
   Filament tracking & label printing: Учёт филамента и печать этикеток
   Filament tracking and inventory: Отслеживание и учёт филамента
@@ -980,6 +994,7 @@ translations:
     ams_slot)
   Flip: Отразить
   Flow: Поток
+  Flow Compensation: 'Компенсация потока'
   Flow Rate: Множитель потока
   'Flow change failed: {}': 'Ошибка изменения потока: {}'
   Flowguard: Flowguard
@@ -1156,7 +1171,8 @@ translations:
   Install Root: Корень установки
   Install Update: Установить обновление
   Install plugin: Установить плагин
-  Install script not found. Use the remote install command instead.: 'Скрипт установки не найден. Используйте вместо этого команду удалённой установки.'
+  Install script not found. Use the remote install command instead.: Скрипт установки
+    не найден. Используйте вместо этого команду удалённой установки.
   Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Установите
     плагин HelixPrint в расширенных настройках, чтобы переназначать филамент без влияния
     на историю печати.
@@ -1167,20 +1183,23 @@ translations:
     таймлапс через SSH,\nзатем нажмите "Проверить снова".
   Install timelapse plugin: Установить плагин таймлапса
   Installation Failed: Ошибка установки
-  Installation failed: 'Ошибка установки'
-  Installation failed. Check logs for details.: 'Ошибка установки. Подробности смотрите в журналах.'
+  Installation failed: Ошибка установки
+  Installation failed. Check logs for details.: Ошибка установки. Подробности смотрите
+    в журналах.
   'Installation failed: ': 'Ошибка установки: '
   Installation takes about 30 seconds.: Установка занимает около 30 секунд.
-  Installation timed out: 'Время установки истекло'
-  Installation timed out. The script may be stuck.: 'Время установки истекло. Скрипт мог зависнуть.'
+  Installation timed out: Время установки истекло
+  Installation timed out. The script may be stuck.: Время установки истекло. Скрипт
+    мог зависнуть.
   Installing...: Установка...
   Intensity: Интенсивность
   Interactive probe calibration: Интерактивная калибровка зонда
   'Internal error: API not available': 'Внутренняя ошибка: API недоступен'
   'Internal error: no scan result': 'Внутренняя ошибка: нет результата сканирования'
   Invalid port number: Неверный номер порта
-  'Invalid sheet template index: {} (have {})': 'Недопустимый индекс шаблона листа: {} (имеется {})'
-  Invalid status response from printer: 'Недопустимый ответ статуса от принтера'
+  'Invalid sheet template index: {} (have {})': 'Недопустимый индекс шаблона листа:
+    {} (имеется {})'
+  Invalid status response from printer: Недопустимый ответ статуса от принтера
   Issue description: Описание проблемы
   Job Queue: Очередь заданий
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Присоединяйтесь
@@ -1195,7 +1214,7 @@ translations:
   Keyboard Test (Gboard-style): Тест клавиатуры (стиль Gboard)
   Kinematics: Кинематика
   Klipper: Klipper
-  Klipper Error: 'Ошибка Klipper'
+  Klipper Error: Ошибка Klipper
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Прошивка
     Klipper отключилась от хоста. Попробуйте перезапустить Klipper или выполнить перезапуск
     прошивки.
@@ -1217,7 +1236,8 @@ translations:
   LED Settings: Настройки LED
   LED Strip: LED-лента
   LED on at Start: Включать LED при старте
-  LED strip available for lighting control: 'Светодиодная лента доступна для управления освещением'
+  LED strip available for lighting control: Светодиодная лента доступна для управления
+    освещением
   LEDs: LED
   LEDs controlled by the light button: LED, управляемые кнопкой света
   LOADED: ЗАГРУЖЕН
@@ -1461,7 +1481,7 @@ translations:
   No Power Devices: Нет устройств питания
   No Spool: Нет катушки
   No Spools: Нет катушек
-  No USB printer detected: 'USB-принтер не обнаружен'
+  No USB printer detected: USB-принтер не обнаружен
   No USB printers found: USB-принтеры не найдены
   No buffer data available: Данные буфера недоступны
   No camera — use USB barcode scanner: Нет камеры — используйте USB сканер штрих-кодов
@@ -1513,8 +1533,8 @@ translations:
   No sensors detected: Датчики не обнаружены
   No spool assigned: Катушка не назначена
   No spools found — tap to retry: Катушки не найдены — нажмите для повтора
-  No tape detected in printer: 'В принтере не обнаружена лента'
-  No target printer configured: 'Целевой принтер не настроен'
+  No tape detected in printer: В принтере не обнаружена лента
+  No target printer configured: Целевой принтер не настроен
   No timelapse videos found: Таймлапс-видео не найдены
   No vendors found: Производители не найдены
   No webcam detected.\nA webcam is required for timelapse.: Веб-камера не обнаружена.\nДля
@@ -1565,7 +1585,7 @@ translations:
   Objects: Объекты
   'Off': Выкл
   'Off:': 'Выкл:'
-  Off\nFlying Toasters\nStarfield\n3D Pipes: 'Выкл\nЛетающие тостеры\nЗвёздное поле\n3D-трубы'
+  Off\nFlying Toasters\nStarfield\n3D Pipes: Выкл\nЛетающие тостеры\nЗвёздное поле\n3D-трубы
   'On': Вкл
   On and Off macros must be different: Макросы включения и выключения должны отличаться
   On/Off: Вкл/Выкл
@@ -1610,8 +1630,8 @@ translations:
   PRE-PRINT STEPS: ЭТАПЫ ПОДГОТОВКИ
   PRINT OPTIONS: ПАРАМЕТРЫ ПЕЧАТИ
   PRINTERS: ПРИНТЕРЫ
-  PRINT_START has {} skippable operation: 'В PRINT_START есть {} пропускаемая операция'
-  PRINT_START has {} skippable operations: 'В PRINT_START есть {} пропускаемых операций'
+  PRINT_START has {} skippable operation: В PRINT_START есть {} пропускаемая операция
+  PRINT_START has {} skippable operations: В PRINT_START есть {} пропускаемых операций
   PROBE SENSORS: ДАТЧИКИ ЗОНДА
   Pair: Сопряжение
   Pair Bluetooth Printer: Подключить Bluetooth-принтер
@@ -1677,10 +1697,11 @@ translations:
   Plugin disabled: Плагин отключен
   Plugin installed successfully: Плагин успешно установлен
   Plugin installed successfully.: Плагин успешно установлен.
-  Plugin installed successfully. Moonraker is restarting...: 'Плагин успешно установлен. Moonraker перезапускается...'
+  Plugin installed successfully. Moonraker is restarting...: Плагин успешно установлен.
+    Moonraker перезапускается...
   Plugin not responding after restart.\nIt may need more time to load.: Плагин не
     отвечает после перезапуска.\nВозможно, ему нужно больше времени для загрузки.
-  Plugin uninstalled successfully.: 'Плагин успешно удалён.'
+  Plugin uninstalled successfully.: Плагин успешно удалён.
   Plugins: Плагины
   Plugins are discovered on application startup: Плагины обнаруживаются при запуске
     приложения
@@ -1735,8 +1756,10 @@ translations:
   Print Time: Время печати
   Print Tuning: Настройка печати
   Print Was Terminated: Печать была прекращена
-  Print didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X}): 'Печать не началась — принтер может быть занят или не в сети (опросы B3={}, статус=0x{:02X}, ошибка=0x{:02X})'
-  Print error: 'Ошибка печати'
+  Print didn't start — printer may be busy or offline (B3 polls={}, status=0x{:02X}, error=0x{:02X}): Печать
+    не началась — принтер может быть занят или не в сети (опросы B3={}, статус=0x{:02X},
+    ошибка=0x{:02X})
+  Print error: Ошибка печати
   Print failed: Печать не удалась
   Print issue detected: Обнаружена проблема печати
   'Print preparation failed: {}': 'Ошибка подготовки печати: {}'
@@ -1746,7 +1769,7 @@ translations:
   Print setup failed: Не удалось подготовить печать
   'Print setup failed: internal error': 'Не удалось подготовить печать: внутренняя
     ошибка'
-  Print timed out waiting for completion: 'Время ожидания завершения печати истекло'
+  Print timed out waiting for completion: Время ожидания завершения печати истекло
   Printer: Принтер
   Printer Error: Ошибка принтера
   Printer Firmware Disconnected: Прошивка принтера отключена
@@ -1766,9 +1789,11 @@ translations:
   'Printer Setup: Touch Calibration': 'Настройка принтера: Калибровка сенсора'
   Printer Shutdown: Остановка принтера
   Printer Type: Тип принтера
-  Printer accepted job but isn't printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X}): 'Принтер принял задание, но не печатает — проверьте крышку, бумагу и тип этикеток (статус прошивки=0x{:02X} ошибка=0x{:02X})'
-  Printer database format error: 'Ошибка формата базы данных принтеров'
-  Printer database is corrupt: 'База данных принтеров повреждена'
+  Printer accepted job but isn't printing — check cover, paper, and label type (firmware status=0x{:02X} error=0x{:02X}): Принтер
+    принял задание, но не печатает — проверьте крышку, бумагу и тип этикеток (статус
+    прошивки=0x{:02X} ошибка=0x{:02X})
+  Printer database format error: Ошибка формата базы данных принтеров
+  Printer database is corrupt: База данных принтеров повреждена
   Printer didn't respond — make sure it's on and in range: Принтер не ответил — убедитесь,
     что он включён и в зоне доступа
   Printer doesn't expose the expected service — wrong device?: Принтер не предоставляет
@@ -1776,7 +1801,7 @@ translations:
   Printer image set to auto-detect: Изображение принтера — автоопределение
   Printer is not paired — pair it first: Принтер не сопряжён — сначала выполните сопряжение
   Printer name: Название принтера
-  Printer not ready: 'Принтер не готов'
+  Printer not ready: Принтер не готов
   Printer ready: Принтер готов
   'Printer:': 'Принтер:'
   'Printer: ': 'Принтер: '
@@ -1840,7 +1865,7 @@ translations:
   Quick Button 3: Быстрая кнопка 3
   Quick Button 4: Быстрая кнопка 4
   Quick actions, calibration, speed: Быстрые действия, калибровка, скорость
-  RFCOMM connect failed: 'Не удалось подключиться по RFCOMM'
+  RFCOMM connect failed: Не удалось подключиться по RFCOMM
   'RFCOMM connect failed: ': 'Не удалось подключиться по RFCOMM: '
   RSS: RSS
   'RSS:': 'RSS:'
@@ -1905,11 +1930,11 @@ translations:
   Report saved to crash_report.txt: Отчёт сохранён в crash_report.txt
   Reprint: Повторить печать
   Reprint Last: Перепечатать последнюю
-  Request Failed: 'Запрос не выполнен'
+  Request Failed: Запрос не выполнен
   Require confirmation before emergency stop: Требовать подтверждение перед аварийной
     остановкой
   Requires Moonraker-Timelapse plugin: Требуется плагин Moonraker-Timelapse
-  Resend write failed at chunk {}: 'Не удалось повторно отправить запись в блоке {}'
+  Resend write failed at chunk {}: Не удалось повторно отправить запись в блоке {}
   Reset: Сброс
   Reset Home Screen?: Сбросить главный экран?
   Reset Speed & Flow to 100%: Сбросить скорость и поток на 100%
@@ -1977,6 +2002,7 @@ translations:
   Run without parameter prompt: Запускать без запроса параметров
   Run {}?: Запустить {}?
   Running {}...: Выполнение {}...
+  Runout: 'Окончание'
   Runout Sensor: Датчик окончания
   SETTINGS: НАСТРОЙКИ
   SHIPPED IMAGES: ВСТРОЕННЫЕ ИЗОБРАЖЕНИЯ
@@ -1989,7 +2015,9 @@ translations:
   SWITCH SENSORS: КОНЦЕВЫЕ ДАТЧИКИ
   ? Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
-  : 'Активен безопасный режим. Подключение к принтеру отключено, так как приложение постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить проблему, затем перезагрузите.'
+  : Активен безопасный режим. Подключение к принтеру отключено, так как приложение
+    постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить
+    проблему, затем перезагрузите.
   Safety & Notifications: Безопасность и уведомления
   Sample: Образец
   Sample %d/%d: Образец %d/%d
@@ -2032,6 +2060,7 @@ translations:
   Scanning for networks...: Поиск сетей...
   Scanning...: Сканирование...
   'Score: 0': 'Счёт: 0'
+  Screen: 'Экран'
   Screen Blank: Гашение экрана
   Screen Dim: Затемнение экрана
   Screen dims to lower brightness after period of inactivity: Экран затемняется после
@@ -2183,7 +2212,7 @@ translations:
   Source: Источник
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris мод от Markus 'Captain'
     Kaarlonen
-  Spaghetti detected — print paused: 'Обнаружены «спагетти» — печать приостановлена'
+  Spaghetti detected — print paused: Обнаружены «спагетти» — печать приостановлена
   Speaker: Динамик
   'Specular:': 'Отражение:'
   Speed: Скорость
@@ -2217,7 +2246,7 @@ translations:
   'Spoolman: %zu/%zu Spool%s': 'Spoolman: %zu/%zu катушк%s'
   Square Corner Velocity: Square Corner Velocity
   Stable: Стабильная
-  Stable\nBeta\nDev: 'Стабильная\nБета\nDev'
+  Stable\nBeta\nDev: Стабильная\nБета\nDev
   Standard: Стандартный
   Standby: Режим ожидания
   Starfield: Звёздное небо
@@ -2233,7 +2262,7 @@ translations:
   Start print anyway?: Всё равно начать печать?
   Started: Начато
   Starting Print...: Запуск печати...
-  Starting download...: 'Начало загрузки...'
+  Starting download...: Начало загрузки...
   Starting measurement...: Запуск измерения...
   Starting...: Запуск...
   Startup Brightness: Яркость при запуске
@@ -2250,6 +2279,7 @@ translations:
   Stop Drying: Остановить сушку
   Stop Print?: Остановить печать?
   Stop failed: Ошибка остановки
+  Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds.: 'Остановить печать \"{}\"?\n\nЭто нельзя будет отменить через 5 секунд.'
   Stops all motion. Requires firmware restart.: Останавливает всё движение. Требуется
     перезапуск прошивки.
   Stow: Убрать
@@ -2279,9 +2309,9 @@ translations:
   Sysfs: Sysfs
   System: Система
   System Keyboard: Системная клавиатура
-  System busy — please try again: 'Система занята — попробуйте снова'
-  System busy — try again: 'Система занята — попробуйте снова'
-  System default: 'Системное по умолчанию'
+  System busy — please try again: Система занята — попробуйте снова
+  System busy — try again: Система занята — попробуйте снова
+  System default: Системное по умолчанию
   System detected: Обнаружена система
   T%d has no filament loaded — this print will run out.: В T%d не загружен филамент
     — печати не хватит филамента.
@@ -2437,13 +2467,13 @@ translations:
   Timelapse plugin installed!: Плагин таймлапса установлен!
   Timelapse plugin is already installed!: Плагин таймлапса уже установлен!
   Timelapse plugin is installed!: Плагин таймлапса установлен!
-  Timelapse render failed: 'Не удалось отрендерить таймлапс'
+  Timelapse render failed: Не удалось отрендерить таймлапс
   'Timelapse render failed: {}': 'Не удалось отрендерить таймлапс: {}'
   Timelapse rendered successfully: Таймлапс успешно отрендерен
   Timezone: Часовой пояс
   'Tip:': 'Совет:'
-  Tips database format error: 'Ошибка формата базы данных советов'
-  Tips database not found: 'База данных советов не найдена'
+  Tips database format error: Ошибка формата базы данных советов
+  Tips database not found: База данных советов не найдена
   Toggle: Переключить
   Toggle (fire-and-forget): Переключение (без отслеживания)
   Toggle Feature: Переключить функцию
@@ -2454,6 +2484,7 @@ translations:
   'Tool change failed: {}': 'Ошибка смены инструмента: {}'
   'Tool {} → Lane {}: no filament loaded.': 'Инструмент {} → Слот {}: филамент не
     загружен.'
+  Toolhead: 'Печатающая головка'
   Toolhead Style: Стиль печатающей головки
   Toolhead jam: Замятие в печатающей головке
   Toolhead, G-code, limits, and materials: Печатающая головка, G-code, лимиты и материалы
@@ -2490,8 +2521,8 @@ translations:
   UI Sounds: Звуки интерфейса
   USB: USB
   USB DEVICES: USB-УСТРОЙСТВА
-  USB drive connected: 'USB-накопитель подключён'
-  USB drive removed: 'USB-накопитель извлечён'
+  USB drive connected: USB-накопитель подключён
+  USB drive removed: USB-накопитель извлечён
   USB printer access denied — check permissions: Доступ к USB-принтеру запрещён —
     проверьте разрешения
   Understanding Results: Понимание результатов
@@ -2505,11 +2536,13 @@ translations:
     сбалансированное натяжение.\n\nДля CoreXY пути A и B должны отличаться на несколько
     Гц.
   Uninstall HelixPrint Plugin: Удалить плагин HelixPrint
-  Uninstall script not found.: 'Скрипт удаления не найден.'
+  Uninstall script not found.: Скрипт удаления не найден.
   'Uninstall: Coming soon': 'Удаление: Скоро появится'
-  Uninstallation failed. Check logs for details.: 'Ошибка удаления. Подробности смотрите в журналах.'
+  Uninstallation failed. Check logs for details.: Ошибка удаления. Подробности смотрите
+    в журналах.
   'Uninstallation failed: ': 'Ошибка удаления: '
-  Uninstallation timed out. The script may be stuck.: 'Время удаления истекло. Скрипт мог зависнуть.'
+  Uninstallation timed out. The script may be stuck.: Время удаления истекло. Скрипт
+    мог зависнуть.
   Unit: Узел
   'Unit ': 'Узел '
   Unknown: Неизвестно
@@ -2535,10 +2568,10 @@ translations:
   Unmapped: Не назначен
   Unretract Extra: Дополнительная подача
   Unretract Speed: Скорость возврата
-  Unsupported tape width: 'Неподдерживаемая ширина ленты'
+  Unsupported tape width: Неподдерживаемая ширина ленты
   'Unsupported tape width: ': 'Неподдерживаемая ширина ленты: '
   Up: Вверх
-  Up to date: 'Актуальная версия'
+  Up to date: Актуальная версия
   Update: Обновить
   Update Available: Доступно обновление
   Update Channel: Канал обновлений
@@ -2565,8 +2598,8 @@ translations:
   Vendor already exists: Такой производитель уже существует
   'Vendor:': 'Производитель:'
   Verify: Проверить
-  Verifying SHA256 checksum...: 'Проверка контрольной суммы SHA256...'
-  Verifying download...: 'Проверка загрузки...'
+  Verifying SHA256 checksum...: Проверка контрольной суммы SHA256...
+  Verifying download...: Проверка загрузки...
   Verifying timelapse plugin...: Проверка плагина таймлапса...
   Verifying...: Проверка...
   Version: Версия
@@ -2576,7 +2609,7 @@ translations:
   Vibration: Вибрация
   Vibration compensation active: Компенсация вибраций активна
   Video playback speed: Скорость воспроизведения видео
-  View: 'Просмотр'
+  View: Просмотр
   View Changelog: Просмотр изменений
   View Full History: Просмотреть полную историю
   View Presets: Просмотр пресетов
@@ -2592,6 +2625,8 @@ translations:
   WIDTH SENSORS: ДАТЧИКИ ШИРИНЫ
   WLED: WLED
   WLED Preset: Пресет WLED
+  WPA/WPA2: 'WPA/WPA2'
+  WPA3: 'WPA3'
   Waiting for Moonraker...: Ожидание Moonraker...
   Waiting for bed to reach temperature for accurate calibration.: Ожидание нагрева
     стола для точной калибровки.
@@ -2626,17 +2661,18 @@ translations:
   WiFi Disabled: WiFi отключён
   WiFi Enabled: WiFi включён
   WiFi Network: Сеть WiFi
-  WiFi Unavailable: 'WiFi недоступен'
+  WiFi Unavailable: WiFi недоступен
   WiFi and Ethernet configuration: Настройка WiFi и Ethernet
   WiFi control unavailable: Управление WiFi недоступно
   WiFi hardware unavailable: Оборудование WiFi недоступно
   WiFi unavailable: WiFi недоступен
-  WiFi was configured but hardware is not available. Check system configuration.: 'WiFi был настроен, но оборудование недоступно. Проверьте конфигурацию системы.'
+  WiFi was configured but hardware is not available. Check system configuration.: WiFi
+    был настроен, но оборудование недоступно. Проверьте конфигурацию системы.
   Widget Labels: Подписи виджетов
   Width: Ширина
   Wifi: Wi-Fi
   Wizard Error: Ошибка мастера
-  Write failed at chunk {}: 'Не удалось записать в блоке {}'
+  Write failed at chunk {}: Не удалось записать в блоке {}
   Wrong PIN: Неверный PIN
   Wrong media: Неверный носитель
   X: X
@@ -2701,11 +2737,11 @@ translations:
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
   Zoom: Масштаб
-  \"%s\" failed to load: 'Не удалось загрузить «%s»'
+  \"%s\" failed to load: Не удалось загрузить «%s»
   bed: стол
   by Preston Brown: by Preston Brown
   chamber heater: нагреватель камеры
-  complete: 'завершено'
+  complete: завершено
   cores: ядер
   disable: отключить
   disabled: отключено
@@ -2715,13 +2751,13 @@ translations:
   elapsed: прошло
   enable: включить
   enabled: включено
-  error: 'ошибка'
+  error: ошибка
   extruder: экструдер
   extruder(s): экструдер(ы)
   extruders: экструдеры
   fans: вентиляторы
   heated bed: подогреваемый стол
-  idle: 'простой'
+  idle: простой
   layers: слои
   left: осталось
   mm before clog: мм до засора
@@ -2737,7 +2773,7 @@ translations:
   prints: печатей
   remaining: осталось
   remaining before clog detection triggers: осталось до срабатывания обнаружения засора
-  rendering: 'рендеринг'
+  rendering: рендеринг
   set to: установлено на
   slots): слотов)
   started: запущено
@@ -2772,16 +2808,16 @@ translations:
     всё нужное.
   tour.step.welcome.title: Добро пожаловать в HelixScreen
   used: использ.
-  v%s available: 'Доступна v%s'
-  v{} installed! Restarting...: 'v{} установлена! Перезапуск...'
+  v%s available: Доступна v%s
+  v{} installed! Restarting...: v{} установлена! Перезапуск...
   v{} is available. Tap to update.: v{} доступна. Нажмите для обновления.
   you have: у вас
   '{} LED strips available': 'Доступно светодиодных лент: {}'
   '{} axis homed': Ось {} запаркована
   '{} command timed out': Время команды {} истекло
   '{} complete': '{} завершено'
-  '{} configured item not found': 'Не найден {} настроенный элемент'
-  '{} configured items not found': 'Не найдено {} настроенных элементов'
+  '{} configured item not found': Не найден {} настроенный элемент
+  '{} configured items not found': Не найдено {} настроенных элементов
   '{} critical hardware issues': '{} критических проблем с оборудованием'
   '{} filament sensors available': 'Доступно датчиков филамента: {}'
   '{} heater turned off': Нагреватель {} выключен

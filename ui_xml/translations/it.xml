@@ -46,6 +46,7 @@
   <translation tag="1 event queued" it="1 evento in coda"/>
   <translation tag="1 hour ago" it="1 ora fa"/>
   <translation tag="1 layer" it="1 strato"/>
+  <translation tag="1 min" it="1 min"/>
   <translation tag="1 min ago" it="1 min fa"/>
   <translation tag="1 minute" it="1 minuto"/>
   <translation tag="1 more tap to {} beta features" it="1 tocco per {} funzioni beta"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" it="120 secondi"/>
   <translation tag="15 seconds" it="15 secondi"/>
   <translation tag="180°" it="180°"/>
+  <translation tag="2 min" it="2 min"/>
   <translation tag="2 minutes" it="2 minuti"/>
   <translation tag="2. Place paper between nozzle and bed" it="2. Posizionare carta tra ugello e piano"/>
   <translation tag="2. Results show how much to turn each screw" it="2. I risultati mostrano quanto girare ogni vite"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" it="Vista 3D"/>
   <translation tag="4. Paper should move but with resistance" it="4. La carta dovrebbe muoversi ma con resistenza"/>
   <translation tag="4. Repeat until bed is level" it="4. Ripetere fino a quando il piano è livellato"/>
+  <translation tag="5 min" it="5 min"/>
   <translation tag="5 minutes" it="5 minuti"/>
   <translation tag="50W" it="50W"/>
   <translation tag="5V" it="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" it="Inserisci password"/>
   <translation tag="Enter printer IP address first" it="Inserire prima l&apos;indirizzo IP della stampante"/>
   <translation tag="Enter the IP address and port of your Spoolman server." it="Inserisci indirizzo IP e porta del tuo server Spoolman."/>
+  <translation tag="Entry" it="Ingresso"/>
   <translation tag="Error" it="Errore"/>
   <translation tag="Error at chunk {} (code={})" it="Errore al chunk {} (code={})"/>
   <translation tag="Error loading file" it="Errore caricamento file"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" it="Precisione eccellente"/>
   <translation tag="Exception: {}" it="Eccezione: {}"/>
   <translation tag="Exclude" it="Escludi"/>
+  <translation tag="Exclude Object?" it="Escludere oggetto?"/>
   <translation tag="Excluded" it="Escluso"/>
   <translation tag="Exclusion cancelled" it="Esclusione annullata"/>
   <translation tag="Execute printer macros" it="Esegui macro stampante"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" it="Anelli concentrici piatti (ams_slot esistente)"/>
   <translation tag="Flip" it="Capovolgi"/>
   <translation tag="Flow" it="Flusso"/>
+  <translation tag="Flow Compensation" it="Compensazione di flusso"/>
   <translation tag="Flow Rate" it="Flusso"/>
   <translation tag="Flow change failed: {}" it="Modifica flusso fallita: {}"/>
   <translation tag="Flowguard" it="Flowguard"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" it="Esegui senza richiesta parametri"/>
   <translation tag="Run {}?" it="Eseguire {}?"/>
   <translation tag="Running {}..." it="Esecuzione {}..."/>
+  <translation tag="Runout" it="Esaurimento"/>
   <translation tag="Runout Sensor" it="Sensore esaurimento"/>
   <translation tag="SETTINGS" it="IMPOSTAZIONI"/>
   <translation tag="SHIPPED IMAGES" it="IMMAGINI INCLUSE"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." it="Scansione reti..."/>
   <translation tag="Scanning..." it="Scansione..."/>
   <translation tag="Score: 0" it="Punteggio: 0"/>
+  <translation tag="Screen" it="Schermo"/>
   <translation tag="Screen Blank" it="Schermo spento"/>
   <translation tag="Screen Dim" it="Attenuazione schermo"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" it="Lo schermo si attenua dopo un periodo di inattività"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" it="Ferma essiccazione"/>
   <translation tag="Stop Print?" it="Fermare stampa?"/>
   <translation tag="Stop failed" it="Arresto fallito"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." it="Interrompere la stampa di \&quot;{}\&quot;?\n\nNon sarà possibile annullare dopo 5 secondi."/>
   <translation tag="Stops all motion. Requires firmware restart." it="Ferma tutto il movimento. Richiede riavvio firmware."/>
   <translation tag="Stow" it="Ritrai"/>
   <translation tag="Strobe LED" it="LED stroboscopico"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" it="Cambia utensile"/>
   <translation tag="Tool change failed: {}" it="Cambio utensile fallito: {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." it="Strumento {} → Corsia {}: nessun filamento caricato."/>
+  <translation tag="Toolhead" it="Testina"/>
   <translation tag="Toolhead Style" it="Stile testina"/>
   <translation tag="Toolhead jam" it="Inceppamento testina"/>
   <translation tag="Toolhead, G-code, limits, and materials" it="Testina, G-code, limiti e materiali"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" it="SENSORI DI LARGHEZZA"/>
   <translation tag="WLED" it="WLED"/>
   <translation tag="WLED Preset" it="Preset WLED"/>
+  <translation tag="WPA/WPA2" it="WPA/WPA2"/>
+  <translation tag="WPA3" it="WPA3"/>
   <translation tag="Waiting for Moonraker..." it="In attesa di Moonraker..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." it="In attesa che il piano raggiunga la temperatura per una calibrazione precisa."/>
   <translation tag="Warm Bed" it="Preriscalda piano"/>

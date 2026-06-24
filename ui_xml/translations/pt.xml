@@ -46,6 +46,7 @@
   <translation tag="1 event queued" pt="1 evento na fila"/>
   <translation tag="1 hour ago" pt="há 1 hora"/>
   <translation tag="1 layer" pt="1 camada"/>
+  <translation tag="1 min" pt="1 min"/>
   <translation tag="1 min ago" pt="há 1 min"/>
   <translation tag="1 minute" pt="1 minuto"/>
   <translation tag="1 more tap to {} beta features" pt="Mais 1 toque para {} recursos beta"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" pt="120 segundos"/>
   <translation tag="15 seconds" pt="15 segundos"/>
   <translation tag="180°" pt="180°"/>
+  <translation tag="2 min" pt="2 min"/>
   <translation tag="2 minutes" pt="2 minutos"/>
   <translation tag="2. Place paper between nozzle and bed" pt="2. Coloque papel entre o bico e a mesa"/>
   <translation tag="2. Results show how much to turn each screw" pt="2. Os resultados mostram quanto girar cada parafuso"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" pt="Vista 3D"/>
   <translation tag="4. Paper should move but with resistance" pt="4. O papel deve se mover, mas com resistência"/>
   <translation tag="4. Repeat until bed is level" pt="4. Repita até a mesa estar nivelada"/>
+  <translation tag="5 min" pt="5 min"/>
   <translation tag="5 minutes" pt="5 minutos"/>
   <translation tag="50W" pt="50W"/>
   <translation tag="5V" pt="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" pt="Digite a senha"/>
   <translation tag="Enter printer IP address first" pt="Insira o endereço IP da impressora primeiro"/>
   <translation tag="Enter the IP address and port of your Spoolman server." pt="Insira o endereço IP e a porta do seu servidor Spoolman."/>
+  <translation tag="Entry" pt="Entrada"/>
   <translation tag="Error" pt="Erro"/>
   <translation tag="Error at chunk {} (code={})" pt="Erro no fragmento {} (code={})"/>
   <translation tag="Error loading file" pt="Erro ao carregar arquivo"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" pt="Precisão Excelente"/>
   <translation tag="Exception: {}" pt="Exceção: {}"/>
   <translation tag="Exclude" pt="Excluir"/>
+  <translation tag="Exclude Object?" pt="Excluir objeto?"/>
   <translation tag="Excluded" pt="Excluído"/>
   <translation tag="Exclusion cancelled" pt="Exclusão cancelada"/>
   <translation tag="Execute printer macros" pt="Executar macros da impressora"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" pt="Anéis Concêntricos Planos (ams_slot existente)"/>
   <translation tag="Flip" pt="Inverter"/>
   <translation tag="Flow" pt="Fluxo"/>
+  <translation tag="Flow Compensation" pt="Compensação de fluxo"/>
   <translation tag="Flow Rate" pt="Taxa de Fluxo"/>
   <translation tag="Flow change failed: {}" pt="Falha ao alterar fluxo: {}"/>
   <translation tag="Flowguard" pt="Proteção de Fluxo"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" pt="Executar sem solicitar parâmetro"/>
   <translation tag="Run {}?" pt="Executar {}?"/>
   <translation tag="Running {}..." pt="Executando {}..."/>
+  <translation tag="Runout" pt="Fim de filamento"/>
   <translation tag="Runout Sensor" pt="Sensor de Fim de Filamento"/>
   <translation tag="SETTINGS" pt="CONFIGURAÇÕES"/>
   <translation tag="SHIPPED IMAGES" pt="IMAGENS INCLUÍDAS"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." pt="Escaneando redes..."/>
   <translation tag="Scanning..." pt="Escaneando..."/>
   <translation tag="Score: 0" pt="Pontuação: 0"/>
+  <translation tag="Screen" pt="Tela"/>
   <translation tag="Screen Blank" pt="Tela Apagada"/>
   <translation tag="Screen Dim" pt="Escurecimento da Tela"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" pt="A tela escurece para menor brilho após período de inatividade"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" pt="Parar Secagem"/>
   <translation tag="Stop Print?" pt="Parar Impressão?"/>
   <translation tag="Stop failed" pt="Falha ao parar"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." pt="Parar a impressão de \&quot;{}\&quot;?\n\nIsso não pode ser desfeito após 5 segundos."/>
   <translation tag="Stops all motion. Requires firmware restart." pt="Para todo movimento. Requer reinício do firmware."/>
   <translation tag="Stow" pt="Guardar"/>
   <translation tag="Strobe LED" pt="LED estroboscópico"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" pt="Trocador de Ferramentas"/>
   <translation tag="Tool change failed: {}" pt="Falha ao trocar ferramenta: {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." pt="Ferramenta {} → Lane {}: nenhum filamento carregado."/>
+  <translation tag="Toolhead" pt="Cabeçote"/>
   <translation tag="Toolhead Style" pt="Estilo do Cabeçote"/>
   <translation tag="Toolhead jam" pt="Atolamento do cabeçote"/>
   <translation tag="Toolhead, G-code, limits, and materials" pt="Cabeçote, G-code, limites e materiais"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" pt="SENSORES DE LARGURA"/>
   <translation tag="WLED" pt="WLED"/>
   <translation tag="WLED Preset" pt="Predefinição WLED"/>
+  <translation tag="WPA/WPA2" pt="WPA/WPA2"/>
+  <translation tag="WPA3" pt="WPA3"/>
   <translation tag="Waiting for Moonraker..." pt="Aguardando Moonraker..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." pt="Aguardando a mesa atingir a temperatura para calibração precisa."/>
   <translation tag="Warm Bed" pt="Aquecer Mesa"/>

@@ -14,6 +14,7 @@
 #include "observer_factory.h"
 #include "printer_state.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 namespace helix::ui {
@@ -180,9 +181,9 @@ void PrintExcludeObjectManager::handle_object_long_press(const char* object_name
         handle_exclude_cancelled();
     });
 
-    std::string message = "Stop printing \"" + std::string(object_name) +
-                          "\"?\n\nThis cannot be undone after 5 seconds.";
-    const char* attrs[] = {"title", "Exclude Object?", "message", message.c_str(), nullptr};
+    std::string message = fmt::format(
+        lv_tr("Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds."), object_name);
+    const char* attrs[] = {"title", lv_tr("Exclude Object?"), "message", message.c_str(), nullptr};
 
     if (!exclude_modal_.show(lv_screen_active(), attrs)) {
         spdlog::error("[PrintExcludeObjectManager] Failed to show exclude confirmation modal");

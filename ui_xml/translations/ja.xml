@@ -46,6 +46,7 @@
   <translation tag="1 event queued" ja="1件のイベント待機中"/>
   <translation tag="1 hour ago" ja="1時間前"/>
   <translation tag="1 layer" ja="1レイヤー"/>
+  <translation tag="1 min" ja="1分"/>
   <translation tag="1 min ago" ja="1分前"/>
   <translation tag="1 minute" ja="1分"/>
   <translation tag="1 more tap to {} beta features" ja="あと1回タップでベータ機能を{}"/>
@@ -57,6 +58,7 @@
   <translation tag="120 seconds" ja="120秒"/>
   <translation tag="15 seconds" ja="15秒"/>
   <translation tag="180°" ja="180°"/>
+  <translation tag="2 min" ja="2分"/>
   <translation tag="2 minutes" ja="2分"/>
   <translation tag="2. Place paper between nozzle and bed" ja="2. ノズルとベッドの間に紙を置いてください"/>
   <translation tag="2. Results show how much to turn each screw" ja="2. 各ネジをどれだけ回すか結果が表示されます"/>
@@ -73,6 +75,7 @@
   <translation tag="3D View" ja="3Dビュー"/>
   <translation tag="4. Paper should move but with resistance" ja="4. 紙が抵抗を感じながら動く状態が適切です"/>
   <translation tag="4. Repeat until bed is level" ja="4. ベッドが水平になるまで繰り返してください"/>
+  <translation tag="5 min" ja="5分"/>
   <translation tag="5 minutes" ja="5分"/>
   <translation tag="50W" ja="50W"/>
   <translation tag="5V" ja="5V"/>
@@ -677,6 +680,7 @@
   <translation tag="Enter password" ja="パスワードを入力"/>
   <translation tag="Enter printer IP address first" ja="先にプリンターのIPアドレスを入力してください"/>
   <translation tag="Enter the IP address and port of your Spoolman server." ja="Spoolman サーバーのIPアドレスとポートを入力してください。"/>
+  <translation tag="Entry" ja="入口"/>
   <translation tag="Error" ja="エラー"/>
   <translation tag="Error at chunk {} (code={})" ja="チャンク {} でエラー (code={})"/>
   <translation tag="Error loading file" ja="ファイルの読み込みエラー"/>
@@ -704,6 +708,7 @@
   <translation tag="Excellent Accuracy" ja="非常に高精度"/>
   <translation tag="Exception: {}" ja="例外: {}"/>
   <translation tag="Exclude" ja="除外"/>
+  <translation tag="Exclude Object?" ja="オブジェクトを除外しますか？"/>
   <translation tag="Excluded" ja="除外"/>
   <translation tag="Exclusion cancelled" ja="除外がキャンセルされました"/>
   <translation tag="Execute printer macros" ja="プリンターマクロを実行"/>
@@ -884,6 +889,7 @@
   <translation tag="Flat Concentric Rings (existing ams_slot)" ja="同心円リング（既存の ams_slot）"/>
   <translation tag="Flip" ja="反転"/>
   <translation tag="Flow" ja="フロー"/>
+  <translation tag="Flow Compensation" ja="フロー補正"/>
   <translation tag="Flow Rate" ja="フローレート"/>
   <translation tag="Flow change failed: {}" ja="フロー変更に失敗しました: {}"/>
   <translation tag="Flowguard" ja="フローガード"/>
@@ -1771,6 +1777,7 @@
   <translation tag="Run without parameter prompt" ja="パラメータ入力なしで実行"/>
   <translation tag="Run {}?" ja="{} を実行しますか？"/>
   <translation tag="Running {}..." ja="{} を実行中..."/>
+  <translation tag="Runout" ja="フィラメント切れ"/>
   <translation tag="Runout Sensor" ja="フィラメント切れセンサー"/>
   <translation tag="SETTINGS" ja="設定"/>
   <translation tag="SHIPPED IMAGES" ja="付属画像"/>
@@ -1817,6 +1824,7 @@
   <translation tag="Scanning for networks..." ja="ネットワークをスキャン中..."/>
   <translation tag="Scanning..." ja="スキャン中..."/>
   <translation tag="Score: 0" ja="スコア: 0"/>
+  <translation tag="Screen" ja="画面"/>
   <translation tag="Screen Blank" ja="画面消灯"/>
   <translation tag="Screen Dim" ja="画面減光"/>
   <translation tag="Screen dims to lower brightness after period of inactivity" ja="一定時間操作がないと画面の明るさが下がります"/>
@@ -2006,6 +2014,7 @@
   <translation tag="Stop Drying" ja="乾燥を停止"/>
   <translation tag="Stop Print?" ja="印刷を停止しますか？"/>
   <translation tag="Stop failed" ja="停止に失敗"/>
+  <translation tag="Stop printing \&quot;{}\&quot;?\n\nThis cannot be undone after 5 seconds." ja="\&quot;{}\&quot; の印刷を停止しますか？\n\n5秒後は取り消せません。"/>
   <translation tag="Stops all motion. Requires firmware restart." ja="すべての動作を停止します。ファームウェアの再起動が必要です。"/>
   <translation tag="Stow" ja="格納"/>
   <translation tag="Strobe LED" ja="ストロボLED"/>
@@ -2147,6 +2156,7 @@
   <translation tag="Tool Changer" ja="ツールチェンジャー"/>
   <translation tag="Tool change failed: {}" ja="ツール変更に失敗しました: {}"/>
   <translation tag="Tool {} → Lane {}: no filament loaded." ja="ツール {} → レーン {}: フィラメントが装填されていません。"/>
+  <translation tag="Toolhead" ja="ツールヘッド"/>
   <translation tag="Toolhead Style" ja="ツールヘッドスタイル"/>
   <translation tag="Toolhead jam" ja="ツールヘッドの詰まり"/>
   <translation tag="Toolhead, G-code, limits, and materials" ja="ツールヘッド、Gコード、制限、材料"/>
@@ -2271,6 +2281,8 @@
   <translation tag="WIDTH SENSORS" ja="幅センサー"/>
   <translation tag="WLED" ja="WLED"/>
   <translation tag="WLED Preset" ja="WLED プリセット"/>
+  <translation tag="WPA/WPA2" ja="WPA/WPA2"/>
+  <translation tag="WPA3" ja="WPA3"/>
   <translation tag="Waiting for Moonraker..." ja="Moonraker を待機中..."/>
   <translation tag="Waiting for bed to reach temperature for accurate calibration." ja="正確なキャリブレーションのためにベッド温度到達を待機中。"/>
   <translation tag="Warm Bed" ja="ベッドを予熱"/>
