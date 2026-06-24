@@ -217,6 +217,8 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     // Register components used by the modal
     lv_xml_register_component_from_file("A:ui_xml/divider_horizontal.xml");
     lv_xml_register_component_from_file("A:ui_xml/setting_toggle_row.xml");
+    // modal_header is a dependency of favorite_macro_config_modal (shared modal header).
+    lv_xml_register_component_from_file("A:ui_xml/modal_header.xml");
     lv_xml_register_component_from_file("A:ui_xml/favorite_macro_config_modal.xml");
 
     s_global_registered = true;
