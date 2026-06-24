@@ -122,20 +122,20 @@ translations:
   All: Все
   All Devices: Все устройства
   All axes homed: Все оси запаркованы
-  Allow cold load/unload: ''
+  Allow cold load/unload: Разрешить загрузку/выгрузку без нагрева
   Allow display to sleep during active prints: Разрешить спящий режим дисплея во время печати
   Allwinner: Allwinner
   Already connecting — wait a moment and try again: 'Подключение уже выполняется — подождите и попробуйте снова'
   Always show Android navigation bar instead of using gestures: 'Всегда показывать панель навигации Android вместо жестов'
   Ambient Transfer: Теплообмен с окружающей средой
-  AmsIdentify: ''
+  AmsIdentify: Определить AMS
   An accelerometer was detected on your printer.: На вашем принтере обнаружен акселерометр.
   An error occurred during calibration.: Во время калибровки произошла ошибка.
   An error occurred during probing.: Во время зондирования произошла ошибка.
   An error occurred while loading filament.: Во время загрузки филамента произошла ошибка.
   An unexpected printer error occurred.: Произошла непредвиденная ошибка принтера.
   An update is available: Доступно обновление
-  Android logcat: ''
+  Android logcat: Android logcat
   Animations: Анимации
   Anonymous data to help improve HelixScreen: Анонимные данные для улучшения HelixScreen
   Anonymous stats — no personal data, ever.: Анонимная статистика — никаких личных данных.
@@ -227,7 +227,7 @@ translations:
   Both belts need tightening.: Оба ремня нужно подтянуть.
   Brightness: Яркость
   Brightness level when LEDs turn on at startup: Уровень яркости при включении LED при запуске
-  BrightnessCLI: ''
+  BrightnessCLI: Командная строка яркости
   Brother PT (Bluetooth): Brother PT (Bluetooth)
   Brother QL: Brother QL
   Brother QL (Bluetooth): Brother QL (Bluetooth)
@@ -255,7 +255,7 @@ translations:
   CONFIGURATION: КОНФИГУРАЦИЯ
   CONNECTION TYPE: ТИП ПОДКЛЮЧЕНИЯ
   CONTROLLABLE FANS: УПРАВЛЯЕМЫЕ ВЕНТИЛЯТОРЫ
-  CPU: ''
+  CPU: CPU
   CRITICAL: КРИТИЧНО
   CURRENT SELECTION: 'ТЕКУЩИЙ ВЫБОР'
   CUSTOM IMAGES: СВОИ ИЗОБРАЖЕНИЯ
@@ -293,8 +293,8 @@ translations:
   'Cannot modify G-code: no temp directory available': 'Невозможно изменить G-code: временная директория недоступна'
   'Cannot modify G-code: scan result not available': 'Невозможно изменить G-code: результат сканирования недоступен'
   'Cannot modify G-code: {}. Printing original file.': 'Невозможно изменить G-code: {}. Печать оригинального файла.'
-  'Cannot remap G-code: no temp directory available': ''
-  'Cannot remap: internal error': ''
+  'Cannot remap G-code: no temp directory available': 'Не удалось переназначить G-code: нет доступной временной директории'
+  'Cannot remap: internal error': 'Не удалось переназначить: внутренняя ошибка'
   'Cannot reprint: not connected to printer': 'Невозможно перепечатать: не подключено к принтеру'
   Cannot restart — no filename: 'Не удалось перезапустить — нет имени файла'
   'Cannot start print: internal error': 'Невозможно начать печать: внутренняя ошибка'
@@ -305,10 +305,10 @@ translations:
   Center QR code in frame: Расположите QR-код в центре кадра
   'Chamb:': 'Камера:'
   Chamber: Камера
-  Chamber Cooling Fan: ''
+  Chamber Cooling Fan: Вентилятор охлаждения камеры
   Chamber Fan: Вентилятор камеры
   Chamber Heater: Нагреватель камеры
-  Chamber Heater Fan: ''
+  Chamber Heater Fan: Вентилятор нагревателя камеры
   Chamber Sensor: Датчик камеры
   Chamber Temperature: Температура камеры
   Chamber and dryer humidity monitoring: Мониторинг влажности камеры и сушилки
@@ -324,7 +324,7 @@ translations:
   Changes are temporary and reset on printer reboot: Изменения временные и сбрасываются при перезагрузке принтера
   Changes can be reversed anytime using the Macro Viewer.: Изменения можно отменить в любое время через Macro Viewer.
   Check Again: Проверить снова
-  Check filament: ''
+  Check filament: Проверьте филамент
   Check for Updates: Проверить обновления
   Check slot: Проверить слот
   'Check slot failed: {}': 'Ошибка проверки слота: {}'
@@ -335,7 +335,7 @@ translations:
   Checking: 'Проверка'
   Checking Spoolman server...: Проверка сервера Spoolman...
   Checking accelerometer...: Проверка акселерометра...
-  Checking filament...: ''
+  Checking filament...: Проверка филамента...
   Checking for plugin...: Поиск плагина...
   Checking slots...: Проверка слотов...
   Checking timelapse plugin...: Проверка плагина таймлапса...
@@ -404,6 +404,7 @@ translations:
   Connected: Подключен
   Connected (%s): Подключен (%s)
   Connected (no discovery): Подключен (без обнаружения)
+  Connected (system-managed network): Подключено (сеть под управлением системы)
   Connected to: Подключен к
   'Connected to ': 'Подключен к '
   Connected! Discovering printer...: Подключен! Обнаружение принтера...
@@ -545,7 +546,7 @@ translations:
   E-Stop Confirmation: Подтверждение аварийной остановки
   EDDY CURRENT: EDDY CURRENT
   EMERGENCY STOP: АВАРИЙНАЯ ОСТАНОВКА
-  EMPTY: ''
+  EMPTY: ПУСТО
   Each fan can only be selected once: Каждый вентилятор можно выбрать только один раз
   Edit: Редактировать
   Edit Preset: Редактировать пресет
@@ -555,10 +556,10 @@ translations:
   Edit Theme Colors (Modified): Редактировать цвета темы (изменено)
   Effects: Эффекты
   Eject: Извлечь
-  Eject Distance: ''
-  Eject Velocity: ''
+  Eject Distance: Расстояние извлечения
+  Eject Velocity: Скорость извлечения
   'Eject failed: {}': 'Ошибка извлечения: {}'
-  Eject needs [force_move] enabled in printer config: ''
+  Eject needs [force_move] enabled in printer config: Для извлечения нужно включить [force_move] в конфигурации принтера
   Elegoo Centauri Carbon: Elegoo Centauri Carbon
   Emergency Stop: Аварийная остановка
   Emergency Stop?: Аварийная остановка?
@@ -566,7 +567,7 @@ translations:
   Emergency stop and print alerts: Аварийная остановка и оповещения печати
   'Emergency stop failed: not connected': 'Аварийная остановка не удалась: нет подключения'
   Empty: Пусто
-  Empty filament slot: ''
+  Empty filament slot: Пустой слот филамента
   Empty slots disable the associated functionality: Пустые слоты отключают связанный функционал
   Enable: Включить
   Enable Monitoring: Включить мониторинг
@@ -642,7 +643,7 @@ translations:
   Failed to delete profile: Не удалось удалить профиль
   Failed to delete spool: Не удалось удалить катушку
   'Failed to download G-code for modification: {}': 'Не удалось скачать G-code для изменения: {}'
-  'Failed to download G-code for remap: {}': ''
+  'Failed to download G-code for remap: {}': 'Не удалось скачать G-code для переназначения: {}'
   Failed to download helixscreen.conf.\nCheck printer connection.: Не удалось скачать helixscreen.conf.\nПроверьте подключение принтера.
   Failed to download moonraker.conf.\nCheck printer connection.: Не удалось скачать moonraker.conf.\nПроверьте подключение принтера.
   Failed to duplicate spool: Не удалось дублировать катушку
@@ -652,7 +653,7 @@ translations:
   Failed to load G-code preview: 'Не удалось загрузить предпросмотр G-code'
   Failed to load fan configuration screen: Не удалось загрузить экран настройки вентилятора
   Failed to load fan control overlay: Не удалось загрузить управление вентилятором
-  'Failed to load filament: {}': ''
+  'Failed to load filament: {}': 'Не удалось загрузить филамент: {}'
   Failed to load file details: Не удалось загрузить данные файла
   Failed to load history: Не удалось загрузить историю
   Failed to load overlay: Не удалось загрузить оверлей
@@ -666,12 +667,12 @@ translations:
   Failed to open wizard: Не удалось открыть мастер
   'Failed to pause print: {}': 'Не удалось приостановить печать: {}'
   'Failed to purge: {}': 'Не удалось прочистить: {}'
-  Failed to read G-code for remap: ''
+  Failed to read G-code for remap: Не удалось прочитать G-code для переназначения
   Failed to read config.: Не удалось прочитать конфигурацию.
   Failed to read config. Check connection.: Не удалось прочитать конфигурацию. Проверьте подключение.
   Failed to read moonraker.conf.: Не удалось прочитать moonraker.conf.
   Failed to refresh file list: Не удалось обновить список файлов
-  'Failed to remap G-code: {}': ''
+  'Failed to remap G-code: {}': 'Не удалось переназначить G-code: {}'
   'Failed to reprint: {}': 'Не удалось перепечатать: {}'
   'Failed to reset flow: {}': 'Не удалось сбросить поток: {}'
   'Failed to reset speed: {}': 'Не удалось сбросить скорость: {}'
@@ -710,14 +711,14 @@ translations:
   Failed to update moonraker.conf.\nCheck printer connection.: Не удалось обновить moonraker.conf.\nПроверьте подключение принтера.
   Failed to update phase tracking: Не удалось обновить отслеживание фазы
   'Failed to upload modified G-code: {}': 'Не удалось загрузить изменённый G-code: {}'
-  'Failed to upload remapped G-code: {}': ''
+  'Failed to upload remapped G-code: {}': 'Не удалось загрузить переназначенный G-code: {}'
   Fan Calibration: Калибровка вентилятора
   Fan Transfer: Теплообмен с вентилятором
   'Fan control failed: {}': 'Ошибка управления вентилятором: {}'
-  FanSelect: ''
+  FanSelect: Выбрать вентилятор
   Fans: Вентиляторы
   Farther: Дальше
-  Feed filament: ''
+  Feed filament: Подать филамент
   Feed filament directly to extruder: Подать филамент напрямую в экструдер
   Feeding filament forward: Подача филамента вперёд
   Filament: Филамент
@@ -742,7 +743,7 @@ translations:
   Filament tracking and inventory: Отслеживание и учёт филамента
   'Filament unload failed: {}': 'Ошибка выгрузки филамента: {}'
   Filament unloaded: Филамент выгружен
-  FilamentSensor: ''
+  FilamentSensor: Датчик филамента
   File: Файл
   File Info: Информация о файле
   Filename: Имя файла
@@ -790,7 +791,7 @@ translations:
   Gray: Серый
   Guides and reference: Руководства и справка
   H: Х
-  HOST: ''
+  HOST: Хост
   HUMIDITY SENSORS: ДАТЧИКИ ВЛАЖНОСТИ
   Hang on, we'll be right back!: Подождите, мы скоро вернёмся!
   Happy Hare MMU: Happy Hare MMU
@@ -816,7 +817,7 @@ translations:
   Heated Bed PID Tuning: Настройка PID стола
   Heater: Нагреватель
   Heater Power: Мощность нагревателя
-  HeaterSelect: ''
+  HeaterSelect: Выбрать нагреватель
   Heaters off: Нагреватели выключены
   Heating: 'Нагрев'
   Heating (%d°C below minimum): Нагрев (%d°C ниже минимума)
@@ -860,7 +861,7 @@ translations:
   Hotend Heater: Нагреватель хотенда
   Hours: Часы
   How Z-axis movement is displayed: Как отображается движение по оси Z
-  How far filament is pushed back into the box on eject (mm): ''
+  How far filament is pushed back into the box on eject (mm): Насколько глубоко филамент задвигается обратно в коробку при извлечении (мм)
   How many labels to print: Сколько этикеток напечатать
   How the toolhead icon appears: Как отображается значок печатающей головки
   Humidity: Влажность
@@ -889,14 +890,14 @@ translations:
   Input shaper settings applied!: Настройки компенсатора вибраций применены!
   Input shaping reduces ringing and ghosting artifacts caused by printer vibrations during fast movements.: Компенсация вибраций уменьшает артефакты звона и двоения, вызванные вибрациями принтера при быстрых перемещениях.
   Input shaping reduces vibration artifacts (ringing) in your prints.: Input Shaper уменьшает артефакты вибрации (эхо) в ваших отпечатках.
-  InputShaper: ''
+  InputShaper: InputShaper
   Insert filament before resuming: Вставьте филамент перед возобновлением
   Install: Установить
   Install HelixPrint Plugin: Установить плагин HelixPrint
   Install Plugin: Установить плагин
   Install Root: 'Корень установки'
   Install Update: Установить обновление
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: ''
+  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Установите плагин HelixPrint в расширенных настройках, чтобы переназначать филамент без влияния на историю печати.
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 'Установите плагин HelixPrint для быстрой модификации G-code. Выполните эту команду через SSH на вашем принтере:'
   Install the timelapse plugin via SSH,\nthen tap \"Check Again\".: Установите плагин таймлапс через SSH,\nзатем нажмите "Проверить снова".
   Install timelapse plugin: Установить плагин таймлапса
@@ -953,7 +954,7 @@ translations:
   Layers: Слои
   Layout: 'Раскладка'
   Learn More: Подробнее
-  LedSelect: ''
+  LedSelect: Выбрать LED
   'Length:': 'Длина:'
   Leveling Gantry...: Выравнивание портала...
   Library: 'Библиотека'
@@ -986,7 +987,7 @@ translations:
   Lock screen after idle timeout: Блокировать экран после простоя
   Locked during print: Заблокировано во время печати
   Log Level: Уровень журнала
-  Logs: ''
+  Logs: Журналы
   Loosen Path A belt.: Ослабьте ремень Пути A.
   Loosen Path B belt.: Ослабьте ремень Пути B.
   Lost connection during print — try again: 'Потеряно соединение во время печати — попробуйте снова'
@@ -997,7 +998,7 @@ translations:
   MACRO DEVICES: МАКРО-УСТРОЙСТВА
   MAIN POWER BUTTON: ГЛАВНАЯ КНОПКА ПИТАНИЯ
   MANUAL: ВРУЧНУЮ
-  MCU: ''
+  MCU: MCU
   MCU, host, and auxiliary temperature monitoring: Мониторинг температуры MCU, хоста и вспомогательных датчиков
   MDI Icons: Иконки MDI
   MISSING CONFIGURED: ОТСУТСТВУЕТ НАСТРОЕННОЕ
@@ -1024,7 +1025,7 @@ translations:
   Macro to unload filament from extruder: Макрос для выгрузки филамента из экструдера
   Macros: Макросы
   Main LED Strip: Основная LED-лента
-  Maintaining: ''
+  Maintaining: Поддержание
   Make %s Optional?: Сделать %s необязательным?
   Make Optional: Сделать опциональным
   Make bed mesh and QGL skippable: Сделать сетку стола и QGL пропускаемыми
@@ -1041,7 +1042,7 @@ translations:
   Match your typical print fan speed: Настройте типичную скорость вентилятора печати
   Material: Материал
   Material Comfort: Комфорт материала
-  'Material Comfort:': ''
+  'Material Comfort:': 'Комфорт материала:'
   Material Design Spinner: Индикатор загрузки Material Design
   Material Mismatch: 'Несоответствие материала'
   Material Temperatures: Температуры материалов
@@ -1060,7 +1061,7 @@ translations:
   Measured: Измерено
   Measurement Failed: Измерение не удалось
   Mechanical setup: Механическая настройка
-  Memory: ''
+  Memory: Память
   Memory (MB): Память (МБ)
   Mesh Complete: Сетка завершена
   Mesh saved as '{}': Сетка сохранена как '{}'
@@ -1068,7 +1069,7 @@ translations:
   Min: Мин
   Minimal: 'Минимальный'
   Minimum: Минимум
-  Minutes: ''
+  Minutes: Минуты
   Mode: Режим
   Modified: Изменён
   Monitoring: Мониторинг
@@ -1187,7 +1188,7 @@ translations:
   Not yet calibrated: Ещё не откалибровано
   Notes: Заметки
   Notes (optional): Заметки (необязательно)
-  Nothing to remap: ''
+  Nothing to remap: Нечего переназначать
   Notification: Уведомление
   Notifications: Уведомления
   Notify when print finishes: Уведомить о завершении печати
@@ -1216,7 +1217,7 @@ translations:
   'On': Вкл
   On and Off macros must be different: Макросы включения и выключения должны отличаться
   On/Off (state-aware): Вкл/Выкл (с отслеживанием)
-  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: ''
+  One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: В один или несколько инструментов, требуемых этим файлом, не загружен филамент. Печать, скорее всего, завершится сбоем. Всё равно печатать?
   Open: Открыть
   Open Source Licenses: Лицензии с открытым кодом
   Operation already in progress: Операция уже выполняется
@@ -1227,7 +1228,7 @@ translations:
   Or Enter Manually: Или введите вручную
   Oscillating... cycle %d/%d: Осцилляция... цикл %d/%d
   Out of range: Вне диапазона
-  Output Device: ''
+  Output Device: Устройство вывода
   Output Mode: Режим вывода
   Output Pin: Выходной пин
   Overheating: Перегрев
@@ -1270,7 +1271,7 @@ translations:
   Pausing...: 'Приостановка...'
   Peak Freq: Пиковая частота
   'Peak:': 'Пик:'
-  Performance: ''
+  Performance: Производительность
   Phase Tracking: Отслеживание фазы
   Phase tracking disabled: Отслеживание фазы отключено
   Phase tracking enabled: Отслеживание фазы включено
@@ -1318,7 +1319,7 @@ translations:
   Preset: Пресет
   'Preset ID: {}': 'ID пресета: {}'
   Presets: Пресеты
-  Press Abort to stop: ''
+  Press Abort to stop: Нажмите «Прервать», чтобы остановить
   Press Scan to search: Нажмите «Поиск» для сканирования
   'Pressure:': 'Давление:'
   Preview Sounds: 'Предпросмотр звуков'
@@ -1326,7 +1327,7 @@ translations:
   Price: Цена
   Primary: Основной
   Print: Печать
-  Print Anyway: ''
+  Print Anyway: Всё равно печатать
   Print Cancelled: Печать отменена
   Print Complete!: Печать завершена!
   Print Completion Alert: Уведомление о завершении печати
@@ -1346,12 +1347,12 @@ translations:
   Print Tuning: Настройка печати
   Print Was Terminated: 'Печать была прекращена'
   Print failed: Печать не удалась
-  Print issue detected: ''
+  Print issue detected: Обнаружена проблема печати
   'Print preparation failed: {}': 'Ошибка подготовки печати: {}'
   Print quality: Качество печати
   Print server rejected the job — check printer status: 'Сервер печати отклонил задание — проверьте статус принтера'
-  Print setup failed: ''
-  'Print setup failed: internal error': ''
+  Print setup failed: Не удалось подготовить печать
+  'Print setup failed: internal error': 'Не удалось подготовить печать: внутренняя ошибка'
   Printer: Принтер
   Printer Error: Ошибка принтера
   Printer Firmware Disconnected: Прошивка принтера отключена
@@ -1377,7 +1378,7 @@ translations:
   Printer is not paired — pair it first: 'Принтер не сопряжён — сначала выполните сопряжение'
   Printer name: Название принтера
   Printer ready: Принтер готов
-  PrinterIdentify: ''
+  PrinterIdentify: Определить принтер
   Printers: Принтеры
   Printers, Multi-Filament System, fans, sensors, and LEDs: Принтеры, мультифиламентная система, вентиляторы, датчики и светодиоды
   Printing: Печать
@@ -1436,7 +1437,7 @@ translations:
   Re-syncs Happy Hare's tracked state with the hardware.: Повторно синхронизирует отслеживаемое состояние Happy Hare с оборудованием.
   Ready: Готов
   Ready to Apply: Готово к применению
-  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': ''
+  'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': 'Причина: {}\n\nПринтер не может возобновить эту печать. Начать заново?'
   Reboot: Перезагрузка
   Reboot failed: 'Ошибка перезагрузки'
   Reboot failed — host is still reachable: 'Ошибка перезагрузки — хост всё ещё доступен'
@@ -1452,10 +1453,10 @@ translations:
   Recover MMU state?: Восстановить состояние MMU?
   Recovering AFC system...: Восстановление системы AFC...
   Recovery failed: Восстановление не удалось
-  Reduce Sensitivity: ''
+  Reduce Sensitivity: Снизить чувствительность
   Reduce ringing and ghosting artifacts: Уменьшить артефакты звона и двоения
   Reduce vibration artifacts like ringing and ghosting: Уменьшить артефакты вибрации, такие как звон и двоение
-  Refill the spool, then Resume.: ''
+  Refill the spool, then Resume.: Пополните катушку, затем нажмите «Продолжить».
   Refresh: Обновить
   Refresh Interval: Интервал обновления
   Release all stepper motors. Position will be lost.: Отпустить все шаговые моторы. Позиция будет потеряна.
@@ -1463,8 +1464,8 @@ translations:
   Remaining (g): Осталось (г)
   Remaining Weight (g): Оставшийся вес (г)
   Remap Tool: Переназначить инструмент
-  Remap needs the HelixPrint plugin: ''
-  Remap…: ''
+  Remap needs the HelixPrint plugin: Для переназначения нужен плагин HelixPrint
+  Remap…: Переназначить…
   Remove: Удалить
   Remove PIN: Удалить PIN
   Remove Spoolman?: Удалить Spoolman?
@@ -1538,7 +1539,7 @@ translations:
   Run Macro: Запустить макрос
   Run Macro?: 'Запустить макрос?'
   Run a Klipper macro when preheating this material: Запускать макрос Klipper при преднагреве этого материала
-  Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves): ''
+  Run filament load/unload even when the nozzle is cold (for macros that heat the nozzle themselves): Выполнять загрузку/выгрузку филамента даже при холодном сопле (для макросов, которые сами нагревают сопло)
   'Run {}?': 'Запустить {}?'
   Running {}...: Выполнение {}...
   Runout Sensor: Датчик окончания
@@ -1692,7 +1693,7 @@ translations:
   Snapmaker SnapSwap: Snapmaker SnapSwap
   Snapmaker U1: Snapmaker U1
   Soft: 'Мягкий'
-  Some filaments don't match the slicer's intent.: ''
+  Some filaments don't match the slicer's intent.: Некоторые филаменты не соответствуют замыслу слайсера.
   Some settings will take effect after restart.: Некоторые настройки вступят в силу после перезапуска.
   Sound Theme: Звуковая тема
   Sounds: Звуки
@@ -1704,7 +1705,7 @@ translations:
   'Speed change failed: {}': 'Ошибка изменения скорости: {}'
   Speed of prime movement: Скорость движения подачи
   Speed of retraction movement: Скорость ретракта
-  Speed used to push filament out of the box (mm/s): ''
+  Speed used to push filament out of the box (mm/s): Скорость выталкивания филамента из коробки (мм/с)
   Spool: Катушка
   Spool Details: Детали катушки
   Spool Info: Информация о катушке
@@ -1748,7 +1749,7 @@ translations:
   Step: Шаг
   Step 1 of 3: Шаг 1 из 3
   Step Progress Widget Test: Тест виджета пошагового прогресса
-  Still working... taking longer than usual: ''
+  Still working... taking longer than usual: Всё ещё выполняется... дольше обычного
   Stop: Стоп
   Stop Drying: Остановить сушку
   Stop Print?: Остановить печать?
@@ -1760,7 +1761,7 @@ translations:
   Success: Успех
   Success Rate: Процент успеха
   Success!: Успешно!
-  Summary: ''
+  Summary: Сводка
   Support, documentation, and version info: Поддержка, документация и информация о версии
   Suppress periodic 'T:.../B:...' status lines: Скрывать периодические строки статуса 'T:.../B:...'
   Suppress raw debug output from printer firmware modules: Скрывать отладочный вывод модулей прошивки принтера
@@ -1776,8 +1777,8 @@ translations:
   System: Система
   System Keyboard: 'Системная клавиатура'
   System detected: Обнаружена система
-  T%d has no filament loaded — this print will run out.: ''
-  T%d needs filament in slot %d, which is empty — this print will run out.: ''
+  T%d has no filament loaded — this print will run out.: В T%d не загружен филамент — печати не хватит филамента.
+  T%d needs filament in slot %d, which is empty — this print will run out.: Для T%d нужен филамент в слоте %d, который пуст — печати не хватит филамента.
   TD-1 filament color detection: Определение цвета филамента TD-1
   TEMPERATURE SENSORS: ДАТЧИКИ ТЕМПЕРАТУРЫ
   THEME COLORS: ЦВЕТА ТЕМЫ
@@ -1793,7 +1794,7 @@ translations:
   Tap to show keyboard...: Нажмите для показа клавиатуры...
   Target Frequency: Целевая частота
   Target Temperature: Целевая температура
-  Telemetry: ''
+  Telemetry: Телеметрия
   Telemetry Data: Данные телеметрии
   Telemetry queue cleared: Очередь телеметрии очищена
   Temp: Темп.
@@ -1820,7 +1821,7 @@ translations:
   : Анимированная заставка была отключена на данном устройстве, чтобы она не мешала печати. Вы можете снова включить её в Настройки > Дисплей.
   The heater will cycle on and off several times.: Нагреватель будет несколько раз включаться и выключаться.
   The printer halted this print and cannot resume it. Restart from the beginning?: 'Принтер остановил эту печать и не может её возобновить. Начать с начала?'
-  The printer rejected the filament configuration. The print was not started.: ''
+  The printer rejected the filament configuration. The print was not started.: Принтер отклонил конфигурацию филамента. Печать не была запущена.
   The runout sensor indicates no filament is loaded. Start print anyway?: Датчик окончания филамента показывает, что филамент не загружен. Всё равно начать печать?
   The toolhead sensor indicates filament is already loaded. Proceed with load anyway?: Датчик печатающей головки показывает, что филамент уже загружен. Всё равно продолжить загрузку?
   The toolhead sensor indicates no filament is present. Proceed with unload anyway?: Датчик печатающей головки показывает, что филамент отсутствует. Всё равно продолжить выгрузку?
@@ -1880,7 +1881,7 @@ translations:
   Tool Changer: Сменщик инструментов
   'Tool change failed: {}': 'Ошибка смены инструмента: {}'
   Toolhead Style: Стиль печатающей головки
-  Toolhead jam: ''
+  Toolhead jam: Замятие в печатающей головке
   Toolhead, G-code, limits, and materials: Печатающая головка, G-code, лимиты и материалы
   Top: Сверху
   Total Prints: Всего печатей
@@ -1892,7 +1893,7 @@ translations:
   Touch anywhere to verify accuracy: Коснитесь в любом месте для проверки точности
   Touch screen to wake from sleep: Коснитесь экрана для выхода из сна
   Touch the target (point %1$d of 3) \xe2\x80\x94 touch %2$d of %3$d: Коснитесь цели (точка %1$d из 3) \xe2\x80\x94 касание %2$d из %3$d
-  TouchCalibration: ''
+  TouchCalibration: Калибровка касания
   Trace: Трассировка
   Travels: Перемещения
   'Troubleshooting:': 'Устранение неполадок:'
@@ -1992,7 +1993,7 @@ translations:
   When enabled, only the macro runs. When disabled, temperatures are set first, then the macro runs.: Когда включено, запускается только макрос. Когда выключено, сначала задаются температуры, затем запускается макрос.
   ? When starting a print, you'll be able to choose whether to run %s. This saves time when you've already done it recently or want more control over your print preparation.
   : При запуске печати вы сможете выбрать, запускать ли %s. Это экономит время, если вы уже делали это недавно или хотите больше контроля над подготовкой печати.
-  Where UI sounds play: ''
+  Where UI sounds play: Где воспроизводятся звуки интерфейса
   White: Белый
   WiFi: WiFi
   WiFi Disabled: WiFi отключён
@@ -2004,7 +2005,7 @@ translations:
   WiFi unavailable: WiFi недоступен
   Widget Labels: Подписи виджетов
   Width: Ширина
-  Wifi: ''
+  Wifi: Wi-Fi
   Wrong PIN: Неверный PIN
   Wrong media: Неверный носитель
   X: X
