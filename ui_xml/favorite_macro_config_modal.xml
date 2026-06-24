@@ -5,11 +5,6 @@
 <component>
   <styles>
     <style name="tab_active" bg_opa="30" bg_color="#primary" text_color="#primary"/>
-    <!-- Header padding: tight at Micro to reclaim vertical space, generous above. -->
-    <style name="header_pad_micro" pad_left="#space_md" pad_right="#space_sm"
-           pad_top="#space_xs" pad_bottom="#space_xs"/>
-    <style name="header_pad_std" pad_left="#space_lg" pad_right="#space_md"
-           pad_top="#space_lg" pad_bottom="#space_sm"/>
   </styles>
   <!-- Constant height across tabs (no per-tab jump) and full room for the Macro
        list. Height is %-based so it fits small screens, but capped by an
@@ -21,16 +16,9 @@
         style_max_height="520" align="center" flex_flow="column"
         style_flex_main_place="start" style_pad_gap="0">
 
-    <!-- Header: title + close. Padding swaps to a compact style at Micro. -->
-    <lv_obj width="100%" height="content" flex_flow="row"
-            style_flex_main_place="space_between" style_flex_cross_place="center" scrollable="false">
-      <bind_style_if_eq name="header_pad_micro" subject="ui_breakpoint" ref_value="0"/>
-      <bind_style_if_ge name="header_pad_std" subject="ui_breakpoint" ref_value="1"/>
-      <text_heading text="Customize Macro Button" translation_tag="Customize Macro Button"/>
-      <ui_button name="btn_close" width="40" height="40" icon="close" variant="ghost" focusable="false">
-        <event_cb trigger="clicked" callback="fav_macro_config_close_cb"/>
-      </ui_button>
-    </lv_obj>
+    <!-- Header: title + close. Responsive padding handled by modal_header. -->
+    <modal_header title="Customize Macro Button" title_tag="Customize Macro Button"
+                  hide_icon="true" hide_close="false" close_callback="fav_macro_config_close_cb"/>
     <divider_horizontal/>
 
     <!-- Tab bar -->
