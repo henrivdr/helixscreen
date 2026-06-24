@@ -118,10 +118,12 @@ lv_obj_t* TimelapseInstallOverlay::create(lv_obj_t* parent) {
     // Create step progress widget programmatically (dynamic content)
     lv_obj_t* step_container = lv_obj_find_by_name(overlay_root_, "step_container");
     if (step_container) {
-        ui_step_t steps[] = {
-            {"Checking webcam", StepState::Pending},   {"Checking plugin", StepState::Pending},
-            {"Install plugin", StepState::Pending},    {"Configure Moonraker", StepState::Pending},
-            {"Restart Moonraker", StepState::Pending}, {"Verify", StepState::Pending}};
+        ui_step_t steps[] = {{lv_tr("Checking webcam"), StepState::Pending},
+                             {lv_tr("Checking plugin"), StepState::Pending},
+                             {lv_tr("Install plugin"), StepState::Pending},
+                             {lv_tr("Configure Moonraker"), StepState::Pending},
+                             {lv_tr("Restart Moonraker"), StepState::Pending},
+                             {lv_tr("Verify"), StepState::Pending}};
         step_progress_ = ui_step_progress_create(step_container, steps, STEP_COUNT, false, nullptr);
     }
 
@@ -206,7 +208,7 @@ void TimelapseInstallOverlay::hide_action_button() {
 
 void TimelapseInstallOverlay::step_check_webcam() {
     set_step(Step::CHECKING_WEBCAM);
-    set_status("Checking for webcam...");
+    set_status(lv_tr("Checking for webcam..."));
 
     if (!api_) {
         set_status(lv_tr("Not connected to printer"));

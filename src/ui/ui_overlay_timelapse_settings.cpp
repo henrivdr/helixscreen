@@ -241,10 +241,10 @@ void TimelapseSettingsOverlay::update_mode_info(int mode_index) {
     }
 
     const char* info_text = (mode_index == 1)
-                                ? "Hyperlapse captures frames at fixed time intervals. "
-                                  "Good for very long prints."
-                                : "Layer Macro captures one frame per layer change. "
-                                  "Best for most prints.";
+                                ? lv_tr("Hyperlapse captures frames at fixed time intervals. "
+                                        "Good for very long prints.")
+                                : lv_tr("Layer Macro captures one frame per layer change. "
+                                        "Best for most prints.");
 
     lv_label_set_text(mode_info_text_, info_text);
 }

@@ -282,12 +282,12 @@ void SpoolmanPanel::update_spool_count() {
     } else if (filtered_spools_.size() != cached_spools_.size()) {
         // Show filtered count: "Spoolman: 5/19 Spools"
         char buf[64];
-        snprintf(buf, sizeof(buf), "Spoolman: %zu/%zu Spool%s", filtered_spools_.size(),
+        snprintf(buf, sizeof(buf), lv_tr("Spoolman: %zu/%zu Spool%s"), filtered_spools_.size(),
                  cached_spools_.size(), cached_spools_.size() == 1 ? "" : "s");
         lv_subject_copy_string(&header_title_subject_, buf);
     } else {
         char buf[64];
-        snprintf(buf, sizeof(buf), "Spoolman: %zu Spool%s", cached_spools_.size(),
+        snprintf(buf, sizeof(buf), lv_tr("Spoolman: %zu Spool%s"), cached_spools_.size(),
                  cached_spools_.size() == 1 ? "" : "s");
         lv_subject_copy_string(&header_title_subject_, buf);
     }
@@ -515,7 +515,8 @@ void SpoolmanPanel::set_active_spool(int spool_id) {
             tok.defer([this, spool_id]() {
                 const SpoolInfo* found = find_cached_spool(spool_id);
                 std::string spool_name =
-                    found ? found->display_name() : "Spool " + std::to_string(spool_id);
+                    found ? found->display_name()
+                          : std::string(lv_tr("Spool ")) + std::to_string(spool_id);
 
                 active_spool_id_ = spool_id;
                 update_active_indicators();
@@ -644,7 +645,7 @@ void SpoolmanPanel::delete_spool(int spool_id) {
     if (spool) {
         spool_desc = spool->display_name() + " (#" + std::to_string(spool_id) + ")";
     } else {
-        spool_desc = "Spool #" + std::to_string(spool_id);
+        spool_desc = std::string(lv_tr("Spool #")) + std::to_string(spool_id);
     }
 
     std::string message = spool_desc + "\n" + lv_tr("This cannot be undone.");

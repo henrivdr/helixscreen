@@ -246,10 +246,10 @@ void LedSettingsOverlay::populate_macro_devices_impl() {
     if (macros.empty()) {
         // Empty state message
         const char* attrs[] = {
-            "label",     "No macro devices configured",
+            "label",     lv_tr("No macro devices configured"),
             "label_tag", "No macro devices configured",
             "icon",      "code_braces",
-            "value",     "Tap + to add",
+            "value",     lv_tr("Tap + to add"),
             nullptr,
         };
         lv_xml_create(container, "setting_info_row", attrs);
@@ -296,21 +296,21 @@ void LedSettingsOverlay::populate_macro_devices_impl() {
 
         // Device name
         auto* name_label = lv_label_create(header_row);
-        lv_label_set_text(name_label,
-                          macro.display_name.empty() ? "(unnamed)" : macro.display_name.c_str());
+        lv_label_set_text(name_label, macro.display_name.empty() ? lv_tr("(unnamed)")
+                                                                 : macro.display_name.c_str());
         lv_obj_set_style_text_color(name_label, text_color, 0);
 
         // Type badge
         std::string type_str;
         switch (macro.type) {
         case helix::led::MacroLedType::ON_OFF:
-            type_str = "On/Off";
+            type_str = lv_tr("On/Off");
             break;
         case helix::led::MacroLedType::TOGGLE:
-            type_str = "Toggle";
+            type_str = lv_tr("Toggle");
             break;
         case helix::led::MacroLedType::PRESET:
-            type_str = "Preset";
+            type_str = lv_tr("Preset");
             break;
         }
         auto* badge = lv_label_create(header_row);
@@ -389,19 +389,19 @@ void LedSettingsOverlay::populate_macro_devices_impl() {
             std::string summary;
             switch (macro.type) {
             case helix::led::MacroLedType::ON_OFF:
-                summary =
-                    fmt::format("ON: {} | OFF: {}", macro.on_macro.empty() ? "—" : macro.on_macro,
-                                macro.off_macro.empty() ? "—" : macro.off_macro);
+                summary = fmt::format(lv_tr("ON: {} | OFF: {}"),
+                                      macro.on_macro.empty() ? "—" : macro.on_macro,
+                                      macro.off_macro.empty() ? "—" : macro.off_macro);
                 break;
             case helix::led::MacroLedType::TOGGLE:
-                summary = fmt::format("TOGGLE: {}",
+                summary = fmt::format(lv_tr("TOGGLE: {}"),
                                       macro.toggle_macro.empty() ? "—" : macro.toggle_macro);
                 break;
             case helix::led::MacroLedType::PRESET:
                 if (macro.presets.empty()) {
-                    summary = "No presets configured";
+                    summary = lv_tr("No presets configured");
                 } else {
-                    summary = fmt::format("{} preset{}", macro.presets.size(),
+                    summary = fmt::format(lv_tr("{} preset{}"), macro.presets.size(),
                                           macro.presets.size() == 1 ? "" : "s");
                 }
                 break;
@@ -452,7 +452,8 @@ void LedSettingsOverlay::rebuild_macro_edit_controls(lv_obj_t* container, int in
     auto primary_color = theme_manager_get_color("primary");
 
     // --- Name input ---
-    const char* name_attrs[] = {"label", "Name:", "placeholder", "Device name", nullptr};
+    const char* name_attrs[] = {"label", lv_tr("Name:"), "placeholder", lv_tr("Device name"),
+                                nullptr};
     auto* name_row =
         static_cast<lv_obj_t*>(lv_xml_create(container, "setting_form_input", name_attrs));
     auto* name_ta = lv_obj_find_by_name(name_row, "input");
@@ -460,7 +461,7 @@ void LedSettingsOverlay::rebuild_macro_edit_controls(lv_obj_t* container, int in
     lv_textarea_set_text(name_ta, macro.display_name.c_str());
 
     // --- Type dropdown ---
-    const char* type_attrs[] = {"label", "Type:", nullptr};
+    const char* type_attrs[] = {"label", lv_tr("Type:"), nullptr};
     auto* type_row =
         static_cast<lv_obj_t*>(lv_xml_create(container, "setting_form_dropdown", type_attrs));
     auto* type_dd = lv_obj_find_by_name(type_row, "dropdown");
@@ -568,7 +569,7 @@ void LedSettingsOverlay::rebuild_macro_edit_controls(lv_obj_t* container, int in
         switch (macro.type) {
         case helix::led::MacroLedType::ON_OFF: {
             // On Macro dropdown
-            const char* on_attrs[] = {"label", "On:", nullptr};
+            const char* on_attrs[] = {"label", lv_tr("On:"), nullptr};
             auto* on_row =
                 static_cast<lv_obj_t*>(lv_xml_create(container, "setting_form_dropdown", on_attrs));
             auto* on_dd = lv_obj_find_by_name(on_row, "dropdown");
@@ -579,7 +580,7 @@ void LedSettingsOverlay::rebuild_macro_edit_controls(lv_obj_t* container, int in
             }
 
             // Off Macro dropdown
-            const char* off_attrs[] = {"label", "Off:", nullptr};
+            const char* off_attrs[] = {"label", lv_tr("Off:"), nullptr};
             auto* off_row = static_cast<lv_obj_t*>(
                 lv_xml_create(container, "setting_form_dropdown", off_attrs));
             auto* off_dd = lv_obj_find_by_name(off_row, "dropdown");
@@ -591,7 +592,7 @@ void LedSettingsOverlay::rebuild_macro_edit_controls(lv_obj_t* container, int in
             break;
         }
         case helix::led::MacroLedType::TOGGLE: {
-            const char* toggle_attrs[] = {"label", "Toggle:", nullptr};
+            const char* toggle_attrs[] = {"label", lv_tr("Toggle:"), nullptr};
             auto* toggle_row = static_cast<lv_obj_t*>(
                 lv_xml_create(container, "setting_form_dropdown", toggle_attrs));
             auto* toggle_dd = lv_obj_find_by_name(toggle_row, "dropdown");
@@ -693,7 +694,7 @@ void LedSettingsOverlay::rebuild_macro_edit_controls(lv_obj_t* container, int in
             lv_obj_set_style_pad_all(add_preset_btn, 8, 0);
 
             auto* add_preset_lbl = lv_label_create(add_preset_btn);
-            lv_label_set_text(add_preset_lbl, "+ Add Preset");
+            lv_label_set_text(add_preset_lbl, lv_tr("+ Add Preset"));
             lv_obj_set_style_text_color(add_preset_lbl, primary_color, 0);
             lv_obj_center(add_preset_lbl);
 
@@ -1181,17 +1182,17 @@ void LedSettingsOverlay::populate_auto_state_rows() {
             options_str += "\n";
         const auto& opt = action_type_options_[i];
         if (opt == "off")
-            options_str += "Off";
+            options_str += lv_tr("Off");
         else if (opt == "brightness")
-            options_str += "Brightness";
+            options_str += lv_tr("Brightness");
         else if (opt == "color")
-            options_str += "Color";
+            options_str += lv_tr("Color");
         else if (opt == "effect")
-            options_str += "Effect";
+            options_str += lv_tr("Effect");
         else if (opt == "wled_preset")
-            options_str += "WLED Preset";
+            options_str += lv_tr("WLED Preset");
         else if (opt == "macro")
-            options_str += "Macro";
+            options_str += lv_tr("Macro");
     }
 
     for (const auto& state : STATE_ROWS) {
@@ -1205,7 +1206,7 @@ void LedSettingsOverlay::populate_auto_state_rows() {
         }
 
         // --- Main row: icon + label + dropdown (always visible) ---
-        const char* row_attrs[] = {"label", state.display_name, "icon", state.icon, nullptr};
+        const char* row_attrs[] = {"label", lv_tr(state.display_name), "icon", state.icon, nullptr};
         auto* row =
             static_cast<lv_obj_t*>(lv_xml_create(container, "setting_state_row", row_attrs));
         auto* dropdown = lv_obj_find_by_name(row, "dropdown");

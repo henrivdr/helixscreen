@@ -108,8 +108,9 @@ void AmsEnvironmentOverlay::init_subjects() {
             snprintf(name, sizeof(name), "ams_env_comfort_%d_text", i);
             UI_MANAGED_SUBJECT_STRING(comfort_text_[i], comfort_text_buf_[i], "", name, subjects_);
         }
-        UI_MANAGED_SUBJECT_STRING(start_stop_text_subject_, start_stop_text_buf_, "Start Drying",
-                                  "ams_env_overlay_start_stop_text", subjects_);
+        UI_MANAGED_SUBJECT_STRING(start_stop_text_subject_, start_stop_text_buf_,
+                                  lv_tr("Start Drying"), "ams_env_overlay_start_stop_text",
+                                  subjects_);
         UI_MANAGED_SUBJECT_STRING(preset_text_subject_, preset_text_buf_, "",
                                   "ams_env_overlay_preset_text", subjects_);
     });
@@ -340,9 +341,7 @@ void AmsEnvironmentOverlay::update_from_backend() {
     // Update temp range label with backend limits (e.g., "Temp °C (35-55)")
     if (temp_range_label_ && dryer.supported) {
         char range_buf[32];
-        snprintf(range_buf, sizeof(range_buf),
-                 "Temp \xC2\xB0"
-                 "C (%d\xe2\x80\x93%d)",
+        snprintf(range_buf, sizeof(range_buf), lv_tr("Temp °C (%d–%d)"),
                  static_cast<int>(dryer.min_temp_c), static_cast<int>(dryer.max_temp_c));
         lv_label_set_text(temp_range_label_, range_buf);
     }

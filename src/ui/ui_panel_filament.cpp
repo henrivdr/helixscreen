@@ -79,11 +79,11 @@ FilamentPanel::FilamentPanel(PrinterState& printer_state, MoonrakerAPI* api)
     // Initialize buffer contents with default values
     std::snprintf(temp_display_buf_, sizeof(temp_display_buf_), "%d / %d°C", nozzle_current_,
                   nozzle_target_);
-    std::snprintf(status_buf_, sizeof(status_buf_), "%s", "Select material to begin");
-    std::snprintf(warning_temps_buf_, sizeof(warning_temps_buf_), "Current: %d°C | Target: %d°C",
-                  nozzle_current_, nozzle_target_);
-    std::snprintf(safety_warning_text_buf_, sizeof(safety_warning_text_buf_), SAFETY_WARNING_FMT,
-                  min_extrude_temp_);
+    std::snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("Select material to begin"));
+    std::snprintf(warning_temps_buf_, sizeof(warning_temps_buf_),
+                  lv_tr("Current: %d°C | Target: %d°C"), nozzle_current_, nozzle_target_);
+    std::snprintf(safety_warning_text_buf_, sizeof(safety_warning_text_buf_),
+                  lv_tr(SAFETY_WARNING_FMT), min_extrude_temp_);
     format_target_or_off(0, material_nozzle_buf_, sizeof(material_nozzle_buf_));
     format_target_or_off(0, material_bed_buf_, sizeof(material_bed_buf_));
     std::snprintf(nozzle_current_buf_, sizeof(nozzle_current_buf_), "%d°C", nozzle_current_);
@@ -243,7 +243,7 @@ void FilamentPanel::init_subjects() {
                                   "filament_material_bed_temp", subjects_);
 
         // Nozzle label (dynamic for multi-tool)
-        UI_MANAGED_SUBJECT_STRING(nozzle_label_subject_, nozzle_label_buf_, "Nozzle",
+        UI_MANAGED_SUBJECT_STRING(nozzle_label_subject_, nozzle_label_buf_, lv_tr("Nozzle"),
                                   "filament_nozzle_label", subjects_);
 
         // Left card temperature subjects (current and target for nozzle/bed)
@@ -526,7 +526,7 @@ void FilamentPanel::update_status() {
     // First check if nozzle is ready for extrusion (highest priority for filament operations)
     if (helix::ui::temperature::is_extrusion_safe(nozzle_current_, min_extrude_temp_)) {
         // Hot enough - ready to load
-        status_msg = "Ready to load";
+        status_msg = lv_tr("Ready to load");
         update_status_icon("check", "success");
     } else if (nozzle_target_ >= min_extrude_temp_) {
         // Nozzle heating in progress — show current AND target so the user can
@@ -555,7 +555,7 @@ void FilamentPanel::update_status() {
         return;
     } else {
         // Cold - needs material selection
-        status_msg = "Select material to begin";
+        status_msg = lv_tr("Select material to begin");
         update_status_icon("cooldown", "secondary");
     }
 
@@ -563,8 +563,8 @@ void FilamentPanel::update_status() {
 }
 
 void FilamentPanel::update_warning_text() {
-    std::snprintf(warning_temps_buf_, sizeof(warning_temps_buf_), "Current: %d°C | Target: %d°C",
-                  nozzle_current_, nozzle_target_);
+    std::snprintf(warning_temps_buf_, sizeof(warning_temps_buf_),
+                  lv_tr("Current: %d°C | Target: %d°C"), nozzle_current_, nozzle_target_);
     lv_subject_copy_string(&warning_temps_subject_, warning_temps_buf_);
 }
 
@@ -1447,7 +1447,7 @@ void FilamentPanel::update_external_spool_from_state() {
             } else if (!ext->material.empty()) {
                 mat_text = ext->material;
             } else {
-                mat_text = "Unknown";
+                mat_text = lv_tr("Unknown");
             }
             // Append Spoolman spool ID when linked (e.g., "Prusament PLA #129")
             if (ext->spoolman_id > 0) {
@@ -2208,7 +2208,7 @@ void FilamentPanel::set_limits(int min_temp, int max_temp, int min_extrude_temp)
     if (min_extrude_temp_ != min_extrude_temp) {
         min_extrude_temp_ = min_extrude_temp;
         std::snprintf(safety_warning_text_buf_, sizeof(safety_warning_text_buf_),
-                      SAFETY_WARNING_FMT, min_extrude_temp_);
+                      lv_tr(SAFETY_WARNING_FMT), min_extrude_temp_);
         lv_subject_copy_string(&safety_warning_text_subject_, safety_warning_text_buf_);
         spdlog::info("[{}] Min extrusion temp updated: {}°C", get_name(), min_extrude_temp_);
     }

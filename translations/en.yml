@@ -4,12 +4,24 @@ translations:
   ' elapsed · ': ' elapsed · '
   ' frames': ' frames'
   ' left': ' left'
+  '%.1f Hz difference': '%.1f Hz difference'
+  '%d additional fan%s': '%d additional fan%s'
+  '%d disabled': '%d disabled'
+  '%d failed to load - see details below': '%d failed to load - see details below'
   '%d more sensors': '%d more sensors'
+  '%d of %d plugins loaded': '%d of %d plugins loaded'
+  '%d plugins loaded': '%d plugins loaded'
+  '%d slots': '%d slots'
   '%lu days ago': '%lu days ago'
   '%lu hours ago': '%lu hours ago'
   '%lu min ago': '%lu min ago'
   '%u layers': '%u layers'
   '%zu changes': '%zu changes'
+  '%zu events queued': '%zu events queued'
+  (incompatible): (incompatible)
+  (multi-tool): (multi-tool)
+  (none detected): (none detected)
+  (unnamed): (unnamed)
   + Add: + Add
   + Add Preset: + Add Preset
   + Add Printer: + Add Printer
@@ -25,6 +37,7 @@ translations:
   --°C: --°C
   -0.5 Hz: -0.5 Hz
   0 = computed: 0 = computed
+  0 events queued: 0 events queued
   0 slots: 0 slots
   0.4-2mm direct drive, 4-6mm bowden: 0.4-2mm direct drive, 4-6mm bowden
   0°: 0°
@@ -35,6 +48,7 @@ translations:
   1 min ago: 1 min ago
   1 minute: 1 minute
   1 more tap to {} beta features: 1 more tap to {} beta features
+  1 plugin loaded: 1 plugin loaded
   1. Printer homes and probes the bed: 1. Printer homes and probes the bed
   1. Printer will home and probe each screw: 1. Printer will home and probe each screw
   10 minutes: 10 minutes
@@ -83,6 +97,7 @@ translations:
     the toolhead at end of print
   ALL DEVICES: ALL DEVICES
   AMS: AMS
+  'AMS Active: ': 'AMS Active: '
   API not available: API not available
   APPEARANCE: APPEARANCE
   AUTO FANS: AUTO FANS
@@ -114,6 +129,8 @@ translations:
   Add Widget: Add Widget
   Added to Spoolman: Added to Spoolman
   Address: Address
+  Adjust belt tension until the belt appears stationary: Adjust belt tension until
+    the belt appears stationary
   Adjust screen brightness level: Adjust screen brightness level
   Adjust screws, then re-probe.: Adjust screws, then re-probe.
   Adjust until belt appears frozen: Adjust until belt appears frozen
@@ -129,6 +146,8 @@ translations:
   All: All
   All Devices: All Devices
   All axes homed: All axes homed
+  All fields are required: All fields are required
+  All plugins loaded successfully: All plugins loaded successfully
   Allow cold load/unload: Allow cold load/unload
   Allow display to sleep during active prints: Allow display to sleep during active
     prints
@@ -142,6 +161,8 @@ translations:
   An accelerometer was detected on your printer.: An accelerometer was detected on
     your printer.
   An error occurred during calibration.: An error occurred during calibration.
+  An error occurred during filament loading.: An error occurred during filament loading.
+  An error occurred during measurement.: An error occurred during measurement.
   An error occurred during probing.: An error occurred during probing.
   An error occurred while loading filament.: An error occurred while loading filament.
   An unexpected printer error occurred.: An unexpected printer error occurred.
@@ -184,6 +205,7 @@ translations:
   Automatic LED Control: Automatic LED Control
   Aux: Aux
   Available: Available
+  Available (%s): Available (%s)
   Available Networks: Available Networks
   Available networks: Available networks
   Average: Average
@@ -194,6 +216,7 @@ translations:
   BLUETOOTH SCANNERS: BLUETOOTH SCANNERS
   Back: Back
   Back to Results: Back to Results
+  'Backtrace: {} frames': 'Backtrace: {} frames'
   Barcode Scanner: Barcode Scanner
   Beacon auto-calibrate sent: Beacon auto-calibrate sent
   Beacon calibrate sent: Beacon calibrate sent
@@ -214,9 +237,12 @@ translations:
   Bed is Level!: Bed is Level!
   Bed mesh operation timed out: Bed mesh operation timed out
   Bed target set to {}°C: Bed target set to {}°C
+  Bed temp must be 0-200°C: Bed temp must be 0-200°C
   Bed warming timed out: Bed warming timed out
   Bed °C: Bed °C
   'Bed:': 'Bed:'
+  Belt A frequency locked: Belt A frequency locked
+  Belt B frequency locked: Belt B frequency locked
   Belt Tension: Belt Tension
   Belt Tension Check: Belt Tension Check
   Belt tension looks good!: Belt tension looks good!
@@ -255,6 +281,7 @@ translations:
   Browse guides, configuration references, and troubleshooting resources for HelixScreen.: Browse
     guides, configuration references, and troubleshooting resources for HelixScreen.
   Buffer Status: Buffer Status
+  'Build Volume: ': 'Build Volume: '
   Bundle Uploaded: Bundle Uploaded
   Button taps and navigation sounds: Button taps and navigation sounds
   Bypass: Bypass
@@ -276,6 +303,7 @@ translations:
   CONNECTION TYPE: CONNECTION TYPE
   CONTROLLABLE FANS: CONTROLLABLE FANS
   CPU: CPU
+  'CPU: ': 'CPU: '
   CRITICAL: CRITICAL
   CURRENT SELECTION: CURRENT SELECTION
   CUSTOM IMAGES: CUSTOM IMAGES
@@ -308,6 +336,8 @@ translations:
     apply on SDL display
   Calibration started: Calibration started
   Calibration timed out. Please try again.: Calibration timed out. Please try again.
+  Calibrator not initialized. Try reopening the panel.: Calibrator not initialized.
+    Try reopening the panel.
   Camera: Camera
   Can't connect — try forgetting and re-pairing the printer: Can't connect — try forgetting
     and re-pairing the printer
@@ -334,9 +364,11 @@ translations:
   'Cannot start print: not connected to printer': 'Cannot start print: not connected
     to printer'
   'Cannot start print: printer is {}': 'Cannot start print: printer is {}'
+  'Capabilities: ': 'Capabilities: '
   Cartographer scan calibrate sent — use Z-Offset panel to adjust: Cartographer scan
     calibrate sent — use Z-Offset panel to adjust
   Cartographer touch calibrate sent: Cartographer touch calibrate sent
+  Category: Category
   Center QR code in frame: Center QR code in frame
   'Chamb:': 'Chamb:'
   Chamber: Chamber
@@ -377,8 +409,11 @@ translations:
   Checking accelerometer...: Checking accelerometer...
   Checking filament...: Checking filament...
   Checking for plugin...: Checking for plugin...
+  Checking for webcam...: Checking for webcam...
+  Checking plugin: Checking plugin
   Checking slots...: Checking slots...
   Checking timelapse plugin...: Checking timelapse plugin...
+  Checking webcam: Checking webcam
   Choose 12-hour or 24-hour time display: Choose 12-hour or 24-hour time display
   Choose Spool: Choose Spool
   Choose an existing filament, or tap + New to create one.: Choose an existing filament,
@@ -410,6 +445,7 @@ translations:
   Closer = more squish | Farther = less squish: Closer = more squish | Farther = less
     squish
   Coarse: Coarse
+  Code: Code
   Coil Temperature: Coil Temperature
   Collect logs and system info for support: Collect logs and system info for support
   Collecting data...: Collecting data...
@@ -421,6 +457,7 @@ translations:
   Complete: Complete
   Complete!: Complete!
   Completed: Completed
+  Completed in %d probe%s: Completed in %d probe%s
   Completed prints will appear here: Completed prints will appear here
   Computing calibration...: Computing calibration...
   Config Dir: Config Dir
@@ -432,6 +469,7 @@ translations:
   Configure Fan Widget: Configure Fan Widget
   Configure G10/G11 firmware retraction: Configure G10/G11 firmware retraction
   Configure Graph: Configure Graph
+  Configure Moonraker: Configure Moonraker
   Configure PRINT_START: Configure PRINT_START
   Configure Spoolman integration and weight sync settings.: Configure Spoolman integration
     and weight sync settings.
@@ -445,6 +483,7 @@ translations:
   Configure timelapse recording: Configure timelapse recording
   Configure your printer's cooling fans: Configure your printer's cooling fans
   Configuring Moonraker...: Configuring Moonraker...
+  Confirm PIN: Confirm PIN
   Confirm before running macros: Confirm before running macros
   Connect: Connect
   Connect a USB label printer first: Connect a USB label printer first
@@ -454,8 +493,10 @@ translations:
     run:'
   Connected: Connected
   Connected (%s): Connected (%s)
+  Connected (auto-sweep): Connected (auto-sweep)
   Connected (no discovery): Connected (no discovery)
   Connected (system-managed network): Connected (system-managed network)
+  Connected Time: Connected Time
   Connected to: Connected to
   'Connected to ': 'Connected to '
   Connected! Discovering printer...: Connected! Discovering printer...
@@ -466,6 +507,7 @@ translations:
   Connecting to network...: Connecting to network...
   Connecting...: Connecting...
   Connection: Connection
+  Connection Stability: Connection Stability
   Connection failed: Connection failed
   Connection failed. Check IP/port and try again.: Connection failed. Check IP/port
     and try again.
@@ -476,8 +518,10 @@ translations:
     to continue
   Connection successful!: Connection successful!
   Connection timeout: Connection timeout
+  Connects: Connects
   Console: Console
   Console Settings: Console Settings
+  Context: Context
   Control optional print start features: Control optional print start features
   Control power relays and smart outlets: Control power relays and smart outlets
   Controlled by hardware sensor: Controlled by hardware sensor
@@ -500,6 +544,7 @@ translations:
     verify Spoolman status. Moonraker may still be restarting.
   Couldn't update Spoolman — saved locally: Couldn't update Spoolman — saved locally
   Cover open: Cover open
+  Crash Report: Crash Report
   Crash report sent — thank you!: Crash report sent — thank you!
   Creality CFS: Creality CFS
   Creality K1: Creality K1
@@ -520,6 +565,7 @@ translations:
   Current Z Position: Current Z Position
   'Current name:': 'Current name:'
   'Current:': 'Current:'
+  'Current: %d°C | Target: %d°C': 'Current: %d°C | Target: %d°C'
   'Current: %s · Slot %d': 'Current: %s · Slot %d'
   'Current: Bypass': 'Current: Bypass'
   'Current: Slot %d': 'Current: Slot %d'
@@ -551,22 +597,28 @@ translations:
     pixels (raise if taps register as swipes; 0 disables)
   Debug: Debug
   Default border thickness: Default border thickness
+  'Default: %d-%d°C nozzle, %d°C bed': 'Default: %d-%d°C nozzle, %d°C bed'
   Define macros in your printer.cfg: Define macros in your printer.cfg
   Delete: Delete
   Delete File?: Delete File?
   Delete Profile?: Delete Profile?
   Delete Spool?: Delete Spool?
+  Delete Video: Delete Video
+  Delete {}?: Delete {}?
   'Delta:': 'Delta:'
   Deploy: Deploy
   Describe the issue (optional): Describe the issue (optional)
   Detailed: Detailed
   Detecting printer type...: Detecting printer type...
+  Detecting...: Detecting...
   Detection Length: Detection Length
   Detection Mode: Detection Mode
   Dev: Dev
   Dev channel requires dev_url in config: Dev channel requires dev_url in config
   Device: Device
+  Device name: Device name
   Device name is required: Device name is required
+  'Device: ': 'Device: '
   Disable: Disable
   Disable Motors?: Disable Motors?
   Disable the security PIN: Disable the security PIN
@@ -574,12 +626,15 @@ translations:
   Discard: Discard
   Discard Changes?: Discard Changes?
   Disconnected: Disconnected
+  Disconnected Time: Disconnected Time
+  Disconnects: Disconnects
   Discord Community: Discord Community
   Discovered Printers: Discovered Printers
   Dismiss: Dismiss
   Display & Sound: Display & Sound
   Display Mode: Display Mode
   Display Sleep: Display Sleep
+  'Display: ': 'Display: '
   Do not power off your printer.: Do not power off your printer.
   Do not touch the printer during calibration: Do not touch the printer during calibration
   Dock: Dock
@@ -612,8 +667,10 @@ translations:
   Edit Preset: Edit Preset
   Edit Slot 1: Edit Slot 1
   Edit Spool: Edit Spool
+  'Edit Spool #{}': 'Edit Spool #{}'
   Edit Theme Colors: Edit Theme Colors
   Edit Theme Colors (Modified): Edit Theme Colors (Modified)
+  Effect: Effect
   Effects: Effects
   Eject: Eject
   Eject Distance: Eject Distance
@@ -647,6 +704,7 @@ translations:
   Ended: Ended
   Enhancement Complete!: Enhancement Complete!
   Enhancement Failed: Enhancement Failed
+  Enter Current PIN: Enter Current PIN
   Enter G-code command...: Enter G-code command...
   Enter New PIN: Enter New PIN
   Enter PIN: Enter PIN
@@ -665,6 +723,7 @@ translations:
   Escalate to emergency stop if cancel doesn't respond: Escalate to emergency stop
     if cancel doesn't respond
   Escalation Timeout: Escalation Timeout
+  Est. Duration: Est. Duration
   Estimating...: Estimating...
   Ethernet: Ethernet
   Events appear here after sessions and prints: Events appear here after sessions
@@ -675,10 +734,12 @@ translations:
   Exclusion cancelled: Exclusion cancelled
   Execute printer macros: Execute printer macros
   Exhaust Fan: Exhaust Fan
+  Exit Code: Exit Code
   Explore how the selected palette shapes text, controls, and status colors.: Explore
     how the selected palette shapes text, controls, and status colors.
   Explore palette and preview: Explore palette and preview
   External: External
+  External Filament: External Filament
   External Spool: External Spool
   External spool cleared: External spool cleared
   External spool updated: External spool updated
@@ -710,6 +771,9 @@ translations:
   'Failed to connect to ''{}'': {}': 'Failed to connect to ''{}'': {}'
   'Failed to connect: %s': 'Failed to connect: %s'
   'Failed to cool down: {}': 'Failed to cool down: {}'
+  'Failed to create filament:': 'Failed to create filament:'
+  'Failed to create spool:': 'Failed to create spool:'
+  'Failed to create vendor:': 'Failed to create vendor:'
   Failed to delete file: Failed to delete file
   Failed to delete profile: Failed to delete profile
   Failed to delete spool: Failed to delete spool
@@ -726,6 +790,7 @@ translations:
   'Failed to exclude ''{}'': {}': 'Failed to exclude ''{}'': {}'
   Failed to get limits: Failed to get limits
   Failed to load G-code preview: Failed to load G-code preview
+  Failed to load devices: Failed to load devices
   Failed to load fan configuration screen: Failed to load fan configuration screen
   Failed to load fan control overlay: Failed to load fan control overlay
   Failed to load filament sensor configuration screen. Please restart the application.: Failed
@@ -780,6 +845,7 @@ translations:
   Failed to show confirmation dialog: Failed to show confirmation dialog
   Failed to start calibration: Failed to start calibration
   'Failed to start print: {}': 'Failed to start print: {}'
+  Failed to toggle %s: Failed to toggle %s
   'Failed to toggle timelapse: {}': 'Failed to toggle timelapse: {}'
   'Failed to turn off heaters: {}': 'Failed to turn off heaters: {}'
   'Failed to unload: {}': 'Failed to unload: {}'
@@ -791,12 +857,14 @@ translations:
   Failed to update phase tracking: Failed to update phase tracking
   'Failed to upload modified G-code: {}': 'Failed to upload modified G-code: {}'
   'Failed to upload remapped G-code: {}': 'Failed to upload remapped G-code: {}'
+  Fan: Fan
   Fan Calibration: Fan Calibration
   Fan Transfer: Fan Transfer
   'Fan control failed: {}': 'Fan control failed: {}'
   FanSelect: FanSelect
   Fans: Fans
   Farther: Farther
+  'Features: ': 'Features: '
   Feed filament: Feed filament
   Feed filament directly to extruder: Feed filament directly to extruder
   Feeding filament forward: Feeding filament forward
@@ -829,6 +897,7 @@ translations:
   FilamentSensor: FilamentSensor
   File: File
   File Info: File Info
+  File Size: File Size
   Filename: Filename
   'Fill: 100% / 75% / 40% / 10%': 'Fill: 100% / 75% / 40% / 10%'
   Fine: Fine
@@ -857,7 +926,14 @@ translations:
   Framerate: Framerate
   Freq Graph: Freq Graph
   Frequency Delta: Frequency Delta
+  ? 'Frequency Delta: Difference between Path A and B. Ideally under 5 Hz; over 15
+    Hz needs adjustment.\n\nPath Similarity: How closely the vibration profiles match.
+    Above 90% is excellent; below 70% suggests uneven tension.'
+  : 'Frequency Delta: Difference between Path A and B. Ideally under 5 Hz; over 15
+    Hz needs adjustment.\n\nPath Similarity: How closely the vibration profiles match.
+    Above 90% is excellent; below 70% suggests uneven tension.'
   From Buffer: From Buffer
+  From Version: From Version
   Front: Front
   Full: Full
   G-code Console: G-code Console
@@ -875,6 +951,7 @@ translations:
   Guides and reference: Guides and reference
   H: H
   HOST: HOST
+  HTTP Code: HTTP Code
   HUMIDITY SENSORS: HUMIDITY SENSORS
   Hang on, we'll be right back!: Hang on, we'll be right back!
   Happy Hare MMU: Happy Hare MMU
@@ -883,6 +960,7 @@ translations:
   Hardware Health: Hardware Health
   Hardware Issues: Hardware Issues
   Hardware Name: Hardware Name
+  Hardware Profile: Hardware Profile
   Hardware is validated on startup and reconnection: Hardware is validated on startup
     and reconnection
   Hardware marked as optional: Hardware marked as optional
@@ -930,6 +1008,7 @@ translations:
   Help improve HelixScreen?: Help improve HelixScreen?
   Hide Firmware Noise: Hide Firmware Noise
   Hide Temperature Reports: Hide Temperature Reports
+  High Water Mark: High Water Mark
   Home: Home
   Home failed: Home failed
   Home selector: Home selector
@@ -939,15 +1018,19 @@ translations:
   Homing Y...: Homing Y...
   Homing Z...: Homing Z...
   Homing all axes...: Homing all axes...
+  'Homing failed: ': 'Homing failed: '
   'Homing failed: {}': 'Homing failed: {}'
   Homing first...: Homing first...
   Homing may still be running — response timed out: Homing may still be running —
     response timed out
   Homing timed out: Homing timed out
+  Homing timed out — printer may still be homing: Homing timed out — printer may still
+    be homing
   Homing...: Homing...
   Horizontal: Horizontal
   Horizontal Progress (Leveling Wizard): Horizontal Progress (Leveling Wizard)
   Host: Host
+  'Host: ': 'Host: '
   Hotend: Hotend
   Hotend Fan: Hotend Fan
   Hotend Heater: Hotend Heater
@@ -959,6 +1042,8 @@ translations:
   How the toolhead icon appears: How the toolhead icon appears
   Humidity: Humidity
   Hyperlapse: Hyperlapse
+  Hyperlapse captures frames at fixed time intervals. Good for very long prints.: Hyperlapse
+    captures frames at fixed time intervals. Good for very long prints.
   IMPORT FROM USB: IMPORT FROM USB
   IP Address / Hostname: IP Address / Hostname
   'IP:': 'IP:'
@@ -975,6 +1060,8 @@ translations:
   In Progress: In Progress
   Inactive: Inactive
   Include Klipper/Moonraker logs: Include Klipper/Moonraker logs
+  'Incompatible materials: {} cannot use {} as backup': 'Incompatible materials: {}
+    cannot use {} as backup'
   Indexing G-code...: Indexing G-code...
   Info: Info
   Initializing...: Initializing...
@@ -989,6 +1076,7 @@ translations:
     fast movements.
   Input shaping reduces vibration artifacts (ringing) in your prints.: Input shaping
     reduces vibration artifacts (ringing) in your prints.
+  'Input: ': 'Input: '
   InputShaper: InputShaper
   Insert filament before resuming: Insert filament before resuming
   Install: Install
@@ -996,6 +1084,7 @@ translations:
   Install Plugin: Install Plugin
   Install Root: Install Root
   Install Update: Install Update
+  Install plugin: Install plugin
   Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Install
     the HelixPrint plugin in Advanced settings to remap filament without affecting
     print history.
@@ -1010,6 +1099,7 @@ translations:
   Installing...: Installing...
   Intensity: Intensity
   Interactive probe calibration: Interactive probe calibration
+  'Internal error: API not available': 'Internal error: API not available'
   'Internal error: no scan result': 'Internal error: no scan result'
   Invalid port number: Invalid port number
   Issue description: Issue description
@@ -1039,6 +1129,9 @@ translations:
   Klipper will restart to apply changes: Klipper will restart to apply changes
   Klipper will restart to apply changes.: Klipper will restart to apply changes.
   Klipper will restart to apply new settings.: Klipper will restart to apply new settings.
+  'Klipper: ': 'Klipper: '
+  Klippy Errors: Klippy Errors
+  Klippy Shutdowns: Klippy Shutdowns
   LED SELECTION: LED SELECTION
   LED Settings: LED Settings
   LED Strip: LED Strip
@@ -1064,6 +1157,8 @@ translations:
   Later: Later
   Layer: Layer
   Layer Height: Layer Height
+  Layer Macro captures one frame per layer change. Best for most prints.: Layer Macro
+    captures one frame per layer change. Best for most prints.
   Layer mode captures one frame per layer change. Best for most prints.: Layer mode
     captures one frame per layer change. Best for most prints.
   'Layer:': 'Layer:'
@@ -1092,6 +1187,7 @@ translations:
   Loading Error: Loading Error
   Loading Filament...: Loading Filament...
   Loading G-code...: Loading G-code...
+  Loading devices...: Loading devices...
   Loading filament ({}mm)...: Loading filament ({}mm)...
   Loading filament...: Loading filament...
   Loading filaments...: Loading filaments...
@@ -1099,6 +1195,8 @@ translations:
   Loading spools...: Loading spools...
   Loading vendors...: Loading vendors...
   Loading...: Loading...
+  Locale: Locale
+  'Locale: ': 'Locale: '
   Location: Location
   Lock: Lock
   Lock A: Lock A
@@ -1107,6 +1205,7 @@ translations:
   Locked during print: Locked during print
   Log Level: Log Level
   Logs: Logs
+  Longest Disconnect: Longest Disconnect
   Loosen Path A belt.: Loosen Path A belt.
   Loosen Path B belt.: Loosen Path B belt.
   Lost connection during print — try again: Lost connection during print — try again
@@ -1117,9 +1216,11 @@ translations:
   MACRO DEVICES: MACRO DEVICES
   MAIN POWER BUTTON: MAIN POWER BUTTON
   MANUAL: MANUAL
+  MB RAM: MB RAM
   MCU: MCU
   MCU, host, and auxiliary temperature monitoring: MCU, host, and auxiliary temperature
     monitoring
+  'MCU: ': 'MCU: '
   MDI Icons: MDI Icons
   MISSING CONFIGURED: MISSING CONFIGURED
   'MMU command failed: {}': 'MMU command failed: {}'
@@ -1182,9 +1283,12 @@ translations:
   Measure belt path frequencies: Measure belt path frequencies
   Measured: Measured
   Measurement Failed: Measurement Failed
+  Measuring Path A... %d%%: Measuring Path A... %d%%
+  Measuring Path B... %d%%: Measuring Path B... %d%%
   Mechanical setup: Mechanical setup
   Memory: Memory
   Memory (MB): Memory (MB)
+  Memory Snapshot: Memory Snapshot
   Mesh Complete: Mesh Complete
   Mesh saved as '{}': Mesh saved as '{}'
   Method: Method
@@ -1201,6 +1305,7 @@ translations:
     but Spoolman not connected. Check server.
   Moonraker restarting...\nWaiting for reconnection...: Moonraker restarting...\nWaiting
     for reconnection...
+  'Moonraker: ': 'Moonraker: '
   More points = more accurate, but takes longer.: More points = more accurate, but
     takes longer.
   Motion: Motion
@@ -1230,6 +1335,7 @@ translations:
   NEWLY DISCOVERED: NEWLY DISCOVERED
   Name: Name
   Name (optional): Name (optional)
+  'Name:': 'Name:'
   Named actions in the LED control panel (long-press).: Named actions in the LED control
     panel (long-press).
   Needs adjustment: Needs adjustment
@@ -1244,12 +1350,15 @@ translations:
   Never: Never
   'New Spool: Step ': 'New Spool: Step '
   'New Spool: Step 1 of 3': 'New Spool: Step 1 of 3'
+  'New Spool: Step {} of {}': 'New Spool: Step {} of {}'
   New Version Available: New Version Available
   New fan name: New fan name
   New printer successfully added: New printer successfully added
   New profile name: New profile name
   Next: Next
   Niimbot (Bluetooth): Niimbot (Bluetooth)
+  'No': 'No'
+  No API connection: No API connection
   No Bluetooth printer selected — pick one in settings: No Bluetooth printer selected
     — pick one in settings
   No Bluetooth printers found: No Bluetooth printers found
@@ -1263,6 +1372,7 @@ translations:
   No Multi-Filament System connected: No Multi-Filament System connected
   No Multi-Filament System connected.: No Multi-Filament System connected.
   No PRINT_START macro found: No PRINT_START macro found
+  No PWM LED detected for strobe mode: No PWM LED detected for strobe mode
   No Power Devices: No Power Devices
   No Spool: No Spool
   No Spools: No Spools
@@ -1272,6 +1382,7 @@ translations:
   No changes selected.\n\nClick Cancel to close.: No changes selected.\n\nClick Cancel
     to close.
   No changes to revert: No changes to revert
+  No color: No color
   No dryer available. Store filament in a sealed dry box with desiccant for best results.: No
     dryer available. Store filament in a sealed dry box with desiccant for best results.
   No effects available: No effects available
@@ -1286,6 +1397,7 @@ translations:
   No jobs in queue: No jobs in queue
   No light configured. Set up in Settings > LED Settings.: No light configured. Set
     up in Settings > LED Settings.
+  No macro devices configured: No macro devices configured
   No macros available: No macros available
   No macros found: No macros found
   No matching prints: No matching prints
@@ -1297,7 +1409,10 @@ translations:
   No networks found: No networks found
   No notifications: No notifications
   No objects defined for this print: No objects defined for this print
+  No plugins: No plugins
+  No plugins discovered: No plugins discovered
   No plugins found: No plugins found
+  No presets configured: No presets configured
   No preview: No preview
   No print history found: No print history found
   No print history yet: No print history yet
@@ -1316,6 +1431,7 @@ translations:
   No webcam detected.\nA webcam is required for timelapse.: No webcam detected.\nA
     webcam is required for timelapse.
   None: None
+  None (disable): None (disable)
   Not Enough Filament: Not Enough Filament
   Not Now: Not Now
   Not calibrated: Not calibrated
@@ -1323,6 +1439,9 @@ translations:
   Not connected: Not connected
   Not connected to printer: Not connected to printer
   Not connected to printer.: Not connected to printer.
+  Not detected: Not detected
+  Not found (strobe only): Not found (strobe only)
+  Not found (use phone app): Not found (use phone app)
   Not yet calibrated: Not yet calibrated
   Notes: Notes
   Notes (optional): Notes (optional)
@@ -1341,20 +1460,27 @@ translations:
   Nozzle Temperature: Nozzle Temperature
   Nozzle Temps: Nozzle Temps
   Nozzle heater turned off: Nozzle heater turned off
+  Nozzle min cannot exceed max: Nozzle min cannot exceed max
   Nozzle target set to {}°C: Nozzle target set to {}°C
+  Nozzle temp must be 100-500°C: Nozzle temp must be 100-500°C
   Nozzle °C: Nozzle °C
   'Nozzle:': 'Nozzle:'
   OD: OD
   'OFF': 'OFF'
   OK: OK
   'ON': 'ON'
+  'ON: {} | OFF: {}': 'ON: {} | OFF: {}'
   OS: OS
+  'OS: ': 'OS: '
   Object positions unavailable: Object positions unavailable
   Objects: Objects
   'Off': 'Off'
+  'Off:': 'Off:'
   'On': 'On'
   On and Off macros must be different: On and Off macros must be different
+  On/Off: On/Off
   On/Off (state-aware): On/Off (state-aware)
+  'On:': 'On:'
   One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: One
     or more tools required by this file have no filament loaded. The print will likely
     fail. Print anyway?
@@ -1371,16 +1497,23 @@ translations:
   Or Enter Manually: Or Enter Manually
   Oscillating... cycle %d/%d: Oscillating... cycle %d/%d
   Out of range: Out of range
+  Outcome: Outcome
   Output Device: Output Device
   Output Mode: Output Mode
   Output Pin: Output Pin
   Overheating: Overheating
+  'Overlay Visits: ': 'Overlay Visits: '
+  Overlays Opened: Overlays Opened
   Override auto-detection if your chamber sensor or heater isn't named 'chamber'.: Override
     auto-detection if your chamber sensor or heater isn't named 'chamber'.
   P: P
   PA: PA
   PETG: PETG
   PID: PID
+  PIN must be 4-6 digits: PIN must be 4-6 digits
+  PIN removed: PIN removed
+  PIN set: PIN set
+  PINs don't match: PINs don't match
   PLA: PLA
   PLA - Black: PLA - Black
   POWER: POWER
@@ -1399,6 +1532,7 @@ translations:
     Pair again.
   Pairing failed: Pairing failed
   Pairing...: Pairing...
+  Panel Usage: Panel Usage
   Paper Test Calibration: Paper Test Calibration
   Parameters: Parameters
   Part: Part
@@ -1432,13 +1566,17 @@ translations:
   'Place image files (PNG, JPEG, BMP, GIF) in config/custom_images/. Max size: 2048×2048 pixels.': 'Place
     image files (PNG, JPEG, BMP, GIF) in config/custom_images/. Max size: 2048×2048
     pixels.'
+  Place plugins in the plugins directory: Place plugins in the plugins directory
   Place plugins in the plugins directory to extend HelixScreen: Place plugins in the
     plugins directory to extend HelixScreen
   Placed: Placed
+  Platform: Platform
+  'Platform: ': 'Platform: '
   Play / stop Crockett's Theme: Play / stop Crockett's Theme
   Please enter a theme name: Please enter a theme name
   Please enter a valid port (1-65535).: Please enter a valid port (1-65535).
   Please enter an IP address or hostname.: Please enter an IP address or hostname.
+  Please fill in the highlighted fields: Please fill in the highlighted fields
   Please wait while the printer homes and probes.: Please wait while the printer homes
     and probes.
   Please wait while the printer probes each screw position.: Please wait while the
@@ -1495,8 +1633,10 @@ translations:
   Print Label: Print Label
   Print Library: Print Library
   Print Objects: Print Objects
+  Print Outcome: Print Outcome
   Print Paused: Print Paused
   Print Speed: Print Speed
+  Print Start: Print Start
   Print Status: Print Status
   Print Time: Print Time
   Print Tuning: Print Tuning
@@ -1536,6 +1676,8 @@ translations:
   Printer is not paired — pair it first: Printer is not paired — pair it first
   Printer name: Printer name
   Printer ready: Printer ready
+  'Printer:': 'Printer:'
+  'Printer: ': 'Printer: '
   PrinterIdentify: PrinterIdentify
   Printers: Printers
   Printers, Multi-Filament System, fans, sensors, and LEDs: Printers, Multi-Filament
@@ -1595,6 +1737,7 @@ translations:
   Quick Button 3: Quick Button 3
   Quick Button 4: Quick Button 4
   Quick actions, calibration, speed: Quick actions, calibration, speed
+  RSS: RSS
   'RSS:': 'RSS:'
   Raspberry Pi: Raspberry Pi
   Raspberry Pi (32-bit): Raspberry Pi (32-bit)
@@ -1603,6 +1746,8 @@ translations:
     state with the hardware.
   Ready: Ready
   Ready to Apply: Ready to Apply
+  Ready to load: Ready to load
+  Reason: Reason
   'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': 'Reason:
     {}\n\nThe printer cannot resume this print. Restart from the beginning?'
   Reboot: Reboot
@@ -1671,6 +1816,7 @@ translations:
   Restart Firmware?: Restart Firmware?
   Restart HelixScreen: Restart HelixScreen
   Restart Klipper: Restart Klipper
+  Restart Moonraker: Restart Moonraker
   Restart Now: Restart Now
   Restart Required: Restart Required
   'Restart failed: not connected': 'Restart failed: not connected'
@@ -1775,6 +1921,7 @@ translations:
   Scanning for networks...: Scanning for networks...
   Scanning...: Scanning...
   'Score: 0': 'Score: 0'
+  Screen Blank: Screen Blank
   Screen Dim: Screen Dim
   Screen dims to lower brightness after period of inactivity: Screen dims to lower
     brightness after period of inactivity
@@ -1812,6 +1959,7 @@ translations:
   Select macro for fourth button: Select macro for fourth button
   Select macro for second button: Select macro for second button
   Select macro for third button: Select macro for third button
+  Select material to begin: Select material to begin
   Select sensor: Select sensor
   Select slot: Select slot
   'Select slot failed: {}': 'Select slot failed: {}'
@@ -1841,13 +1989,22 @@ translations:
     tracks the state.
   Server Setup: Server Setup
   Servo: Servo
+  Session Duration: Session Duration
+  Session Start: Session Start
   'Set ': 'Set '
   Set Active: Set Active
   Set PIN: Set PIN
+  ? 'Set a phone strobe app to %.1f Hz and aim at the belt. Adjust until the belt
+    appears stationary.\n\nRecommended apps:\n  Android: Strobily, Strobe Light\n  iOS:
+    Strobe Light Tachometer, myStroboscope'
+  : 'Set a phone strobe app to %.1f Hz and aim at the belt. Adjust until the belt
+    appears stationary.\n\nRecommended apps:\n  Android: Strobily, Strobe Light\n  iOS:
+    Strobe Light Tachometer, myStroboscope'
   Set local timezone for time display: Set local timezone for time display
   Set logging verbosity for troubleshooting: Set logging verbosity for troubleshooting
   Set up your label printer in Settings: Set up your label printer in Settings
   Settings: Settings
+  Settings Snapshot: Settings Snapshot
   Settings reset to defaults. Restarting...: Settings reset to defaults. Restarting...
   Setup Complete!: Setup Complete!
   Setup Timelapse: Setup Timelapse
@@ -1881,13 +2038,19 @@ translations:
   Shutting down screen...: Shutting down screen...
   Shutting down...: Shutting down...
   Side: Side
+  Signal: Signal
+  'Signal #': 'Signal #'
   Single toggle macro. State is not tracked.: Single toggle macro. State is not tracked.
   Size: Size
   Skip: Skip
   Sleep While Printing: Sleep While Printing
   Sleep adjusted to match dim timeout: Sleep adjusted to match dim timeout
+  Slicer: Slicer
   Slot: Slot
+  Slot %d: Slot %d
+  Slot %d Filament: Slot %d Filament
   Slot 1: Slot 1
+  Slot {}: Slot {}
   Slot {} spool cleared: Slot {} spool cleared
   Slot {} updated: Slot {} updated
   Small labels help keep controls calm and focused.: Small labels help keep controls
@@ -1913,6 +2076,9 @@ translations:
   Speed used to push filament out of the box (mm/s): Speed used to push filament out
     of the box (mm/s)
   Spool: Spool
+  'Spool ': 'Spool '
+  'Spool #': 'Spool #'
+  'Spool #{}': 'Spool #{}'
   Spool Details: Spool Details
   Spool Info: Spool Info
   Spool Visualization (Pseudo-3D Canvas): Spool Visualization (Pseudo-3D Canvas)
@@ -1930,6 +2096,8 @@ translations:
   Spoolman removed.: Spoolman removed.
   Spoolman unavailable — filament weights may be stale: Spoolman unavailable — filament
     weights may be stale
+  'Spoolman: %zu Spool%s': 'Spoolman: %zu Spool%s'
+  'Spoolman: %zu/%zu Spool%s': 'Spoolman: %zu/%zu Spool%s'
   Square Corner Velocity: Square Corner Velocity
   Stable: Stable
   Standard: Standard
@@ -1947,6 +2115,7 @@ translations:
   Start print anyway?: Start print anyway?
   Started: Started
   Starting Print...: Starting Print...
+  Starting measurement...: Starting measurement...
   Starting...: Starting...
   Startup Brightness: Startup Brightness
   Startup, auto-control, and macro devices: Startup, auto-control, and macro devices
@@ -1998,9 +2167,11 @@ translations:
   TD-1 filament color detection: TD-1 filament color detection
   TEMPERATURE SENSORS: TEMPERATURE SENSORS
   THEME COLORS: THEME COLORS
+  'TOGGLE: {}': 'TOGGLE: {}'
   TOOLS: TOOLS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Takes 3-5 min. Do not interrupt.
+  Tap + to add: Tap + to add
   Tap again to confirm this orientation: Tap again to confirm this orientation
   Tap anywhere if this text is right-side up: Tap anywhere if this text is right-side
     up
@@ -2012,15 +2183,20 @@ translations:
   Tap to show keyboard...: Tap to show keyboard...
   Target Frequency: Target Frequency
   Target Temperature: Target Temperature
+  Target Version: Target Version
   Telemetry: Telemetry
   Telemetry Data: Telemetry Data
+  Telemetry Disabled: Telemetry Disabled
+  Telemetry Enabled: Telemetry Enabled
   Telemetry queue cleared: Telemetry queue cleared
   Temp: Temp
   Temp Compensation: Temp Compensation
   Temp °C: Temp °C
+  Temp °C (%d–%d): Temp °C (%d–%d)
   Temperature: Temperature
   Temperature Graph Config: Temperature Graph Config
   Temperatures: Temperatures
+  Temperatures saved: Temperatures saved
   Template: Template
   Temporary adjustment for this print, unless saved on Controls panel: Temporary adjustment
     for this print, unless saved on Controls panel
@@ -2047,6 +2223,14 @@ translations:
     interfering with prints. You can re-enable it in Settings > Display.
   The heater will cycle on and off several times.: The heater will cycle on and off
     several times.
+  ? The motor vibrates the belt while a strobe light flashes at the same frequency.
+    When the belt appears to stand still (frozen), you have found the resonant frequency.\n\nUse
+    the frequency buttons to sweep through values until the belt looks stationary,
+    then lock the reading.
+  : The motor vibrates the belt while a strobe light flashes at the same frequency.
+    When the belt appears to stand still (frozen), you have found the resonant frequency.\n\nUse
+    the frequency buttons to sweep through values until the belt looks stationary,
+    then lock the reading.
   The printer halted this print and cannot resume it. Restart from the beginning?: The
     printer halted this print and cannot resume it. Restart from the beginning?
   The printer rejected the filament configuration. The print was not started.: The
@@ -2062,6 +2246,7 @@ translations:
   Theme Preset: Theme Preset
   Theme changes apply after restart.: Theme changes apply after restart.
   Theme reset to defaults: Theme reset to defaults
+  'Theme: ': 'Theme: '
   'These tools have incompatible materials loaded:': 'These tools have incompatible
     materials loaded:'
   'These tools have no filament loaded:': 'These tools have no filament loaded:'
@@ -2112,12 +2297,14 @@ translations:
   This will restart Klipper.: This will restart Klipper.
   Thorough: Thorough
   Thumbnail Only: Thumbnail Only
+  'Thumbnail: ': 'Thumbnail: '
   Tighten Path A belt.: Tighten Path A belt.
   Tighten Path B belt.: Tighten Path B belt.
   Time: Time
   Time Format: Time Format
   Time to wait before escalating to emergency stop: Time to wait before escalating
     to emergency stop
+  'Time: ': 'Time: '
   Timelapse: Timelapse
   Timelapse Available: Timelapse Available
   Timelapse Settings: Timelapse Settings
@@ -2132,6 +2319,7 @@ translations:
   Toggle: Toggle
   Toggle (fire-and-forget): Toggle (fire-and-forget)
   Toggle Feature: Toggle Feature
+  'Toggle:': 'Toggle:'
   Too humid: Too humid
   Tool: Tool
   Tool Changer: Tool Changer
@@ -2140,6 +2328,8 @@ translations:
   Toolhead Style: Toolhead Style
   Toolhead jam: Toolhead jam
   Toolhead, G-code, limits, and materials: Toolhead, G-code, limits, and materials
+  Tools Used: Tools Used
+  'Tools: ': 'Tools: '
   Top: Top
   Total Prints: Total Prints
   Touch & Input: Touch & Input
@@ -2154,6 +2344,7 @@ translations:
   TouchCalibration: TouchCalibration
   Trace: Trace
   Travels: Travels
+  Trigger: Trigger
   'Troubleshooting:': 'Troubleshooting:'
   Try adjusting your search or filters: Try adjusting your search or filters
   Tune: Tune
@@ -2165,19 +2356,31 @@ translations:
   Turn on LEDs when printer starts: Turn on LEDs when printer starts
   Type: Type
   Type to preview input field...: Type to preview input field...
+  'Type:': 'Type:'
+  T{} shares slot with T{}: T{} shares slot with T{}
   UI Sounds: UI Sounds
   USB: USB
   USB DEVICES: USB DEVICES
   USB printer access denied — check permissions: USB printer access denied — check
     permissions
   Understanding Results: Understanding Results
+  ? Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine
+    artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the
+    resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY,
+    Path A and B should be within a few Hz of each other.
+  : Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine
+    artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the
+    resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY,
+    Path A and B should be within a few Hz of each other.
   Uninstall HelixPrint Plugin: Uninstall HelixPrint Plugin
   'Uninstall: Coming soon': 'Uninstall: Coming soon'
   Unit: Unit
   'Unit ': 'Unit '
   Unknown: Unknown
+  Unknown Event: Unknown Event
   Unknown Spool: Unknown Spool
   Unknown Step: Unknown Step
+  Unknown error: Unknown error
   Unlink: Unlink
   Unload: Unload
   Unload Filament: Unload Filament
@@ -2201,6 +2404,7 @@ translations:
   Update Available: Update Available
   Update Channel: Update Channel
   Update Failed: Update Failed
+  Update Success: Update Success
   Update installed!: Update installed!
   Update your security PIN: Update your security PIN
   Updating Configuration...: Updating Configuration...
@@ -2208,16 +2412,20 @@ translations:
   Upload Debug Bundle: Upload Debug Bundle
   Upload Failed: Upload Failed
   Upload gcode files to get started: Upload gcode files to get started
+  Uptime: Uptime
   Use Android native keyboard for text input: Use Android native keyboard for text
     input
   Use G10/G11 firmware retraction: Use G10/G11 firmware retraction
   Use printer type to select image: Use printer type to select image
+  VM Peak: VM Peak
+  VM Size: VM Size
   Value must be between {:.0f} and {:.0f}: Value must be between {:.0f} and {:.0f}
   Velocity and acceleration limits: Velocity and acceleration limits
   Vendor: Vendor
   Vendor Name: Vendor Name
   Vendor already exists: Vendor already exists
   'Vendor:': 'Vendor:'
+  Verify: Verify
   Verifying timelapse plugin...: Verifying timelapse plugin...
   Verifying...: Verifying...
   Version: Version
@@ -2236,10 +2444,12 @@ translations:
   View installed plugins and status: View installed plugins and status
   View live camera feed: View live camera feed
   View print statistics and job history: View print statistics and job history
+  'Visits: ': 'Visits: '
   Visual Fine-Tuning: Visual Fine-Tuning
   Volume: Volume
   WIDTH SENSORS: WIDTH SENSORS
   WLED: WLED
+  WLED Preset: WLED Preset
   Waiting for Moonraker...: Waiting for Moonraker...
   Waiting for bed to reach temperature for accurate calibration.: Waiting for bed
     to reach temperature for accurate calibration.
@@ -2247,6 +2457,9 @@ translations:
   Warming Bed...: Warming Bed...
   Warn: Warn
   Warning: Warning
+  Watch the belt under the strobe LED. Adjust frequency until the belt appears stationary — that is the resonant frequency.: Watch
+    the belt under the strobe LED. Adjust frequency until the belt appears stationary
+    — that is the resonant frequency.
   Weak battery: Weak battery
   Webcam: Webcam
   Website (optional): Website (optional)
@@ -2297,6 +2510,7 @@ translations:
   'Y jog failed: {}': 'Y jog failed: {}'
   'Y:': 'Y:'
   Year: Year
+  'Yes': 'Yes'
   ? You can now skip these operations when starting prints.\n\nLook for the new options
     in the print details before starting each print.\n\nA backup of your config was
     saved automatically.
@@ -2345,13 +2559,21 @@ translations:
   Zoom: Zoom
   bed: bed
   by Preston Brown: by Preston Brown
+  chamber heater: chamber heater
+  cores: cores
   disable: disable
   disabled: disabled
   e.g. Jet Black: e.g. Jet Black
+  e.g. NAME=my_var VALUE=123: e.g. NAME=my_var VALUE=123
   e.g. Polymaker: e.g. Polymaker
   elapsed: elapsed
   enable: enable
   enabled: enabled
+  extruder: extruder
+  extruder(s): extruder(s)
+  extruders: extruders
+  fans: fans
+  heated bed: heated bed
   layers: layers
   left: left
   mm before clog: mm before clog
@@ -2368,8 +2590,11 @@ translations:
   remaining: remaining
   remaining before clog detection triggers: remaining before clog detection triggers
   set to: set to
+  slots): slots)
   started: started
+  steppers: steppers
   tall: tall
+  tool(s): tool(s)
   tour.step.advanced.body: Macros, G-code console, calibration tools (PID, input shaper,
     z-offset), firmware updates, and developer utilities.
   tour.step.advanced.title: Advanced
@@ -2404,4 +2629,5 @@ translations:
   '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes.
     Are you sure?'
   '{} more taps to {} beta features': '{} more taps to {} beta features'
+  '{} preset{}': '{} preset{}'
   '{} target set to {}°C': '{} target set to {}°C'

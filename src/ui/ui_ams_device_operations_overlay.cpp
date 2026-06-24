@@ -410,27 +410,27 @@ const char* AmsDeviceOperationsOverlay::action_to_string(int action) {
     case AmsAction::IDLE:
         return lv_tr("Idle");
     case AmsAction::LOADING:
-        return "Loading filament...";
+        return lv_tr("Loading filament...");
     case AmsAction::UNLOADING:
-        return "Unloading filament...";
+        return lv_tr("Unloading filament...");
     case AmsAction::SELECTING:
-        return "Selecting slot...";
+        return lv_tr("Selecting slot...");
     case AmsAction::RESETTING:
-        return "Resetting...";
+        return lv_tr("Resetting...");
     case AmsAction::FORMING_TIP:
-        return "Forming tip...";
+        return lv_tr("Forming tip...");
     case AmsAction::CUTTING:
-        return "Cutting filament...";
+        return lv_tr("Cutting filament...");
     case AmsAction::HEATING:
         return lv_tr("Heating...");
     case AmsAction::CHECKING:
-        return "Checking slots...";
+        return lv_tr("Checking slots...");
     case AmsAction::PAUSED:
-        return "Paused (attention needed)";
+        return lv_tr("Paused (attention needed)");
     case AmsAction::ERROR:
-        return "Error state";
+        return lv_tr("Error state");
     default:
-        return "Unknown";
+        return lv_tr("Unknown");
     }
 }
 

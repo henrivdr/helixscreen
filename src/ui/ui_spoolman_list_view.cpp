@@ -198,7 +198,7 @@ void SpoolmanListView::configure_row(RowWidgets& rw, const SpoolInfo& spool, int
 
     // Update vendor (with location if available)
     if (rw.vendor_label) {
-        std::string vendor_text = spool.vendor.empty() ? "Unknown" : spool.vendor;
+        std::string vendor_text = spool.vendor.empty() ? lv_tr("Unknown") : spool.vendor;
         if (!spool.location.empty()) {
             vendor_text += " \xC2\xB7 " + spool.location; // middle dot: U+00B7
         }

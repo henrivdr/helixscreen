@@ -550,17 +550,17 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     case StepOperationType::LOAD_FRESH: {
         if (supports_purge) {
             ui_step_t steps[] = {
-                {"Heat nozzle", StepState::Pending},
-                {"Feed filament", StepState::Pending},
-                {"Purge", StepState::Pending},
+                {lv_tr("Heat nozzle"), StepState::Pending},
+                {lv_tr("Feed filament"), StepState::Pending},
+                {lv_tr("Purge"), StepState::Pending},
             };
             current_step_count_ = 3;
             step_progress_ = ui_step_progress_create(step_progress_container_, steps, 3, false,
                                                      "ams_step_progress");
         } else {
             ui_step_t steps[] = {
-                {"Heat nozzle", StepState::Pending},
-                {"Feed filament", StepState::Pending},
+                {lv_tr("Heat nozzle"), StepState::Pending},
+                {lv_tr("Feed filament"), StepState::Pending},
             };
             current_step_count_ = 2;
             step_progress_ = ui_step_progress_create(step_progress_container_, steps, 2, false,
@@ -571,12 +571,12 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     case StepOperationType::LOAD_SWAP: {
         ui_step_t steps[4];
         int n = 0;
-        steps[n++] = {"Heat nozzle", StepState::Pending};
+        steps[n++] = {lv_tr("Heat nozzle"), StepState::Pending};
         if (has_tip_step)
             steps[n++] = {tip_step_label, StepState::Pending};
-        steps[n++] = {"Feed filament", StepState::Pending};
+        steps[n++] = {lv_tr("Feed filament"), StepState::Pending};
         if (supports_purge)
-            steps[n++] = {"Purge", StepState::Pending};
+            steps[n++] = {lv_tr("Purge"), StepState::Pending};
         current_step_count_ = n;
         step_progress_ =
             ui_step_progress_create(step_progress_container_, steps, n, false, "ams_step_progress");
@@ -585,10 +585,10 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     case StepOperationType::UNLOAD: {
         ui_step_t steps[3];
         int n = 0;
-        steps[n++] = {"Heat nozzle", StepState::Pending};
+        steps[n++] = {lv_tr("Heat nozzle"), StepState::Pending};
         if (has_tip_step)
             steps[n++] = {tip_step_label, StepState::Pending};
-        steps[n++] = {"Retract", StepState::Pending};
+        steps[n++] = {lv_tr("Retract"), StepState::Pending};
         current_step_count_ = n;
         step_progress_ =
             ui_step_progress_create(step_progress_container_, steps, n, false, "ams_step_progress");

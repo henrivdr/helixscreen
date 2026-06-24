@@ -370,9 +370,9 @@ void AmsEditModal::init_subjects() {
     subjects_.register_subject(&remaining_pct_subject_);
 
     // Initialize save button text subject
-    snprintf(save_btn_text_buf_, sizeof(save_btn_text_buf_), "Close");
+    snprintf(save_btn_text_buf_, sizeof(save_btn_text_buf_), "%s", lv_tr("Close"));
     lv_subject_init_string(&save_btn_text_subject_, save_btn_text_buf_, nullptr,
-                           sizeof(save_btn_text_buf_), "Close");
+                           sizeof(save_btn_text_buf_), lv_tr("Close"));
     subjects_.register_subject(&save_btn_text_subject_);
 
     // Initialize remaining mode subject (0=view, 1=edit) - registered globally for XML binding
@@ -998,9 +998,10 @@ void AmsEditModal::update_ui() {
 
     // Update slot indicator via subject (used in header)
     if (slot_index_ < 0) {
-        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), "External Filament");
+        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), "%s",
+                 lv_tr("External Filament"));
     } else {
-        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), "Slot %d Filament",
+        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), lv_tr("Slot %d Filament"),
                  slot_index_ + 1);
     }
     lv_subject_copy_string(&slot_indicator_subject_, slot_indicator_buf_);
@@ -1352,7 +1353,7 @@ void AmsEditModal::update_sync_button_state() {
     bool dirty = is_dirty();
 
     // Update save button text based on dirty state
-    const char* btn_text = dirty ? "Save" : "Close";
+    const char* btn_text = dirty ? lv_tr("Save") : lv_tr("Close");
     snprintf(save_btn_text_buf_, sizeof(save_btn_text_buf_), "%s", btn_text);
     lv_subject_copy_string(&save_btn_text_subject_, save_btn_text_buf_);
 }

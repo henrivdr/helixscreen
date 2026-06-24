@@ -99,7 +99,7 @@ void SpoolmanOverlay::init_subjects() {
     // Initialize scanner device status subject
     auto scanner_name = helix::SettingsManager::instance().get_scanner_device_name();
     auto scanner_id = helix::SettingsManager::instance().get_scanner_device_id();
-    const char* status = scanner_id.empty() ? "Auto-detect" : scanner_name.c_str();
+    const char* status = scanner_id.empty() ? lv_tr("Auto-detect") : scanner_name.c_str();
     snprintf(scanner_status_buf_, sizeof(scanner_status_buf_), "%s", status);
     lv_subject_init_string(&scanner_device_status_subject_, scanner_status_buf_, nullptr,
                            sizeof(scanner_status_buf_), scanner_status_buf_);
@@ -523,7 +523,7 @@ void SpoolmanOverlay::handle_barcode_scanner_clicked() {
 void SpoolmanOverlay::update_scanner_status_text() {
     auto id = helix::SettingsManager::instance().get_scanner_device_id();
     auto name = helix::SettingsManager::instance().get_scanner_device_name();
-    const char* status = id.empty() ? "Auto-detect" : name.c_str();
+    const char* status = id.empty() ? lv_tr("Auto-detect") : name.c_str();
     snprintf(scanner_status_buf_, sizeof(scanner_status_buf_), "%s", status);
     lv_subject_copy_string(&scanner_device_status_subject_, scanner_status_buf_);
 }

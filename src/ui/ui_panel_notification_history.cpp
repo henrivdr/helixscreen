@@ -13,6 +13,7 @@
 #include "ui_utils.h"
 
 #include "app_globals.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
 #include "system/update_checker.h"
@@ -126,7 +127,7 @@ void NotificationHistoryPanel::refresh() {
         std::string timestamp_str = format_timestamp(entry.timestamp_ms);
 
         // Use title if present, otherwise use severity-based default
-        const char* title = entry.title[0] ? entry.title : "Notification";
+        const char* title = entry.title[0] ? entry.title : lv_tr("Notification");
 
         // Build attributes array - just pass semantic severity, widget handles colors
         const char* attrs[] = {"severity",  severity_to_string(entry.severity),

@@ -160,19 +160,19 @@ namespace {
 const char* fan_type_label(helix::FanType type) {
     switch (type) {
     case helix::FanType::PART_COOLING:
-        return "Part";
+        return lv_tr("Part");
     case helix::FanType::HEATER_FAN:
-        return "Heater";
+        return lv_tr("Heater");
     case helix::FanType::CONTROLLER_FAN:
-        return "Controller";
+        return lv_tr("Controller");
     case helix::FanType::TEMPERATURE_FAN:
-        return "Temp";
+        return lv_tr("Temp");
     case helix::FanType::GENERIC_FAN:
-        return "Generic";
+        return lv_tr("Generic");
     case helix::FanType::OUTPUT_PIN_FAN:
-        return "Output Pin";
+        return lv_tr("Output Pin");
     }
-    return "Fan";
+    return lv_tr("Fan");
 }
 
 } // namespace

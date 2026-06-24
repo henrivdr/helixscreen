@@ -4,12 +4,24 @@ translations:
   ' elapsed · ': ' 経過 · '
   ' frames': ' フレーム'
   ' left': ' 残り'
+  '%.1f Hz difference': '%.1f Hz の差'
+  '%d additional fan%s': '追加ファン %d 個%s'
+  '%d disabled': '%d 個無効'
+  '%d failed to load - see details below': '%d 個の読み込みに失敗 - 詳細は下記'
   '%d more sensors': 他%d個のセンサー
+  '%d of %d plugins loaded': '%d / %d 個のプラグインを読み込み'
+  '%d plugins loaded': '%d 個のプラグインを読み込み'
+  '%d slots': '%d スロット'
   '%lu days ago': '%lu日前'
   '%lu hours ago': '%lu時間前'
   '%lu min ago': '%lu分前'
   '%u layers': '%uレイヤー'
   '%zu changes': '%zu件の変更'
+  '%zu events queued': '%zu 件のイベントを待機中'
+  (incompatible): '(非対応)'
+  (multi-tool): '(マルチツール)'
+  (none detected): '(検出なし)'
+  (unnamed): '(名称なし)'
   + Add: + 追加
   + Add Preset: + プリセットを追加
   + Add Printer: + プリンターを追加
@@ -26,6 +38,7 @@ translations:
   --°C: --°C
   -0.5 Hz: -0.5 Hz
   0 = computed: 0 = 自動計算
+  0 events queued: '待機中のイベントなし'
   0 slots: '{0} スロット'
   0.4-2mm direct drive, 4-6mm bowden: 0.4-2mm ダイレクトドライブ、4-6mm ボーデン
   0°: 0°
@@ -36,6 +49,7 @@ translations:
   1 min ago: 1分前
   1 minute: 1分
   1 more tap to {} beta features: あと1回タップでベータ機能を{}
+  1 plugin loaded: '1 個のプラグインを読み込み'
   1. Printer homes and probes the bed: 1. プリンターがホーミングしてベッドをプローブします
   1. Printer will home and probe each screw: 1. プリンターがホーミングして各ネジをプローブします
   10 minutes: 10分
@@ -82,6 +96,7 @@ translations:
   AFC retracts filament from the toolhead at end of print: AFCは印刷終了時にツールヘッドからフィラメントを引き戻します
   ALL DEVICES: すべてのデバイス
   AMS: AMS
+  'AMS Active: ': 'AMS 有効: '
   API not available: APIが利用できません
   APPEARANCE: 外観
   AUTO FANS: 自動ファン
@@ -112,6 +127,7 @@ translations:
   Add Widget: ウィジェットを追加
   Added to Spoolman: Spoolman に追加しました
   Address: アドレス
+  Adjust belt tension until the belt appears stationary: 'ベルトが静止して見えるまでベルト張力を調整してください'
   Adjust screen brightness level: 画面の明るさを調整します
   Adjust screws, then re-probe.: ネジを調整して、再度プローブしてください。
   Adjust until belt appears frozen: ベルトが静止して見えるまで調整
@@ -124,6 +140,8 @@ translations:
   All: すべて
   All Devices: すべてのデバイス
   All axes homed: すべての軸がホーミング済み
+  All fields are required: 'すべての項目が必須です'
+  All plugins loaded successfully: 'すべてのプラグインを正常に読み込みました'
   Allow cold load/unload: コールド時の装填/取り出しを許可
   Allow display to sleep during active prints: 印刷中のスリープを許可
   Allwinner: Allwinner
@@ -133,6 +151,8 @@ translations:
   AmsIdentify: AMSを識別
   An accelerometer was detected on your printer.: プリンターで加速度センサーが検出されました。
   An error occurred during calibration.: キャリブレーション中にエラーが発生しました。
+  An error occurred during filament loading.: 'フィラメントの読み込み中にエラーが発生しました。'
+  An error occurred during measurement.: '測定中にエラーが発生しました。'
   An error occurred during probing.: プローブ中にエラーが発生しました。
   An error occurred while loading filament.: フィラメントの装填中にエラーが発生しました。
   An unexpected printer error occurred.: 予期しないプリンターエラーが発生しました。
@@ -172,6 +192,7 @@ translations:
   Automatic LED Control: 自動LED制御
   Aux: 補助
   Available: 利用可能
+  Available (%s): '利用可能 (%s)'
   Available Networks: 利用可能なネットワーク
   Available networks: 利用可能なネットワーク
   Average: 平均
@@ -182,6 +203,7 @@ translations:
   BLUETOOTH SCANNERS: BLUETOOTH SCANNERS
   Back: 戻る
   Back to Results: 結果に戻る
+  'Backtrace: {} frames': 'バックトレース: {} フレーム'
   Barcode Scanner: バーコードスキャナー
   Beacon auto-calibrate sent: Beacon自動キャリブレーション送信済み
   Beacon calibrate sent: Beaconキャリブレーション送信済み
@@ -202,9 +224,12 @@ translations:
   Bed is Level!: ベッドが水平です！
   Bed mesh operation timed out: ベッドメッシュ操作がタイムアウトしました
   Bed target set to {}°C: ベッド目標温度を {}°C に設定しました
+  Bed temp must be 0-200°C: 'ベッド温度は 0〜200°C にしてください'
   Bed warming timed out: ベッド加熱がタイムアウトしました
   Bed °C: ベッド °C
   'Bed:': 'ベッド:'
+  Belt A frequency locked: 'ベルト A の周波数を固定しました'
+  Belt B frequency locked: 'ベルト B の周波数を固定しました'
   Belt Tension: ベルトテンション
   Belt Tension Check: ベルトテンション確認
   Belt tension looks good!: ベルトテンションは良好です！
@@ -240,6 +265,7 @@ translations:
   Browse guides, configuration references, and troubleshooting resources for HelixScreen.: HelixScreen
     のガイド、設定リファレンス、トラブルシューティング資料を参照します。
   Buffer Status: バッファーステータス
+  'Build Volume: ': '造形サイズ: '
   Bundle Uploaded: バンドルをアップロードしました
   Button taps and navigation sounds: ボタンタップとナビゲーション音
   Bypass: バイパス
@@ -261,6 +287,7 @@ translations:
   CONNECTION TYPE: 接続タイプ
   CONTROLLABLE FANS: 制御可能なファン
   CPU: CPU
+  'CPU: ': 'CPU: '
   CRITICAL: 重大
   CURRENT SELECTION: 現在の選択
   CUSTOM IMAGES: カスタム画像
@@ -288,6 +315,7 @@ translations:
   Calibration saved but cannot apply on SDL display: キャリブレーションは保存されましたが SDL ディスプレイには適用できません
   Calibration started: キャリブレーションを開始しました
   Calibration timed out. Please try again.: タイムアウトしました。もう一度お試しください。
+  Calibrator not initialized. Try reopening the panel.: 'キャリブレーターが初期化されていません。パネルを開き直してください。'
   Camera: カメラ
   Can't connect — try forgetting and re-pairing the printer: 接続できません — プリンターの登録を解除して再ペアリングしてください
   Cancel: キャンセル
@@ -307,9 +335,11 @@ translations:
   'Cannot start print: internal error': '印刷を開始できません: 内部エラー'
   'Cannot start print: not connected to printer': '印刷を開始できません: プリンター未接続'
   'Cannot start print: printer is {}': '印刷を開始できません: プリンターは {} 状態です'
+  'Capabilities: ': '機能: '
   Cartographer scan calibrate sent — use Z-Offset panel to adjust: Cartographerスキャンキャリブレーション送信済み
     — Z-Offsetパネルで調整してください
   Cartographer touch calibrate sent: Cartographerタッチキャリブレーション送信済み
+  Category: 'カテゴリー'
   Center QR code in frame: QR コードをフレームの中央に合わせてください
   'Chamb:': 'チャンバ:'
   Chamber: チャンバー
@@ -345,8 +375,11 @@ translations:
   Checking accelerometer...: 加速度センサーを確認中...
   Checking filament...: フィラメントを確認中...
   Checking for plugin...: プラグインを確認中...
+  Checking for webcam...: 'ウェブカメラを確認中...'
+  Checking plugin: 'プラグインを確認中'
   Checking slots...: スロットを確認中...
   Checking timelapse plugin...: タイムラプスプラグインを確認中...
+  Checking webcam: 'ウェブカメラを確認中'
   Choose 12-hour or 24-hour time display: 12時間表示または24時間表示を選択
   Choose Spool: スプールを選択
   Choose an existing filament, or tap + New to create one.: 既存のフィラメントを選択するか、+ 新規をタップして作成してください。
@@ -373,6 +406,7 @@ translations:
   Closer: 近く
   Closer = more squish | Farther = less squish: 近い = より圧縮 | 遠い = 圧縮少なめ
   Coarse: 粗動
+  Code: 'コード'
   Coil Temperature: コイル温度
   Collect logs and system info for support: サポート用にログとシステム情報を収集
   Collecting data...: データを収集中...
@@ -384,6 +418,7 @@ translations:
   Complete: 完了
   Complete!: 完了！
   Completed: 完了
+  Completed in %d probe%s: '%d 回のプローブ%sで完了'
   Completed prints will appear here: 完了した印刷がここに表示されます
   Computing calibration...: キャリブレーション計算中...
   Config Dir: 設定ディレクトリ
@@ -395,6 +430,7 @@ translations:
   Configure Fan Widget: ファンウィジェットを設定
   Configure G10/G11 firmware retraction: G10/G11 ファームウェアリトラクションを設定
   Configure Graph: グラフを設定
+  Configure Moonraker: 'Moonraker を設定'
   Configure PRINT_START: PRINT_START を設定
   Configure Spoolman integration and weight sync settings.: Spoolman 連携と重量同期設定を行います。
   Configure WiFi for this device, or skip if you're using Ethernet: WiFi を設定するか、イーサネットを使用する場合はスキップしてください
@@ -405,6 +441,7 @@ translations:
   Configure timelapse recording: タイムラプス録画を設定
   Configure your printer's cooling fans: プリンターの冷却ファンを設定します
   Configuring Moonraker...: Moonrakerを設定中...
+  Confirm PIN: 'PIN を確認'
   Confirm before running macros: マクロ実行前に確認する
   Connect: 接続
   Connect a USB label printer first: 先にUSBラベルプリンターを接続してください
@@ -412,8 +449,10 @@ translations:
   'Connect to your printer via SSH and run:': 'SSHでプリンターに接続し、次を実行してください:'
   Connected: 接続済み
   Connected (%s): 接続済み (%s)
+  Connected (auto-sweep): '接続済み (自動スイープ)'
   Connected (no discovery): 接続済み（検出なし）
   Connected (system-managed network): 接続済み（システム管理ネットワーク）
+  Connected Time: '接続時間'
   Connected to: 接続先
   'Connected to ': '接続先: '
   Connected! Discovering printer...: 接続完了！プリンターを検出中...
@@ -424,6 +463,7 @@ translations:
   Connecting to network...: ネットワークに接続中...
   Connecting...: 接続中...
   Connection: 接続
+  Connection Stability: '接続の安定性'
   Connection failed: 接続に失敗しました
   Connection failed. Check IP/port and try again.: 接続に失敗しました。IPアドレス/ポートを確認して再試行してください。
   Connection failed. Check credentials.: 接続に失敗しました。認証情報を確認してください。
@@ -432,8 +472,10 @@ translations:
   Connection must be tested successfully to continue: 続行するには接続テストに成功する必要があります
   Connection successful!: 接続成功！
   Connection timeout: 接続タイムアウト
+  Connects: '接続回数'
   Console: コンソール
   Console Settings: コンソール設定
+  Context: 'コンテキスト'
   Control optional print start features: オプションの印刷開始機能を制御
   Control power relays and smart outlets: 電源リレーとスマートコンセントを制御
   Controlled by hardware sensor: ハードウェアセンサーで制御
@@ -455,6 +497,7 @@ translations:
     がまだ再起動中の可能性があります。
   Couldn't update Spoolman — saved locally: Spoolman を更新できませんでした — ローカルに保存しました
   Cover open: カバーが開いています
+  Crash Report: 'クラッシュレポート'
   Crash report sent — thank you!: クラッシュレポートを送信しました — ありがとうございます！
   Creality CFS: Creality CFS
   Creality K1: Creality K1
@@ -475,6 +518,7 @@ translations:
   Current Z Position: 現在のZ位置
   'Current name:': '現在の名前:'
   'Current:': '現在:'
+  'Current: %d°C | Target: %d°C': '現在: %d°C | 目標: %d°C'
   'Current: %s · Slot %d': '現在: %s · スロット %d'
   'Current: Bypass': '現在: バイパス'
   'Current: Slot %d': '現在: スロット %d'
@@ -506,22 +550,28 @@ translations:
     — タップがスワイプとして認識される場合は増やす (0で無効)
   Debug: デバッグ
   Default border thickness: デフォルトの境界線の太さ
+  'Default: %d-%d°C nozzle, %d°C bed': 'デフォルト: ノズル %d〜%d°C、ベッド %d°C'
   Define macros in your printer.cfg: printer.cfg でマクロを定義してください
   Delete: 削除
   Delete File?: ファイルを削除しますか？
   Delete Profile?: プロファイルを削除しますか？
   Delete Spool?: スプールを削除しますか？
+  Delete Video: '動画を削除'
+  Delete {}?: '{} を削除しますか?'
   'Delta:': '差分:'
   Deploy: 展開
   Describe the issue (optional): 問題の詳細（任意）
   Detailed: 詳細
   Detecting printer type...: プリンタータイプを検出中...
+  Detecting...: '検出中...'
   Detection Length: 検出長
   Detection Mode: 検出モード
   Dev: 開発版
   Dev channel requires dev_url in config: 開発チャンネルには設定にdev_urlが必要です
   Device: デバイス
+  Device name: 'デバイス名'
   Device name is required: デバイス名は必須です
+  'Device: ': 'デバイス: '
   Disable: 無効化
   Disable Motors?: モーターを無効にしますか？
   Disable the security PIN: セキュリティ PIN を無効化
@@ -529,12 +579,15 @@ translations:
   Discard: 破棄
   Discard Changes?: 変更を破棄しますか？
   Disconnected: 切断
+  Disconnected Time: '切断時間'
+  Disconnects: '切断回数'
   Discord Community: Discordコミュニティ
   Discovered Printers: 検出されたプリンター
   Dismiss: 閉じる
   Display & Sound: ディスプレイとサウンド
   Display Mode: 表示モード
   Display Sleep: ディスプレイスリープ
+  'Display: ': 'ディスプレイ: '
   Do not power off your printer.: プリンターの電源を切らないでください。
   Do not touch the printer during calibration: キャリブレーション中はプリンターに触れないでください
   Dock: ドック
@@ -566,8 +619,10 @@ translations:
   Edit Preset: プリセットを編集
   Edit Slot 1: スロット1を編集
   Edit Spool: スプールを編集
+  'Edit Spool #{}': 'スプール #{} を編集'
   Edit Theme Colors: テーマカラーを編集
   Edit Theme Colors (Modified): テーマカラーを編集（変更済み）
+  Effect: 'エフェクト'
   Effects: エフェクト
   Eject: 取り出し
   Eject Distance: 取り出し距離
@@ -599,13 +654,14 @@ translations:
   Ended: 終了
   Enhancement Complete!: 改善完了！
   Enhancement Failed: 改善失敗
+  Enter Current PIN: '現在の PIN を入力'
   Enter G-code command...: G-code コマンドを入力...
   Enter New PIN: 新しい PIN を入力
   Enter PIN: PIN を入力
   Enter WiFi Password: WiFi パスワードを入力
   'Enter a name for your custom theme:': 'カスタムテーマの名前を入力してください:'
   Enter a name to save this profile: このプロファイルを保存する名前を入力
-  Enter network name: 'ネットワーク名を入力'
+  Enter network name: ネットワーク名を入力
   Enter password: パスワードを入力
   Enter printer IP address first: 先にプリンターのIPアドレスを入力してください
   Enter the IP address and port of your Spoolman server.: Spoolman サーバーのIPアドレスとポートを入力してください。
@@ -615,6 +671,7 @@ translations:
   Error state: エラー状態
   Escalate to emergency stop if cancel doesn't respond: キャンセルが応答しない場合は緊急停止にエスカレート
   Escalation Timeout: エスカレーションタイムアウト
+  Est. Duration: '予想時間'
   Estimating...: 推定中...
   Ethernet: イーサネット
   Events appear here after sessions and prints: セッションと印刷の後にイベントがここに表示されます
@@ -624,9 +681,11 @@ translations:
   Exclusion cancelled: 除外がキャンセルされました
   Execute printer macros: プリンターマクロを実行
   Exhaust Fan: 排気ファン
+  Exit Code: '終了コード'
   Explore how the selected palette shapes text, controls, and status colors.: 選択したパレットがテキスト、コントロール、ステータスカラーにどのように影響するかを確認できます。
   Explore palette and preview: パレットを確認してプレビュー
   External: 外部
+  External Filament: '外部フィラメント'
   External Spool: 外部スプール
   External spool cleared: 外部スプールをクリアしました
   External spool updated: 外部スプールを更新しました
@@ -656,6 +715,9 @@ translations:
   'Failed to connect to ''{}'': {}': '''{}'' への接続に失敗しました: {}'
   'Failed to connect: %s': '接続に失敗: %s'
   'Failed to cool down: {}': '冷却に失敗しました: {}'
+  'Failed to create filament:': 'フィラメントの作成に失敗:'
+  'Failed to create spool:': 'スプールの作成に失敗:'
+  'Failed to create vendor:': 'ベンダーの作成に失敗:'
   Failed to delete file: ファイルの削除に失敗しました
   Failed to delete profile: プロファイルの削除に失敗しました
   Failed to delete spool: スプールの削除に失敗しました
@@ -668,9 +730,10 @@ translations:
   'Failed to exclude ''{}'': {}': '''{}'' の除外に失敗しました: {}'
   Failed to get limits: 制限の取得に失敗しました
   Failed to load G-code preview: G-code プレビューの読み込みに失敗しました
+  Failed to load devices: 'デバイスの読み込みに失敗しました'
   Failed to load fan configuration screen: ファン設定画面の読み込みに失敗しました
   Failed to load fan control overlay: ファン制御オーバーレイの読み込みに失敗しました
-  Failed to load filament sensor configuration screen. Please restart the application.: 'フィラメントセンサー設定画面の読み込みに失敗しました。アプリケーションを再起動してください。'
+  Failed to load filament sensor configuration screen. Please restart the application.: フィラメントセンサー設定画面の読み込みに失敗しました。アプリケーションを再起動してください。
   'Failed to load filament: {}': 'フィラメントの装填に失敗しました: {}'
   Failed to load file details: ファイル詳細の読み込みに失敗しました
   Failed to load history: 履歴の読み込みに失敗しました
@@ -721,6 +784,7 @@ translations:
   Failed to show confirmation dialog: 確認ダイアログの表示に失敗しました
   Failed to start calibration: キャリブレーションの開始に失敗しました
   'Failed to start print: {}': '印刷の開始に失敗しました: {}'
+  Failed to toggle %s: '%s の切り替えに失敗しました'
   'Failed to toggle timelapse: {}': 'タイムラプスの切替に失敗しました: {}'
   'Failed to turn off heaters: {}': 'ヒーターのオフに失敗しました: {}'
   'Failed to unload: {}': 'アンロードに失敗しました: {}'
@@ -730,12 +794,14 @@ translations:
   Failed to update phase tracking: フェーズトラッキングの更新に失敗しました
   'Failed to upload modified G-code: {}': '変更済み G-code のアップロードに失敗しました: {}'
   'Failed to upload remapped G-code: {}': 'リマップしたG-codeのアップロードに失敗しました: {}'
+  Fan: 'ファン'
   Fan Calibration: ファンキャリブレーション
   Fan Transfer: ファン熱伝達
   'Fan control failed: {}': 'ファン制御に失敗しました: {}'
   FanSelect: ファンを選択
   Fans: ファン
   Farther: 遠く
+  'Features: ': '機能: '
   Feed filament: フィラメントを送る
   Feed filament directly to extruder: フィラメントをエクストルーダーに直接供給
   Feeding filament forward: フィラメントを前方に送り出し中
@@ -766,6 +832,7 @@ translations:
   FilamentSensor: フィラメントセンサー
   File: ファイル
   File Info: ファイル情報
+  File Size: 'ファイルサイズ'
   Filename: ファイル名
   'Fill: 100% / 75% / 40% / 10%': '塗りつぶし: 100% / 75% / 40% / 10%'
   Fine: 微動
@@ -794,7 +861,12 @@ translations:
   Framerate: フレームレート
   Freq Graph: 周波数グラフ
   Frequency Delta: 周波数差
+  ? 'Frequency Delta: Difference between Path A and B. Ideally under 5 Hz; over 15
+    Hz needs adjustment.\n\nPath Similarity: How closely the vibration profiles match.
+    Above 90% is excellent; below 70% suggests uneven tension.'
+  : '周波数差: パス A と B の差。理想は 5 Hz 未満で、15 Hz を超える場合は調整が必要です。\n\nパス類似度: 振動プロファイルの一致度。90% を超えれば優秀で、70% を下回ると張力が不均一なことを示します。'
   From Buffer: バッファから
+  From Version: '更新前バージョン'
   Front: 正面
   Full: フル
   G-code Console: G-code コンソール
@@ -812,6 +884,7 @@ translations:
   Guides and reference: ガイドとリファレンス
   H: H
   HOST: ホスト
+  HTTP Code: 'HTTP コード'
   HUMIDITY SENSORS: 湿度センサー
   Hang on, we'll be right back!: しばらくお待ちください。すぐに戻ります！
   Happy Hare MMU: Happy Hare MMU
@@ -820,6 +893,7 @@ translations:
   Hardware Health: ハードウェア状態
   Hardware Issues: ハードウェアの問題
   Hardware Name: ハードウェア名
+  Hardware Profile: 'ハードウェアプロファイル'
   Hardware is validated on startup and reconnection: ハードウェアは起動時と再接続時に検証されます
   Hardware marked as optional: ハードウェアをオプションに設定しました
   Hardware saved to config: ハードウェアを設定に保存しました
@@ -862,6 +936,7 @@ translations:
   Help improve HelixScreen?: HelixScreenの改善に協力しますか？
   Hide Firmware Noise: ファームウェアノイズを非表示
   Hide Temperature Reports: 温度レポートを非表示
+  High Water Mark: '最大値'
   Home: ホーム
   Home failed: ホーミング失敗
   Home selector: セレクターをホーミング
@@ -871,14 +946,17 @@ translations:
   Homing Y...: Y軸をホーミング中...
   Homing Z...: Z軸をホーミング中...
   Homing all axes...: 全軸をホーミング中...
+  'Homing failed: ': 'ホーミングに失敗: '
   'Homing failed: {}': 'ホーミングに失敗しました: {}'
   Homing first...: ホーミング中...
   Homing may still be running — response timed out: ホーミングがまだ実行中の可能性があります — 応答タイムアウト
   Homing timed out: ホーミングがタイムアウトしました
+  Homing timed out — printer may still be homing: 'ホーミングがタイムアウトしました — プリンターはまだホーミング中の可能性があります'
   Homing...: ホーミング中...
   Horizontal: 水平
   Horizontal Progress (Leveling Wizard): 水平プログレス（レベリングウィザード）
   Host: ホスト
+  'Host: ': 'ホスト: '
   Hotend: ホットエンド
   Hotend Fan: ホットエンドファン
   Hotend Heater: ホットエンドヒーター
@@ -890,6 +968,7 @@ translations:
   How the toolhead icon appears: ツールヘッドアイコンの表示スタイル
   Humidity: 湿度
   Hyperlapse: ハイパーラプス
+  Hyperlapse captures frames at fixed time intervals. Good for very long prints.: 'ハイパーラプスは一定の時間間隔でフレームを撮影します。非常に長い印刷に適しています。'
   IMPORT FROM USB: USBからインポート
   IP Address / Hostname: IPアドレス / ホスト名
   'IP:': 'IP:'
@@ -904,6 +983,7 @@ translations:
   In Progress: 進行中
   Inactive: 非アクティブ
   Include Klipper/Moonraker logs: Klipper/Moonrakerのログを含める
+  'Incompatible materials: {} cannot use {} as backup': '非対応の素材: {} は {} をバックアップとして使用できません'
   Indexing G-code...: G-codeをインデックス中...
   Info: 情報
   Initializing...: 初期化中...
@@ -915,6 +995,7 @@ translations:
   Input shaper settings applied!: インプットシェーパー設定が適用されました！
   Input shaping reduces ringing and ghosting artifacts caused by printer vibrations during fast movements.: インプットシェーピングは高速移動時のプリンター振動によるリンギングやゴーストのアーティファクトを軽減します。
   Input shaping reduces vibration artifacts (ringing) in your prints.: インプットシェーピングは印刷物の振動アーティファクト（リンギング）を軽減します。
+  'Input: ': '入力: '
   InputShaper: InputShaper
   Insert filament before resuming: 再開前にフィラメントを挿入してください
   Install: インストール
@@ -922,6 +1003,7 @@ translations:
   Install Plugin: プラグインをインストール
   Install Root: インストールルート
   Install Update: 更新をインストール
+  Install plugin: 'プラグインをインストール'
   Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: 印刷履歴に影響を与えずにフィラメントをリマップするには、詳細設定でHelixPrintプラグインをインストールしてください。
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': '高速
     G-code 修正を有効にするために HelixPrint プラグインをインストールしてください。プリンターで SSH 経由でこのコマンドを実行してください:'
@@ -932,6 +1014,7 @@ translations:
   Installing...: インストール中...
   Intensity: 強度
   Interactive probe calibration: インタラクティブプローブキャリブレーション
+  'Internal error: API not available': '内部エラー: API を利用できません'
   'Internal error: no scan result': '内部エラー: スキャン結果がありません'
   Invalid port number: 無効なポート番号
   Issue description: 問題の説明
@@ -957,6 +1040,9 @@ translations:
   Klipper will restart to apply changes: 変更を適用するために Klipper が再起動します
   Klipper will restart to apply changes.: 変更を適用するために Klipper が再起動します。
   Klipper will restart to apply new settings.: 新しい設定を適用するためKlipperが再起動します。
+  'Klipper: ': 'Klipper: '
+  Klippy Errors: 'Klippy エラー'
+  Klippy Shutdowns: 'Klippy シャットダウン'
   LED SELECTION: LED選択
   LED Settings: LED設定
   LED Strip: LEDストリップ
@@ -981,6 +1067,7 @@ translations:
   Later: 後で
   Layer: レイヤー
   Layer Height: レイヤー高さ
+  Layer Macro captures one frame per layer change. Best for most prints.: 'レイヤーマクロはレイヤーが変わるごとに 1 フレームを撮影します。ほとんどの印刷に最適です。'
   Layer mode captures one frame per layer change. Best for most prints.: レイヤーモードはレイヤー変更ごとに1フレームをキャプチャします。ほとんどの印刷に最適です。
   'Layer:': 'レイヤー:'
   Layers: レイヤー
@@ -1005,6 +1092,7 @@ translations:
   Loading Error: 装填エラー
   Loading Filament...: フィラメントを装填中...
   Loading G-code...: G-codeを読み込み中...
+  Loading devices...: 'デバイスを読み込み中...'
   Loading filament ({}mm)...: フィラメントを装填中 ({}mm)...
   Loading filament...: フィラメントを装填中...
   Loading filaments...: フィラメントを読み込み中...
@@ -1012,6 +1100,8 @@ translations:
   Loading spools...: スプールを読み込み中...
   Loading vendors...: ベンダーを読み込み中...
   Loading...: 読み込み中...
+  Locale: 'ロケール'
+  'Locale: ': 'ロケール: '
   Location: 場所
   Lock: ロック
   Lock A: ロック A
@@ -1020,6 +1110,7 @@ translations:
   Locked during print: 印刷中はロックされています
   Log Level: ログレベル
   Logs: ログ
+  Longest Disconnect: '最長切断時間'
   Loosen Path A belt.: パスAのベルトを緩めてください。
   Loosen Path B belt.: パスBのベルトを緩めてください。
   Lost connection during print — try again: 印刷中に接続が切断されました — もう一度お試しください
@@ -1030,8 +1121,10 @@ translations:
   MACRO DEVICES: マクロデバイス
   MAIN POWER BUTTON: メイン電源ボタン
   MANUAL: 手動
+  MB RAM: 'MB RAM'
   MCU: MCU
   MCU, host, and auxiliary temperature monitoring: MCU、ホスト、補助温度の監視
+  'MCU: ': 'MCU: '
   MDI Icons: MDI アイコン
   MISSING CONFIGURED: 設定済みが見つかりません
   'MMU command failed: {}': 'MMU コマンドに失敗しました: {}'
@@ -1092,9 +1185,12 @@ translations:
   Measure belt path frequencies: ベルトパスの周波数を測定
   Measured: 測定値
   Measurement Failed: 測定失敗
+  Measuring Path A... %d%%: 'パス A を測定中... %d%%'
+  Measuring Path B... %d%%: 'パス B を測定中... %d%%'
   Mechanical setup: 機械的セットアップ
   Memory: メモリ
   Memory (MB): メモリ (MB)
+  Memory Snapshot: 'メモリースナップショット'
   Mesh Complete: メッシュ完了
   Mesh saved as '{}': '"メッシュを ''{}'' として保存しました"'
   Method: 方法
@@ -1110,6 +1206,7 @@ translations:
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker は再起動しましたが
     Spoolman に未接続です。サーバーを確認してください。
   Moonraker restarting...\nWaiting for reconnection...: Moonraker再起動中...\n再接続を待機中...
+  'Moonraker: ': 'Moonraker: '
   More points = more accurate, but takes longer.: ポイント数が多いほど精度が上がりますが、時間がかかります。
   Motion: 動作
   'Motion: XYZ': '動作: XYZ'
@@ -1135,6 +1232,7 @@ translations:
   NEWLY DISCOVERED: 新規検出
   Name: 名前
   Name (optional): 名前（オプション）
+  'Name:': '名前:'
   Named actions in the LED control panel (long-press).: LEDコントロールパネルの名前付きアクション（長押し）。
   Needs adjustment: 調整が必要
   Net Weight (g): 正味重量（g）
@@ -1148,12 +1246,15 @@ translations:
   Never: なし
   'New Spool: Step ': '新しいスプール: ステップ '
   'New Spool: Step 1 of 3': '新しいスプール: ステップ 1 / 3'
+  'New Spool: Step {} of {}': '新規スプール: ステップ {} / {}'
   New Version Available: 新バージョンあり
   New fan name: 新しいファン名
   New printer successfully added: 新しいプリンターを追加しました
   New profile name: 新しいプロファイル名
   Next: 次へ
   Niimbot (Bluetooth): Niimbot (Bluetooth)
+  'No': 'いいえ'
+  No API connection: 'API 接続なし'
   No Bluetooth printer selected — pick one in settings: Bluetooth プリンターが選択されていません
     — 設定で選択してください
   No Bluetooth printers found: Bluetooth プリンターが見つかりません
@@ -1167,6 +1268,7 @@ translations:
   No Multi-Filament System connected: マルチフィラメントシステムが接続されていません
   No Multi-Filament System connected.: マルチフィラメントシステムが接続されていません。
   No PRINT_START macro found: PRINT_START マクロが見つかりません
+  No PWM LED detected for strobe mode: 'ストロボモード用の PWM LED が検出されませんでした'
   No Power Devices: 電源デバイスなし
   No Spool: スプールなし
   No Spools: スプールなし
@@ -1175,6 +1277,7 @@ translations:
   No camera — use USB barcode scanner: カメラなし — USB バーコードスキャナーを使用してください
   No changes selected.\n\nClick Cancel to close.: 変更が選択されていません。\n\n「キャンセル」をクリックして閉じてください。
   No changes to revert: 元に戻す変更はありません
+  No color: '色なし'
   No dryer available. Store filament in a sealed dry box with desiccant for best results.: 乾燥機がありません。最良の結果を得るには、乾燥剤入りの密封ドライボックスにフィラメントを保管してください。
   No effects available: 利用可能なエフェクトがありません
   No events queued: キューにイベントはありません
@@ -1187,6 +1290,7 @@ translations:
   No images found on USB drive: USBドライブに画像が見つかりません
   No jobs in queue: キューにジョブがありません
   No light configured. Set up in Settings > LED Settings.: ライトが未設定です。設定 > LED設定で設定してください。
+  No macro devices configured: 'マクロデバイスが設定されていません'
   No macros available: 利用可能なマクロがありません
   No macros found: マクロが見つかりません
   No matching prints: 一致する印刷なし
@@ -1197,7 +1301,10 @@ translations:
   No networks found: ネットワークが見つかりません
   No notifications: 通知なし
   No objects defined for this print: この印刷にはオブジェクトが定義されていません
+  No plugins: 'プラグインなし'
+  No plugins discovered: 'プラグインが見つかりませんでした'
   No plugins found: プラグインが見つかりません
+  No presets configured: 'プリセットが設定されていません'
   No preview: プレビューなし
   No print history found: 印刷履歴が見つかりません
   No print history yet: 印刷履歴がありません
@@ -1214,6 +1321,7 @@ translations:
   No vendors found: ベンダーが見つかりません
   No webcam detected.\nA webcam is required for timelapse.: ウェブカメラが検出されませんでした。\nタイムラプスにはウェブカメラが必要です。
   None: なし
+  None (disable): 'なし (無効)'
   Not Enough Filament: フィラメントが不足しています
   Not Now: 今はしない
   Not calibrated: キャリブレーション未実施
@@ -1221,6 +1329,9 @@ translations:
   Not connected: 未接続
   Not connected to printer: プリンターに未接続
   Not connected to printer.: プリンターに未接続です。
+  Not detected: '検出されません'
+  Not found (strobe only): '見つかりません (ストロボのみ)'
+  Not found (use phone app): '見つかりません (スマホアプリを使用)'
   Not yet calibrated: 未キャリブレーション
   Notes: メモ
   Notes (optional): メモ（オプション）
@@ -1239,20 +1350,27 @@ translations:
   Nozzle Temperature: ノズル温度
   Nozzle Temps: ノズル温度
   Nozzle heater turned off: ノズルヒーターをオフにしました
+  Nozzle min cannot exceed max: 'ノズル温度の最小値は最大値を超えられません'
   Nozzle target set to {}°C: ノズル目標温度を {}°C に設定しました
+  Nozzle temp must be 100-500°C: 'ノズル温度は 100〜500°C にしてください'
   Nozzle °C: ノズル °C
   'Nozzle:': 'ノズル:'
   OD: OD
   'OFF': 'OFF'
   OK: OK
   'ON': 'ON'
+  'ON: {} | OFF: {}': 'オン: {} | オフ: {}'
   OS: OS
+  'OS: ': 'OS: '
   Object positions unavailable: オブジェクト位置が利用できません
   Objects: オブジェクト
   'Off': オフ
+  'Off:': 'オフ:'
   'On': オン
   On and Off macros must be different: オンとオフのマクロは異なるものにしてください
+  On/Off: 'オン/オフ'
   On/Off (state-aware): オン/オフ（状態追跡）
+  'On:': 'オン:'
   One or more tools required by this file have no filament loaded. The print will likely fail. Print anyway?: このファイルに必要なツールの1つ以上にフィラメントが装填されていません。印刷は失敗する可能性があります。それでも印刷しますか？
   Open: 開く
   Open Source Licenses: オープンソースライセンス
@@ -1266,16 +1384,23 @@ translations:
   Or Enter Manually: または手動で入力
   Oscillating... cycle %d/%d: 振動中... サイクル %d/%d
   Out of range: 範囲外
+  Outcome: '結果'
   Output Device: 出力デバイス
   Output Mode: 出力モード
   Output Pin: 出力ピン
   Overheating: 過熱
+  'Overlay Visits: ': 'オーバーレイ表示回数: '
+  Overlays Opened: '開いたオーバーレイ数'
   Override auto-detection if your chamber sensor or heater isn't named 'chamber'.: チャンバーセンサーやヒーターの名前が
     'chamber' でない場合、自動検出を上書きできます。
   P: P
   PA: PA
   PETG: PETG
   PID: PID
+  PIN must be 4-6 digits: 'PIN は 4〜6 桁にしてください'
+  PIN removed: 'PIN を削除しました'
+  PIN set: 'PIN を設定しました'
+  PINs don't match: 'PIN が一致しません'
   PLA: PLA
   PLA - Black: PLA - ブラック
   POWER: 電源
@@ -1293,6 +1418,7 @@ translations:
     — スキャナーがボンディングされませんでした。スキャナーの電源を入れ直してから、もう一度 Pair をタップしてください。
   Pairing failed: ペアリング失敗
   Pairing...: ペアリング中...
+  Panel Usage: 'パネル使用状況'
   Paper Test Calibration: 紙テストキャリブレーション
   Parameters: パラメータ
   Part: パーツ
@@ -1325,12 +1451,16 @@ translations:
     (低いほどスクロールが早く開始)
   'Place image files (PNG, JPEG, BMP, GIF) in config/custom_images/. Max size: 2048×2048 pixels.': '画像ファイル
     (PNG, JPEG, BMP, GIF) を config/custom_images/ に配置してください。最大サイズ: 2048×2048 ピクセル。'
+  Place plugins in the plugins directory: 'プラグインを plugins ディレクトリに配置してください'
   Place plugins in the plugins directory to extend HelixScreen: HelixScreen を拡張するには、プラグインディレクトリにプラグインを配置してください
   Placed: 配置済み
+  Platform: 'プラットフォーム'
+  'Platform: ': 'プラットフォーム: '
   Play / stop Crockett's Theme: Crockett's Theme を再生/停止
   Please enter a theme name: テーマ名を入力してください
   Please enter a valid port (1-65535).: 有効なポート番号を入力してください (1-65535)。
   Please enter an IP address or hostname.: IPアドレスまたはホスト名を入力してください。
+  Please fill in the highlighted fields: 'ハイライトされた項目を入力してください'
   Please wait while the printer homes and probes.: プリンターがホーミングとプローブを行う間お待ちください。
   Please wait while the printer probes each screw position.: プリンターが各ネジ位置をプローブする間お待ちください。
   Plugin already installed: プラグインは既にインストール済みです
@@ -1383,8 +1513,10 @@ translations:
   Print Label: ラベルを印刷
   Print Library: 印刷ライブラリ
   Print Objects: 印刷オブジェクト
+  Print Outcome: '印刷結果'
   Print Paused: 印刷一時停止
   Print Speed: 印刷速度
+  Print Start: '印刷開始'
   Print Status: 印刷ステータス
   Print Time: 印刷時間
   Print Tuning: 印刷チューニング
@@ -1422,6 +1554,8 @@ translations:
   Printer is not paired — pair it first: プリンターがペアリングされていません — 先にペアリングしてください
   Printer name: プリンター名
   Printer ready: プリンター準備完了
+  'Printer:': 'プリンター:'
+  'Printer: ': 'プリンター: '
   PrinterIdentify: プリンターを識別
   Printers: プリンター
   Printers, Multi-Filament System, fans, sensors, and LEDs: プリンター、マルチフィラメントシステム、ファン、センサー、LED
@@ -1476,6 +1610,7 @@ translations:
   Quick Button 3: クイックボタン3
   Quick Button 4: クイックボタン4
   Quick actions, calibration, speed: クイックアクション、キャリブレーション、速度
+  RSS: 'RSS'
   'RSS:': 'RSS:'
   Raspberry Pi: Raspberry Pi
   Raspberry Pi (32-bit): Raspberry Pi (32-bit)
@@ -1483,6 +1618,8 @@ translations:
   Re-syncs Happy Hare's tracked state with the hardware.: Happy Hare が追跡している状態をハードウェアと再同期します。
   Ready: 準備完了
   Ready to Apply: 適用の準備完了
+  Ready to load: '読み込み準備完了'
+  Reason: '理由'
   'Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?': '理由:
     {}\n\nプリンターはこの印刷を再開できません。最初からやり直しますか？'
   Reboot: 再起動
@@ -1546,6 +1683,7 @@ translations:
   Restart Firmware?: ファームウェアを再起動しますか？
   Restart HelixScreen: HelixScreen を再起動
   Restart Klipper: Klipper を再起動
+  Restart Moonraker: 'Moonraker を再起動'
   Restart Now: 今すぐ再起動
   Restart Required: 再起動が必要です
   'Restart failed: not connected': '再起動に失敗: 未接続'
@@ -1640,6 +1778,7 @@ translations:
   Scanning for networks...: ネットワークをスキャン中...
   Scanning...: スキャン中...
   'Score: 0': 'スコア: 0'
+  Screen Blank: '画面消灯'
   Screen Dim: 画面減光
   Screen dims to lower brightness after period of inactivity: 一定時間操作がないと画面の明るさが下がります
   Screen lock and PIN settings: 画面ロックと PIN の設定
@@ -1674,6 +1813,7 @@ translations:
   Select macro for fourth button: 4番目のボタンのマクロを選択
   Select macro for second button: 2番目のボタンのマクロを選択
   Select macro for third button: 3番目のボタンのマクロを選択
+  Select material to begin: '素材を選択して開始してください'
   Select sensor: センサーを選択
   Select slot: スロットを選択
   'Select slot failed: {}': 'スロットの選択に失敗しました: {}'
@@ -1698,13 +1838,20 @@ translations:
   Separate on/off macros. HelixScreen tracks the state.: 個別のオン/オフマクロ。HelixScreenが状態を追跡します。
   Server Setup: サーバー設定
   Servo: サーボ
+  Session Duration: 'セッション継続時間'
+  Session Start: 'セッション開始'
   'Set ': '設定 '
   Set Active: アクティブに設定
   Set PIN: PIN を設定
+  ? 'Set a phone strobe app to %.1f Hz and aim at the belt. Adjust until the belt
+    appears stationary.\n\nRecommended apps:\n  Android: Strobily, Strobe Light\n  iOS:
+    Strobe Light Tachometer, myStroboscope'
+  : 'スマホのストロボアプリを %.1f Hz に設定してベルトに向けてください。ベルトが静止して見えるまで調整します。\n\n推奨アプリ:\n  Android: Strobily, Strobe Light\n  iOS: Strobe Light Tachometer, myStroboscope'
   Set local timezone for time display: 時刻表示用のローカルタイムゾーンを設定
   Set logging verbosity for troubleshooting: トラブルシューティング用のログの詳細レベルを設定
   Set up your label printer in Settings: 設定でラベルプリンターをセットアップしてください
   Settings: 設定
+  Settings Snapshot: '設定スナップショット'
   Settings reset to defaults. Restarting...: 設定をデフォルトにリセットしました。再起動中...
   Setup Complete!: セットアップ完了！
   Setup Timelapse: タイムラプスを設定
@@ -1714,7 +1861,7 @@ translations:
     の改善にご協力ください。個人データは一切収集されません。
   'Share this code in Discord or support:': 'このコードをDiscordまたはサポートで共有してください:'
   Sheet Label Print: シートラベル印刷
-  Shelf A: '棚A'
+  Shelf A: 棚A
   'Shininess:': '光沢:'
   Show Printer Switcher: プリンター切替を表示
   Show Sections: セクションを表示
@@ -1734,13 +1881,19 @@ translations:
   Shutting down screen...: 画面をシャットダウン中...
   Shutting down...: シャットダウン中...
   Side: 側面
+  Signal: '信号'
+  'Signal #': '信号番号'
   Single toggle macro. State is not tracked.: 単一のトグルマクロ。状態は追跡されません。
   Size: サイズ
   Skip: スキップ
   Sleep While Printing: 印刷中のスリープ
   Sleep adjusted to match dim timeout: スリープタイムアウトを調整しました
+  Slicer: 'スライサー'
   Slot: スロット
+  Slot %d: 'スロット %d'
+  Slot %d Filament: 'スロット %d のフィラメント'
   Slot 1: スロット1
+  Slot {}: 'スロット {}'
   Slot {} spool cleared: スロット {} のスプールをクリアしました
   Slot {} updated: スロット {} を更新しました
   Small labels help keep controls calm and focused.: 小さなラベルはコントロールを落ち着いた集中した状態に保ちます。
@@ -1762,6 +1915,9 @@ translations:
   Speed of retraction movement: リトラクション動作の速度
   Speed used to push filament out of the box (mm/s): フィラメントをボックスから押し出す速度 (mm/s)
   Spool: スプール
+  'Spool ': 'スプール '
+  'Spool #': 'スプール #'
+  'Spool #{}': 'スプール #{}'
   Spool Details: スプール詳細
   Spool Info: スプール情報
   Spool Visualization (Pseudo-3D Canvas): スプール可視化（疑似3Dキャンバス）
@@ -1778,6 +1934,8 @@ translations:
   Spoolman has no spools configured: Spoolman にスプールが設定されていません
   Spoolman removed.: Spoolman を削除しました。
   Spoolman unavailable — filament weights may be stale: Spoolmanが利用できません — フィラメント重量が古い可能性があります
+  'Spoolman: %zu Spool%s': 'Spoolman: %zu 個のスプール%s'
+  'Spoolman: %zu/%zu Spool%s': 'Spoolman: %zu/%zu 個のスプール%s'
   Square Corner Velocity: 直角コーナー速度
   Stable: 安定版
   Standard: スタンダード
@@ -1795,6 +1953,7 @@ translations:
   Start print anyway?: それでも印刷を開始しますか？
   Started: 開始
   Starting Print...: 印刷開始中...
+  Starting measurement...: '測定を開始中...'
   Starting...: 開始中...
   Startup Brightness: 起動時の明るさ
   Startup, auto-control, and macro devices: 起動、自動制御、マクロデバイス
@@ -1839,9 +1998,11 @@ translations:
   TD-1 filament color detection: TD-1 フィラメント色検出
   TEMPERATURE SENSORS: 温度センサー
   THEME COLORS: テーマカラー
+  'TOGGLE: {}': '切り替え: {}'
   TOOLS: ツール
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 3〜5分かかります。中断しないでください。
+  Tap + to add: '+ をタップして追加'
   Tap again to confirm this orientation: もう一度タップしてこの向きを確定
   Tap anywhere if this text is right-side up: この文字が正しい向きならどこかをタップ
   Tap anywhere to begin: どこかをタップして開始
@@ -1852,15 +2013,20 @@ translations:
   Tap to show keyboard...: タップしてキーボードを表示...
   Target Frequency: 目標周波数
   Target Temperature: 目標温度
+  Target Version: '目標バージョン'
   Telemetry: テレメトリ
   Telemetry Data: テレメトリデータ
+  Telemetry Disabled: 'テレメトリー無効'
+  Telemetry Enabled: 'テレメトリー有効'
   Telemetry queue cleared: テレメトリキューをクリアしました
   Temp: 温度
   Temp Compensation: 温度補正
   Temp °C: 温度 °C
+  Temp °C (%d–%d): '温度 °C (%d〜%d)'
   Temperature: 温度
   Temperature Graph Config: 温度グラフ設定
   Temperatures: 温度
+  Temperatures saved: '温度を保存しました'
   Template: テンプレート
   Temporary adjustment for this print, unless saved on Controls panel: コントロールパネルで保存しない限り、この印刷のみの一時的な調整です
   Tertiary: ターシャリ
@@ -1883,6 +2049,11 @@ translations:
     interfering with prints. You can re-enable it in Settings > Display.
   : アニメーション付きスクリーンセーバーが印刷に干渉しないよう、このデバイスではオフになっています。設定 > ディスプレイで再度有効にできます。
   The heater will cycle on and off several times.: ヒーターは数回オン/オフを繰り返します。
+  ? The motor vibrates the belt while a strobe light flashes at the same frequency.
+    When the belt appears to stand still (frozen), you have found the resonant frequency.\n\nUse
+    the frequency buttons to sweep through values until the belt looks stationary,
+    then lock the reading.
+  : 'モーターがベルトを振動させ、ストロボライトが同じ周波数で点滅します。ベルトが静止して(止まって)見えたとき、共振周波数を見つけたことになります。\n\n周波数ボタンで値を変化させ、ベルトが静止して見えたらその値を固定してください。'
   The printer halted this print and cannot resume it. Restart from the beginning?: プリンターはこの印刷を停止し、再開できません。最初からやり直しますか？
   The printer rejected the filament configuration. The print was not started.: プリンターがフィラメント設定を拒否しました。印刷は開始されませんでした。
   The runout sensor indicates no filament is loaded. Start print anyway?: フィラメント切れセンサーがフィラメント未装填を検出しました。それでも印刷を開始しますか？
@@ -1893,6 +2064,7 @@ translations:
   Theme Preset: テーマプリセット
   Theme changes apply after restart.: テーマの変更は再起動後に適用されます。
   Theme reset to defaults: テーマをデフォルトにリセットしました
+  'Theme: ': 'テーマ: '
   'These tools have incompatible materials loaded:': 'これらのツールには互換性のない素材がロードされています:'
   'These tools have no filament loaded:': 'これらのツールにフィラメントが装填されていません:'
   'These tools have no matching filament loaded:': 'これらのツールに一致するフィラメントが装填されていません:'
@@ -1929,11 +2101,13 @@ translations:
   This will restart Klipper.: これにより Klipper が再起動します。
   Thorough: 徹底的
   Thumbnail Only: サムネイルのみ
+  'Thumbnail: ': 'サムネイル: '
   Tighten Path A belt.: パスAのベルトを張ってください。
   Tighten Path B belt.: パスBのベルトを張ってください。
   Time: 時間
   Time Format: 時間形式
   Time to wait before escalating to emergency stop: 緊急停止にエスカレートするまでの待機時間
+  'Time: ': '時刻: '
   Timelapse: タイムラプス
   Timelapse Available: タイムラプス利用可能
   Timelapse Settings: タイムラプス設定
@@ -1948,6 +2122,7 @@ translations:
   Toggle: トグル
   Toggle (fire-and-forget): トグル（状態追跡なし）
   Toggle Feature: 機能を切り替え
+  'Toggle:': '切り替え:'
   Too humid: 湿度が高すぎます
   Tool: ツール
   Tool Changer: ツールチェンジャー
@@ -1956,6 +2131,8 @@ translations:
   Toolhead Style: ツールヘッドスタイル
   Toolhead jam: ツールヘッドの詰まり
   Toolhead, G-code, limits, and materials: ツールヘッド、Gコード、制限、材料
+  Tools Used: '使用したツール'
+  'Tools: ': 'ツール: '
   Top: 上
   Total Prints: 総印刷数
   Touch & Input: タッチと入力
@@ -1970,6 +2147,7 @@ translations:
   TouchCalibration: タッチキャリブレーション
   Trace: トレース
   Travels: 移動
+  Trigger: 'トリガー'
   'Troubleshooting:': 'トラブルシューティング:'
   Try adjusting your search or filters: 検索やフィルターを調整してみてください
   Tune: チューニング
@@ -1980,18 +2158,27 @@ translations:
   Turn on LEDs when printer starts: プリンター起動時に LED を点灯
   Type: タイプ
   Type to preview input field...: 入力フィールドをプレビューするには入力してください...
+  'Type:': 'タイプ:'
+  T{} shares slot with T{}: 'T{} は T{} とスロットを共有しています'
   UI Sounds: UIサウンド
   USB: USB
   USB DEVICES: USBデバイス
   USB printer access denied — check permissions: USB プリンターへのアクセスが拒否されました — 権限を確認してください
   Understanding Results: 結果の理解
+  ? Uneven belt tension causes print artifacts like layer shifts, VFAs (vertical fine
+    artifacts), and ringing.\n\nThis tool vibrates each belt path and measures the
+    resonant frequency \u2014 matched frequencies mean balanced tension.\n\nFor CoreXY,
+    Path A and B should be within a few Hz of each other.
+  : 'ベルト張力が不均一だと、レイヤーシフトや VFA(垂直微細アーティファクト)、リンギングなどの印刷不良が発生します。\n\nこのツールは各ベルトパスを振動させて共振周波数を測定します — 周波数が一致していれば張力が均等であることを意味します。\n\nCoreXY では、パス A と B は数 Hz 以内に収まっている必要があります。'
   Uninstall HelixPrint Plugin: HelixPrint プラグインをアンインストール
   'Uninstall: Coming soon': 'アンインストール: 近日公開'
   Unit: ユニット
   'Unit ': 'ユニット '
   Unknown: 不明
+  Unknown Event: '不明なイベント'
   Unknown Spool: 不明なスプール
   Unknown Step: 不明なステップ
+  Unknown error: '不明なエラー'
   Unlink: 連携解除
   Unload: 排出
   Unload Filament: フィラメントを排出
@@ -2013,6 +2200,7 @@ translations:
   Update Available: 更新あり
   Update Channel: 更新チャンネル
   Update Failed: 更新失敗
+  Update Success: '更新成功'
   Update installed!: アップデートをインストールしました！
   Update your security PIN: セキュリティ PIN を更新
   Updating Configuration...: 設定を更新中...
@@ -2020,15 +2208,19 @@ translations:
   Upload Debug Bundle: デバッグバンドルをアップロード
   Upload Failed: アップロード失敗
   Upload gcode files to get started: 開始するには gcode ファイルをアップロードしてください
+  Uptime: '稼働時間'
   Use Android native keyboard for text input: テキスト入力に Android ネイティブキーボードを使用
   Use G10/G11 firmware retraction: G10/G11 ファームウェアリトラクションを使用
   Use printer type to select image: プリンタータイプで画像を選択
+  VM Peak: 'VM ピーク'
+  VM Size: 'VM サイズ'
   Value must be between {:.0f} and {:.0f}: 値は {:.0f} から {:.0f} の間で入力してください
   Velocity and acceleration limits: 速度と加速度の制限
   Vendor: ベンダー
   Vendor Name: ベンダー名
   Vendor already exists: ベンダーはすでに存在します
   'Vendor:': ベンダー：
+  Verify: '確認'
   Verifying timelapse plugin...: タイムラプスプラグインを確認中...
   Verifying...: 検証中...
   Version: バージョン
@@ -2047,16 +2239,19 @@ translations:
   View installed plugins and status: インストール済みプラグインとステータスを表示
   View live camera feed: ライブカメラ映像を表示
   View print statistics and job history: 印刷統計とジョブ履歴を表示
+  'Visits: ': '表示回数: '
   Visual Fine-Tuning: 視覚的微調整
   Volume: 音量
   WIDTH SENSORS: 幅センサー
   WLED: WLED
+  WLED Preset: 'WLED プリセット'
   Waiting for Moonraker...: Moonraker を待機中...
   Waiting for bed to reach temperature for accurate calibration.: 正確なキャリブレーションのためにベッド温度到達を待機中。
   Warm Bed: ベッドを予熱
   Warming Bed...: ベッド予熱中...
   Warn: 警告
   Warning: 警告
+  Watch the belt under the strobe LED. Adjust frequency until the belt appears stationary — that is the resonant frequency.: 'ストロボ LED の下でベルトを観察してください。ベルトが静止して見えるまで周波数を調整します — それが共振周波数です。'
   Weak battery: バッテリー残量低下
   Webcam: ウェブカメラ
   Website (optional): ウェブサイト（オプション）
@@ -2084,7 +2279,7 @@ translations:
   Widget Labels: ウィジェットラベル
   Width: 幅
   Wifi: Wi-Fi
-  Wizard Error: 'ウィザードエラー'
+  Wizard Error: ウィザードエラー
   Wrong PIN: PIN が違います
   Wrong media: 不正なメディア
   X: X
@@ -2102,6 +2297,7 @@ translations:
   'Y jog failed: {}': 'Y軸移動に失敗しました: {}'
   'Y:': 'Y:'
   Year: 年
+  'Yes': 'はい'
   ? You can now skip these operations when starting prints.\n\nLook for the new options
     in the print details before starting each print.\n\nA backup of your config was
     saved automatically.
@@ -2143,13 +2339,21 @@ translations:
   Zoom: ズーム
   bed: ベッド
   by Preston Brown: by Preston Brown
+  chamber heater: 'チャンバーヒーター'
+  cores: 'コア'
   disable: 無効化
   disabled: 無効
   e.g. Jet Black: 例：ジェットブラック
+  e.g. NAME=my_var VALUE=123: '例: NAME=my_var VALUE=123'
   e.g. Polymaker: 例：Polymaker
   elapsed: 経過
   enable: 有効化
   enabled: 有効
+  extruder: 'エクストルーダー'
+  extruder(s): 'エクストルーダー'
+  extruders: 'エクストルーダー'
+  fans: 'ファン'
+  heated bed: 'ヒートベッド'
   layers: レイヤー
   left: 残り
   mm before clog: 詰まりまでの距離 (mm)
@@ -2165,8 +2369,11 @@ translations:
   remaining: 残り
   remaining before clog detection triggers: 残りで詰まり検出が作動します
   set to: に設定
+  slots): 'スロット)'
   started: 開始
+  steppers: 'ステッパー'
   tall: 高さ
+  tool(s): 'ツール'
   tour.step.advanced.body: マクロ、G-code コンソール、キャリブレーションツール（PID、入力シェイパー、Z オフセット）、ファームウェア更新、開発者向けユーティリティ。
   tour.step.advanced.title: 詳細設定
   tour.step.controls.body: ツールヘッドを動かし、軸をホーミングし、ベッドをレベリングし、温度、ファン、その他のモーション設定を微調整します。
@@ -2194,4 +2401,5 @@ translations:
   '{} macro not configured': '{} マクロが未設定です'
   '{} may cause unintended changes. Are you sure?': '{} は意図しない変更を引き起こす可能性があります。よろしいですか？'
   '{} more taps to {} beta features': あと{}回タップでベータ機能を{}
+  '{} preset{}': '{} 個のプリセット{}'
   '{} target set to {}°C': '{} 目標温度を {}°C に設定しました'

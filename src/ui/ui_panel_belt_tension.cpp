@@ -127,32 +127,32 @@ void ui_panel_belt_tension_register_callbacks() {
          [](lv_event_t* /*e*/) {
              helix::ui::modal_show_alert(
                  lv_tr("Belt Tension Check"),
-                 "Uneven belt tension causes print artifacts like layer shifts, "
-                 "VFAs (vertical fine artifacts), and ringing.\n\n"
-                 "This tool vibrates each belt path and measures the resonant "
-                 "frequency \u2014 matched frequencies mean balanced tension.\n\n"
-                 "For CoreXY, Path A and B should be within a few Hz of each other.",
+                 lv_tr("Uneven belt tension causes print artifacts like layer shifts, "
+                       "VFAs (vertical fine artifacts), and ringing.\n\n"
+                       "This tool vibrates each belt path and measures the resonant "
+                       "frequency \u2014 matched frequencies mean balanced tension.\n\n"
+                       "For CoreXY, Path A and B should be within a few Hz of each other."),
                  ModalSeverity::Info, lv_tr("Got it"));
          }},
         {"belt_tension_results_help_cb",
          [](lv_event_t* /*e*/) {
              helix::ui::modal_show_alert(
                  lv_tr("Understanding Results"),
-                 "Frequency Delta: Difference between Path A and B. "
-                 "Ideally under 5 Hz; over 15 Hz needs adjustment.\n\n"
-                 "Path Similarity: How closely the vibration profiles match. "
-                 "Above 90% is excellent; below 70% suggests uneven tension.",
+                 lv_tr("Frequency Delta: Difference between Path A and B. "
+                       "Ideally under 5 Hz; over 15 Hz needs adjustment.\n\n"
+                       "Path Similarity: How closely the vibration profiles match. "
+                       "Above 90% is excellent; below 70% suggests uneven tension."),
                  ModalSeverity::Info, lv_tr("Got it"));
          }},
         {"belt_tension_strobe_help_cb",
          [](lv_event_t* /*e*/) {
              helix::ui::modal_show_alert(
                  lv_tr("Visual Fine-Tuning"),
-                 "The motor vibrates the belt while a strobe light flashes at the "
-                 "same frequency. When the belt appears to stand still (frozen), "
-                 "you have found the resonant frequency.\n\n"
-                 "Use the frequency buttons to sweep through values until the belt "
-                 "looks stationary, then lock the reading.",
+                 lv_tr("The motor vibrates the belt while a strobe light flashes at the "
+                       "same frequency. When the belt appears to stand still (frozen), "
+                       "you have found the resonant frequency.\n\n"
+                       "Use the frequency buttons to sweep through values until the belt "
+                       "looks stationary, then lock the reading."),
                  ModalSeverity::Info, lv_tr("Got it"));
          }},
     });
@@ -177,17 +177,18 @@ void BeltTensionPanel::init_subjects() {
     UI_MANAGED_SUBJECT_INT(s_belt_tension_state, 0, "belt_tension_state", subjects_);
 
     // Start screen subjects
-    UI_MANAGED_SUBJECT_STRING(hw_kinematics_subject_, hw_kinematics_buf_, "Detecting...",
+    UI_MANAGED_SUBJECT_STRING(hw_kinematics_subject_, hw_kinematics_buf_, lv_tr("Detecting..."),
                               "bt_hw_kinematics", subjects_);
-    UI_MANAGED_SUBJECT_STRING(hw_adxl_subject_, hw_adxl_buf_, "Detecting...", "bt_hw_adxl",
+    UI_MANAGED_SUBJECT_STRING(hw_adxl_subject_, hw_adxl_buf_, lv_tr("Detecting..."), "bt_hw_adxl",
                               subjects_);
-    UI_MANAGED_SUBJECT_STRING(hw_led_subject_, hw_led_buf_, "Detecting...", "bt_hw_led", subjects_);
+    UI_MANAGED_SUBJECT_STRING(hw_led_subject_, hw_led_buf_, lv_tr("Detecting..."), "bt_hw_led",
+                              subjects_);
     UI_MANAGED_SUBJECT_STRING(target_freq_subject_, target_freq_buf_, "110 Hz", "bt_target_freq",
                               subjects_);
 
     // Progress subjects
     UI_MANAGED_SUBJECT_INT(progress_subject_, 0, "bt_progress", subjects_);
-    UI_MANAGED_SUBJECT_STRING(progress_label_subject_, progress_label_buf_, "Preparing...",
+    UI_MANAGED_SUBJECT_STRING(progress_label_subject_, progress_label_buf_, lv_tr("Preparing..."),
                               "bt_progress_label", subjects_);
 
     // Result subjects
@@ -212,12 +213,12 @@ void BeltTensionPanel::init_subjects() {
     UI_MANAGED_SUBJECT_STRING(strobe_freq_subject_, strobe_freq_buf_, "100.0 Hz", "bt_strobe_freq",
                               subjects_);
     UI_MANAGED_SUBJECT_STRING(strobe_instruction_subject_, strobe_instruction_buf_,
-                              "Adjust belt tension until the belt appears stationary",
+                              lv_tr("Adjust belt tension until the belt appears stationary"),
                               "bt_strobe_instruction", subjects_);
 
     // Error subject
     UI_MANAGED_SUBJECT_STRING(error_message_subject_, error_message_buf_,
-                              "An error occurred during measurement.", "bt_error_message",
+                              lv_tr("An error occurred during measurement."), "bt_error_message",
                               subjects_);
 
     subjects_initialized_ = true;
@@ -353,11 +354,12 @@ void BeltTensionPanel::on_activate() {
                         return;
                     spdlog::warn("[BeltTension] Hardware detection failed: {}", msg);
                     // Show defaults, user can still try
-                    snprintf(hw_kinematics_buf_, sizeof(hw_kinematics_buf_), "Unknown");
+                    snprintf(hw_kinematics_buf_, sizeof(hw_kinematics_buf_), "%s",
+                             lv_tr("Unknown"));
                     lv_subject_notify(&hw_kinematics_subject_);
-                    snprintf(hw_adxl_buf_, sizeof(hw_adxl_buf_), "Not detected");
+                    snprintf(hw_adxl_buf_, sizeof(hw_adxl_buf_), "%s", lv_tr("Not detected"));
                     lv_subject_notify(&hw_adxl_subject_);
-                    snprintf(hw_led_buf_, sizeof(hw_led_buf_), "Not detected");
+                    snprintf(hw_led_buf_, sizeof(hw_led_buf_), "%s", lv_tr("Not detected"));
                     lv_subject_notify(&hw_led_subject_);
                 });
             });
@@ -410,7 +412,7 @@ void BeltTensionPanel::on_hardware_detected(const helix::calibration::BeltTensio
     detected_hw_ = hw;
 
     // Update kinematics display
-    const char* kin_label = "Unknown";
+    const char* kin_label = lv_tr("Unknown");
     switch (hw.kinematics) {
     case helix::calibration::KinematicsType::COREXY:
         kin_label = "CoreXY";
@@ -419,7 +421,7 @@ void BeltTensionPanel::on_hardware_detected(const helix::calibration::BeltTensio
         kin_label = "Cartesian";
         break;
     default:
-        kin_label = hw.kinematics_name.empty() ? "Unknown" : hw.kinematics_name.c_str();
+        kin_label = hw.kinematics_name.empty() ? lv_tr("Unknown") : hw.kinematics_name.c_str();
         break;
     }
     snprintf(hw_kinematics_buf_, sizeof(hw_kinematics_buf_), "%s", kin_label);
@@ -427,14 +429,14 @@ void BeltTensionPanel::on_hardware_detected(const helix::calibration::BeltTensio
 
     // Update ADXL status
     snprintf(hw_adxl_buf_, sizeof(hw_adxl_buf_), "%s",
-             hw.has_adxl ? "Connected (auto-sweep)" : "Not found (strobe only)");
+             hw.has_adxl ? lv_tr("Connected (auto-sweep)") : lv_tr("Not found (strobe only)"));
     lv_subject_notify(&hw_adxl_subject_);
 
     // Update LED status
     if (hw.has_pwm_led) {
-        snprintf(hw_led_buf_, sizeof(hw_led_buf_), "Available (%s)", hw.pwm_led_pin.c_str());
+        snprintf(hw_led_buf_, sizeof(hw_led_buf_), lv_tr("Available (%s)"), hw.pwm_led_pin.c_str());
     } else {
-        snprintf(hw_led_buf_, sizeof(hw_led_buf_), "Not found (use phone app)");
+        snprintf(hw_led_buf_, sizeof(hw_led_buf_), lv_tr("Not found (use phone app)"));
     }
     lv_subject_notify(&hw_led_subject_);
 
@@ -453,13 +455,13 @@ void BeltTensionPanel::handle_start_clicked() {
     spdlog::info("[BeltTension] Start clicked");
 
     if (!calibrator_) {
-        on_error("Calibrator not initialized. Try reopening the panel.");
+        on_error(lv_tr("Calibrator not initialized. Try reopening the panel."));
         return;
     }
 
     set_view_state(ViewState::PROGRESS);
     lv_subject_set_int(&progress_subject_, 0);
-    snprintf(progress_label_buf_, sizeof(progress_label_buf_), "Starting measurement...");
+    snprintf(progress_label_buf_, sizeof(progress_label_buf_), lv_tr("Starting measurement..."));
     lv_subject_notify(&progress_label_subject_);
 
     auto tok = lifetime_.token();
@@ -473,10 +475,10 @@ void BeltTensionPanel::handle_start_clicked() {
 
                 if (percent < 50) {
                     snprintf(progress_label_buf_, sizeof(progress_label_buf_),
-                             "Measuring Path A... %d%%", percent * 2);
+                             lv_tr("Measuring Path A... %d%%"), percent * 2);
                 } else {
                     snprintf(progress_label_buf_, sizeof(progress_label_buf_),
-                             "Measuring Path B... %d%%", (percent - 50) * 2);
+                             lv_tr("Measuring Path B... %d%%"), (percent - 50) * 2);
                 }
                 lv_subject_notify(&progress_label_subject_);
             });
@@ -513,7 +515,7 @@ void BeltTensionPanel::handle_strobe_clicked() {
 
     if (!detected_hw_.has_pwm_led) {
         ToastManager::instance().show(ToastSeverity::WARNING,
-                                      "No PWM LED detected for strobe mode");
+                                      lv_tr("No PWM LED detected for strobe mode"));
         return;
     }
 
@@ -545,12 +547,12 @@ void BeltTensionPanel::handle_strobe_freq_down() {
 
 void BeltTensionPanel::handle_lock_a_clicked() {
     spdlog::info("[BeltTension] Lock A clicked (strobe placeholder)");
-    ToastManager::instance().show(ToastSeverity::INFO, "Belt A frequency locked");
+    ToastManager::instance().show(ToastSeverity::INFO, lv_tr("Belt A frequency locked"));
 }
 
 void BeltTensionPanel::handle_lock_b_clicked() {
     spdlog::info("[BeltTension] Lock B clicked (strobe placeholder)");
-    ToastManager::instance().show(ToastSeverity::INFO, "Belt B frequency locked");
+    ToastManager::instance().show(ToastSeverity::INFO, lv_tr("Belt B frequency locked"));
 }
 
 void BeltTensionPanel::handle_back_to_results_clicked() {
@@ -605,7 +607,7 @@ void BeltTensionPanel::populate_results(const helix::calibration::BeltTensionRes
     lv_subject_notify(&result_b_status_subject_);
 
     // Delta
-    snprintf(result_delta_buf_, sizeof(result_delta_buf_), "%.1f Hz difference",
+    snprintf(result_delta_buf_, sizeof(result_delta_buf_), lv_tr("%.1f Hz difference"),
              result.frequency_delta);
     lv_subject_notify(&result_delta_subject_);
 
@@ -631,16 +633,16 @@ void BeltTensionPanel::update_strobe_display() {
     bool has_led = calibrator_ && calibrator_->get_hardware().has_pwm_led;
     if (has_led) {
         snprintf(strobe_instruction_buf_, sizeof(strobe_instruction_buf_),
-                 "Watch the belt under the strobe LED. "
-                 "Adjust frequency until the belt appears stationary — "
-                 "that is the resonant frequency.");
+                 lv_tr("Watch the belt under the strobe LED. "
+                       "Adjust frequency until the belt appears stationary — "
+                       "that is the resonant frequency."));
     } else {
         snprintf(strobe_instruction_buf_, sizeof(strobe_instruction_buf_),
-                 "Set a phone strobe app to %.1f Hz and aim at the belt. "
-                 "Adjust until the belt appears stationary.\n\n"
-                 "Recommended apps:\n"
-                 "  Android: Strobily, Strobe Light\n"
-                 "  iOS: Strobe Light Tachometer, myStroboscope",
+                 lv_tr("Set a phone strobe app to %.1f Hz and aim at the belt. "
+                       "Adjust until the belt appears stationary.\n\n"
+                       "Recommended apps:\n"
+                       "  Android: Strobily, Strobe Light\n"
+                       "  iOS: Strobe Light Tachometer, myStroboscope"),
                  current_strobe_freq_);
     }
     lv_subject_notify(&strobe_instruction_subject_);

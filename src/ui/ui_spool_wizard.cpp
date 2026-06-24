@@ -19,6 +19,7 @@
 #include "moonraker_api.h"
 #include "theme_manager.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -361,7 +362,7 @@ void SpoolWizardOverlay::set_can_proceed(bool val) {
 
 std::string SpoolWizardOverlay::step_label() const {
     int step_num = static_cast<int>(current_step_) + 1;
-    return "New Spool: Step " + std::to_string(step_num) + " of " + std::to_string(STEP_COUNT);
+    return fmt::format(lv_tr("New Spool: Step {} of {}"), step_num, STEP_COUNT);
 }
 
 void SpoolWizardOverlay::on_create_requested() {
@@ -438,7 +439,7 @@ void SpoolWizardOverlay::set_creating(bool val) {
 void SpoolWizardOverlay::create_vendor_then_filament_then_spool() {
     MoonrakerAPI* api = get_moonraker_api();
     if (!api) {
-        on_creation_error("No API connection");
+        on_creation_error(lv_tr("No API connection"));
         return;
     }
 
@@ -470,7 +471,7 @@ void SpoolWizardOverlay::create_vendor_then_filament_then_spool() {
         },
         [this](const MoonrakerError& err) {
             helix::ui::queue_update([this, msg = err.message]() {
-                on_creation_error("Failed to create vendor: " + msg);
+                on_creation_error(fmt::format("{} {}", lv_tr("Failed to create vendor:"), msg));
             });
         });
 }
@@ -478,7 +479,7 @@ void SpoolWizardOverlay::create_vendor_then_filament_then_spool() {
 void SpoolWizardOverlay::create_filament_then_spool(int vendor_id) {
     MoonrakerAPI* api = get_moonraker_api();
     if (!api) {
-        on_creation_error("No API connection", created_vendor_id_);
+        on_creation_error(lv_tr("No API connection"), created_vendor_id_);
         return;
     }
 
@@ -522,7 +523,8 @@ void SpoolWizardOverlay::create_filament_then_spool(int vendor_id) {
         },
         [this](const MoonrakerError& err) {
             helix::ui::queue_update([this, msg = err.message]() {
-                on_creation_error("Failed to create filament: " + msg, created_vendor_id_);
+                on_creation_error(fmt::format("{} {}", lv_tr("Failed to create filament:"), msg),
+                                  created_vendor_id_);
             });
         });
 }
@@ -530,7 +532,7 @@ void SpoolWizardOverlay::create_filament_then_spool(int vendor_id) {
 void SpoolWizardOverlay::create_spool(int filament_id) {
     MoonrakerAPI* api = get_moonraker_api();
     if (!api) {
-        on_creation_error("No API connection", created_vendor_id_, created_filament_id_);
+        on_creation_error(lv_tr("No API connection"), created_vendor_id_, created_filament_id_);
         return;
     }
 
@@ -562,8 +564,8 @@ void SpoolWizardOverlay::create_spool(int filament_id) {
         },
         [this](const MoonrakerError& err) {
             helix::ui::queue_update([this, msg = err.message]() {
-                on_creation_error("Failed to create spool: " + msg, created_vendor_id_,
-                                  created_filament_id_);
+                on_creation_error(fmt::format("{} {}", lv_tr("Failed to create spool:"), msg),
+                                  created_vendor_id_, created_filament_id_);
             });
         });
 }
@@ -1699,7 +1701,7 @@ void SpoolWizardOverlay::on_wizard_confirm_create_filament(lv_event_t* /*e*/) {
     if (has_error) {
         spdlog::warn("[SpoolWizard] Cannot create filament — missing required fields");
         ToastManager::instance().show(ToastSeverity::WARNING,
-                                      "Please fill in the highlighted fields");
+                                      lv_tr("Please fill in the highlighted fields"));
         return;
     }
 

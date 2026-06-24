@@ -17,6 +17,7 @@
 #include "moonraker_api.h"
 #include "theme_manager.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <cmath>
@@ -138,7 +139,7 @@ void SpoolEditModal::init_subjects() {
     }
 
     lv_subject_init_string(&save_button_text_subject_, save_button_text_buf_, nullptr,
-                           sizeof(save_button_text_buf_), "Close");
+                           sizeof(save_button_text_buf_), lv_tr("Close"));
     lv_xml_register_subject(nullptr, "spoolman_edit_save_text", &save_button_text_subject_);
 
 #if HELIX_HAS_LABEL_PRINTER
@@ -166,7 +167,7 @@ void SpoolEditModal::populate_fields() {
     // Title — modal_header names its title widget "header_title".
     lv_obj_t* title = find_widget("header_title");
     if (title) {
-        std::string title_text = "Edit Spool #" + std::to_string(working_spool_.id);
+        std::string title_text = fmt::format(lv_tr("Edit Spool #{}"), working_spool_.id);
         lv_label_set_text(title, title_text.c_str());
     }
 
@@ -174,7 +175,7 @@ void SpoolEditModal::populate_fields() {
     lv_obj_t* material_label = find_widget("material_label");
     if (material_label) {
         const char* material =
-            working_spool_.material.empty() ? "Unknown" : working_spool_.material.c_str();
+            working_spool_.material.empty() ? lv_tr("Unknown") : working_spool_.material.c_str();
         lv_label_set_text(material_label, material);
     }
 
@@ -186,7 +187,7 @@ void SpoolEditModal::populate_fields() {
         } else if (!working_spool_.color_hex.empty()) {
             color = working_spool_.color_hex;
         } else {
-            color = "No color";
+            color = lv_tr("No color");
         }
         lv_label_set_text(color_label, color.c_str());
     }
@@ -194,7 +195,7 @@ void SpoolEditModal::populate_fields() {
     lv_obj_t* vendor_label = find_widget("vendor_label");
     if (vendor_label) {
         const char* vendor =
-            working_spool_.vendor.empty() ? "Unknown" : working_spool_.vendor.c_str();
+            working_spool_.vendor.empty() ? lv_tr("Unknown") : working_spool_.vendor.c_str();
         lv_label_set_text(vendor_label, vendor);
     }
 

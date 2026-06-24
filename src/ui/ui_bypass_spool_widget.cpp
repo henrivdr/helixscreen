@@ -49,7 +49,7 @@ BypassSpoolWidgets bypass_spool_create(lv_obj_t* parent, lv_event_cb_t on_click,
     }
 
     w.bypass_label = lv_label_create(parent);
-    lv_label_set_text(w.bypass_label, "Bypass");
+    lv_label_set_text(w.bypass_label, lv_tr("Bypass"));
     lv_obj_set_style_text_color(w.bypass_label, theme_manager_get_color("text"), 0);
     lv_obj_add_flag(w.bypass_label, LV_OBJ_FLAG_FLOATING);
     lv_obj_update_layout(w.bypass_label);

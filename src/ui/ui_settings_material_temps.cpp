@@ -308,8 +308,9 @@ void MaterialTempsOverlay::show_edit_view(const std::string& material_name) {
     lv_subject_copy_string(&edit_name_subject_, edit_name_buf_);
 
     // Update defaults hint
-    snprintf(edit_defaults_buf_, sizeof(edit_defaults_buf_), "Default: %d-%d°C nozzle, %d°C bed",
-             default_nozzle_min, default_nozzle_max, default_bed);
+    snprintf(edit_defaults_buf_, sizeof(edit_defaults_buf_),
+             lv_tr("Default: %d-%d°C nozzle, %d°C bed"), default_nozzle_min, default_nozzle_max,
+             default_bed);
     lv_subject_copy_string(&edit_defaults_subject_, edit_defaults_buf_);
 
     // Populate input fields
@@ -400,7 +401,8 @@ void MaterialTempsOverlay::handle_save() {
     const char* bed_text = lv_textarea_get_text(bed_temp_input);
 
     if (!min_text || !min_text[0] || !max_text || !max_text[0] || !bed_text || !bed_text[0]) {
-        ToastManager::instance().show(ToastSeverity::WARNING, "All fields are required", 3000);
+        ToastManager::instance().show(ToastSeverity::WARNING, lv_tr("All fields are required"),
+                                      3000);
         return;
     }
 
@@ -410,16 +412,18 @@ void MaterialTempsOverlay::handle_save() {
 
     // Validate ranges
     if (nozzle_min < 100 || nozzle_max < 100 || nozzle_min > 500 || nozzle_max > 500) {
-        ToastManager::instance().show(ToastSeverity::WARNING, "Nozzle temp must be 100-500°C",
-                                      3000);
+        ToastManager::instance().show(ToastSeverity::WARNING,
+                                      lv_tr("Nozzle temp must be 100-500°C"), 3000);
         return;
     }
     if (bed_temp < 0 || bed_temp > 200) {
-        ToastManager::instance().show(ToastSeverity::WARNING, "Bed temp must be 0-200°C", 3000);
+        ToastManager::instance().show(ToastSeverity::WARNING, lv_tr("Bed temp must be 0-200°C"),
+                                      3000);
         return;
     }
     if (nozzle_min > nozzle_max) {
-        ToastManager::instance().show(ToastSeverity::WARNING, "Nozzle min cannot exceed max", 3000);
+        ToastManager::instance().show(ToastSeverity::WARNING, lv_tr("Nozzle min cannot exceed max"),
+                                      3000);
         return;
     }
 
@@ -459,7 +463,7 @@ void MaterialTempsOverlay::handle_save() {
     }
 
     spdlog::info("[{}] Saved overrides for {}", get_name(), editing_material_);
-    ToastManager::instance().show(ToastSeverity::SUCCESS, "Temperatures saved", 2000);
+    ToastManager::instance().show(ToastSeverity::SUCCESS, lv_tr("Temperatures saved"), 2000);
 
     // Return to list view and refresh, preserving scroll position
     int scroll_y = list_view_ ? lv_obj_get_scroll_y(list_view_) : 0;
