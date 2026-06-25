@@ -3016,11 +3016,34 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             std::lock_guard<std::mutex> lock(mutex_);
             const int chan = *result.ifs_chan; // 1-based, 0 = none
 
-            // Record the physically seated port unconditionally — the unload
-            // router reads this directly so the seated channel is recognised
-            // even on the plugin path, where the tool_map_-derived current_slot
-            // is owned by save_variables and can disagree with the seated port.
-            seated_chan_ = chan;
+            // IFS_STATUS "Chan" reports the LAST channel the switching mechanism
+            // engaged, which includes a cold-lane eject (IFS_F11): after ejecting
+            // an idle lane, Chan points at that now-EMPTY port. Bundle CGR6C7PA
+            // (#1065) captured it directly — `Chan:1` with `Ports:[false,..]` right
+            // after ejecting cold lane 1 while lane 2 stayed seated at the head.
+            // Adopting that as the seated channel moves "seated" onto an empty lane
+            // and reclassifies the genuinely-seated lane as a cold eject, grinding
+            // its un-cut filament (#1065 Bug 3). The same IFS_STATUS frame carries
+            // the silk-sensor Ports presence, so reject a non-zero Chan that THIS
+            // frame shows as an empty lane. Chan==0 (nothing engaged) and frames
+            // without a Ports reading apply unchanged — the seated channel only
+            // moves onto a lane the simultaneous presence snapshot confirms has
+            // filament.
+            bool chan_lane_empty = false;
+            if (chan > 0 && chan <= NUM_PORTS && result.ifs_ports.has_value()) {
+                chan_lane_empty = !(*result.ifs_ports)[static_cast<size_t>(chan - 1)];
+            }
+            if (!chan_lane_empty) {
+                // Record the physically seated port — the unload router reads this
+                // directly so the seated channel is recognised even on the plugin
+                // path, where the tool_map_-derived current_slot is owned by
+                // save_variables and can disagree with the seated port.
+                seated_chan_ = chan;
+            } else {
+                spdlog::debug("{} IFS_STATUS Chan={} ignored as seated: lane empty this "
+                              "frame (eject-engaged stale channel); keeping seated_chan_={}",
+                              backend_log_tag(), chan, seated_chan_);
+            }
 
             // IFS_STATUS "Ports" is the RS-485 silk-sensor presence truth and is
             // the presence authority on native ZMOD. Apply it here — before the
@@ -3057,7 +3080,11 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // derivation (gated on !has_ifs_vars_, matching the extruder_slot
             // path below: lessWaste/bambufy own active_tool_ via save_variables).
             if (!has_ifs_vars_) {
-                int new_active_tool = (chan > 0) ? find_first_tool_for_port(chan) : -1;
+                // Derive from the (guarded) seated channel, not the raw Chan: an
+                // eject-engaged empty lane was rejected above, so active_tool_ and
+                // current_slot must follow seated_chan_, not the stale reading.
+                int new_active_tool =
+                    (seated_chan_ > 0) ? find_first_tool_for_port(seated_chan_) : -1;
                 if (active_tool_ != new_active_tool) {
                     active_tool_ = new_active_tool;
                     chan_changed = true;

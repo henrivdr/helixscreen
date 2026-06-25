@@ -2566,6 +2566,55 @@ TEST_CASE("AD5X IFS IFS_STATUS Chan is seated authority over stale Extruder: Non
     REQUIRE_FALSE(backend.can_unload_from_toolhead(2));
 }
 
+TEST_CASE("AD5X IFS cold-lane eject does not pollute seated channel (#1065 Bug 3)",
+          "[ams][ad5x_ifs]") {
+    // Field repro (raza616/mkleersn bundle CGR6C7PA + state table): a lane is
+    // loaded to the toolhead, then the user ejects a DIFFERENT, cold lane. The
+    // firmware's switching mechanism engages the ejected port, so the follow-up
+    // IFS_STATUS reports that port as "Chan" even though it is now EMPTY (its
+    // Ports[] bit drops to false). The xlsx captured exactly this: after ejecting
+    // channel 1, `Chan: 1` with `Ports: [false, true, true, true]`. Trusting that
+    // stale Chan reclassified the genuinely-seated lane as a cold lane, so the
+    // loaded lane offered Eject and a tap would cold-grind seated filament.
+    //
+    // The seated channel must only follow a Chan whose lane actually has filament.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Identity tool map so find_first_tool_for_port(N) -> tool N-1.
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+    REQUIRE(backend.set_tool_mapping(2, 2).success());
+    REQUIRE(backend.set_tool_mapping(3, 3).success());
+
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // Channel 2 seated at the toolhead, all four lanes present.
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.ifs_active = true;
+    loaded.ifs_chan = 2;
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+
+    // Baseline: ch2 (slot 1) is seated -> Unload; ch1 (slot 0) is cold -> Eject.
+    REQUIRE(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
+    REQUIRE_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+
+    // Eject cold lane 1. Its post-eject IFS_STATUS: Chan=1 (last-engaged channel)
+    // but port 1 now empty. seated_chan_ must NOT move to channel 1.
+    AmsBackendAd5xIfs::ZColorSilentResult after_eject;
+    after_eject.saw_valid_response = true;
+    after_eject.ifs_active = true;
+    after_eject.ifs_chan = 1; // stale: engaged-but-now-empty lane
+    after_eject.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, after_eject);
+
+    // Channel 2 is still the seated lane -> must still route to the heated
+    // toolhead Unload, NOT a cold Eject. Channel 1, now empty, stays cold-eject.
+    CHECK(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+}
+
 TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)", "[ams][ad5x_ifs]") {
     // On old zmod, GET_ZCOLOR SILENT=1 degrades to an action:prompt dialog
     // (is_prompt_fallback). IFS_STATUS rides the same buffer as clean JSON
