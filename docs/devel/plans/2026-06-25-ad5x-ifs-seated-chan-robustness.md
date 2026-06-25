@@ -100,11 +100,23 @@ single "Unload current filament" action rather than offering Unload on every lan
 - **PURGING budget**: action stays non-ERROR up to the new budget; `ifs_motion_sensor`
   activity resets the clock.
 
+## Field timing data for Fix 3 (#1065 follow-up)
+- **raza616 (2026-06-25):** from a cold start (~24 °C ambient, worst case) the *whole*
+  cut → unload loaded channel → load new channel → purge took **almost exactly 3 minutes**.
+  This is the full multi-phase op (includes the cold HEATING phase, already budgeted 300 s);
+  it does NOT isolate the PURGING phase.
+- **Vger1700 (earlier):** hit the 90 s PURGING ERROR twice before a purge finished → the
+  purge phase alone may approach ~180 s, OR poll starvation hides completion.
+- **Implication:** reports agree the op is long but disagree on whether PURGING *alone* is.
+  Since each phase's clock resets on transition (except HEATING), the robust fix is both
+  (a) a dedicated PURGING budget (size ≥180 s) AND (b) reset the clock on `ifs_motion_sensor`
+  activity, so the exact phase duration matters less; treat a starved poll as "keep waiting."
+
 ## Field confirmation still needed
 - Power-cycle Unload→Eject after Fix 1/2: re-run the xlsx sequence (load X, power cycle,
   eject Y, re-check X) → X should still offer Unload.
-- Real purge duration on a slow material to size `PURGING_TIMEOUT_SECONDS` (Vger1700 saw
-  ~180 s; 240 s proposed with headroom).
+- PURGING-phase duration in isolation (motion-sensor-active window) to confirm the dedicated
+  budget — raza616's 3 min is whole-op, not purge-only.
 
 ## Status
 Confirmed/diagnosed from CGR6C7PA + xlsx. Implementation not started. MAJOR / critical-path

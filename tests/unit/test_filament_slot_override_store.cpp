@@ -1962,3 +1962,103 @@ TEST_CASE("save + load round-trip preserves explicit lock state",
     CHECK(loaded.at(1).user_locked_color);
     CHECK(loaded.at(1).user_locked_material);
 }
+
+// ============================================================================
+// Seated-lane persistence: lane_data/"seated" scalar holding the 0-based index
+// of the lane currently loaded to the toolhead. Round-trips through
+// save_seated_slot_async / load_seated_slot_blocking; clear_seated_slot_async
+// removes it. Absent / null api → nullopt.
+// ============================================================================
+
+TEST_CASE("FilamentSlotOverrideStore seated slot round-trips through save/load",
+          "[filament_slot_override][slow]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    FilamentSlotOverrideStore store(&api, "ifs");
+
+    bool cb_done = false;
+    bool cb_ok = false;
+    std::string cb_err;
+    store.save_seated_slot_async(2, [&](bool ok, std::string err) {
+        cb_ok = ok;
+        cb_err = std::move(err);
+        cb_done = true;
+    });
+    REQUIRE(cb_done);
+    CHECK(cb_ok);
+    CHECK(cb_err.empty());
+
+    // Stored as a plain JSON integer under the sibling "seated" key.
+    auto stored = api.mock_get_db_value("lane_data", "seated");
+    REQUIRE(stored.is_number_integer());
+    CHECK(stored.get<int>() == 2);
+
+    auto seated = store.load_seated_slot_blocking();
+    REQUIRE(seated.has_value());
+    CHECK(*seated == 2);
+}
+
+TEST_CASE("FilamentSlotOverrideStore clear_seated_slot_async removes the seated key",
+          "[filament_slot_override][slow]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    FilamentSlotOverrideStore store(&api, "ifs");
+
+    bool save_done = false;
+    store.save_seated_slot_async(2, [&](bool, std::string) { save_done = true; });
+    REQUIRE(save_done);
+    REQUIRE(store.load_seated_slot_blocking().has_value());
+
+    bool clear_done = false;
+    bool clear_ok = false;
+    store.clear_seated_slot_async([&](bool ok, std::string) {
+        clear_ok = ok;
+        clear_done = true;
+    });
+    REQUIRE(clear_done);
+    CHECK(clear_ok);
+
+    CHECK(api.mock_get_db_value("lane_data", "seated").is_null());
+    CHECK_FALSE(store.load_seated_slot_blocking().has_value());
+}
+
+TEST_CASE("FilamentSlotOverrideStore load_seated_slot_blocking returns nullopt when unset",
+          "[filament_slot_override][slow]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    // No "seated" key set → absent → nullopt.
+    FilamentSlotOverrideStore store(&api, "ifs");
+    CHECK_FALSE(store.load_seated_slot_blocking().has_value());
+
+    // Null api → nullopt (never blocks, never crashes).
+    FilamentSlotOverrideStore null_store(nullptr, "ifs");
+    CHECK_FALSE(null_store.load_seated_slot_blocking().has_value());
+
+    // save / clear with a null api report failure via the callback, not a crash.
+    bool save_cb = false;
+    bool save_ok = true;
+    null_store.save_seated_slot_async(1, [&](bool ok, std::string) {
+        save_ok = ok;
+        save_cb = true;
+    });
+    REQUIRE(save_cb);
+    CHECK_FALSE(save_ok);
+
+    bool clear_cb = false;
+    bool clear_ok = true;
+    null_store.clear_seated_slot_async([&](bool ok, std::string) {
+        clear_ok = ok;
+        clear_cb = true;
+    });
+    REQUIRE(clear_cb);
+    CHECK_FALSE(clear_ok);
+}

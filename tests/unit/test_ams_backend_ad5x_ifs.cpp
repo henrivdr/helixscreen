@@ -200,6 +200,17 @@ class Ad5xIfsTestAccess {
                                     const AmsBackendAd5xIfs::ZColorSilentResult& r) {
         b.apply_zcolor_result(r);
     }
+    // Seed the remembered seated lane directly (bypasses the Moonraker
+    // "lane_data" DB load, which requires a live connection). Production loads
+    // this at init via override_store_; tests inject it to exercise the
+    // cold-boot restore path with a nullptr api/client.
+    static void set_persisted_seated_slot(AmsBackendAd5xIfs& b, std::optional<int> slot) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.persisted_seated_slot_ = slot;
+    }
+    static std::optional<int> persisted_seated_slot(const AmsBackendAd5xIfs& b) {
+        return b.persisted_seated_slot_;
+    }
     // Seed the in-memory overrides map directly (bypasses load_blocking, which
     // requires a live Moonraker connection). on_started() is the only
     // production path that writes this field; tests must use this shim because
@@ -2613,6 +2624,91 @@ TEST_CASE("AD5X IFS cold-lane eject does not pollute seated channel (#1065 Bug 3
     // toolhead Unload, NOT a cold Eject. Channel 1, now empty, stays cold-eject.
     CHECK(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
     CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+}
+
+TEST_CASE(
+    "AD5X IFS restores persisted seated lane after power-cycle Chan=0 (#1065 power-cycle floor)",
+    "[ams][ad5x_ifs]") {
+    // The firmware forgets the seated channel across a power cycle: IFS_STATUS
+    // comes back Chan=0 even with a lane physically at the head (bundle CGR6C7PA).
+    // With no seated lane and head loaded, every lane wrongly labels as Unloadable.
+    // We remember the last loaded lane and restore it provisionally on cold boot.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+    REQUIRE(backend.set_tool_mapping(2, 2).success());
+    REQUIRE(backend.set_tool_mapping(3, 3).success());
+
+    // Last session had channel 2 (slot 1) loaded — restored from the lane_data DB.
+    Ad5xIfsTestAccess::set_persisted_seated_slot(backend, 1);
+
+    // Power cycle: a lane is at the head (head sensor true) but firmware lost which
+    // one (Chan=0). All four lanes still physically present.
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    AmsBackendAd5xIfs::ZColorSilentResult boot;
+    boot.saw_valid_response = true;
+    boot.ifs_active = true;
+    boot.ifs_chan = 0; // firmware forgot the seated channel
+    boot.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, boot);
+
+    // Channel 2 (slot 1) is restored as seated -> Unload on it, Eject on cold lanes.
+    CHECK(backend.get_system_info().current_slot == 1);
+    CHECK(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(2, /*loaded_hint=*/true));
+}
+
+TEST_CASE("AD5X IFS does not restore a seated lane whose port is now empty (#1065)",
+          "[ams][ad5x_ifs]") {
+    // Corroboration: the filament in the remembered lane was pulled while powered
+    // off. head_filament_ says SOMETHING is loaded, but it is not the remembered
+    // lane (its port reads empty), so we must NOT claim it as seated.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+
+    Ad5xIfsTestAccess::set_persisted_seated_slot(backend, 1); // remembered ch2
+
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    AmsBackendAd5xIfs::ZColorSilentResult boot;
+    boot.saw_valid_response = true;
+    boot.ifs_active = true;
+    boot.ifs_chan = 0;
+    // Channel 2 (index 1) is now empty -> the remembered lane can't be seated.
+    boot.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, boot);
+
+    // No false claim: the seated slot stays unknown.
+    CHECK(backend.get_system_info().current_slot == -1);
+}
+
+TEST_CASE("AD5X IFS remembers the seated lane on load and forgets it on unload (#1065)",
+          "[ams][ad5x_ifs]") {
+    // The persisted marker is written when a load seats a channel (Chan>0 with the
+    // lane present) and cleared when an unload empties the head (Chan==0, head off).
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(2, 2).success()); // tool 2 -> port 3
+
+    // Load channel 3 (slot 2): head rises, Chan=3, port 3 present.
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.ifs_active = true;
+    loaded.ifs_chan = 3;
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, false, true, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+    CHECK(Ad5xIfsTestAccess::persisted_seated_slot(backend) == std::optional<int>(2));
+
+    // Unload: head drops, Chan back to 0 -> forget the remembered lane.
+    Ad5xIfsTestAccess::set_head_filament(backend, false);
+    AmsBackendAd5xIfs::ZColorSilentResult unloaded;
+    unloaded.saw_valid_response = true;
+    unloaded.ifs_active = true;
+    unloaded.ifs_chan = 0;
+    unloaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, unloaded);
+    CHECK_FALSE(Ad5xIfsTestAccess::persisted_seated_slot(backend).has_value());
 }
 
 TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)", "[ams][ad5x_ifs]") {

@@ -97,6 +97,23 @@ void AmsBackendAd5xIfs::on_started() {
         }
         spdlog::info("{} Loaded {} slot overrides from filament_slot store", backend_log_tag(),
                      loaded_count);
+
+        // Restore the last-known seated lane (#1065 power-cycle floor). The
+        // firmware forgets the seated channel across a reboot, so this is the only
+        // way to relabel Unload/Eject correctly when IFS_STATUS returns Chan=0 with
+        // a lane still physically at the head. Range-check against NUM_PORTS — a
+        // stale/corrupt value is discarded rather than trusted.
+        std::optional<int> seated = override_store_->load_seated_slot_blocking();
+        if (seated.has_value() && (*seated < 0 || *seated >= NUM_PORTS)) {
+            seated.reset();
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            persisted_seated_slot_ = seated;
+        }
+        if (seated.has_value()) {
+            spdlog::info("{} Restored remembered seated lane: slot {}", backend_log_tag(), *seated);
+        }
     }
 
     // Resolve the on-disk Adventurer5M.json path so write_adventurer_json()
@@ -3029,20 +3046,76 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // without a Ports reading apply unchanged — the seated channel only
             // moves onto a lane the simultaneous presence snapshot confirms has
             // filament.
-            bool chan_lane_empty = false;
-            if (chan > 0 && chan <= NUM_PORTS && result.ifs_ports.has_value()) {
-                chan_lane_empty = !(*result.ifs_ports)[static_cast<size_t>(chan - 1)];
-            }
-            if (!chan_lane_empty) {
+            // Presence of a 0-based lane, preferring THIS frame's IFS_STATUS Ports
+            // (the simultaneous silk-sensor snapshot) over the last-known per-port
+            // presence. Used to corroborate both the eject-stale-Chan rejection and
+            // the cold-boot restore below.
+            const auto lane_present = [&](int slot0) -> bool {
+                if (slot0 < 0 || slot0 >= NUM_PORTS)
+                    return false;
+                if (result.ifs_ports.has_value())
+                    return (*result.ifs_ports)[static_cast<size_t>(slot0)];
+                return port_presence_[static_cast<size_t>(slot0)];
+            };
+
+            // Eject-stale rejection (#1065 Bug 3) trusts ONLY this frame's Ports
+            // snapshot — never the last-known port_presence_, which lags and would
+            // wrongly reject a freshly-seated Chan on a frame that carried no Ports
+            // reading (the plugin path applies Chan without Ports).
+            const bool chan_lane_empty =
+                (chan > 0 && chan <= NUM_PORTS && result.ifs_ports.has_value() &&
+                 !(*result.ifs_ports)[static_cast<size_t>(chan - 1)]);
+            if (chan_lane_empty) {
+                spdlog::debug("{} IFS_STATUS Chan={} ignored as seated: lane empty this "
+                              "frame (eject-engaged stale channel); keeping seated_chan_={}",
+                              backend_log_tag(), chan, seated_chan_);
+            } else if (chan == 0 && !seated_resolved_since_boot_ && head_filament_ &&
+                       persisted_seated_slot_.has_value() &&
+                       lane_present(*persisted_seated_slot_)) {
+                // Power-cycle floor (#1065): the firmware forgets the seated channel
+                // across a reboot — IFS_STATUS returns Chan=0 even with a lane
+                // physically at the head (bundle CGR6C7PA). The head sensor proves a
+                // lane is loaded and the remembered lane is still present, so restore
+                // it as the seated channel rather than dropping to "nothing seated"
+                // (which would label every lane Unloadable). A real Chan>0, or a
+                // load/unload, supersedes it on a later frame.
+                const int restored = *persisted_seated_slot_ + 1;
+                if (seated_chan_ != restored) {
+                    spdlog::info("{} Cold-boot: Chan=0 with head loaded; restoring remembered "
+                                 "seated lane (slot {})",
+                                 backend_log_tag(), *persisted_seated_slot_);
+                }
+                seated_chan_ = restored;
+            } else {
                 // Record the physically seated port — the unload router reads this
                 // directly so the seated channel is recognised even on the plugin
                 // path, where the tool_map_-derived current_slot is owned by
                 // save_variables and can disagree with the seated port.
                 seated_chan_ = chan;
-            } else {
-                spdlog::debug("{} IFS_STATUS Chan={} ignored as seated: lane empty this "
-                              "frame (eject-engaged stale channel); keeping seated_chan_={}",
-                              backend_log_tag(), chan, seated_chan_);
+            }
+
+            // A real seated channel (Chan>0) or a confirmed-empty head resolves the
+            // seated state, so any later idle Chan==0 is a genuine clear rather than
+            // post-reboot amnesia — close the cold-boot restore window.
+            if ((chan > 0 && !chan_lane_empty) || (chan == 0 && !head_filament_)) {
+                seated_resolved_since_boot_ = true;
+            }
+
+            // Remember/forget the seated lane so a future power cycle can recover it.
+            // seated_chan_ now holds the corroborated seated channel (live or
+            // cold-boot-restored). On a confirmed unload (Chan=0 with the head
+            // empty) drop the memory so a later boot doesn't resurrect a lane that
+            // is no longer loaded. Writes are deduped so idle status frames don't
+            // re-post the DB key every ~1.4 s.
+            if (seated_chan_ > 0) {
+                const int seated_slot0 = seated_chan_ - 1;
+                if (persisted_seated_slot_ != std::optional<int>(seated_slot0)) {
+                    persisted_seated_slot_ = seated_slot0;
+                    persist_seated_slot_locked(seated_slot0);
+                }
+            } else if (chan == 0 && !head_filament_ && persisted_seated_slot_.has_value()) {
+                persisted_seated_slot_.reset();
+                persist_seated_slot_locked(-1);
             }
 
             // IFS_STATUS "Ports" is the RS-485 silk-sensor presence truth and is
@@ -3867,6 +3940,27 @@ void AmsBackendAd5xIfs::recompute_current_slot_locked() {
         }
     }
     system_info_.current_slot = -1;
+}
+
+void AmsBackendAd5xIfs::persist_seated_slot_locked(int slot0) {
+    // No store in unit tests / remote-less setups — the in-memory
+    // persisted_seated_slot_ still drives this session's restore logic; only the
+    // cross-restart durability is skipped. The store call is fire-and-forget; its
+    // SaveCallback only logs on failure, so the held mutex_ is never re-entered.
+    if (!override_store_)
+        return;
+    const std::string tag = backend_log_tag();
+    if (slot0 >= 0) {
+        override_store_->save_seated_slot_async(slot0, [tag, slot0](bool ok, std::string err) {
+            if (!ok)
+                spdlog::warn("{} failed to persist seated slot {}: {}", tag, slot0, err);
+        });
+    } else {
+        override_store_->clear_seated_slot_async([tag](bool ok, std::string err) {
+            if (!ok)
+                spdlog::warn("{} failed to clear persisted seated slot: {}", tag, err);
+        });
+    }
 }
 
 bool AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {

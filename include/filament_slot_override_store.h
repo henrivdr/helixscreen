@@ -6,6 +6,7 @@
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -25,6 +26,25 @@ class FilamentSlotOverrideStore {
     using SaveCallback = std::function<void(bool success, std::string error)>;
     void save_async(int slot_index, const FilamentSlotOverride& override, SaveCallback cb);
     void clear_async(int slot_index, SaveCallback cb);
+
+    // Seated-lane persistence. Unlike the per-lane overrides above, this is a
+    // single scalar (the 0-based index of the lane currently loaded to the
+    // toolhead) stored under a sibling key "seated" in the same lane_data
+    // namespace. The value on disk is a plain JSON integer.
+
+    // Persist the 0-based seated lane index to lane_data/"seated".
+    // Fire-and-forget, mirrors save_async (dispatches via
+    // api_->database_post_item, does not block).
+    void save_seated_slot_async(int slot_index, SaveCallback cb);
+
+    // Remove lane_data/"seated" (nothing currently seated). Mirrors clear_async.
+    void clear_seated_slot_async(SaveCallback cb);
+
+    // Blocking read of lane_data/"seated" at init time (mirrors load_blocking's
+    // cv.wait_for pattern + load_timeout_). Returns nullopt if absent/unreachable
+    // or the stored value is not a valid 0-based lane index. The caller is
+    // responsible for range-checking against its own NUM_PORTS.
+    std::optional<int> load_seated_slot_blocking();
 
     const std::string& backend_id() const {
         return backend_id_;
