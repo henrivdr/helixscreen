@@ -94,6 +94,11 @@ Supports: Kobra 3, Kobra 3 V2, Kobra 3 Max, Kobra S1
 
 ## 3. Multi-Material System: ACE Pro
 
+> **See also:** [`ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md`](ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md)
+> — real-log teardown of a Kobra S1 running the **mainline-Python Klipper fork**
+> (`klipper-kobra-s1`) with a custom `[ace_status]` Moonraker component. Refines several
+> figures below (baud, USB selection, `GET_INFO` schema) with observed data.
+
 ### Specifications
 
 | Feature | Specification |
