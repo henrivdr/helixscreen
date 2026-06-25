@@ -4,7 +4,7 @@
 <!-- Widget Catalog Overlay: half-width panel listing available widgets for grid placement -->
 <component>
   <view name="widget_catalog_overlay"
-        extends="overlay_panel" width="70%" title="Add Widget" title_tag="Add Widget"
+        extends="overlay_panel" width="90%" title="Add Widget" title_tag="Add Widget"
         action_button_text="Reset" action_button_text_tag="Reset"
         action_button_callback="on_catalog_reset" hide_action_button="false"
         action_button_bg_color="#secondary"

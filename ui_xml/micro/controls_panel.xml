@@ -34,19 +34,20 @@
         <lv_obj flex_flow="row"
                 style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0"
                 style_pad_gap="#space_sm">
-          <icon src="axis_arrow" size="sm" variant="primary"/>
+          <icon src="axis_arrow" size="md" variant="primary"/>
           <text_heading text="Position" translation_tag="Position" style_translate_y="2" style_text_color="#text"/>
         </lv_obj>
         <!-- Position display with homing indicators -->
         <!-- Split into static label + dynamic value for proper alignment with proportional fonts -->
         <lv_obj width="100%"
-                height="content" style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="#space_xxs">
+                height="content" style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="#space_xxs" clickable="true">
+          <event_cb trigger="clicked" callback="on_controls_quick_actions"/>
           <!-- X Position Row -->
           <lv_obj width="100%"
                   height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center"
-                  style_pad_gap="#space_xs">
+                  style_pad_gap="#space_xs" event_bubble="true">
             <text_heading width="content" text="X:"/>
-            <text_heading name="pos_x" bind_text="controls_pos_x" flex_grow="1" style_text_align="right"  style_text_color="#text"/>
+            <text_heading name="pos_x" bind_text="controls_pos_x" flex_grow="1" style_text_align="right" style_text_color="#text"/>
             <lv_obj width="10" height="10" style_radius="9999" style_margin_left="#space_xs">
               <bind_style name="indicator_homed" subject="x_homed" ref_value="1"/>
               <bind_style name="indicator_unhomed" subject="x_homed" ref_value="0"/>
@@ -55,7 +56,7 @@
           <!-- Y Position Row -->
           <lv_obj width="100%"
                   height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center"
-                  style_pad_gap="#space_xs">
+                  style_pad_gap="#space_xs" event_bubble="true">
             <text_heading width="content" text="Y:"/>
             <text_heading name="pos_y" bind_text="controls_pos_y" flex_grow="1" style_text_align="right" style_text_color="#text"/>
             <lv_obj width="10" height="10" style_radius="9999" style_margin_left="#space_xs">
@@ -66,7 +67,7 @@
           <!-- Z Position Row -->
           <lv_obj width="100%"
                   height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center"
-                  style_pad_gap="#space_xs">
+                  style_pad_gap="#space_xs" event_bubble="true">
             <text_heading width="content" text="Z:"/>
             <text_heading name="pos_z" bind_text="controls_pos_z" flex_grow="1" style_text_align="right" style_text_color="#text"/>
             <lv_obj width="10" height="10" style_radius="9999" style_margin_left="#space_xs">
@@ -79,13 +80,14 @@
                   width="100%" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs"
                   style_margin_top="#space_sm" clickable="true" scrollable="false">
             <event_cb trigger="clicked" callback="on_zoffset_tune"/>
-            <text_heading width="content" text="Z-Off:" translation_tag="Z-Off:"/>
+            <text_heading width="content" text="Offset:" translation_tag="Offset:"/>
             <text_heading bind_text="controls_z_offset" flex_grow="1" style_text_align="right" style_text_color="#text"/>
             <icon src="chevron_right" size="xs" variant="secondary"/>
           </lv_obj>
         </lv_obj>
         <!-- Save Z-Offset button: hidden when firmware auto-saves (GCODE_OFFSET strategy)
              or when gcode_z_offset == 0. Wrapper binds to strategy, button binds to offset. -->
+             <!-- TODO: Keep ot not? -->
         <lv_obj width="100%" height="content" hidden="true" style_pad_all="0" style_bg_opa="0" style_border_width="0">
           <bind_flag_if_eq subject="z_offset_can_save" flag="hidden" ref_value="0"/>
           <ui_button name="btn_save_z_offset"
@@ -98,7 +100,10 @@
         </lv_obj>
         <!-- Motion panel navigation button -->
         <ui_button name="btn_motion"
-                   width="100%" height="#button_height_sm" icon="cursor_move" text="Motion" translation_tag="Motion" style_text_font="#font_body">
+                   width="100%" height="#button_height_sm" icon="cursor_move" text="Motion" translation_tag="Motion"
+                   style_text_font="#font_body">
+          <!-- Hidden on MICRO screens. The position values are clickable. -->
+          <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
           <event_cb trigger="clicked" callback="on_controls_quick_actions"/>
         </ui_button>
       </ui_card>
@@ -126,9 +131,9 @@
             <lv_obj width="100%"
                     height="content" flex_flow="row" style_flex_cross_place="center" style_pad_all="0"
                     style_pad_gap="#space_sm" scrollable="false">
-              <icon src="thermometer" size="sm" variant="secondary"/>
-              <text_heading text="Temperatures"
-                          translation_tag="Temperatures" style_translate_y="2" style_text_color="#text"/>
+              <icon src="thermometer" size="md" variant="secondary"/>
+              <text_heading text="Temperature"
+                          translation_tag="Temperature" style_translate_y="2" style_text_color="#text"/>
             </lv_obj>
             <!-- Nozzle section (clickable) -->
             <lv_obj name="btn_nozzle_temp"
@@ -139,8 +144,13 @@
               <lv_obj width="content"
                       height="content" flex_flow="row" style_pad_all="0" scrollable="false"
                       style_flex_cross_place="center" style_pad_gap="#space_xs" clickable="false" event_bubble="true">
+                <bind_style_if_lt name="temp_row_gap_tiny" subject="ui_breakpoint" ref_value="2"/>
+                <bind_style_if_ge name="temp_row_gap_standard" subject="ui_breakpoint" ref_value="2"/>
                 <icon name="nozzle_heater_icon"
                       src="heater" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
+                <text_small bind_text="controls_nozzle_label">
+                  <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>
+                </text_small>
                 <temp_display name="nozzle_temp_display"
                               size="lg" show_target="true" bind_current="extruder_temp" bind_target="extruder_target"
                               clickable="false" event_bubble="true"/>
@@ -154,7 +164,12 @@
                 <icon src="pencil" size="sm" variant="tertiary" clickable="false" event_bubble="true"/>
               </lv_obj>
             </lv_obj>
-          
+            <text_small name="nozzle_status"
+                        width="100%" bind_text="controls_nozzle_status" style_text_color="#text"
+                        style_text_align="right">
+              <!-- Hidden on MICRO screens -->
+              <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
+            </text_small>
             <!-- Bed section (clickable) -->
             <lv_obj name="btn_bed_temp"
                     width="100%" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center"
@@ -164,8 +179,13 @@
               <lv_obj width="content"
                       height="content" flex_flow="row" style_pad_all="0" scrollable="false"
                       style_flex_cross_place="center" style_pad_gap="#space_xs" clickable="false" event_bubble="true">
+                <bind_style_if_lt name="temp_row_gap_tiny" subject="ui_breakpoint" ref_value="2"/>
+                <bind_style_if_ge name="temp_row_gap_standard" subject="ui_breakpoint" ref_value="2"/>
                 <icon name="bed_heater_icon"
                       src="radiator" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
+                <text_small text="Bed" translation_tag="Bed">
+                  <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>
+                </text_small>
                 <temp_display name="bed_temp_display"
                               size="lg" show_target="true" bind_current="bed_temp" bind_target="bed_target"
                               clickable="false" event_bubble="true"/>
@@ -179,6 +199,10 @@
                 <icon src="pencil" size="sm" variant="tertiary" clickable="false" event_bubble="true"/>
               </lv_obj>
             </lv_obj>
+            <text_small name="bed_status"
+                        width="100%" bind_text="controls_bed_status" style_text_color="#text" style_text_align="right">
+              <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
+            </text_small>
             <!-- Chamber section (visible only if printer has chamber sensor) -->
             <lv_obj name="btn_chamber_temp"
                     width="100%" flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center"
@@ -189,12 +213,17 @@
               <lv_obj width="content"
                       height="content" flex_flow="row" style_pad_all="0" scrollable="false"
                       style_flex_cross_place="center" style_pad_gap="#space_xs" clickable="false" event_bubble="true">
+                <bind_style_if_lt name="temp_row_gap_tiny" subject="ui_breakpoint" ref_value="2"/>
+                <bind_style_if_ge name="temp_row_gap_standard" subject="ui_breakpoint" ref_value="2"/>
                 <icon src="fridge_industrial" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
+                <text_small text="Chamb:" translation_tag="Chamb:" clickable="false" event_bubble="true">
+                  <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>
+                </text_small>
                 <temp_display name="chamber_temp_display"
                               size="lg" show_target="true" bind_current="chamber_temp" bind_target="chamber_effective_target" bind_mode="chamber_mode"
                               clickable="false" event_bubble="true"/>
               </lv_obj>
-              <!-- Right side: edit icon -->
+              <!-- Right side: temp display + edit icon -->
               <lv_obj name="chamber_temp_edit_container"
                       width="content" height="content" flex_flow="row" style_pad_all="0" scrollable="false"
                       style_flex_cross_place="center" style_pad_gap="#space_xs" clickable="true"
@@ -203,6 +232,13 @@
                 <icon src="pencil" size="sm" variant="tertiary" clickable="false" event_bubble="true"/>
               </lv_obj>
             </lv_obj>
+            <text_small name="chamber_status"
+                        width="100%" bind_text="controls_chamber_status" style_text_color="#text"
+                        style_text_align="right">
+              <!-- Hidden on MICRO screens and when printer has no chamber -->
+              <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
+              <bind_flag_if_eq subject="printer_has_chamber" flag="hidden" ref_value="0"/>
+            </text_small>
             <!-- Secondary temperature sensors list (populated dynamically) -->
             <lv_obj name="secondary_temps_list"
                     width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
@@ -219,8 +255,9 @@
             <lv_obj width="100%"
                     height="content" flex_flow="row" style_flex_cross_place="center" style_pad_all="0"
                     style_pad_gap="#space_sm" scrollable="false">
-              <icon name="fan_icon" src="fan" size="sm" variant="primary"/>
-              <text_heading text="Cooling" translation_tag="Cooling" style_translate_y="2" style_text_color="#text"/>
+              <icon name="fan_icon" src="fan" size="md" variant="primary"/>
+              <text_heading text="Cooling"
+                            ftranslation_tag="Cooling" style_translate_y="2" style_text_color="#text"/>
             </lv_obj>
             <!-- Part cooling hero section -->
             <text_small width="100%" text="Part Fan" translation_tag="Part Fan" style_margin_top="#space_sm" style_text_font="#font_heading"/>
@@ -230,7 +267,7 @@
               <event_cb trigger="value_changed" callback="on_controls_fan_slider"/>
             </lv_slider>
             <text_body name="fan_speed_display" width="80%" bind_text="controls_fan_speed" style_text_align="right">
-              <bind_flag_if_eq subject="ui_breakpoint" flag="hidden" ref_value="0"/>
+              <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
             </text_body>
             <!-- Secondary fans list (populated dynamically) -->
             <lv_obj name="secondary_fans_list"
@@ -254,7 +291,7 @@
         <lv_obj width="100%"
                 height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center"
                 style_pad_gap="#space_sm">
-          <icon src="wrench" size="sm" variant="primary"/>
+          <icon src="wrench" size="md" variant="primary"/>
           <text_heading text="Calibration &amp; Tools"
                       translation_tag="Calibration &amp; Tools" style_translate_y="2" style_text_color="#text"/>
         </lv_obj>
@@ -268,7 +305,7 @@
             <!-- Bed Mesh Button -->
             <ui_button name="btn_bed_mesh"
                        height="100%" flex_grow="1" icon="grid_large" text="Bed Mesh" translation_tag="Bed Mesh"
-                       icon_position="top" style_bg_opa="0" style_border_width="0">
+                       icon_position="top" style_bg_opa="0" style_border_width="0" style_text_font="#font_body" >
               <event_cb trigger="clicked" callback="on_calibration_bed_mesh"/>
             </ui_button>
 
@@ -302,17 +339,16 @@
               <lv_obj flex_flow="column"
                       style_flex_cross_place="center" align="center" style_pad_all="0" style_pad_gap="0"
                       clickable="false" scrollable="false">
-                <icon src="engine" size="sm" variant="warning" clickable="false">
+                <icon src="engine" size="md" variant="warning" clickable="false">
                   <bind_flag_if_eq subject="motors_enabled" flag="hidden" ref_value="0"/>
                 </icon>
-                <icon src="engine_off" size="sm" variant="secondary" clickable="false">
+                <icon src="engine_off" size="md" variant="secondary" clickable="false">
                   <bind_flag_if_eq subject="motors_enabled" flag="hidden" ref_value="1"/>
                 </icon>
-                <text_small text="Motors Off" translation_tag="Motors Off"/>
+                <text_small text="Motors Off" translation_tag="Motors Off" style_text_font="#font_body"/>
               </lv_obj>
             </lv_obj>
           </lv_obj>
-          <!-- row 2 -->
         </lv_obj>
       </ui_card>
       <!-- Card 5: Quick Actions (60% width) -->
@@ -323,15 +359,16 @@
         <lv_obj flex_flow="row"
                 style_flex_cross_place="center" style_flex_track_place="center" style_pad_all="0"
                 style_pad_gap="#space_sm">
-          <icon src="flash" size="sm" variant="primary"/>
+          <icon src="flash" size="md" variant="primary"/>
           <text_heading text="Quick Actions"
                       translation_tag="Quick Actions" style_translate_y="2" style_text_color="#text"/>
+          <bind_flag_if_eq subject="macro_header_visible" flag="hidden" ref_value="0"/>
         </lv_obj>
         <!-- Home row: label + segmented homing button bar -->
         <lv_obj width="100%"
                 height="content" style_pad_all="0" scrollable="false" flex_flow="row" style_flex_cross_place="center"
                 style_pad_gap="#space_xs">
-          <text_small text="Home" translation_tag="Home"/>
+          <text_small text="Home" translation_tag="Home" style_text_font="#font_body"/>
           <!-- Segmented homing button bar -->
           <lv_obj flex_grow="1" height="#button_height_sm"
                   style_radius="#border_radius" style_clip_corner="true" style_pad_all="0" style_pad_gap="0"
@@ -425,13 +462,15 @@
               <event_cb trigger="clicked" callback="on_controls_macro" user_data="1"/>
             </ui_button>
             <ui_button name="btn_macro_3"
-                       width="0" height="#button_height_sm" flex_grow="1" bind_text="macro_3_name" variant="secondary">
+                       width="0" height="#button_height_sm" flex_grow="1" bind_text="macro_3_name" variant="secondary"
+                       style_text_font="#font_small" long_mode="wrap">
               <bind_flag_if_eq subject="macro_3_visible" flag="hidden" ref_value="0"/>
               <bind_state_if_eq subject="print_active" state="disabled" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_controls_macro" user_data="2"/>
             </ui_button>
             <ui_button name="btn_macro_4"
-                       width="0" height="#button_height_sm" flex_grow="1" bind_text="macro_4_name" variant="secondary">
+                       width="0" height="#button_height_sm" flex_grow="1" bind_text="macro_4_name" variant="secondary"
+                       style_text_font="#font_small" long_mode="wrap">
               <bind_flag_if_eq subject="macro_4_visible" flag="hidden" ref_value="0"/>
               <bind_state_if_eq subject="print_active" state="disabled" ref_value="1"/>
               <event_cb trigger="clicked" callback="on_controls_macro" user_data="3"/>

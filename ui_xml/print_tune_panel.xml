@@ -83,8 +83,10 @@
                  translation_tag="Reset Speed &amp; Flow to 100%">
         <event_cb trigger="clicked" callback="on_tune_reset_clicked"/>
       </ui_button>
+
+
       <!-- Z-Offset Baby Stepping Section (flex_grow claims remaining space, content aligned to bottom) -->
-      <lv_obj name="z_offset_section"
+      <lv_obj name="z_offset_section" style_bg_opa="0" style_border_width="1"
               width="100%" height="content" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xs"
               scrollable="false">
         <!-- Header Row -->
@@ -92,15 +94,27 @@
                 height="content" style_pad_all="0" scrollable="false" flex_flow="row"
                 style_flex_main_place="space_between" style_flex_cross_place="center">
           <text_body text="Z-Offset"/>
+          <text_small name="z_offset_help_text_manual"
+                      text="Temporary adjustment for this print, unless saved."
+                      translation_tag="Temporary adjustment for this print, unless saved."
+                      hidden="true">
+            <bind_flag_if_eq subject="z_offset_can_save" flag="hidden" ref_value="0"/>
+          </text_small>
+          <text_small name="z_offset_help_text_auto"
+                      text="Z-offset is auto-saved by firmware"
+                      translation_tag="Z-offset is auto-saved by firmware">
+            <bind_flag_if_eq subject="z_offset_can_save" flag="hidden" ref_value="1"/>
+          </text_small>
           <text_heading name="z_offset_display" bind_text="tune_z_offset_display"/>
         </lv_obj>
+
 
         <!-- Indicator (left) + Controls (right) side-by-side -->
         <lv_obj width="100%"
                 height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_sm"
                 scrollable="false">
           <!-- Nozzle-over-bed visual indicator -->
-          <z_offset_indicator name="z_offset_indicator" width="170"/>
+          <z_offset_indicator name="z_offset_indicator" width="170" hidden="true"/>
           <!-- Controls column: amount buttons row with direction buttons stacked on the right -->
           <lv_obj height="content"
                   flex_grow="1" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
@@ -147,19 +161,20 @@
             <!-- Help text -->
             <text_small text="Closer = more squish | Farther = less squish"
                         translation_tag="Closer = more squish | Farther = less squish"/>
+          <!-- Save Z-Offset button: hidden when firmware auto-saves (GCODE_OFFSET strategy)
+              or when gcode_z_offset == 0. Wrapper binds to strategy, button binds to offset. -->
+          <lv_obj width="100%" height="content" hidden="true" style_pad_all="0" style_bg_opa="0" style_border_width="0">
+            <bind_flag_if_eq subject="z_offset_can_save" flag="hidden" ref_value="0"/>
+            <ui_button name="btn_save_z_offset"
+                      width="100%" height="#button_height_sm" variant="success" icon="check" text="Save Z-Offset"
+                      translation_tag="Save Z-Offset" hidden="true">
+              <bind_flag_if_eq subject="gcode_z_offset" flag="hidden" ref_value="0"/>
+              <!-- <bind_state_if_eq subject="print_active" state="disabled" ref_value="1"/> -->
+              <event_cb trigger="clicked" callback="on_controls_save_z_offset"/>
+            </ui_button>
+          </lv_obj>
           </lv_obj>
         </lv_obj>
-        <text_small name="z_offset_help_text_manual"
-                    text="Temporary adjustment for this print, unless saved on Controls panel"
-                    translation_tag="Temporary adjustment for this print, unless saved on Controls panel"
-                    hidden="true">
-          <bind_flag_if_eq subject="z_offset_can_save" flag="hidden" ref_value="0"/>
-        </text_small>
-        <text_small name="z_offset_help_text_auto"
-                    text="Z-offset is auto-saved by firmware"
-                    translation_tag="Z-offset is auto-saved by firmware">
-          <bind_flag_if_eq subject="z_offset_can_save" flag="hidden" ref_value="1"/>
-        </text_small>
       </lv_obj>
     </lv_obj>
   </view>
