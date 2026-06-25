@@ -23,7 +23,7 @@
     <lv_obj height="content"
             flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_sm" scrollable="false">
       <icon name="lock_icon" src="lock" size="sm" variant="secondary" hidden="true"/>
-      <ui_switch name="device_toggle" size="small" press_lock="false">
+      <ui_switch name="device_toggle" size="small">
         <event_cb trigger="value_changed" callback="on_power_device_toggle"/>
       </ui_switch>
     </lv_obj>

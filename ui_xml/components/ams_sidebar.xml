@@ -57,7 +57,7 @@
           <text_body text="Bypass"/>
         </lv_obj>
         <!-- Right side: toggle switch - state bound to ams_bypass_active subject -->
-        <ui_switch name="bypass_switch" size="small" press_lock="false">
+        <ui_switch name="bypass_switch" size="small">
           <bind_state_if_eq subject="ams_bypass_active" state="checked" ref_value="1"/>
           <event_cb trigger="value_changed" callback="ams_sidebar_bypass_toggled"/>
         </ui_switch>

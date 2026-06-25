@@ -94,7 +94,7 @@
         </ui_card>
         <!-- Actions Preview Card -->
         <ui_card name="preview_actions_card" width="0" height="content" flex_grow="2" flex_flow="column">
-          <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
+          <bind_flag_if_eq subject="ui_breakpoint" flag="hidden" ref_value="0"/>
           <lv_obj width="100%"
                   height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm"
                   style_flex_cross_place="center" scrollable="false">

@@ -28,7 +28,7 @@
           </lv_obj>
         </lv_obj>
         <!-- Toggle Switch -->
-        <ui_switch name="retraction_enabled_switch" size="small" press_lock="false">
+        <ui_switch name="retraction_enabled_switch" size="small">
           <event_cb trigger="value_changed" callback="on_retraction_enabled_changed"/>
         </ui_switch>
       </lv_obj>

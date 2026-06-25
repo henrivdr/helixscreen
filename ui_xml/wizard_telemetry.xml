@@ -32,7 +32,7 @@
               scrollable="false" style_bg_opa="0" style_border_width="0">
         <text_body text="Enable anonymous statistics"
                    translation_tag="Enable anonymous statistics"/>
-        <ui_switch name="wizard_telemetry_toggle" size="tiny" press_lock="false">
+        <ui_switch name="wizard_telemetry_toggle" size="tiny">
           <bind_state_if_eq subject="settings_telemetry_enabled" state="checked" ref_value="1"/>
           <event_cb trigger="value_changed" callback="on_wizard_telemetry_changed"/>
         </ui_switch>

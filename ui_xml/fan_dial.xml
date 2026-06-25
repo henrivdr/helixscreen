@@ -39,7 +39,7 @@
             scrollable="false" flex_flow="row"
             style_flex_main_place="center" style_flex_cross_place="center"
             style_pad_gap="#space_sm">
-      <ui_switch name="onoff_switch" size="tiny" press_lock="false">
+      <ui_switch name="onoff_switch" size="tiny">
         <event_cb trigger="value_changed" callback="on_fan_dial_switch_changed"/>
       </ui_switch>
       <text_small name="onoff_label" text="Off" translation_tag="Off"

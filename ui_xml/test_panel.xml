@@ -130,21 +130,21 @@
              height="56" style_radius="#border_radius" style_pad_all="#space_lg" style_pad_gap="#space_md"
              flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_body text="Toggle Feature" translation_tag="Toggle Feature"/>
-      <ui_switch name="test_switch_1" width="44" height="24" press_lock="false"/>
+      <ui_switch name="test_switch_1" width="44" height="24"/>
     </ui_card>
     <ui_card width="100%"
              height="72" style_radius="#border_radius" style_pad_all="#space_lg" style_pad_gap="#space_md"
              flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_heading text="Advanced Setting" translation_tag="Advanced Setting"/>
-      <ui_switch name="test_switch_2" width="56" height="32" checked="true" press_lock="false"/>
+      <ui_switch name="test_switch_2" width="56" height="32" checked="true"/>
     </ui_card>
     <ui_card width="100%"
              height="56" style_radius="#border_radius" style_pad_all="#space_lg" style_pad_gap="#space_md"
              flex_flow="row" style_flex_main_place="start" style_flex_cross_place="center">
       <text_body text="WiFi" style_margin_right="10"/>
-      <ui_switch name="test_switch_3" width="44" height="24" style_margin_right="20" press_lock="false"/>
+      <ui_switch name="test_switch_3" width="44" height="24" style_margin_right="20"/>
       <text_body text="Bluetooth" style_margin_right="10"/>
-      <ui_switch name="test_switch_4" width="44" height="24" checked="true" press_lock="false"/>
+      <ui_switch name="test_switch_4" width="44" height="24" checked="true"/>
     </ui_card>
     <divider_horizontal/>
     <!-- ============================================================ -->
@@ -155,32 +155,32 @@
              height="60" style_radius="#border_radius" style_pad_all="#space_lg" flex_flow="row"
              style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_body text="size=&quot;tiny&quot;" translation_tag="size=&quot;tiny&quot;"/>
-      <ui_switch name="test_switch_tiny" size="tiny" press_lock="false"/>
+      <ui_switch name="test_switch_tiny" size="tiny"/>
     </ui_card>
     <ui_card width="100%"
              height="60" style_radius="#border_radius" style_pad_all="#space_lg" flex_flow="row"
              style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_body text="size=&quot;small&quot;" translation_tag="size=&quot;small&quot;"/>
-      <ui_switch name="test_switch_small" size="small" checked="true" press_lock="false"/>
+      <ui_switch name="test_switch_small" size="small" checked="true"/>
     </ui_card>
     <ui_card width="100%"
              height="70" style_radius="#border_radius" style_pad_all="#space_lg" flex_flow="row"
              style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_body text="size=&quot;medium&quot;" translation_tag="size=&quot;medium&quot;"/>
-      <ui_switch name="test_switch_medium" size="medium" press_lock="false"/>
+      <ui_switch name="test_switch_medium" size="medium"/>
     </ui_card>
     <ui_card width="100%"
              height="80" style_radius="#border_radius" style_pad_all="#space_lg" flex_flow="row"
              style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_body text="size=&quot;large&quot;" translation_tag="size=&quot;large&quot;"/>
-      <ui_switch name="test_switch_large" size="large" checked="true " press_lock="false"/>
+      <ui_switch name="test_switch_large" size="large" checked="true"/>
     </ui_card>
     <ui_card width="100%"
              height="70" style_radius="#border_radius" style_pad_all="#space_lg" flex_flow="row"
              style_flex_main_place="space_between" style_flex_cross_place="center">
       <text_body text="size=&quot;medium&quot; width=&quot;100&quot;"
                  translation_tag="size=&quot;medium&quot; width=&quot;100&quot;"/>
-      <ui_switch name="test_switch_override" width="100" size="medium" press_lock="false"/>
+      <ui_switch name="test_switch_override" width="100" size="medium"/>
     </ui_card>
     <divider_horizontal/>
     <!-- ============================================================ -->

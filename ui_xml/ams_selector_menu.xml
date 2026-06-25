@@ -72,7 +72,7 @@
               width="100%" height="content" style_pad_all="0" style_pad_gap="#space_sm"
               flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center" scrollable="false">
         <text_body text="Gear motor synced" translation_tag="Gear motor synced"/>
-        <ui_switch name="gear_sync_switch" size="small" press_lock="false">
+        <ui_switch name="gear_sync_switch" size="small">
           <event_cb trigger="value_changed" callback="ams_selector_gear_sync_cb"/>
         </ui_switch>
       </lv_obj>

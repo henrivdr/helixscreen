@@ -31,7 +31,7 @@
                   height="content" style_pad_all="0" scrollable="false" flex_flow="row"
                   style_flex_main_place="space_between" style_flex_cross_place="center">
             <text_small text="Enable Monitoring" translation_tag="Enable Monitoring"/>
-            <ui_switch name="switch_master_toggle" size="small" press_lock="false">
+            <ui_switch name="switch_master_toggle" size="small">
               <bind_state_if_eq subject="filament_master_enabled" state="checked" ref_value="1"/>
               <event_cb trigger="value_changed" callback="on_switch_master_toggle_changed"/>
             </ui_switch>

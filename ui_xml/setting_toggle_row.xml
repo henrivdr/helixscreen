@@ -53,7 +53,7 @@
       <event_cb trigger="clicked" callback="on_setting_info_clicked"/>
     </lv_obj>
     <!-- Right side: Switch toggle -->
-    <ui_switch name="toggle" size="small" press_lock="false">
+    <ui_switch name="toggle" size="small">
       <bind_state_if_eq subject="$subject" state="checked" ref_value="1"/>
       <bind_state_if_eq subject="$disabled" state="disabled" ref_value="1"/>
       <event_cb trigger="value_changed" callback="$callback"/>
