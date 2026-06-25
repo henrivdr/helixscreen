@@ -100,7 +100,7 @@
             <text_body text="Sync with Spoolman" translation_tag="Sync with Spoolman"/>
             <text_small text="Auto-poll for weight updates" translation_tag="Auto-poll for weight updates"/>
           </lv_obj>
-          <ui_switch name="sync_toggle" size="small">
+          <ui_switch name="sync_toggle" size="small" press_lock="false">
             <bind_state_if_eq subject="ams_spoolman_sync_enabled" state="checked" ref_value="1"/>
             <event_cb trigger="value_changed" callback="on_ams_spoolman_sync_toggled"/>
           </ui_switch>

@@ -34,7 +34,7 @@
                 style_bg_opa="cover" style_bg_color="#card_bg" style_radius="#border_radius"
                 style_flex_main_place="space_between" style_flex_cross_place="center">
           <text_body text="Include Klipper/Moonraker logs" translation_tag="Include Klipper/Moonraker logs"/>
-          <ui_switch name="include_logs_switch" bind_checked="debug_bundle_include_logs"/>
+          <ui_switch name="include_logs_switch" bind_checked="debug_bundle_include_logs" press_lock="false"/>
         </lv_obj>
         <!-- Optional user note -->
         <lv_textarea name="user_note_textarea"

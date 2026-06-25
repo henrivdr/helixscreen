@@ -65,7 +65,7 @@
                           style_text_color="#text_muted"/>
             </lv_obj>
             <!-- Right: switch -->
-            <ui_switch name="warm_bed_switch" size="small">
+            <ui_switch name="warm_bed_switch" size="small" press_lock="false">
               <bind_state_if_eq subject="zoffset_warm_bed" state="checked" ref_value="1"/>
               <event_cb trigger="value_changed" callback="on_zoffset_warm_bed_toggled"/>
             </ui_switch>

@@ -317,14 +317,14 @@
             <bind_state_if_eq subject="filament_load_disabled" state="disabled" ref_value="1"/>
             <event_cb trigger="clicked" callback="on_filament_load"/>
           </ui_button>
-          <ui_button name="btn_unload"
+          <ui_button name="btn_unload" press_lock="false"
                      height="#button_height" flex_grow="1" icon="arrow_up" text="Unload" translation_tag="Unload" style_text_font="#font_small" bind_op_state="filament_op_unload_state">
             <bind_state_if_eq subject="filament_safety_warning_visible" state="disabled" ref_value="1"/>
             <bind_state_if_eq subject="filament_operation_in_progress" state="disabled" ref_value="1"/>
             <bind_state_if_eq subject="filament_unload_disabled" state="disabled" ref_value="1"/>
             <event_cb trigger="clicked" callback="on_filament_unload"/>
           </ui_button>
-          <ui_button name="btn_purge"
+          <ui_button name="btn_purge" press_lock="false"
                      height="#button_height" flex_grow="1" icon="trash_can_outline" text="Purge" translation_tag="Purge" style_text_font="#font_small" bind_op_state="filament_op_purge_state">
             <bind_state_if_eq subject="filament_safety_warning_visible" state="disabled" ref_value="1"/>
             <bind_state_if_eq subject="filament_operation_in_progress" state="disabled" ref_value="1"/>

@@ -32,7 +32,7 @@
                 scrollable="false">
           <bind_flag_if_eq subject="settings_dark_mode_available" flag="hidden" ref_value="0"/>
           <text_small name="preview_label_dark_mode" text="Dark Mode" translation_tag="Dark Mode"/>
-          <ui_switch name="preview_dark_mode_toggle" size="small" checked="true">
+          <ui_switch name="preview_dark_mode_toggle" size="small" checked="true" press_lock="false">
             <event_cb trigger="value_changed" callback="on_preview_dark_mode_toggled"/>
           </ui_switch>
         </lv_obj>
@@ -71,7 +71,7 @@
             <lv_obj height="content"
                     flex_flow="column" style_pad_all="#space_xs" style_pad_gap="#space_xs" scrollable="false">
               <text_small name="preview_label_auto" text="Auto" translation_tag="Auto"/>
-              <ui_switch name="preview_switch" size="small" checked="true"/>
+              <ui_switch name="preview_switch" size="small" checked="true" press_lock="false"/>
             </lv_obj>
           </lv_obj>
           <text_small name="preview_label_input" text="Input" translation_tag="Input"/>
@@ -85,7 +85,7 @@
             <icon src="light_off" size="xs" variant="secondary"/>
             <lv_slider name="preview_intensity_slider" flex_grow="1" min_value="0" max_value="100" value="60"/>
             <icon src="light" size="xs" variant="primary"/>
-            <lv_checkbox name="preview_checkbox" text="Enable" translation_tag="Enable" style_pad_all="#space_xs" checked="true"/>
+            <lv_checkbox name="preview_checkbox" text="Enable" translation_tag="Enable" style_pad_all="#space_xs" checked="true" press_lock="false"/>
           </lv_obj>
         </ui_card>
         <!-- Actions Preview Card -->
