@@ -891,6 +891,133 @@ void FilamentSlotOverrideStore::clear_async(int slot_index, SaveCallback cb) {
 }
 
 // =============================================================================
+// Seated-lane persistence
+// =============================================================================
+//
+// The "seated" key is a sibling scalar in the lane_data namespace holding the
+// 0-based index of the lane currently loaded to the toolhead. It is NOT
+// per-lane, so it does not go through lane_key()/to_lane_data_record() and is
+// NOT mirrored into the local per-slot read-cache. The value on disk is a
+// plain JSON integer.
+
+void FilamentSlotOverrideStore::save_seated_slot_async(int slot_index, SaveCallback cb) {
+    if (!api_) {
+        if (cb)
+            cb(false, "no API");
+        return;
+    }
+    // Reject negative indices symmetrically with save_async — a negative seated
+    // index is never a valid lane. "Nothing seated" goes through
+    // clear_seated_slot_async, not a sentinel index.
+    if (slot_index < 0) {
+        if (cb)
+            cb(false, "invalid slot_index");
+        return;
+    }
+
+    // Lifetime safety mirrors save_async: Moonraker's request tracker can fire
+    // the error callback ~60s after this returns, well after the store may have
+    // been destroyed. Value-capture only; no `this`.
+    const std::string backend_id_copy = backend_id_;
+
+    api_->database_post_item(
+        namespace_, "seated", nlohmann::json(slot_index),
+        [cb]() {
+            if (cb)
+                cb(true, "");
+        },
+        [cb, backend_id_copy](const MoonrakerError& err) {
+            spdlog::warn("[FilamentSlotOverrideStore:{}] save seated failed: {}", backend_id_copy,
+                         err.message);
+            if (cb)
+                cb(false, err.message);
+        });
+}
+
+void FilamentSlotOverrideStore::clear_seated_slot_async(SaveCallback cb) {
+    if (!api_) {
+        if (cb)
+            cb(false, "no API");
+        return;
+    }
+
+    // Value-capture only; no `this` (see save_seated_slot_async).
+    const std::string backend_id_copy = backend_id_;
+
+    api_->database_delete_item(
+        namespace_, "seated",
+        [cb]() {
+            if (cb)
+                cb(true, "");
+        },
+        [cb, backend_id_copy](const MoonrakerError& err) {
+            spdlog::warn("[FilamentSlotOverrideStore:{}] clear seated failed: {}", backend_id_copy,
+                         err.message);
+            if (cb)
+                cb(false, err.message);
+        });
+}
+
+std::optional<int> FilamentSlotOverrideStore::load_seated_slot_blocking() {
+    if (!api_)
+        return std::nullopt;
+
+    // Same shared_ptr<SyncState> + cv.wait_for discipline as load_blocking:
+    // a callback firing after our local timeout must not touch a freed stack
+    // frame, so the state is heap-owned and captured by value into the lambdas.
+    struct SyncState {
+        std::mutex m;
+        std::condition_variable cv;
+        bool done{false};
+        bool got{false};
+        nlohmann::json received;
+    };
+    auto state = std::make_shared<SyncState>();
+    const std::string backend_id_copy = backend_id_;
+    const std::string namespace_copy = namespace_;
+
+    api_->database_get_item(
+        namespace_, "seated",
+        [state](const nlohmann::json& value) {
+            std::lock_guard<std::mutex> lk(state->m);
+            state->received = value;
+            state->got = true;
+            state->done = true;
+            state->cv.notify_one();
+        },
+        [state, backend_id_copy, namespace_copy](const MoonrakerError& err) {
+            // Missing key is the common case (nothing seated yet) — not an error
+            // worth more than a debug line.
+            spdlog::debug("[FilamentSlotOverrideStore:{}] database_get_item({}:seated) failed: {}",
+                          backend_id_copy, namespace_copy, err.message);
+            std::lock_guard<std::mutex> lk(state->m);
+            state->done = true;
+            state->cv.notify_one();
+        });
+
+    bool got_copy;
+    nlohmann::json received_copy;
+    {
+        std::unique_lock<std::mutex> lk(state->m);
+        state->cv.wait_for(lk, load_timeout_, [state] { return state->done; });
+        got_copy = state->got;
+        if (got_copy)
+            received_copy = state->received;
+    }
+
+    if (!got_copy)
+        return std::nullopt;
+    // Must be a plain non-negative integer. The store doesn't know NUM_PORTS,
+    // so the caller is responsible for the upper-bound range check.
+    if (!received_copy.is_number_integer())
+        return std::nullopt;
+    int idx = received_copy.get<int>();
+    if (idx < 0)
+        return std::nullopt;
+    return idx;
+}
+
+// =============================================================================
 // Shared firmware -> lane_data mirror helper
 // =============================================================================
 
