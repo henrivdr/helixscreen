@@ -672,6 +672,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // min and the macro errors out, so this never gates real functionality.
     static constexpr int ACTION_TIMEOUT_SECONDS = 90;
     static constexpr int HEATING_TIMEOUT_SECONDS = 300;
+    // A real purge runs far longer than the generic 90 s phase window (raza616:
+    // ~3 min whole-op from cold; Vger1700 hit the 90 s ERROR twice mid-purge,
+    // #1065). PURGING gets its own budget AND its clock is reset on
+    // ifs_motion_sensor activity (see handle_status_update), so the budget is
+    // effectively "time since filament last moved" — a long-but-healthy purge is
+    // never falsely failed, a genuinely stalled one still surfaces ERROR.
+    static constexpr int PURGING_TIMEOUT_SECONDS = 240;
     std::chrono::steady_clock::time_point action_start_time_;
 
     // Rate-limit gate for the JSON-content poll. handle_status_update kicks

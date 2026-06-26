@@ -345,6 +345,13 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
             bool detected = motion["filament_detected"].get<bool>();
             bool was = head_filament_;
             parse_head_sensor(detected);
+            // During a purge, ifs_motion_sensor activity means filament is still
+            // moving — the purge is progressing, not stalled. Reset the timeout
+            // clock so a long-but-healthy purge isn't falsely failed; the PURGING
+            // budget then measures time since the last motion (#1065 Bug 2).
+            if (system_info_.action == AmsAction::PURGING && detected) {
+                action_start_time_ = std::chrono::steady_clock::now();
+            }
             // Phase tracker (active op WE started) advances the phase on a head
             // transition. detect_load_unload_completion preserves legacy
             // snap-to-IDLE when the tracker is inactive.
@@ -3982,10 +3989,16 @@ void AmsBackendAd5xIfs::check_action_timeout() {
     }
 
     // HEATING from cold legitimately takes ~158s (longer for high-temp
-    // materials), so it gets a longer dedicated budget. Every other phase has
-    // its clock reset on transition (see apply_phase_action_locked) and keeps
-    // the short 90s window.
-    const int limit = (a == AmsAction::HEATING) ? HEATING_TIMEOUT_SECONDS : ACTION_TIMEOUT_SECONDS;
+    // materials), so it gets a longer dedicated budget. PURGING likewise runs
+    // well past 90s and its clock is reset on motion-sensor activity (#1065
+    // Bug 2). Every other phase has its clock reset on transition (see
+    // apply_phase_action_locked) and keeps the short 90s window.
+    int limit = ACTION_TIMEOUT_SECONDS;
+    if (a == AmsAction::HEATING) {
+        limit = HEATING_TIMEOUT_SECONDS;
+    } else if (a == AmsAction::PURGING) {
+        limit = PURGING_TIMEOUT_SECONDS;
+    }
     auto elapsed = std::chrono::steady_clock::now() - action_start_time_;
     if (elapsed >= std::chrono::seconds(limit)) {
         spdlog::warn("{} {} timed out after {}s, surfacing ERROR", backend_log_tag(),

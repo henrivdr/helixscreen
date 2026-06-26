@@ -131,6 +131,15 @@ class Ad5xIfsTestAccess {
         b.action_start_time_ = std::chrono::steady_clock::now() - elapsed;
         b.check_action_timeout();
     }
+    // Age the action clock WITHOUT running the timeout check — lets a test age the
+    // clock, fire an event that may reset it, then check separately.
+    static void set_action_age(AmsBackendAd5xIfs& b, std::chrono::seconds elapsed) {
+        b.action_start_time_ = std::chrono::steady_clock::now() - elapsed;
+    }
+    // Run the timeout check against the current (possibly event-reset) clock.
+    static void run_action_timeout(AmsBackendAd5xIfs& b) {
+        b.check_action_timeout();
+    }
     static std::string var_prefix(const AmsBackendAd5xIfs& b) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         return b.var_prefix_;
@@ -1103,6 +1112,50 @@ TEST_CASE("AD5X IFS action timeout resets stuck operations", "[ams][ad5x_ifs]") 
     }
 }
 
+TEST_CASE("AD5X IFS PURGING gets a longer dedicated timeout budget (#1065 Bug 2)",
+          "[ams][ad5x_ifs]") {
+    // A real purge runs far longer than the generic 90 s phase budget (raza616:
+    // ~3 min whole-op from cold; Vger1700 hit the 90 s ERROR twice mid-purge).
+    // PURGING gets its own longer budget so a healthy-but-slow purge isn't killed.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    SECTION("does not ERROR within the dedicated budget (past the old 90 s window)") {
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(200));
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+    }
+
+    SECTION("still ERRORs once the dedicated budget is exceeded") {
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(241));
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+    }
+}
+
+TEST_CASE("AD5X IFS motion during PURGING resets the timeout clock (#1065 Bug 2)",
+          "[ams][ad5x_ifs]") {
+    // ifs_motion_sensor activity proves filament is still moving, so the purge is
+    // progressing — reset the clock rather than ERRORing. The budget is then
+    // effectively "time since last motion", so a long purge that keeps moving is
+    // never falsely failed, while a genuinely stalled one still surfaces ERROR.
+    SECTION("motion keeps a long-but-moving purge alive past the budget") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::set_action_age(backend, std::chrono::seconds(300)); // past budget
+        Ad5xIfsTestAccess::handle_status(backend, make_motion_sensor(true));   // still moving
+        Ad5xIfsTestAccess::run_action_timeout(backend);
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+    }
+
+    SECTION("a stalled purge with no motion still ERRORs") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::set_action_age(backend, std::chrono::seconds(300));
+        Ad5xIfsTestAccess::run_action_timeout(backend);
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+    }
+}
+
 // ==========================================================================
 // 19. Variable prefix auto-detection (lessWaste vs bambufy)
 // ==========================================================================
@@ -1235,7 +1288,8 @@ TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)", "[ams][ad5x_ifs]
     REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Purging old filament");
 
     // Timeout backstop surfaces ERROR; detail preserved for error-center bridge.
-    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    // PURGING has a dedicated 240s budget (#1065 Bug 2), so age past it.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(250));
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE_FALSE(Ad5xIfsTestAccess::operation_detail(backend).empty());
 }
@@ -6170,7 +6224,8 @@ TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during load",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 2);
 
-    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    // PURGING has a dedicated 240s budget (#1065 Bug 2), so age past it.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(250));
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == -1);
 }
