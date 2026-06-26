@@ -1582,6 +1582,12 @@ void NavigationManager::push_overlay(lv_obj_t* overlay_panel, bool hide_previous
         // Show overlay
         lv_obj_remove_flag(overlay_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(overlay_panel);
+        // Claim taps landing anywhere within the panel bounds. Overlays are
+        // narrower than the screen and sit in front of a full-screen, clickable
+        // dismiss-backdrop. Without this, a touch that misses an interactive
+        // child (a gap between buttons, padding) falls through to the backdrop
+        // and dismisses the whole overlay (#1066).
+        lv_obj_add_flag(overlay_panel, LV_OBJ_FLAG_CLICKABLE);
         mgr.ensure_delete_hook(overlay_panel);
         mgr.panel_stack_.push_back(overlay_panel);
         mgr.overlay_animate_slide_in(overlay_panel);
@@ -1686,6 +1692,9 @@ void NavigationManager::push_overlay_zoom_from(lv_obj_t* overlay_panel, lv_area_
         // Show overlay with zoom animation instead of slide
         lv_obj_remove_flag(overlay_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(overlay_panel);
+        // See push_overlay(): claim in-bounds taps so stray touches don't fall
+        // through to the dismiss-backdrop and close the overlay (#1066).
+        lv_obj_add_flag(overlay_panel, LV_OBJ_FLAG_CLICKABLE);
         mgr.ensure_delete_hook(overlay_panel);
         mgr.panel_stack_.push_back(overlay_panel);
         mgr.overlay_animate_zoom_in(overlay_panel, source_rect);
