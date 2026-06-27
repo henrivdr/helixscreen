@@ -224,7 +224,7 @@ static void* ui_switch_xml_create(lv_xml_parser_state_t* state, const char** att
     }
 
     // Prevent accidental click when scrolling.
-    lv_obj_set_flag(obj, LV_OBJ_FLAG_PRESS_LOCK, false);
+    lv_obj_remove_flag(obj, LV_OBJ_FLAG_PRESS_LOCK);
 
     lv_obj_add_event_cb(obj, switch_value_changed_sound_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 

@@ -645,7 +645,7 @@ void* ui_button_create(lv_xml_parser_state_t* state, const char** attrs) {
     defer_button_contrast_update(btn);
 
     // Prevent accidental click when scrolling.
-    lv_obj_set_flag(btn, LV_OBJ_FLAG_PRESS_LOCK, false);
+    lv_obj_remove_flag(btn, LV_OBJ_FLAG_PRESS_LOCK);
 
     const char* pos_name = icon_on_top      ? "top"
                            : icon_on_bottom ? "bottom"
