@@ -644,6 +644,9 @@ void* ui_button_create(lv_xml_parser_state_t* state, const char** attrs) {
     // logic works correctly.
     defer_button_contrast_update(btn);
 
+    // Prevent accidental click when scrolling.
+    lv_obj_remove_flag(btn, LV_OBJ_FLAG_PRESS_LOCK);
+
     const char* pos_name = icon_on_top      ? "top"
                            : icon_on_bottom ? "bottom"
                            : icon_on_right  ? "right"
@@ -981,8 +984,7 @@ void ui_button_apply(lv_xml_parser_state_t* state, const char** attrs) {
     // 0=idle (original icon glyph), 1=busy (animated spinner in the icon slot),
     // 2=done ("check" glyph). Requires an icon to render into.
     const char* bind_op_state = lv_xml_get_value_of(attrs, "bind_op_state");
-    if (bind_op_state && bind_op_state[0] != '\0' && data &&
-        data->magic == UiButtonData::MAGIC) {
+    if (bind_op_state && bind_op_state[0] != '\0' && data && data->magic == UiButtonData::MAGIC) {
         if (!data->icon) {
             spdlog::warn("[ui_button] bind_op_state '{}' ignored — button has no icon",
                          bind_op_state);
