@@ -90,7 +90,7 @@ RoleResolution resolve_role(const HardwareRoleDescriptor& desc, const std::strin
     // Tier 1b: heuristic guess.
     if (desc.guess) {
         std::string g = desc.guess(discovered);
-        if (!g.empty() && is_cand(g)) {
+        if (!g.empty() && contains(discovered, g) && is_cand(g)) {
             return {RoleResolutionStatus::AutoHealed, g};
         }
     }

@@ -47,6 +47,13 @@ TEST_CASE("resolve_role: bed heater keeps canonical when present", "[hwrole][res
     REQUIRE(r.object == "heater_bed");
 }
 
+TEST_CASE("resolve_role: Tier 1b never returns an object outside discovered", "[hwrole][resolve]") {
+    const auto& part = *role_descriptor(HardwareRoleId::PartFan);
+    auto r = resolve_role(part, "output_pin fan0", {}); // nothing live
+    REQUIRE(r.status == RoleResolutionStatus::Unresolved);
+    REQUIRE(r.object.empty());
+}
+
 TEST_CASE("registry integrity: every descriptor has a usable config key", "[hwrole][drift]") {
     const auto& reg = hardware_role_registry();
     REQUIRE(!reg.empty());
