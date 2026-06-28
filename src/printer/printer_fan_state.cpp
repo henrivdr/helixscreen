@@ -28,14 +28,33 @@ FanRoleConfig FanRoleConfig::from_config(Config* config,
     if (!config) {
         return roles;
     }
-    roles.part_fan =
-        resolve_role_from_config(HardwareRoleId::PartFan, config, discovered_fans, true);
-    roles.hotend_fan =
-        resolve_role_from_config(HardwareRoleId::HotendFan, config, discovered_fans, true);
-    roles.chamber_fan =
-        resolve_role_from_config(HardwareRoleId::ChamberFan, config, discovered_fans, true);
-    roles.exhaust_fan =
-        resolve_role_from_config(HardwareRoleId::ExhaustFan, config, discovered_fans, true);
+    // Resolve all four fan roles without saving (persist=false), then write once if any changed.
+    // This avoids up to 4 independent disk writes on first-heal.
+    bool any_changed = false;
+    auto resolve_one = [&](HardwareRoleId id, std::string& field) {
+        const auto* desc = role_descriptor(id);
+        if (!desc)
+            return;
+        const std::string key = config->df() + desc->config_key;
+        const std::string dflt =
+            desc->canonical_default ? std::string(desc->canonical_default) : std::string();
+        const std::string saved = config->get<std::string>(key, dflt);
+        std::string resolved = resolve_role_from_config(id, config, discovered_fans, false);
+        field = resolved;
+        if (!resolved.empty() && resolved != saved) {
+            config->set<std::string>(key, resolved);
+            any_changed = true;
+        }
+    };
+    resolve_one(HardwareRoleId::PartFan, roles.part_fan);
+    resolve_one(HardwareRoleId::HotendFan, roles.hotend_fan);
+    resolve_one(HardwareRoleId::ChamberFan, roles.chamber_fan);
+    resolve_one(HardwareRoleId::ExhaustFan, roles.exhaust_fan);
+    if (any_changed) {
+        if (!config->save()) {
+            spdlog::warn("[FanRoleConfig] Failed to persist batched fan role heals");
+        }
+    }
     return roles;
 }
 

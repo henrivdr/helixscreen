@@ -30,6 +30,7 @@
 #include "environment_config.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
+#include "hardware_role_registry.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -2493,8 +2494,9 @@ void Application::setup_discovery_callbacks() {
                                             static_cast<long>(snapshot->macros().size()));
             get_printer_state().set_hardware(std::move(*snapshot));
             crash_handler::breadcrumb::note("disc", "post_set_hw", n);
+            const auto& fans = hw.fans();
             get_printer_state().init_fans(
-                hw.fans(), helix::FanRoleConfig::from_config(Config::get_instance(), hw.fans()));
+                fans, helix::FanRoleConfig::from_config(Config::get_instance(), fans));
             crash_handler::breadcrumb::note("disc", "post_init_fans",
                                             static_cast<long>(hw.fans().size()));
 
@@ -2584,6 +2586,34 @@ void Application::setup_discovery_callbacks() {
             // Reading *snapshot here would pass an empty/moved-from PrinterDiscovery and
             // detection would fail with "0 sensors, 0 fans, hostname ''" (#802).
             PrinterDetector::auto_detect_and_save(api->hardware(), Config::get_instance());
+
+            // Auto-heal + persist heater roles (batched single save, symmetry with fan roles
+            // above). Ensures the validator sees resolved heater names so it does not emit a
+            // toast every boot for a stale saved role that has a confident replacement.
+            {
+                const auto& heaters = hw.heaters();
+                auto* cfg = Config::get_instance();
+                bool heater_changed = false;
+                for (auto id :
+                     {helix::HardwareRoleId::HotendHeater, helix::HardwareRoleId::BedHeater}) {
+                    const auto* desc = helix::role_descriptor(id);
+                    if (!desc)
+                        continue;
+                    const std::string key = cfg->df() + desc->config_key;
+                    const std::string dflt = desc->canonical_default
+                                                 ? std::string(desc->canonical_default)
+                                                 : std::string();
+                    const std::string saved = cfg->get<std::string>(key, dflt);
+                    std::string healed = helix::resolve_role_from_config(id, cfg, heaters, false);
+                    if (!healed.empty() && healed != saved) {
+                        cfg->set<std::string>(key, healed);
+                        heater_changed = true;
+                    }
+                }
+                if (heater_changed && !cfg->save()) {
+                    spdlog::warn("[Application] Failed to persist heater role heals");
+                }
+            }
 
             // Hardware validation: check config expectations vs discovered hardware.
             // Now uses the post-preset config so preset-mapped fan/heater names are
