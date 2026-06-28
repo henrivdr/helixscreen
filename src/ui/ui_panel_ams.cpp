@@ -1056,19 +1056,14 @@ void AmsPanel::update_slot_colors() {
                 }
             }
 
-            // Set fill level from weight data. BOTH fields must be valid:
-            // some backends (Snapmaker RFID) report total_weight_g from the
-            // tag but never populate remaining_weight_g — firmware doesn't
-            // track consumption. Dividing -1/total yields a negative fill
-            // that clamps to 0, rendering every slot as "empty" even though
-            // spools have real filament. Treat remaining_weight_g < 0 the
-            // same as total <= 0: unknown → fall back to 75%.
-            if (slot_info.total_weight_g > 0.0f && slot_info.remaining_weight_g >= 0.0f) {
-                float fill_level = slot_info.remaining_weight_g / slot_info.total_weight_g;
-                ui_ams_slot_set_fill_level(slot_widgets_[i], fill_level);
-            } else if (slot_info.has_filament_info()) {
-                // Weight data unknown — show 75% rather than defaulting to full
-                ui_ams_slot_set_fill_level(slot_widgets_[i], 0.75f);
+            // Set fill level from the slot's display policy (see
+            // SlotInfo::display_fill_level): real ratio when both weights are
+            // known, 75% fallback when only metadata is present, and an empty
+            // bar for a not-present/ghost lane — which a retained Spoolman link
+            // across an eject would otherwise render as ~75% full (#1071 BUG-1).
+            // nullopt means leave the bar untouched.
+            if (auto fill = slot_info.display_fill_level()) {
+                ui_ams_slot_set_fill_level(slot_widgets_[i], *fill);
             }
 
             // Refresh slot to update tool badge and other dynamic state

@@ -708,6 +708,29 @@ struct SlotInfo {
     [[nodiscard]] bool is_present() const {
         return status != SlotStatus::EMPTY && status != SlotStatus::UNKNOWN;
     }
+
+    /**
+     * @brief Fill-bar level for the slot UI, or nullopt to leave the bar as-is.
+     *
+     * EMPTY/UNKNOWN lanes render empty (0.0) — even when a Spoolman link and
+     * material were deliberately RETAINED across an eject (#1071), so a ghost
+     * lane never shows a phantom fill (#1071 BUG-1). Present lanes use the real
+     * remaining/total ratio when both weights are known; else fall back to 75%
+     * when any filament metadata is present (some backends, e.g. Snapmaker RFID,
+     * report a total but never a remaining); else nullopt (leave unchanged).
+     */
+    [[nodiscard]] std::optional<float> display_fill_level() const {
+        if (!is_present()) {
+            return 0.0f;
+        }
+        if (total_weight_g > 0.0f && remaining_weight_g >= 0.0f) {
+            return remaining_weight_g / total_weight_g;
+        }
+        if (has_filament_info()) {
+            return 0.75f;
+        }
+        return std::nullopt;
+    }
 };
 
 /**
