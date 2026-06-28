@@ -32,6 +32,7 @@
 #include "subject_managed_panel.h"
 #include "touch_calibration.h"
 #include "touch_calibration_panel.h"
+#include "touch_calibration_session.h"
 
 #include <functional>
 #include <memory>
@@ -238,9 +239,10 @@ class TouchCalibrationOverlay : public OverlayBase {
     CompletionCallback completion_callback_;
     bool callback_invoked_ = false; ///< Guard against double-invoke
 
-    // Backup calibration for revert on timeout
-    helix::TouchCalibration backup_calibration_;
-    bool has_backup_ = false;
+    // Backup/disable/restore of the pre-session calibration. Shared with the
+    // first-run wizard; guarantees the affine transform is re-enabled however
+    // the session ends (#943).
+    helix::TouchCalibrationSession session_;
 
     //
     // === Widget References ===
