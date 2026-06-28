@@ -11,6 +11,7 @@
 
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
+#include "printer_print_state.h"
 #include "printer_state.h"
 
 #include <spdlog/spdlog.h>
@@ -188,4 +189,56 @@ TEST_CASE_METHOD(PrintActiveTestFixture, "PrintActive: full lifecycle test",
     // Back to standby
     set_print_state("standby");
     REQUIRE(get_print_active() == 0);
+}
+
+// ============================================================================
+// Pure predicate: PrinterPrintState::status_indicates_active_print
+//
+// This is the exact decision used by BOTH the print_active subject update and
+// the discovery-time idle gate in Application::on_discovery_complete. The gate
+// must consult the just-arrived status (the subject is stale at that point),
+// so this predicate is what blocks a reconfig wizard from launching over a live
+// print on a fresh connection. These cases lock that behavior down.
+// ============================================================================
+
+TEST_CASE("status_indicates_active_print: printing -> true",
+          "[core][printer_state][print_active][print_state]") {
+    json status = {{"print_stats", {{"state", "printing"}}}};
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == true);
+}
+
+TEST_CASE("status_indicates_active_print: paused -> true",
+          "[core][printer_state][print_active][print_state]") {
+    json status = {{"print_stats", {{"state", "paused"}}}};
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == true);
+}
+
+TEST_CASE("status_indicates_active_print: standby -> false",
+          "[core][printer_state][print_active][print_state]") {
+    json status = {{"print_stats", {{"state", "standby"}}}};
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == false);
+}
+
+TEST_CASE("status_indicates_active_print: complete -> false",
+          "[core][printer_state][print_active][print_state]") {
+    json status = {{"print_stats", {{"state", "complete"}}}};
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == false);
+}
+
+TEST_CASE("status_indicates_active_print: cancelled -> false",
+          "[core][printer_state][print_active][print_state]") {
+    json status = {{"print_stats", {{"state", "cancelled"}}}};
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == false);
+}
+
+TEST_CASE("status_indicates_active_print: missing print_stats -> false",
+          "[core][printer_state][print_active][print_state]") {
+    json status = json::object();
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == false);
+}
+
+TEST_CASE("status_indicates_active_print: print_stats without state -> false",
+          "[core][printer_state][print_active][print_state]") {
+    json status = {{"print_stats", json::object()}};
+    REQUIRE(PrinterPrintState::status_indicates_active_print(status) == false);
 }

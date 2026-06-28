@@ -194,6 +194,18 @@ void PrinterPrintState::reset_for_new_print() {
                   estimated_print_time_);
 }
 
+bool PrinterPrintState::status_indicates_active_print(const nlohmann::json& status) {
+    if (!status.contains("print_stats")) {
+        return false;
+    }
+    const auto& ps = status["print_stats"];
+    if (!ps.contains("state") || !ps["state"].is_string()) {
+        return false;
+    }
+    const std::string st = ps["state"].get<std::string>();
+    return st == "printing" || st == "paused";
+}
+
 void PrinterPrintState::update_from_status(const nlohmann::json& status) {
     // Layer tracking has two sources within a single status update:
     //   primary  — print_stats.info.{current_layer,total_layer} (slicer
@@ -289,9 +301,10 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
             }
 
             // Update print_active (1 when PRINTING/PAUSED, 0 otherwise)
-            // This derived subject simplifies XML bindings for card visibility
-            bool is_active =
-                (new_state == PrintJobState::PRINTING || new_state == PrintJobState::PAUSED);
+            // This derived subject simplifies XML bindings for card visibility.
+            // Uses the shared pure predicate so the subject's definition of
+            // "active" matches the discovery-time idle gate exactly.
+            bool is_active = status_indicates_active_print(status);
             int active_val = is_active ? 1 : 0;
             if (lv_subject_get_int(&print_active_) != active_val) {
                 lv_subject_set_int(&print_active_, active_val);

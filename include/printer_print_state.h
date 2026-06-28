@@ -63,6 +63,11 @@ class PrinterPrintState {
      */
     void update_from_status(const nlohmann::json& status);
 
+    /// True if a Moonraker status object indicates an active (printing or paused) print.
+    /// Pure: depends only on status["print_stats"]["state"]. Used by both the
+    /// print_active subject update and the discovery-time idle gate so they agree.
+    static bool status_indicates_active_print(const nlohmann::json& status);
+
     /**
      * @brief Reset UI state when starting a new print
      *
