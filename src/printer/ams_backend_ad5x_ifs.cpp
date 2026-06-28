@@ -836,9 +836,10 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index,
     if (!slot_has_filament) {
         // Empty slot reads back as the placeholder #808080 in parse_adventurer_json
         // — that's not an "edit," it's the absence of a reading. Eject is
-        // handled separately by parse_adventurer_json calling
-        // clear_override_locked when presence flips false. Just update the
-        // baseline so we don't repeat this branch every poll.
+        // handled separately by parse_adventurer_json dropping presence to false;
+        // the lane->Spoolman override is RETAINED across empty (#1071), not
+        // cleared. Just update the baseline so we don't repeat this branch every
+        // poll.
         spdlog::debug("{} Slot {} firmware color changed #{:06X} -> #{:06X} "
                       "(slot empty — sync skipped, eject handled by parse path)",
                       backend_log_tag(), slot_index, old_color, color);
@@ -3748,16 +3749,17 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             //     previously-emptied channel on every content-changed poll (the
             //     external-unload-not-reflected / one-edit-resurrects-another bug).
             //     Every JSON change schedules a GET_ZCOLOR right after this parse,
-            //     so silk-truth presence re-establishes immediately, and its
-            //     present->absent transition drives clear_override_locked.
+            //     so silk-truth presence re-establishes immediately. A
+            //     present->absent transition there only drops presence; the
+            //     lane->Spoolman override is retained across empty (#1071).
             //
             //   * Pre-SILENT zmod (GET_ZCOLOR returns a prompt dialog →
             //     zcolor_silent_supported_ latched false): there is NO silk-truth
             //     query at all, so Adventurer5M.json is the only presence source we
             //     have. Fall back to the legacy inference (non-empty colour ==
-            //     present; empty colour while IDLE == eject + override-clear). The
-            //     resurrection bug can't bite here because no GET_ZCOLOR ever
-            //     competes for ownership.
+            //     present; empty colour while IDLE == eject — presence drops, the
+            //     override is retained, #1071). The resurrection bug can't bite
+            //     here because no GET_ZCOLOR ever competes for ownership.
             //   * IFS_STATUS Ports seen (ifs_status_ports_seen_): the RS-485
             //     silk sensors are the presence authority and already own
             //     port_presence_. The persisted ffmColor must NEVER override
