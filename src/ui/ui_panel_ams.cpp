@@ -396,6 +396,13 @@ void AmsPanel::on_activate() {
         // bypass_row visibility managed by bind_flag_if_eq on ams_supports_bypass subject
     }
 
+    // Re-read non-subject slot fields on reactivation. The MATERIAL label has no
+    // backing subject (unlike color, which self-refreshes via sync_from_backend()
+    // above), so it is only re-read by refresh_slots(). Without this call the
+    // material label stays stale until the next slots_version bump (#981).
+    // refresh_slots() guards panel_ && subjects_initialized_ internally.
+    refresh_slots();
+
     update_endless_arrows_from_backend();
 
     // Ensure filament path canvas redraws after being stopped on deactivate
