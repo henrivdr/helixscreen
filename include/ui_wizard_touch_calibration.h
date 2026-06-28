@@ -4,6 +4,7 @@
 #pragma once
 
 #include "touch_calibration_panel.h"
+#include "touch_calibration_session.h"
 #include "wizard_step.h"
 
 #include <lvgl.h>
@@ -150,9 +151,10 @@ class WizardTouchCalibrationStep : public helix::wizard::Step {
     bool has_pending_calibration_ = false;
     helix::TouchCalibration pending_calibration_;
 
-    // Backup calibration for revert on timeout
-    helix::TouchCalibration backup_calibration_;
-    bool has_backup_ = false;
+    // Backup/disable/restore of the pre-session calibration. Shared with the
+    // Settings recalibration overlay; guarantees the affine transform is
+    // re-enabled however the session ends (#943).
+    helix::TouchCalibrationSession session_;
 
     // Next/Skip group reparenting state (brought on top of touch overlay)
     lv_obj_t* skip_btn_original_parent_ = nullptr;

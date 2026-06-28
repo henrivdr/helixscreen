@@ -7,6 +7,7 @@
 #include "color_transform.h"
 #include "display_backend.h"
 #include "touch_calibration.h"
+#include "touch_calibration_session.h"
 
 #include <functional>
 #include <lvgl.h>
@@ -45,7 +46,7 @@
  * display_mgr.shutdown();
  * @endcode
  */
-class DisplayManager {
+class DisplayManager : public helix::ICalibrationSink {
   public:
     /**
      * @brief Display configuration options
@@ -372,6 +373,21 @@ class DisplayManager {
      * Restores the stored calibration transform. Safe no-op on non-fbdev backends.
      */
     void enable_affine_calibration();
+
+    // ICalibrationSink — thin adapters so TouchCalibrationSession can drive the
+    // backup/restore dance against DisplayManager (and against a fake in tests).
+    helix::TouchCalibration current_calibration() const override {
+        return get_current_calibration();
+    }
+    bool apply_calibration(const helix::TouchCalibration& cal) override {
+        return apply_touch_calibration(cal);
+    }
+    void disable_affine() override {
+        disable_affine_calibration();
+    }
+    void enable_affine() override {
+        enable_affine_calibration();
+    }
 
     /**
      * @brief Mark whether a touch-calibration UI (overlay or wizard) is on screen
