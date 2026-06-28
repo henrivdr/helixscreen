@@ -30,6 +30,7 @@
 #include "environment_config.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
+#include "hardware_role_registry.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -2413,6 +2414,25 @@ void Application::create_overlays() {
     }
 }
 
+void Application::reapply_hardware_roles() {
+    helix::ui::queue_update("Application::reapply_hardware_roles", [this]() {
+        MoonrakerAPI* api = m_moonraker ? m_moonraker->api() : nullptr;
+        if (!api) {
+            return;
+        }
+        const auto& fans = api->hardware().fans();
+        const auto& heaters = api->hardware().heaters();
+        // Re-resolve + persist fan roles, then rebind fan UI to the new mapping.
+        auto roles = helix::FanRoleConfig::from_config(Config::get_instance(), fans);
+        get_printer_state().init_fans(fans, roles);
+        // Heater roles persist back to config (no dedicated runtime fan-style consumer).
+        helix::resolve_role_from_config(helix::HardwareRoleId::HotendHeater, Config::get_instance(),
+                                        heaters, /*persist_autoheal=*/true);
+        helix::resolve_role_from_config(helix::HardwareRoleId::BedHeater, Config::get_instance(),
+                                        heaters, /*persist_autoheal=*/true);
+    });
+}
+
 void Application::setup_discovery_callbacks() {
     MoonrakerClient* client = m_moonraker->client();
     MoonrakerAPI* api = m_moonraker->api();
@@ -2430,6 +2450,9 @@ void Application::setup_discovery_callbacks() {
         helix::ui::queue_update([api, client, app, snapshot]() {
             if (app->m_shutdown_complete)
                 return;
+            // A new discovery cycle is starting — re-arm the once-per-connection
+            // targeted hardware-reconfig wizard guard so a reconnect can re-offer it.
+            app->m_targeted_reconfig_shown = false;
             api->hardware() = std::move(*snapshot);
             helix::init_subsystems_from_hardware(api->hardware(), api, client);
         });
@@ -2493,8 +2516,9 @@ void Application::setup_discovery_callbacks() {
                                             static_cast<long>(snapshot->macros().size()));
             get_printer_state().set_hardware(std::move(*snapshot));
             crash_handler::breadcrumb::note("disc", "post_set_hw", n);
+            const auto& fans = hw.fans();
             get_printer_state().init_fans(
-                hw.fans(), helix::FanRoleConfig::from_config(Config::get_instance()));
+                fans, helix::FanRoleConfig::from_config(Config::get_instance(), fans));
             crash_handler::breadcrumb::note("disc", "post_init_fans",
                                             static_cast<long>(hw.fans().size()));
 
@@ -2585,6 +2609,34 @@ void Application::setup_discovery_callbacks() {
             // detection would fail with "0 sensors, 0 fans, hostname ''" (#802).
             PrinterDetector::auto_detect_and_save(api->hardware(), Config::get_instance());
 
+            // Auto-heal + persist heater roles (batched single save, symmetry with fan roles
+            // above). Ensures the validator sees resolved heater names so it does not emit a
+            // toast every boot for a stale saved role that has a confident replacement.
+            {
+                const auto& heaters = hw.heaters();
+                auto* cfg = Config::get_instance();
+                bool heater_changed = false;
+                for (auto id :
+                     {helix::HardwareRoleId::HotendHeater, helix::HardwareRoleId::BedHeater}) {
+                    const auto* desc = helix::role_descriptor(id);
+                    if (!desc)
+                        continue;
+                    const std::string key = cfg->df() + desc->config_key;
+                    const std::string dflt = desc->canonical_default
+                                                 ? std::string(desc->canonical_default)
+                                                 : std::string();
+                    const std::string saved = cfg->get<std::string>(key, dflt);
+                    std::string healed = helix::resolve_role_from_config(id, cfg, heaters, false);
+                    if (!healed.empty() && healed != saved) {
+                        cfg->set<std::string>(key, healed);
+                        heater_changed = true;
+                    }
+                }
+                if (heater_changed && !cfg->save()) {
+                    spdlog::warn("[Application] Failed to persist heater role heals");
+                }
+            }
+
             // Hardware validation: check config expectations vs discovered hardware.
             // Now uses the post-preset config so preset-mapped fan/heater names are
             // checked against discovery, not the pre-preset scaffolded defaults.
@@ -2595,6 +2647,57 @@ void Application::setup_discovery_callbacks() {
             if (validation_result.has_issues() && !Config::get_instance()->is_wizard_required() &&
                 !is_wizard_active()) {
                 validator.notify_user(validation_result);
+            }
+
+            // Route unresolved GUIDED hardware roles (a saved fan/heater role with no
+            // confident live substitute) into the targeted reconfig wizard — only the
+            // affected step(s), not the full first-run wizard. Skipped while the first-run
+            // wizard is required/active, and gated to once-per-connection so it does not
+            // relaunch on reconnect churn within a single session.
+            auto reconfig_steps = helix::unresolved_guided_steps(Config::get_instance(), hw);
+            // Idle gate: NEVER launch the reconfig wizard over a live print.
+            // The print_active subject is NOT yet updated from this discovery's
+            // initial status — dispatch_status_update() above only QUEUES the status
+            // (m_notification_queue); print_active_ is applied a tick later in
+            // process_notifications, AFTER this queue_update returns. On a fresh
+            // connection mid-print (app/panel restart during a print) the subject
+            // still reads its initialized 0. Consult the just-arrived status directly
+            // so a reconfig wizard never launches over a live print.
+            bool print_active =
+                lv_subject_get_int(get_printer_state().get_print_active_subject()) != 0;
+            if (status_snapshot &&
+                helix::PrinterPrintState::status_indicates_active_print(*status_snapshot)) {
+                print_active = true;
+            }
+            if (!reconfig_steps.empty() && !print_active &&
+                !Config::get_instance()->is_wizard_required() && !is_wizard_active() &&
+                !app->m_targeted_reconfig_shown) {
+                app->m_targeted_reconfig_shown = true;
+                ui_wizard_register_event_callbacks();
+                ui_wizard_container_register_responsive_constants();
+                ui_wizard_init_subjects();
+                // Cancel = dismiss the targeted session. Without this, Back on the first
+                // targeted step is a no-op (no prior step to retreat to). Cancelling an
+                // UNSATISFIABLE role (no candidate hardware exists) must also record the
+                // decision — otherwise the wizard re-launches on every reconnect forever.
+                // decline_unresolved_guided_roles() writes "" (declined) for each still-
+                // Unresolved guided role with a present saved key, read against the CURRENT
+                // discovered hardware (api->hardware()) at cancel time.
+                set_wizard_cancel_callback([api]() {
+                    // Record the cancel as a decline for each still-Unresolved guided
+                    // role (writes "" + saves internally). reapply_hardware_roles() is
+                    // intentionally NOT called here: ui_wizard_complete_targeted() fires
+                    // the on_complete callback (registered in ui_wizard_create_targeted
+                    // below), which already reapplies the roles. Calling it here too
+                    // would be a redundant double reapply.
+                    helix::decline_unresolved_guided_roles(Config::get_instance(), api->hardware());
+                    ui_wizard_complete_targeted();
+                    set_wizard_cancel_callback(nullptr);
+                });
+                ui_wizard_create_targeted(app->m_screen, reconfig_steps, [app]() {
+                    set_wizard_cancel_callback(nullptr);
+                    app->reapply_hardware_roles();
+                });
             }
 
             // Save session snapshot for next comparison (even if no issues)

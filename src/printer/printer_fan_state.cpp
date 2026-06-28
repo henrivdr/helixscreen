@@ -12,22 +12,49 @@
 
 #include "config.h"
 #include "device_display_name.h"
+#include "hardware_role_registry.h"
 #include "state/subject_macros.h"
 #include "unit_conversions.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 namespace helix {
 
-FanRoleConfig FanRoleConfig::from_config(Config* config) {
+FanRoleConfig FanRoleConfig::from_config(Config* config,
+                                         const std::vector<std::string>& discovered_fans) {
     FanRoleConfig roles;
     if (!config) {
         return roles;
     }
-    roles.part_fan = config->get<std::string>(config->df() + "fans/part", "fan");
-    roles.hotend_fan = config->get<std::string>(config->df() + "fans/hotend", "");
-    roles.chamber_fan = config->get<std::string>(config->df() + "fans/chamber", "");
-    roles.exhaust_fan = config->get<std::string>(config->df() + "fans/exhaust", "");
+    // Resolve all four fan roles without saving (persist=false), then write once if any changed.
+    // This avoids up to 4 independent disk writes on first-heal.
+    bool any_changed = false;
+    auto resolve_one = [&](HardwareRoleId id, std::string& field) {
+        const auto* desc = role_descriptor(id);
+        if (!desc)
+            return;
+        const std::string key = config->df() + desc->config_key;
+        const std::string dflt =
+            desc->canonical_default ? std::string(desc->canonical_default) : std::string();
+        const std::string saved = config->get<std::string>(key, dflt);
+        std::string resolved = resolve_role_from_config(id, config, discovered_fans, false);
+        field = resolved;
+        if (!resolved.empty() && resolved != saved) {
+            config->set<std::string>(key, resolved);
+            any_changed = true;
+        }
+    };
+    resolve_one(HardwareRoleId::PartFan, roles.part_fan);
+    resolve_one(HardwareRoleId::HotendFan, roles.hotend_fan);
+    resolve_one(HardwareRoleId::ChamberFan, roles.chamber_fan);
+    resolve_one(HardwareRoleId::ExhaustFan, roles.exhaust_fan);
+    if (any_changed) {
+        if (!config->save()) {
+            spdlog::warn("[FanRoleConfig] Failed to persist batched fan role heals");
+        }
+    }
     return roles;
 }
 
@@ -268,9 +295,13 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
     fans_.reserve(fan_objects.size());
 
     for (const auto& obj_name : fan_objects) {
-        // Skip bare "fan" if a different fan is configured as part cooling —
-        // some printers expose an empty "fan" object that never reports speed data.
-        if (obj_name == "fan" && !roles_.part_fan.empty() && roles_.part_fan != "fan") {
+        // Skip bare "fan" only when a DIFFERENT, LIVE fan is configured as part
+        // cooling — some printers expose an empty "fan" object that never reports
+        // speed data. Never skip the real [fan] just because a stale role names an
+        // absent object.
+        if (obj_name == "fan" && !roles_.part_fan.empty() && roles_.part_fan != "fan" &&
+            std::find(fan_objects.begin(), fan_objects.end(), roles_.part_fan) !=
+                fan_objects.end()) {
             spdlog::debug("[PrinterFanState] Skipping bare 'fan' — part fan is '{}'",
                           roles_.part_fan);
             continue;
