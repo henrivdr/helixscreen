@@ -436,8 +436,8 @@ void HardwareValidator::validate_configured_hardware(Config* config,
     // Role-bearing heater/fan validation via registry.
     // Bypasses is_hardware_optional for role targets: a configured role pointing at
     // an optional object is a stale role, not a silent drop.
-    try {
-        for (const auto& desc : helix::hardware_role_registry()) {
+    for (const auto& desc : helix::hardware_role_registry()) {
+        try {
             const std::vector<std::string>* discovered = nullptr;
             if (desc.category == helix::HardwareCategory::Fan)
                 discovered = &hardware.fans();
@@ -463,8 +463,8 @@ void HardwareValidator::validate_configured_hardware(Config* config,
                     saved, hardware_type_for(desc.category),
                     "Configured hardware no longer present", /*optional=*/false));
             }
+        } catch (...) {
         }
-    } catch (...) {
     }
 
     // Check configured fan (aux) — not in the registry; kept as a bespoke check.

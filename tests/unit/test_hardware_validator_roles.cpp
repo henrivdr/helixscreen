@@ -16,7 +16,6 @@
 #include "hardware_role_registry.h"
 #include "hardware_validator.h"
 #include "moonraker_client_mock.h"
-#include "printer_discovery.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -135,6 +134,7 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture, "validator emits no issue when all
     auto result = v.validate(&config, client.hardware());
 
     // No roles in expected_missing or newly_discovered from the registry loop.
+    REQUIRE(result.expected_missing.empty());
     for (const auto& issue : result.expected_missing) {
         INFO("unexpected expected_missing: " << issue.hardware_name);
         REQUIRE(issue.hardware_type == HardwareType::OTHER); // only AMS/generic, not Fan/Heater
