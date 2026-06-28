@@ -864,6 +864,15 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     void dispatch_manual_probe_update();
 
     /**
+     * @brief Read all three position axes as a consistent snapshot
+     *
+     * Acquires pos_mutex_ so the returned (x, y, z) triple is never torn across
+     * a concurrent multi-axis move. Releases the lock before returning, keeping
+     * pos_mutex_ a leaf lock.
+     */
+    void read_position_snapshot(double& x, double& y, double& z) const;
+
+    /**
      * @brief Dispatch SHAPER_CALIBRATE response sequence
      *
      * Simulates the G-code response output from Klipper's SHAPER_CALIBRATE
@@ -1014,7 +1023,15 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     std::atomic<double> mcu_temp_{42.0};       // MCU temp (40-55°C, stable with small variation)
     std::atomic<double> host_temp_{52.0};      // Host/RPi temp (45-65°C, correlates with load)
 
-    // Position simulation state
+    // Position simulation state.
+    // The three axes are individually atomic, but a multi-axis move and the
+    // background simulation loop's status broadcast run on different threads.
+    // pos_mutex_ makes a multi-axis write and a snapshot read atomic *as a
+    // group*, so a broadcast can never observe a torn cross-axis snapshot (e.g.
+    // X/Y updated but Z still stale) mid-move. It is a leaf lock: never acquire
+    // another lock while holding it. Use read_position_snapshot() to read all
+    // three together; wrap multi-axis stores in a lock_guard(pos_mutex_).
+    mutable std::mutex pos_mutex_;
     std::atomic<double> pos_x_{0.0};
     std::atomic<double> pos_y_{0.0};
     std::atomic<double> pos_z_{0.0};

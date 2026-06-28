@@ -1383,6 +1383,10 @@ int MoonrakerClientMock::gcode_script(const std::string& gcode) {
         std::string homed;
         {
             std::lock_guard<std::mutex> lock(homed_axes_mutex_);
+            // Group all axis zeroing so a concurrent snapshot read never sees a
+            // partially-homed position. Lock order is homed_axes_mutex_ ->
+            // pos_mutex_ (pos_mutex_ is a leaf).
+            std::lock_guard<std::mutex> pos_lock(pos_mutex_);
 
             if (home_all) {
                 homed_axes_ = "xyz";
@@ -1490,24 +1494,28 @@ int MoonrakerClientMock::gcode_script(const std::string& gcode) {
                 last_gcode_error_ = error_msg;
             }
         } else {
-            // Apply the move
-            if (has_x)
-                pos_x_.store(target_x);
-            if (has_y)
-                pos_y_.store(target_y);
-            if (has_z)
-                pos_z_.store(target_z);
+            // Apply the move as a group so the background simulation loop never
+            // broadcasts a torn snapshot (e.g. X/Y updated but Z still stale).
+            {
+                std::lock_guard<std::mutex> pos_lock(pos_mutex_);
+                if (has_x)
+                    pos_x_.store(target_x);
+                if (has_y)
+                    pos_y_.store(target_y);
+                if (has_z)
+                    pos_z_.store(target_z);
+            }
 
             if (has_x || has_y || has_z) {
+                double sx, sy, sz;
+                read_position_snapshot(sx, sy, sz);
                 spdlog::debug("[MoonrakerClientMock] Move {} X={} Y={} Z={} (mode={})",
-                              gcode.find("G0") != std::string::npos ? "G0" : "G1", pos_x_.load(),
-                              pos_y_.load(), pos_z_.load(), is_relative ? "relative" : "absolute");
+                              gcode.find("G0") != std::string::npos ? "G0" : "G1", sx, sy, sz,
+                              is_relative ? "relative" : "absolute");
                 // Reset idle timeout when moving
                 reset_idle_timeout();
                 // Dispatch immediate position update (matches real Moonraker)
-                dispatch_status_update(
-                    {{"toolhead",
-                      {{"position", {pos_x_.load(), pos_y_.load(), pos_z_.load(), 0.0}}}}});
+                dispatch_status_update({{"toolhead", {{"position", {sx, sy, sz, 0.0}}}}});
             }
         }
     }
@@ -2096,7 +2104,9 @@ int MoonrakerClientMock::gcode_script(const std::string& gcode) {
             {
                 std::lock_guard<std::mutex> lock(homed_axes_mutex_);
                 if (homed_axes_.find("xyz") == std::string::npos) {
-                    // Auto-home like real Klipper would
+                    // Auto-home like real Klipper would. Group the axis zeroing
+                    // so a concurrent snapshot read never sees a torn position.
+                    std::lock_guard<std::mutex> pos_lock(pos_mutex_);
                     homed_axes_ = "xyz";
                     pos_x_.store(0.0);
                     pos_y_.store(0.0);
@@ -3016,6 +3026,13 @@ void MoonrakerClientMock::dispatch_enhanced_print_status() {
 // Temperature Simulation
 // ============================================================================
 
+void MoonrakerClientMock::read_position_snapshot(double& x, double& y, double& z) const {
+    std::lock_guard<std::mutex> pos_lock(pos_mutex_);
+    x = pos_x_.load();
+    y = pos_y_.load();
+    z = pos_z_.load();
+}
+
 void MoonrakerClientMock::dispatch_initial_state() {
     // Build initial state JSON matching real Moonraker subscription response format
     // Uses current simulated values (room temp by default, or preset values if set)
@@ -3023,9 +3040,8 @@ void MoonrakerClientMock::dispatch_initial_state() {
     double ext_target = extruder_target_.load();
     double bed_temp_val = bed_temp_.load();
     double bed_target_val = bed_target_.load();
-    double x = pos_x_.load();
-    double y = pos_y_.load();
-    double z = pos_z_.load();
+    double x, y, z;
+    read_position_snapshot(x, y, z);
     int speed = speed_factor_.load();
     int flow = flow_factor_.load();
     int fan = fan_speed_.load();
@@ -3729,9 +3745,8 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         }
 
         // ========== Position and Motion State ==========
-        double x = pos_x_.load();
-        double y = pos_y_.load();
-        double z = pos_z_.load();
+        double x, y, z;
+        read_position_snapshot(x, y, z);
 
         std::string homed;
         {
@@ -4108,9 +4123,8 @@ void MoonrakerClientMock::dispatch_gcode_move_update() {
     double z_offset = gcode_offset_z_.load();
     int speed = speed_factor_.load();
     int flow = flow_factor_.load();
-    double x = pos_x_.load();
-    double y = pos_y_.load();
-    double z = pos_z_.load();
+    double x, y, z;
+    read_position_snapshot(x, y, z);
 
     json gcode_move = {{"gcode_move",
                         {{"gcode_position", {x, y, z, 0.0}},
