@@ -858,6 +858,11 @@ static void dismiss_wizard_container() {
 void ui_wizard_complete() {
     spdlog::info("[Wizard] Completing wizard and transitioning to main UI");
 
+    // Any full completion ends targeted mode unconditionally (defense in depth):
+    // guarantees the next wizard run is never accidentally a subset session.
+    g_step_subset.clear();
+    g_targeted_on_complete = nullptr;
+
     // 1. Mark wizard as completed in config
     Config* config = Config::get_instance();
     if (config) {
@@ -1085,6 +1090,9 @@ static void on_next_clicked(lv_event_t* e) {
     // NOT set wizard_completed).
     if (!g_step_subset.empty()) {
         int idx = subset_index_of(current);
+        // idx < 0 (current not in subset) is unreachable in practice because
+        // navigate_to_step always sets current_step to a subset member; handled
+        // defensively as completion alongside the normal last-step case.
         if (idx < 0 || idx + 1 >= static_cast<int>(g_step_subset.size())) {
             spdlog::info("[Wizard] Targeted subset finished, completing targeted session");
             ui_wizard_complete_targeted();
