@@ -469,6 +469,12 @@ TEST_CASE("AD5X IFS type identification", "[ams][ad5x_ifs]") {
     REQUIRE(backend.get_topology() == PathTopology::LINEAR);
 }
 
+TEST_CASE("AD5X IFS: manages_active_spool() is true so the UI never auto-writes Spoolman",
+          "[ams][ad5x][ifs][spoolman][1071]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    CHECK(backend.manages_active_spool() == true);
+}
+
 // ==========================================================================
 // 2. parse_save_variables — full JSON
 // ==========================================================================

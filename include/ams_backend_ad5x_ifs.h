@@ -206,6 +206,17 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
         return false;
     }
 
+    // Match the AFC/Happy Hare pattern: HelixScreen must NOT auto-call
+    // server.spoolman.post_spool_id for AD5X. AD5X has no per-spool identity
+    // (no RFID/color sensing) so the lane->spool link can be stale after a
+    // physical swap; auto-firing set_active_spool against a stale link bumped
+    // "last used" on the wrong spool (#1071, symptom A). AD5X has no native
+    // active-spool mechanism either, so this simply disables auto active-spool
+    // tracking for this printer. All Spoolman writes become explicit-user-only.
+    [[nodiscard]] bool manages_active_spool() const override {
+        return true;
+    }
+
     [[nodiscard]] RemapStrategy get_remap_strategy() const override {
         return RemapStrategy::Native;
     }
