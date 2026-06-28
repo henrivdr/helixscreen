@@ -302,6 +302,15 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     void parse_save_variables(const nlohmann::json& vars);
     void parse_port_sensor(int port_1based, bool detected);
     void parse_head_sensor(bool detected);
+    // Belt-and-suspenders head-loaded derivation from GET_ZCOLOR's "Extruder:"
+    // summary, for native Z-Mod where the head switch sensor may not stream
+    // under the stock filament_*_sensor sections (BUG-B, #1065). Asserts loaded
+    // on "Extruder: N" and clears on "Extruder: None" ONLY when physical presence
+    // corroborates an empty head — never strands seated filament on a firmware
+    // that drops the extruder pointer post-runout (C1/#995) nor clobbers a real
+    // head switch sensor whose lane still reads present (C2). Returns true if
+    // head_filament_ changed. Caller MUST hold mutex_.
+    bool derive_head_loaded_from_summary_locked(const ZColorSilentResult& result);
     // One-shot fetch of /mod_data/user.cfg. Parses the [zmod_ifs] section for
     // `filament_<NAME>: <TEMP>` entries — zmod's mechanism for user-defined
     // material types beyond the AD5X firmware whitelist (e.g., PLA+, RPLA,

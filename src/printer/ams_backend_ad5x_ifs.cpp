@@ -352,13 +352,26 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         lock.lock();
     }
 
+    // A sensor object only counts as a real reading when it actually carries a
+    // boolean filament_detected. On a fresh boot Moonraker can return the stock
+    // filament_*_sensor object as a present-but-empty {} compat view while the
+    // live zmod_ifs_* sensor carries the real field; choosing a key purely by
+    // presence would let the empty stock object win and the real zmod reading be
+    // ignored (#1065 boot scenario). Prefer whichever namespace carries the
+    // field, stock first when both do (the historical order).
+    const auto has_reading = [&](const char* key) {
+        return status->contains(key) && (*status)[key].is_object() &&
+               (*status)[key].contains("filament_detected") &&
+               (*status)[key]["filament_detected"].is_boolean();
+    };
+
     // Native ZMOD IFS: single motion sensor replaces per-port presence sensors.
     // Maps to head_filament_ since it detects filament at the toolhead. The live
     // AD5X publishes this under the zmod_ifs_motion_sensor namespace rather than
     // the stock filament_motion_sensor section, so accept either key.
-    const char* motion_key = status->contains("filament_motion_sensor ifs_motion_sensor")
+    const char* motion_key = has_reading("filament_motion_sensor ifs_motion_sensor")
                                  ? "filament_motion_sensor ifs_motion_sensor"
-                                 : (status->contains("zmod_ifs_motion_sensor ifs_motion_sensor")
+                                 : (has_reading("zmod_ifs_motion_sensor ifs_motion_sensor")
                                         ? "zmod_ifs_motion_sensor ifs_motion_sensor"
                                         : nullptr);
     if (motion_key) {
@@ -388,9 +401,9 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
     // Parse head sensor. The live AD5X publishes this under the
     // zmod_ifs_switch_sensor namespace rather than the stock
     // filament_switch_sensor section, so accept either key (switch semantics).
-    const char* head_key = status->contains("filament_switch_sensor head_switch_sensor")
+    const char* head_key = has_reading("filament_switch_sensor head_switch_sensor")
                                ? "filament_switch_sensor head_switch_sensor"
-                               : (status->contains("zmod_ifs_switch_sensor head_switch_sensor")
+                               : (has_reading("zmod_ifs_switch_sensor head_switch_sensor")
                                       ? "zmod_ifs_switch_sensor head_switch_sensor"
                                       : nullptr);
     if (head_key) {
@@ -3231,6 +3244,18 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                 }
             }
 
+            // Belt-and-suspenders head-loaded derivation (BUG-B). Run it HERE in
+            // Phase 1 — after seated_chan_/port_presence_ were updated above but
+            // before the slot-state refresh below — so a frame carrying BOTH the
+            // IFS_STATUS Chan and the GET_ZCOLOR Extruder summary doesn't first
+            // emit a slot update with a stale head_filament_ and only correct it
+            // in Phase 2 (BUG-2, transient spurious LOADED to sync observers).
+            // For a frame with no Extruder summary this is a no-op; the Phase 2
+            // call covers GET_ZCOLOR-only frames.
+            if (derive_head_loaded_from_summary_locked(result)) {
+                chan_changed = true;
+            }
+
             if (chan_changed) {
                 for (int i = 0; i < NUM_PORTS; ++i) {
                     update_slot_from_state(i);
@@ -3381,26 +3406,12 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             }
         }
 
-        // Head-loaded state from GET_ZCOLOR's "Extruder:" summary. On native
-        // Z-Mod the head switch / motion sensors don't push under the stock
-        // filament_switch_sensor / filament_motion_sensor sections, so
-        // parse_head_sensor() never fires and head_filament_ would stay false
-        // even with filament at the toolhead (BUG-B). The "Extruder: N" summary
-        // is zmod's live toolhead view — it reads "None" when nothing is at the
-        // head — so it is the correct head-loaded signal. extruder_slot.has_value()
-        // is true for "Extruder: N" and false for "None". Gated on
-        // saw_extruder_summary so a frame without the summary line (e.g. one that
-        // carried only slot lines or only IFS_STATUS JSON) can't wrongly clear
-        // head state. Deliberately NO seated_chan_/lane-present fallback: a
-        // cold-inserted lane is present and seated but NOT at the head, which the
-        // "Extruder:" view correctly reports as not loaded.
-        if (result.saw_extruder_summary) {
-            const bool head_loaded = result.extruder_slot.has_value();
-            if (head_filament_ != head_loaded) {
-                head_filament_ = head_loaded;
-                system_info_.filament_loaded = head_loaded;
-                changed = true;
-            }
+        // Head-loaded state from GET_ZCOLOR's "Extruder:" summary (BUG-B). For
+        // frames that also carried IFS_STATUS Chan this already ran in Phase 1
+        // (so it is a no-op here); this call covers GET_ZCOLOR-only frames. The
+        // C1/C2 presence corroboration lives in the helper.
+        if (derive_head_loaded_from_summary_locked(result)) {
+            changed = true;
         }
 
         if (changed) {
@@ -3413,6 +3424,60 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
     if (changed) {
         emit_event(EVENT_STATE_CHANGED);
     }
+}
+
+bool AmsBackendAd5xIfs::derive_head_loaded_from_summary_locked(const ZColorSilentResult& result) {
+    // Native Z-Mod's head switch/motion sensors don't reliably push under the
+    // stock filament_*_sensor sections, so head_filament_ can be unwritten even
+    // with filament at the toolhead (BUG-B, #1065). GET_ZCOLOR's "Extruder: N"
+    // summary is zmod's live at-extruder view and the belt-and-suspenders head
+    // signal. Gated on saw_extruder_summary so a frame without the summary line
+    // (IFS_STATUS-only, or slot-lines-only) can't act on a coincidentally-absent
+    // extruder_slot.
+    if (!result.saw_extruder_summary) {
+        return false;
+    }
+
+    if (result.extruder_slot.has_value()) {
+        // "Extruder: N" — positive, authoritative evidence of filament at the
+        // extruder. Assert loaded. This also self-heals a transient clobber from
+        // the motion sensor, which (device-confirmed 2026-06-28) reads
+        // filament_detected=false while idle even with filament loaded — see the
+        // parse_head_sensor() conflation NOTE in the header.
+        if (!head_filament_) {
+            head_filament_ = true;
+            system_info_.filament_loaded = true;
+            return true;
+        }
+        return false;
+    }
+
+    // "Extruder: None" is AMBIGUOUS: it appears both after a genuine unload AND,
+    // on some firmware, while filament is still seated at the head post-runout/
+    // print-end (#995 — the case can_unload_from_toolhead's `head_filament_ &&
+    // current_slot<0` fallback exists for). Only clear an established loaded
+    // state when physical presence corroborates an empty head — i.e. the seated
+    // lane's port has gone absent. Keeping it loaded while the lane is still
+    // present avoids stranding unremovable filament and wrongly re-enabling Load
+    // (-> cold grind), and prevents an Extruder:None frame from clobbering a real
+    // head switch sensor on lessWaste/older variants whose seated lane still
+    // reads present (C1/C2). A genuine unload/eject drops the lane's port, which
+    // re-permits the clear; the real head switch sensor (parse_head_sensor) is
+    // the primary clear path and is unaffected.
+    if (!head_filament_) {
+        return false;
+    }
+    const bool seated_port_present = seated_chan_ > 0 && seated_chan_ <= NUM_PORTS &&
+                                     port_presence_[static_cast<size_t>(seated_chan_ - 1)];
+    if (seated_port_present) {
+        spdlog::debug("{} Extruder:None with seated lane {} still present — keeping "
+                      "head-loaded (post-runout/seated; deferring to the head sensor) (#995)",
+                      backend_log_tag(), seated_chan_);
+        return false;
+    }
+    head_filament_ = false;
+    system_info_.filament_loaded = false;
+    return true;
 }
 
 AmsBackendAd5xIfs::ZColorSilentResult
