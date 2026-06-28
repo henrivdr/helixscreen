@@ -2182,7 +2182,57 @@ TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override", "[ams]
         Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
     }
     REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
-    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+    // #1071: an emptied lane now KEEPS its Spoolman link (see the dedicated
+    // keep-the-link test below) — only firmware-sourced presence/status drops.
+    CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+}
+
+// #1071: AD5X must match the AFC / Happy Hare backends, which never clear the
+// lane->Spoolman link when a lane goes empty (runout / unload / eject). The
+// emptied lane renders as removed (presence=false, status != LOADED) but
+// retains spoolman_id / brand / spool_name / color / material so a re-inserted
+// same spool keeps its assignment. (Previously AD5X diverged by auto-calling
+// clear_override_locked on the present->absent transition.)
+TEST_CASE("AD5X IFS: a lane going empty keeps its Spoolman link (AFC/HH parity)",
+          "[ams][ad5x][ifs][spoolman][1071]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // Slot 0 present with a user Spoolman override staged.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "FF0000"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.spoolman_id = 42;
+    ovr.brand = "Polymaker";
+    ovr.spool_name = "Polymaker PLA";
+    ovr.color_rgb = 0xFF0000;
+    ovr.color_set = true;
+    ovr.material = "PLA";
+    Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
+    REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+
+    // Lane 0 goes empty (eject / runout): GET_ZCOLOR reports slot 0 ABSENT.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        // slots[0] left empty => absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+
+    // Presence flips false; the slot renders empty/removed...
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    SlotInfo info = backend.get_slot_info(0);
+    CHECK(info.status != SlotStatus::LOADED);
+    // ...but the Spoolman link is RETAINED so a re-inserted same spool keeps it.
+    CHECK(info.spoolman_id == 42);
+    CHECK(info.brand == "Polymaker");
+    CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 }
 
 // NOTE: tests previously here exercised parse_save_variables's color/type
@@ -4070,17 +4120,19 @@ TEST_CASE("AD5X IFS external color change with no override creates minimal lane_
     CHECK_FALSE(db.contains("vendor"));
 }
 
-TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
+TEST_CASE("AD5X IFS GET_ZCOLOR eject keeps the override and lane_data (#1071)",
           "[ams][ad5x_ifs][filament_slot_override][slow]") {
     // Genuine spool removal. presence is owned solely by GET_ZCOLOR now: when
-    // apply_zcolor_result reports a slot present->absent it must clear the
-    // override (brand/spool_name/spoolman describe the gone spool) AND delete
-    // the lane_data entry via clear_override_locked's store->clear_async path.
-    // (This used to ride on parse_adventurer_json's empty-color eject branch.)
+    // apply_zcolor_result reports a slot present->absent the lane renders empty,
+    // but #1071: the override (brand/spool_name/spoolman) and the MR DB lane_data
+    // row are RETAINED so a re-inserted same spool keeps its assignment —
+    // matching the AFC and Happy Hare backends, which never clear the link on
+    // empty. (Previously this drove clear_override_locked, which also deleted the
+    // lane_data row via store->clear_async.)
     //
-    // The sibling test "GET_ZCOLOR present->absent clears the slot override"
-    // covers the override-only clear without a store; this case additionally
-    // verifies the MR DB lane_data row is deleted.
+    // The sibling test "a lane going empty keeps its Spoolman link" covers the
+    // override-retention without a store; this case additionally verifies the MR
+    // DB lane_data row survives.
     Ad5xIfsTmpCacheDir tmp("eject_clears_override");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -4112,8 +4164,9 @@ TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
     })");
     REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 
-    // Eject: GET_ZCOLOR reports slot 0 ABSENT. The present->absent transition
-    // in apply_zcolor_result clears the override and the MR DB lane_data entry.
+    // Eject: GET_ZCOLOR reports slot 0 ABSENT. The present->absent transition in
+    // apply_zcolor_result drops presence/status but RETAINS the override and the
+    // MR DB lane_data entry (#1071).
     {
         AmsBackendAd5xIfs::ZColorSilentResult r;
         r.saw_valid_response = true;
@@ -4121,13 +4174,17 @@ TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
         Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
     }
 
+    // The lane renders removed (presence/status dropped)...
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
     {
         auto info = backend.get_slot_info(0);
-        CHECK(info.brand.empty());
-        CHECK(info.spoolman_id == 0);
+        CHECK(info.status != SlotStatus::LOADED);
+        // ...but the Spoolman link survives the empty.
+        CHECK(info.brand == "Polymaker");
+        CHECK(info.spoolman_id == 42);
     }
-    CHECK_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
-    CHECK(api.mock_get_db_value("lane_data", "lane1").is_null());
+    CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+    CHECK_FALSE(api.mock_get_db_value("lane_data", "lane1").is_null());
 }
 
 // ==========================================================================

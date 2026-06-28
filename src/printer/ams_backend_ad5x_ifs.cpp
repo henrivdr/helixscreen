@@ -3145,13 +3145,17 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                     const bool was_present = port_presence_[idx];
                     port_presence_[idx] = ports[idx];
                     chan_changed = true;
-                    // present->absent: clear the stale user override so the
-                    // emptied slot doesn't keep a now-gone spool's metadata
-                    // (mirrors the GET_ZCOLOR present->absent path below).
+                    // present->absent: the lane went empty (eject / runout /
+                    // unload). #1071: KEEP the lane->Spoolman override so a
+                    // re-inserted same spool keeps its assignment — matching the
+                    // AFC and Happy Hare backends, which never clear the link on
+                    // empty. Only presence drops here; update_slot_from_state
+                    // below recomputes status to EMPTY and re-applies the
+                    // retained override (mirrors the GET_ZCOLOR path below).
                     if (was_present && !ports[idx]) {
-                        if (auto* eject_entry = slots_.get_mut(i)) {
-                            clear_override_locked(i, eject_entry->info);
-                        }
+                        spdlog::info("{} Slot {} went empty (IFS_STATUS Ports) — "
+                                     "retaining the Spoolman link (#1071)",
+                                     backend_log_tag(), i);
                     }
                 }
             }
@@ -3270,16 +3274,17 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                 port_presence_[idx] = loaded;
                 changed = true;
 
-                // present->absent: the spool was physically removed. Clear the
-                // user override so brand/spool_name/spoolman_id from the now-gone
-                // spool don't haunt the empty slot or get re-applied to whatever
-                // loads next. (This cleanup used to ride on parse_adventurer_json's
-                // presence inference; GET_ZCOLOR is now the sole presence
-                // authority, so it drives the override-clear too. mutex_ is held.)
+                // present->absent: the spool was physically removed. #1071:
+                // KEEP the user override (brand/spool_name/spoolman_id/color/
+                // material) so a re-inserted same spool keeps its assignment —
+                // matching the AFC and Happy Hare backends, which never clear the
+                // link on empty. The emptied slot still renders removed because
+                // presence dropped above; update_slot_from_state below recomputes
+                // status to EMPTY and re-applies the retained override.
                 if (was_present && !loaded) {
-                    if (auto* eject_entry = slots_.get_mut(i)) {
-                        clear_override_locked(i, eject_entry->info);
-                    }
+                    spdlog::info("{} Slot {} went empty (GET_ZCOLOR present->absent) "
+                                 "— retaining the Spoolman link (#1071)",
+                                 backend_log_tag(), i);
                 }
             }
 
@@ -3649,13 +3654,17 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
                 if (has_filament_data) {
                     presence = true;
                 } else if (presence && system_info_.action == AmsAction::IDLE) {
+                    // present->absent eject (pre-SILENT zmod, JSON-inferred).
+                    // #1071: KEEP the lane->Spoolman override so a re-inserted
+                    // same spool keeps its assignment — matching the AFC and
+                    // Happy Hare backends, which never clear the link on empty.
+                    // Only presence drops; update_slot_from_state below recomputes
+                    // status to EMPTY and re-applies the retained override.
                     spdlog::info("{} Slot {} eject detected (empty color in "
-                                 "Adventurer5M.json, pre-SILENT zmod)",
+                                 "Adventurer5M.json, pre-SILENT zmod) — retaining "
+                                 "the Spoolman link (#1071)",
                                  backend_log_tag(), idx);
                     presence = false;
-                    if (auto* eject_entry = slots_.get_mut(idx)) {
-                        clear_override_locked(idx, eject_entry->info);
-                    }
                     needs_ifs_vars_push = true;
                 }
             }
