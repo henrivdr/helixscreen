@@ -237,6 +237,12 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     }
 
   private:
+    // Build a " GATES=g0,g1,..." suffix targeting a specific unit's gates for
+    // MMU_HEATER on multi-unit (EMU) rigs. Returns "" for a single-unit MMU or
+    // unit<0 so the command omits GATES and HH defaults to all non-empty gates.
+    // Locks mutex_ internally — call with no lock held.
+    [[nodiscard]] std::string gates_suffix_for_unit(int unit) const;
+
     // Build context-aware recovery actions from live MMU state. Caller holds mutex_.
     [[nodiscard]] std::vector<helix::RecoveryAction> build_recovery_actions() const;
 
@@ -375,6 +381,8 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     std::map<std::string, float> heater_temp_; ///< live temp (°C) keyed by heater object name
     std::map<std::string, float>
         sensor_humidity_; ///< live humidity (%RH) keyed by env-sensor object name
+    std::map<std::string, float>
+        sensor_temp_; ///< live ambient temp (°C) keyed by env-sensor object name
 
     // Error state tracking
     std::string reason_for_pause_; ///< Last reason_for_pause from MMU (descriptive error text)

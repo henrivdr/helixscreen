@@ -166,20 +166,40 @@ AmsSystemInfo AmsBackendHappyHare::get_system_info() const {
                 sensor = environment_sensors_[gi];
             }
 
-            // Temperature: per-object reading, falling back to the global dryer temp
-            // for the scalar/shared case (same value).
-            float temp = dryer_info_.current_temp_c;
+            // Temperature: prefer a live heater reading, then the env sensor's own
+            // ambient temperature (heater-less enclosures), then the global dryer
+            // temp (scalar/shared, object-form drying_state).
+            float temp = 0.0f;
+            bool have_temp = false;
             if (auto t = heater_temp_.find(heater); t != heater_temp_.end()) {
                 temp = t->second;
+                have_temp = true;
+            } else if (auto st = sensor_temp_.find(sensor); st != sensor_temp_.end()) {
+                temp = st->second;
+                have_temp = true;
+            } else if (dryer_info_.current_temp_c > 0.0f) {
+                temp = dryer_info_.current_temp_c;
+                have_temp = true;
             }
-            if (temp <= 0.0f) {
-                continue; // no live heater reading for this unit yet
+
+            float humidity = 0.0f;
+            bool have_humidity = false;
+            if (auto h = sensor_humidity_.find(sensor); h != sensor_humidity_.end()) {
+                humidity = h->second;
+                have_humidity = true;
+            }
+
+            // Surface the unit's environment whenever ANY reading is present. Gating
+            // on a positive heater temp previously discarded humidity for enclosures
+            // monitored without (or before) a heater reading.
+            if (!have_temp && !have_humidity) {
+                continue;
             }
 
             EnvironmentData env;
-            env.temperature_c = temp;
-            if (auto h = sensor_humidity_.find(sensor); h != sensor_humidity_.end()) {
-                env.humidity_pct = h->second;
+            env.temperature_c = temp; // 0 only if humidity-only and no temp source
+            if (have_humidity) {
+                env.humidity_pct = humidity;
                 env.has_humidity = true;
             }
             unit.environment = env;
@@ -1409,9 +1429,10 @@ bool AmsBackendHappyHare::apply_filament_heater_status(const nlohmann::json& par
 
     bool any = false;
     for (const auto& hname : heaters) {
-        // Normalize: Moonraker keys generic heaters as "heater_generic <name>".
-        const std::string status_key =
-            (hname.rfind("heater_generic ", 0) == 0) ? hname : ("heater_generic " + hname);
+        // Happy Hare stores the full Klipper object name (e.g. "heater_generic
+        // MMU_heater"), which is exactly the Moonraker status key. Use it verbatim so
+        // any heater object type HH permits resolves — not only heater_generic.
+        const std::string& status_key = hname;
         auto h_it = params.find(status_key);
         if (h_it == params.end() || !h_it->is_object()) {
             continue;
@@ -1452,7 +1473,7 @@ bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& 
 
     bool any = false;
     for (const auto& sname : sensors) {
-        // Candidate object keys carrying the humidity field, mirroring Happy Hare's
+        // Candidate object keys carrying temperature/humidity, mirroring Happy Hare's
         // _get_environment_status(): the sensor object itself (it may be a humidity
         // chip directly), plus "<chip> <name>" for each humidity-capable chip, where
         // <name> is the bare second token (e.g. "temperature_sensor box" -> "box").
@@ -1467,19 +1488,46 @@ bool AmsBackendHappyHare::apply_environment_sensor_status(const nlohmann::json& 
                 }
             }
         }
+        bool have_temp = false;
+        bool have_hum = false;
+        float temp_val = 0.0f;
+        float hum_val = 0.0f;
         for (const auto& key : candidates) {
             auto it = params.find(key);
             if (it == params.end() || !it->is_object()) {
                 continue;
             }
-            if (auto h = it->find("humidity"); h != it->end() && h->is_number()) {
-                std::lock_guard<std::mutex> lock(mutex_);
-                sensor_humidity_[sname] = h->get<float>();
-                spdlog::trace("[AMS HappyHare] Humidity {:.1f}% for {} (from {})",
-                              sensor_humidity_[sname], sname, key);
-                any = true;
-                break; // first matching chip wins for this sensor
+            // Ambient temperature is what HH surfaces for the enclosure when no
+            // heater is fitted; capture it so humidity-only enclosures still show a
+            // temperature and so the readout never gates humidity on a heater.
+            if (!have_temp) {
+                if (auto t = it->find("temperature"); t != it->end() && t->is_number()) {
+                    temp_val = t->get<float>();
+                    have_temp = true;
+                }
             }
+            if (!have_hum) {
+                if (auto h = it->find("humidity"); h != it->end() && h->is_number()) {
+                    hum_val = h->get<float>();
+                    have_hum = true;
+                }
+            }
+            if (have_temp && have_hum) {
+                break;
+            }
+        }
+        if (have_temp || have_hum) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (have_temp) {
+                sensor_temp_[sname] = temp_val;
+            }
+            if (have_hum) {
+                sensor_humidity_[sname] = hum_val;
+            }
+            spdlog::trace("[AMS HappyHare] Env sensor {}: temp={:.1f} (have={}) humidity={:.1f} "
+                          "(have={})",
+                          sname, temp_val, have_temp, hum_val, have_hum);
+            any = true;
         }
     }
     return any;
@@ -2416,9 +2464,13 @@ bool AmsBackendHappyHare::is_bypass_active() const {
 helix::printer::EndlessSpoolCapabilities
 AmsBackendHappyHare::get_endless_spool_capabilities() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    // Happy Hare uses group-based endless spool configured in mmu_vars.cfg
-    // UI can read but not modify the configuration
-    return {true, false, "Happy Hare group-based"};
+    // Happy Hare uses group-based endless spool, settable at runtime via
+    // MMU_ENDLESS_SPOOL GROUPS=... The gcode has no UNIT= parameter and acts on the
+    // currently-selected unit, so editing is only safe on a single-unit MMU.
+    const bool single_unit = system_info_.units.size() <= 1;
+    return {true, single_unit,
+            single_unit ? "Happy Hare group-based (runtime editable)"
+                        : "Happy Hare group-based (read-only on multi-unit)"};
 }
 
 std::vector<helix::printer::EndlessSpoolConfig>
@@ -2462,10 +2514,82 @@ AmsBackendHappyHare::get_endless_spool_config() const {
 }
 
 AmsError AmsBackendHappyHare::set_endless_spool_backup(int slot_index, int backup_slot) {
-    // Happy Hare endless spool is configured in mmu_vars.cfg, not via runtime G-code
-    (void)slot_index;
-    (void)backup_slot;
-    return AmsErrorHelper::not_supported("Endless spool configuration");
+    std::string csv;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!slots_.is_initialized()) {
+            return AmsErrorHelper::not_supported("Endless spool (MMU not ready)");
+        }
+        // MMU_ENDLESS_SPOOL has no UNIT= parameter and operates on the selected
+        // unit, so a client cannot reliably target a specific unit's groups.
+        if (system_info_.units.size() > 1) {
+            return AmsErrorHelper::not_supported("Endless spool editing on multi-unit Happy Hare");
+        }
+
+        const int n = slots_.slot_count();
+        if (!slots_.is_valid_index(slot_index)) {
+            return AmsErrorHelper::invalid_slot(slot_index, n > 0 ? n - 1 : 0);
+        }
+        if (backup_slot != -1) {
+            if (!slots_.is_valid_index(backup_slot)) {
+                return AmsErrorHelper::invalid_slot(backup_slot, n > 0 ? n - 1 : 0);
+            }
+            if (backup_slot == slot_index) {
+                return AmsError(AmsResult::INVALID_SLOT, "Cannot use slot as its own backup",
+                                "A slot cannot be its own endless spool backup",
+                                "Select a different backup slot");
+            }
+        }
+
+        // Build the GROUPS array (length == num_gates), indexed by gate. HH requires
+        // a non-negative group id for every gate; gates with no group get a fresh
+        // standalone id. For a single-unit MMU the gate number equals the global
+        // slot index, so slot_index/backup_slot index directly into the array.
+        std::vector<int> groups(n, -1);
+        int next_unique = 0;
+        for (int i = 0; i < n; ++i) {
+            const auto* e = slots_.get(i);
+            int gate = (e ? e->info.global_index : i);
+            if (gate < 0 || gate >= n) {
+                gate = i;
+            }
+            int g = (e && e->info.endless_spool_group >= 0) ? e->info.endless_spool_group : -1;
+            groups[gate] = g;
+            if (g >= next_unique) {
+                next_unique = g + 1;
+            }
+        }
+        for (int i = 0; i < n; ++i) {
+            if (groups[i] < 0) {
+                groups[i] = next_unique++;
+            }
+        }
+
+        if (backup_slot < 0) {
+            // Remove backup: move this gate into a fresh standalone group.
+            int mx = 0;
+            for (int g : groups) {
+                mx = std::max(mx, g);
+            }
+            groups[slot_index] = mx + 1;
+        } else {
+            // Join the backup gate's group so the two back each other up.
+            groups[slot_index] = groups[backup_slot];
+        }
+
+        for (int i = 0; i < n; ++i) {
+            if (i) {
+                csv += ',';
+            }
+            csv += std::to_string(groups[i]);
+        }
+    }
+
+    spdlog::info("[AMS HappyHare] Setting endless spool: slot {} backup {} -> GROUPS={}",
+                 slot_index, backup_slot, csv);
+    // ENABLE=1 is required: HH ignores GROUPS while endless spool is disabled.
+    return execute_gcode("MMU_ENDLESS_SPOOL ENABLE=1 QUIET=1 GROUPS=" + csv);
 }
 
 AmsError AmsBackendHappyHare::reset_tool_mappings() {
@@ -2495,9 +2619,12 @@ AmsError AmsBackendHappyHare::reset_tool_mappings() {
 }
 
 AmsError AmsBackendHappyHare::reset_endless_spool() {
-    // Happy Hare endless spool is read-only (configured in mmu_vars.cfg)
-    spdlog::warn("[AMS HappyHare] Endless spool reset not supported (read-only)");
-    return AmsErrorHelper::not_supported("Happy Hare endless spool is read-only");
+    // ENABLE=1 is required: HH's MMU_ENDLESS_SPOOL handler early-returns (ignoring
+    // RESET) when endless spool is currently disabled. With ENABLE=1, RESET=1 then
+    // restores both the groups and the enabled flag to the config defaults
+    // (_reset_endless_spool overwrites the momentary enable with the config default).
+    spdlog::info("[AMS HappyHare] Resetting endless spool groups to config defaults");
+    return execute_gcode("MMU_ENDLESS_SPOOL ENABLE=1 RESET=1 QUIET=1");
 }
 
 // ============================================================================
@@ -2528,8 +2655,32 @@ DryerInfo AmsBackendHappyHare::get_dryer_info() const {
     return out;
 }
 
+std::string AmsBackendHappyHare::gates_suffix_for_unit(int unit) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Single-unit MMU (or unspecified unit): omit GATES so HH targets all
+    // non-empty gates, matching the long-standing whole-MMU behavior.
+    if (unit < 0 || system_info_.units.size() <= 1) {
+        return "";
+    }
+    for (const auto& u : system_info_.units) {
+        if (u.unit_index != unit) {
+            continue;
+        }
+        // Target every gate on this unit. NOTE: includes empty gates; per-gate
+        // occupancy filtering is a future refinement (needs real EMU hardware).
+        std::string csv;
+        for (int i = 0; i < u.slot_count; ++i) {
+            if (i) {
+                csv += ',';
+            }
+            csv += std::to_string(u.first_slot_global_index + i);
+        }
+        return csv.empty() ? "" : (" GATES=" + csv);
+    }
+    return "";
+}
+
 AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
-    (void)unit;
     (void)fan_pct; // Happy Hare MMU_HEATER does not accept a FAN parameter
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -2539,7 +2690,10 @@ AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int f
     }
 
     // Happy Hare uses TIMER= (minutes) not DURATION=, and has no FAN parameter.
-    std::string cmd = fmt::format("MMU_HEATER DRY=1 TEMP={:.0f} TIMER={}", temp_c, duration_min);
+    // GATES targets a specific unit's gates on multi-unit (EMU) rigs; gates_suffix
+    // locks internally, so it is called with no lock held.
+    std::string cmd = fmt::format("MMU_HEATER DRY=1 TEMP={:.0f} TIMER={}", temp_c, duration_min) +
+                      gates_suffix_for_unit(unit);
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -2547,12 +2701,12 @@ AmsError AmsBackendHappyHare::start_drying(float temp_c, int duration_min, int f
         dry_end_epoch_ = now_fn_() + static_cast<std::time_t>(duration_min) * 60;
     }
 
-    spdlog::info("[AMS HappyHare] Starting dryer: {:.0f}°C for {} min", temp_c, duration_min);
+    spdlog::info("[AMS HappyHare] Starting dryer: {:.0f}°C for {} min (unit {})", temp_c,
+                 duration_min, unit);
     return execute_gcode(cmd);
 }
 
 AmsError AmsBackendHappyHare::stop_drying(int unit) {
-    (void)unit;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!dryer_info_.supported) {
@@ -2564,8 +2718,8 @@ AmsError AmsBackendHappyHare::stop_drying(int unit) {
         dryer_info_.duration_min = 0;
     }
 
-    spdlog::info("[AMS HappyHare] Stopping dryer");
-    return execute_gcode("MMU_HEATER STOP=1");
+    spdlog::info("[AMS HappyHare] Stopping dryer (unit {})", unit);
+    return execute_gcode("MMU_HEATER STOP=1" + gates_suffix_for_unit(unit));
 }
 
 // ============================================================================

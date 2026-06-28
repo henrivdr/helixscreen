@@ -97,6 +97,37 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
     }
 
     /**
+     * @brief Populate system_info_.units AND the slot registry for multiple units.
+     * Unlike initialize_test_units (registry only), this fills system_info_.units so
+     * per-unit logic (e.g. gates_suffix_for_unit) sees the multi-unit topology.
+     * @param gates_per_unit Gate count for each unit; total gates = sum.
+     */
+    void initialize_test_gates_multi(const std::vector<int>& gates_per_unit) {
+        system_info_.units.clear();
+        int total = 0;
+        int global = 0;
+        for (size_t u = 0; u < gates_per_unit.size(); ++u) {
+            AmsUnit unit;
+            unit.unit_index = static_cast<int>(u);
+            unit.name = "MMU" + std::to_string(u);
+            unit.slot_count = gates_per_unit[u];
+            unit.first_slot_global_index = global;
+            for (int i = 0; i < gates_per_unit[u]; ++i) {
+                SlotInfo slot;
+                slot.slot_index = i;
+                slot.global_index = global + i;
+                slot.status = SlotStatus::AVAILABLE;
+                unit.slots.push_back(slot);
+            }
+            global += gates_per_unit[u];
+            total += gates_per_unit[u];
+            system_info_.units.push_back(unit);
+        }
+        system_info_.total_slots = total;
+        initialize_test_units(gates_per_unit);
+    }
+
+    /**
      * @brief Get mutable slot pointer for test setup
      * @param slot_index Global slot index
      * @return Pointer to SlotInfo or nullptr
@@ -595,17 +626,71 @@ TEST_CASE("Happy Hare reset_tool_mappings with zero tools is no-op",
 // reset_endless_spool() Tests
 // ============================================================================
 
-TEST_CASE("Happy Hare reset_endless_spool returns not_supported",
+TEST_CASE("Happy Hare reset_endless_spool sends MMU_ENDLESS_SPOOL RESET",
           "[ams][happy_hare][endless_spool][reset]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
     auto result = helper.reset_endless_spool();
 
+    CHECK(result.success());
+    // ENABLE=1 is required so HH does not skip RESET when endless spool is disabled.
+    REQUIRE(helper.has_gcode("MMU_ENDLESS_SPOOL ENABLE=1 RESET=1 QUIET=1"));
+}
+
+TEST_CASE("Happy Hare endless spool is editable on single-unit",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    auto caps = helper.get_endless_spool_capabilities();
+    CHECK(caps.supported);
+    CHECK(caps.editable);
+}
+
+TEST_CASE("Happy Hare set_endless_spool_backup sends MMU_ENDLESS_SPOOL GROUPS",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    auto result = helper.set_endless_spool_backup(0, 2);
+
+    CHECK(result.success());
+    // All gates start ungrouped -> assigned standalone ids 0,1,2,3; joining gate 0
+    // to gate 2's group yields 2,1,2,3. ENABLE=1 is required for HH to apply GROUPS.
+    REQUIRE(helper.has_gcode("MMU_ENDLESS_SPOOL ENABLE=1 QUIET=1 GROUPS=2,1,2,3"));
+}
+
+TEST_CASE("Happy Hare set_endless_spool_backup removal makes gate standalone",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    // Two backup pairs: gates 0&1 share group 0, gates 2&3 share group 1.
+    helper.get_mutable_slot(0)->endless_spool_group = 0;
+    helper.get_mutable_slot(1)->endless_spool_group = 0;
+    helper.get_mutable_slot(2)->endless_spool_group = 1;
+    helper.get_mutable_slot(3)->endless_spool_group = 1;
+
+    auto result = helper.set_endless_spool_backup(0, -1);
+
+    CHECK(result.success());
+    // Gate 0 moves to a fresh standalone group (max+1 = 2): 2,0,1,1.
+    REQUIRE(helper.has_gcode("MMU_ENDLESS_SPOOL ENABLE=1 QUIET=1 GROUPS=2,0,1,1"));
+}
+
+TEST_CASE("Happy Hare endless spool is read-only on multi-unit",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates_multi({4, 4});
+
+    auto caps = helper.get_endless_spool_capabilities();
+    CHECK(caps.supported);
+    CHECK_FALSE(caps.editable);
+
+    // MMU_ENDLESS_SPOOL has no UNIT= param, so editing is refused on multi-unit.
+    auto result = helper.set_endless_spool_backup(0, 1);
     CHECK_FALSE(result.success());
     CHECK(result.result == AmsResult::NOT_SUPPORTED);
-    // Should NOT send any G-code commands
-    REQUIRE(helper.captured_gcodes.empty());
 }
 
 // ============================================================================
@@ -1095,6 +1180,24 @@ TEST_CASE("Happy Hare dryer start/stop send MMU_HEATER commands", "[ams][happy_h
     REQUIRE(helper.has_gcode("MMU_HEATER STOP=1"));
 }
 
+TEST_CASE("Happy Hare drying targets a unit's gates on multi-unit", "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    // Enable dryer support first, then install a two-unit (4+4) topology so the
+    // per-unit GATES path is exercised.
+    helper.test_parse_mmu_state({{"drying_state", {{"active", false}}}});
+    helper.initialize_test_gates_multi({4, 4});
+
+    auto start = helper.start_drying(50.0f, 120, -1, 1);
+    REQUIRE(start.success());
+    // Unit 1 owns global gates 4..7.
+    REQUIRE(helper.has_gcode("MMU_HEATER DRY=1 TEMP=50 TIMER=120 GATES=4,5,6,7"));
+
+    helper.clear_captured_gcodes();
+    auto stop = helper.stop_drying(1);
+    REQUIRE(stop.success());
+    REQUIRE(helper.has_gcode("MMU_HEATER STOP=1 GATES=4,5,6,7"));
+}
+
 TEST_CASE("Happy Hare reads filament_heater + heater_max_temp from config",
           "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;
@@ -1104,6 +1207,46 @@ TEST_CASE("Happy Hare reads filament_heater + heater_max_temp from config",
     auto d = helper.get_dryer_info();
     REQUIRE(d.supported);
     REQUIRE(d.max_temp_c == Catch::Approx(65.0f));
+}
+
+TEST_CASE("Happy Hare surfaces env sensor temp+humidity without a heater",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    // Heater-less enclosure: only an environment sensor is configured. The dryer is
+    // "supported" because HH publishes a per-gate drying_state array whenever the
+    // environment manager is loaded — but no heater temperature will ever arrive.
+    helper.test_apply_heater_config({{"mmu_machine", {{"environment_sensor", "bme280 mmu_box"}}}});
+    helper.test_parse_mmu_state({{"drying_state", nlohmann::json::array({"", "", "", ""})}});
+    helper.test_apply_environment_sensor_status(
+        {{"bme280 mmu_box", {{"temperature", 24.5}, {"humidity", 38.0}}}});
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    // Both the sensor's ambient temperature and humidity must surface even though
+    // there is no heater reading (the readout previously gated on heater temp > 0).
+    REQUIRE(info.units[0].environment.has_value());
+    CHECK(info.units[0].environment->temperature_c == Catch::Approx(24.5f));
+    CHECK(info.units[0].environment->has_humidity);
+    CHECK(info.units[0].environment->humidity_pct == Catch::Approx(38.0f));
+}
+
+TEST_CASE("Happy Hare resolves a non-heater_generic filament heater verbatim",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    // HH stores the full Klipper object name; a heater whose section is not
+    // "heater_generic" must still resolve (no forced prefix).
+    helper.test_apply_heater_config({{"mmu_machine", {{"filament_heater", "my_heater chamber"}}}});
+    helper.test_parse_mmu_state({{"drying_state", nlohmann::json::array({"", "", "", ""})}});
+    helper.test_apply_filament_heater_status({{"my_heater chamber", {{"temperature", 50.0}}}});
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    REQUIRE(info.units[0].environment.has_value());
+    CHECK(info.units[0].environment->temperature_c == Catch::Approx(50.0f));
 }
 
 TEST_CASE("Happy Hare surfaces box heater temp as unit environment", "[ams][happy_hare][v4]") {

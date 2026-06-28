@@ -16,6 +16,8 @@
 #include "ams_backend_mock.h"
 #include "ams_types.h"
 
+#include <algorithm>
+
 #include "../catch_amalgamated.hpp"
 
 // Uncomment these as implementations are added:
@@ -383,18 +385,25 @@ class AmsBackendHappyHareEndlessSpoolHelper : public AmsBackendHappyHare {
             }
         }
     }
+
+    // Capture G-code instead of dispatching to a (null) Moonraker API.
+    std::vector<std::string> captured_gcodes;
+    AmsError execute_gcode(const std::string& gcode) override {
+        captured_gcodes.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
 };
 
-TEST_CASE("Happy Hare backend endless spool - read-only implementation",
+TEST_CASE("Happy Hare backend endless spool - editable implementation",
           "[ams][endless_spool][happy_hare]") {
     AmsBackendHappyHareEndlessSpoolHelper helper;
     helper.initialize_test_gates(4);
 
-    SECTION("capabilities show editable=false") {
+    SECTION("capabilities show editable=true on single-unit") {
         auto caps = helper.get_endless_spool_capabilities();
 
         CHECK(caps.supported == true);
-        CHECK(caps.editable == false); // Happy Hare is read-only
+        CHECK(caps.editable == true); // Runtime-editable via MMU_ENDLESS_SPOOL on single-unit
         // Check description contains "group" (case-insensitive via separate checks)
         CHECK((caps.description.find("group") != std::string::npos ||
                caps.description.find("Group") != std::string::npos));
@@ -447,11 +456,15 @@ TEST_CASE("Happy Hare backend endless spool - read-only implementation",
         }
     }
 
-    SECTION("set_endless_spool_backup returns NOT_SUPPORTED") {
+    SECTION("set_endless_spool_backup sends MMU_ENDLESS_SPOOL GROUPS") {
+        // Gates start ungrouped -> standalone ids 0,1,2,3; joining gate 0 to gate
+        // 2's group yields 2,1,2,3. ENABLE=1 is required for HH to apply GROUPS.
         auto result = helper.set_endless_spool_backup(0, 2);
 
-        CHECK_FALSE(result);
-        CHECK(result.result == AmsResult::NOT_SUPPORTED);
+        CHECK(result.success());
+        REQUIRE(std::find(helper.captured_gcodes.begin(), helper.captured_gcodes.end(),
+                          "MMU_ENDLESS_SPOOL ENABLE=1 QUIET=1 GROUPS=2,1,2,3") !=
+                helper.captured_gcodes.end());
     }
 }
 #endif // Happy Hare implementation enabled
