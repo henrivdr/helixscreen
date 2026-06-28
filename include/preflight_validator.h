@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
+#include "filament_mapper.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "filament_mapper.h"
 
 namespace helix {
 
@@ -21,15 +22,15 @@ struct ToolCheck {
 
 struct PreflightResult {
     std::vector<ToolCheck> checks;
-    bool has_block() const;     // any EmptySlot
-    bool has_advisory() const;  // any MaterialMismatch
+    bool has_block() const;    // any EmptySlot
+    bool has_advisory() const; // any MaterialMismatch
 };
 
 class PreflightValidator {
-public:
+  public:
     static PreflightResult validate(const std::vector<GcodeToolInfo>& tools,
                                     const std::vector<AvailableSlot>& slots,
                                     const std::vector<ToolMapping>& mapping);
 };
 
-}  // namespace helix
+} // namespace helix

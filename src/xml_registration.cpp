@@ -9,6 +9,7 @@
 #include "ui_button.h"
 #include "ui_carousel.h"
 #include "ui_confetti.h"
+#include "ui_event_safety.h"
 #include "ui_fan_dial.h"
 #include "ui_fonts.h"
 #include "ui_gcode_viewer.h"
@@ -34,7 +35,6 @@
 #include "layout_manager.h"
 #include "static_subject_registry.h"
 #include "theme_manager.h"
-#include "ui_event_safety.h"
 
 #include <spdlog/spdlog.h>
 
@@ -192,16 +192,19 @@ static void on_toggle_password_visibility(lv_event_t* e) {
 static void on_setting_info_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[Settings] on_setting_info_clicked");
     auto* info_btn = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
-    if (!info_btn) return;
+    if (!info_btn)
+        return;
     // Walk up parent chain to find a level that contains "description" child
     auto* parent = lv_obj_get_parent(info_btn);
     lv_obj_t* desc = nullptr;
     while (parent) {
         desc = lv_obj_find_by_name(parent, "description");
-        if (desc) break;
+        if (desc)
+            break;
         parent = lv_obj_get_parent(parent);
     }
-    if (!desc) return;
+    if (!desc)
+        return;
     if (lv_obj_has_flag(desc, LV_OBJ_FLAG_HIDDEN)) {
         lv_obj_remove_flag(desc, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -244,8 +247,7 @@ void register_xml_components() {
     // Global utility callbacks used by multiple components
     lv_xml_register_event_cb(nullptr, "on_toggle_password_visibility",
                              on_toggle_password_visibility);
-    lv_xml_register_event_cb(nullptr, "on_setting_info_clicked",
-                             on_setting_info_clicked);
+    lv_xml_register_event_cb(nullptr, "on_setting_info_clicked", on_setting_info_clicked);
     lv_xml_register_event_cb(nullptr, "on_edit_done_clicked",
                              [](lv_event_t*) { get_global_home_panel().exit_grid_edit_mode(); });
     lv_xml_register_event_cb(nullptr, "on_edit_add_widget_clicked",
@@ -436,7 +438,7 @@ void register_xml_components() {
     register_xml("thermistor_configure_picker.xml");
     register_xml("print_status_configure_picker.xml");
     register_xml("print_status_nozzle_tool_picker.xml");
-    register_xml("favorite_macro_picker.xml");
+    register_xml("favorite_macro_config_modal.xml");
     helix::ui::PrinterSwitchMenu::register_callbacks();
     register_xml("printer_switch_menu.xml");
     register_xml("macro_param_modal.xml");

@@ -2,12 +2,13 @@
 
 #include "ui_exclude_object_side_list.h"
 
-#include "observer_factory.h"
-#include "printer_state.h"
-#include "theme_manager.h"
 #include "ui_gcode_viewer.h"
 #include "ui_print_exclude_object_manager.h"
 #include "ui_utils.h"
+
+#include "observer_factory.h"
+#include "printer_state.h"
+#include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -23,7 +24,7 @@ constexpr uint32_t kSlideInDurationMs = 220;
 // Singleton handle so the static XML close callback can find the live instance.
 // Only one side list exists at a time (owned by PrintStatusPanel).
 ExcludeObjectSideList* g_active_side_list = nullptr;
-}  // namespace
+} // namespace
 
 ExcludeObjectSideList::ExcludeObjectSideList() = default;
 
@@ -85,7 +86,7 @@ void ExcludeObjectSideList::create(lv_obj_t* parent, PrinterState* printer_state
     lv_obj_update_layout(parent);
     int slide_distance = lv_obj_get_width(root_);
     if (slide_distance <= 0) {
-        slide_distance = 200;  // fallback for unsized parent
+        slide_distance = 200; // fallback for unsized parent
     }
 
     // Start off-screen right (positive x relative to LV_ALIGN_RIGHT_MID), then
@@ -109,14 +110,13 @@ void ExcludeObjectSideList::create(lv_obj_t* parent, PrinterState* printer_state
     lv_anim_set_var(&a, root_);
     lv_anim_set_values(&a, slide_distance, 0);
     lv_anim_set_duration(&a, kSlideInDurationMs);
-    lv_anim_set_exec_cb(&a, [](void* obj, int32_t v) {
-        lv_obj_set_x(static_cast<lv_obj_t*>(obj), v);
-    });
+    lv_anim_set_exec_cb(&a,
+                        [](void* obj, int32_t v) { lv_obj_set_x(static_cast<lv_obj_t*>(obj), v); });
     lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
     lv_anim_start(&a);
 
-    spdlog::debug("[ExcludeObjectSideList] Created (width_pct={}, slide_distance={}px)",
-                  width_pct, slide_distance);
+    spdlog::debug("[ExcludeObjectSideList] Created (width_pct={}, slide_distance={}px)", width_pct,
+                  slide_distance);
 }
 
 void ExcludeObjectSideList::destroy() {
@@ -297,4 +297,4 @@ lv_color_t ExcludeObjectSideList::color_for_index(int index) {
     return theme_manager_get_object_palette_color(index);
 }
 
-}  // namespace helix::ui
+} // namespace helix::ui

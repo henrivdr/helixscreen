@@ -1863,8 +1863,7 @@ void ui_temp_graph_clear_series(ui_temp_graph_t* graph, int series_id) {
 
     // Wipe target history too.
     if (meta->target_deci_buf) {
-        memset(meta->target_deci_buf, 0,
-               static_cast<size_t>(graph->point_count) * sizeof(int16_t));
+        memset(meta->target_deci_buf, 0, static_cast<size_t>(graph->point_count) * sizeof(int16_t));
     }
     meta->target_head = 0;
 

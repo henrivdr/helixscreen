@@ -149,7 +149,8 @@ void ThemeManager::register_style_configs() {
     styles_[static_cast<size_t>(StyleRole::ButtonTertiary)].configure = configure_button_tertiary;
     styles_[static_cast<size_t>(StyleRole::ButtonDanger)].configure = configure_button_danger;
     styles_[static_cast<size_t>(StyleRole::ButtonGhost)].configure = configure_button_ghost;
-    styles_[static_cast<size_t>(StyleRole::ButtonTransparent)].configure = configure_button_transparent;
+    styles_[static_cast<size_t>(StyleRole::ButtonTransparent)].configure =
+        configure_button_transparent;
     styles_[static_cast<size_t>(StyleRole::ButtonOutline)].configure = configure_button_outline;
     styles_[static_cast<size_t>(StyleRole::ButtonSuccess)].configure = configure_button_success;
     styles_[static_cast<size_t>(StyleRole::ButtonWarning)].configure = configure_button_warning;

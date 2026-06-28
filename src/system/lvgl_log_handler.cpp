@@ -307,9 +307,8 @@ void lvgl_log_callback(lv_log_level_t level, const char* buf) {
     // Dedupe high-frequency retry messages (broken image assets, etc.) — first
     // occurrence at original level, repeats at debug. Decided up-front so the
     // WARN-path anomaly detection below still runs on the first hit.
-    bool is_repeat_retry =
-        (level == LV_LOG_LEVEL_WARN || level == LV_LOG_LEVEL_ERROR) &&
-        is_high_frequency_retry(msg) && seen_before(msg);
+    bool is_repeat_retry = (level == LV_LOG_LEVEL_WARN || level == LV_LOG_LEVEL_ERROR) &&
+                           is_high_frequency_retry(msg) && seen_before(msg);
 
     // Route to appropriate spdlog level
     switch (level) {

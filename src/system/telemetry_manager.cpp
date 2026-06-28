@@ -3,6 +3,7 @@
 
 #include "system/telemetry_manager.h"
 
+#include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
@@ -32,7 +33,6 @@
 #include "theme_loader.h"
 #include "theme_manager.h"
 #include "tool_state.h"
-#include "ui_temperature_utils.h"
 #include "version.h"
 
 #include <spdlog/spdlog.h>
@@ -748,7 +748,7 @@ void TelemetryManager::write_update_success_flag(const std::string& config_dir,
     // Use ISO 8601 timestamp
     auto now = std::chrono::system_clock::now();
     auto tt = std::chrono::system_clock::to_time_t(now);
-    struct tm utc{};
+    struct tm utc {};
     gmtime_r(&tt, &utc);
     char buf[32];
     strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &utc);
@@ -894,8 +894,7 @@ void TelemetryManager::try_send(bool force) {
     // spawn failure the queue is already in the right state. Just log; the
     // next try_send tick will retry.
     try {
-        send_thread_ =
-            std::thread([this, batch = std::move(batch)]() { do_send(batch); });
+        send_thread_ = std::thread([this, batch = std::move(batch)]() { do_send(batch); });
     } catch (const std::system_error& e) {
         spdlog::error("[TelemetryManager] Failed to spawn send thread: {} — events remain "
                       "queued for next try_send",
@@ -1744,7 +1743,8 @@ TelemetryManager::build_memory_warning_event(const helix::MemoryWarningEvent& wa
     // "3D-renderer-during-print holds memory" from "slow idle creep" without
     // cross-referencing other event streams. (No string mirror — racing reads
     // of std::string across threads is UB; the int IDs are sufficient.)
-    event["print_state"] = helix::telemetry_context::print_state_int.load(std::memory_order_relaxed);
+    event["print_state"] =
+        helix::telemetry_context::print_state_int.load(std::memory_order_relaxed);
     event["active_panel"] =
         helix::telemetry_context::active_panel_int.load(std::memory_order_relaxed);
     event["gcode_renderer_loaded"] =
@@ -2875,7 +2875,7 @@ void on_print_state_changed_for_telemetry(lv_observer_t* observer, lv_subject_t*
     // Stored as the raw PrintJobState int — small integer enum, value space
     // matches what the receiver decodes.
     helix::telemetry_context::print_state_int.store(static_cast<int>(current),
-                                                     std::memory_order_relaxed);
+                                                    std::memory_order_relaxed);
 
     // Skip the first callback -- state may be stale before Moonraker updates arrive
     if (!s_telemetry_first_update) {

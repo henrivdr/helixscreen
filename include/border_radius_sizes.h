@@ -26,7 +26,9 @@ class BorderRadiusSizes {
         std::array<int, 7> pixels;
     };
 
-    static constexpr int count() { return SIZE_COUNT; }
+    static constexpr int count() {
+        return SIZE_COUNT;
+    }
 
     static const char* name(int index) {
         index = clamp_index(index);
@@ -36,7 +38,8 @@ class BorderRadiusSizes {
     /**
      * @brief Get pixel value for a size index at a given breakpoint suffix.
      * @param index Size index (0-7, clamped)
-     * @param suffix Breakpoint suffix: "_micro", "_tiny", "_small", "_medium", "_large", "_xlarge", "_xxlarge"
+     * @param suffix Breakpoint suffix: "_micro", "_tiny", "_small", "_medium", "_large", "_xlarge",
+     * "_xxlarge"
      */
     static int pixels(int index, const char* suffix) {
         index = clamp_index(index);
@@ -51,15 +54,18 @@ class BorderRadiusSizes {
      * themes were designed for) and picks the closest match.
      */
     static int nearest_size_index(int raw_pixels) {
-        if (raw_pixels <= 0) return 0;
-        if (raw_pixels >= 30) return 7; // anything >= 30 is "Full"
+        if (raw_pixels <= 0)
+            return 0;
+        if (raw_pixels >= 30)
+            return 7; // anything >= 30 is "Full"
 
         int best = 0;
         int best_dist = INT_MAX;
         // Compare against XXLarge column (index 6)
         for (int i = 0; i < SIZE_COUNT; ++i) {
             int ref = table()[i].pixels[6]; // xxlarge
-            if (ref == 9999) continue;      // skip "Full" for distance calc
+            if (ref == 9999)
+                continue; // skip "Full" for distance calc
             int dist = std::abs(raw_pixels - ref);
             if (dist < best_dist) {
                 best_dist = dist;
@@ -72,14 +78,14 @@ class BorderRadiusSizes {
     static const std::array<SizeEntry, SIZE_COUNT>& table() {
         static constexpr std::array<SizeEntry, SIZE_COUNT> t = {{
             //                micro tiny small med  large xl   xxl
-            {"None",    {{  0,  0,  0,  0,  0,  0,  0}}},
-            {"Minimal", {{  1,  1,  2,  3,  4,  4,  4}}},
-            {"Subtle",  {{  2,  2,  3,  4,  6,  7,  8}}},
-            {"Soft",    {{  3,  3,  4,  6, 10, 11, 12}}},
-            {"Rounded", {{  3,  4,  6,  8, 12, 14, 16}}},
-            {"Bold",    {{  4,  5,  8, 10, 16, 18, 20}}},
-            {"Pill",    {{  5,  6, 10, 14, 20, 24, 28}}},
-            {"Full",    {{9999, 9999, 9999, 9999, 9999, 9999, 9999}}},
+            {"None", {{0, 0, 0, 0, 0, 0, 0}}},
+            {"Minimal", {{1, 1, 2, 3, 4, 4, 4}}},
+            {"Subtle", {{2, 2, 3, 4, 6, 7, 8}}},
+            {"Soft", {{3, 3, 4, 6, 10, 11, 12}}},
+            {"Rounded", {{3, 4, 6, 8, 12, 14, 16}}},
+            {"Bold", {{4, 5, 8, 10, 16, 18, 20}}},
+            {"Pill", {{5, 6, 10, 14, 20, 24, 28}}},
+            {"Full", {{9999, 9999, 9999, 9999, 9999, 9999, 9999}}},
         }};
         return t;
     }
@@ -91,12 +97,18 @@ class BorderRadiusSizes {
 
     static int breakpoint_index(const char* suffix) {
         // Order: micro=0, tiny=1, small=2, medium=3, large=4, xlarge=5, xxlarge=6
-        if (strcmp(suffix, "_micro") == 0) return 0;
-        if (strcmp(suffix, "_tiny") == 0) return 1;
-        if (strcmp(suffix, "_small") == 0) return 2;
-        if (strcmp(suffix, "_medium") == 0) return 3;
-        if (strcmp(suffix, "_large") == 0) return 4;
-        if (strcmp(suffix, "_xlarge") == 0) return 5;
+        if (strcmp(suffix, "_micro") == 0)
+            return 0;
+        if (strcmp(suffix, "_tiny") == 0)
+            return 1;
+        if (strcmp(suffix, "_small") == 0)
+            return 2;
+        if (strcmp(suffix, "_medium") == 0)
+            return 3;
+        if (strcmp(suffix, "_large") == 0)
+            return 4;
+        if (strcmp(suffix, "_xlarge") == 0)
+            return 5;
         return 6; // _xxlarge or unknown
     }
 };

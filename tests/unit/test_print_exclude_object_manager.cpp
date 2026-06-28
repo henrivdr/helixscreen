@@ -26,8 +26,6 @@
 #include "../../include/moonraker_api.h"
 #include "../../include/moonraker_client_mock.h"
 #include "../../include/moonraker_error.h"
-
-#include "hv/json.hpp"
 #include "../../include/printer_state.h"
 #include "../../include/ui_print_exclude_object_manager.h"
 #include "../../include/ui_update_queue.h"
@@ -35,6 +33,7 @@
 #include "../ui_test_utils.h"
 
 #include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using namespace helix;
 using namespace helix::ui;
@@ -68,8 +67,7 @@ struct LVGLInitializerExcludeMgr {
             lv_init_safe();
             lv_display_t* disp = lv_display_create(800, 480);
             alignas(64) static lv_color_t buf[800 * 10];
-            lv_display_set_buffers(disp, buf, NULL, sizeof(buf),
-                                   LV_DISPLAY_RENDER_MODE_PARTIAL);
+            lv_display_set_buffers(disp, buf, NULL, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
             initialized = true;
         }
     }
@@ -84,8 +82,7 @@ class ExcludeManagerFixture {
   public:
     ExcludeManagerFixture() : mock_client(MoonrakerClientMock::PrinterType::VORON_24) {
         state.init_subjects(false);
-        mock_client.connect(
-            "ws://mock/websocket", []() {}, []() {});
+        mock_client.connect("ws://mock/websocket", []() {}, []() {});
         api = std::make_unique<MoonrakerAPI>(mock_client, state);
         manager = std::make_unique<PrintExcludeObjectManager>(api.get(), state, nullptr);
         manager->init();
@@ -133,8 +130,8 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     // Manager has dispatched an EXCLUDE_OBJECT RPC for "Part_1"; visual is optimistic
     // but excluded_objects_ is still empty because we now wait for Klipper to confirm
     // via the exclude_object.excluded_objects status field.
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"Part_1");
-    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"Part_1"));
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "Part_1");
+    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "Part_1"));
     REQUIRE(manager->get_excluded_objects().count("Part_1") == 0);
 
     // Klipper pushes a status update via Moonraker subscription: Part_1 is now excluded.
@@ -146,7 +143,8 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     }
 
     SECTION("awaiting-confirmation is cleared once Klipper confirms") {
-        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"Part_1"));
+        REQUIRE_FALSE(
+            PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "Part_1"));
     }
 }
 
@@ -155,7 +153,8 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
                  "[exclude_object][manager]") {
     // No awaiting entry — this simulates another frontend (e.g. Mainsail) excluding
     // an object. The manager must still pick it up so its UI stays consistent.
-    REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"Foreign_Part"));
+    REQUIRE_FALSE(
+        PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "Foreign_Part"));
 
     state.set_excluded_objects({"Foreign_Part"});
     UpdateQueue::instance().drain();
@@ -170,13 +169,13 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     // (e.g. another object was excluded from a different client). Our pending entry
     // must remain awaiting — clearing it prematurely would let a later TIMEOUT error
     // silently forget the object.
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"Part_B");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "Part_B");
 
     state.set_excluded_objects({"Part_A"});
     UpdateQueue::instance().drain();
 
     REQUIRE(manager->get_excluded_objects().count("Part_A") == 1);
-    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"Part_B"));
+    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "Part_B"));
     REQUIRE(manager->get_excluded_objects().count("Part_B") == 0);
 }
 
@@ -210,12 +209,13 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     SECTION("awaiting-confirmation entries are untouched by the sync-to-set") {
         // An object with a dispatched-but-unconfirmed RPC must not be prematurely
         // synthesized into excluded_objects_ just because Klipper's set is empty.
-        PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"InFlight");
+        PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "InFlight");
         state.set_excluded_objects({});
         UpdateQueue::instance().drain();
 
         REQUIRE(manager->get_excluded_objects().empty());
-        REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"InFlight"));
+        REQUIRE(
+            PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "InFlight"));
     }
 }
 
@@ -226,18 +226,19 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
 TEST_CASE_METHOD(ExcludeManagerFixture,
                  "RPC TIMEOUT error leaves awaiting entry intact for status to confirm later",
                  "[exclude_object][manager][regression]") {
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"LateExclude");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "LateExclude");
 
     MoonrakerError err;
     err.type = MoonrakerErrorType::TIMEOUT;
     err.method = "printer.gcode.script";
     err.message = "Printer command 'printer.gcode.script' timed out after 900000ms";
 
-    PrintExcludeObjectManagerTestAccess::handle_rpc_error(*manager,"LateExclude", err);
+    PrintExcludeObjectManagerTestAccess::handle_rpc_error(*manager, "LateExclude", err);
     UpdateQueue::instance().drain();
 
     SECTION("awaiting entry remains — Klipper may still run the gcode") {
-        REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"LateExclude"));
+        REQUIRE(
+            PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "LateExclude"));
     }
 
     SECTION("excluded_objects_ is not mutated by the error path") {
@@ -250,44 +251,45 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
 
     SECTION("late status arrival still promotes to confirmed") {
         REQUIRE(manager->get_excluded_objects().count("LateExclude") == 1);
-        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"LateExclude"));
+        REQUIRE_FALSE(
+            PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "LateExclude"));
     }
 }
 
-TEST_CASE_METHOD(ExcludeManagerFixture,
-                 "RPC VALIDATION_ERROR clears awaiting and reverts",
+TEST_CASE_METHOD(ExcludeManagerFixture, "RPC VALIDATION_ERROR clears awaiting and reverts",
                  "[exclude_object][manager][regression]") {
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"BadName");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "BadName");
 
     MoonrakerError err;
     err.type = MoonrakerErrorType::VALIDATION_ERROR;
     err.method = "exclude_object";
     err.message = "Invalid object name contains illegal characters";
 
-    PrintExcludeObjectManagerTestAccess::handle_rpc_error(*manager,"BadName", err);
+    PrintExcludeObjectManagerTestAccess::handle_rpc_error(*manager, "BadName", err);
     UpdateQueue::instance().drain();
 
     // The error path removes the awaiting entry so no late status push can resurrect it.
-    REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"BadName"));
+    REQUIRE_FALSE(
+        PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "BadName"));
     REQUIRE(manager->get_excluded_objects().count("BadName") == 0);
 }
 
-TEST_CASE_METHOD(ExcludeManagerFixture,
-                 "RPC CONNECTION_LOST clears awaiting",
+TEST_CASE_METHOD(ExcludeManagerFixture, "RPC CONNECTION_LOST clears awaiting",
                  "[exclude_object][manager]") {
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"OrphanedExclude");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "OrphanedExclude");
 
     MoonrakerError err;
     err.type = MoonrakerErrorType::CONNECTION_LOST;
     err.method = "printer.gcode.script";
     err.message = "WebSocket disconnected before response";
 
-    PrintExcludeObjectManagerTestAccess::handle_rpc_error(*manager,"OrphanedExclude", err);
+    PrintExcludeObjectManagerTestAccess::handle_rpc_error(*manager, "OrphanedExclude", err);
     UpdateQueue::instance().drain();
 
     // Connection loss is a real failure — drop the awaiting entry. Self-healing case:
     // on reconnect, status subscription will re-sync any exclusions that did run.
-    REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"OrphanedExclude"));
+    REQUIRE_FALSE(
+        PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "OrphanedExclude"));
 }
 
 // ============================================================================
@@ -297,17 +299,19 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
 TEST_CASE_METHOD(ExcludeManagerFixture,
                  "print ending clears awaiting-confirmation entries silently",
                  "[exclude_object][manager][watchdog]") {
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"UnconfirmedPart");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "UnconfirmedPart");
 
     // Print starts and runs — the awaiting visual is legitimate.
     set_print_state_str(state, "printing");
     UpdateQueue::instance().drain();
-    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"UnconfirmedPart"));
+    REQUIRE(
+        PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "UnconfirmedPart"));
 
     SECTION("user cancels the print — drop the optimistic visual") {
         set_print_state_str(state, "cancelled");
         UpdateQueue::instance().drain();
-        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"UnconfirmedPart"));
+        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(
+            *manager, "UnconfirmedPart"));
         // Nothing was ever confirmed, so confirmed set stays empty.
         REQUIRE(manager->get_excluded_objects().empty());
     }
@@ -315,26 +319,28 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     SECTION("print completes without Klipper confirming — drop the visual") {
         set_print_state_str(state, "complete");
         UpdateQueue::instance().drain();
-        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"UnconfirmedPart"));
+        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(
+            *manager, "UnconfirmedPart"));
     }
 
     SECTION("print errors out — drop the visual") {
         set_print_state_str(state, "error");
         UpdateQueue::instance().drain();
-        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"UnconfirmedPart"));
+        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(
+            *manager, "UnconfirmedPart"));
     }
 
     SECTION("print drops back to standby — drop the visual") {
         set_print_state_str(state, "standby");
         UpdateQueue::instance().drain();
-        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"UnconfirmedPart"));
+        REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(
+            *manager, "UnconfirmedPart"));
     }
 }
 
-TEST_CASE_METHOD(ExcludeManagerFixture,
-                 "paused print keeps awaiting-confirmation — still active",
+TEST_CASE_METHOD(ExcludeManagerFixture, "paused print keeps awaiting-confirmation — still active",
                  "[exclude_object][manager][watchdog]") {
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"PausedPart");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "PausedPart");
 
     set_print_state_str(state, "printing");
     UpdateQueue::instance().drain();
@@ -343,15 +349,14 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
 
     // Pause is not a terminal state — Klipper can still execute the queued gcode
     // when the print resumes, so the awaiting entry stays.
-    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"PausedPart"));
+    REQUIRE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "PausedPart"));
 }
 
-TEST_CASE_METHOD(ExcludeManagerFixture,
-                 "confirmed exclusions survive the watchdog",
+TEST_CASE_METHOD(ExcludeManagerFixture, "confirmed exclusions survive the watchdog",
                  "[exclude_object][manager][watchdog]") {
     // Dispatch, Klipper confirms, THEN the user cancels. The confirmed exclusion
     // must stay in excluded_objects_ — only un-confirmed awaiting entries get dropped.
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"ConfirmedPart");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "ConfirmedPart");
     state.set_excluded_objects({"ConfirmedPart"});
     UpdateQueue::instance().drain();
     REQUIRE(manager->get_excluded_objects().count("ConfirmedPart") == 1);
@@ -368,7 +373,7 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     // A new print starts — both confirmed exclusions AND any in-flight dispatches
     // must reset, otherwise a stale awaiting entry could promote itself when the
     // next print's first status push arrives.
-    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager,"StalePart");
+    PrintExcludeObjectManagerTestAccess::add_awaiting_confirmation(*manager, "StalePart");
     state.set_excluded_objects({"Confirmed"});
     UpdateQueue::instance().drain();
     REQUIRE(manager->get_excluded_objects().count("Confirmed") == 1);
@@ -376,5 +381,6 @@ TEST_CASE_METHOD(ExcludeManagerFixture,
     manager->clear_excluded_objects();
 
     REQUIRE(manager->get_excluded_objects().empty());
-    REQUIRE_FALSE(PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager,"StalePart"));
+    REQUIRE_FALSE(
+        PrintExcludeObjectManagerTestAccess::is_awaiting_confirmation(*manager, "StalePart"));
 }

@@ -13,7 +13,6 @@
 
 #include "ui_notification.h"
 
-#include "pending_startup_warnings.h"
 #include "ui_modal.h"
 #include "ui_notification_history.h"
 #include "ui_notification_manager.h"
@@ -22,6 +21,7 @@
 #include "ui_update_queue.h"
 
 #include "app_globals.h"
+#include "pending_startup_warnings.h"
 
 #include <spdlog/spdlog.h>
 
@@ -58,8 +58,10 @@ static bool is_main_thread() {
 // errors on every boot after a settings restore / tips load failure.
 // Application::run() drains PendingStartupWarnings right after ToastManager::init().
 static bool try_defer_to_startup_queue(ToastSeverity severity, const char* display_msg) {
-    if (!display_msg || !*display_msg) return false;
-    if (ToastManager::instance().is_initialized()) return false;
+    if (!display_msg || !*display_msg)
+        return false;
+    if (ToastManager::instance().is_initialized())
+        return false;
 
     helix::PendingStartupWarnings::Severity sev;
     switch (severity) {
@@ -264,7 +266,8 @@ static void show_notification(const char* title, const char* message, ToastSever
     const bool has_title = title && *title;
     std::string display_msg = has_title ? (std::string(title) + ": " + message) : message;
 
-    if (try_defer_to_startup_queue(severity, display_msg.c_str())) return;
+    if (try_defer_to_startup_queue(severity, display_msg.c_str()))
+        return;
 
     if (is_main_thread()) {
         // Main thread: call LVGL directly
@@ -379,7 +382,8 @@ void ui_notification_error(const char* title, const char* message, bool modal) {
     {
         const bool has_title = title && *title;
         std::string display = has_title ? (std::string(title) + ": " + message) : message;
-        if (try_defer_to_startup_queue(ToastSeverity::ERROR, display.c_str())) return;
+        if (try_defer_to_startup_queue(ToastSeverity::ERROR, display.c_str()))
+            return;
     }
 
     if (is_main_thread()) {

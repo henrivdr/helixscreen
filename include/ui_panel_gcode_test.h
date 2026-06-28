@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "runtime_config.h"
 #include "ui_panel_base.h"
+
+#include "runtime_config.h"
 
 #include <string>
 #include <vector>

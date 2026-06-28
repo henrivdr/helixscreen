@@ -370,9 +370,9 @@ void AmsEditModal::init_subjects() {
     subjects_.register_subject(&remaining_pct_subject_);
 
     // Initialize save button text subject
-    snprintf(save_btn_text_buf_, sizeof(save_btn_text_buf_), "Close");
+    snprintf(save_btn_text_buf_, sizeof(save_btn_text_buf_), "%s", lv_tr("Close"));
     lv_subject_init_string(&save_btn_text_subject_, save_btn_text_buf_, nullptr,
-                           sizeof(save_btn_text_buf_), "Close");
+                           sizeof(save_btn_text_buf_), lv_tr("Close"));
     subjects_.register_subject(&save_btn_text_subject_);
 
     // Initialize remaining mode subject (0=view, 1=edit) - registered globally for XML binding
@@ -919,8 +919,7 @@ void AmsEditModal::handle_print_label() {
         } else {
             spdlog::error("[AmsEditModal] Print failed: {}", error);
             ToastManager::instance().show(ToastSeverity::ERROR,
-                                          helix::friendly_label_printer_error(error).c_str(),
-                                          5000);
+                                          helix::friendly_label_printer_error(error).c_str(), 5000);
         }
     };
 
@@ -999,9 +998,10 @@ void AmsEditModal::update_ui() {
 
     // Update slot indicator via subject (used in header)
     if (slot_index_ < 0) {
-        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), "External Filament");
+        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), "%s",
+                 lv_tr("External Filament"));
     } else {
-        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), "Slot %d Filament",
+        snprintf(slot_indicator_buf_, sizeof(slot_indicator_buf_), lv_tr("Slot %d Filament"),
                  slot_index_ + 1);
     }
     lv_subject_copy_string(&slot_indicator_subject_, slot_indicator_buf_);
@@ -1175,12 +1175,13 @@ void AmsEditModal::update_ui() {
     // doesn't leave a blank row on backends/slots that don't populate it.
     lv_obj_t* spool_name_label = find_widget("spool_name_label");
     if (!working_info_.spool_name.empty()) {
-        snprintf(spool_name_buf_, sizeof(spool_name_buf_), "%s",
-                 working_info_.spool_name.c_str());
-        if (spool_name_label) lv_obj_remove_flag(spool_name_label, LV_OBJ_FLAG_HIDDEN);
+        snprintf(spool_name_buf_, sizeof(spool_name_buf_), "%s", working_info_.spool_name.c_str());
+        if (spool_name_label)
+            lv_obj_remove_flag(spool_name_label, LV_OBJ_FLAG_HIDDEN);
     } else {
         spool_name_buf_[0] = '\0';
-        if (spool_name_label) lv_obj_add_flag(spool_name_label, LV_OBJ_FLAG_HIDDEN);
+        if (spool_name_label)
+            lv_obj_add_flag(spool_name_label, LV_OBJ_FLAG_HIDDEN);
     }
     lv_subject_copy_string(&spool_name_subject_, spool_name_buf_);
 
@@ -1352,7 +1353,7 @@ void AmsEditModal::update_sync_button_state() {
     bool dirty = is_dirty();
 
     // Update save button text based on dirty state
-    const char* btn_text = dirty ? "Save" : "Close";
+    const char* btn_text = dirty ? lv_tr("Save") : lv_tr("Close");
     snprintf(save_btn_text_buf_, sizeof(save_btn_text_buf_), "%s", btn_text);
     lv_subject_copy_string(&save_btn_text_subject_, save_btn_text_buf_);
 }
@@ -1655,53 +1656,52 @@ void AmsEditModal::handle_save() {
         if ((has_linked_spool && changes.any()) || can_create_new) {
             auto token = lifetime_.token();
             auto saver = std::make_shared<helix::SpoolmanSlotSaver>(api_);
-            saver->save(original_info_, working_info_,
-                        [this, token, saver](const helix::SaveResult& result) {
-                            if (token.expired()) {
-                                return;
+            saver->save(
+                original_info_, working_info_,
+                [this, token, saver](const helix::SaveResult& result) {
+                    if (token.expired()) {
+                        return;
+                    }
+                    // Spoolman callback arrives on a background thread — defer
+                    // to the UI thread before touching LVGL subjects/widgets.
+                    token.defer([this, result]() {
+                        if (!result.success) {
+                            // Local save still proceeds; only the Spoolman mirror failed.
+                            spdlog::error("[AmsEditModal] Spoolman save failed, saving locally");
+                            ToastManager::instance().show(
+                                ToastSeverity::ERROR,
+                                lv_tr("Couldn't update Spoolman — saved locally"), 3000);
+                        } else if (result.created_new_spool || result.repointed_filament) {
+                            // Persist new Spoolman IDs into working_info_ so the
+                            // completion callback's backend->set_slot_info() writes
+                            // the link back to the slot. Without this, a subsequent
+                            // edit would not know the spool exists and would create
+                            // a duplicate.
+                            if (result.new_spool_id != 0) {
+                                working_info_.spoolman_id = result.new_spool_id;
                             }
-                            // Spoolman callback arrives on a background thread — defer
-                            // to the UI thread before touching LVGL subjects/widgets.
-                            token.defer([this, result]() {
-                                if (!result.success) {
-                                    // Local save still proceeds; only the Spoolman mirror failed.
-                                    spdlog::error(
-                                        "[AmsEditModal] Spoolman save failed, saving locally");
-                                    ToastManager::instance().show(
-                                        ToastSeverity::ERROR,
-                                        lv_tr("Couldn't update Spoolman — saved locally"), 3000);
-                                } else if (result.created_new_spool || result.repointed_filament) {
-                                    // Persist new Spoolman IDs into working_info_ so the
-                                    // completion callback's backend->set_slot_info() writes
-                                    // the link back to the slot. Without this, a subsequent
-                                    // edit would not know the spool exists and would create
-                                    // a duplicate.
-                                    if (result.new_spool_id != 0) {
-                                        working_info_.spoolman_id = result.new_spool_id;
-                                    }
-                                    if (result.new_filament_id != 0) {
-                                        working_info_.spoolman_filament_id = result.new_filament_id;
-                                    }
-                                    if (result.new_vendor_id != 0) {
-                                        working_info_.spoolman_vendor_id = result.new_vendor_id;
-                                    }
-                                    // The early sync_active_spool() above was skipped because
-                                    // spoolman_id was 0 on both sides (creation hadn't happened
-                                    // yet). Notify Moonraker now so Mainsail/Fluidd show the
-                                    // new spool as active and filament tracking starts.
-                                    if (result.created_new_spool && result.new_spool_id != 0 &&
-                                        api_) {
-                                        sync_active_spool(api_, result.new_spool_id);
-                                    }
-                                    if (result.created_new_spool) {
-                                        ToastManager::instance().show(
-                                            ToastSeverity::INFO, lv_tr("Added to Spoolman"), 2500);
-                                    }
-                                    // Repoint is silent — IDs change but no toast.
-                                }
-                                fire_completion(true);
-                            });
-                        });
+                            if (result.new_filament_id != 0) {
+                                working_info_.spoolman_filament_id = result.new_filament_id;
+                            }
+                            if (result.new_vendor_id != 0) {
+                                working_info_.spoolman_vendor_id = result.new_vendor_id;
+                            }
+                            // The early sync_active_spool() above was skipped because
+                            // spoolman_id was 0 on both sides (creation hadn't happened
+                            // yet). Notify Moonraker now so Mainsail/Fluidd show the
+                            // new spool as active and filament tracking starts.
+                            if (result.created_new_spool && result.new_spool_id != 0 && api_) {
+                                sync_active_spool(api_, result.new_spool_id);
+                            }
+                            if (result.created_new_spool) {
+                                ToastManager::instance().show(ToastSeverity::INFO,
+                                                              lv_tr("Added to Spoolman"), 2500);
+                            }
+                            // Repoint is silent — IDs change but no toast.
+                        }
+                        fire_completion(true);
+                    });
+                });
             return; // Async path - fire_completion called from callback
         }
     }

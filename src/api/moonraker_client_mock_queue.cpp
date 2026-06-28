@@ -3,9 +3,10 @@
 
 #include "moonraker_client_mock_internal.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <ctime>
-#include <spdlog/spdlog.h>
 
 namespace mock_internal {
 
@@ -34,7 +35,7 @@ static struct MockQueueState {
             {"0003", "phone_stand.gcode", now - 300},
         };
         queue_state = "ready";
-        next_id = 4;  // Next-available ID; preserves 4-digit zero-padded format.
+        next_id = 4; // Next-available ID; preserves 4-digit zero-padded format.
     }
 
     std::string allocate_id() {
@@ -171,4 +172,4 @@ void register_queue_handlers(std::unordered_map<std::string, MethodHandler>& reg
     };
 }
 
-}  // namespace mock_internal
+} // namespace mock_internal

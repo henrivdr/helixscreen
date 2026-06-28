@@ -806,8 +806,7 @@ void InputShaperPanel::apply_recommendation() {
                         apply_y_after_x();
                     } else {
                         ToastManager::instance().show(
-                            ToastSeverity::SUCCESS,
-                            lv_tr("Input shaper settings applied!"), 2500);
+                            ToastSeverity::SUCCESS, lv_tr("Input shaper settings applied!"), 2500);
                     }
                 });
             },

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
 #include "../lvgl_test_fixture.h"
 #include "sensor_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
 

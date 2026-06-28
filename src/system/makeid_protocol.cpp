@@ -25,9 +25,9 @@ std::vector<uint8_t> makeid_build_handshake(MakeIdHandshakeState state) {
     std::vector<uint8_t> frame;
     frame.reserve(6);
 
-    frame.push_back(0x66);  // magic
-    frame.push_back(0x06);  // length low (6 bytes total)
-    frame.push_back(0x00);  // length high
+    frame.push_back(0x66); // magic
+    frame.push_back(0x06); // length low (6 bytes total)
+    frame.push_back(0x00); // length high
     frame.push_back(static_cast<uint8_t>(MakeIdCmd::Handshake));
     frame.push_back(static_cast<uint8_t>(state));
 
@@ -83,7 +83,7 @@ MakeIdResponse makeid_parse_response(const uint8_t* data, size_t len) {
 }
 
 std::vector<uint8_t> makeid_build_print_frame(const std::vector<uint8_t>& compressed_data,
-                                                const MakeIdPrintParams& params) {
+                                              const MakeIdPrintParams& params) {
     // Header: 17 bytes + compressed_data + 1 checksum byte
     // Total = 18 + compressed_data.size()
     size_t total_len = 17 + compressed_data.size() + 1;
@@ -180,7 +180,7 @@ std::vector<uint8_t> makeid_lzo_literals_only(const uint8_t* data, size_t len) {
 /// MakeID column-major: each "column" = one position along label length.
 /// Each bitmap row maps directly to one column (same byte layout).
 std::vector<uint8_t> makeid_encode_bitmap_raw(const LabelBitmap& bitmap, int printer_width_bytes) {
-    int total_cols = bitmap.height();  // columns = label length
+    int total_cols = bitmap.height(); // columns = label length
     int bpc = printer_width_bytes;
 
     std::vector<uint8_t> result(static_cast<size_t>(total_cols) * bpc, 0x00);
@@ -195,9 +195,8 @@ std::vector<uint8_t> makeid_encode_bitmap_raw(const LabelBitmap& bitmap, int pri
     return result;
 }
 
-std::vector<MakeIdBitmapChunk> makeid_encode_bitmap(const LabelBitmap& bitmap,
-                                                      int printer_width_bytes,
-                                                      int max_cols_per_chunk) {
+std::vector<MakeIdBitmapChunk>
+makeid_encode_bitmap(const LabelBitmap& bitmap, int printer_width_bytes, int max_cols_per_chunk) {
     // Encode full bitmap to column-major
     auto full_data = makeid_encode_bitmap_raw(bitmap, printer_width_bytes);
     int bpc = printer_width_bytes;
@@ -221,13 +220,13 @@ std::vector<MakeIdBitmapChunk> makeid_encode_bitmap(const LabelBitmap& bitmap,
 }
 
 MakeIdPrintJob makeid_build_print_job(const LabelBitmap& bitmap, const LabelSize& size,
-                                        const MakeIdPrintJobConfig& config) {
+                                      const MakeIdPrintJobConfig& config) {
     MakeIdPrintJob job;
     job.total_rows = bitmap.height();
 
     // Encode bitmap into chunks
-    auto chunks = makeid_encode_bitmap(bitmap, config.printer_width_bytes,
-                                        config.max_rows_per_chunk);
+    auto chunks =
+        makeid_encode_bitmap(bitmap, config.printer_width_bytes, config.max_rows_per_chunk);
 
     int total_chunks = static_cast<int>(chunks.size());
 
@@ -259,14 +258,10 @@ std::vector<LabelSize> makeid_e1_sizes() {
     // 12mm -> ~96px  (12 * 203 / 25.4 ≈ 95.9)
     // 16mm tape: head is still 96px on E1 (wider tape, same head)
     return {
-        {"12x40mm", 96, 307, 203, 0x01, 12, 40},
-        {"12x30mm", 96, 231, 203, 0x01, 12, 30},
-        {"12x50mm", 96, 384, 203, 0x01, 12, 50},
-        {"9x40mm", 72, 307, 203, 0x01, 9, 40},
-        {"9x30mm", 72, 231, 203, 0x01, 9, 30},
-        {"16x30mm", 96, 231, 203, 0x01, 16, 30},
-        {"16x40mm", 96, 307, 203, 0x01, 16, 40},
-        {"16x50mm", 96, 384, 203, 0x01, 16, 50},
+        {"12x40mm", 96, 307, 203, 0x01, 12, 40}, {"12x30mm", 96, 231, 203, 0x01, 12, 30},
+        {"12x50mm", 96, 384, 203, 0x01, 12, 50}, {"9x40mm", 72, 307, 203, 0x01, 9, 40},
+        {"9x30mm", 72, 231, 203, 0x01, 9, 30},   {"16x30mm", 96, 231, 203, 0x01, 16, 30},
+        {"16x40mm", 96, 307, 203, 0x01, 16, 40}, {"16x50mm", 96, 384, 203, 0x01, 16, 50},
     };
 }
 
@@ -274,6 +269,6 @@ std::vector<LabelSize> makeid_default_sizes() {
     return makeid_e1_sizes();
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include "static_subject_registry.h"
 #include "ui_modal.h"
 #include "ui_split_button.h"
+
+#include "static_subject_registry.h"
 
 #include <spdlog/spdlog.h>
 
@@ -55,40 +56,61 @@ class ShutdownModal : public Modal {
     void set_single_callbacks(ActionCallback on_shutdown, ActionCallback on_reboot) {
         mode_ = Mode::Single;
         on_printer_shutdown_cb_ = std::move(on_shutdown);
-        on_printer_reboot_cb_   = std::move(on_reboot);
-        on_screen_shutdown_cb_  = nullptr;
-        on_screen_reboot_cb_    = nullptr;
-        on_both_shutdown_cb_    = nullptr;
-        on_both_reboot_cb_      = nullptr;
+        on_printer_reboot_cb_ = std::move(on_reboot);
+        on_screen_shutdown_cb_ = nullptr;
+        on_screen_reboot_cb_ = nullptr;
+        on_both_shutdown_cb_ = nullptr;
+        on_both_reboot_cb_ = nullptr;
         lv_subject_set_int(&view_state_subject_, 0);
     }
 
     /// Dual-scope (separate hosts) — six distinct callbacks: Both, Printer, Screen.
-    void set_dual_callbacks(ActionCallback both_shutdown,
-                            ActionCallback both_reboot,
-                            ActionCallback printer_shutdown,
-                            ActionCallback printer_reboot,
-                            ActionCallback screen_shutdown,
-                            ActionCallback screen_reboot) {
+    void set_dual_callbacks(ActionCallback both_shutdown, ActionCallback both_reboot,
+                            ActionCallback printer_shutdown, ActionCallback printer_reboot,
+                            ActionCallback screen_shutdown, ActionCallback screen_reboot) {
         mode_ = Mode::Dual;
-        on_both_shutdown_cb_    = std::move(both_shutdown);
-        on_both_reboot_cb_      = std::move(both_reboot);
+        on_both_shutdown_cb_ = std::move(both_shutdown);
+        on_both_reboot_cb_ = std::move(both_reboot);
         on_printer_shutdown_cb_ = std::move(printer_shutdown);
-        on_printer_reboot_cb_   = std::move(printer_reboot);
-        on_screen_shutdown_cb_  = std::move(screen_shutdown);
-        on_screen_reboot_cb_    = std::move(screen_reboot);
+        on_printer_reboot_cb_ = std::move(printer_reboot);
+        on_screen_shutdown_cb_ = std::move(screen_shutdown);
+        on_screen_reboot_cb_ = std::move(screen_reboot);
         lv_subject_set_int(&view_state_subject_, 1);
     }
 
     // Invoked from XML event callback free functions (registered in
     // shutdown_widget.cpp). Public so those free functions can reach them
     // after looking the modal up via the view root's user_data.
-    void fire_screen_shutdown()  { lv_subject_set_int(&view_state_subject_, 2); if (on_screen_shutdown_cb_)  on_screen_shutdown_cb_(); }
-    void fire_screen_reboot()    { lv_subject_set_int(&view_state_subject_, 3); if (on_screen_reboot_cb_)    on_screen_reboot_cb_(); }
-    void fire_printer_shutdown() { lv_subject_set_int(&view_state_subject_, 4); if (on_printer_shutdown_cb_) on_printer_shutdown_cb_(); }
-    void fire_printer_reboot()   { lv_subject_set_int(&view_state_subject_, 5); if (on_printer_reboot_cb_)   on_printer_reboot_cb_(); }
-    void fire_both_shutdown()    { lv_subject_set_int(&view_state_subject_, 6); if (on_both_shutdown_cb_)    on_both_shutdown_cb_(); }
-    void fire_both_reboot()      { lv_subject_set_int(&view_state_subject_, 7); if (on_both_reboot_cb_)      on_both_reboot_cb_(); }
+    void fire_screen_shutdown() {
+        lv_subject_set_int(&view_state_subject_, 2);
+        if (on_screen_shutdown_cb_)
+            on_screen_shutdown_cb_();
+    }
+    void fire_screen_reboot() {
+        lv_subject_set_int(&view_state_subject_, 3);
+        if (on_screen_reboot_cb_)
+            on_screen_reboot_cb_();
+    }
+    void fire_printer_shutdown() {
+        lv_subject_set_int(&view_state_subject_, 4);
+        if (on_printer_shutdown_cb_)
+            on_printer_shutdown_cb_();
+    }
+    void fire_printer_reboot() {
+        lv_subject_set_int(&view_state_subject_, 5);
+        if (on_printer_reboot_cb_)
+            on_printer_reboot_cb_();
+    }
+    void fire_both_shutdown() {
+        lv_subject_set_int(&view_state_subject_, 6);
+        if (on_both_shutdown_cb_)
+            on_both_shutdown_cb_();
+    }
+    void fire_both_reboot() {
+        lv_subject_set_int(&view_state_subject_, 7);
+        if (on_both_reboot_cb_)
+            on_both_reboot_cb_();
+    }
 
   protected:
     void on_show() override {
@@ -129,7 +151,8 @@ class ShutdownModal : public Modal {
     static inline bool subjects_initialized_ = false;
 
     static void init_subjects() {
-        if (subjects_initialized_) return;
+        if (subjects_initialized_)
+            return;
         subjects_initialized_ = true;
 
         lv_subject_init_int(&view_state_subject_, 0);
@@ -143,7 +166,8 @@ class ShutdownModal : public Modal {
         }
 
         StaticSubjectRegistry::instance().register_deinit("ShutdownModal", []() {
-            if (!subjects_initialized_) return;
+            if (!subjects_initialized_)
+                return;
             lv_subject_deinit(&view_state_subject_);
             subjects_initialized_ = false;
         });

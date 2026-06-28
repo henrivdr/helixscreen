@@ -726,22 +726,19 @@ TEST_CASE("PrintStartAnalyzer searches pre-downloaded content", "[print_start]")
     helix::PrintStartAnalyzer analyzer;
 
     std::set<std::string> active_files = {"printer.cfg", "macros.cfg"};
-    std::map<std::string, std::string> file_contents = {
-        {"printer.cfg", "[include macros.cfg]\n"},
-        {"macros.cfg",
-         "[gcode_macro PRINT_START]\n"
-         "gcode:\n"
-         "  G28\n"
-         "  BED_MESH_CALIBRATE\n"}};
+    std::map<std::string, std::string> file_contents = {{"printer.cfg", "[include macros.cfg]\n"},
+                                                        {"macros.cfg", "[gcode_macro PRINT_START]\n"
+                                                                       "gcode:\n"
+                                                                       "  G28\n"
+                                                                       "  BED_MESH_CALIBRATE\n"}};
 
     helix::PrintStartAnalysis result;
     bool callback_fired = false;
 
-    analyzer.analyze(active_files, file_contents,
-                     [&](const helix::PrintStartAnalysis& analysis) {
-                         result = analysis;
-                         callback_fired = true;
-                     });
+    analyzer.analyze(active_files, file_contents, [&](const helix::PrintStartAnalysis& analysis) {
+        result = analysis;
+        callback_fired = true;
+    });
 
     REQUIRE(callback_fired);
     REQUIRE(result.found);
@@ -761,11 +758,10 @@ TEST_CASE("PrintStartAnalyzer cached search reports not found correctly", "[prin
     bool callback_fired = false;
     helix::PrintStartAnalysis result;
 
-    analyzer.analyze(active_files, file_contents,
-                     [&](const helix::PrintStartAnalysis& analysis) {
-                         result = analysis;
-                         callback_fired = true;
-                     });
+    analyzer.analyze(active_files, file_contents, [&](const helix::PrintStartAnalysis& analysis) {
+        result = analysis;
+        callback_fired = true;
+    });
 
     REQUIRE(callback_fired);
     REQUIRE_FALSE(result.found);

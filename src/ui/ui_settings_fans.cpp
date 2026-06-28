@@ -12,6 +12,7 @@
 #include "ui_fan_control_overlay.h"
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
+#include "ui_status_pill.h"
 #include "ui_utils.h"
 
 #include "app_globals.h"
@@ -19,7 +20,6 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
-#include "ui_status_pill.h"
 
 #include <spdlog/spdlog.h>
 
@@ -49,8 +49,8 @@ static std::unique_ptr<FanSettingsOverlay> g_fan_settings_overlay;
 FanSettingsOverlay& get_fan_settings_overlay() {
     if (!g_fan_settings_overlay) {
         g_fan_settings_overlay = std::make_unique<FanSettingsOverlay>();
-        StaticPanelRegistry::instance().register_destroy(
-            "FanSettingsOverlay", []() { g_fan_settings_overlay.reset(); });
+        StaticPanelRegistry::instance().register_destroy("FanSettingsOverlay",
+                                                         []() { g_fan_settings_overlay.reset(); });
     }
     return *g_fan_settings_overlay;
 }
@@ -160,19 +160,19 @@ namespace {
 const char* fan_type_label(helix::FanType type) {
     switch (type) {
     case helix::FanType::PART_COOLING:
-        return "Part";
+        return lv_tr("Part");
     case helix::FanType::HEATER_FAN:
-        return "Heater";
+        return lv_tr("Heater");
     case helix::FanType::CONTROLLER_FAN:
-        return "Controller";
+        return lv_tr("Controller");
     case helix::FanType::TEMPERATURE_FAN:
-        return "Temp";
+        return lv_tr("Temp");
     case helix::FanType::GENERIC_FAN:
-        return "Generic";
+        return lv_tr("Generic");
     case helix::FanType::OUTPUT_PIN_FAN:
-        return "Output Pin";
+        return lv_tr("Output Pin");
     }
-    return "Fan";
+    return lv_tr("Fan");
 }
 
 } // namespace
@@ -219,10 +219,8 @@ void FanSettingsOverlay::populate_fan_list(lv_obj_t* list, bool controllable) {
         // Create row from XML component
         const char* type_label = fan_type_label(fan.type);
         const char* attrs[] = {
-            "fan_name",   fan.display_name.c_str(),
-            "fan_type",   type_label,
-            "fan_object", fan.object_name.c_str(),
-            nullptr,
+            "fan_name",   fan.display_name.c_str(), "fan_type", type_label,
+            "fan_object", fan.object_name.c_str(),  nullptr,
         };
         auto* row = static_cast<lv_obj_t*>(lv_xml_create(list, "fan_settings_row", attrs));
         if (!row) {
@@ -250,10 +248,8 @@ void FanSettingsOverlay::populate_fan_list(lv_obj_t* list, bool controllable) {
                     if (name) {
                         lv_obj_t* r = lv_event_get_current_target_obj(e);
                         lv_obj_t* label = lv_obj_find_by_name(r, "name_label");
-                        const char* current =
-                            label ? lv_label_get_text(label) : "";
-                        get_fan_settings_overlay().handle_fan_rename(
-                            *name, current ? current : "");
+                        const char* current = label ? lv_label_get_text(label) : "";
+                        get_fan_settings_overlay().handle_fan_rename(*name, current ? current : "");
                     }
                     LVGL_SAFE_EVENT_CB_END();
                 },
@@ -261,9 +257,7 @@ void FanSettingsOverlay::populate_fan_list(lv_obj_t* list, bool controllable) {
 
             lv_obj_add_event_cb(
                 row,
-                [](lv_event_t* e) {
-                    delete static_cast<std::string*>(lv_event_get_user_data(e));
-                },
+                [](lv_event_t* e) { delete static_cast<std::string*>(lv_event_get_user_data(e)); },
                 LV_EVENT_DELETE, obj_name);
         }
 

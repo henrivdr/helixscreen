@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mock_performance_source.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <spdlog/spdlog.h>
 #include <string>
 
 namespace helix {
@@ -17,38 +18,48 @@ namespace {
 
 bool read_proc_stat(uint64_t& idle, uint64_t& total) {
     std::ifstream f("/proc/stat");
-    if (!f) return false;
+    if (!f)
+        return false;
     std::string label;
     uint64_t user = 0, nice = 0, sys = 0, idl = 0, iowait = 0, irq = 0, softirq = 0, steal = 0;
     f >> label >> user >> nice >> sys >> idl >> iowait >> irq >> softirq >> steal;
-    if (label != "cpu") return false;
-    idle  = idl + iowait;
+    if (label != "cpu")
+        return false;
+    idle = idl + iowait;
     total = user + nice + sys + idl + iowait + irq + softirq + steal;
     return true;
 }
 
 bool read_meminfo(uint32_t& free_mb, float& pct_used) {
     std::ifstream f("/proc/meminfo");
-    if (!f) return false;
+    if (!f)
+        return false;
     uint64_t total_kb = 0, avail_kb = 0;
     std::string key;
     uint64_t val;
     std::string unit;
     while (f >> key >> val >> unit) {
-        if (key == "MemTotal:") total_kb = val;
-        else if (key == "MemAvailable:") { avail_kb = val; break; }
+        if (key == "MemTotal:")
+            total_kb = val;
+        else if (key == "MemAvailable:") {
+            avail_kb = val;
+            break;
+        }
     }
-    if (!total_kb || !avail_kb) return false;
-    free_mb  = static_cast<uint32_t>(avail_kb / 1024);
+    if (!total_kb || !avail_kb)
+        return false;
+    free_mb = static_cast<uint32_t>(avail_kb / 1024);
     pct_used = 100.0f * (1.0f - static_cast<float>(avail_kb) / total_kb);
     return true;
 }
 
 bool read_thermal(float& temp_c) {
     std::ifstream f("/sys/class/thermal/thermal_zone0/temp");
-    if (!f) return false;
+    if (!f)
+        return false;
     int milli;
-    if (!(f >> milli)) return false;
+    if (!(f >> milli))
+        return false;
     temp_c = milli / 1000.0f;
     return true;
 }
@@ -56,10 +67,13 @@ bool read_thermal(float& temp_c) {
 } // namespace
 
 MockPerformanceSource::MockPerformanceSource() = default;
-MockPerformanceSource::~MockPerformanceSource() { stop(); }
+MockPerformanceSource::~MockPerformanceSource() {
+    stop();
+}
 
 void MockPerformanceSource::start() {
-    if (running_.exchange(true)) return;
+    if (running_.exchange(true))
+        return;
     timer_ = lv_timer_create(
         [](lv_timer_t* t) {
             auto* self = static_cast<MockPerformanceSource*>(lv_timer_get_user_data(t));
@@ -69,7 +83,8 @@ void MockPerformanceSource::start() {
 }
 
 void MockPerformanceSource::stop() {
-    if (!running_.exchange(false)) return;
+    if (!running_.exchange(false))
+        return;
     if (timer_) {
         lv_timer_delete(timer_);
         timer_ = nullptr;
@@ -82,16 +97,17 @@ bool MockPerformanceSource::read_host_stats(PerfSample& out) {
     if (read_proc_stat(idle, total)) {
         if (have_prev_) {
             const uint64_t d_total = total - prev_total_;
-            const uint64_t d_idle  = idle  - prev_idle_;
+            const uint64_t d_idle = idle - prev_idle_;
             if (d_total > 0) {
                 out.host_cpu_pct = 100.0f * (1.0f - static_cast<float>(d_idle) / d_total);
             }
         }
-        prev_idle_  = idle;
+        prev_idle_ = idle;
         prev_total_ = total;
-        have_prev_  = true;
+        have_prev_ = true;
     }
-    uint32_t mem_free = 0; float mem_used = 0.0f;
+    uint32_t mem_free = 0;
+    float mem_used = 0.0f;
     if (read_meminfo(mem_free, mem_used)) {
         out.host_mem_free_mb = mem_free;
         out.host_mem_pct_used = mem_used;
@@ -105,18 +121,24 @@ bool MockPerformanceSource::read_host_stats(PerfSample& out) {
 
 void MockPerformanceSource::synth_mcus(PerfSample& out) {
     std::uniform_real_distribution<float> step(-0.04f, 0.04f);
-    mcu_load_    = std::clamp(mcu_load_    + step(rng_), 0.05f, 0.45f);
+    mcu_load_ = std::clamp(mcu_load_ + step(rng_), 0.05f, 0.45f);
     mcu_sb_load_ = std::clamp(mcu_sb_load_ + step(rng_), 0.05f, 0.45f);
 
-    McuStat a; a.name = "mcu";    a.load = mcu_load_;    a.retransmits = 0;
-    McuStat b; b.name = "mcu sb"; b.load = mcu_sb_load_;
+    McuStat a;
+    a.name = "mcu";
+    a.load = mcu_load_;
+    a.retransmits = 0;
+    McuStat b;
+    b.name = "mcu sb";
+    b.load = mcu_sb_load_;
     b.retransmits = static_cast<uint64_t>((tick_count_ / 30) * 14);
     out.mcus = {a, b};
 }
 
 void MockPerformanceSource::apply_throttle_env(PerfSample& out) {
     const char* env = std::getenv("HELIX_MOCK_THROTTLE");
-    if (!env || !*env) return;
+    if (!env || !*env)
+        return;
     const std::string e = env;
     out.host_throttle_bits = 0x50000;
     out.host_throttle_text = "Under-voltage detected (now)";
@@ -127,7 +149,8 @@ void MockPerformanceSource::apply_throttle_env(PerfSample& out) {
 }
 
 void MockPerformanceSource::tick() {
-    if (!running_ || !cb_) return;
+    if (!running_ || !cb_)
+        return;
     PerfSample s;
     read_host_stats(s);
     synth_mcus(s);

@@ -159,8 +159,7 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // apply_phase_action_locked(); these expose them as labelled steps + the
     // current-step subject so the tracker advances instead of falling back to
     // the legacy coarse AmsAction model.
-    [[nodiscard]] OperationStepModel
-    get_operation_step_model(StepOperationType op) const override;
+    [[nodiscard]] OperationStepModel get_operation_step_model(StepOperationType op) const override;
     [[nodiscard]] lv_subject_t* get_operation_step_index_subject(StepOperationType op) override;
 
     // User-initiated state refresh. Re-reads Adventurer5M.json (the JSON poll
@@ -445,8 +444,8 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // initiated action changes), detect_load_unload_completion preserves the
     // historical snap-to-IDLE on a head transition.
     struct IfsPhaseTracker {
-        bool active = false;        // true between begin and finalize
-        bool is_unload = false;     // unload vs load direction
+        bool active = false;              // true between begin and finalize
+        bool is_unload = false;           // unload vs load direction
         bool reached_target_once = false; // current temp ever within ~0.5°C of target
         bool seen_head_drop = false;      // head sensor true→false (cut/retract started)
         bool seen_head_rise = false;      // head sensor false→true (filament reached nozzle)
@@ -489,6 +488,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // seated slot updates immediately when IFS_STATUS reports a new Chan instead
     // of waiting for the next status frame. Caller must hold mutex_.
     void recompute_current_slot_locked();
+
+    // Persist the remembered seated lane to the Moonraker "lane_data" DB so it
+    // survives a power cycle (the firmware forgets Chan across a reboot, #1065).
+    // slot0 >= 0 writes the lane index; slot0 < 0 clears the key. Fire-and-forget
+    // (no-op when there is no override_store_, e.g. in unit tests). Caller holds
+    // mutex_; the store call dispatches asynchronously and does not block.
+    void persist_seated_slot_locked(int slot0);
 
   private:
     bool validate_slot_index(int slot_index) const;
@@ -537,6 +543,22 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // unconditionally — independent of has_ifs_vars_ / tool_map_ — because the
     // tool_map_-derived current_slot can disagree with it on the plugin path.
     int seated_chan_ = 0;
+    // Last lane (0-based slot index) we saw loaded to the toolhead, persisted to
+    // the Moonraker "lane_data" DB (sibling "seated" key) so it survives a power
+    // cycle. The firmware forgets the seated channel across a reboot — IFS_STATUS
+    // "Chan" comes back 0 even with a lane physically at the head (bundle
+    // CGR6C7PA, #1065). On cold boot, when head_filament_ is true but Chan==0 and
+    // this lane's port still reads present, it is restored as the seated channel
+    // so the Unload/Eject menu labels correctly. nullopt = nothing remembered.
+    std::optional<int> persisted_seated_slot_;
+    // Gates the cold-boot seated-lane restore to genuine power-cycle amnesia.
+    // False until we observe a definitive seated signal this session — a real
+    // IFS_STATUS Chan>0, or a confirmed-empty head (Chan==0 with head_filament_
+    // false). While false, a Chan==0 reported with the head still loaded is the
+    // post-reboot "firmware forgot which lane" case and the remembered lane is
+    // restored. Once true, a Chan==0 is a genuine "nothing seated" and clears the
+    // loaded slot as before (#1065).
+    bool seated_resolved_since_boot_ = false;
     // Latches true the first time IFS_STATUS "Ports" is observed. Once the
     // RS-485 silk-sensor presence truth is available, (1) the legacy
     // Adventurer5M.json ffmColor presence inference must NEVER run — that
@@ -547,9 +569,9 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // Atomic: written under mutex_ in apply_zcolor_result, read unlocked in the
     // schedule/query gates.
     std::atomic<bool> ifs_status_ports_seen_{false};
-    bool external_mode_ = false;                // Bypass/external spool mode
-    bool head_filament_ = false;                // Head sensor state
-    std::array<bool, NUM_PORTS> dirty_{};       // Per-slot dirty flag to prevent stale overwrites
+    bool external_mode_ = false;          // Bypass/external spool mode
+    bool head_filament_ = false;          // Head sensor state
+    std::array<bool, NUM_PORTS> dirty_{}; // Per-slot dirty flag to prevent stale overwrites
 
     helix::printer::SlotRegistry slots_;
 
@@ -577,6 +599,16 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // is the discriminator, not key presence.
     bool ifs_macro_confirmed_missing_ = true;
     std::atomic<bool> reread_pending_{false};
+
+    // Main-thread-only: counts external color-change detections in the gcode
+    // stream since the last coalesced re-read fired. zmod re-emits CHANGE_ZCOLOR
+    // on every edit, so a single user action produces a burst of trigger lines
+    // (24 in a 3s window in bundle UQG4RNUA). Rather than log one line each, the
+    // count is folded into a single consolidated line when reread_apply runs.
+    // Both the increment (on_gcode_response_line) and the read/reset
+    // (reread_apply) run on the main thread via the UpdateQueue, so no atomic is
+    // needed.
+    int external_change_burst_count_ = 0;
 
     // Signature (count + per-slot color/material) of the slots parsed from the
     // last Adventurer5M.json read. Native ZMOD re-reads the file on every sensor
@@ -640,6 +672,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // min and the macro errors out, so this never gates real functionality.
     static constexpr int ACTION_TIMEOUT_SECONDS = 90;
     static constexpr int HEATING_TIMEOUT_SECONDS = 300;
+    // A real purge runs far longer than the generic 90 s phase window (raza616:
+    // ~3 min whole-op from cold; Vger1700 hit the 90 s ERROR twice mid-purge,
+    // #1065). PURGING gets its own budget AND its clock is reset on
+    // ifs_motion_sensor activity (see handle_status_update), so the budget is
+    // effectively "time since filament last moved" — a long-but-healthy purge is
+    // never falsely failed, a genuinely stalled one still surfaces ERROR.
+    static constexpr int PURGING_TIMEOUT_SECONDS = 240;
     std::chrono::steady_clock::time_point action_start_time_;
 
     // Rate-limit gate for the JSON-content poll. handle_status_update kicks

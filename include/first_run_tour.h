@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "tour_steps.h"
 #include "ui_observer_guard.h"
+
+#include "tour_steps.h"
 
 #include <cstddef>
 #include <memory>
@@ -40,7 +41,9 @@ class FirstRunTour {
     /// Skip button — marks completed and tears down overlay.
     void skip();
 
-    bool is_running() const { return running_; }
+    bool is_running() const {
+        return running_;
+    }
 
   private:
     FirstRunTour() = default;

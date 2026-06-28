@@ -57,7 +57,6 @@ WizardInputShaperStep::WizardInputShaperStep()
 }
 
 WizardInputShaperStep::~WizardInputShaperStep() {
-
     // Deinitialize subjects to disconnect observers before destruction
     // NOTE: lv_subject_deinit() is safe to call even during shutdown
     if (subjects_initialized_) {
@@ -112,8 +111,7 @@ void WizardInputShaperStep::init_subjects() {
 
 // Helper to safely update subjects from async callbacks
 // Captures alive flag and queues update to UI thread
-static void safe_update_status(helix::LifetimeToken token,
-                               const std::string& msg) {
+static void safe_update_status(helix::LifetimeToken token, const std::string& msg) {
     helix::ui::queue_update([token, msg]() {
         if (token.expired()) {
             return; // Step was cleaned up
@@ -222,10 +220,7 @@ static void on_start_calibration_clicked(lv_event_t* e) {
                 InputShaperCalibrator* cal = step->get_calibrator();
                 if (cal) {
                     cal->run_calibration(
-                        'X',
-                        [token](int percent) {
-                            safe_update_progress(token, percent / 2);
-                        },
+                        'X', [token](int percent) { safe_update_progress(token, percent / 2); },
                         [token](const InputShaperResult& result) {
                             (void)result;
                             if (token.expired()) {

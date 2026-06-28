@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "touch_calibration_panel.h"
+#include "wizard_step.h"
 
 #include <lvgl.h>
 #include <memory>
@@ -47,10 +46,18 @@
 class WizardTouchCalibrationStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::TouchCalibration; }
-    const char* component_name() const override { return "wizard_touch_calibration"; }
-    const char* log_name() const override { return "Touch Calibration"; }
-    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override { return should_skip(); }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::TouchCalibration;
+    }
+    const char* component_name() const override {
+        return "wizard_touch_calibration";
+    }
+    const char* log_name() const override {
+        return "Touch Calibration";
+    }
+    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override {
+        return should_skip();
+    }
 
     WizardTouchCalibrationStep();
     ~WizardTouchCalibrationStep();

@@ -26,11 +26,11 @@
  * test_moonraker_subscription_fields.cpp (MCU section).
  */
 
-#include "../catch_amalgamated.hpp"
-
 #include <fstream>
 #include <sstream>
 #include <string>
+
+#include "../catch_amalgamated.hpp"
 
 namespace {
 

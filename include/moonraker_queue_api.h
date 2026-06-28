@@ -26,17 +26,17 @@ class MoonrakerClient;
  * @brief A single entry in the Moonraker job queue
  */
 struct JobQueueEntry {
-    std::string job_id;     ///< Unique job identifier
-    std::string filename;   ///< G-code filename
-    double time_added;      ///< Unix timestamp when job was added
-    double time_in_queue;   ///< Seconds the job has been in queue
+    std::string job_id;   ///< Unique job identifier
+    std::string filename; ///< G-code filename
+    double time_added;    ///< Unix timestamp when job was added
+    double time_in_queue; ///< Seconds the job has been in queue
 };
 
 /**
  * @brief Status of the Moonraker job queue
  */
 struct JobQueueStatus {
-    std::string queue_state;              ///< "ready", "paused", "loading"
+    std::string queue_state;                ///< "ready", "paused", "loading"
     std::vector<JobQueueEntry> queued_jobs; ///< Jobs currently in queue
 };
 

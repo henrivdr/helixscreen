@@ -28,19 +28,16 @@ struct BiquadFilter {
 
 /// Generate waveform samples into buffer.
 /// @param phase Modified in-place for continuity across calls.
-void generate_samples(float* buffer, int num_samples, int sample_rate,
-                      Waveform wave, float freq, float amplitude,
-                      float duty_cycle, float& phase);
+void generate_samples(float* buffer, int num_samples, int sample_rate, Waveform wave, float freq,
+                      float amplitude, float duty_cycle, float& phase);
 
 /// Compute biquad coefficients for lowpass or highpass.
-void compute_biquad_coeffs(BiquadFilter& f, FilterType type, float cutoff,
-                           float sample_rate);
+void compute_biquad_coeffs(BiquadFilter& f, FilterType type, float cutoff, float sample_rate);
 
 /// Apply filter to buffer in-place.
 void apply_filter(BiquadFilter& f, float* buffer, int num_samples);
 
 /// Recompute filter coefficients only if parameters changed.
-void update_filter_if_needed(BiquadFilter& f, FilterType type, float cutoff,
-                             float sample_rate);
+void update_filter_if_needed(BiquadFilter& f, FilterType type, float cutoff, float sample_rate);
 
 } // namespace helix::audio

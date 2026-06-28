@@ -22,7 +22,7 @@ class MoonrakerAPI;
 namespace helix {
 class MoonrakerClient;
 class PrinterDiscovery;
-}
+} // namespace helix
 
 // LVGL subject — forward-declared so backends can expose the subject that drives
 // the operation step bar's current index without ams_state.h (circular include).
@@ -249,8 +249,8 @@ class AmsBackend {
      * @param ctx       Printer state at the time the line arrived
      * @return ErrorEvent if this backend claims the line, nullopt otherwise
      */
-    [[nodiscard]] virtual std::optional<helix::ErrorEvent> classify_error(
-        const std::string& /*raw_line*/, const helix::ClassifyContext& /*ctx*/) const {
+    [[nodiscard]] virtual std::optional<helix::ErrorEvent>
+    classify_error(const std::string& /*raw_line*/, const helix::ClassifyContext& /*ctx*/) const {
         return std::nullopt;
     }
 
@@ -264,9 +264,9 @@ class AmsBackend {
 
     /// One ordered phase in a backend's toolchange narration model.
     struct ToolchangePhase {
-        std::string id;       ///< stable key matched from narration, e.g. "brush"
-        std::string label;    ///< display label (translatable), e.g. "Brush nozzle"
-        bool        optional; ///< if true, stays greyed/Pending when never narrated this swap
+        std::string id;    ///< stable key matched from narration, e.g. "brush"
+        std::string label; ///< display label (translatable), e.g. "Brush nozzle"
+        bool optional;     ///< if true, stays greyed/Pending when never narrated this swap
     };
 
     /// Declared ordered phase template for a toolchange operation.
@@ -290,10 +290,10 @@ class AmsBackend {
 
     /// One ordered step in a backend's operation step bar.
     struct OperationStep {
-        std::string label;        ///< display label (translatable)
-        int         phase_id = -1; ///< backend phase index this step represents (-1 = positional)
-        bool        optional = false; ///< stays greyed/Pending when never reached this op
-        bool        live_temp = false; ///< render a live "<label> cur/target°C" while current
+        std::string label;      ///< display label (translatable)
+        int phase_id = -1;      ///< backend phase index this step represents (-1 = positional)
+        bool optional = false;  ///< stays greyed/Pending when never reached this op
+        bool live_temp = false; ///< render a live "<label> cur/target°C" while current
     };
 
     /// Ordered step labels for an operation. Empty => backend has no specialized
@@ -314,8 +314,7 @@ class AmsBackend {
      * @param op  Operation being performed
      * @return ordered steps, or empty for the legacy fallback
      */
-    [[nodiscard]] virtual OperationStepModel
-    get_operation_step_model(StepOperationType op) const {
+    [[nodiscard]] virtual OperationStepModel get_operation_step_model(StepOperationType op) const {
         OperationStepModel model;
         for (const auto& p : toolchange_phase_template(op)) {
             model.steps.push_back({p.label, -1, p.optional, false});
@@ -339,8 +338,7 @@ class AmsBackend {
      * @param op  Operation being performed
      * @return subject pointer, or nullptr for the legacy fallback
      */
-    [[nodiscard]] virtual lv_subject_t*
-    get_operation_step_index_subject(StepOperationType op);
+    [[nodiscard]] virtual lv_subject_t* get_operation_step_index_subject(StepOperationType op);
 
     /**
      * @brief True when this backend already populates remaining_weight_g from a live
@@ -1445,9 +1443,8 @@ class AmsBackend {
      * @param remap      Logical tool -> physical head, only for changed tools
      * @return Newline-joined gcode (no trailing newline), or "" when none
      */
-    [[nodiscard]] virtual std::string
-    build_preprint_gcode(const std::set<int>& tools_used,
-                         const std::map<int, int>& remap) const {
+    [[nodiscard]] virtual std::string build_preprint_gcode(const std::set<int>& tools_used,
+                                                           const std::map<int, int>& remap) const {
         (void)tools_used;
         (void)remap;
         return "";

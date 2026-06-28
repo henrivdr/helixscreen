@@ -355,8 +355,8 @@ WiFiError WifiBackendNetworkManager::check_system_prerequisites() {
     // connected:full:enabled:enabled
     // Check that it's not "error" or empty
     if (result.stdout_output.find("error") != std::string::npos) {
-        return WiFiErrorHelper::service_not_running("NetworkManager (reported error: " +
-                                                    result.stdout_output + ")");
+        return WiFiErrorHelper::service_not_running(
+            "NetworkManager (reported error: " + result.stdout_output + ")");
     }
 
     spdlog::debug("[WifiBackend] NM: Prerequisites check passed");
@@ -695,8 +695,7 @@ WiFiError WifiBackendNetworkManager::connect_network(const std::string& ssid,
 }
 
 WifiBackendNetworkManager::ConnectAttempt
-WifiBackendNetworkManager::try_nmcli_connect(const std::string& ssid,
-                                             const std::string& password) {
+WifiBackendNetworkManager::try_nmcli_connect(const std::string& ssid, const std::string& password) {
     ConnectAttempt result;
 
     // SECURITY: fork/exec (no shell) so SSID/password can't be interpreted by sh.

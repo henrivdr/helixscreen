@@ -15,6 +15,8 @@
  * behave identically. These tests exercise that method directly.
  */
 
+#include "ui_print_start_controller.h"
+
 #include "../helix_test_fixture.h"
 #include "ams_backend_ad5x_ifs.h"
 #include "ams_state.h"
@@ -22,7 +24,6 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
-#include "ui_print_start_controller.h"
 
 #include <memory>
 
@@ -38,8 +39,8 @@ class PrintStartControllerTestAccess {
     static bool check(PrintStartController& c) {
         return c.check_required_filament_present();
     }
-    static bool should_warn_remap_unsupported(
-        const helix::printer::ToolMappingCapabilities& caps, bool applies_via_preprint) {
+    static bool should_warn_remap_unsupported(const helix::printer::ToolMappingCapabilities& caps,
+                                              bool applies_via_preprint) {
         return PrintStartController::should_warn_remap_unsupported(caps, applies_via_preprint);
     }
 };
@@ -61,7 +62,9 @@ struct ScopedAd5xIfsBackend {
         backend = be.get();
         AmsState::instance().set_backend(std::move(be));
     }
-    ~ScopedAd5xIfsBackend() { AmsState::instance().set_backend(nullptr); }
+    ~ScopedAd5xIfsBackend() {
+        AmsState::instance().set_backend(nullptr);
+    }
 };
 
 } // namespace

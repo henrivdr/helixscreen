@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include <vector>
+#include "wizard_step.h"       // helix::wizard::Step, StepId, StepContext
+#include "wizard_step_logic.h" // helix::StepSkip
 
-#include "wizard_step.h"        // helix::wizard::Step, StepId, StepContext
-#include "wizard_step_logic.h"  // helix::StepSkip
+#include <vector>
 
 namespace helix {
 namespace wizard {

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "gcode_error_router.h"
-
 #include "helix_test_fixture.h"
 
 #include <string>
@@ -13,7 +12,7 @@ using helix::GcodeErrorRouter;
 
 namespace {
 struct GcodeErrorRouterTest : public HelixTestFixture {};
-}  // namespace
+} // namespace
 
 // clean_error_text must handle K2's two `!!` payload shapes.
 //
@@ -44,8 +43,7 @@ TEST_CASE_METHOD(GcodeErrorRouterTest, "clean_error_text extracts pure JSON shap
     REQUIRE(text.find("unit 1 slot A") != std::string::npos);
 }
 
-TEST_CASE_METHOD(GcodeErrorRouterTest,
-                 "clean_error_text extracts embedded JSON after prefix",
+TEST_CASE_METHOD(GcodeErrorRouterTest, "clean_error_text extracts embedded JSON after prefix",
                  "[gcode_error_router]") {
     // Exact shape observed on K2 Plus 2026-05-24 when klipper_mcu was
     // shutdown. The `!` between the prefix and the JSON is Klipper's
@@ -79,8 +77,7 @@ TEST_CASE_METHOD(GcodeErrorRouterTest,
     REQUIRE(code == "key298");
 }
 
-TEST_CASE_METHOD(GcodeErrorRouterTest,
-                 "clean_error_text falls through when text has no code",
+TEST_CASE_METHOD(GcodeErrorRouterTest, "clean_error_text falls through when text has no code",
                  "[gcode_error_router]") {
     std::string text = "Generic Klipper error with no code marker";
     std::string code;
@@ -91,8 +88,7 @@ TEST_CASE_METHOD(GcodeErrorRouterTest,
     REQUIRE(text == "Generic Klipper error with no code marker");
 }
 
-TEST_CASE_METHOD(GcodeErrorRouterTest,
-                 "clean_error_text applies must-home heuristic",
+TEST_CASE_METHOD(GcodeErrorRouterTest, "clean_error_text applies must-home heuristic",
                  "[gcode_error_router]") {
     std::string text = "Must home axis first";
     std::string code;
@@ -105,8 +101,7 @@ TEST_CASE_METHOD(GcodeErrorRouterTest,
     REQUIRE(text.find("home") != std::string::npos);
 }
 
-TEST_CASE_METHOD(GcodeErrorRouterTest,
-                 "clean_error_text recovers from malformed JSON after prefix",
+TEST_CASE_METHOD(GcodeErrorRouterTest, "clean_error_text recovers from malformed JSON after prefix",
                  "[gcode_error_router]") {
     // Embedded `{"code":` substring but with broken JSON (missing close
     // quote). Brace-balance can still find an end, but parse must throw
@@ -126,8 +121,7 @@ TEST_CASE_METHOD(GcodeErrorRouterTest,
 // should_surface_replay encodes the decision: fresh -> surface, stale ->
 // suppress, unknown age -> surface (never suppress on missing data).
 
-TEST_CASE_METHOD(GcodeErrorRouterTest,
-                 "should_surface_replay surfaces a fresh error",
+TEST_CASE_METHOD(GcodeErrorRouterTest, "should_surface_replay surfaces a fresh error",
                  "[gcode_error_router]") {
     const double now = 1'000'000.0;
     // 5s old — well within the 30s window; the brief-reconnect case.
@@ -142,8 +136,7 @@ TEST_CASE_METHOD(GcodeErrorRouterTest,
     REQUIRE(GcodeErrorRouter::should_surface_replay(now - 30.0, now));
 }
 
-TEST_CASE_METHOD(GcodeErrorRouterTest,
-                 "should_surface_replay suppresses a stale error",
+TEST_CASE_METHOD(GcodeErrorRouterTest, "should_surface_replay suppresses a stale error",
                  "[gcode_error_router]") {
     const double now = 1'000'000.0;
     // 287s old — the exact #991 stale-after-restart case. Must suppress.

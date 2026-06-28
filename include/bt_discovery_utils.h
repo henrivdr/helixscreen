@@ -27,33 +27,40 @@ inline constexpr const char* MAKEID_BLE_UUID_PREFIX = "0000abf0";
 
 /// Check if a UUID string matches one of our target label printer service UUIDs.
 /// Comparison is case-insensitive on the first 8 hex characters (the UUID16 prefix).
-inline bool is_label_printer_uuid(const char* uuid)
-{
-    if (!uuid) return false;
-    if (strncasecmp(uuid, SPP_UUID_PREFIX, 8) == 0) return true;
-    if (strncasecmp(uuid, PHOMEMO_BLE_UUID_PREFIX, 8) == 0) return true;
-    if (strncasecmp(uuid, NIIMBOT_BLE_UUID_PREFIX, 8) == 0) return true;
-    if (strncasecmp(uuid, MAKEID_BLE_UUID_PREFIX, 8) == 0) return true;
+inline bool is_label_printer_uuid(const char* uuid) {
+    if (!uuid)
+        return false;
+    if (strncasecmp(uuid, SPP_UUID_PREFIX, 8) == 0)
+        return true;
+    if (strncasecmp(uuid, PHOMEMO_BLE_UUID_PREFIX, 8) == 0)
+        return true;
+    if (strncasecmp(uuid, NIIMBOT_BLE_UUID_PREFIX, 8) == 0)
+        return true;
+    if (strncasecmp(uuid, MAKEID_BLE_UUID_PREFIX, 8) == 0)
+        return true;
     return false;
 }
 
 /// Determine if a UUID indicates a BLE device.
-inline bool uuid_is_ble(const char* uuid)
-{
-    if (!uuid) return false;
-    if (strncasecmp(uuid, PHOMEMO_BLE_UUID_PREFIX, 8) == 0) return true;
-    if (strncasecmp(uuid, NIIMBOT_BLE_UUID_PREFIX, 8) == 0) return true;
-    if (strncasecmp(uuid, MAKEID_BLE_UUID_PREFIX, 8) == 0) return true;
+inline bool uuid_is_ble(const char* uuid) {
+    if (!uuid)
+        return false;
+    if (strncasecmp(uuid, PHOMEMO_BLE_UUID_PREFIX, 8) == 0)
+        return true;
+    if (strncasecmp(uuid, NIIMBOT_BLE_UUID_PREFIX, 8) == 0)
+        return true;
+    if (strncasecmp(uuid, MAKEID_BLE_UUID_PREFIX, 8) == 0)
+        return true;
     return false;
 }
 
 /// Known printer brand entry for unified matching.
 struct PrinterBrand {
     const char* prefix;
-    bool is_ble;      // true = BLE-only (no SPP/RFCOMM)
-    bool is_brother;   // true = Brother QL protocol
-    bool is_niimbot;   // true = Niimbot protocol
-    bool is_makeid;    // true = MakeID protocol
+    bool is_ble;     // true = BLE-only (no SPP/RFCOMM)
+    bool is_brother; // true = Brother QL protocol
+    bool is_niimbot; // true = Niimbot protocol
+    bool is_makeid;  // true = MakeID protocol
 };
 
 // Shared table of known label printer brands.
@@ -81,14 +88,14 @@ inline constexpr PrinterBrand KNOWN_BRANDS[] = {
     {"B21", true, false, true, false},
     {"B18", true, false, true, false},
     {"B3S", true, false, true, false},
-    {"B1",  true, false, true, false},
+    {"B1", true, false, true, false},
     {"D11", true, false, true, false},
     {"D110", true, false, true, false},
 
     // MakeID — BLE only, custom protocol
     {"MakeID", true, false, false, true},
     {"MAKEID", true, false, false, true},
-    {"YichipFPGA", true, false, false, true},  // MakeID E1 uses Yichip BLE SoC
+    {"YichipFPGA", true, false, false, true}, // MakeID E1 uses Yichip BLE SoC
 
     // Supvan / KataSymbol — BLE only
     {"Supvan", true, false, false, false},
@@ -99,12 +106,13 @@ inline constexpr PrinterBrand KNOWN_BRANDS[] = {
 };
 
 /// Find a matching brand entry for a device name, or nullptr if unknown.
-inline const PrinterBrand* find_brand(const char* name)
-{
-    if (!name || !name[0]) return nullptr;
+inline const PrinterBrand* find_brand(const char* name) {
+    if (!name || !name[0])
+        return nullptr;
 
     for (const auto& brand : KNOWN_BRANDS) {
-        if (strncasecmp(name, brand.prefix, strlen(brand.prefix)) == 0) return &brand;
+        if (strncasecmp(name, brand.prefix, strlen(brand.prefix)) == 0)
+            return &brand;
     }
 
     // Phomemo M/Q series: single letter + digits (e.g. M110, Q199)
@@ -119,50 +127,49 @@ inline const PrinterBrand* find_brand(const char* name)
 
 /// Determine if a device name indicates a BLE-only printer (no SPP/RFCOMM).
 /// Used when UUID-based detection isn't available (UUIDs resolve late on BLE).
-inline bool name_suggests_ble(const char* name)
-{
+inline bool name_suggests_ble(const char* name) {
     auto* brand = find_brand(name);
     return brand && brand->is_ble;
 }
 
 /// Check if a device name looks like a label printer.
-inline bool is_likely_label_printer(const char* name)
-{
-    if (find_brand(name)) return true;
+inline bool is_likely_label_printer(const char* name) {
+    if (find_brand(name))
+        return true;
 
     // Generic keyword match
-    if (!name || !name[0]) return false;
-    if (strcasestr(name, "printer") != nullptr) return true;
-    if (strcasestr(name, "label") != nullptr) return true;
+    if (!name || !name[0])
+        return false;
+    if (strcasestr(name, "printer") != nullptr)
+        return true;
+    if (strcasestr(name, "label") != nullptr)
+        return true;
     return false;
 }
 
 /// Check if a device name indicates a Brother QL-family printer.
-inline bool is_brother_printer(const char* name)
-{
+inline bool is_brother_printer(const char* name) {
     auto* brand = find_brand(name);
     return brand && brand->is_brother;
 }
 
 /// Check if a device name indicates a Brother PT-series (P-Touch) printer.
-inline bool is_brother_pt_printer(const char* name)
-{
-    if (!name || !name[0]) return false;
+inline bool is_brother_pt_printer(const char* name) {
+    if (!name || !name[0])
+        return false;
     return strncasecmp(name, "PT-", 3) == 0;
 }
 
 /// Check if a device name indicates a Niimbot printer.
-inline bool is_niimbot_printer(const char* name)
-{
+inline bool is_niimbot_printer(const char* name) {
     auto* brand = find_brand(name);
     return brand && brand->is_niimbot;
 }
 
 /// Check if a device name indicates a MakeID printer.
-inline bool is_makeid_printer(const char* name)
-{
+inline bool is_makeid_printer(const char* name) {
     auto* brand = find_brand(name);
     return brand && brand->is_makeid;
 }
 
-}  // namespace helix::bluetooth
+} // namespace helix::bluetooth

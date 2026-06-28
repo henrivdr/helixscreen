@@ -198,7 +198,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "InputSettingsManager jitter_threshold clamps 
     InputSettingsManager::instance().deinit_subjects();
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "InputSettingsManager scroll_guard persists and is restart-required",
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "InputSettingsManager scroll_guard persists and is restart-required",
                  "[input_settings]") {
     Config::get_instance();
     InputSettingsManager::instance().init_subjects();

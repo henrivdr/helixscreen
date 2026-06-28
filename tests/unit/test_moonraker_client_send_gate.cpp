@@ -20,9 +20,9 @@
 #include "../../include/moonraker_error.h"
 #include "hv/EventLoopThread.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <atomic>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -80,7 +80,8 @@ TEST_CASE("send_jsonrpc 1-arg returns -1 when not connected",
 TEST_CASE("send_jsonrpc 2-arg returns -1 when not connected",
           "[moonraker][client][regression][eventloop][slow]") {
     UnconnectedClient u;
-    int result = u.client_->send_jsonrpc("printer.objects.query", json{{"objects", {{"toolhead", nullptr}}}});
+    int result = u.client_->send_jsonrpc("printer.objects.query",
+                                         json{{"objects", {{"toolhead", nullptr}}}});
     REQUIRE(result < 0);
 }
 
@@ -88,8 +89,7 @@ TEST_CASE("send_jsonrpc with null error_cb refuses cleanly when not connected",
           "[moonraker][client][regression][eventloop][slow]") {
     UnconnectedClient u;
     // 4-arg overload — no error callback at all. Must not crash.
-    auto id = u.client_->send_jsonrpc(
-        "printer.info", json(),
-        [](const json&) { /* should not fire */ });
+    auto id =
+        u.client_->send_jsonrpc("printer.info", json(), [](const json&) { /* should not fire */ });
     REQUIRE(id == INVALID_REQUEST_ID);
 }

@@ -65,6 +65,58 @@ TEST_CASE_METHOD(LVGLUITestFixture, "text_input placeholder attribute sets place
 }
 
 // ============================================================================
+// placeholder_tag Translation Tests
+// ============================================================================
+
+#if LV_USE_TRANSLATION
+TEST_CASE_METHOD(LVGLUITestFixture, "text_input placeholder_tag translates the placeholder",
+                 "[text_input][xml][placeholder][i18n]") {
+    // Self-contained translation pack with a unique tag that can't collide with
+    // the app's real translations.
+    const char* pack =
+        "<translations languages=\"en de\">"
+        "  <translation tag=\"ti_test_placeholder\" en=\"Search...\" de=\"Suchen...\"/>"
+        "</translations>";
+    REQUIRE(lv_xml_register_translation_from_data(pack) == LV_RESULT_OK);
+
+    SECTION("resolves to the active language's translation") {
+        lv_translation_set_language("de");
+        const char* attrs[] = {"placeholder_tag", "ti_test_placeholder", nullptr};
+        lv_obj_t* text_input = create_text_input(test_screen(), attrs);
+        REQUIRE(text_input != nullptr);
+
+        const char* placeholder = lv_textarea_get_placeholder_text(text_input);
+        REQUIRE(placeholder != nullptr);
+        REQUIRE(std::string(placeholder) == "Suchen...");
+    }
+
+    SECTION("falls back to the base language string") {
+        lv_translation_set_language("en");
+        const char* attrs[] = {"placeholder_tag", "ti_test_placeholder", nullptr};
+        lv_obj_t* text_input = create_text_input(test_screen(), attrs);
+        REQUIRE(text_input != nullptr);
+
+        const char* placeholder = lv_textarea_get_placeholder_text(text_input);
+        REQUIRE(placeholder != nullptr);
+        REQUIRE(std::string(placeholder) == "Search...");
+    }
+
+    SECTION("placeholder_tag overrides placeholder_text when both are present") {
+        lv_translation_set_language("de");
+        // placeholder_text first, placeholder_tag second — the order the XML uses
+        const char* attrs[] = {"placeholder_text", "literal fallback", "placeholder_tag",
+                               "ti_test_placeholder", nullptr};
+        lv_obj_t* text_input = create_text_input(test_screen(), attrs);
+        REQUIRE(text_input != nullptr);
+
+        const char* placeholder = lv_textarea_get_placeholder_text(text_input);
+        REQUIRE(placeholder != nullptr);
+        REQUIRE(std::string(placeholder) == "Suchen...");
+    }
+}
+#endif // LV_USE_TRANSLATION
+
+// ============================================================================
 // Max Length Attribute Tests
 // ============================================================================
 

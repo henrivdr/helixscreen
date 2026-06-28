@@ -3,8 +3,9 @@
 
 #include "tour_overlay.h"
 
-#include "theme_manager.h"
 #include "ui_button.h"
+
+#include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -21,9 +22,13 @@ constexpr int kTooltipMaxWidth = 480;
 constexpr uint8_t kDimOpa = 140;
 
 // Spacing tokens resolved at call time from the theme (responsive per breakpoint).
-inline int highlight_outline_pad() { return theme_manager_get_spacing("space_xs"); }
-inline int tooltip_margin() { return theme_manager_get_spacing("space_sm"); }
-}  // namespace
+inline int highlight_outline_pad() {
+    return theme_manager_get_spacing("space_xs");
+}
+inline int tooltip_margin() {
+    return theme_manager_get_spacing("space_sm");
+}
+} // namespace
 
 TourOverlay::TourOverlay(std::vector<TourStep> steps, AdvanceCb on_next, SkipCb on_skip)
     : steps_(std::move(steps)), on_next_cb_(std::move(on_next)), on_skip_cb_(std::move(on_skip)) {
@@ -107,19 +112,22 @@ void TourOverlay::build_tree() {
 
 void TourOverlay::on_skip_cb(lv_event_t* e) {
     auto* self = static_cast<TourOverlay*>(lv_event_get_user_data(e));
-    if (!self || !self->on_skip_cb_) return;
+    if (!self || !self->on_skip_cb_)
+        return;
     self->on_skip_cb_();
 }
 
 void TourOverlay::on_next_cb(lv_event_t* e) {
     auto* self = static_cast<TourOverlay*>(lv_event_get_user_data(e));
-    if (!self || !self->on_next_cb_) return;
+    if (!self || !self->on_next_cb_)
+        return;
     self->on_next_cb_();
 }
 
 void TourOverlay::resolve_target(const TourStep& step, lv_area_t& out_rect, bool& out_has_target) {
     out_has_target = false;
-    if (step.target_name.empty()) return;
+    if (step.target_name.empty())
+        return;
 
     // Search the entire screen tree (home panel root + navbar + anything on layer_top below us).
     lv_obj_t* scr = lv_screen_active();
@@ -141,8 +149,7 @@ void TourOverlay::place_highlight(const lv_area_t& target_rect) {
     lv_obj_clear_flag(highlight_, LV_OBJ_FLAG_HIDDEN);
 }
 
-void TourOverlay::place_tooltip(const lv_area_t& target_rect, bool has_target,
-                                TooltipAnchor hint) {
+void TourOverlay::place_tooltip(const lv_area_t& target_rect, bool has_target, TooltipAnchor hint) {
     lv_obj_update_layout(tooltip_);
     const int screen_w = lv_display_get_horizontal_resolution(nullptr);
     const int screen_h = lv_display_get_vertical_resolution(nullptr);
@@ -189,24 +196,28 @@ void TourOverlay::place_tooltip(const lv_area_t& target_rect, bool has_target,
     };
 
     switch (hint) {
-        case TooltipAnchor::PreferBelow:
-            set_below();
-            if (fits(x, y)) break;
-            [[fallthrough]];
-        case TooltipAnchor::PreferAbove:
-            set_above();
-            if (fits(x, y)) break;
-            [[fallthrough]];
-        case TooltipAnchor::PreferRight:
-            set_right();
-            if (fits(x, y)) break;
-            [[fallthrough]];
-        case TooltipAnchor::PreferLeft:
-            set_left();
-            if (fits(x, y)) break;
-            [[fallthrough]];
-        default:
-            set_below();
+    case TooltipAnchor::PreferBelow:
+        set_below();
+        if (fits(x, y))
+            break;
+        [[fallthrough]];
+    case TooltipAnchor::PreferAbove:
+        set_above();
+        if (fits(x, y))
+            break;
+        [[fallthrough]];
+    case TooltipAnchor::PreferRight:
+        set_right();
+        if (fits(x, y))
+            break;
+        [[fallthrough]];
+    case TooltipAnchor::PreferLeft:
+        set_left();
+        if (fits(x, y))
+            break;
+        [[fallthrough]];
+    default:
+        set_below();
     }
 
     // Final clamp for edge cases.
@@ -216,13 +227,16 @@ void TourOverlay::place_tooltip(const lv_area_t& target_rect, bool has_target,
 }
 
 void TourOverlay::update_tooltip_text(const TourStep& step, size_t index, size_t total) {
-    if (!tooltip_) return;
+    if (!tooltip_)
+        return;
     lv_obj_t* title = lv_obj_find_by_name(tooltip_, "tour_title");
     lv_obj_t* body = lv_obj_find_by_name(tooltip_, "tour_body");
     lv_obj_t* next_btn = lv_obj_find_by_name(tooltip_, "tour_next_btn");
 
-    if (title) lv_label_set_text(title, lv_tr(step.title_key.c_str()));
-    if (body) lv_label_set_text(body, lv_tr(step.body_key.c_str()));
+    if (title)
+        lv_label_set_text(title, lv_tr(step.title_key.c_str()));
+    if (body)
+        lv_label_set_text(body, lv_tr(step.body_key.c_str()));
 
     // Change "Next" to "Done" on last step.
     if (next_btn) {
@@ -235,18 +249,21 @@ void TourOverlay::update_tooltip_text(const TourStep& step, size_t index, size_t
 
 void TourOverlay::update_counter(size_t index, size_t total) {
     lv_obj_t* counter = lv_obj_find_by_name(tooltip_, "tour_counter");
-    if (!counter) return;
+    if (!counter)
+        return;
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%zu / %zu", index + 1, total);
     lv_label_set_text(counter, buf);
 }
 
 void TourOverlay::show_step(size_t index) {
-    if (index >= steps_.size()) return;
+    if (index >= steps_.size())
+        return;
     // Defensive: if build_tree() failed to instantiate the tooltip component
     // (e.g. XML not registered), every placement/update path below dereferences
     // tooltip_. Skip rather than crash.
-    if (!tooltip_ || !highlight_) return;
+    if (!tooltip_ || !highlight_)
+        return;
     const TourStep& step = steps_[index];
 
     lv_area_t target_rect{};
@@ -263,4 +280,4 @@ void TourOverlay::show_step(size_t index) {
     place_tooltip(target_rect, has_target, step.anchor_hint);
 }
 
-}  // namespace helix::tour
+} // namespace helix::tour

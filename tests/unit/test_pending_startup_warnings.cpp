@@ -65,8 +65,7 @@ TEST_CASE("PendingStartupWarnings: enqueue preserves FIFO order", "[startup_warn
     REQUIRE(captured[2].severity == PendingStartupWarnings::Severity::INFO);
 }
 
-TEST_CASE("PendingStartupWarnings: deduplicates identical pending entries",
-          "[startup_warnings]") {
+TEST_CASE("PendingStartupWarnings: deduplicates identical pending entries", "[startup_warnings]") {
     auto& q = PendingStartupWarnings::instance();
     q.clear();
 

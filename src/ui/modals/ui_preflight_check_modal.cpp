@@ -73,8 +73,7 @@ void PreflightCheckModal::on_show() {
     // None-strategy backends (single-extruder / no AMS) hide the button.
     bool remap_supported = false;
     if (auto* backend = AmsState::instance().get_backend()) {
-        remap_supported =
-            backend->get_remap_strategy() != AmsBackend::RemapStrategy::None;
+        remap_supported = backend->get_remap_strategy() != AmsBackend::RemapStrategy::None;
     }
     if (auto* remap_btn = find_widget("btn_tertiary")) {
         if (remap_supported) {
@@ -186,8 +185,7 @@ void PreflightCheckModal::on_hide() {
     // on every show. Deferred via async_call so we never delete `this`
     // mid-event. Mirrors SpaghettiDetectionModal::on_hide().
     auto* self = this;
-    helix::ui::async_call([](void* data) { delete static_cast<PreflightCheckModal*>(data); },
-                          self);
+    helix::ui::async_call([](void* data) { delete static_cast<PreflightCheckModal*>(data); }, self);
 }
 
 } // namespace helix::ui

@@ -12,9 +12,9 @@
 
 #include "abort_manager.h"
 #include "app_globals.h"
-#include "printer_recovery_service.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
+#include "printer_recovery_service.h"
 #include "static_panel_registry.h"
 
 #include <spdlog/spdlog.h>

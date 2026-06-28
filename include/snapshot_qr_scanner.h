@@ -2,9 +2,8 @@
 #pragma once
 
 #include "async_lifetime_guard.h"
-#include "qr_decoder.h"
-
 #include "lvgl.h"
+#include "qr_decoder.h"
 
 #include <atomic>
 #include <functional>
@@ -38,15 +37,15 @@ class SnapshotQrScanner {
     SnapshotQrScanner& operator=(const SnapshotQrScanner&) = delete;
 
     /// Start polling the snapshot URL. Callbacks fire from background threads.
-    void start(const std::string& snapshot_url,
-               FrameCallback on_frame,
-               QrResultCallback on_qr_result,
-               ErrorCallback on_error = nullptr);
+    void start(const std::string& snapshot_url, FrameCallback on_frame,
+               QrResultCallback on_qr_result, ErrorCallback on_error = nullptr);
 
     /// Stop polling and free all buffers. Safe to call multiple times.
     void stop();
 
-    bool is_running() const { return running_.load(); }
+    bool is_running() const {
+        return running_.load();
+    }
 
     /// Signal that the UI has consumed the current frame (unblocks next fetch).
     void frame_consumed();

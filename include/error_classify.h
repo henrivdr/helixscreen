@@ -2,6 +2,7 @@
 #pragma once
 
 #include "error_event.h"
+
 #include <optional>
 #include <string>
 
@@ -13,4 +14,4 @@ namespace helix::error_classify {
 /// GcodeErrorRouter::clean_error_text for translation.
 std::optional<ErrorEvent> classify(const std::string& raw_line, const ClassifyContext& ctx);
 
-}  // namespace helix::error_classify
+} // namespace helix::error_classify

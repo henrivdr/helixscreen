@@ -137,7 +137,8 @@ lv_obj_t* ModalStack::top_dialog() const {
 std::string ModalStack::top_component_name() const {
     // Walk from top, skipping exiting entries (matches top_dialog semantics).
     for (auto it = stack_.rbegin(); it != stack_.rend(); ++it) {
-        if (!it->exiting) return it->component_name;
+        if (!it->exiting)
+            return it->component_name;
     }
     return "";
 }
@@ -643,7 +644,8 @@ bool Modal::any_visible() {
 bool Modal::rebuild_top() {
     auto& stack = ModalStack::instance();
     lv_obj_t* dialog = stack.top_dialog();
-    if (!dialog) return false;
+    if (!dialog)
+        return false;
 
     std::string name = stack.top_component_name();
     if (name.empty()) {

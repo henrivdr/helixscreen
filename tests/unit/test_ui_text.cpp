@@ -12,12 +12,13 @@
  */
 
 #include "../../include/ui_text.h"
+#include "../ui_test_utils.h"
 
 #include <spdlog/spdlog.h>
+
 #include <string>
 
 #include "../catch_amalgamated.hpp"
-#include "../ui_test_utils.h"
 
 // Test fixture for text widget tests
 class TextTest {
@@ -204,9 +205,9 @@ TEST_CASE("text_transform uppercase via event callback", "[ui_text][transform]")
 
     SECTION("Accented Latin characters are uppercased") {
         ui_text_apply_transform(label, "uppercase");
-        lv_label_set_text(label, "caf\xC3\xA9 na\xC3\xAFve");  // café naïve
+        lv_label_set_text(label, "caf\xC3\xA9 na\xC3\xAFve"); // café naïve
 
-        REQUIRE(std::string(lv_label_get_text(label)) == "CAF\xC3\x89 NA\xC3\x8FVE");  // CAFÉ NAÏVE
+        REQUIRE(std::string(lv_label_get_text(label)) == "CAF\xC3\x89 NA\xC3\x8FVE"); // CAFÉ NAÏVE
     }
 
     lv_obj_delete(label);

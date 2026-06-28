@@ -14,7 +14,8 @@ TEST_CASE_METHOD(HelixTestFixture, "PrintStatusWidget config defaults", "[print_
     REQUIRE(w.nozzle_tool_override_for_test() == "auto");
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "PrintStatusWidget config sets detailed", "[print_status][config]") {
+TEST_CASE_METHOD(HelixTestFixture, "PrintStatusWidget config sets detailed",
+                 "[print_status][config]") {
     PrintStatusWidget w;
     nlohmann::json cfg = {{"layout_style", "detailed"}, {"nozzle_tool_override", "extruder1"}};
     w.set_config(cfg);
@@ -27,7 +28,8 @@ TEST_CASE_METHOD(HelixTestFixture, "PrintStatusWidget config sets detailed", "[p
     REQUIRE(w.nozzle_tool_override_for_test() == "auto");
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "PrintStatusWidget rejects invalid layout_style", "[print_status][config]") {
+TEST_CASE_METHOD(HelixTestFixture, "PrintStatusWidget rejects invalid layout_style",
+                 "[print_status][config]") {
     PrintStatusWidget w;
     nlohmann::json cfg = {{"layout_style", "bogus"}};
     w.set_config(cfg);

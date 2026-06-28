@@ -11,58 +11,58 @@ namespace helix::ipp {
 
 /// IPP operation codes
 enum class Operation : uint16_t {
-    PRINT_JOB              = 0x0002,
-    VALIDATE_JOB           = 0x0004,
-    CREATE_JOB             = 0x0005,
-    SEND_DOCUMENT          = 0x0006,
-    CANCEL_JOB             = 0x0008,
-    GET_JOB_ATTRIBUTES     = 0x0009,
+    PRINT_JOB = 0x0002,
+    VALIDATE_JOB = 0x0004,
+    CREATE_JOB = 0x0005,
+    SEND_DOCUMENT = 0x0006,
+    CANCEL_JOB = 0x0008,
+    GET_JOB_ATTRIBUTES = 0x0009,
     GET_PRINTER_ATTRIBUTES = 0x000B,
 };
 
 /// IPP status codes (high byte = class)
 enum class StatusCode : uint16_t {
-    OK                       = 0x0000,
-    OK_IGNORED_ATTRIBUTES    = 0x0001,
-    OK_CONFLICTING           = 0x0002,
-    CLIENT_BAD_REQUEST       = 0x0400,
-    CLIENT_FORBIDDEN         = 0x0401,
+    OK = 0x0000,
+    OK_IGNORED_ATTRIBUTES = 0x0001,
+    OK_CONFLICTING = 0x0002,
+    CLIENT_BAD_REQUEST = 0x0400,
+    CLIENT_FORBIDDEN = 0x0401,
     CLIENT_NOT_AUTHENTICATED = 0x0402,
-    CLIENT_NOT_AUTHORIZED    = 0x0403,
-    CLIENT_NOT_POSSIBLE      = 0x0404,
-    CLIENT_TIMEOUT           = 0x0405,
-    CLIENT_NOT_FOUND         = 0x0406,
-    CLIENT_GONE              = 0x0407,
-    CLIENT_DOCUMENT_FORMAT   = 0x040A,
-    SERVER_INTERNAL_ERROR    = 0x0500,
-    SERVER_NOT_ACCEPTING     = 0x0502,
-    SERVER_BUSY              = 0x0503,
+    CLIENT_NOT_AUTHORIZED = 0x0403,
+    CLIENT_NOT_POSSIBLE = 0x0404,
+    CLIENT_TIMEOUT = 0x0405,
+    CLIENT_NOT_FOUND = 0x0406,
+    CLIENT_GONE = 0x0407,
+    CLIENT_DOCUMENT_FORMAT = 0x040A,
+    SERVER_INTERNAL_ERROR = 0x0500,
+    SERVER_NOT_ACCEPTING = 0x0502,
+    SERVER_BUSY = 0x0503,
 };
 
 /// IPP value type tags
 enum class ValueTag : uint8_t {
     // Delimiter tags
     OPERATION_ATTRIBUTES = 0x01,
-    JOB_ATTRIBUTES       = 0x02,
-    END_OF_ATTRIBUTES    = 0x03,
-    PRINTER_ATTRIBUTES   = 0x04,
+    JOB_ATTRIBUTES = 0x02,
+    END_OF_ATTRIBUTES = 0x03,
+    PRINTER_ATTRIBUTES = 0x04,
 
     // Value tags
-    INTEGER              = 0x21,
-    BOOLEAN              = 0x22,
-    ENUM                 = 0x23,
-    OCTET_STRING         = 0x30,
-    DATE_TIME            = 0x31,
-    RESOLUTION           = 0x32,
-    RANGE_OF_INTEGER     = 0x33,
+    INTEGER = 0x21,
+    BOOLEAN = 0x22,
+    ENUM = 0x23,
+    OCTET_STRING = 0x30,
+    DATE_TIME = 0x31,
+    RESOLUTION = 0x32,
+    RANGE_OF_INTEGER = 0x33,
     TEXT_WITHOUT_LANGUAGE = 0x41,
     NAME_WITHOUT_LANGUAGE = 0x42,
-    KEYWORD              = 0x44,
-    URI                  = 0x45,
-    URI_SCHEME           = 0x46,
-    CHARSET              = 0x47,
-    NATURAL_LANGUAGE     = 0x48,
-    MIME_MEDIA_TYPE      = 0x49,
+    KEYWORD = 0x44,
+    URI = 0x45,
+    URI_SCHEME = 0x46,
+    CHARSET = 0x47,
+    NATURAL_LANGUAGE = 0x48,
+    MIME_MEDIA_TYPE = 0x49,
 };
 
 /// An IPP attribute value (simplified -- stores raw bytes + tag)
@@ -85,8 +85,8 @@ struct IppValue {
 struct IppResponse {
     uint8_t version_major = 0;
     uint8_t version_minor = 0;
-    StatusCode status     = StatusCode::OK;
-    uint32_t request_id   = 0;
+    StatusCode status = StatusCode::OK;
+    uint32_t request_id = 0;
 
     /// Attributes grouped by delimiter tag
     std::vector<IppValue> operation_attributes;
@@ -94,7 +94,9 @@ struct IppResponse {
     std::vector<IppValue> printer_attributes;
 
     /// Is the status a success code?
-    bool is_success() const { return static_cast<uint16_t>(status) < 0x0400; }
+    bool is_success() const {
+        return static_cast<uint16_t>(status) < 0x0400;
+    }
 
     /// Find first attribute by name across all groups
     const IppValue* find_attribute(const std::string& name) const;
@@ -108,7 +110,7 @@ struct IppResponse {
 
 /// Builder for IPP request messages
 class IppRequest {
-public:
+  public:
     explicit IppRequest(Operation op, uint32_t request_id = 1);
 
     /// Add standard required operation attributes (charset, language, printer-uri)
@@ -151,7 +153,7 @@ public:
     /// Encode the IPP request + append document data (convenience for Print-Job)
     std::vector<uint8_t> encode_with_data(const std::vector<uint8_t>& document) const;
 
-private:
+  private:
     Operation operation_;
     uint32_t request_id_;
 
@@ -165,8 +167,7 @@ private:
     std::vector<Attribute> job_attrs_;
     bool in_job_group_ = false;
 
-    void add_raw_attribute(ValueTag tag, const std::string& name,
-                           const void* data, size_t len);
+    void add_raw_attribute(ValueTag tag, const std::string& name, const void* data, size_t len);
     static void encode_attribute(std::vector<uint8_t>& buf, const Attribute& attr);
 };
 
@@ -176,19 +177,16 @@ IppResponse parse_response(const std::vector<uint8_t>& data);
 
 /// Build a Get-Printer-Attributes request.
 /// requested_attributes: if empty, requests all; otherwise specific attrs.
-IppRequest build_get_printer_attributes(
-    const std::string& printer_uri,
-    const std::vector<std::string>& requested_attributes = {});
+IppRequest build_get_printer_attributes(const std::string& printer_uri,
+                                        const std::vector<std::string>& requested_attributes = {});
 
 /// Build a Print-Job request (document data appended separately)
-IppRequest build_print_job(const std::string& printer_uri,
-                           const std::string& job_name,
-                           const std::string& document_format,
-                           const std::string& media = "");
+IppRequest build_print_job(const std::string& printer_uri, const std::string& job_name,
+                           const std::string& document_format, const std::string& media = "");
 
 /// Construct an IPP printer URI from discovered mDNS info.
 /// host: hostname or IP, port: IPP port, resource_path: from mDNS TXT "rp" field.
 std::string make_printer_uri(const std::string& host, uint16_t port,
                              const std::string& resource_path = "ipp/print");
 
-}  // namespace helix::ipp
+} // namespace helix::ipp

@@ -25,10 +25,10 @@
  * These tests FAIL if any of those transitions regress.
  */
 
-#include "../catch_amalgamated.hpp"
-
 #include <array>
 #include <optional>
+
+#include "../catch_amalgamated.hpp"
 
 namespace {
 
@@ -160,8 +160,8 @@ TEST_CASE("op_failed returns to idle and keeps the error toast", "[filament][op_
     REQUIRE(sm.st(Op::Purge) == 1);
 
     sm.op_failed(Op::Purge);
-    CHECK(sm.st(Op::Purge) == 0);  // idle, not stuck on a spinner
-    CHECK(sm.error_toasts == 1);   // error/timeout toast preserved
+    CHECK(sm.st(Op::Purge) == 0); // idle, not stuck on a spinner
+    CHECK(sm.error_toasts == 1);  // error/timeout toast preserved
 }
 
 TEST_CASE("starting a new op resets the previously-active op", "[filament][op_state][char]") {
@@ -174,8 +174,8 @@ TEST_CASE("starting a new op resets the previously-active op", "[filament][op_st
 
     // User triggers Unload before Load's checkmark reverts.
     sm.op_started(Op::Unload);
-    CHECK(sm.st(Op::Unload) == 1); // new op busy
-    CHECK(sm.st(Op::Load) == 0);   // prior op force-reset to idle
+    CHECK(sm.st(Op::Unload) == 1);                             // new op busy
+    CHECK(sm.st(Op::Load) == 0);                               // prior op force-reset to idle
     CHECK(sm.phase == OpButtonStateMachine::TimerPhase::None); // stale revert cancelled
 }
 
@@ -255,9 +255,9 @@ TEST_CASE("AMS-backend load drives spinner then checkmark via ams_action IDLE, n
     // Backend runs asynchronously; AMS action eventually returns to IDLE.
     sm.now += MIN_SPINNER_VISIBLE_MS + 50; // real backend op takes time
     sm.ams_action_idle();
-    CHECK(sm.st(Op::Load) == 2);          // checkmark
-    CHECK(sm.complete_toasts == 0);       // no "Filament loaded" toast
-    CHECK_FALSE(sm.backend_op_active);    // gate cleared
+    CHECK(sm.st(Op::Load) == 2);       // checkmark
+    CHECK(sm.complete_toasts == 0);    // no "Filament loaded" toast
+    CHECK_FALSE(sm.backend_op_active); // gate cleared
     CHECK_FALSE(sm.op_in_flight.has_value());
 
     sm.fire_timer();

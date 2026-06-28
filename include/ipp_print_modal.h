@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_modal.h"
+
 #include "label_printer.h"
 #include "spoolman_types.h"
-#include "ui_modal.h"
 
 #include <functional>
 #include <string>
@@ -25,8 +26,12 @@ class IppPrintModal : public Modal {
     IppPrintModal();
     ~IppPrintModal() override = default;
 
-    const char* get_name() const override { return "IPP Print"; }
-    const char* component_name() const override { return "ipp_print_modal"; }
+    const char* get_name() const override {
+        return "IPP Print";
+    }
+    const char* component_name() const override {
+        return "ipp_print_modal";
+    }
 
     /// Configure and show the modal for a spool print job.
     /// When user confirms, executes the print with chosen settings.

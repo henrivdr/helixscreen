@@ -75,7 +75,7 @@ class PrinterDiscovery {
         int best_chamber_sensor_conf = 0;
         int best_chamber_cooling_fan_conf = 0;
 
-        constexpr int kChamberHeaterGenericWeight = 2; // settable heater — preferred
+        constexpr int kChamberHeaterGenericWeight = 2;  // settable heater — preferred
         constexpr int kChamberTemperatureFanWeight = 1; // fan — only wins if no heater_generic
 
         // Promote the current object to the best chamber heater if its keyword
@@ -168,7 +168,7 @@ class PrinterDiscovery {
             // temperature, unlike a passive temperature_sensor.
             else if (name.rfind("temperature_fan ", 0) == 0) {
                 sensors_.push_back(name);
-                fans_.push_back(name); // Also add to fans for control
+                fans_.push_back(name);                  // Also add to fans for control
                 std::string fan_name = name.substr(16); // Remove "temperature_fan " prefix
                 try_set_chamber_heater(name, fan_name, kChamberTemperatureFanWeight);
                 try_set_chamber_cooling_fan(name, fan_name);
@@ -289,9 +289,8 @@ class PrinterDiscovery {
                 has_mmu_ = true;
                 mmu_type_ = AmsType::CFS;
                 if (PrinterDetector::is_creality_k1()) {
-                    spdlog::info(
-                        "[PrinterDiscovery] 'box' object on K1-series printer — "
-                        "enabling CFS backend with K1 macro dialect (BOX_*).");
+                    spdlog::info("[PrinterDiscovery] 'box' object on K1-series printer — "
+                                 "enabling CFS backend with K1 macro dialect (BOX_*).");
                 }
             }
             // ACE detection (Anycubic ACE Pro). Native Anycubic GoKlipper
@@ -1332,7 +1331,7 @@ class PrinterDiscovery {
                                              ///< independent of the heater pick: in COOLING mode
                                              ///< the K2 M141 macro parks the setpoint on this fan's
                                              ///< target, not the heater's.
-    int chamber_fan_resting_deci_ = 0;      ///< Cooling fan's configured resting/off target
+    int chamber_fan_resting_deci_ = 0;       ///< Cooling fan's configured resting/off target
                                              ///< (decidegrees), from configfile.settings
                                              ///< target_temp. 0 = unknown. M141 S0 returns here.
     bool has_led_ = false;

@@ -163,8 +163,7 @@ void TempGraphWidget::apply_config_save(const nlohmann::json& new_config) {
 
 bool TempGraphWidget::on_edit_configure() {
     config_modal_ = std::make_unique<TempGraphConfigModal>(
-        config_,
-        [this](const nlohmann::json& new_config) { apply_config_save(new_config); });
+        config_, [this](const nlohmann::json& new_config) { apply_config_save(new_config); });
     config_modal_->show(lv_screen_active());
     return true;
 }
@@ -222,8 +221,8 @@ std::vector<TempGraphSeriesSpec> TempGraphWidget::build_series_from_config() con
         const std::string klipper_name = entry["name"].get<std::string>();
         bool enabled;
         if (use_snapshot) {
-            enabled = std::find(snapshot->begin(), snapshot->end(), klipper_name) !=
-                      snapshot->end();
+            enabled =
+                std::find(snapshot->begin(), snapshot->end(), klipper_name) != snapshot->end();
         } else {
             enabled = entry.value("enabled", true);
         }
@@ -352,8 +351,7 @@ bool TempGraphWidget::merge_discovered_extruders(nlohmann::json& config, bool en
             continue;
         lv_color_t c = TEMP_GRAPH_SERIES_COLORS[color_idx % TEMP_GRAPH_PALETTE_SIZE];
         uint32_t color_hex = (static_cast<uint32_t>(c.red) << 16) |
-                             (static_cast<uint32_t>(c.green) << 8) |
-                             static_cast<uint32_t>(c.blue);
+                             (static_cast<uint32_t>(c.green) << 8) | static_cast<uint32_t>(c.blue);
         nlohmann::json row;
         row["name"] = name;
         row["enabled"] = enabled;
@@ -412,8 +410,8 @@ void TempGraphWidget::TempGraphConfigModal::on_ok() {
         on_save_(new_config);
     }
 
-    spdlog::info("[TempGraphConfigModal] Saved config with {} sensors (follow={})",
-                 sensors.size(), new_config["follow_overlay"].get<bool>());
+    spdlog::info("[TempGraphConfigModal] Saved config with {} sensors (follow={})", sensors.size(),
+                 new_config["follow_overlay"].get<bool>());
     hide();
 }
 
@@ -541,10 +539,9 @@ void TempGraphWidget::TempGraphConfigModal::populate_sensor_list() {
                    is_extruder_name(entry["name"].get<std::string>());
         };
         auto split = std::stable_partition(arr.begin(), arr.end(), entry_is_extruder);
-        std::sort(arr.begin(), split,
-                  [](const nlohmann::json& a, const nlohmann::json& b) {
-                      return a["name"].get<std::string>() < b["name"].get<std::string>();
-                  });
+        std::sort(arr.begin(), split, [](const nlohmann::json& a, const nlohmann::json& b) {
+            return a["name"].get<std::string>() < b["name"].get<std::string>();
+        });
     }
 
     const auto& sensors = config_["sensors"];

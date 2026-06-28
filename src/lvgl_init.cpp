@@ -138,9 +138,9 @@ bool init_lvgl(int width, int height, LvglContext& ctx) {
 
         // Cooldown window for the post-scroll click guard. 80 ms matches most
         // controllers; raise if users still see phantom taps at lift-off.
-        int scroll_guard_cooldown = cfg->get<int>(
-            "/input/scroll_guard_cooldown_ms",
-            static_cast<int>(TouchJitterFilter::SCROLL_GUARD_COOLDOWN_MS_DEFAULT));
+        int scroll_guard_cooldown =
+            cfg->get<int>("/input/scroll_guard_cooldown_ms",
+                          static_cast<int>(TouchJitterFilter::SCROLL_GUARD_COOLDOWN_MS_DEFAULT));
         const char* env_cooldown = std::getenv("HELIX_SCROLL_GUARD_COOLDOWN_MS");
         if (env_cooldown) {
             scroll_guard_cooldown = std::atoi(env_cooldown);

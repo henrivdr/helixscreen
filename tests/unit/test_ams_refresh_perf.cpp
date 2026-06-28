@@ -1,13 +1,14 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "ams_state.h"
-#include "ams_backend_mock.h"
-#include "ui_spool_canvas.h"
 #include "ui_ams_slot.h"
+#include "ui_spool_canvas.h"
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "ams_backend_mock.h"
+#include "ams_state.h"
+
 #include "../catch_amalgamated.hpp"
 
 using namespace helix;
@@ -28,8 +29,7 @@ static void drain() {
 // Test 1: Conditional bump_slots_version — no-op on identical sync
 // ============================================================================
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "AMS slots_version does not increment on identical sync",
+TEST_CASE_METHOD(LVGLTestFixture, "AMS slots_version does not increment on identical sync",
                  "[ams][perf]") {
     auto& ams = AmsState::instance();
     ams.init_subjects(false);
@@ -76,8 +76,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 // Test 2: Spool canvas dirty guard — set_color
 // ============================================================================
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "Spool canvas set_color guards redundant redraws",
+TEST_CASE_METHOD(LVGLTestFixture, "Spool canvas set_color guards redundant redraws",
                  "[ams][perf]") {
     lv_obj_t* canvas = ui_spool_canvas_create(test_screen(), 64);
     REQUIRE(canvas != nullptr);
@@ -108,8 +107,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 // Test 3: Spool canvas dirty guard — set_fill_level
 // ============================================================================
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "Spool canvas set_fill_level guards redundant redraws",
+TEST_CASE_METHOD(LVGLTestFixture, "Spool canvas set_fill_level guards redundant redraws",
                  "[ams][perf]") {
     lv_obj_t* canvas = ui_spool_canvas_create(test_screen(), 64);
     REQUIRE(canvas != nullptr);
@@ -145,9 +143,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 // Test 4: ui_ams_slot_refresh does not crash with null
 // ============================================================================
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "ui_ams_slot_refresh is safe with null widget",
-                 "[ams][perf]") {
+TEST_CASE_METHOD(LVGLTestFixture, "ui_ams_slot_refresh is safe with null widget", "[ams][perf]") {
     // ui_ams_slot_refresh should only update material/badge/error,
     // not observer-owned properties like color/status/highlight.
     // Verify it handles null gracefully as a no-op.

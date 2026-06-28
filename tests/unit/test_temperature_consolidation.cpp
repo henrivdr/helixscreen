@@ -5,9 +5,9 @@
 
 #include "theme_manager.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <string>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix::ui::temperature;
 

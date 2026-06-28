@@ -1,9 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "label_bitmap.h"
+
+#include "../catch_amalgamated.hpp"
 
 using helix::LabelBitmap;
 
@@ -74,10 +74,10 @@ TEST_CASE("LabelBitmap::set_pixel/get_pixel round-trip", "[label]") {
     }
 
     SECTION("out-of-bounds set is no-op") {
-        bmp.set_pixel(-1, 0, true);   // Should not crash
-        bmp.set_pixel(32, 0, true);   // Should not crash
-        bmp.set_pixel(0, -1, true);   // Should not crash
-        bmp.set_pixel(0, 16, true);   // Should not crash
+        bmp.set_pixel(-1, 0, true); // Should not crash
+        bmp.set_pixel(32, 0, true); // Should not crash
+        bmp.set_pixel(0, -1, true); // Should not crash
+        bmp.set_pixel(0, 16, true); // Should not crash
     }
 }
 

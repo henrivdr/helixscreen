@@ -72,7 +72,8 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: flat style builds spool rings",
     REQUIRE(slot != nullptr);
     lv_obj_t* spool_container = UITest::find_by_name(slot, "spool_container");
     REQUIRE(spool_container != nullptr);
-    REQUIRE(lv_obj_get_child_count(spool_container) >= 4); // outer/filament/hub + placeholder + error (+badges)
+    REQUIRE(lv_obj_get_child_count(spool_container) >=
+            4); // outer/filament/hub + placeholder + error (+badges)
     lv_obj_delete(slot);
     // Restore default so sibling tests (which assume 3D) are not affected.
     helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");

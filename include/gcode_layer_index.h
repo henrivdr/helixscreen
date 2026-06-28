@@ -3,12 +3,12 @@
 
 #pragma once
 
+#include "gcode_parser.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
-
-#include "gcode_parser.h"
 
 namespace helix {
 namespace gcode {
@@ -62,9 +62,10 @@ struct LayerIndexStats {
     size_t extrusion_moves{0};  ///< Count of G1 E+ moves
     size_t travel_moves{0};     ///< Count of G0/G1 without extrusion
     double build_time_ms{0.0};  ///< Time to build index
-    std::string filament_color;              ///< First filament color hex from metadata (palette[0]; legacy)
-    std::vector<std::string> filament_palette; ///< All filament colors from semicolon-separated metadata
-    int initial_tool_index{-1};               ///< First T-command seen in the file (-1 = none)
+    std::string filament_color; ///< First filament color hex from metadata (palette[0]; legacy)
+    std::vector<std::string>
+        filament_palette;       ///< All filament colors from semicolon-separated metadata
+    int initial_tool_index{-1}; ///< First T-command seen in the file (-1 = none)
 };
 
 /**

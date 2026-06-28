@@ -39,8 +39,7 @@ static uint32_t read_be32(const uint8_t* p) {
 //   MED 0x1F = Note delay/retrig    → depends on nybbles
 // ---------------------------------------------------------------------------
 
-static void remap_med_effect(uint8_t med_cmd, uint8_t med_data,
-                             uint8_t& pt_cmd, uint8_t& pt_data) {
+static void remap_med_effect(uint8_t med_cmd, uint8_t med_data, uint8_t& pt_cmd, uint8_t& pt_data) {
     switch (med_cmd) {
     case 0x00: // Arpeggio
     case 0x01: // Portamento up
@@ -142,7 +141,7 @@ static void remap_med_effect(uint8_t med_cmd, uint8_t med_data,
 // ---------------------------------------------------------------------------
 
 std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
-    static constexpr size_t kHeaderSize = 20;  // bare minimum to read the main header
+    static constexpr size_t kHeaderSize = 20; // bare minimum to read the main header
     static constexpr size_t kMaxInstruments = 64;
     static constexpr size_t kChannels = 4;
 
@@ -168,7 +167,8 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
     //   8  : song_offset (uint32)
     //   12 : (reserved)
     //   16 : blockarr_offset (uint32)
-    if (size < 20) return std::nullopt;
+    if (size < 20)
+        return std::nullopt;
 
     uint32_t song_offset = read_be32(data + 8);
     uint32_t blockarr_offset = read_be32(data + 16);
@@ -233,7 +233,8 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
     } else {
         order_count = songlen;
     }
-    if (order_count > 256) order_count = 256;
+    if (order_count > 256)
+        order_count = 256;
 
     uint16_t deftempo = read_be16(data + fields_off + 260);
     uint8_t flags = data[fields_off + 263];
@@ -243,7 +244,9 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
     uint8_t tempo;
     if (flags & 0x20) {
         // BPM mode: deftempo is directly the BPM
-        tempo = (deftempo == 0) ? 125u : static_cast<uint8_t>(std::clamp(static_cast<int>(deftempo), 32, 255));
+        tempo = (deftempo == 0)
+                    ? 125u
+                    : static_cast<uint8_t>(std::clamp(static_cast<int>(deftempo), 32, 255));
     } else {
         // CIA mode: BPM ≈ 4926 / deftempo (PAL timing)
         if (deftempo == 0) {
@@ -268,7 +271,7 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
     TrackerModule mod;
     mod.tempo = tempo;
     mod.speed = speed;
-    mod.rows_per_pattern = 64;  // default; updated to max across all blocks below
+    mod.rows_per_pattern = 64; // default; updated to max across all blocks below
     mod.num_orders = static_cast<uint8_t>(std::min<int>(order_count, 255));
 
     // Build order table
@@ -297,7 +300,7 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
         }
 
         uint16_t num_tracks;
-        uint16_t num_lines;   // rows - 1
+        uint16_t num_lines; // rows - 1
         size_t note_data_off;
 
         if (is_mmd23) {
@@ -324,8 +327,10 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
 
         uint16_t rows = num_lines + 1;
         // Clamp to sane range
-        if (rows == 0 || rows > 256) rows = 64;
-        if (num_tracks == 0 || num_tracks > 128) num_tracks = 4;
+        if (rows == 0 || rows > 256)
+            rows = 64;
+        if (num_tracks == 0 || num_tracks > 128)
+            num_tracks = 4;
         max_rows = std::max(max_rows, rows);
 
         mod.patterns[b].resize(rows * kChannels, TrackerNote{});
@@ -335,22 +340,25 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
         size_t block_data_size = static_cast<size_t>(rows) * num_tracks * bytes_per_note;
 
         if (note_data_off + block_data_size > size) {
-            spdlog::warn("tracker: MED block[{}] note data out of bounds (need {} bytes from 0x{:x})",
-                         b, block_data_size, note_data_off);
+            spdlog::warn(
+                "tracker: MED block[{}] note data out of bounds (need {} bytes from 0x{:x})", b,
+                block_data_size, note_data_off);
             // Fill what we can below with partial read; rest stays zero
         }
 
         bool truncated = false;
         for (uint16_t row = 0; row < rows && !truncated; ++row) {
             for (uint16_t ch = 0; ch < num_tracks; ++ch) {
-                size_t cell_off = note_data_off + (static_cast<size_t>(row) * num_tracks + ch) * bytes_per_note;
+                size_t cell_off =
+                    note_data_off + (static_cast<size_t>(row) * num_tracks + ch) * bytes_per_note;
                 if (cell_off + bytes_per_note > size) {
                     truncated = true;
                     break;
                 }
 
                 // Only store first kChannels (4) channels
-                if (ch >= kChannels) continue;
+                if (ch >= kChannels)
+                    continue;
 
                 TrackerNote& note = mod.patterns[b][row * kChannels + ch];
 
@@ -364,8 +372,9 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
                     // MED note 0 = no note, 1..N = actual notes
                     // MED note 1 = C-1 in Amiga octave notation = our note 13
                     // (add 12: MED note 1 → our note 13)
-                    note.note = (raw_note == 0) ? 0u : static_cast<uint8_t>(
-                        std::clamp(static_cast<int>(raw_note) - 12, 1, 84));
+                    note.note = (raw_note == 0) ? 0u
+                                                : static_cast<uint8_t>(std::clamp(
+                                                      static_cast<int>(raw_note) - 12, 1, 84));
                     note.instrument = instr;
 
                     // Remap MED effects to ProTracker equivalents.
@@ -386,8 +395,9 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
                     uint8_t effect = b1 & 0x0F;
                     uint8_t effect_data = b2;
 
-                    note.note = (raw_note == 0) ? 0u : static_cast<uint8_t>(
-                        std::clamp(static_cast<int>(raw_note) - 12, 1, 84));
+                    note.note = (raw_note == 0) ? 0u
+                                                : static_cast<uint8_t>(std::clamp(
+                                                      static_cast<int>(raw_note) - 12, 1, 84));
                     note.instrument = instr;
                     // MMD0/1 only has 4-bit effect commands (0x0-0xF).
                     // Commands 0x0-0xC match ProTracker. 0xD = MED volume slide
@@ -408,16 +418,30 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
         mod.instruments[i].finetune = 0.0f;
         // Assign waveforms by instrument role (fallback when no PCM sample):
         switch (i) {
-        case 1: mod.instruments[i].waveform = Waveform::SAW; break;
-        case 2: mod.instruments[i].waveform = Waveform::SAW; break;
-        case 3: mod.instruments[i].waveform = Waveform::TRIANGLE; break;
-        case 4: mod.instruments[i].waveform = Waveform::SAW; break;
-        case 5: mod.instruments[i].waveform = Waveform::SINE; break;
-        case 6: mod.instruments[i].waveform = Waveform::SINE; break;
-        case 7: mod.instruments[i].waveform = Waveform::SQUARE; break;
+        case 1:
+            mod.instruments[i].waveform = Waveform::SAW;
+            break;
+        case 2:
+            mod.instruments[i].waveform = Waveform::SAW;
+            break;
+        case 3:
+            mod.instruments[i].waveform = Waveform::TRIANGLE;
+            break;
+        case 4:
+            mod.instruments[i].waveform = Waveform::SAW;
+            break;
+        case 5:
+            mod.instruments[i].waveform = Waveform::SINE;
+            break;
+        case 6:
+            mod.instruments[i].waveform = Waveform::SINE;
+            break;
+        case 7:
+            mod.instruments[i].waveform = Waveform::SQUARE;
+            break;
         default:
-            static const Waveform kFallback[] = {Waveform::TRIANGLE, Waveform::SAW,
-                                                  Waveform::SINE, Waveform::SQUARE};
+            static const Waveform kFallback[] = {Waveform::TRIANGLE, Waveform::SAW, Waveform::SINE,
+                                                 Waveform::SQUARE};
             mod.instruments[i].waveform = kFallback[i % 4];
             break;
         }
@@ -426,18 +450,20 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
     // Extract PCM sample data from smplarr (sample pointer array)
     uint32_t smplarr_offset = read_be32(data + 24);
     if (smplarr_offset > 0 && smplarr_offset < size) {
-        size_t max_instruments = std::min(static_cast<size_t>(63),
-                                           (size - smplarr_offset) / 4);
+        size_t max_instruments = std::min(static_cast<size_t>(63), (size - smplarr_offset) / 4);
         for (size_t i = 0; i < max_instruments && i < mod.instruments.size(); ++i) {
             uint32_t sample_ptr = read_be32(data + smplarr_offset + i * 4);
-            if (sample_ptr == 0 || sample_ptr >= size) continue;
+            if (sample_ptr == 0 || sample_ptr >= size)
+                continue;
 
             // InstrHdr: length(4 bytes), type(2 bytes)
-            if (sample_ptr + 6 > size) continue;
+            if (sample_ptr + 6 > size)
+                continue;
             uint32_t sample_length = read_be32(data + sample_ptr);
             uint16_t sample_type = read_be16(data + sample_ptr + 4);
 
-            if (sample_length == 0) continue;
+            if (sample_length == 0)
+                continue;
 
             // MED sample type flags: bit 4 = stereo, bit 5 = 16-bit
             bool is_16bit = (sample_type & 0x20) != 0;
@@ -452,13 +478,15 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
             if (is_16bit) {
                 // 16-bit big-endian signed PCM
                 size_t num_samples = sample_length / 2;
-                if (is_stereo) num_samples /= 2; // mix to mono
+                if (is_stereo)
+                    num_samples /= 2; // mix to mono
                 mod.instruments[i].sample_data.resize(num_samples);
                 for (size_t s = 0; s < num_samples; ++s) {
                     size_t byte_off = pcm_offset + s * 2 * (is_stereo ? 2 : 1);
-                    if (byte_off + 1 >= size) break;
-                    auto raw = static_cast<int16_t>(
-                        (static_cast<int16_t>(data[byte_off]) << 8) | data[byte_off + 1]);
+                    if (byte_off + 1 >= size)
+                        break;
+                    auto raw = static_cast<int16_t>((static_cast<int16_t>(data[byte_off]) << 8) |
+                                                    data[byte_off + 1]);
                     mod.instruments[i].sample_data[s] = static_cast<float>(raw) / 32768.0f;
                 }
             } else {
@@ -467,7 +495,8 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
                 mod.instruments[i].sample_data.resize(num_samples);
                 for (size_t s = 0; s < num_samples; ++s) {
                     size_t byte_off = pcm_offset + s * (is_stereo ? 2 : 1);
-                    if (byte_off >= size) break;
+                    if (byte_off >= size)
+                        break;
                     auto raw = static_cast<int8_t>(data[byte_off]);
                     mod.instruments[i].sample_data[s] = static_cast<float>(raw) / 128.0f;
                 }
@@ -476,7 +505,7 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
             // MED loop points are in expdata which we don't parse yet
             mod.instruments[i].loop_start = 0;
             mod.instruments[i].loop_length = 0;
-            mod.instruments[i].c4_rate = 8287;  // standard Amiga C-4 rate
+            mod.instruments[i].c4_rate = 8287; // standard Amiga C-4 rate
 
             mod.has_samples = true;
         }
@@ -491,6 +520,6 @@ std::optional<TrackerModule> parse_med(const uint8_t* data, size_t size) {
     return mod;
 }
 
-}  // namespace helix::audio
+} // namespace helix::audio
 
-#endif  // HELIX_HAS_TRACKER
+#endif // HELIX_HAS_TRACKER

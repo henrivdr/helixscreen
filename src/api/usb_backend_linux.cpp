@@ -216,9 +216,9 @@ bool UsbBackendLinux::is_usb_mount(const std::string& device, const std::string&
     }
 
     // Common USB mount points (includes /tmp/udisk/ for Creality K1C, #610)
-    bool is_usb_path = (mount_point.find("/media/") == 0 || mount_point.find("/mnt/") == 0 ||
-                        mount_point.find("/run/media/") == 0 ||
-                        mount_point.find("/tmp/udisk/") == 0);
+    bool is_usb_path =
+        (mount_point.find("/media/") == 0 || mount_point.find("/mnt/") == 0 ||
+         mount_point.find("/run/media/") == 0 || mount_point.find("/tmp/udisk/") == 0);
     if (!is_usb_path) {
         return false;
     }

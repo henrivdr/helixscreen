@@ -193,7 +193,6 @@ class FanControlOverlay : public OverlayBase {
 
     void update_auto_fan_animation(AutoFanCard& card, int speed_pct);
     void refresh_all_auto_fan_animations();
-
 };
 
 /**

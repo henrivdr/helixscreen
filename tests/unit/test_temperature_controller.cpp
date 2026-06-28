@@ -1,15 +1,14 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "temperature_controller.h"
-
 #include "../../include/moonraker_client_mock.h"
+#include "../test_helpers/temperature_controller_test_access.h"
 #include "app_globals.h"
 #include "moonraker_api.h"
 #include "panel_widget_manager.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "settings_manager.h"
-#include "../test_helpers/temperature_controller_test_access.h"
+#include "temperature_controller.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -47,12 +46,10 @@ TEST_CASE("TemperatureController resolves heater names", "[temp_controller]") {
         hardware.parse_objects(objects);
         f.state.set_hardware(hardware);
 
-        REQUIRE(f.controller.resolved_name(HeaterType::Chamber) ==
-                "heater_generic chamber_heater");
+        REQUIRE(f.controller.resolved_name(HeaterType::Chamber) == "heater_generic chamber_heater");
     }
     SECTION("nozzle is the active extruder") {
-        REQUIRE(f.controller.resolved_name(HeaterType::Nozzle) ==
-                f.state.active_extruder_name());
+        REQUIRE(f.controller.resolved_name(HeaterType::Nozzle) == f.state.active_extruder_name());
     }
 }
 
@@ -110,12 +107,11 @@ TEST_CASE("TemperatureController set_target routes to the resolved name", "[temp
     // malformed one).
     bool success_fired = false;
     bool error_fired = false;
-    f.controller.set_target(HeaterType::Chamber, 45.0,
-                            helix::SendOptions{.toast = false,
-                                              .on_success = [&] { success_fired = true; },
-                                              .on_error = [&](const MoonrakerError&) {
-                                                  error_fired = true;
-                                              }});
+    f.controller.set_target(
+        HeaterType::Chamber, 45.0,
+        helix::SendOptions{.toast = false,
+                           .on_success = [&] { success_fired = true; },
+                           .on_error = [&](const MoonrakerError&) { error_fired = true; }});
 
     REQUIRE(success_fired);
     REQUIRE_FALSE(error_fired);
@@ -145,12 +141,11 @@ TEST_CASE("TemperatureController reports an error when the chamber heater is not
         f.client.clear_gcode_script_history();
         bool error_fired = false;
         bool success_fired = false;
-        f.controller.set_target(HeaterType::Chamber, 50.0,
-                                helix::SendOptions{.toast = true,
-                                                  .on_success = [&] { success_fired = true; },
-                                                  .on_error = [&](const MoonrakerError&) {
-                                                      error_fired = true;
-                                                  }});
+        f.controller.set_target(
+            HeaterType::Chamber, 50.0,
+            helix::SendOptions{.toast = true,
+                               .on_success = [&] { success_fired = true; },
+                               .on_error = [&](const MoonrakerError&) { error_fired = true; }});
 
         REQUIRE(error_fired);
         REQUIRE_FALSE(success_fired);
@@ -163,12 +158,11 @@ TEST_CASE("TemperatureController reports an error when the chamber heater is not
         f.client.clear_gcode_script_history();
         bool error_fired = false;
         bool success_fired = false;
-        f.controller.set_target(HeaterType::Chamber, 50.0,
-                                helix::SendOptions{.toast = false,
-                                                  .on_success = [&] { success_fired = true; },
-                                                  .on_error = [&](const MoonrakerError&) {
-                                                      error_fired = true;
-                                                  }});
+        f.controller.set_target(
+            HeaterType::Chamber, 50.0,
+            helix::SendOptions{.toast = false,
+                               .on_success = [&] { success_fired = true; },
+                               .on_error = [&](const MoonrakerError&) { error_fired = true; }});
 
         REQUIRE_FALSE(error_fired);
         REQUIRE_FALSE(success_fired);
@@ -180,6 +174,7 @@ TEST_CASE("TemperatureController reports an error when the chamber heater is not
 TEST_CASE("get_temperature_controller returns the registered shared resource",
           "[temp_controller][globals]") {
     helix::TemperatureController ctrl(get_printer_state(), nullptr);
-    helix::PanelWidgetManager::instance().register_shared_resource<helix::TemperatureController>(&ctrl);
+    helix::PanelWidgetManager::instance().register_shared_resource<helix::TemperatureController>(
+        &ctrl);
     REQUIRE(get_temperature_controller() == &ctrl);
 }

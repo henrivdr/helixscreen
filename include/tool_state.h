@@ -184,8 +184,8 @@ class ToolState {
 
     std::vector<ToolInfo> tools_;
     int active_tool_index_ = 0;
-    std::string config_dir_ = "config"; ///< Directory for local JSON persistence
-    bool spool_dirty_ = false;          ///< True when spool data changed since last save
+    std::string config_dir_ = "config";     ///< Directory for local JSON persistence
+    bool spool_dirty_ = false;              ///< True when spool data changed since last save
     bool spool_assignments_loaded_ = false; ///< True after load_spool_assignments() completes
 
     // AMS topology override (set by AMS backends that multiplex tools, e.g. AFC).

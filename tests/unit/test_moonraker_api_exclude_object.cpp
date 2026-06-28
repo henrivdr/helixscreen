@@ -389,7 +389,6 @@ TEST_CASE_METHOD(ExcludeObjectTestFixture, "exclude_object accepts valid object 
             REQUIRE(captured_error.type != MoonrakerErrorType::VALIDATION_ERROR);
         }
     }
-
 }
 
 // ============================================================================

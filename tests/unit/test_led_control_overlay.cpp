@@ -15,11 +15,10 @@
  * @see LedSettingsOverlay::populate_auto_state_rows() (the mirrored capability gate)
  */
 
-#include "led/ui_led_control_overlay.h"
-
 #include "../lvgl_test_fixture.h"
 #include "led/led_backend.h"
 #include "led/led_controller.h"
+#include "led/ui_led_control_overlay.h"
 #include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
@@ -142,8 +141,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     ctrl.deinit();
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "LedControlOverlay: color picker hidden for output_pin backend",
+TEST_CASE_METHOD(LVGLTestFixture, "LedControlOverlay: color picker hidden for output_pin backend",
                  "[led][control_overlay]") {
     auto& ctrl = LedController::instance();
     ctrl.deinit();

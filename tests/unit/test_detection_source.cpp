@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "../catch_amalgamated.hpp"
 #include "../test_fixtures.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "detection_source.h"
 #include "printer_state.h"
 #include "u1_stock_detection_source.h"
+
+#include "../catch_amalgamated.hpp"
 
 using helix::detection::DetectionEvent;
 using helix::detection::DetectionKind;
@@ -95,10 +96,9 @@ TEST_CASE_METHOD(XMLTestFixture, "U1StockSource fires once per pause edge",
     src.start();
 
     state().update_from_status(json{{"print_stats", {{"state", "printing"}}}});
-    state().update_from_status(json{{"print_stats",
-                                     {{"state", "paused"},
-                                      {"exception",
-                                       {{"code", 2}, {"message", "detected noodle"}}}}}});
+    state().update_from_status(json{
+        {"print_stats",
+         {{"state", "paused"}, {"exception", {{"code", 2}, {"message", "detected noodle"}}}}}});
     // redundant paused frame -> no second event
     state().update_from_status(json{{"print_stats", {{"state", "paused"}}}});
     helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());

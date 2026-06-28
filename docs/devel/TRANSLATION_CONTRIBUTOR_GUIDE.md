@@ -22,7 +22,7 @@ For the *implementation* of the translation system — how strings get from YAML
 | `ru` | `translations/ru.yml` | Russian |
 | `zh` | `translations/zh.yml` | Chinese (Simplified) |
 
-All files have identical keys — 1,971 strings — and differ only in their translated values. If English adds a new string, `make translation-sync` propagates the key to every other language file with the English value as a placeholder, marked for a human to fix.
+All files have identical keys — every key in `en.yml` (~2,400 strings) — and differ only in their translated values. If English adds a new string, `make translation-sync` propagates the key to every other language file with the English value as a placeholder, marked for a human to fix.
 
 ---
 
@@ -148,7 +148,7 @@ translations:
 
 ### Step 3: Translate
 
-Walk through every entry and replace the English value with the translated value. All 1,971 strings.
+Walk through every entry and replace the English value with the translated value — every key in the file.
 
 This is a significant undertaking — realistically 10–20 hours for a solo translator who knows the domain well. Break it into sessions. Commit as you go so your work is never in a half-state.
 
@@ -209,6 +209,12 @@ HelixScreen's English source text aims for:
 
 Match that register in your translation. If your language has a formal/informal `you` distinction (Sie/du, vous/tu), pick the register the existing translations use and stay consistent — check how other strings address the user and match them.
 
+### Stay consistent with the glossary
+
+`translations/GLOSSARY.md` is the canonical reference for how recurring HelixScreen terms (extruder, bed mesh, retraction, slot, …) are rendered in each language. It's generated from the YAML by `make translation-glossary` (or `python scripts/translation_sync.py glossary`).
+
+**The rule, for every translator — human or agent:** reuse the glossary's term for a concept. For terms that aren't in the glossary, grep the target `translations/<lang>.yml` and reuse the dominant existing rendering. **Never coin a new word for a concept that's already translated somewhere in the file** — inconsistent terminology for the same thing is the most common quality problem in a large translation, and it's the easiest to avoid.
+
 ---
 
 ## Testing locally
@@ -218,7 +224,7 @@ You don't need a build setup to edit YAML. You do need a build to see your trans
 ### Quick test (if you have the dev environment)
 
 ```bash
-make -j                              # rebuild with regenerated translation tables
+make -j                              # rebuild with regenerated translation packs
 ./build/bin/helix-screen --test -vv  # run with mock printer
 # Settings → Display & Sound → Language → <your language>
 ```
@@ -245,7 +251,7 @@ Submit the PR without local testing. Note in the PR description that you didn't 
    - What language / what area
    - Your qualifications (native speaker? professional translator? just fluent?)
    - Anything you were uncertain about and want a second opinion on
-4. **Regenerated artifacts** (`src/generated/lv_i18n_translations.*`, `ui_xml/translations/translations.xml`) should also be committed. They're not gitignored because cross-compile targets need them. If you didn't run the build, note that and we'll regenerate during review.
+4. **Commit the regenerated artifacts too.** The source `translations/*.yml` plus the runtime XML packs (`ui_xml/translations/*.xml`) belong in the same PR — they're not gitignored because the running app loads them directly. If you changed any Chinese or Japanese strings, also commit the regenerated CJK runtime fonts (`assets/fonts/cjk/*.bin`) — that font is subset to exactly the characters used, so new glyphs need `make regen-fonts`. (There's no `src/generated/lv_i18n_translations.*` to commit anymore — that legacy table was removed.) If you didn't run the build, note that and we'll regenerate during review.
 
 Translations don't need to be complete in a single PR. If you want to translate a panel's worth of strings and submit, then do another panel next week, that's welcome. Partial translations are better than no translation.
 
@@ -261,6 +267,7 @@ Translations don't need to be complete in a single PR. If you want to translate 
 
 ## Related docs
 
+- [translations/GLOSSARY.md](../../translations/GLOSSARY.md) — canonical per-language renderings of recurring terms; reuse these for consistency
 - [TRANSLATION_SYSTEM.md](TRANSLATION_SYSTEM.md) — implementation internals (for developers modifying the translation system itself)
 - [CONTRIBUTOR_GOTCHAS.md § Translations](CONTRIBUTOR_GOTCHAS.md#translations) — silent-failure traps when working with translations in code
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — general contribution guide

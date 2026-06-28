@@ -9,7 +9,6 @@
 
 #include "border_radius_sizes.h"
 #include "config.h"
-
 #include "helix-xml/src/libs/expat/expat.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/lvgl.h"

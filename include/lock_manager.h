@@ -19,7 +19,7 @@ namespace helix {
  * Thread safety: main UI thread only.
  */
 class LockManager {
-public:
+  public:
     static LockManager& instance();
 
     /** Returns true if a PIN hash is stored. */
@@ -58,7 +58,7 @@ public:
     /** Initialise LVGL subjects for UI binding (call after lv_init()). */
     void init_subjects();
 
-private:
+  private:
     LockManager();
 
     // Allow test fixture to reset internal state without public test methods.

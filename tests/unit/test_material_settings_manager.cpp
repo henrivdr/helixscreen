@@ -16,7 +16,7 @@ class TestAccess {
         mgr.initialized_ = false;
     }
 };
-}  // namespace helix
+} // namespace helix
 
 using namespace helix;
 using namespace filament;
@@ -288,7 +288,8 @@ TEST_CASE_METHOD(MaterialSettingsFixture, "MaterialSettingsManager macro with te
     MaterialSettingsManager::instance().clear_override("ABS");
 }
 
-TEST_CASE_METHOD(MaterialSettingsFixture, "MaterialSettingsManager absent macro_handles_heating defaults true",
+TEST_CASE_METHOD(MaterialSettingsFixture,
+                 "MaterialSettingsManager absent macro_handles_heating defaults true",
                  "[material_settings]") {
     Config::get_instance();
     MaterialSettingsManager::instance().init();
@@ -305,7 +306,8 @@ TEST_CASE_METHOD(MaterialSettingsFixture, "MaterialSettingsManager absent macro_
     MaterialSettingsManager::instance().clear_override("TPU");
 }
 
-TEST_CASE_METHOD(MaterialSettingsFixture, "Preheat macro override: macro_handles_heating true skips temps",
+TEST_CASE_METHOD(MaterialSettingsFixture,
+                 "Preheat macro override: macro_handles_heating true skips temps",
                  "[material_settings][preheat]") {
     Config::get_instance();
     MaterialSettingsManager::instance().init();
@@ -326,7 +328,8 @@ TEST_CASE_METHOD(MaterialSettingsFixture, "Preheat macro override: macro_handles
     MaterialSettingsManager::instance().clear_override("ABS");
 }
 
-TEST_CASE_METHOD(MaterialSettingsFixture, "Preheat macro override: macro_handles_heating false runs both",
+TEST_CASE_METHOD(MaterialSettingsFixture,
+                 "Preheat macro override: macro_handles_heating false runs both",
                  "[material_settings][preheat]") {
     Config::get_instance();
     MaterialSettingsManager::instance().init();

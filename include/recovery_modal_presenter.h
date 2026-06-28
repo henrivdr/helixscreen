@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "action_prompt_manager.h"  // PromptData / PromptButton
-#include "action_prompt_modal.h"    // helix::ui::ActionPromptModal
+#include "action_prompt_manager.h" // PromptData / PromptButton
+#include "action_prompt_modal.h"   // helix::ui::ActionPromptModal
 #include "error_event.h"
 
 #include <memory>
@@ -52,4 +52,4 @@ class RecoveryModalPresenter {
     std::vector<helix::RecoveryAction> active_actions_;
 };
 
-}  // namespace helix::ui
+} // namespace helix::ui

@@ -11,7 +11,8 @@ ControlButtonView compute_control_button_view(helix::PrintJobState state, Pendin
 
     const bool active =
         (state == helix::PrintJobState::PRINTING || state == helix::PrintJobState::PAUSED);
-    const bool slot_ok = (state == helix::PrintJobState::PAUSED) ? resume_available : pause_available;
+    const bool slot_ok =
+        (state == helix::PrintJobState::PAUSED) ? resume_available : pause_available;
 
     v.primary_enabled = active && pending == PendingAction::None && slot_ok;
     v.stop_enabled = active && cancel_available;

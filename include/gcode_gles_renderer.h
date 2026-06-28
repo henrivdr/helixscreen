@@ -302,7 +302,7 @@ class GCodeGLESRenderer {
         int layer_start = -2;
         int layer_end = -2;
         size_t highlight_count = 0;
-        size_t highlight_set_hash = 0;  // distinguishes different single-object selections
+        size_t highlight_set_hash = 0; // distinguishes different single-object selections
         size_t exclude_count = 0;
         glm::vec4 filament_color{-1.0f};
         uint8_t ghost_opacity = 0;
@@ -403,7 +403,7 @@ class GCodeGLESRenderer {
     int layer_end_ = -1;
     std::string highlighted_object_;
     std::unordered_set<std::string> highlighted_objects_;
-    size_t highlighted_objects_hash_ = 0;  // recomputed in set_highlighted_objects
+    size_t highlighted_objects_hash_ = 0; // recomputed in set_highlighted_objects
     std::unordered_set<std::string> excluded_objects_;
     lv_opa_t global_opacity_ = LV_OPA_COVER;
 

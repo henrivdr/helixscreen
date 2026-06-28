@@ -26,10 +26,18 @@ class SDLSoundBackend : public SoundBackend {
     void silence() override;
     void set_waveform(Waveform w) override;
     void set_filter(const std::string& type, float cutoff) override;
-    bool supports_waveforms() const override { return true; }
-    bool supports_amplitude() const override { return true; }
-    bool supports_filter() const override { return true; }
-    float min_tick_ms() const override { return 1.0f; }
+    bool supports_waveforms() const override {
+        return true;
+    }
+    bool supports_amplitude() const override {
+        return true;
+    }
+    bool supports_filter() const override {
+        return true;
+    }
+    float min_tick_ms() const override {
+        return 1.0f;
+    }
 
     /// Initialize SDL audio device. Returns false on failure.
     bool initialize();
@@ -41,14 +49,20 @@ class SDLSoundBackend : public SoundBackend {
     void set_voice(int slot, float freq_hz, float amplitude, float duty_cycle) override;
     void set_voice_waveform(int slot, Waveform w) override;
     void silence_voice(int slot) override;
-    int voice_count() const override { return MAX_VOICES; }
+    int voice_count() const override {
+        return MAX_VOICES;
+    }
 
     // NoteEvent interface (primary path — per-sample envelope/sweep/LFO in callback)
     void publish_note(int slot, const NoteEvent& event) override;
-    bool supports_note_events() const override { return true; }
+    bool supports_note_events() const override {
+        return true;
+    }
 
     // Render source for tracker PCM playback
-    bool supports_render_source() const override { return true; }
+    bool supports_render_source() const override {
+        return true;
+    }
     void set_render_source(std::function<void(float*, size_t, int)> fn) override;
     void clear_render_source() override;
 

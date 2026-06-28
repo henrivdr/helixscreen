@@ -90,8 +90,8 @@ inline bool splash_memory_ok(long mem_available_kb, long min_free_kb) {
 // strip a single trailing newline and any trailing whitespace, and clamp to a
 // sane length so a malformed file can't blow up the label.
 inline std::string sanitize_splash_message(std::string msg, size_t max_len = 96) {
-    while (!msg.empty() && (msg.back() == '\n' || msg.back() == '\r' || msg.back() == ' ' ||
-                           msg.back() == '\t')) {
+    while (!msg.empty() &&
+           (msg.back() == '\n' || msg.back() == '\r' || msg.back() == ' ' || msg.back() == '\t')) {
         msg.pop_back();
     }
     // Keep only the first line — the file's mtime is the heartbeat, the first

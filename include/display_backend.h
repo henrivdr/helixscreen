@@ -13,14 +13,14 @@
 
 #pragma once
 
+#include "data_root_resolver.h"
+#include "touch_calibration.h"
+
 #include <fstream>
 #include <lvgl.h>
 #include <memory>
 #include <regex>
 #include <string>
-
-#include "data_root_resolver.h"
-#include "touch_calibration.h"
 
 /**
  * @brief Display backend types supported by HelixScreen

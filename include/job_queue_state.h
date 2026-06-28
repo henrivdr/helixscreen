@@ -38,13 +38,19 @@ class JobQueueState {
     void fetch();
 
     /// Check if data has been loaded
-    bool is_loaded() const { return is_loaded_; }
+    bool is_loaded() const {
+        return is_loaded_;
+    }
 
     /// Get cached jobs
-    const std::vector<JobQueueEntry>& get_jobs() const { return cached_jobs_; }
+    const std::vector<JobQueueEntry>& get_jobs() const {
+        return cached_jobs_;
+    }
 
     /// Get queue state string
-    const std::string& get_queue_state() const { return queue_state_; }
+    const std::string& get_queue_state() const {
+        return queue_state_;
+    }
 
     /// Initialize LVGL subjects (call before XML creation)
     void init_subjects();

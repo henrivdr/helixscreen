@@ -350,8 +350,7 @@ TEST_CASE("MoonrakerAPIMock - get_spoolman_spools", "[filament][mock]") {
             [&](const std::vector<SpoolInfo>& spools) {
                 REQUIRE(spools.size() > 0);
                 const int active_count = std::count_if(
-                    spools.begin(), spools.end(),
-                    [](const SpoolInfo& s) { return s.is_active; });
+                    spools.begin(), spools.end(), [](const SpoolInfo& s) { return s.is_active; });
                 REQUIRE(active_count == 1);
             },
             [](const MoonrakerError&) {});
@@ -917,7 +916,8 @@ TEST_CASE("filter_spools - fuzzy does not match wildly different terms", "[filam
     REQUIRE(result.empty());
 }
 
-TEST_CASE("filter_spools - fuzzy AND still works with mixed exact and fuzzy", "[filament][filter]") {
+TEST_CASE("filter_spools - fuzzy AND still works with mixed exact and fuzzy",
+          "[filament][filter]") {
     auto spools = make_filter_test_spools();
     // "polmaker" fuzzy-matches "polymaker", "pla" exact-matches
     auto result = filter_spools(spools, "polmaker pla");
@@ -963,10 +963,7 @@ TEST_CASE("SpoolInfo - location field parsed from JSON", "[filament][parsing]") 
     std::string created_location;
 
     api.spoolman().create_spoolman_spool(
-        body,
-        [&](const SpoolInfo& spool) {
-            created_location = spool.location;
-        },
+        body, [&](const SpoolInfo& spool) { created_location = spool.location; },
         [](const MoonrakerError&) { FAIL("create failed"); });
 
     REQUIRE(created_location == "Shelf B");
@@ -983,10 +980,7 @@ TEST_CASE("SpoolInfo - location defaults to empty when null in JSON", "[filament
     std::string created_location = "should-be-cleared";
 
     api.spoolman().create_spoolman_spool(
-        body,
-        [&](const SpoolInfo& spool) {
-            created_location = spool.location;
-        },
+        body, [&](const SpoolInfo& spool) { created_location = spool.location; },
         [](const MoonrakerError&) { FAIL("create failed"); });
 
     REQUIRE(created_location.empty());

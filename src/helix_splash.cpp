@@ -564,9 +564,8 @@ int main(int argc, char** argv) {
     // Theme-aware text color, matching the version label (white on dark, black on
     // light) so it reads cleanly over the logo's gray art. Transparent
     // background — no backing pill; let the logo show through.
-    lv_obj_set_style_text_color(status_label,
-                                dark_mode ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x000000),
-                                LV_PART_MAIN);
+    lv_obj_set_style_text_color(
+        status_label, dark_mode ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_text_opa(status_label, LV_OPA_80, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(status_label, LV_OPA_TRANSP, LV_PART_MAIN);
     // Upper-right, clear of the centered logo (BOTTOM_MID overlapped it).
@@ -591,7 +590,7 @@ int main(int argc, char** argv) {
     // make a live heartbeat look stale — and extend our lifetime accordingly.
     const std::string status_path = splash_status_path();
     const helix::splash::SplashLifetimePolicy life_policy{MAX_LIFETIME_SEC, 180};
-    struct stat status_prev{};
+    struct stat status_prev {};
     bool have_status_prev = false;
     long last_heartbeat_mono = -1;
     std::string current_label; // gate-provided message, without the counter
@@ -622,10 +621,9 @@ int main(int argc, char** argv) {
 
         // Poll the status file: cheap stat() every loop, read contents only when
         // it changes. A change is a heartbeat and refreshes the status message.
-        struct stat status_now{};
+        struct stat status_now {};
         if (stat(status_path.c_str(), &status_now) == 0) {
-            const bool changed = !have_status_prev ||
-                                 status_now.st_mtime != status_prev.st_mtime ||
+            const bool changed = !have_status_prev || status_now.st_mtime != status_prev.st_mtime ||
                                  status_now.st_size != status_prev.st_size;
             if (changed) {
                 status_prev = status_now;

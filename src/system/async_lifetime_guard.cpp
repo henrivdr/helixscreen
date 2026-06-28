@@ -62,11 +62,13 @@ thread_local void* tls_seen_lrs[kSeenSlots] = {};
 /// Returns true if this is the first time `lr` has been reported on the
 /// calling thread; false otherwise (already seen or table full).
 bool record_first_fire(void* lr) noexcept {
-    if (lr == nullptr) return false;
+    if (lr == nullptr)
+        return false;
     const auto h = static_cast<size_t>(reinterpret_cast<uintptr_t>(lr) >> 4) & (kSeenSlots - 1);
     for (size_t step = 0; step < kSeenSlots; ++step) {
         const size_t slot = (h + step) & (kSeenSlots - 1);
-        if (tls_seen_lrs[slot] == lr) return false;
+        if (tls_seen_lrs[slot] == lr)
+            return false;
         if (tls_seen_lrs[slot] == nullptr) {
             tls_seen_lrs[slot] = lr;
             return true;
@@ -78,7 +80,8 @@ bool record_first_fire(void* lr) noexcept {
 } // namespace
 
 void set_main_thread_id() noexcept {
-    if (g_main_thread_set.load(std::memory_order_acquire)) return;
+    if (g_main_thread_set.load(std::memory_order_acquire))
+        return;
     g_main_thread_id = pthread_self();
 #ifndef HELIX_RELEASE_BUILD
     // Resolve strict mode opt-in once. Test fixtures may call
@@ -113,7 +116,8 @@ bool on_main_thread() noexcept {
     // user's source-level callsite. Capturing the LR up in the inline path
     // would have given F's caller's LR after inlining (wrong frame).
     void* lr = __builtin_return_address(0);
-    if (!record_first_fire(lr)) return;
+    if (!record_first_fire(lr))
+        return;
 
     // pthread_t is `unsigned long` on glibc/musl Linux but a pointer on
     // macOS — reinterpret_cast<uintptr_t> fails on 32-bit ARM where
@@ -126,8 +130,8 @@ bool on_main_thread() noexcept {
                 sizeof(self) < sizeof(tid_word) ? sizeof(self) : sizeof(tid_word));
     char ctx[96];
     std::snprintf(ctx, sizeof(ctx),
-                  "lr=%p tid=0x%llx (likely L081 Mechanism C: tok.expired() on bg thread)",
-                  lr, static_cast<unsigned long long>(tid_word));
+                  "lr=%p tid=0x%llx (likely L081 Mechanism C: tok.expired() on bg thread)", lr,
+                  static_cast<unsigned long long>(tid_word));
 
     // Use the existing display-anomaly channel so the telemetry pipeline
     // captures backtrace + rate-limits across other LVGL anomalies. Telemetry

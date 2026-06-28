@@ -233,8 +233,8 @@ void MoonrakerAPI::database_get_item(const std::string& namespace_name, const st
             // before extracting the "value" field — the shape is
             // {"jsonrpc","id","result":{"namespace","key","value": <payload>}}.
             if (on_success) {
-                const json& result = response.contains("result") ? response.at("result")
-                                                                 : json::object();
+                const json& result =
+                    response.contains("result") ? response.at("result") : json::object();
                 on_success(result.value("value", json{}));
             }
         },
@@ -273,8 +273,8 @@ void MoonrakerAPI::database_get_namespace(const std::string& namespace_name,
         [on_success](const json& response) {
             // See database_get_item above: unwrap response["result"] first.
             if (on_success) {
-                const json& result = response.contains("result") ? response.at("result")
-                                                                 : json::object();
+                const json& result =
+                    response.contains("result") ? response.at("result") : json::object();
                 on_success(result.value("value", json::object()));
             }
         },
@@ -287,8 +287,7 @@ void MoonrakerAPI::database_get_namespace(const std::string& namespace_name,
 }
 
 void MoonrakerAPI::database_delete_item(const std::string& namespace_name, const std::string& key,
-                                        std::function<void()> on_success,
-                                        ErrorCallback on_error) {
+                                        std::function<void()> on_success, ErrorCallback on_error) {
     json params = {{"namespace", namespace_name}, {"key", key}};
     client_.send_jsonrpc(
         "server.database.delete_item", params,
@@ -305,8 +304,7 @@ void MoonrakerAPI::database_delete_item(const std::string& namespace_name, const
             // phrase "not found" (broad but not false-positive-prone — Moonraker
             // uses it specifically for absent-entity errors).
             const bool missing_key =
-                err.code == 404 ||
-                err.message.find("not found") != std::string::npos;
+                err.code == 404 || err.message.find("not found") != std::string::npos;
             if (missing_key) {
                 spdlog::debug("[MoonrakerAPI] database_delete_item({}/{}): missing-key "
                               "error treated as success (code={}, msg=\"{}\")",

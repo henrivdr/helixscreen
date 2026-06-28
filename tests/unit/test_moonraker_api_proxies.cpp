@@ -69,12 +69,14 @@ TEST_CASE_METHOD(ProxyTestFixture, "is_connected returns true when client is con
     REQUIRE(api->is_connected());
 }
 
-TEST_CASE_METHOD(ProxyTestFixture, "is_connected returns false after disconnect", "[api][proxy][slow]") {
+TEST_CASE_METHOD(ProxyTestFixture, "is_connected returns false after disconnect",
+                 "[api][proxy][slow]") {
     mock_client.disconnect();
     REQUIRE_FALSE(api->is_connected());
 }
 
-TEST_CASE_METHOD(ProxyTestFixture, "get_connection_state mirrors client state", "[api][proxy][slow]") {
+TEST_CASE_METHOD(ProxyTestFixture, "get_connection_state mirrors client state",
+                 "[api][proxy][slow]") {
     REQUIRE(api->get_connection_state() == ConnectionState::CONNECTED);
     mock_client.disconnect();
     REQUIRE(api->get_connection_state() == ConnectionState::DISCONNECTED);
@@ -92,7 +94,8 @@ TEST_CASE_METHOD(ProxyTestFixture, "get_websocket_url returns client URL", "[api
 // Subscription Proxy Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProxyTestFixture, "subscribe_notifications returns valid ID", "[api][proxy][slow]") {
+TEST_CASE_METHOD(ProxyTestFixture, "subscribe_notifications returns valid ID",
+                 "[api][proxy][slow]") {
     SubscriptionId id = api->subscribe_notifications([](json) {});
     REQUIRE(id != INVALID_SUBSCRIPTION_ID);
 }
@@ -149,7 +152,8 @@ TEST_CASE_METHOD(ProxyTestFixture, "unregister nonexistent method callback retur
 // Disconnect Modal Suppression Proxy Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProxyTestFixture, "suppress_disconnect_modal forwards to client", "[api][proxy][slow]") {
+TEST_CASE_METHOD(ProxyTestFixture, "suppress_disconnect_modal forwards to client",
+                 "[api][proxy][slow]") {
     // Should not throw, and client should report suppressed
     api->suppress_disconnect_modal(5000);
     REQUIRE(mock_client.is_disconnect_modal_suppressed());
@@ -159,7 +163,8 @@ TEST_CASE_METHOD(ProxyTestFixture, "suppress_disconnect_modal forwards to client
 // Database Operation Proxy Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProxyTestFixture, "database_get_item sends correct JSON-RPC", "[api][proxy][slow]") {
+TEST_CASE_METHOD(ProxyTestFixture, "database_get_item sends correct JSON-RPC",
+                 "[api][proxy][slow]") {
     // The mock client will process the JSON-RPC request. Since this is a mock,
     // the request will likely fail or timeout. We verify the callback mechanism works.
     bool callback_invoked = false;
@@ -178,7 +183,8 @@ TEST_CASE_METHOD(ProxyTestFixture, "database_get_item sends correct JSON-RPC", "
     SUCCEED("database_get_item completed without throwing");
 }
 
-TEST_CASE_METHOD(ProxyTestFixture, "database_post_item sends correct JSON-RPC", "[api][proxy][slow]") {
+TEST_CASE_METHOD(ProxyTestFixture, "database_post_item sends correct JSON-RPC",
+                 "[api][proxy][slow]") {
     bool callback_invoked = false;
     bool error_invoked = false;
 

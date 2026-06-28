@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 using namespace helix;
 
@@ -360,6 +361,42 @@ lv_style_t* get_variant_style(const char* variant_str) {
     return tm.get_style(StyleRole::ButtonPrimary);
 }
 
+#if LV_USE_TRANSLATION
+// Translate a newline-delimited options list through the active language and
+// apply it to the dropdown. Mirrors the <lv_dropdown options_tag="..."> handling
+// in lv_xml_dropdown_parser.c: each line is an i18n key passed through lv_tr().
+void apply_translated_options(lv_obj_t* dropdown, const char* tags) {
+    std::string translated;
+    const char* p = tags;
+    while (*p) {
+        const char* nl = std::strchr(p, '\n');
+        size_t seg_len = nl ? static_cast<size_t>(nl - p) : std::strlen(p);
+        std::string key(p, seg_len);
+        translated += lv_tr(key.c_str());
+        if (nl) {
+            translated += '\n';
+            p = nl + 1;
+        } else {
+            break;
+        }
+    }
+    lv_dropdown_set_options(dropdown, translated.c_str());
+}
+
+// Re-translate options when the UI language changes at runtime. The owned tags
+// copy is freed on the dropdown's LV_EVENT_DELETE.
+void split_options_language_changed_cb(lv_event_t* e) {
+    auto* dropdown = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    auto* tags = static_cast<char*>(lv_event_get_user_data(e));
+    if (dropdown && tags)
+        apply_translated_options(dropdown, tags);
+}
+
+void split_options_free_tags_cb(lv_event_t* e) {
+    lv_free(lv_event_get_user_data(e));
+}
+#endif
+
 /**
  * @brief XML create callback for <ui_split_button>
  */
@@ -391,6 +428,7 @@ void* ui_split_button_create(lv_xml_parser_state_t* state, const char** attrs) {
         text = "";
     const char* icon_name = lv_xml_get_value_of(attrs, "icon");
     const char* options = lv_xml_get_value_of(attrs, "options");
+    const char* options_tag = lv_xml_get_value_of(attrs, "options_tag");
 
     // Allocate user data (stored on main_btn child, not sb — see get_data())
     auto* data = new SplitButtonData{};
@@ -479,7 +517,18 @@ void* ui_split_button_create(lv_xml_parser_state_t* state, const char** attrs) {
     lv_obj_remove_flag(data->dropdown, LV_OBJ_FLAG_CLICKABLE);
     lv_dropdown_set_dir(data->dropdown, LV_DIR_BOTTOM);
 
-    if (options && strlen(options) > 0) {
+#if LV_USE_TRANSLATION
+    if (options_tag && strlen(options_tag) > 0) {
+        // Translate the options through the active language, and re-translate on
+        // runtime language change (tags copy freed on dropdown delete).
+        char* tags_copy = lv_strdup(options_tag);
+        apply_translated_options(data->dropdown, options_tag);
+        lv_obj_add_event_cb(data->dropdown, split_options_language_changed_cb,
+                            LV_EVENT_TRANSLATION_LANGUAGE_CHANGED, tags_copy);
+        lv_obj_add_event_cb(data->dropdown, split_options_free_tags_cb, LV_EVENT_DELETE, tags_copy);
+    } else
+#endif
+        if (options && strlen(options) > 0) {
         lv_dropdown_set_options(data->dropdown, options);
     }
 

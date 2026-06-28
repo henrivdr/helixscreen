@@ -202,8 +202,8 @@ bool TemperatureHistoryManager::add_sample_internal(const std::string& heater_na
     // Upper bound rejects obviously-bogus spikes (deci-degrees; 4000 = 400°C).
     constexpr int kMaxValidTempDeci = 4000;
     if (temp_deci <= 0 || temp_deci > kMaxValidTempDeci) {
-        spdlog::debug("[TempHistory] dropping invalid sample for '{}': {} deci-°C",
-                      heater_name, temp_deci);
+        spdlog::debug("[TempHistory] dropping invalid sample for '{}': {} deci-°C", heater_name,
+                      temp_deci);
         return false;
     }
 
@@ -363,8 +363,7 @@ int TemperatureHistoryManager::get_cached_target(const std::string& heater_name)
     return 0;
 }
 
-void TemperatureHistoryManager::set_cached_target(const std::string& heater_name,
-                                                  int target_deci) {
+void TemperatureHistoryManager::set_cached_target(const std::string& heater_name, int target_deci) {
     if (heater_name == "extruder") {
         cached_extruder_target_ = target_deci;
     } else if (heater_name == "heater_bed") {

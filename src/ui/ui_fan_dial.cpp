@@ -142,9 +142,9 @@ FanDial::~FanDial() {
 FanDial::FanDial(FanDial&& other) noexcept
     : root_(other.root_), arc_(other.arc_), speed_label_(other.speed_label_),
       fan_icon_(other.fan_icon_), onoff_switch_(other.onoff_switch_),
-      onoff_label_(other.onoff_label_),
-      name_(std::move(other.name_)), fan_id_(std::move(other.fan_id_)),
-      current_speed_(other.current_speed_), on_speed_changed_(std::move(other.on_speed_changed_)),
+      onoff_label_(other.onoff_label_), name_(std::move(other.name_)),
+      fan_id_(std::move(other.fan_id_)), current_speed_(other.current_speed_),
+      on_speed_changed_(std::move(other.on_speed_changed_)),
       on_icon_clicked_(std::move(other.on_icon_clicked_)), syncing_(other.syncing_),
       last_user_input_(other.last_user_input_) {
     // Drop any pending debounce timer on the source — its user_data still points
@@ -366,7 +366,8 @@ void FanDial::update_speed_label(int percent) {
         return;
 
     char buf[8];
-    lv_label_set_text(speed_label_, lv_tr(helix::format::format_fan_speed(percent, buf, sizeof(buf))));
+    lv_label_set_text(speed_label_,
+                      lv_tr(helix::format::format_fan_speed(percent, buf, sizeof(buf))));
 }
 
 void FanDial::handle_arc_changed() {

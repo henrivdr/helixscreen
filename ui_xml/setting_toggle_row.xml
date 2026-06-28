@@ -28,8 +28,8 @@
         scrollable="false">
     <bind_style_if_eq name="pad_micro" subject="ui_breakpoint" ref_value="0"/>
     <bind_style_if_ge name="pad_standard" subject="ui_breakpoint" ref_value="1"/>
-    <!-- Left side: Optional icon -->
-    <icon name="row_icon" src="$icon" size="sm" variant="secondary"/>
+    <!-- Left side: Optional icon — hidden (no broken-glyph fallback) when none given -->
+    <icon name="row_icon" src="$icon" size="sm" variant="secondary" hidden_if_empty="$icon"/>
     <!-- Middle: Label and optional description -->
     <lv_obj height="content"
             style_pad_all="0" flex_flow="column" style_pad_gap="#space_sm" flex_grow="1" scrollable="false">
@@ -37,20 +37,33 @@
         <bind_style name="label_enabled" subject="$disabled" ref_value="0"/>
         <bind_style name="label_disabled" subject="$disabled" ref_value="1"/>
       </text_body>
-      <!-- Description: hidden on micro/tiny by default -->
-      <text_small name="description" text="$description" translation_tag="$description_tag">
-        <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>
-      </text_small>
+      <!-- Description wrapper: collapsed entirely when no description (parse-time,
+           so it doesn't fight the reactive breakpoint bind below). With no
+           description the column holds only the label, which then centers
+           vertically against the icon/switch. -->
+      <lv_obj width="100%" height="content" style_pad_all="0" style_border_width="0"
+              scrollable="false" hidden_if_empty="$description">
+        <!-- Description: hidden on micro/tiny by default -->
+        <text_small name="description" text="$description" translation_tag="$description_tag">
+          <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>
+        </text_small>
+      </lv_obj>
     </lv_obj>
-    <!-- Info icon: hidden if no description, hidden on medium+ -->
-    <lv_obj name="info_btn" width="content" height="content"
-            style_pad_all="2" style_bg_opa="0" style_border_width="0"
-            clickable="true" event_bubble="false" scrollable="false"
-            hidden_if_empty="$description">
-      <bind_flag_if_gt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
-      <icon src="info_outline" size="sm" variant="muted"
-            clickable="false" event_bubble="true"/>
-      <event_cb trigger="clicked" callback="on_setting_info_clicked"/>
+    <!-- Info icon: only when a description exists, and only on small breakpoints
+         (where the description text itself is hidden). The empty-check lives on
+         an outer wrapper (parse-time, permanent) so it isn't cleared by the
+         reactive breakpoint bind on the inner button — otherwise an empty (i)
+         reappears at micro/tiny. -->
+    <lv_obj width="content" height="content" style_pad_all="0" style_bg_opa="0"
+            style_border_width="0" scrollable="false" hidden_if_empty="$description">
+      <lv_obj name="info_btn" width="content" height="content"
+              style_pad_all="2" style_bg_opa="0" style_border_width="0"
+              clickable="true" event_bubble="false" scrollable="false">
+        <bind_flag_if_gt subject="ui_breakpoint" flag="hidden" ref_value="1"/>
+        <icon src="info_outline" size="sm" variant="muted"
+              clickable="false" event_bubble="true"/>
+        <event_cb trigger="clicked" callback="on_setting_info_clicked"/>
+      </lv_obj>
     </lv_obj>
     <!-- Right side: Switch toggle -->
     <ui_switch name="toggle" size="small">

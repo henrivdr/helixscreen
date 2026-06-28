@@ -15,17 +15,16 @@
 // in isolation; on_notify_gcode_response was previously UNTESTED. This file
 // exercises both, plus the template-derived step labels the sidebar consumes.
 
-#include "gcode_narration_router.h"
-
-#include "ams_backend_afc.h"
-#include "ams_state.h"
 #include "ui_step_progress.h"
 #include "ui_update_queue.h"
 
-#include "hv/json.hpp" // libhv-bundled nlohmann::json, same header the router uses
+#include "../lvgl_test_fixture.h"
+#include "ams_backend_afc.h"
+#include "ams_state.h"
+#include "gcode_narration_router.h"
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
+#include "hv/json.hpp" // libhv-bundled nlohmann::json, same header the router uses
 
 using namespace helix;
 
@@ -35,7 +34,9 @@ using namespace helix;
 // to the one in test_gcode_narration_router.cpp (same struct, global namespace)
 // to avoid an ODR violation across translation units.
 struct GcodeNarrationRouterTestAccess {
-    static void feed(GcodeNarrationRouter& r, const std::string& line) { r.process_line(line); }
+    static void feed(GcodeNarrationRouter& r, const std::string& line) {
+        r.process_line(line);
+    }
     static void notify(GcodeNarrationRouter& r, const nlohmann::json& msg) {
         r.on_notify_gcode_response(msg);
     }
@@ -85,7 +86,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     //   heat=0, cut=1, poop=2, kick=3, feed=4, purge=5, brush=6, clean=7, load=8
     struct Step {
         const char* line;
-        int         expected_index;
+        int expected_index;
         const char* expected_detail;
     };
     const Step sequence[] = {
@@ -199,7 +200,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     // S1: the phase "// Purge" resolves to is labeled "Purge" (its own phase),
     // and sits AFTER "feed" so it is never conflated with "Feed filament".
     const int purge_idx = index_of("purge");
-    const int feed_idx  = index_of("feed");
+    const int feed_idx = index_of("feed");
     REQUIRE(purge_idx == 5);
     REQUIRE(feed_idx == 4);
     REQUIRE(purge_idx > feed_idx);
@@ -213,9 +214,9 @@ TEST_CASE_METHOD(LVGLTestFixture,
     for (const auto& p : tmpl) {
         steps.push_back({p.label.c_str(), helix::StepState::Pending});
     }
-    lv_obj_t* bar = ui_step_progress_create(lv_screen_active(), steps.data(),
-                                            static_cast<int>(steps.size()),
-                                            /*horizontal=*/true, /*scope_name=*/nullptr);
+    lv_obj_t* bar =
+        ui_step_progress_create(lv_screen_active(), steps.data(), static_cast<int>(steps.size()),
+                                /*horizontal=*/true, /*scope_name=*/nullptr);
     REQUIRE(bar != nullptr);
     // ui_step_progress was created from the same labels; nothing further to
     // assert beyond construction succeeding (its child structure moves

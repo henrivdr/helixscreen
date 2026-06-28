@@ -1602,7 +1602,7 @@ TEST_CASE_METHOD(ConfigTestFixture,
                  "[core][config][migration][versioning]") {
     // System-level backup at /var/lib/helixscreen/ takes priority over HOME-based
     // fallback and would be restored instead of creating a truly fresh config.
-    struct stat st{};
+    struct stat st {};
     if (stat("/var/lib/helixscreen/settings.json.backup", &st) == 0)
         SKIP(
             "System backup exists at /var/lib/helixscreen/ — would override fresh config defaults");
@@ -1889,10 +1889,9 @@ TEST_CASE("Config: v13→v14 imports legacy telemetry_config.json when settings 
     std::string settings_path = temp_dir + "/test_config.json";
     std::string legacy_path = temp_dir + "/telemetry_config.json";
 
-    json v13_config = {
-        {"config_version", 13},
-        {"active_printer_id", "default"},
-        {"printers", {{"default", {{"moonraker_host", "127.0.0.1"}}}}}};
+    json v13_config = {{"config_version", 13},
+                       {"active_printer_id", "default"},
+                       {"printers", {{"default", {{"moonraker_host", "127.0.0.1"}}}}}};
     {
         std::ofstream o(settings_path);
         o << v13_config.dump(2);
@@ -1914,8 +1913,7 @@ TEST_CASE("Config: v13→v14 imports legacy telemetry_config.json when settings 
     std::filesystem::remove_all(temp_dir);
 }
 
-TEST_CASE("Config: v13→v14 preserves disabled legacy state",
-          "[core][config][migration][v14]") {
+TEST_CASE("Config: v13→v14 preserves disabled legacy state", "[core][config][migration][v14]") {
     std::string temp_dir = "/tmp/helix_test_v13_to_v14_disabled";
     std::filesystem::remove_all(temp_dir);
     std::filesystem::create_directories(temp_dir);
@@ -2499,7 +2497,7 @@ TEST_CASE("Config::init() recovers from corrupt config by restoring backup",
           "[core][config][corruption]") {
     // System-level backup at /var/lib/helixscreen/ takes priority over the
     // HOME-based fallback this test sets up, causing wrong data to be restored.
-    struct stat st{};
+    struct stat st {};
     if (stat("/var/lib/helixscreen/settings.json.backup", &st) == 0)
         SKIP("System backup exists at /var/lib/helixscreen/ — would override test backup");
 
@@ -2660,7 +2658,7 @@ struct TarballTestEnv {
         : dir("/tmp/helix_test_" + name + "_" + std::to_string(getpid())),
           config_path((dir / "settings.json").string()),
           backup_dir((dir / ".helixscreen").string()), home(dir.string()) {
-        struct stat st{};
+        struct stat st {};
         if (stat("/var/lib/helixscreen/settings.json.backup", &st) == 0)
             SKIP("System backup exists at /var/lib/helixscreen/ — would override test");
         std::filesystem::remove_all(dir);
@@ -2917,9 +2915,7 @@ TEST_CASE("Config: v11→v12 migration consolidates chamber keys for all printer
            {{"printer",
              {{"chamber_sensor", "temperature_sensor chamber_temp"},
               {"chamber_heater", "temperature_fan chamber_fan"}}}}},
-          {"voron",
-           {{"printer",
-             {{"chamber_sensor", "temperature_sensor chamber"}}}}},
+          {"voron", {{"printer", {{"chamber_sensor", "temperature_sensor chamber"}}}}},
           {"bare", {{"heaters", {{"bed", "heater_bed"}}}}}}}};
 
     {
@@ -2963,12 +2959,11 @@ TEST_CASE("Config: v11→v12 migration does not overwrite canonical keys already
     std::filesystem::create_directories(temp_dir);
     std::string temp_path = temp_dir + "/test_config.json";
 
-    json v11_config = {
-        {"config_version", 11},
-        {"printers",
-         {{"k1c",
-           {{"temp_sensors", {{"chamber", "temperature_sensor new_chamber"}}},
-            {"printer", {{"chamber_sensor", "temperature_sensor old_chamber"}}}}}}}};
+    json v11_config = {{"config_version", 11},
+                       {"printers",
+                        {{"k1c",
+                          {{"temp_sensors", {{"chamber", "temperature_sensor new_chamber"}}},
+                           {"printer", {{"chamber_sensor", "temperature_sensor old_chamber"}}}}}}}};
 
     {
         std::ofstream o(temp_path);
@@ -3182,16 +3177,15 @@ TEST_CASE("Config: v16→v17 migration renames retired Voron printer_image IDs",
         std::filesystem::create_directories(temp_dir);
         std::string temp_path = temp_dir + "/test_config.json";
 
-        json v16_config = {
-            {"config_version", 16},
-            {"active_printer_id", "voron24"},
-            {"printers",
-             {{"voron24", {{"printer_image", "shipped:voron-24r2"}}},
-              {"voron0", {{"printer_image", "shipped:voron-0-2"}}},
-              {"sw", {{"printer_image", "shipped:voron-switchwire"}}},
-              {"custom", {{"printer_image", "custom:my-printer"}}},
-              {"auto", {{"printer_image", ""}}},
-              {"none", {{"heaters", {{"bed", "heater_bed"}}}}}}}};
+        json v16_config = {{"config_version", 16},
+                           {"active_printer_id", "voron24"},
+                           {"printers",
+                            {{"voron24", {{"printer_image", "shipped:voron-24r2"}}},
+                             {"voron0", {{"printer_image", "shipped:voron-0-2"}}},
+                             {"sw", {{"printer_image", "shipped:voron-switchwire"}}},
+                             {"custom", {{"printer_image", "custom:my-printer"}}},
+                             {"auto", {{"printer_image", ""}}},
+                             {"none", {{"heaters", {{"bed", "heater_bed"}}}}}}}};
 
         {
             std::ofstream o(temp_path);

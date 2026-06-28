@@ -221,15 +221,13 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
         // read 0 at the moment of the state transition, the collector would
         // wrongly start, and the lifecycle would park in Preparing — leaving
         // "Starting Print..." stuck and dropping print_elapsed updates.
-        if (auto pd_it = stats.find("print_duration");
-            pd_it != stats.end() && pd_it->is_number()) {
+        if (auto pd_it = stats.find("print_duration"); pd_it != stats.end() && pd_it->is_number()) {
             int print_seconds = static_cast<int>(pd_it->get<double>());
             if (lv_subject_get_int(&print_duration_) != print_seconds) {
                 lv_subject_set_int(&print_duration_, print_seconds);
             }
         }
-        if (auto td_it = stats.find("total_duration");
-            td_it != stats.end() && td_it->is_number()) {
+        if (auto td_it = stats.find("total_duration"); td_it != stats.end() && td_it->is_number()) {
             int total_elapsed = static_cast<int>(td_it->get<double>());
             if (lv_subject_get_int(&print_elapsed_) != total_elapsed) {
                 lv_subject_set_int(&print_elapsed_, total_elapsed);
@@ -349,8 +347,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
         if (auto exc_it = stats.find("exception"); exc_it != stats.end()) {
             if (exc_it->is_object() && !exc_it->empty()) {
                 const auto& exc = *exc_it;
-                if (auto id_it = exc.find("id");
-                    id_it != exc.end() && id_it->is_number_integer()) {
+                if (auto id_it = exc.find("id"); id_it != exc.end() && id_it->is_number_integer()) {
                     print_exception_id_ = id_it->get<int>();
                 } else {
                     print_exception_id_ = -1;
@@ -399,7 +396,8 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
 
             if (info.contains("total_layer") && info["total_layer"].is_number()) {
                 int total_layer = info["total_layer"].get<int>();
-                printer_reports_layers_ = true; // sticky printer capability (U1 sends this at start)
+                printer_reports_layers_ =
+                    true; // sticky printer capability (U1 sends this at start)
                 if (total_layer != lv_subject_get_int(&print_layer_total_)) {
                     spdlog::debug("[LayerTracker] total_layer={} (from print_stats.info)",
                                   total_layer);
@@ -577,8 +575,8 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
         auto map_it = extruder_filament_used_.find(idx);
         if (map_it == extruder_filament_used_.end()) {
             // Cannot happen after init_subjects() pre-population; defensive log.
-            spdlog::warn("[PrinterPrintState] extruder{} filament_used entry missing (init skipped?)",
-                         idx);
+            spdlog::warn(
+                "[PrinterPrintState] extruder{} filament_used entry missing (init skipped?)", idx);
             continue;
         }
         auto& info = map_it->second;

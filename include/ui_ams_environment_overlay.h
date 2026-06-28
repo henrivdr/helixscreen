@@ -137,7 +137,7 @@ class AmsEnvironmentOverlay : public OverlayBase {
 
     static constexpr int MAX_COMFORT_ROWS = 4;
     lv_subject_t comfort_visible_[MAX_COMFORT_ROWS] = {};
-    lv_subject_t comfort_status_[MAX_COMFORT_ROWS] = {};  ///< 0=OK, 1=Marginal, 2=Too humid
+    lv_subject_t comfort_status_[MAX_COMFORT_ROWS] = {}; ///< 0=OK, 1=Marginal, 2=Too humid
     lv_subject_t comfort_text_[MAX_COMFORT_ROWS] = {};
     char comfort_text_buf_[MAX_COMFORT_ROWS][96] = {};
 

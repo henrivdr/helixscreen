@@ -1122,8 +1122,8 @@ TEST_CASE("Fan characterization: output_pin fan type classification",
     PrinterStateTestAccess::reset(state);
     state.init_subjects(false);
 
-    state.init_fans({"output_pin fan0", "output_pin fan1", "output_pin fan2",
-                     "heater_fan hotend_fan"});
+    state.init_fans(
+        {"output_pin fan0", "output_pin fan1", "output_pin fan2", "heater_fan hotend_fan"});
 
     const auto& fans = state.get_fans();
 
@@ -1230,9 +1230,8 @@ TEST_CASE("Fan characterization: fan_feedback RPM updates",
     state.init_fans({"output_pin fan0", "output_pin fan1", "output_pin fan2"});
 
     SECTION("fan_feedback maps fanN_speed to output_pin fanN rpm") {
-        json status = {{"fan_feedback", {{"fan0_speed", 16000},
-                                         {"fan1_speed", 3692},
-                                         {"fan2_speed", 0}}}};
+        json status = {
+            {"fan_feedback", {{"fan0_speed", 16000}, {"fan1_speed", 3692}, {"fan2_speed", 0}}}};
         state.update_from_status(status);
 
         const auto& fans = state.get_fans();
@@ -1310,8 +1309,7 @@ TEST_CASE("Fan characterization: single chamber fan still reads sensibly",
 
     SECTION("a user-set custom name still wins over role disambiguation") {
         auto* config = Config::get_instance();
-        config->set(config->df() + "fans/names/heater_fan chamber_fan",
-                    std::string("My Fan"));
+        config->set(config->df() + "fans/names/heater_fan chamber_fan", std::string("My Fan"));
 
         state.init_fans({"heater_fan chamber_fan"});
         REQUIRE(state.get_fans()[0].display_name == "My Fan");

@@ -11,12 +11,12 @@
 LV_FONT_DECLARE(mdi_icons_128); // Oversized hero icons (XXLARGE displays)
 LV_FONT_DECLARE(mdi_icons_96);  // Large hero icons (XXLARGE displays)
 LV_FONT_DECLARE(mdi_icons_80);  // Large hero icons (XLARGE displays)
-LV_FONT_DECLARE(mdi_icons_64); // Navigation bar icons
-LV_FONT_DECLARE(mdi_icons_48); // Status card icons (large displays)
-LV_FONT_DECLARE(mdi_icons_32); // Status card icons (small displays)
-LV_FONT_DECLARE(mdi_icons_24); // General UI icons (tiny displays)
-LV_FONT_DECLARE(mdi_icons_16); // Metadata icons (small inline)
-LV_FONT_DECLARE(mdi_icons_14); // Metadata icons (small inline for tiny)
+LV_FONT_DECLARE(mdi_icons_64);  // Navigation bar icons
+LV_FONT_DECLARE(mdi_icons_48);  // Status card icons (large displays)
+LV_FONT_DECLARE(mdi_icons_32);  // Status card icons (small displays)
+LV_FONT_DECLARE(mdi_icons_24);  // General UI icons (tiny displays)
+LV_FONT_DECLARE(mdi_icons_16);  // Metadata icons (small inline)
+LV_FONT_DECLARE(mdi_icons_14);  // Metadata icons (small inline for tiny)
 
 // Noto Sans - Regular weight with extended Unicode (©®™€£¥°±•…)
 // Declared mutable (not const) so CjkFontManager can set fallback pointers at runtime

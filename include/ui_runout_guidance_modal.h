@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "static_subject_registry.h"
 #include "ui_modal.h"
+
+#include "static_subject_registry.h"
 
 #include <spdlog/spdlog.h>
 
@@ -257,7 +258,8 @@ class RunoutGuidanceModal : public Modal {
     static inline bool subjects_initialized_ = false;
 
     static void init_subjects() {
-        if (subjects_initialized_) return;
+        if (subjects_initialized_)
+            return;
         subjects_initialized_ = true;
 
         lv_subject_init_int(&autofeed_capable_subject_, 0);
@@ -265,17 +267,16 @@ class RunoutGuidanceModal : public Modal {
 
         auto* scope = lv_xml_component_get_scope("runout_guidance_modal");
         if (scope) {
-            lv_xml_register_subject(scope, "runout_autofeed_capable",
-                                    &autofeed_capable_subject_);
-            lv_xml_register_subject(scope, "runout_resume_blocked",
-                                    &resume_blocked_subject_);
+            lv_xml_register_subject(scope, "runout_autofeed_capable", &autofeed_capable_subject_);
+            lv_xml_register_subject(scope, "runout_resume_blocked", &resume_blocked_subject_);
         } else {
             spdlog::warn("[RunoutGuidanceModal] Component scope not found — "
                          "ensure runout_guidance_modal.xml is registered first");
         }
 
         StaticSubjectRegistry::instance().register_deinit("RunoutGuidanceModal", []() {
-            if (!subjects_initialized_) return;
+            if (!subjects_initialized_)
+                return;
             lv_subject_deinit(&autofeed_capable_subject_);
             lv_subject_deinit(&resume_blocked_subject_);
             subjects_initialized_ = false;

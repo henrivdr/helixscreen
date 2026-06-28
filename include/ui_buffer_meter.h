@@ -27,8 +27,12 @@ class UiBufferMeter {
     UiBufferMeter(const UiBufferMeter&) = delete;
     UiBufferMeter& operator=(const UiBufferMeter&) = delete;
 
-    [[nodiscard]] lv_obj_t* get_root() const { return root_; }
-    [[nodiscard]] bool is_valid() const { return root_ != nullptr; }
+    [[nodiscard]] lv_obj_t* get_root() const {
+        return root_;
+    }
+    [[nodiscard]] bool is_valid() const {
+        return root_ != nullptr;
+    }
 
     /// Set bias value directly (for modal usage without subject binding)
     void set_bias(float bias);

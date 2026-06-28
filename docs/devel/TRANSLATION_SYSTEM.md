@@ -1,6 +1,6 @@
 # Translation System
 
-HelixScreen's translation system combines LVGL's native XML translations for static UI text with an lv_i18n-compatible C API for runtime lookups and plural forms. This document explains how translations flow from source YAML files through code generation to the running application.
+HelixScreen's translation system is built on LVGL's native XML translations. Source strings live in per-locale YAML files; a generator turns them into runtime XML translation packs that the app loads at startup, and C++ resolves strings at runtime through LVGL's `lv_translation_*` API (`lv_tr()`). This document explains how translations flow from source YAML files through generation to the running application.
 
 ## Supported Languages
 
@@ -27,24 +27,33 @@ HelixScreen's translation system combines LVGL's native XML translations for sta
                                  ▼
                    ┌─────────────────────────────┐
                    │  generate_translations.py   │
-                   │  (Python code generator)    │
+                   │  (Python pack generator)    │
                    └─────────────┬───────────────┘
                                  │
-                ┌────────────────┼────────────────┐
-                ▼                ▼                ▼
-┌───────────────────┐ ┌──────────────────┐ ┌─────────────────────┐
-│  translations.xml │ │ lv_i18n_trans... │ │ lv_i18n_trans...    │
-│  (LVGL XML)       │ │ lations.c        │ │ lations.h           │
-└─────────┬─────────┘ └────────┬─────────┘ └──────────┬──────────┘
-          │                    │                      │
-          ▼                    ▼                      ▼
+                ┌────────────────┴────────────────┐
+                ▼                                  ▼
+┌───────────────────────────┐      ┌──────────────────────────────┐
+│  translations.xml         │      │  <lang>.xml (per-locale)     │
+│  (combined LVGL XML pack) │      │  en.xml, de.xml, zh.xml, ... │
+└─────────────┬─────────────┘      └───────────────┬──────────────┘
+              │                                     │
+              ▼                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          Runtime (Application)                          │
-│  • XML parser reads translations.xml for static labels                  │
-│  • C code provides lv_i18n_*() API for locale switching                 │
+│  • App loads the active locale's pack via the locale loader             │
+│    (lv_translation_set_language + lv_xml_register_translation_from_file) │
+│  • XML parser resolves translation_tag / placeholder_tag via lv_tr()    │
+│  • C++ resolves strings with lv_tr("English text") (English fallback)   │
 │  • Plural rules applied per-language                                    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+> The generator emits **only** the runtime XML packs by default. The legacy
+> `lv_i18n` C table (`src/generated/lv_i18n_translations.c`/`.h`) was never
+> compiled or linked — the runtime uses LVGL's native `lv_translation_*` API on
+> the XML — so it has been removed from the repo. It can still be produced on
+> demand with `generate_translations.py --emit-lv-i18n`, but normal work never
+> needs it.
 
 ## Source Files (YAML)
 
@@ -93,21 +102,24 @@ translations:
 
 ### Generator Script
 
-`scripts/generate_translations.py` is the main code generator. It reads all YAML files and produces:
+`scripts/generate_translations.py` is the main pack generator. It reads all YAML files and produces the runtime XML translation packs:
 
 | Output | Path | Purpose |
 |--------|------|---------|
-| `translations.xml` | `ui_xml/translations/translations.xml` | LVGL XML format for declarative UI |
-| `lv_i18n_translations.c` | `src/generated/lv_i18n_translations.c` | Singular/plural arrays, plural functions, language pack |
-| `lv_i18n_translations.h` | `src/generated/lv_i18n_translations.h` | Types, structs, function declarations |
+| `translations.xml` | `ui_xml/translations/translations.xml` | Combined LVGL XML pack (all languages) |
+| `<lang>.xml` | `ui_xml/translations/<lang>.xml` | Per-locale packs (`en.xml`, `de.xml`, `zh.xml`, …) loaded individually at runtime |
+
+These are the only outputs by default. The legacy `lv_i18n` C/H table is **not**
+emitted (see the note in the Architecture section); pass `--emit-lv-i18n` to
+produce it on demand.
 
 ### Makefile Integration
 
 Translation generation is integrated into the build via `mk/translations.mk`:
 
 ```makefile
-# Regenerate if YAML or script changes
-$(TRANS_GEN_C) $(TRANS_GEN_H) $(TRANS_XML): $(TRANS_YAML) $(TRANS_SCRIPT)
+# Regenerate the XML packs if YAML or script changes
+$(TRANS_XML): $(TRANS_YAML) $(TRANS_SCRIPT)
     python generate_translations.py
 ```
 
@@ -132,44 +144,22 @@ LVGL's native XML translation format. Each `<translation>` element maps a tag to
 </translations>
 ```
 
-### lv_i18n_translations.h
+### Per-locale packs (`<lang>.xml`)
 
-Defines types and declares the public API:
+Alongside the combined `translations.xml`, the generator emits one pack per
+locale (`en.xml`, `de.xml`, `zh.xml`, …). At runtime the app loads only the
+active locale's pack via the locale loader (`src/system/translation_loader.cpp`,
+`helix::ui::ensure_translation_loaded()` → `lv_xml_register_translation_from_file()`),
+so it never has to parse every language up front.
 
-```c
-typedef enum {
-    LV_I18N_PLURAL_TYPE_ZERO,
-    LV_I18N_PLURAL_TYPE_ONE,
-    LV_I18N_PLURAL_TYPE_TWO,
-    LV_I18N_PLURAL_TYPE_FEW,
-    LV_I18N_PLURAL_TYPE_MANY,
-    LV_I18N_PLURAL_TYPE_OTHER,
-    _LV_I18N_PLURAL_TYPE_NUM,
-} lv_i18n_plural_type_t;
+### Legacy `lv_i18n` C table (opt-in)
 
-typedef struct {
-    const char * locale_name;
-    const char * * singulars;
-    const char * * plurals[_LV_I18N_PLURAL_TYPE_NUM];
-    uint8_t (*locale_plural_fn)(int32_t num);
-} lv_i18n_lang_t;
-
-extern const lv_i18n_language_pack_t lv_i18n_language_pack[];
-
-int lv_i18n_init(const lv_i18n_language_pack_t * langs);
-int lv_i18n_set_locale(const char * l_name);
-const char * lv_i18n_get_current_locale(void);
-```
-
-### lv_i18n_translations.c
-
-Contains all translation data and runtime functions:
-
-- **Singular arrays** per locale (indexed by key)
-- **Plural arrays** per locale and form (one, few, many, other)
-- **Plural functions** implementing CLDR rules per language
-- **Language pack** array linking everything together
-- **Runtime API** implementation
+`src/generated/lv_i18n_translations.c`/`.h` was a parallel i18n subsystem kept
+alongside LVGL's native `lv_translation_*` API. It was never read from
+(`lv_i18n_get_text()` had no callers), so it has been removed from the repo and
+is no longer generated by default. Pass `generate_translations.py --emit-lv-i18n`
+if you need to produce it for some external consumer — normal HelixScreen work
+never does.
 
 ## XML Usage
 
@@ -219,51 +209,66 @@ For text that changes at runtime based on data, use `bind_text` with subjects in
 - `translation_tag` - Static text that varies by locale
 - `bind_text` - Dynamic text that varies by application state
 
+### Text-input Placeholders with placeholder_tag
+
+Text inputs translate their placeholder text via `placeholder_tag`, which
+mirrors `translation_tag` on labels and is resolved through `lv_tr()` at parse
+time:
+
+```xml
+<text_input placeholder_text="Search vendors..." placeholder_tag="Search vendors..."/>
+```
+
+The `form_field` component forwards the same attribute, so wrap a placeholder
+the same way there:
+
+```xml
+<form_field placeholder="Enter network name" placeholder_tag="Enter network name"/>
+```
+
+As with `translation_tag`, the literal `placeholder_text` / `placeholder`
+attribute is the English fallback, and the `*_tag` value is the YAML key to
+look up.
+
 ## C++ Runtime API
 
-### Initialization
+Runtime translation goes through LVGL's native `lv_translation_*` API. There is
+no `lv_i18n_init()` / `lv_i18n_set_locale()` — those were part of the removed
+legacy table.
 
-The translation system is initialized during application startup:
+### Translating a string
 
-```cpp
-// In application.cpp
-#include "lv_i18n_translations.h"
-
-void Application::init_translations() {
-    // Initialize with the language pack
-    int result = lv_i18n_init(lv_i18n_language_pack);
-    if (result != 0) {
-        spdlog::error("Failed to initialize i18n");
-        return;
-    }
-
-    // Set locale from settings (or default to "en")
-    std::string lang = settings_manager.get_language();
-    lv_i18n_set_locale(lang.c_str());
-}
-```
-
-### Changing Language
-
-To change the display language at runtime:
+Wrap a user-facing string literal in `lv_tr()`. It returns the active language's
+string for that key, falling back to the English literal if there's no
+translation:
 
 ```cpp
-// In settings_manager.cpp
-void SettingsManager::set_language(const std::string& lang) {
-    int result = lv_i18n_set_locale(lang.c_str());
-    if (result == 0) {
-        // Success - trigger UI refresh
-        lv_obj_invalidate(lv_screen_active());
-    }
-}
+// Returns the localized string for the active language ("Cancel" in English)
+const char* label = lv_tr("Cancel");
+
+// Format strings: translate the format, then fmt::format with the args
+std::string msg = fmt::format(lv_tr("Nozzle: {}°C"), temp);
 ```
 
-### Querying Current Locale
+Wrapping a C++ string literal in `lv_tr(...)` (or `fmt::format(lv_tr("..{}.."), arg)`
+for format strings) is exactly how a C++ string becomes translatable — the
+wrapped literal is also picked up by `make translation-sync`.
+
+### Loading a locale and changing language
+
+The active locale's pack is loaded on demand and made active. The locale loader
+registers the per-locale XML pack, and `lv_translation_set_language()` switches
+the active language for all `lv_tr()` lookups:
 
 ```cpp
-const char* current = lv_i18n_get_current_locale();
-spdlog::info("Current language: {}", current);
+// In system_settings_manager.cpp / application.cpp
+helix::ui::ensure_translation_loaded(lang);   // registers ui_xml/translations/<lang>.xml
+lv_translation_set_language(lang.c_str());     // switch active language
+lv_obj_invalidate(lv_screen_active());         // refresh visible UI
 ```
+
+See `src/system/translation_loader.cpp` for the loader, which tracks which
+locales have already been registered so a pack is parsed at most once.
 
 ## Plural Rules
 
@@ -352,7 +357,12 @@ static uint8_t ru_plural_fn(int32_t num) {
    "New Feature": "Nouvelle fonctionnalité"
    ```
 
-4. **Regenerate code:**
+   When translating a recurring domain term, reuse the rendering in
+   `translations/GLOSSARY.md` for that language. For terms not in the glossary,
+   grep the target `translations/<lang>.yml` and reuse the dominant existing
+   rendering — never coin a new word for a concept that's already translated.
+
+4. **Regenerate the XML translation packs:**
    ```bash
    make translations
    ```
@@ -374,10 +384,11 @@ This shows what keys would be added without modifying files.
 
 | Target | Description |
 |--------|-------------|
-| `make translations` | Regenerate C code and XML from YAML |
+| `make translations` | Regenerate the XML translation packs from YAML |
 | `make translation-sync` | Extract strings from XML, merge new keys to YAML |
 | `make translation-sync-dry-run` | Preview sync without modifying files |
 | `make translation-coverage` | Show translation coverage statistics |
+| `make translation-glossary` | Regenerate `translations/GLOSSARY.md` from the YAML |
 | `make translation-obsolete` | Find translation keys not used in XML |
 
 ## Key Files Reference
@@ -385,14 +396,15 @@ This shows what keys would be added without modifying files.
 | File | Purpose |
 |------|---------|
 | `translations/*.yml` | Source translation files (one per language) |
-| `scripts/generate_translations.py` | Main code generator |
-| `scripts/translation_sync.py` | String extraction and sync tool |
+| `translations/GLOSSARY.md` | Canonical per-language renderings of recurring terms (generated) |
+| `scripts/generate_translations.py` | Main pack generator |
+| `scripts/translation_sync.py` | String extraction, sync, and glossary tool |
 | `scripts/translations/` | Support modules for sync tool |
 | `mk/translations.mk` | Makefile integration |
-| `ui_xml/translations/translations.xml` | Generated LVGL XML translations |
-| `src/generated/lv_i18n_translations.c` | Generated C source |
-| `src/generated/lv_i18n_translations.h` | Generated C header |
-| `src/application/application.cpp` | Translation initialization |
+| `ui_xml/translations/translations.xml` | Generated combined LVGL XML pack |
+| `ui_xml/translations/<lang>.xml` | Generated per-locale packs (loaded at runtime) |
+| `src/system/translation_loader.cpp` | Per-locale pack loader (`ensure_translation_loaded()`) |
+| `src/application/application.cpp` | Translation startup / language switching |
 | `src/system/settings_manager.cpp` | Locale switching |
 
 ## Troubleshooting

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../lvgl_test_fixture.h"
 #include "buffer_status_modal.h"
 
-#include "../lvgl_test_fixture.h"
+#include <cstring>
 
 #include "../catch_amalgamated.hpp"
-
-#include <cstring>
 
 // ============================================================================
 // Test Wrapper — accesses private members via friend declaration
@@ -17,19 +16,43 @@ class TestableBufferStatusModal : public BufferStatusModal {
     using BufferStatusModal::populate;
 
     // Read subject values for assertions (LVGL getters take non-const pointers)
-    int type_value() { return lv_subject_get_int(&type_subject_); }
-    int show_meter_value() { return lv_subject_get_int(&show_meter_subject_); }
-    int show_espooler_value() { return lv_subject_get_int(&show_espooler_subject_); }
-    int show_flow_value() { return lv_subject_get_int(&show_flow_subject_); }
-    int show_distance_value() { return lv_subject_get_int(&show_distance_subject_); }
+    int type_value() {
+        return lv_subject_get_int(&type_subject_);
+    }
+    int show_meter_value() {
+        return lv_subject_get_int(&show_meter_subject_);
+    }
+    int show_espooler_value() {
+        return lv_subject_get_int(&show_espooler_subject_);
+    }
+    int show_flow_value() {
+        return lv_subject_get_int(&show_flow_subject_);
+    }
+    int show_distance_value() {
+        return lv_subject_get_int(&show_distance_subject_);
+    }
 
-    const char* description_value() { return lv_subject_get_string(&description_subject_); }
-    const char* espooler_value() { return lv_subject_get_string(&espooler_value_subject_); }
-    const char* gear_sync_value() { return lv_subject_get_string(&gear_sync_value_subject_); }
-    const char* clog_value() { return lv_subject_get_string(&clog_value_subject_); }
-    const char* flow_value() { return lv_subject_get_string(&flow_value_subject_); }
-    const char* afc_state_value() { return lv_subject_get_string(&afc_state_subject_); }
-    const char* afc_distance_value() { return lv_subject_get_string(&afc_distance_subject_); }
+    const char* description_value() {
+        return lv_subject_get_string(&description_subject_);
+    }
+    const char* espooler_value() {
+        return lv_subject_get_string(&espooler_value_subject_);
+    }
+    const char* gear_sync_value() {
+        return lv_subject_get_string(&gear_sync_value_subject_);
+    }
+    const char* clog_value() {
+        return lv_subject_get_string(&clog_value_subject_);
+    }
+    const char* flow_value() {
+        return lv_subject_get_string(&flow_value_subject_);
+    }
+    const char* afc_state_value() {
+        return lv_subject_get_string(&afc_state_subject_);
+    }
+    const char* afc_distance_value() {
+        return lv_subject_get_string(&afc_distance_subject_);
+    }
 };
 
 // ============================================================================

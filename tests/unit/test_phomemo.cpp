@@ -51,12 +51,12 @@ TEST_CASE("PhomemoPrinter::build_raster_commands GS v 0 raster header", "[label]
     REQUIRE(commands[14] == 0x00); // normal mode
 
     // bytes_per_line = (319 + 7) / 8 = 40, 16-bit LE
-    REQUIRE(commands[15] == 40);  // lo
-    REQUIRE(commands[16] == 0);   // hi
+    REQUIRE(commands[15] == 40); // lo
+    REQUIRE(commands[16] == 0);  // hi
 
     // num_lines = 10, 16-bit LE
-    REQUIRE(commands[17] == 10);  // lo
-    REQUIRE(commands[18] == 0);   // hi
+    REQUIRE(commands[17] == 10); // lo
+    REQUIRE(commands[18] == 0);  // hi
 }
 
 TEST_CASE("PhomemoPrinter::build_raster_commands total size", "[label]") {
@@ -68,11 +68,11 @@ TEST_CASE("PhomemoPrinter::build_raster_commands total size", "[label]") {
 
     auto commands = helix::PhomemoPrinter::build_raster_commands(bitmap, size);
 
-    int bytes_per_line = (width + 7) / 8; // 40
-    size_t expected = 11                                       // header
-                      + 8                                      // GS v 0 command + dimensions
-                      + static_cast<size_t>(bytes_per_line) * height  // raster data
-                      + 8;                                     // footer
+    int bytes_per_line = (width + 7) / 8;                            // 40
+    size_t expected = 11                                             // header
+                      + 8                                            // GS v 0 command + dimensions
+                      + static_cast<size_t>(bytes_per_line) * height // raster data
+                      + 8;                                           // footer
     REQUIRE(commands.size() == expected);
 }
 
@@ -130,8 +130,8 @@ TEST_CASE("PhomemoPrinter::build_raster_commands known pixel pattern", "[label]"
 
     // Raster data starts at offset 19 (11 header + 8 GS v 0)
     // bytes_per_line = 1, num_lines = 1
-    REQUIRE(commands[15] == 1);  // bytes_per_line lo
-    REQUIRE(commands[17] == 1);  // num_lines lo
+    REQUIRE(commands[15] == 1); // bytes_per_line lo
+    REQUIRE(commands[17] == 1); // num_lines lo
 
     // The single raster byte: no flip needed for Phomemo
     REQUIRE(commands[19] == 0x81);
@@ -174,6 +174,6 @@ TEST_CASE("PhomemoPrinter::build_raster_commands wider label", "[label]") {
     REQUIRE(commands[15] == 50); // lo
     REQUIRE(commands[16] == 0);  // hi
     // num_lines = 3
-    REQUIRE(commands[17] == 3);  // lo
-    REQUIRE(commands[18] == 0);  // hi
+    REQUIRE(commands[17] == 3); // lo
+    REQUIRE(commands[18] == 0); // hi
 }

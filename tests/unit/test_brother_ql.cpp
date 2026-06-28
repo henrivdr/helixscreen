@@ -45,10 +45,12 @@ TEST_CASE("BrotherQLPrinter::build_raster_commands blank row optimization", "[la
     auto commands = helix::BrotherQLPrinter::build_raster_commands(bitmap, sizes[0]);
 
     // Count 0x5A bytes after the header section
-    // Header: 200 (invalidate) + 2 (init) + 4 (raster mode) + 13 (media) + 4 (auto-cut) + 4 (cut-every) + 4 (expanded) + 5 (margins) + 2 (compression) = 238
+    // Header: 200 (invalidate) + 2 (init) + 4 (raster mode) + 13 (media) + 4 (auto-cut) + 4
+    // (cut-every) + 4 (expanded) + 5 (margins) + 2 (compression) = 238
     int blank_count = 0;
     for (size_t i = 238; i < commands.size() - 1; i++) {
-        if (commands[i] == 0x5A) blank_count++;
+        if (commands[i] == 0x5A)
+            blank_count++;
     }
     REQUIRE(blank_count == 5);
 }

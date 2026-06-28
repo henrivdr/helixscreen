@@ -3,12 +3,13 @@
 
 #include "ui_printer_switch_menu.h"
 
-#include "config.h"
-#include "theme_manager.h"
 #include "ui_callback_helpers.h"
 #include "ui_event_safety.h"
 #include "ui_icon_codepoints.h"
 #include "ui_update_queue.h"
+
+#include "config.h"
+#include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -98,8 +99,7 @@ void PrinterSwitchMenu::populate_printer_list() {
 
     for (const auto& id : printer_ids) {
         bool is_active = (id == active_id);
-        std::string name = cfg->get<std::string>("/printers/" + id + "/printer_name",
-                                                  id);
+        std::string name = cfg->get<std::string>("/printers/" + id + "/printer_name", id);
 
         // Row container
         lv_obj_t* row = lv_obj_create(printer_list);
@@ -108,8 +108,7 @@ void PrinterSwitchMenu::populate_printer_list() {
         lv_obj_set_style_pad_all(row, space_sm, 0);
         lv_obj_set_style_pad_gap(row, space_xs, 0);
         lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
 
@@ -146,8 +145,8 @@ void PrinterSwitchMenu::populate_printer_list() {
         lv_obj_add_event_cb(row, on_printer_row_cb, LV_EVENT_CLICKED, nullptr);
     }
 
-    spdlog::debug("[PrinterSwitchMenu] Populated {} printers (active: {})",
-                  printer_ids.size(), active_id);
+    spdlog::debug("[PrinterSwitchMenu] Populated {} printers (active: {})", printer_ids.size(),
+                  active_id);
 }
 
 // ============================================================================
@@ -164,16 +163,13 @@ void PrinterSwitchMenu::handle_add_printer() {
     dispatch_switch_action(MenuAction::ADD_PRINTER);
 }
 
-void PrinterSwitchMenu::dispatch_switch_action(MenuAction action,
-                                                const std::string& printer_id) {
+void PrinterSwitchMenu::dispatch_switch_action(MenuAction action, const std::string& printer_id) {
     auto callback = switch_callback_;
     s_active_instance_ = nullptr;
-    hide();  // Safe: uses lv_obj_delete_async internally
+    hide(); // Safe: uses lv_obj_delete_async internally
 
     if (callback) {
-        helix::ui::queue_update([callback, action, printer_id]() {
-            callback(action, printer_id);
-        });
+        helix::ui::queue_update([callback, action, printer_id]() { callback(action, printer_id); });
     }
 }
 
@@ -252,4 +248,4 @@ void PrinterSwitchMenu::on_printer_row_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-}  // namespace helix::ui
+} // namespace helix::ui

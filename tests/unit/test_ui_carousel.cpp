@@ -591,8 +591,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "remove_item adjusts current_page when removin
     REQUIRE(ui_carousel_get_page_count(carousel) == 2);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "remove_item updates page_subject",
-                 "[carousel][remove_item]") {
+TEST_CASE_METHOD(LVGLTestFixture, "remove_item updates page_subject", "[carousel][remove_item]") {
     lv_obj_t* carousel = ui_carousel_create_obj(test_screen());
     CarouselState* state = ui_carousel_get_state(carousel);
     state->wrap = false;
@@ -616,8 +615,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "remove_item updates page_subject",
     state->page_subject = nullptr;
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "remove_item rebuilds indicators",
-                 "[carousel][remove_item]") {
+TEST_CASE_METHOD(LVGLTestFixture, "remove_item rebuilds indicators", "[carousel][remove_item]") {
     lv_obj_t* carousel = ui_carousel_create_obj(test_screen());
     CarouselState* state = ui_carousel_get_state(carousel);
 

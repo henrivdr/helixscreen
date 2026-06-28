@@ -3,12 +3,13 @@
 
 #include "ams_backend_cfs.h"
 
+#include "ui_temperature_utils.h"
+
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 #include "moonraker_error.h"
 #include "post_op_cooldown_manager.h"
 #include "printer_detector.h"
-#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -642,8 +643,7 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
             if (slot.brand.empty() && i < static_cast<int>(vender_arr.size()) &&
                 vender_arr[i].is_string()) {
                 std::string vender = vender_arr[i].get<std::string>();
-                if (!vender.empty() && vender != "unknown" && vender != "-1" &&
-                    vender != "None") {
+                if (!vender.empty() && vender != "unknown" && vender != "-1" && vender != "None") {
                     slot.brand = vender;
                 }
             }
@@ -1878,8 +1878,8 @@ void AmsBackendCfs::apply_overrides(SlotInfo& slot, int slot_index) {
     // always read RFID -1, so firmware reports the bay EMPTY even though a
     // spool is physically present. If the override carries a real assignment,
     // the user has told us a spool is in this bay — promote it to AVAILABLE.
-    const bool real_assignment = o.spoolman_id > 0 || !o.material.empty() ||
-                                 !o.brand.empty() || !o.spool_name.empty() || o.color_set;
+    const bool real_assignment = o.spoolman_id > 0 || !o.material.empty() || !o.brand.empty() ||
+                                 !o.spool_name.empty() || o.color_set;
     if (real_assignment && slot.status == SlotStatus::EMPTY) {
         slot.status = SlotStatus::AVAILABLE;
     }

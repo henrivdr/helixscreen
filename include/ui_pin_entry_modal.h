@@ -110,4 +110,4 @@ class PinEntryModal {
     static void on_cancel_clicked(lv_event_t* e);
 };
 
-}  // namespace helix::ui
+} // namespace helix::ui

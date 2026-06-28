@@ -226,7 +226,8 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         lv_subject_set_int(&is_qidi_subject_, 0);
         system_info_buf_[0] = '\0';
         lv_subject_copy_string(&system_info_subject_, system_info_buf_);
-        snprintf(status_buf_, sizeof(status_buf_), "%s", lv_tr("No Multi-Filament System connected"));
+        snprintf(status_buf_, sizeof(status_buf_), "%s",
+                 lv_tr("No Multi-Filament System connected"));
         lv_subject_copy_string(&status_subject_, status_buf_);
 
         if (section_list_container_) {
@@ -282,7 +283,8 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         if (dist_slider) {
             lv_slider_set_value(dist_slider, eject_distance, LV_ANIM_OFF);
         }
-        snprintf(qidi_eject_distance_buf_, sizeof(qidi_eject_distance_buf_), "%d mm", eject_distance);
+        snprintf(qidi_eject_distance_buf_, sizeof(qidi_eject_distance_buf_), "%d mm",
+                 eject_distance);
         lv_subject_copy_string(&qidi_eject_distance_display_subject_, qidi_eject_distance_buf_);
 
         auto* vel_slider = lv_obj_find_by_name(overlay_, "qidi_eject_velocity_slider");
@@ -408,27 +410,27 @@ const char* AmsDeviceOperationsOverlay::action_to_string(int action) {
     case AmsAction::IDLE:
         return lv_tr("Idle");
     case AmsAction::LOADING:
-        return "Loading filament...";
+        return lv_tr("Loading filament...");
     case AmsAction::UNLOADING:
-        return "Unloading filament...";
+        return lv_tr("Unloading filament...");
     case AmsAction::SELECTING:
-        return "Selecting slot...";
+        return lv_tr("Selecting slot...");
     case AmsAction::RESETTING:
-        return "Resetting...";
+        return lv_tr("Resetting...");
     case AmsAction::FORMING_TIP:
-        return "Forming tip...";
+        return lv_tr("Forming tip...");
     case AmsAction::CUTTING:
-        return "Cutting filament...";
+        return lv_tr("Cutting filament...");
     case AmsAction::HEATING:
         return lv_tr("Heating...");
     case AmsAction::CHECKING:
-        return "Checking slots...";
+        return lv_tr("Checking slots...");
     case AmsAction::PAUSED:
-        return "Paused (attention needed)";
+        return lv_tr("Paused (attention needed)");
     case AmsAction::ERROR:
-        return "Error state";
+        return lv_tr("Error state");
     default:
-        return "Unknown";
+        return lv_tr("Unknown");
     }
 }
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "subject_managed_panel.h"
 #include "ui_observer_guard.h" // SubjectLifetime
+
+#include "subject_managed_panel.h"
 
 #include <atomic>
 #include <lvgl.h>
@@ -186,8 +187,7 @@ class PrinterPrintState {
      * @return Non-null subject pointer for `0 <= idx < kMaxExtruderScan` once
      *         `init_subjects()` has run; `nullptr` otherwise (lifetime untouched).
      */
-    lv_subject_t* get_extruder_filament_used_subject(int extruder_idx,
-                                                     SubjectLifetime& lifetime);
+    lv_subject_t* get_extruder_filament_used_subject(int extruder_idx, SubjectLifetime& lifetime);
 
     /// Maximum number of per-extruder filament subjects pre-populated at init.
     /// Klipper toolchanger setups max out well below this.
@@ -575,8 +575,8 @@ class PrinterPrintState {
     char display_message_buf_[128]{};        // Buffer for message storage
 
     // print_stats.message from Klipper (set by firmware on pause/error to describe reason)
-    lv_subject_t print_message_{};    // String: e.g. "Filament Sensor: Runout Detected"
-    char print_message_buf_[256]{};   // Buffer for print_stats.message storage
+    lv_subject_t print_message_{};  // String: e.g. "Filament Sensor: Runout Detected"
+    char print_message_buf_[256]{}; // Buffer for print_stats.message storage
 
     // print_stats.exception — structured pause descriptor {id,index,code,message,
     // level} sent by Snapmaker U1 firmware. On these pauses print_stats.message

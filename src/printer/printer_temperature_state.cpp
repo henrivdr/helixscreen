@@ -10,9 +10,10 @@
 
 #include "printer_temperature_state.h"
 
+#include "ui_temperature_utils.h"
+
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "state/subject_macros.h"
-#include "ui_temperature_utils.h"
 #include "unit_conversions.h"
 
 #include <spdlog/spdlog.h>
@@ -79,24 +80,33 @@ void PrinterTemperatureState::deinit_subjects() {
     // Signal subject death FIRST — sets the pointed-to bool to false so that
     // ALL ObserverGuards detect the subject as dead and skip lv_observer_remove()
     // on the about-to-be-freed observers. Then reset the shared_ptr. (#816)
-    if (bed_temp_lifetime_) *bed_temp_lifetime_ = false;
+    if (bed_temp_lifetime_)
+        *bed_temp_lifetime_ = false;
     bed_temp_lifetime_.reset();
-    if (bed_target_lifetime_) *bed_target_lifetime_ = false;
+    if (bed_target_lifetime_)
+        *bed_target_lifetime_ = false;
     bed_target_lifetime_.reset();
-    if (chamber_temp_lifetime_) *chamber_temp_lifetime_ = false;
+    if (chamber_temp_lifetime_)
+        *chamber_temp_lifetime_ = false;
     chamber_temp_lifetime_.reset();
-    if (chamber_target_lifetime_) *chamber_target_lifetime_ = false;
+    if (chamber_target_lifetime_)
+        *chamber_target_lifetime_ = false;
     chamber_target_lifetime_.reset();
-    if (chamber_fan_target_lifetime_) *chamber_fan_target_lifetime_ = false;
+    if (chamber_fan_target_lifetime_)
+        *chamber_fan_target_lifetime_ = false;
     chamber_fan_target_lifetime_.reset();
-    if (chamber_effective_target_lifetime_) *chamber_effective_target_lifetime_ = false;
+    if (chamber_effective_target_lifetime_)
+        *chamber_effective_target_lifetime_ = false;
     chamber_effective_target_lifetime_.reset();
-    if (chamber_mode_lifetime_) *chamber_mode_lifetime_ = false;
+    if (chamber_mode_lifetime_)
+        *chamber_mode_lifetime_ = false;
     chamber_mode_lifetime_.reset();
     for (auto& [name, info] : extruders_) {
-        if (info.temp_lifetime) *info.temp_lifetime = false;
+        if (info.temp_lifetime)
+            *info.temp_lifetime = false;
         info.temp_lifetime.reset();
-        if (info.target_lifetime) *info.target_lifetime = false;
+        if (info.target_lifetime)
+            *info.target_lifetime = false;
         info.target_lifetime.reset();
     }
 
@@ -142,9 +152,11 @@ void PrinterTemperatureState::init_extruders(const std::vector<std::string>& hea
     // shared_ptr copies) detect the subject as dead and skip lv_observer_remove()
     // on the about-to-be-freed observers. (#816)
     for (auto& [name, info] : extruders_) {
-        if (info.temp_lifetime) *info.temp_lifetime = false;
+        if (info.temp_lifetime)
+            *info.temp_lifetime = false;
         info.temp_lifetime.reset();
-        if (info.target_lifetime) *info.target_lifetime = false;
+        if (info.target_lifetime)
+            *info.target_lifetime = false;
         info.target_lifetime.reset();
     }
 

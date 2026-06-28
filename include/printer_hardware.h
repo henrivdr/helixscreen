@@ -263,7 +263,6 @@ class PrinterHardware {
      */
     static bool is_ams_sensor_substring(const std::string& sensor_name);
 
-
     std::vector<std::string> heaters_;
     std::vector<std::string> sensors_;
     std::vector<std::string> fans_;

@@ -221,8 +221,7 @@ G1 X30 Y30 E0.3
     REQUIRE(index.get_entry(1).file_offset < index.get_entry(2).file_offset);
 }
 
-TEST_CASE("GCodeLayerIndex - LAYER_CHANGE_HOOK is not a marker",
-          "[gcode][layer_index]") {
+TEST_CASE("GCodeLayerIndex - LAYER_CHANGE_HOOK is not a marker", "[gcode][layer_index]") {
     // Locks in the terminator check in is_layer_marker: a comment whose
     // name starts with LAYER_CHANGE but continues into a longer identifier
     // (e.g. a custom ;LAYER_CHANGE_HOOK macro) must not flip the indexer
@@ -251,8 +250,7 @@ G1 X30 Y30 E0.3
     REQUIRE(index.get_layer_count() == 3);
 }
 
-TEST_CASE("GCodeLayerIndex - per-layer start position",
-          "[gcode][layer_index]") {
+TEST_CASE("GCodeLayerIndex - per-layer start position", "[gcode][layer_index]") {
     // Streaming mode parses each layer with a fresh GCodeParser, so without a
     // recorded starting position the first move of a layer is drawn from
     // (0,0) — producing stray travel/extrusion lines from origin to the real
@@ -292,8 +290,7 @@ G1 X110 Y120 E0.3
     REQUIRE(e2.start_z == Approx(0.4f));
 }
 
-TEST_CASE("GCodeLayerIndex - Z-only move carries X/Y forward",
-          "[gcode][layer_index]") {
+TEST_CASE("GCodeLayerIndex - Z-only move carries X/Y forward", "[gcode][layer_index]") {
     // A Z-only inter-layer move (common with retract+lift slicers) must not
     // reset X/Y on the next layer's snapshot — the head is still at the end
     // of the previous layer's print move.
@@ -318,8 +315,7 @@ G1 X50 Y60 E0.2
     REQUIRE(e1.start_z == Approx(0.2f));
 }
 
-TEST_CASE("GCodeLayerIndex - axis extraction ignores comments",
-          "[gcode][layer_index]") {
+TEST_CASE("GCodeLayerIndex - axis extraction ignores comments", "[gcode][layer_index]") {
     // Defensive: a trailing ;X100 retract comment must not poison the X
     // tracked for the next layer's snapshot.
     std::string gcode = R"(
@@ -338,8 +334,7 @@ G1 X50 Y60 Z0.4
     REQUIRE(e1.start_y == Approx(40.0f));
 }
 
-TEST_CASE("GCodeLayerIndex - per-layer start_feature_type",
-          "[gcode][layer_index][feature_type]") {
+TEST_CASE("GCodeLayerIndex - per-layer start_feature_type", "[gcode][layer_index][feature_type]") {
     // Streaming mode parses each layer with a fresh GCodeParser. Without a
     // recorded starting feature type, the prologue's ;TYPE: comment is
     // invisible to load_layer (it lives before layer 0's byte_offset),

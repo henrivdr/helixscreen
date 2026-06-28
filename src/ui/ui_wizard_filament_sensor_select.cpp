@@ -150,7 +150,7 @@ void WizardFilamentSensorSelectStep::populate_dropdowns() {
             options += "\n";
         // Use display name (sensor_name) for dropdown, but store klipper_name
         if (i == 0) {
-            options += "None";
+            options += lv_tr("None");
         } else {
             options += standalone_sensors_[i - 1].sensor_name;
         }
@@ -198,8 +198,9 @@ lv_obj_t* WizardFilamentSensorSelectStep::create(lv_obj_t* parent) {
     if (!screen_root_) {
         spdlog::error("[{}] Failed to create screen from XML", get_name());
         ui_notification_error(
-            "Wizard Error",
-            "Failed to load filament sensor configuration screen. Please restart the application.");
+            lv_tr("Wizard Error"),
+            lv_tr("Failed to load filament sensor configuration screen. Please restart the "
+                  "application."));
         return nullptr;
     }
 

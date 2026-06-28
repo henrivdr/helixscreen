@@ -11,16 +11,15 @@
  * 4. End-to-end flow: list files -> find best match -> download CSV
  */
 
-#include "../../include/moonraker_client_mock.h"
 #include "../../include/moonraker_advanced_api.h"
 #include "../../include/moonraker_api.h"
+#include "../../include/moonraker_client_mock.h"
 #include "../../include/printer_state.h"
-
-#include "hv/json.hpp"
 
 #include <string>
 
 #include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using namespace helix;
 using json = nlohmann::json;
@@ -31,13 +30,17 @@ using json = nlohmann::json;
 
 TEST_CASE("File list response with result wrapper is parsed correctly", "[accel_csv][parsing]") {
     // Simulate the JSON-RPC response format: {"result": [{...}, ...]}
-    json response = {
-        {"result", json::array({
-            {{"path", "raw_data_belt_path_a-20260310_120000.csv"}, {"size", 2048}, {"modified", 1773158400.0}},
-            {{"path", "raw_data_belt_path_b-20260310_120001.csv"}, {"size", 2048}, {"modified", 1773158401.0}},
-            {{"path", "raw_data_x-20260310_115000.csv"}, {"size", 4096}, {"modified", 1773154800.0}},
-        })}
-    };
+    json response = {{"result", json::array({
+                                    {{"path", "raw_data_belt_path_a-20260310_120000.csv"},
+                                     {"size", 2048},
+                                     {"modified", 1773158400.0}},
+                                    {{"path", "raw_data_belt_path_b-20260310_120001.csv"},
+                                     {"size", 2048},
+                                     {"modified", 1773158401.0}},
+                                    {{"path", "raw_data_x-20260310_115000.csv"},
+                                     {"size", 4096},
+                                     {"modified", 1773154800.0}},
+                                })}};
 
     SECTION("Extract result array and find matching files") {
         REQUIRE(response.contains("result"));
@@ -82,10 +85,9 @@ TEST_CASE("File list response without result field is handled", "[accel_csv][par
 // ============================================================================
 
 TEST_CASE("CSV content response extracts string from result", "[accel_csv][parsing]") {
-    std::string expected_csv =
-        "#time,accel_x,accel_y,accel_z\n"
-        "0.000000,0.1,0.2,9.8\n"
-        "0.001000,0.3,0.5,9.7\n";
+    std::string expected_csv = "#time,accel_x,accel_y,accel_z\n"
+                               "0.000000,0.1,0.2,9.8\n"
+                               "0.001000,0.3,0.5,9.7\n";
 
     SECTION("Result-wrapped string response") {
         json response = {{"result", expected_csv}};
@@ -141,8 +143,10 @@ TEST_CASE("Mock returns data_store accelerometer files", "[accel_csv][mock]") {
     bool found_path_b = false;
     for (const auto& file : result) {
         std::string path = file.value("path", "");
-        if (path.find("belt_path_a") != std::string::npos) found_path_a = true;
-        if (path.find("belt_path_b") != std::string::npos) found_path_b = true;
+        if (path.find("belt_path_a") != std::string::npos)
+            found_path_a = true;
+        if (path.find("belt_path_b") != std::string::npos)
+            found_path_b = true;
     }
     CHECK(found_path_a);
     CHECK(found_path_b);
@@ -194,8 +198,7 @@ TEST_CASE("Mock get_file returns error for missing filename", "[accel_csv][mock]
     json params; // no filename
 
     client.send_jsonrpc(
-        "server.files.get_file", params,
-        [](const json&) { FAIL("Unexpected success callback"); },
+        "server.files.get_file", params, [](const json&) { FAIL("Unexpected success callback"); },
         [&](const MoonrakerError& err) {
             error_called = true;
             CHECK(err.type == MoonrakerErrorType::VALIDATION_ERROR);
@@ -252,8 +255,7 @@ TEST_CASE("download_accel_csv reports error for missing CSV name", "[accel_csv][
 
     // Use a name that won't match any mock files
     advanced.download_accel_csv(
-        "nonexistent_axis_zzz",
-        [&](const std::string&) { complete_called = true; },
+        "nonexistent_axis_zzz", [&](const std::string&) { complete_called = true; },
         [&](const MoonrakerError& err) {
             error_called = true;
             CHECK(err.message.find("No accelerometer data file found") != std::string::npos);

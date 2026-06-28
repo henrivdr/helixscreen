@@ -72,8 +72,7 @@ TEST_CASE("MemoryThresholds for good device honors RSS floor on small good devic
     REQUIRE(t.critical_rss_kb == info.total_kb * 50 / 100);
 }
 
-TEST_CASE("MemoryThresholds: 512MB-class AD5X classifies as good, not normal",
-          "[memory_monitor]") {
+TEST_CASE("MemoryThresholds: 512MB-class AD5X classifies as good, not normal", "[memory_monitor]") {
     // AD5X is physically 512MB but reports ~473MB usable after firmware reserves
     // kernel/CMA/framebuffer. It must land in the "good" tier (growth 5MB/5min,
     // RSS floors) rather than "normal" (growth 3MB/5min) so a 512MB board is not

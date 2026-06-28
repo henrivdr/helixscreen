@@ -2,22 +2,23 @@
 
 #include "ams_backend_snapmaker.h"
 
+#include "ui_toast_manager.h"
+
 #include "ams_error.h"
 #include "ams_state.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "pause_cause.h"
 #include "post_op_cooldown_manager.h"
 #include "snapmaker_resume.h"
-#include "ui_toast_manager.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <lvgl.h>
-#include "lvgl/src/others/translation/lv_translation.h"
 #include <string_view>
 #include <utility>
 
@@ -204,8 +205,7 @@ AmsBackendSnapmaker::get_operation_step_model(StepOperationType op) const {
     model.steps.push_back({lv_tr("Home"), 0, false, false});
     model.steps.push_back({lv_tr("Select"), 1, false, false});
     model.steps.push_back({lv_tr("Heat nozzle"), 2, false, /*live_temp=*/true});
-    model.steps.push_back(
-        {unload ? lv_tr("Retract") : lv_tr("Feed filament"), 3, false, false});
+    model.steps.push_back({unload ? lv_tr("Retract") : lv_tr("Feed filament"), 3, false, false});
     return model;
 }
 
@@ -531,10 +531,9 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     // the user what the wait is — otherwise the long pause reads as a hang.
     // prepare_for_resume runs on the main thread (resume-button path), so this
     // toast is safe to raise directly here.
-    ToastManager::instance().show(
-        ToastSeverity::INFO,
-        lv_tr("Refeeding filament — this may take a minute"),
-        /*duration_ms=*/8000);
+    ToastManager::instance().show(ToastSeverity::INFO,
+                                  lv_tr("Refeeding filament — this may take a minute"),
+                                  /*duration_ms=*/8000);
 
     auto tok = lifetime_.token();
     const char* tag = backend_log_tag();
@@ -559,8 +558,8 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
             std::string msg = err.message;
             tok.defer("AmsBackendSnapmaker::prepare_for_resume.err",
                       [this, cb = std::move(on_ready), tag, slot, msg]() {
-                          spdlog::error("{} prepare_for_resume: tool {} AMS load failed: {}",
-                                        tag, slot, msg);
+                          spdlog::error("{} prepare_for_resume: tool {} AMS load failed: {}", tag,
+                                        slot, msg);
                           // Load failed → RESUME is never dispatched; report failure.
                           if (cb) {
                               cb(AmsError(AmsResult::COMMAND_FAILED,
@@ -1128,12 +1127,11 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             // Treat an error on an idle, empty, non-active lane as
                             // a non-event. (Snapmaker U1 false-alarm fix.)
                             const auto* slot = system_info_.units[0].get_slot(i);
-                            const bool lane_empty =
-                                slot == nullptr || !slot->is_present();
+                            const bool lane_empty = slot == nullptr || !slot->is_present();
                             const bool load_in_progress =
                                 state == "loading" || state == "preloading";
-                            const bool active_lane = system_info_.current_slot == i ||
-                                                     system_info_.current_tool == i;
+                            const bool active_lane =
+                                system_info_.current_slot == i || system_info_.current_tool == i;
                             if (lane_empty && !load_in_progress && !active_lane) {
                                 spdlog::debug(
                                     "[AmsBackendSnapmaker] ignoring channel_error '{}' on idle "
@@ -1182,8 +1180,7 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                 slot->status = SlotStatus::AVAILABLE;
                                 changed = true;
                             }
-                            if (system_info_.current_slot == i ||
-                                system_info_.current_tool == i) {
+                            if (system_info_.current_slot == i || system_info_.current_tool == i) {
                                 system_info_.filament_loaded = false;
                                 system_info_.current_slot = -1;
                                 system_info_.current_tool = -1;
@@ -1465,9 +1462,8 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
         // mutex is released. Only publish on an actual change to avoid spamming
         // the UpdateQueue on every incremental notify.
         int active_tool = system_info_.current_tool;
-        bool active_port_present =
-            !(active_tool >= 0 && active_tool < NUM_TOOLS) ||
-            port_sensor_filament_present_[active_tool];
+        bool active_port_present = !(active_tool >= 0 && active_tool < NUM_TOOLS) ||
+                                   port_sensor_filament_present_[active_tool];
         int port_val = active_port_present ? 1 : 0;
         if (port_val != last_published_port_present_) {
             last_published_port_present_ = port_val;

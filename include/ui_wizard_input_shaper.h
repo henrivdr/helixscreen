@@ -2,11 +2,10 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "async_lifetime_guard.h"
 #include "input_shaper_calibrator.h"
 #include "lvgl/lvgl.h"
+#include "wizard_step.h"
 
 #include <atomic>
 #include <memory>
@@ -51,9 +50,15 @@ class InputShaperCalibrator;
 class WizardInputShaperStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::InputShaper; }
-    const char* component_name() const override { return "wizard_input_shaper"; }
-    const char* log_name() const override { return "Wizard Input Shaper"; }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::InputShaper;
+    }
+    const char* component_name() const override {
+        return "wizard_input_shaper";
+    }
+    const char* log_name() const override {
+        return "Wizard Input Shaper";
+    }
     bool should_skip(const helix::wizard::StepContext& ctx) const override;
 
     WizardInputShaperStep();

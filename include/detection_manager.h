@@ -3,13 +3,14 @@
 
 #include "async_lifetime_guard.h"
 #include "detection_source.h"
-#include "hv/json.hpp"
 
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "hv/json.hpp"
 
 namespace helix {
 class MoonrakerClient;
@@ -49,7 +50,9 @@ class DetectionManager {
     bool any_available() const;
 
     using Presenter = std::function<void(const DetectionEvent&, DetectionPolicy)>;
-    void set_presenter(Presenter p) { presenter_ = std::move(p); }
+    void set_presenter(Presenter p) {
+        presenter_ = std::move(p);
+    }
 
     void reset_for_test();
 
@@ -67,14 +70,14 @@ class DetectionManager {
     void apply_capability(bool has_defect_detection);
 
     helix::MoonrakerClient* client_ = nullptr;
-    helix::PrinterState*    state_  = nullptr;
+    helix::PrinterState* state_ = nullptr;
 
     std::vector<std::unique_ptr<DetectionSource>> sources_;
-    std::map<std::string, DetectionPolicy>        policies_;
-    Presenter                                     presenter_;
+    std::map<std::string, DetectionPolicy> policies_;
+    Presenter presenter_;
 
     helix::AsyncLifetimeGuard lifetime_;
-    bool                      connect_observer_registered_ = false;
+    bool connect_observer_registered_ = false;
 };
 
-}  // namespace helix::detection
+} // namespace helix::detection

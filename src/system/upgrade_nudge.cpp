@@ -57,8 +57,7 @@ void UpgradeNudge::reload() {
     std::lock_guard<std::mutex> lock(mu_);
     std::string raw = cfg->get<std::string>(kIntensityPtr, std::string("off"));
     intensity_ = parse_intensity(raw);
-    dismissed_version_ =
-        cfg->get<std::string>(kDismissedVersionPtr, std::string(""));
+    dismissed_version_ = cfg->get<std::string>(kDismissedVersionPtr, std::string(""));
     spdlog::debug("[UpgradeNudge] Loaded intensity={} dismissed_version='{}'",
                   intensity_to_string(intensity_), dismissed_version_);
 }

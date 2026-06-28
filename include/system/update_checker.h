@@ -193,10 +193,10 @@ class UpdateChecker {
     /// candidate met the free-space threshold, so callers can build a
     /// useful error message.
     struct DownloadPathDiag {
-        std::string best_dir;          // best candidate found (regardless of threshold)
-        uint64_t best_free_bytes = 0;  // its free space (uint64_t — on 32-bit
-                                       // platforms a 46 GiB rootfs wraps size_t)
-        uint64_t threshold_bytes = 0;  // threshold required
+        std::string best_dir;         // best candidate found (regardless of threshold)
+        uint64_t best_free_bytes = 0; // its free space (uint64_t — on 32-bit
+                                      // platforms a 46 GiB rootfs wraps size_t)
+        uint64_t threshold_bytes = 0; // threshold required
     };
     /// @param diag Optional diagnostic out-param (for error reporting)
     /// @param threshold_bytes Required free bytes; 0 → use a 120 MB default

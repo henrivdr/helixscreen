@@ -15,7 +15,9 @@ class CjkFontManager {
 
     void on_language_changed(const std::string& lang);
 
-    bool is_loaded() const { return loaded_; }
+    bool is_loaded() const {
+        return loaded_;
+    }
 
     void shutdown();
 
@@ -39,4 +41,4 @@ class CjkFontManager {
     bool loaded_ = false;
 };
 
-}  // namespace helix::system
+} // namespace helix::system

@@ -27,8 +27,7 @@ struct FilamentConsumptionTrackerTestAccess {
     static void set_persist_interval(FilamentConsumptionTracker& t, uint32_t ms) {
         for (auto& s : t.sinks_) {
             if (s->kind() == SinkKind::ExternalSpool) {
-                static_cast<ExternalSpoolSink*>(s.get())
-                    ->set_persist_interval_ms_override(ms);
+                static_cast<ExternalSpoolSink*>(s.get())->set_persist_interval_ms_override(ms);
                 return;
             }
         }
@@ -38,15 +37,13 @@ struct FilamentConsumptionTrackerTestAccess {
     /// print_state_enum_ subject (useful when the test sets up fixtures before
     /// the aggregate observer fires).
     static void force_print_state(PrintJobState s) {
-        FilamentConsumptionTracker::instance().on_print_state_changed(
-            static_cast<int>(s));
+        FilamentConsumptionTracker::instance().on_print_state_changed(static_cast<int>(s));
     }
 
     /// Invoke the per-extruder handler directly — lets routing tests verify
     /// the dispatch logic without needing the full observer plumbing to fire.
     static void on_extruder_filament_used(int extruder_idx, int mm) {
-        FilamentConsumptionTracker::instance().on_extruder_filament_used_changed(
-            extruder_idx, mm);
+        FilamentConsumptionTracker::instance().on_extruder_filament_used_changed(extruder_idx, mm);
     }
 
     /// Count of registered sinks (any kind).

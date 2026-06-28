@@ -20,6 +20,7 @@
 #include "ui_update_queue.h"
 
 #include "ams_backend_cfs.h"
+#include "ams_error_bridge.h"
 #include "app_constants.h"
 #include "asset_manager.h"
 #include "cjk_font_manager.h"
@@ -27,10 +28,8 @@
 #include "display/lv_display_private.h"
 #include "display_manager.h"
 #include "environment_config.h"
-#include "ams_error_bridge.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
-#include "recovery_modal_presenter.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -47,6 +46,7 @@
 #include "power_device_state.h"
 #include "print_history_manager.h"
 #include "printer_recovery_service.h"
+#include "recovery_modal_presenter.h"
 #include "rpc_error_correlation.h"
 #include "screenshot.h"
 #include "sensor_state.h"
@@ -169,7 +169,6 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_translation.h"
 #include "hv/hlog.h" // libhv logging - sync level with spdlog
-#include "hv/json.hpp"
 #include "logging_init.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "lvgl_log_handler.h"
@@ -192,6 +191,8 @@
 
 #include <lvgl/src/misc/cache/instance/lv_image_cache.h>
 #include <spdlog/spdlog.h>
+
+#include "hv/json.hpp"
 
 #ifdef HELIX_DISPLAY_SDL
 #include <SDL.h>
@@ -808,8 +809,8 @@ int Application::run(int argc, char** argv) {
         if (s_safe_mode_active) {
             ToastManager::instance().show(
                 ToastSeverity::WARNING,
-                "Safe Mode active. The printer connection is disabled because the app "
-                "kept crashing on startup. Open Settings to fix the issue, then reboot.",
+                lv_tr("Safe Mode active. The printer connection is disabled because the app "
+                      "kept crashing on startup. Open Settings to fix the issue, then reboot."),
                 0 /* sticky */);
         }
 
@@ -900,7 +901,7 @@ int Application::run(int argc, char** argv) {
         try {
             ToastManager::instance().show(
                 ToastSeverity::ERROR,
-                "App startup encountered an error. Some features may be unavailable.",
+                lv_tr("App startup encountered an error. Some features may be unavailable."),
                 0 /* sticky */);
         } catch (...) {
             // Toast failure is non-fatal; the user still gets a working main loop.
@@ -1631,7 +1632,7 @@ bool Application::init_panel_subjects() {
                 return;
             if (p == DetectionPolicy::NotifyOnly) {
                 ToastManager::instance().show(ToastSeverity::WARNING,
-                                              "Spaghetti detected — print paused", 8000);
+                                              lv_tr("Spaghetti detected — print paused"), 8000);
                 return;
             }
             // DeferToSource: show the response modal. The modal self-deletes via its
@@ -1642,15 +1643,13 @@ bool Application::init_panel_subjects() {
             // TODO(detection): attach latest camera frame when a stream is active
             modal->set_detection(e.message, nullptr);
             modal->set_on_resume([] {
-                get_moonraker_api()->job().resume_print([] {},
-                                                        [](const MoonrakerError&) {});
+                get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
             });
             modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
             modal->set_on_tune([] {
                 get_moonraker_client()->send_jsonrpc(
                     "printer.gcode.script",
-                    nlohmann::json{{"script",
-                                    "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
+                    nlohmann::json{{"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
                     [](const nlohmann::json&) {}, [](const MoonrakerError&) {});
             });
             modal->show(lv_screen_active());
@@ -1893,11 +1892,11 @@ bool Application::init_plugins() {
             auto* ctx = new PluginDisableContext{m_plugin_manager.get(), errors[0].plugin_id};
 
             char toast_msg[96];
-            snprintf(toast_msg, sizeof(toast_msg), "\"%s\" failed to load",
+            snprintf(toast_msg, sizeof(toast_msg), lv_tr("\"%s\" failed to load"),
                      errors[0].plugin_id.c_str());
 
             ToastManager::instance().show_with_action(
-                ToastSeverity::WARNING, toast_msg, "Disable",
+                ToastSeverity::WARNING, toast_msg, lv_tr("Disable"),
                 [](void* user_data) {
                     auto* ctx = static_cast<PluginDisableContext*>(user_data);
                     if (ctx->manager && ctx->manager->disable_plugin(ctx->plugin_id)) {
@@ -1910,10 +1909,11 @@ bool Application::init_plugins() {
         } else {
             // Multiple failures: Show [Manage] button to open Settings > Plugins
             char toast_msg[64];
-            snprintf(toast_msg, sizeof(toast_msg), "%zu plugins failed to load", errors.size());
+            snprintf(toast_msg, sizeof(toast_msg), lv_tr("%zu plugins failed to load"),
+                     errors.size());
 
             ToastManager::instance().show_with_action(
-                ToastSeverity::WARNING, toast_msg, "Manage",
+                ToastSeverity::WARNING, toast_msg, lv_tr("Manage"),
                 [](void* /*user_data*/) {
                     NavigationManager::instance().set_active(PanelId::Settings);
                     get_global_settings_panel().handle_plugins_clicked();
@@ -2023,8 +2023,8 @@ bool Application::run_wizard() {
     // Clamp to a valid StepId range so an out-of-range debug value lands on a real
     // step (the last one) instead of a blank wizard from a bogus enum cast.
     if (initial_step < 0 || initial_step >= helix::wizard::kStepCount) {
-        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping",
-                     initial_step, helix::wizard::kStepCount);
+        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping", initial_step,
+                     helix::wizard::kStepCount);
         initial_step = (initial_step < 0) ? 0 : helix::wizard::kStepCount - 1;
     }
     // Map it to a StepId for the registry-driven wizard.
@@ -3091,8 +3091,8 @@ void Application::init_action_prompt() {
     // also replays the most recent gcode_store error when the WS (re)connects
     // (catches errors that fired while HelixScreen was offline). Lives as
     // a member so its dtor unregisters callbacks before MoonrakerClient dies.
-    m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client,
-                                                                      *m_recovery_presenter);
+    m_gcode_error_router =
+        std::make_unique<helix::GcodeErrorRouter>(api, client, *m_recovery_presenter);
 
     // Narration router: maps `//` toolchange narration to the active AMS
     // backend's step model and drives the toolchange_step subject. Separate
@@ -3194,8 +3194,9 @@ void Application::check_wifi_availability() {
 
     auto wifi = get_wifi_manager();
     if (wifi && !wifi->has_hardware()) {
-        NOTIFY_ERROR_MODAL("WiFi Unavailable", "WiFi was configured but hardware is not available. "
-                                               "Check system configuration.");
+        NOTIFY_ERROR_MODAL(lv_tr("WiFi Unavailable"),
+                           lv_tr("WiFi was configured but hardware is not available. "
+                                 "Check system configuration."));
     }
 }
 
@@ -3470,8 +3471,8 @@ int Application::main_loop() {
             try {
                 ToastManager::instance().show(
                     ToastSeverity::ERROR,
-                    "An internal error occurred. The app continues running — "
-                    "please send a debug bundle from Settings > About if it repeats.",
+                    lv_tr("An internal error occurred. The app continues running — "
+                          "please send a debug bundle from Settings > About if it repeats."),
                     8000);
             } catch (...) {
                 // Toast subsystem itself in trouble — keep running anyway.
@@ -3764,7 +3765,7 @@ void Application::switch_printer(const std::string& printer_id) {
     // Show toast with the new printer name
     std::string printer_name =
         m_config->get<std::string>(m_config->df() + "printer_name", printer_id);
-    std::string toast_msg = "Connected to " + printer_name;
+    std::string toast_msg = fmt::format(fmt::runtime(lv_tr("Connected to {}")), printer_name);
     ToastManager::instance().show(ToastSeverity::INFO, toast_msg.c_str());
 
     m_soft_restart_in_progress = false;

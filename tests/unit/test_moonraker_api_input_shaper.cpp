@@ -906,9 +906,8 @@ TEST_CASE("Kalico smoother regex parses bleeding-edge format", "[input_shaper][k
     }
 
     SECTION("Standard Klipper line is NOT matched by kalico_regex") {
-        std::string line =
-            "Fitted shaper 'mzv' frequency = 36.7 Hz "
-            "(vibrations = 7.2%, smoothing ~= 0.140)";
+        std::string line = "Fitted shaper 'mzv' frequency = 36.7 Hz "
+                           "(vibrations = 7.2%, smoothing ~= 0.140)";
 
         std::smatch match;
         CHECK_FALSE(std::regex_search(line, match, kalico_regex));
@@ -923,12 +922,18 @@ TEST_CASE("Kalico smoother regex parses bleeding-edge format", "[input_shaper][k
 
     SECTION("All Kalico smooth shaper types parse correctly") {
         std::vector<std::pair<std::string, std::string>> smoother_lines = {
-            {"smooth_zv", "Fitted smoother 'smooth_zv' frequency = 60.2 Hz (vibration score = 4.80%, smoothing ~= 0.040, combined score = 1.0e-02)"},
-            {"smooth_mzv", "Fitted smoother 'smooth_mzv' frequency = 54.4 Hz (vibration score = 1.20%, smoothing ~= 0.085, combined score = 2.0e-02)"},
-            {"smooth_ei", "Fitted smoother 'smooth_ei' frequency = 57.0 Hz (vibration score = 0.50%, smoothing ~= 0.095, combined score = 3.0e-02)"},
-            {"smooth_2hump_ei", "Fitted smoother 'smooth_2hump_ei' frequency = 72.4 Hz (vibration score = 0.00%, smoothing ~= 0.065, combined score = 4.0e-02)"},
-            {"smooth_zvd_ei", "Fitted smoother 'smooth_zvd_ei' frequency = 68.0 Hz (vibration score = 0.10%, smoothing ~= 0.070, combined score = 5.0e-02)"},
-            {"smooth_si", "Fitted smoother 'smooth_si' frequency = 52.0 Hz (vibration score = 0.00%, smoothing ~= 0.110, combined score = 6.0e-02)"},
+            {"smooth_zv", "Fitted smoother 'smooth_zv' frequency = 60.2 Hz (vibration score = "
+                          "4.80%, smoothing ~= 0.040, combined score = 1.0e-02)"},
+            {"smooth_mzv", "Fitted smoother 'smooth_mzv' frequency = 54.4 Hz (vibration score = "
+                           "1.20%, smoothing ~= 0.085, combined score = 2.0e-02)"},
+            {"smooth_ei", "Fitted smoother 'smooth_ei' frequency = 57.0 Hz (vibration score = "
+                          "0.50%, smoothing ~= 0.095, combined score = 3.0e-02)"},
+            {"smooth_2hump_ei", "Fitted smoother 'smooth_2hump_ei' frequency = 72.4 Hz (vibration "
+                                "score = 0.00%, smoothing ~= 0.065, combined score = 4.0e-02)"},
+            {"smooth_zvd_ei", "Fitted smoother 'smooth_zvd_ei' frequency = 68.0 Hz (vibration "
+                              "score = 0.10%, smoothing ~= 0.070, combined score = 5.0e-02)"},
+            {"smooth_si", "Fitted smoother 'smooth_si' frequency = 52.0 Hz (vibration score = "
+                          "0.00%, smoothing ~= 0.110, combined score = 6.0e-02)"},
         };
 
         for (const auto& [expected_type, line] : smoother_lines) {

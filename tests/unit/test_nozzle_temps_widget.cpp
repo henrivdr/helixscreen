@@ -8,13 +8,13 @@
  * panel widget registry with expected metadata and hardware gating.
  */
 
-#include "src/ui/panel_widgets/nozzle_temps_widget.h"
 #include "panel_widget_registry.h"
+#include "src/ui/panel_widgets/nozzle_temps_widget.h"
 #include "tool_state.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <cstring>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -49,7 +49,8 @@ TEST_CASE("NozzleTempsWidget: no hardware gate (visible to all printers)",
     REQUIRE(def->hardware_gate_subject == nullptr);
 }
 
-TEST_CASE("NozzleTempsWidget: default rowspan is 2 (1x2 preferred)", "[nozzle_temps][panel_widget]") {
+TEST_CASE("NozzleTempsWidget: default rowspan is 2 (1x2 preferred)",
+          "[nozzle_temps][panel_widget]") {
     const auto* def = find_widget_def("nozzle_temps");
     REQUIRE(def != nullptr);
 

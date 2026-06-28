@@ -3,6 +3,7 @@
 #pragma once
 
 #include "touch_calibration.h"
+
 #include <lvgl.h>
 
 namespace helix {
@@ -30,4 +31,4 @@ TouchCalibration load_touch_calibration();
 void install_calibration_wrapper(lv_indev_t* indev, CalibrationContext& ctx,
                                  const TouchCalibration& cal, int screen_w, int screen_h);
 
-}  // namespace helix
+} // namespace helix

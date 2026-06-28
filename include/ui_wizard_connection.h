@@ -3,11 +3,10 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "async_lifetime_guard.h"
 #include "lvgl/lvgl.h"
 #include "mdns_discovery.h"
+#include "wizard_step.h"
 
 #include <atomic>
 #include <memory>
@@ -64,10 +63,18 @@
 class WizardConnectionStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::Connection; }
-    const char* component_name() const override { return "wizard_connection"; }
-    const char* log_name() const override { return "Wizard Connection"; }
-    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override { return false; }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::Connection;
+    }
+    const char* component_name() const override {
+        return "wizard_connection";
+    }
+    const char* log_name() const override {
+        return "Wizard Connection";
+    }
+    bool should_skip([[maybe_unused]] const helix::wizard::StepContext& ctx) const override {
+        return false;
+    }
 
     /// Auto-probe state for localhost detection
     enum class AutoProbeState {
@@ -155,7 +162,9 @@ class WizardConnectionStep : public helix::wizard::Step {
     void set_mdns_discovery(std::unique_ptr<helix::IMdnsDiscovery> discovery);
 
     /// Test-only: expose a lifetime token for verifying callback safety
-    helix::LifetimeToken lifetime_token_for_test() { return lifetime_.token(); }
+    helix::LifetimeToken lifetime_token_for_test() {
+        return lifetime_.token();
+    }
 
   private:
     // Screen instance

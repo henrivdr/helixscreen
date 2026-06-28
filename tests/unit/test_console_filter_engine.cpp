@@ -15,9 +15,14 @@ namespace {
 // These are the format strings emitted by motor_control_wrapper.cpython-39.so via
 // gcode.respond_info() — Klipper prepends "// " when broadcasting on the GCode console.
 constexpr const char* K2_NOISE_SAMPLES[] = {
-    "// data_send:b'\\x83\\x05\\x00\\x06\\x02F' recv_result:b'\\xf7\\x83\\x07\\x00\\x06\\x00\\x00\\x96C\\t'",
-    "// sys\xe5\x8f\x82\xe6\x95\xb0\xe6\x93\x8d\xe4\xbd\x9c-\xe8\xaf\xbb\xe5\x8f\x96:b'\\x00\\x00\\x96C' value:300.0",
-    "// sys\xe5\x8f\x82\xe6\x95\xb0\xe6\x93\x8d\xe4\xbd\x9c-\xe5\x86\x99\xe5\x85\xa5\xe6\x88\x90\xe5\x8a\x9f:b'F' value:100.0",
+    "// data_send:b'\\x83\\x05\\x00\\x06\\x02F' "
+    "recv_result:b'\\xf7\\x83\\x07\\x00\\x06\\x00\\x00\\x96C\\t'",
+    "// "
+    "sys\xe5\x8f\x82\xe6\x95\xb0\xe6\x93\x8d\xe4\xbd\x9c-\xe8\xaf\xbb\xe5\x8f\x96:b'"
+    "\\x00\\x00\\x96C' value:300.0",
+    "// "
+    "sys\xe5\x8f\x82\xe6\x95\xb0\xe6\x93\x8d\xe4\xbd\x9c-"
+    "\xe5\x86\x99\xe5\x85\xa5\xe6\x88\x90\xe5\x8a\x9f:b'F' value:100.0",
     "// send float_bytes:b'\\x00\\x00\\xc8B'",
     "// recv_result:b'\\xf7\\x83\\x07\\x00\\x06B`\\xe5<\\x9c'",
 };
@@ -171,22 +176,14 @@ TEST_CASE("ConsoleFilter: K2 preset never suppresses real GCode responses",
 // ============================================================================
 namespace {
 constexpr const char* K2_SHIPPED_PRESET[] = {
-    "prefix:// data_send:",
-    "prefix:// recv_result:",
-    "prefix:// send float_bytes:",
-    "prefix:// sys\xe5\x8f\x82\xe6\x95\xb0\xe6\x93\x8d\xe4\xbd\x9c",
-    "prefix:// MDL_NAME:",
-    "prefix:// ACK_mdl_",
-    "prefix:// halversion:",
-    "prefix:// softversion:",
-    "prefix:// reset:start error",
-    "prefix:// reset:comfun error",
-    "regex:^// times:[0-9]",
-    "prefix:// config_ioRemap",
-    "prefix:// operation_ioRemap",
-    "prefix:// ai_switch =",
-    "substring:WILL LOAD_AI_DEAL",
-    "prefix:// LOAD_AI_DEAL",
+    "prefix:// data_send:",        "prefix:// recv_result:",
+    "prefix:// send float_bytes:", "prefix:// sys\xe5\x8f\x82\xe6\x95\xb0\xe6\x93\x8d\xe4\xbd\x9c",
+    "prefix:// MDL_NAME:",         "prefix:// ACK_mdl_",
+    "prefix:// halversion:",       "prefix:// softversion:",
+    "prefix:// reset:start error", "prefix:// reset:comfun error",
+    "regex:^// times:[0-9]",       "prefix:// config_ioRemap",
+    "prefix:// operation_ioRemap", "prefix:// ai_switch =",
+    "substring:WILL LOAD_AI_DEAL", "prefix:// LOAD_AI_DEAL",
 };
 } // namespace
 
@@ -245,8 +242,7 @@ TEST_CASE("ConsoleFilter: K2 preset filters belt_mdl / io_remap / load_ai chatte
 // Defensive edge cases
 // ============================================================================
 
-TEST_CASE("ConsoleFilter: empty line never matches a populated engine",
-          "[console_filter]") {
+TEST_CASE("ConsoleFilter: empty line never matches a populated engine", "[console_filter]") {
     ConsoleFilterEngine eng;
     for (const char* spec : K2_SHIPPED_PRESET) {
         eng.add(spec);
@@ -254,16 +250,14 @@ TEST_CASE("ConsoleFilter: empty line never matches a populated engine",
     CHECK_FALSE(eng.should_filter(""));
 }
 
-TEST_CASE("ConsoleFilter: trailing CRLF does not break prefix matching",
-          "[console_filter]") {
+TEST_CASE("ConsoleFilter: trailing CRLF does not break prefix matching", "[console_filter]") {
     ConsoleFilterEngine eng;
     eng.add("prefix:// data_send:");
     CHECK(eng.should_filter("// data_send:foo\r\n"));
     CHECK(eng.should_filter("// data_send:bar\n"));
 }
 
-TEST_CASE("ConsoleFilter: substring match handles UTF-8 multi-byte correctly",
-          "[console_filter]") {
+TEST_CASE("ConsoleFilter: substring match handles UTF-8 multi-byte correctly", "[console_filter]") {
     ConsoleFilterEngine eng;
     eng.add("substring:\xe5\x8f\x82\xe6\x95\xb0"); // 参数 (U+53C2 U+6570)
     CHECK(eng.should_filter("xx \xe5\x8f\x82\xe6\x95\xb0 xx"));
@@ -274,8 +268,7 @@ TEST_CASE("ConsoleFilter: substring match handles UTF-8 multi-byte correctly",
     CHECK_FALSE(eng.should_filter("\xe5\x8f")); // truncated 参 — 2 of 3 bytes
 }
 
-TEST_CASE("ConsoleFilter: clear() then re-add() rebuilds correctly",
-          "[console_filter]") {
+TEST_CASE("ConsoleFilter: clear() then re-add() rebuilds correctly", "[console_filter]") {
     ConsoleFilterEngine eng;
     eng.add("prefix:// foo");
     REQUIRE(eng.should_filter("// foo bar"));

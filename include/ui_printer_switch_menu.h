@@ -31,12 +31,16 @@ class PrinterSwitchMenu : public ContextMenu {
 
     void show(lv_obj_t* parent, lv_obj_t* near_widget);
 
-    void set_switch_callback(SwitchCallback callback) { switch_callback_ = std::move(callback); }
+    void set_switch_callback(SwitchCallback callback) {
+        switch_callback_ = std::move(callback);
+    }
 
     static void register_callbacks();
 
   protected:
-    const char* xml_component_name() const override { return "printer_switch_menu"; }
+    const char* xml_component_name() const override {
+        return "printer_switch_menu";
+    }
     void on_created(lv_obj_t* menu) override;
     void on_backdrop_clicked() override;
 
@@ -57,4 +61,4 @@ class PrinterSwitchMenu : public ContextMenu {
     static void on_printer_row_cb(lv_event_t* e);
 };
 
-}  // namespace helix::ui
+} // namespace helix::ui

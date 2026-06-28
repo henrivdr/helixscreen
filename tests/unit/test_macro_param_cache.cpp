@@ -19,13 +19,11 @@ TEST_CASE("MacroParamCache populate categorizes params correctly", "[macro_param
     nlohmann::json config;
     config["gcode_macro clean_nozzle"] = {
         {"gcode", "{% set TEMP = params.TEMP|default(240)|int %}\nG1 E10"}};
-    config["gcode_macro cancel_print"] = {
-        {"gcode", "TURN_OFF_HEATERS\nBASE_CANCEL"}};
-    config["gcode_macro pause"] = {
-        {"gcode", "SAVE_GCODE_STATE\nBASE_PAUSE"}};
+    config["gcode_macro cancel_print"] = {{"gcode", "TURN_OFF_HEATERS\nBASE_CANCEL"}};
+    config["gcode_macro pause"] = {{"gcode", "SAVE_GCODE_STATE\nBASE_PAUSE"}};
 
-    std::unordered_set<std::string> known_macros = {
-        "CLEAN_NOZZLE", "CANCEL_PRINT", "PAUSE", "GET_VARIABLE"};
+    std::unordered_set<std::string> known_macros = {"CLEAN_NOZZLE", "CANCEL_PRINT", "PAUSE",
+                                                    "GET_VARIABLE"};
 
     cache.populate_from_configfile(config, known_macros);
 
@@ -70,8 +68,7 @@ TEST_CASE("MacroParamCache clear resets state", "[macro_param_cache]") {
     cache.clear();
 
     nlohmann::json config;
-    config["gcode_macro test_macro"] = {
-        {"gcode", "{% set X = params.X|default(0) %}"}};
+    config["gcode_macro test_macro"] = {{"gcode", "{% set X = params.X|default(0) %}"}};
 
     cache.populate_from_configfile(config, {});
 
@@ -87,8 +84,7 @@ TEST_CASE("MacroParamCache case-insensitive lookup", "[macro_param_cache]") {
     cache.clear();
 
     nlohmann::json config;
-    config["gcode_macro print_start"] = {
-        {"gcode", "{% set BED = params.BED_TEMP|default(60) %}"}};
+    config["gcode_macro print_start"] = {{"gcode", "{% set BED = params.BED_TEMP|default(60) %}"}};
 
     cache.populate_from_configfile(config, {});
 
@@ -104,9 +100,7 @@ TEST_CASE("MacroParamCache uppercase configfile keys match known_macros", "[macr
     cache.clear();
 
     nlohmann::json config;
-    config["gcode_macro CLEAN_NOZZLE"] = {
-        {"gcode", "G1 X{start_x}"},
-        {"variable_start_x", "265"}};
+    config["gcode_macro CLEAN_NOZZLE"] = {{"gcode", "G1 X{start_x}"}, {"variable_start_x", "265"}};
 
     std::unordered_set<std::string> known_macros = {"CLEAN_NOZZLE"};
     cache.populate_from_configfile(config, known_macros);
@@ -124,10 +118,9 @@ TEST_CASE("MacroParamCache multiple params extracted", "[macro_param_cache]") {
 
     nlohmann::json config;
     config["gcode_macro start_print"] = {
-        {"gcode",
-         "{% set BED_TEMP = params.BED_TEMP|default(60)|float %}\n"
-         "{% set EXTRUDER_TEMP = params.EXTRUDER_TEMP|default(200)|float %}\n"
-         "{% set CHAMBER_TEMP = params.CHAMBER_TEMP|default(0)|float %}\nG28"}};
+        {"gcode", "{% set BED_TEMP = params.BED_TEMP|default(60)|float %}\n"
+                  "{% set EXTRUDER_TEMP = params.EXTRUDER_TEMP|default(200)|float %}\n"
+                  "{% set CHAMBER_TEMP = params.CHAMBER_TEMP|default(0)|float %}\nG28"}};
 
     cache.populate_from_configfile(config, {});
 
@@ -158,11 +151,10 @@ TEST_CASE("MacroParamCache ignores variable_* fields", "[macro_param_cache]") {
     cache.clear();
 
     nlohmann::json config;
-    config["gcode_macro clean_nozzle"] = {
-        {"gcode", "G1 X{start_x} Y{start_y}"},
-        {"variable_start_x", "265"},
-        {"variable_start_y", "298"},
-        {"variable_wipe_qty", "4"}};
+    config["gcode_macro clean_nozzle"] = {{"gcode", "G1 X{start_x} Y{start_y}"},
+                                          {"variable_start_x", "265"},
+                                          {"variable_start_y", "298"},
+                                          {"variable_wipe_qty", "4"}};
 
     cache.populate_from_configfile(config, {});
 
@@ -177,9 +169,8 @@ TEST_CASE("MacroParamCache params extracted but variables ignored", "[macro_para
     cache.clear();
 
     nlohmann::json config;
-    config["gcode_macro start_print"] = {
-        {"gcode", "{% set BED = params.BED_TEMP|default(60) %}"},
-        {"variable_idle_state", "false"}};
+    config["gcode_macro start_print"] = {{"gcode", "{% set BED = params.BED_TEMP|default(60) %}"},
+                                         {"variable_idle_state", "false"}};
 
     cache.populate_from_configfile(config, {});
 
@@ -197,11 +188,10 @@ TEST_CASE("MacroParamCache variable-only macro is KNOWN_NO_PARAMS", "[macro_para
     cache.clear();
 
     nlohmann::json config;
-    config["gcode_macro bedfanvars"] = {
-        {"gcode", ""},
-        {"variable_threshold", "100"},
-        {"variable_fast", "0.6"},
-        {"variable_slow", "0.2"}};
+    config["gcode_macro bedfanvars"] = {{"gcode", ""},
+                                        {"variable_threshold", "100"},
+                                        {"variable_fast", "0.6"},
+                                        {"variable_slow", "0.2"}};
 
     cache.populate_from_configfile(config, {});
 
@@ -210,4 +200,3 @@ TEST_CASE("MacroParamCache variable-only macro is KNOWN_NO_PARAMS", "[macro_para
     REQUIRE(info.knowledge == MacroParamKnowledge::KNOWN_NO_PARAMS);
     REQUIRE(info.params.empty());
 }
-

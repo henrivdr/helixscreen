@@ -8,8 +8,7 @@
 
 namespace helix::label {
 
-std::vector<uint8_t> brother_ql_build_raster(const LabelBitmap& bitmap,
-                                              const LabelSize& size) {
+std::vector<uint8_t> brother_ql_build_raster(const LabelBitmap& bitmap, const LabelSize& size) {
     std::vector<uint8_t> cmd;
     // Pre-allocate: header ~220 bytes + per-row worst case (3 + 90) * rows + footer
     cmd.reserve(256 + static_cast<size_t>(bitmap.height()) * (3 + BROTHER_QL_RASTER_ROW_BYTES) + 1);
@@ -33,14 +32,14 @@ std::vector<uint8_t> brother_ql_build_raster(const LabelBitmap& bitmap,
     cmd.push_back(0x69);
     cmd.push_back(0x7A);
     // Validity flags: bit 7=PI, bit 2=width, bit 1=media_type, bit 3=length (die-cut only)
-    uint8_t valid_flags = 0x80 | 0x04 | 0x02;  // PI + width + media type
+    uint8_t valid_flags = 0x80 | 0x04 | 0x02; // PI + width + media type
     if (size.media_type == 0x0B) {
-        valid_flags |= 0x08;  // Die-cut: mark length field as valid
+        valid_flags |= 0x08; // Die-cut: mark length field as valid
     }
     cmd.push_back(valid_flags);
-    cmd.push_back(size.media_type);  // Media type
-    cmd.push_back(size.width_mm);    // Width in mm
-    cmd.push_back(size.length_mm);   // Length in mm
+    cmd.push_back(size.media_type); // Media type
+    cmd.push_back(size.width_mm);   // Width in mm
+    cmd.push_back(size.length_mm);  // Length in mm
     // Page length as little-endian 32-bit
     cmd.push_back(static_cast<uint8_t>(page_length & 0xFF));
     cmd.push_back(static_cast<uint8_t>((page_length >> 8) & 0xFF));
@@ -99,7 +98,8 @@ std::vector<uint8_t> brother_ql_build_raster(const LabelBitmap& bitmap,
     }
 
     int right_pad = BROTHER_QL_RASTER_ROW_BYTES - label_byte_width - left_offset;
-    if (right_pad < 0) right_pad = 0;
+    if (right_pad < 0)
+        right_pad = 0;
 
     // Build a horizontally-flipped copy of each row
     std::vector<uint8_t> flipped_row(label_byte_width, 0x00);
@@ -191,12 +191,11 @@ BrotherQLMedia brother_ql_parse_status(const uint8_t* data, size_t len) {
 }
 
 const LabelSize* brother_ql_match_media(const BrotherQLMedia& media,
-                                         const std::vector<LabelSize>& sizes) {
+                                        const std::vector<LabelSize>& sizes) {
     if (!media.valid)
         return nullptr;
     for (const auto& s : sizes) {
-        if (s.media_type == media.media_type &&
-            s.width_mm == media.width_mm &&
+        if (s.media_type == media.media_type && s.width_mm == media.width_mm &&
             s.length_mm == media.length_mm) {
             return &s;
         }
@@ -211,6 +210,6 @@ const LabelSize* brother_ql_match_media(const BrotherQLMedia& media,
     return nullptr;
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

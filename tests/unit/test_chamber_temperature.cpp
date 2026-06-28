@@ -352,8 +352,7 @@ TEST_CASE("Manual chamber assignment updates sensor role", "[chamber][role]") {
 }
 
 // Empty-string override path: existing CHAMBER demoted, nothing re-promoted.
-TEST_CASE("apply_chamber_sensor_override(\"\") demotes existing CHAMBER",
-          "[chamber][override]") {
+TEST_CASE("apply_chamber_sensor_override(\"\") demotes existing CHAMBER", "[chamber][override]") {
     LVGLTestFixture fixture;
 
     auto& mgr = helix::sensors::TemperatureSensorManager::instance();
@@ -394,8 +393,7 @@ TEST_CASE("apply_chamber_sensor_override promotes non-chamber-named sensor",
     auto& mgr = helix::sensors::TemperatureSensorManager::instance();
     mgr.init_subjects();
 
-    std::vector<std::string> objects = {"temperature_sensor cavity",
-                                        "temperature_sensor mcu_temp"};
+    std::vector<std::string> objects = {"temperature_sensor cavity", "temperature_sensor mcu_temp"};
     mgr.discover(objects);
 
     // Auto-categorizer doesn't match "cavity" against the "chamber" substring.
@@ -465,7 +463,8 @@ TEST_CASE("Chamber assignment full round trip", "[chamber][integration]") {
                               "heater_generic custom_heater", "extruder", "heater_bed"};
     discovery.parse_objects(objects);
 
-    // Names don't match any chamber keyword (chamber/cavity/enclosure/box) — auto-detect finds nothing
+    // Names don't match any chamber keyword (chamber/cavity/enclosure/box) — auto-detect finds
+    // nothing
     REQUIRE_FALSE(discovery.has_chamber_sensor());
     REQUIRE_FALSE(discovery.has_chamber_heater());
 
@@ -511,7 +510,8 @@ TEST_CASE("Manual chamber assignment enables capability flags", "[chamber][capab
     PrinterCapabilitiesState caps;
     caps.init_subjects(false);
 
-    // Names don't match any chamber keyword (chamber/cavity/enclosure/box) — auto-detect finds nothing
+    // Names don't match any chamber keyword (chamber/cavity/enclosure/box) — auto-detect finds
+    // nothing
     PrinterDiscovery hardware;
     nlohmann::json objects = {"temperature_sensor external_bme", "heater_generic custom_heater",
                               "extruder", "heater_bed"};
@@ -855,8 +855,9 @@ TEST_CASE("build_heater_gcode emits M141 when use_m141 is set", "[temperature][m
                                            /*use_m141=*/true)) == "M141 S60");
     REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 0, buf, sizeof(buf),
                                            true)) == "M141 S0");
-    REQUIRE(std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf))) ==
-            "SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=60");
+    REQUIRE(
+        std::string(build_heater_gcode("heater_generic chamber_heater", 600, buf, sizeof(buf))) ==
+        "SET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=60");
 }
 
 // API send chokepoint: a chamber set on an M141-capable printer routes through
@@ -1031,9 +1032,9 @@ TEST_CASE("chamber status uses effective target — Maintaining shows non-Off st
 
     // Simulate Maintaining state: heater target = 0, fan target = 360 deci (36°C)
     // chamber_effective_target = 360, chamber_mode = Maintaining
-    int cached_chamber_temp_deci  = 380; // 38°C — current
-    int cached_chamber_target_raw  = 0;   // raw heater target (WRONG to display)
-    int cached_effective_target    = 360; // chamber_effective_target (CORRECT)
+    int cached_chamber_temp_deci = 380; // 38°C — current
+    int cached_chamber_target_raw = 0;  // raw heater target (WRONG to display)
+    int cached_effective_target = 360;  // chamber_effective_target (CORRECT)
 
     // The old (buggy) path: heater_display with raw heater target → "Off"
     auto bad_result = heater_display(cached_chamber_temp_deci, cached_chamber_target_raw);
@@ -1099,8 +1100,7 @@ TEST_CASE("chamber_status_text: Heating mode leads with Heating word",
     REQUIRE(status == std::string(lv_tr("Heating")));
 }
 
-TEST_CASE("chamber_status_text: Off mode returns Off",
-          "[chamber][controls][status][temperature]") {
+TEST_CASE("chamber_status_text: Off mode returns Off", "[chamber][controls][status][temperature]") {
     using helix::ChamberMode;
     using helix::ui::temperature::chamber_status_text;
 

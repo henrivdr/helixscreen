@@ -12,6 +12,7 @@
 #include "ams_types.h"
 #include "filament_database.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 namespace helix::ui {
@@ -383,7 +384,7 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
     lv_obj_t* slot_header = lv_obj_find_by_name(menu_obj, "slot_header");
     if (slot_header) {
         char header_text[32];
-        snprintf(header_text, sizeof(header_text), "Slot %d", slot_index + 1);
+        snprintf(header_text, sizeof(header_text), lv_tr("Slot %d"), slot_index + 1);
         lv_label_set_text(slot_header, header_text);
     }
 
@@ -619,8 +620,7 @@ void AmsContextMenu::handle_tool_changed() {
             if (static_cast<int>(i) != tool_number && mapping[i] == get_item_index()) {
                 spdlog::warn("[AmsContextMenu] Tool {} will share slot {} with tool {}",
                              tool_number, get_item_index(), i);
-                std::string msg =
-                    "T" + std::to_string(tool_number) + " shares slot with T" + std::to_string(i);
+                std::string msg = fmt::format(lv_tr("T{} shares slot with T{}"), tool_number, i);
                 ToastManager::instance().show(ToastSeverity::WARNING, msg.c_str());
                 break;
             }
@@ -671,8 +671,9 @@ void AmsContextMenu::handle_backup_changed() {
                          current_material, backup_material);
 
             // Show toast error
-            std::string msg = "Incompatible materials: " + current_material + " cannot use " +
-                              backup_material + " as backup";
+            std::string msg =
+                fmt::format(lv_tr("Incompatible materials: {} cannot use {} as backup"),
+                            current_material, backup_material);
             ToastManager::instance().show(ToastSeverity::ERROR, msg.c_str());
 
             // Reset dropdown to "None" (index 0)
@@ -802,7 +803,7 @@ void AmsContextMenu::populate_backup_dropdown() {
 }
 
 std::string AmsContextMenu::build_tool_options() const {
-    std::string options = "None";
+    std::string options = lv_tr("None");
     // Add tool options T0, T1, T2... based on total slots
     for (int i = 0; i < total_slots_; ++i) {
         options += "\nT" + std::to_string(i);
@@ -811,7 +812,7 @@ std::string AmsContextMenu::build_tool_options() const {
 }
 
 std::string AmsContextMenu::build_backup_options() const {
-    std::string options = "None";
+    std::string options = lv_tr("None");
 
     // Get current slot's material for compatibility checking
     std::string current_material;
@@ -824,14 +825,14 @@ std::string AmsContextMenu::build_backup_options() const {
     // Mark incompatible materials
     for (int i = 0; i < total_slots_; ++i) {
         if (i != get_item_index()) {
-            std::string slot_option = "\nSlot " + std::to_string(i + 1);
+            std::string slot_option = "\n" + fmt::format(lv_tr("Slot {}"), i + 1);
 
             // Check material compatibility if we have a current material
             if (backend_ && !current_material.empty()) {
                 std::string other_material = backend_->get_slot_info(i).material;
                 if (!other_material.empty() &&
                     !filament::are_materials_compatible(current_material, other_material)) {
-                    slot_option += " (incompatible)";
+                    slot_option += std::string(" ") + lv_tr("(incompatible)");
                 }
             }
 

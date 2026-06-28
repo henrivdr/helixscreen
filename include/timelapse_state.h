@@ -5,14 +5,13 @@
 
 #include "subject_managed_panel.h"
 
-#include <lvgl.h>
-
-#include "hv/json.hpp"
-
 #include <atomic>
 #include <functional>
+#include <lvgl.h>
 #include <mutex>
 #include <string>
+
+#include "hv/json.hpp"
 
 namespace helix {
 

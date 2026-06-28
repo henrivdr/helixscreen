@@ -3,11 +3,12 @@
 
 #pragma once
 
-#include <functional>
-#include <memory>
+#include "ui_ams_context_menu.h"
 
 #include "lvgl.h"
-#include "ui_ams_context_menu.h"
+
+#include <functional>
+#include <memory>
 
 namespace helix::ui {
 

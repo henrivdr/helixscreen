@@ -367,7 +367,6 @@ TEST_CASE("HardwareValidator - New fan discovery", "[hardware][validator]") {
     }
 }
 
-
 TEST_CASE("HardwareValidator - Session changes", "[hardware][validator]") {
     SECTION("Detects hardware removed since last session") {
         // Create a "previous" snapshot with LED
@@ -1212,10 +1211,9 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // standalone runout detection.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_additional_objects({"mmu"});
-    client.set_filament_sensors({"filament_switch_sensor extruder",
-                                 "filament_switch_sensor toolhead",
-                                 "filament_switch_sensor filament_tension",
-                                 "filament_switch_sensor filament_compression"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor extruder", "filament_switch_sensor toolhead",
+         "filament_switch_sensor filament_tension", "filament_switch_sensor filament_compression"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1271,8 +1269,8 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
     client.set_additional_objects({"AFC"});
-    client.set_filament_sensors({"filament_switch_sensor tool_start",
-                                 "filament_switch_sensor tool_end"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor tool_start", "filament_switch_sensor tool_end"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1301,14 +1299,11 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // afc_lane_names() and matches by lane prefix.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
-    client.set_additional_objects(
-        {"AFC", "AFC_lane T0", "AFC_lane T1", "AFC_buffer Turtle1"});
-    client.set_filament_sensors({"filament_switch_sensor T0_prep",
-                                 "filament_switch_sensor T0_load",
-                                 "filament_switch_sensor T0_selector",
-                                 "filament_switch_sensor T1_prep",
-                                 "filament_switch_sensor Turtle1_expanded",
-                                 "filament_switch_sensor Turtle1_compressed"});
+    client.set_additional_objects({"AFC", "AFC_lane T0", "AFC_lane T1", "AFC_buffer Turtle1"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor T0_prep", "filament_switch_sensor T0_load",
+         "filament_switch_sensor T0_selector", "filament_switch_sensor T1_prep",
+         "filament_switch_sensor Turtle1_expanded", "filament_switch_sensor Turtle1_compressed"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1366,11 +1361,10 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // suppression on the toast path.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
-    client.set_filament_sensors({"filament_switch_sensor _ifs_port_sensor_1",
-                                 "filament_switch_sensor _ifs_port_sensor_2",
-                                 "filament_switch_sensor _ifs_port_sensor_3",
-                                 "filament_switch_sensor _ifs_port_sensor_4",
-                                 "filament_switch_sensor head_switch_sensor"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor _ifs_port_sensor_1", "filament_switch_sensor _ifs_port_sensor_2",
+         "filament_switch_sensor _ifs_port_sensor_3", "filament_switch_sensor _ifs_port_sensor_4",
+         "filament_switch_sensor head_switch_sensor"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1398,8 +1392,8 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // toolhead head_switch_sensor.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
-    client.set_filament_sensors({"filament_motion_sensor ifs_motion_sensor",
-                                 "filament_switch_sensor head_switch_sensor"});
+    client.set_filament_sensors(
+        {"filament_motion_sensor ifs_motion_sensor", "filament_switch_sensor head_switch_sensor"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},

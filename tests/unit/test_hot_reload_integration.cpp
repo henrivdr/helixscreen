@@ -24,11 +24,12 @@
  * to re-initialize per-test.
  */
 
-#include "helix-xml/src/xml/lv_xml.h"
-#include "test_fixtures.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_base.h"
 #include "ui_update_queue.h"
+
+#include "helix-xml/src/xml/lv_xml.h"
+#include "test_fixtures.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -72,17 +73,15 @@ class FakePanel : public PanelBase {
 /// is idempotent enough for our purposes — if it's already registered (from a prior
 /// test run in the same process), re-registering returns OK.
 void ensure_fake_component_registered(const char* name) {
-    lv_xml_register_component_from_data(
-        name,
-        "<component>"
-        "<view extends=\"lv_obj\" width=\"100\" height=\"100\"/>"
-        "</component>");
+    lv_xml_register_component_from_data(name,
+                                        "<component>"
+                                        "<view extends=\"lv_obj\" width=\"100\" height=\"100\"/>"
+                                        "</component>");
 }
 
 } // anonymous namespace
 
-TEST_CASE_METHOD(MoonrakerTestFixture,
-                 "rebuild_active_views swaps active panel widget pointer",
+TEST_CASE_METHOD(MoonrakerTestFixture, "rebuild_active_views swaps active panel widget pointer",
                  "[hot-reload][integration][slow]") {
     // 1. Register stub component
     constexpr const char* kComponent = "fake_rebuild_panel";
@@ -97,8 +96,7 @@ TEST_CASE_METHOD(MoonrakerTestFixture,
     lv_obj_t* parent = test_screen();
     REQUIRE(parent != nullptr);
 
-    lv_obj_t* initial_widget =
-        static_cast<lv_obj_t*>(lv_xml_create(parent, kComponent, nullptr));
+    lv_obj_t* initial_widget = static_cast<lv_obj_t*>(lv_xml_create(parent, kComponent, nullptr));
     REQUIRE(initial_widget != nullptr);
 
     // 4. Register widget array with NavigationManager. Only Home is populated —

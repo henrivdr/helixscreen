@@ -17,13 +17,13 @@ LogPathProbeResult probe_log_path_writable(const std::string& path, std::uint64_
     const std::size_t slash = path.find_last_of('/');
     const std::string dir = (slash == std::string::npos) ? "." : path.substr(0, slash);
 
-    struct statvfs vfs{};
+    struct statvfs vfs {};
     if (::statvfs(dir.c_str(), &vfs) == 0) {
         const std::uint64_t avail =
             static_cast<std::uint64_t>(vfs.f_bavail) * static_cast<std::uint64_t>(vfs.f_frsize);
         if (avail < min_free_bytes) {
-            result.error = "only " + std::to_string(avail) + " bytes free on " + dir +
-                           " (need ≥ " + std::to_string(min_free_bytes) + ")";
+            result.error = "only " + std::to_string(avail) + " bytes free on " + dir + " (need ≥ " +
+                           std::to_string(min_free_bytes) + ")";
             return result;
         }
     }
@@ -50,4 +50,4 @@ LogPathProbeResult probe_log_path_writable(const std::string& path, std::uint64_
     return result;
 }
 
-}  // namespace helix::system
+} // namespace helix::system

@@ -92,16 +92,14 @@ class IMoonrakerAPI {
                                           std::function<void(const json&)> callback) = 0;
 
     /// @brief Unregister a method-specific callback
-    virtual bool unregister_method_callback(const std::string& method,
-                                            const std::string& name) = 0;
+    virtual bool unregister_method_callback(const std::string& method, const std::string& name) = 0;
 
     /// @brief Temporarily suppress disconnect modal notifications
     virtual void suppress_disconnect_modal(uint32_t duration_ms) = 0;
 
     /// @brief Retrieve recent G-code commands/responses from Moonraker's store
     virtual void
-    get_gcode_store(int count,
-                    std::function<void(const std::vector<GcodeStoreEntry>&)> on_success,
+    get_gcode_store(int count, std::function<void(const std::vector<GcodeStoreEntry>&)> on_success,
                     std::function<void(const MoonrakerError&)> on_error) = 0;
 
     // ========================================================================
@@ -128,8 +126,7 @@ class IMoonrakerAPI {
 
     /// @brief Store a value in Moonraker's database
     virtual void database_post_item(const std::string& namespace_name, const std::string& key,
-                                    const json& value,
-                                    std::function<void()> on_success = nullptr,
+                                    const json& value, std::function<void()> on_success = nullptr,
                                     ErrorCallback on_error = nullptr) = 0;
 
     /// @brief Get all keys in a namespace. Moonraker returns a JSON object

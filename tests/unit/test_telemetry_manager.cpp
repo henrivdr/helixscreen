@@ -11,6 +11,9 @@
  * Written TDD-style - tests WILL FAIL if TelemetryManager is removed.
  */
 
+#include "ui_update_queue.h"
+
+#include "config.h"
 #include "system/telemetry_manager.h"
 
 #include <algorithm>
@@ -23,9 +26,7 @@
 #include <unistd.h>
 
 #include "../catch_amalgamated.hpp"
-#include "config.h"
 #include "hv/json.hpp"
-#include "ui_update_queue.h"
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;

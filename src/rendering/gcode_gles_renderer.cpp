@@ -1459,9 +1459,9 @@ bool GCodeGLESRenderer::CachedRenderState::operator==(const CachedRenderState& o
            near_angle(target.x, o.target.x) && near_angle(target.y, o.target.y) &&
            near_angle(target.z, o.target.z) && progress_layer == o.progress_layer &&
            layer_start == o.layer_start && layer_end == o.layer_end &&
-           highlight_count == o.highlight_count &&
-           highlight_set_hash == o.highlight_set_hash && exclude_count == o.exclude_count &&
-           filament_color == o.filament_color && ghost_opacity == o.ghost_opacity;
+           highlight_count == o.highlight_count && highlight_set_hash == o.highlight_set_hash &&
+           exclude_count == o.exclude_count && filament_color == o.filament_color &&
+           ghost_opacity == o.ghost_opacity;
 }
 
 // ============================================================
@@ -2006,7 +2006,7 @@ std::optional<std::string> GCodeGLESRenderer::pick_object(const glm::vec2& scree
             for (const auto& corner : corners) {
                 glm::vec4 clip = transform * glm::vec4(corner, 1.0f);
                 if (clip.w <= kClipSpaceWEpsilon)
-                    continue;  // behind the camera
+                    continue; // behind the camera
                 any_in_front = true;
                 glm::vec3 ndc = glm::vec3(clip) / clip.w;
                 float sx = (ndc.x + 1.0f) * 0.5f * viewport_width_;

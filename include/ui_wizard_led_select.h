@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "lvgl/lvgl.h"
+#include "wizard_step.h"
 
 #include <memory>
 #include <string>
@@ -36,10 +35,18 @@
 class WizardLedSelectStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::LedSelect; }
-    const char* component_name() const override { return "wizard_led_select"; }
-    const char* log_name() const override { return "Wizard LED"; }
-    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::LedSelect;
+    }
+    const char* component_name() const override {
+        return "wizard_led_select";
+    }
+    const char* log_name() const override {
+        return "Wizard LED";
+    }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override {
+        return ctx.preset.skip_hardware || should_skip();
+    }
 
     WizardLedSelectStep();
     ~WizardLedSelectStep();

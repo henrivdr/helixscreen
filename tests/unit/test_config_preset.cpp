@@ -29,7 +29,9 @@ class PresetConfigFixture {
     // (a leak there breaks find_readable() for every later test in the process —
     // 127 printer_detector failures, macro/grid/theme cascades). Idempotent via
     // did_setup_/torn_down_ so an explicit TearDown() + the dtor don't double-run.
-    ~PresetConfigFixture() { TearDown(); }
+    ~PresetConfigFixture() {
+        TearDown();
+    }
 
     void SetUp() {
         did_setup_ = true;

@@ -3,10 +3,11 @@
 
 #include "ui_bypass_spool_widget.h"
 
-#include <cstring>
+#include "ui_spool_canvas.h"
 
 #include "theme_manager.h"
-#include "ui_spool_canvas.h"
+
+#include <cstring>
 
 namespace helix::ui {
 
@@ -18,8 +19,7 @@ constexpr int32_t LABEL_GAP = 4;
 constexpr int32_t LABEL_HEIGHT = 16;
 } // namespace
 
-BypassSpoolWidgets bypass_spool_create(lv_obj_t* parent, lv_event_cb_t on_click,
-                                       void* user_data) {
+BypassSpoolWidgets bypass_spool_create(lv_obj_t* parent, lv_event_cb_t on_click, void* user_data) {
     BypassSpoolWidgets w;
     if (!parent) {
         return w;
@@ -49,7 +49,7 @@ BypassSpoolWidgets bypass_spool_create(lv_obj_t* parent, lv_event_cb_t on_click,
     }
 
     w.bypass_label = lv_label_create(parent);
-    lv_label_set_text(w.bypass_label, "Bypass");
+    lv_label_set_text(w.bypass_label, lv_tr("Bypass"));
     lv_obj_set_style_text_color(w.bypass_label, theme_manager_get_color("text"), 0);
     lv_obj_add_flag(w.bypass_label, LV_OBJ_FLAG_FLOATING);
     lv_obj_update_layout(w.bypass_label);
@@ -131,8 +131,7 @@ void bypass_spool_set_position(BypassSpoolWidgets& w, int32_t cx, int32_t cy) {
         // Material text changes — must measure each call.
         lv_obj_update_layout(w.material_label);
         int32_t mat_w = lv_obj_get_width(w.material_label);
-        lv_obj_set_pos(w.material_label, cx - mat_w / 2,
-                       box_top - LABEL_HEIGHT - LABEL_GAP);
+        lv_obj_set_pos(w.material_label, cx - mat_w / 2, box_top - LABEL_HEIGHT - LABEL_GAP);
     }
 }
 

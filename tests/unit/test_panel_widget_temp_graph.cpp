@@ -8,9 +8,9 @@
 #include "lvgl/lvgl.h"
 #include "panel_widget_registry.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <algorithm>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -18,7 +18,9 @@ using namespace helix;
 // adding test-only methods to TempGraphWidget.
 class helix::TempGraphWidgetTestAccess {
   public:
-    static void set_follow_overlay(TempGraphWidget& w, bool on) { w.follow_overlay_ = on; }
+    static void set_follow_overlay(TempGraphWidget& w, bool on) {
+        w.follow_overlay_ = on;
+    }
     static std::vector<TempGraphSeriesSpec> build_series(TempGraphWidget& w) {
         return w.build_series_from_config();
     }
@@ -37,11 +39,21 @@ class helix::TempGraphWidgetTestAccess {
 
     // Inject widget container pointers so apply_config_save() can be exercised
     // with both a live lv_obj_t and a deleted/null one (regression: RP293UCW).
-    static void set_widget_obj(TempGraphWidget& w, lv_obj_t* obj) { w.widget_obj_ = obj; }
-    static void set_parent_screen(TempGraphWidget& w, lv_obj_t* obj) { w.parent_screen_ = obj; }
-    static lv_obj_t* get_widget_obj(const TempGraphWidget& w) { return w.widget_obj_; }
-    static bool has_controller(const TempGraphWidget& w) { return w.controller_ != nullptr; }
-    static const nlohmann::json& get_config(const TempGraphWidget& w) { return w.config_; }
+    static void set_widget_obj(TempGraphWidget& w, lv_obj_t* obj) {
+        w.widget_obj_ = obj;
+    }
+    static void set_parent_screen(TempGraphWidget& w, lv_obj_t* obj) {
+        w.parent_screen_ = obj;
+    }
+    static lv_obj_t* get_widget_obj(const TempGraphWidget& w) {
+        return w.widget_obj_;
+    }
+    static bool has_controller(const TempGraphWidget& w) {
+        return w.controller_ != nullptr;
+    }
+    static const nlohmann::json& get_config(const TempGraphWidget& w) {
+        return w.config_;
+    }
 };
 
 // Reuse the same lightweight fixture as test_temp_graph.cpp
@@ -360,11 +372,11 @@ TEST_CASE("TempGraphWidget: set_config tolerates JSON null/non-object configs",
           "[temp_graph][panel_widget][crash-safety]") {
     TempGraphWidget widget("test_null_cfg");
 
-    REQUIRE_NOTHROW(widget.set_config(nlohmann::json()));               // default-constructed = null
-    REQUIRE_NOTHROW(widget.set_config(nullptr));                        // explicit null literal
-    REQUIRE_NOTHROW(widget.set_config(nlohmann::json::array()));        // wrong type: array
-    REQUIRE_NOTHROW(widget.set_config(nlohmann::json("a string")));    // wrong type: string
-    REQUIRE_NOTHROW(widget.set_config(nlohmann::json::object()));       // empty object — the happy path
+    REQUIRE_NOTHROW(widget.set_config(nlohmann::json()));           // default-constructed = null
+    REQUIRE_NOTHROW(widget.set_config(nullptr));                    // explicit null literal
+    REQUIRE_NOTHROW(widget.set_config(nlohmann::json::array()));    // wrong type: array
+    REQUIRE_NOTHROW(widget.set_config(nlohmann::json("a string"))); // wrong type: string
+    REQUIRE_NOTHROW(widget.set_config(nlohmann::json::object())); // empty object — the happy path
 }
 
 // ============================================================================
@@ -507,14 +519,13 @@ TEST_CASE("TempGraphWidget: follow_overlay off uses configured enabled flags",
         std::vector<std::string>{"chamber"}); // overlay snapshot says "only chamber"
 
     TempGraphWidget w("test_follow_off");
-    nlohmann::json cfg = {
-        {"follow_overlay", false},
-        {"sensors",
-         {
-             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
-             {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
-             {{"name", "chamber"}, {"enabled", false}, {"color", 0xA3BE8C}},
-         }}};
+    nlohmann::json cfg = {{"follow_overlay", false},
+                          {"sensors",
+                           {
+                               {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+                               {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
+                               {{"name", "chamber"}, {"enabled", false}, {"color", 0xA3BE8C}},
+                           }}};
     w.set_config(cfg);
 
     auto specs = TempGraphWidgetTestAccess::build_series(w);
@@ -532,15 +543,14 @@ TEST_CASE("TempGraphWidget: follow_overlay on uses snapshot membership",
         std::vector<std::string>{"chamber", "heater_bed"}); // overlay shows bed + chamber only
 
     TempGraphWidget w("test_follow_on");
-    nlohmann::json cfg = {
-        {"follow_overlay", true},
-        {"sensors",
-         {
-             // config flags would otherwise show extruder + bed only
-             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
-             {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
-             {{"name", "chamber"}, {"enabled", false}, {"color", 0xA3BE8C}},
-         }}};
+    nlohmann::json cfg = {{"follow_overlay", true},
+                          {"sensors",
+                           {
+                               // config flags would otherwise show extruder + bed only
+                               {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+                               {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
+                               {{"name", "chamber"}, {"enabled", false}, {"color", 0xA3BE8C}},
+                           }}};
     w.set_config(cfg);
 
     auto specs = TempGraphWidgetTestAccess::build_series(w);
@@ -556,13 +566,12 @@ TEST_CASE("TempGraphWidget: follow_overlay on with no snapshot falls back to con
     helix::test_access::set_temp_graph_visibility_snapshot(std::nullopt);
 
     TempGraphWidget w("test_follow_no_snapshot");
-    nlohmann::json cfg = {
-        {"follow_overlay", true},
-        {"sensors",
-         {
-             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
-             {{"name", "heater_bed"}, {"enabled", false}, {"color", 0x88C0D0}},
-         }}};
+    nlohmann::json cfg = {{"follow_overlay", true},
+                          {"sensors",
+                           {
+                               {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+                               {{"name", "heater_bed"}, {"enabled", false}, {"color", 0x88C0D0}},
+                           }}};
     w.set_config(cfg);
 
     auto specs = TempGraphWidgetTestAccess::build_series(w);
@@ -613,12 +622,11 @@ TEST_CASE("merge_discovered_extruders adds missing entries and is idempotent",
     auto& ps = get_printer_state();
     ps.init_extruders({"extruder", "extruder1", "extruder2", "extruder3"});
 
-    nlohmann::json config = {
-        {"sensors",
-         {
-             {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
-             {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
-         }}};
+    nlohmann::json config = {{"sensors",
+                              {
+                                  {{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+                                  {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}},
+                              }}};
 
     bool added = TempGraphWidgetTestAccess::merge_discovered_extruders(config, /*enabled=*/true);
     REQUIRE(added == true);
@@ -636,7 +644,8 @@ TEST_CASE("merge_discovered_extruders adds missing entries and is idempotent",
     REQUIRE((*find_name("extruder1"))["enabled"].get<bool>() == true);
 
     // Idempotent: second call adds nothing.
-    bool added_again = TempGraphWidgetTestAccess::merge_discovered_extruders(config, /*enabled=*/true);
+    bool added_again =
+        TempGraphWidgetTestAccess::merge_discovered_extruders(config, /*enabled=*/true);
     REQUIRE(added_again == false);
     REQUIRE(sensors.size() == 5); // extruder + bed + 3 new
 
@@ -679,10 +688,9 @@ TEST_CASE_METHOD(TempGraphFeatureFixture,
     TempGraphWidgetTestAccess::set_parent_screen(w, nullptr);
 
     nlohmann::json new_cfg = {
-        {"sensors",
-         nlohmann::json::array(
-             {{{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
-              {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}}})}};
+        {"sensors", nlohmann::json::array(
+                        {{{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}},
+                         {{"name", "heater_bed"}, {"enabled", true}, {"color", 0x88C0D0}}})}};
 
     REQUIRE_NOTHROW(TempGraphWidgetTestAccess::apply_config_save(w, new_cfg));
 
@@ -705,8 +713,7 @@ TEST_CASE_METHOD(TempGraphFeatureFixture,
 
     nlohmann::json new_cfg = {
         {"sensors",
-         nlohmann::json::array(
-             {{{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}}})}};
+         nlohmann::json::array({{{"name", "extruder"}, {"enabled", true}, {"color", 0xFF4444}}})}};
 
     REQUIRE_NOTHROW(TempGraphWidgetTestAccess::apply_config_save(w, new_cfg));
 

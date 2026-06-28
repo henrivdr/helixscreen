@@ -30,9 +30,8 @@ bool SpoolmanSetup::validate_host(const std::string& host) {
         return false;
     }
     // Reject strings that are entirely whitespace
-    bool all_whitespace = std::all_of(host.begin(), host.end(), [](unsigned char c) {
-        return std::isspace(c);
-    });
+    bool all_whitespace =
+        std::all_of(host.begin(), host.end(), [](unsigned char c) { return std::isspace(c); });
     return !all_whitespace;
 }
 
@@ -75,7 +74,7 @@ std::pair<std::string, std::string> SpoolmanSetup::parse_url_components(const st
         return {working, DEFAULT_SPOOLMAN_PORT};
     }
 
-    std::string host      = working.substr(0, colon_pos);
+    std::string host = working.substr(0, colon_pos);
     std::string port_part = working.substr(colon_pos + 1);
 
     // Validate the extracted port; fall back to default if invalid

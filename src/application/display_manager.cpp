@@ -14,16 +14,15 @@
 #include "display_manager.h"
 
 // Private LVGL header for direct flush_cb capture (matches application.cpp pattern)
-#include "display/lv_display_private.h"
-
-#include "app_constants.h"
 #include "ui_effects.h"
 #include "ui_fatal_error.h"
 #include "ui_update_queue.h"
 
 #include "../../include/pending_startup_warnings.h"
+#include "app_constants.h"
 #include "app_globals.h"
 #include "config.h"
+#include "display/lv_display_private.h"
 #include "display_settings_manager.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -660,6 +659,13 @@ void DisplayManager::enter_sleep(int timeout_sec) {
         // HDMI/fbdev devices with no hardware backlight blank (#1049). The panel
         // is actually powered down, so no software overlay is needed. wake_display()
         // restores power BEFORE lv_refr_now() to honor the #303 wake-race.
+        //
+        // Neutralize the flush so the next page-flip can't re-assert DPMS-on and
+        // relight the panel on the home screen. Without this, stopping the
+        // screensaver above (or any later Klipper-driven invalidation) renders a
+        // frame whose DRM commit turns the connector back ON — the user-reported
+        // regression where an idle HDMI panel "comes back on at the home screen".
+        suppress_flush_for_sleep();
         method = "panel power-off";
     } else {
         // Software overlay path: do NOT call FBIOBLANK — the overlay alone is
@@ -707,6 +713,51 @@ void DisplayManager::destroy_sleep_overlay() {
     lv_obj_delete(m_sleep_overlay);
     m_sleep_overlay = nullptr;
     spdlog::debug("[DisplayManager] Software sleep overlay destroyed");
+}
+
+// ============================================================================
+// Power-off flush suppression (#1049)
+// ============================================================================
+
+namespace {
+// No-op flush used while the panel is powered off: it must still signal "ready"
+// or LVGL stalls waiting for the flush to complete, but it commits nothing to the
+// framebuffer — so no DRM page-flip happens to re-assert DPMS-on.
+void sleep_noop_flush_cb(lv_display_t* disp, const lv_area_t* /*area*/, uint8_t* /*px*/) {
+    lv_display_flush_ready(disp);
+}
+} // namespace
+
+void DisplayManager::suppress_flush_for_sleep() {
+    if (m_flush_suppressed_for_sleep || !m_display) {
+        return;
+    }
+    // Stop invalidations from scheduling renders AND swap the flush callback for a
+    // no-op. Pausing the refresh timer alone is insufficient: any invalidation
+    // fires LV_EVENT_REFR_REQUEST, which resumes the timer (see the identical note
+    // in Application's splash suppression). With the flush neutralized, even a
+    // render that slips through commits nothing, so the powered-off panel can't be
+    // relit by a stray page-flip (#1049).
+    lv_display_enable_invalidation(m_display, false);
+    m_saved_flush_cb_for_sleep = m_display->flush_cb;
+    lv_display_set_flush_cb(m_display, sleep_noop_flush_cb);
+    m_flush_suppressed_for_sleep = true;
+    spdlog::debug("[DisplayManager] Flush suppressed while panel powered off");
+}
+
+void DisplayManager::restore_flush_after_sleep() {
+    if (!m_flush_suppressed_for_sleep) {
+        return;
+    }
+    m_flush_suppressed_for_sleep = false;
+    if (m_display) {
+        if (m_saved_flush_cb_for_sleep) {
+            lv_display_set_flush_cb(m_display, m_saved_flush_cb_for_sleep);
+        }
+        lv_display_enable_invalidation(m_display, true);
+    }
+    m_saved_flush_cb_for_sleep = nullptr;
+    spdlog::debug("[DisplayManager] Flush restored on wake");
 }
 
 // ============================================================================
@@ -880,8 +931,13 @@ void DisplayManager::restore_display_output() {
             m_backend->unblank_display();
         }
     } else if (m_use_power_off && m_backend) {
-        // Power-off path: power the panel back on. A software overlay may also
-        // exist if a prior power_off() failed and fell back — remove it defensively.
+        // Power-off path: re-enable rendering, then power the panel back on. The
+        // flush must be restored BEFORE the post-wake lv_refr_now() (in
+        // wake_display) so that synchronous render actually reaches the panel.
+        // A software overlay may also exist if a prior power_off() failed and fell
+        // back — remove it defensively. restore_flush_after_sleep() is a no-op if
+        // suppression was never engaged (overlay fallback).
+        restore_flush_after_sleep();
         m_backend->power_on();
         destroy_sleep_overlay();
     } else {
@@ -994,6 +1050,7 @@ void DisplayManager::preview_screensaver(int type) {
 
 void DisplayManager::ensure_display_on() {
     // Force display awake at startup regardless of previous state
+    restore_flush_after_sleep(); // defensive: never start up with flush suppressed
     m_display_sleeping = false;
     m_display_dimmed = false;
 
@@ -1016,6 +1073,11 @@ void DisplayManager::set_dim_timeout(int seconds) {
 void DisplayManager::restore_display_on_shutdown() {
     // Clean up software sleep overlay if active
     destroy_sleep_overlay();
+
+    // Re-enable rendering before the framebuffer clear / final brightness below,
+    // otherwise the clear is committed through the no-op flush and never reaches
+    // the panel (#1049). No-op if flush was never suppressed.
+    restore_flush_after_sleep();
 
     // If we powered the panel down (#1049), bring it back on so the next app
     // doesn't inherit a powered-off panel.
@@ -1239,9 +1301,9 @@ void DisplayManager::warn_fbdev_high_dpi() {
                  m_width, m_height, kHighDpiThreshold);
     char toast_msg[256];
     snprintf(toast_msg, sizeof(toast_msg),
-             "Display resolution is very high (%dx%d). Text may appear small. "
-             "Reduce framebuffer resolution in /boot/firmware/config.txt for "
-             "best results.",
+             lv_tr("Display resolution is very high (%dx%d). Text may appear small. "
+                   "Reduce framebuffer resolution in /boot/firmware/config.txt for "
+                   "best results."),
              m_width, m_height);
     helix::PendingStartupWarnings::instance().enqueue(
         helix::PendingStartupWarnings::Severity::WARNING, toast_msg);
@@ -1570,8 +1632,9 @@ void DisplayManager::resize_timer_cb(lv_timer_t* timer) {
         self->m_height = lv_display_get_vertical_resolution(self->m_display);
     }
 
-    spdlog::debug("[DisplayManager] Resize debounce complete: {}x{}, calling {} registered callbacks",
-                  self->m_width, self->m_height, self->m_resize_callbacks.size());
+    spdlog::debug(
+        "[DisplayManager] Resize debounce complete: {}x{}, calling {} registered callbacks",
+        self->m_width, self->m_height, self->m_resize_callbacks.size());
 
     // Call all registered callbacks
     for (auto callback : self->m_resize_callbacks) {
@@ -1641,7 +1704,6 @@ void DisplayManager::register_resize_callback(ResizeCallback callback) {
                   m_resize_callbacks.size());
 }
 
-
 // ============================================================================
 // Color Transform (gamma + warmth)
 // ============================================================================
@@ -1657,23 +1719,22 @@ void DisplayManager::install_color_transform_hook() {
     if (!m_original_flush_cb_for_color) {
         return;
     }
-    lv_display_set_flush_cb(m_display,
-        [](lv_display_t* d, const lv_area_t* area, uint8_t* px_map) {
-            DisplayManager* self = DisplayManager::instance();
-            if (self && !self->m_color_transform.is_identity() && area && px_map) {
-                const lv_color_format_t cf = lv_display_get_color_format(d);
-                const int w = lv_area_get_width(area);
-                const int h = lv_area_get_height(area);
-                const int stride = lv_draw_buf_width_to_stride(w, cf);
-                self->m_color_transform.apply(px_map, w, h, stride, cf);
-            }
-            // Forward to the original backend flush
-            if (self && self->m_original_flush_cb_for_color) {
-                self->m_original_flush_cb_for_color(d, area, px_map);
-            } else {
-                lv_display_flush_ready(d);
-            }
-        });
+    lv_display_set_flush_cb(m_display, [](lv_display_t* d, const lv_area_t* area, uint8_t* px_map) {
+        DisplayManager* self = DisplayManager::instance();
+        if (self && !self->m_color_transform.is_identity() && area && px_map) {
+            const lv_color_format_t cf = lv_display_get_color_format(d);
+            const int w = lv_area_get_width(area);
+            const int h = lv_area_get_height(area);
+            const int stride = lv_draw_buf_width_to_stride(w, cf);
+            self->m_color_transform.apply(px_map, w, h, stride, cf);
+        }
+        // Forward to the original backend flush
+        if (self && self->m_original_flush_cb_for_color) {
+            self->m_original_flush_cb_for_color(d, area, px_map);
+        } else {
+            lv_display_flush_ready(d);
+        }
+    });
     spdlog::debug("[DisplayManager] Color transform flush hook installed");
 }
 

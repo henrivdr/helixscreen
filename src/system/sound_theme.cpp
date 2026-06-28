@@ -149,7 +149,8 @@ static SoundStep parse_step(const json& j, float bpm, Waveform default_wave, flo
         step.chord_count = static_cast<uint8_t>(std::min(notes_arr.size(), size_t(4)));
         for (uint8_t i = 0; i < step.chord_count; ++i) {
             if (notes_arr[i].is_string()) {
-                step.chord_freqs[i] = SoundThemeParser::note_to_freq(notes_arr[i].get<std::string>());
+                step.chord_freqs[i] =
+                    SoundThemeParser::note_to_freq(notes_arr[i].get<std::string>());
             } else if (notes_arr[i].is_number()) {
                 step.chord_freqs[i] = clamp_freq(notes_arr[i].get<float>());
             }

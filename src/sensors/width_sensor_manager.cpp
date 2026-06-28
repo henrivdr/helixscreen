@@ -150,8 +150,7 @@ void WidthSensorManager::update_from_status(const nlohmann::json& status) {
                 it != sensor_data.end() && it->is_number()) {
                 state.diameter = it->get<float>();
             }
-            if (auto it = sensor_data.find("Raw");
-                it != sensor_data.end() && it->is_number()) {
+            if (auto it = sensor_data.find("Raw"); it != sensor_data.end() && it->is_number()) {
                 state.raw_value = it->get<float>();
             }
 

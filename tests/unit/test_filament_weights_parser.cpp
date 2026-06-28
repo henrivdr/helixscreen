@@ -44,8 +44,7 @@ TEST_CASE("parse_filament_weights: filament_used semicolon string",
     CHECK(w[3] == Catch::Approx(12.5));
 }
 
-TEST_CASE("parse_filament_weights: filament_used comma string",
-          "[moonraker][metadata][weights]") {
+TEST_CASE("parse_filament_weights: filament_used comma string", "[moonraker][metadata][weights]") {
     json obj = {{"filament_used", "0.0,0.0,0.0,12.5"}};
     auto w = parse_filament_weights(obj);
 
@@ -53,8 +52,7 @@ TEST_CASE("parse_filament_weights: filament_used comma string",
     CHECK(w[3] == Catch::Approx(12.5));
 }
 
-TEST_CASE("parse_filament_weights: missing field returns empty",
-          "[moonraker][metadata][weights]") {
+TEST_CASE("parse_filament_weights: missing field returns empty", "[moonraker][metadata][weights]") {
     // Empty MUST mean "unknown" so the caller falls back to checking every
     // tool. Returning all-zeros here would incorrectly suppress all warnings.
     json obj = json::object();

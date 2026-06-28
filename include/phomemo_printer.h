@@ -30,8 +30,7 @@ class PhomemoPrinter : public ILabelPrinter {
     // === ILabelPrinter interface ===
 
     [[nodiscard]] std::string name() const override;
-    void print(const LabelBitmap& bitmap, const LabelSize& size,
-               PrintCallback callback) override;
+    void print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) override;
     [[nodiscard]] std::vector<LabelSize> supported_sizes() const override;
 
     // === Phomemo-specific API ===
@@ -44,7 +43,7 @@ class PhomemoPrinter : public ILabelPrinter {
 
     /// Build the raw raster command buffer (public for testing)
     static std::vector<uint8_t> build_raster_commands(const LabelBitmap& bitmap,
-                                                       const LabelSize& size);
+                                                      const LabelSize& size);
 
   private:
     uint16_t vid_ = 0;

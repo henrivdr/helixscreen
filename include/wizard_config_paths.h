@@ -68,19 +68,16 @@ constexpr const char* PRINTER_IMAGE = "printer_image";
 
 /// Get the printer display name from config: saved name → model/type → fallback.
 /// Used by both the home screen widget and printer manager overlay.
-inline std::string get_printer_display_name(
-    const std::string& fallback = "My Printer") {
+inline std::string get_printer_display_name(const std::string& fallback = "My Printer") {
     Config* config = Config::get_instance();
     if (!config)
         return fallback;
 
-    std::string name =
-        config->get<std::string>(config->df() + wizard::PRINTER_NAME, "");
+    std::string name = config->get<std::string>(config->df() + wizard::PRINTER_NAME, "");
     if (!name.empty())
         return name;
 
-    std::string type =
-        config->get<std::string>(config->df() + wizard::PRINTER_TYPE, "");
+    std::string type = config->get<std::string>(config->df() + wizard::PRINTER_TYPE, "");
     if (!type.empty())
         return type;
 

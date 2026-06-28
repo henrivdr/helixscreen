@@ -12,6 +12,7 @@
 #include "ui_utils.h"
 
 #include "helix-xml/src/xml/lv_xml.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "static_panel_registry.h"
 #include "theme_manager.h"
 #include "thumbnail_cache.h"
@@ -19,6 +20,7 @@
 #include "timelapse_state.h"
 #include "timelapse_thumbnailer.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -752,11 +754,11 @@ void TimelapseVideosOverlay::play_video(const std::string& filename) {
 void TimelapseVideosOverlay::confirm_delete(const std::string& filename) {
     pending_delete_filename_ = filename;
 
-    std::string message = "Delete " + filename + "?";
+    std::string message = fmt::format(lv_tr("Delete {}?"), filename);
 
     delete_confirmation_dialog_ = helix::ui::modal_show_confirmation(
-        "Delete Video", message.c_str(), ModalSeverity::Warning, "Delete", on_delete_confirmed,
-        on_delete_cancelled, this);
+        lv_tr("Delete Video"), message.c_str(), ModalSeverity::Warning, lv_tr("Delete"),
+        on_delete_confirmed, on_delete_cancelled, this);
 }
 
 void TimelapseVideosOverlay::on_delete_confirmed(lv_event_t* e) {

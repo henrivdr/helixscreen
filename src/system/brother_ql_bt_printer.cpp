@@ -3,11 +3,13 @@
 #if HELIX_HAS_LABEL_PRINTER
 
 #include "brother_ql_bt_printer.h"
+
+#include "ui_update_queue.h"
+
 #include "bluetooth_loader.h"
 #include "brother_ql_printer.h"
 #include "brother_ql_protocol.h"
 #include "bt_print_utils.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 
@@ -29,12 +31,13 @@ std::vector<LabelSize> BrotherQLBluetoothPrinter::supported_sizes() const {
 }
 
 void BrotherQLBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize& size,
-                                       PrintCallback callback) {
+                                      PrintCallback callback) {
     auto& loader = helix::bluetooth::BluetoothLoader::instance();
     if (!loader.is_available()) {
         spdlog::error("Brother QL BT: Bluetooth not available");
         helix::ui::queue_update([callback]() {
-            if (callback) callback(false, "Bluetooth not available");
+            if (callback)
+                callback(false, "Bluetooth not available");
         });
         return;
     }
@@ -42,7 +45,8 @@ void BrotherQLBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize
     if (mac_.empty()) {
         spdlog::error("Brother QL BT: No device configured");
         helix::ui::queue_update([callback]() {
-            if (callback) callback(false, "Bluetooth device not configured");
+            if (callback)
+                callback(false, "Bluetooth device not configured");
         });
         return;
     }
@@ -61,17 +65,19 @@ void BrotherQLBluetoothPrinter::print(const LabelBitmap& bitmap, const LabelSize
             auto result = helix::bluetooth::rfcomm_send(mac, channel, commands, "Brother QL BT");
 
             helix::ui::queue_update([callback, result]() {
-                if (callback) callback(result.success, result.error);
+                if (callback)
+                    callback(result.success, result.error);
             });
         }).detach();
     } catch (const std::system_error& e) {
         spdlog::error("Brother QL BT: failed to spawn print thread: {}", e.what());
         helix::ui::queue_update([callback]() {
-            if (callback) callback(false, "System busy — please try again");
+            if (callback)
+                callback(false, "System busy — please try again");
         });
     }
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

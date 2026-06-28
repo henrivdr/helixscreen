@@ -3,10 +3,9 @@
 
 #include "translation_loader.h"
 
-#include <lvgl.h>
-
 #include <spdlog/spdlog.h>
 
+#include <lvgl.h>
 #include <set>
 #include <string>
 
@@ -24,7 +23,8 @@ std::set<std::string>& loaded_locales() {
 } // namespace
 
 void ensure_translation_loaded(const std::string& lang) {
-    if (lang.empty()) return;
+    if (lang.empty())
+        return;
 
     // Earlier revision short-circuited for "en" on the theory that tags ARE
     // English and lv_translation_get returns the tag when no pack matches the
@@ -32,7 +32,8 @@ void ensure_translation_loaded(const std::string& lang) {
     // call log `language is not found` — hundreds of warnings on the device.
     // Loading en.xml costs ~140 KB of heap; tolerable vs the log spam.
 
-    if (loaded_locales().count(lang) > 0) return;
+    if (loaded_locales().count(lang) > 0)
+        return;
 
     std::string path = "A:ui_xml/translations/" + lang + ".xml";
     lv_result_t res = lv_xml_register_translation_from_file(path.c_str());

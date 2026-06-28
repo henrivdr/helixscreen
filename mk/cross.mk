@@ -1131,7 +1131,7 @@ cc1-docker: ensure-docker
 	fi
 	@# Generate translations on the host FIRST (docker image lacks python/yaml).
 	@# Pass PLATFORM_TARGET=cc1 so cross.mk sets HELIX_LANG for the generator.
-	@$(MAKE) --no-print-directory PLATFORM_TARGET=cc1 src/generated/lv_i18n_translations.c
+	@$(MAKE) --no-print-directory PLATFORM_TARGET=cc1 $(TRANS_XML)
 	$(call ensure-ccache-dir,cc1)
 	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src $(DOCKER_WORKTREE_MOUNT) -w /src $(call docker-ccache-args,cc1) helixscreen/toolchain-cc1 \
 		make PLATFORM_TARGET=cc1 SKIP_OPTIONAL_DEPS=1 -j$(NPROC_DOCKER_RUN)
@@ -1140,12 +1140,12 @@ cc1-docker: ensure-docker
 	@docker run --rm helixscreen/toolchain-cc1 cat /etc/ssl/certs/ca-certificates.crt > build/cc1/certs/ca-certificates.crt 2>/dev/null \
 		&& echo "$(GREEN)✓ CA certificates extracted$(RESET)" \
 		|| echo "$(YELLOW)⚠ Could not extract CA certificates (HTTPS may rely on device certs)$(RESET)"
-	@# Restore the full-language translation table so the committed file in
-	@# src/generated/ doesn't drift from git HEAD after a CC1 build. The stamp
-	@# file detects that HELIX_LANG is now empty and regenerates with all locales.
-	@$(MAKE) --no-print-directory src/generated/lv_i18n_translations.c >/dev/null 2>&1 \
-		&& echo "$(DIM)✓ Restored full translation table (repo clean)$(RESET)" \
-		|| echo "$(YELLOW)⚠ Could not restore full translation table — run 'make translations'$(RESET)"
+	@# Restore the full-language translation packs so the committed XML in
+	@# ui_xml/translations/ doesn't drift from git HEAD after a CC1 build. The
+	@# stamp file detects that HELIX_LANG is now empty and regenerates all locales.
+	@$(MAKE) --no-print-directory $(TRANS_XML) >/dev/null 2>&1 \
+		&& echo "$(DIM)✓ Restored full translation packs (repo clean)$(RESET)" \
+		|| echo "$(YELLOW)⚠ Could not restore full translation packs — run 'make translations'$(RESET)"
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
 mips-docker: ensure-docker

@@ -418,7 +418,7 @@ TEST_CASE("SpoolmanSlotSaver save creates new filament and repoints spool when m
 
     REQUIRE(got.success);
     REQUIRE(got.repointed_filament);
-    REQUIRE(got.new_vendor_id == 1);    // existing Polymaker
+    REQUIRE(got.new_vendor_id == 1);     // existing Polymaker
     REQUIRE(got.new_filament_id == 101); // newly-created PETG
 
     // Verify a new filament was POSTed (not a PATCH of filament 100).
@@ -433,8 +433,7 @@ TEST_CASE("SpoolmanSlotSaver save creates new filament and repoints spool when m
     REQUIRE(updates[0].patch["filament_id"] == 101);
 }
 
-TEST_CASE("SpoolmanSlotSaver save creates vendor when brand is new",
-          "[spoolman][slot_saver]") {
+TEST_CASE("SpoolmanSlotSaver save creates vendor when brand is new", "[spoolman][slot_saver]") {
     PrinterState state;
     MoonrakerClientMock client;
     MoonrakerAPIMock api(client, state);
@@ -705,8 +704,7 @@ TEST_CASE("SpoolmanSlotSaver find_or_create_vendor: creates new vendor when name
     int got_id = -1;
     bool error_called = false;
     saver.find_or_create_vendor(
-        "eSUN", [&](int id) { got_id = id; },
-        [&](const MoonrakerError&) { error_called = true; });
+        "eSUN", [&](int id) { got_id = id; }, [&](const MoonrakerError&) { error_called = true; });
 
     REQUIRE(got_id == 42);
     REQUIRE_FALSE(error_called);
@@ -836,8 +834,8 @@ TEST_CASE("SpoolmanSlotSaver repoint_spool: PATCHes spool with new filament_id",
 
     bool success = false;
     bool error_called = false;
-    saver.repoint_spool(/*spool_id*/ 42, /*new_filament_id*/ 101,
-                        [&]() { success = true; },
+    saver.repoint_spool(/*spool_id*/
+                        42, /*new_filament_id*/ 101, [&]() { success = true; },
                         [&](const MoonrakerError&) { error_called = true; });
 
     REQUIRE(success);
@@ -898,7 +896,7 @@ TEST_CASE("SpoolmanSlotSaver save: linked spool + incomplete filament fields + w
 
     SlotInfo original = make_test_slot();
     SlotInfo edited = original;
-    edited.brand = "";            // incomplete
+    edited.brand = "";                  // incomplete
     edited.remaining_weight_g = 600.0f; // weight change
 
     SpoolmanSlotSaver saver(&api);
@@ -1097,8 +1095,8 @@ TEST_CASE("SpoolmanSlotSaver save: linked spool + filament resolves to existing 
     SlotInfo original = make_test_slot();
     original.spoolman_filament_id = 100;
     SlotInfo edited = original;
-    edited.material = "PETG";            // resolves to existing filament 200
-    edited.remaining_weight_g = 600.0f;  // weight also changed
+    edited.material = "PETG";           // resolves to existing filament 200
+    edited.remaining_weight_g = 600.0f; // weight also changed
 
     SpoolmanSlotSaver saver(&api);
     SaveResult got{};

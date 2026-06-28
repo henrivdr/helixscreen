@@ -64,9 +64,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "ScopedFreeze is RAII — thaw on scope exit",
     bool ran = false;
 
     // Freeze in inner scope
-    {
-        auto freeze = q.scoped_freeze();
-    }
+    { auto freeze = q.scoped_freeze(); }
 
     // After scope exit, queue should work again
     q.queue([&ran]() { ran = true; });
@@ -135,8 +133,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         // Create observer while frozen — the initial fire is queued via
         // queue_update(), goes into frozen_buffer_.
         guard = helix::ui::observe_int_sync<FakePanel>(
-            &subject, &panel,
-            [](FakePanel* p, int value) { p->observed_value = value; });
+            &subject, &panel, [](FakePanel* p, int value) { p->observed_value = value; });
 
         // Drain inside freeze is a no-op — buffer has not been spliced yet.
         UpdateQueueTestAccess::drain(q);
@@ -151,8 +148,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     lv_subject_deinit(&subject);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "observe_int_sync initial callback works without ScopedFreeze",
+TEST_CASE_METHOD(LVGLTestFixture, "observe_int_sync initial callback works without ScopedFreeze",
                  "[update_queue][observer]") {
     auto& q = UpdateQueue::instance();
     FakePanel panel;
@@ -163,8 +159,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     {
         // Create observer without freeze — initial fire should be delivered.
         auto guard = helix::ui::observe_int_sync<FakePanel>(
-            &subject, &panel,
-            [](FakePanel* p, int value) { p->observed_value = value; });
+            &subject, &panel, [](FakePanel* p, int value) { p->observed_value = value; });
 
         UpdateQueueTestAccess::drain(q);
         REQUIRE(panel.observed_value == 42);
@@ -173,8 +168,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     lv_subject_deinit(&subject);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "observe_int_sync subsequent changes are delivered after thaw",
+TEST_CASE_METHOD(LVGLTestFixture, "observe_int_sync subsequent changes are delivered after thaw",
                  "[update_queue][observer]") {
     auto& q = UpdateQueue::instance();
     FakePanel panel;
@@ -188,8 +182,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 
         // Initial fire buffered during freeze.
         guard = helix::ui::observe_int_sync<FakePanel>(
-            &subject, &panel,
-            [](FakePanel* p, int value) { p->observed_value = value; });
+            &subject, &panel, [](FakePanel* p, int value) { p->observed_value = value; });
     }
 
     // Buffered initial fire spliced into pending_ on freeze release — drain
@@ -222,14 +215,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "tagged queue_update sets current_callback_tag
     REQUIRE(UpdateQueue::current_callback_tag() == nullptr);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "untagged queue_update has null callback tag",
-                 "[update_queue]") {
+TEST_CASE_METHOD(LVGLTestFixture, "untagged queue_update has null callback tag", "[update_queue]") {
     auto& q = UpdateQueue::instance();
     const char* tag_during_callback = reinterpret_cast<const char*>(0x1); // sentinel
 
-    q.queue([&tag_during_callback]() {
-        tag_during_callback = UpdateQueue::current_callback_tag();
-    });
+    q.queue(
+        [&tag_during_callback]() { tag_during_callback = UpdateQueue::current_callback_tag(); });
     UpdateQueueTestAccess::drain(q);
 
     REQUIRE(tag_during_callback == nullptr);

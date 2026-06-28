@@ -48,18 +48,21 @@ void prune_locked() {
 } // namespace
 
 void record_caller_handled(const std::string& message) {
-    if (message.empty()) return;
+    if (message.empty())
+        return;
     std::lock_guard<std::mutex> lock(mu());
     prune_locked();
     entries().push_back(Entry{message, Clock::now()});
 }
 
 bool was_recently_handled(const std::string& message) {
-    if (message.empty()) return false;
+    if (message.empty())
+        return false;
     std::lock_guard<std::mutex> lock(mu());
     prune_locked();
     for (const auto& e : entries()) {
-        if (e.message == message) return true;
+        if (e.message == message)
+            return true;
     }
     return false;
 }

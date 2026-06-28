@@ -5,10 +5,10 @@
 
 #include "ui_callback_helpers.h"
 #include "ui_carousel.h"
-#include "ui_modal.h"
 #include "ui_event_safety.h"
 #include "ui_fonts.h"
 #include "ui_icon_codepoints.h"
+#include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_ams.h"
 #include "ui_update_queue.h"
@@ -78,7 +78,8 @@ HomePanel::~HomePanel() {
     // Detach all page widget instances
     for (auto& page : page_widgets_) {
         for (auto& w : page) {
-            if (w) w->detach();
+            if (w)
+                w->detach();
         }
     }
     page_widgets_.clear();
@@ -213,8 +214,7 @@ void HomePanel::build_carousel() {
         lv_obj_t* plus_label = lv_label_create(plus_btn);
         lv_label_set_text(plus_label, ui_icon::lookup_codepoint("plus"));
         lv_obj_set_style_text_font(plus_label, &mdi_icons_32, LV_PART_MAIN);
-        lv_obj_set_style_text_color(plus_label, theme_manager_get_color("secondary"),
-                                    LV_PART_MAIN);
+        lv_obj_set_style_text_color(plus_label, theme_manager_get_color("secondary"), LV_PART_MAIN);
         lv_obj_align(plus_label, LV_ALIGN_CENTER, 0, 0);
 
         ui_carousel_add_item(carousel_, add_page_tile_);
@@ -276,8 +276,7 @@ void HomePanel::build_carousel() {
             lv_obj_t* label = lv_label_create(arrow);
             lv_label_set_text(label, ui_icon::lookup_codepoint(icon_name));
             lv_obj_set_style_text_font(label, &mdi_icons_24, LV_PART_MAIN);
-            lv_obj_set_style_text_color(label, theme_manager_get_color("text"),
-                                        LV_PART_MAIN);
+            lv_obj_set_style_text_color(label, theme_manager_get_color("text"), LV_PART_MAIN);
             lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
             return arrow;
         };
@@ -311,8 +310,7 @@ void HomePanel::build_carousel() {
                 LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] arrow_right_clicked");
                 auto& panel = get_global_home_panel();
                 if (panel.carousel_) {
-                    auto& config =
-                        helix::PanelWidgetManager::instance().get_widget_config("home");
+                    auto& config = helix::PanelWidgetManager::instance().get_widget_config("home");
                     int cur = ui_carousel_get_current_page(panel.carousel_);
                     int max_page = static_cast<int>(config.page_count()) - 1;
                     if (cur < max_page) {
@@ -354,17 +352,18 @@ void HomePanel::rebuild_carousel() {
     int prev_page = active_page_index_;
 
     // Deactivate current page widgets
-    if (active_page_index_ >= 0 &&
-        active_page_index_ < static_cast<int>(page_widgets_.size())) {
+    if (active_page_index_ >= 0 && active_page_index_ < static_cast<int>(page_widgets_.size())) {
         for (auto& w : page_widgets_[static_cast<size_t>(active_page_index_)]) {
-            if (w) w->on_deactivate();
+            if (w)
+                w->on_deactivate();
         }
     }
 
     // Detach all widget instances across all pages
     for (auto& page : page_widgets_) {
         for (auto& w : page) {
-            if (w) w->detach();
+            if (w)
+                w->detach();
         }
     }
     page_widgets_.clear();
@@ -465,10 +464,10 @@ void HomePanel::populate_page(int page_index, bool force) {
             }
         }
         // Remove null entries
-        page_widgets_[idx].erase(
-            std::remove_if(page_widgets_[idx].begin(), page_widgets_[idx].end(),
-                           [](const auto& w) { return !w; }),
-            page_widgets_[idx].end());
+        page_widgets_[idx].erase(std::remove_if(page_widgets_[idx].begin(),
+                                                page_widgets_[idx].end(),
+                                                [](const auto& w) { return !w; }),
+                                 page_widgets_[idx].end());
     }
 
     // Flush deferred callbacks, then async-clean the LVGL tree. Gate observers
@@ -502,7 +501,8 @@ void HomePanel::populate_page(int page_index, bool force) {
     // Activate widgets if this is the active page and panel is active
     if (panel_active_ && page_index == active_page_index_) {
         for (auto& w : widgets) {
-            if (w) w->on_activate();
+            if (w)
+                w->on_activate();
         }
     }
 
@@ -539,20 +539,20 @@ void HomePanel::on_page_changed(int new_page) {
     spdlog::debug("[{}] Page changed: {} -> {}", get_name(), active_page_index_, new_page);
 
     // Deactivate old page widgets
-    if (active_page_index_ >= 0 &&
-        active_page_index_ < static_cast<int>(page_widgets_.size())) {
+    if (active_page_index_ >= 0 && active_page_index_ < static_cast<int>(page_widgets_.size())) {
         for (auto& w : page_widgets_[static_cast<size_t>(active_page_index_)]) {
-            if (w) w->on_deactivate();
+            if (w)
+                w->on_deactivate();
         }
     }
 
     active_page_index_ = new_page;
 
     // Activate new page widgets if panel is active
-    if (panel_active_ && new_page >= 0 &&
-        new_page < static_cast<int>(page_widgets_.size())) {
+    if (panel_active_ && new_page >= 0 && new_page < static_cast<int>(page_widgets_.size())) {
         for (auto& w : page_widgets_[static_cast<size_t>(new_page)]) {
-            if (w) w->on_activate();
+            if (w)
+                w->on_activate();
         }
     }
 
@@ -590,8 +590,10 @@ void HomePanel::update_arrow_visibility(int page) {
 
     // Hide arrows entirely when there's only one page
     if (num_pages <= 1) {
-        if (arrow_left_) lv_obj_add_flag(arrow_left_, LV_OBJ_FLAG_HIDDEN);
-        if (arrow_right_) lv_obj_add_flag(arrow_right_, LV_OBJ_FLAG_HIDDEN);
+        if (arrow_left_)
+            lv_obj_add_flag(arrow_left_, LV_OBJ_FLAG_HIDDEN);
+        if (arrow_right_)
+            lv_obj_add_flag(arrow_right_, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
@@ -702,13 +704,13 @@ void HomePanel::finalize_setup() {
     // Set delete page callback for edit mode
     grid_edit_mode_.set_delete_page_callback([this]() {
         helix::ui::modal_show_confirmation(
-            "Delete Page", "Remove this page and all its widgets?", ModalSeverity::Warning, "Delete",
+            "Delete Page", "Remove this page and all its widgets?", ModalSeverity::Warning,
+            "Delete",
             [](lv_event_t* ev) {
                 LV_UNUSED(ev);
                 auto& panel = get_global_home_panel();
                 int page_to_delete = panel.grid_edit_mode_.page_index();
-                auto& config =
-                    helix::PanelWidgetManager::instance().get_widget_config("home");
+                auto& config = helix::PanelWidgetManager::instance().get_widget_config("home");
                 config.remove_page(static_cast<size_t>(page_to_delete));
                 config.save();
                 panel.grid_edit_mode_.exit();
@@ -724,10 +726,10 @@ void HomePanel::on_activate() {
     panel_active_ = true;
 
     // Notify only the active page's widgets that the panel is visible
-    if (active_page_index_ >= 0 &&
-        active_page_index_ < static_cast<int>(page_widgets_.size())) {
+    if (active_page_index_ >= 0 && active_page_index_ < static_cast<int>(page_widgets_.size())) {
         for (auto& w : page_widgets_[static_cast<size_t>(active_page_index_)]) {
-            if (w) w->on_activate();
+            if (w)
+                w->on_activate();
         }
     }
 
@@ -747,10 +749,10 @@ void HomePanel::on_deactivate() {
     }
 
     // Notify only the active page's widgets that the panel is going offscreen
-    if (active_page_index_ >= 0 &&
-        active_page_index_ < static_cast<int>(page_widgets_.size())) {
+    if (active_page_index_ >= 0 && active_page_index_ < static_cast<int>(page_widgets_.size())) {
         for (auto& w : page_widgets_[static_cast<size_t>(active_page_index_)]) {
-            if (w) w->on_deactivate();
+            if (w)
+                w->on_deactivate();
         }
     }
 
@@ -896,15 +898,14 @@ void HomePanel::on_home_grid_long_press(lv_event_t* e) {
             // Cancel the in-progress press to prevent the widget's click
             // action from firing on release.
             lv_indev_t* indev = lv_indev_active();
-            if (indev) lv_indev_reset(indev, nullptr);
+            if (indev)
+                lv_indev_reset(indev, nullptr);
 
             // Clear PRESSED state from active page container
             lv_obj_t* container = nullptr;
             if (panel.active_page_index_ >= 0 &&
-                panel.active_page_index_ <
-                    static_cast<int>(panel.page_containers_.size())) {
-                container =
-                    panel.page_containers_[static_cast<size_t>(panel.active_page_index_)];
+                panel.active_page_index_ < static_cast<int>(panel.page_containers_.size())) {
+                container = panel.page_containers_[static_cast<size_t>(panel.active_page_index_)];
             }
             if (container) {
                 clear_pressed_state_recursive(container);
@@ -965,7 +966,8 @@ void HomePanel::on_home_grid_released(lv_event_t* e) {
 }
 
 void HomePanel::go_to_main_page() {
-    if (!carousel_ || grid_edit_mode_.is_active()) return;
+    if (!carousel_ || grid_edit_mode_.is_active())
+        return;
     int current = ui_carousel_get_current_page(carousel_);
     if (current != 0) {
         spdlog::debug("[HomePanel] Navigating carousel to main page (page 0)");

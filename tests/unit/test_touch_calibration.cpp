@@ -1199,18 +1199,10 @@ TEST_CASE("TouchCalibration: detect_and_correct_axis_swap with swapped 800x480 s
 TEST_CASE("TouchCalibration: detect_and_correct_axis_swap with non-swapped screen",
           "[touch-calibration][axis-swap]") {
     // Normal (non-swapped) calibration — should NOT trigger swap
-    Point screen_points[3] = {
-        {120, 96},
-        {400, 374},
-        {680, 96}
-    };
+    Point screen_points[3] = {{120, 96}, {400, 374}, {680, 96}};
 
     // Touch points match screen points with slight offset (typical for cap screens)
-    Point touch_points[3] = {
-        {125, 100},
-        {405, 378},
-        {685, 100}
-    };
+    Point touch_points[3] = {{125, 100}, {405, 378}, {685, 100}};
 
     TouchCalibration cal;
     REQUIRE(compute_calibration(screen_points, touch_points, cal));
@@ -1232,11 +1224,7 @@ TEST_CASE("TouchCalibration: detect_and_correct_axis_swap with ADC-range swapped
           "[touch-calibration][axis-swap]") {
     // Simulate resistive touchscreen with 12-bit ADC and swapped axes
     // on 800x480 screen
-    Point screen_points[3] = {
-        {120, 96},
-        {400, 374},
-        {680, 96}
-    };
+    Point screen_points[3] = {{120, 96}, {400, 374}, {680, 96}};
 
     // Raw ADC values (0-4095 range) but X/Y swapped
     Point touch_points[3] = {
@@ -1264,19 +1252,11 @@ TEST_CASE("TouchCalibration: axis swap with Ender 5 Max-like coefficients",
     // The original coefficients (d=1.187, e=2.367) indicate heavy cross-coupling
     // Simulate the touch input that would produce these coefficients
 
-    Point screen_points[3] = {
-        {120, 96},
-        {400, 374},
-        {680, 96}
-    };
+    Point screen_points[3] = {{120, 96}, {400, 374}, {680, 96}};
 
     // These touch points produce high cross-coupling when not swapped
     // (representing a screen where touch X/Y are transposed)
-    Point touch_points[3] = {
-        {50, 100},
-        {250, 350},
-        {50, 600}
-    };
+    Point touch_points[3] = {{50, 100}, {250, 350}, {50, 600}};
 
     TouchCalibration cal;
     REQUIRE(compute_calibration(screen_points, touch_points, cal));
@@ -1300,20 +1280,14 @@ TEST_CASE("TouchCalibration: axis swap with Ender 5 Max-like coefficients",
 TEST_CASE("TouchCalibration: axis swap detection does not trigger on slight rotation",
           "[touch-calibration][axis-swap]") {
     // A slightly rotated touchscreen has small cross-coupling but diagonal still dominates
-    Point screen_points[3] = {
-        {120, 96},
-        {400, 374},
-        {680, 96}
-    };
+    Point screen_points[3] = {{120, 96}, {400, 374}, {680, 96}};
 
     // Slight clockwise rotation (~5 degrees) in touch coordinates
     // cos(5°)≈0.996, sin(5°)≈0.087
     Point touch_points[3] = {
         {static_cast<int>(120 * 0.996 + 96 * 0.087), static_cast<int>(-120 * 0.087 + 96 * 0.996)},
-        {static_cast<int>(400 * 0.996 + 374 * 0.087),
-         static_cast<int>(-400 * 0.087 + 374 * 0.996)},
-        {static_cast<int>(680 * 0.996 + 96 * 0.087),
-         static_cast<int>(-680 * 0.087 + 96 * 0.996)},
+        {static_cast<int>(400 * 0.996 + 374 * 0.087), static_cast<int>(-400 * 0.087 + 374 * 0.996)},
+        {static_cast<int>(680 * 0.996 + 96 * 0.087), static_cast<int>(-680 * 0.087 + 96 * 0.996)},
     };
 
     TouchCalibration cal;

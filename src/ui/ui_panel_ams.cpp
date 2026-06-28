@@ -1629,7 +1629,7 @@ void AmsPanel::show_loading_error_modal() {
     AmsSystemInfo info = backend->get_system_info();
     std::string error_message = info.operation_detail;
     if (error_message.empty()) {
-        error_message = "An error occurred during filament loading.";
+        error_message = lv_tr("An error occurred during filament loading.");
     }
 
     // Store slot for retry

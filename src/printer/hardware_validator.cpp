@@ -8,8 +8,10 @@
 #include "ui_toast_manager.h"
 
 #include "config.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "printer_discovery.h"
 #include "printer_hardware.h"
+#include "spdlog/fmt/fmt.h"
 #include "spdlog/spdlog.h"
 #include "wizard_config_paths.h"
 
@@ -168,15 +170,18 @@ void HardwareValidator::notify_user(const HardwareValidationResult& result) {
 
     if (result.has_critical()) {
         if (result.critical_missing.size() == 1) {
-            message = "Critical hardware missing: " + result.critical_missing[0].hardware_name;
+            message = fmt::format(lv_tr("Critical hardware missing: {}"),
+                                  result.critical_missing[0].hardware_name);
         } else {
-            message = std::to_string(result.critical_missing.size()) + " critical hardware issues";
+            message =
+                fmt::format(lv_tr("{} critical hardware issues"), result.critical_missing.size());
         }
         severity = ToastSeverity::ERROR;
     } else if (!result.expected_missing.empty() || !result.changed_from_last_session.empty()) {
         size_t count = result.expected_missing.size() + result.changed_from_last_session.size();
-        message =
-            std::to_string(count) + " configured " + (count == 1 ? "item" : "items") + " not found";
+        message = fmt::format(count == 1 ? lv_tr("{} configured item not found")
+                                         : lv_tr("{} configured items not found"),
+                              count);
         severity = ToastSeverity::WARNING;
     } else {
         // Build intelligent message based on hardware types
@@ -192,20 +197,21 @@ void HardwareValidator::notify_user(const HardwareValidationResult& result) {
         }
 
         if (led_count > 0 && sensor_count == 0 && other_count == 0) {
-            message = led_count == 1 ? "LED strip available for lighting control"
-                                     : std::to_string(led_count) + " LED strips available";
+            message = led_count == 1 ? lv_tr("LED strip available for lighting control")
+                                     : fmt::format(lv_tr("{} LED strips available"), led_count);
         } else if (sensor_count > 0 && led_count == 0 && other_count == 0) {
             message = sensor_count == 1
-                          ? "Filament sensor available for runout detection"
-                          : std::to_string(sensor_count) + " filament sensors available";
+                          ? lv_tr("Filament sensor available for runout detection")
+                          : fmt::format(lv_tr("{} filament sensors available"), sensor_count);
         } else {
-            message = std::to_string(result.newly_discovered.size()) + " new hardware available";
+            message =
+                fmt::format(lv_tr("{} new hardware available"), result.newly_discovered.size());
         }
         severity = ToastSeverity::INFO;
     }
 
     // Show toast with action button to navigate to Hardware Health section
-    ToastManager::instance().show_with_action(severity, message.c_str(), "View",
+    ToastManager::instance().show_with_action(severity, message.c_str(), lv_tr("View"),
                                               on_hardware_toast_view_clicked, nullptr, 8000);
     spdlog::debug("[HardwareValidator] Notified user ({}): {}",
                   severity == ToastSeverity::ERROR     ? "error"
@@ -483,8 +489,8 @@ void HardwareValidator::validate_configured_hardware(Config* config,
         std::string aux_fan = config->get<std::string>(config->df() + "fans/aux", "");
         if (!aux_fan.empty() && !contains_name(fans, aux_fan) &&
             !is_hardware_optional(config, aux_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                aux_fan, HardwareType::FAN, "Configured aux fan not found"));
+            result.expected_missing.push_back(
+                HardwareIssue::warning(aux_fan, HardwareType::FAN, "Configured aux fan not found"));
         }
     } catch (...) {
     }
@@ -835,8 +841,8 @@ void HardwareValidator::log_ignored_hardware(Config* config) {
             }
             joined << names[i];
         }
-        spdlog::info("[HardwareValidator] {} hardware item(s) silenced (ignored): {}",
-                     names.size(), joined.str());
+        spdlog::info("[HardwareValidator] {} hardware item(s) silenced (ignored): {}", names.size(),
+                     joined.str());
     } catch (const std::exception& e) {
         spdlog::trace("[HardwareValidator] Error reading optional list: {}", e.what());
     }

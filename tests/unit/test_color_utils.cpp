@@ -134,9 +134,9 @@ TEST_CASE("parse_hex_color: invalid inputs", "[color][parse]") {
     }
 
     SECTION("Wrong digit count") {
-        REQUIRE(helix::parse_hex_color("#FF", rgb) == false);   // 2 digits
-        REQUIRE(helix::parse_hex_color("#FFFF", rgb) == false); // 4 digits
-        REQUIRE(helix::parse_hex_color("#FFFFF", rgb) == false); // 5 digits
+        REQUIRE(helix::parse_hex_color("#FF", rgb) == false);      // 2 digits
+        REQUIRE(helix::parse_hex_color("#FFFF", rgb) == false);    // 4 digits
+        REQUIRE(helix::parse_hex_color("#FFFFF", rgb) == false);   // 5 digits
         REQUIRE(helix::parse_hex_color("#FFFFFFF", rgb) == false); // 7 digits
     }
 

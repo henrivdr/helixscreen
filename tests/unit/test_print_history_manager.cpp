@@ -158,7 +158,8 @@ TEST_CASE_METHOD(HistoryManagerTestFixture, "PrintHistoryManager builds filename
 // ============================================================================
 
 TEST_CASE_METHOD(HistoryManagerTestFixture,
-                 "PrintHistoryManager aggregates success count correctly", "[history_manager][slow]") {
+                 "PrintHistoryManager aggregates success count correctly",
+                 "[history_manager][slow]") {
     // When: fetch completes
     manager_->fetch();
     REQUIRE(wait_for_loaded());
@@ -185,7 +186,8 @@ TEST_CASE_METHOD(HistoryManagerTestFixture,
 }
 
 TEST_CASE_METHOD(HistoryManagerTestFixture,
-                 "PrintHistoryManager aggregates failure count correctly", "[history_manager][slow]") {
+                 "PrintHistoryManager aggregates failure count correctly",
+                 "[history_manager][slow]") {
     // When: fetch completes
     manager_->fetch();
     REQUIRE(wait_for_loaded());
@@ -504,7 +506,8 @@ TEST_CASE_METHOD(HistoryManagerTestFixture, "PrintHistoryStats includes uuid fro
 }
 
 TEST_CASE_METHOD(HistoryManagerTestFixture,
-                 "PrintHistoryStats includes size_bytes from most recent job", "[history][uuid][slow]") {
+                 "PrintHistoryStats includes size_bytes from most recent job",
+                 "[history][uuid][slow]") {
     manager_->fetch();
     REQUIRE(wait_for_loaded());
 

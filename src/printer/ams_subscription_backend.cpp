@@ -3,8 +3,9 @@
 
 #include "ams_subscription_backend.h"
 
-#include "hv/json.hpp"
 #include "moonraker_error.h"
+
+#include "hv/json.hpp"
 
 AmsSubscriptionBackend::AmsSubscriptionBackend(MoonrakerAPI* api, helix::MoonrakerClient* client)
     : api_(api), client_(client) {
@@ -161,18 +162,18 @@ AmsError AmsSubscriptionBackend::ensure_homed_then(std::string gcode,
     auto token = lifetime_.token();
     auto gcode_copy = std::move(gcode);
     client_->send_jsonrpc(
-        "printer.objects.query",
-        json{{"objects", json{{"toolhead", json::array({"homed_axes"})}}}},
+        "printer.objects.query", json{{"objects", json{{"toolhead", json::array({"homed_axes"})}}}},
         [this, token, gcode_copy, on_complete](const json& response) {
             // L081 Mechanism C: this branches into api_->execute_gcode() (member access)
             // and execute_gcode() (member call); marshal to main.
-            token.defer("AmsSubscriptionBackend::ensure_homed_then_query_success",
-                        [this, token, gcode_copy, response, on_complete]() {
+            token.defer("AmsSubscriptionBackend::ensure_homed_then_query_success", [this, token,
+                                                                                    gcode_copy,
+                                                                                    response,
+                                                                                    on_complete]() {
                 bool needs_home = true;
                 if (response.contains("result") && response["result"].contains("status")) {
                     const auto& status = response["result"]["status"];
-                    if (status.contains("toolhead") &&
-                        status["toolhead"].contains("homed_axes") &&
+                    if (status.contains("toolhead") && status["toolhead"].contains("homed_axes") &&
                         status["toolhead"]["homed_axes"].is_string()) {
                         std::string axes = status["toolhead"]["homed_axes"].get<std::string>();
                         needs_home = (axes.find("xyz") == std::string::npos);
@@ -187,23 +188,24 @@ AmsError AmsSubscriptionBackend::ensure_homed_then(std::string gcode,
                             // L081 Mechanism C: execute_gcode touches api_/members.
                             token.defer("AmsSubscriptionBackend::ensure_homed_then_g28_success",
                                         [this, gcode_copy, on_complete]() {
-                                spdlog::info("{} Homing complete, proceeding with: {}",
-                                             backend_log_tag(), gcode_copy);
-                                if (on_complete) {
-                                    execute_gcode(gcode_copy, on_complete);
-                                } else {
-                                    execute_gcode(gcode_copy);
-                                }
-                            });
+                                            spdlog::info("{} Homing complete, proceeding with: {}",
+                                                         backend_log_tag(), gcode_copy);
+                                            if (on_complete) {
+                                                execute_gcode(gcode_copy, on_complete);
+                                            } else {
+                                                execute_gcode(gcode_copy);
+                                            }
+                                        });
                         },
                         [this, token](const MoonrakerError& err) {
                             // L081 Mechanism C: system_info_ write under lock.
                             token.defer("AmsSubscriptionBackend::ensure_homed_then_g28_error",
                                         [this, message = err.message]() {
-                                spdlog::error("{} Homing failed: {}", backend_log_tag(), message);
-                                std::lock_guard<std::mutex> lock(mutex_);
-                                system_info_.action = AmsAction::IDLE;
-                            });
+                                            spdlog::error("{} Homing failed: {}", backend_log_tag(),
+                                                          message);
+                                            std::lock_guard<std::mutex> lock(mutex_);
+                                            system_info_.action = AmsAction::IDLE;
+                                        });
                         },
                         MoonrakerAPI::HOMING_TIMEOUT_MS);
                 } else if (on_complete) {
@@ -217,10 +219,11 @@ AmsError AmsSubscriptionBackend::ensure_homed_then(std::string gcode,
             // L081 Mechanism C: system_info_ write under lock.
             token.defer("AmsSubscriptionBackend::ensure_homed_then_query_error",
                         [this, message = err.message]() {
-                spdlog::error("{} Homed axes query failed: {}", backend_log_tag(), message);
-                std::lock_guard<std::mutex> lock(mutex_);
-                system_info_.action = AmsAction::IDLE;
-            });
+                            spdlog::error("{} Homed axes query failed: {}", backend_log_tag(),
+                                          message);
+                            std::lock_guard<std::mutex> lock(mutex_);
+                            system_info_.action = AmsAction::IDLE;
+                        });
         });
 
     return AmsErrorHelper::success();

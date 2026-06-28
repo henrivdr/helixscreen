@@ -8,21 +8,19 @@
  * Logging uses fprintf(stderr) — NOT spdlog (plugin is a standalone .so).
  */
 
-#include "bt_context.h"
 #include "bluetooth_plugin.h"
-
-#include <unistd.h>
+#include "bt_context.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <unistd.h>
 
 // ---------------------------------------------------------------------------
 // Shared helper: MAC to D-Bus path
 // ---------------------------------------------------------------------------
 
-std::string mac_to_dbus_path(const char* mac)
-{
+std::string mac_to_dbus_path(const char* mac) {
     // "AA:BB:CC:DD:EE:FF" -> "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
     std::string path = "/org/bluez/hci0/dev_";
     if (mac) {
@@ -44,8 +42,7 @@ static helix_bt_plugin_info plugin_info = {
     .has_ble = true,
 };
 
-extern "C" helix_bt_plugin_info* helix_bt_get_info(void)
-{
+extern "C" helix_bt_plugin_info* helix_bt_get_info(void) {
     return &plugin_info;
 }
 
@@ -53,8 +50,7 @@ extern "C" helix_bt_plugin_info* helix_bt_get_info(void)
 // Init / Deinit
 // ---------------------------------------------------------------------------
 
-extern "C" helix_bt_context* helix_bt_init(void)
-{
+extern "C" helix_bt_context* helix_bt_init(void) {
     auto* ctx = new (std::nothrow) helix_bt_context;
     if (!ctx) {
         fprintf(stderr, "[bt] failed to allocate context\n");
@@ -70,7 +66,7 @@ extern "C" helix_bt_context* helix_bt_init(void)
 
     // Set a 5-second D-Bus method call timeout (default is 25 seconds which
     // freezes the UI when is_paired/is_connected checks are called synchronously)
-    sd_bus_set_method_call_timeout(ctx->bus, 5 * 1000000ULL);  // microseconds
+    sd_bus_set_method_call_timeout(ctx->bus, 5 * 1000000ULL); // microseconds
 
     ctx->bus_thread = std::make_unique<helix::bluetooth::BusThread>(ctx->bus);
     ctx->bus_thread->start();
@@ -84,9 +80,9 @@ extern "C" helix_bt_context* helix_bt_init(void)
     return ctx;
 }
 
-extern "C" void helix_bt_deinit(helix_bt_context* ctx)
-{
-    if (!ctx) return;
+extern "C" void helix_bt_deinit(helix_bt_context* ctx) {
+    if (!ctx)
+        return;
 
     // Unregister the pairing agent before tearing down the bus thread.
     helix_bt_unregister_agent(ctx);
@@ -165,9 +161,9 @@ extern "C" void helix_bt_deinit(helix_bt_context* ctx)
 // Error reporting
 // ---------------------------------------------------------------------------
 
-extern "C" const char* helix_bt_last_error(helix_bt_context* ctx)
-{
-    if (!ctx) return "null context";
+extern "C" const char* helix_bt_last_error(helix_bt_context* ctx) {
+    if (!ctx)
+        return "null context";
     std::lock_guard<std::mutex> lock(ctx->mutex);
     return ctx->last_error.c_str();
 }
