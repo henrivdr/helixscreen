@@ -19,6 +19,7 @@
 #include "config.h"
 #include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "observer_factory.h"
 #include "static_panel_registry.h"
 
 #include <spdlog/spdlog.h>
@@ -224,6 +225,69 @@ void AmsEnvironmentOverlay::refresh() {
 
     spdlog::debug("[{}] Refreshing from backend", get_name());
     update_from_backend();
+}
+
+// ============================================================================
+// LIFECYCLE
+// ============================================================================
+
+void AmsEnvironmentOverlay::on_activate() {
+    OverlayBase::on_activate();
+
+    // Keep the readouts live while the overlay is open. Environment temperature/
+    // humidity and dryer state do NOT bump AmsState's slots_version (that tracks
+    // slot data only), so observe the per-unit environment indicator text subjects
+    // and the system dryer subjects directly; each re-pulls via refresh() on change.
+    // update_from_backend() only writes subject strings/ints — no synchronous widget
+    // deletion — so running it inside the deferred observer callbacks is safe.
+    using helix::ui::observe_int_sync;
+    using helix::ui::observe_string;
+    auto& ams = AmsState::instance();
+
+    auto refresh_if_visible = [](AmsEnvironmentOverlay* self) {
+        if (self->is_visible()) {
+            self->refresh();
+        }
+    };
+
+    if (auto* s = ams.get_env_ind_temp_text_subject(unit_index_)) {
+        env_temp_observer_ = observe_string<AmsEnvironmentOverlay>(
+            s, this, [refresh_if_visible](AmsEnvironmentOverlay* self, const char*) {
+                refresh_if_visible(self);
+            });
+    }
+    if (auto* s = ams.get_env_ind_humidity_text_subject(unit_index_)) {
+        env_humidity_observer_ = observe_string<AmsEnvironmentOverlay>(
+            s, this, [refresh_if_visible](AmsEnvironmentOverlay* self, const char*) {
+                refresh_if_visible(self);
+            });
+    }
+    if (auto* s = ams.get_dryer_active_subject()) {
+        dryer_active_observer_ = observe_int_sync<AmsEnvironmentOverlay>(
+            s, this,
+            [refresh_if_visible](AmsEnvironmentOverlay* self, int) { refresh_if_visible(self); });
+    }
+    if (auto* s = ams.get_dryer_current_temp_subject()) {
+        dryer_temp_observer_ = observe_int_sync<AmsEnvironmentOverlay>(
+            s, this,
+            [refresh_if_visible](AmsEnvironmentOverlay* self, int) { refresh_if_visible(self); });
+    }
+
+    // Pull current state immediately on activation.
+    refresh();
+
+    spdlog::trace("[{}] Activated", get_name());
+}
+
+void AmsEnvironmentOverlay::on_deactivate() {
+    OverlayBase::on_deactivate();
+
+    env_temp_observer_.reset();
+    env_humidity_observer_.reset();
+    dryer_active_observer_.reset();
+    dryer_temp_observer_.reset();
+
+    spdlog::debug("[{}] Deactivated", get_name());
 }
 
 // ============================================================================

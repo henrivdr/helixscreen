@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "overlay_base.h"
 #include "subject_managed_panel.h"
 
@@ -51,6 +53,12 @@ class AmsEnvironmentOverlay : public OverlayBase {
     void init_subjects() override;
     void register_callbacks() override;
     lv_obj_t* create(lv_obj_t* parent) override;
+
+    /// Subscribe to live AMS state changes and pull current data.
+    void on_activate() override;
+
+    /// Drop the live-update subscription.
+    void on_deactivate() override;
 
     const char* get_name() const override {
         return "AMS Environment";
@@ -103,6 +111,16 @@ class AmsEnvironmentOverlay : public OverlayBase {
 
     /// Cached dryer presets
     std::vector<DryingPreset> cached_presets_;
+
+    /// Live-update observers. Environment temperature/humidity and dryer state do
+    /// NOT bump AmsState's slots_version (that tracks slot data only), so the
+    /// overlay observes the per-unit environment indicator text subjects and the
+    /// system dryer subjects directly and re-pulls via refresh() on change. All
+    /// are singleton subjects, so no paired SubjectLifetime is needed.
+    ObserverGuard env_temp_observer_;
+    ObserverGuard env_humidity_observer_;
+    ObserverGuard dryer_active_observer_;
+    ObserverGuard dryer_temp_observer_;
 
     /// Widget pointers (found after create)
     lv_obj_t* preset_dropdown_ = nullptr;
