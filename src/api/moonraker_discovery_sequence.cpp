@@ -1527,9 +1527,16 @@ void MoonrakerDiscoverySequence::parse_objects(const json& objects) {
             afc_objects_.push_back(name);
         }
         // Filament sensors (switch or motion type)
-        // These provide runout detection and encoder motion data
+        // These provide runout detection and encoder motion data.
+        // AD5X native Z-Mod publishes its head/motion sensors under custom module
+        // namespaces (zmod_ifs_switch_sensor / zmod_ifs_motion_sensor) rather than
+        // the stock filament_switch_sensor / filament_motion_sensor sections, so
+        // bucket those too — the IFS backend subscribes to them for head-loaded
+        // state.
         else if (name.rfind("filament_switch_sensor ", 0) == 0 ||
-                 name.rfind("filament_motion_sensor ", 0) == 0) {
+                 name.rfind("filament_motion_sensor ", 0) == 0 ||
+                 name.rfind("zmod_ifs_switch_sensor ", 0) == 0 ||
+                 name.rfind("zmod_ifs_motion_sensor ", 0) == 0) {
             filament_sensors_.push_back(name);
         }
         // MCUs: "mcu" (primary) and "mcu <name>" (secondary boards, host MCU,

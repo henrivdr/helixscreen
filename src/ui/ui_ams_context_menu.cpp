@@ -324,10 +324,16 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
         }
     }
 
-    // Determine if slot has filament for Load button state
-    // Disable Load if: system busy, slot empty, OR slot is already loaded
-    // (live: firmware seated/loaded or filament at this slot's toolhead).
-    bool can_load = !system_busy && !is_loaded && slot_has_filament;
+    // Determine if slot has filament for Load button state.
+    // Gate on ACTUAL toolhead-loaded state (toolhead_unload), NOT the broadened
+    // is_loaded recovery signal. is_loaded folds in can_unload_from_toolhead, which
+    // reads true for the firmware's seated channel regardless of whether filament
+    // actually reached the head. A cold-lane-eject lane (filament parked in the
+    // lane but NOT at the toolhead) is a valid Load target, so it must stay
+    // enabled. For non-AD5X backends slot_unloads_to_toolhead() returns the hint
+    // unchanged, so !toolhead_unload == !is_loaded and behavior is unaffected.
+    // Disable Load if: system busy, slot empty, OR filament is already at the head.
+    bool can_load = !system_busy && !toolhead_unload && slot_has_filament;
     lv_subject_set_int(&slot_can_load_subject_, can_load ? 1 : 0);
     if (!can_load) {
         spdlog::debug("[AmsContextMenu] Load disabled for slot {}: busy={}, loaded={} "

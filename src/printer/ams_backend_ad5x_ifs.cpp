@@ -64,6 +64,16 @@ bool AmsBackendAd5xIfs::owns_filament_sensor(const std::string& bare_name,
     if (bare_name == "ifs_motion_sensor" || bare_name == "head_switch_sensor") {
         return true;
     }
+    // Native Z-Mod publishes these same sensors under custom module namespaces
+    // (zmod_ifs_switch_sensor / zmod_ifs_motion_sensor) instead of the stock
+    // filament_switch_sensor / filament_motion_sensor sections. The hardware-side
+    // strip only removes the stock prefixes, so the bare_name still carries the
+    // zmod namespace — claim it by prefix so the head/motion sensors aren't
+    // surfaced as generic runout sensors.
+    if (bare_name.rfind("zmod_ifs_switch_sensor ", 0) == 0 ||
+        bare_name.rfind("zmod_ifs_motion_sensor ", 0) == 0) {
+        return true;
+    }
     // lessWaste per-port HUB sensors (_ifs_port_sensor_{1..4}) and older ZMOD
     // per-port motion sensors (_ifs_motion_sensor_N).
     return bare_name.rfind("_ifs_port_sensor_", 0) == 0 ||
@@ -142,6 +152,11 @@ void AmsBackendAd5xIfs::on_started() {
                    {"filament_switch_sensor head_switch_sensor", nullptr},
                    // Native ZMOD IFS: single motion sensor (replaces per-port sensors)
                    {"filament_motion_sensor ifs_motion_sensor", nullptr},
+                   // Native Z-Mod custom-module namespaces — the live AD5X pushes
+                   // its head switch + motion sensor under zmod_ifs_* sections
+                   // (no stock filament_*_sensor section exists), so query both.
+                   {"zmod_ifs_switch_sensor head_switch_sensor", nullptr},
+                   {"zmod_ifs_motion_sensor ifs_motion_sensor", nullptr},
                    // Extruder temp/target — primary signal for the load/unload
                    // phase tracker (HEATING completion). Without this the IFS
                    // unload silently heats for ~2.5 min with no feedback.
@@ -338,9 +353,16 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
     }
 
     // Native ZMOD IFS: single motion sensor replaces per-port presence sensors.
-    // Maps to head_filament_ since it detects filament at the toolhead.
-    if (status->contains("filament_motion_sensor ifs_motion_sensor")) {
-        const auto& motion = (*status)["filament_motion_sensor ifs_motion_sensor"];
+    // Maps to head_filament_ since it detects filament at the toolhead. The live
+    // AD5X publishes this under the zmod_ifs_motion_sensor namespace rather than
+    // the stock filament_motion_sensor section, so accept either key.
+    const char* motion_key = status->contains("filament_motion_sensor ifs_motion_sensor")
+                                 ? "filament_motion_sensor ifs_motion_sensor"
+                                 : (status->contains("zmod_ifs_motion_sensor ifs_motion_sensor")
+                                        ? "zmod_ifs_motion_sensor ifs_motion_sensor"
+                                        : nullptr);
+    if (motion_key) {
+        const auto& motion = (*status)[motion_key];
         if (motion.contains("filament_detected") && motion["filament_detected"].is_boolean()) {
             bool detected = motion["filament_detected"].get<bool>();
             bool was = head_filament_;
@@ -363,9 +385,16 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         }
     }
 
-    // Parse head sensor
-    if (status->contains("filament_switch_sensor head_switch_sensor")) {
-        const auto& head = (*status)["filament_switch_sensor head_switch_sensor"];
+    // Parse head sensor. The live AD5X publishes this under the
+    // zmod_ifs_switch_sensor namespace rather than the stock
+    // filament_switch_sensor section, so accept either key (switch semantics).
+    const char* head_key = status->contains("filament_switch_sensor head_switch_sensor")
+                               ? "filament_switch_sensor head_switch_sensor"
+                               : (status->contains("zmod_ifs_switch_sensor head_switch_sensor")
+                                      ? "zmod_ifs_switch_sensor head_switch_sensor"
+                                      : nullptr);
+    if (head_key) {
+        const auto& head = (*status)[head_key];
         if (head.contains("filament_detected") && head["filament_detected"].is_boolean()) {
             bool detected = head["filament_detected"].get<bool>();
             bool was = head_filament_;
@@ -3352,6 +3381,28 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             }
         }
 
+        // Head-loaded state from GET_ZCOLOR's "Extruder:" summary. On native
+        // Z-Mod the head switch / motion sensors don't push under the stock
+        // filament_switch_sensor / filament_motion_sensor sections, so
+        // parse_head_sensor() never fires and head_filament_ would stay false
+        // even with filament at the toolhead (BUG-B). The "Extruder: N" summary
+        // is zmod's live toolhead view — it reads "None" when nothing is at the
+        // head — so it is the correct head-loaded signal. extruder_slot.has_value()
+        // is true for "Extruder: N" and false for "None". Gated on
+        // saw_extruder_summary so a frame without the summary line (e.g. one that
+        // carried only slot lines or only IFS_STATUS JSON) can't wrongly clear
+        // head state. Deliberately NO seated_chan_/lane-present fallback: a
+        // cold-inserted lane is present and seated but NOT at the head, which the
+        // "Extruder:" view correctly reports as not loaded.
+        if (result.saw_extruder_summary) {
+            const bool head_loaded = result.extruder_slot.has_value();
+            if (head_filament_ != head_loaded) {
+                head_filament_ = head_loaded;
+                system_info_.filament_loaded = head_loaded;
+                changed = true;
+            }
+        }
+
         if (changed) {
             for (int i = 0; i < NUM_PORTS; ++i) {
                 update_slot_from_state(i);
@@ -3452,7 +3503,8 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines, co
     for (const auto& line : lines) {
         if (std::regex_match(line, m, summary_re)) {
             result.saw_valid_response = true;
-            result.saw_silent_content = true; // genuine GET_ZCOLOR summary line
+            result.saw_silent_content = true;   // genuine GET_ZCOLOR summary line
+            result.saw_extruder_summary = true; // carries the "Extruder:" head field
             result.ifs_active = (m[2].str() == "True");
             const std::string extruder_part = m[1].str();
 

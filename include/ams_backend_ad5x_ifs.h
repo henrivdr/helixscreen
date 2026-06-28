@@ -263,6 +263,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
         // opposed to ONLY the IFS_STATUS JSON). Proves SILENT actually works on
         // this device, which retires the false prompt-demotion (#981).
         bool saw_silent_content = false;
+        // True only when the GET_ZCOLOR "// Extruder: ..." summary line was parsed
+        // (the line that feeds extruder_slot). Slot lines also set
+        // saw_silent_content but carry no Extruder field, so this distinguishes a
+        // definitive head reading (extruder_slot reflects "N" or "None") from a
+        // frame that simply lacked the summary line — without it a slot-line-only
+        // frame would have extruder_slot == nullopt and falsely clear head state.
+        bool saw_extruder_summary = false;
         std::optional<int> current_channel;
         std::optional<int> extruder_slot; // 0-based, absent when "None"
         // Seated/engaged channel from IFS_STATUS "Chan" (1-based, 0 = none).
