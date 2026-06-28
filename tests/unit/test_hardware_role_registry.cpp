@@ -56,6 +56,27 @@ TEST_CASE("resolve_role: Tier 1b never returns an object outside discovered", "[
     REQUIRE(r.object.empty());
 }
 
+TEST_CASE("resolve_role: stale part fan with only wrong-category candidates stays Unresolved",
+          "[hwrole][resolve]") {
+    // Regression: without is_candidate, guess_part_cooling_fan() falls back to fans_[0]
+    // (controller_fan Case_Fan) and that was silently accepted. With the predicate it is
+    // rejected, so we correctly stay Unresolved rather than persisting a wrong-category fan.
+    auto r = resolve_role(part_fan_desc(), "output_pin fan0",
+                          {"controller_fan Case_Fan", "heater_fan hotend_fan"});
+    REQUIRE(r.status == RoleResolutionStatus::Unresolved);
+    REQUIRE(r.object.empty());
+}
+
+TEST_CASE("resolve_role: Tier 0 honors live saved wrong-category fan (user choice)",
+          "[hwrole][resolve]") {
+    // A user who explicitly saved a controller_fan as their part fan must have that
+    // choice respected at Tier 0 — candidacy is intentionally not checked there.
+    auto r = resolve_role(part_fan_desc(), "controller_fan Case_Fan",
+                          {"controller_fan Case_Fan", "heater_fan hotend_fan"});
+    REQUIRE(r.status == RoleResolutionStatus::Resolved);
+    REQUIRE(r.object == "controller_fan Case_Fan");
+}
+
 TEST_CASE("registry integrity: every descriptor has a usable config key", "[hwrole][drift]") {
     const auto& reg = hardware_role_registry();
     REQUIRE(!reg.empty());
@@ -69,25 +90,34 @@ TEST_CASE("registry integrity: every descriptor has a usable config key", "[hwro
 TEST_CASE("resolve_role_from_config: unconfigured optional role stays empty", "[hwrole][config]") {
     Config* cfg = Config::get_instance();
     REQUIRE(cfg != nullptr);
-    cfg->set<std::string>(cfg->df() + helix::wizard::CHAMBER_FAN, std::string(""));
+    const std::string key = cfg->df() + helix::wizard::CHAMBER_FAN;
+    const std::string orig = cfg->get<std::string>(key, "");
+    cfg->set<std::string>(key, std::string(""));
     std::string r = resolve_role_from_config(HardwareRoleId::ChamberFan, cfg,
                                              {"fan", "fan_generic chamber_fan"}, false);
-    REQUIRE(r.empty()); // empty saved => do not invent a role
+    REQUIRE(r.empty());               // empty saved => do not invent a role
+    cfg->set<std::string>(key, orig); // restore
 }
 
 TEST_CASE("resolve_role_from_config: persists auto-healed part fan", "[hwrole][config]") {
     Config* cfg = Config::get_instance();
-    cfg->set<std::string>(cfg->df() + helix::wizard::PART_FAN, std::string("output_pin fan0"));
+    const std::string key = cfg->df() + helix::wizard::PART_FAN;
+    const std::string orig = cfg->get<std::string>(key, "");
+    cfg->set<std::string>(key, std::string("output_pin fan0"));
     std::string r = resolve_role_from_config(HardwareRoleId::PartFan, cfg,
                                              {"fan", "fan_generic Aux_Cooling_Fan"}, true);
     REQUIRE(r == "fan");
-    REQUIRE(cfg->get<std::string>(cfg->df() + helix::wizard::PART_FAN, "") == "fan");
+    REQUIRE(cfg->get<std::string>(key, "") == "fan");
+    cfg->set<std::string>(key, orig); // restore
 }
 
 TEST_CASE("resolve_role_from_config: no persist leaves config untouched", "[hwrole][config]") {
     Config* cfg = Config::get_instance();
-    cfg->set<std::string>(cfg->df() + helix::wizard::PART_FAN, std::string("output_pin fan0"));
+    const std::string key = cfg->df() + helix::wizard::PART_FAN;
+    const std::string orig = cfg->get<std::string>(key, "");
+    cfg->set<std::string>(key, std::string("output_pin fan0"));
     std::string r = resolve_role_from_config(HardwareRoleId::PartFan, cfg, {"fan"}, false);
     REQUIRE(r == "fan");
-    REQUIRE(cfg->get<std::string>(cfg->df() + helix::wizard::PART_FAN, "") == "output_pin fan0");
+    REQUIRE(cfg->get<std::string>(key, "") == "output_pin fan0");
+    cfg->set<std::string>(key, orig); // restore
 }
