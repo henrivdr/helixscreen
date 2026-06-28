@@ -77,6 +77,7 @@ class Config {
     friend class MultiInstanceMigrationFixture;
     friend class PresetConfigFixture;
     friend class VariantPresetFixture;
+    friend class RoleValidatorFixture;
 
   public:
     /**
