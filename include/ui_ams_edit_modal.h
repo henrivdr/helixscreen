@@ -102,6 +102,12 @@ class AmsEditModal : public Modal {
     int slot_index_ = -1;
     SlotInfo original_info_; ///< Original info for reset
     SlotInfo working_info_;  ///< Working copy being edited
+    // Set true only when the user actually edits a filament field (vendor,
+    // material, or color) in this session. Gates new-Spoolman-spool creation so
+    // an unedited open+save — where update_vendor_dropdown auto-defaults
+    // brand="Generic", making is_filament_complete() true — cannot spawn a
+    // phantom "Generic" spool (#1071 Symptom C). Reset on every show_for_slot.
+    bool filament_user_edited_ = false;
     MoonrakerAPI* api_ = nullptr;
     CompletionCallback completion_callback_;
     int remaining_pre_edit_pct_ = 0; ///< Remaining % before edit mode
@@ -199,6 +205,15 @@ class AmsEditModal : public Modal {
     void handle_remaining_cancel();
     void handle_reset();
     void handle_save();
+
+    // Pure decision for whether handle_save() should create a NEW Spoolman spool
+    // from manually-entered fields: only for an unlinked slot, only after a
+    // genuine user filament edit (vendor/material/color — NOT the auto-defaulted
+    // "Generic"), and only when the metadata is complete (#1071 Symptom C).
+    // Static + side-effect-free so it is unit-testable without the modal/XML/
+    // async machinery (the is_spoolman_available() and Spoolman create chain
+    // around it are not).
+    static bool should_create_new_spool(const SlotInfo& working_info, bool filament_user_edited);
 #if HELIX_HAS_LABEL_PRINTER
     void handle_print_label();
 #endif

@@ -139,6 +139,7 @@ bool AmsEditModal::show_for_slot(lv_obj_t* parent, int slot_index, const SlotInf
     slot_index_ = slot_index;
     original_info_ = initial_info;
     working_info_ = initial_info;
+    filament_user_edited_ = false; // no user edit yet this session (#1071)
     api_ = api ? api : get_moonraker_api();
     remaining_pre_edit_pct_ = 0;
     cached_spools_.clear();
@@ -1374,6 +1375,7 @@ void AmsEditModal::show_color_picker() {
         // Update the working slot info with selected color
         working_info_.color_rgb = color_rgb;
         working_info_.color_name = color_name;
+        filament_user_edited_ = true; // genuine user edit gates new-spool create (#1071)
 
         // Update the edit modal's color swatch to show new selection
         if (dialog_) {
@@ -1428,6 +1430,7 @@ void AmsEditModal::handle_vendor_changed(int index) {
     if (index >= 0 && index < static_cast<int>(vendor_list_.size())) {
         working_info_.brand = vendor_list_[index].name;
         working_info_.spoolman_vendor_id = vendor_list_[index].id;
+        filament_user_edited_ = true; // genuine user edit gates new-spool create (#1071)
         spdlog::debug("[AmsEditModal] Vendor changed to: {} (vendor_id={})", working_info_.brand,
                       working_info_.spoolman_vendor_id);
         update_sync_button_state();
@@ -1437,6 +1440,7 @@ void AmsEditModal::handle_vendor_changed(int index) {
 void AmsEditModal::handle_material_changed(int index) {
     if (index >= 0 && index < static_cast<int>(material_list_.size())) {
         working_info_.material = material_list_[index];
+        filament_user_edited_ = true; // genuine user edit gates new-spool create (#1071)
         spdlog::debug("[AmsEditModal] Material changed to: {}", working_info_.material);
 
         // Clear existing temp values so update_temp_display uses material-based defaults
@@ -1618,6 +1622,16 @@ void AmsEditModal::handle_reset() {
     fire_completion(false);
 }
 
+bool AmsEditModal::should_create_new_spool(const SlotInfo& working_info,
+                                           bool filament_user_edited) {
+    // Unlinked + a genuine user edit + complete metadata. The user-edit term is
+    // the #1071 Symptom C fix: an unedited open auto-defaults brand="Generic",
+    // which alone satisfies is_filament_complete() and would otherwise spawn a
+    // phantom spool on save.
+    return working_info.spoolman_id == 0 && filament_user_edited &&
+           helix::SpoolmanSlotSaver::is_filament_complete(working_info);
+}
+
 void AmsEditModal::handle_save() {
     spdlog::info("[AmsEditModal] Saving edits for slot {}", slot_index_);
 
@@ -1651,8 +1665,15 @@ void AmsEditModal::handle_save() {
     if (api_ && get_printer_state().is_spoolman_available()) {
         const bool has_linked_spool = working_info_.spoolman_id > 0;
         auto changes = helix::SpoolmanSlotSaver::detect_changes(original_info_, working_info_);
-        const bool can_create_new =
-            !has_linked_spool && helix::SpoolmanSlotSaver::is_filament_complete(working_info_);
+        // Require an explicit user filament edit before creating a new Spoolman
+        // spool. update_vendor_dropdown auto-defaults brand="Generic" on an
+        // unedited open, which alone makes is_filament_complete() true; without
+        // this gate an open+save with no edits spawns a phantom "Generic" spool
+        // (#1071 Symptom C). Editing fields routes through handle_vendor_changed /
+        // handle_material_changed / the color picker, which set the flag; picking
+        // an existing spool (handle_spool_selected) does NOT — it takes the
+        // has_linked_spool branch instead.
+        const bool can_create_new = should_create_new_spool(working_info_, filament_user_edited_);
         if ((has_linked_spool && changes.any()) || can_create_new) {
             auto token = lifetime_.token();
             auto saver = std::make_shared<helix::SpoolmanSlotSaver>(api_);
