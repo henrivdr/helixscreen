@@ -2414,6 +2414,25 @@ void Application::create_overlays() {
     }
 }
 
+void Application::reapply_hardware_roles() {
+    helix::ui::queue_update("Application::reapply_hardware_roles", [this]() {
+        MoonrakerAPI* api = m_moonraker ? m_moonraker->api() : nullptr;
+        if (!api) {
+            return;
+        }
+        const auto& fans = api->hardware().fans();
+        const auto& heaters = api->hardware().heaters();
+        // Re-resolve + persist fan roles, then rebind fan UI to the new mapping.
+        auto roles = helix::FanRoleConfig::from_config(Config::get_instance(), fans);
+        get_printer_state().init_fans(fans, roles);
+        // Heater roles persist back to config (no dedicated runtime fan-style consumer).
+        helix::resolve_role_from_config(helix::HardwareRoleId::HotendHeater, Config::get_instance(),
+                                        heaters, /*persist_autoheal=*/true);
+        helix::resolve_role_from_config(helix::HardwareRoleId::BedHeater, Config::get_instance(),
+                                        heaters, /*persist_autoheal=*/true);
+    });
+}
+
 void Application::setup_discovery_callbacks() {
     MoonrakerClient* client = m_moonraker->client();
     MoonrakerAPI* api = m_moonraker->api();
@@ -2431,6 +2450,9 @@ void Application::setup_discovery_callbacks() {
         helix::ui::queue_update([api, client, app, snapshot]() {
             if (app->m_shutdown_complete)
                 return;
+            // A new discovery cycle is starting — re-arm the once-per-connection
+            // targeted hardware-reconfig wizard guard so a reconnect can re-offer it.
+            app->m_targeted_reconfig_shown = false;
             api->hardware() = std::move(*snapshot);
             helix::init_subsystems_from_hardware(api->hardware(), api, client);
         });
@@ -2625,6 +2647,30 @@ void Application::setup_discovery_callbacks() {
             if (validation_result.has_issues() && !Config::get_instance()->is_wizard_required() &&
                 !is_wizard_active()) {
                 validator.notify_user(validation_result);
+            }
+
+            // Route unresolved GUIDED hardware roles (a saved fan/heater role with no
+            // confident live substitute) into the targeted reconfig wizard — only the
+            // affected step(s), not the full first-run wizard. Skipped while the first-run
+            // wizard is required/active, and gated to once-per-connection so it does not
+            // relaunch on reconnect churn within a single session.
+            auto reconfig_steps = helix::unresolved_guided_steps(Config::get_instance(), hw);
+            if (!reconfig_steps.empty() && !Config::get_instance()->is_wizard_required() &&
+                !is_wizard_active() && !app->m_targeted_reconfig_shown) {
+                app->m_targeted_reconfig_shown = true;
+                ui_wizard_register_event_callbacks();
+                ui_wizard_container_register_responsive_constants();
+                ui_wizard_init_subjects();
+                // Cancel = dismiss the targeted session. Without this, Back on the first
+                // targeted step is a no-op (no prior step to retreat to).
+                set_wizard_cancel_callback([]() {
+                    ui_wizard_complete_targeted();
+                    set_wizard_cancel_callback(nullptr);
+                });
+                ui_wizard_create_targeted(app->m_screen, reconfig_steps, [app]() {
+                    set_wizard_cancel_callback(nullptr);
+                    app->reapply_hardware_roles();
+                });
             }
 
             // Save session snapshot for next comparison (even if no issues)

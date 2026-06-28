@@ -2,6 +2,7 @@
 #include "hardware_role_registry.h"
 
 #include "config.h"
+#include "printer_discovery.h"
 #include "printer_hardware.h"
 #include "wizard_config_paths.h"
 
@@ -171,6 +172,40 @@ std::string resolve_role_from_config(HardwareRoleId id, Config* config,
                      desc->config_key, saved);
     }
     return res.object;
+}
+
+std::vector<helix::wizard::StepId> unresolved_guided_steps(Config* config,
+                                                           const PrinterDiscovery& hw) {
+    std::vector<helix::wizard::StepId> out;
+    if (!config) {
+        return out;
+    }
+    for (const auto& desc : hardware_role_registry()) {
+        if (!desc.guided) {
+            continue;
+        }
+        const std::vector<std::string>* discovered =
+            desc.category == HardwareCategory::Fan      ? &hw.fans()
+            : desc.category == HardwareCategory::Heater ? &hw.heaters()
+                                                        : nullptr;
+        if (!discovered) {
+            continue;
+        }
+        const std::string key = config->df() + desc.config_key;
+        const std::string default_val =
+            desc.canonical_default ? std::string(desc.canonical_default) : std::string();
+        const std::string saved = config->get<std::string>(key, default_val);
+        // Empty saved means the role is intentionally unconfigured — nothing to reconfigure.
+        if (saved.empty()) {
+            continue;
+        }
+        if (resolve_role(desc, saved, *discovered).status == RoleResolutionStatus::Unresolved) {
+            if (std::find(out.begin(), out.end(), desc.wizard_step) == out.end()) {
+                out.push_back(desc.wizard_step);
+            }
+        }
+    }
+    return out;
 }
 
 } // namespace helix

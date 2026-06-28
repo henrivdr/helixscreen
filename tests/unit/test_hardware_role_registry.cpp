@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "config.h"
 #include "hardware_role_registry.h"
+#include "moonraker_client_mock.h"
+#include "printer_discovery.h"
 #include "wizard_config_paths.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 #include "../catch_amalgamated.hpp"
 
@@ -120,4 +126,86 @@ TEST_CASE("resolve_role_from_config: no persist leaves config untouched", "[hwro
     REQUIRE(r == "fan");
     REQUIRE(cfg->get<std::string>(key, "") == "output_pin fan0");
     cfg->set<std::string>(key, orig); // restore
+}
+
+// ---------------------------------------------------------------------------
+// unresolved_guided_steps: routes unresolvable guided roles to the targeted wizard
+// ---------------------------------------------------------------------------
+
+TEST_CASE("unresolved_guided_steps: stale part fan with empty discovery yields FanSelect",
+          "[hwrole][reconfig]") {
+    Config* cfg = Config::get_instance();
+    const std::string key = cfg->df() + helix::wizard::PART_FAN;
+    const std::string orig = cfg->get<std::string>(key, "");
+
+    // Stale role: a part fan that no longer exists, and NO fans discovered at all,
+    // so neither the canonical default nor the heuristic guess can resolve it.
+    cfg->set<std::string>(key, std::string("output_pin fan0"));
+    helix::PrinterDiscovery hw; // empty fans + heaters
+
+    auto steps = helix::unresolved_guided_steps(cfg, hw);
+    REQUIRE(std::find(steps.begin(), steps.end(), helix::wizard::StepId::FanSelect) != steps.end());
+
+    cfg->set<std::string>(key, orig); // restore
+}
+
+TEST_CASE("unresolved_guided_steps: empty when every guided role resolves", "[hwrole][reconfig]") {
+    Config* cfg = Config::get_instance();
+    struct KV {
+        std::string key;
+        std::string orig;
+    };
+    std::vector<KV> stash;
+    auto save = [&](const char* suffix) {
+        std::string k = cfg->df() + suffix;
+        stash.push_back({k, cfg->get<std::string>(k, "")});
+    };
+    save(helix::wizard::PART_FAN);
+    save(helix::wizard::HOTEND_FAN);
+    save(helix::wizard::CHAMBER_FAN);
+    save(helix::wizard::EXHAUST_FAN);
+    save(helix::wizard::HOTEND_HEATER);
+    save(helix::wizard::BED_HEATER);
+
+    cfg->set<std::string>(cfg->df() + helix::wizard::PART_FAN, std::string("fan"));
+    cfg->set<std::string>(cfg->df() + helix::wizard::HOTEND_FAN, std::string(""));
+    cfg->set<std::string>(cfg->df() + helix::wizard::CHAMBER_FAN, std::string(""));
+    cfg->set<std::string>(cfg->df() + helix::wizard::EXHAUST_FAN, std::string(""));
+    cfg->set<std::string>(cfg->df() + helix::wizard::HOTEND_HEATER, std::string("extruder"));
+    cfg->set<std::string>(cfg->df() + helix::wizard::BED_HEATER, std::string("heater_bed"));
+
+    MoonrakerClientMock client;
+    client.set_fans({"fan"});
+    client.set_heaters({"extruder", "heater_bed"});
+
+    auto steps = helix::unresolved_guided_steps(cfg, client.hardware());
+    REQUIRE(steps.empty());
+
+    for (const auto& kv : stash)
+        cfg->set<std::string>(kv.key, kv.orig); // restore
+}
+
+TEST_CASE("unresolved_guided_steps: dedups multiple unresolved fan roles to one FanSelect",
+          "[hwrole][reconfig]") {
+    Config* cfg = Config::get_instance();
+    const std::string pkey = cfg->df() + helix::wizard::PART_FAN;
+    const std::string hkey = cfg->df() + helix::wizard::HOTEND_FAN;
+    const std::string porig = cfg->get<std::string>(pkey, "");
+    const std::string horig = cfg->get<std::string>(hkey, "");
+
+    // Two distinct fan roles both unresolvable (no fans discovered). Heaters resolve
+    // so only FAN-category steps can appear.
+    cfg->set<std::string>(pkey, std::string("output_pin fan0"));
+    cfg->set<std::string>(hkey, std::string("heater_fan gone_fan"));
+
+    MoonrakerClientMock client;
+    client.set_fans({});
+    client.set_heaters({"extruder", "heater_bed"});
+
+    auto steps = helix::unresolved_guided_steps(cfg, client.hardware());
+    long fan_count = std::count(steps.begin(), steps.end(), helix::wizard::StepId::FanSelect);
+    REQUIRE(fan_count == 1);
+
+    cfg->set<std::string>(pkey, porig); // restore
+    cfg->set<std::string>(hkey, horig);
 }

@@ -9,6 +9,7 @@
 namespace helix {
 
 class Config;
+class PrinterDiscovery;
 
 enum class HardwareRoleId {
     HotendHeater,
@@ -64,5 +65,17 @@ RoleResolution resolve_role(const HardwareRoleDescriptor& desc, const std::strin
 std::string resolve_role_from_config(HardwareRoleId id, Config* config,
                                      const std::vector<std::string>& discovered,
                                      bool persist_autoheal);
+
+/// Collect the deduped, registry-ordered set of wizard steps whose guided
+/// hardware roles cannot be confidently resolved against discovered hardware.
+///
+/// For each guided registry descriptor: the discovered list is chosen by category
+/// (Fan -> hw.fans(), Heater -> hw.heaters(); other categories are skipped). The
+/// saved role is read from config (default = canonical_default). An empty saved
+/// value is treated as unconfigured and skipped. When resolve_role() returns
+/// Unresolved, the descriptor's wizard_step is added (once). Returns empty when
+/// config is null or every guided role resolves.
+std::vector<helix::wizard::StepId> unresolved_guided_steps(Config* config,
+                                                           const PrinterDiscovery& hw);
 
 } // namespace helix
