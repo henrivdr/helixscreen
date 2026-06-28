@@ -447,20 +447,25 @@ void HardwareValidator::validate_configured_hardware(Config* config,
                 continue;
 
             const std::string key = config->df() + desc.config_key;
-            const std::string default_val =
-                desc.canonical_default ? std::string(desc.canonical_default) : std::string();
-            std::string saved = config->get<std::string>(key, default_val);
+            // Read with an EMPTY default (NOT the canonical default): an absent key
+            // means this role is not configured for THIS printer (a bed-less printer
+            // has no heaters/bed key). Absent is legitimate, not a problem to flag.
+            std::string saved = config->get<std::string>(key, "");
             if (saved.empty())
-                continue; // unconfigured optional role
+                continue; // unconfigured role
 
             auto res = helix::resolve_role(desc, saved, *discovered);
             // Confident heals are resolved+persisted upstream (FanRoleConfig::from_config and the
             // heater heal block in the discovery sequence) BEFORE validate() runs, so an AutoHealed
-            // role is already Resolved here. We deliberately surface ONLY Unresolved roles —
-            // confident heals stay silent (tiered-remediation design). Do not re-add an AutoHealed
-            // branch here without moving the upstream pre-heal, or you reintroduce an every-boot
-            // toast.
-            if (res.status == helix::RoleResolutionStatus::Unresolved) {
+            // role is already Resolved here. We surface ONLY Unresolved NON-GUIDED roles as a
+            // warning. Guided roles (every current registry role) are routed to the targeted
+            // reconfig wizard via helix::unresolved_guided_steps()/the collector — toasting them
+            // here too would double-notify (spec §3.4: guided → reconfig only; non-guided →
+            // warning). After this change the validator surfaces none of the current registry
+            // roles by design; the collector + wizard are the authority. Do not re-add an
+            // AutoHealed branch here without moving the upstream pre-heal, or you reintroduce an
+            // every-boot toast.
+            if (res.status == helix::RoleResolutionStatus::Unresolved && !desc.guided) {
                 result.expected_missing.push_back(HardwareIssue::warning(
                     saved, hardware_type_for(desc.category),
                     "Configured hardware no longer present", /*optional=*/false));

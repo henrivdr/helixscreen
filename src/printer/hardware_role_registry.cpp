@@ -168,8 +168,11 @@ std::string resolve_role_from_config(HardwareRoleId id, Config* config,
             }
         }
     } else if (res.status == RoleResolutionStatus::Unresolved) {
-        spdlog::warn("[HardwareRole] Role '{}' (saved '{}') has no live match — unresolved",
-                     desc->config_key, saved);
+        // Unresolved is an expected state handled by the targeted reconfig wizard, and
+        // fires every discovery for bed-less printers via the heater pre-heal. Keep it
+        // at debug so it isn't noise.
+        spdlog::debug("[HardwareRole] Role '{}' (saved '{}') has no live match — unresolved",
+                      desc->config_key, saved);
     }
     return res.object;
 }
@@ -192,12 +195,13 @@ std::vector<helix::wizard::StepId> unresolved_guided_steps(Config* config,
             continue;
         }
         const std::string key = config->df() + desc.config_key;
-        const std::string default_val =
-            desc.canonical_default ? std::string(desc.canonical_default) : std::string();
-        const std::string saved = config->get<std::string>(key, default_val);
-        // Empty saved means the role is intentionally unconfigured — nothing to reconfigure.
+        // Read with an EMPTY default (NOT the canonical default): an absent config
+        // key means this role is not configured for THIS printer (e.g. a bed-less
+        // printer has no heaters/bed key, a part-fan-less printer has no fans/part
+        // key). Absent must NOT be treated as a problem to reconfigure.
+        const std::string saved = config->get<std::string>(key, "");
         if (saved.empty()) {
-            continue;
+            continue; // role not configured for this printer → nothing to reconfigure
         }
         if (resolve_role(desc, saved, *discovered).status == RoleResolutionStatus::Unresolved) {
             if (std::find(out.begin(), out.end(), desc.wizard_step) == out.end()) {
@@ -206,6 +210,43 @@ std::vector<helix::wizard::StepId> unresolved_guided_steps(Config* config,
         }
     }
     return out;
+}
+
+bool decline_unresolved_guided_roles(Config* config, const PrinterDiscovery& hw) {
+    if (!config) {
+        return false;
+    }
+    bool changed = false;
+    for (const auto& desc : hardware_role_registry()) {
+        if (!desc.guided) {
+            continue;
+        }
+        const std::vector<std::string>* discovered =
+            desc.category == HardwareCategory::Fan      ? &hw.fans()
+            : desc.category == HardwareCategory::Heater ? &hw.heaters()
+                                                        : nullptr;
+        if (!discovered) {
+            continue;
+        }
+        const std::string key = config->df() + desc.config_key;
+        // Only a present (non-empty) saved key can be "declined". An absent key is
+        // already unconfigured — leave it alone (it isn't re-nagged after C1a).
+        const std::string saved = config->get<std::string>(key, "");
+        if (saved.empty()) {
+            continue;
+        }
+        if (resolve_role(desc, saved, *discovered).status == RoleResolutionStatus::Unresolved) {
+            // No confident substitute exists against current hardware. Record the
+            // user's cancel as "declined/unconfigured" ("") so this role is skipped
+            // on the next connection instead of re-launching the wizard forever.
+            config->set<std::string>(key, std::string(""));
+            changed = true;
+        }
+    }
+    if (changed && !config->save()) {
+        spdlog::warn("[HardwareRole] Failed to persist declined role(s)");
+    }
+    return changed;
 }
 
 } // namespace helix

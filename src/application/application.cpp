@@ -2655,15 +2655,31 @@ void Application::setup_discovery_callbacks() {
             // wizard is required/active, and gated to once-per-connection so it does not
             // relaunch on reconnect churn within a single session.
             auto reconfig_steps = helix::unresolved_guided_steps(Config::get_instance(), hw);
-            if (!reconfig_steps.empty() && !Config::get_instance()->is_wizard_required() &&
-                !is_wizard_active() && !app->m_targeted_reconfig_shown) {
+            // Idle gate: NEVER launch the reconfig wizard over a live print. The
+            // print_active subject is 1 while PRINTING or PAUSED, 0 otherwise (see
+            // PrinterPrintState: "1 when PRINTING/PAUSED"). We are on the main thread
+            // inside queue_update, so reading the subject here is safe.
+            const bool print_active =
+                lv_subject_get_int(get_printer_state().get_print_active_subject()) != 0;
+            if (!reconfig_steps.empty() && !print_active &&
+                !Config::get_instance()->is_wizard_required() && !is_wizard_active() &&
+                !app->m_targeted_reconfig_shown) {
                 app->m_targeted_reconfig_shown = true;
                 ui_wizard_register_event_callbacks();
                 ui_wizard_container_register_responsive_constants();
                 ui_wizard_init_subjects();
                 // Cancel = dismiss the targeted session. Without this, Back on the first
-                // targeted step is a no-op (no prior step to retreat to).
-                set_wizard_cancel_callback([]() {
+                // targeted step is a no-op (no prior step to retreat to). Cancelling an
+                // UNSATISFIABLE role (no candidate hardware exists) must also record the
+                // decision — otherwise the wizard re-launches on every reconnect forever.
+                // decline_unresolved_guided_roles() writes "" (declined) for each still-
+                // Unresolved guided role with a present saved key, read against the CURRENT
+                // discovered hardware (api->hardware()) at cancel time.
+                set_wizard_cancel_callback([app, api]() {
+                    if (helix::decline_unresolved_guided_roles(Config::get_instance(),
+                                                               api->hardware())) {
+                        app->reapply_hardware_roles();
+                    }
                     ui_wizard_complete_targeted();
                     set_wizard_cancel_callback(nullptr);
                 });

@@ -245,6 +245,13 @@ static const char* get_step_subtitle_from_xml(const char* comp_name) {
 static bool wizard_subjects_initialized = false;
 
 void ui_wizard_init_subjects() {
+    // Idempotent: the targeted-reconfig path may call this after the first-run
+    // wizard already initialized subjects. Re-initializing would re-register the
+    // managed subjects (double-init). Bail out if already initialized.
+    if (wizard_subjects_initialized) {
+        spdlog::debug("[Wizard] Subjects already initialized; skipping re-init");
+        return;
+    }
     spdlog::debug("[Wizard] Initializing subjects");
 
     // Log the preset-driven skip plan (pre-configured printer package). The

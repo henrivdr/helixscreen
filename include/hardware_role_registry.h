@@ -78,4 +78,12 @@ std::string resolve_role_from_config(HardwareRoleId id, Config* config,
 std::vector<helix::wizard::StepId> unresolved_guided_steps(Config* config,
                                                            const PrinterDiscovery& hw);
 
+/// Mark every guided role that is STILL Unresolved against `hw` AND has a present
+/// (non-empty) saved key as declined by writing "" to its config key, then save()
+/// once if anything changed. Mirrors unresolved_guided_steps() but records the
+/// user's "cancel" so an unsatisfiable role (no candidate hardware exists) is not
+/// re-offered on every reconnect. Absent keys and resolvable roles are left
+/// untouched. Returns true if any key was changed.
+bool decline_unresolved_guided_roles(Config* config, const PrinterDiscovery& hw);
+
 } // namespace helix

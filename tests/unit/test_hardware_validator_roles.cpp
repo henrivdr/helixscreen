@@ -19,6 +19,8 @@
 #include "hardware_validator.h"
 #include "moonraker_client_mock.h"
 
+#include <algorithm>
+
 #include "../catch_amalgamated.hpp"
 
 using json = nlohmann::json;
@@ -103,15 +105,16 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture,
 }
 
 // ---------------------------------------------------------------------------
-// Unresolved: stale role → no confident substitute
+// Unresolved GUIDED role → routed to the wizard, NOT surfaced by the validator
 // ---------------------------------------------------------------------------
 
 TEST_CASE_METHOD(helix::RoleValidatorFixture,
-                 "validator reports unresolved stale part-fan role to expected_missing",
+                 "validator stays silent for unresolved GUIDED part-fan role (wizard owns it)",
                  "[hwvalidate][roles]") {
     // Stale role: fans/part was "output_pin fan0" which no longer exists.
     // No fans at all are discovered, so guess_part_cooling_fan() returns ""
-    // (no fallback candidate) → Unresolved → expected_missing.
+    // (no fallback candidate) → Unresolved. PartFan is a GUIDED role, so the
+    // validator must NOT surface it (spec §3.4: guided → reconfig wizard only).
     setup_minimal(
         /*fans_node=*/{{"part", "output_pin fan0"}},
         /*heaters_node=*/json::object(),
@@ -123,11 +126,14 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture,
     HardwareValidator v;
     auto result = v.validate(&config, client.hardware());
 
-    bool found_missing = false;
+    // Validator must NOT toast the guided role.
     for (const auto& issue : result.expected_missing)
-        if (issue.hardware_name == "output_pin fan0" && issue.hardware_type == HardwareType::FAN)
-            found_missing = true;
-    REQUIRE(found_missing);
+        REQUIRE_FALSE(
+            (issue.hardware_name == "output_pin fan0" && issue.hardware_type == HardwareType::FAN));
+
+    // The collector IS the authority: it routes the unresolved guided role to FanSelect.
+    auto steps = helix::unresolved_guided_steps(&config, client.hardware());
+    REQUIRE(std::find(steps.begin(), steps.end(), helix::wizard::StepId::FanSelect) != steps.end());
 }
 
 // ---------------------------------------------------------------------------
