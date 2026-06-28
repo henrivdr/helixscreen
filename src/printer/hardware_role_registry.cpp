@@ -99,4 +99,36 @@ RoleResolution resolve_role(const HardwareRoleDescriptor& desc, const std::strin
     return {RoleResolutionStatus::Unresolved, {}};
 }
 
+std::string resolve_role_from_config(HardwareRoleId id, Config* config,
+                                     const std::vector<std::string>& discovered,
+                                     bool persist_autoheal) {
+    const HardwareRoleDescriptor* desc = role_descriptor(id);
+    if (!desc || !config) {
+        return {};
+    }
+    const std::string key = config->df() + desc->config_key;
+    const std::string default_val =
+        desc->canonical_default ? std::string(desc->canonical_default) : std::string();
+    std::string saved = config->get<std::string>(key, default_val);
+
+    // Empty saved means the role is intentionally unconfigured — do not invent one.
+    if (saved.empty()) {
+        return {};
+    }
+
+    RoleResolution res = resolve_role(*desc, saved, discovered);
+    if (res.status == RoleResolutionStatus::AutoHealed) {
+        spdlog::info("[HardwareRole] Auto-healed '{}' from '{}' to '{}' after hardware change",
+                     desc->config_key, saved, res.object);
+        if (persist_autoheal) {
+            config->set<std::string>(key, res.object);
+            config->save();
+        }
+    } else if (res.status == RoleResolutionStatus::Unresolved) {
+        spdlog::warn("[HardwareRole] Role '{}' (saved '{}') has no live match — unresolved",
+                     desc->config_key, saved);
+    }
+    return res.object;
+}
+
 } // namespace helix

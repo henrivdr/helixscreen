@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "config.h"
 #include "hardware_role_registry.h"
+#include "wizard_config_paths.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -62,4 +64,30 @@ TEST_CASE("registry integrity: every descriptor has a usable config key", "[hwro
         REQUIRE(std::string(d.config_key).find("/") != std::string::npos);
         REQUIRE(role_descriptor(d.id) == &d);
     }
+}
+
+TEST_CASE("resolve_role_from_config: unconfigured optional role stays empty", "[hwrole][config]") {
+    Config* cfg = Config::get_instance();
+    REQUIRE(cfg != nullptr);
+    cfg->set<std::string>(cfg->df() + helix::wizard::CHAMBER_FAN, std::string(""));
+    std::string r = resolve_role_from_config(HardwareRoleId::ChamberFan, cfg,
+                                             {"fan", "fan_generic chamber_fan"}, false);
+    REQUIRE(r.empty()); // empty saved => do not invent a role
+}
+
+TEST_CASE("resolve_role_from_config: persists auto-healed part fan", "[hwrole][config]") {
+    Config* cfg = Config::get_instance();
+    cfg->set<std::string>(cfg->df() + helix::wizard::PART_FAN, std::string("output_pin fan0"));
+    std::string r = resolve_role_from_config(HardwareRoleId::PartFan, cfg,
+                                             {"fan", "fan_generic Aux_Cooling_Fan"}, true);
+    REQUIRE(r == "fan");
+    REQUIRE(cfg->get<std::string>(cfg->df() + helix::wizard::PART_FAN, "") == "fan");
+}
+
+TEST_CASE("resolve_role_from_config: no persist leaves config untouched", "[hwrole][config]") {
+    Config* cfg = Config::get_instance();
+    cfg->set<std::string>(cfg->df() + helix::wizard::PART_FAN, std::string("output_pin fan0"));
+    std::string r = resolve_role_from_config(HardwareRoleId::PartFan, cfg, {"fan"}, false);
+    REQUIRE(r == "fan");
+    REQUIRE(cfg->get<std::string>(cfg->df() + helix::wizard::PART_FAN, "") == "output_pin fan0");
 }
