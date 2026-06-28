@@ -26,9 +26,10 @@ bool is_part_fan_candidate(const std::string& o) {
            o.rfind("temperature_fan ", 0) != 0;
 }
 // Hotend / heatbreak cooling fan.
+// NOTE: intentionally avoids bare "heat" to prevent matching "heater_bed".
 bool is_hotend_fan_candidate(const std::string& o) {
     return o.rfind("heater_fan ", 0) == 0 || o.find("hotend") != std::string::npos ||
-           o.find("heat") != std::string::npos || o.find("heatbreak") != std::string::npos;
+           o.find("heatbreak") != std::string::npos;
 }
 // Chamber circulation / filter fan.
 bool is_chamber_fan_candidate(const std::string& o) {
@@ -110,6 +111,9 @@ RoleResolution resolve_role(const HardwareRoleDescriptor& desc, const std::strin
 
     // Tier 0: keep a still-valid saved role. User's explicit live choice is always honored —
     // candidacy is NOT checked here so a deliberately assigned wrong-category fan is kept.
+    // Intentional trade-off: a hand-edited config naming a heater_fan as the part fan will be
+    // kept, which means init_fans will treat it as PART_COOLING. The wizard's candidate filters
+    // prevent creating such configs; Tier 0 defers to the user's judgment for everything else.
     if (!saved_value.empty() && contains(discovered, saved_value)) {
         return {RoleResolutionStatus::Resolved, saved_value};
     }

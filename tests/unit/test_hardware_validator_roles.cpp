@@ -4,9 +4,11 @@
  * @file test_hardware_validator_roles.cpp
  * @brief TDD tests for registry-driven role validation in HardwareValidator.
  *
- * Validates that a stale role pointing at a hardware/optional object is
- * surfaced (AutoHealed→newly_discovered, Unresolved→expected_missing) instead
- * of being silently dropped by the is_hardware_optional early-skip.
+ * Production flow: fan and heater roles are resolved+persisted to config (pre-heal)
+ * by FanRoleConfig::from_config and the heater heal block in the discovery sequence,
+ * BEFORE HardwareValidator::validate() runs. When a pre-heal fires, validate() sees
+ * Tier 0 Resolved and stays silent. Only Unresolved roles (no confident substitute)
+ * surface as expected_missing.
  *
  * Populate pattern: MoonrakerClientMock::set_fans/set_heaters + client.hardware()
  * Config pattern:   local Config with v3 format via setup_printer_data()
@@ -58,15 +60,15 @@ class RoleValidatorFixture {
 } // namespace helix
 
 // ---------------------------------------------------------------------------
-// AutoHealed: stale role → canonical default present in discovered
+// Pre-heal + validate: stale role healed upstream → validator stays silent
 // ---------------------------------------------------------------------------
 
 TEST_CASE_METHOD(helix::RoleValidatorFixture,
-                 "validator surfaces stale part-fan role even when target is optional",
+                 "pre-healed part-fan role is silent in validator (no newly_discovered entry)",
                  "[hwvalidate][roles]") {
     // Stale role: fans/part was set to "output_pin fan0" (now gone).
     // The user silenced "output_pin fan0" as hardware/optional.
-    // A canonical "fan" IS available in discovery — AutoHeal path.
+    // A canonical "fan" IS available in discovery.
     setup_minimal(
         /*fans_node=*/{{"part", "output_pin fan0"}},
         /*heaters_node=*/json::object(),
@@ -76,16 +78,28 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture,
     client.set_heaters({"extruder", "heater_bed"});
     client.set_fans({"fan", "heater_fan hotend_fan", "fan_generic Aux_Cooling_Fan"});
 
+    // Production pre-heal: FanRoleConfig::from_config calls resolve_role_from_config
+    // with persist=true BEFORE validate() runs. Mimic that here.
+    std::string healed = helix::resolve_role_from_config(
+        HardwareRoleId::PartFan, &config, client.hardware().fans(), /*persist_autoheal=*/true);
+    REQUIRE(healed == "fan"); // canonical default was adopted
+    REQUIRE(config.get<std::string>(config.df() + "fans/part", "") == "fan");
+
     HardwareValidator v;
     auto result = v.validate(&config, client.hardware());
 
-    // The blind spot is closed: the auto-heal must appear in newly_discovered
-    // as hardware_name == "fan" (the canonical replacement chosen by resolve_role).
-    bool mentions_part = false;
-    for (const auto& issue : result.newly_discovered)
-        if (issue.hardware_name == "fan" && issue.hardware_type == HardwareType::FAN)
-            mentions_part = true;
-    REQUIRE(mentions_part);
+    // After the upstream pre-heal the role reads as Resolved (Tier 0) — validator
+    // must NOT surface it in newly_discovered or expected_missing.
+    for (const auto& issue : result.newly_discovered) {
+        bool is_part_fan_issue =
+            issue.hardware_type == HardwareType::FAN && issue.hardware_name == "fan";
+        REQUIRE_FALSE(is_part_fan_issue);
+    }
+    for (const auto& issue : result.expected_missing) {
+        bool is_stale_part_fan =
+            issue.hardware_type == HardwareType::FAN && issue.hardware_name == "output_pin fan0";
+        REQUIRE_FALSE(is_stale_part_fan);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,10 +149,6 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture, "validator emits no issue when all
 
     // No roles in expected_missing or newly_discovered from the registry loop.
     REQUIRE(result.expected_missing.empty());
-    for (const auto& issue : result.expected_missing) {
-        INFO("unexpected expected_missing: " << issue.hardware_name);
-        REQUIRE(issue.hardware_type == HardwareType::OTHER); // only AMS/generic, not Fan/Heater
-    }
     bool any_role_issue = false;
     for (const auto& issue : result.newly_discovered)
         if (issue.hardware_type == HardwareType::FAN || issue.hardware_type == HardwareType::HEATER)
@@ -147,11 +157,11 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture, "validator emits no issue when all
 }
 
 // ---------------------------------------------------------------------------
-// Optional bypass: stale heater role also not silenced by optional flag
+// Pre-heal + validate: stale heater role healed upstream → validator stays silent
 // ---------------------------------------------------------------------------
 
 TEST_CASE_METHOD(helix::RoleValidatorFixture,
-                 "validator surfaces stale hotend-heater role even when target is optional",
+                 "pre-healed hotend-heater role is silent in validator (no newly_discovered entry)",
                  "[hwvalidate][roles]") {
     // Configured hotend heater is a non-standard name that's gone; extruder (canonical) is live.
     setup_minimal(
@@ -162,13 +172,27 @@ TEST_CASE_METHOD(helix::RoleValidatorFixture,
     client.set_heaters({"extruder", "heater_bed"});
     client.set_fans({"fan"});
 
+    // Production pre-heal: the heater heal block in the discovery sequence calls
+    // resolve_role_from_config with persist=true BEFORE validate() runs.
+    std::string healed =
+        helix::resolve_role_from_config(HardwareRoleId::HotendHeater, &config,
+                                        client.hardware().heaters(), /*persist_autoheal=*/true);
+    REQUIRE(healed == "extruder"); // canonical default was adopted
+    REQUIRE(config.get<std::string>(config.df() + "heaters/hotend", "") == "extruder");
+
     HardwareValidator v;
     auto result = v.validate(&config, client.hardware());
 
-    // AutoHealed: "extruder" is canonical default and is live.
-    bool auto_healed = false;
-    for (const auto& issue : result.newly_discovered)
-        if (issue.hardware_name == "extruder" && issue.hardware_type == HardwareType::HEATER)
-            auto_healed = true;
-    REQUIRE(auto_healed);
+    // After the upstream pre-heal the role reads as Resolved (Tier 0) — validator
+    // must NOT surface it in newly_discovered or expected_missing.
+    for (const auto& issue : result.newly_discovered) {
+        bool is_heater_issue =
+            issue.hardware_type == HardwareType::HEATER && issue.hardware_name == "extruder";
+        REQUIRE_FALSE(is_heater_issue);
+    }
+    for (const auto& issue : result.expected_missing) {
+        bool is_stale_heater = issue.hardware_type == HardwareType::HEATER &&
+                               issue.hardware_name == "heater_generic custom_nozzle";
+        REQUIRE_FALSE(is_stale_heater);
+    }
 }

@@ -454,11 +454,13 @@ void HardwareValidator::validate_configured_hardware(Config* config,
                 continue; // unconfigured optional role
 
             auto res = helix::resolve_role(desc, saved, *discovered);
-            if (res.status == helix::RoleResolutionStatus::AutoHealed) {
-                result.newly_discovered.push_back(
-                    HardwareIssue::info(res.object, hardware_type_for(desc.category),
-                                        "Reassigned after a hardware change"));
-            } else if (res.status == helix::RoleResolutionStatus::Unresolved) {
+            // Confident heals are resolved+persisted upstream (FanRoleConfig::from_config and the
+            // heater heal block in the discovery sequence) BEFORE validate() runs, so an AutoHealed
+            // role is already Resolved here. We deliberately surface ONLY Unresolved roles —
+            // confident heals stay silent (tiered-remediation design). Do not re-add an AutoHealed
+            // branch here without moving the upstream pre-heal, or you reintroduce an every-boot
+            // toast.
+            if (res.status == helix::RoleResolutionStatus::Unresolved) {
                 result.expected_missing.push_back(HardwareIssue::warning(
                     saved, hardware_type_for(desc.category),
                     "Configured hardware no longer present", /*optional=*/false));
