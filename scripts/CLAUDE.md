@@ -90,6 +90,7 @@ Composable pipeline for improving `printer_database.json` from real-world teleme
 | Script | Purpose |
 |--------|---------|
 | `quality-checks.sh` | Pre-commit and CI quality checks (single source of truth) |
+| `check_translation_format_specifiers.py` | Fail if a translated printf/`fmt::format` string (via `lv_tr()`) changes the placeholder count/type vs its English source — a mismatch makes snprintf read a missing vararg (SIGSEGV, #1073) or fmt throw. Gated on actual format-sink usage so prose `%`/`{}` don't false-positive |
 | `audit_codebase.sh` | Check for coding standard violations. `--strict` for CI |
 | `format-xml.py` | XML formatter: 2-space indent, attribute wrapping at ~120 chars |
 | `verify_mdi_codepoints.py` | Verify MDI codepoint mappings are correct |

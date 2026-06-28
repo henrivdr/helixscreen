@@ -5,7 +5,7 @@
   <translation tag=" frames" fr=" images"/>
   <translation tag=" left" fr=" restant"/>
   <translation tag="%.1f Hz difference" fr="différence de %.1f Hz"/>
-  <translation tag="%d additional fan%s" fr="%d ventilateur%s supplémentaire%s"/>
+  <translation tag="%d additional fan%s" fr="%d ventilateur%s supplémentaire"/>
   <translation tag="%d disabled" fr="%d désactivé"/>
   <translation tag="%d failed to load - see details below" fr="%d nont pas pu se charger - voir les détails ci-dessous"/>
   <translation tag="%d more sensors" fr="%d capteurs supplémentaires"/>

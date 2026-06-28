@@ -623,6 +623,40 @@ fi
 echo ""
 
 # ====================================================================
+# Translation format-specifier parity (crash #1073)
+# ====================================================================
+# Background: format strings passed to snprintf/fmt::format via lv_tr() are
+# runtime-translated. If a translation adds an extra %s/%d (or {} field), the
+# format call reads an argument that was never passed → SIGSEGV (snprintf) or
+# fmt::format_error (fmt). #1073 was the French '%d additional fan%s' translated
+# with two %s, crashing the Controls panel for French users.
+SECTION_START=$(date +%s)
+echo -n "🌐 Checking translation format specifiers..."
+
+TRANS_FMT_PY="${VENV_PYTHON:-python3}"
+[ -x "$TRANS_FMT_PY" ] || TRANS_FMT_PY=python3
+if [ -f "scripts/check_translation_format_specifiers.py" ]; then
+  if "$TRANS_FMT_PY" scripts/check_translation_format_specifiers.py >/tmp/trans_fmt.out 2>&1; then
+    section_time $SECTION_START
+    echo ""
+    echo "✅ All translated format strings preserve their source placeholders"
+  else
+    section_time $SECTION_START
+    echo ""
+    cat /tmp/trans_fmt.out
+    echo "   Run: $TRANS_FMT_PY scripts/check_translation_format_specifiers.py"
+    echo "   Fix the offending translation in translations/<locale>.yml, then run: make translations"
+    EXIT_CODE=1
+  fi
+else
+  section_time $SECTION_START
+  echo ""
+  echo "⚠️  check_translation_format_specifiers.py not found — skipping"
+fi
+
+echo ""
+
+# ====================================================================
 # Shell Script Linting (shellcheck)
 # ====================================================================
 SECTION_START=$(date +%s)

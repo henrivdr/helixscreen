@@ -5,7 +5,7 @@ translations:
   ' frames': ' images'
   ' left': ' restant'
   '%.1f Hz difference': différence de %.1f Hz
-  '%d additional fan%s': '%d ventilateur%s supplémentaire%s'
+  '%d additional fan%s': '%d ventilateur%s supplémentaire'
   '%d disabled': '%d désactivé'
   '%d failed to load - see details below': '%d nont pas pu se charger - voir les détails
     ci-dessous'
