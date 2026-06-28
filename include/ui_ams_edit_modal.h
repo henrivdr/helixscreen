@@ -214,6 +214,24 @@ class AmsEditModal : public Modal {
     // async machinery (the is_spoolman_available() and Spoolman create chain
     // around it are not).
     static bool should_create_new_spool(const SlotInfo& working_info, bool filament_user_edited);
+
+    // Pure: true when an edit to a LINKED spool changes the filament identity —
+    // a different material, or a color beyond FilamentMapper's match tolerance.
+    // A strong signal the user loaded a DIFFERENT physical spool, so updating the
+    // linked Spoolman spool would clobber the previous spool's definition (#1071
+    // Symptom B). Static + side-effect-free so it is unit-testable.
+    static bool is_material_identity_change(const SlotInfo& original, const SlotInfo& edited);
+
+    // Fire the Spoolman create/update async path for the current working_info_
+    // (factored out of handle_save so the identity-change confirmation can defer
+    // into it). Caller returns after invoking.
+    void do_spoolman_save();
+    // Show the dismiss-safe "different filament?" confirmation, then either run
+    // do_spoolman_save() (confirm) or save locally without touching Spoolman
+    // (cancel) — see on_identity_confirm_cb / on_identity_cancel_cb.
+    void prompt_identity_change_then_save();
+    static void on_identity_confirm_cb(lv_event_t* e);
+    static void on_identity_cancel_cb(lv_event_t* e);
 #if HELIX_HAS_LABEL_PRINTER
     void handle_print_label();
 #endif

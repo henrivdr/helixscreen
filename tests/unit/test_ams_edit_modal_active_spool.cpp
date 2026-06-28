@@ -53,6 +53,9 @@ class AmsEditModalTestAccess {
     static bool should_create_new_spool(const SlotInfo& working_info, bool filament_user_edited) {
         return AmsEditModal::should_create_new_spool(working_info, filament_user_edited);
     }
+    static bool is_material_identity_change(const SlotInfo& original, const SlotInfo& edited) {
+        return AmsEditModal::is_material_identity_change(original, edited);
+    }
 
   private:
     AmsEditModal& modal_;
@@ -270,4 +273,35 @@ TEST_CASE("AmsEditModal::should_create_new_spool gates new-spool creation on a r
     incomplete.material = "PLA"; // no brand, default color
     REQUIRE_FALSE(helix::SpoolmanSlotSaver::is_filament_complete(incomplete));
     CHECK_FALSE(AmsEditModalTestAccess::should_create_new_spool(incomplete, /*edited=*/true));
+}
+
+TEST_CASE("AmsEditModal::is_material_identity_change flags different-spool edits (#1071)",
+          "[ams_edit_modal][spoolman][1071]") {
+    SlotInfo original;
+    original.material = "PLA";
+    original.color_rgb = 0xFF0000;
+
+    // Same material + same color: a plain re-save, NOT an identity change.
+    SlotInfo same = original;
+    CHECK_FALSE(AmsEditModalTestAccess::is_material_identity_change(original, same));
+
+    // Tiny color tweak within the match tolerance: still the same spool.
+    SlotInfo nudged = original;
+    nudged.color_rgb = 0xFE0101;
+    CHECK_FALSE(AmsEditModalTestAccess::is_material_identity_change(original, nudged));
+
+    // Material comparison is case-insensitive: not a change.
+    SlotInfo recased = original;
+    recased.material = "pla";
+    CHECK_FALSE(AmsEditModalTestAccess::is_material_identity_change(original, recased));
+
+    // Different material: identity change (confirm before overwriting the link).
+    SlotInfo diff_mat = original;
+    diff_mat.material = "PETG";
+    CHECK(AmsEditModalTestAccess::is_material_identity_change(original, diff_mat));
+
+    // Far-apart color (red -> blue): identity change.
+    SlotInfo diff_color = original;
+    diff_color.color_rgb = 0x0000FF;
+    CHECK(AmsEditModalTestAccess::is_material_identity_change(original, diff_color));
 }
