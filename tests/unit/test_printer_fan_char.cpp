@@ -1349,3 +1349,59 @@ TEST_CASE("Fan characterization: custom display names from config",
     config->set(config->df() + "fans/names/output_pin fan0", std::string(""));
     config->set(config->df() + "fans/names/output_pin fan1", std::string(""));
 }
+
+// ============================================================================
+// Task 4: FanRoleConfig::from_config with live fan list (auto-heal stale roles)
+// ============================================================================
+
+TEST_CASE("FanRoleConfig::from_config auto-heals stale part fan to live fan",
+          "[characterization][fan][role][hwrole]") {
+    lv_init_safe();
+    Config* cfg = Config::get_instance();
+    REQUIRE(cfg != nullptr);
+    cfg->set<std::string>(cfg->df() + "fans/part", std::string("output_pin fan0"));
+
+    FanRoleConfig roles = FanRoleConfig::from_config(
+        cfg, {"fan", "heater_fan hotend_fan", "fan_generic Aux_Cooling_Fan"});
+
+    REQUIRE(roles.part_fan == "fan");
+
+    // Cleanup
+    cfg->set<std::string>(cfg->df() + "fans/part", std::string(""));
+}
+
+TEST_CASE("init_fans no longer skips real [fan] when part role is stale",
+          "[characterization][fan][role][hwrole]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    Config* cfg = Config::get_instance();
+    cfg->set<std::string>(cfg->df() + "fans/part", std::string("output_pin fan0"));
+
+    state.init_fans({"fan", "heater_fan hotend_fan", "fan_generic Aux_Cooling_Fan"});
+
+    // The real part fan must have a subject (default empty roles -> no stale skip).
+    REQUIRE(state.get_fan_speed_subject("fan") != nullptr);
+
+    // Cleanup
+    cfg->set<std::string>(cfg->df() + "fans/part", std::string(""));
+}
+
+TEST_CASE("init_fans keeps [fan] when part role points to an absent object",
+          "[characterization][fan][role][hwrole]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    // Defense in depth: a role that resolution did NOT touch (set directly), naming
+    // an object absent from the discovered list, must NOT cause [fan] to be skipped.
+    FanRoleConfig roles;
+    roles.part_fan = "output_pin fan0"; // absent from fan_objects below
+
+    state.init_fans({"fan", "heater_fan hotend_fan"}, roles);
+
+    REQUIRE(state.get_fan_speed_subject("fan") != nullptr); // not skipped
+}

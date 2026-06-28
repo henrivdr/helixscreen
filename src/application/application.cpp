@@ -2494,7 +2494,7 @@ void Application::setup_discovery_callbacks() {
             get_printer_state().set_hardware(std::move(*snapshot));
             crash_handler::breadcrumb::note("disc", "post_set_hw", n);
             get_printer_state().init_fans(
-                hw.fans(), helix::FanRoleConfig::from_config(Config::get_instance()));
+                hw.fans(), helix::FanRoleConfig::from_config(Config::get_instance(), hw.fans()));
             crash_handler::breadcrumb::note("disc", "post_init_fans",
                                             static_cast<long>(hw.fans().size()));
 

@@ -12,22 +12,30 @@
 
 #include "config.h"
 #include "device_display_name.h"
+#include "hardware_role_registry.h"
 #include "state/subject_macros.h"
 #include "unit_conversions.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 namespace helix {
 
-FanRoleConfig FanRoleConfig::from_config(Config* config) {
+FanRoleConfig FanRoleConfig::from_config(Config* config,
+                                         const std::vector<std::string>& discovered_fans) {
     FanRoleConfig roles;
     if (!config) {
         return roles;
     }
-    roles.part_fan = config->get<std::string>(config->df() + "fans/part", "fan");
-    roles.hotend_fan = config->get<std::string>(config->df() + "fans/hotend", "");
-    roles.chamber_fan = config->get<std::string>(config->df() + "fans/chamber", "");
-    roles.exhaust_fan = config->get<std::string>(config->df() + "fans/exhaust", "");
+    roles.part_fan =
+        resolve_role_from_config(HardwareRoleId::PartFan, config, discovered_fans, true);
+    roles.hotend_fan =
+        resolve_role_from_config(HardwareRoleId::HotendFan, config, discovered_fans, true);
+    roles.chamber_fan =
+        resolve_role_from_config(HardwareRoleId::ChamberFan, config, discovered_fans, true);
+    roles.exhaust_fan =
+        resolve_role_from_config(HardwareRoleId::ExhaustFan, config, discovered_fans, true);
     return roles;
 }
 
@@ -268,9 +276,13 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
     fans_.reserve(fan_objects.size());
 
     for (const auto& obj_name : fan_objects) {
-        // Skip bare "fan" if a different fan is configured as part cooling —
-        // some printers expose an empty "fan" object that never reports speed data.
-        if (obj_name == "fan" && !roles_.part_fan.empty() && roles_.part_fan != "fan") {
+        // Skip bare "fan" only when a DIFFERENT, LIVE fan is configured as part
+        // cooling — some printers expose an empty "fan" object that never reports
+        // speed data. Never skip the real [fan] just because a stale role names an
+        // absent object.
+        if (obj_name == "fan" && !roles_.part_fan.empty() && roles_.part_fan != "fan" &&
+            std::find(fan_objects.begin(), fan_objects.end(), roles_.part_fan) !=
+                fan_objects.end()) {
             spdlog::debug("[PrinterFanState] Skipping bare 'fan' — part fan is '{}'",
                           roles_.part_fan);
             continue;
