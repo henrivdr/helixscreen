@@ -1679,10 +1679,14 @@ void AmsEditModal::handle_save() {
         // #1071 Symptom B: updating a LINKED spool whose filament identity changed
         // (different material, or color past the match tolerance) probably
         // clobbers a DIFFERENT physical spool's Spoolman definition. Confirm
-        // first; the dismiss-safe default skips the Spoolman write (the slot still
-        // saves locally and keeps its link, which the user can re-point via
-        // "Choose Spool"). The clobber risk is backend-agnostic.
-        if (has_linked_spool && changes.any() &&
+        // first; "Update anyway" writes Spoolman, "Cancel" keeps the linked spool
+        // untouched and saves the slot locally, tapping outside aborts back to the
+        // editor. Scoped to AD5X IFS — the only backend where #1071's
+        // keep-the-link-across-eject policy makes a silent identity swap likely;
+        // other backends keep the prior straight-to-update behavior.
+        auto* active_backend = AmsState::instance().get_backend();
+        const bool is_ad5x = active_backend && active_backend->get_type() == AmsType::AD5X_IFS;
+        if (has_linked_spool && changes.any() && is_ad5x &&
             is_material_identity_change(original_info_, working_info_)) {
             prompt_identity_change_then_save();
             return;
@@ -1756,9 +1760,11 @@ bool AmsEditModal::is_material_identity_change(const SlotInfo& original, const S
 }
 
 void AmsEditModal::prompt_identity_change_then_save() {
-    // Dismiss-safe binary confirmation. Confirm -> update the linked spool;
-    // cancel/dismiss -> keep the linked Spoolman spool untouched and save the
-    // slot locally (the stale link can be re-pointed via "Choose Spool").
+    // Dismiss-safe binary confirmation. "Update anyway" -> update the linked
+    // spool; "Cancel" -> keep the linked Spoolman spool untouched and save the
+    // slot locally (re-point later via "Choose Spool"); tapping outside aborts
+    // the confirmation and returns to the editor (no save, link untouched). No
+    // path writes a materially-different spool without an explicit confirm.
     lv_obj_t* dlg = modal_show_confirmation(
         lv_tr("Different filament?"),
         lv_tr("This looks like a different spool than the one linked. Update the linked Spoolman "
@@ -1774,13 +1780,20 @@ void AmsEditModal::prompt_identity_change_then_save() {
 }
 
 void AmsEditModal::on_identity_confirm_cb(lv_event_t* /*e*/) {
+    // Dismiss the confirmation FIRST — modal_dialog has no auto-close, and leaving
+    // it up would orphan a dead-button dialog (s_active_instance_ is cleared when
+    // the edit modal closes below) and keep the buttons re-tappable, double-firing
+    // the Spoolman write. Hiding this static modal does not touch s_active_instance_.
+    Modal::hide(Modal::get_top());
     if (s_active_instance_) {
         s_active_instance_->do_spoolman_save();
     }
 }
 
 void AmsEditModal::on_identity_cancel_cb(lv_event_t* /*e*/) {
-    // Dismiss-safe: do NOT touch the linked Spoolman spool; save the slot locally.
+    // Dismiss the confirmation first (see on_identity_confirm_cb), then save the
+    // slot locally WITHOUT touching the linked Spoolman spool (dismiss-safe).
+    Modal::hide(Modal::get_top());
     if (s_active_instance_) {
         s_active_instance_->fire_completion(true);
     }
