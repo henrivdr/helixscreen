@@ -53,6 +53,13 @@ const std::vector<HardwareRoleDescriptor>& hardware_role_registry();
 /// Look up a descriptor by id. Returns nullptr if absent.
 const HardwareRoleDescriptor* role_descriptor(HardwareRoleId id);
 
+/// True if `obj` is an acceptable candidate for role `id`. Wraps the descriptor's
+/// is_candidate predicate (true when the descriptor has no predicate; false for an
+/// unknown id). This is the SAME predicate used by the conservative auto-heal tiers
+/// in resolve_role — wizard part/hotend-fan dropdowns use it to filter, but
+/// chamber/exhaust dropdowns intentionally do NOT (kept permissive for user choice).
+bool is_role_candidate(HardwareRoleId id, const std::string& obj);
+
 /// Pure tiered resolution -- no config, no persistence, fully unit-testable.
 RoleResolution resolve_role(const HardwareRoleDescriptor& desc, const std::string& saved_value,
                             const std::vector<std::string>& discovered);

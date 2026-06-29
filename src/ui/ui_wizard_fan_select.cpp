@@ -12,6 +12,7 @@
 
 #include "app_globals.h"
 #include "config.h"
+#include "hardware_role_registry.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
@@ -197,13 +198,15 @@ lv_obj_t* WizardFanSelectStep::create(lv_obj_t* parent) {
     // Get Moonraker API for hardware discovery
     MoonrakerAPI* api = get_moonraker_api();
 
-    // Build hotend fan options with custom filter (heater_fan OR hotend_fan)
+    // Build hotend fan options — source is api->hardware().fans() which contains only fan
+    // objects (fan / heater_fan * / fan_generic * / controller_fan * / temperature_fan *).
+    // Filter via the registry candidacy predicate so the list matches the conservative
+    // auto-heal definition: heater_fan and hotend-named fans only.
     hotend_fan_items_.clear();
     if (api) {
         const auto& fans = api->hardware().fans();
         for (const auto& fan : fans) {
-            if (fan.find("heater_fan") != std::string::npos ||
-                fan.find("hotend_fan") != std::string::npos) {
+            if (helix::is_role_candidate(helix::HardwareRoleId::HotendFan, fan)) {
                 hotend_fan_items_.push_back(fan);
             }
         }
@@ -216,14 +219,15 @@ lv_obj_t* WizardFanSelectStep::create(lv_obj_t* parent) {
     // Add "None" FIRST in items vector to match dropdown order
     hotend_fan_items_.insert(hotend_fan_items_.begin(), "None");
 
-    // Build part cooling fan options with custom filter (has "fan" but NOT heater/hotend)
+    // Build part cooling fan options — source is api->hardware().fans() which contains only
+    // fan objects (fan / heater_fan * / fan_generic * / controller_fan * / temperature_fan *).
+    // Filter via the registry candidacy predicate: excludes heater_fan, controller_fan, and
+    // temperature_fan prefixes, matching the conservative auto-heal definition exactly.
     part_fan_items_.clear();
     if (api) {
         const auto& fans = api->hardware().fans();
         for (const auto& fan : fans) {
-            if (fan.find("fan") != std::string::npos &&
-                fan.find("heater_fan") == std::string::npos &&
-                fan.find("hotend_fan") == std::string::npos) {
+            if (helix::is_role_candidate(helix::HardwareRoleId::PartFan, fan)) {
                 part_fan_items_.push_back(fan);
             }
         }
@@ -275,7 +279,10 @@ lv_obj_t* WizardFanSelectStep::create(lv_obj_t* parent) {
         }
         spdlog::debug("[{}] Only {} fans, hiding optional fan row", get_name(), fan_count);
     } else {
-        // Build chamber fan options - show ALL fans
+        // Build chamber fan options - show ALL fans.
+        // Permissive by design: the user may assign any discovered fan to chamber/exhaust.
+        // (registry is_candidate is conservative — used only for confident auto-heal, not user
+        // choice).
         chamber_fan_items_.clear();
         if (api) {
             const auto& fans = api->hardware().fans();
@@ -291,7 +298,10 @@ lv_obj_t* WizardFanSelectStep::create(lv_obj_t* parent) {
         // Add "None" FIRST in items vector to match dropdown order
         chamber_fan_items_.insert(chamber_fan_items_.begin(), "None");
 
-        // Build exhaust fan options - show ALL fans
+        // Build exhaust fan options - show ALL fans.
+        // Permissive by design: the user may assign any discovered fan to chamber/exhaust.
+        // (registry is_candidate is conservative — used only for confident auto-heal, not user
+        // choice).
         exhaust_fan_items_.clear();
         if (api) {
             const auto& fans = api->hardware().fans();
