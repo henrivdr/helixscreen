@@ -6108,6 +6108,37 @@ TEST_CASE("AD5X IFS unload finalizes to IDLE on the macro completion ack, not th
     REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
 }
 
+TEST_CASE("AD5X IFS commanded unload clears head-loaded even with the lane still present "
+          "(park-in-lane, #1065)",
+          "[ams][ad5x][ifs][1065]") {
+    // A normal toolhead unload retracts filament out of the hotend but parks it
+    // in the lane, so the IFS silk sensor stays PRESENT. A COMMANDED unload is
+    // unambiguous, so head-loaded must clear on completion regardless of lane
+    // presence — otherwise the slot stays stuck LOADED (Unload offered on an
+    // empty head, Load disabled). This is DISTINCT from a passive Extruder:None
+    // (#995), which DOES require presence corroboration so it can't strand
+    // still-seated filament — the presence guard in
+    // derive_head_loaded_from_summary_locked() would leave this stuck without the
+    // dedicated commanded-unload clear at finalize.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // no async debounce task
+    Ad5xIfsTestAccess::set_current_slot(backend, 0, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true); // lane 1 filament present
+
+    REQUIRE(backend.unload_filament(0).success());
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+
+    // Macro completes while the lane silk sensor still reads present.
+    Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true);
+
+    CHECK(backend.get_system_info().action == AmsAction::IDLE);
+    CHECK_FALSE(Ad5xIfsTestAccess::head_filament(backend)); // head cleared on unload
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 0));    // lane still present
+    CHECK(backend.get_slot_info(0).status != SlotStatus::LOADED);
+}
+
 TEST_CASE("AD5X IFS load finalizes to IDLE on the macro completion ack (raza616 stuck-on-Purging)",
           "[ams][ad5x_ifs]") {
     // Mirror of the stuck-on-Retract unload fix for the load path. INSERT_PRUTOK_IFS

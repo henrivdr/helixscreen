@@ -311,6 +311,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // head switch sensor whose lane still reads present (C2). Returns true if
     // head_filament_ changed. Caller MUST hold mutex_.
     bool derive_head_loaded_from_summary_locked(const ZColorSilentResult& result);
+    // A COMMANDED unload that reached its terminal state empties the toolhead, so
+    // clear head-loaded directly. Unlike a passive "Extruder: None" (runout/print-
+    // end, #995), a tracked unload is unambiguous and must NOT wait on the lane-
+    // presence corroboration in derive_head_loaded_from_summary_locked(): filament
+    // often parks in the lane after an unload, leaving the silk sensor present, so
+    // that path would leave the slot stuck LOADED. Caller MUST hold mutex_.
+    void clear_head_loaded_after_unload_locked();
     // One-shot fetch of /mod_data/user.cfg. Parses the [zmod_ifs] section for
     // `filament_<NAME>: <TEMP>` entries — zmod's mechanism for user-defined
     // material types beyond the AD5X firmware whitelist (e.g., PLA+, RPLA,

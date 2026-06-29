@@ -1274,6 +1274,15 @@ void AmsBackendAd5xIfs::finalize_op_after_macro(bool is_unload) {
             spdlog::info("{} {} macro complete (gcode ack) -> IDLE", backend_log_tag(),
                          is_unload ? "Unload" : "Load");
             system_info_.action = AmsAction::IDLE;
+            if (is_unload) {
+                clear_head_loaded_after_unload_locked();
+                // Unlike the Chan/GET_ZCOLOR finalize paths (which refresh slots
+                // in their own loops), this gcode-ack path otherwise wouldn't —
+                // so the just-cleared head wouldn't reach the cached slot status.
+                for (int i = 0; i < NUM_PORTS; ++i) {
+                    update_slot_from_state(i);
+                }
+            }
             end_phase_tracking_locked();
             set_operation_detail_locked("");
             changed = true;
@@ -3239,6 +3248,9 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                                  backend_log_tag(), chan,
                                  phase_tracker_.is_unload ? "unload" : "load");
                     system_info_.action = AmsAction::IDLE;
+                    if (phase_tracker_.is_unload) {
+                        clear_head_loaded_after_unload_locked();
+                    }
                     end_phase_tracking_locked();
                     set_operation_detail_locked("");
                     chan_changed = true;
@@ -3401,6 +3413,9 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                 spdlog::info("{} Phase: zcolor confirms {} complete -> IDLE", backend_log_tag(),
                              phase_tracker_.is_unload ? "unload" : "load");
                 system_info_.action = AmsAction::IDLE;
+                if (phase_tracker_.is_unload) {
+                    clear_head_loaded_after_unload_locked();
+                }
                 end_phase_tracking_locked();
                 set_operation_detail_locked("");
                 changed = true;
@@ -3424,6 +3439,13 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
 
     if (changed) {
         emit_event(EVENT_STATE_CHANGED);
+    }
+}
+
+void AmsBackendAd5xIfs::clear_head_loaded_after_unload_locked() {
+    if (head_filament_) {
+        head_filament_ = false;
+        system_info_.filament_loaded = false;
     }
 }
 
