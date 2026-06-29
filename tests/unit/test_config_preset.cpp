@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 
 #include <filesystem>
@@ -69,13 +70,13 @@ class PresetConfigFixture {
         }
 
         // Set config path so apply_preset_file can find presets/ relative to it
-        config.path = temp_dir + "/settings.json";
+        ConfigTestAccess::path(config) = temp_dir + "/settings.json";
 
         // Set active printer ID so df() returns the correct prefix
-        config.active_printer_id_ = "default";
+        ConfigTestAccess::active_printer_id(config) = "default";
 
         // Initialize with a v4 multi-printer structure
-        config.data = {
+        ConfigTestAccess::data(config) = {
             {"preset", "ad5m"},
             {"language", "de"},
             {"active_printer_id", "default"},
@@ -126,11 +127,11 @@ class PresetConfigFixture {
     }
 
     json& printer_data() {
-        return config.data["printers"]["default"];
+        return ConfigTestAccess::data(config)["printers"]["default"];
     }
 
     json& data() {
-        return config.data;
+        return ConfigTestAccess::data(config);
     }
 };
 } // namespace helix

@@ -67,17 +67,8 @@ class Config {
   protected:
     json data;
 
-    /// Allow test fixtures to access protected members
-    friend class ConfigTestFixture;
-    friend class ChangeHostConfigFixture;
-    friend class HardwareValidatorConfigFixture;
-    friend class MmuDetectionFixture;
-    friend class PanelWidgetConfigFixture;
-    friend class ThermistorConfigFixture;
-    friend class MultiInstanceMigrationFixture;
-    friend class PresetConfigFixture;
-    friend class VariantPresetFixture;
-    friend class RoleValidatorFixture;
+    /// Allow test-only accessor to reach protected/private members
+    friend class ConfigTestAccess;
 
   public:
     /**

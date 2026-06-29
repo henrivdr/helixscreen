@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "utils/network_validation.h"
 
@@ -13,22 +14,22 @@ using namespace helix;
 // ============================================================================
 
 // Test fixture that sets up Config singleton with test data
-// Must be in namespace helix to match friend declaration in Config
 namespace helix {
 class ChangeHostConfigFixture : public Config {
   public:
     ChangeHostConfigFixture() {
-        data = {{"config_version", 3},
-                {"active_printer_id", "default"},
-                {"printers",
-                 {{"default", {{"moonraker_host", "192.168.1.50"}, {"moonraker_port", 7125}}}}}};
-        active_printer_id_ = "default";
-        saved_instance_ = instance;
-        instance = this;
+        ConfigTestAccess::data(*this) = {
+            {"config_version", 3},
+            {"active_printer_id", "default"},
+            {"printers",
+             {{"default", {{"moonraker_host", "192.168.1.50"}, {"moonraker_port", 7125}}}}}};
+        ConfigTestAccess::active_printer_id(*this) = "default";
+        saved_instance_ = ConfigTestAccess::instance_ref();
+        ConfigTestAccess::instance_ref() = this;
     }
 
     ~ChangeHostConfigFixture() {
-        instance = saved_instance_;
+        ConfigTestAccess::instance_ref() = saved_instance_;
     }
 
   private:

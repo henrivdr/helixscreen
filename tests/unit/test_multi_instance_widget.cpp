@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "panel_widget.h"
 #include "panel_widget_config.h"
@@ -122,8 +123,9 @@ class MultiInstanceMigrationFixture {
     Config config;
 
     void setup_with_widgets(const json& widgets_json, const std::string& panel_id = "home") {
-        config.data = json::object();
-        config.data["printers"]["default"]["panel_widgets"][panel_id] = widgets_json;
+        ConfigTestAccess::data(config) = json::object();
+        ConfigTestAccess::data(config)["printers"]["default"]["panel_widgets"][panel_id] =
+            widgets_json;
     }
 };
 } // namespace helix

@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "data_root_resolver.h"
 #include "printer_detector.h"
@@ -4214,9 +4215,9 @@ class VariantPresetFixture {
             }
         }
 
-        config.path = temp_dir + "/settings.json";
-        config.active_printer_id_ = "default";
-        config.data = {
+        ConfigTestAccess::path(config) = temp_dir + "/settings.json";
+        ConfigTestAccess::active_printer_id(config) = "default";
+        ConfigTestAccess::data(config) = {
             {"active_printer_id", "default"},
             {"printers",
              {{"default", {{"moonraker_host", "127.0.0.1"}, {"wizard_completed", false}}}}}};

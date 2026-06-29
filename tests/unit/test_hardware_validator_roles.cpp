@@ -14,6 +14,7 @@
  * Config pattern:   local Config with v3 format via setup_printer_data()
  */
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "hardware_role_registry.h"
 #include "hardware_validator.h"
@@ -37,10 +38,7 @@ class RoleValidatorFixture {
     MoonrakerClientMock client;
 
     void setup_printer_data(const json& printer_data) {
-        config.data = {{"config_version", 3},
-                       {"active_printer_id", "default"},
-                       {"printers", {{"default", printer_data}}}};
-        config.active_printer_id_ = "default";
+        helix::setup_printer_data(config, printer_data);
     }
 
     void setup_minimal(const json& fans_node = json::object(),

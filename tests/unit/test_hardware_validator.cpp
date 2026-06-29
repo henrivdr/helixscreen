@@ -462,12 +462,12 @@ TEST_CASE("HardwareValidator - Snapshot roundtrip", "[hardware][validator]") {
 // Config Integration Tests (Optional/Expected Hardware)
 // ============================================================================
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 
 // Test fixture for Config-dependent HardwareValidator tests
 // NOTE: After the plural naming refactor, hardware config moves from
 // /hardware/ to /printer/hardware/
-// Must be in namespace helix to match friend declaration in Config
 namespace helix {
 class HardwareValidatorConfigFixture {
   protected:
@@ -475,15 +475,12 @@ class HardwareValidatorConfigFixture {
 
     // Helper to check if a JSON pointer path exists in config data
     bool config_contains(const std::string& json_ptr) {
-        return config.data.contains(json::json_pointer(json_ptr));
+        return ConfigTestAccess::data(config).contains(json::json_pointer(json_ptr));
     }
 
     // Helper to wrap printer data in v3 format with active_printer_id
     void setup_printer_data(const json& printer_data) {
-        config.data = {{"config_version", 3},
-                       {"active_printer_id", "default"},
-                       {"printers", {{"default", printer_data}}}};
-        config.active_printer_id_ = "default";
+        helix::setup_printer_data(config, printer_data);
     }
 
     void setup_empty_hardware_config() {
@@ -516,14 +513,15 @@ class HardwareValidatorConfigFixture {
     void setup_config(const json& j) {
         // For tests that pass full config JSON — wrap in v3 format if needed
         if (j.contains("printer") && !j.contains("printers")) {
-            config.data = {{"config_version", 3},
-                           {"active_printer_id", "default"},
-                           {"printers", {{"default", j["printer"]}}}};
-            config.active_printer_id_ = "default";
+            ConfigTestAccess::data(config) = {{"config_version", 3},
+                                              {"active_printer_id", "default"},
+                                              {"printers", {{"default", j["printer"]}}}};
+            ConfigTestAccess::active_printer_id(config) = "default";
         } else {
-            config.data = j;
+            ConfigTestAccess::data(config) = j;
             if (j.contains("active_printer_id")) {
-                config.active_printer_id_ = j["active_printer_id"].get<std::string>();
+                ConfigTestAccess::active_printer_id(config) =
+                    j["active_printer_id"].get<std::string>();
             }
         }
     }

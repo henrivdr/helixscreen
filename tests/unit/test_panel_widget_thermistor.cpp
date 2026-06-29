@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "panel_widget_config.h"
 #include "panel_widget_registry.h"
@@ -14,23 +15,24 @@ using json = nlohmann::json;
 // Test fixture — reuse Config internals access pattern
 // ============================================================================
 
-// Fixture with friend access to Config::data
+// Fixture using ConfigTestAccess for Config::data
 namespace helix {
 class ThermistorConfigFixture {
   protected:
     Config config;
 
     void setup_empty_config() {
-        config.data = json::object();
+        ConfigTestAccess::data(config) = json::object();
     }
 
     void setup_with_widgets(const json& widgets_json) {
-        config.data = json::object();
-        config.data["printers"]["default"]["panel_widgets"]["home"] = widgets_json;
+        ConfigTestAccess::data(config) = json::object();
+        ConfigTestAccess::data(config)["printers"]["default"]["panel_widgets"]["home"] =
+            widgets_json;
     }
 
     json& get_data() {
-        return config.data;
+        return ConfigTestAccess::data(config);
     }
 };
 } // namespace helix
