@@ -532,6 +532,20 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     }
 
     /**
+     * @brief Control whether SHAPER_CALIBRATE writes its CSV file for testing
+     *
+     * When false, the mock still dispatches the "calibration data written to
+     * <path>" G-code line but does NOT create the file — simulating the case
+     * where Klipper's /tmp output is unreadable (e.g. systemd PrivateTmp
+     * isolation). Used to verify the chart-data-unavailable failure path.
+     *
+     * @param writable True to write the CSV (default: true)
+     */
+    void set_shaper_csv_writable(bool writable) {
+        shaper_csv_writable_ = writable;
+    }
+
+    /**
      * @brief Check if mock accelerometer is enabled
      * @return true if accelerometer should be reported as available
      */
@@ -1205,6 +1219,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     bool mock_spoolman_enabled_{true};   ///< Controlled by HELIX_MOCK_SPOOLMAN env var
     bool accelerometer_available_{true}; ///< Accelerometer available for input shaper tests
     bool input_shaper_configured_{true}; ///< Input shaper configured for config query tests
+    bool shaper_csv_writable_{true};     ///< When false, SHAPER_CALIBRATE skips writing the CSV
     bool mmu_enabled_{true};             ///< MMU available (default true for existing tests)
 
     // Additional objects for testing (e.g., "mmu", "AFC", "toolchanger")

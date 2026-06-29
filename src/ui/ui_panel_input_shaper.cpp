@@ -939,6 +939,17 @@ void InputShaperPanel::on_calibration_result(const InputShaperResult& result) {
     spdlog::info("[InputShaper] Calibration complete: {} @ {:.1f} Hz (vib: {:.1f}%)",
                  result.shaper_type, result.shaper_freq, result.vibrations);
 
+    // Surface a non-blocking warning when the recommendation succeeded but the
+    // frequency-response chart data couldn't be read (e.g. Klipper's /tmp CSV
+    // unreadable). Without this the chart just silently disappears.
+    if (result.chart_data_unavailable) {
+        spdlog::warn("[InputShaper] {} axis: calibration CSV unreadable, chart unavailable",
+                     result.axis);
+        ToastManager::instance().show(
+            ToastSeverity::WARNING,
+            lv_tr("Calibration succeeded, but the frequency chart data couldn't be read."), 5000);
+    }
+
     // If Calibrate All and this was X, store result and continue to Y
     if (calibrate_all_mode_ && result.axis == 'X') {
         x_result_ = result;

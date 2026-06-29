@@ -181,6 +181,66 @@ TEST_CASE_METHOD(InputShaperTestFixture, "start_resonance_test sends correct G-c
     REQUIRE(complete_called);
 }
 
+TEST_CASE_METHOD(InputShaperTestFixture,
+                 "start_resonance_test flags chart data unavailable when CSV unreadable",
+                 "[calibration][input_shaper]") {
+    // Simulate Klipper reporting a CSV path whose file the client cannot read
+    // (e.g. systemd PrivateTmp isolating HelixScreen from Klipper's /tmp).
+    mock_client_.set_shaper_csv_writable(false);
+
+    std::atomic<bool> complete_called{false};
+    InputShaperResult captured_result;
+
+    api_->advanced().start_resonance_test(
+        'X', [](int) {},
+        [&](const InputShaperResult& result) {
+            captured_result = result;
+            complete_called = true;
+        },
+        [&](const MoonrakerError&) { FAIL("Error callback should not be called"); });
+
+    for (int i = 0; i < 200 && !complete_called; ++i) {
+        lv_tick_inc(100);
+        lv_timer_handler_safe();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    REQUIRE(complete_called);
+    // Recommendation is still valid — it comes from console output, not the CSV.
+    REQUIRE(captured_result.is_valid());
+    REQUIRE(captured_result.shaper_type == "mzv");
+    // Klipper reported a path, so csv_path is populated...
+    REQUIRE_FALSE(captured_result.csv_path.empty());
+    // ...but no chart data could be read, and that must be flagged (not silent).
+    REQUIRE(captured_result.freq_response.empty());
+    REQUIRE(captured_result.chart_data_unavailable);
+}
+
+TEST_CASE_METHOD(InputShaperTestFixture,
+                 "start_resonance_test does not flag chart unavailable when CSV is readable",
+                 "[calibration][input_shaper]") {
+    std::atomic<bool> complete_called{false};
+    InputShaperResult captured_result;
+
+    api_->advanced().start_resonance_test(
+        'X', [](int) {},
+        [&](const InputShaperResult& result) {
+            captured_result = result;
+            complete_called = true;
+        },
+        [&](const MoonrakerError&) { FAIL("Error callback should not be called"); });
+
+    for (int i = 0; i < 200 && !complete_called; ++i) {
+        lv_tick_inc(100);
+        lv_timer_handler_safe();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    REQUIRE(complete_called);
+    REQUIRE(captured_result.has_freq_data());
+    REQUIRE_FALSE(captured_result.chart_data_unavailable);
+}
+
 // ============================================================================
 // set_input_shaper() Tests
 // ============================================================================

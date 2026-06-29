@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -4372,10 +4373,17 @@ void MoonrakerClientMock::dispatch_shaper_calibrate_response(char axis) {
             }
 
             if (final_step == 1) {
-                // Write actual CSV file so frequency response chart has data
+                // Write actual CSV file so frequency response chart has data.
+                // When shaper_csv_writable_ is false, simulate Klipper's /tmp
+                // output being unreadable (e.g. PrivateTmp) by removing any
+                // stale file at the path instead of writing it.
                 std::string csv_path = std::string("/tmp/calibration_data_") + s->axis_lower +
                                        std::string("_mock.csv");
-                write_mock_shaper_csv(csv_path, s->axis_lower);
+                if (s->mock->shaper_csv_writable_) {
+                    write_mock_shaper_csv(csv_path, s->axis_lower);
+                } else {
+                    std::remove(csv_path.c_str());
+                }
 
                 snprintf(
                     buf, sizeof(buf),

@@ -1255,6 +1255,15 @@ class InputShaperCollector : public std::enable_shared_from_this<InputShaperColl
                     spdlog::debug(
                         "[InputShaperCollector] parsed {} freq bins, {} shaper curves from CSV",
                         result.freq_response.size(), result.shaper_curves.size());
+                } else {
+                    // Klipper reported a CSV path but we couldn't read any data
+                    // from it (missing/unreadable file or malformed CSV). Flag it
+                    // so the UI can tell the user the chart is unavailable instead
+                    // of silently showing a blank graph.
+                    result.chart_data_unavailable = true;
+                    spdlog::warn("[InputShaperCollector] CSV reported at {} but no frequency data "
+                                 "could be read — chart unavailable",
+                                 result.csv_path);
                 }
             }
 
