@@ -268,59 +268,6 @@ TEST_CASE("unresolved_guided_steps: dedups multiple unresolved fan roles to one 
     cfg->set<std::string>(hkey, horig);
 }
 
-// ---------------------------------------------------------------------------
-// is_role_candidate: public helper that wraps the descriptor's is_candidate predicate
-// Used by the wizard fan dropdowns to filter part/hotend fans (permissive for chamber/exhaust).
-// ---------------------------------------------------------------------------
-
-TEST_CASE("is_role_candidate: part fan accepts standard fan objects", "[hwrole][candidate]") {
-    // Realistic Klipper object names for part cooling fans
-    REQUIRE(is_role_candidate(HardwareRoleId::PartFan, "fan"));
-    REQUIRE(is_role_candidate(HardwareRoleId::PartFan, "fan_generic Aux_Cooling_Fan"));
-    // These are auto-controlled fan types — NOT part-fan candidates
-    REQUIRE_FALSE(is_role_candidate(HardwareRoleId::PartFan, "controller_fan Case_Fan"));
-    REQUIRE_FALSE(is_role_candidate(HardwareRoleId::PartFan, "heater_fan hotend_fan"));
-    REQUIRE_FALSE(is_role_candidate(HardwareRoleId::PartFan, "temperature_fan chamber"));
-}
-
-TEST_CASE("is_role_candidate: hotend fan accepts heater_fan / hotend-named fans",
-          "[hwrole][candidate]") {
-    REQUIRE(is_role_candidate(HardwareRoleId::HotendFan, "heater_fan hotend_fan"));
-    // Bare "fan" and generic cooling fans are NOT hotend candidates
-    REQUIRE_FALSE(is_role_candidate(HardwareRoleId::HotendFan, "fan"));
-    REQUIRE_FALSE(is_role_candidate(HardwareRoleId::HotendFan, "fan_generic Aux_Cooling_Fan"));
-}
-
-TEST_CASE("is_role_candidate: bed heater uses bed-ish names", "[hwrole][candidate]") {
-    REQUIRE(is_role_candidate(HardwareRoleId::BedHeater, "heater_bed"));
-    REQUIRE_FALSE(is_role_candidate(HardwareRoleId::BedHeater, "extruder"));
-}
-
-TEST_CASE("is_role_candidate: unknown id returns false", "[hwrole][candidate]") {
-    // role_descriptor() for a fabricated cast returns nullptr → must return false, not crash
-    // Use a value that is numerically out of range via cast
-    REQUIRE_FALSE(is_role_candidate(static_cast<HardwareRoleId>(999), "fan"));
-}
-
-TEST_CASE("is_role_candidate: no dead-end — mixed fan list always offers a part fan",
-          "[hwrole][candidate]") {
-    // Simulates a realistic discovered fan list that includes both candidate and
-    // non-candidate fans. The wizard must always offer at least one part-fan option.
-    std::vector<std::string> discovered = {"controller_fan Case_Fan", "fan",
-                                           "fan_generic Aux_Cooling_Fan"};
-    int count = 0;
-    bool has_bare_fan = false;
-    for (const auto& obj : discovered) {
-        if (is_role_candidate(HardwareRoleId::PartFan, obj)) {
-            count++;
-            if (obj == "fan")
-                has_bare_fan = true;
-        }
-    }
-    REQUIRE(count >= 1);
-    REQUIRE(has_bare_fan);
-}
-
 TEST_CASE("decline_unresolved_guided_roles: present unsatisfiable role becomes \"\", resolvable "
           "untouched",
           "[hwrole][reconfig]") {

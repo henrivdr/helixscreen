@@ -17,16 +17,9 @@ bool contains(const std::vector<std::string>& v, const std::string& s) {
     return std::find(v.begin(), v.end(), s) != v.end();
 }
 
-// --- is_candidate predicates ---
-// These serve two purposes:
-//   (a) Conservative gating of confident auto-heal in resolve_role (Tier 1a/1b): a
-//       fallback guess such as fans_[0] is not accepted when it is a controller_fan or
-//       heater_fan that would be wrong as a part-cooling fan.
-//   (b) Wizard part/hotend-fan dropdown filtering via the public is_role_candidate()
-//       helper below, so the user is only offered plausible choices for those roles.
-// Chamber and exhaust dropdowns intentionally do NOT apply is_candidate — they are kept
-// permissive so the user can assign any discovered fan to those roles (user choice vs
-// conservative auto-heal confidence).
+// --- is_candidate predicates: applied by Tier 1a/1b only (NOT Tier 0) ---
+// These gate heuristic/canonical picks so a fallback guess can't pick a wrong-category object
+// (e.g. guess_part_cooling_fan() falling back to fans_[0] which is a controller_fan).
 
 // Part cooling: anything that is NOT an auto-controlled fan type.
 bool is_part_fan_candidate(const std::string& o) {
@@ -109,13 +102,6 @@ const HardwareRoleDescriptor* role_descriptor(HardwareRoleId id) {
             return &d;
     }
     return nullptr;
-}
-
-bool is_role_candidate(HardwareRoleId id, const std::string& obj) {
-    const HardwareRoleDescriptor* d = role_descriptor(id);
-    if (!d)
-        return false;
-    return d->is_candidate == nullptr || d->is_candidate(obj);
 }
 
 RoleResolution resolve_role(const HardwareRoleDescriptor& desc, const std::string& saved_value,
