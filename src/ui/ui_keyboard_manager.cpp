@@ -150,7 +150,16 @@ bool KeyboardManager::point_in_area(const lv_area_t* area, const lv_point_t* poi
 }
 
 void KeyboardManager::overlay_cleanup() {
-    helix::ui::safe_delete(overlay_);
+    // Every caller runs inside input-event dispatch: longpress_reset() fires from
+    // the keyboard's LV_EVENT_RELEASED handler, and hide() (which calls it) runs
+    // from keyboard READY/CANCEL and textarea DEFOCUSED handlers. A synchronous
+    // safe_delete() here deletes a widget while LVGL is mid-dispatch, which can
+    // corrupt the global event linked list and detonate later at an unrelated
+    // malloc (#776/#983 signature). Defer the delete so it lands via
+    // lv_obj_delete_async(), outside the current dispatch. safe_delete_deferred()
+    // hides immediately and nulls overlay_ synchronously, so show_overlay() can
+    // safely assign a fresh overlay right after.
+    helix::ui::safe_delete_deferred(overlay_);
 }
 
 void KeyboardManager::longpress_reset() {
