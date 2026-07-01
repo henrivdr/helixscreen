@@ -21,11 +21,13 @@ namespace helix::ui {
 /// @param context_menu  Owning panel's lazy-init unique_ptr — created on
 ///                      first use, reused afterwards
 /// @param on_edit_action Fires for the EDIT and SPOOLMAN menu actions; the
-///                      panel uses this to open its own edit modal. The
-///                      Scan QR and Clear actions go straight to AmsState
-///                      and don't need a panel hook.
+///                      panel uses this to open its own edit modal. The bool
+///                      argument requests the Spoolman spool picker directly
+///                      (true for SPOOLMAN / "Select Spool", false for EDIT /
+///                      "Spool Info"). The Scan QR and Clear actions go straight
+///                      to AmsState and don't need a panel hook.
 void show_external_spool_menu(lv_obj_t* parent_screen, lv_obj_t* anchor_widget,
                               std::unique_ptr<AmsContextMenu>& context_menu,
-                              std::function<void()> on_edit_action);
+                              std::function<void(bool open_on_picker)> on_edit_action);
 
 } // namespace helix::ui

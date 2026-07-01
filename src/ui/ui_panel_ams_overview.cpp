@@ -1162,8 +1162,11 @@ void AmsOverviewPanel::show_detail_context_menu(int slot_index, lv_obj_t* near_w
             break;
 
         case helix::ui::AmsContextMenu::MenuAction::EDIT:
-        case helix::ui::AmsContextMenu::MenuAction::SPOOLMAN:
             show_edit_modal(slot);
+            break;
+
+        case helix::ui::AmsContextMenu::MenuAction::SPOOLMAN:
+            show_edit_modal(slot, /*open_on_picker=*/true);
             break;
 
         case helix::ui::AmsContextMenu::MenuAction::SCAN_QR: {
@@ -1213,8 +1216,9 @@ void AmsOverviewPanel::on_bypass_spool_clicked(lv_event_t* e) {
 }
 
 void AmsOverviewPanel::handle_bypass_click() {
-    helix::ui::show_external_spool_menu(parent_screen_, system_path_, context_menu_,
-                                        [this]() { show_edit_modal(-2); });
+    helix::ui::show_external_spool_menu(
+        parent_screen_, system_path_, context_menu_,
+        [this](bool open_on_picker) { show_edit_modal(-2, open_on_picker); });
 }
 
 void AmsOverviewPanel::refresh_bypass_display() {
@@ -1268,7 +1272,7 @@ void AmsOverviewPanel::update_bypass_widgets_position() {
                                          abs_cy - parent_abs.y1);
 }
 
-void AmsOverviewPanel::show_edit_modal(int slot_index) {
+void AmsOverviewPanel::show_edit_modal(int slot_index, bool open_on_picker) {
     if (!parent_screen_) {
         spdlog::warn("[{}] Cannot show edit modal - no parent screen", get_name());
         return;
@@ -1293,7 +1297,7 @@ void AmsOverviewPanel::show_edit_modal(int slot_index) {
                 NOTIFY_INFO(lv_tr("External spool updated"));
             }
         });
-        edit_modal_->show_for_slot(parent_screen_, -2, initial_info, api_);
+        edit_modal_->show_for_slot(parent_screen_, -2, initial_info, api_, open_on_picker);
         return;
     }
 
@@ -1317,7 +1321,7 @@ void AmsOverviewPanel::show_edit_modal(int slot_index) {
         }
     });
 
-    edit_modal_->show_for_slot(parent_screen_, slot_index, initial_info, api_);
+    edit_modal_->show_for_slot(parent_screen_, slot_index, initial_info, api_, open_on_picker);
 }
 
 // ============================================================================

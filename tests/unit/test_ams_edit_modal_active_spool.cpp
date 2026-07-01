@@ -4,6 +4,7 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../lvgl_ui_test_fixture.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
@@ -40,6 +41,11 @@ class AmsEditModalTestAccess {
 
     void init_subjects() {
         modal_.init_subjects();
+    }
+
+    // View mode subject: 0 = form view, 1 = Spoolman picker view.
+    int get_view_mode() {
+        return lv_subject_get_int(&modal_.view_mode_subject_);
     }
     void call_handle_save() {
         modal_.handle_save();
@@ -304,4 +310,43 @@ TEST_CASE("AmsEditModal::is_material_identity_change flags different-spool edits
     SlotInfo diff_color = original;
     diff_color.color_rgb = 0x0000FF;
     CHECK(AmsEditModalTestAccess::is_material_identity_change(original, diff_color));
+}
+
+// ============================================================================
+// Tests: #1071 initial-view routing — show_for_slot(..., open_on_picker) must
+// open directly on the Spoolman picker; the default must open on the form.
+// Uses the full-UI fixture so Modal::show() finds the registered
+// ams_edit_modal XML component and the view-mode subject reflects the choice.
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "show_for_slot opens on the Spoolman picker when requested (#1071)",
+                 "[ams_edit_modal][spoolman][ui_integration][1071]") {
+    AmsEditModal modal;
+    AmsEditModalTestAccess access(modal);
+
+    SlotInfo info;
+    info.slot_index = 0;
+
+    REQUIRE(modal.show_for_slot(test_screen(), 0, info, api(), /*open_on_picker=*/true));
+    process_lvgl(10);
+
+    // Picker view is selected synchronously by switch_to_picker().
+    CHECK(access.get_view_mode() == 1);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "show_for_slot opens on the form view by default (#1071)",
+                 "[ams_edit_modal][spoolman][ui_integration][1071]") {
+    AmsEditModal modal;
+    AmsEditModalTestAccess access(modal);
+
+    SlotInfo info;
+    info.slot_index = 0;
+
+    REQUIRE(modal.show_for_slot(test_screen(), 0, info, api()));
+    process_lvgl(10);
+
+    // Default path (open_on_picker=false) stays on the form view.
+    CHECK(access.get_view_mode() == 0);
 }

@@ -129,7 +129,7 @@ void AmsEditModal::set_completion_callback(CompletionCallback callback) {
 }
 
 bool AmsEditModal::show_for_slot(lv_obj_t* parent, int slot_index, const SlotInfo& initial_info,
-                                 MoonrakerAPI* api) {
+                                 MoonrakerAPI* api, bool open_on_picker) {
     // Register callbacks once (idempotent)
     register_callbacks();
 
@@ -159,9 +159,15 @@ bool AmsEditModal::show_for_slot(lv_obj_t* parent, int slot_index, const SlotInf
         return false;
     }
 
-    // Always start on the form view — it's the primary interface showing current
-    // slot state. The Spoolman picker is accessible via "Choose Spool" button.
-    switch_to_form();
+    // Start on the picker when the caller asked to jump straight to Spoolman
+    // spool selection (#1071); otherwise start on the form view — the primary
+    // interface showing current slot state, with the picker reachable via the
+    // "Choose Spool" button.
+    if (open_on_picker) {
+        switch_to_picker();
+    } else {
+        switch_to_form();
+    }
 
     // If linked to Spoolman, fetch authoritative filament data (vendor, material, color)
     // so the form shows current Spoolman state, not stale backend data
@@ -583,6 +589,10 @@ void AmsEditModal::populate_picker() {
                     return;
                 }
 
+                // Spools arrive already ordered most-recently-used first (then
+                // most-recently-created for never-used) — sort_spools_by_recency()
+                // is applied once in the API layer on fetch (#1071). filter_spools()
+                // preserves order, so filtering doesn't need to re-sort.
                 cached_spools_ = spools;
                 render_spool_list("");
             });

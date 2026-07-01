@@ -394,9 +394,13 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
         lv_label_set_text(slot_header, header_text);
     }
 
-    // Show "Scan QR Code" button if Spoolman is available
+    // Show "Select Spool" and "Scan QR Code" buttons if Spoolman is available
     auto* spoolman_subj = lv_xml_get_subject(nullptr, "printer_has_spoolman");
     bool has_spoolman = spoolman_subj && lv_subject_get_int(spoolman_subj) == 1;
+    lv_obj_t* btn_spoolman = lv_obj_find_by_name(menu_obj, "btn_spoolman");
+    if (btn_spoolman && has_spoolman) {
+        lv_obj_clear_flag(btn_spoolman, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_t* btn_scan_qr = lv_obj_find_by_name(menu_obj, "btn_scan_qr");
     if (btn_scan_qr && has_spoolman) {
         lv_obj_clear_flag(btn_scan_qr, LV_OBJ_FLAG_HIDDEN);

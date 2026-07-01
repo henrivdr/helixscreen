@@ -74,10 +74,12 @@ class AmsEditModal : public Modal {
      * @param slot_index Index of slot being edited (0-based)
      * @param initial_info Initial slot info to populate form
      * @param api MoonrakerAPI for Spoolman sync (may be nullptr)
+     * @param open_on_picker When true, open directly on the Spoolman spool
+     *        picker instead of the form view (#1071)
      * @return true if modal was created successfully
      */
     bool show_for_slot(lv_obj_t* parent, int slot_index, const SlotInfo& initial_info,
-                       MoonrakerAPI* api);
+                       MoonrakerAPI* api, bool open_on_picker = false);
 
     /**
      * @brief Set callback for when editing completes

@@ -1341,3 +1341,72 @@ TEST_CASE("SlotInfo spoolman_vendor_id defaults to 0", "[ams][spoolman]") {
     SlotInfo slot;
     REQUIRE(slot.spoolman_vendor_id == 0);
 }
+
+// ============================================================================
+// sort_spools_by_recency — picker ordering (#1071): most-recently-used first,
+// then (for never-used spools) most-recently-created first.
+// ============================================================================
+
+TEST_CASE("sort_spools_by_recency orders used-newest then created-newest (#1071)",
+          "[filament][spoolman][sort]") {
+    std::vector<SpoolInfo> spools;
+
+    // Used spools (have last_used) — should sort ahead of never-used, newest first.
+    SpoolInfo used_old;
+    used_old.id = 10;
+    used_old.last_used = "2026-01-01T00:00:00";
+    spools.push_back(used_old);
+
+    SpoolInfo used_new;
+    used_new.id = 11;
+    used_new.last_used = "2026-06-01T00:00:00";
+    spools.push_back(used_new);
+
+    // Never-used spools (empty last_used) — order by registered (creation), newest first.
+    SpoolInfo fresh_old;
+    fresh_old.id = 20;
+    fresh_old.registered = "2025-01-01T00:00:00";
+    spools.push_back(fresh_old);
+
+    SpoolInfo fresh_new;
+    fresh_new.id = 21;
+    fresh_new.registered = "2025-12-31T00:00:00";
+    spools.push_back(fresh_new);
+
+    // Never-used with NO registered timestamp — falls to id tie-break, sorts last.
+    SpoolInfo fresh_undated;
+    fresh_undated.id = 5;
+    spools.push_back(fresh_undated);
+
+    sort_spools_by_recency(spools);
+
+    // Used spools first (newest use), then never-used by creation (newest),
+    // then the undated one (no registered) last via id tie-break.
+    REQUIRE(spools.size() == 5);
+    CHECK(spools[0].id == 11); // used, 2026-06
+    CHECK(spools[1].id == 10); // used, 2026-01
+    CHECK(spools[2].id == 21); // never-used, created 2025-12
+    CHECK(spools[3].id == 20); // never-used, created 2025-01
+    CHECK(spools[4].id == 5);  // never-used, no registered -> last
+}
+
+TEST_CASE("sort_spools_by_recency tie-breaks equal registered by id (#1071)",
+          "[filament][spoolman][sort]") {
+    std::vector<SpoolInfo> spools;
+
+    SpoolInfo a;
+    a.id = 1;
+    a.registered = "2025-05-05T00:00:00";
+    spools.push_back(a);
+
+    SpoolInfo b;
+    b.id = 2;
+    b.registered = "2025-05-05T00:00:00"; // same creation timestamp
+    spools.push_back(b);
+
+    sort_spools_by_recency(spools);
+
+    // Equal registered -> higher id first (stable tie-break).
+    CHECK(spools[0].id == 2);
+    CHECK(spools[1].id == 1);
+}

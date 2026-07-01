@@ -16,7 +16,7 @@ namespace helix::ui {
 
 void show_external_spool_menu(lv_obj_t* parent_screen, lv_obj_t* anchor_widget,
                               std::unique_ptr<AmsContextMenu>& context_menu,
-                              std::function<void()> on_edit_action) {
+                              std::function<void(bool open_on_picker)> on_edit_action) {
     if (!parent_screen || !anchor_widget) {
         return;
     }
@@ -34,9 +34,14 @@ void show_external_spool_menu(lv_obj_t* parent_screen, lv_obj_t* anchor_widget,
                                           AmsContextMenu::MenuAction action, int /*slot*/) {
         switch (action) {
         case AmsContextMenu::MenuAction::EDIT:
+            if (edit) {
+                edit(/*open_on_picker=*/false);
+            }
+            break;
+
         case AmsContextMenu::MenuAction::SPOOLMAN:
             if (edit) {
-                edit();
+                edit(/*open_on_picker=*/true);
             }
             break;
 
