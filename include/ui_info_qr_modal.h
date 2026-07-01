@@ -2,6 +2,7 @@
 #pragma once
 
 #include "ui_modal.h"
+
 #include <string>
 
 namespace helix::ui {
@@ -19,8 +20,12 @@ class InfoQrModal : public Modal {
 
     explicit InfoQrModal(Config config);
 
-    const char* get_name() const override { return "Info QR"; }
-    const char* component_name() const override { return "info_qr_modal"; }
+    const char* get_name() const override {
+        return "Info QR";
+    }
+    const char* component_name() const override {
+        return "info_qr_modal";
+    }
 
     bool show_modal(lv_obj_t* parent);
 

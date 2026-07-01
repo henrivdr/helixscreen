@@ -4,10 +4,10 @@
 
 #include "theme_manager.h"
 
-#include <lvgl.h>
 #include <spdlog/spdlog.h>
 
 #include <cstdio>
+#include <lvgl.h>
 
 namespace helix::ui {
 

@@ -193,12 +193,12 @@ class PrintStatusWidget : public PanelWidget {
     static inline bool visibility_subjects_initialized_ = false;
 
     // Detailed-layout subjects (static inline — shared across all widget instances)
-    static inline lv_subject_t layout_mode_subject_{};       // 0=library, 1=detailed (user pref)
-    static inline lv_subject_t layout_effective_subject_{};  // after width gating
+    static inline lv_subject_t layout_mode_subject_{};      // 0=library, 1=detailed (user pref)
+    static inline lv_subject_t layout_effective_subject_{}; // after width gating
     // Combined gate: (colspan >= 3) AND (filament_used > 0). Avoids the
     // phantom-row gap when filament hasn't started extruding yet.
     static inline lv_subject_t show_filament_active_subject_{};
-    static inline lv_subject_t multi_tool_subject_{};        // 1 when tool_count > 1
+    static inline lv_subject_t multi_tool_subject_{}; // 1 when tool_count > 1
     // Resolved thumbnail path for the detailed-idle hero; written by
     // reset_print_card_to_idle alongside the lv_image_set_src calls on the
     // Library-mode thumbs, so all three idle thumbnails share the same source.
@@ -215,11 +215,11 @@ class PrintStatusWidget : public PanelWidget {
     static inline bool detailed_subjects_initialized_ = false;
 
     // Compact mode and state tracking
-    bool is_active_ = false;  // PRINTING or PAUSED (drives view_subject_)
+    bool is_active_ = false; // PRINTING or PAUSED (drives view_subject_)
     bool is_compact_ = false;
     bool is_column_ = false;
     bool last_print_available_ = false;
-    int last_rowspan_ = 1;  // Cached for picker-dismiss re-gating
+    int last_rowspan_ = 1; // Cached for picker-dismiss re-gating
 
     // PrinterState reference for subject access
     PrinterState& printer_state_;
@@ -278,15 +278,15 @@ class PrintStatusWidget : public PanelWidget {
         SubjectManager subjects_;
 
         // Buffers backing string subjects
-        char progress_pct_buf_[8];        // "100%"
-        char layer_text_buf_[32];         // "Layer 9999 / 9999"
-        char time_text_buf_[40];          // "12h 34m / 99h 99m"
-        char filament_text_buf_[32];      // "1234.5m / 9999.9m"
-        char nozzle_text_buf_[32];        // "265 / 270°C" — kept for tool_override test
-        char nozzle_tool_label_buf_[8];   // "T0", "T9"
+        char progress_pct_buf_[8];      // "100%"
+        char layer_text_buf_[32];       // "Layer 9999 / 9999"
+        char time_text_buf_[40];        // "12h 34m / 99h 99m"
+        char filament_text_buf_[32];    // "1234.5m / 9999.9m"
+        char nozzle_text_buf_[32];      // "265 / 270°C" — kept for tool_override test
+        char nozzle_tool_label_buf_[8]; // "T0", "T9"
         char idle_filename_buf_[160];
-        char idle_when_buf_[64];          // "Completed 2 hours ago"
-        char idle_meta_buf_[64];          // "12.4m filament • 4h 12m"
+        char idle_when_buf_[64]; // "Completed 2 hours ago"
+        char idle_meta_buf_[64]; // "12.4m filament • 4h 12m"
 
         // String + int subjects (XML-registered)
         lv_subject_t progress_pct_subject_;
@@ -371,8 +371,8 @@ class PrintStatusWidget : public PanelWidget {
 
     // Configuration state
     nlohmann::json config_;
-    std::string layout_style_ = "library";       // "library" | "detailed"
-    std::string nozzle_tool_override_ = "auto";  // "auto" | extruder name
+    std::string layout_style_ = "library";      // "library" | "detailed"
+    std::string nozzle_tool_override_ = "auto"; // "auto" | extruder name
     bool show_title_ = true;
     bool show_print_files_ = true;
     bool show_reprint_last_ = true;

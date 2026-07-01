@@ -2,14 +2,13 @@
 
 #include "bt_bus_thread.h"
 
-#include <fcntl.h>
-#include <poll.h>
-#include <unistd.h>
+#include "spdlog/spdlog.h"
 
 #include <cstdio>
 #include <cstring>
-
-#include "spdlog/spdlog.h"
+#include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>
 
 namespace helix::bluetooth {
 
@@ -22,8 +21,10 @@ BusThread::BusThread(sd_bus* bus) : bus_(bus) {
 
 BusThread::~BusThread() {
     stop();
-    if (wakeup_fds_[0] >= 0) close(wakeup_fds_[0]);
-    if (wakeup_fds_[1] >= 0) close(wakeup_fds_[1]);
+    if (wakeup_fds_[0] >= 0)
+        close(wakeup_fds_[0]);
+    if (wakeup_fds_[1] >= 0)
+        close(wakeup_fds_[1]);
 }
 
 void BusThread::start() {
@@ -33,7 +34,7 @@ void BusThread::start() {
     stopping_.store(false);
     // Wrap — EAGAIN under thread exhaustion throws std::system_error ([L083]).
     try {
-        thread_ = std::thread([this]{
+        thread_ = std::thread([this] {
             // Publish our id from inside the worker BEFORE any work runs, so
             // on_thread() always sees a valid id — the parent thread used to
             // write thread_id_ after std::thread construction, which races the
@@ -142,7 +143,8 @@ void BusThread::loop() {
         // 1. Drain queued work items.
         for (;;) {
             if (stopping_.load())
-                break;  // Leave remaining items for stop()'s post-join drain to break their promises.
+                break; // Leave remaining items for stop()'s post-join drain to break their
+                       // promises.
             std::pair<BusWork, std::promise<void>> item;
             {
                 std::lock_guard<std::mutex> lk(mu_);
@@ -199,8 +201,10 @@ void BusThread::loop() {
                 clock_gettime(CLOCK_MONOTONIC, &ts);
                 uint64_t now_us = ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000;
                 int64_t delta_ms = (int64_t(timeout_us) - int64_t(now_us)) / 1000;
-                if (delta_ms < 0) delta_ms = 0;
-                if (delta_ms < timeout_ms) timeout_ms = int(delta_ms);
+                if (delta_ms < 0)
+                    delta_ms = 0;
+                if (delta_ms < timeout_ms)
+                    timeout_ms = int(delta_ms);
             }
         }
 
@@ -209,7 +213,8 @@ void BusThread::loop() {
         // Drain the wakeup pipe.
         if (wakeup_fds_[0] >= 0) {
             uint8_t buf[16];
-            while (read(wakeup_fds_[0], buf, sizeof(buf)) > 0) {}
+            while (read(wakeup_fds_[0], buf, sizeof(buf)) > 0) {
+            }
         }
     }
 

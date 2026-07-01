@@ -57,6 +57,13 @@ TEST_CASE("AmsBackendMock bypass mode", "[ams][mock][bypass]") {
     }
 
     SECTION("enable bypass fails when busy") {
+        // Use a real (non-zero) operation delay so the load stays in-flight long
+        // enough for the immediate busy check. With delay 0 the async completion
+        // thread can finish in ~1ms and clear the busy state before enable_bypass
+        // runs, making the rejection check flaky. cancel() ends it promptly so
+        // the longer delay doesn't slow the test down.
+        backend.set_operation_delay(500);
+
         // Start a load operation
         auto load_result = backend.load_filament(0);
         REQUIRE(load_result);

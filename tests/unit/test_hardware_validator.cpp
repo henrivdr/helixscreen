@@ -367,7 +367,6 @@ TEST_CASE("HardwareValidator - New fan discovery", "[hardware][validator]") {
     }
 }
 
-
 TEST_CASE("HardwareValidator - Session changes", "[hardware][validator]") {
     SECTION("Detects hardware removed since last session") {
         // Create a "previous" snapshot with LED
@@ -463,12 +462,12 @@ TEST_CASE("HardwareValidator - Snapshot roundtrip", "[hardware][validator]") {
 // Config Integration Tests (Optional/Expected Hardware)
 // ============================================================================
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 
 // Test fixture for Config-dependent HardwareValidator tests
 // NOTE: After the plural naming refactor, hardware config moves from
 // /hardware/ to /printer/hardware/
-// Must be in namespace helix to match friend declaration in Config
 namespace helix {
 class HardwareValidatorConfigFixture {
   protected:
@@ -476,15 +475,12 @@ class HardwareValidatorConfigFixture {
 
     // Helper to check if a JSON pointer path exists in config data
     bool config_contains(const std::string& json_ptr) {
-        return config.data.contains(json::json_pointer(json_ptr));
+        return ConfigTestAccess::data(config).contains(json::json_pointer(json_ptr));
     }
 
     // Helper to wrap printer data in v3 format with active_printer_id
     void setup_printer_data(const json& printer_data) {
-        config.data = {{"config_version", 3},
-                       {"active_printer_id", "default"},
-                       {"printers", {{"default", printer_data}}}};
-        config.active_printer_id_ = "default";
+        helix::setup_printer_data(config, printer_data);
     }
 
     void setup_empty_hardware_config() {
@@ -517,14 +513,15 @@ class HardwareValidatorConfigFixture {
     void setup_config(const json& j) {
         // For tests that pass full config JSON — wrap in v3 format if needed
         if (j.contains("printer") && !j.contains("printers")) {
-            config.data = {{"config_version", 3},
-                           {"active_printer_id", "default"},
-                           {"printers", {{"default", j["printer"]}}}};
-            config.active_printer_id_ = "default";
+            ConfigTestAccess::data(config) = {{"config_version", 3},
+                                              {"active_printer_id", "default"},
+                                              {"printers", {{"default", j["printer"]}}}};
+            ConfigTestAccess::active_printer_id(config) = "default";
         } else {
-            config.data = j;
+            ConfigTestAccess::data(config) = j;
             if (j.contains("active_printer_id")) {
-                config.active_printer_id_ = j["active_printer_id"].get<std::string>();
+                ConfigTestAccess::active_printer_id(config) =
+                    j["active_printer_id"].get<std::string>();
             }
         }
     }
@@ -1212,10 +1209,9 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // standalone runout detection.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_additional_objects({"mmu"});
-    client.set_filament_sensors({"filament_switch_sensor extruder",
-                                 "filament_switch_sensor toolhead",
-                                 "filament_switch_sensor filament_tension",
-                                 "filament_switch_sensor filament_compression"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor extruder", "filament_switch_sensor toolhead",
+         "filament_switch_sensor filament_tension", "filament_switch_sensor filament_compression"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1271,8 +1267,8 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
     client.set_additional_objects({"AFC"});
-    client.set_filament_sensors({"filament_switch_sensor tool_start",
-                                 "filament_switch_sensor tool_end"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor tool_start", "filament_switch_sensor tool_end"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1301,14 +1297,11 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // afc_lane_names() and matches by lane prefix.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
-    client.set_additional_objects(
-        {"AFC", "AFC_lane T0", "AFC_lane T1", "AFC_buffer Turtle1"});
-    client.set_filament_sensors({"filament_switch_sensor T0_prep",
-                                 "filament_switch_sensor T0_load",
-                                 "filament_switch_sensor T0_selector",
-                                 "filament_switch_sensor T1_prep",
-                                 "filament_switch_sensor Turtle1_expanded",
-                                 "filament_switch_sensor Turtle1_compressed"});
+    client.set_additional_objects({"AFC", "AFC_lane T0", "AFC_lane T1", "AFC_buffer Turtle1"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor T0_prep", "filament_switch_sensor T0_load",
+         "filament_switch_sensor T0_selector", "filament_switch_sensor T1_prep",
+         "filament_switch_sensor Turtle1_expanded", "filament_switch_sensor Turtle1_compressed"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1366,11 +1359,10 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // suppression on the toast path.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
-    client.set_filament_sensors({"filament_switch_sensor _ifs_port_sensor_1",
-                                 "filament_switch_sensor _ifs_port_sensor_2",
-                                 "filament_switch_sensor _ifs_port_sensor_3",
-                                 "filament_switch_sensor _ifs_port_sensor_4",
-                                 "filament_switch_sensor head_switch_sensor"});
+    client.set_filament_sensors(
+        {"filament_switch_sensor _ifs_port_sensor_1", "filament_switch_sensor _ifs_port_sensor_2",
+         "filament_switch_sensor _ifs_port_sensor_3", "filament_switch_sensor _ifs_port_sensor_4",
+         "filament_switch_sensor head_switch_sensor"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},
@@ -1398,8 +1390,8 @@ TEST_CASE_METHOD(ExpectedHardwareSuppressFixture,
     // toolhead head_switch_sensor.
     client.set_heaters({"extruder", "heater_bed"});
     client.set_mmu_enabled(false);
-    client.set_filament_sensors({"filament_motion_sensor ifs_motion_sensor",
-                                 "filament_switch_sensor head_switch_sensor"});
+    client.set_filament_sensors(
+        {"filament_motion_sensor ifs_motion_sensor", "filament_switch_sensor head_switch_sensor"});
     setup_config({{"printer",
                    {{"moonraker_host", "127.0.0.1"},
                     {"moonraker_port", 7125},

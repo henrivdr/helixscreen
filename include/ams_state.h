@@ -856,8 +856,7 @@ class AmsState {
      * @return Subject pointer or nullptr if out of range
      */
     [[nodiscard]] lv_subject_t* get_slot_segment_subject(int slot_index);
-    [[nodiscard]] lv_subject_t* get_slot_segment_subject(int slot_index,
-                                                         SubjectLifetime& lifetime);
+    [[nodiscard]] lv_subject_t* get_slot_segment_subject(int slot_index, SubjectLifetime& lifetime);
 
     /**
      * @brief Get per-slot toolhead-present subject.
@@ -869,8 +868,8 @@ class AmsState {
      * @return Subject pointer or nullptr if out of range
      */
     [[nodiscard]] lv_subject_t* get_slot_toolhead_present_subject(int slot_index);
-    [[nodiscard]] lv_subject_t*
-    get_slot_toolhead_present_subject(int slot_index, SubjectLifetime& lifetime);
+    [[nodiscard]] lv_subject_t* get_slot_toolhead_present_subject(int slot_index,
+                                                                  SubjectLifetime& lifetime);
 
     /**
      * @brief Get per-slot active-loaded subject.
@@ -883,7 +882,7 @@ class AmsState {
      */
     [[nodiscard]] lv_subject_t* get_slot_active_loaded_subject(int slot_index);
     [[nodiscard]] lv_subject_t* get_slot_active_loaded_subject(int slot_index,
-                                                              SubjectLifetime& lifetime);
+                                                               SubjectLifetime& lifetime);
 
     // ========================================================================
     // Per-Unit Subject Accessors (CFS environment sensors)
@@ -1186,8 +1185,7 @@ class AmsState {
     /// FilamentConsumptionTracker sink handles, keyed by backend index. One
     /// AmsSlotSink per slot is registered when a backend is added and removed
     /// in clear_backends().
-    std::map<int, std::vector<helix::FilamentConsumptionTracker::SinkHandle>>
-        consumption_sinks_;
+    std::map<int, std::vector<helix::FilamentConsumptionTracker::SinkHandle>> consumption_sinks_;
     bool initialized_ = false;
 
     // Moonraker API for Spoolman integration
@@ -1237,7 +1235,8 @@ class AmsState {
     /// backend). Updated from sync_from_backend() and set_action_detail().
     std::string last_operation_detail_;
 
-    std::string last_narration_label_; ///< live toolchange narration phase label; top priority in recompute_action_detail; cleared on IDLE
+    std::string last_narration_label_; ///< live toolchange narration phase label; top priority in
+                                       ///< recompute_action_detail; cleared on IDLE
 
     /// Observer that re-runs compute_action_detail() when PrinterState's
     /// print_state_enum subject changes, so the sidebar flips between

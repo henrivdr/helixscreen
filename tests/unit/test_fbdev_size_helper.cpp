@@ -19,7 +19,7 @@ using namespace helix;
 
 static struct fb_var_screeninfo make_vinfo(uint32_t xres, uint32_t yres, uint32_t xvirt,
                                            uint32_t yvirt) {
-    struct fb_var_screeninfo v{};
+    struct fb_var_screeninfo v {};
     v.xres = xres;
     v.yres = yres;
     v.xres_virtual = xvirt;

@@ -10,15 +10,13 @@
 
 #include "app_globals.h"
 #include "config.h"
-#include "hv/json.hpp"
 #include "lvgl/lvgl.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "printer_hardware.h"
 #include "static_panel_registry.h"
 #include "wizard_config_paths.h"
-
-#include "lvgl/src/others/translation/lv_translation.h"
 
 #include <spdlog/spdlog.h>
 
@@ -26,6 +24,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "hv/json.hpp"
 
 using namespace helix;
 
@@ -100,8 +100,7 @@ lv_obj_t* WizardLedSelectStep::create(lv_obj_t* parent) {
     try {
         // Create screen from XML
         spdlog::debug("[{}] About to call lv_xml_create", get_name());
-        screen_root_ =
-            static_cast<lv_obj_t*>(lv_xml_create(parent, "wizard_led_select", nullptr));
+        screen_root_ = static_cast<lv_obj_t*>(lv_xml_create(parent, "wizard_led_select", nullptr));
         if (!screen_root_) {
             spdlog::error("[{}] Failed to create screen from XML", get_name());
             return nullptr;

@@ -298,10 +298,13 @@ class PrinterTemperatureState {
     // chamber display bindings (XML-registered). chamber_target / chamber_fan_target are
     // internal synthesis inputs only — intentionally NOT XML-registered.
     lv_subject_t chamber_temp_{};
-    lv_subject_t chamber_target_{}; ///< Internal: raw heater target (0 in Maintaining mode) — NOT XML
-    lv_subject_t chamber_fan_target_{}; ///< Internal: cooling-fan target — NOT XML
-    lv_subject_t chamber_effective_target_{}; ///< XML display: heater target (Heating) or fan target (Maintaining) or 0 (Off)
-    lv_subject_t chamber_mode_{}; ///< XML display: ChamberMode int Off/Heating/Maintaining (resting-aware)
+    lv_subject_t
+        chamber_target_{}; ///< Internal: raw heater target (0 in Maintaining mode) — NOT XML
+    lv_subject_t chamber_fan_target_{};       ///< Internal: cooling-fan target — NOT XML
+    lv_subject_t chamber_effective_target_{}; ///< XML display: heater target (Heating) or fan
+                                              ///< target (Maintaining) or 0 (Off)
+    lv_subject_t
+        chamber_mode_{}; ///< XML display: ChamberMode int Off/Heating/Maintaining (resting-aware)
     SubjectLifetime chamber_temp_lifetime_;
     SubjectLifetime chamber_target_lifetime_;
     SubjectLifetime chamber_fan_target_lifetime_;
@@ -319,10 +322,12 @@ class PrinterTemperatureState {
     std::string chamber_sensor_name_; ///< Klipper sensor name (e.g., "temperature_sensor chamber")
     std::string chamber_heater_name_; ///< Klipper heater name (e.g., "heater_generic chamber"),
                                       ///< empty if sensor-only
-    std::string chamber_cooling_fan_name_; ///< temperature_fan carrying the chamber cooling
-                                           ///< setpoint (M141 target in cooling mode), empty if none
-    int chamber_fan_resting_deci_ = 0;    ///< Cooling fan's configured resting/off target
-                                           ///< (decidegrees); M141 S0 returns the fan here. 0 = unknown.
+    std::string
+        chamber_cooling_fan_name_; ///< temperature_fan carrying the chamber cooling
+                                   ///< setpoint (M141 target in cooling mode), empty if none
+    int chamber_fan_resting_deci_ =
+        0; ///< Cooling fan's configured resting/off target
+           ///< (decidegrees); M141 S0 returns the fan here. 0 = unknown.
 };
 
 } // namespace helix

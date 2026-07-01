@@ -2,12 +2,12 @@
 
 #ifdef HELIX_ENABLE_SCREENSAVER
 
-#include "screensaver.h"
+#include "ui_screensaver.h"
 
 #include "display_settings_manager.h"
+#include "screensaver.h"
 #include "screensaver_pipes.h"
 #include "screensaver_starfield.h"
-#include "ui_screensaver.h"
 
 #include <spdlog/spdlog.h>
 
@@ -42,7 +42,8 @@ void ScreensaverManager::start(ScreensaverType type) {
 
     Screensaver* ss = find(type);
     if (!ss) {
-        spdlog::warn("[ScreensaverManager] No screensaver registered for type {}", static_cast<int>(type));
+        spdlog::warn("[ScreensaverManager] No screensaver registered for type {}",
+                     static_cast<int>(type));
         return;
     }
 
@@ -54,7 +55,8 @@ void ScreensaverManager::start(ScreensaverType type) {
 void ScreensaverManager::stop() {
     if (active_) {
         active_->stop();
-        spdlog::info("[ScreensaverManager] Stopped screensaver type {}", static_cast<int>(active_->type()));
+        spdlog::info("[ScreensaverManager] Stopped screensaver type {}",
+                     static_cast<int>(active_->type()));
         active_ = nullptr;
     }
 }

@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "panel_widget_config.h"
 #include "ui_observer_guard.h"
+
+#include "panel_widget_config.h"
 
 #include <any>
 #include <cstdint>

@@ -62,8 +62,9 @@ TEST_CASE("has_section handles leading whitespace on section line", "[config_man
 
 TEST_CASE("add_section appends section with entries and comment", "[config_manager]") {
     std::string content = "[server]\nhost: localhost\n";
-    auto result = MoonrakerConfigManager::add_section(content, "spoolman",
-        {{"server", "http://localhost:7912"}, {"sync_rate", "5"}}, "Added by HelixScreen");
+    auto result = MoonrakerConfigManager::add_section(
+        content, "spoolman", {{"server", "http://localhost:7912"}, {"sync_rate", "5"}},
+        "Added by HelixScreen");
     CHECK(MoonrakerConfigManager::has_section(result, "spoolman"));
     CHECK(result.find("# Added by HelixScreen") != std::string::npos);
     CHECK(result.find("server: http://localhost:7912") != std::string::npos);
@@ -72,8 +73,8 @@ TEST_CASE("add_section appends section with entries and comment", "[config_manag
 
 TEST_CASE("add_section is idempotent", "[config_manager]") {
     std::string content = "[spoolman]\nserver: http://localhost:7912\n";
-    auto result = MoonrakerConfigManager::add_section(
-        content, "spoolman", {{"server", "http://other:7912"}}, "");
+    auto result = MoonrakerConfigManager::add_section(content, "spoolman",
+                                                      {{"server", "http://other:7912"}}, "");
     // Should not have added a second spoolman section
     size_t first = result.find("[spoolman]");
     size_t second = result.find("[spoolman]", first + 1);
@@ -81,14 +82,15 @@ TEST_CASE("add_section is idempotent", "[config_manager]") {
 }
 
 TEST_CASE("add_section handles empty content", "[config_manager]") {
-    auto result = MoonrakerConfigManager::add_section(
-        "", "spoolman", {{"server", "http://localhost:7912"}}, "");
+    auto result = MoonrakerConfigManager::add_section("", "spoolman",
+                                                      {{"server", "http://localhost:7912"}}, "");
     CHECK(MoonrakerConfigManager::has_section(result, "spoolman"));
     CHECK(result.find("server: http://localhost:7912") != std::string::npos);
 }
 
 TEST_CASE("add_section preserves multiple entries in order", "[config_manager]") {
-    auto result = MoonrakerConfigManager::add_section("", "spoolman",
+    auto result = MoonrakerConfigManager::add_section(
+        "", "spoolman",
         {{"server", "http://localhost:7912"}, {"sync_rate", "5"}, {"connection_timeout", "30"}},
         "");
     size_t server_pos = result.find("server: http://localhost:7912");
@@ -102,8 +104,8 @@ TEST_CASE("add_section preserves multiple entries in order", "[config_manager]")
 }
 
 TEST_CASE("add_section no comment line when comment is empty", "[config_manager]") {
-    auto result = MoonrakerConfigManager::add_section(
-        "", "spoolman", {{"server", "http://localhost:7912"}}, "");
+    auto result = MoonrakerConfigManager::add_section("", "spoolman",
+                                                      {{"server", "http://localhost:7912"}}, "");
     CHECK(result.find('#') == std::string::npos);
 }
 
@@ -114,8 +116,8 @@ TEST_CASE("add_section handles section with no entries", "[config_manager]") {
 
 TEST_CASE("add_section result passes has_section check", "[config_manager]") {
     std::string content = "[server]\nhost: localhost\n";
-    auto result = MoonrakerConfigManager::add_section(
-        content, "spoolman", {{"server", "http://localhost:7912"}}, "");
+    auto result = MoonrakerConfigManager::add_section(content, "spoolman",
+                                                      {{"server", "http://localhost:7912"}}, "");
     CHECK(MoonrakerConfigManager::has_section(result, "spoolman"));
 }
 
@@ -124,7 +126,8 @@ TEST_CASE("add_section result passes has_section check", "[config_manager]") {
 // ============================================================================
 
 TEST_CASE("remove_section removes section and its entries", "[config_manager]") {
-    std::string content = "[server]\nhost: localhost\n\n[spoolman]\nserver: http://localhost:7912\n";
+    std::string content =
+        "[server]\nhost: localhost\n\n[spoolman]\nserver: http://localhost:7912\n";
     auto result = MoonrakerConfigManager::remove_section(content, "spoolman");
     CHECK_FALSE(MoonrakerConfigManager::has_section(result, "spoolman"));
     CHECK(result.find("server: http://localhost:7912") == std::string::npos);
@@ -141,9 +144,8 @@ TEST_CASE("remove_section removes preceding comment block", "[config_manager]") 
 }
 
 TEST_CASE("remove_section removes section between other sections", "[config_manager]") {
-    std::string content =
-        "[server]\nhost: localhost\n\n[spoolman]\nserver: "
-        "http://localhost:7912\n\n[authorization]\nenabled: true\n";
+    std::string content = "[server]\nhost: localhost\n\n[spoolman]\nserver: "
+                          "http://localhost:7912\n\n[authorization]\nenabled: true\n";
     auto result = MoonrakerConfigManager::remove_section(content, "spoolman");
     CHECK_FALSE(MoonrakerConfigManager::has_section(result, "spoolman"));
     CHECK(MoonrakerConfigManager::has_section(result, "server"));
@@ -157,7 +159,8 @@ TEST_CASE("remove_section is no-op when section does not exist", "[config_manage
 }
 
 TEST_CASE("remove_section handles section at end of file", "[config_manager]") {
-    std::string content = "[server]\nhost: localhost\n\n[spoolman]\nserver: http://localhost:7912\n";
+    std::string content =
+        "[server]\nhost: localhost\n\n[spoolman]\nserver: http://localhost:7912\n";
     auto result = MoonrakerConfigManager::remove_section(content, "spoolman");
     CHECK_FALSE(MoonrakerConfigManager::has_section(result, "spoolman"));
     CHECK(MoonrakerConfigManager::has_section(result, "server"));
@@ -223,7 +226,7 @@ TEST_CASE("add_include_line handles empty content", "[config_manager]") {
 }
 
 TEST_CASE("add_include_line inserts after leading comments but before first section",
-    "[config_manager]") {
+          "[config_manager]") {
     std::string content =
         "# Moonraker configuration\n# Generated by setup\n\n[server]\nhost: localhost\n";
     auto result = MoonrakerConfigManager::add_include_line(content);
@@ -237,8 +240,8 @@ TEST_CASE("add_include_line inserts after leading comments but before first sect
 
 TEST_CASE("get_section_value extracts value from section", "[config_manager]") {
     std::string content = "[spoolman]\nserver: http://localhost:7912\nsync_rate: 5\n";
-    CHECK(MoonrakerConfigManager::get_section_value(content, "spoolman", "server")
-          == "http://localhost:7912");
+    CHECK(MoonrakerConfigManager::get_section_value(content, "spoolman", "server") ==
+          "http://localhost:7912");
 }
 
 TEST_CASE("get_section_value returns empty for missing key", "[config_manager]") {
@@ -260,6 +263,6 @@ TEST_CASE("get_section_value does not cross section boundaries", "[config_manage
 
 TEST_CASE("get_section_value handles whitespace around colon", "[config_manager]") {
     std::string content = "[spoolman]\nserver  :  http://localhost:7912\n";
-    CHECK(MoonrakerConfigManager::get_section_value(content, "spoolman", "server")
-          == "http://localhost:7912");
+    CHECK(MoonrakerConfigManager::get_section_value(content, "spoolman", "server") ==
+          "http://localhost:7912");
 }

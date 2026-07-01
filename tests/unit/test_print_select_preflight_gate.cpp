@@ -29,7 +29,7 @@ namespace {
 
 /// Minimal model of PrintSelectDetailView's pre-flight readiness state machine.
 struct PreflightGateModel {
-    bool gcode_loaded = false;     // viewer parse done (full platforms only)
+    bool gcode_loaded = false;       // viewer parse done (full platforms only)
     bool headless_scan_done = false; // headless tools_used scan done (all platforms)
     std::function<void()> pending;   // run_when_preflight_ready deferral
     bool timer_armed = false;        // safety timeout armed
@@ -149,18 +149,20 @@ namespace {
 /// scan completion path. Guards the 22d37fd47 regression where 2D-only platforms
 /// rendered no swatches because the viewer never parses.
 struct SwatchRenderModel {
-    bool gcode_loaded = false;       // viewer parse done (full platforms)
-    bool mapping_visible = false;    // editable mapping card shown (hides swatches)
-    bool is_multi_tool = false;      // multi-tool printer / >1 AMS slot
-    std::set<int> viewer_tools;      // tools from viewer parse (full platforms)
-    std::set<int> headless_tools;    // tools from headless scan (2D-only)
+    bool gcode_loaded = false;    // viewer parse done (full platforms)
+    bool mapping_visible = false; // editable mapping card shown (hides swatches)
+    bool is_multi_tool = false;   // multi-tool printer / >1 AMS slot
+    std::set<int> viewer_tools;   // tools from viewer parse (full platforms)
+    std::set<int> headless_tools; // tools from headless scan (2D-only)
     bool headless_done = false;
 
     // Render outputs.
     int swatches_visible = 0;
     std::set<int> rendered_tools;
 
-    [[nodiscard]] bool is_gcode_loaded() const { return gcode_loaded; }
+    [[nodiscard]] bool is_gcode_loaded() const {
+        return gcode_loaded;
+    }
 
     /// Mirrors tools_used_effective(): prefer viewer parse, else headless set.
     [[nodiscard]] std::set<int> tools_used_effective() const {
@@ -213,14 +215,14 @@ TEST_CASE("Swatch render: 2D-only headless scan renders real used tools",
     // Regression 22d37fd47: 2D-only viewer never parses, so swatches must be driven
     // by the headless scan's REAL tool set ({0,2}), not left hidden/empty.
     SwatchRenderModel m;
-    m.is_multi_tool = true;          // U1 toolchanger
-    m.headless_tools = {0, 2};       // real used tools recovered by the scan
+    m.is_multi_tool = true;    // U1 toolchanger
+    m.headless_tools = {0, 2}; // real used tools recovered by the scan
 
     REQUIRE(m.swatches_visible == 0); // nothing rendered before the scan
     m.on_headless_scan_done();
 
-    REQUIRE_FALSE(m.gcode_loaded);                  // viewer never parsed
-    REQUIRE(m.swatches_visible == 1);               // swatches now shown
+    REQUIRE_FALSE(m.gcode_loaded);                    // viewer never parsed
+    REQUIRE(m.swatches_visible == 1);                 // swatches now shown
     REQUIRE(m.rendered_tools == std::set<int>{0, 2}); // REAL tools, not {0,1,2,3}
 }
 
@@ -228,7 +230,7 @@ TEST_CASE("Swatch render: mapping card hides swatches on 2D-only",
           "[print_select][preflight][swatch]") {
     SwatchRenderModel m;
     m.is_multi_tool = true;
-    m.mapping_visible = true;   // editable mapping present → swatches suppressed
+    m.mapping_visible = true; // editable mapping present → swatches suppressed
     m.headless_tools = {0, 2};
 
     m.on_headless_scan_done();

@@ -413,8 +413,7 @@ static void cleanup_splash(pid_t splash_pid) {
         // Either already gone, never existed, or PID got recycled. In all
         // three cases, do not signal — stale-PID kills cause incident reports
         // worse than the leak we're trying to prevent.
-        spdlog::debug("[Watchdog] Skipping splash cleanup: PID {} is not helix-splash",
-                      splash_pid);
+        spdlog::debug("[Watchdog] Skipping splash cleanup: PID {} is not helix-splash", splash_pid);
         clear_global();
         return;
     }
@@ -761,8 +760,8 @@ static bool write_safe_mode_marker() {
         spdlog::warn("[Watchdog] Wrote safe-mode marker to fallback path: {}", fallback);
         return true;
     }
-    spdlog::critical("[Watchdog] Failed to write safe-mode marker at fallback {}: {}",
-                     fallback, strerror(errno));
+    spdlog::critical("[Watchdog] Failed to write safe-mode marker at fallback {}: {}", fallback,
+                     strerror(errno));
     return false;
 }
 
@@ -840,8 +839,8 @@ static void create_crash_dialog(lv_obj_t* screen, int /*width*/, int /*height*/,
 
     // Title
     lv_obj_t* title = lv_label_create(container);
-    lv_label_set_text(title, crash_loop_detected ? "HelixScreen Keeps Crashing"
-                                                 : "HelixScreen Crashed");
+    lv_label_set_text(title,
+                      crash_loop_detected ? "HelixScreen Keeps Crashing" : "HelixScreen Crashed");
     lv_obj_set_style_text_font(title, &noto_sans_bold_24, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(TEXT_PRIMARY), 0);
     lv_obj_set_style_pad_top(title, 16, 0);
@@ -862,10 +861,9 @@ static void create_crash_dialog(lv_obj_t* screen, int /*width*/, int /*height*/,
     // own — point the user at Safe Mode.
     if (crash_loop_detected) {
         lv_obj_t* hint = lv_label_create(container);
-        lv_label_set_text(hint,
-                          "Same crash 3+ times in a row. Try Safe Mode\n"
-                          "(boots without connecting to the printer) so\n"
-                          "you can adjust settings.");
+        lv_label_set_text(hint, "Same crash 3+ times in a row. Try Safe Mode\n"
+                                "(boots without connecting to the printer) so\n"
+                                "you can adjust settings.");
         lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(hint, LV_PCT(100));
         lv_obj_set_style_text_font(hint, &noto_sans_14, 0);
@@ -1215,8 +1213,8 @@ static int run_watchdog(const WatchdogArgs& args) {
         spdlog::warn("[Watchdog] Crash detected, showing recovery dialog{}",
                      crash_loop_detected ? " (loop detected)" : "");
 
-        DialogChoice choice = show_crash_dialog(args.width, args.height, args.rotation, crash,
-                                                crash_loop_detected);
+        DialogChoice choice =
+            show_crash_dialog(args.width, args.height, args.rotation, crash, crash_loop_detected);
 
         if (choice == DialogChoice::RESTART_SYSTEM) {
             perform_system_restart();

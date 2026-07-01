@@ -2,16 +2,15 @@
 
 #include "ui_filament_mapping_card.h"
 
-#include "ams_state.h"
-#include "color_utils.h"
-#include "settings_manager.h"
-#include "theme_manager.h"
 #include "ui_fonts.h"
+#include "ui_update_queue.h"
 #include "ui_utils.h"
 
+#include "ams_state.h"
+#include "color_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
-
-#include "ui_update_queue.h"
+#include "settings_manager.h"
+#include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -26,7 +25,7 @@ namespace helix::ui {
 // ============================================================================
 
 void FilamentMappingCard::create(lv_obj_t* card_widget, lv_obj_t* rows_container,
-                                  lv_obj_t* warning_container) {
+                                 lv_obj_t* warning_container) {
     card_ = card_widget;
     rows_container_ = rows_container;
     warning_container_ = warning_container;
@@ -57,7 +56,7 @@ void FilamentMappingCard::create(lv_obj_t* card_widget, lv_obj_t* rows_container
 // ============================================================================
 
 void FilamentMappingCard::update(const std::vector<std::string>& gcode_colors,
-                                  const std::vector<std::string>& gcode_materials) {
+                                 const std::vector<std::string>& gcode_materials) {
     if (!card_ || !rows_container_) {
         should_show_ = false;
         return;
@@ -123,8 +122,8 @@ void FilamentMappingCard::update(const std::vector<std::string>& gcode_colors,
     // detail view — see PrintSelectDetailView::publish_mapping_visibility().
     should_show_ = true;
 
-    spdlog::debug("[FilamentMapping] Updated: {} tools, {} slots, {} mappings",
-                  tool_info_.size(), available_slots_.size(), mappings_.size());
+    spdlog::debug("[FilamentMapping] Updated: {} tools, {} slots, {} mappings", tool_info_.size(),
+                  available_slots_.size(), mappings_.size());
 }
 
 bool FilamentMappingCard::has_mismatch() const {
@@ -194,8 +193,8 @@ void FilamentMappingCard::rebuild_compact_view() {
         if (auto* tool_lbl = lv_obj_find_by_name(pill, "tool_label")) {
             if (multi_tool) {
                 lv_label_set_text_fmt(tool_lbl, "T%d", tool.tool_index);
-                lv_obj_set_style_text_color(
-                    tool_lbl, theme_manager_get_contrast_color(gcode_color), 0);
+                lv_obj_set_style_text_color(tool_lbl, theme_manager_get_contrast_color(gcode_color),
+                                            0);
                 lv_obj_remove_flag(tool_lbl, LV_OBJ_FLAG_HIDDEN);
             }
         }
@@ -218,8 +217,7 @@ void FilamentMappingCard::rebuild_compact_view() {
             if (slot_empty) {
                 lv_obj_set_style_bg_opa(slot_dot, LV_OPA_TRANSP, 0);
                 lv_obj_set_style_border_width(slot_dot, 2, 0);
-                lv_obj_set_style_border_color(
-                    slot_dot, theme_manager_get_color("warning"), 0);
+                lv_obj_set_style_border_color(slot_dot, theme_manager_get_color("warning"), 0);
                 lv_obj_set_style_border_opa(slot_dot, LV_OPA_COVER, 0);
             } else {
                 lv_obj_set_style_bg_color(slot_dot, lv_color_hex(slot_color), 0);
@@ -300,9 +298,9 @@ void FilamentMappingCard::open_mapping_modal() {
 // Data collection
 // ============================================================================
 
-std::vector<helix::GcodeToolInfo> FilamentMappingCard::build_tool_info(
-    const std::vector<std::string>& colors,
-    const std::vector<std::string>& materials) {
+std::vector<helix::GcodeToolInfo>
+FilamentMappingCard::build_tool_info(const std::vector<std::string>& colors,
+                                     const std::vector<std::string>& materials) {
     std::vector<helix::GcodeToolInfo> tools;
 
     // Use the larger of colors or materials to determine tool count.

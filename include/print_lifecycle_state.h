@@ -139,8 +139,7 @@ class PrintLifecycleState {
     /// True during Preparing, Printing, or Paused — i.e. a print job is in
     /// progress. False in Idle and terminal states (Complete, Cancelled, Error).
     static bool is_active(PrintState s) {
-        return s == PrintState::Printing || s == PrintState::Paused ||
-               s == PrintState::Preparing;
+        return s == PrintState::Printing || s == PrintState::Paused || s == PrintState::Preparing;
     }
     bool is_active() const {
         return is_active(current_state_);

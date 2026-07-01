@@ -49,6 +49,14 @@ setup() {
     grep -q 'ProtectSystem=strict' "$SERVICE_TEMPLATE"
 }
 
+@test "service template does NOT enable PrivateTmp" {
+    # PrivateTmp=true gives the service an isolated /tmp, hiding files Klipper
+    # writes to the shared /tmp — notably input-shaper resonance CSVs
+    # (/tmp/calibration_data_*.csv), which HelixScreen reads directly. Enabling
+    # it silently breaks the frequency-response chart on every systemd install.
+    ! grep -qiE '^PrivateTmp=(true|yes|1|on)$' "$SERVICE_TEMPLATE"
+}
+
 @test "service template HAS RuntimeDirectory=helixscreen for wpa_ctrl sockets" {
     grep -q 'RuntimeDirectory=helixscreen' "$SERVICE_TEMPLATE"
 }

@@ -3,16 +3,18 @@
 
 #include "first_run_tour.h"
 
+#include "ui_nav_manager.h"
+
 #include "config.h"
 #include "observer_factory.h"
 #include "static_panel_registry.h"
 #include "theme_manager.h"
 #include "tour_overlay.h"
 #include "tour_steps.h"
-#include "ui_nav_manager.h"
+
+#include <spdlog/spdlog.h>
 
 #include <lvgl.h>
-#include <spdlog/spdlog.h>
 
 namespace helix::tour {
 
@@ -22,9 +24,8 @@ FirstRunTour& FirstRunTour::instance() {
         // Tear the overlay down before LVGL deinits — otherwise the unique_ptr's
         // destructor runs during C++ static teardown, after lv_deinit(), and
         // ~TourOverlay's lv_obj_delete() touches freed LVGL state.
-        StaticPanelRegistry::instance().register_destroy("FirstRunTour", []() {
-            FirstRunTour::instance().overlay_.reset();
-        });
+        StaticPanelRegistry::instance().register_destroy(
+            "FirstRunTour", []() { FirstRunTour::instance().overlay_.reset(); });
         return true;
     }();
     (void)registered;
@@ -33,7 +34,8 @@ FirstRunTour& FirstRunTour::instance() {
 
 bool FirstRunTour::should_auto_start() {
     auto* cfg = ::helix::Config::get_instance();
-    if (!cfg) return false;
+    if (!cfg)
+        return false;
 
     if (cfg->is_wizard_required()) {
         spdlog::debug("[FirstRunTour] gate: wizard_required");
@@ -59,7 +61,8 @@ bool FirstRunTour::should_auto_start() {
 
 void FirstRunTour::mark_completed() {
     auto* cfg = ::helix::Config::get_instance();
-    if (!cfg) return;
+    if (!cfg)
+        return;
     cfg->set<bool>("/tour/completed", true);
     cfg->set<int>("/tour/last_seen_version", kTourVersion);
     cfg->save();
@@ -67,17 +70,19 @@ void FirstRunTour::mark_completed() {
 }
 
 void FirstRunTour::maybe_start() {
-    if (running_) return;
-    if (!should_auto_start()) return;
+    if (running_)
+        return;
+    if (!should_auto_start())
+        return;
     // Defer one tick so the caller (e.g., HomePanel::on_activate) completes first.
     // Raw lv_async_call with `this` is safe here because FirstRunTour is a
     // function-local static (immortal lifetime) — see instance().
-    lv_async_call(
-        [](void* self) { static_cast<FirstRunTour*>(self)->start_impl(); }, this);
+    lv_async_call([](void* self) { static_cast<FirstRunTour*>(self)->start_impl(); }, this);
 }
 
 void FirstRunTour::start() {
-    if (running_) return;
+    if (running_)
+        return;
     start_impl();
 }
 
@@ -96,9 +101,10 @@ void FirstRunTour::start_impl() {
         // The overlay dim doesn't cover the navbar, so without this the tour
         // would be orphaned on top of a different panel with a stale target.
         auto* nav_subject = NavigationManager::instance().get_active_panel_subject();
-        nav_observer_ = helix::ui::observe_int_sync(
-            nav_subject, this, [](FirstRunTour* self, int panel_id) {
-                if (!self->running_) return;
+        nav_observer_ =
+            helix::ui::observe_int_sync(nav_subject, this, [](FirstRunTour* self, int panel_id) {
+                if (!self->running_)
+                    return;
                 if (panel_id != static_cast<int>(helix::PanelId::Home)) {
                     spdlog::debug("[FirstRunTour] Cancelled: user navigated away from Home");
                     self->skip();
@@ -111,9 +117,10 @@ void FirstRunTour::start_impl() {
         // tick via lv_async_call so the new widget tree is built before we
         // look up the target by name.
         if (auto* bp_subj = theme_manager_get_breakpoint_subject()) {
-            breakpoint_observer_ = helix::ui::observe_int_sync(
-                bp_subj, this, [](FirstRunTour* self, int /*bp*/) {
-                    if (!self->running_ || !self->overlay_) return;
+            breakpoint_observer_ =
+                helix::ui::observe_int_sync(bp_subj, this, [](FirstRunTour* self, int /*bp*/) {
+                    if (!self->running_ || !self->overlay_)
+                        return;
                     // Defer: panel rebuild on breakpoint change is async; the
                     // new widget tree isn't ready synchronously. Raw
                     // lv_async_call with `this` is safe — FirstRunTour is a
@@ -121,7 +128,8 @@ void FirstRunTour::start_impl() {
                     lv_async_call(
                         [](void* s) {
                             auto* tour = static_cast<FirstRunTour*>(s);
-                            if (!tour->running_ || !tour->overlay_) return;
+                            if (!tour->running_ || !tour->overlay_)
+                                return;
                             tour->render_current_step();
                         },
                         self);
@@ -133,7 +141,8 @@ void FirstRunTour::start_impl() {
 }
 
 void FirstRunTour::advance() {
-    if (!running_) return;
+    if (!running_)
+        return;
     current_index_++;
     if (current_index_ >= steps_.size()) {
         finish();
@@ -143,7 +152,8 @@ void FirstRunTour::advance() {
 }
 
 void FirstRunTour::skip() {
-    if (!running_) return;
+    if (!running_)
+        return;
     spdlog::debug("[FirstRunTour] Skipped at step {}/{}", current_index_ + 1, steps_.size());
     mark_completed();
     running_ = false;
@@ -162,7 +172,8 @@ void FirstRunTour::finish() {
 }
 
 void FirstRunTour::render_current_step() {
-    if (overlay_) overlay_->show_step(current_index_);
+    if (overlay_)
+        overlay_->show_step(current_index_);
 }
 
 } // namespace helix::tour

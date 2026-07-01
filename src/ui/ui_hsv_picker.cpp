@@ -3,7 +3,6 @@
 
 #include "ui_hsv_picker.h"
 
-#include "memory_utils.h"
 #include "ui_update_queue.h"
 
 #include "helix-xml/src/xml/lv_xml.h"
@@ -12,6 +11,7 @@
 #include "helix-xml/src/xml/lv_xml_widget.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
 #include "lvgl/lvgl.h"
+#include "memory_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -26,13 +26,11 @@ namespace {
 
 // Default sizes — smaller on constrained devices (saves ~107KB ARGB8888)
 static int32_t default_sv_size() {
-    static const int32_t size =
-        helix::get_system_memory_info().is_constrained_device() ? 128 : 200;
+    static const int32_t size = helix::get_system_memory_info().is_constrained_device() ? 128 : 200;
     return size;
 }
 static int32_t default_hue_height() {
-    static const int32_t size =
-        helix::get_system_memory_info().is_constrained_device() ? 16 : 24;
+    static const int32_t size = helix::get_system_memory_info().is_constrained_device() ? 16 : 24;
     return size;
 }
 constexpr int32_t DEFAULT_GAP = 8;

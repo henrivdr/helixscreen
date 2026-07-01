@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "brother_ql_protocol.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 using namespace helix::label;
@@ -55,9 +56,9 @@ TEST_CASE("Brother QL protocol - media info continuous", "[label][brother]") {
     REQUIRE(data[208] == 0x7A);
     // Continuous: PI + width + media_type = 0x80 | 0x04 | 0x02 = 0x86
     REQUIRE(data[209] == 0x86);
-    REQUIRE(data[210] == 0x0A);  // media type (continuous)
-    REQUIRE(data[211] == 62);    // width mm
-    REQUIRE(data[212] == 0);     // length mm (continuous = 0)
+    REQUIRE(data[210] == 0x0A); // media type (continuous)
+    REQUIRE(data[211] == 62);   // width mm
+    REQUIRE(data[212] == 0);    // length mm (continuous = 0)
 }
 
 TEST_CASE("Brother QL protocol - media info die-cut", "[label][brother]") {
@@ -67,10 +68,10 @@ TEST_CASE("Brother QL protocol - media info die-cut", "[label][brother]") {
     auto data = brother_ql_build_raster(bitmap, size);
 
     // ESC i z at offset 206
-    REQUIRE(data[209] == 0x8E);  // Die-cut: PI + width + media_type + length
-    REQUIRE(data[210] == 0x0B);  // media type (die-cut)
-    REQUIRE(data[211] == 29);    // width mm
-    REQUIRE(data[212] == 90);    // length mm
+    REQUIRE(data[209] == 0x8E); // Die-cut: PI + width + media_type + length
+    REQUIRE(data[210] == 0x0B); // media type (die-cut)
+    REQUIRE(data[211] == 29);   // width mm
+    REQUIRE(data[212] == 90);   // length mm
 }
 
 TEST_CASE("Brother QL protocol - print command at end", "[label][brother]") {
@@ -141,7 +142,7 @@ TEST_CASE("Brother QL protocol - 38mm narrow label right-justified with flip", "
     }
     REQUIRE(found_raster);
 
-    int label_byte_width = (413 + 7) / 8; // 52
+    int label_byte_width = (413 + 7) / 8;                           // 52
     int right_pad = BROTHER_QL_RASTER_ROW_BYTES - label_byte_width; // 38
 
     // Data is left-justified, right padding bytes should be zero

@@ -45,7 +45,8 @@ inline float calculate_temp_graph_y_max(float current_max, float max_temp, float
     if (max_temp > current_max * p.expand_threshold && current_max < p.ceiling) {
         new_max = (std::floor(max_temp / p.step) + 1.0f) * p.step;
         // Ensure we actually expand (rounding can land on current_max)
-        if (new_max <= current_max) new_max = current_max + p.step;
+        if (new_max <= current_max)
+            new_max = current_max + p.step;
     }
     // Shrink: well below current max
     else if (max_temp < current_max * p.shrink_threshold && current_max > p.floor) {

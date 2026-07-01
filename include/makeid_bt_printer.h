@@ -18,8 +18,7 @@ class MakeIdBluetoothPrinter : public ILabelPrinter {
     void set_device(const std::string& mac, const std::string& device_name = {});
 
     [[nodiscard]] std::string name() const override;
-    void print(const LabelBitmap& bitmap, const LabelSize& size,
-               PrintCallback callback) override;
+    void print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) override;
     [[nodiscard]] std::vector<LabelSize> supported_sizes() const override;
 
   private:
@@ -27,4 +26,4 @@ class MakeIdBluetoothPrinter : public ILabelPrinter {
     std::string name_;
 };
 
-}  // namespace helix::label
+} // namespace helix::label

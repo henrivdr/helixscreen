@@ -142,8 +142,7 @@ void configure_manager(PrintPreparationManager& manager, PrinterState& ps, PrePr
 // Label: single toggle relabels based on adaptive_active
 // ============================================================================
 
-TEST_CASE("PrePrint adaptive: bed_mesh label reflects adaptive_active",
-          "[adaptive][preprint]") {
+TEST_CASE("PrePrint adaptive: bed_mesh label reflects adaptive_active", "[adaptive][preprint]") {
     lv_init_safe();
 
     SECTION("Adaptive active -> 'Adaptive Bed Mesh'") {
@@ -183,8 +182,7 @@ TEST_CASE("PrePrint adaptive: enabled + active emits SKIP_LEVELING=0 and ADAPTIV
     REQUIRE(has_param(params, "ADAPTIVE", "1"));
 }
 
-TEST_CASE("PrePrint adaptive: honors custom adaptive param name + value",
-          "[adaptive][preprint]") {
+TEST_CASE("PrePrint adaptive: honors custom adaptive param name + value", "[adaptive][preprint]") {
     lv_init_safe();
     PrinterState& ps = get_printer_state();
     PrinterStateTestAccess::reset(ps);
@@ -253,8 +251,7 @@ TEST_CASE("PrePrint adaptive: disabled emits SKIP_LEVELING=1 and no ADAPTIVE",
 // apply_dynamic_options drives adaptive_active end to end
 // ============================================================================
 
-TEST_CASE("PrePrint adaptive: AD5M database entry forwards ADAPTIVE",
-          "[adaptive][preprint]") {
+TEST_CASE("PrePrint adaptive: AD5M database entry forwards ADAPTIVE", "[adaptive][preprint]") {
     // The shipped FlashForge AD5M entry must carry adaptive_param on its
     // bed_mesh option (this is the demo printer + the load_cell_probe printer).
     auto caps = PrinterDetector::get_pre_print_option_set("FlashForge Adventurer 5M");

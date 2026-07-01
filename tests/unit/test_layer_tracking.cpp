@@ -213,7 +213,8 @@ TEST_CASE("Layer tracking: virtual_sdcard.layer updates subject",
     state.update_from_status(printing);
 
     SECTION("layer and layer_count update from virtual_sdcard") {
-        json status = {{"virtual_sdcard", {{"progress", 0.50}, {"layer", 158}, {"layer_count", 296}}}};
+        json status = {
+            {"virtual_sdcard", {{"progress", 0.50}, {"layer", 158}, {"layer_count", 296}}}};
         state.update_from_status(status);
 
         REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 158);
@@ -227,7 +228,8 @@ TEST_CASE("Layer tracking: virtual_sdcard.layer updates subject",
         UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
 
         // Send progress with layer data — should use layer, not estimation
-        json status = {{"virtual_sdcard", {{"progress", 0.66}, {"layer", 158}, {"layer_count", 296}}}};
+        json status = {
+            {"virtual_sdcard", {{"progress", 0.66}, {"layer", 158}, {"layer_count", 296}}}};
         state.update_from_status(status);
 
         // 0.66 * 296 = 195 (estimation), but real layer is 158
@@ -294,19 +296,22 @@ TEST_CASE("Layer tracking: print_stats.info wins over virtual_sdcard in same upd
 
     SECTION("virtual_sdcard takes over when info missing in subsequent update") {
         // First update: info-only — sets layer to 10
-        json info_only = {{"print_stats", {{"info", {{"current_layer", 10}, {"total_layer", 100}}}}}};
+        json info_only = {
+            {"print_stats", {{"info", {{"current_layer", 10}, {"total_layer", 100}}}}}};
         state.update_from_status(info_only);
         REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 10);
 
         // Second update: virtual_sdcard only — should now drive layer
-        json sdcard_only = {{"virtual_sdcard", {{"progress", 0.5}, {"layer", 50}, {"layer_count", 100}}}};
+        json sdcard_only = {
+            {"virtual_sdcard", {{"progress", 0.5}, {"layer", 50}, {"layer_count", 100}}}};
         state.update_from_status(sdcard_only);
         REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 50);
     }
 
     SECTION("partial info — only current_layer set — still prefers info, sdcard fills total") {
-        json partial = {{"print_stats", {{"info", {{"current_layer", 7}}}}},
-                        {"virtual_sdcard", {{"progress", 0.0}, {"layer", 99}, {"layer_count", 150}}}};
+        json partial = {
+            {"print_stats", {{"info", {{"current_layer", 7}}}}},
+            {"virtual_sdcard", {{"progress", 0.0}, {"layer", 99}, {"layer_count", 150}}}};
         state.update_from_status(partial);
 
         REQUIRE(lv_subject_get_int(state.get_print_layer_current_subject()) == 7);
@@ -557,7 +562,8 @@ TEST_CASE("Layer tracking: printer_reports_layers is sticky across reset_for_new
 
     // --- Print A: U1 reports total_layer at print start (current_layer arrives later). ---
     json print_a_start = {
-        {"print_stats", {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 0}}}}}};
+        {"print_stats",
+         {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 0}}}}}};
     state.update_from_status(print_a_start);
     UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     REQUIRE(state.printer_reports_layers()); // latched immediately from total_layer
@@ -565,7 +571,8 @@ TEST_CASE("Layer tracking: printer_reports_layers is sticky across reset_for_new
 
     // Print A advances and finishes.
     state.update_from_status(
-        {{"print_stats", {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 10}}}}}});
+        {{"print_stats",
+          {{"state", "printing"}, {"info", {{"total_layer", 10}, {"current_layer", 10}}}}}});
     UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
     state.update_from_status({{"print_stats", {{"state", "complete"}}}});
     UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());

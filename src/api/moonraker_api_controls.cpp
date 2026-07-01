@@ -539,8 +539,8 @@ void MoonrakerAPI::restart_klipper(SuccessCallback on_success, ErrorCallback on_
         on_error);
 }
 
-void MoonrakerAPI::restart_service(const std::string& service_name,
-                                    SuccessCallback on_success, ErrorCallback on_error) {
+void MoonrakerAPI::restart_service(const std::string& service_name, SuccessCallback on_success,
+                                   ErrorCallback on_error) {
     spdlog::info("[Moonraker API] Restarting service '{}' via machine.services.restart",
                  service_name);
 

@@ -2,13 +2,13 @@
 
 #include "ui_buffer_meter.h"
 
+#include "lvgl/lvgl.h"
 #include "theme_manager.h"
 
-#include "lvgl/lvgl.h"
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cmath>
-#include <spdlog/spdlog.h>
 
 namespace helix::ui {
 
@@ -80,19 +80,23 @@ void UiBufferMeter::resize() {
 
 void UiBufferMeter::on_draw(lv_event_t* e) {
     auto* self = static_cast<UiBufferMeter*>(lv_event_get_user_data(e));
-    if (!self) return;
+    if (!self)
+        return;
     auto* layer = lv_event_get_layer(e);
-    if (!layer) return;
+    if (!layer)
+        return;
     self->draw(layer);
 }
 
 void UiBufferMeter::on_size_changed(lv_event_t* e) {
     auto* self = static_cast<UiBufferMeter*>(lv_event_get_user_data(e));
-    if (self) self->resize();
+    if (self)
+        self->resize();
 }
 
 void UiBufferMeter::update_labels() {
-    if (!direction_label_) return;
+    if (!direction_label_)
+        return;
 
     int pct = static_cast<int>(bias_ * 100.0f);
 
@@ -106,7 +110,8 @@ void UiBufferMeter::update_labels() {
 }
 
 void UiBufferMeter::draw(lv_layer_t* layer) {
-    if (!canvas_obj_) return;
+    if (!canvas_obj_)
+        return;
 
     lv_area_t area;
     lv_obj_get_coords(canvas_obj_, &area);

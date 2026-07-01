@@ -5,10 +5,10 @@
 
 #include "pwg_raster.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cstring>
-
-#include <spdlog/spdlog.h>
 
 namespace helix::pwg {
 
@@ -60,8 +60,7 @@ std::vector<uint8_t> build_page_header(const PageParams& params) {
     return hdr;
 }
 
-void packbits_encode(const uint8_t* line, size_t len,
-                     std::vector<uint8_t>& out) {
+void packbits_encode(const uint8_t* line, size_t len, std::vector<uint8_t>& out) {
     size_t pos = 0;
 
     while (pos < len) {
@@ -93,22 +92,18 @@ void packbits_encode(const uint8_t* line, size_t len,
             if (lit_count > 0) {
                 // Emit literal: (256 - count) as unsigned byte, then the bytes
                 out.push_back(static_cast<uint8_t>(256 - lit_count));
-                out.insert(out.end(), line + lit_start,
-                           line + lit_start + lit_count);
+                out.insert(out.end(), line + lit_start, line + lit_start + lit_count);
             }
         }
     }
 }
 
 // Expand a 1bpp row to 8bpp grayscale (bit=1 → 0x00 black, bit=0 → 0xFF white)
-static void expand_1bpp_to_8bpp(const uint8_t* src, int src_row_bytes,
-                                int width_px, uint8_t* dst) {
+static void expand_1bpp_to_8bpp(const uint8_t* src, int src_row_bytes, int width_px, uint8_t* dst) {
     for (int x = 0; x < width_px; x++) {
         int byte_idx = x / 8;
         int bit_idx = 7 - (x % 8);
-        bool black = (byte_idx < src_row_bytes)
-                         ? ((src[byte_idx] >> bit_idx) & 1) != 0
-                         : false;
+        bool black = (byte_idx < src_row_bytes) ? ((src[byte_idx] >> bit_idx) & 1) != 0 : false;
         dst[x] = black ? 0x00 : 0xFF;
     }
 }
@@ -166,17 +161,14 @@ static void encode_page(const LabelBitmap& bitmap, const PageParams& params,
             bool same = false;
             if (next_y < bmp_h) {
                 if (bytes_per_pixel == 1) {
-                    expand_1bpp_to_8bpp(
-                        bitmap.row_data(next_y), bitmap.row_byte_width(),
-                        std::min(width, bmp_w), prev_line.data());
+                    expand_1bpp_to_8bpp(bitmap.row_data(next_y), bitmap.row_byte_width(),
+                                        std::min(width, bmp_w), prev_line.data());
                     if (bmp_w < width) {
-                        std::memset(prev_line.data() + bmp_w, 0xFF,
-                                    width - bmp_w);
+                        std::memset(prev_line.data() + bmp_w, 0xFF, width - bmp_w);
                     }
                 } else {
                     for (int x = 0; x < width; x++) {
-                        bool black =
-                            (x < bmp_w) ? bitmap.get_pixel(x, next_y) : false;
+                        bool black = (x < bmp_w) ? bitmap.get_pixel(x, next_y) : false;
                         uint8_t val = black ? 0x00 : 0xFF;
                         size_t off = static_cast<size_t>(x) * 3;
                         prev_line[off] = val;
@@ -197,7 +189,8 @@ static void encode_page(const LabelBitmap& bitmap, const PageParams& params,
                 same = cur_all_white;
             }
 
-            if (!same) break;
+            if (!same)
+                break;
             repeat_count++;
             next_y++;
         }
@@ -213,10 +206,10 @@ static void encode_page(const LabelBitmap& bitmap, const PageParams& params,
     }
 }
 
-std::vector<uint8_t> generate(const LabelBitmap& page_bitmap,
-                              const PageParams& params) {
+std::vector<uint8_t> generate(const LabelBitmap& page_bitmap, const PageParams& params) {
     PageParams p = params;
-    if (p.width_px == 0) p.width_px = static_cast<uint32_t>(page_bitmap.width());
+    if (p.width_px == 0)
+        p.width_px = static_cast<uint32_t>(page_bitmap.width());
     if (p.height_px == 0)
         p.height_px = static_cast<uint32_t>(page_bitmap.height());
 
@@ -224,9 +217,8 @@ std::vector<uint8_t> generate(const LabelBitmap& page_bitmap,
     size_t line_bytes = static_cast<size_t>(p.width_px) * bytes_per_pixel;
     size_t uncompressed_estimate = line_bytes * p.height_px;
 
-    spdlog::debug("pwg: generating {}x{} page, {}bpp, ~{} bytes uncompressed",
-                  p.width_px, p.height_px, p.bits_per_pixel,
-                  uncompressed_estimate);
+    spdlog::debug("pwg: generating {}x{} page, {}bpp, ~{} bytes uncompressed", p.width_px,
+                  p.height_px, p.bits_per_pixel, uncompressed_estimate);
 
     // Pre-allocate: sync + header + estimated compressed data
     // PackBits worst case is input_size + input_size/128 + 1 per line,
@@ -245,18 +237,14 @@ std::vector<uint8_t> generate(const LabelBitmap& page_bitmap,
     // Page data
     encode_page(page_bitmap, p, out);
 
-    spdlog::debug("pwg: output size {} bytes ({:.0f}% of uncompressed)",
-                  out.size(),
-                  uncompressed_estimate > 0
-                      ? (100.0 * out.size() / uncompressed_estimate)
-                      : 0.0);
+    spdlog::debug("pwg: output size {} bytes ({:.0f}% of uncompressed)", out.size(),
+                  uncompressed_estimate > 0 ? (100.0 * out.size() / uncompressed_estimate) : 0.0);
 
     return out;
 }
 
-std::vector<uint8_t>
-generate_multi(const std::vector<const LabelBitmap*>& pages,
-               const PageParams& params) {
+std::vector<uint8_t> generate_multi(const std::vector<const LabelBitmap*>& pages,
+                                    const PageParams& params) {
     if (pages.empty()) {
         spdlog::warn("pwg: generate_multi called with no pages");
         return {};

@@ -82,8 +82,7 @@ std::vector<MacroParam> helix::parse_macro_params(const std::string& gcode_templ
     std::regex in_params_re(
         R"RE((?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s+(?:not\s+)?in\s+params)RE");
 
-    auto it2 =
-        std::sregex_iterator(gcode_template.begin(), gcode_template.end(), in_params_re);
+    auto it2 = std::sregex_iterator(gcode_template.begin(), gcode_template.end(), in_params_re);
     for (; it2 != end; ++it2) {
         const auto& match = *it2;
 
@@ -108,8 +107,7 @@ std::vector<MacroParam> helix::parse_macro_params(const std::string& gcode_templ
     return result;
 }
 
-std::map<std::string, std::string>
-helix::parse_raw_macro_params(const std::string& raw_text) {
+std::map<std::string, std::string> helix::parse_raw_macro_params(const std::string& raw_text) {
     std::map<std::string, std::string> result;
     size_t pos = 0;
     while (pos < raw_text.size()) {
@@ -146,7 +144,7 @@ void MacroParamModal::show_for_macro(lv_obj_t* parent, const std::string& macro_
 }
 
 void MacroParamModal::show_for_unknown_params(lv_obj_t* parent, const std::string& macro_name,
-                                               MacroExecuteCallback on_execute) {
+                                              MacroExecuteCallback on_execute) {
     macro_name_ = macro_name;
     params_.clear();
     on_execute_ = std::move(on_execute);
@@ -211,10 +209,9 @@ void MacroParamModal::populate_param_fields() {
 
     if (raw_mode_) {
         const char* attrs[] = {"label",       lv_tr("Parameters"),
-                               "placeholder", "e.g. NAME=my_var VALUE=123",
+                               "placeholder", lv_tr("e.g. NAME=my_var VALUE=123"),
                                nullptr,       nullptr};
-        lv_obj_t* field =
-            static_cast<lv_obj_t*>(lv_xml_create(param_list, "form_field", attrs));
+        lv_obj_t* field = static_cast<lv_obj_t*>(lv_xml_create(param_list, "form_field", attrs));
         if (field) {
             raw_textarea_ = lv_obj_find_by_name(field, "field_input");
         }
@@ -231,15 +228,12 @@ void MacroParamModal::populate_param_fields() {
         }
 
         // Show default value as placeholder hint; empty field = use macro's own default
-        std::string placeholder =
-            param.default_value.empty() ? param.name : param.default_value;
+        std::string placeholder = param.default_value.empty() ? param.name : param.default_value;
 
         // Create form_field component (label + themed text_input with keyboard wiring)
-        const char* attrs[] = {"label",       display_name.c_str(),
-                               "placeholder", placeholder.c_str(),
-                               nullptr,       nullptr};
-        lv_obj_t* field =
-            static_cast<lv_obj_t*>(lv_xml_create(param_list, "form_field", attrs));
+        const char* attrs[] = {
+            "label", display_name.c_str(), "placeholder", placeholder.c_str(), nullptr, nullptr};
+        lv_obj_t* field = static_cast<lv_obj_t*>(lv_xml_create(param_list, "form_field", attrs));
         if (!field) {
             spdlog::warn("[MacroParamModal] Failed to create form_field for {}", param.name);
             continue;

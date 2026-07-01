@@ -40,11 +40,11 @@ struct ChangeSet {
  */
 struct SaveResult {
     bool success = false;
-    bool created_new_spool = false;   ///< set when a new spool was POSTed
-    bool repointed_filament = false;  ///< set when PATCH spool changed filament_id
-    int new_spool_id = 0;             ///< spool_id assigned on create (0 if unchanged)
-    int new_filament_id = 0;          ///< filament_id after find-or-create (0 if unchanged)
-    int new_vendor_id = 0;            ///< vendor_id after find-or-create (0 if unchanged)
+    bool created_new_spool = false;  ///< set when a new spool was POSTed
+    bool repointed_filament = false; ///< set when PATCH spool changed filament_id
+    int new_spool_id = 0;            ///< spool_id assigned on create (0 if unchanged)
+    int new_filament_id = 0;         ///< filament_id after find-or-create (0 if unchanged)
+    int new_vendor_id = 0;           ///< vendor_id after find-or-create (0 if unchanged)
 };
 
 /**

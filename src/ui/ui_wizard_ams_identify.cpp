@@ -8,6 +8,7 @@
 #include "lvgl/lvgl.h"
 #include "static_panel_registry.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -156,7 +157,7 @@ std::string WizardAmsIdentifyStep::get_ams_type_name() const {
     AmsBackend* backend = ams.get_backend();
 
     if (!backend) {
-        return "Unknown";
+        return lv_tr("Unknown");
     }
 
     AmsType type = backend->get_type();
@@ -178,7 +179,7 @@ std::string WizardAmsIdentifyStep::get_ams_type_name() const {
     case AmsType::QIDI_BOX:
         return "QIDI Box"; // i18n: do not translate - product name
     default:
-        return "Unknown";
+        return lv_tr("Unknown");
     }
 }
 
@@ -187,7 +188,7 @@ std::string WizardAmsIdentifyStep::get_ams_details() const {
     AmsBackend* backend = ams.get_backend();
 
     if (!backend) {
-        return "System detected";
+        return lv_tr("System detected");
     }
 
     AmsSystemInfo info = backend->get_system_info();
@@ -195,7 +196,7 @@ std::string WizardAmsIdentifyStep::get_ams_details() const {
 
     // Start with lane count if available
     if (info.total_slots > 0) {
-        details = std::to_string(info.total_slots) + " lanes";
+        details = fmt::format(lv_tr("{} lanes"), info.total_slots);
     }
 
     // Add unit name if available (e.g., "• Turtle 1")
@@ -210,7 +211,7 @@ std::string WizardAmsIdentifyStep::get_ams_details() const {
         details += uname;
     }
 
-    return details.empty() ? "System detected" : details;
+    return details.empty() ? std::string(lv_tr("System detected")) : details;
 }
 
 // ============================================================================

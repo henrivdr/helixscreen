@@ -72,7 +72,8 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: flat style builds spool rings",
     REQUIRE(slot != nullptr);
     lv_obj_t* spool_container = UITest::find_by_name(slot, "spool_container");
     REQUIRE(spool_container != nullptr);
-    REQUIRE(lv_obj_get_child_count(spool_container) >= 4); // outer/filament/hub + placeholder + error (+badges)
+    REQUIRE(lv_obj_get_child_count(spool_container) >=
+            4); // outer/filament/hub + placeholder + error (+badges)
     lv_obj_delete(slot);
     // Restore default so sibling tests (which assume 3D) are not affected.
     helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
@@ -775,4 +776,43 @@ TEST_CASE_METHOD(LVGLUITestFixture, "AMS slot hides empty slot with no metadata 
     REQUIRE_FALSE(st.any_ghosted);
 
     AmsState::instance().clear_backends();
+}
+
+TEST_CASE("SlotInfo::display_fill_level renders ghost lanes empty, present lanes by weight",
+          "[ams][slot][1071]") {
+    // Ghost lane: EMPTY status, but a Spoolman link + material were RETAINED
+    // across an eject (#1071), so has_filament_info() is true. The fill bar must
+    // read empty (0), NOT the 75% metadata fallback — otherwise an ejected lane
+    // renders ~75% full (#1071 BUG-1).
+    SlotInfo ghost;
+    ghost.status = SlotStatus::EMPTY;
+    ghost.material = "PLA";
+    ghost.color_rgb = 0xFF0000;
+    REQUIRE(ghost.has_filament_info());
+    REQUIRE_FALSE(ghost.is_present());
+    auto gfill = ghost.display_fill_level();
+    REQUIRE(gfill.has_value());
+    CHECK(*gfill == Catch::Approx(0.0f));
+
+    // Present lane, both weights known: real remaining/total ratio.
+    SlotInfo weighed;
+    weighed.status = SlotStatus::AVAILABLE;
+    weighed.total_weight_g = 1000.0f;
+    weighed.remaining_weight_g = 250.0f;
+    auto wfill = weighed.display_fill_level();
+    REQUIRE(wfill.has_value());
+    CHECK(*wfill == Catch::Approx(0.25f));
+
+    // Present lane, metadata but no remaining weight (e.g. Snapmaker RFID): 75%.
+    SlotInfo meta;
+    meta.status = SlotStatus::AVAILABLE;
+    meta.material = "PETG";
+    auto mfill = meta.display_fill_level();
+    REQUIRE(mfill.has_value());
+    CHECK(*mfill == Catch::Approx(0.75f));
+
+    // Present lane, no info at all: leave the bar unchanged (nullopt).
+    SlotInfo bare;
+    bare.status = SlotStatus::AVAILABLE;
+    CHECK_FALSE(bare.display_fill_level().has_value());
 }

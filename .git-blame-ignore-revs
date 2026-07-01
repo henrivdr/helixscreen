@@ -1,0 +1,9 @@
+# Revisions to ignore in `git blame` (bulk, mechanical, no semantic changes).
+#
+# GitHub honors this file automatically. Locally, enable it once with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Add the FULL 40-char SHA of any future tree-wide format/rename pass here.
+
+# style: normalize src/include/tests to clang-format 18.1.8 (one-time v18 reflow)
+54650149fdcfcceafc5f5564c4ed5973bf923493

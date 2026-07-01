@@ -706,14 +706,37 @@ The backend detects the installed version by querying the `afc-install` database
 
 ## ACE (Anycubic ACE Pro)
 
-The ACE backend supports the Anycubic ACE Pro multi-material hub. There are **two distinct deployments** of this hardware, and they expose completely different Klipper interfaces:
+The ACE backend supports the Anycubic ACE Pro multi-material hub. The same hardware
+shows up behind **several different software stacks**, and they expose *different*
+Klipper/Moonraker interfaces. "ACE support" is therefore not one integration — it is
+whichever of these the printer is running:
 
-| Deployment | Klipper object | Transport | Audience |
-|------------|----------------|-----------|----------|
-| **Native Anycubic GoKlipper (via Rinkhals)** | `filament_hub` (config section `[ace]`) | WebSocket query/subscribe | **Primary real user base** — stock Kobra 3 / 3 V2 / 3 Max / S1 / S1 Max (Combo) flashed with [Rinkhals](https://github.com/jbatonnet/Rinkhals) |
-| **Community ValgACE / BunnyACE / DuckACE** | `ace` | `/server/ace/*` REST bridge | ACE Pro hardware bolted onto a **non-Anycubic DIY printer** (niche) |
+| # | Stack | Klipper / Moonraker surface | Transport | Audience | Backend status |
+|---|-------|-----------------------------|-----------|----------|----------------|
+| 1 | **Native Anycubic GoKlipper (via Rinkhals)** | `filament_hub` printer object (config `[ace]`) | WebSocket query/subscribe | **Primary real user base** — stock Kobra 3 / 3 V2 / 3 Max / S1 / S1 Max (Combo) flashed with [Rinkhals](https://github.com/jbatonnet/Rinkhals) | ✅ Handled (parses `filament_hub`) |
+| 2 | **Community ValgACE / BunnyACE / DuckACE** | `ace` printer object + `ace_status.py` | `/server/ace/*` REST bridge | ACE Pro bolted onto a **non-Anycubic DIY printer** (niche; DuckACE abandoned) | ✅ Handled (REST fallback) |
+| 3 | **Mainline-Python Kobra-S1 fork** (`github.com/Kobra-S1/klipper-kobra-s1`) | custom `[ace]` extra + `[ace_status]` Moonraker component | **unconfirmed** (`ace_status.py` JSON/REST) | KS1 users replacing KobraOS with mainline Klipper (often on an external Pi) | ❓ **Unverified** — status surface not yet inspected |
 
-The native path is what almost every actual ACE user runs: it ships inside Anycubic's own GoKlipper firmware and is surfaced when the printer is reflashed with Rinkhals. The community drivers (ValgACE for ACE Pro on a DIY rig, plus the BunnyACE/DuckACE forks — DuckACE is abandoned) are a separate, niche world that integrates through Moonraker macros/endpoints rather than a native Klipper object.
+**How to think about the three:**
+
+- **Path 1 (native)** is what almost every actual ACE user runs — it ships inside
+  Anycubic's own GoKlipper firmware and is surfaced when the printer is reflashed with
+  Rinkhals. This is the path the backend is built around.
+- **Path 2 (community)** is ACE-on-a-DIY-rig: ValgACE (active), plus the BunnyACE/DuckACE
+  forks (DuckACE abandoned). Integrates through Moonraker macros/endpoints rather than a
+  native Klipper object.
+- **Path 3 (KS1 fork)** is newly observed in real logs (2026-06-24) and **not yet
+  validated against our backend.** It is a *full Klipper firmware fork* for the Kobra S1
+  — related to the Path 2 driver concept (it too ships an `ace_status.py`) but wrapped in
+  KS1-specific cutter/purge/toolchange macros. Whether its `[ace_status]` surface matches
+  Path 1's `filament_hub`, Path 2's `ace`/REST, or neither is an **open question**.
+  Control gcode (`ACE_CHANGE_TOOL`, `ACE_ENABLE/DISABLE_FEED_ASSIST`) does match what the
+  backend already sends. Full teardown:
+  [`printer-research/ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md`](printer-research/ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md).
+
+> The sections below (`filament_hub` schema, REST endpoints, etc.) document Paths 1 and 2,
+> which the backend handles today. Path 3's status schema is still TBD — see the linked
+> log-analysis doc for the open items needed to confirm or extend coverage.
 
 ### History
 

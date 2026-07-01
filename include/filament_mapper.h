@@ -22,27 +22,29 @@ struct GcodeToolInfo {
 /// This is an intentional abstraction boundary — callers convert from
 /// ams_types.h SlotInfo to keep FilamentMapper free of LVGL dependency.
 struct AvailableSlot {
-    int slot_index;           ///< Global slot index (unique within backend, used for mapping)
-    int backend_index;        ///< Which AMS backend (0 = primary)
-    uint32_t color_rgb;       ///< Loaded filament color (0xRRGGBB)
-    std::string material;     ///< Loaded material type
-    bool is_empty;            ///< True if slot has no filament
-    int current_tool_mapping; ///< What tool this slot is currently mapped to (-1 = none)
-    int unit_index = 0;       ///< Unit index within the backend
-    int local_slot_index = 0; ///< Slot index within its unit (for display labels)
+    int slot_index;                ///< Global slot index (unique within backend, used for mapping)
+    int backend_index;             ///< Which AMS backend (0 = primary)
+    uint32_t color_rgb;            ///< Loaded filament color (0xRRGGBB)
+    std::string material;          ///< Loaded material type
+    bool is_empty;                 ///< True if slot has no filament
+    int current_tool_mapping;      ///< What tool this slot is currently mapped to (-1 = none)
+    int unit_index = 0;            ///< Unit index within the backend
+    int local_slot_index = 0;      ///< Slot index within its unit (for display labels)
     std::string unit_display_name; ///< Unit name for display (empty = single-unit backend)
 
     /// Unique key for this slot across all backends
-    SlotKey key() const { return {slot_index, backend_index}; }
+    SlotKey key() const {
+        return {slot_index, backend_index};
+    }
 };
 
 /// Result of mapping a single tool
 struct ToolMapping {
-    int tool_index = -1;       ///< G-code tool number
-    int mapped_slot = -1;      ///< AMS slot index (-1 = auto/unmapped)
-    int mapped_backend = -1;   ///< Backend index (-1 = auto/primary)
+    int tool_index = -1;            ///< G-code tool number
+    int mapped_slot = -1;           ///< AMS slot index (-1 = auto/unmapped)
+    int mapped_backend = -1;        ///< Backend index (-1 = auto/primary)
     bool material_mismatch = false; ///< True if slot material != expected material
-    bool is_auto = false;      ///< True if using "auto" (no explicit mapping)
+    bool is_auto = false;           ///< True if using "auto" (no explicit mapping)
 
     enum class MatchReason {
         FIRMWARE_MAPPING, ///< Matched via current firmware tool-to-slot mapping
@@ -56,12 +58,11 @@ struct ToolMapping {
 /// No LVGL dependency — takes data in, returns mappings out.
 /// All methods are static and thread-safe.
 class FilamentMapper {
-public:
+  public:
     /// Compute default mappings for all tools.
     /// Priority: firmware mapping -> color match -> auto
-    static std::vector<ToolMapping> compute_defaults(
-        const std::vector<GcodeToolInfo>& tools,
-        const std::vector<AvailableSlot>& slots);
+    static std::vector<ToolMapping> compute_defaults(const std::vector<GcodeToolInfo>& tools,
+                                                     const std::vector<AvailableSlot>& slots);
 
     /// Check if two colors are within matching tolerance.
     /// Uses weighted RGB distance (luminance-weighted) with tolerance of 40 units.
@@ -77,9 +78,9 @@ public:
     /// Map tools using only current firmware assignments.
     /// Tools with no firmware assignment become AUTO (unmapped).
     /// Used when "keep current assignments" setting is enabled.
-    static std::vector<ToolMapping> use_current_assignments(
-        const std::vector<GcodeToolInfo>& tools,
-        const std::vector<AvailableSlot>& slots);
+    static std::vector<ToolMapping>
+    use_current_assignments(const std::vector<GcodeToolInfo>& tools,
+                            const std::vector<AvailableSlot>& slots);
 
     /// Find tool indices that have no resolved mapping (auto with no match).
     /// These are the tools that would trigger a color mismatch warning.

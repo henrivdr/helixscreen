@@ -11,7 +11,9 @@
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
+#include "config.h"
 #include "format_utils.h"
+#include "host_identity.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
@@ -806,8 +808,7 @@ void InputShaperPanel::apply_recommendation() {
                         apply_y_after_x();
                     } else {
                         ToastManager::instance().show(
-                            ToastSeverity::SUCCESS,
-                            lv_tr("Input shaper settings applied!"), 2500);
+                            ToastSeverity::SUCCESS, lv_tr("Input shaper settings applied!"), 2500);
                     }
                 });
             },
@@ -939,6 +940,30 @@ void InputShaperPanel::on_calibration_result(const InputShaperResult& result) {
 
     spdlog::info("[InputShaper] Calibration complete: {} @ {:.1f} Hz (vib: {:.1f}%)",
                  result.shaper_type, result.shaper_freq, result.vibrations);
+
+    // Surface a non-blocking warning when the recommendation succeeded but the
+    // frequency-response chart data couldn't be read (e.g. Klipper's /tmp CSV
+    // unreadable). Without this the chart just silently disappears.
+    if (result.chart_data_unavailable) {
+        // The chart needs Klipper's /tmp CSV, which is only readable when
+        // HelixScreen runs on the printer host. If Moonraker is remote, say so;
+        // otherwise it's a transient/local read issue.
+        std::string host;
+        if (Config* cfg = Config::get_instance()) {
+            host = cfg->get<std::string>(cfg->df() + "moonraker_host", "localhost");
+        }
+        const bool same_host = helix::is_moonraker_on_same_host(host);
+        spdlog::warn("[InputShaper] {} axis: calibration CSV unreadable, chart unavailable "
+                     "(same_host={})",
+                     result.axis, same_host);
+        ToastManager::instance().show(
+            ToastSeverity::WARNING,
+            same_host
+                ? lv_tr("Calibration succeeded, but the frequency chart data couldn't be read.")
+                : lv_tr("Calibration succeeded. The frequency chart is only available when "
+                        "HelixScreen runs on the printer."),
+            5000);
+    }
 
     // If Calibrate All and this was X, store result and continue to Y
     if (calibrate_all_mode_ && result.axis == 'X') {

@@ -6,12 +6,12 @@
 namespace helix {
 
 struct GcodeLineReplacement {
-    int line_number;       // 1-based
-    std::string new_line;  // replacement text (no trailing newline)
+    int line_number;      // 1-based
+    std::string new_line; // replacement text (no trailing newline)
 };
 
 class GcodeToolRemapper {
-public:
+  public:
     // remap: logical tool index -> physical head index.
     // Rewrites all three command families. Each line is mapped from its ORIGINAL
     // index in a single pass (collision-safe for swaps). Lines not matching any
@@ -20,8 +20,8 @@ public:
 
     // Same logic but returns only the CHANGED lines as (1-based line_number, new text),
     // for feeding the streaming GCodeFileModifier in the production path (Task 12).
-    static std::vector<GcodeLineReplacement> build_line_replacements(const std::string& gcode,
-                                                                      const std::map<int, int>& remap);
+    static std::vector<GcodeLineReplacement>
+    build_line_replacements(const std::string& gcode, const std::map<int, int>& remap);
 };
 
-}  // namespace helix
+} // namespace helix

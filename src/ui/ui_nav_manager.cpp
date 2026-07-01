@@ -3,7 +3,6 @@
 
 #include "ui_nav_manager.h"
 
-#include "backdrop_blur.h"
 #include "ui_emergency_stop.h"
 #include "ui_event_safety.h"
 #include "ui_fonts.h"
@@ -15,10 +14,10 @@
 #include "ui_utils.h"
 
 #include "app_globals.h"
+#include "backdrop_blur.h"
 #include "display_settings_manager.h"
 #include "moonraker_client.h" // For ConnectionState enum
 #include "observer_factory.h"
-#include "system/telemetry_manager.h"
 #include "overlay_base.h"
 #include "printer_state.h" // For KlippyState enum
 #include "sound_manager.h"
@@ -1157,7 +1156,7 @@ void NavigationManager::set_active(PanelId panel_id) {
     active_panel_ = panel_id;
     // Publish for off-main memory_warning context (relaxed: telemetry only).
     helix::telemetry_context::active_panel_int.store(static_cast<int>(panel_id),
-                                                      std::memory_order_relaxed);
+                                                     std::memory_order_relaxed);
 
     // Crash-diagnostic breadcrumb: records which panel transition was in flight
     // if we crash during on_activate/layout/first-paint.
@@ -1165,8 +1164,7 @@ void NavigationManager::set_active(PanelId panel_id) {
         const char* name = panel_instances_[static_cast<int>(panel_id)]
                                ? panel_instances_[static_cast<int>(panel_id)]->get_name()
                                : nullptr;
-        crash_handler::breadcrumb::note("nav", name ? name : "",
-                                        static_cast<long>(panel_id));
+        crash_handler::breadcrumb::note("nav", name ? name : "", static_cast<long>(panel_id));
     }
 
     // Call on_activate() AFTER state update
@@ -1224,7 +1222,8 @@ void NavigationManager::register_panel_instance(PanelId id, PanelBase* panel) {
 }
 
 helix::PanelId NavigationManager::find_panel_id(const PanelBase* panel) const {
-    if (!panel) return helix::PanelId::Count;
+    if (!panel)
+        return helix::PanelId::Count;
     for (int i = 0; i < UI_PANEL_COUNT; ++i) {
         if (panel_instances_[i] == panel) {
             return static_cast<helix::PanelId>(i);
@@ -1235,20 +1234,23 @@ helix::PanelId NavigationManager::find_panel_id(const PanelBase* panel) const {
 
 void NavigationManager::replace_panel_widget(helix::PanelId id, lv_obj_t* new_widget) {
     int idx = static_cast<int>(id);
-    if (idx < 0 || idx >= UI_PANEL_COUNT) return;
+    if (idx < 0 || idx >= UI_PANEL_COUNT)
+        return;
     panel_widgets_[idx] = new_widget;
-    spdlog::debug("[NavigationManager] Panel widget for {} swapped to {}",
-                  panel_id_to_name(id), (void*)new_widget);
+    spdlog::debug("[NavigationManager] Panel widget for {} swapped to {}", panel_id_to_name(id),
+                  (void*)new_widget);
 }
 
 lv_obj_t* NavigationManager::get_panel_widget(helix::PanelId id) const {
     int idx = static_cast<int>(id);
-    if (idx < 0 || idx >= UI_PANEL_COUNT) return nullptr;
+    if (idx < 0 || idx >= UI_PANEL_COUNT)
+        return nullptr;
     return panel_widgets_[idx];
 }
 
 void NavigationManager::rekey_overlay_widget(lv_obj_t* old_widget, lv_obj_t* new_widget) {
-    if (!old_widget || !new_widget || old_widget == new_widget) return;
+    if (!old_widget || !new_widget || old_widget == new_widget)
+        return;
 
     auto rekey_life = [&](std::unordered_map<lv_obj_t*, IPanelLifecycle*>& m) {
         auto it = m.find(old_widget);
@@ -1293,7 +1295,8 @@ void NavigationManager::rekey_overlay_widget(lv_obj_t* old_widget, lv_obj_t* new
 }
 
 void NavigationManager::scrub_deleted_widget(lv_obj_t* widget) {
-    if (!widget) return;
+    if (!widget)
+        return;
 
     // Erase from every widget-keyed bookkeeping container. Mirrors the canonical
     // list documented on rekey_overlay_widget(), but ERASES instead of rekeys.
@@ -1315,14 +1318,17 @@ void NavigationManager::scrub_deleted_widget(lv_obj_t* widget) {
 }
 
 void NavigationManager::overlay_delete_event_cb(lv_event_t* e) {
-    if (NavigationManager::is_destroyed()) return;
+    if (NavigationManager::is_destroyed())
+        return;
     auto* target = static_cast<lv_obj_t*>(lv_event_get_target(e));
     NavigationManager::instance().scrub_deleted_widget(target);
 }
 
 void NavigationManager::ensure_delete_hook(lv_obj_t* widget) {
-    if (!widget) return;
-    if (delete_hooked_.count(widget)) return;
+    if (!widget)
+        return;
+    if (delete_hooked_.count(widget))
+        return;
     delete_hooked_.insert(widget);
     lv_obj_add_event_cb(widget, overlay_delete_event_cb, LV_EVENT_DELETE, nullptr);
 }
@@ -1346,10 +1352,12 @@ void NavigationManager::rebuild_active_views() {
     std::vector<IPanelLifecycle*> overlays;
     overlays.reserve(overlay_instances_.size() + persistent_overlay_instances_.size());
     for (auto& [w, inst] : overlay_instances_) {
-        if (inst) overlays.push_back(inst);
+        if (inst)
+            overlays.push_back(inst);
     }
     for (auto& [w, inst] : persistent_overlay_instances_) {
-        if (inst) overlays.push_back(inst);
+        if (inst)
+            overlays.push_back(inst);
     }
     for (auto* inst : overlays) {
         inst->rebuild();
@@ -1574,6 +1582,12 @@ void NavigationManager::push_overlay(lv_obj_t* overlay_panel, bool hide_previous
         // Show overlay
         lv_obj_remove_flag(overlay_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(overlay_panel);
+        // Claim taps landing anywhere within the panel bounds. Overlays are
+        // narrower than the screen and sit in front of a full-screen, clickable
+        // dismiss-backdrop. Without this, a touch that misses an interactive
+        // child (a gap between buttons, padding) falls through to the backdrop
+        // and dismisses the whole overlay (#1066).
+        lv_obj_add_flag(overlay_panel, LV_OBJ_FLAG_CLICKABLE);
         mgr.ensure_delete_hook(overlay_panel);
         mgr.panel_stack_.push_back(overlay_panel);
         mgr.overlay_animate_slide_in(overlay_panel);
@@ -1678,6 +1692,9 @@ void NavigationManager::push_overlay_zoom_from(lv_obj_t* overlay_panel, lv_area_
         // Show overlay with zoom animation instead of slide
         lv_obj_remove_flag(overlay_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(overlay_panel);
+        // See push_overlay(): claim in-bounds taps so stray touches don't fall
+        // through to the dismiss-backdrop and close the overlay (#1066).
+        lv_obj_add_flag(overlay_panel, LV_OBJ_FLAG_CLICKABLE);
         mgr.ensure_delete_hook(overlay_panel);
         mgr.panel_stack_.push_back(overlay_panel);
         mgr.overlay_animate_zoom_in(overlay_panel, source_rect);
@@ -1725,7 +1742,7 @@ bool NavigationManager::go_back() {
         auto& mgr = NavigationManager::instance();
         spdlog::trace("[NavigationManager] go_back executing, stack depth: {}",
                       mgr.panel_stack_.size());
-        crash_handler::breadcrumb::note("nav",  "go_back",
+        crash_handler::breadcrumb::note("nav", "go_back",
                                         static_cast<long>(mgr.panel_stack_.size()));
 
         // L081 Mech D defense: cancel in-flight pointer input before teardown.

@@ -15,11 +15,11 @@
 
 #include "ui_error_reporting.h"
 #include "ui_update_queue.h"
-#include "wifi_ui_utils.h"
 
 #include "lvgl/lvgl.h"
 #include "safe_log.h"
 #include "spdlog/spdlog.h"
+#include "wifi_ui_utils.h"
 
 #if !defined(__APPLE__) && !defined(__ANDROID__)
 #include "wifi_backend_networkmanager.h"

@@ -153,11 +153,14 @@ TEST_CASE("change_tool sets SELECTING immediately in mock toolchanger mode",
 
 TEST_CASE("Lockout rejects operations during in-flight tool change",
           "[ams][toolchanger][toolchanger_actions]") {
-    FastTimingScopeTC timing_guard;
-
+    // NOTE: deliberately NOT using FastTimingScopeTC here. The 1000x sim_speedup
+    // would shrink the operation delay below to ~1ms, so the async completion
+    // thread can clear the in-flight state before the immediate second call runs
+    // — racing this test's whole premise. Use a real (un-scaled) delay long
+    // enough that the operation is reliably still in-flight on slow CI.
     AmsBackendMock backend(4);
     backend.set_tool_changer_mode(true);
-    backend.set_operation_delay(500); // Must be long enough that op is still in-flight on slow CI
+    backend.set_operation_delay(500); // real ms — kept in-flight for the immediate reject check
     REQUIRE(backend.start());
 
     SECTION("change_tool rejected while load is in progress") {

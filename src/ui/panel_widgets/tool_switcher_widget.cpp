@@ -2,15 +2,16 @@
 
 #include "tool_switcher_widget.h"
 
+#include "ui_event_safety.h"
+#include "ui_modal.h"
+#include "ui_utils.h"
+
 #include "app_globals.h"
 #include "observer_factory.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
 #include "theme_manager.h"
 #include "tool_state.h"
-#include "ui_event_safety.h"
-#include "ui_modal.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -55,9 +56,9 @@ void ToolSwitcherWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
 
     // Observe active tool changes
     active_tool_observer_ = helix::ui::observe_int_sync<ToolSwitcherWidget>(
-        tool_state.get_active_tool_subject(), this,
-        [token](ToolSwitcherWidget* self, int tool) {
-            if (token.expired()) return;
+        tool_state.get_active_tool_subject(), this, [token](ToolSwitcherWidget* self, int tool) {
+            if (token.expired())
+                return;
             self->on_active_tool_changed(tool);
         });
 
@@ -65,7 +66,8 @@ void ToolSwitcherWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
     tool_count_observer_ = helix::ui::observe_int_sync<ToolSwitcherWidget>(
         tool_state.get_tool_count_subject(), this,
         [token](ToolSwitcherWidget* self, int /*count*/) {
-            if (token.expired()) return;
+            if (token.expired())
+                return;
             if (self->current_colspan_ == 1 && self->current_rowspan_ == 1) {
                 self->rebuild_compact();
             } else {
@@ -96,7 +98,8 @@ void ToolSwitcherWidget::on_size_changed(int colspan, int rowspan, int /*width_p
     current_colspan_ = colspan;
     current_rowspan_ = rowspan;
 
-    if (!widget_obj_) return;
+    if (!widget_obj_)
+        return;
 
     if (colspan == 1 && rowspan == 1) {
         rebuild_compact();
@@ -110,7 +113,8 @@ void ToolSwitcherWidget::on_size_changed(int colspan, int rowspan, int /*width_p
 // ============================================================================
 
 void ToolSwitcherWidget::rebuild_pills() {
-    if (!widget_obj_) return;
+    if (!widget_obj_)
+        return;
 
     lv_obj_t* container = lv_obj_find_by_name(widget_obj_, "tool_switcher_container");
     if (!container) {
@@ -169,15 +173,15 @@ void ToolSwitcherWidget::rebuild_pills() {
         }
         int pill_min_h = btn_min_w; // square-ish pill, use button_height_sm as min row height
         int row_gap = space_xs;
-        int fit_rows = (container_h > 0)
-                           ? std::max(1, (container_h + row_gap) / (pill_min_h + row_gap))
-                           : 1;
+        int fit_rows =
+            (container_h > 0) ? std::max(1, (container_h + row_gap) / (pill_min_h + row_gap)) : 1;
         int preferred_rows = std::min(2, fit_rows); // cap at 2 rows per spec
 
         if (preferred_rows >= 2 && total >= 2) {
             rows = preferred_rows;
             cols = (total + rows - 1) / rows; // ceil(total / rows)
-            if (cols < 1) cols = 1;
+            if (cols < 1)
+                cols = 1;
             use_grid = true;
 
             // Build the grid descriptor now, but defer activating LV_LAYOUT_GRID
@@ -233,7 +237,8 @@ void ToolSwitcherWidget::rebuild_pills() {
             btn,
             [](lv_event_t* e) {
                 LVGL_SAFE_EVENT_CB_BEGIN("[ToolSwitcher] pill_click");
-                if (!s_active_instance) return;
+                if (!s_active_instance)
+                    return;
                 int idx = static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
                 s_active_instance->handle_tool_selected(idx);
                 LVGL_SAFE_EVENT_CB_END();
@@ -281,7 +286,8 @@ void ToolSwitcherWidget::on_active_tool_changed(int tool_index) {
 // ============================================================================
 
 void ToolSwitcherWidget::rebuild_compact() {
-    if (!widget_obj_) return;
+    if (!widget_obj_)
+        return;
 
     lv_obj_t* container = lv_obj_find_by_name(widget_obj_, "tool_switcher_container");
     if (!container) {
@@ -304,8 +310,8 @@ void ToolSwitcherWidget::rebuild_compact() {
     lv_obj_set_style_pad_gap(container, resolve_space_token("space_xxs", 2), 0);
 
     // Swap icon above tool label
-    const char* icon_attrs[] = {"src", "arrow_left_right", "size", "sm", "variant",
-                                "secondary", nullptr};
+    const char* icon_attrs[] = {"src",     "arrow_left_right", "size", "sm",
+                                "variant", "secondary",        nullptr};
     auto* icon = static_cast<lv_obj_t*>(lv_xml_create(container, "icon", icon_attrs));
     if (icon) {
         lv_obj_remove_flag(icon, LV_OBJ_FLAG_CLICKABLE);
@@ -314,9 +320,8 @@ void ToolSwitcherWidget::rebuild_compact() {
 
     // Current tool label centered with larger font
     lv_obj_t* label = lv_label_create(container);
-    std::string tool_name = (active >= 0 && active < static_cast<int>(tools.size()))
-                                ? tools[active].name
-                                : "T?";
+    std::string tool_name =
+        (active >= 0 && active < static_cast<int>(tools.size())) ? tools[active].name : "T?";
     lv_label_set_text(label, tool_name.c_str());
     lv_obj_set_style_text_color(label, theme_manager_get_color("text"), 0);
     const lv_font_t* body_font = theme_manager_get_font("font_body");
@@ -355,7 +360,8 @@ void ToolSwitcherWidget::show_tool_picker() {
     const auto& tools = tool_state.tools();
     int active = tool_state.active_tool_index();
 
-    if (tools.empty()) return;
+    if (tools.empty())
+        return;
 
     int space_xs = resolve_space_token("space_xs", 4);
 
@@ -445,7 +451,8 @@ void ToolSwitcherWidget::show_tool_picker() {
                 btn,
                 [](lv_event_t* e) {
                     LVGL_SAFE_EVENT_CB_BEGIN("[ToolSwitcher] picker_tool_click");
-                    if (!s_active_instance) return;
+                    if (!s_active_instance)
+                        return;
                     int idx =
                         static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
                     s_active_instance->handle_tool_selected(idx);
@@ -505,7 +512,8 @@ void ToolSwitcherWidget::show_tool_picker() {
 }
 
 void ToolSwitcherWidget::dismiss_tool_picker() {
-    if (!picker_backdrop_) return;
+    if (!picker_backdrop_)
+        return;
 
     // Use deferred deletion to avoid destroying the event source during
     // event processing (picker button click calls dismiss then handle_tool_selected)
@@ -535,14 +543,12 @@ void ToolSwitcherWidget::handle_tool_selected(int tool_index) {
         spdlog::info("[ToolSwitcher] Print active, showing confirmation for T{}", tool_index);
 
         helix::ui::modal_show_confirmation(
-            "Tool Change During Print",
-            "Changing tools while printing may cause issues. Continue?",
+            "Tool Change During Print", "Changing tools while printing may cause issues. Continue?",
             ::ModalSeverity::Warning, "Change Tool",
             // on_confirm
             [](lv_event_t* e) {
                 LVGL_SAFE_EVENT_CB_BEGIN("[ToolSwitcher] confirm_tool_change");
-                int idx = static_cast<int>(
-                    reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
+                int idx = static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
                 auto* api = get_moonraker_api();
                 if (api) {
                     ToolState::instance().request_tool_change(idx, api);
@@ -570,7 +576,8 @@ void ToolSwitcherWidget::handle_tool_selected(int tool_index) {
 
 void ToolSwitcherWidget::tool_pill_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[ToolSwitcher] tool_pill_cb");
-    if (!s_active_instance) return;
+    if (!s_active_instance)
+        return;
     auto* target = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
     int idx = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(target)));
     s_active_instance->handle_tool_selected(idx);

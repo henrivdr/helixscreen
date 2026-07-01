@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include "hv/json.hpp"
-
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
+
+#include "hv/json.hpp"
 
 /**
  * @file pre_print_option.h
@@ -40,10 +40,10 @@ enum class PrePrintCategory {
  * Each kind has a corresponding payload struct in the variant below.
  */
 enum class PrePrintStrategyKind {
-    MacroParam,      ///< Append "PARAM=value" to the START_PRINT macro call
-    PreStartGcode,   ///< Send a gcode line BEFORE the start macro
-    QueueAheadJob,   ///< Run a separate calibration job before the print
-    RuntimeCommand,  ///< Issue a runtime command at print start
+    MacroParam,     ///< Append "PARAM=value" to the START_PRINT macro call
+    PreStartGcode,  ///< Send a gcode line BEFORE the start macro
+    QueueAheadJob,  ///< Run a separate calibration job before the print
+    RuntimeCommand, ///< Issue a runtime command at print start
 };
 
 // Strategy payload structs ---------------------------------------------------
@@ -64,8 +64,8 @@ struct PrePrintStrategyMacroParam {
     /// bed_mesh toggle is "Adaptive Bed Mesh" (see PrePrintOption::adaptive_active)
     /// and ENABLED, the print-start emits `<adaptive_param>=<adaptive_value>`
     /// alongside the enable param. adaptive_value defaults to "1".
-    std::string adaptive_param;          ///< Adaptive param name (empty = unsupported)
-    std::string adaptive_value = "1";    ///< Value emitted when adaptive is ON
+    std::string adaptive_param;       ///< Adaptive param name (empty = unsupported)
+    std::string adaptive_value = "1"; ///< Value emitted when adaptive is ON
 };
 
 /// `PreStartGcode`: a gcode line emitted before the start macro. The literal
@@ -86,10 +86,9 @@ struct PrePrintStrategyRuntimeCommand {
     std::string command_disabled;
 };
 
-using PrePrintStrategyPayload = std::variant<PrePrintStrategyMacroParam,
-                                             PrePrintStrategyPreStartGcode,
-                                             PrePrintStrategyQueueAheadJob,
-                                             PrePrintStrategyRuntimeCommand>;
+using PrePrintStrategyPayload =
+    std::variant<PrePrintStrategyMacroParam, PrePrintStrategyPreStartGcode,
+                 PrePrintStrategyQueueAheadJob, PrePrintStrategyRuntimeCommand>;
 
 /**
  * @brief A single printer-agnostic per-print option.

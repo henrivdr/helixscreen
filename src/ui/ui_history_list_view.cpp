@@ -209,8 +209,7 @@ static const char* get_status_text(PrintJobStatus status) {
     }
 }
 
-void HistoryListView::configure_row(lv_obj_t* row, size_t data_index,
-                                     const PrintHistoryJob& job) {
+void HistoryListView::configure_row(lv_obj_t* row, size_t data_index, const PrintHistoryJob& job) {
     if (!row) {
         return;
     }

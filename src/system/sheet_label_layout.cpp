@@ -30,20 +30,13 @@ static int mm_to_px(float mm, int dpi) {
 PageDimensions get_page_dimensions(PaperSize paper, int dpi) {
     switch (paper) {
     case PaperSize::LETTER:
-        return {mm_to_px(LETTER_WIDTH_MM, dpi),
-                mm_to_px(LETTER_HEIGHT_MM, dpi),
-                LETTER_WIDTH_MM,
+        return {mm_to_px(LETTER_WIDTH_MM, dpi), mm_to_px(LETTER_HEIGHT_MM, dpi), LETTER_WIDTH_MM,
                 LETTER_HEIGHT_MM};
     case PaperSize::A4:
-        return {mm_to_px(A4_WIDTH_MM, dpi),
-                mm_to_px(A4_HEIGHT_MM, dpi),
-                A4_WIDTH_MM,
-                A4_HEIGHT_MM};
+        return {mm_to_px(A4_WIDTH_MM, dpi), mm_to_px(A4_HEIGHT_MM, dpi), A4_WIDTH_MM, A4_HEIGHT_MM};
     }
     // Unreachable, but satisfy compiler
-    return {mm_to_px(LETTER_WIDTH_MM, dpi),
-            mm_to_px(LETTER_HEIGHT_MM, dpi),
-            LETTER_WIDTH_MM,
+    return {mm_to_px(LETTER_WIDTH_MM, dpi), mm_to_px(LETTER_HEIGHT_MM, dpi), LETTER_WIDTH_MM,
             LETTER_HEIGHT_MM};
 }
 
@@ -105,19 +98,18 @@ LabelSize sheet_template_to_label_size(const SheetTemplate& tmpl, int dpi) {
     };
 }
 
-LabelBitmap tile_labels_on_page(const LabelBitmap& label_bitmap,
-                                const SheetTemplate& tmpl,
-                                int count,
-                                int start,
-                                int dpi) {
+LabelBitmap tile_labels_on_page(const LabelBitmap& label_bitmap, const SheetTemplate& tmpl,
+                                int count, int start, int dpi) {
     auto page = get_page_dimensions(tmpl.paper, dpi);
     LabelBitmap sheet(page.width_px, page.height_px);
     sheet.fill(false); // white background
 
     int total = tmpl.labels_per_sheet();
-    if (start < 0) start = 0;
+    if (start < 0)
+        start = 0;
     if (start >= total) {
-        spdlog::warn("[sheet_label_layout] start {} >= total {}, returning blank page", start, total);
+        spdlog::warn("[sheet_label_layout] start {} >= total {}, returning blank page", start,
+                     total);
         return sheet;
     }
 

@@ -5,9 +5,10 @@
 #include "static_subject_registry.h"
 #include "subject_managed_panel.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cstdio>
-#include <spdlog/spdlog.h>
 
 namespace helix {
 namespace perf {
@@ -27,21 +28,20 @@ void PerformanceState::init_subjects() {
     // release safely once deinit_subjects() flips/resets it. (#816 pattern.)
     subjects_lifetime_ = std::make_shared<bool>(true);
 
-    UI_MANAGED_SUBJECT_INT(s_host_cpu_pct_,         0, "perf_host_cpu_pct",         subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_cpu_pct_present_,  0, "perf_host_cpu_pct_present", subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_cpu_temp_c10_,     0, "perf_host_cpu_temp_c10",    subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_cpu_temp_present_, 0, "perf_host_cpu_temp_present",subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_mem_free_mb_,      0, "perf_host_mem_free_mb",     subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_mem_pct_used_,     0, "perf_host_mem_pct_used",    subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_mem_present_,      0, "perf_host_mem_present",     subjects_);
-    UI_MANAGED_SUBJECT_INT(s_host_throttle_state_,   0, "perf_host_throttle_state",  subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_cpu_pct_, 0, "perf_host_cpu_pct", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_cpu_pct_present_, 0, "perf_host_cpu_pct_present", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_cpu_temp_c10_, 0, "perf_host_cpu_temp_c10", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_cpu_temp_present_, 0, "perf_host_cpu_temp_present", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_mem_free_mb_, 0, "perf_host_mem_free_mb", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_mem_pct_used_, 0, "perf_host_mem_pct_used", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_mem_present_, 0, "perf_host_mem_present", subjects_);
+    UI_MANAGED_SUBJECT_INT(s_host_throttle_state_, 0, "perf_host_throttle_state", subjects_);
     UI_MANAGED_SUBJECT_STRING(s_host_throttle_text_, buf_throttle_text_, "",
                               "perf_host_throttle_text", subjects_);
-    UI_MANAGED_SUBJECT_STRING(s_mcu_names_, buf_mcu_names_, "",
-                              "perf_mcu_names", subjects_);
+    UI_MANAGED_SUBJECT_STRING(s_mcu_names_, buf_mcu_names_, "", "perf_mcu_names", subjects_);
     UI_MANAGED_SUBJECT_STRING(s_about_summary_, buf_about_summary_, "\xe2\x80\x94",
                               "perf_about_summary", subjects_);
-    UI_MANAGED_SUBJECT_INT(s_available_,    0, "perf_available",    subjects_);
+    UI_MANAGED_SUBJECT_INT(s_available_, 0, "perf_available", subjects_);
     UI_MANAGED_SUBJECT_INT(s_history_tick_, 0, "perf_history_tick", subjects_);
     UI_MANAGED_SUBJECT_STRING(s_host_cpu_pct_text_, buf_cpu_text_, "\xe2\x80\x94",
                               "perf_host_cpu_pct_text", subjects_);
@@ -87,12 +87,12 @@ void PerformanceState::set_source(std::unique_ptr<IPerformanceSource> source) {
         source_.reset();
     }
     source_ = std::move(source);
-    if (!source_) return;
+    if (!source_)
+        return;
 
     auto tok = lifetime_.token();
     source_->set_callback([this, tok](const PerfSample& s) {
-        tok.defer("PerformanceState::apply_sample",
-                  [this, s]() { apply_sample(s); });
+        tok.defer("PerformanceState::apply_sample", [this, s]() { apply_sample(s); });
     });
     source_->start();
 }
@@ -100,7 +100,8 @@ void PerformanceState::set_source(std::unique_ptr<IPerformanceSource> source) {
 std::vector<float> PerformanceState::read_history(const std::string& name) const {
     std::lock_guard<std::mutex> lk(history_mu_);
     auto it = history_.find(name);
-    if (it == history_.end()) return {};
+    if (it == history_.end())
+        return {};
     const auto& ring = it->second;
     std::vector<float> out;
     out.reserve(ring.fill);
@@ -132,8 +133,7 @@ void PerformanceState::apply_sample(const PerfSample& s) {
         lv_subject_set_int(&s_host_mem_free_mb_, static_cast<int>(*s.host_mem_free_mb));
     }
     if (s.host_mem_pct_used) {
-        lv_subject_set_int(&s_host_mem_pct_used_,
-                           static_cast<int>(*s.host_mem_pct_used + 0.5f));
+        lv_subject_set_int(&s_host_mem_pct_used_, static_cast<int>(*s.host_mem_pct_used + 0.5f));
         push_history("host_mem_pct_used", *s.host_mem_pct_used);
     }
     set_present(s_host_mem_present_,
@@ -146,7 +146,9 @@ void PerformanceState::apply_sample(const PerfSample& s) {
 
     char tmp[48];
     if (s.host_cpu_pct && s.host_cpu_temp_c) {
-        snprintf(tmp, sizeof(tmp), "%d%% \xc2\xb7 %.1f\xc2\xb0""C",
+        snprintf(tmp, sizeof(tmp),
+                 "%d%% \xc2\xb7 %.1f\xc2\xb0"
+                 "C",
                  static_cast<int>(*s.host_cpu_pct + 0.5f), *s.host_cpu_temp_c);
     } else if (s.host_cpu_pct) {
         snprintf(tmp, sizeof(tmp), "%d%%", static_cast<int>(*s.host_cpu_pct + 0.5f));
@@ -173,7 +175,7 @@ void PerformanceState::apply_sample(const PerfSample& s) {
 }
 
 void PerformanceState::update_about_summary(const PerfSample& s) {
-    const int cpu         = lv_subject_get_int(&s_host_cpu_pct_);
+    const int cpu = lv_subject_get_int(&s_host_cpu_pct_);
     const int cpu_present = lv_subject_get_int(&s_host_cpu_pct_present_);
 
     int mcu_load = -1;
@@ -215,8 +217,8 @@ void PerformanceState::update_mcu_subjects(const std::vector<McuStat>& mcus) {
             lv_subject_init_int(&subs->load_pct, 0);
             lv_subject_init_int(&subs->retrans, 0);
             lv_subject_init_int(&subs->present, 0);
-            lv_subject_init_string(&subs->text, subs->buf_text, nullptr,
-                                   sizeof(subs->buf_text), "\xe2\x80\x94");
+            lv_subject_init_string(&subs->text, subs->buf_text, nullptr, sizeof(subs->buf_text),
+                                   "\xe2\x80\x94");
             helix::xml::register_subject_in_current_scope(load_name.c_str(), &subs->load_pct);
             helix::xml::register_subject_in_current_scope(retr_name.c_str(), &subs->retrans);
             helix::xml::register_subject_in_current_scope(pres_name.c_str(), &subs->present);
@@ -231,8 +233,7 @@ void PerformanceState::update_mcu_subjects(const std::vector<McuStat>& mcus) {
         const std::string safe = mcu_safe_name(m.name);
         auto& subs = mcu_subjects_[safe];
         if (m.load) {
-            lv_subject_set_int(&subs->load_pct,
-                               static_cast<int>(*m.load * 100.0f + 0.5f));
+            lv_subject_set_int(&subs->load_pct, static_cast<int>(*m.load * 100.0f + 0.5f));
             push_history("mcu_" + safe + "_load_pct", *m.load * 100.0f);
         }
         if (m.retransmits) {
@@ -242,10 +243,10 @@ void PerformanceState::update_mcu_subjects(const std::vector<McuStat>& mcus) {
 
         // Format per-MCU text: "22% · 14 retx" or "14%"
         const int load_pct_val = lv_subject_get_int(&subs->load_pct);
-        const int retrans_val  = lv_subject_get_int(&subs->retrans);
+        const int retrans_val = lv_subject_get_int(&subs->retrans);
         if (retrans_val > 0) {
-            snprintf(subs->buf_text, sizeof(subs->buf_text), "%d%% \xc2\xb7 %d retx",
-                     load_pct_val, retrans_val);
+            snprintf(subs->buf_text, sizeof(subs->buf_text), "%d%% \xc2\xb7 %d retx", load_pct_val,
+                     retrans_val);
         } else {
             snprintf(subs->buf_text, sizeof(subs->buf_text), "%d%%", load_pct_val);
         }
@@ -262,7 +263,8 @@ void PerformanceState::update_mcu_subjects(const std::vector<McuStat>& mcus) {
     // Build comma-joined names string
     std::string joined;
     for (size_t i = 0; i < sorted.size(); ++i) {
-        if (i) joined += ",";
+        if (i)
+            joined += ",";
         joined += sorted[i].name;
     }
     lv_subject_copy_string(&s_mcu_names_, joined.c_str());
@@ -273,13 +275,15 @@ void PerformanceState::push_history(const std::string& key, float value) {
     auto& ring = history_[key];
     ring.data[ring.head] = value;
     ring.head = (ring.head + 1) % kHistorySamples;
-    if (ring.fill < kHistorySamples) ++ring.fill;
+    if (ring.fill < kHistorySamples)
+        ++ring.fill;
 }
 
 std::string PerformanceState::mcu_safe_name(const std::string& raw) {
     std::string out = raw;
     for (auto& c : out) {
-        if (c == ' ' || c == '/' || c == '.') c = '_';
+        if (c == ' ' || c == '/' || c == '.')
+            c = '_';
     }
     return out;
 }

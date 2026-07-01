@@ -1,11 +1,12 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "label_printer_utils.h"
 
+#include "../catch_amalgamated.hpp"
+
 static helix::DiscoveredPrinter make_printer(const std::string& name,
-                                              const std::string& hostname = "printer.local") {
+                                             const std::string& hostname = "printer.local") {
     return {name, hostname, "192.168.1.100", 9100};
 }
 

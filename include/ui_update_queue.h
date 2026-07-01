@@ -39,7 +39,6 @@
 #pragma once
 
 #include "lvgl/lvgl.h"
-
 #include "system/crash_handler.h"
 
 #include <spdlog/spdlog.h>
@@ -123,10 +122,8 @@ class UpdateQueue {
         // High-frequency repeats (e.g. TSM::update_subjects per WebSocket tick)
         // coalesce into a single slot with a count, preserving runway for
         // distinct callbacks above.
-        crash_handler::register_previous_tag_ring(previous_tag_ring_,
-                                                  previous_tag_count_ring_,
-                                                  kPreviousTagRingSize,
-                                                  &previous_tag_next_);
+        crash_handler::register_previous_tag_ring(previous_tag_ring_, previous_tag_count_ring_,
+                                                  kPreviousTagRingSize, &previous_tag_next_);
 
         initialized_ = true;
         spdlog::debug("[UpdateQueue] Initialized - timer created for queue drain");
@@ -170,17 +167,20 @@ class UpdateQueue {
     void queue(const char* tag, UpdateCallback callback) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (shut_down_) {
-            if (tag) spdlog::warn("[UpdateQueue] DROPPED (shutdown): {}", tag);
+            if (tag)
+                spdlog::warn("[UpdateQueue] DROPPED (shutdown): {}", tag);
             return;
         }
         if (freeze_depth_ > 0) {
             frozen_buffer_.push({tag, std::move(callback)});
-            if (tag) spdlog::trace("[UpdateQueue] Buffered (frozen): {} (buffered={})",
-                                   tag, frozen_buffer_.size());
+            if (tag)
+                spdlog::trace("[UpdateQueue] Buffered (frozen): {} (buffered={})", tag,
+                              frozen_buffer_.size());
             return;
         }
         pending_.push({tag, std::move(callback)});
-        if (tag) spdlog::trace("[UpdateQueue] Enqueued: {} (pending={})", tag, pending_.size());
+        if (tag)
+            spdlog::trace("[UpdateQueue] Enqueued: {} (pending={})", tag, pending_.size());
     }
 
     /**
@@ -234,15 +234,16 @@ class UpdateQueue {
      * (and splices the buffer) when the last ScopedFreeze is destroyed.
      */
     class ScopedFreeze {
-    public:
-        explicit ScopedFreeze(UpdateQueue& q, const char* caller = nullptr) : q_(q), caller_(caller) {
+      public:
+        explicit ScopedFreeze(UpdateQueue& q, const char* caller = nullptr)
+            : q_(q), caller_(caller) {
             int depth;
             {
                 std::lock_guard<std::mutex> lock(q_.mutex_);
                 depth = ++q_.freeze_depth_;
             }
-            spdlog::trace("[UpdateQueue] FREEZE depth={} caller={}",
-                         depth, caller_ ? caller_ : "unknown");
+            spdlog::trace("[UpdateQueue] FREEZE depth={} caller={}", depth,
+                          caller_ ? caller_ : "unknown");
         }
         ~ScopedFreeze() {
             size_t spliced = 0;
@@ -261,12 +262,13 @@ class UpdateQueue {
                     }
                 }
             }
-            spdlog::trace("[UpdateQueue] THAW depth={} caller={} spliced={}",
-                         depth, caller_ ? caller_ : "unknown", spliced);
+            spdlog::trace("[UpdateQueue] THAW depth={} caller={} spliced={}", depth,
+                          caller_ ? caller_ : "unknown", spliced);
         }
         ScopedFreeze(const ScopedFreeze&) = delete;
         ScopedFreeze& operator=(const ScopedFreeze&) = delete;
-    private:
+
+      private:
         UpdateQueue& q_;
         const char* caller_;
     };
@@ -431,7 +433,8 @@ class UpdateQueue {
      * has already returned.
      */
     static const char* previous_callback_tag() {
-        if (previous_tag_next_ == 0) return nullptr;
+        if (previous_tag_next_ == 0)
+            return nullptr;
         unsigned int idx = (previous_tag_next_ - 1) % kPreviousTagRingSize;
         return const_cast<const char*>(previous_tag_ring_[idx]);
     }

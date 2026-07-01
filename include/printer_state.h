@@ -551,7 +551,9 @@ class PrinterState {
      * Reflects the last received pause_resume.is_paused value from Moonraker.
      * Safe to read synchronously from the main thread.
      */
-    [[nodiscard]] bool is_paused() const { return is_paused_; }
+    [[nodiscard]] bool is_paused() const {
+        return is_paused_;
+    }
 
     /**
      * @brief Reset UI state when starting a new print
@@ -587,8 +589,7 @@ class PrinterState {
      * @param[out] lifetime Token whose expiration signals subject death
      * @return Non-null subject pointer (created lazily on first access).
      */
-    lv_subject_t* get_extruder_filament_used_subject(int extruder_idx,
-                                                     SubjectLifetime& lifetime) {
+    lv_subject_t* get_extruder_filament_used_subject(int extruder_idx, SubjectLifetime& lifetime) {
         return print_domain_.get_extruder_filament_used_subject(extruder_idx, lifetime);
     }
 
@@ -1973,8 +1974,8 @@ class PrinterState {
     helix::PrinterDiscovery discovery_;
 
     // Printer type and pre-print option set
-    std::string printer_type_;                ///< Selected printer type name
-    PrePrintOptionSet pre_print_option_set_;  ///< Cached option set for current type
+    std::string printer_type_;               ///< Selected printer type name
+    PrePrintOptionSet pre_print_option_set_; ///< Cached option set for current type
     ZOffsetCalibrationStrategy z_offset_calibration_strategy_ =
         ZOffsetCalibrationStrategy::PROBE_CALIBRATE;
     lv_subject_t z_offset_can_save_{}; ///< 1 when manual save needed, 0 when auto-saved

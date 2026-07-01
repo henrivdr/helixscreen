@@ -260,8 +260,7 @@ TEST_CASE("expired() correct on main thread (alive)", "[lifetime_guard][bg_detec
     REQUIRE_FALSE(tok.expired());
 }
 
-TEST_CASE("expired() correct on main thread (after invalidate)",
-         "[lifetime_guard][bg_detector]") {
+TEST_CASE("expired() correct on main thread (after invalidate)", "[lifetime_guard][bg_detector]") {
     helix::internal::set_main_thread_id();
     AsyncLifetimeGuard guard;
     auto tok = guard.token();
@@ -276,8 +275,12 @@ TEST_CASE("expired() correct on main thread (after invalidate)",
 // the *boolean* result of expired() is correct under bg use even though the
 // detector classifies the callsite as suspicious.
 struct BgDetectorFixture {
-    BgDetectorFixture() { helix::internal::set_strict_bg_check(false); }
-    ~BgDetectorFixture() { helix::internal::set_strict_bg_check(true); }
+    BgDetectorFixture() {
+        helix::internal::set_strict_bg_check(false);
+    }
+    ~BgDetectorFixture() {
+        helix::internal::set_strict_bg_check(true);
+    }
 };
 
 TEST_CASE_METHOD(BgDetectorFixture, "expired() correct on bg thread (alive)",
@@ -289,24 +292,19 @@ TEST_CASE_METHOD(BgDetectorFixture, "expired() correct on bg thread (alive)",
     // Bg thread + alive token: should return false (the dangerous case the
     // detector flags via anomaly, but the boolean must still be correct).
     std::atomic<bool> bg_saw_alive{false};
-    std::thread bg([&]() {
-        bg_saw_alive.store(!tok.expired());
-    });
+    std::thread bg([&]() { bg_saw_alive.store(!tok.expired()); });
     bg.join();
     REQUIRE(bg_saw_alive.load());
 }
 
-TEST_CASE("expired() correct on bg thread (after invalidate)",
-         "[lifetime_guard][bg_detector]") {
+TEST_CASE("expired() correct on bg thread (after invalidate)", "[lifetime_guard][bg_detector]") {
     helix::internal::set_main_thread_id();
     AsyncLifetimeGuard guard;
     auto tok = guard.token();
     guard.invalidate();
 
     std::atomic<bool> bg_saw_expired{false};
-    std::thread bg([&]() {
-        bg_saw_expired.store(tok.expired());
-    });
+    std::thread bg([&]() { bg_saw_expired.store(tok.expired()); });
     bg.join();
     REQUIRE(bg_saw_expired.load());
 }
@@ -332,9 +330,7 @@ TEST_CASE("on_main_thread() reflects current thread", "[lifetime_guard][bg_detec
     REQUIRE(helix::internal::on_main_thread());
 
     std::atomic<bool> bg_saw_main{true};
-    std::thread bg([&]() {
-        bg_saw_main.store(helix::internal::on_main_thread());
-    });
+    std::thread bg([&]() { bg_saw_main.store(helix::internal::on_main_thread()); });
     bg.join();
     REQUIRE_FALSE(bg_saw_main.load());
 }

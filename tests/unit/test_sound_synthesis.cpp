@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "sound_synthesis.h"
+
 #include <cmath>
 #include <vector>
 
@@ -67,8 +68,8 @@ TEST_CASE("Square wave duty cycle 0.25 produces 25% time above zero", "[sound][s
     std::vector<float> buffer(num_samples);
     float phase = 0;
 
-    generate_samples(buffer.data(), num_samples, SAMPLE_RATE, Waveform::SQUARE, 440.0f, 1.0f,
-                     0.25f, phase);
+    generate_samples(buffer.data(), num_samples, SAMPLE_RATE, Waveform::SQUARE, 440.0f, 1.0f, 0.25f,
+                     phase);
 
     int positive_count = 0;
     for (int i = 0; i < num_samples; i++) {
@@ -154,7 +155,8 @@ TEST_CASE("Saw wave output stays within amplitude bounds", "[sound][synthesis]")
 // Phase continuity
 // ============================================================================
 
-TEST_CASE("Phase continuity: two consecutive calls produce no discontinuity", "[sound][synthesis]") {
+TEST_CASE("Phase continuity: two consecutive calls produce no discontinuity",
+          "[sound][synthesis]") {
     constexpr int half = 100;
     std::vector<float> buf1(half);
     std::vector<float> buf2(half);

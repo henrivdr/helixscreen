@@ -295,8 +295,8 @@ TEST_CASE("Snapmaker get_operation_step_index_subject is the firmware phase subj
     AmsBackendSnapmaker backend(nullptr, nullptr);
     // The U1 drives the current step from the firmware Home/Select/Heat/Move
     // phase, surfaced via AmsState's operation_phase subject (static singleton).
-    for (auto op : {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP,
-                    StepOperationType::UNLOAD}) {
+    for (auto op :
+         {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP, StepOperationType::UNLOAD}) {
         CHECK(backend.get_operation_step_index_subject(op) ==
               AmsState::instance().get_ams_operation_phase_subject());
     }
@@ -414,17 +414,16 @@ TEST_CASE("Snapmaker channel_error on idle empty lane does NOT raise Error", "[a
 
     // Heads 0 and 2 present, head 1 left empty. Head 1 reports the firmware's
     // idle-empty token while sitting idle (channel_state "idle"), not loading.
-    json status = json{
-        {"filament_feed left",
-         json{{"extruder0", json{{"filament_detected", true},
-                                 {"channel_state", "idle"},
-                                 {"channel_error", "ok"}}},
-              {"extruder1", json{{"filament_detected", false},
-                                 {"channel_state", "idle"},
-                                 {"channel_error", "no_filament"}}},
-              {"extruder2", json{{"filament_detected", true},
-                                 {"channel_state", "idle"},
-                                 {"channel_error", "ok"}}}}}};
+    json status =
+        json{{"filament_feed left", json{{"extruder0", json{{"filament_detected", true},
+                                                            {"channel_state", "idle"},
+                                                            {"channel_error", "ok"}}},
+                                         {"extruder1", json{{"filament_detected", false},
+                                                            {"channel_state", "idle"},
+                                                            {"channel_error", "no_filament"}}},
+                                         {"extruder2", json{{"filament_detected", true},
+                                                            {"channel_state", "idle"},
+                                                            {"channel_error", "ok"}}}}}};
     SnapmakerTestAccess::handle_status(backend, status);
 
     // Lane 1 is empty, idle, and not the active lane → no error.
@@ -438,11 +437,10 @@ TEST_CASE("Snapmaker channel_error during an active load DOES raise Error", "[am
 
     // A real load FAILURE: lane 1 is mid-load (channel_state "loading") when the
     // firmware reports an error. This must surface as Error so the user is told.
-    json status = json{
-        {"filament_feed left",
-         json{{"extruder1", json{{"filament_detected", false},
-                                 {"channel_state", "loading"},
-                                 {"channel_error", "no_filament"}}}}}};
+    json status =
+        json{{"filament_feed left", json{{"extruder1", json{{"filament_detected", false},
+                                                            {"channel_state", "loading"},
+                                                            {"channel_error", "no_filament"}}}}}};
     SnapmakerTestAccess::handle_status(backend, status);
 
     CHECK(backend.get_system_info().action == AmsAction::ERROR);
@@ -458,11 +456,10 @@ TEST_CASE("Snapmaker channel_error on the ACTIVE lane DOES raise Error", "[ams][
     // idle. An error on the in-use lane is a genuine fault, not a quiet empty
     // lane — it must alarm.
     SnapmakerTestAccess::set_current_slot(backend, 0);
-    json status = json{
-        {"filament_feed left",
-         json{{"extruder0", json{{"filament_detected", false},
-                                 {"channel_state", "idle"},
-                                 {"channel_error", "some_fault"}}}}}};
+    json status =
+        json{{"filament_feed left", json{{"extruder0", json{{"filament_detected", false},
+                                                            {"channel_state", "idle"},
+                                                            {"channel_error", "some_fault"}}}}}};
     SnapmakerTestAccess::handle_status(backend, status);
 
     CHECK(backend.get_system_info().action == AmsAction::ERROR);
@@ -478,36 +475,31 @@ TEST_CASE("Snapmaker granular unload sub-states drive UNLOADING action",
     for (const char* state :
          {"unload_homing", "unload_picking", "unload_heating", "unload_doing"}) {
         AmsBackendSnapmaker backend(nullptr, nullptr);
-        json status = json{
-            {"filament_feed left",
-             json{{"extruder2", json{{"filament_detected", true},
-                                     {"channel_state", state},
-                                     {"channel_error", "ok"}}}}}};
+        json status =
+            json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                                {"channel_state", state},
+                                                                {"channel_error", "ok"}}}}}};
         SnapmakerTestAccess::handle_status(backend, status);
         INFO("state=" << state);
         CHECK(backend.get_system_info().action == AmsAction::UNLOADING);
     }
 }
 
-TEST_CASE("Snapmaker granular load sub-states drive LOADING action",
-          "[ams][snapmaker][load]") {
+TEST_CASE("Snapmaker granular load sub-states drive LOADING action", "[ams][snapmaker][load]") {
     // Symmetric to the unload case: load_homing/picking/heating/doing → LOADING.
-    for (const char* state :
-         {"load_homing", "load_picking", "load_heating", "load_doing"}) {
+    for (const char* state : {"load_homing", "load_picking", "load_heating", "load_doing"}) {
         AmsBackendSnapmaker backend(nullptr, nullptr);
-        json status = json{
-            {"filament_feed left",
-             json{{"extruder2", json{{"filament_detected", true},
-                                     {"channel_state", state},
-                                     {"channel_error", "ok"}}}}}};
+        json status =
+            json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                                {"channel_state", state},
+                                                                {"channel_error", "ok"}}}}}};
         SnapmakerTestAccess::handle_status(backend, status);
         INFO("state=" << state);
         CHECK(backend.get_system_info().action == AmsAction::LOADING);
     }
 }
 
-TEST_CASE("Snapmaker channel_state maps to granular operation_phase",
-          "[ams][snapmaker][phase]") {
+TEST_CASE("Snapmaker channel_state maps to granular operation_phase", "[ams][snapmaker][phase]") {
     // The U1 firmware emits four sequential sub-phases per direction
     // (<load|unload>_<homing|picking|heating|doing>), each many seconds long.
     // operation_phase mirrors these into a 0..3 index that drives the sidebar's
@@ -518,21 +510,19 @@ TEST_CASE("Snapmaker channel_state maps to granular operation_phase",
         int expected_phase;
     };
     const Case cases[] = {
-        {"unload_homing", 0},  {"unload_picking", 1}, {"unload_heating", 2},
-        {"unload_doing", 3},   {"load_homing", 0},    {"load_picking", 1},
-        {"load_heating", 2},   {"load_doing", 3},     {"unload_finish", -1},
-        {"load_finish", -1},   {"preload_finish", -1}, {"idle", -1},
+        {"unload_homing", 0},  {"unload_picking", 1}, {"unload_heating", 2},  {"unload_doing", 3},
+        {"load_homing", 0},    {"load_picking", 1},   {"load_heating", 2},    {"load_doing", 3},
+        {"unload_finish", -1}, {"load_finish", -1},   {"preload_finish", -1}, {"idle", -1},
     };
 
     for (const auto& c : cases) {
         AmsBackendSnapmaker backend(nullptr, nullptr);
         // A loaded lane so unload_finish doesn't early-return before the phase
         // is parsed; filament_detected=true keeps the lane present.
-        json status = json{
-            {"filament_feed left",
-             json{{"extruder2", json{{"filament_detected", true},
-                                     {"channel_state", c.channel_state},
-                                     {"channel_error", "ok"}}}}}};
+        json status =
+            json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                                {"channel_state", c.channel_state},
+                                                                {"channel_error", "ok"}}}}}};
         SnapmakerTestAccess::handle_status(backend, status);
         INFO("channel_state=" << c.channel_state);
         CHECK(backend.get_system_info().operation_phase == c.expected_phase);
@@ -543,20 +533,18 @@ TEST_CASE("Snapmaker unload_finish resolves UNLOADING to IDLE", "[ams][snapmaker
     AmsBackendSnapmaker backend(nullptr, nullptr);
 
     // Mid-unload: action becomes UNLOADING.
-    json doing = json{
-        {"filament_feed left",
-         json{{"extruder2", json{{"filament_detected", true},
-                                 {"channel_state", "unload_doing"},
-                                 {"channel_error", "ok"}}}}}};
+    json doing =
+        json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                            {"channel_state", "unload_doing"},
+                                                            {"channel_error", "ok"}}}}}};
     SnapmakerTestAccess::handle_status(backend, doing);
     REQUIRE(backend.get_system_info().action == AmsAction::UNLOADING);
 
     // unload_finish is the TRUE end of the operation → IDLE.
-    json finish = json{
-        {"filament_feed left",
-         json{{"extruder2", json{{"filament_detected", true},
-                                 {"channel_state", "unload_finish"},
-                                 {"channel_error", "ok"}}}}}};
+    json finish =
+        json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                            {"channel_state", "unload_finish"},
+                                                            {"channel_error", "ok"}}}}}};
     SnapmakerTestAccess::handle_status(backend, finish);
     CHECK(backend.get_system_info().action == AmsAction::IDLE);
 }
@@ -569,19 +557,17 @@ TEST_CASE("Snapmaker preload_finish is NOT matched by the load_ prefix branch",
     AmsBackendSnapmaker backend(nullptr, nullptr);
 
     // Start mid-unload so there is an action to (incorrectly) clobber.
-    json doing = json{
-        {"filament_feed left",
-         json{{"extruder2", json{{"filament_detected", true},
-                                 {"channel_state", "unload_heating"},
-                                 {"channel_error", "ok"}}}}}};
+    json doing =
+        json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                            {"channel_state", "unload_heating"},
+                                                            {"channel_error", "ok"}}}}}};
     SnapmakerTestAccess::handle_status(backend, doing);
     REQUIRE(backend.get_system_info().action == AmsAction::UNLOADING);
 
-    json preload = json{
-        {"filament_feed left",
-         json{{"extruder2", json{{"filament_detected", true},
-                                 {"channel_state", "preload_finish"},
-                                 {"channel_error", "ok"}}}}}};
+    json preload =
+        json{{"filament_feed left", json{{"extruder2", json{{"filament_detected", true},
+                                                            {"channel_state", "preload_finish"},
+                                                            {"channel_error", "ok"}}}}}};
     SnapmakerTestAccess::handle_status(backend, preload);
     // preload_finish leaves the in-progress action alone (does NOT become LOADING
     // and does NOT resolve to IDLE — only unload_finish/load_finish/idle do).
@@ -1525,9 +1511,8 @@ struct ResumeRecoveryHarness {
         // Populate slot 0: MAIN_TYPE=PLA, MANUFACTURER=Polymaker, SUB_TYPE=Basic
         // (a recognized product line, so it round-trips into the config gcode).
         SnapmakerTestAccess::handle_status(
-            backend,
-            make_filament_detect_status(0, "PLA", 0xFF112233u, "Polymaker",
-                                        json::array({1, 2, 3, 4})));
+            backend, make_filament_detect_status(0, "PLA", 0xFF112233u, "Polymaker",
+                                                 json::array({1, 2, 3, 4})));
 
         SnapmakerTestAccess::set_sensor_present(backend, 0, false); // runout latched
         SnapmakerTestAccess::set_current_slot(backend, 0);

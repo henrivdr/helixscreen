@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "../catch_amalgamated.hpp"
 #include "printer_excluded_objects_state.h"
+
+#include "../catch_amalgamated.hpp"
 
 using Catch::Approx;
 using namespace helix;

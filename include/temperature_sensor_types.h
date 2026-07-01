@@ -9,12 +9,12 @@ namespace helix::sensors {
 
 /// @brief Role assigned to a temperature sensor (auto-categorized during discovery)
 enum class TemperatureSensorRole {
-    NONE = 0,      ///< Discovered but not assigned to a role
-    CHAMBER = 1,   ///< Chamber temperature monitoring
-    MCU = 2,       ///< MCU/board temperature
-    HOST = 3,      ///< Host computer (Raspberry Pi, etc.)
-    AUXILIARY = 4,       ///< Any other temperature sensor
-    STEPPER_DRIVER = 5,  ///< TMC stepper driver built-in temperature
+    NONE = 0,           ///< Discovered but not assigned to a role
+    CHAMBER = 1,        ///< Chamber temperature monitoring
+    MCU = 2,            ///< MCU/board temperature
+    HOST = 3,           ///< Host computer (Raspberry Pi, etc.)
+    AUXILIARY = 4,      ///< Any other temperature sensor
+    STEPPER_DRIVER = 5, ///< TMC stepper driver built-in temperature
 };
 
 /// @brief Type of temperature sensor in Klipper

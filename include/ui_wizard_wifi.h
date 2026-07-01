@@ -3,12 +3,11 @@
 
 #pragma once
 
-#include "wizard_step.h"
-#include "platform_info.h"
-
 #include "async_lifetime_guard.h"
 #include "lvgl/lvgl.h"
+#include "platform_info.h"
 #include "subject_managed_panel.h"
+#include "wizard_step.h"
 
 #include <memory>
 #include <string>
@@ -68,10 +67,18 @@ struct WiFiNetwork;
 class WizardWifiStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::Wifi; }
-    const char* component_name() const override { return "wizard_wifi_setup"; }
-    const char* log_name() const override { return "WiFi Screen"; }
-    bool should_skip(const helix::wizard::StepContext& ctx) const override { return helix::is_android_platform() || ctx.is_subsequent_printer; }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::Wifi;
+    }
+    const char* component_name() const override {
+        return "wizard_wifi_setup";
+    }
+    const char* log_name() const override {
+        return "WiFi Screen";
+    }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override {
+        return helix::is_android_platform() || ctx.is_subsequent_printer;
+    }
 
     WizardWifiStep();
     ~WizardWifiStep();

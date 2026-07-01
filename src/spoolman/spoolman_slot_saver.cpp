@@ -214,8 +214,7 @@ void SpoolmanSlotSaver::save(const SlotInfo& original, const SlotInfo& edited,
                                 if (weight_changed) {
                                     update_weight(
                                         spool_id, weight,
-                                        [vendor_id, filament_id,
-                                         on_complete](const SaveResult& r) {
+                                        [vendor_id, filament_id, on_complete](const SaveResult& r) {
                                             SaveResult out = r;
                                             out.repointed_filament = true;
                                             out.new_vendor_id = vendor_id;
@@ -315,8 +314,7 @@ std::string SpoolmanSlotSaver::normalize_color_hex(const std::string& in) {
 
 void SpoolmanSlotSaver::find_or_create_filament(int vendor_id, const std::string& material,
                                                 const std::string& color_hex,
-                                                FilamentCallback on_found,
-                                                ErrorCallback on_error) {
+                                                FilamentCallback on_found, ErrorCallback on_error) {
     const std::string needle_color = normalize_color_hex(color_hex);
     if (needle_color.empty()) {
         spdlog::warn("[SpoolmanSlotSaver] Invalid color hex '{}', aborting find_or_create_filament",
@@ -331,11 +329,10 @@ void SpoolmanSlotSaver::find_or_create_filament(int vendor_id, const std::string
     }
     api_->spoolman().get_spoolman_filaments(
         vendor_id,
-        [this, vendor_id, material, needle_color,
-         on_found, on_error](const std::vector<FilamentInfo>& filaments) {
+        [this, vendor_id, material, needle_color, on_found,
+         on_error](const std::vector<FilamentInfo>& filaments) {
             for (const auto& f : filaments) {
-                if (f.material == material &&
-                    normalize_color_hex(f.color_hex) == needle_color) {
+                if (f.material == material && normalize_color_hex(f.color_hex) == needle_color) {
                     spdlog::debug("[SpoolmanSlotSaver] Reusing filament id={} "
                                   "(vendor={}, material={}, color={})",
                                   f.id, vendor_id, material, needle_color);
@@ -370,8 +367,8 @@ void SpoolmanSlotSaver::find_or_create_filament(int vendor_id, const std::string
         on_error);
 }
 
-void SpoolmanSlotSaver::repoint_spool(int spool_id, int new_filament_id,
-                                      VoidCallback on_success, ErrorCallback on_error) {
+void SpoolmanSlotSaver::repoint_spool(int spool_id, int new_filament_id, VoidCallback on_success,
+                                      ErrorCallback on_error) {
     nlohmann::json patch;
     patch["filament_id"] = new_filament_id;
     spdlog::info("[SpoolmanSlotSaver] Repointing spool {} -> filament {}", spool_id,

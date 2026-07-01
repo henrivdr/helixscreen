@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "data_root_resolver.h"
 #include "printer_detector.h"
@@ -994,8 +995,8 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
         .fans = {"chamber_fan"},
         .leds = {},
         .hostname = "",
-        .printer_objects = {"box", "motor_control", "fan_feedback", "load_ai",
-                            "filament_rack", "heater_generic chamber_heater"},
+        .printer_objects = {"box", "motor_control", "fan_feedback", "load_ai", "filament_rack",
+                            "heater_generic chamber_heater"},
         .steppers = {},
         .kinematics = "corexy",
         .build_volume = {}};
@@ -2559,8 +2560,7 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.confidence >= 60);
 }
 
-TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: Anycubic Kobra 3 with hostname",
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Anycubic Kobra 3 with hostname",
                  "[printer][real_world][anycubic]") {
     PrinterHardwareData hardware{
         .heaters = {"extruder", "heater_bed"},
@@ -2661,8 +2661,7 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.confidence >= 60);
 }
 
-TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: Anycubic Kobra S1 Max by chamber + ACE",
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: Anycubic Kobra S1 Max by chamber + ACE",
                  "[printer][real_world][anycubic]") {
     // Kobra S1 Max: enclosed CoreXY with a heated chamber (its exclusive
     // discriminator over the S1) plus ACE, on the HC32F460.
@@ -4216,9 +4215,9 @@ class VariantPresetFixture {
             }
         }
 
-        config.path = temp_dir + "/settings.json";
-        config.active_printer_id_ = "default";
-        config.data = {
+        ConfigTestAccess::path(config) = temp_dir + "/settings.json";
+        ConfigTestAccess::active_printer_id(config) = "default";
+        ConfigTestAccess::data(config) = {
             {"active_printer_id", "default"},
             {"printers",
              {{"default", {{"moonraker_host", "127.0.0.1"}, {"wizard_completed", false}}}}}};

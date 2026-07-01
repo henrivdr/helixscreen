@@ -155,8 +155,8 @@ TEST_CASE("CHAR: Sleep timeout dropdown options",
     }
 
     SECTION("Options count is 6") {
-        std::vector<std::string> options = {"Never", "1 minute", "5 minutes", "10 minutes", "20 minutes",
-                                            "30 minutes"};
+        std::vector<std::string> options = {"Never",      "1 minute",   "5 minutes",
+                                            "10 minutes", "20 minutes", "30 minutes"};
         REQUIRE(options.size() == 6);
     }
 }

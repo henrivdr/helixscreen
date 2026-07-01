@@ -378,7 +378,7 @@ void SensorSettingsOverlay::populate_probe_sensors() {
             type_str = "Eddy";
             break;
         default:
-            type_str = "Probe";
+            type_str = lv_tr("Probe");
             break;
         }
         lv_label_set_text(type_label, type_str);
@@ -765,7 +765,7 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
     // --- Chamber Heater Dropdown ---
     lv_obj_t* heater_dd = lv_obj_find_by_name(overlay_root_, "chamber_heater_dropdown");
     if (heater_dd) {
-        std::string auto_label = "Auto";
+        std::string auto_label = lv_tr("Auto");
         std::string detected = discovery.chamber_heater_name();
         if (!detected.empty()) {
             std::string display = detected;
@@ -774,7 +774,7 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
             }
             auto_label += " (" + display + ")";
         } else {
-            auto_label += " (none detected)";
+            auto_label += " " + std::string(lv_tr("(none detected)"));
         }
 
         std::string options = auto_label;
@@ -792,7 +792,7 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
             options += "\n" + display;
             heater_names.push_back(heater);
         }
-        options += "\nNone (disable)";
+        options += "\n" + std::string(lv_tr("None (disable)"));
 
         lv_dropdown_set_options(heater_dd, options.c_str());
 
@@ -859,7 +859,7 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
     // --- Chamber Sensor Dropdown ---
     lv_obj_t* sensor_dd = lv_obj_find_by_name(overlay_root_, "chamber_sensor_dropdown");
     if (sensor_dd) {
-        std::string auto_label = "Auto";
+        std::string auto_label = lv_tr("Auto");
         std::string detected = discovery.chamber_sensor_name();
         if (!detected.empty()) {
             std::string display = detected;
@@ -868,7 +868,7 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
             }
             auto_label += " (" + display + ")";
         } else {
-            auto_label += " (none detected)";
+            auto_label += " " + std::string(lv_tr("(none detected)"));
         }
 
         std::string options = auto_label;
@@ -882,7 +882,7 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
             options += "\n" + display;
             sensor_names.push_back(sensor);
         }
-        options += "\nNone (disable)";
+        options += "\n" + std::string(lv_tr("None (disable)"));
 
         lv_dropdown_set_options(sensor_dd, options.c_str());
 
@@ -995,7 +995,7 @@ void SensorSettingsOverlay::populate_temperature_sensors() {
         lv_obj_set_flex_grow(name_label, 1);
 
         auto* type_label = lv_label_create(row);
-        const char* type_str = "Sensor";
+        const char* type_str = lv_tr("Sensor");
         switch (sensor.role) {
         case helix::sensors::TemperatureSensorRole::MCU:
             type_str = "MCU";
@@ -1007,7 +1007,7 @@ void SensorSettingsOverlay::populate_temperature_sensors() {
             type_str = "Aux";
             break;
         default:
-            type_str = "Sensor";
+            type_str = lv_tr("Sensor");
             break;
         }
         lv_label_set_text(type_label, type_str);

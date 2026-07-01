@@ -131,6 +131,15 @@ class Ad5xIfsTestAccess {
         b.action_start_time_ = std::chrono::steady_clock::now() - elapsed;
         b.check_action_timeout();
     }
+    // Age the action clock WITHOUT running the timeout check — lets a test age the
+    // clock, fire an event that may reset it, then check separately.
+    static void set_action_age(AmsBackendAd5xIfs& b, std::chrono::seconds elapsed) {
+        b.action_start_time_ = std::chrono::steady_clock::now() - elapsed;
+    }
+    // Run the timeout check against the current (possibly event-reset) clock.
+    static void run_action_timeout(AmsBackendAd5xIfs& b) {
+        b.check_action_timeout();
+    }
     static std::string var_prefix(const AmsBackendAd5xIfs& b) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         return b.var_prefix_;
@@ -199,6 +208,17 @@ class Ad5xIfsTestAccess {
     static void apply_zcolor_result(AmsBackendAd5xIfs& b,
                                     const AmsBackendAd5xIfs::ZColorSilentResult& r) {
         b.apply_zcolor_result(r);
+    }
+    // Seed the remembered seated lane directly (bypasses the Moonraker
+    // "lane_data" DB load, which requires a live connection). Production loads
+    // this at init via override_store_; tests inject it to exercise the
+    // cold-boot restore path with a nullptr api/client.
+    static void set_persisted_seated_slot(AmsBackendAd5xIfs& b, std::optional<int> slot) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.persisted_seated_slot_ = slot;
+    }
+    static std::optional<int> persisted_seated_slot(const AmsBackendAd5xIfs& b) {
+        return b.persisted_seated_slot_;
     }
     // Seed the in-memory overrides map directly (bypasses load_blocking, which
     // requires a live Moonraker connection). on_started() is the only
@@ -404,6 +424,21 @@ static json make_motion_sensor(bool detected) {
         {"filament_motion_sensor ifs_motion_sensor", json{{"filament_detected", detected}}}};
 }
 
+// Helper to build a head switch sensor notification under the native Z-Mod
+// custom-module namespace (zmod_ifs_switch_sensor) that the live AD5X actually
+// pushes — distinct from the stock filament_switch_sensor section.
+static json make_zmod_head_sensor(bool detected) {
+    return json{
+        {"zmod_ifs_switch_sensor head_switch_sensor", json{{"filament_detected", detected}}}};
+}
+
+// Helper to build a motion sensor notification under the native Z-Mod
+// custom-module namespace (zmod_ifs_motion_sensor).
+static json make_zmod_motion_sensor(bool detected) {
+    return json{
+        {"zmod_ifs_motion_sensor ifs_motion_sensor", json{{"filament_detected", detected}}}};
+}
+
 // Standard test variables representing a typical IFS configuration. Note:
 // `<prefix>_colors` and `<prefix>_types` are no longer consumed by
 // parse_save_variables (they live in lessWaste/bambufy's private namespace,
@@ -447,6 +482,12 @@ TEST_CASE("AD5X IFS type identification", "[ams][ad5x_ifs]") {
 
     REQUIRE(backend.get_type() == AmsType::AD5X_IFS);
     REQUIRE(backend.get_topology() == PathTopology::LINEAR);
+}
+
+TEST_CASE("AD5X IFS: manages_active_spool() is true so the UI never auto-writes Spoolman",
+          "[ams][ad5x][ifs][spoolman][1071]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    CHECK(backend.manages_active_spool() == true);
 }
 
 // ==========================================================================
@@ -1092,6 +1133,50 @@ TEST_CASE("AD5X IFS action timeout resets stuck operations", "[ams][ad5x_ifs]") 
     }
 }
 
+TEST_CASE("AD5X IFS PURGING gets a longer dedicated timeout budget (#1065 Bug 2)",
+          "[ams][ad5x_ifs]") {
+    // A real purge runs far longer than the generic 90 s phase budget (raza616:
+    // ~3 min whole-op from cold; Vger1700 hit the 90 s ERROR twice mid-purge).
+    // PURGING gets its own longer budget so a healthy-but-slow purge isn't killed.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    SECTION("does not ERROR within the dedicated budget (past the old 90 s window)") {
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(200));
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+    }
+
+    SECTION("still ERRORs once the dedicated budget is exceeded") {
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(241));
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+    }
+}
+
+TEST_CASE("AD5X IFS motion during PURGING resets the timeout clock (#1065 Bug 2)",
+          "[ams][ad5x_ifs]") {
+    // ifs_motion_sensor activity proves filament is still moving, so the purge is
+    // progressing — reset the clock rather than ERRORing. The budget is then
+    // effectively "time since last motion", so a long purge that keeps moving is
+    // never falsely failed, while a genuinely stalled one still surfaces ERROR.
+    SECTION("motion keeps a long-but-moving purge alive past the budget") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::set_action_age(backend, std::chrono::seconds(300)); // past budget
+        Ad5xIfsTestAccess::handle_status(backend, make_motion_sensor(true));   // still moving
+        Ad5xIfsTestAccess::run_action_timeout(backend);
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
+    }
+
+    SECTION("a stalled purge with no motion still ERRORs") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        Ad5xIfsTestAccess::set_action(backend, AmsAction::PURGING);
+        Ad5xIfsTestAccess::set_action_age(backend, std::chrono::seconds(300));
+        Ad5xIfsTestAccess::run_action_timeout(backend);
+        REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
+    }
+}
+
 // ==========================================================================
 // 19. Variable prefix auto-detection (lessWaste vs bambufy)
 // ==========================================================================
@@ -1165,8 +1250,7 @@ TEST_CASE("AD5X IFS motion sensor completes load/unload", "[ams][ad5x_ifs]") {
 // 20b. Phase tracker — live load/unload progress feedback
 // ==========================================================================
 
-TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)", "[ams][ad5x_ifs][phase]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     // Filament present at the toolhead before unload begins.
     Ad5xIfsTestAccess::set_head_filament(backend, true);
@@ -1192,8 +1276,7 @@ TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
     // Head sensor drops (cut + retract started) → UNLOADING.
     Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(false));
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::UNLOADING);
-    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) ==
-            "Retracting filament from nozzle");
+    REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Retracting filament from nozzle");
 
     // Action timeout backstop surfaces ERROR (firmware did not confirm completion;
     // detail is preserved as the error context for the error-center bridge).
@@ -1203,8 +1286,7 @@ TEST_CASE("AD5X IFS phase: unload sequence (temp + head sensor)",
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
-TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)", "[ams][ad5x_ifs][phase]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     // Fresh load: no filament at the toolhead initially.
     Ad5xIfsTestAccess::set_head_filament(backend, false);
@@ -1227,7 +1309,8 @@ TEST_CASE("AD5X IFS phase: load sequence (temp + head sensor)",
     REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Purging old filament");
 
     // Timeout backstop surfaces ERROR; detail preserved for error-center bridge.
-    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    // PURGING has a dedicated 240s budget (#1065 Bug 2), so age past it.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(250));
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE_FALSE(Ad5xIfsTestAccess::operation_detail(backend).empty());
 }
@@ -1239,8 +1322,7 @@ TEST_CASE("AD5X IFS phase: RESPOND line sets target before any extruder frame",
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
 
     // Firmware emits the heat target via RESPOND before the first temp tick.
-    Ad5xIfsTestAccess::on_gcode_response_line(
-        backend, "// Heating the nozzle to 240 degrees");
+    Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Heating the nozzle to 240 degrees");
 
     // Detail should reflect the parsed 240°C target even with no extruder frame.
     REQUIRE(Ad5xIfsTestAccess::operation_detail(backend) == "Heating nozzle to 240°C");
@@ -1250,15 +1332,13 @@ TEST_CASE("AD5X IFS phase: RESPOND line sets target before any extruder frame",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
 }
 
-TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation", "[ams][ad5x_ifs][phase]") {
     SECTION("\"Unloading filament\" marks an unload op") {
         AmsBackendAd5xIfs backend(nullptr, nullptr);
         Ad5xIfsTestAccess::set_head_filament(backend, true);
         // Begin as a load, then a RESPOND line corrects the direction to unload.
         Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
-        Ad5xIfsTestAccess::on_gcode_response_line(backend,
-                                                  "// Unloading filament from IFS");
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Unloading filament from IFS");
         // Reaching target on an unload op → CUTTING (not LOADING).
         Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::CUTTING);
@@ -1269,8 +1349,7 @@ TEST_CASE("AD5X IFS phase: RESPOND direction disambiguation",
         Ad5xIfsTestAccess::set_head_filament(backend, false);
         // Begin as an unload, then a RESPOND line corrects the direction to load.
         Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
-        Ad5xIfsTestAccess::on_gcode_response_line(backend,
-                                                  "// Loading filament into IFS");
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "// Loading filament into IFS");
         // Reaching target on a load op → LOADING (not CUTTING).
         Ad5xIfsTestAccess::handle_status(backend, make_extruder(230.0, 230.0));
         REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::LOADING);
@@ -1358,8 +1437,7 @@ static AmsBackendAd5xIfs::ZColorSilentResult make_zcolor(std::optional<int> extr
     return r;
 }
 
-TEST_CASE("AD5X IFS phase: zcolor quick-finish unload (head drop seen)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: zcolor quick-finish unload (head drop seen)", "[ams][ad5x_ifs][phase]") {
     // After the unload physically progresses past the cut (head drop), a fresh
     // GET_ZCOLOR with no extruder slot is the early terminal signal — finalize
     // to IDLE within ~1s instead of waiting out the 90s timeout backstop.
@@ -1398,8 +1476,7 @@ TEST_CASE("AD5X IFS phase: zcolor does NOT finalize before head transition",
     REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
-TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)", "[ams][ad5x_ifs][phase]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_head_filament(backend, false);
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/false);
@@ -1417,8 +1494,7 @@ TEST_CASE("AD5X IFS phase: zcolor quick-finish load (head rise seen)",
     REQUIRE_FALSE(Ad5xIfsTestAccess::phase_active(backend));
 }
 
-TEST_CASE("AD5X IFS phase: zcolor invalid response does not finalize",
-          "[ams][ad5x_ifs][phase]") {
+TEST_CASE("AD5X IFS phase: zcolor invalid response does not finalize", "[ams][ad5x_ifs][phase]") {
     // A junk read (saw_valid_response=false) must never finalize the op — even
     // after a head transition. apply_zcolor_result early-returns on it.
     AmsBackendAd5xIfs backend(nullptr, nullptr);
@@ -2055,8 +2131,7 @@ TEST_CASE("AD5X IFS emptied channel is not resurrected by a JSON edit to another
 // there would be NO presence source at all (every channel stuck EMPTY). So when
 // SILENT is unsupported, parse_adventurer_json must resume the legacy inference.
 
-TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
 
@@ -2093,8 +2168,7 @@ TEST_CASE("AD5X IFS pre-SILENT zmod falls back to JSON presence inference",
 // loads next. That cleanup used to ride on parse_adventurer_json's presence
 // inference; it now rides on apply_zcolor_result's present->absent transition.
 
-TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override", "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
 
@@ -2123,7 +2197,57 @@ TEST_CASE("AD5X IFS GET_ZCOLOR present->absent clears the slot override",
         Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
     }
     REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
-    REQUIRE_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+    // #1071: an emptied lane now KEEPS its Spoolman link (see the dedicated
+    // keep-the-link test below) — only firmware-sourced presence/status drops.
+    CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+}
+
+// #1071: AD5X must match the AFC / Happy Hare backends, which never clear the
+// lane->Spoolman link when a lane goes empty (runout / unload / eject). The
+// emptied lane renders as removed (presence=false, status != LOADED) but
+// retains spoolman_id / brand / spool_name / color / material so a re-inserted
+// same spool keeps its assignment. (Previously AD5X diverged by auto-calling
+// clear_override_locked on the present->absent transition.)
+TEST_CASE("AD5X IFS: a lane going empty keeps its Spoolman link (AFC/HH parity)",
+          "[ams][ad5x][ifs][spoolman][1071]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_per_port_sensors(backend));
+
+    // Slot 0 present with a user Spoolman override staged.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        r.slots[0] = AmsBackendAd5xIfs::ZColorSlot{"PLA", "FF0000"};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+    REQUIRE(Ad5xIfsTestAccess::port_presence(backend, 0));
+
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.spoolman_id = 42;
+    ovr.brand = "Polymaker";
+    ovr.spool_name = "Polymaker PLA";
+    ovr.color_rgb = 0xFF0000;
+    ovr.color_set = true;
+    ovr.material = "PLA";
+    Ad5xIfsTestAccess::seed_override(backend, 0, ovr);
+    REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+
+    // Lane 0 goes empty (eject / runout): GET_ZCOLOR reports slot 0 ABSENT.
+    {
+        AmsBackendAd5xIfs::ZColorSilentResult r;
+        r.saw_valid_response = true;
+        // slots[0] left empty => absent
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+    }
+
+    // Presence flips false; the slot renders empty/removed...
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
+    SlotInfo info = backend.get_slot_info(0);
+    CHECK(info.status != SlotStatus::LOADED);
+    // ...but the Spoolman link is RETAINED so a re-inserted same spool keeps it.
+    CHECK(info.spoolman_id == 42);
+    CHECK(info.brand == "Polymaker");
+    CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 }
 
 // NOTE: tests previously here exercised parse_save_variables's color/type
@@ -2578,8 +2702,409 @@ TEST_CASE("AD5X IFS IFS_STATUS Chan is seated authority over stale Extruder: Non
     REQUIRE_FALSE(backend.can_unload_from_toolhead(2));
 }
 
-TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)",
+TEST_CASE("AD5X IFS cold-lane eject does not pollute seated channel (#1065 Bug 3)",
           "[ams][ad5x_ifs]") {
+    // Field repro (raza616/mkleersn bundle CGR6C7PA + state table): a lane is
+    // loaded to the toolhead, then the user ejects a DIFFERENT, cold lane. The
+    // firmware's switching mechanism engages the ejected port, so the follow-up
+    // IFS_STATUS reports that port as "Chan" even though it is now EMPTY (its
+    // Ports[] bit drops to false). The xlsx captured exactly this: after ejecting
+    // channel 1, `Chan: 1` with `Ports: [false, true, true, true]`. Trusting that
+    // stale Chan reclassified the genuinely-seated lane as a cold lane, so the
+    // loaded lane offered Eject and a tap would cold-grind seated filament.
+    //
+    // The seated channel must only follow a Chan whose lane actually has filament.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Identity tool map so find_first_tool_for_port(N) -> tool N-1.
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+    REQUIRE(backend.set_tool_mapping(2, 2).success());
+    REQUIRE(backend.set_tool_mapping(3, 3).success());
+
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+
+    // Channel 2 seated at the toolhead, all four lanes present.
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.ifs_active = true;
+    loaded.ifs_chan = 2;
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+
+    // Baseline: ch2 (slot 1) is seated -> Unload; ch1 (slot 0) is cold -> Eject.
+    REQUIRE(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
+    REQUIRE_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+
+    // Eject cold lane 1. Its post-eject IFS_STATUS: Chan=1 (last-engaged channel)
+    // but port 1 now empty. seated_chan_ must NOT move to channel 1.
+    AmsBackendAd5xIfs::ZColorSilentResult after_eject;
+    after_eject.saw_valid_response = true;
+    after_eject.ifs_active = true;
+    after_eject.ifs_chan = 1; // stale: engaged-but-now-empty lane
+    after_eject.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, after_eject);
+
+    // Channel 2 is still the seated lane -> must still route to the heated
+    // toolhead Unload, NOT a cold Eject. Channel 1, now empty, stays cold-eject.
+    CHECK(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+}
+
+// ==========================================================================
+// BUG-B (#1065): native Z-Mod head-loaded state
+//
+// On native Z-Mod (v0.99.84) the head switch / motion sensors never push under
+// the stock filament_*_sensor sections, so head_filament_ was never written and
+// the seated lane reported AVAILABLE instead of LOADED. Two fixes:
+//   PART A — derive head-loaded from GET_ZCOLOR's "Extruder:" summary.
+//   PART B — also subscribe to the zmod_ifs_*_sensor namespaces.
+// ==========================================================================
+
+TEST_CASE("AD5X IFS native Z-Mod derives head-loaded from GET_ZCOLOR Extruder summary "
+          "(BUG-B Part A)",
+          "[ams][ad5x][ifs][1065]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+    REQUIRE(backend.set_tool_mapping(2, 2).success());
+    REQUIRE(backend.set_tool_mapping(3, 3).success());
+
+    // Device-confirmed loaded frame: GET_ZCOLOR "// Extruder: 1: PLA/white | IFS:
+    // True" (extruder_slot 0, 0-based) riding the same response as IFS_STATUS
+    // {"Chan":1,"Ports":[true,false,false,false]}. head_filament_ is NOT seeded —
+    // the backend must derive it from the Extruder summary.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.saw_silent_content = true;
+    loaded.saw_extruder_summary = true; // "// Extruder: 1" line present
+    loaded.ifs_active = true;
+    loaded.extruder_slot = 0; // "Extruder: 1" -> 0-based slot 0
+    loaded.ifs_chan = 1;      // 1-based seated channel
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+
+    CHECK(Ad5xIfsTestAccess::head_filament(backend));
+    CHECK(backend.get_system_info().filament_loaded);
+    CHECK(backend.is_filament_loaded());
+    CHECK(backend.get_slot_info(0).status == SlotStatus::LOADED);
+
+    // Genuine unload/eject: GET_ZCOLOR "// Extruder: None | IFS: True" AND the
+    // seated lane's port has gone absent (IFS_STATUS Ports all false). Physical
+    // presence corroborates an empty head, so the derivation clears head-loaded.
+    // (The Extruder:None-WHILE-still-present case is covered by the C1/#995 test
+    // below, where head-loaded is deliberately RETAINED.)
+    AmsBackendAd5xIfs::ZColorSilentResult none;
+    none.saw_valid_response = true;
+    none.saw_silent_content = true;
+    none.saw_extruder_summary = true; // summary present, but reads "None"
+    none.ifs_active = true;
+    // none.extruder_slot deliberately absent ("None")
+    none.ifs_chan = 1;
+    none.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, none);
+
+    CHECK_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+    CHECK_FALSE(backend.get_system_info().filament_loaded);
+    CHECK_FALSE(backend.is_filament_loaded());
+    CHECK(backend.get_slot_info(0).status != SlotStatus::LOADED);
+}
+
+TEST_CASE("AD5X IFS Extruder:None does NOT clear head-loaded while the seated lane is present "
+          "(C1 / #995 post-runout-while-seated)",
+          "[ams][ad5x][ifs][1065]") {
+    // Some AD5X firmware drops the GET_ZCOLOR extruder pointer to "Extruder: None"
+    // after a runout/print-end while filament is STILL physically seated at the
+    // toolhead. Clearing head-loaded then would strand the filament (Unload
+    // disappears — can_unload_from_toolhead's `head_filament_ && current_slot<0`
+    // fallback can't fire) and wrongly re-enable Load (-> cold grind). The
+    // derivation must RETAIN head-loaded as long as the seated lane reads present.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+
+    // Establish loaded: Extruder: 1, lane 1 present + seated.
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.saw_silent_content = true;
+    loaded.saw_extruder_summary = true;
+    loaded.ifs_active = true;
+    loaded.extruder_slot = 0;
+    loaded.ifs_chan = 1;
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+    REQUIRE(Ad5xIfsTestAccess::head_filament(backend));
+
+    // Firmware quirk: Extruder: None, but lane 1 is STILL present (Ports[0] true).
+    AmsBackendAd5xIfs::ZColorSilentResult none_seated;
+    none_seated.saw_valid_response = true;
+    none_seated.saw_silent_content = true;
+    none_seated.saw_extruder_summary = true; // summary present, reads "None"
+    none_seated.ifs_active = true;
+    // extruder_slot deliberately absent ("None")
+    none_seated.ifs_chan = 1;
+    none_seated.ifs_ports =
+        std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, none_seated);
+
+    // Head-loaded MUST be retained — the seated lane is still present.
+    CHECK(Ad5xIfsTestAccess::head_filament(backend));
+    CHECK(backend.get_system_info().filament_loaded);
+    CHECK(backend.can_unload_from_toolhead(0));
+}
+
+TEST_CASE("AD5X IFS prefers the head sensor namespace that carries filament_detected "
+          "(I1 / #1065 boot scenario)",
+          "[ams][ad5x][ifs][1065]") {
+    // On a fresh boot Moonraker can return the stock filament_switch_sensor object
+    // as an empty {} compat view (no filament_detected) while the live
+    // zmod_ifs_switch_sensor carries the real reading. Selecting the head sensor
+    // key purely by presence would let the empty stock object win and the real
+    // zmod reading be ignored, leaving head-loaded false with filament at the head.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+
+    json frame;
+    frame["filament_switch_sensor head_switch_sensor"] = json::object(); // empty compat view
+    frame["zmod_ifs_switch_sensor head_switch_sensor"] = json{{"filament_detected", true}};
+    Ad5xIfsTestAccess::handle_status(backend, frame);
+
+    CHECK(Ad5xIfsTestAccess::head_filament(backend));
+}
+
+TEST_CASE("AD5X IFS can_load gate: cold-seated stays loadable, truly-loaded does not, AFC "
+          "keeps the loaded-hint (I3 / BUG-A)",
+          "[ams][ad5x][ifs][1065]") {
+    // The context menu computes can_load = !system_busy && !toolhead_unload &&
+    // slot_has_filament, where toolhead_unload = slot_unloads_to_toolhead(slot,
+    // is_loaded). BUG-A swapped the gate from the permissive is_loaded to this
+    // backend-aware signal so a cold-seated AD5X lane (present but NOT at the
+    // head) still offers Load. Assert the backend semantics the gate rests on.
+    SECTION("AD5X cold-seated lane is not a toolhead unload (Load stays enabled)") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        REQUIRE(backend.set_tool_mapping(0, 0).success());
+        // Lane 1 present + seated, but nothing at the head (Extruder: None).
+        AmsBackendAd5xIfs::ZColorSilentResult cold;
+        cold.saw_valid_response = true;
+        cold.saw_silent_content = true;
+        cold.saw_extruder_summary = true; // "Extruder: None"
+        cold.ifs_active = true;
+        cold.ifs_chan = 1;
+        cold.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, cold);
+        REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+        // slot_unloads_to_toolhead false -> !toolhead_unload true -> Load enabled.
+        CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+    }
+    SECTION("AD5X truly-loaded lane is a toolhead unload (Load disabled)") {
+        AmsBackendAd5xIfs backend(nullptr, nullptr);
+        REQUIRE(backend.set_tool_mapping(0, 0).success());
+        AmsBackendAd5xIfs::ZColorSilentResult loaded;
+        loaded.saw_valid_response = true;
+        loaded.saw_silent_content = true;
+        loaded.saw_extruder_summary = true;
+        loaded.ifs_active = true;
+        loaded.extruder_slot = 0; // "Extruder: 1" -> head loaded
+        loaded.ifs_chan = 1;
+        loaded.ifs_ports =
+            std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+        Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+        REQUIRE(Ad5xIfsTestAccess::head_filament(backend));
+        CHECK(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+    }
+    SECTION("AFC backend returns the loaded-hint unchanged (no can_load regression)") {
+        AmsBackendAfc afc(nullptr, nullptr);
+        // For non-AD5X backends !toolhead_unload == !is_loaded, so the gate is
+        // exactly the pre-BUG-A behavior.
+        CHECK(afc.slot_unloads_to_toolhead(0, /*loaded_hint=*/true) == true);
+        CHECK(afc.slot_unloads_to_toolhead(0, /*loaded_hint=*/false) == false);
+    }
+}
+
+TEST_CASE("AD5X IFS Extruder-summary head derivation ignores frames without the summary line "
+          "(BUG-B Part A guard)",
+          "[ams][ad5x][ifs][1065]") {
+    // A frame that carries only IFS_STATUS JSON (no "// Extruder:" line) has
+    // extruder_slot absent for an unrelated reason — it must NOT clear a
+    // previously-established head-loaded state. saw_extruder_summary gates this.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.saw_silent_content = true;
+    loaded.saw_extruder_summary = true;
+    loaded.ifs_active = true;
+    loaded.extruder_slot = 0;
+    loaded.ifs_chan = 1;
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+    REQUIRE(Ad5xIfsTestAccess::head_filament(backend));
+
+    // IFS_STATUS-only follow-up: no Extruder summary, extruder_slot absent. Head
+    // state must be left untouched (still loaded).
+    AmsBackendAd5xIfs::ZColorSilentResult status_only;
+    status_only.saw_valid_response = true;
+    status_only.saw_silent_content = false;
+    status_only.saw_extruder_summary = false; // no "// Extruder:" line this frame
+    status_only.ifs_chan = 1;
+    status_only.ifs_ports =
+        std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, status_only);
+
+    CHECK(Ad5xIfsTestAccess::head_filament(backend));
+}
+
+TEST_CASE("AD5X IFS routes native Z-Mod head switch sensor namespace to head_filament_ "
+          "(BUG-B Part B)",
+          "[ams][ad5x][ifs][1065]") {
+    // The live AD5X publishes its head switch sensor as
+    // "zmod_ifs_switch_sensor head_switch_sensor", not the stock
+    // "filament_switch_sensor head_switch_sensor". handle_status_update must route
+    // the zmod namespace to parse_head_sensor().
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+    Ad5xIfsTestAccess::handle_status(backend, make_zmod_head_sensor(true));
+    CHECK(Ad5xIfsTestAccess::head_filament(backend));
+
+    Ad5xIfsTestAccess::handle_status(backend, make_zmod_head_sensor(false));
+    CHECK_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+}
+
+TEST_CASE("AD5X IFS routes native Z-Mod motion sensor namespace to head_filament_ (BUG-B Part B)",
+          "[ams][ad5x][ifs][1065]") {
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+    Ad5xIfsTestAccess::handle_status(backend, make_zmod_motion_sensor(true));
+    CHECK(Ad5xIfsTestAccess::head_filament(backend));
+
+    Ad5xIfsTestAccess::handle_status(backend, make_zmod_motion_sensor(false));
+    CHECK_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+}
+
+TEST_CASE("AD5X IFS toolhead-unload predicate stays false on a cold-seated lane (BUG-A #1065)",
+          "[ams][ad5x][ifs][1065]") {
+    // BUG-A: the context-menu Load gate used the recovery-broadened is_loaded
+    // (can_unload_from_toolhead, true for the seated channel regardless of head
+    // state), greying out Load on a lane whose filament sits in the lane but never
+    // reached the toolhead. The real toolhead-loaded signal is
+    // slot_unloads_to_toolhead(), which returns false when the head is empty — so
+    // the corrected gate (!toolhead_unload) keeps Load enabled. This pins the
+    // backend predicate the gate reads; the UI gate itself lives in
+    // ui_ams_context_menu.cpp and is verified by the program build.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+
+    // Lane 1 present + seated (Chan=1, Ports[0]=true) but NOTHING at the head
+    // (GET_ZCOLOR "Extruder: None"); saw_extruder_summary resolves head to false.
+    AmsBackendAd5xIfs::ZColorSilentResult cold;
+    cold.saw_valid_response = true;
+    cold.saw_silent_content = true;
+    cold.saw_extruder_summary = true;
+    cold.ifs_active = true;
+    // extruder_slot absent: head empty
+    cold.ifs_chan = 1;
+    cold.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, cold);
+
+    // Backend truth: filament present in the lane, head empty.
+    CHECK(backend.get_slot_info(0).is_present());
+    CHECK_FALSE(Ad5xIfsTestAccess::head_filament(backend));
+
+    // The ACTUAL toolhead-unload predicate is false because the head is empty,
+    // even when the recovery-broadened loaded_hint is passed in — so the UI Load
+    // gate (!toolhead_unload) keeps the cold-seated lane a valid Load target.
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+}
+
+TEST_CASE(
+    "AD5X IFS restores persisted seated lane after power-cycle Chan=0 (#1065 power-cycle floor)",
+    "[ams][ad5x_ifs]") {
+    // The firmware forgets the seated channel across a power cycle: IFS_STATUS
+    // comes back Chan=0 even with a lane physically at the head (bundle CGR6C7PA).
+    // With no seated lane and head loaded, every lane wrongly labels as Unloadable.
+    // We remember the last loaded lane and restore it provisionally on cold boot.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+    REQUIRE(backend.set_tool_mapping(2, 2).success());
+    REQUIRE(backend.set_tool_mapping(3, 3).success());
+
+    // Last session had channel 2 (slot 1) loaded — restored from the lane_data DB.
+    Ad5xIfsTestAccess::set_persisted_seated_slot(backend, 1);
+
+    // Power cycle: a lane is at the head (head sensor true) but firmware lost which
+    // one (Chan=0). All four lanes still physically present.
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    AmsBackendAd5xIfs::ZColorSilentResult boot;
+    boot.saw_valid_response = true;
+    boot.ifs_active = true;
+    boot.ifs_chan = 0; // firmware forgot the seated channel
+    boot.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, true, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, boot);
+
+    // Channel 2 (slot 1) is restored as seated -> Unload on it, Eject on cold lanes.
+    CHECK(backend.get_system_info().current_slot == 1);
+    CHECK(backend.slot_unloads_to_toolhead(1, /*loaded_hint=*/true));
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(0, /*loaded_hint=*/true));
+    CHECK_FALSE(backend.slot_unloads_to_toolhead(2, /*loaded_hint=*/true));
+}
+
+TEST_CASE("AD5X IFS does not restore a seated lane whose port is now empty (#1065)",
+          "[ams][ad5x_ifs]") {
+    // Corroboration: the filament in the remembered lane was pulled while powered
+    // off. head_filament_ says SOMETHING is loaded, but it is not the remembered
+    // lane (its port reads empty), so we must NOT claim it as seated.
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(0, 0).success());
+    REQUIRE(backend.set_tool_mapping(1, 1).success());
+
+    Ad5xIfsTestAccess::set_persisted_seated_slot(backend, 1); // remembered ch2
+
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    AmsBackendAd5xIfs::ZColorSilentResult boot;
+    boot.saw_valid_response = true;
+    boot.ifs_active = true;
+    boot.ifs_chan = 0;
+    // Channel 2 (index 1) is now empty -> the remembered lane can't be seated.
+    boot.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, false, true, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, boot);
+
+    // No false claim: the seated slot stays unknown.
+    CHECK(backend.get_system_info().current_slot == -1);
+}
+
+TEST_CASE("AD5X IFS remembers the seated lane on load and forgets it on unload (#1065)",
+          "[ams][ad5x_ifs]") {
+    // The persisted marker is written when a load seats a channel (Chan>0 with the
+    // lane present) and cleared when an unload empties the head (Chan==0, head off).
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+    REQUIRE(backend.set_tool_mapping(2, 2).success()); // tool 2 -> port 3
+
+    // Load channel 3 (slot 2): head rises, Chan=3, port 3 present.
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    AmsBackendAd5xIfs::ZColorSilentResult loaded;
+    loaded.saw_valid_response = true;
+    loaded.ifs_active = true;
+    loaded.ifs_chan = 3;
+    loaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, false, true, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, loaded);
+    CHECK(Ad5xIfsTestAccess::persisted_seated_slot(backend) == std::optional<int>(2));
+
+    // Unload: head drops, Chan back to 0 -> forget the remembered lane.
+    Ad5xIfsTestAccess::set_head_filament(backend, false);
+    AmsBackendAd5xIfs::ZColorSilentResult unloaded;
+    unloaded.saw_valid_response = true;
+    unloaded.ifs_active = true;
+    unloaded.ifs_chan = 0;
+    unloaded.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{false, false, false, false};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, unloaded);
+    CHECK_FALSE(Ad5xIfsTestAccess::persisted_seated_slot(backend).has_value());
+}
+
+TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)", "[ams][ad5x_ifs]") {
     // On old zmod, GET_ZCOLOR SILENT=1 degrades to an action:prompt dialog
     // (is_prompt_fallback). IFS_STATUS rides the same buffer as clean JSON
     // (respond_info, not a dialog), so its Chan must still drive the seated slot
@@ -2601,6 +3126,52 @@ TEST_CASE("AD5X IFS IFS_STATUS Chan is applied on prompt-fallback (old zmod)",
     // ...but the seated channel from IFS_STATUS was applied regardless.
     REQUIRE(Ad5xIfsTestAccess::active_tool(backend) == 3);
     REQUIRE(backend.get_system_info().current_slot == 3);
+}
+
+TEST_CASE("AD5X IFS native ZMOD: IFS_STATUS Chan resolves the loaded slot without a populated "
+          "tool map (raza616 loaded-status defect, bundle UQG4RNUA)",
+          "[ams][ad5x_ifs]") {
+    // Native ZMOD has no lessWaste/bambufy _IFS_VARS, so parse_save_variables
+    // never populates tool_map_ — it stays all-UNMAPPED. The seated channel from
+    // IFS_STATUS ("Chan") is therefore the ONLY authority for which slot is
+    // loaded. Pre-fix, recompute_current_slot_locked laundered the seated channel
+    // through the empty tool_map_ (find_first_tool_for_port -> -1 -> active_tool_
+    // -1 -> current_slot -1), pinning current_slot at -1 for the whole session.
+    // slot_is_actively_loaded is (slot == current_slot && filament_loaded), so it
+    // was ALWAYS false even with filament demonstrably at the toolhead — the UI
+    // showed "not loaded" and disabled Unload right after a successful load
+    // (bundle UQG4RNUA: Chan=1, head sensor detected, current_slot stuck at -1).
+    AmsBackendAd5xIfs backend(nullptr, nullptr);
+
+    // Production native path: has_ifs_vars_ defaults false and NO set_tool_mapping
+    // is ever called — that 1:1 map is exactly what the field device lacks.
+    REQUIRE_FALSE(Ad5xIfsTestAccess::has_ifs_vars(backend));
+
+    // Filament physically at the toolhead. handle_status also sets
+    // system_info_.filament_loaded (= head_filament_) via the state_changed path.
+    Ad5xIfsTestAccess::handle_status(backend, make_head_sensor(true));
+    REQUIRE(backend.is_filament_loaded());
+
+    // Firmware reports port 1 seated (matches the bundle's IFS_STATUS).
+    AmsBackendAd5xIfs::ZColorSilentResult r;
+    r.saw_valid_response = true;
+    r.ifs_active = true;
+    r.ifs_chan = 1; // 1-based seated channel -> slot 0
+    r.ifs_ports = std::array<bool, AmsBackendAd5xIfs::NUM_PORTS>{true, true, false, true};
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
+
+    // The seated channel — not the empty tool_map_ — resolves the loaded slot.
+    REQUIRE(backend.get_system_info().current_slot == 0);
+    REQUIRE(backend.slot_is_actively_loaded(0));
+    REQUIRE_FALSE(backend.slot_is_actively_loaded(1));
+
+    // A later Chan=0 (nothing seated) correctly clears the loaded slot.
+    AmsBackendAd5xIfs::ZColorSilentResult cleared;
+    cleared.saw_valid_response = true;
+    cleared.ifs_chan = 0;
+    Ad5xIfsTestAccess::apply_zcolor_result(backend, cleared);
+    REQUIRE(backend.get_system_info().current_slot == -1);
+    REQUIRE_FALSE(backend.slot_is_actively_loaded(0));
 }
 
 TEST_CASE("AD5X IFS a confirmed SILENT device is NOT demoted by a later prompt "
@@ -3832,17 +4403,19 @@ TEST_CASE("AD5X IFS external color change with no override creates minimal lane_
     CHECK_FALSE(db.contains("vendor"));
 }
 
-TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
+TEST_CASE("AD5X IFS GET_ZCOLOR eject keeps the override and lane_data (#1071)",
           "[ams][ad5x_ifs][filament_slot_override][slow]") {
     // Genuine spool removal. presence is owned solely by GET_ZCOLOR now: when
-    // apply_zcolor_result reports a slot present->absent it must clear the
-    // override (brand/spool_name/spoolman describe the gone spool) AND delete
-    // the lane_data entry via clear_override_locked's store->clear_async path.
-    // (This used to ride on parse_adventurer_json's empty-color eject branch.)
+    // apply_zcolor_result reports a slot present->absent the lane renders empty,
+    // but #1071: the override (brand/spool_name/spoolman) and the MR DB lane_data
+    // row are RETAINED so a re-inserted same spool keeps its assignment —
+    // matching the AFC and Happy Hare backends, which never clear the link on
+    // empty. (Previously this drove clear_override_locked, which also deleted the
+    // lane_data row via store->clear_async.)
     //
-    // The sibling test "GET_ZCOLOR present->absent clears the slot override"
-    // covers the override-only clear without a store; this case additionally
-    // verifies the MR DB lane_data row is deleted.
+    // The sibling test "a lane going empty keeps its Spoolman link" covers the
+    // override-retention without a store; this case additionally verifies the MR
+    // DB lane_data row survives.
     Ad5xIfsTmpCacheDir tmp("eject_clears_override");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -3874,8 +4447,9 @@ TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
     })");
     REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
 
-    // Eject: GET_ZCOLOR reports slot 0 ABSENT. The present->absent transition
-    // in apply_zcolor_result clears the override and the MR DB lane_data entry.
+    // Eject: GET_ZCOLOR reports slot 0 ABSENT. The present->absent transition in
+    // apply_zcolor_result drops presence/status but RETAINS the override and the
+    // MR DB lane_data entry (#1071).
     {
         AmsBackendAd5xIfs::ZColorSilentResult r;
         r.saw_valid_response = true;
@@ -3883,13 +4457,17 @@ TEST_CASE("AD5X IFS GET_ZCOLOR eject clears the override and lane_data",
         Ad5xIfsTestAccess::apply_zcolor_result(backend, r);
     }
 
+    // The lane renders removed (presence/status dropped)...
+    REQUIRE_FALSE(Ad5xIfsTestAccess::port_presence(backend, 0));
     {
         auto info = backend.get_slot_info(0);
-        CHECK(info.brand.empty());
-        CHECK(info.spoolman_id == 0);
+        CHECK(info.status != SlotStatus::LOADED);
+        // ...but the Spoolman link survives the empty.
+        CHECK(info.brand == "Polymaker");
+        CHECK(info.spoolman_id == 42);
     }
-    CHECK_FALSE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
-    CHECK(api.mock_get_db_value("lane_data", "lane1").is_null());
+    CHECK(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+    CHECK_FALSE(api.mock_get_db_value("lane_data", "lane1").is_null());
 }
 
 // ==========================================================================
@@ -3912,7 +4490,8 @@ class GcodeCapturingBackend : public AmsBackendAd5xIfs {
         captured_gcodes.push_back(gcode);
         return AmsErrorHelper::success();
     }
-    AmsError execute_gcode(const std::string& gcode, std::function<void()> /*on_complete*/) override {
+    AmsError execute_gcode(const std::string& gcode,
+                           std::function<void()> /*on_complete*/) override {
         captured_gcodes.push_back(gcode);
         return AmsErrorHelper::success();
     }
@@ -4683,8 +5262,8 @@ TEST_CASE("AD5X IFS coalesces a burst of color-change triggers into one debounce
 
     constexpr int kBurst = 20;
     for (int i = 0; i < kBurst; ++i) {
-        Ad5xIfsTestAccess::on_gcode_response_line(
-            backend, "// CHANGE_ZCOLOR SLOT=2 HEX=F72224 TYPE=PLA");
+        Ad5xIfsTestAccess::on_gcode_response_line(backend,
+                                                  "// CHANGE_ZCOLOR SLOT=2 HEX=F72224 TYPE=PLA");
     }
 
     // Every trigger is seen (diagnostic counter rises by the full burst)...
@@ -5378,7 +5957,8 @@ TEST_CASE("AD5X IFS eject_lane port mapping is 1-based", "[ams][ad5x_ifs]") {
     REQUIRE(backend.captured_gcodes[2] == "IFS_F39 PRUTOK=4");
 }
 
-TEST_CASE("AD5X IFS eject_lane uses the lane material's tube length / ifs speed", "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS eject_lane uses the lane material's tube length / ifs speed",
+          "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
 
@@ -5528,6 +6108,37 @@ TEST_CASE("AD5X IFS unload finalizes to IDLE on the macro completion ack, not th
     REQUIRE(backend.get_system_info().action == AmsAction::IDLE);
 }
 
+TEST_CASE("AD5X IFS commanded unload clears head-loaded even with the lane still present "
+          "(park-in-lane, #1065)",
+          "[ams][ad5x][ifs][1065]") {
+    // A normal toolhead unload retracts filament out of the hotend but parks it
+    // in the lane, so the IFS silk sensor stays PRESENT. A COMMANDED unload is
+    // unambiguous, so head-loaded must clear on completion regardless of lane
+    // presence — otherwise the slot stays stuck LOADED (Unload offered on an
+    // empty head, Load disabled). This is DISTINCT from a passive Extruder:None
+    // (#995), which DOES require presence corroboration so it can't strand
+    // still-seated filament — the presence guard in
+    // derive_head_loaded_from_summary_locked() would leave this stuck without the
+    // dedicated commanded-unload clear at finalize.
+    TestableAd5xIfsBackend backend;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false); // no async debounce task
+    Ad5xIfsTestAccess::set_current_slot(backend, 0, /*filament_loaded=*/true);
+    Ad5xIfsTestAccess::set_head_filament(backend, true);
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true); // lane 1 filament present
+
+    REQUIRE(backend.unload_filament(0).success());
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
+
+    // Macro completes while the lane silk sensor still reads present.
+    Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true);
+
+    CHECK(backend.get_system_info().action == AmsAction::IDLE);
+    CHECK_FALSE(Ad5xIfsTestAccess::head_filament(backend)); // head cleared on unload
+    CHECK(Ad5xIfsTestAccess::port_presence(backend, 0));    // lane still present
+    CHECK(backend.get_slot_info(0).status != SlotStatus::LOADED);
+}
+
 TEST_CASE("AD5X IFS load finalizes to IDLE on the macro completion ack (raza616 stuck-on-Purging)",
           "[ams][ad5x_ifs]") {
     // Mirror of the stuck-on-Retract unload fix for the load path. INSERT_PRUTOK_IFS
@@ -5558,7 +6169,7 @@ TEST_CASE("AD5X IFS load finalizes to IDLE on the macro completion ack (raza616 
     REQUIRE(backend.load_filament(1).success());
     REQUIRE(Ad5xIfsTestAccess::phase_active(backend));
     Ad5xIfsTestAccess::finalize_op_after_macro(backend, /*is_unload=*/true); // wrong direction
-    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));                      // still in flight
+    REQUIRE(Ad5xIfsTestAccess::phase_active(backend));                       // still in flight
     REQUIRE(backend.get_system_info().action != AmsAction::IDLE);
 }
 
@@ -5940,8 +6551,8 @@ TEST_CASE("AD5X IFS get_operation_step_model LOAD is the 3-phase synth sequence"
 TEST_CASE("AD5X IFS get_operation_step_index_subject is the AmsState phase subject",
           "[ams][ad5x_ifs][stepmodel]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
-    for (auto op : {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP,
-                    StepOperationType::UNLOAD}) {
+    for (auto op :
+         {StepOperationType::LOAD_FRESH, StepOperationType::LOAD_SWAP, StepOperationType::UNLOAD}) {
         CHECK(backend.get_operation_step_index_subject(op) != nullptr);
         CHECK(backend.get_operation_step_index_subject(op) ==
               AmsState::instance().get_ams_operation_phase_subject());
@@ -5990,7 +6601,8 @@ TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during load",
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::PURGING);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == 2);
 
-    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(120));
+    // PURGING has a dedicated 240s budget (#1065 Bug 2), so age past it.
+    Ad5xIfsTestAccess::check_action_timeout(backend, std::chrono::seconds(250));
     REQUIRE(Ad5xIfsTestAccess::action(backend) == AmsAction::ERROR);
     REQUIRE(Ad5xIfsTestAccess::operation_phase(backend) == -1);
 }
@@ -5999,8 +6611,7 @@ TEST_CASE("AD5X IFS phase: operation_phase advances 0->1->2 during load",
 // Error-center bridge: IFS surfaces ERROR on timeout, current_error(), recover
 // ==========================================================================
 
-TEST_CASE("AD5X IFS error-center: timeout sets ERROR not IDLE",
-          "[ams][ad5x_ifs][error-center]") {
+TEST_CASE("AD5X IFS error-center: timeout sets ERROR not IDLE", "[ams][ad5x_ifs][error-center]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_head_filament(backend, true);
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
@@ -6033,8 +6644,7 @@ TEST_CASE("AD5X IFS error-center: current_error returns CRITICAL IFS event on ER
     REQUIRE(ev->recovery_actions[0].gcode == "IFS_UNLOCK");
 }
 
-TEST_CASE("AD5X IFS error-center: recover() clears ERROR state",
-          "[ams][ad5x_ifs][error-center]") {
+TEST_CASE("AD5X IFS error-center: recover() clears ERROR state", "[ams][ad5x_ifs][error-center]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     Ad5xIfsTestAccess::set_head_filament(backend, true);
     Ad5xIfsTestAccess::begin_phase(backend, /*is_unload=*/true);
@@ -6153,8 +6763,7 @@ TEST_CASE("AD5X IFS unload routing regression: active-slot cut + non-active cold
 // FIX 2: eject_lane schedules a status re-read on success
 // ==========================================================================
 
-TEST_CASE("AD5X IFS eject_lane schedules a status re-read on success (FIX 2)",
-          "[ams][ad5x_ifs]") {
+TEST_CASE("AD5X IFS eject_lane schedules a status re-read on success (FIX 2)", "[ams][ad5x_ifs]") {
     TestableAd5xIfsBackend backend;
     Ad5xIfsTestAccess::set_running(backend, true);
     // Leave zcolor_silent_supported_ at its default (true) so schedule_zcolor_query
@@ -6206,8 +6815,9 @@ TEST_CASE("AD5X IFS live authority blocks stale JSON color/type for a present sl
     CHECK(info.material == "PLA");
 }
 
-TEST_CASE("AD5X IFS pre-SILENT JSON still seeds color/type when no live authority (FIX 3 regression)",
-          "[ams][ad5x_ifs]") {
+TEST_CASE(
+    "AD5X IFS pre-SILENT JSON still seeds color/type when no live authority (FIX 3 regression)",
+    "[ams][ad5x_ifs]") {
     AmsBackendAd5xIfs backend(nullptr, nullptr);
     // No live authority: SILENT demoted and IFS_STATUS Ports never seen.
     Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
@@ -6392,7 +7002,8 @@ TEST_CASE("AD5X IFS slot_unloads_to_toolhead matches unload routing across the a
 
             // Predicate (label/dispatch) — must ignore the recovery-broadened hint.
             const bool pred_true = backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/true);
-            const bool pred_false = backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/false);
+            const bool pred_false =
+                backend->slot_unloads_to_toolhead(c.slot, /*loaded_hint=*/false);
             CHECK(pred_true == c.expect_toolhead);
             CHECK(pred_false == c.expect_toolhead); // hint is ignored for AD5X
 
@@ -6406,7 +7017,8 @@ TEST_CASE("AD5X IFS slot_unloads_to_toolhead matches unload routing across the a
 
 TEST_CASE("AD5X IFS unload of the active slot via -1 (unload active) toolhead-cuts",
           "[ams][ad5x_ifs]") {
-    auto backend = make_routing_backend(/*current_slot=*/2, /*seated_chan=*/0, /*head_loaded=*/true);
+    auto backend =
+        make_routing_backend(/*current_slot=*/2, /*seated_chan=*/0, /*head_loaded=*/true);
     REQUIRE(backend->unload_filament(-1).success());
     CHECK(backend->has_gcode("_IFS_REMOVE_CURRENT_PRUTOK"));
     CHECK_FALSE(backend->has_gcode_containing("IFS_F11"));

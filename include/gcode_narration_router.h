@@ -4,9 +4,10 @@
 #pragma once
 
 #include "async_lifetime_guard.h"
-#include "hv/json.hpp"
 
 #include <string>
+
+#include "hv/json.hpp"
 
 class MoonrakerAPI;
 
@@ -56,4 +57,4 @@ class GcodeNarrationRouter {
     AsyncLifetimeGuard lifetime_;
 };
 
-}  // namespace helix
+} // namespace helix

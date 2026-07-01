@@ -23,8 +23,8 @@
  * Example: 2053 = 205.3°C
  */
 struct TempSample {
-    int temp_deci = 0;       ///< Temperature × 10 (e.g., 2053 = 205.3°C)
-    int target_deci = 0;     ///< Target temperature × 10
+    int temp_deci = 0;        ///< Temperature × 10 (e.g., 2053 = 205.3°C)
+    int target_deci = 0;      ///< Target temperature × 10
     int64_t timestamp_ms = 0; ///< Unix timestamp in milliseconds
 };
 

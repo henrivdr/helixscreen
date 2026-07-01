@@ -30,8 +30,7 @@ void reset_tour_settings() {
 TEST_CASE("FirstRunTour gate: blocks when tour already completed", "[tour]") {
     reset_tour_settings();
     Config::get_instance()->set<bool>("/tour/completed", true);
-    Config::get_instance()->set<int>("/tour/last_seen_version",
-                                     helix::tour::kTourVersion);
+    Config::get_instance()->set<int>("/tour/last_seen_version", helix::tour::kTourVersion);
     REQUIRE(FirstRunTour::should_auto_start() == false);
 }
 
@@ -88,8 +87,8 @@ TEST_CASE("Tour steps: step 4 is print_status widget, steps 5-8 are nav buttons"
 
 TEST_CASE("Tour steps: welcome and customize steps have correct targets", "[tour]") {
     auto steps = build_tour_steps(true);
-    REQUIRE(steps[0].target_name.empty());              // Welcome is centered
-    REQUIRE(steps[2].target_name == "fan_stack");       // Customize example tile
+    REQUIRE(steps[0].target_name.empty());        // Welcome is centered
+    REQUIRE(steps[2].target_name == "fan_stack"); // Customize example tile
 }
 
 TEST_CASE("FirstRunTour: start() sets is_running", "[tour]") {
@@ -114,7 +113,8 @@ TEST_CASE("FirstRunTour: advance past last step finishes", "[tour]") {
     reset_tour_settings();
     auto& t = FirstRunTour::instance();
     t.start();
-    for (int i = 0; i < 8; ++i) t.advance();
+    for (int i = 0; i < 8; ++i)
+        t.advance();
     REQUIRE(!t.is_running());
     REQUIRE(Config::get_instance()->get<bool>("/tour/completed", false) == true);
 }

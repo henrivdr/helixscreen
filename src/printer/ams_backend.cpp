@@ -3,9 +3,9 @@
 
 #include "ams_backend.h"
 
-#include "ams_state.h"
 #include "ams_backend_afc.h"
 #include "ams_backend_happy_hare.h"
+#include "ams_state.h"
 #ifdef HELIX_ENABLE_MOCKS
 #include "ams_backend_mock.h"
 #include "app_globals.h"
@@ -17,10 +17,10 @@
 #if HELIX_HAS_CFS
 #include "ams_backend_cfs.h"
 #endif
+#include "ams_backend_ace.h"
 #include "ams_backend_qidi.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_backend_toolchanger.h"
-#include "ams_backend_ace.h"
 #include "filament_database.h"
 #include "moonraker_api.h"
 #include "printer_discovery.h"
@@ -202,7 +202,8 @@ create_mock_with_features(int gate_count, MoonrakerClient* mock_client = nullptr
 
     // Enable mock dryer by default (disable with HELIX_MOCK_DRYER=0)
     const char* dryer_env = std::getenv("HELIX_MOCK_DRYER");
-    bool dryer_enabled = !dryer_env || (std::string(dryer_env) != "0" && std::string(dryer_env) != "false");
+    bool dryer_enabled =
+        !dryer_env || (std::string(dryer_env) != "0" && std::string(dryer_env) != "false");
     if (dryer_enabled) {
         mock->set_dryer_enabled(true);
         spdlog::info("[AMS Backend] Mock dryer enabled");

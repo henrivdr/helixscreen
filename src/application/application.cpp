@@ -20,6 +20,7 @@
 #include "ui_update_queue.h"
 
 #include "ams_backend_cfs.h"
+#include "ams_error_bridge.h"
 #include "app_constants.h"
 #include "asset_manager.h"
 #include "cjk_font_manager.h"
@@ -27,10 +28,9 @@
 #include "display/lv_display_private.h"
 #include "display_manager.h"
 #include "environment_config.h"
-#include "ams_error_bridge.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
-#include "recovery_modal_presenter.h"
+#include "hardware_role_registry.h"
 #include "hardware_validator.h"
 #include "helix_version.h"
 #include "http_executor.h"
@@ -47,6 +47,7 @@
 #include "power_device_state.h"
 #include "print_history_manager.h"
 #include "printer_recovery_service.h"
+#include "recovery_modal_presenter.h"
 #include "rpc_error_correlation.h"
 #include "screenshot.h"
 #include "sensor_state.h"
@@ -169,7 +170,6 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_translation.h"
 #include "hv/hlog.h" // libhv logging - sync level with spdlog
-#include "hv/json.hpp"
 #include "logging_init.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "lvgl_log_handler.h"
@@ -192,6 +192,8 @@
 
 #include <lvgl/src/misc/cache/instance/lv_image_cache.h>
 #include <spdlog/spdlog.h>
+
+#include "hv/json.hpp"
 
 #ifdef HELIX_DISPLAY_SDL
 #include <SDL.h>
@@ -808,8 +810,8 @@ int Application::run(int argc, char** argv) {
         if (s_safe_mode_active) {
             ToastManager::instance().show(
                 ToastSeverity::WARNING,
-                "Safe Mode active. The printer connection is disabled because the app "
-                "kept crashing on startup. Open Settings to fix the issue, then reboot.",
+                lv_tr("Safe Mode active. The printer connection is disabled because the app "
+                      "kept crashing on startup. Open Settings to fix the issue, then reboot."),
                 0 /* sticky */);
         }
 
@@ -900,7 +902,7 @@ int Application::run(int argc, char** argv) {
         try {
             ToastManager::instance().show(
                 ToastSeverity::ERROR,
-                "App startup encountered an error. Some features may be unavailable.",
+                lv_tr("App startup encountered an error. Some features may be unavailable."),
                 0 /* sticky */);
         } catch (...) {
             // Toast failure is non-fatal; the user still gets a working main loop.
@@ -1631,7 +1633,7 @@ bool Application::init_panel_subjects() {
                 return;
             if (p == DetectionPolicy::NotifyOnly) {
                 ToastManager::instance().show(ToastSeverity::WARNING,
-                                              "Spaghetti detected — print paused", 8000);
+                                              lv_tr("Spaghetti detected — print paused"), 8000);
                 return;
             }
             // DeferToSource: show the response modal. The modal self-deletes via its
@@ -1642,15 +1644,13 @@ bool Application::init_panel_subjects() {
             // TODO(detection): attach latest camera frame when a stream is active
             modal->set_detection(e.message, nullptr);
             modal->set_on_resume([] {
-                get_moonraker_api()->job().resume_print([] {},
-                                                        [](const MoonrakerError&) {});
+                get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
             });
             modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
             modal->set_on_tune([] {
                 get_moonraker_client()->send_jsonrpc(
                     "printer.gcode.script",
-                    nlohmann::json{{"script",
-                                    "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
+                    nlohmann::json{{"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
                     [](const nlohmann::json&) {}, [](const MoonrakerError&) {});
             });
             modal->show(lv_screen_active());
@@ -1893,11 +1893,11 @@ bool Application::init_plugins() {
             auto* ctx = new PluginDisableContext{m_plugin_manager.get(), errors[0].plugin_id};
 
             char toast_msg[96];
-            snprintf(toast_msg, sizeof(toast_msg), "\"%s\" failed to load",
+            snprintf(toast_msg, sizeof(toast_msg), lv_tr("\"%s\" failed to load"),
                      errors[0].plugin_id.c_str());
 
             ToastManager::instance().show_with_action(
-                ToastSeverity::WARNING, toast_msg, "Disable",
+                ToastSeverity::WARNING, toast_msg, lv_tr("Disable"),
                 [](void* user_data) {
                     auto* ctx = static_cast<PluginDisableContext*>(user_data);
                     if (ctx->manager && ctx->manager->disable_plugin(ctx->plugin_id)) {
@@ -1910,10 +1910,11 @@ bool Application::init_plugins() {
         } else {
             // Multiple failures: Show [Manage] button to open Settings > Plugins
             char toast_msg[64];
-            snprintf(toast_msg, sizeof(toast_msg), "%zu plugins failed to load", errors.size());
+            snprintf(toast_msg, sizeof(toast_msg), lv_tr("%zu plugins failed to load"),
+                     errors.size());
 
             ToastManager::instance().show_with_action(
-                ToastSeverity::WARNING, toast_msg, "Manage",
+                ToastSeverity::WARNING, toast_msg, lv_tr("Manage"),
                 [](void* /*user_data*/) {
                     NavigationManager::instance().set_active(PanelId::Settings);
                     get_global_settings_panel().handle_plugins_clicked();
@@ -2023,8 +2024,8 @@ bool Application::run_wizard() {
     // Clamp to a valid StepId range so an out-of-range debug value lands on a real
     // step (the last one) instead of a blank wizard from a bogus enum cast.
     if (initial_step < 0 || initial_step >= helix::wizard::kStepCount) {
-        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping",
-                     initial_step, helix::wizard::kStepCount);
+        spdlog::warn("[Application] --wizard-step {} out of range [0,{}); clamping", initial_step,
+                     helix::wizard::kStepCount);
         initial_step = (initial_step < 0) ? 0 : helix::wizard::kStepCount - 1;
     }
     // Map it to a StepId for the registry-driven wizard.
@@ -2413,6 +2414,25 @@ void Application::create_overlays() {
     }
 }
 
+void Application::reapply_hardware_roles() {
+    helix::ui::queue_update("Application::reapply_hardware_roles", [this]() {
+        MoonrakerAPI* api = m_moonraker ? m_moonraker->api() : nullptr;
+        if (!api) {
+            return;
+        }
+        const auto& fans = api->hardware().fans();
+        const auto& heaters = api->hardware().heaters();
+        // Re-resolve + persist fan roles, then rebind fan UI to the new mapping.
+        auto roles = helix::FanRoleConfig::from_config(Config::get_instance(), fans);
+        get_printer_state().init_fans(fans, roles);
+        // Heater roles persist back to config (no dedicated runtime fan-style consumer).
+        helix::resolve_role_from_config(helix::HardwareRoleId::HotendHeater, Config::get_instance(),
+                                        heaters, /*persist_autoheal=*/true);
+        helix::resolve_role_from_config(helix::HardwareRoleId::BedHeater, Config::get_instance(),
+                                        heaters, /*persist_autoheal=*/true);
+    });
+}
+
 void Application::setup_discovery_callbacks() {
     MoonrakerClient* client = m_moonraker->client();
     MoonrakerAPI* api = m_moonraker->api();
@@ -2430,6 +2450,9 @@ void Application::setup_discovery_callbacks() {
         helix::ui::queue_update([api, client, app, snapshot]() {
             if (app->m_shutdown_complete)
                 return;
+            // A new discovery cycle is starting — re-arm the once-per-connection
+            // targeted hardware-reconfig wizard guard so a reconnect can re-offer it.
+            app->m_targeted_reconfig_shown = false;
             api->hardware() = std::move(*snapshot);
             helix::init_subsystems_from_hardware(api->hardware(), api, client);
         });
@@ -2493,8 +2516,9 @@ void Application::setup_discovery_callbacks() {
                                             static_cast<long>(snapshot->macros().size()));
             get_printer_state().set_hardware(std::move(*snapshot));
             crash_handler::breadcrumb::note("disc", "post_set_hw", n);
+            const auto& fans = hw.fans();
             get_printer_state().init_fans(
-                hw.fans(), helix::FanRoleConfig::from_config(Config::get_instance()));
+                fans, helix::FanRoleConfig::from_config(Config::get_instance(), fans));
             crash_handler::breadcrumb::note("disc", "post_init_fans",
                                             static_cast<long>(hw.fans().size()));
 
@@ -2585,6 +2609,34 @@ void Application::setup_discovery_callbacks() {
             // detection would fail with "0 sensors, 0 fans, hostname ''" (#802).
             PrinterDetector::auto_detect_and_save(api->hardware(), Config::get_instance());
 
+            // Auto-heal + persist heater roles (batched single save, symmetry with fan roles
+            // above). Ensures the validator sees resolved heater names so it does not emit a
+            // toast every boot for a stale saved role that has a confident replacement.
+            {
+                const auto& heaters = hw.heaters();
+                auto* cfg = Config::get_instance();
+                bool heater_changed = false;
+                for (auto id :
+                     {helix::HardwareRoleId::HotendHeater, helix::HardwareRoleId::BedHeater}) {
+                    const auto* desc = helix::role_descriptor(id);
+                    if (!desc)
+                        continue;
+                    const std::string key = cfg->df() + desc->config_key;
+                    const std::string dflt = desc->canonical_default
+                                                 ? std::string(desc->canonical_default)
+                                                 : std::string();
+                    const std::string saved = cfg->get<std::string>(key, dflt);
+                    std::string healed = helix::resolve_role_from_config(id, cfg, heaters, false);
+                    if (!healed.empty() && healed != saved) {
+                        cfg->set<std::string>(key, healed);
+                        heater_changed = true;
+                    }
+                }
+                if (heater_changed && !cfg->save()) {
+                    spdlog::warn("[Application] Failed to persist heater role heals");
+                }
+            }
+
             // Hardware validation: check config expectations vs discovered hardware.
             // Now uses the post-preset config so preset-mapped fan/heater names are
             // checked against discovery, not the pre-preset scaffolded defaults.
@@ -2595,6 +2647,57 @@ void Application::setup_discovery_callbacks() {
             if (validation_result.has_issues() && !Config::get_instance()->is_wizard_required() &&
                 !is_wizard_active()) {
                 validator.notify_user(validation_result);
+            }
+
+            // Route unresolved GUIDED hardware roles (a saved fan/heater role with no
+            // confident live substitute) into the targeted reconfig wizard — only the
+            // affected step(s), not the full first-run wizard. Skipped while the first-run
+            // wizard is required/active, and gated to once-per-connection so it does not
+            // relaunch on reconnect churn within a single session.
+            auto reconfig_steps = helix::unresolved_guided_steps(Config::get_instance(), hw);
+            // Idle gate: NEVER launch the reconfig wizard over a live print.
+            // The print_active subject is NOT yet updated from this discovery's
+            // initial status — dispatch_status_update() above only QUEUES the status
+            // (m_notification_queue); print_active_ is applied a tick later in
+            // process_notifications, AFTER this queue_update returns. On a fresh
+            // connection mid-print (app/panel restart during a print) the subject
+            // still reads its initialized 0. Consult the just-arrived status directly
+            // so a reconfig wizard never launches over a live print.
+            bool print_active =
+                lv_subject_get_int(get_printer_state().get_print_active_subject()) != 0;
+            if (status_snapshot &&
+                helix::PrinterPrintState::status_indicates_active_print(*status_snapshot)) {
+                print_active = true;
+            }
+            if (!reconfig_steps.empty() && !print_active &&
+                !Config::get_instance()->is_wizard_required() && !is_wizard_active() &&
+                !app->m_targeted_reconfig_shown) {
+                app->m_targeted_reconfig_shown = true;
+                ui_wizard_register_event_callbacks();
+                ui_wizard_container_register_responsive_constants();
+                ui_wizard_init_subjects();
+                // Cancel = dismiss the targeted session. Without this, Back on the first
+                // targeted step is a no-op (no prior step to retreat to). Cancelling an
+                // UNSATISFIABLE role (no candidate hardware exists) must also record the
+                // decision — otherwise the wizard re-launches on every reconnect forever.
+                // decline_unresolved_guided_roles() writes "" (declined) for each still-
+                // Unresolved guided role with a present saved key, read against the CURRENT
+                // discovered hardware (api->hardware()) at cancel time.
+                set_wizard_cancel_callback([api]() {
+                    // Record the cancel as a decline for each still-Unresolved guided
+                    // role (writes "" + saves internally). reapply_hardware_roles() is
+                    // intentionally NOT called here: ui_wizard_complete_targeted() fires
+                    // the on_complete callback (registered in ui_wizard_create_targeted
+                    // below), which already reapplies the roles. Calling it here too
+                    // would be a redundant double reapply.
+                    helix::decline_unresolved_guided_roles(Config::get_instance(), api->hardware());
+                    ui_wizard_complete_targeted();
+                    set_wizard_cancel_callback(nullptr);
+                });
+                ui_wizard_create_targeted(app->m_screen, reconfig_steps, [app]() {
+                    set_wizard_cancel_callback(nullptr);
+                    app->reapply_hardware_roles();
+                });
             }
 
             // Save session snapshot for next comparison (even if no issues)
@@ -3091,8 +3194,8 @@ void Application::init_action_prompt() {
     // also replays the most recent gcode_store error when the WS (re)connects
     // (catches errors that fired while HelixScreen was offline). Lives as
     // a member so its dtor unregisters callbacks before MoonrakerClient dies.
-    m_gcode_error_router = std::make_unique<helix::GcodeErrorRouter>(api, client,
-                                                                      *m_recovery_presenter);
+    m_gcode_error_router =
+        std::make_unique<helix::GcodeErrorRouter>(api, client, *m_recovery_presenter);
 
     // Narration router: maps `//` toolchange narration to the active AMS
     // backend's step model and drives the toolchange_step subject. Separate
@@ -3194,8 +3297,9 @@ void Application::check_wifi_availability() {
 
     auto wifi = get_wifi_manager();
     if (wifi && !wifi->has_hardware()) {
-        NOTIFY_ERROR_MODAL("WiFi Unavailable", "WiFi was configured but hardware is not available. "
-                                               "Check system configuration.");
+        NOTIFY_ERROR_MODAL(lv_tr("WiFi Unavailable"),
+                           lv_tr("WiFi was configured but hardware is not available. "
+                                 "Check system configuration."));
     }
 }
 
@@ -3470,8 +3574,8 @@ int Application::main_loop() {
             try {
                 ToastManager::instance().show(
                     ToastSeverity::ERROR,
-                    "An internal error occurred. The app continues running — "
-                    "please send a debug bundle from Settings > About if it repeats.",
+                    lv_tr("An internal error occurred. The app continues running — "
+                          "please send a debug bundle from Settings > About if it repeats."),
                     8000);
             } catch (...) {
                 // Toast subsystem itself in trouble — keep running anyway.
@@ -3764,7 +3868,7 @@ void Application::switch_printer(const std::string& printer_id) {
     // Show toast with the new printer name
     std::string printer_name =
         m_config->get<std::string>(m_config->df() + "printer_name", printer_id);
-    std::string toast_msg = "Connected to " + printer_name;
+    std::string toast_msg = fmt::format(fmt::runtime(lv_tr("Connected to {}")), printer_name);
     ToastManager::instance().show(ToastSeverity::INFO, toast_msg.c_str());
 
     m_soft_restart_in_progress = false;

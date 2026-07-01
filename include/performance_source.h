@@ -13,21 +13,21 @@ namespace perf {
 
 /// One MCU's per-tick stats. mcu_load is 0..1 (UI multiplies by 100).
 struct McuStat {
-    std::string name;             ///< e.g. "mcu", "mcu sb"
-    std::optional<float> load;    ///< awake/wall over the last sample window
+    std::string name;                    ///< e.g. "mcu", "mcu sb"
+    std::optional<float> load;           ///< awake/wall over the last sample window
     std::optional<uint64_t> retransmits; ///< cumulative counter; UI displays raw value
 };
 
 /// One full sample emitted by an IPerformanceSource. Optionals carry the
 /// "present" semantics — absent = no data this tick (UI hides the row).
 struct PerfSample {
-    std::optional<float>    host_cpu_pct;        ///< 0..100
-    std::optional<float>    host_cpu_temp_c;     ///< °C
+    std::optional<float> host_cpu_pct;    ///< 0..100
+    std::optional<float> host_cpu_temp_c; ///< °C
     std::optional<uint32_t> host_mem_free_mb;
-    std::optional<float>    host_mem_pct_used;   ///< 0..100
-    uint32_t                host_throttle_bits = 0;  ///< Pi bitmask; 0 = no flags ever set
-    std::string             host_throttle_text;      ///< empty unless bits != 0
-    std::vector<McuStat>    mcus;                ///< sorted by name
+    std::optional<float> host_mem_pct_used; ///< 0..100
+    uint32_t host_throttle_bits = 0;        ///< Pi bitmask; 0 = no flags ever set
+    std::string host_throttle_text;         ///< empty unless bits != 0
+    std::vector<McuStat> mcus;              ///< sorted by name
 };
 
 /// Strategy interface — Moonraker in prod, /proc + synthetic in test/mock.

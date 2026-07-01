@@ -587,8 +587,7 @@ TEST_CASE("PrintStartProfile: progress mode detection", "[profile][print]") {
 // Adaptive bed-mesh flag
 // ============================================================================
 
-TEST_CASE("PrintStartProfile: adaptive_meshing flag parses correctly",
-          "[profile][print][mesh]") {
+TEST_CASE("PrintStartProfile: adaptive_meshing flag parses correctly", "[profile][print][mesh]") {
     SECTION("Snapmaker U1 declares adaptive_meshing=true") {
         auto profile = PrintStartProfile::load("snapmaker_u1");
         REQUIRE(profile != nullptr);
@@ -921,8 +920,7 @@ static std::shared_ptr<PrintStartProfile> get_snapmaker_u1_profile() {
     return PrintStartProfile::load("snapmaker_u1");
 }
 
-TEST_CASE("PrintStartProfile: snapmaker_u1 profile loads",
-          "[profile][print][snapmaker]") {
+TEST_CASE("PrintStartProfile: snapmaker_u1 profile loads", "[profile][print][snapmaker]") {
     auto profile = get_snapmaker_u1_profile();
     REQUIRE(profile != nullptr);
 
@@ -963,16 +961,15 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 action-code signals route to correct 
     };
     std::vector<ActionCase> cases = {
         // --- "Set action code" verb (evidence: gcode_store 23:24:27..23:31:00) ---
-        {"// Success: Set action code PRINT_SWITCH_CHECKING",
-         PrintStartPhase::INITIALIZING, "Checking extruders..."},
-        {"// Success: Set action code PRINT_AUTO_FEEDING",
-         PrintStartPhase::INITIALIZING, "Loading filament..."},
-        {"// Success: Set action code PRINT_REPLENISHING",
-         PrintStartPhase::INITIALIZING, "Replenishing filament..."},
-        {"// Success: Set action code DETECT_PLATE",
-         PrintStartPhase::BED_MESH, "Detecting plate..."},
-        {"// Success: Set action code PRINT_PREEXTRUDING",
-         PrintStartPhase::PURGING, "Priming..."},
+        {"// Success: Set action code PRINT_SWITCH_CHECKING", PrintStartPhase::INITIALIZING,
+         "Checking extruders..."},
+        {"// Success: Set action code PRINT_AUTO_FEEDING", PrintStartPhase::INITIALIZING,
+         "Loading filament..."},
+        {"// Success: Set action code PRINT_REPLENISHING", PrintStartPhase::INITIALIZING,
+         "Replenishing filament..."},
+        {"// Success: Set action code DETECT_PLATE", PrintStartPhase::BED_MESH,
+         "Detecting plate..."},
+        {"// Success: Set action code PRINT_PREEXTRUDING", PrintStartPhase::PURGING, "Priming..."},
         // --- "Changed main state to PRINTING with action" verb
         //     (evidence: gcode_store 23:23:26) ---
         {"// Success: Changed main state to PRINTING with action PRINT_BED_DETECTING",
@@ -993,19 +990,16 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 action-code signals route to correct 
     // IDLE action codes intentionally have no mapping — they bracket every real
     // phase ("// Success: Set action code IDLE" / "...with action IDLE") and
     // must NOT steer the UI.
-    REQUIRE_FALSE(profile->try_match_signal(
-        "// Success: Set action code IDLE", result));
+    REQUIRE_FALSE(profile->try_match_signal("// Success: Set action code IDLE", result));
     REQUIRE_FALSE(profile->try_match_signal(
         "// Success: Changed main state to PRINTING with action IDLE", result));
 
     // Future Snapmaker firmware revisions may emit action codes we don't know
     // about yet; they must fall through cleanly (no false match).
-    REQUIRE_FALSE(profile->try_match_signal(
-        "// Success: Set action code FOO_UNKNOWN", result));
+    REQUIRE_FALSE(profile->try_match_signal("// Success: Set action code FOO_UNKNOWN", result));
 
     // try_match_signal trims trailing whitespace (\r from some firmware variants).
-    REQUIRE(profile->try_match_signal(
-        "// Success: Set action code DETECT_PLATE\r", result));
+    REQUIRE(profile->try_match_signal("// Success: Set action code DETECT_PLATE\r", result));
     REQUIRE(result.phase == PrintStartPhase::BED_MESH);
 }
 
@@ -1041,8 +1035,8 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 response patterns match real preprint
     // It used to be mislabelled "Z Calibration..." under BED_MESH, which made
     // the UI show bed-mesh-flavoured text during homing. It now belongs to
     // HOMING / "Probing Z...".
-    REQUIRE(profile->try_match_pattern(
-        "// probe_start_x: 5.32188, probe_start_y: 4.87969", result));
+    REQUIRE(
+        profile->try_match_pattern("// probe_start_x: 5.32188, probe_start_y: 4.87969", result));
     REQUIRE(result.phase == PrintStartPhase::HOMING);
     REQUIRE(result.message == "Probing Z...");
 
@@ -1050,8 +1044,7 @@ TEST_CASE("PrintStartProfile: snapmaker_u1 response patterns match real preprint
     // "// z_mesh_complete: 0.02573436601557052"). The per-probe "probe at x:..."
     // lines are consumed by the collector's mesh counter, not the profile;
     // z_mesh_complete is the END boundary in the response stream.
-    REQUIRE(profile->try_match_pattern(
-        "// z_mesh_complete: 0.02573436601557052", result));
+    REQUIRE(profile->try_match_pattern("// z_mesh_complete: 0.02573436601557052", result));
     REQUIRE(result.phase == PrintStartPhase::BED_MESH);
     REQUIRE(result.message == "Bed mesh...");
 

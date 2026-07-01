@@ -102,6 +102,12 @@ class AmsEditModal : public Modal {
     int slot_index_ = -1;
     SlotInfo original_info_; ///< Original info for reset
     SlotInfo working_info_;  ///< Working copy being edited
+    // Set true only when the user actually edits a filament field (vendor,
+    // material, or color) in this session. Gates new-Spoolman-spool creation so
+    // an unedited open+save — where update_vendor_dropdown auto-defaults
+    // brand="Generic", making is_filament_complete() true — cannot spawn a
+    // phantom "Generic" spool (#1071 Symptom C). Reset on every show_for_slot.
+    bool filament_user_edited_ = false;
     MoonrakerAPI* api_ = nullptr;
     CompletionCallback completion_callback_;
     int remaining_pre_edit_pct_ = 0; ///< Remaining % before edit mode
@@ -199,6 +205,33 @@ class AmsEditModal : public Modal {
     void handle_remaining_cancel();
     void handle_reset();
     void handle_save();
+
+    // Pure decision for whether handle_save() should create a NEW Spoolman spool
+    // from manually-entered fields: only for an unlinked slot, only after a
+    // genuine user filament edit (vendor/material/color — NOT the auto-defaulted
+    // "Generic"), and only when the metadata is complete (#1071 Symptom C).
+    // Static + side-effect-free so it is unit-testable without the modal/XML/
+    // async machinery (the is_spoolman_available() and Spoolman create chain
+    // around it are not).
+    static bool should_create_new_spool(const SlotInfo& working_info, bool filament_user_edited);
+
+    // Pure: true when an edit to a LINKED spool changes the filament identity —
+    // a different material, or a color beyond FilamentMapper's match tolerance.
+    // A strong signal the user loaded a DIFFERENT physical spool, so updating the
+    // linked Spoolman spool would clobber the previous spool's definition (#1071
+    // Symptom B). Static + side-effect-free so it is unit-testable.
+    static bool is_material_identity_change(const SlotInfo& original, const SlotInfo& edited);
+
+    // Fire the Spoolman create/update async path for the current working_info_
+    // (factored out of handle_save so the identity-change confirmation can defer
+    // into it). Caller returns after invoking.
+    void do_spoolman_save();
+    // Show the dismiss-safe "different filament?" confirmation, then either run
+    // do_spoolman_save() (confirm) or save locally without touching Spoolman
+    // (cancel) — see on_identity_confirm_cb / on_identity_cancel_cb.
+    void prompt_identity_change_then_save();
+    static void on_identity_confirm_cb(lv_event_t* e);
+    static void on_identity_cancel_cb(lv_event_t* e);
 #if HELIX_HAS_LABEL_PRINTER
     void handle_print_label();
 #endif

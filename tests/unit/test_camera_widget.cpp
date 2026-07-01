@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "lvgl.h"
 #include "panel_widget.h"
 #include "panel_widget_registry.h"
 
 #include "../catch_amalgamated.hpp"
-
-#include "lvgl.h"
 
 #if HELIX_HAS_CAMERA
 #include "camera_stream.h"
@@ -160,8 +159,7 @@ TEST_CASE("CameraStream: copy_pixels_rgb_to_lvgl with both flips", "[camera]") {
     const int stride = W * 3;
     // Row 0: [0xAA,0xBB,0xCC] [0x11,0x22,0x33]
     // Row 1: [0x44,0x55,0x66] [0x77,0x88,0x99]
-    uint8_t src[12] = {0xAA, 0xBB, 0xCC, 0x11, 0x22, 0x33,
-                       0x44, 0x55, 0x66, 0x77, 0x88, 0x99};
+    uint8_t src[12] = {0xAA, 0xBB, 0xCC, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99};
     uint8_t dst[12] = {};
 
     CameraStream::copy_pixels_rgb_to_lvgl(src, dst, W, H, stride, stride, true, true);
@@ -174,10 +172,18 @@ TEST_CASE("CameraStream: copy_pixels_rgb_to_lvgl with both flips", "[camera]") {
     //   dst(1,0) = src(0,1) swapped = B=66,G=55,R=44
     //   dst(0,1) = src(1,0) swapped = B=33,G=22,R=11
     //   dst(1,1) = src(0,0) swapped = B=CC,G=BB,R=AA
-    CHECK(dst[0] == 0x99); CHECK(dst[1] == 0x88); CHECK(dst[2] == 0x77);
-    CHECK(dst[3] == 0x66); CHECK(dst[4] == 0x55); CHECK(dst[5] == 0x44);
-    CHECK(dst[6] == 0x33); CHECK(dst[7] == 0x22); CHECK(dst[8] == 0x11);
-    CHECK(dst[9] == 0xCC); CHECK(dst[10] == 0xBB); CHECK(dst[11] == 0xAA);
+    CHECK(dst[0] == 0x99);
+    CHECK(dst[1] == 0x88);
+    CHECK(dst[2] == 0x77);
+    CHECK(dst[3] == 0x66);
+    CHECK(dst[4] == 0x55);
+    CHECK(dst[5] == 0x44);
+    CHECK(dst[6] == 0x33);
+    CHECK(dst[7] == 0x22);
+    CHECK(dst[8] == 0x11);
+    CHECK(dst[9] == 0xCC);
+    CHECK(dst[10] == 0xBB);
+    CHECK(dst[11] == 0xAA);
 }
 
 // ============================================================================
@@ -193,8 +199,12 @@ TEST_CASE("CameraStream: copy_pixels_to_lvgl BGR no-swap fast path", "[camera]")
     CameraStream::copy_pixels_to_lvgl(src, dst, W, H, stride, stride, false, false, false);
 
     // No swap, no flip: straight memcpy
-    CHECK(dst[0] == 0xAA); CHECK(dst[1] == 0xBB); CHECK(dst[2] == 0xCC);
-    CHECK(dst[3] == 0x11); CHECK(dst[4] == 0x22); CHECK(dst[5] == 0x33);
+    CHECK(dst[0] == 0xAA);
+    CHECK(dst[1] == 0xBB);
+    CHECK(dst[2] == 0xCC);
+    CHECK(dst[3] == 0x11);
+    CHECK(dst[4] == 0x22);
+    CHECK(dst[5] == 0x33);
 }
 
 TEST_CASE("CameraStream: copy_pixels_to_lvgl BGR with horizontal flip", "[camera]") {
@@ -206,8 +216,12 @@ TEST_CASE("CameraStream: copy_pixels_to_lvgl BGR with horizontal flip", "[camera
     CameraStream::copy_pixels_to_lvgl(src, dst, W, H, stride, stride, true, false, false);
 
     // Flip H only, no swap: pixel order reversed, channels preserved
-    CHECK(dst[0] == 0x11); CHECK(dst[1] == 0x22); CHECK(dst[2] == 0x33);
-    CHECK(dst[3] == 0xAA); CHECK(dst[4] == 0xBB); CHECK(dst[5] == 0xCC);
+    CHECK(dst[0] == 0x11);
+    CHECK(dst[1] == 0x22);
+    CHECK(dst[2] == 0x33);
+    CHECK(dst[3] == 0xAA);
+    CHECK(dst[4] == 0xBB);
+    CHECK(dst[5] == 0xCC);
 }
 
 TEST_CASE("CameraStream: copy_pixels_to_lvgl BGR with vertical flip", "[camera]") {
@@ -219,8 +233,12 @@ TEST_CASE("CameraStream: copy_pixels_to_lvgl BGR with vertical flip", "[camera]"
     CameraStream::copy_pixels_to_lvgl(src, dst, W, H, stride, stride, false, true, false);
 
     // Flip V only, no swap: row order reversed, channels preserved
-    CHECK(dst[0] == 0x11); CHECK(dst[1] == 0x22); CHECK(dst[2] == 0x33);
-    CHECK(dst[3] == 0xAA); CHECK(dst[4] == 0xBB); CHECK(dst[5] == 0xCC);
+    CHECK(dst[0] == 0x11);
+    CHECK(dst[1] == 0x22);
+    CHECK(dst[2] == 0x33);
+    CHECK(dst[3] == 0xAA);
+    CHECK(dst[4] == 0xBB);
+    CHECK(dst[5] == 0xCC);
 }
 
 // ============================================================================
@@ -237,7 +255,8 @@ TEST_CASE("CameraStream: parse_boundary extracts boundary from Content-Type", "[
         CHECK(b == "--frame");
     }
     SECTION("quoted boundary") {
-        auto b = CameraStream::parse_boundary("multipart/x-mixed-replace; boundary=\"someboundary\"");
+        auto b =
+            CameraStream::parse_boundary("multipart/x-mixed-replace; boundary=\"someboundary\"");
         CHECK(b == "--someboundary");
     }
     SECTION("boundary already has dashes") {

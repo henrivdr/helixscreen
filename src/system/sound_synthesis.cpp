@@ -24,9 +24,8 @@ FilterType filter_type_from_string(const std::string& type) {
     return FilterType::LOWPASS;
 }
 
-void generate_samples(float* buffer, int num_samples, int sample_rate,
-                      Waveform wave, float freq, float amplitude,
-                      float duty_cycle, float& phase) {
+void generate_samples(float* buffer, int num_samples, int sample_rate, Waveform wave, float freq,
+                      float amplitude, float duty_cycle, float& phase) {
     const float phase_inc = freq / static_cast<float>(sample_rate);
 
     for (int i = 0; i < num_samples; ++i) {
@@ -57,8 +56,7 @@ void generate_samples(float* buffer, int num_samples, int sample_rate,
     }
 }
 
-void compute_biquad_coeffs(BiquadFilter& f, FilterType type, float cutoff,
-                           float sample_rate) {
+void compute_biquad_coeffs(BiquadFilter& f, FilterType type, float cutoff, float sample_rate) {
     constexpr float Q = 0.707107f; // 1/sqrt(2), Butterworth
 
     // Clamp cutoff to valid range (above 0, below Nyquist)
@@ -115,8 +113,7 @@ void apply_filter(BiquadFilter& f, float* buffer, int num_samples) {
     }
 }
 
-void update_filter_if_needed(BiquadFilter& f, FilterType type, float cutoff,
-                             float sample_rate) {
+void update_filter_if_needed(BiquadFilter& f, FilterType type, float cutoff, float sample_rate) {
     if (f.current_type == type && f.current_cutoff == cutoff &&
         f.current_sample_rate == sample_rate) {
         return;

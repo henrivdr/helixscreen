@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "../lvgl_test_fixture.h"
 #include "config.h"
 #include "settings_manager.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 

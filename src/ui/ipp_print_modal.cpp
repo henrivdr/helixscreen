@@ -5,14 +5,14 @@
 
 #include "ipp_print_modal.h"
 
-#include "ipp_printer.h"
-#include "label_printer_settings.h"
-#include "label_renderer.h"
-#include "sheet_label_layout.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
+#include "ipp_printer.h"
+#include "label_printer_settings.h"
+#include "label_renderer.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "sheet_label_layout.h"
 
 #include <spdlog/spdlog.h>
 
@@ -69,7 +69,8 @@ void IppPrintModal::init_dropdowns() {
     if (count_dd) {
         std::string options;
         for (int i = 1; i <= max_labels_; i++) {
-            if (i > 1) options += "\n";
+            if (i > 1)
+                options += "\n";
             options += std::to_string(i);
         }
         lv_dropdown_set_options(count_dd, options.c_str());
@@ -84,15 +85,15 @@ void IppPrintModal::init_dropdowns() {
     if (start_dd) {
         std::string options;
         for (int i = 1; i <= max_labels_; i++) {
-            if (i > 1) options += "\n";
+            if (i > 1)
+                options += "\n";
             options += fmt::format("{} {}", lv_tr("Position"), i);
         }
         lv_dropdown_set_options(start_dd, options.c_str());
         lv_dropdown_set_selected(start_dd, 0); // Default to Position 1
     }
 
-    spdlog::debug("[IppPrintModal] Template: {} ({} labels/sheet)", tmpl.name,
-                  max_labels_);
+    spdlog::debug("[IppPrintModal] Template: {} ({} labels/sheet)", tmpl.name, max_labels_);
 }
 
 void IppPrintModal::on_ok() {
@@ -119,14 +120,16 @@ void IppPrintModal::on_ok() {
     auto bitmap = LabelRenderer::render(spool_, preset, label_size);
     if (bitmap.empty()) {
         spdlog::error("[IppPrintModal] Failed to render label bitmap");
-        if (callback_) callback_(false, "Failed to render label");
+        if (callback_)
+            callback_(false, "Failed to render label");
         hide();
         return;
     }
 
     // Configure and print via IPP
     static IppPrinter ipp_printer;
-    ipp_printer.set_target(settings.get_printer_address(), settings.get_printer_port(), "ipp/print");
+    ipp_printer.set_target(settings.get_printer_address(), settings.get_printer_port(),
+                           "ipp/print");
     ipp_printer.set_sheet_template(size_idx);
     ipp_printer.set_label_count(count);
     ipp_printer.set_start_position(start);
@@ -148,8 +151,8 @@ void IppPrintModal::on_cancel() {
 
 bool maybe_show_ipp_print_modal(const SpoolInfo& spool, PrintCallback callback) {
     auto& settings = LabelPrinterSettingsManager::instance();
-    if (settings.get_printer_type() != "network" ||
-        settings.get_printer_protocol() != "ipp") return false;
+    if (settings.get_printer_type() != "network" || settings.get_printer_protocol() != "ipp")
+        return false;
 
     static IppPrintModal modal;
     modal.show_for_spool(spool, std::move(callback));

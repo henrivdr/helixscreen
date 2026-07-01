@@ -29,9 +29,8 @@
 
 namespace helix {
 void register_thermistor_widget() {
-    register_widget_factory("thermistor", [](const std::string& id) {
-        return std::make_unique<ThermistorWidget>(id);
-    });
+    register_widget_factory(
+        "thermistor", [](const std::string& id) { return std::make_unique<ThermistorWidget>(id); });
 
     // Register XML event callbacks at startup (before any XML is parsed)
     lv_xml_register_event_cb(nullptr, "thermistor_clicked_cb",
@@ -218,8 +217,7 @@ void position_picker_card(lv_obj_t* backdrop, lv_obj_t* widget_obj, lv_obj_t* pa
 
 } // anonymous namespace
 
-ThermistorWidget::ThermistorWidget(const std::string& instance_id)
-    : instance_id_(instance_id) {
+ThermistorWidget::ThermistorWidget(const std::string& instance_id) : instance_id_(instance_id) {
     std::strcpy(temp_buffer_, "--\xC2\xB0"
                               "C"); // "--°C"
 }

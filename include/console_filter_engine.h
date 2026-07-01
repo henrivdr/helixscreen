@@ -30,7 +30,8 @@ class ConsoleFilterEngine {
     enum class Type { Prefix, Substring, Regex };
 
     /**
-     * @brief Add one pattern from its serialized spec ("prefix:foo" / "substring:bar" / "regex:^baz").
+     * @brief Add one pattern from its serialized spec ("prefix:foo" / "substring:bar" /
+     * "regex:^baz").
      * @return true on success; false on malformed spec, unknown type, or invalid regex.
      */
     bool add(std::string_view spec);

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_observer_guard.h" // SubjectLifetime
+
 #include "../helix_test_fixture.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
-#include "src/ui/panel_widgets/print_status_widget.h"
 #include "app_globals.h"
 #include "printer_state.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
 #include "tool_state.h"
-#include "ui_observer_guard.h"  // SubjectLifetime
 
 #include "../catch_amalgamated.hpp"
 
@@ -19,7 +20,9 @@ struct FormatterScope {
         PrintStatusWidget::destroy_formatter_for_test();
         PrintStatusWidget::ensure_formatter_for_test();
     }
-    ~FormatterScope() { PrintStatusWidget::release_formatter_for_test(); }
+    ~FormatterScope() {
+        PrintStatusWidget::release_formatter_for_test();
+    }
 };
 
 TEST_CASE_METHOD(HelixTestFixture, "Tool override: pinned reads per-tool subject",
@@ -45,8 +48,8 @@ TEST_CASE_METHOD(HelixTestFixture, "Tool override: pinned reads per-tool subject
     SubjectLifetime lt;
     auto* e1_temp = ps.get_extruder_temp_subject("extruder1", lt);
     REQUIRE(e1_temp != nullptr);
-    lv_subject_set_int(e1_temp, 25000);                                 // 250 °C
-    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 19000);   // 190 °C (distinct)
+    lv_subject_set_int(e1_temp, 25000);                               // 250 °C
+    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 19000); // 190 °C (distinct)
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
     // Pin the formatter to extruder1
@@ -75,7 +78,7 @@ TEST_CASE_METHOD(HelixTestFixture, "Tool override: stale pin falls back to auto"
 
     // Pin to a ghost extruder that doesn't exist — should fall back to auto
     PrintStatusWidget::set_nozzle_tool_override_for_test("extruder7_ghost");
-    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 12345);   // 123 °C
+    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 12345); // 123 °C
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
     auto* nozzle_sub = lv_xml_get_subject(nullptr, "print_status_nozzle_text");

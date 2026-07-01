@@ -16,13 +16,13 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "app_constants.h"
-#include "filament_database.h"
 #include "app_globals.h"
+#include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
-#include "temperature_controller.h"
 #include "post_op_cooldown_manager.h"
 #include "printer_state.h"
+#include "temperature_controller.h"
 #include "ui/ui_cleanup_helpers.h"
 
 #include <spdlog/spdlog.h>
@@ -496,9 +496,9 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
                 ++idx;
             }
             current_step_count_ = static_cast<int>(steps.size());
-            step_progress_ = ui_step_progress_create(step_progress_container_, steps.data(),
-                                                     current_step_count_, false,
-                                                     "ams_step_progress");
+            step_progress_ =
+                ui_step_progress_create(step_progress_container_, steps.data(), current_step_count_,
+                                        false, "ams_step_progress");
             if (step_progress_) {
                 // Observe the backend-supplied current-step subject. The subject
                 // is always a STATIC singleton (firmware phase or narration step),
@@ -550,17 +550,17 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     case StepOperationType::LOAD_FRESH: {
         if (supports_purge) {
             ui_step_t steps[] = {
-                {"Heat nozzle", StepState::Pending},
-                {"Feed filament", StepState::Pending},
-                {"Purge", StepState::Pending},
+                {lv_tr("Heat nozzle"), StepState::Pending},
+                {lv_tr("Feed filament"), StepState::Pending},
+                {lv_tr("Purge"), StepState::Pending},
             };
             current_step_count_ = 3;
             step_progress_ = ui_step_progress_create(step_progress_container_, steps, 3, false,
                                                      "ams_step_progress");
         } else {
             ui_step_t steps[] = {
-                {"Heat nozzle", StepState::Pending},
-                {"Feed filament", StepState::Pending},
+                {lv_tr("Heat nozzle"), StepState::Pending},
+                {lv_tr("Feed filament"), StepState::Pending},
             };
             current_step_count_ = 2;
             step_progress_ = ui_step_progress_create(step_progress_container_, steps, 2, false,
@@ -571,27 +571,27 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
     case StepOperationType::LOAD_SWAP: {
         ui_step_t steps[4];
         int n = 0;
-        steps[n++] = {"Heat nozzle", StepState::Pending};
+        steps[n++] = {lv_tr("Heat nozzle"), StepState::Pending};
         if (has_tip_step)
             steps[n++] = {tip_step_label, StepState::Pending};
-        steps[n++] = {"Feed filament", StepState::Pending};
+        steps[n++] = {lv_tr("Feed filament"), StepState::Pending};
         if (supports_purge)
-            steps[n++] = {"Purge", StepState::Pending};
+            steps[n++] = {lv_tr("Purge"), StepState::Pending};
         current_step_count_ = n;
-        step_progress_ = ui_step_progress_create(step_progress_container_, steps, n, false,
-                                                 "ams_step_progress");
+        step_progress_ =
+            ui_step_progress_create(step_progress_container_, steps, n, false, "ams_step_progress");
         break;
     }
     case StepOperationType::UNLOAD: {
         ui_step_t steps[3];
         int n = 0;
-        steps[n++] = {"Heat nozzle", StepState::Pending};
+        steps[n++] = {lv_tr("Heat nozzle"), StepState::Pending};
         if (has_tip_step)
             steps[n++] = {tip_step_label, StepState::Pending};
-        steps[n++] = {"Retract", StepState::Pending};
+        steps[n++] = {lv_tr("Retract"), StepState::Pending};
         current_step_count_ = n;
-        step_progress_ = ui_step_progress_create(step_progress_container_, steps, n, false,
-                                                 "ams_step_progress");
+        step_progress_ =
+            ui_step_progress_create(step_progress_container_, steps, n, false, "ams_step_progress");
         break;
     }
     }
@@ -637,11 +637,10 @@ void AmsOperationSidebar::refresh_live_temp_step_label(int current_index) {
         temperature::format_temperature_pair(temperature::deci_to_degrees(current_deci),
                                              temperature::deci_to_degrees(target_deci), temp_buf,
                                              sizeof(temp_buf));
-        const char* base_label = (live_temp_step_index_ <
-                                  static_cast<int>(current_step_model_.steps.size()))
-                                     ? lv_tr(current_step_model_.steps[live_temp_step_index_]
-                                                 .label.c_str())
-                                     : lv_tr("Heat nozzle");
+        const char* base_label =
+            (live_temp_step_index_ < static_cast<int>(current_step_model_.steps.size()))
+                ? lv_tr(current_step_model_.steps[live_temp_step_index_].label.c_str())
+                : lv_tr("Heat nozzle");
         char label_buf[64];
         snprintf(label_buf, sizeof(label_buf), "%s %s", base_label, temp_buf);
         ui_step_progress_set_label(step_progress_, live_temp_step_index_, label_buf);
@@ -649,11 +648,10 @@ void AmsOperationSidebar::refresh_live_temp_step_label(int current_index) {
         spdlog::debug("[AmsSidebar] Live-temp step label: {}", label_buf);
     } else if (heat_label_showing_temp_) {
         // Left the live-temp step — restore the static label.
-        const char* base_label = (live_temp_step_index_ <
-                                  static_cast<int>(current_step_model_.steps.size()))
-                                     ? lv_tr(current_step_model_.steps[live_temp_step_index_]
-                                                 .label.c_str())
-                                     : lv_tr("Heat nozzle");
+        const char* base_label =
+            (live_temp_step_index_ < static_cast<int>(current_step_model_.steps.size()))
+                ? lv_tr(current_step_model_.steps[live_temp_step_index_].label.c_str())
+                : lv_tr("Heat nozzle");
         ui_step_progress_set_label(step_progress_, live_temp_step_index_, base_label);
         heat_label_showing_temp_ = false;
     }

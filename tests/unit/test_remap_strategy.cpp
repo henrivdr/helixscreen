@@ -77,37 +77,83 @@ class QidiProbe : public AmsBackendQidi {
 class BaseProbe : public AmsBackend {
   public:
     // Stubs for pure-virtual methods — only strategy is under test.
-    AmsError start() override { return AmsErrorHelper::success(); }
+    AmsError start() override {
+        return AmsErrorHelper::success();
+    }
     void stop() override {}
-    [[nodiscard]] bool is_running() const override { return false; }
+    [[nodiscard]] bool is_running() const override {
+        return false;
+    }
     void set_event_callback(EventCallback) override {}
-    [[nodiscard]] AmsSystemInfo get_system_info() const override { return {}; }
-    [[nodiscard]] AmsType get_type() const override { return AmsType::NONE; }
-    [[nodiscard]] SlotInfo get_slot_info(int) const override { return {}; }
-    [[nodiscard]] AmsAction get_current_action() const override { return AmsAction::IDLE; }
-    [[nodiscard]] int get_current_tool() const override { return -1; }
-    [[nodiscard]] int get_current_slot() const override { return -1; }
-    [[nodiscard]] bool is_filament_loaded() const override { return false; }
-    [[nodiscard]] PathTopology get_topology() const override { return PathTopology::LINEAR; }
+    [[nodiscard]] AmsSystemInfo get_system_info() const override {
+        return {};
+    }
+    [[nodiscard]] AmsType get_type() const override {
+        return AmsType::NONE;
+    }
+    [[nodiscard]] SlotInfo get_slot_info(int) const override {
+        return {};
+    }
+    [[nodiscard]] AmsAction get_current_action() const override {
+        return AmsAction::IDLE;
+    }
+    [[nodiscard]] int get_current_tool() const override {
+        return -1;
+    }
+    [[nodiscard]] int get_current_slot() const override {
+        return -1;
+    }
+    [[nodiscard]] bool is_filament_loaded() const override {
+        return false;
+    }
+    [[nodiscard]] PathTopology get_topology() const override {
+        return PathTopology::LINEAR;
+    }
     [[nodiscard]] PathSegment get_filament_segment() const override {
         return PathSegment::NONE;
     }
     [[nodiscard]] PathSegment get_slot_filament_segment(int) const override {
         return PathSegment::NONE;
     }
-    [[nodiscard]] PathSegment infer_error_segment() const override { return PathSegment::NONE; }
-    AmsError load_filament(int) override { return AmsErrorHelper::success(); }
-    AmsError unload_filament(int) override { return AmsErrorHelper::success(); }
-    AmsError select_slot(int) override { return AmsErrorHelper::success(); }
-    AmsError change_tool(int) override { return AmsErrorHelper::success(); }
-    AmsError recover() override { return AmsErrorHelper::success(); }
-    AmsError reset() override { return AmsErrorHelper::success(); }
-    AmsError cancel() override { return AmsErrorHelper::success(); }
-    AmsError set_slot_info(int, const SlotInfo&, bool) override { return AmsErrorHelper::success(); }
-    AmsError set_tool_mapping(int, int) override { return AmsErrorHelper::success(); }
-    AmsError enable_bypass() override { return AmsErrorHelper::success(); }
-    AmsError disable_bypass() override { return AmsErrorHelper::success(); }
-    [[nodiscard]] bool is_bypass_active() const override { return false; }
+    [[nodiscard]] PathSegment infer_error_segment() const override {
+        return PathSegment::NONE;
+    }
+    AmsError load_filament(int) override {
+        return AmsErrorHelper::success();
+    }
+    AmsError unload_filament(int) override {
+        return AmsErrorHelper::success();
+    }
+    AmsError select_slot(int) override {
+        return AmsErrorHelper::success();
+    }
+    AmsError change_tool(int) override {
+        return AmsErrorHelper::success();
+    }
+    AmsError recover() override {
+        return AmsErrorHelper::success();
+    }
+    AmsError reset() override {
+        return AmsErrorHelper::success();
+    }
+    AmsError cancel() override {
+        return AmsErrorHelper::success();
+    }
+    AmsError set_slot_info(int, const SlotInfo&, bool) override {
+        return AmsErrorHelper::success();
+    }
+    AmsError set_tool_mapping(int, int) override {
+        return AmsErrorHelper::success();
+    }
+    AmsError enable_bypass() override {
+        return AmsErrorHelper::success();
+    }
+    AmsError disable_bypass() override {
+        return AmsErrorHelper::success();
+    }
+    [[nodiscard]] bool is_bypass_active() const override {
+        return false;
+    }
 };
 
 } // namespace

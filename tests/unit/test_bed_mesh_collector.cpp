@@ -425,8 +425,7 @@ TEST_CASE("parse_probe_position handles negative coordinates",
     REQUIRE(p->y == Catch::Approx(-10.250));
 }
 
-TEST_CASE("parse_probe_position rejects non-probe lines",
-          "[bed_mesh_collector][probe_position]") {
+TEST_CASE("parse_probe_position rejects non-probe lines", "[bed_mesh_collector][probe_position]") {
     REQUIRE_FALSE(helix::parse_probe_position("Probing point 5/25").has_value());
     REQUIRE_FALSE(helix::parse_probe_position("ok").has_value());
     REQUIRE_FALSE(helix::parse_probe_position("probe at is z=0").has_value());
@@ -463,8 +462,7 @@ TEST_CASE("parse_adapted_probe_count extracts N*M from Klipper line",
     }
 }
 
-TEST_CASE("parse_adapted_probe_count rejects unrelated lines",
-          "[bed_mesh_collector][adapted]") {
+TEST_CASE("parse_adapted_probe_count rejects unrelated lines", "[bed_mesh_collector][adapted]") {
     REQUIRE_FALSE(helix::parse_adapted_probe_count("Probing point 5/25").has_value());
     REQUIRE_FALSE(helix::parse_adapted_probe_count("// bed_mesh: generated points").has_value());
     REQUIRE_FALSE(helix::parse_adapted_probe_count("Mesh X,Y: 10,10").has_value());
@@ -485,8 +483,8 @@ TEST_CASE("parse_adapted_probe_count rejects unrelated lines",
  * This mirrors the real Snapmaker U1 observation: probed_matrix 6x5=30 with
  * samples=3 produces 90 "probe at" lines that must deduplicate to 30 points.
  */
-static int simulate_dedupe_count(int grid_rows, int grid_cols, int samples,
-                                 double x_spacing = 46.1, double y_spacing = 41.62) {
+static int simulate_dedupe_count(int grid_rows, int grid_cols, int samples, double x_spacing = 46.1,
+                                 double y_spacing = 41.62) {
     constexpr double POS_TOL = 0.05;
     double last_x = 0.0, last_y = 0.0;
     bool has_last = false;

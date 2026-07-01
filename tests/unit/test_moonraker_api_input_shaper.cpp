@@ -181,6 +181,66 @@ TEST_CASE_METHOD(InputShaperTestFixture, "start_resonance_test sends correct G-c
     REQUIRE(complete_called);
 }
 
+TEST_CASE_METHOD(InputShaperTestFixture,
+                 "start_resonance_test flags chart data unavailable when CSV unreadable",
+                 "[calibration][input_shaper]") {
+    // Simulate Klipper reporting a CSV path whose file the client cannot read
+    // (e.g. systemd PrivateTmp isolating HelixScreen from Klipper's /tmp).
+    mock_client_.set_shaper_csv_writable(false);
+
+    std::atomic<bool> complete_called{false};
+    InputShaperResult captured_result;
+
+    api_->advanced().start_resonance_test(
+        'X', [](int) {},
+        [&](const InputShaperResult& result) {
+            captured_result = result;
+            complete_called = true;
+        },
+        [&](const MoonrakerError&) { FAIL("Error callback should not be called"); });
+
+    for (int i = 0; i < 200 && !complete_called; ++i) {
+        lv_tick_inc(100);
+        lv_timer_handler_safe();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    REQUIRE(complete_called);
+    // Recommendation is still valid — it comes from console output, not the CSV.
+    REQUIRE(captured_result.is_valid());
+    REQUIRE(captured_result.shaper_type == "mzv");
+    // Klipper reported a path, so csv_path is populated...
+    REQUIRE_FALSE(captured_result.csv_path.empty());
+    // ...but no chart data could be read, and that must be flagged (not silent).
+    REQUIRE(captured_result.freq_response.empty());
+    REQUIRE(captured_result.chart_data_unavailable);
+}
+
+TEST_CASE_METHOD(InputShaperTestFixture,
+                 "start_resonance_test does not flag chart unavailable when CSV is readable",
+                 "[calibration][input_shaper]") {
+    std::atomic<bool> complete_called{false};
+    InputShaperResult captured_result;
+
+    api_->advanced().start_resonance_test(
+        'X', [](int) {},
+        [&](const InputShaperResult& result) {
+            captured_result = result;
+            complete_called = true;
+        },
+        [&](const MoonrakerError&) { FAIL("Error callback should not be called"); });
+
+    for (int i = 0; i < 200 && !complete_called; ++i) {
+        lv_tick_inc(100);
+        lv_timer_handler_safe();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    REQUIRE(complete_called);
+    REQUIRE(captured_result.has_freq_data());
+    REQUIRE_FALSE(captured_result.chart_data_unavailable);
+}
+
 // ============================================================================
 // set_input_shaper() Tests
 // ============================================================================
@@ -906,9 +966,8 @@ TEST_CASE("Kalico smoother regex parses bleeding-edge format", "[input_shaper][k
     }
 
     SECTION("Standard Klipper line is NOT matched by kalico_regex") {
-        std::string line =
-            "Fitted shaper 'mzv' frequency = 36.7 Hz "
-            "(vibrations = 7.2%, smoothing ~= 0.140)";
+        std::string line = "Fitted shaper 'mzv' frequency = 36.7 Hz "
+                           "(vibrations = 7.2%, smoothing ~= 0.140)";
 
         std::smatch match;
         CHECK_FALSE(std::regex_search(line, match, kalico_regex));
@@ -923,12 +982,18 @@ TEST_CASE("Kalico smoother regex parses bleeding-edge format", "[input_shaper][k
 
     SECTION("All Kalico smooth shaper types parse correctly") {
         std::vector<std::pair<std::string, std::string>> smoother_lines = {
-            {"smooth_zv", "Fitted smoother 'smooth_zv' frequency = 60.2 Hz (vibration score = 4.80%, smoothing ~= 0.040, combined score = 1.0e-02)"},
-            {"smooth_mzv", "Fitted smoother 'smooth_mzv' frequency = 54.4 Hz (vibration score = 1.20%, smoothing ~= 0.085, combined score = 2.0e-02)"},
-            {"smooth_ei", "Fitted smoother 'smooth_ei' frequency = 57.0 Hz (vibration score = 0.50%, smoothing ~= 0.095, combined score = 3.0e-02)"},
-            {"smooth_2hump_ei", "Fitted smoother 'smooth_2hump_ei' frequency = 72.4 Hz (vibration score = 0.00%, smoothing ~= 0.065, combined score = 4.0e-02)"},
-            {"smooth_zvd_ei", "Fitted smoother 'smooth_zvd_ei' frequency = 68.0 Hz (vibration score = 0.10%, smoothing ~= 0.070, combined score = 5.0e-02)"},
-            {"smooth_si", "Fitted smoother 'smooth_si' frequency = 52.0 Hz (vibration score = 0.00%, smoothing ~= 0.110, combined score = 6.0e-02)"},
+            {"smooth_zv", "Fitted smoother 'smooth_zv' frequency = 60.2 Hz (vibration score = "
+                          "4.80%, smoothing ~= 0.040, combined score = 1.0e-02)"},
+            {"smooth_mzv", "Fitted smoother 'smooth_mzv' frequency = 54.4 Hz (vibration score = "
+                           "1.20%, smoothing ~= 0.085, combined score = 2.0e-02)"},
+            {"smooth_ei", "Fitted smoother 'smooth_ei' frequency = 57.0 Hz (vibration score = "
+                          "0.50%, smoothing ~= 0.095, combined score = 3.0e-02)"},
+            {"smooth_2hump_ei", "Fitted smoother 'smooth_2hump_ei' frequency = 72.4 Hz (vibration "
+                                "score = 0.00%, smoothing ~= 0.065, combined score = 4.0e-02)"},
+            {"smooth_zvd_ei", "Fitted smoother 'smooth_zvd_ei' frequency = 68.0 Hz (vibration "
+                              "score = 0.10%, smoothing ~= 0.070, combined score = 5.0e-02)"},
+            {"smooth_si", "Fitted smoother 'smooth_si' frequency = 52.0 Hz (vibration score = "
+                          "0.00%, smoothing ~= 0.110, combined score = 6.0e-02)"},
         };
 
         for (const auto& [expected_type, line] : smoother_lines) {

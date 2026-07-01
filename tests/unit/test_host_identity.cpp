@@ -3,11 +3,11 @@
 
 #include "host_identity.h"
 
-#include "../catch_amalgamated.hpp"
-
-#include <unistd.h>
 #include <cctype>
 #include <string>
+#include <unistd.h>
+
+#include "../catch_amalgamated.hpp"
 
 TEST_CASE("host_identity — localhost strings", "[host_identity]") {
     REQUIRE(helix::is_moonraker_on_same_host("localhost"));
@@ -22,7 +22,8 @@ TEST_CASE("host_identity — gethostname matches", "[host_identity]") {
     REQUIRE(helix::is_moonraker_on_same_host(buf));
 
     std::string upper = buf;
-    for (auto& c : upper) c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+    for (auto& c : upper)
+        c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
     REQUIRE(helix::is_moonraker_on_same_host(upper));
 }
 

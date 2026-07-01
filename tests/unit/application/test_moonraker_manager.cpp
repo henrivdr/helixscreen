@@ -276,12 +276,12 @@ TEST_CASE("should_start_print_collector - mid-print detection (app boot only)",
     // This is the ONLY case where mid-print detection should suppress the collector
     REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
                                                                  PrintJobState::PRINTING, 1, true));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
-                                                                 PrintJobState::PRINTING, 31, true));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
-                                                                 PrintJobState::PRINTING, 99, true));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
-                                                                 PrintJobState::PRINTING, 100, true));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::STANDBY, PrintJobState::PRINTING, 31, true));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::STANDBY, PrintJobState::PRINTING, 99, true));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::STANDBY, PrintJobState::PRINTING, 100, true));
 }
 
 TEST_CASE("should_start_print_collector - reprint after cancel with stale progress",
@@ -299,18 +299,18 @@ TEST_CASE("should_start_print_collector - reprint after cancel with stale progre
 
 TEST_CASE("should_start_print_collector - already printing", "[application][print_start]") {
     // If already printing, no transition → don't start
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::PRINTING,
-                                                                 PrintJobState::PRINTING, 0, false));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::PRINTING,
-                                                                 PrintJobState::PRINTING, 50, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::PRINTING, PrintJobState::PRINTING, 0, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::PRINTING, PrintJobState::PRINTING, 50, false));
 }
 
 TEST_CASE("should_start_print_collector - paused states", "[application][print_start]") {
     // Transition from PAUSED to PRINTING = resume, not fresh start
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::PAUSED,
-                                                                 PrintJobState::PRINTING, 0, false));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::PAUSED,
-                                                                 PrintJobState::PRINTING, 50, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::PAUSED, PrintJobState::PRINTING, 0, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::PAUSED, PrintJobState::PRINTING, 50, false));
     // Transition to PAUSED (not PRINTING) = don't start
     REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
                                                                  PrintJobState::PAUSED, 0, false));
@@ -318,12 +318,12 @@ TEST_CASE("should_start_print_collector - paused states", "[application][print_s
 
 TEST_CASE("should_start_print_collector - non-printing transitions", "[application][print_start]") {
     // Transitions that don't involve PRINTING = don't start
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
-                                                                 PrintJobState::COMPLETE, 0, false));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::PRINTING,
-                                                                 PrintJobState::COMPLETE, 100, false));
-    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(PrintJobState::PRINTING,
-                                                                 PrintJobState::CANCELLED, 50, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::STANDBY, PrintJobState::COMPLETE, 0, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::PRINTING, PrintJobState::COMPLETE, 100, false));
+    REQUIRE_FALSE(MoonrakerManager::should_start_print_collector(
+        PrintJobState::PRINTING, PrintJobState::CANCELLED, 50, false));
 }
 
 TEST_CASE("should_start_print_collector - mid-print attach via print_duration",
@@ -360,8 +360,8 @@ TEST_CASE("should_start_print_collector - mid-print attach via print_duration",
     SECTION("Default duration arg preserves backward compat") {
         // Existing 4-arg call sites must still compile and behave identically
         // when print_duration was never plumbed through.
-        REQUIRE(MoonrakerManager::should_start_print_collector(
-            PrintJobState::STANDBY, PrintJobState::PRINTING, 0, true));
+        REQUIRE(MoonrakerManager::should_start_print_collector(PrintJobState::STANDBY,
+                                                               PrintJobState::PRINTING, 0, true));
     }
 }
 
@@ -632,8 +632,8 @@ struct ShutdownObserverContract {
 // appears — see comment block above for criteria.
 const std::vector<ShutdownObserverContract>& shutdown_observer_classes() {
     static const std::vector<ShutdownObserverContract> contracts = {
-        {"include/moonraker_manager.h", "src/application/moonraker_manager.cpp",
-         "MoonrakerManager", "shutdown",
+        {"include/moonraker_manager.h", "src/application/moonraker_manager.cpp", "MoonrakerManager",
+         "shutdown",
          /*min_expected_members=*/6},
     };
     return contracts;
@@ -654,8 +654,8 @@ TEST_CASE("Shutdown observer release contract — every ObserverGuard member is 
             INFO("Header: " << c.header_path);
             REQUIRE(static_cast<int>(members.size()) >= c.min_expected_members);
 
-            auto released = extract_released_members_in_method(impl, c.class_name,
-                                                               c.shutdown_method);
+            auto released =
+                extract_released_members_in_method(impl, c.class_name, c.shutdown_method);
             INFO("Impl: " << c.impl_path << " method: " << c.shutdown_method);
             REQUIRE_FALSE(released.empty());
 

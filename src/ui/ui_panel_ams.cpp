@@ -396,6 +396,13 @@ void AmsPanel::on_activate() {
         // bypass_row visibility managed by bind_flag_if_eq on ams_supports_bypass subject
     }
 
+    // Re-read non-subject slot fields on reactivation. The MATERIAL label has no
+    // backing subject (unlike color, which self-refreshes via sync_from_backend()
+    // above), so it is only re-read by refresh_slots(). Without this call the
+    // material label stays stale until the next slots_version bump (#981).
+    // refresh_slots() guards panel_ && subjects_initialized_ internally.
+    refresh_slots();
+
     update_endless_arrows_from_backend();
 
     // Ensure filament path canvas redraws after being stopped on deactivate
@@ -1049,19 +1056,14 @@ void AmsPanel::update_slot_colors() {
                 }
             }
 
-            // Set fill level from weight data. BOTH fields must be valid:
-            // some backends (Snapmaker RFID) report total_weight_g from the
-            // tag but never populate remaining_weight_g — firmware doesn't
-            // track consumption. Dividing -1/total yields a negative fill
-            // that clamps to 0, rendering every slot as "empty" even though
-            // spools have real filament. Treat remaining_weight_g < 0 the
-            // same as total <= 0: unknown → fall back to 75%.
-            if (slot_info.total_weight_g > 0.0f && slot_info.remaining_weight_g >= 0.0f) {
-                float fill_level = slot_info.remaining_weight_g / slot_info.total_weight_g;
-                ui_ams_slot_set_fill_level(slot_widgets_[i], fill_level);
-            } else if (slot_info.has_filament_info()) {
-                // Weight data unknown — show 75% rather than defaulting to full
-                ui_ams_slot_set_fill_level(slot_widgets_[i], 0.75f);
+            // Set fill level from the slot's display policy (see
+            // SlotInfo::display_fill_level): real ratio when both weights are
+            // known, 75% fallback when only metadata is present, and an empty
+            // bar for a not-present/ghost lane — which a retained Spoolman link
+            // across an eject would otherwise render as ~75% full (#1071 BUG-1).
+            // nullopt means leave the bar untouched.
+            if (auto fill = slot_info.display_fill_level()) {
+                ui_ams_slot_set_fill_level(slot_widgets_[i], *fill);
             }
 
             // Refresh slot to update tool badge and other dynamic state
@@ -1629,7 +1631,7 @@ void AmsPanel::show_loading_error_modal() {
     AmsSystemInfo info = backend->get_system_info();
     std::string error_message = info.operation_detail;
     if (error_message.empty()) {
-        error_message = "An error occurred during filament loading.";
+        error_message = lv_tr("An error occurred during filament loading.");
     }
 
     // Store slot for retry

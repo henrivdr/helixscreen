@@ -345,7 +345,7 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
         bool reached_target_once = false; // current_temp ever within 5°C of target this op
         bool pending_purge_target = false; // target rose >10°C above baseline (waits for rise)
         bool seen_purge_signal = false;    // pending_purge_target gated by seen_filament_rise
-        int baseline_target_deci = 0;     // extruder target when heating first completed
+        int baseline_target_deci = 0;      // extruder target when heating first completed
     };
     PhaseTracker phase_tracker_;
     int last_extruder_target_deci_ = 0;

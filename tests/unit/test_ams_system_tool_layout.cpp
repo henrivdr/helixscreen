@@ -633,10 +633,10 @@ TEST_CASE("SystemToolLayout: PARALLEL shared extruder dedup via extruder_name",
         const char* extruder;
     };
     LaneSpec lanes[] = {
-        {0, "extruder"},   // Lane 0: T0, unique extruder
-        {2, "extruder1"},  // Lane 1: T2, unique extruder
-        {1, "extruder2"},  // Lane 2: T1, shared extruder
-        {3, "extruder2"},  // Lane 3: T3, shared extruder
+        {0, "extruder"},  // Lane 0: T0, unique extruder
+        {2, "extruder1"}, // Lane 1: T2, unique extruder
+        {1, "extruder2"}, // Lane 2: T1, shared extruder
+        {3, "extruder2"}, // Lane 3: T3, shared extruder
     };
     for (int s = 0; s < 4; ++s) {
         SlotInfo slot;
@@ -738,8 +738,8 @@ TEST_CASE("SystemToolLayout: PARALLEL cross-unit remap does not inflate tool cou
 
     // Virtual-to-physical mapping should use sorted rank within each unit
     // Unit 0 sorted tools: {0, 1, 2, 3, 4, 11} → physical 0-5
-    CHECK(layout.virtual_to_physical.at(0) == 0);  // rank 0 of {0,1,2,3,4,11}
-    CHECK(layout.virtual_to_physical.at(1) == 1);  // rank 1
+    CHECK(layout.virtual_to_physical.at(0) == 0); // rank 0 of {0,1,2,3,4,11}
+    CHECK(layout.virtual_to_physical.at(1) == 1); // rank 1
     CHECK(layout.virtual_to_physical.at(2) == 2);
     CHECK(layout.virtual_to_physical.at(3) == 3);
     CHECK(layout.virtual_to_physical.at(4) == 4);
@@ -848,9 +848,9 @@ TEST_CASE("SystemToolLayout: HTLF MIXED + Toolchanger PARALLEL total tools",
 
     // Virtual→physical mapping:
     // HTLF direct lanes sorted: T0→phys0, T2→phys1, hub group (T1)→phys2
-    CHECK(layout.virtual_to_physical.at(0) == 0);  // T0 direct → phys 0
-    CHECK(layout.virtual_to_physical.at(2) == 1);  // T2 direct → phys 1
-    CHECK(layout.virtual_to_physical.at(1) == 2);  // T1 hub → phys 2
+    CHECK(layout.virtual_to_physical.at(0) == 0); // T0 direct → phys 0
+    CHECK(layout.virtual_to_physical.at(2) == 1); // T2 direct → phys 1
+    CHECK(layout.virtual_to_physical.at(1) == 2); // T1 hub → phys 2
 
     // Toolchanger: T4→phys3, T5→phys4, T6→phys5
     CHECK(layout.virtual_to_physical.at(4) == 3);
@@ -924,8 +924,7 @@ TEST_CASE("SystemToolLayout: MIXED with all hub lanes gives tool_count 1",
 // Multi-unit mock regression: single toolhead must produce 1 nozzle
 // ============================================================================
 
-TEST_CASE("SystemToolLayout: multi-unit mock produces 1 physical tool",
-          "[ams][tool_layout]") {
+TEST_CASE("SystemToolLayout: multi-unit mock produces 1 physical tool", "[ams][tool_layout]") {
     // Regression test: multi-unit mock (Box Turtle + Night Owl) both feed
     // a single T0 toolhead via hub. hub_tool_label must be set so both
     // units share one physical nozzle position.

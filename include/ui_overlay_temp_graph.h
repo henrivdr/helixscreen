@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include "overlay_base.h"
-#include "temp_graph_controller.h"
 #include "ui_heater_config.h"
 #include "ui_temp_graph.h"
+
+#include "overlay_base.h"
+#include "temp_graph_controller.h"
 
 #include <memory>
 #include <optional>
@@ -76,15 +77,15 @@ class TempGraphOverlay : public OverlayBase {
      * only tracks what the overlay needs for chip toggles and control strips.
      */
     struct SeriesInfo {
-        std::string display_name;  ///< UI label (e.g., "Nozzle", "Bed", "MCU")
-        std::string heater_name;   ///< History manager key (e.g., "extruder", "heater_bed")
-        std::string klipper_name;  ///< Full Klipper object name for API calls
-        lv_color_t color{};        ///< Series line color
-        int series_id = -1;        ///< Graph series ID (mapped from controller)
-        bool visible = true;       ///< Current visibility state
-        bool has_target = false;   ///< Whether this heater has a controllable target
-        bool is_dynamic = false;   ///< Dynamic sensor (needs SubjectLifetime)
-        lv_obj_t* chip = nullptr;  ///< Toggle chip widget
+        std::string display_name; ///< UI label (e.g., "Nozzle", "Bed", "MCU")
+        std::string heater_name;  ///< History manager key (e.g., "extruder", "heater_bed")
+        std::string klipper_name; ///< Full Klipper object name for API calls
+        lv_color_t color{};       ///< Series line color
+        int series_id = -1;       ///< Graph series ID (mapped from controller)
+        bool visible = true;      ///< Current visibility state
+        bool has_target = false;  ///< Whether this heater has a controllable target
+        bool is_dynamic = false;  ///< Dynamic sensor (needs SubjectLifetime)
+        lv_obj_t* chip = nullptr; ///< Toggle chip widget
     };
 
     // Series management

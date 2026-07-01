@@ -52,8 +52,8 @@
 #include "moonraker_file_transfer_api.h"
 #include "moonraker_history_api.h"
 #include "moonraker_job_api.h"
-#include "moonraker_queue_api.h"
 #include "moonraker_motion_api.h"
+#include "moonraker_queue_api.h"
 #include "moonraker_rest_api.h"
 #include "moonraker_spoolman_api.h"
 #include "moonraker_timelapse_api.h"
@@ -300,8 +300,8 @@ class MoonrakerAPI : public IMoonrakerAPI {
      * @param on_success   Success callback
      * @param on_error     Error callback
      */
-    void restart_service(const std::string& service_name,
-                         SuccessCallback on_success, ErrorCallback on_error);
+    void restart_service(const std::string& service_name, SuccessCallback on_success,
+                         ErrorCallback on_error);
 
     /**
      * @brief Restart the Moonraker service
@@ -454,10 +454,12 @@ class MoonrakerAPI : public IMoonrakerAPI {
      * @param url The URL to resolve (modified in place). Absolute URLs are unchanged.
      */
     void resolve_webcam_url(std::string& url) {
-        if (url.empty() || url[0] != '/') return;
+        if (url.empty() || url[0] != '/')
+            return;
         ensure_http_base_url();
         const auto& base = get_http_base_url();
-        if (base.empty()) return;
+        if (base.empty())
+            return;
         auto scheme_end = base.find("://");
         if (scheme_end == std::string::npos) {
             url = base + url;
@@ -473,7 +475,8 @@ class MoonrakerAPI : public IMoonrakerAPI {
         int base_port = 0;
         for (size_t i = port_pos + 1; i < base.size(); ++i) {
             char c = base[i];
-            if (c < '0' || c > '9') break;
+            if (c < '0' || c > '9')
+                break;
             base_port = base_port * 10 + (c - '0');
         }
         if (base_port == MOONRAKER_DEFAULT_PORT) {
@@ -530,9 +533,9 @@ class MoonrakerAPI : public IMoonrakerAPI {
     void suppress_disconnect_modal(uint32_t duration_ms) override;
 
     /// Retrieve recent G-code commands/responses from Moonraker's store
-    void
-    get_gcode_store(int count, std::function<void(const std::vector<GcodeStoreEntry>&)> on_success,
-                    std::function<void(const MoonrakerError&)> on_error) override;
+    void get_gcode_store(int count,
+                         std::function<void(const std::vector<GcodeStoreEntry>&)> on_success,
+                         std::function<void(const MoonrakerError&)> on_error) override;
 
     // ========================================================================
     // Helix Plugin Operations

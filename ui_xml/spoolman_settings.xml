@@ -112,7 +112,7 @@
                 style_flex_main_place="space_between" style_flex_cross_place="center" scrollable="false">
           <text_body text="Refresh Interval" translation_tag="Refresh Interval"/>
           <lv_dropdown name="interval_dropdown"
-                       width="100" height="36" options="30s&#10;1 min&#10;2 min&#10;5 min" style_pad_left="#space_sm"
+                       width="100" height="36" options="30s&#10;1 min&#10;2 min&#10;5 min" options_tag="30s&#10;1 min&#10;2 min&#10;5 min" style_pad_left="#space_sm"
                        style_pad_right="#space_sm">
             <event_cb trigger="value_changed" callback="on_ams_spoolman_interval_changed"/>
           </lv_dropdown>

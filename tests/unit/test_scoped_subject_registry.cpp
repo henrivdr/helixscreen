@@ -1,10 +1,11 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "../lvgl_test_fixture.h"
 #include "helix/xml/scoped_subject_registry.h"
 #include "lvgl/lvgl.h"
+
+#include "../catch_amalgamated.hpp"
 
 TEST_CASE_METHOD(LVGLTestFixture, "scoped_subject_registry defaults to global scope",
                  "[xml][scope]") {
@@ -19,10 +20,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "scoped_subject_registry defaults to global sc
     lv_subject_deinit(&s);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "scoped_subject_registry uses active scope when pushed", "[xml][scope]") {
-    REQUIRE(lv_xml_register_component_from_data(
-                "test_scope_stub", "<component><view/></component>") == LV_RESULT_OK);
+TEST_CASE_METHOD(LVGLTestFixture, "scoped_subject_registry uses active scope when pushed",
+                 "[xml][scope]") {
+    REQUIRE(lv_xml_register_component_from_data("test_scope_stub",
+                                                "<component><view/></component>") == LV_RESULT_OK);
     lv_xml_component_scope_t* scope = lv_xml_component_get_scope("test_scope_stub");
     REQUIRE(scope != nullptr);
 

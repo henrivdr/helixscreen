@@ -432,7 +432,6 @@ class AmsErrorHelper {
         return AmsError(AmsResult::RESUME_REQUIRES_RESTART,
                         detail.empty() ? "virtual_sdcard.is_active=false; RESUME would no-op"
                                        : detail,
-                        "Print Was Terminated",
-                        "Restart from the beginning to recover");
+                        "Print Was Terminated", "Restart from the beginning to recover");
     }
 };

@@ -125,7 +125,7 @@ class DisplaySettingsManager {
      */
     bool should_couple_sleep_to_dim() const;
 
-/** @brief Get sleep while printing state */
+    /** @brief Get sleep while printing state */
     bool get_sleep_while_printing() const;
 
     /** @brief Set sleep while printing state (updates subject + persists) */
@@ -283,7 +283,7 @@ class DisplaySettingsManager {
         return &brightness_subject_;
     }
 
-/** @brief Has backlight control subject (integer: 0=no, 1=yes) */
+    /** @brief Has backlight control subject (integer: 0=no, 1=yes) */
     lv_subject_t* subject_has_backlight() {
         return &has_backlight_subject_;
     }

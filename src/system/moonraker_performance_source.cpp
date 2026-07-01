@@ -4,10 +4,12 @@
 
 #include "moonraker_api.h"
 #include "moonraker_types.h"
-#include "hv/json.hpp"
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <spdlog/spdlog.h>
+
+#include "hv/json.hpp"
 
 namespace helix {
 namespace perf {
@@ -28,7 +30,8 @@ MoonrakerPerformanceSource::~MoonrakerPerformanceSource() {
 // ----------------------------------------------------------------------------
 
 void MoonrakerPerformanceSource::start() {
-    if (running_) return;
+    if (running_)
+        return;
     running_ = true;
 
     // Subscribe to live proc_stat push notifications. These persist across
@@ -37,24 +40,22 @@ void MoonrakerPerformanceSource::start() {
     // params are at j["params"][0].
     api_->register_method_callback(
         "notify_proc_stat_update", kHandlerName,
-        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_proc_stat",
-                        [this](const json& j) {
-                            // Runs on main thread via bg_cb defer.
-                            if (!j.contains("params") || !j["params"].is_array() ||
-                                j["params"].empty())
-                                return;
-                            const json& body = j["params"][0];
-                            if (body.is_object()) on_proc_stat_payload(body);
-                        }));
+        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_proc_stat", [this](const json& j) {
+            // Runs on main thread via bg_cb defer.
+            if (!j.contains("params") || !j["params"].is_array() || j["params"].empty())
+                return;
+            const json& body = j["params"][0];
+            if (body.is_object())
+                on_proc_stat_payload(body);
+        }));
 
     // Re-fetch proc_stats on Klippy ready (firmware restart).
     api_->register_method_callback(
         "notify_klippy_ready", kHandlerName,
-        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_klippy_ready",
-                        [this](const json&) {
-                            // Runs on main thread via bg_cb defer.
-                            run_initial_handshake();
-                        }));
+        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_klippy_ready", [this](const json&) {
+            // Runs on main thread via bg_cb defer.
+            run_initial_handshake();
+        }));
 
     // Hook notify_status_update for MCU live frames. MCU objects are
     // subscribed by MoonrakerDiscoverySequence as part of the single union
@@ -70,37 +71,34 @@ void MoonrakerPerformanceSource::start() {
     // WS frames, leaving MCU rows blank until Klipper's first incremental
     // push.
     status_sub_id_ = api_->subscribe_notifications(
-        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_status",
-                        [this](const json& j) {
-                            // Runs on main thread via bg_cb defer.
-                            // notify_callbacks_ also receives notify_filelist_changed
-                            // and other methods — filter by the key shape since the
-                            // params[0] payload differs per method.
-                            if (!j.contains("params") || !j["params"].is_array() ||
-                                j["params"].empty())
-                                return;
-                            const json& obj = j["params"][0];
-                            if (!obj.is_object()) return;
-                            for (auto it = obj.begin(); it != obj.end(); ++it) {
-                                // Route MCU keys (matches "mcu" and "mcu <name>").
-                                const std::string& key = it.key();
-                                if (key == "mcu" || key.rfind("mcu ", 0) == 0) {
-                                    on_mcu_status_update(key, it.value());
-                                }
-                            }
-                        }));
+        lifetime_.bg_cb("MoonrakerPerformanceSource::notify_status", [this](const json& j) {
+            // Runs on main thread via bg_cb defer.
+            // notify_callbacks_ also receives notify_filelist_changed
+            // and other methods — filter by the key shape since the
+            // params[0] payload differs per method.
+            if (!j.contains("params") || !j["params"].is_array() || j["params"].empty())
+                return;
+            const json& obj = j["params"][0];
+            if (!obj.is_object())
+                return;
+            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                // Route MCU keys (matches "mcu" and "mcu <name>").
+                const std::string& key = it.key();
+                if (key == "mcu" || key.rfind("mcu ", 0) == 0) {
+                    on_mcu_status_update(key, it.value());
+                }
+            }
+        }));
 
     // Hook the WS connect event for the proc_stats REST fetch. Requires the
     // HTTP base URL to be set, which Application configures AFTER
     // PerformanceState::set_source(). add_connected_observer fires immediately
     // if already connected, or on the next WS open / Klippy ready transition.
     api_->get_client().add_connected_observer(
-        kHandlerName,
-        lifetime_.bg_cb("MoonrakerPerformanceSource::on_connected",
-                        [this]() {
-                            // Runs on main thread via bg_cb defer.
-                            run_initial_handshake();
-                        }));
+        kHandlerName, lifetime_.bg_cb("MoonrakerPerformanceSource::on_connected", [this]() {
+            // Runs on main thread via bg_cb defer.
+            run_initial_handshake();
+        }));
 }
 
 void MoonrakerPerformanceSource::run_initial_handshake() {
@@ -126,7 +124,8 @@ void MoonrakerPerformanceSource::run_initial_handshake() {
 }
 
 void MoonrakerPerformanceSource::stop() {
-    if (!running_) return;
+    if (!running_)
+        return;
     running_ = false;
 
     // Invalidate the lifetime guard — all in-flight bg_cb wrappers become no-ops.
@@ -134,7 +133,7 @@ void MoonrakerPerformanceSource::stop() {
 
     // Unregister persistent method callbacks + the on-connected observer.
     api_->unregister_method_callback("notify_proc_stat_update", kHandlerName);
-    api_->unregister_method_callback("notify_klippy_ready",     kHandlerName);
+    api_->unregister_method_callback("notify_klippy_ready", kHandlerName);
     api_->get_client().remove_connected_observer(kHandlerName);
 
     // Drop the notify_status_update subscription registered for MCU live updates.
@@ -152,7 +151,8 @@ void MoonrakerPerformanceSource::stop() {
 // ----------------------------------------------------------------------------
 
 void MoonrakerPerformanceSource::on_proc_stat_payload(const json& body) {
-    if (!body.is_object()) return;
+    if (!body.is_object())
+        return;
 
     // system_cpu_usage: { "cpu": <aggregate 0-100>, "cpu0": ..., ... }
     if (body.contains("system_cpu_usage") && body["system_cpu_usage"].is_object()) {
@@ -168,12 +168,12 @@ void MoonrakerPerformanceSource::on_proc_stat_payload(const json& body) {
     // system_memory: { "total": <kB>, "available": <kB>, ... }
     if (body.contains("system_memory") && body["system_memory"].is_object()) {
         const auto& m = body["system_memory"];
-        if (m.contains("total")     && m["total"].is_number() &&
-            m.contains("available") && m["available"].is_number()) {
+        if (m.contains("total") && m["total"].is_number() && m.contains("available") &&
+            m["available"].is_number()) {
             const auto total_kb = m["total"].get<uint64_t>();
             const auto avail_kb = m["available"].get<uint64_t>();
             if (total_kb > 0) {
-                latest_.host_mem_free_mb  = static_cast<uint32_t>(avail_kb / 1024);
+                latest_.host_mem_free_mb = static_cast<uint32_t>(avail_kb / 1024);
                 latest_.host_mem_pct_used =
                     100.0f * (1.0f - static_cast<float>(avail_kb) / static_cast<float>(total_kb));
             }
@@ -185,17 +185,19 @@ void MoonrakerPerformanceSource::on_proc_stat_payload(const json& body) {
         const auto& th = body["throttled"];
         uint32_t bits = 0;
         std::vector<std::string> flags;
-        if (th.contains("bits")  && th["bits"].is_number())
+        if (th.contains("bits") && th["bits"].is_number())
             bits = th["bits"].get<uint32_t>();
         if (th.contains("flags") && th["flags"].is_array()) {
             for (const auto& f : th["flags"])
-                if (f.is_string()) flags.push_back(f.get<std::string>());
+                if (f.is_string())
+                    flags.push_back(f.get<std::string>());
         }
         latest_.host_throttle_bits = bits;
         latest_.host_throttle_text = format_throttle_text(bits, flags);
     }
 
-    if (cb_) cb_(latest_);
+    if (cb_)
+        cb_(latest_);
 }
 
 // ----------------------------------------------------------------------------
@@ -204,7 +206,8 @@ void MoonrakerPerformanceSource::on_proc_stat_payload(const json& body) {
 
 void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
                                                       const json& payload) {
-    if (!payload.is_object()) return;
+    if (!payload.is_object())
+        return;
     auto& st = mcu_state_[name];
 
     bool updated = false;
@@ -216,7 +219,7 @@ void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
         const auto& ls = payload["last_stats"];
         if (ls.contains("mcu_awake") && ls["mcu_awake"].is_number()) {
             const double awake = ls["mcu_awake"].get<double>();
-            const auto   now   = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
             // Leave load absent on the first sample and on degenerate deltas;
             // downstream subjects honour `present = 0` for std::nullopt so the
             // UI bar hides instead of snapping to 0%.
@@ -227,8 +230,8 @@ void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
                 if (d_t >= 0.1 && d_awake >= 0.0)
                     load = static_cast<float>(d_awake / d_t);
             }
-            st.last_awake  = awake;
-            st.last_t      = now;
+            st.last_awake = awake;
+            st.last_t = now;
             st.initialized = true;
 
             // Upsert into latest_.mcus.
@@ -236,14 +239,14 @@ void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
             for (auto& m : latest_.mcus) {
                 if (m.name == name) {
                     m.load = load;
-                    found  = true;
+                    found = true;
                     break;
                 }
             }
             if (!found) {
                 McuStat m;
-                m.name        = name;
-                m.load        = load;
+                m.name = name;
+                m.load = load;
                 m.retransmits = st.retrans;
                 latest_.mcus.push_back(std::move(m));
                 // Keep sorted for stable UI ordering.
@@ -271,22 +274,26 @@ void MoonrakerPerformanceSource::on_mcu_status_update(const std::string& name,
         }
     }
 
-    if (updated && cb_) cb_(latest_);
+    if (updated && cb_)
+        cb_(latest_);
 }
 
 // ----------------------------------------------------------------------------
 // format_throttle_text (static)
 // ----------------------------------------------------------------------------
 
-std::string MoonrakerPerformanceSource::format_throttle_text(
-    uint32_t bits, const std::vector<std::string>& flags) {
-    if (bits == 0) return "";
+std::string
+MoonrakerPerformanceSource::format_throttle_text(uint32_t bits,
+                                                 const std::vector<std::string>& flags) {
+    if (bits == 0)
+        return "";
 
     // Use Moonraker-provided flag strings when available.
     if (!flags.empty()) {
         std::string out;
         for (size_t i = 0; i < flags.size(); ++i) {
-            if (i) out += ", ";
+            if (i)
+                out += ", ";
             out += flags[i];
         }
         return out;
@@ -294,13 +301,20 @@ std::string MoonrakerPerformanceSource::format_throttle_text(
 
     // Fallback bit-decode table (Raspberry Pi throttle register layout).
     std::string out;
-    if (bits & 0x00001) out += "Under-voltage now; ";
-    if (bits & 0x00002) out += "Freq capped now; ";
-    if (bits & 0x00004) out += "Throttled now; ";
-    if (bits & 0x10000) out += "Under-voltage previously; ";
-    if (bits & 0x20000) out += "Freq capped previously; ";
-    if (bits & 0x40000) out += "Throttled previously; ";
-    if (!out.empty()) out.erase(out.size() - 2); // strip trailing "; "
+    if (bits & 0x00001)
+        out += "Under-voltage now; ";
+    if (bits & 0x00002)
+        out += "Freq capped now; ";
+    if (bits & 0x00004)
+        out += "Throttled now; ";
+    if (bits & 0x10000)
+        out += "Under-voltage previously; ";
+    if (bits & 0x20000)
+        out += "Freq capped previously; ";
+    if (bits & 0x40000)
+        out += "Throttled previously; ";
+    if (!out.empty())
+        out.erase(out.size() - 2); // strip trailing "; "
     return out;
 }
 

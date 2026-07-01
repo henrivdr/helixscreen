@@ -11,8 +11,9 @@
 #include "static_subject_registry.h"
 #include "system/crash_handler.h"
 
-#include <algorithm>
 #include <spdlog/spdlog.h>
+
+#include <algorithm>
 
 namespace helix {
 
@@ -30,15 +31,11 @@ void FilamentConsumptionTracker::start() {
 
     print_state_obs_ = helix::ui::observe_int_sync<FilamentConsumptionTracker>(
         printer.get_print_state_enum_subject(), this,
-        [](FilamentConsumptionTracker* self, int state) {
-            self->on_print_state_changed(state);
-        });
+        [](FilamentConsumptionTracker* self, int state) { self->on_print_state_changed(state); });
 
     filament_used_obs_ = helix::ui::observe_int_sync<FilamentConsumptionTracker>(
         printer.get_print_filament_used_subject(), this,
-        [](FilamentConsumptionTracker* self, int mm) {
-            self->on_filament_used_changed(mm);
-        });
+        [](FilamentConsumptionTracker* self, int mm) { self->on_filament_used_changed(mm); });
 
     // Per-extruder filament_used_mm observers. These are dynamic subjects
     // ([L077]) and share one lifetime token so a single reset() in stop()
@@ -84,8 +81,7 @@ void FilamentConsumptionTracker::start() {
     // window goes away because no other deinit step runs between
     // FilamentConsumptionTracker::stop() and our observers' creation.
     StaticSubjectRegistry::instance().register_deinit(
-        "FilamentConsumptionTracker",
-        []() { FilamentConsumptionTracker::instance().stop(); });
+        "FilamentConsumptionTracker", []() { FilamentConsumptionTracker::instance().stop(); });
 }
 
 void FilamentConsumptionTracker::stop() {
@@ -149,9 +145,7 @@ void FilamentConsumptionTracker::unregister_sink(SinkHandle handle) {
     }
     auto it = std::find_if(
         sinks_.begin(), sinks_.end(),
-        [handle](const std::unique_ptr<IConsumptionSink>& s) {
-            return s.get() == handle;
-        });
+        [handle](const std::unique_ptr<IConsumptionSink>& s) { return s.get() == handle; });
     if (it == sinks_.end()) {
         return;
     }
@@ -162,42 +156,41 @@ void FilamentConsumptionTracker::unregister_sink(SinkHandle handle) {
     sinks_.erase(it);
 }
 
-
 void FilamentConsumptionTracker::on_print_state_changed(int job_state) {
     auto state = static_cast<PrintJobState>(job_state);
     auto* printer_mm = get_printer_state().get_print_filament_used_subject();
     const float mm = static_cast<float>(lv_subject_get_int(printer_mm));
 
     switch (state) {
-        case PrintJobState::PRINTING:
-            if (!print_in_progress_) {
-                snapshot_all_sinks(mm);
-                print_in_progress_ = true;
-                // active_ is true iff at least one sink is tracking so that
-                // is_active() retains its original "tracker has live state"
-                // meaning for existing tests.
-                active_ = any_sink_trackable();
-            }
-            break;
-        case PrintJobState::COMPLETE:
-        case PrintJobState::CANCELLED:
-        case PrintJobState::ERROR:
-            if (print_in_progress_) {
-                flush_all_sinks();
-                spdlog::info("[FilamentTracker] Print ended in state {}; "
-                             "flushed sinks",
-                             job_state);
-            }
-            active_ = false;
-            print_in_progress_ = false;
-            break;
-        case PrintJobState::PAUSED:
-            if (print_in_progress_) {
-                flush_all_sinks(); // crash-safety snapshot
-            }
-            break;
-        default:
-            break;
+    case PrintJobState::PRINTING:
+        if (!print_in_progress_) {
+            snapshot_all_sinks(mm);
+            print_in_progress_ = true;
+            // active_ is true iff at least one sink is tracking so that
+            // is_active() retains its original "tracker has live state"
+            // meaning for existing tests.
+            active_ = any_sink_trackable();
+        }
+        break;
+    case PrintJobState::COMPLETE:
+    case PrintJobState::CANCELLED:
+    case PrintJobState::ERROR:
+        if (print_in_progress_) {
+            flush_all_sinks();
+            spdlog::info("[FilamentTracker] Print ended in state {}; "
+                         "flushed sinks",
+                         job_state);
+        }
+        active_ = false;
+        print_in_progress_ = false;
+        break;
+    case PrintJobState::PAUSED:
+        if (print_in_progress_) {
+            flush_all_sinks(); // crash-safety snapshot
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -249,8 +242,7 @@ void FilamentConsumptionTracker::on_filament_used_changed(int filament_mm) {
     active_ = any_sink_trackable();
 }
 
-void FilamentConsumptionTracker::on_extruder_filament_used_changed(int extruder_idx,
-                                                                   int mm) {
+void FilamentConsumptionTracker::on_extruder_filament_used_changed(int extruder_idx, int mm) {
     if (!print_in_progress_) {
         return;
     }

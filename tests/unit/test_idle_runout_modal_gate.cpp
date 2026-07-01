@@ -47,10 +47,10 @@ class IdleRunoutModalGate {
     enum class PrintState { Standby, Printing, Paused, Complete, Cancelled, Error };
 
     struct ExternalState {
-        bool in_startup_grace = false;        // FilamentSensorManager::is_in_startup_grace_period()
-        bool has_any_runout = true;           // FilamentSensorManager::has_any_runout()
-        bool runtime_config_allows = true;    // RuntimeConfig::should_show_runout_modal()
-        bool ams_filament_op_active = false;  // AmsState::is_filament_operation_active()
+        bool in_startup_grace = false;       // FilamentSensorManager::is_in_startup_grace_period()
+        bool has_any_runout = true;          // FilamentSensorManager::has_any_runout()
+        bool runtime_config_allows = true;   // RuntimeConfig::should_show_runout_modal()
+        bool ams_filament_op_active = false; // AmsState::is_filament_operation_active()
         PrintState print_state = PrintState::Standby;
     };
 
@@ -69,8 +69,7 @@ class IdleRunoutModalGate {
             return;
         // This modal is the IDLE-only variant. While a print is active
         // (printing/paused) the pause-gated FilamentRunoutHandler owns runout.
-        if (ext_.print_state != PrintState::Standby &&
-            ext_.print_state != PrintState::Complete &&
+        if (ext_.print_state != PrintState::Standby && ext_.print_state != PrintState::Complete &&
             ext_.print_state != PrintState::Cancelled)
             return;
 
@@ -107,7 +106,7 @@ class IdleRunoutModalGate {
 TEST_CASE("Idle manual unload does not show runout modal", "[idle_runout][gate]") {
     IdleRunoutModalGate g;
     g.ext().print_state = IdleRunoutModalGate::PrintState::Standby;
-    g.ext().has_any_runout = true;       // sensor went empty from the manual pull
+    g.ext().has_any_runout = true;         // sensor went empty from the manual pull
     g.ext().ams_filament_op_active = true; // AMS is UNLOADING
 
     g.check_and_show_idle_runout_modal();
@@ -116,8 +115,7 @@ TEST_CASE("Idle manual unload does not show runout modal", "[idle_runout][gate]"
     REQUIRE(g.was_shown() == false);
 }
 
-TEST_CASE("Idle genuine empty spool (no AMS op) still shows runout modal",
-          "[idle_runout][gate]") {
+TEST_CASE("Idle genuine empty spool (no AMS op) still shows runout modal", "[idle_runout][gate]") {
     IdleRunoutModalGate g;
     g.ext().print_state = IdleRunoutModalGate::PrintState::Standby;
     g.ext().has_any_runout = true;

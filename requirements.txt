@@ -5,3 +5,8 @@ Pillow>=10.0.0
 PyYAML>=6.0
 ruamel.yaml>=0.18.0
 pandas>=2.0
+# Pinned EXACTLY so clang-format output is byte-identical on every machine + CI.
+# The pip wheel is the single source of truth — the hook prefers .venv/bin/clang-format
+# (see scripts/quality-checks.sh) so a machine's system clang-format (Homebrew's newer
+# release, Ubuntu's older 18.1.x) never affects formatting. Bump deliberately + renormalize.
+clang-format==18.1.8

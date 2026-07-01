@@ -2,9 +2,10 @@
 
 #include "buffer_status_modal.h"
 
-#include "theme_manager.h"
 #include "ui_buffer_meter.h"
 #include "ui_update_queue.h"
+
+#include "theme_manager.h"
 
 #include <spdlog/fmt/fmt.h>
 
@@ -55,14 +56,14 @@ void BufferStatusModal::init_subjects() {
 
     lv_subject_init_string(&description_subject_, description_buf_, nullptr,
                            sizeof(description_buf_), "");
-    lv_subject_init_string(&espooler_value_subject_, espooler_buf_, nullptr,
-                           sizeof(espooler_buf_), "");
+    lv_subject_init_string(&espooler_value_subject_, espooler_buf_, nullptr, sizeof(espooler_buf_),
+                           "");
     lv_subject_init_string(&gear_sync_value_subject_, gear_sync_buf_, nullptr,
                            sizeof(gear_sync_buf_), "");
     lv_subject_init_string(&clog_value_subject_, clog_buf_, nullptr, sizeof(clog_buf_), "");
     lv_subject_init_string(&flow_value_subject_, flow_buf_, nullptr, sizeof(flow_buf_), "");
-    lv_subject_init_string(&afc_state_subject_, afc_state_buf_, nullptr,
-                           sizeof(afc_state_buf_), "");
+    lv_subject_init_string(&afc_state_subject_, afc_state_buf_, nullptr, sizeof(afc_state_buf_),
+                           "");
     lv_subject_init_string(&afc_distance_subject_, afc_distance_buf_, nullptr,
                            sizeof(afc_distance_buf_), "");
 
@@ -92,10 +93,9 @@ void BufferStatusModal::populate(const AmsSystemInfo& info, int effective_unit) 
             float abs_bias = std::fabs(info.sync_feedback_bias);
             if (abs_bias < 0.02f) {
                 lv_subject_copy_string(&description_subject_,
-                                      lv_tr("Filament tension is balanced"));
+                                       lv_tr("Filament tension is balanced"));
             } else if (info.sync_feedback_bias < 0) {
-                lv_subject_copy_string(&description_subject_,
-                                      lv_tr("Filament is pulling tight"));
+                lv_subject_copy_string(&description_subject_, lv_tr("Filament is pulling tight"));
             } else {
                 lv_subject_copy_string(&description_subject_, lv_tr("Filament is loose"));
             }
@@ -119,7 +119,7 @@ void BufferStatusModal::populate(const AmsSystemInfo& info, int effective_unit) 
 
         // Gear sync
         lv_subject_copy_string(&gear_sync_value_subject_,
-                              info.sync_drive ? lv_tr("Active") : lv_tr("Inactive"));
+                               info.sync_drive ? lv_tr("Active") : lv_tr("Inactive"));
 
         // Clog detection
         if (info.clog_detection == 2) {
@@ -161,10 +161,9 @@ void BufferStatusModal::populate(const AmsSystemInfo& info, int effective_unit) 
                 if (!bh.state.empty()) {
                     if (bh.state == "Advancing") {
                         lv_subject_copy_string(&afc_state_subject_,
-                                              lv_tr("Feeding filament forward"));
+                                               lv_tr("Feeding filament forward"));
                     } else if (bh.state == "Trailing") {
-                        lv_subject_copy_string(&afc_state_subject_,
-                                              lv_tr("Pulling filament back"));
+                        lv_subject_copy_string(&afc_state_subject_, lv_tr("Pulling filament back"));
                     } else {
                         auto s = fmt::format("{}: {}", lv_tr("State"), bh.state);
                         lv_subject_copy_string(&afc_state_subject_, s.c_str());
@@ -213,9 +212,8 @@ void BufferStatusModal::on_show() {
     // (which runs in Modal::show and forces all labels white on dark backgrounds)
     if (dialog()) {
         auto muted = theme_manager_get_color("text_muted");
-        static const char* label_names[] = {"lbl_espooler",  "lbl_gear_sync",
-                                            "lbl_clog",      "lbl_flow",
-                                            "lbl_afc_clog",  nullptr};
+        static const char* label_names[] = {"lbl_espooler", "lbl_gear_sync", "lbl_clog",
+                                            "lbl_flow",     "lbl_afc_clog",  nullptr};
         for (const char** name = label_names; *name; ++name) {
             lv_obj_t* lbl = lv_obj_find_by_name(dialog(), *name);
             if (lbl)
@@ -236,8 +234,7 @@ void BufferStatusModal::on_show() {
 
 void BufferStatusModal::on_hide() {
     auto* self = this;
-    helix::ui::async_call(
-        [](void* data) { delete static_cast<BufferStatusModal*>(data); }, self);
+    helix::ui::async_call([](void* data) { delete static_cast<BufferStatusModal*>(data); }, self);
 }
 
 void BufferStatusModal::show_for(const AmsSystemInfo& info, int effective_unit) {

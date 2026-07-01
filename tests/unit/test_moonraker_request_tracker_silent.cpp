@@ -15,11 +15,11 @@
 #include "moonraker_request_tracker.h"
 #include "rpc_error_correlation.h"
 
-#include "../catch_amalgamated.hpp"
-#include "hv/json.hpp"
-
 #include <atomic>
 #include <thread>
+
+#include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using namespace helix;
 
@@ -79,7 +79,8 @@ TEST_CASE("check_timeouts suppresses REQUEST_TIMEOUT event for silent requests",
     EventCapture capture;
     auto err_fired = std::make_shared<std::atomic<bool>>(false);
 
-    MoonrakerRequestTrackerTestAccess::inject_request(tracker,
+    MoonrakerRequestTrackerTestAccess::inject_request(
+        tracker,
         /*id=*/42, make_timed_out_request("printer.gcode.script", /*silent=*/true, err_fired));
 
     tracker.check_timeouts(capture.as_lambda());
@@ -103,7 +104,8 @@ TEST_CASE("check_timeouts still emits REQUEST_TIMEOUT for non-silent requests",
     EventCapture capture;
     auto err_fired = std::make_shared<std::atomic<bool>>(false);
 
-    MoonrakerRequestTrackerTestAccess::inject_request(tracker,
+    MoonrakerRequestTrackerTestAccess::inject_request(
+        tracker,
         /*id=*/7, make_timed_out_request("printer.objects.query", /*silent=*/false, err_fired));
 
     tracker.check_timeouts(capture.as_lambda());
@@ -142,7 +144,9 @@ PendingRequest make_error_request(const std::string& method, bool silent, bool w
     req.timeout_ms = 100000;
     req.timestamp = std::chrono::steady_clock::now();
     if (with_error_cb) {
-        req.error_callback = [error_cb_fired](const MoonrakerError&) { error_cb_fired->store(true); };
+        req.error_callback = [error_cb_fired](const MoonrakerError&) {
+            error_cb_fired->store(true);
+        };
     }
     return req;
 }
@@ -211,9 +215,11 @@ TEST_CASE("check_timeouts handles a mix of silent and non-silent timeouts in one
     auto silent_fired = std::make_shared<std::atomic<bool>>(false);
     auto loud_fired = std::make_shared<std::atomic<bool>>(false);
 
-    MoonrakerRequestTrackerTestAccess::inject_request(tracker,
+    MoonrakerRequestTrackerTestAccess::inject_request(
+        tracker,
         /*id=*/1, make_timed_out_request("silent.op", /*silent=*/true, silent_fired));
-    MoonrakerRequestTrackerTestAccess::inject_request(tracker,
+    MoonrakerRequestTrackerTestAccess::inject_request(
+        tracker,
         /*id=*/2, make_timed_out_request("loud.op", /*silent=*/false, loud_fired));
 
     tracker.check_timeouts(capture.as_lambda());

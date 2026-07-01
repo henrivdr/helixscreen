@@ -1,14 +1,14 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "gcode_narration_router.h"
-
-#include "ams_backend_afc.h"
-#include "ams_state.h"
 #include "ui_update_queue.h"
 
-#include "../catch_amalgamated.hpp"
 #include "../lvgl_test_fixture.h"
+#include "ams_backend_afc.h"
+#include "ams_state.h"
+#include "gcode_narration_router.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -16,7 +16,9 @@ using namespace helix;
 // narration line straight through process_line() without standing up a
 // MoonrakerClient + WebSocket.
 struct GcodeNarrationRouterTestAccess {
-    static void feed(GcodeNarrationRouter& r, const std::string& line) { r.process_line(line); }
+    static void feed(GcodeNarrationRouter& r, const std::string& line) {
+        r.process_line(line);
+    }
     static void notify(GcodeNarrationRouter& r, const nlohmann::json& msg) {
         r.on_notify_gcode_response(msg);
     }
@@ -43,12 +45,13 @@ void reset_step_baseline() {
     install_afc_backend();
 }
 
-}  // namespace
+} // namespace
 
-TEST_CASE_METHOD(LVGLTestFixture, "Narration router ignores non-// lines", "[unit][narration][router]") {
+TEST_CASE_METHOD(LVGLTestFixture, "Narration router ignores non-// lines",
+                 "[unit][narration][router]") {
     reset_step_baseline();
 
-    GcodeNarrationRouter router(nullptr, nullptr);  // null client => no real subscription
+    GcodeNarrationRouter router(nullptr, nullptr); // null client => no real subscription
     GcodeNarrationRouterTestAccess::feed(router, "!! Toolhead jam");
     GcodeNarrationRouterTestAccess::feed(router, "ok");
     GcodeNarrationRouterTestAccess::feed(router, "Klipper ready");
@@ -59,8 +62,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "Narration router ignores non-// lines", "[uni
     REQUIRE(lv_subject_get_int(AmsState::instance().get_toolchange_step_subject()) == -1);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "Narration router advances toolchange_step on a // phase line",
+TEST_CASE_METHOD(LVGLTestFixture, "Narration router advances toolchange_step on a // phase line",
                  "[unit][narration][router]") {
     reset_step_baseline();
 
@@ -73,8 +75,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(lv_subject_get_int(AmsState::instance().get_toolchange_step_subject()) == 7);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "Narration router ignores unrecognized // lines",
+TEST_CASE_METHOD(LVGLTestFixture, "Narration router ignores unrecognized // lines",
                  "[unit][narration][router]") {
     reset_step_baseline();
 

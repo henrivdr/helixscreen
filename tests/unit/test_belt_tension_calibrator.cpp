@@ -41,8 +41,8 @@ TEST_CASE("evaluate_belt_status classifies correctly", "[belt_tension][types]") 
     CHECK(evaluate_belt_status(100.0f, 110.0f, 10.0f) == BeltStatus::GOOD);
     CHECK(evaluate_belt_status(120.0f, 110.0f, 10.0f) == BeltStatus::GOOD);
 
-    // WARNING: within [target-2*tolerance, target-tolerance) or (target+tolerance, target+2*tolerance]
-    // i.e. [90, 100) or (120, 130]
+    // WARNING: within [target-2*tolerance, target-tolerance) or (target+tolerance,
+    // target+2*tolerance] i.e. [90, 100) or (120, 130]
     CHECK(evaluate_belt_status(95.0f, 110.0f, 10.0f) == BeltStatus::WARNING);
     CHECK(evaluate_belt_status(125.0f, 110.0f, 10.0f) == BeltStatus::WARNING);
 
@@ -64,8 +64,9 @@ TEST_CASE("evaluate_belt_status boundary values", "[belt_tension][types]") {
 TEST_CASE("evaluate_belt_status with different targets", "[belt_tension][types]") {
     // Prusa MK4 default: target=96, tolerance=15
     CHECK(evaluate_belt_status(96.0f, 96.0f, 15.0f) == BeltStatus::GOOD);
-    CHECK(evaluate_belt_status(80.0f, 96.0f, 15.0f) == BeltStatus::WARNING); // delta=16, > tolerance
-    CHECK(evaluate_belt_status(50.0f, 96.0f, 15.0f) == BeltStatus::BAD);    // delta=46, > 2*tolerance
+    CHECK(evaluate_belt_status(80.0f, 96.0f, 15.0f) ==
+          BeltStatus::WARNING);                                          // delta=16, > tolerance
+    CHECK(evaluate_belt_status(50.0f, 96.0f, 15.0f) == BeltStatus::BAD); // delta=46, > 2*tolerance
 }
 
 // ============================================================================
@@ -270,8 +271,8 @@ TEST_CASE("calculate_similarity between curves", "[belt_tension][similarity]") {
             b.push_back({f, vb});
         }
         float sim = calculate_similarity(a, b);
-        CHECK(sim > 70.0f);   // Similar shape
-        CHECK(sim < 100.0f);  // But not identical
+        CHECK(sim > 70.0f);  // Similar shape
+        CHECK(sim < 100.0f); // But not identical
     }
 
     SECTION("empty curves") {
@@ -313,12 +314,11 @@ TEST_CASE("BeltTensionCalibrator detect_hardware without API calls error",
     bool error_called = false;
     std::string error_msg;
 
-    cal.detect_hardware(
-        [](const BeltTensionHardware&) { FAIL("Should not succeed without API"); },
-        [&](const std::string& msg) {
-            error_called = true;
-            error_msg = msg;
-        });
+    cal.detect_hardware([](const BeltTensionHardware&) { FAIL("Should not succeed without API"); },
+                        [&](const std::string& msg) {
+                            error_called = true;
+                            error_msg = msg;
+                        });
 
     CHECK(error_called);
     CHECK_FALSE(error_msg.empty());
@@ -331,21 +331,19 @@ TEST_CASE("BeltTensionCalibrator run_auto_sweep without API calls error",
     bool error_called = false;
     std::string error_msg;
 
-    cal.run_auto_sweep(
-        [](int) {},
-        [](const BeltTensionResult&) { FAIL("Should not succeed without API"); },
-        [&](const std::string& msg) {
-            error_called = true;
-            error_msg = msg;
-        });
+    cal.run_auto_sweep([](int) {},
+                       [](const BeltTensionResult&) { FAIL("Should not succeed without API"); },
+                       [&](const std::string& msg) {
+                           error_called = true;
+                           error_msg = msg;
+                       });
 
     CHECK(error_called);
     CHECK_FALSE(error_msg.empty());
     CHECK(cal.get_state() == BeltTensionCalibrator::State::IDLE);
 }
 
-TEST_CASE("BeltTensionCalibrator test_path without API calls error",
-          "[belt_tension][calibrator]") {
+TEST_CASE("BeltTensionCalibrator test_path without API calls error", "[belt_tension][calibrator]") {
     BeltTensionCalibrator cal;
     bool error_called = false;
 
@@ -434,8 +432,7 @@ TEST_CASE("BeltTensionCalibrator get_hardware returns default values",
     CHECK_FALSE(hw.has_pwm_led);
 }
 
-TEST_CASE("BeltTensionCalibrator is non-copyable and non-movable",
-          "[belt_tension][calibrator]") {
+TEST_CASE("BeltTensionCalibrator is non-copyable and non-movable", "[belt_tension][calibrator]") {
     // Shared alive_ flag makes move unsound, so move ops are deleted
     CHECK_FALSE(std::is_move_constructible_v<BeltTensionCalibrator>);
     CHECK_FALSE(std::is_move_assignable_v<BeltTensionCalibrator>);
@@ -443,8 +440,7 @@ TEST_CASE("BeltTensionCalibrator is non-copyable and non-movable",
     CHECK_FALSE(std::is_copy_assignable_v<BeltTensionCalibrator>);
 }
 
-TEST_CASE("BeltTensionCalibrator State enum values are distinct",
-          "[belt_tension][calibrator]") {
+TEST_CASE("BeltTensionCalibrator State enum values are distinct", "[belt_tension][calibrator]") {
     using State = BeltTensionCalibrator::State;
 
     CHECK(State::IDLE != State::DETECTING_HARDWARE);
@@ -742,7 +738,7 @@ namespace {
  * @return CSV string in Klipper format
  */
 std::string generate_mock_accel_csv(float frequency_hz, float sample_rate = 3200.0f,
-                                     float duration_sec = 1.0f, float amplitude = 50.0f) {
+                                    float duration_sec = 1.0f, float amplitude = 50.0f) {
     std::string csv = "#time,accel_x,accel_y,accel_z\n";
 
     int num_samples = static_cast<int>(sample_rate * duration_sec);
@@ -962,7 +958,8 @@ TEST_CASE("End-to-end pipeline: loose belts (both low)", "[belt_tension][mock][p
     CHECK(result.recommendation().find("tightening") != std::string::npos);
 }
 
-TEST_CASE("End-to-end pipeline: overtightened belts (both high)", "[belt_tension][mock][pipeline]") {
+TEST_CASE("End-to-end pipeline: overtightened belts (both high)",
+          "[belt_tension][mock][pipeline]") {
     std::string csv_a = generate_mock_accel_csv(150.0f);
     std::string csv_b = generate_mock_accel_csv(148.0f);
 
@@ -1040,12 +1037,11 @@ TEST_CASE("BeltTensionCalibrator state transitions without API (error paths)",
         bool error_called = false;
         std::string error_msg;
 
-        cal.detect_hardware(
-            [](const BeltTensionHardware&) { FAIL("Should not succeed"); },
-            [&](const std::string& msg) {
-                error_called = true;
-                error_msg = msg;
-            });
+        cal.detect_hardware([](const BeltTensionHardware&) { FAIL("Should not succeed"); },
+                            [&](const std::string& msg) {
+                                error_called = true;
+                                error_msg = msg;
+                            });
 
         CHECK(error_called);
         CHECK(error_msg.find("API") != std::string::npos);
@@ -1064,10 +1060,8 @@ TEST_CASE("BeltTensionCalibrator state transitions without API (error paths)",
 
     SECTION("run_auto_sweep -> error -> IDLE") {
         bool error_called = false;
-        cal.run_auto_sweep(
-            [](int) {},
-            [](const BeltTensionResult&) { FAIL("Should not succeed"); },
-            [&](const std::string&) { error_called = true; });
+        cal.run_auto_sweep([](int) {}, [](const BeltTensionResult&) { FAIL("Should not succeed"); },
+                           [&](const std::string&) { error_called = true; });
         CHECK(error_called);
         CHECK(cal.get_state() == BeltTensionCalibrator::State::IDLE);
     }
@@ -1081,8 +1075,7 @@ TEST_CASE("BeltTensionCalibrator state transitions without API (error paths)",
     SECTION("start_z_belt_listening -> error -> IDLE") {
         bool error_called = false;
         cal.start_z_belt_listening(
-            ZBeltCorner::FRONT_LEFT,
-            [](const BeltMeasurement&) { FAIL("Should not succeed"); },
+            ZBeltCorner::FRONT_LEFT, [](const BeltMeasurement&) { FAIL("Should not succeed"); },
             [&](const std::string&) { error_called = true; });
         CHECK(error_called);
     }
@@ -1127,8 +1120,7 @@ TEST_CASE("BeltTensionCalibrator full workflow simulation (analysis only)",
     result.path_b.freq_response = psd_b;
     result.path_b.status = evaluate_belt_status(peak_b.frequency, 110.0f, 10.0f);
 
-    result.frequency_delta =
-        std::abs(result.path_a.peak_frequency - result.path_b.peak_frequency);
+    result.frequency_delta = std::abs(result.path_a.peak_frequency - result.path_b.peak_frequency);
     result.similarity_percent =
         calculate_similarity(result.path_a.freq_response, result.path_b.freq_response);
 

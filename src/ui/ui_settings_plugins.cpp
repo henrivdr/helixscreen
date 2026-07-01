@@ -58,7 +58,7 @@ void SettingsPluginsOverlay::init_subjects() {
     }
 
     // Initialize string subjects
-    UI_MANAGED_SUBJECT_STRING(plugins_status_title_subject_, status_title_buf_, "No plugins",
+    UI_MANAGED_SUBJECT_STRING(plugins_status_title_subject_, status_title_buf_, lv_tr("No plugins"),
                               "plugins_status_title", subjects_);
     UI_MANAGED_SUBJECT_STRING(plugins_status_detail_subject_, status_detail_buf_, "",
                               "plugins_status_detail", subjects_);
@@ -166,7 +166,7 @@ void SettingsPluginsOverlay::refresh_plugin_list() {
         } else {
             // Failed to load (enabled but not loaded)
             auto it = error_map.find(plugin.manifest.id);
-            std::string error_msg = (it != error_map.end()) ? it->second : "Unknown error";
+            std::string error_msg = (it != error_map.end()) ? it->second : lv_tr("Unknown error");
             if (failed_plugins_list_) {
                 create_plugin_card(failed_plugins_list_, plugin, error_msg);
             }
@@ -232,28 +232,30 @@ void SettingsPluginsOverlay::update_status(int loaded, int disabled, int failed)
 
     // Update status title
     if (total == 0) {
-        snprintf(status_title_buf_, sizeof(status_title_buf_), "No plugins discovered");
+        snprintf(status_title_buf_, sizeof(status_title_buf_), "%s",
+                 lv_tr("No plugins discovered"));
     } else if (loaded == 1 && total == 1) {
-        snprintf(status_title_buf_, sizeof(status_title_buf_), "1 plugin loaded");
+        snprintf(status_title_buf_, sizeof(status_title_buf_), "%s", lv_tr("1 plugin loaded"));
     } else if (loaded == total) {
-        snprintf(status_title_buf_, sizeof(status_title_buf_), "%d plugins loaded", loaded);
+        snprintf(status_title_buf_, sizeof(status_title_buf_), lv_tr("%d plugins loaded"), loaded);
     } else {
-        snprintf(status_title_buf_, sizeof(status_title_buf_), "%d of %d plugins loaded", loaded,
-                 total);
+        snprintf(status_title_buf_, sizeof(status_title_buf_), lv_tr("%d of %d plugins loaded"),
+                 loaded, total);
     }
     lv_subject_copy_string(&plugins_status_title_subject_, status_title_buf_);
 
     // Update status detail
     if (total == 0) {
-        snprintf(status_detail_buf_, sizeof(status_detail_buf_),
-                 "Place plugins in the plugins directory");
+        snprintf(status_detail_buf_, sizeof(status_detail_buf_), "%s",
+                 lv_tr("Place plugins in the plugins directory"));
     } else if (failed > 0) {
         snprintf(status_detail_buf_, sizeof(status_detail_buf_),
-                 "%d failed to load - see details below", failed);
+                 lv_tr("%d failed to load - see details below"), failed);
     } else if (disabled > 0) {
-        snprintf(status_detail_buf_, sizeof(status_detail_buf_), "%d disabled", disabled);
+        snprintf(status_detail_buf_, sizeof(status_detail_buf_), lv_tr("%d disabled"), disabled);
     } else {
-        snprintf(status_detail_buf_, sizeof(status_detail_buf_), "All plugins loaded successfully");
+        snprintf(status_detail_buf_, sizeof(status_detail_buf_), "%s",
+                 lv_tr("All plugins loaded successfully"));
     }
     lv_subject_copy_string(&plugins_status_detail_subject_, status_detail_buf_);
 }

@@ -15,26 +15,24 @@
  * never race with discovery, pairing, or other plugin bus users.
  */
 
-#include "bt_context.h"
 #include "bluetooth_plugin.h"
-
-#include <poll.h>
-#include <unistd.h>
+#include "bt_context.h"
 
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <poll.h>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 /// Wait for ServicesResolved to become true, polling the property via the
 /// BusThread. No nested sd_bus_process loop — BusThread drives the bus.
 /// Timeout: 10s.
-static int wait_for_services_resolved(helix_bt_context* ctx, const std::string& device_path)
-{
+static int wait_for_services_resolved(helix_bt_context* ctx, const std::string& device_path) {
     struct timespec start;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
@@ -43,14 +41,9 @@ static int wait_for_services_resolved(helix_bt_context* ctx, const std::string& 
         int r = 0;
         ctx->bus_thread->run_sync([&](sd_bus* bus) {
             sd_bus_error error = SD_BUS_ERROR_NULL;
-            r = sd_bus_get_property_trivial(bus,
-                                             "org.bluez",
-                                             device_path.c_str(),
-                                             "org.bluez.Device1",
-                                             "ServicesResolved",
-                                             &error,
-                                             'b',
-                                             &resolved);
+            r = sd_bus_get_property_trivial(bus, "org.bluez", device_path.c_str(),
+                                            "org.bluez.Device1", "ServicesResolved", &error, 'b',
+                                            &resolved);
             sd_bus_error_free(&error);
         });
 
@@ -60,8 +53,8 @@ static int wait_for_services_resolved(helix_bt_context* ctx, const std::string& 
 
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
-        long elapsed_ms = (now.tv_sec - start.tv_sec) * 1000 +
-                          (now.tv_nsec - start.tv_nsec) / 1000000;
+        long elapsed_ms =
+            (now.tv_sec - start.tv_sec) * 1000 + (now.tv_nsec - start.tv_nsec) / 1000000;
         if (elapsed_ms >= 10000) {
             return -ETIMEDOUT;
         }
@@ -72,21 +65,13 @@ static int wait_for_services_resolved(helix_bt_context* ctx, const std::string& 
 
 /// Find a GATT characteristic by UUID under the device path.
 /// Must be called from inside a run_sync lambda (executes on the bus thread).
-static std::string find_gatt_char(sd_bus* bus, const char* device_path,
-                                   const char* target_uuid)
-{
+static std::string find_gatt_char(sd_bus* bus, const char* device_path, const char* target_uuid) {
     sd_bus_error error = SD_BUS_ERROR_NULL;
     sd_bus_message* reply = nullptr;
     std::string char_path;
 
-    int r = sd_bus_call_method(bus,
-                               "org.bluez",
-                               "/",
-                               "org.freedesktop.DBus.ObjectManager",
-                               "GetManagedObjects",
-                               &error,
-                               &reply,
-                               "");
+    int r = sd_bus_call_method(bus, "org.bluez", "/", "org.freedesktop.DBus.ObjectManager",
+                               "GetManagedObjects", &error, &reply, "");
     if (r < 0) {
         sd_bus_error_free(&error);
         return {};
@@ -96,7 +81,8 @@ static std::string find_gatt_char(sd_bus* bus, const char* device_path,
 
     // Parse: a{oa{sa{sv}}}
     r = sd_bus_message_enter_container(reply, 'a', "{oa{sa{sv}}}");
-    if (r < 0) goto done;
+    if (r < 0)
+        goto done;
 
     while ((r = sd_bus_message_enter_container(reply, 'e', "oa{sa{sv}}")) > 0) {
         const char* path = nullptr;
@@ -124,8 +110,7 @@ static std::string find_gatt_char(sd_bus* bus, const char* device_path,
         while ((r = sd_bus_message_enter_container(reply, 'e', "sa{sv}")) > 0) {
             const char* iface = nullptr;
             r = sd_bus_message_read(reply, "s", &iface);
-            if (r < 0 || !iface ||
-                strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
+            if (r < 0 || !iface || strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
                 sd_bus_message_skip(reply, "a{sv}");
                 sd_bus_message_exit_container(reply);
                 continue;
@@ -156,15 +141,17 @@ static std::string find_gatt_char(sd_bus* bus, const char* device_path,
                 }
                 sd_bus_message_exit_container(reply);
             }
-            sd_bus_message_exit_container(reply);  // properties array
-            sd_bus_message_exit_container(reply);  // interface entry
+            sd_bus_message_exit_container(reply); // properties array
+            sd_bus_message_exit_container(reply); // interface entry
 
-            if (!char_path.empty()) break;
+            if (!char_path.empty())
+                break;
         }
-        sd_bus_message_exit_container(reply);  // interfaces array
-        sd_bus_message_exit_container(reply);  // object entry
+        sd_bus_message_exit_container(reply); // interfaces array
+        sd_bus_message_exit_container(reply); // object entry
 
-        if (!char_path.empty()) break;
+        if (!char_path.empty())
+            break;
     }
     sd_bus_message_exit_container(reply);
 
@@ -177,20 +164,13 @@ done:
 /// Try AcquireWrite on a GATT characteristic (BlueZ 5.46+)
 /// Must be called from inside a run_sync lambda.
 /// Returns fd on success, -1 on failure (fallback to WriteValue)
-static int try_acquire_write(sd_bus* bus, const char* char_path, uint16_t* out_mtu)
-{
+static int try_acquire_write(sd_bus* bus, const char* char_path, uint16_t* out_mtu) {
     sd_bus_error error = SD_BUS_ERROR_NULL;
     sd_bus_message* reply = nullptr;
 
     // AcquireWrite takes options dict: a{sv}
-    int r = sd_bus_call_method(bus,
-                               "org.bluez",
-                               char_path,
-                               "org.bluez.GattCharacteristic1",
-                               "AcquireWrite",
-                               &error,
-                               &reply,
-                               "a{sv}", 0);  // empty options dict
+    int r = sd_bus_call_method(bus, "org.bluez", char_path, "org.bluez.GattCharacteristic1",
+                               "AcquireWrite", &error, &reply, "a{sv}", 0); // empty options dict
     if (r < 0) {
         sd_bus_error_free(&error);
         return -1;
@@ -210,9 +190,11 @@ static int try_acquire_write(sd_bus* bus, const char* char_path, uint16_t* out_m
     sd_bus_message_unref(reply);
     sd_bus_error_free(&error);
 
-    if (owned_fd < 0) return -1;
+    if (owned_fd < 0)
+        return -1;
 
-    if (out_mtu) *out_mtu = mtu;
+    if (out_mtu)
+        *out_mtu = mtu;
     fprintf(stderr, "[bt] AcquireWrite succeeded (fd=%d, mtu=%u)\n", owned_fd, mtu);
     return owned_fd;
 }
@@ -221,19 +203,12 @@ static int try_acquire_write(sd_bus* bus, const char* char_path, uint16_t* out_m
 /// Must be called from inside a run_sync lambda.
 /// Returns fd on success, -1 on failure. On failure falls back to StartNotify
 /// (values then arrive as PropertiesChanged signals, not via fd).
-static int try_acquire_notify(sd_bus* bus, const char* char_path)
-{
+static int try_acquire_notify(sd_bus* bus, const char* char_path) {
     sd_bus_error error = SD_BUS_ERROR_NULL;
     sd_bus_message* reply = nullptr;
 
-    int r = sd_bus_call_method(bus,
-                               "org.bluez",
-                               char_path,
-                               "org.bluez.GattCharacteristic1",
-                               "AcquireNotify",
-                               &error,
-                               &reply,
-                               "a{sv}", 0);  // empty options dict
+    int r = sd_bus_call_method(bus, "org.bluez", char_path, "org.bluez.GattCharacteristic1",
+                               "AcquireNotify", &error, &reply, "a{sv}", 0); // empty options dict
     if (r < 0) {
         fprintf(stderr, "[bt] AcquireNotify failed: %s (falling back to StartNotify)\n",
                 error.message ? error.message : strerror(-r));
@@ -241,14 +216,8 @@ static int try_acquire_notify(sd_bus* bus, const char* char_path)
 
         // Fallback: try StartNotify (older BlueZ / different characteristic flags)
         error = SD_BUS_ERROR_NULL;
-        r = sd_bus_call_method(bus,
-                               "org.bluez",
-                               char_path,
-                               "org.bluez.GattCharacteristic1",
-                               "StartNotify",
-                               &error,
-                               nullptr,
-                               "");
+        r = sd_bus_call_method(bus, "org.bluez", char_path, "org.bluez.GattCharacteristic1",
+                               "StartNotify", &error, nullptr, "");
         sd_bus_error_free(&error);
         if (r < 0) {
             fprintf(stderr, "[bt] StartNotify also failed: %s\n", strerror(-r));
@@ -272,15 +241,15 @@ static int try_acquire_notify(sd_bus* bus, const char* char_path)
     sd_bus_message_unref(reply);
     sd_bus_error_free(&error);
 
-    if (owned_fd < 0) return -1;
+    if (owned_fd < 0)
+        return -1;
 
     fprintf(stderr, "[bt] AcquireNotify succeeded (fd=%d, mtu=%u)\n", owned_fd, mtu);
     return owned_fd;
 }
 
 /// Read MTU property from the device (fallback value if not available)
-static uint16_t read_mtu(sd_bus* bus, const char* device_path)
-{
+static uint16_t read_mtu(sd_bus* bus, const char* device_path) {
     // BlueZ exposes MTU on the characteristic after AcquireWrite, but if we
     // didn't get it that way, use the default BLE minimum (20).
     (void)bus;
@@ -291,21 +260,23 @@ static uint16_t read_mtu(sd_bus* bus, const char* device_path)
 /// PropertiesChanged signal handler for a GATT characteristic.
 /// BlueZ emits these when StartNotify is active (no AcquireNotify fd).
 /// Signature: s (interface) a{sv} (changed_properties) as (invalidated)
-static int on_notify_changed(sd_bus_message* msg, void* userdata, sd_bus_error* /*ret_error*/)
-{
+static int on_notify_changed(sd_bus_message* msg, void* userdata, sd_bus_error* /*ret_error*/) {
     auto* conn = static_cast<helix_bt_context::BleConnection*>(userdata);
-    if (!conn) return 0;
+    if (!conn)
+        return 0;
 
     const char* iface = nullptr;
     int r = sd_bus_message_read(msg, "s", &iface);
-    if (r < 0 || !iface) return 0;
+    if (r < 0 || !iface)
+        return 0;
     if (strcmp(iface, "org.bluez.GattCharacteristic1") != 0) {
         return 0;
     }
 
     // changed_properties: a{sv}
     r = sd_bus_message_enter_container(msg, 'a', "{sv}");
-    if (r < 0) return 0;
+    if (r < 0)
+        return 0;
 
     std::vector<uint8_t> value;
     bool have_value = false;
@@ -335,9 +306,9 @@ static int on_notify_changed(sd_bus_message* msg, void* userdata, sd_bus_error* 
             sd_bus_message_skip(msg, "v");
         }
 
-        sd_bus_message_exit_container(msg);  // sv entry
+        sd_bus_message_exit_container(msg); // sv entry
     }
-    sd_bus_message_exit_container(msg);  // a{sv}
+    sd_bus_message_exit_container(msg); // a{sv}
 
     if (have_value) {
         std::lock_guard<std::mutex> lock(conn->rx_mu);
@@ -352,9 +323,9 @@ static int on_notify_changed(sd_bus_message* msg, void* userdata, sd_bus_error* 
 // ---------------------------------------------------------------------------
 
 extern "C" int helix_bt_connect_ble(helix_bt_context* ctx, const char* mac,
-                                     const char* write_uuid)
-{
-    if (!ctx) return -EINVAL;
+                                    const char* write_uuid) {
+    if (!ctx)
+        return -EINVAL;
     if (!mac || !write_uuid) {
         std::lock_guard<std::mutex> lock(ctx->mutex);
         ctx->last_error = "null MAC or UUID";
@@ -382,8 +353,7 @@ extern "C" int helix_bt_connect_ble(helix_bt_context* ctx, const char* mac,
     // service is present. When we detect that failure mode we retry with
     // ConnectProfile(write_uuid), which forces the LE transport for the
     // specific GATT characteristic UUID we actually care about.
-    auto do_connect = [&](const char* method, const char* signature,
-                          const char* uuid_arg) {
+    auto do_connect = [&](const char* method, const char* signature, const char* uuid_arg) {
         err.clear();
         fatal_connect_failure = false;
         try {
@@ -391,15 +361,13 @@ extern "C" int helix_bt_connect_ble(helix_bt_context* ctx, const char* mac,
                 sd_bus_error error = SD_BUS_ERROR_NULL;
                 if (signature && uuid_arg) {
                     r = sd_bus_call_method(bus, "org.bluez", device_path.c_str(),
-                                           "org.bluez.Device1", method, &error,
-                                           nullptr, signature, uuid_arg);
+                                           "org.bluez.Device1", method, &error, nullptr, signature,
+                                           uuid_arg);
                 } else {
                     r = sd_bus_call_method(bus, "org.bluez", device_path.c_str(),
-                                           "org.bluez.Device1", method, &error,
-                                           nullptr, "");
+                                           "org.bluez.Device1", method, &error, nullptr, "");
                 }
-                if (r < 0 &&
-                    !sd_bus_error_has_name(&error, "org.bluez.Error.AlreadyConnected")) {
+                if (r < 0 && !sd_bus_error_has_name(&error, "org.bluez.Error.AlreadyConnected")) {
                     err = error.message ? error.message : "BLE connect failed";
                     fatal_connect_failure = true;
                 } else {
@@ -420,10 +388,8 @@ extern "C" int helix_bt_connect_ble(helix_bt_context* ctx, const char* mac,
     // which is LE-only for GATT service UUIDs. Strings come from
     // btd_error_*() in bluez's src/error.c and all carry the "br-connection-"
     // prefix.
-    if (fatal_connect_failure &&
-        err.find("br-connection-") != std::string::npos) {
-        fprintf(stderr,
-                "[bt] Device1.Connect failed (%s), retrying via ConnectProfile(%s)\n",
+    if (fatal_connect_failure && err.find("br-connection-") != std::string::npos) {
+        fprintf(stderr, "[bt] Device1.Connect failed (%s), retrying via ConnectProfile(%s)\n",
                 err.c_str(), write_uuid);
         do_connect("ConnectProfile", "s", write_uuid);
     }
@@ -516,14 +482,10 @@ extern "C" int helix_bt_connect_ble(helix_bt_context* ctx, const char* mac,
     if (notify_fd < 0) {
         try {
             ctx->bus_thread->run_sync([&](sd_bus* bus) {
-                int mr = sd_bus_match_signal(bus,
-                                             &conn_raw->notify_slot,
-                                             "org.bluez",
+                int mr = sd_bus_match_signal(bus, &conn_raw->notify_slot, "org.bluez",
                                              conn_raw->char_path.c_str(),
-                                             "org.freedesktop.DBus.Properties",
-                                             "PropertiesChanged",
-                                             on_notify_changed,
-                                             conn_raw);
+                                             "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                                             on_notify_changed, conn_raw);
                 if (mr < 0) {
                     fprintf(stderr, "[bt] sd_bus_match_signal for PropertiesChanged failed: %s\n",
                             strerror(-mr));
@@ -546,10 +508,9 @@ extern "C" int helix_bt_connect_ble(helix_bt_context* ctx, const char* mac,
 // Public API: BLE Write
 // ---------------------------------------------------------------------------
 
-extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
-                                   const uint8_t* data, int len)
-{
-    if (!ctx) return -EINVAL;
+extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle, const uint8_t* data, int len) {
+    if (!ctx)
+        return -EINVAL;
     if (!data || len <= 0) {
         std::lock_guard<std::mutex> lock(ctx->mutex);
         ctx->last_error = "null data or zero length";
@@ -586,7 +547,8 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
 
     // Effective payload per chunk: MTU - 3 (ATT header)
     int chunk_size = conn->mtu > 3 ? conn->mtu - 3 : conn->mtu;
-    if (chunk_size <= 0) chunk_size = 20;
+    if (chunk_size <= 0)
+        chunk_size = 20;
 
     int offset = 0;
     while (offset < len) {
@@ -595,8 +557,8 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
 
         if (conn->acquired_fd >= 0) {
             // Fast path: write directly to acquired fd (no bus thread needed)
-            ssize_t written = write(conn->acquired_fd, data + offset,
-                                    static_cast<size_t>(to_write));
+            ssize_t written =
+                write(conn->acquired_fd, data + offset, static_cast<size_t>(to_write));
             if (written < 0) {
                 int err = errno;
                 fprintf(stderr, "[bt] BLE fd write failed: %s\n", strerror(err));
@@ -613,11 +575,9 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
                     sd_bus_error error = SD_BUS_ERROR_NULL;
                     sd_bus_message* msg = nullptr;
 
-                    r = sd_bus_message_new_method_call(bus, &msg,
-                                                        "org.bluez",
-                                                        conn->char_path.c_str(),
-                                                        "org.bluez.GattCharacteristic1",
-                                                        "WriteValue");
+                    r = sd_bus_message_new_method_call(
+                        bus, &msg, "org.bluez", conn->char_path.c_str(),
+                        "org.bluez.GattCharacteristic1", "WriteValue");
                     if (r < 0) {
                         werr = "failed to create WriteValue message";
                         sd_bus_error_free(&error);
@@ -626,7 +586,7 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
 
                     // Append data as byte array: ay
                     r = sd_bus_message_append_array(msg, 'y', data + offset,
-                                                     static_cast<size_t>(to_write));
+                                                    static_cast<size_t>(to_write));
                     if (r < 0) {
                         sd_bus_message_unref(msg);
                         werr = "failed to append write data";
@@ -636,7 +596,8 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
 
                     // Append options dict: a{sv} (empty)
                     r = sd_bus_message_open_container(msg, 'a', "{sv}");
-                    if (r >= 0) r = sd_bus_message_close_container(msg);
+                    if (r >= 0)
+                        r = sd_bus_message_close_container(msg);
                     if (r < 0) {
                         sd_bus_message_unref(msg);
                         werr = "failed to build WriteValue options";
@@ -645,9 +606,10 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
                     }
 
                     sd_bus_message* reply = nullptr;
-                    r = sd_bus_call(bus, msg, 5000000, &error, &reply);  // 5s timeout
+                    r = sd_bus_call(bus, msg, 5000000, &error, &reply); // 5s timeout
                     sd_bus_message_unref(msg);
-                    if (reply) sd_bus_message_unref(reply);
+                    if (reply)
+                        sd_bus_message_unref(reply);
 
                     if (r < 0) {
                         werr = error.message ? error.message : "WriteValue failed";
@@ -683,12 +645,14 @@ extern "C" int helix_bt_ble_write(helix_bt_context* ctx, int handle,
 // Public API: BLE Read (via notify fd OR PropertiesChanged signal queue)
 // ---------------------------------------------------------------------------
 
-extern "C" int helix_bt_ble_read(helix_bt_context* ctx, int handle,
-                                   uint8_t* buf, int buf_len, int timeout_ms)
-{
-    if (!ctx) return -EINVAL;
-    if (!buf || buf_len <= 0) return -EINVAL;
-    if (handle < BLE_HANDLE_OFFSET) return -EINVAL;
+extern "C" int helix_bt_ble_read(helix_bt_context* ctx, int handle, uint8_t* buf, int buf_len,
+                                 int timeout_ms) {
+    if (!ctx)
+        return -EINVAL;
+    if (!buf || buf_len <= 0)
+        return -EINVAL;
+    if (handle < BLE_HANDLE_OFFSET)
+        return -EINVAL;
 
     int index = handle - BLE_HANDLE_OFFSET;
 
@@ -701,7 +665,8 @@ extern "C" int helix_bt_ble_read(helix_bt_context* ctx, int handle,
         conn = ctx->ble_connections[static_cast<size_t>(index)].get();
     }
 
-    if (!conn || !conn->active) return -ENOTCONN;
+    if (!conn || !conn->active)
+        return -ENOTCONN;
 
     // Prefer the PropertiesChanged-backed queue: the signal handler runs on
     // the bus thread and populates it without any read/poll here. This also
@@ -710,7 +675,7 @@ extern "C" int helix_bt_ble_read(helix_bt_context* ctx, int handle,
     {
         std::unique_lock<std::mutex> lk(conn->rx_mu);
         if (conn->rx_cv.wait_for(lk, std::chrono::milliseconds(timeout_ms),
-                                  [conn] { return !conn->rx_queue.empty(); })) {
+                                 [conn] { return !conn->rx_queue.empty(); })) {
             auto data = std::move(conn->rx_queue.front());
             conn->rx_queue.pop_front();
             lk.unlock();
@@ -738,22 +703,21 @@ extern "C" int helix_bt_ble_read(helix_bt_context* ctx, int handle,
             return static_cast<int>(n);
         }
         if (ret > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
-            fprintf(stderr, "[bt] BLE read: poll error on notify fd (revents=0x%x)\n",
-                    pfd.revents);
+            fprintf(stderr, "[bt] BLE read: poll error on notify fd (revents=0x%x)\n", pfd.revents);
             return -EIO;
         }
     }
 
-    return 0;  // timeout, no data
+    return 0; // timeout, no data
 }
 
 // ---------------------------------------------------------------------------
 // Public API: Disconnect (unified for RFCOMM and BLE)
 // ---------------------------------------------------------------------------
 
-extern "C" void helix_bt_disconnect(helix_bt_context* ctx, int handle)
-{
-    if (!ctx) return;
+extern "C" void helix_bt_disconnect(helix_bt_context* ctx, int handle) {
+    if (!ctx)
+        return;
 
     if (handle >= BLE_HANDLE_OFFSET) {
         // BLE disconnect
@@ -767,7 +731,8 @@ extern "C" void helix_bt_disconnect(helix_bt_context* ctx, int handle)
             }
             conn = ctx->ble_connections[static_cast<size_t>(index)].get();
         }
-        if (!conn || !conn->active) return;
+        if (!conn || !conn->active)
+            return;
 
         // Close acquired fds if held (no bus traffic needed)
         if (conn->acquired_fd >= 0) {
@@ -788,14 +753,8 @@ extern "C" void helix_bt_disconnect(helix_bt_context* ctx, int handle)
                         conn->notify_slot = nullptr;
                     }
                     sd_bus_error error = SD_BUS_ERROR_NULL;
-                    sd_bus_call_method(bus,
-                                       "org.bluez",
-                                       conn->device_path.c_str(),
-                                       "org.bluez.Device1",
-                                       "Disconnect",
-                                       &error,
-                                       nullptr,
-                                       "");
+                    sd_bus_call_method(bus, "org.bluez", conn->device_path.c_str(),
+                                       "org.bluez.Device1", "Disconnect", &error, nullptr, "");
                     sd_bus_error_free(&error);
                 });
             } catch (const std::exception& e) {

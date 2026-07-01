@@ -1653,8 +1653,8 @@ TEST_CASE("CFS override preserved across unchanged parses",
 TEST_CASE("CFS parse: color_value 'unknown' is EMPTY, real hex is AVAILABLE", "[ams][cfs]") {
     // Slot 0: untagged spool — RFID reports sentinel "unknown" / "-1" with no
     // remaining length. Slot 1: a genuine hex color with remaining length.
-    json box = make_single_unit_box({"-1", "101001", "-1", "-1"},
-                                    {"unknown", "0FFFFFF", "-1", "-1"});
+    json box =
+        make_single_unit_box({"-1", "101001", "-1", "-1"}, {"unknown", "0FFFFFF", "-1", "-1"});
     box["T1"]["remain_len"] = json::array({"-1", "57", "-1", "-1"});
 
     auto info = AmsBackendCfs::parse_box_status(box);
@@ -1729,8 +1729,7 @@ TEST_CASE("CFS: partial box.filament update does not clear active slot", "[ams][
 // Fix 1 regression guard: the toolhead sensor is the SOLE writer of
 // filament_loaded. A sensor update sets it true; a SUBSEQUENT box-only update
 // (carrying box.filament but no sensor param) must NOT clobber it back to false.
-TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded",
-          "[ams][cfs]") {
+TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded", "[ams][cfs]") {
     CfsTmpCacheDir tmp("presence_sensor_authority");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -1742,11 +1741,10 @@ TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded"
     CfsTestAccess::inject_override_store(backend, std::move(store));
 
     // 1) Toolhead sensor trips: filament present at the nozzle.
-    json sensor_update = json{
-        {"params",
-         json::array({json{{"filament_switch_sensor filament_sensor",
-                            {{"filament_detected", true}}}},
-                      0})}};
+    json sensor_update =
+        json{{"params", json::array({json{{"filament_switch_sensor filament_sensor",
+                                           {{"filament_detected", true}}}},
+                                     0})}};
     CfsTestAccess::handle_status(backend, sensor_update);
     REQUIRE(backend.get_system_info().filament_loaded == true);
 
@@ -1782,8 +1780,7 @@ TEST_CASE("CFS: user override promotes an RFID-empty bay to AVAILABLE", "[ams][c
     CfsTestAccess::seed_override(backend, 0, ovr);
 
     // Firmware reports slot 0 EMPTY (RFID -1 / no length), slots 1-3 EMPTY too.
-    json box = make_single_unit_box({"-1", "-1", "-1", "-1"},
-                                    {"-1", "-1", "-1", "-1"});
+    json box = make_single_unit_box({"-1", "-1", "-1", "-1"}, {"-1", "-1", "-1", "-1"});
     box["T1"]["remain_len"] = json::array({"-1", "-1", "-1", "-1"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box));
 

@@ -25,10 +25,11 @@
  * on an 800x480 target.
  */
 
+#include "ui_wizard_touch_calibration.h"
+
 #include "../test_helpers/touch_calibration_panel_test_access.h"
 #include "../test_helpers/wizard_touch_calibration_test_access.h"
 #include "touch_calibration_panel.h"
-#include "ui_wizard_touch_calibration.h"
 
 #include <cstdint>
 

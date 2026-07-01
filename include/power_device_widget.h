@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
-#include "sensor_state.h"
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "panel_widget.h"
+#include "sensor_state.h"
 
 #include <string>
 #include <vector>

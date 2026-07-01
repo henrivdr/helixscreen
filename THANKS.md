@@ -61,6 +61,11 @@ Extensive help with the Flashforge AD5X integrated filament system — debug bun
 and on-printer validation across many rounds of fixes. The IFS support is as solid
 as it is because of this testing.
 
+### Vger1700 — AD5X / IFS
+Debugging help on the AD5X integrated filament system — captured the debug bundles
+that pinned down the purge-timeout and loaded-status behavior (#1065), and
+volunteered as a field tester across the fixes.
+
 ### npa62 — Niimbot B1
 Help bringing up and testing Niimbot B1 label-printer support on a Voron setup.
 

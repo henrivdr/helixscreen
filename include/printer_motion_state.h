@@ -150,9 +150,9 @@ class PrinterMotionState {
     lv_subject_t flow_factor_{};
 
     // Actual speed/velocity subjects
-    lv_subject_t gcode_speed_{};              // mm/s (from gcode_move.speed)
-    lv_subject_t max_velocity_{};             // mm/s (from toolhead.max_velocity)
-    lv_subject_t live_extruder_velocity_{};   // centimm/s (from motion_report, ×100 for precision)
+    lv_subject_t gcode_speed_{};            // mm/s (from gcode_move.speed)
+    lv_subject_t max_velocity_{};           // mm/s (from toolhead.max_velocity)
+    lv_subject_t live_extruder_velocity_{}; // centimm/s (from motion_report, ×100 for precision)
 
     // Z-offset subjects
     lv_subject_t gcode_z_offset_{};

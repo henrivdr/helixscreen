@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_spool_canvas.h"
+
 #include "../lvgl_test_fixture.h"
 #include "ams_state.h"
 #include "ams_types.h"
 #include "config.h"
 #include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
-#include "ui_spool_canvas.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -488,8 +489,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "spool_visual flat: set_color tints swatch + d
     lv_obj_delete(host);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "create_lane_badge: shows 1-based number",
-                 "[ui][ams][badge]") {
+TEST_CASE_METHOD(LVGLTestFixture, "create_lane_badge: shows 1-based number", "[ui][ams][badge]") {
     lv_obj_t* host = lv_obj_create(test_screen());
     lv_obj_t* badge = ams_draw::create_lane_badge(host, 3, 16);
     REQUIRE(badge != nullptr);

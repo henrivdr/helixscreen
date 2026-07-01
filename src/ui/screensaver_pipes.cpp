@@ -15,10 +15,11 @@
 #include <ctime>
 
 static constexpr uint32_t TICK_PERIOD_MS = 100;
-static constexpr float PIPE_RADIUS = 0.22f;       // Reference uses 0.2
-static constexpr float JOINT_RADIUS = PIPE_RADIUS * 1.5f; // Reference: ballJointRadius = pipeRadius * 1.5
-static constexpr float FOV_DEGREES = 45.0f;       // Reference: PerspectiveCamera(45, ...)
-static constexpr float CAM_DISTANCE = 28.0f;      // Reference: camera at distance 14 from ±10 grid
+static constexpr float PIPE_RADIUS = 0.22f; // Reference uses 0.2
+static constexpr float JOINT_RADIUS =
+    PIPE_RADIUS * 1.5f;                      // Reference: ballJointRadius = pipeRadius * 1.5
+static constexpr float FOV_DEGREES = 45.0f;  // Reference: PerspectiveCamera(45, ...)
+static constexpr float CAM_DISTANCE = 28.0f; // Reference: camera at distance 14 from ±10 grid
 static constexpr float PI_F = 3.14159265f;
 
 // ---------- Vector math helpers ----------
@@ -48,16 +49,16 @@ static constexpr int NUM_PIPE_COLORS = 10;
 
 static lv_color_t get_pipe_color(int index) {
     static const uint8_t palette[][3] = {
-        {230, 50, 50},   // red
-        {50, 200, 50},   // green
-        {70, 70, 240},   // blue
-        {230, 220, 40},  // yellow
-        {40, 210, 210},  // cyan
-        {210, 50, 210},  // magenta
-        {240, 140, 20},  // orange
-        {140, 230, 20},  // lime
-        {30, 140, 240},  // sky blue
-        {240, 40, 140},  // hot pink
+        {230, 50, 50},  // red
+        {50, 200, 50},  // green
+        {70, 70, 240},  // blue
+        {230, 220, 40}, // yellow
+        {40, 210, 210}, // cyan
+        {210, 50, 210}, // magenta
+        {240, 140, 20}, // orange
+        {140, 230, 20}, // lime
+        {30, 140, 240}, // sky blue
+        {240, 40, 140}, // hot pink
     };
     int i = index % NUM_PIPE_COLORS;
     return lv_color_make(palette[i][0], palette[i][1], palette[i][2]);
@@ -94,12 +95,12 @@ void PipesScreensaver::setup_camera() {
              (2.0f * std::tan(FOV_DEGREES * 0.5f * PI_F / 180.0f));
 }
 
-bool PipesScreensaver::project(float wx, float wy, float wz,
-                                int& sx, int& sy, float& depth) const {
+bool PipesScreensaver::project(float wx, float wy, float wz, int& sx, int& sy, float& depth) const {
     float d[3] = {wx - cam_pos_[0], wy - cam_pos_[1], wz - cam_pos_[2]};
 
     float vz = vec3_dot(d, cam_fwd_);
-    if (vz < 0.1f) return false; // Behind camera
+    if (vz < 0.1f)
+        return false; // Behind camera
 
     float vx = vec3_dot(d, cam_right_);
     float vy = vec3_dot(d, cam_up_);
@@ -207,7 +208,8 @@ void PipesScreensaver::stop() {
         canvas_ = nullptr; // deleted as child of overlay
     }
 
-    for (auto& p : pipes_) p.alive = false;
+    for (auto& p : pipes_)
+        p.alive = false;
     active_ = false;
 }
 
@@ -260,19 +262,22 @@ void PipesScreensaver::start_new_pipe(ActivePipe& pipe) {
 
 void PipesScreensaver::tick_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<PipesScreensaver*>(lv_timer_get_user_data(timer));
-    if (!self || !self->active_) return;
+    if (!self || !self->active_)
+        return;
     self->tick();
 }
 
 void PipesScreensaver::tick() {
-    if (!canvas_) return;
+    if (!canvas_)
+        return;
 
     // Reset when grid is full
     if (total_segments_ > MAX_SEGMENTS) {
         lv_canvas_fill_bg(canvas_, lv_color_black(), LV_OPA_COVER);
         reset_grid();
         setup_camera(); // New random camera angle on reset
-        for (auto& p : pipes_) p.alive = false;
+        for (auto& p : pipes_)
+            p.alive = false;
         for (int i = 0; i < 2; i++) {
             start_new_pipe(pipes_[i]);
         }
@@ -286,7 +291,8 @@ void PipesScreensaver::tick() {
     // Grow each active pipe
     int alive_count = 0;
     for (auto& pipe : pipes_) {
-        if (!pipe.alive) continue;
+        if (!pipe.alive)
+            continue;
         alive_count++;
 
         if (!grow_pipe(pipe, &layer)) {
@@ -336,9 +342,7 @@ bool PipesScreensaver::grow_pipe(ActivePipe& pipe, lv_layer_t* layer) {
         int sx1, sy1, sx2, sy2;
         float d1, d2;
 
-        if (project(wx1, wy1, wz1, sx1, sy1, d1) &&
-            project(wx2, wy2, wz2, sx2, sy2, d2)) {
-
+        if (project(wx1, wy1, wz1, sx1, sy1, d1) && project(wx2, wy2, wz2, sx2, sy2, d2)) {
             // Ball joint at direction change (reference: makeBallJoint)
             if (pipe.has_prev_dir && try_dir != pipe.dir) {
                 draw_joint(layer, sx1, sy1, d1, pipe);
@@ -374,7 +378,6 @@ bool PipesScreensaver::grow_pipe(ActivePipe& pipe, lv_layer_t* layer) {
 
             if (project(wx1, wy1, wz1, sx1, sy1, depth1) &&
                 project(wx2, wy2, wz2, sx2, sy2, depth2)) {
-
                 if (pipe.has_prev_dir && candidate != pipe.dir) {
                     draw_joint(layer, sx1, sy1, depth1, pipe);
                 }
@@ -397,7 +400,7 @@ bool PipesScreensaver::grow_pipe(ActivePipe& pipe, lv_layer_t* layer) {
 // ---------- Drawing ----------
 
 void PipesScreensaver::draw_segment(lv_layer_t* layer, int sx1, int sy1, int sx2, int sy2,
-                                     float depth, const ActivePipe& pipe) {
+                                    float depth, const ActivePipe& pipe) {
     // Pipe thickness scales with depth (perspective foreshortening)
     float projected_radius = PIPE_RADIUS * focal_ / depth;
     int thickness = std::max(3, static_cast<int>(projected_radius * 2.0f));
@@ -433,7 +436,8 @@ void PipesScreensaver::draw_segment(lv_layer_t* layer, int sx1, int sy1, int sx2
     lv_draw_line(layer, &dsc);
 }
 
-void PipesScreensaver::draw_joint(lv_layer_t* layer, int sx, int sy, float depth, const ActivePipe& pipe) {
+void PipesScreensaver::draw_joint(lv_layer_t* layer, int sx, int sy, float depth,
+                                  const ActivePipe& pipe) {
     // Ball joint radius scales with depth (reference: SphereGeometry(ballJointRadius, 8, 8))
     float projected_radius = JOINT_RADIUS * focal_ / depth;
     int ball_r = std::max(3, static_cast<int>(projected_radius));
@@ -480,20 +484,31 @@ void PipesScreensaver::draw_joint(lv_layer_t* layer, int sx, int sy, float depth
 
 PipesScreensaver::GridPos PipesScreensaver::next_pos(GridPos pos, Direction dir) const {
     switch (dir) {
-        case Direction::POS_X: pos.x += 1; break;
-        case Direction::NEG_X: pos.x -= 1; break;
-        case Direction::POS_Y: pos.y += 1; break;
-        case Direction::NEG_Y: pos.y -= 1; break;
-        case Direction::POS_Z: pos.z += 1; break;
-        case Direction::NEG_Z: pos.z -= 1; break;
+    case Direction::POS_X:
+        pos.x += 1;
+        break;
+    case Direction::NEG_X:
+        pos.x -= 1;
+        break;
+    case Direction::POS_Y:
+        pos.y += 1;
+        break;
+    case Direction::NEG_Y:
+        pos.y -= 1;
+        break;
+    case Direction::POS_Z:
+        pos.z += 1;
+        break;
+    case Direction::NEG_Z:
+        pos.z -= 1;
+        break;
     }
     return pos;
 }
 
 bool PipesScreensaver::in_bounds(GridPos pos) const {
-    return pos.x >= 0 && pos.x < GRID_DIM &&
-           pos.y >= 0 && pos.y < GRID_DIM &&
-           pos.z >= 0 && pos.z < GRID_DIM;
+    return pos.x >= 0 && pos.x < GRID_DIM && pos.y >= 0 && pos.y < GRID_DIM && pos.z >= 0 &&
+           pos.z < GRID_DIM;
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER

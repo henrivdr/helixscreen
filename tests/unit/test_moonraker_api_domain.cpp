@@ -240,7 +240,8 @@ TEST_CASE_METHOD(MoonrakerAPIDomainTestFixture,
 }
 
 TEST_CASE_METHOD(MoonrakerAPIDomainTestFixture,
-                 "MoonrakerAPI::get_bed_mesh_profiles returns profile list", "[api][bedmesh][slow]") {
+                 "MoonrakerAPI::get_bed_mesh_profiles returns profile list",
+                 "[api][bedmesh][slow]") {
     std::vector<std::string> profiles = api->advanced().get_bed_mesh_profiles();
 
     // Verify profiles list is reasonable
@@ -256,7 +257,8 @@ TEST_CASE_METHOD(MoonrakerAPIDomainTestFixture,
 // ============================================================================
 
 TEST_CASE_METHOD(MoonrakerAPIDomainTestFixture,
-                 "MoonrakerAPI::get_excluded_objects handles empty response", "[api][exclude][slow]") {
+                 "MoonrakerAPI::get_excluded_objects handles empty response",
+                 "[api][exclude][slow]") {
     bool callback_called = false;
     std::set<std::string> result;
 
@@ -274,7 +276,8 @@ TEST_CASE_METHOD(MoonrakerAPIDomainTestFixture,
 }
 
 TEST_CASE_METHOD(MoonrakerAPIDomainTestFixture,
-                 "MoonrakerAPI::get_available_objects handles empty response", "[api][exclude][slow]") {
+                 "MoonrakerAPI::get_available_objects handles empty response",
+                 "[api][exclude][slow]") {
     bool callback_called = false;
     std::vector<std::string> result;
 

@@ -1154,11 +1154,11 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     // Moonraker finishes scanning and emits notify_filelist_changed for the
     // file we're printing (fires on the WS thread in production; the handler
     // marshals to main, hence the drain).
-    json msg = {{"jsonrpc", "2.0"},
-                {"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "create_file"},
-                               {"item", {{"path", "benchy.gcode"}, {"root", "gcodes"}}}}})}};
+    json msg = {
+        {"jsonrpc", "2.0"},
+        {"method", "notify_filelist_changed"},
+        {"params", json::array({{{"action", "create_file"},
+                                 {"item", {{"path", "benchy.gcode"}, {"root", "gcodes"}}}}})}};
     fire_notification("notify_filelist_changed", msg);
     drain();
 
@@ -1184,11 +1184,11 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     drain();
     REQUIRE(TestAccess::has_pending_retry(manager()));
 
-    json msg = {{"jsonrpc", "2.0"},
-                {"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "create_file"},
-                               {"item", {{"path", "unrelated.gcode"}, {"root", "gcodes"}}}}})}};
+    json msg = {
+        {"jsonrpc", "2.0"},
+        {"method", "notify_filelist_changed"},
+        {"params", json::array({{{"action", "create_file"},
+                                 {"item", {{"path", "unrelated.gcode"}, {"root", "gcodes"}}}}})}};
     fire_notification("notify_filelist_changed", msg);
     drain();
 
@@ -1367,9 +1367,8 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     // But a filelist_changed for the file still re-triggers (covers the
     // genuinely-late-scan case beyond the cheap cap).
     json msg = {{"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "modify_file"},
-                               {"item", {{"path", "no_thumbs_sliced.gcode"}}}}})}};
+                {"params", json::array({{{"action", "modify_file"},
+                                         {"item", {{"path", "no_thumbs_sliced.gcode"}}}}})}};
     fire_notification("notify_filelist_changed", msg);
     drain();
     REQUIRE(files().pending_count() == 4);
@@ -1390,13 +1389,12 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     // The printing file gets deleted — re-querying it is guaranteed to fail,
     // so the notification must NOT kick off a fresh retry ladder.
     json msg = {{"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "delete_file"},
-                               {"item", {{"path", "doomed_delete.gcode"}}}}})}};
+                {"params", json::array({{{"action", "delete_file"},
+                                         {"item", {{"path", "doomed_delete.gcode"}}}}})}};
     fire_notification("notify_filelist_changed", msg);
     drain();
 
-    REQUIRE(files().pending_count() == 1); // no immediate reload
+    REQUIRE(files().pending_count() == 1);            // no immediate reload
     REQUIRE(TestAccess::retry_count(manager()) == 1); // ladder not reset
 }
 
@@ -1414,10 +1412,9 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     // The printing file is renamed: source_item is the old (current) name,
     // item is the destination. Metadata now lives under the destination.
     json msg = {{"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "move_file"},
-                               {"source_item", {{"path", "benchy.gcode"}}},
-                               {"item", {{"path", "archive/benchy_v2.gcode"}}}}})}};
+                {"params", json::array({{{"action", "move_file"},
+                                         {"source_item", {{"path", "benchy.gcode"}}},
+                                         {"item", {{"path", "archive/benchy_v2.gcode"}}}}})}};
     fire_notification("notify_filelist_changed", msg);
     drain();
 
@@ -1445,13 +1442,12 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
 
     // Malformed/partial move notification: source matches but no dest item.
     json msg = {{"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "move_file"},
-                               {"source_item", {{"path", "benchy.gcode"}}}}})}};
+                {"params", json::array({{{"action", "move_file"},
+                                         {"source_item", {{"path", "benchy.gcode"}}}}})}};
     fire_notification("notify_filelist_changed", msg);
     drain();
 
-    REQUIRE(files().pending_count() == 1); // no reload from a missing dest
+    REQUIRE(files().pending_count() == 1);             // no reload from a missing dest
     REQUIRE(TestAccess::has_pending_retry(manager())); // backoff ladder untouched
 }
 
@@ -1471,9 +1467,8 @@ TEST_CASE_METHOD(ActivePrintMediaAsyncFixture,
     manager_ptr().reset(); // destroy the manager (lifetime invalidated)
 
     json msg = {{"method", "notify_filelist_changed"},
-                {"params",
-                 json::array({{{"action", "create_file"},
-                               {"item", {{"path", "teardown.gcode"}}}}})}};
+                {"params", json::array({{{"action", "create_file"},
+                                         {"item", {{"path", "teardown.gcode"}}}}})}};
     REQUIRE_NOTHROW(fire_notification("notify_filelist_changed", msg));
     REQUIRE_NOTHROW(
         fire_notification("notify_klippy_ready", json{{"method", "notify_klippy_ready"}}));

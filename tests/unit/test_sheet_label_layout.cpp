@@ -1,10 +1,10 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "label_bitmap.h"
 #include "sheet_label_layout.h"
+
+#include "../catch_amalgamated.hpp"
 
 using helix::LabelBitmap;
 using namespace helix::label;
@@ -269,7 +269,8 @@ TEST_CASE("sheet_template_options", "[label][sheet]") {
     // Count newlines to verify correct count (10 templates = 9 newlines)
     int newlines = 0;
     for (char c : options) {
-        if (c == '\n') newlines++;
+        if (c == '\n')
+            newlines++;
     }
     REQUIRE(newlines == 9);
 }

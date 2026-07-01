@@ -17,7 +17,8 @@ namespace fs = std::filesystem;
 
 static size_t count_xml_subjects(const char* component_name) {
     lv_xml_component_scope_t* scope = lv_xml_component_get_scope(component_name);
-    if (!scope) return 0;
+    if (!scope)
+        return 0;
     size_t n = 0;
     // LV_LL_READ is a C macro that relies on implicit void* conversion — expand it manually
     // for C++ so we can cast explicitly.
@@ -68,7 +69,8 @@ void XmlHotReloader::initial_scan(const std::vector<std::string>& xml_dirs) {
     auto is_skipped = [](const fs::path& p) {
         auto name = p.filename().string();
         for (const auto* skip : SKIP_DIRS) {
-            if (name == skip) return true;
+            if (name == skip)
+                return true;
         }
         return false;
     };
@@ -107,8 +109,7 @@ void XmlHotReloader::initial_scan(const std::vector<std::string>& xml_dirs) {
                     std::error_code inc_ec;
                     it.increment(inc_ec);
                     if (inc_ec) {
-                        spdlog::warn("[HotReload] Iterator error in {}: {}", dir,
-                                     inc_ec.message());
+                        spdlog::warn("[HotReload] Iterator error in {}: {}", dir, inc_ec.message());
                         break;
                     }
                     continue;
@@ -137,7 +138,8 @@ void XmlHotReloader::initial_scan(const std::vector<std::string>& xml_dirs) {
 
     std::string breakdown;
     for (const auto& [bucket, n] : per_dir_counts) {
-        if (!breakdown.empty()) breakdown += ", ";
+        if (!breakdown.empty())
+            breakdown += ", ";
         breakdown += bucket + ": " + std::to_string(n);
     }
     spdlog::info("[HotReload] Scan complete ({} files) [{}]", file_mtimes_.size(), breakdown);
@@ -176,7 +178,8 @@ void XmlHotReloader::scan_and_reload() {
         if (reload_callback_) {
             // Test mode — invoke callback directly instead of LVGL operations
             reload_callback_(comp_name, lvgl_path);
-            if (after_reload_callback_) after_reload_callback_(comp_name);
+            if (after_reload_callback_)
+                after_reload_callback_(comp_name);
         } else {
             // Marshal the reload to the LVGL main thread
             auto reload_name = comp_name;
@@ -187,9 +190,10 @@ void XmlHotReloader::scan_and_reload() {
 
                 size_t subject_count = count_xml_subjects(reload_name.c_str());
                 if (subject_count > 0) {
-                    spdlog::warn("[HotReload] '{}' defines {} XML subject(s); any live widget bound "
-                                 "to these subjects will hold a dangling pointer until rebuilt",
-                                 reload_name, subject_count);
+                    spdlog::warn(
+                        "[HotReload] '{}' defines {} XML subject(s); any live widget bound "
+                        "to these subjects will hold a dangling pointer until rebuilt",
+                        reload_name, subject_count);
                 }
 
                 // Unregister old component definition
@@ -211,7 +215,8 @@ void XmlHotReloader::scan_and_reload() {
                 auto us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
                 spdlog::info("[HotReload] Reloaded: {} ({:.1f}ms)", reload_name, us / 1000.0);
 
-                if (after_cb) after_cb(reload_name);
+                if (after_cb)
+                    after_cb(reload_name);
             });
         }
     }

@@ -55,7 +55,8 @@ struct TempGraphSeriesSpec {
     std::string klipper_name; ///< Klipper object key (e.g., "extruder", "heater_bed")
     lv_color_t color{};       ///< Series line color
     bool show_target = false; ///< Whether this heater has a controllable target
-    std::string display_name; ///< Label shown in the graph legend; falls back to klipper_name when empty
+    std::string
+        display_name; ///< Label shown in the graph legend; falls back to klipper_name when empty
 };
 
 /**

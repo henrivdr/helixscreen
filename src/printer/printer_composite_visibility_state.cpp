@@ -64,11 +64,10 @@ void PrinterCompositeVisibilityState::update_visibility(
         lv_subject_set_int(&has_any_preprint_options_, new_any);
     }
 
-    if (!last_log_state_initialized_ || new_any != last_any_ ||
-        plugin_installed != last_plugin_) {
-        spdlog::debug(
-            "[PrinterCompositeVisibilityState] has_any_preprint_options={} (plugin={}, framework={})",
-            new_any, plugin_installed, framework_option_count);
+    if (!last_log_state_initialized_ || new_any != last_any_ || plugin_installed != last_plugin_) {
+        spdlog::debug("[PrinterCompositeVisibilityState] has_any_preprint_options={} (plugin={}, "
+                      "framework={})",
+                      new_any, plugin_installed, framework_option_count);
         last_any_ = new_any;
         last_plugin_ = plugin_installed;
         last_log_state_initialized_ = true;

@@ -123,26 +123,21 @@ void AboutSettingsOverlay::init_subjects() {
                                   about_copyright_buf_, "about_copyright", subjects_);
 
         UI_MANAGED_SUBJECT_STRING(install_root_value_subject_, install_root_value_buf_,
-                                  app_get_install_root().c_str(),
-                                  "install_root_value", subjects_);
+                                  app_get_install_root().c_str(), "install_root_value", subjects_);
         UI_MANAGED_SUBJECT_STRING(config_dir_value_subject_, config_dir_value_buf_,
-                                  app_get_config_dir().c_str(),
-                                  "config_dir_value", subjects_);
+                                  app_get_config_dir().c_str(), "config_dir_value", subjects_);
         UI_MANAGED_SUBJECT_STRING(cache_dir_value_subject_, cache_dir_value_buf_,
-                                  app_get_cache_dir().c_str(),
-                                  "cache_dir_value", subjects_);
+                                  app_get_cache_dir().c_str(), "cache_dir_value", subjects_);
         {
             std::string dest = helix::logging::effective_destination();
             if (dest.empty()) {
                 dest = "\xe2\x80\x94"; // em dash when init hasn't completed
             }
-            UI_MANAGED_SUBJECT_STRING(log_dest_value_subject_, log_dest_value_buf_,
-                                      dest.c_str(),
+            UI_MANAGED_SUBJECT_STRING(log_dest_value_subject_, log_dest_value_buf_, dest.c_str(),
                                       "log_dest_value", subjects_);
         }
         UI_MANAGED_SUBJECT_STRING(host_arch_value_subject_, host_arch_value_buf_,
-                                  helix::host_arch_string().c_str(),
-                                  "host_arch_value", subjects_);
+                                  helix::host_arch_string().c_str(), "host_arch_value", subjects_);
     });
 }
 

@@ -214,8 +214,7 @@ void SlotRegistry::set_tool_mapping(int global_index, int tool_number) {
     // so each tool maps to exactly one slot
     if (tool_number < static_cast<int>(tool_to_slot_.size())) {
         int old_slot = tool_to_slot_[tool_number];
-        if (old_slot >= 0 && old_slot != global_index &&
-            is_valid_index(old_slot) &&
+        if (old_slot >= 0 && old_slot != global_index && is_valid_index(old_slot) &&
             slots_[old_slot].info.mapped_tool == tool_number) {
             slots_[old_slot].info.mapped_tool = -1;
         }

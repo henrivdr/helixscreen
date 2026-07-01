@@ -1,9 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "ipp_protocol.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix::ipp;
 
@@ -79,7 +79,10 @@ TEST_CASE("IppRequest encoding - printer URI", "[label][ipp]") {
     bool found = false;
     while (pos < buf.size() - 1 && buf[pos] != 0x03) {
         uint8_t tag = buf[pos];
-        if (tag <= 0x0F) { pos++; continue; } // delimiter
+        if (tag <= 0x0F) {
+            pos++;
+            continue;
+        } // delimiter
         uint16_t nlen = read_be16(buf.data() + pos + 1);
         uint16_t vlen = read_be16(buf.data() + pos + 3 + nlen);
         std::string attr_name(buf.begin() + pos + 3, buf.begin() + pos + 3 + nlen);
@@ -106,7 +109,10 @@ TEST_CASE("IppRequest encoding - string attributes", "[label][ipp]") {
     bool found = false;
     while (pos < buf.size() - 1 && buf[pos] != 0x03) {
         uint8_t tag = buf[pos];
-        if (tag <= 0x0F) { pos++; continue; }
+        if (tag <= 0x0F) {
+            pos++;
+            continue;
+        }
         uint16_t nlen = read_be16(buf.data() + pos + 1);
         uint16_t vlen = read_be16(buf.data() + pos + 3 + nlen);
         std::string attr_name(buf.begin() + pos + 3, buf.begin() + pos + 3 + nlen);
@@ -133,7 +139,10 @@ TEST_CASE("IppRequest encoding - integer attributes", "[label][ipp]") {
     bool found = false;
     while (pos < buf.size() - 1 && buf[pos] != 0x03) {
         uint8_t tag = buf[pos];
-        if (tag <= 0x0F) { pos++; continue; }
+        if (tag <= 0x0F) {
+            pos++;
+            continue;
+        }
         uint16_t nlen = read_be16(buf.data() + pos + 1);
         uint16_t vlen = read_be16(buf.data() + pos + 3 + nlen);
         std::string attr_name(buf.begin() + pos + 3, buf.begin() + pos + 3 + nlen);
@@ -164,7 +173,10 @@ TEST_CASE("IppRequest encoding - boolean attributes", "[label][ipp]") {
         bool found = false;
         while (pos < buf.size() - 1 && buf[pos] != 0x03) {
             uint8_t tag = buf[pos];
-            if (tag <= 0x0F) { pos++; continue; }
+            if (tag <= 0x0F) {
+                pos++;
+                continue;
+            }
             uint16_t nlen = read_be16(buf.data() + pos + 1);
             uint16_t vlen = read_be16(buf.data() + pos + 3 + nlen);
             std::string attr_name(buf.begin() + pos + 3, buf.begin() + pos + 3 + nlen);
@@ -188,7 +200,10 @@ TEST_CASE("IppRequest encoding - boolean attributes", "[label][ipp]") {
         bool found = false;
         while (pos < buf.size() - 1 && buf[pos] != 0x03) {
             uint8_t tag = buf[pos];
-            if (tag <= 0x0F) { pos++; continue; }
+            if (tag <= 0x0F) {
+                pos++;
+                continue;
+            }
             uint16_t nlen = read_be16(buf.data() + pos + 1);
             uint16_t vlen = read_be16(buf.data() + pos + 3 + nlen);
             std::string attr_name(buf.begin() + pos + 3, buf.begin() + pos + 3 + nlen);
@@ -253,21 +268,25 @@ TEST_CASE("IppRequest encoding - job attributes group", "[label][ipp]") {
 
         // Delimiter tags are 0x00-0x0F
         if (tag <= 0x0F) {
-            if (tag == 0x01) found_op_tag = true;
+            if (tag == 0x01)
+                found_op_tag = true;
             if (tag == 0x02) {
                 found_job_tag = true;
                 job_tag_pos = pos;
                 break;
             }
-            if (tag == 0x03) break; // end of attributes
+            if (tag == 0x03)
+                break; // end of attributes
             pos++;
             continue;
         }
 
         // Value tag: skip over the attribute (tag + name-len + name + value-len + value)
-        if (pos + 3 > buf.size()) break;
+        if (pos + 3 > buf.size())
+            break;
         uint16_t nlen = read_be16(buf.data() + pos + 1);
-        if (pos + 3 + nlen + 2 > buf.size()) break;
+        if (pos + 3 + nlen + 2 > buf.size())
+            break;
         uint16_t vlen = read_be16(buf.data() + pos + 3 + nlen);
         pos = pos + 3 + nlen + 2 + vlen;
     }
@@ -304,7 +323,8 @@ static std::vector<uint8_t> build_minimal_response(StatusCode status, uint32_t r
     resp.push_back(static_cast<uint8_t>(req_id & 0xFF));
     // Operation attributes tag
     resp.push_back(0x01);
-    // charset attribute: tag(0x47) + name-length(2) + "attributes-charset" + value-length(2) + "utf-8"
+    // charset attribute: tag(0x47) + name-length(2) + "attributes-charset" + value-length(2) +
+    // "utf-8"
     resp.push_back(0x47);
     std::string charset_name = "attributes-charset";
     resp.push_back(0x00);
@@ -355,19 +375,23 @@ TEST_CASE("IppResponse parsing - find_attribute", "[label][ipp]") {
     // charset
     raw.push_back(0x47);
     std::string n1 = "attributes-charset";
-    raw.push_back(0x00); raw.push_back(static_cast<uint8_t>(n1.size()));
+    raw.push_back(0x00);
+    raw.push_back(static_cast<uint8_t>(n1.size()));
     raw.insert(raw.end(), n1.begin(), n1.end());
     std::string v1 = "utf-8";
-    raw.push_back(0x00); raw.push_back(static_cast<uint8_t>(v1.size()));
+    raw.push_back(0x00);
+    raw.push_back(static_cast<uint8_t>(v1.size()));
     raw.insert(raw.end(), v1.begin(), v1.end());
     // Printer attributes
     raw.push_back(0x04);
     // printer-state (integer, tag 0x21)
     raw.push_back(0x21);
     std::string n2 = "printer-state";
-    raw.push_back(0x00); raw.push_back(static_cast<uint8_t>(n2.size()));
+    raw.push_back(0x00);
+    raw.push_back(static_cast<uint8_t>(n2.size()));
     raw.insert(raw.end(), n2.begin(), n2.end());
-    raw.push_back(0x00); raw.push_back(0x04); // value-length = 4
+    raw.push_back(0x00);
+    raw.push_back(0x04);                             // value-length = 4
     raw.insert(raw.end(), {0x00, 0x00, 0x00, 0x03}); // idle = 3
     // End
     raw.push_back(0x03);
@@ -397,17 +421,21 @@ TEST_CASE("IppResponse parsing - multi-valued attributes", "[label][ipp]") {
     // First value: keyword tag, name="document-format-supported", value="application/pdf"
     raw.push_back(0x44);
     std::string name = "document-format-supported";
-    raw.push_back(0x00); raw.push_back(static_cast<uint8_t>(name.size()));
+    raw.push_back(0x00);
+    raw.push_back(static_cast<uint8_t>(name.size()));
     raw.insert(raw.end(), name.begin(), name.end());
     std::string val1 = "application/pdf";
-    raw.push_back(0x00); raw.push_back(static_cast<uint8_t>(val1.size()));
+    raw.push_back(0x00);
+    raw.push_back(static_cast<uint8_t>(val1.size()));
     raw.insert(raw.end(), val1.begin(), val1.end());
 
     // Second value: same attribute, name-length=0 (multi-valued)
     raw.push_back(0x44);
-    raw.push_back(0x00); raw.push_back(0x00); // name-length = 0
+    raw.push_back(0x00);
+    raw.push_back(0x00); // name-length = 0
     std::string val2 = "image/pwg-raster";
-    raw.push_back(0x00); raw.push_back(static_cast<uint8_t>(val2.size()));
+    raw.push_back(0x00);
+    raw.push_back(static_cast<uint8_t>(val2.size()));
     raw.insert(raw.end(), val2.begin(), val2.end());
 
     // End
@@ -425,9 +453,8 @@ TEST_CASE("IppResponse parsing - multi-valued attributes", "[label][ipp]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("build_get_printer_attributes - basic", "[label][ipp]") {
-    auto req = build_get_printer_attributes(
-        "ipp://printer.local/ipp/print",
-        {"printer-state", "printer-state-reasons"});
+    auto req = build_get_printer_attributes("ipp://printer.local/ipp/print",
+                                            {"printer-state", "printer-state-reasons"});
     auto buf = req.encode();
 
     // Verify operation code = GET_PRINTER_ATTRIBUTES (0x000B)
@@ -446,11 +473,8 @@ TEST_CASE("build_get_printer_attributes - basic", "[label][ipp]") {
 }
 
 TEST_CASE("build_print_job - basic", "[label][ipp]") {
-    auto req = build_print_job(
-        "ipp://printer.local/ipp/print",
-        "my-label",
-        "image/pwg-raster",
-        "na_letter_8.5x11in");
+    auto req = build_print_job("ipp://printer.local/ipp/print", "my-label", "image/pwg-raster",
+                               "na_letter_8.5x11in");
     auto buf = req.encode();
 
     // Verify operation code = PRINT_JOB (0x0002)

@@ -13,25 +13,35 @@ struct KeypadInput {
 
     char buf[BUF_SIZE] = "";
 
-    void clear() { buf[0] = '\0'; }
+    void clear() {
+        buf[0] = '\0';
+    }
 
-    size_t length() const { return strlen(buf); }
+    size_t length() const {
+        return strlen(buf);
+    }
 
-    bool has_dot() const { return strchr(buf, '.') != nullptr; }
+    bool has_dot() const {
+        return strchr(buf, '.') != nullptr;
+    }
 
     /// Append a digit 0-9. Limits: 3 digits without decimal, 5 with.
     bool append_digit(int digit) {
-        if (digit < 0 || digit > 9) return false;
+        if (digit < 0 || digit > 9)
+            return false;
 
         size_t len = length();
         int digit_count = 0;
         bool dot = false;
         for (size_t i = 0; i < len; i++) {
-            if (buf[i] >= '0' && buf[i] <= '9') digit_count++;
-            else if (buf[i] == '.') dot = true;
+            if (buf[i] >= '0' && buf[i] <= '9')
+                digit_count++;
+            else if (buf[i] == '.')
+                dot = true;
         }
         int max_digits = dot ? 5 : 3;
-        if (digit_count >= max_digits) return false;
+        if (digit_count >= max_digits)
+            return false;
 
         if (len < BUF_SIZE - 1) {
             buf[len] = '0' + digit;
@@ -43,7 +53,8 @@ struct KeypadInput {
 
     /// Append a decimal point. Only one allowed.
     bool append_dot() {
-        if (has_dot()) return false;
+        if (has_dot())
+            return false;
         size_t len = length();
         if (len < BUF_SIZE - 1) {
             buf[len] = '.';
@@ -56,16 +67,18 @@ struct KeypadInput {
     /// Remove the last character.
     bool backspace() {
         size_t len = length();
-        if (len == 0) return false;
+        if (len == 0)
+            return false;
         buf[len - 1] = '\0';
         return true;
     }
 
     /// Parse buffer as float. Empty buffer returns 0.
     float value() const {
-        if (buf[0] == '\0') return 0.0f;
+        if (buf[0] == '\0')
+            return 0.0f;
         return static_cast<float>(atof(buf));
     }
 };
 
-}  // namespace helix::ui
+} // namespace helix::ui

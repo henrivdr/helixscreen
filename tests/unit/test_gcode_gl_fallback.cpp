@@ -27,8 +27,7 @@ TEST_CASE("gl_draw_error_is_fatal triggers fallback on out-of-memory", "[gcode][
     REQUIRE(gl_draw_error_is_fatal(0x0505)); // literal value guards against renumbering
 }
 
-TEST_CASE("gl_draw_error_is_fatal triggers fallback on invalid-operation",
-          "[gcode][gl_fallback]") {
+TEST_CASE("gl_draw_error_is_fatal triggers fallback on invalid-operation", "[gcode][gl_fallback]") {
     // GL_INVALID_OPERATION means the command stream is in a driver-rejected
     // state; continuing to draw is unsafe.
     REQUIRE(gl_draw_error_is_fatal(kGLInvalidOperation));
@@ -41,8 +40,7 @@ TEST_CASE("gl_draw_error_is_fatal does NOT fall back on GL_NO_ERROR", "[gcode][g
     REQUIRE_FALSE(gl_draw_error_is_fatal(0x0000)); // GL_NO_ERROR
 }
 
-TEST_CASE("gl_draw_error_is_fatal ignores non-fatal recoverable errors",
-          "[gcode][gl_fallback]") {
+TEST_CASE("gl_draw_error_is_fatal ignores non-fatal recoverable errors", "[gcode][gl_fallback]") {
     // These errors indicate a programming mistake in the call, but the driver
     // stays in a defined state and the next frame can recover — they must NOT
     // permanently disable GPU rendering.
@@ -51,8 +49,7 @@ TEST_CASE("gl_draw_error_is_fatal ignores non-fatal recoverable errors",
     REQUIRE_FALSE(gl_draw_error_is_fatal(0x0506)); // GL_INVALID_FRAMEBUFFER_OPERATION
 }
 
-TEST_CASE("gl_draw_error_is_fatal constants match OpenGL ES values",
-          "[gcode][gl_fallback]") {
+TEST_CASE("gl_draw_error_is_fatal constants match OpenGL ES values", "[gcode][gl_fallback]") {
     // The predicate is header-only (no GL dependency) so it is testable on
     // builds without ENABLE_GLES_3D. Pin the constants to the real GL ES
     // numbers so a typo can never silently disable the guard.

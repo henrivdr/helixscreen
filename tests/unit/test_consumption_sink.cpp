@@ -1,13 +1,12 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "consumption_sink.h"
-
+#include "../lvgl_test_fixture.h"
 #include "ams_state.h"
 #include "ams_types.h"
+#include "consumption_sink.h"
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
 
 using helix::ExternalSpoolSink;
 
@@ -55,8 +54,7 @@ TEST_CASE_METHOD(ExternalSpoolSinkFixture,
     REQUIRE(info->remaining_weight_g > 996.0f);
 }
 
-TEST_CASE_METHOD(ExternalSpoolSinkFixture,
-                 "ExternalSpoolSink: unknown weight not trackable",
+TEST_CASE_METHOD(ExternalSpoolSinkFixture, "ExternalSpoolSink: unknown weight not trackable",
                  "[consumption_sink][external]") {
     SlotInfo info;
     info.material = "PLA";
@@ -68,8 +66,7 @@ TEST_CASE_METHOD(ExternalSpoolSinkFixture,
     REQUIRE_FALSE(sink.is_trackable());
 }
 
-TEST_CASE_METHOD(ExternalSpoolSinkFixture,
-                 "ExternalSpoolSink: unknown material not trackable",
+TEST_CASE_METHOD(ExternalSpoolSinkFixture, "ExternalSpoolSink: unknown material not trackable",
                  "[consumption_sink][external]") {
     SlotInfo info;
     info.material = "UnknownNovelMaterial9000";

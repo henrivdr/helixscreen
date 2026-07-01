@@ -238,11 +238,11 @@ class FilamentPanel : public PanelBase {
     bool backend_op_active_ = false; ///< true while an AMS-backend op awaits ams_action IDLE
 
     lv_subject_t* op_state_subject(FilamentOp op);
-    void set_op_state(FilamentOp op, int state);  ///< main-thread: set state subject
-    void op_started(FilamentOp op);               ///< main-thread: → busy (state 1)
-    void op_succeeded(FilamentOp op);             ///< main-thread: → done (after min floor)
-    void op_failed(FilamentOp op);                ///< main-thread: → idle (state 0)
-    void enter_op_done_state(FilamentOp op);      ///< main-thread: → done + arm revert timer
+    void set_op_state(FilamentOp op, int state); ///< main-thread: set state subject
+    void op_started(FilamentOp op);              ///< main-thread: → busy (state 1)
+    void op_succeeded(FilamentOp op);            ///< main-thread: → done (after min floor)
+    void op_failed(FilamentOp op);               ///< main-thread: → idle (state 0)
+    void enter_op_done_state(FilamentOp op);     ///< main-thread: → done + arm revert timer
     void schedule_op_timer(uint32_t delay_ms, lv_timer_cb_t cb); ///< (re)arm shared op timer
     void cancel_op_revert_timer();
 

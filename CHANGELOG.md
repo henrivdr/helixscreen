@@ -5,6 +5,43 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.85] - 2026-06-30
+
+### Added
+
+- **Automatic hardware role healing** (prestonbrown/helixscreen#1062) — fan and heater roles are validated against live hardware and re-resolved when the config changes; stale or unresolved roles route to a targeted wizard reconfiguration that reapplies without resetting your completed setup. Reconfiguration is idle-gated and no longer nags about unconfigured roles.
+- **Editable Happy Hare endless spool and per-unit drying** — endless-spool groups are now editable, each MMU/EMU unit reports its own drying environment, and heater-less units still surface environment readings.
+- **Input-shaper chart guidance for remote users** — when the frequency-response chart can't be shown because calibration ran on the printer, HelixScreen explains that the chart needs an on-printer install instead of showing a blank chart.
+
+### Fixed
+
+- **AD5X loaded-lane accuracy on native Z-Mod** (prestonbrown/helixscreen#1065) — head-loaded state is derived from the native Z-Mod sensors and cleared on a commanded unload even when filament parks in the lane; Load is gated on toolhead state; the seated lane persists across a power cycle; and a dedicated purging timeout with motion reset avoids stuck states.
+- **AD5X + Spoolman spool integrity** (prestonbrown/helixscreen#1071) — HelixScreen no longer auto-writes the Spoolman active spool, keeps the spool link when a lane goes empty (matching AFC/Happy Hare), only creates a spool when you actually edit filament fields, and confirms before overwriting a materially different linked spool. An emptied lane's fill bar now reads empty instead of 75%.
+- **AMS material label refresh** (prestonbrown/helixscreen#981) — a slot's material label is re-read when the panel reactivates, and the dryer environment overlay live-refreshes instead of freezing when opened.
+- **Input-shaper calibration chart** — an unreadable calibration CSV surfaces a clear message instead of a blank chart, and the service keeps `PrivateTmp` off so Klipper's `/tmp` output stays readable.
+- **Stray taps no longer dismiss a panel** (prestonbrown/helixscreen#1066) — in-bounds taps on an overlay root are absorbed instead of closing the panel.
+- **Touch calibration restore** (prestonbrown/helixscreen#943) — dismissing the recalibrate control in Settings restores the previous affine calibration.
+- **French fan status text** (prestonbrown/helixscreen#1073) — corrects a French fan format string, with a new format-specifier parity guard to catch similar mismatches.
+- **Home tile layout** — a tile layout computed while Klipper is not yet READY is no longer persisted.
+
+## [0.99.84] - 2026-06-24
+
+### Added
+
+- **Full UI translation across 9 languages** — translations completed to 100% coverage, now covering dropdown options, property-default modals, text-input placeholders, wizard screens, and backend error/status messages.
+- **Customizable macro buttons** — a tabbed "Customize Macro Button" modal configures a favorite macro's appearance and options, including a "run without parameter prompt" toggle to fire a macro immediately. It opens from the favorite widget and replaces the old picker.
+
+### Fixed
+
+- **AD5X loaded-lane reporting** — the active slot is derived from the seated channel on native ZMOD firmware, so the loaded lane is reported correctly.
+- **3D render refreshes on a new print** — the print-status view tracks thumbnail and gcode markers separately so the preview reloads for each new print.
+- **Quieter AD5X color polling** — background zcolor poll timeouts no longer raise a toast.
+- **Screen stays asleep on power-off** (prestonbrown/helixscreen#1049) — LVGL flushes are suppressed during DPMS power-off so the panel doesn't wake back up.
+
+### Changed
+
+- **Consistent modal headers** — six modals adopt a shared header with a uniform close button and responsive padding.
+
 ## [0.99.82] - 2026-06-22
 
 ### Fixed
@@ -4140,6 +4177,8 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.85]: https://github.com/prestonbrown/helixscreen/compare/v0.99.84...v0.99.85
+[0.99.84]: https://github.com/prestonbrown/helixscreen/compare/v0.99.82...v0.99.84
 [0.99.82]: https://github.com/prestonbrown/helixscreen/compare/v0.99.81...v0.99.82
 [0.99.81]: https://github.com/prestonbrown/helixscreen/compare/v0.99.80...v0.99.81
 [0.99.80]: https://github.com/prestonbrown/helixscreen/compare/v0.99.79...v0.99.80

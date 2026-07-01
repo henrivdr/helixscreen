@@ -5,13 +5,12 @@
 
 #include "ui_error_reporting.h"
 #include "ui_nav_manager.h"
-
-#include "lvgl/src/others/translation/lv_translation.h"
 #include "ui_update_queue.h"
 
 #include "ams_backend.h"
 #include "ams_state.h"
 #include "filament_sensor_manager.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "observer_factory.h"
 #include "print_control_buttons.h"
@@ -137,16 +136,18 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
         if (autofeed) {
             // Seed the block from the current port value so a stale spool gates
             // immediately on show, then keep it in sync via the observer.
-            int present = lv_subject_get_int(
-                AmsState::instance().get_active_tool_port_present_subject());
+            int present =
+                lv_subject_get_int(AmsState::instance().get_active_tool_port_present_subject());
             runout_modal_.set_resume_blocked(present == 0);
             // Static singleton subject → plain ObserverGuard, no SubjectLifetime.
             port_present_observer_ = helix::ui::observe_int_sync<FilamentRunoutHandler>(
                 AmsState::instance().get_active_tool_port_present_subject(), this,
                 [](FilamentRunoutHandler* self, int port_present) {
                     // Only gate while still on an auto-feed runout modal.
-                    if (!self->autofeed_context_) return;
-                    if (!self->runout_modal_.is_visible()) return;
+                    if (!self->autofeed_context_)
+                        return;
+                    if (!self->runout_modal_.is_visible())
+                        return;
                     self->runout_modal_.set_resume_blocked(port_present == 0);
                 });
         } else {
@@ -165,27 +166,31 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
         // "token expired and swallowed the action".
         spdlog::info("[FilamentRunoutHandler] Load callback entered (token expired={})",
                      token.expired());
-        if (token.expired()) return;
+        if (token.expired())
+            return;
         user_took_manual_action_ = true; // keep dialog open; suppress auto-close
         AmsBackend* backend = AmsState::instance().get_backend();
         if (backend) {
             int slot = backend->get_current_slot();
-            spdlog::info("[FilamentRunoutHandler] User chose to load filament after runout (tool {})",
-                         slot);
+            spdlog::info(
+                "[FilamentRunoutHandler] User chose to load filament after runout (tool {})", slot);
             AmsError err = backend->load_filament(slot);
             if (!err.success()) {
-                spdlog::error("[FilamentRunoutHandler] Load filament failed: {}", err.technical_msg);
+                spdlog::error("[FilamentRunoutHandler] Load filament failed: {}",
+                              err.technical_msg);
                 NOTIFY_ERROR(lv_tr("Failed to load filament: {}"), err.user_msg);
             }
         } else {
             // No AMS backend — fall back to navigating to the Filament panel.
-            spdlog::info("[FilamentRunoutHandler] No AMS backend; navigating to Filament panel to load");
+            spdlog::info(
+                "[FilamentRunoutHandler] No AMS backend; navigating to Filament panel to load");
             NavigationManager::instance().set_active(PanelId::Filament);
         }
     });
 
     runout_modal_.set_on_resume([this, token]() {
-        if (token.expired()) return;
+        if (token.expired())
+            return;
 
         // No client-side filament-present gate here. The previous
         // has_any_runout() check used the encoder-based motion sensor, which
@@ -212,7 +217,8 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
     });
 
     runout_modal_.set_on_cancel_print([this, token]() {
-        if (token.expired()) return;
+        if (token.expired())
+            return;
 
         spdlog::info("[FilamentRunoutHandler] User chose to cancel print after runout");
 
@@ -240,7 +246,8 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
     });
 
     runout_modal_.set_on_unload_filament([this, token]() {
-        if (token.expired()) return;
+        if (token.expired())
+            return;
         user_took_manual_action_ = true; // in-dialog action suppresses auto-close
 
         spdlog::info("[FilamentRunoutHandler] User chose to unload filament after runout");
@@ -267,7 +274,8 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
     });
 
     runout_modal_.set_on_purge([this, token]() {
-        if (token.expired()) return;
+        if (token.expired())
+            return;
         user_took_manual_action_ = true; // in-dialog action suppresses auto-close
 
         spdlog::info("[FilamentRunoutHandler] User chose to purge after runout");
@@ -293,7 +301,8 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
     });
 
     runout_modal_.set_on_ok_dismiss([token]() {
-        if (token.expired()) return;
+        if (token.expired())
+            return;
         spdlog::info("[FilamentRunoutHandler] User dismissed runout modal (idle mode)");
         // Just hide the modal - no action needed
     });
@@ -328,9 +337,12 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
                 // Transient 0 during sensor stabilization — not a real resolution.
                 return;
             }
-            if (!self->runout_confirmed_active_) return; // never saw a confirmed runout
-            if (self->user_took_manual_action_) return;  // user is managing it in-dialog
-            if (!self->runout_modal_.is_visible()) return;
+            if (!self->runout_confirmed_active_)
+                return; // never saw a confirmed runout
+            if (self->user_took_manual_action_)
+                return; // user is managing it in-dialog
+            if (!self->runout_modal_.is_visible())
+                return;
             spdlog::info(
                 "[FilamentRunoutHandler] Runout cleared externally — auto-closing guidance modal");
             self->hide_runout_guidance_modal();

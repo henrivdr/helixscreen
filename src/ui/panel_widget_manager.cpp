@@ -422,7 +422,20 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     // Only write positions for widgets that are enabled in config — skip
     // temporarily injected widgets (e.g., firmware_restart during Klipper error)
     // whose positions would block cells for real widgets on subsequent layouts.
-    {
+    // Never write back OR persist a layout computed while Klipper is not READY.
+    // When fw_restart_injected is true a temporary firmware_restart widget is
+    // occupying a grid cell, so this placement is not the user's intended layout.
+    //   - Saving it freezes the transient arrangement to disk, so it survives the
+    //     next boot (raza616: "tiles revert to a previous layout after any reset").
+    //   - Even just mutating the in-memory entries locks the transient slot in:
+    //     the gate observer rebuilds on the next klippy_state transition WITHOUT
+    //     reloading the cached config, so the following READY populate would see
+    //     an explicit position, never re-derive it, and never persist it.
+    // The widgets for THIS frame are placed from `placed` regardless (the per-cell
+    // assignment below uses it, not entry.col), so skipping the write-back only
+    // defers auto-placed positions to the next READY populate, which re-derives
+    // and persists them cleanly.
+    if (!fw_restart_injected) {
         auto& mut_entries = widget_config.page_entries_mut(page_index);
         bool any_written = false;
         for (const auto& p : placed) {

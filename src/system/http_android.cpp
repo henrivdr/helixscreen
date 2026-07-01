@@ -5,16 +5,15 @@
 
 #include "system/http_android.h"
 
+#include <spdlog/spdlog.h>
+
 #include <SDL.h>
 #include <jni.h>
-#include <spdlog/spdlog.h>
 
 namespace helix::android {
 
-std::pair<int, std::string> https_get(const std::string& url,
-                                      const std::string& user_agent,
-                                      const std::string& accept,
-                                      int timeout_sec) {
+std::pair<int, std::string> https_get(const std::string& url, const std::string& user_agent,
+                                      const std::string& accept, int timeout_sec) {
     // SDL_AndroidGetJNIEnv attaches the calling thread to the JavaVM if needed,
     // so this is safe from the UpdateChecker worker thread.
     JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
@@ -88,6 +87,6 @@ std::pair<int, std::string> https_get(const std::string& url,
     return {status, result.substr(newline + 1)};
 }
 
-}  // namespace helix::android
+} // namespace helix::android
 
-#endif  // __ANDROID__
+#endif // __ANDROID__

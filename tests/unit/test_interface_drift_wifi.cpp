@@ -3,8 +3,9 @@
 //
 // Compile-only drift protection for WifiBackend.
 
-#include "../catch_amalgamated.hpp"
 #include "wifi_backend.h"
+
+#include "../catch_amalgamated.hpp"
 
 #ifdef HELIX_ENABLE_MOCKS
 #include "wifi_backend_mock.h"

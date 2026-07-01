@@ -50,7 +50,9 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdio>
+#include <functional>
 #include <optional>
+#include <vector>
 
 using namespace helix;
 
@@ -86,11 +88,30 @@ static std::optional<helix::wizard::StepId> current_screen_step;
 // Guard against rapid double-clicks during navigation
 static bool navigating = false;
 
+// Targeted (subset) wizard session state. Non-empty iff a targeted session is
+// active — running only these steps, in this order, for hardware
+// reconfiguration without re-running the full first-run wizard. When empty, all
+// navigation behaves exactly as the normal first-run wizard (every subset
+// branch is gated on !g_step_subset.empty()).
+static std::vector<helix::wizard::StepId> g_step_subset;
+static std::function<void()> g_targeted_on_complete;
+
+// Index of `step` within the active subset, or -1 if not present.
+static int subset_index_of(helix::wizard::StepId step) {
+    for (size_t i = 0; i < g_step_subset.size(); ++i) {
+        if (g_step_subset[i] == step) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
 // Forward declarations
 static void on_back_clicked(lv_event_t* e);
 static void on_next_clicked(lv_event_t* e);
 static void ui_wizard_load_screen(helix::wizard::StepId step);
 static void ui_wizard_cleanup_current_screen();
+static void dismiss_wizard_container();
 static const char* get_step_title_from_xml(const char* comp_name);
 static const char* get_step_subtitle_from_xml(const char* comp_name);
 static void ui_wizard_purge_subtree_anims(lv_obj_t* root);
@@ -123,7 +144,8 @@ static void ui_wizard_purge_subtree_anims(lv_obj_t* root);
 // at this fix). The recursion descends through children only; for the
 // initial call we visit the root just for `lv_anim_delete`.
 static void ui_wizard_purge_subtree_anims_recursive(lv_obj_t* obj) {
-    if (!obj) return;
+    if (!obj)
+        return;
     lv_obj_enable_style_refresh(false);
     lv_obj_remove_style_all(obj);
     lv_obj_enable_style_refresh(true);
@@ -135,7 +157,8 @@ static void ui_wizard_purge_subtree_anims_recursive(lv_obj_t* obj) {
 }
 
 static void ui_wizard_purge_subtree_anims(lv_obj_t* root) {
-    if (!root) return;
+    if (!root)
+        return;
     // Cancel anims targeting the root itself (var == root) but DO NOT
     // strip its styles — root survives the upcoming lv_obj_clean.
     lv_anim_delete(root, nullptr);
@@ -151,7 +174,8 @@ static void ui_wizard_purge_subtree_anims(lv_obj_t* root) {
 // The caller sets navigating=true first; the callback path clears it when
 // navigate_to_step finishes.
 static void navigate_to_step_async_cb(void* data) {
-    auto step = static_cast<helix::wizard::StepId>(static_cast<int>(reinterpret_cast<intptr_t>(data)));
+    auto step =
+        static_cast<helix::wizard::StepId>(static_cast<int>(reinterpret_cast<intptr_t>(data)));
     ui_wizard_navigate_to_step(step);
 }
 
@@ -221,6 +245,13 @@ static const char* get_step_subtitle_from_xml(const char* comp_name) {
 static bool wizard_subjects_initialized = false;
 
 void ui_wizard_init_subjects() {
+    // Idempotent: the targeted-reconfig path may call this after the first-run
+    // wizard already initialized subjects. Re-initializing would re-register the
+    // managed subjects (double-init). Bail out if already initialized.
+    if (wizard_subjects_initialized) {
+        spdlog::debug("[Wizard] Subjects already initialized; skipping re-init");
+        return;
+    }
     spdlog::debug("[Wizard] Initializing subjects");
 
     // Log the preset-driven skip plan (pre-configured printer package). The
@@ -298,6 +329,11 @@ void ui_wizard_deinit_subjects() {
         helix::ui::safe_delete(wizard_container);
         current_screen_step.reset();
     }
+
+    // Clear any targeted (subset) session state so a later full wizard run is
+    // never accidentally treated as a subset session.
+    g_step_subset.clear();
+    g_targeted_on_complete = nullptr;
 
     // Use SubjectManager for RAII cleanup - handles all registered subjects
     wizard_subjects_.deinit_all();
@@ -420,6 +456,31 @@ lv_obj_t* ui_wizard_create(lv_obj_t* parent) {
     return wizard_container;
 }
 
+const std::vector<helix::wizard::StepId>& ui_wizard_active_step_subset() {
+    return g_step_subset;
+}
+
+lv_obj_t* ui_wizard_create_targeted(lv_obj_t* parent, std::vector<helix::wizard::StepId> steps,
+                                    std::function<void()> on_complete) {
+    g_step_subset = std::move(steps);
+    g_targeted_on_complete = std::move(on_complete);
+    spdlog::info("[Wizard] Creating targeted session with {} step(s)", g_step_subset.size());
+
+    // Mark the wizard active for the duration of the targeted session (cleared
+    // by dismiss_wizard_container() on completion).
+    set_wizard_active(true);
+
+    // Reuse the standard container/subject setup.
+    lv_obj_t* root = ui_wizard_create(parent);
+
+    // Navigate to the first requested step. The subset being non-empty makes the
+    // Next/Back handlers and progress display honor subset order.
+    if (!g_step_subset.empty()) {
+        ui_wizard_navigate_to_step(g_step_subset.front());
+    }
+    return root;
+}
+
 void ui_wizard_navigate_to_step(helix::wizard::StepId step) {
     using helix::wizard::StepId;
     spdlog::debug("[Wizard] Navigating to step {}", helix::wizard::to_string(step));
@@ -430,7 +491,10 @@ void ui_wizard_navigate_to_step(helix::wizard::StepId step) {
     // language-already-set, Android, and subsequent-printer logic, so a single
     // wizard_next() over the live skip vector replaces the old hand-rolled
     // cascade.
-    if (step == StepId::TouchCalibration) {
+    //
+    // Targeted (subset) sessions run an explicit step list and must never
+    // auto-skip out of it, so this leading-step forwarding is gated off.
+    if (g_step_subset.empty() && step == StepId::TouchCalibration) {
         auto ctx = helix::wizard::build_context();
         auto skips = helix::wizard::skip_vector(ctx);
         // If the first step itself is skipped, advance to the first visible one.
@@ -452,8 +516,28 @@ void ui_wizard_navigate_to_step(helix::wizard::StepId step) {
     auto ctx = helix::wizard::build_context();
     auto skips = helix::wizard::skip_vector(ctx);
 
-    int display_step = helix::wizard_display_number(step, skips);
-    int display_total = helix::wizard_visible_count(skips);
+    // Progress numbers, first/last and "previous exists" facts. In a targeted
+    // (subset) session these come from the subset's own order; otherwise they
+    // come from the live skip vector over the full step list (unchanged path).
+    int display_step;
+    int display_total;
+    bool at_first_visible;
+    bool is_last_step;
+    if (!g_step_subset.empty()) {
+        int sub_idx = subset_index_of(step);
+        if (sub_idx < 0) {
+            sub_idx = 0;
+        }
+        display_step = sub_idx + 1;
+        display_total = static_cast<int>(g_step_subset.size());
+        at_first_visible = (sub_idx == 0);
+        is_last_step = (sub_idx + 1 >= static_cast<int>(g_step_subset.size()));
+    } else {
+        display_step = helix::wizard_display_number(step, skips);
+        display_total = helix::wizard_visible_count(skips);
+        at_first_visible = !helix::wizard_prev(step, skips).has_value();
+        is_last_step = helix::wizard_is_last(step, skips);
+    }
 
     // Update current_step subject (internal step index for UI bindings)
     crash_handler::breadcrumb::note("wiz", "notify_current", static_cast<long>(step_idx));
@@ -461,7 +545,6 @@ void ui_wizard_navigate_to_step(helix::wizard::StepId step) {
 
     // Back button: visible when there is a previous non-skipped step, or when an
     // add-printer cancel callback is registered (shown as "Cancel" on step one).
-    bool at_first_visible = !helix::wizard_prev(step, skips).has_value();
     bool has_cancel = (get_wizard_cancel_callback() != nullptr);
     crash_handler::breadcrumb::note("wiz", "notify_back_vis", static_cast<long>(step_idx));
     lv_subject_set_int(&wizard_back_visible, (!at_first_visible || has_cancel) ? 1 : 0);
@@ -487,9 +570,6 @@ void ui_wizard_navigate_to_step(helix::wizard::StepId step) {
             }
         }
     }
-
-    // Determine if this is the last step (no more non-skipped steps after this)
-    bool is_last_step = helix::wizard_is_last(step, skips);
 
     // Update final step flag for button visibility binding
     crash_handler::breadcrumb::note("wiz", "notify_final", static_cast<long>(step_idx));
@@ -749,8 +829,46 @@ static void ui_wizard_load_screen(helix::wizard::StepId step) {
 // Wizard Completion
 // ============================================================================
 
+// Shared container teardown used by BOTH completion paths (DRY).
+//
+// Performs only the container/UI teardown that is identical between the full
+// first-run completion (ui_wizard_complete) and the targeted completion
+// (ui_wizard_complete_targeted): clean up the active step, dismiss the
+// keyboard, async-delete the container, and clear the global active flag.
+//
+// It deliberately does NOT touch config flags, expected-hardware, the
+// post-wizard re-discovery, or the deferred Home navigation — those are
+// completion-mode specific and remain in ui_wizard_complete().
+static void dismiss_wizard_container() {
+    // Cleanup current wizard screen
+    ui_wizard_cleanup_current_screen();
+
+    // Dismiss any on-screen keyboard left over from wizard text inputs
+    // (prevents stale textarea focus from wizard_connection step)
+    KeyboardManager::instance().hide();
+
+    // Delete wizard container (main UI is already created underneath)
+    // SAFETY: Use lv_obj_del_async — the Finish button that triggered this call is a
+    // child of wizard_container. Synchronous delete causes use-after-free (issue #80).
+    // Hide immediately so user sees the app layout underneath without waiting for async delete.
+    if (wizard_container) {
+        spdlog::debug("[Wizard] Hiding and deleting wizard container (async)");
+        lv_obj_add_flag(wizard_container, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_del_async(wizard_container);
+        wizard_container = nullptr;
+    }
+
+    // Clear global wizard state
+    set_wizard_active(false);
+}
+
 void ui_wizard_complete() {
     spdlog::info("[Wizard] Completing wizard and transitioning to main UI");
+
+    // Any full completion ends targeted mode unconditionally (defense in depth):
+    // guarantees the next wizard run is never accidentally a subset session.
+    g_step_subset.clear();
+    g_targeted_on_complete = nullptr;
 
     // 1. Mark wizard as completed in config
     Config* config = Config::get_instance();
@@ -824,26 +942,9 @@ void ui_wizard_complete() {
         LOG_ERROR_INTERNAL("[Wizard] Failed to get config instance to mark wizard complete");
     }
 
-    // 2. Cleanup current wizard screen
-    ui_wizard_cleanup_current_screen();
-
-    // 3. Dismiss any on-screen keyboard left over from wizard text inputs
-    // (prevents stale textarea focus from wizard_connection step)
-    KeyboardManager::instance().hide();
-
-    // 4. Delete wizard container (main UI is already created underneath)
-    // SAFETY: Use lv_obj_del_async — the Finish button that triggered this call is a
-    // child of wizard_container. Synchronous delete causes use-after-free (issue #80).
-    // Hide immediately so user sees the app layout underneath without waiting for async delete.
-    if (wizard_container) {
-        spdlog::debug("[Wizard] Hiding and deleting wizard container (async)");
-        lv_obj_add_flag(wizard_container, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_del_async(wizard_container);
-        wizard_container = nullptr;
-    }
-
-    // 5. Clear global wizard state
-    set_wizard_active(false);
+    // 2-5. Shared container teardown (cleanup screen, hide keyboard, delete
+    // container, clear active flag).
+    dismiss_wizard_container();
 
     // 6. Schedule deferred runout check - modal may need to show after wizard
     lv_timer_create(
@@ -890,6 +991,30 @@ void ui_wizard_complete() {
     spdlog::info("[Wizard] Wizard complete, transitioning to main UI");
 }
 
+void ui_wizard_complete_targeted() {
+    spdlog::info("[Wizard] Targeted reconfiguration complete");
+
+    // NOTE: do NOT set wizard_completed here — targeted sessions reconfigure
+    // specific hardware step(s) without re-running / re-finishing the full
+    // first-run wizard, so the completion flag and expected-hardware population
+    // done by ui_wizard_complete() are intentionally skipped.
+
+    // Capture + clear the callback and subset BEFORE tearing down / firing, so
+    // a later full wizard run is never treated as a subset session and the
+    // callback can safely (re)launch UI.
+    auto cb = g_targeted_on_complete;
+    g_step_subset.clear();
+    g_targeted_on_complete = nullptr;
+
+    // Shared teardown (same as the full-wizard path, minus the flag writes).
+    dismiss_wizard_container();
+    current_screen_step.reset();
+
+    if (cb) {
+        cb();
+    }
+}
+
 // ============================================================================
 // Event Handlers
 // ============================================================================
@@ -901,6 +1026,25 @@ static void on_back_clicked(lv_event_t* e) {
         return;
     navigating = true;
     auto current = static_cast<StepId>(lv_subject_get_int(&current_step));
+
+    // Targeted (subset) session: retreat only within the requested subset.
+    if (!g_step_subset.empty()) {
+        int idx = subset_index_of(current);
+        if (idx > 0) {
+            schedule_navigate_to_step(g_step_subset[idx - 1]);
+            spdlog::debug("[Wizard] Targeted back, step: {}",
+                          helix::wizard::to_string(g_step_subset[idx - 1]));
+            return;
+        }
+        // At the first subset step — invoke cancel callback if one is registered.
+        auto cancel_cb = get_wizard_cancel_callback();
+        if (cancel_cb) {
+            spdlog::info("[Wizard] Targeted back from first step — invoking cancel callback");
+            cancel_cb();
+        }
+        navigating = false;
+        return;
+    }
 
     auto ctx = helix::wizard::build_context();
     auto skips = helix::wizard::skip_vector(ctx);
@@ -947,6 +1091,26 @@ static void on_next_clicked(lv_event_t* e) {
         return;
     navigating = true;
     auto current = static_cast<StepId>(lv_subject_get_int(&current_step));
+
+    // Targeted (subset) session: advance only within the requested subset; the
+    // last subset step finishes via ui_wizard_complete_targeted() (which does
+    // NOT set wizard_completed).
+    if (!g_step_subset.empty()) {
+        int idx = subset_index_of(current);
+        // idx < 0 (current not in subset) is unreachable in practice because
+        // navigate_to_step always sets current_step to a subset member; handled
+        // defensively as completion alongside the normal last-step case.
+        if (idx < 0 || idx + 1 >= static_cast<int>(g_step_subset.size())) {
+            spdlog::info("[Wizard] Targeted subset finished, completing targeted session");
+            ui_wizard_complete_targeted();
+            navigating = false;
+            return;
+        }
+        schedule_navigate_to_step(g_step_subset[idx + 1]);
+        spdlog::debug("[Wizard] Targeted next, step: {}",
+                      helix::wizard::to_string(g_step_subset[idx + 1]));
+        return;
+    }
 
     // Ensure the filament manager is populated so the filament step's skip
     // decision (and the single-sensor auto-config side effect) is accurate.

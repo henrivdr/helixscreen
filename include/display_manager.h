@@ -7,6 +7,7 @@
 #include "color_transform.h"
 #include "display_backend.h"
 #include "touch_calibration.h"
+#include "touch_calibration_session.h"
 
 #include <functional>
 #include <lvgl.h>
@@ -45,7 +46,7 @@
  * display_mgr.shutdown();
  * @endcode
  */
-class DisplayManager {
+class DisplayManager : public helix::ICalibrationSink {
   public:
     /**
      * @brief Display configuration options
@@ -373,6 +374,21 @@ class DisplayManager {
      */
     void enable_affine_calibration();
 
+    // ICalibrationSink — thin adapters so TouchCalibrationSession can drive the
+    // backup/restore dance against DisplayManager (and against a fake in tests).
+    helix::TouchCalibration current_calibration() const override {
+        return get_current_calibration();
+    }
+    bool apply_calibration(const helix::TouchCalibration& cal) override {
+        return apply_touch_calibration(cal);
+    }
+    void disable_affine() override {
+        disable_affine_calibration();
+    }
+    void enable_affine() override {
+        enable_affine_calibration();
+    }
+
     /**
      * @brief Mark whether a touch-calibration UI (overlay or wizard) is on screen
      *
@@ -511,6 +527,16 @@ class DisplayManager {
     bool m_sleep_backlight_off = true; // Whether to power off backlight during sleep
     lv_obj_t* m_sleep_overlay = nullptr;
 
+    // Power-off sleep flush suppression (#1049 regression guard). When the panel
+    // is powered down via DRM DPMS-off / FB_BLANK_POWERDOWN, the very next LVGL
+    // page-flip re-asserts DPMS-on and relights the panel on the home screen.
+    // Pausing the refresh timer is insufficient — any invalidation fires
+    // LV_EVENT_REFR_REQUEST and resumes it. So we disable invalidation and swap
+    // the flush callback for a no-op while powered off (mirroring Application's
+    // proven splash flush-suppression). Restored on wake.
+    lv_display_flush_cb_t m_saved_flush_cb_for_sleep = nullptr;
+    bool m_flush_suppressed_for_sleep = false;
+
     // Original pointer read callback (before sleep-aware wrapper)
     lv_indev_read_cb_t m_original_pointer_read_cb = nullptr;
 
@@ -538,6 +564,22 @@ class DisplayManager {
      * lv_refr_now() so the framebuffer is ready when LVGL paints (#303).
      */
     void restore_display_output();
+
+    /**
+     * @brief Neutralize LVGL rendering while the panel is powered off (#1049).
+     *
+     * Disables invalidation and replaces the display flush callback with a no-op
+     * so no page-flip reaches the panel and re-asserts DPMS-on while it is
+     * powered down. Idempotent; no-op if no display or already suppressed.
+     */
+    void suppress_flush_for_sleep();
+
+    /**
+     * @brief Undo suppress_flush_for_sleep() on wake. Idempotent; safe to call
+     *        even when suppression was never engaged (overlay / hardware-blank
+     *        path), so wake/shutdown paths can call it unconditionally.
+     */
+    void restore_flush_after_sleep();
 
     /**
      * @brief Create fullscreen black overlay on lv_layer_top() for software sleep

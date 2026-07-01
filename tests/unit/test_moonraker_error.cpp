@@ -3,7 +3,6 @@
 #include "moonraker_error.h"
 
 #include "../catch_amalgamated.hpp"
-
 #include "hv/json.hpp"
 
 using nlohmann::json;
@@ -12,8 +11,7 @@ using nlohmann::json;
 // extract_friendly_message() tests
 // ============================================================================
 
-TEST_CASE("extract_friendly_message parses Klipper error strings",
-          "[moonraker][error]") {
+TEST_CASE("extract_friendly_message parses Klipper error strings", "[moonraker][error]") {
     SECTION("extracts message from Python dict repr with single quotes") {
         auto result = MoonrakerError::extract_friendly_message(
             "{'error': 'WebRequestError', 'message': 'Must home axis first'}");
@@ -49,8 +47,7 @@ TEST_CASE("extract_friendly_message parses Klipper error strings",
     }
 
     SECTION("handles message-only dict") {
-        auto result = MoonrakerError::extract_friendly_message(
-            "{'message': 'Timer too close'}");
+        auto result = MoonrakerError::extract_friendly_message("{'message': 'Timer too close'}");
         REQUIRE(result == "Timer too close");
     }
 
@@ -79,13 +76,11 @@ TEST_CASE("extract_friendly_message parses Klipper error strings",
 // from_json_rpc() integration — error message gets cleaned up
 // ============================================================================
 
-TEST_CASE("from_json_rpc extracts friendly message from Klipper errors",
-          "[moonraker][error]") {
+TEST_CASE("from_json_rpc extracts friendly message from Klipper errors", "[moonraker][error]") {
     SECTION("Klipper homing error gets cleaned up") {
         json error_obj = {
             {"code", -32603},
-            {"message",
-             "{'error': 'WebRequestError', 'message': 'Must home axis first'}"}};
+            {"message", "{'error': 'WebRequestError', 'message': 'Must home axis first'}"}};
 
         auto err = MoonrakerError::from_json_rpc(error_obj, "printer.gcode.script");
         REQUIRE(err.message == "Must home axis first");

@@ -263,12 +263,13 @@ lv_obj_t* WizardTouchCalibrationStep::create(lv_obj_t* parent) {
         panel_->cancel(); // Reset to IDLE
     }
 
-    // Disable affine calibration so we capture raw (post-LVGL-linear) coordinates.
-    // Without this, existing bad calibration transforms the coordinates, making
-    // recalibration produce garbage (feedback loop).
+    // Snapshot the active calibration and disable affine so we capture raw
+    // (post-LVGL-linear) coordinates. Without disabling, an existing bad
+    // calibration transforms the coordinates, making recalibration produce
+    // garbage (feedback loop). session_.restore() (in cleanup) re-enables it.
     DisplayManager* dm = DisplayManager::instance();
     if (dm) {
-        dm->disable_affine_calibration();
+        session_.begin_capture(*dm);
         // Suppress the global debug-touches ripple during the wizard step — it
         // would draw raw (Y-inverted) coords while affine is off (#943).
         dm->set_touch_calibration_active(true);
@@ -326,16 +327,12 @@ void WizardTouchCalibrationStep::cleanup() {
     test_touch_area_ = nullptr;
     screen_root_ = nullptr;
 
-    // Restore backup calibration and re-enable affine transform
+    // Restore the pre-session calibration and re-enable the affine transform.
     DisplayManager* dm = DisplayManager::instance();
     if (dm) {
-        if (has_backup_) {
-            dm->apply_touch_calibration(backup_calibration_);
-        }
-        dm->enable_affine_calibration();
+        session_.restore(*dm);
         dm->set_touch_calibration_active(false);
     }
-    has_backup_ = false;
 
     // Reset panel state - clear callbacks before reset to prevent updates to
     // destroyed UI widgets (callbacks would call update_instruction_text() etc.).
@@ -381,7 +378,7 @@ bool WizardTouchCalibrationStep::commit_calibration() {
 
     spdlog::info("[{}] Calibration committed to config", get_name());
     has_pending_calibration_ = false;
-    has_backup_ = false; // Calibration committed, no need to restore
+    session_.commit(); // Calibration committed, no need to revert on teardown
     return true;
 }
 
@@ -640,13 +637,12 @@ void WizardTouchCalibrationStep::on_calibration_complete(const helix::TouchCalib
         has_pending_calibration_ = true;
         spdlog::debug("[{}] Calibration stored (will save when 'Next' is clicked)", get_name());
 
-        // Backup current calibration before applying new one
+        // The pre-session calibration was already snapshotted in create() via
+        // session_.begin_capture(); apply the new one immediately (no restart
+        // required). session_.restore() reverts it if the user backs out before
+        // committing on 'Next'.
         DisplayManager* dm = DisplayManager::instance();
         if (dm) {
-            backup_calibration_ = dm->get_current_calibration();
-            has_backup_ = true;
-
-            // Apply calibration immediately (no restart required)
             if (dm->apply_touch_calibration(*cal)) {
                 spdlog::info("[{}] Calibration applied to touch input", get_name());
             } else {

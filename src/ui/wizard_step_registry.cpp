@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "wizard_step_registry.h"
 
-#include "app_globals.h" // get_moonraker_api()
-#include "config.h"      // helix::Config
-
 #include "ui_wizard_ams_identify.h"
 #include "ui_wizard_connection.h"
 #include "ui_wizard_fan_select.h"
@@ -17,6 +14,9 @@
 #include "ui_wizard_telemetry.h"
 #include "ui_wizard_touch_calibration.h"
 #include "ui_wizard_wifi.h"
+
+#include "app_globals.h" // get_moonraker_api()
+#include "config.h"      // helix::Config
 
 namespace helix {
 namespace wizard {
@@ -32,18 +32,18 @@ std::vector<Step*> steps() {
     std::vector<Step*> v;
     v.reserve(kStepCount);
     v.push_back(get_wizard_touch_calibration_step());      // TouchCalibration = 0
-    v.push_back(get_wizard_language_chooser_step());        // Language
+    v.push_back(get_wizard_language_chooser_step());       // Language
     v.push_back(get_wizard_wifi_step());                   // Wifi
-    v.push_back(get_wizard_connection_step());              // Connection
-    v.push_back(get_wizard_printer_identify_step());        // PrinterIdentify
-    v.push_back(get_wizard_heater_select_step());           // HeaterSelect
-    v.push_back(get_wizard_fan_select_step());              // FanSelect
-    v.push_back(get_wizard_ams_identify_step());            // AmsIdentify
-    v.push_back(get_wizard_led_select_step());              // LedSelect
-    v.push_back(get_wizard_filament_sensor_select_step());  // FilamentSensor
-    v.push_back(get_wizard_input_shaper_step());            // InputShaper
-    v.push_back(get_wizard_summary_step());                 // Summary
-    v.push_back(get_wizard_telemetry_step());               // Telemetry
+    v.push_back(get_wizard_connection_step());             // Connection
+    v.push_back(get_wizard_printer_identify_step());       // PrinterIdentify
+    v.push_back(get_wizard_heater_select_step());          // HeaterSelect
+    v.push_back(get_wizard_fan_select_step());             // FanSelect
+    v.push_back(get_wizard_ams_identify_step());           // AmsIdentify
+    v.push_back(get_wizard_led_select_step());             // LedSelect
+    v.push_back(get_wizard_filament_sensor_select_step()); // FilamentSensor
+    v.push_back(get_wizard_input_shaper_step());           // InputShaper
+    v.push_back(get_wizard_summary_step());                // Summary
+    v.push_back(get_wizard_telemetry_step());              // Telemetry
     return v;
 }
 

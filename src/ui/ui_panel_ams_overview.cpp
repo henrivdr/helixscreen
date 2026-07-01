@@ -77,7 +77,7 @@ static void set_slot_count_label(lv_obj_t* label, int slot_count) {
         return;
     }
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d slots", slot_count);
+    snprintf(buf, sizeof(buf), lv_tr("%d slots"), slot_count);
     lv_label_set_text(label, buf);
 }
 

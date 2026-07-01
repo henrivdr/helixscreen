@@ -12,9 +12,9 @@
  * error overlay at startup when end_overlay_dismissed defaulted to 0.
  */
 
-#include "../catch_amalgamated.hpp"
-
 #include "printer_state.h"
+
+#include "../catch_amalgamated.hpp"
 
 using helix::PrintOutcome;
 
@@ -69,8 +69,7 @@ TEST_CASE("End overlay visibility — at most one overlay visible at a time",
     }
 }
 
-TEST_CASE("End overlay dismissal suppresses all three overlays",
-          "[print_status][overlay]") {
+TEST_CASE("End overlay dismissal suppresses all three overlays", "[print_status][overlay]") {
     SECTION("Dismissed COMPLETE stays hidden") {
         auto f = compute_flags(PrintOutcome::COMPLETE, /*dismissed=*/true);
         REQUIRE(f.complete == 0);
@@ -102,8 +101,7 @@ TEST_CASE("End overlay dismissal suppresses all three overlays",
     }
 }
 
-TEST_CASE("End overlay truth table — full outcome × dismissed matrix",
-          "[print_status][overlay]") {
+TEST_CASE("End overlay truth table — full outcome × dismissed matrix", "[print_status][overlay]") {
     struct Case {
         PrintOutcome outcome;
         bool dismissed;
@@ -113,14 +111,10 @@ TEST_CASE("End overlay truth table — full outcome × dismissed matrix",
     };
 
     const Case cases[] = {
-        {PrintOutcome::NONE,      false, 0, 0, 0},
-        {PrintOutcome::NONE,      true,  0, 0, 0},
-        {PrintOutcome::COMPLETE,  false, 1, 0, 0},
-        {PrintOutcome::COMPLETE,  true,  0, 0, 0},
-        {PrintOutcome::CANCELLED, false, 0, 1, 0},
-        {PrintOutcome::CANCELLED, true,  0, 0, 0},
-        {PrintOutcome::ERROR,     false, 0, 0, 1},
-        {PrintOutcome::ERROR,     true,  0, 0, 0},
+        {PrintOutcome::NONE, false, 0, 0, 0},      {PrintOutcome::NONE, true, 0, 0, 0},
+        {PrintOutcome::COMPLETE, false, 1, 0, 0},  {PrintOutcome::COMPLETE, true, 0, 0, 0},
+        {PrintOutcome::CANCELLED, false, 0, 1, 0}, {PrintOutcome::CANCELLED, true, 0, 0, 0},
+        {PrintOutcome::ERROR, false, 0, 0, 1},     {PrintOutcome::ERROR, true, 0, 0, 0},
     };
 
     for (const auto& c : cases) {

@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
-#include "panel_widget.h"
 #include "ui_job_queue_modal.h"
 #include "ui_observer_guard.h"
+
+#include "async_lifetime_guard.h"
+#include "panel_widget.h"
 
 #include <memory>
 
@@ -22,7 +23,9 @@ class JobQueueWidget : public PanelWidget {
     void on_activate() override;
     void on_deactivate() override;
     void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override;
-    const char* id() const override { return "job_queue"; }
+    const char* id() const override {
+        return "job_queue";
+    }
 
     /// Open the job queue modal (called from XML event callback)
     void open_modal();
@@ -33,7 +36,7 @@ class JobQueueWidget : public PanelWidget {
     lv_obj_t* job_list_container_ = nullptr;
 
     ObserverGuard count_observer_;
-    int current_size_mode_ = 1; // 0=compact, 1=normal, 2=expanded
+    int current_size_mode_ = 1;         // 0=compact, 1=normal, 2=expanded
     bool list_rebuild_pending_ = false; ///< Coalesces rapid count observer notifications
 
     /// Guards lv_async_call callbacks from accessing a detached widget

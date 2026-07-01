@@ -4,19 +4,18 @@
 
 #include "ams_backend_ad5x_ifs.h"
 
+#include "ui_temperature_utils.h"
+
 #include "ams_state.h"
 #include "config.h"
 #include "host_identity.h"
 #include "http_executor.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "post_op_cooldown_manager.h"
-#include "ui_temperature_utils.h"
 
-#include <lvgl.h>
 #include <spdlog/spdlog.h>
-
-#include "lvgl/src/others/translation/lv_translation.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -24,6 +23,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <lvgl.h>
 #include <regex>
 #include <sstream>
 #include <thread>
@@ -64,6 +64,16 @@ bool AmsBackendAd5xIfs::owns_filament_sensor(const std::string& bare_name,
     if (bare_name == "ifs_motion_sensor" || bare_name == "head_switch_sensor") {
         return true;
     }
+    // Native Z-Mod publishes these same sensors under custom module namespaces
+    // (zmod_ifs_switch_sensor / zmod_ifs_motion_sensor) instead of the stock
+    // filament_switch_sensor / filament_motion_sensor sections. The hardware-side
+    // strip only removes the stock prefixes, so the bare_name still carries the
+    // zmod namespace — claim it by prefix so the head/motion sensors aren't
+    // surfaced as generic runout sensors.
+    if (bare_name.rfind("zmod_ifs_switch_sensor ", 0) == 0 ||
+        bare_name.rfind("zmod_ifs_motion_sensor ", 0) == 0) {
+        return true;
+    }
     // lessWaste per-port HUB sensors (_ifs_port_sensor_{1..4}) and older ZMOD
     // per-port motion sensors (_ifs_motion_sensor_N).
     return bare_name.rfind("_ifs_port_sensor_", 0) == 0 ||
@@ -97,6 +107,23 @@ void AmsBackendAd5xIfs::on_started() {
         }
         spdlog::info("{} Loaded {} slot overrides from filament_slot store", backend_log_tag(),
                      loaded_count);
+
+        // Restore the last-known seated lane (#1065 power-cycle floor). The
+        // firmware forgets the seated channel across a reboot, so this is the only
+        // way to relabel Unload/Eject correctly when IFS_STATUS returns Chan=0 with
+        // a lane still physically at the head. Range-check against NUM_PORTS — a
+        // stale/corrupt value is discarded rather than trusted.
+        std::optional<int> seated = override_store_->load_seated_slot_blocking();
+        if (seated.has_value() && (*seated < 0 || *seated >= NUM_PORTS)) {
+            seated.reset();
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            persisted_seated_slot_ = seated;
+        }
+        if (seated.has_value()) {
+            spdlog::info("{} Restored remembered seated lane: slot {}", backend_log_tag(), *seated);
+        }
     }
 
     // Resolve the on-disk Adventurer5M.json path so write_adventurer_json()
@@ -125,6 +152,11 @@ void AmsBackendAd5xIfs::on_started() {
                    {"filament_switch_sensor head_switch_sensor", nullptr},
                    // Native ZMOD IFS: single motion sensor (replaces per-port sensors)
                    {"filament_motion_sensor ifs_motion_sensor", nullptr},
+                   // Native Z-Mod custom-module namespaces — the live AD5X pushes
+                   // its head switch + motion sensor under zmod_ifs_* sections
+                   // (no stock filament_*_sensor section exists), so query both.
+                   {"zmod_ifs_switch_sensor head_switch_sensor", nullptr},
+                   {"zmod_ifs_motion_sensor ifs_motion_sensor", nullptr},
                    // Extruder temp/target — primary signal for the load/unload
                    // phase tracker (HEATING completion). Without this the IFS
                    // unload silently heats for ~2.5 min with no feedback.
@@ -320,14 +352,41 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         lock.lock();
     }
 
+    // A sensor object only counts as a real reading when it actually carries a
+    // boolean filament_detected. On a fresh boot Moonraker can return the stock
+    // filament_*_sensor object as a present-but-empty {} compat view while the
+    // live zmod_ifs_* sensor carries the real field; choosing a key purely by
+    // presence would let the empty stock object win and the real zmod reading be
+    // ignored (#1065 boot scenario). Prefer whichever namespace carries the
+    // field, stock first when both do (the historical order).
+    const auto has_reading = [&](const char* key) {
+        return status->contains(key) && (*status)[key].is_object() &&
+               (*status)[key].contains("filament_detected") &&
+               (*status)[key]["filament_detected"].is_boolean();
+    };
+
     // Native ZMOD IFS: single motion sensor replaces per-port presence sensors.
-    // Maps to head_filament_ since it detects filament at the toolhead.
-    if (status->contains("filament_motion_sensor ifs_motion_sensor")) {
-        const auto& motion = (*status)["filament_motion_sensor ifs_motion_sensor"];
+    // Maps to head_filament_ since it detects filament at the toolhead. The live
+    // AD5X publishes this under the zmod_ifs_motion_sensor namespace rather than
+    // the stock filament_motion_sensor section, so accept either key.
+    const char* motion_key = has_reading("filament_motion_sensor ifs_motion_sensor")
+                                 ? "filament_motion_sensor ifs_motion_sensor"
+                                 : (has_reading("zmod_ifs_motion_sensor ifs_motion_sensor")
+                                        ? "zmod_ifs_motion_sensor ifs_motion_sensor"
+                                        : nullptr);
+    if (motion_key) {
+        const auto& motion = (*status)[motion_key];
         if (motion.contains("filament_detected") && motion["filament_detected"].is_boolean()) {
             bool detected = motion["filament_detected"].get<bool>();
             bool was = head_filament_;
             parse_head_sensor(detected);
+            // During a purge, ifs_motion_sensor activity means filament is still
+            // moving — the purge is progressing, not stalled. Reset the timeout
+            // clock so a long-but-healthy purge isn't falsely failed; the PURGING
+            // budget then measures time since the last motion (#1065 Bug 2).
+            if (system_info_.action == AmsAction::PURGING && detected) {
+                action_start_time_ = std::chrono::steady_clock::now();
+            }
             // Phase tracker (active op WE started) advances the phase on a head
             // transition. detect_load_unload_completion preserves legacy
             // snap-to-IDLE when the tracker is inactive.
@@ -339,9 +398,16 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
         }
     }
 
-    // Parse head sensor
-    if (status->contains("filament_switch_sensor head_switch_sensor")) {
-        const auto& head = (*status)["filament_switch_sensor head_switch_sensor"];
+    // Parse head sensor. The live AD5X publishes this under the
+    // zmod_ifs_switch_sensor namespace rather than the stock
+    // filament_switch_sensor section, so accept either key (switch semantics).
+    const char* head_key = has_reading("filament_switch_sensor head_switch_sensor")
+                               ? "filament_switch_sensor head_switch_sensor"
+                               : (has_reading("zmod_ifs_switch_sensor head_switch_sensor")
+                                      ? "zmod_ifs_switch_sensor head_switch_sensor"
+                                      : nullptr);
+    if (head_key) {
+        const auto& head = (*status)[head_key];
         if (head.contains("filament_detected") && head["filament_detected"].is_boolean()) {
             bool detected = head["filament_detected"].get<bool>();
             bool was = head_filament_;
@@ -370,8 +436,7 @@ void AmsBackendAd5xIfs::handle_status_update(const json& notification) {
             AmsAction before = system_info_.action;
             std::string detail_before = system_info_.operation_detail;
             on_extruder_temp_locked(last_extruder_temp_deci_, last_extruder_target_deci_);
-            if (system_info_.action != before ||
-                system_info_.operation_detail != detail_before) {
+            if (system_info_.action != before || system_info_.operation_detail != detail_before) {
                 state_changed = true;
             }
         }
@@ -771,9 +836,10 @@ bool AmsBackendAd5xIfs::check_external_color_change(int slot_index,
     if (!slot_has_filament) {
         // Empty slot reads back as the placeholder #808080 in parse_adventurer_json
         // — that's not an "edit," it's the absence of a reading. Eject is
-        // handled separately by parse_adventurer_json calling
-        // clear_override_locked when presence flips false. Just update the
-        // baseline so we don't repeat this branch every poll.
+        // handled separately by parse_adventurer_json dropping presence to false;
+        // the lane->Spoolman override is RETAINED across empty (#1071), not
+        // cleared. Just update the baseline so we don't repeat this branch every
+        // poll.
         spdlog::debug("{} Slot {} firmware color changed #{:06X} -> #{:06X} "
                       "(slot empty — sync skipped, eject handled by parse path)",
                       backend_log_tag(), slot_index, old_color, color);
@@ -1208,6 +1274,15 @@ void AmsBackendAd5xIfs::finalize_op_after_macro(bool is_unload) {
             spdlog::info("{} {} macro complete (gcode ack) -> IDLE", backend_log_tag(),
                          is_unload ? "Unload" : "Load");
             system_info_.action = AmsAction::IDLE;
+            if (is_unload) {
+                clear_head_loaded_after_unload_locked();
+                // Unlike the Chan/GET_ZCOLOR finalize paths (which refresh slots
+                // in their own loops), this gcode-ack path otherwise wouldn't —
+                // so the just-cleared head wouldn't reach the cached slot status.
+                for (int i = 0; i < NUM_PORTS; ++i) {
+                    update_slot_from_state(i);
+                }
+            }
             end_phase_tracking_locked();
             set_operation_detail_locked("");
             changed = true;
@@ -1428,8 +1503,8 @@ AmsBackendAd5xIfs::get_operation_step_model(StepOperationType op) const {
     const bool unload = (op == StepOperationType::UNLOAD);
     OperationStepModel model;
     model.steps.push_back({lv_tr("Heat nozzle"), 0, false, /*live_temp=*/true});
-    model.steps.push_back({unload ? lv_tr("Cut filament") : lv_tr("Feed filament"), 1, false,
-                           false});
+    model.steps.push_back(
+        {unload ? lv_tr("Cut filament") : lv_tr("Feed filament"), 1, false, false});
     model.steps.push_back({unload ? lv_tr("Retract") : lv_tr("Purge"), 2, false, false});
     return model;
 }
@@ -2486,8 +2561,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                 int degrees = std::atoi(m[1].str().c_str());
                 if (degrees > 0) {
                     phase_tracker_.target_deci = helix::ui::temperature::degrees_to_deci(degrees);
-                    spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(),
-                                  degrees);
+                    spdlog::debug("{} Phase: RESPOND heat target {}°C", backend_log_tag(), degrees);
                     phase_changed = apply_phase_action_locked();
                 }
             } else if (line.find("Unloading filament") != std::string::npos) {
@@ -2616,9 +2690,12 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                 }
             }
         }
-        spdlog::debug("{} Detected external color change in gcode stream, "
-                      "scheduling re-read + zcolor query",
-                      backend_log_tag());
+        // Count the detection rather than logging per line — zmod re-emits
+        // CHANGE_ZCOLOR on every edit, so one user action floods the stream with
+        // trigger lines (24 in a 3s window in bundle UQG4RNUA). schedule_*()
+        // already coalesce the actual work; reread_apply logs a single
+        // consolidated line carrying this count when the debounced re-read fires.
+        ++external_change_burst_count_;
         schedule_json_reread();
         schedule_zcolor_query("external_change_zcolor");
         return false;
@@ -2709,10 +2786,9 @@ void AmsBackendAd5xIfs::register_zcolor_listener() {
             // String .find() on the LOCAL line only — no member access on the
             // bg thread (L081/L072 safe). Must mirror the parse triggers in
             // on_gcode_response_line.
-            const bool is_phase_token =
-                (line.find("Heating the nozzle to") != std::string::npos ||
-                 line.find("Unloading filament") != std::string::npos ||
-                 line.find("Loading filament") != std::string::npos);
+            const bool is_phase_token = (line.find("Heating the nozzle to") != std::string::npos ||
+                                         line.find("Unloading filament") != std::string::npos ||
+                                         line.find("Loading filament") != std::string::npos);
             if (!query_active && !is_zcolor_token && !is_unknown_ifs_vars && !is_phase_token &&
                 !is_extruder_commit) {
                 return;
@@ -2823,8 +2899,17 @@ void AmsBackendAd5xIfs::schedule_json_reread() {
         // which itself touches api_ and member state.
         token.defer("Ad5xIfsBackend::reread_apply", [this]() {
             reread_pending_.store(false);
-            spdlog::debug("{} Re-reading Adventurer5M.json after external change",
-                          backend_log_tag());
+            const int n = external_change_burst_count_;
+            external_change_burst_count_ = 0;
+            if (n > 0) {
+                spdlog::debug("{} Detected {} external color change(s) in gcode stream — "
+                              "re-reading Adventurer5M.json + querying zcolor",
+                              backend_log_tag(), n);
+            } else {
+                // Reread scheduled by a non-stream trigger (klippy_ready, etc.).
+                spdlog::debug("{} Re-reading Adventurer5M.json after external change",
+                              backend_log_tag());
+            }
             read_adventurer_json();
         });
     });
@@ -2932,6 +3017,14 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
     }
 
     spdlog::debug("{} Querying GET_ZCOLOR SILENT=1", backend_log_tag());
+    // silent=true: this is a background color-state poll. Klipper runs gcode
+    // serially, so when a physical IFS operation stalls (e.g. "Purging old
+    // filament timed out"), this poll queues behind it on the printer and hits
+    // the 60s RPC timeout — which would otherwise raise a scary user-facing
+    // "Printer command 'printer.gcode.script' timed out" toast on top of the
+    // real filament-error modal the user is already seeing (bundles AS394UHU /
+    // UQG4RNUA). The error callback below still logs + clears the in-flight flag
+    // so the next trigger re-arms the poll. Mirrors get_sensors() / EXCLUDE_OBJECT.
     api_->execute_gcode(
         "GET_ZCOLOR SILENT=1",
         [this, token]() {
@@ -2955,7 +3048,8 @@ void AmsBackendAd5xIfs::query_zcolor_silent() {
                 spdlog::warn("{} GET_ZCOLOR SILENT=1 failed: {}", backend_log_tag(), msg);
                 zcolor_query_active_.store(false);
             });
-        });
+        },
+        /*timeout_ms=*/0, /*silent=*/true);
 }
 
 void AmsBackendAd5xIfs::finalize_zcolor_response() {
@@ -2998,11 +3092,90 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             std::lock_guard<std::mutex> lock(mutex_);
             const int chan = *result.ifs_chan; // 1-based, 0 = none
 
-            // Record the physically seated port unconditionally — the unload
-            // router reads this directly so the seated channel is recognised
-            // even on the plugin path, where the tool_map_-derived current_slot
-            // is owned by save_variables and can disagree with the seated port.
-            seated_chan_ = chan;
+            // IFS_STATUS "Chan" reports the LAST channel the switching mechanism
+            // engaged, which includes a cold-lane eject (IFS_F11): after ejecting
+            // an idle lane, Chan points at that now-EMPTY port. Bundle CGR6C7PA
+            // (#1065) captured it directly — `Chan:1` with `Ports:[false,..]` right
+            // after ejecting cold lane 1 while lane 2 stayed seated at the head.
+            // Adopting that as the seated channel moves "seated" onto an empty lane
+            // and reclassifies the genuinely-seated lane as a cold eject, grinding
+            // its un-cut filament (#1065 Bug 3). The same IFS_STATUS frame carries
+            // the silk-sensor Ports presence, so reject a non-zero Chan that THIS
+            // frame shows as an empty lane. Chan==0 (nothing engaged) and frames
+            // without a Ports reading apply unchanged — the seated channel only
+            // moves onto a lane the simultaneous presence snapshot confirms has
+            // filament.
+            // Presence of a 0-based lane, preferring THIS frame's IFS_STATUS Ports
+            // (the simultaneous silk-sensor snapshot) over the last-known per-port
+            // presence. Used to corroborate both the eject-stale-Chan rejection and
+            // the cold-boot restore below.
+            const auto lane_present = [&](int slot0) -> bool {
+                if (slot0 < 0 || slot0 >= NUM_PORTS)
+                    return false;
+                if (result.ifs_ports.has_value())
+                    return (*result.ifs_ports)[static_cast<size_t>(slot0)];
+                return port_presence_[static_cast<size_t>(slot0)];
+            };
+
+            // Eject-stale rejection (#1065 Bug 3) trusts ONLY this frame's Ports
+            // snapshot — never the last-known port_presence_, which lags and would
+            // wrongly reject a freshly-seated Chan on a frame that carried no Ports
+            // reading (the plugin path applies Chan without Ports).
+            const bool chan_lane_empty =
+                (chan > 0 && chan <= NUM_PORTS && result.ifs_ports.has_value() &&
+                 !(*result.ifs_ports)[static_cast<size_t>(chan - 1)]);
+            if (chan_lane_empty) {
+                spdlog::debug("{} IFS_STATUS Chan={} ignored as seated: lane empty this "
+                              "frame (eject-engaged stale channel); keeping seated_chan_={}",
+                              backend_log_tag(), chan, seated_chan_);
+            } else if (chan == 0 && !seated_resolved_since_boot_ && head_filament_ &&
+                       persisted_seated_slot_.has_value() &&
+                       lane_present(*persisted_seated_slot_)) {
+                // Power-cycle floor (#1065): the firmware forgets the seated channel
+                // across a reboot — IFS_STATUS returns Chan=0 even with a lane
+                // physically at the head (bundle CGR6C7PA). The head sensor proves a
+                // lane is loaded and the remembered lane is still present, so restore
+                // it as the seated channel rather than dropping to "nothing seated"
+                // (which would label every lane Unloadable). A real Chan>0, or a
+                // load/unload, supersedes it on a later frame.
+                const int restored = *persisted_seated_slot_ + 1;
+                if (seated_chan_ != restored) {
+                    spdlog::info("{} Cold-boot: Chan=0 with head loaded; restoring remembered "
+                                 "seated lane (slot {})",
+                                 backend_log_tag(), *persisted_seated_slot_);
+                }
+                seated_chan_ = restored;
+            } else {
+                // Record the physically seated port — the unload router reads this
+                // directly so the seated channel is recognised even on the plugin
+                // path, where the tool_map_-derived current_slot is owned by
+                // save_variables and can disagree with the seated port.
+                seated_chan_ = chan;
+            }
+
+            // A real seated channel (Chan>0) or a confirmed-empty head resolves the
+            // seated state, so any later idle Chan==0 is a genuine clear rather than
+            // post-reboot amnesia — close the cold-boot restore window.
+            if ((chan > 0 && !chan_lane_empty) || (chan == 0 && !head_filament_)) {
+                seated_resolved_since_boot_ = true;
+            }
+
+            // Remember/forget the seated lane so a future power cycle can recover it.
+            // seated_chan_ now holds the corroborated seated channel (live or
+            // cold-boot-restored). On a confirmed unload (Chan=0 with the head
+            // empty) drop the memory so a later boot doesn't resurrect a lane that
+            // is no longer loaded. Writes are deduped so idle status frames don't
+            // re-post the DB key every ~1.4 s.
+            if (seated_chan_ > 0) {
+                const int seated_slot0 = seated_chan_ - 1;
+                if (persisted_seated_slot_ != std::optional<int>(seated_slot0)) {
+                    persisted_seated_slot_ = seated_slot0;
+                    persist_seated_slot_locked(seated_slot0);
+                }
+            } else if (chan == 0 && !head_filament_ && persisted_seated_slot_.has_value()) {
+                persisted_seated_slot_.reset();
+                persist_seated_slot_locked(-1);
+            }
 
             // IFS_STATUS "Ports" is the RS-485 silk-sensor presence truth and is
             // the presence authority on native ZMOD. Apply it here — before the
@@ -3024,13 +3197,17 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                     const bool was_present = port_presence_[idx];
                     port_presence_[idx] = ports[idx];
                     chan_changed = true;
-                    // present->absent: clear the stale user override so the
-                    // emptied slot doesn't keep a now-gone spool's metadata
-                    // (mirrors the GET_ZCOLOR present->absent path below).
+                    // present->absent: the lane went empty (eject / runout /
+                    // unload). #1071: KEEP the lane->Spoolman override so a
+                    // re-inserted same spool keeps its assignment — matching the
+                    // AFC and Happy Hare backends, which never clear the link on
+                    // empty. Only presence drops here; update_slot_from_state
+                    // below recomputes status to EMPTY and re-applies the
+                    // retained override (mirrors the GET_ZCOLOR path below).
                     if (was_present && !ports[idx]) {
-                        if (auto* eject_entry = slots_.get_mut(i)) {
-                            clear_override_locked(i, eject_entry->info);
-                        }
+                        spdlog::info("{} Slot {} went empty (IFS_STATUS Ports) — "
+                                     "retaining the Spoolman link (#1071)",
+                                     backend_log_tag(), i);
                     }
                 }
             }
@@ -3039,7 +3216,11 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             // derivation (gated on !has_ifs_vars_, matching the extruder_slot
             // path below: lessWaste/bambufy own active_tool_ via save_variables).
             if (!has_ifs_vars_) {
-                int new_active_tool = (chan > 0) ? find_first_tool_for_port(chan) : -1;
+                // Derive from the (guarded) seated channel, not the raw Chan: an
+                // eject-engaged empty lane was rejected above, so active_tool_ and
+                // current_slot must follow seated_chan_, not the stale reading.
+                int new_active_tool =
+                    (seated_chan_ > 0) ? find_first_tool_for_port(seated_chan_) : -1;
                 if (active_tool_ != new_active_tool) {
                     active_tool_ = new_active_tool;
                     chan_changed = true;
@@ -3061,17 +3242,31 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             if (phase_tracker_.active) {
                 const bool progressed = phase_tracker_.is_unload ? phase_tracker_.seen_head_drop
                                                                  : phase_tracker_.seen_head_rise;
-                const bool reached_end =
-                    phase_tracker_.is_unload ? (chan == 0) : (chan > 0);
+                const bool reached_end = phase_tracker_.is_unload ? (chan == 0) : (chan > 0);
                 if (progressed && reached_end) {
                     spdlog::info("{} Phase: IFS_STATUS Chan={} confirms {} complete -> IDLE",
                                  backend_log_tag(), chan,
                                  phase_tracker_.is_unload ? "unload" : "load");
                     system_info_.action = AmsAction::IDLE;
+                    if (phase_tracker_.is_unload) {
+                        clear_head_loaded_after_unload_locked();
+                    }
                     end_phase_tracking_locked();
                     set_operation_detail_locked("");
                     chan_changed = true;
                 }
+            }
+
+            // Belt-and-suspenders head-loaded derivation (BUG-B). Run it HERE in
+            // Phase 1 — after seated_chan_/port_presence_ were updated above but
+            // before the slot-state refresh below — so a frame carrying BOTH the
+            // IFS_STATUS Chan and the GET_ZCOLOR Extruder summary doesn't first
+            // emit a slot update with a stale head_filament_ and only correct it
+            // in Phase 2 (BUG-2, transient spurious LOADED to sync observers).
+            // For a frame with no Extruder summary this is a no-op; the Phase 2
+            // call covers GET_ZCOLOR-only frames.
+            if (derive_head_loaded_from_summary_locked(result)) {
+                chan_changed = true;
             }
 
             if (chan_changed) {
@@ -3146,16 +3341,17 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                 port_presence_[idx] = loaded;
                 changed = true;
 
-                // present->absent: the spool was physically removed. Clear the
-                // user override so brand/spool_name/spoolman_id from the now-gone
-                // spool don't haunt the empty slot or get re-applied to whatever
-                // loads next. (This cleanup used to ride on parse_adventurer_json's
-                // presence inference; GET_ZCOLOR is now the sole presence
-                // authority, so it drives the override-clear too. mutex_ is held.)
+                // present->absent: the spool was physically removed. #1071:
+                // KEEP the user override (brand/spool_name/spoolman_id/color/
+                // material) so a re-inserted same spool keeps its assignment —
+                // matching the AFC and Happy Hare backends, which never clear the
+                // link on empty. The emptied slot still renders removed because
+                // presence dropped above; update_slot_from_state below recomputes
+                // status to EMPTY and re-applies the retained override.
                 if (was_present && !loaded) {
-                    if (auto* eject_entry = slots_.get_mut(i)) {
-                        clear_override_locked(i, eject_entry->info);
-                    }
+                    spdlog::info("{} Slot {} went empty (GET_ZCOLOR present->absent) "
+                                 "— retaining the Spoolman link (#1071)",
+                                 backend_log_tag(), i);
                 }
             }
 
@@ -3217,10 +3413,21 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                 spdlog::info("{} Phase: zcolor confirms {} complete -> IDLE", backend_log_tag(),
                              phase_tracker_.is_unload ? "unload" : "load");
                 system_info_.action = AmsAction::IDLE;
+                if (phase_tracker_.is_unload) {
+                    clear_head_loaded_after_unload_locked();
+                }
                 end_phase_tracking_locked();
                 set_operation_detail_locked("");
                 changed = true;
             }
+        }
+
+        // Head-loaded state from GET_ZCOLOR's "Extruder:" summary (BUG-B). For
+        // frames that also carried IFS_STATUS Chan this already ran in Phase 1
+        // (so it is a no-op here); this call covers GET_ZCOLOR-only frames. The
+        // C1/C2 presence corroboration lives in the helper.
+        if (derive_head_loaded_from_summary_locked(result)) {
+            changed = true;
         }
 
         if (changed) {
@@ -3235,9 +3442,69 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
     }
 }
 
+void AmsBackendAd5xIfs::clear_head_loaded_after_unload_locked() {
+    if (head_filament_) {
+        head_filament_ = false;
+        system_info_.filament_loaded = false;
+    }
+}
+
+bool AmsBackendAd5xIfs::derive_head_loaded_from_summary_locked(const ZColorSilentResult& result) {
+    // Native Z-Mod's head switch/motion sensors don't reliably push under the
+    // stock filament_*_sensor sections, so head_filament_ can be unwritten even
+    // with filament at the toolhead (BUG-B, #1065). GET_ZCOLOR's "Extruder: N"
+    // summary is zmod's live at-extruder view and the belt-and-suspenders head
+    // signal. Gated on saw_extruder_summary so a frame without the summary line
+    // (IFS_STATUS-only, or slot-lines-only) can't act on a coincidentally-absent
+    // extruder_slot.
+    if (!result.saw_extruder_summary) {
+        return false;
+    }
+
+    if (result.extruder_slot.has_value()) {
+        // "Extruder: N" — positive, authoritative evidence of filament at the
+        // extruder. Assert loaded. This also self-heals a transient clobber from
+        // the motion sensor, which (device-confirmed 2026-06-28) reads
+        // filament_detected=false while idle even with filament loaded — see the
+        // parse_head_sensor() conflation NOTE in the header.
+        if (!head_filament_) {
+            head_filament_ = true;
+            system_info_.filament_loaded = true;
+            return true;
+        }
+        return false;
+    }
+
+    // "Extruder: None" is AMBIGUOUS: it appears both after a genuine unload AND,
+    // on some firmware, while filament is still seated at the head post-runout/
+    // print-end (#995 — the case can_unload_from_toolhead's `head_filament_ &&
+    // current_slot<0` fallback exists for). Only clear an established loaded
+    // state when physical presence corroborates an empty head — i.e. the seated
+    // lane's port has gone absent. Keeping it loaded while the lane is still
+    // present avoids stranding unremovable filament and wrongly re-enabling Load
+    // (-> cold grind), and prevents an Extruder:None frame from clobbering a real
+    // head switch sensor on lessWaste/older variants whose seated lane still
+    // reads present (C1/C2). A genuine unload/eject drops the lane's port, which
+    // re-permits the clear; the real head switch sensor (parse_head_sensor) is
+    // the primary clear path and is unaffected.
+    if (!head_filament_) {
+        return false;
+    }
+    const bool seated_port_present = seated_chan_ > 0 && seated_chan_ <= NUM_PORTS &&
+                                     port_presence_[static_cast<size_t>(seated_chan_ - 1)];
+    if (seated_port_present) {
+        spdlog::debug("{} Extruder:None with seated lane {} still present — keeping "
+                      "head-loaded (post-runout/seated; deferring to the head sensor) (#995)",
+                      backend_log_tag(), seated_chan_);
+        return false;
+    }
+    head_filament_ = false;
+    system_info_.filament_loaded = false;
+    return true;
+}
+
 AmsBackendAd5xIfs::ZColorSilentResult
-AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
-                                       const char* reason) {
+AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines, const char* reason) {
     ZColorSilentResult result;
 
     // Regexes compiled once per call; parsing is off the hot path.
@@ -3286,9 +3553,9 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
                     // next field bundle proves Chan's loaded-idle behavior.
                     int state = obj.value("State", -1);
                     std::string ports_str;
-                    if (auto ports_it = obj.find("Ports");
-                        ports_it != obj.end() && ports_it->is_array() &&
-                        ports_it->size() == NUM_PORTS) {
+                    if (auto ports_it = obj.find("Ports"); ports_it != obj.end() &&
+                                                           ports_it->is_array() &&
+                                                           ports_it->size() == NUM_PORTS) {
                         ports_str = ports_it->dump();
                         // Capture the per-port presence as the sensor-backed
                         // authority (not just a diagnostic). Each entry is the
@@ -3324,7 +3591,8 @@ AmsBackendAd5xIfs::parse_zcolor_silent(const std::vector<std::string>& lines,
     for (const auto& line : lines) {
         if (std::regex_match(line, m, summary_re)) {
             result.saw_valid_response = true;
-            result.saw_silent_content = true; // genuine GET_ZCOLOR summary line
+            result.saw_silent_content = true;   // genuine GET_ZCOLOR summary line
+            result.saw_extruder_summary = true; // carries the "Extruder:" head field
             result.ifs_active = (m[2].str() == "True");
             const std::string extruder_part = m[1].str();
 
@@ -3503,16 +3771,17 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             //     previously-emptied channel on every content-changed poll (the
             //     external-unload-not-reflected / one-edit-resurrects-another bug).
             //     Every JSON change schedules a GET_ZCOLOR right after this parse,
-            //     so silk-truth presence re-establishes immediately, and its
-            //     present->absent transition drives clear_override_locked.
+            //     so silk-truth presence re-establishes immediately. A
+            //     present->absent transition there only drops presence; the
+            //     lane->Spoolman override is retained across empty (#1071).
             //
             //   * Pre-SILENT zmod (GET_ZCOLOR returns a prompt dialog →
             //     zcolor_silent_supported_ latched false): there is NO silk-truth
             //     query at all, so Adventurer5M.json is the only presence source we
             //     have. Fall back to the legacy inference (non-empty colour ==
-            //     present; empty colour while IDLE == eject + override-clear). The
-            //     resurrection bug can't bite here because no GET_ZCOLOR ever
-            //     competes for ownership.
+            //     present; empty colour while IDLE == eject — presence drops, the
+            //     override is retained, #1071). The resurrection bug can't bite
+            //     here because no GET_ZCOLOR ever competes for ownership.
             //   * IFS_STATUS Ports seen (ifs_status_ports_seen_): the RS-485
             //     silk sensors are the presence authority and already own
             //     port_presence_. The persisted ffmColor must NEVER override
@@ -3526,13 +3795,17 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
                 if (has_filament_data) {
                     presence = true;
                 } else if (presence && system_info_.action == AmsAction::IDLE) {
+                    // present->absent eject (pre-SILENT zmod, JSON-inferred).
+                    // #1071: KEEP the lane->Spoolman override so a re-inserted
+                    // same spool keeps its assignment — matching the AFC and
+                    // Happy Hare backends, which never clear the link on empty.
+                    // Only presence drops; update_slot_from_state below recomputes
+                    // status to EMPTY and re-applies the retained override.
                     spdlog::info("{} Slot {} eject detected (empty color in "
-                                 "Adventurer5M.json, pre-SILENT zmod)",
+                                 "Adventurer5M.json, pre-SILENT zmod) — retaining "
+                                 "the Spoolman link (#1071)",
                                  backend_log_tag(), idx);
                     presence = false;
-                    if (auto* eject_entry = slots_.get_mut(idx)) {
-                        clear_override_locked(idx, eject_entry->info);
-                    }
                     needs_ifs_vars_push = true;
                 }
             }
@@ -3804,6 +4077,18 @@ int AmsBackendAd5xIfs::find_first_tool_for_port(int port_1based) const {
 }
 
 void AmsBackendAd5xIfs::recompute_current_slot_locked() {
+    // Native ZMOD (no lessWaste/bambufy _IFS_VARS) never populates tool_map_ — it
+    // stays all-UNMAPPED, so the active_tool_ -> tool_map_ round-trip below
+    // collapses to -1 and current_slot would be pinned at -1 forever, leaving
+    // every slot "not loaded" (slot_is_actively_loaded) even with filament
+    // demonstrably seated at the toolhead. The IFS_STATUS "Chan" (seated_chan_)
+    // is the direct, sensor-backed seated authority there, and it survives a
+    // timed-out GET_ZCOLOR (it only updates on a fresh successful read), so it is
+    // the correct source for the loaded slot on the native path.
+    if (!has_ifs_vars_) {
+        system_info_.current_slot = seated_chan_ > 0 ? seated_chan_ - 1 : -1;
+        return;
+    }
     if (active_tool_ >= 0 && active_tool_ < TOOL_MAP_SIZE) {
         int port = tool_map_[static_cast<size_t>(active_tool_)];
         if (port >= 1 && port <= NUM_PORTS) {
@@ -3812,6 +4097,27 @@ void AmsBackendAd5xIfs::recompute_current_slot_locked() {
         }
     }
     system_info_.current_slot = -1;
+}
+
+void AmsBackendAd5xIfs::persist_seated_slot_locked(int slot0) {
+    // No store in unit tests / remote-less setups — the in-memory
+    // persisted_seated_slot_ still drives this session's restore logic; only the
+    // cross-restart durability is skipped. The store call is fire-and-forget; its
+    // SaveCallback only logs on failure, so the held mutex_ is never re-entered.
+    if (!override_store_)
+        return;
+    const std::string tag = backend_log_tag();
+    if (slot0 >= 0) {
+        override_store_->save_seated_slot_async(slot0, [tag, slot0](bool ok, std::string err) {
+            if (!ok)
+                spdlog::warn("{} failed to persist seated slot {}: {}", tag, slot0, err);
+        });
+    } else {
+        override_store_->clear_seated_slot_async([tag](bool ok, std::string err) {
+            if (!ok)
+                spdlog::warn("{} failed to clear persisted seated slot: {}", tag, err);
+        });
+    }
 }
 
 bool AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {
@@ -3833,10 +4139,16 @@ void AmsBackendAd5xIfs::check_action_timeout() {
     }
 
     // HEATING from cold legitimately takes ~158s (longer for high-temp
-    // materials), so it gets a longer dedicated budget. Every other phase has
-    // its clock reset on transition (see apply_phase_action_locked) and keeps
-    // the short 90s window.
-    const int limit = (a == AmsAction::HEATING) ? HEATING_TIMEOUT_SECONDS : ACTION_TIMEOUT_SECONDS;
+    // materials), so it gets a longer dedicated budget. PURGING likewise runs
+    // well past 90s and its clock is reset on motion-sensor activity (#1065
+    // Bug 2). Every other phase has its clock reset on transition (see
+    // apply_phase_action_locked) and keeps the short 90s window.
+    int limit = ACTION_TIMEOUT_SECONDS;
+    if (a == AmsAction::HEATING) {
+        limit = HEATING_TIMEOUT_SECONDS;
+    } else if (a == AmsAction::PURGING) {
+        limit = PURGING_TIMEOUT_SECONDS;
+    }
     auto elapsed = std::chrono::steady_clock::now() - action_start_time_;
     if (elapsed >= std::chrono::seconds(limit)) {
         spdlog::warn("{} {} timed out after {}s, surfacing ERROR", backend_log_tag(),

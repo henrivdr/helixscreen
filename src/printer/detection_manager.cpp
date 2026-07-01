@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "detection_manager.h"
 
-#include "hv/json.hpp"
 #include "moonraker_client.h"
 #include "u1_stock_detection_source.h"
 
 #include <spdlog/spdlog.h>
+
+#include "hv/json.hpp"
 
 namespace helix::detection {
 
@@ -16,15 +17,14 @@ DetectionManager& DetectionManager::instance() {
 
 void DetectionManager::init(helix::MoonrakerClient* client, helix::PrinterState* state) {
     client_ = client;
-    state_  = state;
+    state_ = state;
     // Do NOT probe here: init() runs during Application::init_panel_subjects, before
     // the WebSocket connects. printer.objects.list would fail (not connected) and the
     // capability would latch false forever. Instead, run the probe on every connect.
     if (client_ && !connect_observer_registered_) {
-        client_->add_connected_observer(
-            "DetectionManager::refresh_capabilities",
-            lifetime_.bg_cb("DetectionManager::on_connected",
-                            [this]() { refresh_capabilities(); }));
+        client_->add_connected_observer("DetectionManager::refresh_capabilities",
+                                        lifetime_.bg_cb("DetectionManager::on_connected",
+                                                        [this]() { refresh_capabilities(); }));
         connect_observer_registered_ = true;
     }
 }
@@ -133,10 +133,10 @@ void DetectionManager::reset_for_test() {
     sources_.clear();
     policies_.clear();
     presenter_ = nullptr;
-    client_    = nullptr;
-    state_     = nullptr;
+    client_ = nullptr;
+    state_ = nullptr;
     connect_observer_registered_ = false;
     lifetime_.invalidate();
 }
 
-}  // namespace helix::detection
+} // namespace helix::detection

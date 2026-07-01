@@ -7,9 +7,9 @@
 #include "app_globals.h"
 #include "data_root_resolver.h"
 #include "helix_version.h"
-#include "logging_init.h"
 #include "http_executor.h"
 #include "hv/requests.h"
+#include "logging_init.h"
 #include "moonraker_api.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
@@ -245,10 +245,9 @@ json DebugBundleCollector::collect_printer_info() {
         // generation should prefer platform_model when it differs from model
         // so AD5X devices stop showing as "5M Pro" in the bundle list.
         const std::string platform = UpdateChecker::get_platform_key();
-        const std::string platform_model =
-            platform_has_printer_hardware(platform)
-                ? UpdateChecker::get_platform_display_name(platform)
-                : std::string{};
+        const std::string platform_model = platform_has_printer_hardware(platform)
+                                               ? UpdateChecker::get_platform_display_name(platform)
+                                               : std::string{};
         if (!platform_model.empty()) {
             printer["platform_model"] = platform_model;
             // Substring match handles trim variations ("5M" vs "5M Pro"). If
@@ -316,8 +315,7 @@ json DebugBundleCollector::collect_log_meta() {
     // to, and the level they run at. If level is "warn", the on-disk logs only
     // have WARN+; the ring buffer (below) is the only place debug survives.
     meta["target"] = helix::logging::effective_destination();
-    meta["level"] =
-        spdlog::level::to_string_view(helix::logging::effective_log_level()).data();
+    meta["level"] = spdlog::level::to_string_view(helix::logging::effective_log_level()).data();
     meta["ring_lines"] = helix::logging::ring_buffer_capacity();
 
     // Where collect_log_tail() got its content. The ring buffer is preferred
@@ -673,12 +671,10 @@ json DebugBundleCollector::collect_moonraker_info() {
 
 json DebugBundleCollector::filter_filament_objects(const json& object_list) {
     static const std::vector<std::string> prefixes = {
-        "AFC",     "mmu",
-        "toolchanger", "tool ",
-        "filament_switch_sensor", "filament_motion_sensor",
+        "AFC", "mmu", "toolchanger", "tool ", "filament_switch_sensor", "filament_motion_sensor",
         // Creality CFS (K2 family): [box] is the CFS controller, [filament_rack]
         // is the slot-occupancy gate. Both expose state via printer.objects.query.
-        "box",     "filament_rack"};
+        "box", "filament_rack"};
 
     json result = json::array();
     if (!object_list.is_array())
@@ -789,8 +785,8 @@ json DebugBundleCollector::collect_filament_system_info() {
 enum class PlatformFileFormat { JSON, TEXT };
 
 struct PlatformFile {
-    std::string name;            // Logical name used as bundle key
-    std::string moonraker_path;  // Path rooted at Moonraker base URL
+    std::string name;           // Logical name used as bundle key
+    std::string moonraker_path; // Path rooted at Moonraker base URL
     PlatformFileFormat format;
 };
 

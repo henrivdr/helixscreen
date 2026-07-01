@@ -64,7 +64,9 @@ class QrScannerOverlay : public OverlayBase {
     void init_subjects() override;
     lv_obj_t* create(lv_obj_t* parent) override;
     void register_callbacks() override;
-    const char* get_name() const override { return "QR Scanner"; }
+    const char* get_name() const override {
+        return "QR Scanner";
+    }
     void on_activate() override;
     void on_deactivate() override;
     void on_ui_destroyed() override;
@@ -77,14 +79,14 @@ class QrScannerOverlay : public OverlayBase {
      * @param on_result Called with spool info on successful scan
      * @param on_cancel Called when user closes without scanning
      */
-    void show(lv_obj_t* parent, int slot_index,
-              ResultCallback on_result, CancelCallback on_cancel = nullptr);
+    void show(lv_obj_t* parent, int slot_index, ResultCallback on_result,
+              CancelCallback on_cancel = nullptr);
 
     /**
      * @brief Show for active spool (single-extruder, no slot)
      */
-    void show_for_active_spool(lv_obj_t* parent,
-                               ResultCallback on_result, CancelCallback on_cancel = nullptr);
+    void show_for_active_spool(lv_obj_t* parent, ResultCallback on_result,
+                               CancelCallback on_cancel = nullptr);
 
     // Static event callbacks (registered with XML)
     static void on_close_clicked(lv_event_t* e);
@@ -115,7 +117,7 @@ class QrScannerOverlay : public OverlayBase {
     std::unique_ptr<helix::CameraStream> camera_;
     std::unique_ptr<helix::QrDecoder> qr_decoder_;
     std::atomic<bool> decode_busy_{false};
-    std::vector<uint8_t> grayscale_buf_;  // Subsampled grayscale for QR decode
+    std::vector<uint8_t> grayscale_buf_; // Subsampled grayscale for QR decode
     int qr_width_ = 0;                   // Dimensions of subsampled QR buffer
     int qr_height_ = 0;
 
@@ -141,7 +143,6 @@ class QrScannerOverlay : public OverlayBase {
     // Timers (tracked for cleanup)
     lv_timer_t* success_timer_ = nullptr;
     lv_timer_t* timeout_timer_ = nullptr;
-
 };
 
 /**

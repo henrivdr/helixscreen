@@ -5,8 +5,8 @@
 
 #include "print_history_data.h"
 
-#include <lvgl.h>
 #include <functional>
+#include <lvgl.h>
 #include <vector>
 
 namespace helix::ui {
@@ -97,8 +97,8 @@ class HistoryListView {
 
   private:
     // === Widget References ===
-    lv_obj_t* container_ = nullptr;      ///< Where rows and spacers live
-    lv_obj_t* scroll_parent_ = nullptr;  ///< Scrollable parent (for reading scroll_y)
+    lv_obj_t* container_ = nullptr;     ///< Where rows and spacers live
+    lv_obj_t* scroll_parent_ = nullptr; ///< Scrollable parent (for reading scroll_y)
     lv_obj_t* leading_spacer_ = nullptr;
     lv_obj_t* trailing_spacer_ = nullptr;
 

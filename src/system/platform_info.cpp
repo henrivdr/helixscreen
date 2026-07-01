@@ -53,8 +53,8 @@ void log_platform_info() {
 
 std::string host_arch_string() {
     struct utsname uts {};
-    const std::string kernel = (uname(&uts) == 0 && uts.machine[0] != '\0') ? uts.machine
-                                                                            : "unknown";
+    const std::string kernel =
+        (uname(&uts) == 0 && uts.machine[0] != '\0') ? uts.machine : "unknown";
     // sizeof(void*) is the only reliable runtime check for binary bitness:
     // compile-time __aarch64__/__arm__ macros tell us the ABI family but not
     // 32-vs-64-bit on every supported target. " · " is U+00B7 MIDDLE DOT.

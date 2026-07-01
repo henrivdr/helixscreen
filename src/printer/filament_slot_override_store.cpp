@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "filament_slot_override_store.h"
+
 #include "ams_types.h"
 #include "data_root_resolver.h"
 #include "filament_database.h"
 #include "filament_slot_override.h"
-#include "filament_slot_override_store.h"
 #include "i_moonraker_api.h"
 #include "moonraker_error.h"
 
@@ -40,7 +41,8 @@ std::chrono::system_clock::time_point parse_iso8601(const std::string& s) {
     std::tm tm{};
     std::istringstream is(s);
     is >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
-    if (is.fail()) return {};
+    if (is.fail())
+        return {};
     return std::chrono::system_clock::from_time_t(timegm(&tm));
 }
 
@@ -65,7 +67,8 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
         std::snprintf(buf, sizeof(buf), "#%06X", o.color_rgb & 0x00FFFFFFu);
         j["color"] = buf;
     }
-    if (!o.material.empty()) j["material"] = o.material;
+    if (!o.material.empty())
+        j["material"] = o.material;
     // helix_locked_* are HelixScreen-internal markers. Always emit both (even
     // when false) so a future re-load can distinguish "explicit auto-mirror,
     // safe to track" from "missing key, fall back to pessimistic default."
@@ -80,7 +83,8 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
                                     // matching. Zero-cost alias today (Orca
                                     // ignores unknown keys).
     }
-    if (o.spoolman_id > 0) j["spool_id"] = o.spoolman_id;
+    if (o.spoolman_id > 0)
+        j["spool_id"] = o.spoolman_id;
     if (o.updated_at.time_since_epoch().count() > 0) {
         j["scan_time"] = format_iso8601(o.updated_at);
     }
@@ -88,16 +92,22 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
     // cache (to_json) goes through the same resolver so the two stores never
     // disagree on what an override means.
     auto temps = resolved_temps(o);
-    if (temps.bed_temp > 0) j["bed_temp"] = temps.bed_temp;
-    if (temps.nozzle_temp > 0) j["nozzle_temp"] = temps.nozzle_temp;
+    if (temps.bed_temp > 0)
+        j["bed_temp"] = temps.bed_temp;
+    if (temps.nozzle_temp > 0)
+        j["nozzle_temp"] = temps.nozzle_temp;
     if (!o.spool_name.empty()) {
         j["spool_name"] = o.spool_name; // HelixScreen/AFC key
         j["name"] = o.spool_name;       // Happy Hare key; alias for forward-compat
     }
-    if (o.spoolman_vendor_id > 0) j["spoolman_vendor_id"] = o.spoolman_vendor_id;
-    if (o.remaining_weight_g >= 0) j["remaining_weight_g"] = o.remaining_weight_g;
-    if (o.total_weight_g >= 0) j["total_weight_g"] = o.total_weight_g;
-    if (!o.color_name.empty()) j["color_name"] = o.color_name;
+    if (o.spoolman_vendor_id > 0)
+        j["spoolman_vendor_id"] = o.spoolman_vendor_id;
+    if (o.remaining_weight_g >= 0)
+        j["remaining_weight_g"] = o.remaining_weight_g;
+    if (o.total_weight_g >= 0)
+        j["total_weight_g"] = o.total_weight_g;
+    if (!o.color_name.empty())
+        j["color_name"] = o.color_name;
     return j;
 }
 
@@ -105,9 +115,9 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
 // Returns (slot_index, override) where slot_index comes from the "lane" field
 // (which Orca requires). nullopt if the record is malformed (non-object or
 // missing/invalid "lane" field).
-std::optional<std::pair<int, FilamentSlotOverride>>
-from_lane_data_record(const nlohmann::json& j) {
-    if (!j.is_object() || !j.contains("lane")) return std::nullopt;
+std::optional<std::pair<int, FilamentSlotOverride>> from_lane_data_record(const nlohmann::json& j) {
+    if (!j.is_object() || !j.contains("lane"))
+        return std::nullopt;
     int slot_index = 0;
     if (j["lane"].is_string()) {
         try {
@@ -122,7 +132,8 @@ from_lane_data_record(const nlohmann::json& j) {
     }
     // Matches OrcaSlicer's MoonrakerPrinterAgent.cpp:796 — negative lane
     // values are never valid slot indices.
-    if (slot_index < 0) return std::nullopt;
+    if (slot_index < 0)
+        return std::nullopt;
 
     FilamentSlotOverride o;
     if (j.contains("color") && j["color"].is_string()) {
@@ -146,8 +157,7 @@ from_lane_data_record(const nlohmann::json& j) {
     // (post-fix) carry the explicit flag and round-trip exactly. See struct
     // doc + #965 for rationale.
     o.user_locked_color = j.value("helix_locked_color", o.color_set);
-    o.user_locked_material =
-        j.value("helix_locked_material", !o.material.empty());
+    o.user_locked_material = j.value("helix_locked_material", !o.material.empty());
     // Prefer our own `vendor` key; fall back to Happy Hare's `vendor_name` so
     // alias-only records (e.g. written by HH's mmu_server push_lane_data) read
     // correctly. Round-trips of our own records stay exact.
@@ -190,10 +200,8 @@ from_lane_data_record(const nlohmann::json& j) {
 // this cache file across two backends (e.g. IFS + ACE) can't interleave today.
 // If that threading model ever changes (per-request dispatch, multi-connection
 // fan-out), this read-modify-write becomes racy and needs a file lock.
-void write_cache_slot(const std::filesystem::path& cache_path,
-                      const std::string& backend_id,
-                      int slot_index,
-                      const FilamentSlotOverride* ovr) {
+void write_cache_slot(const std::filesystem::path& cache_path, const std::string& backend_id,
+                      int slot_index, const FilamentSlotOverride* ovr) {
     nlohmann::json doc = nlohmann::json::object();
     std::error_code ec;
     if (std::filesystem::exists(cache_path, ec)) {
@@ -201,7 +209,8 @@ void write_cache_slot(const std::filesystem::path& cache_path,
         if (in) {
             try {
                 doc = nlohmann::json::parse(in);
-                if (!doc.is_object()) doc = nlohmann::json::object();
+                if (!doc.is_object())
+                    doc = nlohmann::json::object();
             } catch (const std::exception& e) {
                 spdlog::warn("[FilamentSlotOverrideStore] cache parse failed "
                              "({}), starting fresh: {}",
@@ -233,21 +242,23 @@ void write_cache_slot(const std::filesystem::path& cache_path,
         std::ofstream out(tmp, std::ios::trunc);
         if (!out) {
             spdlog::warn("[FilamentSlotOverrideStore] cache write failed: "
-                         "cannot open {} for writing", tmp.string());
+                         "cannot open {} for writing",
+                         tmp.string());
             return;
         }
         out << doc.dump(2);
         if (!out) {
             spdlog::warn("[FilamentSlotOverrideStore] cache write failed: "
-                         "error writing to {}", tmp.string());
+                         "error writing to {}",
+                         tmp.string());
             return;
         }
     } // ofstream closed here, buffers flushed, before rename
 
     std::filesystem::rename(tmp, cache_path, ec);
     if (ec) {
-        spdlog::warn("[FilamentSlotOverrideStore] cache rename failed ({} -> {}): {}",
-                     tmp.string(), cache_path.string(), ec.message());
+        spdlog::warn("[FilamentSlotOverrideStore] cache rename failed ({} -> {}): {}", tmp.string(),
+                     cache_path.string(), ec.message());
         // Best-effort cleanup of the orphan tmp — ignore errors.
         std::error_code rm_ec;
         std::filesystem::remove(tmp, rm_ec);
@@ -282,21 +293,23 @@ void write_cache_slot(const std::filesystem::path& cache_path,
 // - Otherwise iterate slots: parse each key as int, skip if non-int or
 //   negative (symmetric with from_lane_data_record's rejection rule), call
 //   from_json on the value, insert into the result map.
-std::unordered_map<int, FilamentSlotOverride>
-read_cache(const std::filesystem::path& cache_path, const std::string& backend_id) {
+std::unordered_map<int, FilamentSlotOverride> read_cache(const std::filesystem::path& cache_path,
+                                                         const std::string& backend_id) {
     std::unordered_map<int, FilamentSlotOverride> result;
     std::error_code ec;
-    if (!std::filesystem::exists(cache_path, ec)) return result;
+    if (!std::filesystem::exists(cache_path, ec))
+        return result;
 
     std::ifstream in(cache_path);
-    if (!in) return result;
+    if (!in)
+        return result;
 
     nlohmann::json doc;
     try {
         doc = nlohmann::json::parse(in);
     } catch (const std::exception& e) {
-        spdlog::warn("[FilamentSlotOverrideStore] cache parse failed ({}): {}",
-                     cache_path.string(), e.what());
+        spdlog::warn("[FilamentSlotOverrideStore] cache parse failed ({}): {}", cache_path.string(),
+                     e.what());
         return result;
     }
     if (!doc.is_object()) {
@@ -317,9 +330,11 @@ read_cache(const std::filesystem::path& cache_path, const std::string& backend_i
         return result;
     }
 
-    if (!doc.contains(backend_id) || !doc[backend_id].is_object()) return result;
+    if (!doc.contains(backend_id) || !doc[backend_id].is_object())
+        return result;
     const auto& backend_entry = doc[backend_id];
-    if (!backend_entry.contains("slots") || !backend_entry["slots"].is_object()) return result;
+    if (!backend_entry.contains("slots") || !backend_entry["slots"].is_object())
+        return result;
 
     const auto& slots = backend_entry["slots"];
     for (auto it = slots.begin(); it != slots.end(); ++it) {
@@ -331,8 +346,10 @@ read_cache(const std::filesystem::path& cache_path, const std::string& backend_i
         }
         // Symmetric with from_lane_data_record / save_async / clear_async:
         // negative slot indices are never valid and must be silently skipped.
-        if (slot_index < 0) continue;
-        if (!it.value().is_object()) continue;
+        if (slot_index < 0)
+            continue;
+        if (!it.value().is_object())
+            continue;
         result[slot_index] = from_json(it.value());
     }
     return result;
@@ -377,8 +394,7 @@ FilamentSlotOverride from_json(const nlohmann::json& j) {
     o.material = j.value("material", "");
     // Pessimistic legacy-default — see from_lane_data_record + #965.
     o.user_locked_color = j.value("user_locked_color", o.color_set);
-    o.user_locked_material =
-        j.value("user_locked_material", !o.material.empty());
+    o.user_locked_material = j.value("user_locked_material", !o.material.empty());
     o.bed_temp = j.value("bed_temp", 0);
     o.nozzle_temp = j.value("nozzle_temp", 0);
     if (j.contains("updated_at") && j["updated_at"].is_string()) {
@@ -391,8 +407,10 @@ ResolvedTemps resolved_temps(const FilamentSlotOverride& o) {
     ResolvedTemps r{o.bed_temp, o.nozzle_temp};
     if ((r.bed_temp == 0 || r.nozzle_temp == 0) && !o.material.empty()) {
         if (auto mat = filament::find_material(o.material)) {
-            if (r.bed_temp == 0) r.bed_temp = mat->bed_temp;
-            if (r.nozzle_temp == 0) r.nozzle_temp = mat->nozzle_recommended();
+            if (r.bed_temp == 0)
+                r.bed_temp = mat->bed_temp;
+            if (r.nozzle_temp == 0)
+                r.nozzle_temp = mat->nozzle_recommended();
         }
     }
     return r;
@@ -463,11 +481,12 @@ namespace {
 //   there for the next attempt. That's correct conservative behavior.
 std::unordered_map<int, FilamentSlotOverride>
 try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
-                   std::chrono::milliseconds timeout,
-                   const std::filesystem::path& cache_dir) {
+                   std::chrono::milliseconds timeout, const std::filesystem::path& cache_dir) {
     std::unordered_map<int, FilamentSlotOverride> empty_result;
-    if (!api) return empty_result;
-    if (backend_id != "ace" && backend_id != "cfs") return empty_result;
+    if (!api)
+        return empty_result;
+    if (backend_id != "ace" && backend_id != "cfs")
+        return empty_result;
 
     const std::string legacy_ns = "helix-screen";
     const std::string legacy_key = backend_id + "_slot_overrides";
@@ -506,14 +525,16 @@ try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
         // MR DB is reachable via the prior lane_data fetch, so the caller's
         // load_timeout_ is a generous upper bound for a single
         // database_get_item round-trip.
-        get_state->cv.wait_for(lk, timeout,
-                               [get_state] { return get_state->done; });
+        get_state->cv.wait_for(lk, timeout, [get_state] { return get_state->done; });
         legacy_got = get_state->got;
-        if (legacy_got) legacy_doc = get_state->received;
+        if (legacy_got)
+            legacy_doc = get_state->received;
     }
 
-    if (!legacy_got) return empty_result;
-    if (!legacy_doc.is_object() || legacy_doc.empty()) return empty_result;
+    if (!legacy_got)
+        return empty_result;
+    if (!legacy_doc.is_object() || legacy_doc.empty())
+        return empty_result;
 
     // Build the migrated slot map. Legacy field names happen to match our
     // FilamentSlotOverride members 1:1 — same as from_json, with the single
@@ -533,8 +554,10 @@ try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
         } catch (...) {
             continue; // non-int keys silently skipped (matches cache reader)
         }
-        if (slot_index < 0) continue;
-        if (!it.value().is_object()) continue; // malformed entry → skip
+        if (slot_index < 0)
+            continue;
+        if (!it.value().is_object())
+            continue; // malformed entry → skip
 
         FilamentSlotOverride o = from_json(it.value());
         o.updated_at = std::chrono::system_clock::now();
@@ -551,15 +574,14 @@ try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
             spdlog::info("[FilamentSlotOverrideStore:{}] dropped {} malformed legacy "
                          "entries from helix-screen:{}_slot_overrides",
                          backend_id, legacy_entries_seen, backend_id);
-            api->database_delete_item(
-                legacy_ns, legacy_key,
-                nullptr,
-                [backend_id, legacy_key](const MoonrakerError& err) {
-                    spdlog::warn("[FilamentSlotOverrideStore:{}] failed to delete "
-                                 "all-malformed legacy helix-screen:{}: {} "
-                                 "(non-fatal, will retry on next startup)",
-                                 backend_id, legacy_key, err.message);
-                });
+            api->database_delete_item(legacy_ns, legacy_key, nullptr,
+                                      [backend_id, legacy_key](const MoonrakerError& err) {
+                                          spdlog::warn(
+                                              "[FilamentSlotOverrideStore:{}] failed to delete "
+                                              "all-malformed legacy helix-screen:{}: {} "
+                                              "(non-fatal, will retry on next startup)",
+                                              backend_id, legacy_key, err.message);
+                                      });
             if (!cache_dir.empty()) {
                 std::error_code rm_ec;
                 std::filesystem::remove(cache_dir / (backend_id + "_slot_overrides.json"), rm_ec);
@@ -595,8 +617,7 @@ try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
         bool write_ok = false;
         {
             std::unique_lock<std::mutex> lk(post_state->m);
-            post_state->cv.wait_for(lk, timeout,
-                                    [post_state] { return post_state->done; });
+            post_state->cv.wait_for(lk, timeout, [post_state] { return post_state->done; });
             write_ok = post_state->got;
         }
         if (!write_ok) {
@@ -614,9 +635,7 @@ try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
     // Capture legacy_key by value (the lambda outlives this stack frame in
     // case the error callback fires after the outer function returns).
     api->database_delete_item(
-        legacy_ns, legacy_key,
-        nullptr,
-        [backend_id, legacy_key](const MoonrakerError& err) {
+        legacy_ns, legacy_key, nullptr, [backend_id, legacy_key](const MoonrakerError& err) {
             spdlog::warn("[FilamentSlotOverrideStore:{}] failed to delete legacy "
                          "helix-screen:{}: {} (non-fatal, migration complete)",
                          backend_id, legacy_key, err.message);
@@ -644,7 +663,8 @@ try_migrate_legacy(IMoonrakerAPI* api, const std::string& backend_id,
 
 std::unordered_map<int, FilamentSlotOverride> FilamentSlotOverrideStore::load_blocking() {
     std::unordered_map<int, FilamentSlotOverride> result;
-    if (!api_) return result;
+    if (!api_)
+        return result;
 
     // Wrap sync state in shared_ptr so callbacks firing after our local
     // cv.wait_for timeout (load_timeout_, default 5s) don't touch a freed
@@ -697,15 +717,17 @@ std::unordered_map<int, FilamentSlotOverride> FilamentSlotOverrideStore::load_bl
         state->cv.wait_for(lk, load_timeout_, [state] { return state->done; });
         got_copy = state->got;
         done_copy = state->done;
-        if (got_copy) received_copy = state->received;
+        if (got_copy)
+            received_copy = state->received;
     }
 
     spdlog::debug("[FilamentSlotOverrideStore:{}] load_blocking: got={} done={} "
                   "received_type={} received_size={}",
                   backend_id_, got_copy, done_copy,
-                  got_copy ? (received_copy.is_object() ? "object"
-                              : received_copy.is_null() ? "null"
-                              : received_copy.is_array() ? "array" : "other")
+                  got_copy ? (received_copy.is_object()  ? "object"
+                              : received_copy.is_null()  ? "null"
+                              : received_copy.is_array() ? "array"
+                                                         : "other")
                            : "n/a",
                   got_copy && received_copy.is_object() ? received_copy.size() : 0u);
 
@@ -721,15 +743,16 @@ std::unordered_map<int, FilamentSlotOverride> FilamentSlotOverrideStore::load_bl
                       backend_id_, cached.size());
         return cached;
     }
-    if (!received_copy.is_object()) return result;
+    if (!received_copy.is_object())
+        return result;
 
     for (auto it = received_copy.begin(); it != received_copy.end(); ++it) {
         const std::string& key = it.key();
         // Only consider lane-prefixed keys (AFC convention). Ignore any
         // unrelated data that may live in the lane_data namespace.
         if (key.rfind("lane", 0) != 0) {
-            spdlog::debug("[FilamentSlotOverrideStore:{}] skipping non-lane key: {}",
-                          backend_id_, key);
+            spdlog::debug("[FilamentSlotOverrideStore:{}] skipping non-lane key: {}", backend_id_,
+                          key);
             continue;
         }
         auto parsed = from_lane_data_record(it.value());
@@ -756,24 +779,25 @@ std::unordered_map<int, FilamentSlotOverride> FilamentSlotOverrideStore::load_bl
     // fallback branch above we explicitly do NOT migrate — a transient
     // network blip should not attempt destructive namespace moves.
     if (result.empty() && (backend_id_ == "ace" || backend_id_ == "cfs")) {
-        auto migrated = try_migrate_legacy(api_, backend_id_, load_timeout_,
-                                           cache_dir_effective());
-        if (!migrated.empty()) return migrated;
+        auto migrated = try_migrate_legacy(api_, backend_id_, load_timeout_, cache_dir_effective());
+        if (!migrated.empty())
+            return migrated;
     }
     return result;
 }
 
-void FilamentSlotOverrideStore::save_async(int slot_index,
-                                           const FilamentSlotOverride& ovr,
+void FilamentSlotOverrideStore::save_async(int slot_index, const FilamentSlotOverride& ovr,
                                            SaveCallback cb) {
     if (!api_) {
-        if (cb) cb(false, "no API");
+        if (cb)
+            cb(false, "no API");
         return;
     }
     // Reject negative slot indices symmetrically with from_lane_data_record's
     // rejection on load (matches OrcaSlicer's MoonrakerPrinterAgent.cpp:796).
     if (slot_index < 0) {
-        if (cb) cb(false, "invalid slot_index");
+        if (cb)
+            cb(false, "invalid slot_index");
         return;
     }
 
@@ -798,14 +822,16 @@ void FilamentSlotOverrideStore::save_async(int slot_index,
     const std::string backend_id_copy = backend_id_;
     const std::filesystem::path cache_path_copy = cache_path();
 
-    api_->database_post_item(namespace_, key, record,
+    api_->database_post_item(
+        namespace_, key, record,
         [cb, cache_path_copy, backend_id_copy, slot_index, stamped]() {
             // MR DB write succeeded — refresh our local read-cache. Errors in
             // write_cache_slot are logged at warn and do NOT affect the user
             // callback: the DB is the source of truth, and a cache write
             // failure must not pretend the save failed.
             write_cache_slot(cache_path_copy, backend_id_copy, slot_index, &stamped);
-            if (cb) cb(true, "");
+            if (cb)
+                cb(true, "");
         },
         [cb, backend_id_copy, key](const MoonrakerError& err) {
             // Save failures are user-visible (unlike namespace-missing on load,
@@ -813,19 +839,22 @@ void FilamentSlotOverrideStore::save_async(int slot_index,
             // failures in the logs.
             spdlog::warn("[FilamentSlotOverrideStore:{}] save failed for key {}: {}",
                          backend_id_copy, key, err.message);
-            if (cb) cb(false, err.message);
+            if (cb)
+                cb(false, err.message);
         });
 }
 
 void FilamentSlotOverrideStore::clear_async(int slot_index, SaveCallback cb) {
     if (!api_) {
-        if (cb) cb(false, "no API");
+        if (cb)
+            cb(false, "no API");
         return;
     }
     // Reject negative slot indices symmetrically with save_async and
     // from_lane_data_record (matches OrcaSlicer's MoonrakerPrinterAgent.cpp:796).
     if (slot_index < 0) {
-        if (cb) cb(false, "invalid slot_index");
+        if (cb)
+            cb(false, "invalid slot_index");
         return;
     }
 
@@ -839,14 +868,16 @@ void FilamentSlotOverrideStore::clear_async(int slot_index, SaveCallback cb) {
     const std::string backend_id_copy = backend_id_;
     const std::filesystem::path cache_path_copy = cache_path();
 
-    api_->database_delete_item(namespace_, key,
+    api_->database_delete_item(
+        namespace_, key,
         [cb, cache_path_copy, backend_id_copy, slot_index]() {
             // MR DB delete succeeded — erase the slot from our read-cache too.
             // Passing nullptr is the documented "erase this slot" signal.
             // Cache errors are logged at warn but never reported to cb: the DB
             // is the source of truth and we don't lie about the clear result.
             write_cache_slot(cache_path_copy, backend_id_copy, slot_index, nullptr);
-            if (cb) cb(true, "");
+            if (cb)
+                cb(true, "");
         },
         [cb, backend_id_copy, key](const MoonrakerError& err) {
             // Clear failures are user-visible — warn so ops can spot persistent
@@ -854,8 +885,136 @@ void FilamentSlotOverrideStore::clear_async(int slot_index, SaveCallback cb) {
             // real api layer, so reaching this lambda means a real failure.)
             spdlog::warn("[FilamentSlotOverrideStore:{}] clear failed for key {}: {}",
                          backend_id_copy, key, err.message);
-            if (cb) cb(false, err.message);
+            if (cb)
+                cb(false, err.message);
         });
+}
+
+// =============================================================================
+// Seated-lane persistence
+// =============================================================================
+//
+// The "seated" key is a sibling scalar in the lane_data namespace holding the
+// 0-based index of the lane currently loaded to the toolhead. It is NOT
+// per-lane, so it does not go through lane_key()/to_lane_data_record() and is
+// NOT mirrored into the local per-slot read-cache. The value on disk is a
+// plain JSON integer.
+
+void FilamentSlotOverrideStore::save_seated_slot_async(int slot_index, SaveCallback cb) {
+    if (!api_) {
+        if (cb)
+            cb(false, "no API");
+        return;
+    }
+    // Reject negative indices symmetrically with save_async — a negative seated
+    // index is never a valid lane. "Nothing seated" goes through
+    // clear_seated_slot_async, not a sentinel index.
+    if (slot_index < 0) {
+        if (cb)
+            cb(false, "invalid slot_index");
+        return;
+    }
+
+    // Lifetime safety mirrors save_async: Moonraker's request tracker can fire
+    // the error callback ~60s after this returns, well after the store may have
+    // been destroyed. Value-capture only; no `this`.
+    const std::string backend_id_copy = backend_id_;
+
+    api_->database_post_item(
+        namespace_, "seated", nlohmann::json(slot_index),
+        [cb]() {
+            if (cb)
+                cb(true, "");
+        },
+        [cb, backend_id_copy](const MoonrakerError& err) {
+            spdlog::warn("[FilamentSlotOverrideStore:{}] save seated failed: {}", backend_id_copy,
+                         err.message);
+            if (cb)
+                cb(false, err.message);
+        });
+}
+
+void FilamentSlotOverrideStore::clear_seated_slot_async(SaveCallback cb) {
+    if (!api_) {
+        if (cb)
+            cb(false, "no API");
+        return;
+    }
+
+    // Value-capture only; no `this` (see save_seated_slot_async).
+    const std::string backend_id_copy = backend_id_;
+
+    api_->database_delete_item(
+        namespace_, "seated",
+        [cb]() {
+            if (cb)
+                cb(true, "");
+        },
+        [cb, backend_id_copy](const MoonrakerError& err) {
+            spdlog::warn("[FilamentSlotOverrideStore:{}] clear seated failed: {}", backend_id_copy,
+                         err.message);
+            if (cb)
+                cb(false, err.message);
+        });
+}
+
+std::optional<int> FilamentSlotOverrideStore::load_seated_slot_blocking() {
+    if (!api_)
+        return std::nullopt;
+
+    // Same shared_ptr<SyncState> + cv.wait_for discipline as load_blocking:
+    // a callback firing after our local timeout must not touch a freed stack
+    // frame, so the state is heap-owned and captured by value into the lambdas.
+    struct SyncState {
+        std::mutex m;
+        std::condition_variable cv;
+        bool done{false};
+        bool got{false};
+        nlohmann::json received;
+    };
+    auto state = std::make_shared<SyncState>();
+    const std::string backend_id_copy = backend_id_;
+    const std::string namespace_copy = namespace_;
+
+    api_->database_get_item(
+        namespace_, "seated",
+        [state](const nlohmann::json& value) {
+            std::lock_guard<std::mutex> lk(state->m);
+            state->received = value;
+            state->got = true;
+            state->done = true;
+            state->cv.notify_one();
+        },
+        [state, backend_id_copy, namespace_copy](const MoonrakerError& err) {
+            // Missing key is the common case (nothing seated yet) — not an error
+            // worth more than a debug line.
+            spdlog::debug("[FilamentSlotOverrideStore:{}] database_get_item({}:seated) failed: {}",
+                          backend_id_copy, namespace_copy, err.message);
+            std::lock_guard<std::mutex> lk(state->m);
+            state->done = true;
+            state->cv.notify_one();
+        });
+
+    bool got_copy;
+    nlohmann::json received_copy;
+    {
+        std::unique_lock<std::mutex> lk(state->m);
+        state->cv.wait_for(lk, load_timeout_, [state] { return state->done; });
+        got_copy = state->got;
+        if (got_copy)
+            received_copy = state->received;
+    }
+
+    if (!got_copy)
+        return std::nullopt;
+    // Must be a plain non-negative integer. The store doesn't know NUM_PORTS,
+    // so the caller is responsible for the upper-bound range check.
+    if (!received_copy.is_number_integer())
+        return std::nullopt;
+    int idx = received_copy.get<int>();
+    if (idx < 0)
+        return std::nullopt;
+    return idx;
 }
 
 // =============================================================================
@@ -883,50 +1042,49 @@ bool mirror_firmware_to_lane_data(FilamentSlotOverrideStore* store,
     bool changed = false;
 
     switch (policy) {
-        case MirrorPolicy::OverwriteAlways: {
-            // IFS / Snapmaker-extended: user edits CAN reach firmware (IFS:
-            // direct Adventurer5M.json write; Snapmaker paxx12: POST endpoint).
-            // In steady state firmware-truth and user-truth converge, so this
-            // policy bootstraps an empty override AND catches genuine external
-            // edits (Mainsail console, native LCD, etc.).
-            //
-            // BUT user-locked fields are NEVER overwritten — set_slot_info
-            // (persist=true) tags the fields it wrote, and that tag survives
-            // restart via lane_data. Without this guard, a stale firmware
-            // re-emission (AD5X post-print FFMInfo revert, #965) would clobber
-            // the user's choice. Auto-mirror writes leave the locks false so
-            // subsequent firmware changes still propagate; users restore the
-            // auto-track behavior on a previously-locked slot by calling
-            // clear_slot_override.
-            if (!ovr.user_locked_color &&
-                (!ovr.color_set || ovr.color_rgb != firmware_color)) {
-                ovr.color_rgb = firmware_color;
-                ovr.color_set = true;
-                changed = true;
-            }
-            if (!ovr.user_locked_material && ovr.material != firmware_material) {
-                ovr.material = firmware_material;
-                changed = true;
-            }
-            break;
+    case MirrorPolicy::OverwriteAlways: {
+        // IFS / Snapmaker-extended: user edits CAN reach firmware (IFS:
+        // direct Adventurer5M.json write; Snapmaker paxx12: POST endpoint).
+        // In steady state firmware-truth and user-truth converge, so this
+        // policy bootstraps an empty override AND catches genuine external
+        // edits (Mainsail console, native LCD, etc.).
+        //
+        // BUT user-locked fields are NEVER overwritten — set_slot_info
+        // (persist=true) tags the fields it wrote, and that tag survives
+        // restart via lane_data. Without this guard, a stale firmware
+        // re-emission (AD5X post-print FFMInfo revert, #965) would clobber
+        // the user's choice. Auto-mirror writes leave the locks false so
+        // subsequent firmware changes still propagate; users restore the
+        // auto-track behavior on a previously-locked slot by calling
+        // clear_slot_override.
+        if (!ovr.user_locked_color && (!ovr.color_set || ovr.color_rgb != firmware_color)) {
+            ovr.color_rgb = firmware_color;
+            ovr.color_set = true;
+            changed = true;
         }
-        case MirrorPolicy::FillUnsetOnly: {
-            // CFS / Snapmaker: user edits do NOT propagate to firmware (RFID
-            // is hardware-truth). Only fill fields the user hasn't explicitly
-            // set, otherwise every status poll would erase the user's choice.
-            // The escape hatch is clear_slot_override, which erases the entry
-            // and lets auto-mirror take over again.
-            if (!ovr.color_set) {
-                ovr.color_rgb = firmware_color;
-                ovr.color_set = true;
-                changed = true;
-            }
-            if (ovr.material.empty() && !firmware_material.empty()) {
-                ovr.material = firmware_material;
-                changed = true;
-            }
-            break;
+        if (!ovr.user_locked_material && ovr.material != firmware_material) {
+            ovr.material = firmware_material;
+            changed = true;
         }
+        break;
+    }
+    case MirrorPolicy::FillUnsetOnly: {
+        // CFS / Snapmaker: user edits do NOT propagate to firmware (RFID
+        // is hardware-truth). Only fill fields the user hasn't explicitly
+        // set, otherwise every status poll would erase the user's choice.
+        // The escape hatch is clear_slot_override, which erases the entry
+        // and lets auto-mirror take over again.
+        if (!ovr.color_set) {
+            ovr.color_rgb = firmware_color;
+            ovr.color_set = true;
+            changed = true;
+        }
+        if (ovr.material.empty() && !firmware_material.empty()) {
+            ovr.material = firmware_material;
+            changed = true;
+        }
+        break;
+    }
     }
 
     if (!changed)
@@ -950,4 +1108,4 @@ bool mirror_firmware_to_lane_data(FilamentSlotOverrideStore* store,
     return true;
 }
 
-}  // namespace helix::ams
+} // namespace helix::ams

@@ -46,6 +46,6 @@ void SpaghettiDetectionModal::on_hide() {
     // detection. Deferred via async_call so we never delete `this` mid-event.
     // Mirrors BufferStatusModal::on_hide() — the proven-safe pattern.
     auto* self = this;
-    helix::ui::async_call(
-        [](void* data) { delete static_cast<SpaghettiDetectionModal*>(data); }, self);
+    helix::ui::async_call([](void* data) { delete static_cast<SpaghettiDetectionModal*>(data); },
+                          self);
 }

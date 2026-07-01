@@ -13,12 +13,12 @@
  * @see docs/LV_SIZE_CONTENT_GUIDE.md
  */
 
+#include "../ui_test_utils.h"
 #include "lvgl/lvgl.h"
 
 #include <spdlog/spdlog.h>
 
 #include "../catch_amalgamated.hpp"
-#include "../ui_test_utils.h"
 
 // Global LVGL initialization (only once per test run)
 static bool g_lvgl_initialized = false;

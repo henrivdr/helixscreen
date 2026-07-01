@@ -52,8 +52,9 @@
  * | show_target    | bool    | "false" | Show "/ target" portion (opt-in)                 |
  * | bind_current   | subject | -       | Subject name for current temp (decidegrees×10) |
  * | bind_target    | subject | -       | Subject name for target temp (decidegrees×10)  |
- * | bind_mode      | subject | -       | Subject name for ChamberMode int (cooling-ceiling color in Maintaining) |
- * | event_cb       | string  | ""      | Click callback name (makes widget clickable)     |
+ * | bind_mode      | subject | -       | Subject name for ChamberMode int (cooling-ceiling color in
+ * Maintaining) | | event_cb       | string  | ""      | Click callback name (makes widget
+ * clickable)     |
  *
  * @note When show_target="true" and target=0, displays "--" instead of "0"
  *

@@ -373,8 +373,7 @@ TEST_CASE_METHOD(NavbarIconTestFixture, "Overlay registration accepts IPanelLife
 
 #include "../test_helpers/update_queue_test_access.h"
 
-TEST_CASE_METHOD(NavbarIconTestFixture,
-                 "Out-of-band widget deletion scrubs panel_stack_",
+TEST_CASE_METHOD(NavbarIconTestFixture, "Out-of-band widget deletion scrubs panel_stack_",
                  "[navigation][overlay][l081]") {
     auto& nav = NavigationManager::instance();
 
@@ -500,8 +499,7 @@ TEST_CASE_METHOD(NavbarIconTestFixture,
 // Production never pushes onto an empty stack (slot 0 holds the active panel),
 // so this guards a latent path rather than a reachable user flow.
 
-TEST_CASE_METHOD(NavbarIconTestFixture,
-                 "push_overlay onto empty stack does not deref back()",
+TEST_CASE_METHOD(NavbarIconTestFixture, "push_overlay onto empty stack does not deref back()",
                  "[navigation][overlay]") {
     auto& nav = NavigationManager::instance();
 

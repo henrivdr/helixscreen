@@ -22,8 +22,12 @@ class BufferStatusModal : public Modal {
     BufferStatusModal();
     ~BufferStatusModal() override;
 
-    const char* get_name() const override { return "Buffer Status"; }
-    const char* component_name() const override { return "buffer_status_modal"; }
+    const char* get_name() const override {
+        return "Buffer Status";
+    }
+    const char* component_name() const override {
+        return "buffer_status_modal";
+    }
 
     /// Convenience: create modal, populate from info, and show
     static void show_for(const AmsSystemInfo& info, int effective_unit);

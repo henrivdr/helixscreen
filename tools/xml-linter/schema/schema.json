@@ -419,6 +419,9 @@
         "placeholder_text": {
           "type": "string"
         },
+        "placeholder_tag": {
+          "type": "string"
+        },
         "one_line": {
           "type": "bool"
         },
@@ -1588,10 +1591,6 @@
     },
     "notification_badge": {
       "attributes": {
-        "variant": {
-          "type": "enum",
-          "enum": "ui_variant"
-        },
         "text": {
           "type": "string"
         },
@@ -1638,6 +1637,9 @@
           "type": "string"
         },
         "bind_target": {
+          "type": "string"
+        },
+        "bind_mode": {
           "type": "string"
         },
         "event_cb": {
@@ -1759,6 +1761,9 @@
           "type": "string"
         },
         "options": {
+          "type": "string"
+        },
+        "options_tag": {
           "type": "string"
         },
         "text_format": {
@@ -3193,8 +3198,6 @@
     "preset_swatch_size",
     "preview_offset_y",
     "primary",
-    "print_column_width",
-    "printer_column_width",
     "row_height",
     "screen_bg",
     "screw_indicator_height",

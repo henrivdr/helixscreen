@@ -1,33 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "qr_decoder.h"
 
+#include "quirc/lib/quirc.h"
+
+#include <spdlog/spdlog.h>
+
 #include <climits>
 #include <cstdlib>
 #include <cstring>
 
-#include <spdlog/spdlog.h>
-
-#include "quirc/lib/quirc.h"
-
 namespace helix {
 
-QrDecoder::QrDecoder()
-{
+QrDecoder::QrDecoder() {
     qr_ = quirc_new();
     if (!qr_) {
         spdlog::error("QrDecoder: failed to allocate quirc context");
     }
 }
 
-QrDecoder::~QrDecoder()
-{
+QrDecoder::~QrDecoder() {
     if (qr_) {
         quirc_destroy(qr_);
     }
 }
 
-QrDecodeResult QrDecoder::decode(const uint8_t* gray_data, int width, int height)
-{
+QrDecodeResult QrDecoder::decode(const uint8_t* gray_data, int width, int height) {
     QrDecodeResult result;
 
     if (!qr_ || !gray_data || width <= 0 || height <= 0) {
@@ -84,8 +81,7 @@ QrDecodeResult QrDecoder::decode(const uint8_t* gray_data, int width, int height
 }
 
 // Safe string-to-int conversion. Returns -1 on overflow or invalid input.
-static int safe_parse_int(const std::string& s)
-{
+static int safe_parse_int(const std::string& s) {
     if (s.empty() || s.find_first_not_of("0123456789") != std::string::npos) {
         return -1;
     }
@@ -98,8 +94,7 @@ static int safe_parse_int(const std::string& s)
     return static_cast<int>(val);
 }
 
-int QrDecoder::parse_spoolman_id(const std::string& text)
-{
+int QrDecoder::parse_spoolman_id(const std::string& text) {
     if (text.empty()) {
         return -1;
     }
@@ -109,8 +104,10 @@ int QrDecoder::parse_spoolman_id(const std::string& text)
     // '+' arrives as '=' and ':' arrives as ';'.
     std::string normalized = text;
     for (auto& c : normalized) {
-        if (c == '=') c = '+';
-        if (c == ';') c = ':';
+        if (c == '=')
+            c = '+';
+        if (c == ';')
+            c = ':';
     }
 
     if (normalized != text) {
@@ -127,8 +124,7 @@ int QrDecoder::parse_spoolman_id(const std::string& text)
     // Format: "SM:SPOOL=<id>" (note: '=' is intentional here, not normalized)
     const std::string prefix_sm = "SM:SPOOL=";
     // Check original text first (camera QR reads correctly)
-    if (text.size() > prefix_sm.size() &&
-        text.compare(0, prefix_sm.size(), prefix_sm) == 0) {
+    if (text.size() > prefix_sm.size() && text.compare(0, prefix_sm.size(), prefix_sm) == 0) {
         return safe_parse_int(text.substr(prefix_sm.size()));
     }
     // Also check normalized (scanner may send "SM:SPOOL+<id>")
@@ -145,19 +141,23 @@ int QrDecoder::parse_spoolman_id(const std::string& text)
     //   ".../spool/show/<id>/" — trailing slash variant
     for (const auto& spool_path : {"/spool/show/", "/spool/"}) {
         auto pos = text.rfind(spool_path);
-        if (pos == std::string::npos) continue;
+        if (pos == std::string::npos)
+            continue;
         auto id_start = pos + std::strlen(spool_path);
-        if (id_start >= text.size()) continue;
+        if (id_start >= text.size())
+            continue;
         auto id_end = text.find('/', id_start);
         std::string id_str = (id_end != std::string::npos)
-            ? text.substr(id_start, id_end - id_start)
-            : text.substr(id_start);
+                                 ? text.substr(id_start, id_end - id_start)
+                                 : text.substr(id_start);
         int result = safe_parse_int(id_str);
-        if (result >= 0) return result;
+        if (result >= 0)
+            return result;
     }
 
     spdlog::debug("QrDecoder: no Spoolman pattern matched for '{}' "
-                  "(tried web+spoolman:, SM:SPOOL=, /spool/ URL)", text);
+                  "(tried web+spoolman:, SM:SPOOL=, /spool/ URL)",
+                  text);
     return -1;
 }
 

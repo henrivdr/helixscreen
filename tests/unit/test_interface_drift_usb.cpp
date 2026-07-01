@@ -3,8 +3,9 @@
 //
 // Compile-only drift protection for UsbBackend.
 
-#include "../catch_amalgamated.hpp"
 #include "usb_backend.h"
+
+#include "../catch_amalgamated.hpp"
 
 #ifdef HELIX_ENABLE_MOCKS
 #include "usb_backend_mock.h"

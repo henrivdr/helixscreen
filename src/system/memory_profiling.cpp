@@ -118,7 +118,7 @@ void MemoryProfiler::init(bool enable_periodic) {
     }
 
     // Install SIGUSR1 handler for on-demand snapshots
-    struct sigaction sa{};
+    struct sigaction sa {};
     sa.sa_handler = sigusr1_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;

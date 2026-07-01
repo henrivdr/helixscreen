@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "touch_calibration_wrapper.h"
+
 #include "config.h"
 
 #include <spdlog/spdlog.h>
@@ -83,4 +84,4 @@ void install_calibration_wrapper(lv_indev_t* indev, CalibrationContext& ctx,
     lv_indev_set_read_cb(indev, helix::calibrated_read_cb);
 }
 
-}  // namespace helix
+} // namespace helix

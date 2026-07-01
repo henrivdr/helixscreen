@@ -10,12 +10,11 @@
 #include "printer_state.h"
 
 #include <filesystem>
+#include <json.hpp> // nlohmann/json from libhv
 #include <memory>
 #include <optional>
 #include <string>
 #include <unistd.h>
-
-#include <json.hpp> // nlohmann/json from libhv
 
 #include "../catch_amalgamated.hpp"
 
@@ -42,8 +41,8 @@ class AceTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.overrides_[slot_index] = ovr;
     }
-    static std::optional<helix::ams::FilamentSlotOverride>
-    get_override(const AmsBackendAce& b, int slot_index) {
+    static std::optional<helix::ams::FilamentSlotOverride> get_override(const AmsBackendAce& b,
+                                                                        int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         auto it = b.overrides_.find(slot_index);
         if (it == b.overrides_.end())
@@ -90,11 +89,9 @@ json make_ace_slot_payload(const std::string& status_str, uint32_t color_rgb,
         {"model", "ACE Pro"},
         {"firmware", "1.2.3"},
         {"status", "ready"},
-        {"slots", json::array({
-            json{{"status", status_str},
-                 {"color", json::array({r, g, b})},
-                 {"type", material_str}}
-        })},
+        {"slots",
+         json::array({json{
+             {"status", status_str}, {"color", json::array({r, g, b})}, {"type", material_str}}})},
     };
 }
 
@@ -110,22 +107,35 @@ json make_native_filament_hub_payload() {
         {"fan_speed", 0},
         {"feed_assist_count", 0},
         {"cont_assist_time", 0.0},
-        {"dryer", json{
-            {"status", "drying"},
-            {"target_temp", 55},
-            {"duration", 240},
-            {"remain_time", 180},
-        }},
+        {"dryer",
+         json{
+             {"status", "drying"},
+             {"target_temp", 55},
+             {"duration", 240},
+             {"remain_time", 180},
+         }},
         {"slots", json::array({
-            json{{"index", 0}, {"status", "empty"}, {"sku", ""}, {"type", ""},
-                 {"color", json::array({0, 0, 0})}},
-            json{{"index", 1}, {"status", "ready"}, {"sku", ""}, {"type", "PLA"},
-                 {"color", json::array({255, 85, 0})}},
-            json{{"index", 2}, {"status", "empty"}, {"sku", ""}, {"type", ""},
-                 {"color", json::array({0, 0, 0})}},
-            json{{"index", 3}, {"status", "empty"}, {"sku", ""}, {"type", ""},
-                 {"color", json::array({0, 0, 0})}},
-        })},
+                      json{{"index", 0},
+                           {"status", "empty"},
+                           {"sku", ""},
+                           {"type", ""},
+                           {"color", json::array({0, 0, 0})}},
+                      json{{"index", 1},
+                           {"status", "ready"},
+                           {"sku", ""},
+                           {"type", "PLA"},
+                           {"color", json::array({255, 85, 0})}},
+                      json{{"index", 2},
+                           {"status", "empty"},
+                           {"sku", ""},
+                           {"type", ""},
+                           {"color", json::array({0, 0, 0})}},
+                      json{{"index", 3},
+                           {"status", "empty"},
+                           {"sku", ""},
+                           {"type", ""},
+                           {"color", json::array({0, 0, 0})}},
+                  })},
         {"current_filament", "0-1"},
     };
 }
@@ -622,8 +632,7 @@ TEST_CASE("ACE override loaded at init is applied over firmware data",
     AceTestAccess::seed_override(backend, 0, ovr);
 
     // Firmware reports slot 0 with DIFFERENT color (green) and material (ABS).
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("available", 0x00FF00, "ABS"));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0x00FF00, "ABS"));
 
     auto info = backend.get_slot_info(0);
     CHECK(info.brand == "Polymaker");
@@ -651,13 +660,14 @@ TEST_CASE("ACE migrates from helix-screen:ace_slot_overrides on first startup",
     // Seed legacy namespace with a PLA Orange override on slot 0.
     // lane_data is untouched -> forces migration.
     json legacy = {
-        {"0", {
-            {"brand", "Polymaker"},
-            {"material", "PLA"},
-            {"color_rgb", 0xFF5500},
-            {"spoolman_id", 42},
-            {"spool_name", "PolyLite Orange"},
-        }},
+        {"0",
+         {
+             {"brand", "Polymaker"},
+             {"material", "PLA"},
+             {"color_rgb", 0xFF5500},
+             {"spoolman_id", 42},
+             {"spool_name", "PolyLite Orange"},
+         }},
     };
     api.mock_set_db_value("helix-screen", "ace_slot_overrides", legacy);
 
@@ -699,14 +709,13 @@ TEST_CASE("ACE set_slot_info(persist=true) writes to store",
     AceTestAccess::inject_override_store(backend, std::move(store));
 
     // Prime the backend with 4 slots so set_slot_info's index check passes.
-    AceTestAccess::parse_ace(backend,
-        json{{"model", "ACE Pro"},
-             {"slots", json::array({
-                 json{{"status", "empty"}},
-                 json{{"status", "empty"}},
-                 json{{"status", "empty"}},
-                 json{{"status", "empty"}},
-             })}});
+    AceTestAccess::parse_ace(backend, json{{"model", "ACE Pro"},
+                                           {"slots", json::array({
+                                                         json{{"status", "empty"}},
+                                                         json{{"status", "empty"}},
+                                                         json{{"status", "empty"}},
+                                                         json{{"status", "empty"}},
+                                                     })}});
 
     SlotInfo edit;
     edit.brand = "Polymaker";
@@ -752,14 +761,13 @@ TEST_CASE("ACE set_slot_info(persist=false) does NOT write to store",
     FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
     AceTestAccess::inject_override_store(backend, std::move(store));
 
-    AceTestAccess::parse_ace(backend,
-        json{{"model", "ACE Pro"},
-             {"slots", json::array({
-                 json{{"status", "empty"}},
-                 json{{"status", "empty"}},
-                 json{{"status", "empty"}},
-                 json{{"status", "empty"}},
-             })}});
+    AceTestAccess::parse_ace(backend, json{{"model", "ACE Pro"},
+                                           {"slots", json::array({
+                                                         json{{"status", "empty"}},
+                                                         json{{"status", "empty"}},
+                                                         json{{"status", "empty"}},
+                                                         json{{"status", "empty"}},
+                                                     })}});
 
     SlotInfo edit;
     edit.brand = "Draft";
@@ -795,11 +803,9 @@ TEST_CASE("ACE slot transition empty -> present clears override",
 
     // Seed override AND lane_data entry so we can verify clear_async really
     // deletes it from the mock Moonraker DB.
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"},
-                               {"spool_id", 42},
-                               {"material", "PLA"},
-                               {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        json{{"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -811,16 +817,14 @@ TEST_CASE("ACE slot transition empty -> present clears override",
 
     // First parse: slot is EMPTY. prev_slot_status_ is unset (baseline UNKNOWN);
     // UNKNOWN -> EMPTY is NOT a swap (curr is not "present"), so no clear.
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("empty", 0x000000, ""));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("empty", 0x000000, ""));
     REQUIRE(AceTestAccess::get_override(backend, 0).has_value());
     REQUIRE(!api.mock_get_db_value("lane_data", "lane1").is_null());
 
     // Second parse: slot becomes AVAILABLE with a different color — EMPTY ->
     // AVAILABLE is the swap signal. Override MUST be cleared (in-memory and
     // in MR DB).
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("available", 0x0055FF, "PETG"));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0x0055FF, "PETG"));
 
     CHECK_FALSE(AceTestAccess::get_override(backend, 0).has_value());
     CHECK(api.mock_get_db_value("lane_data", "lane1").is_null());
@@ -831,8 +835,8 @@ TEST_CASE("ACE slot transition empty -> present clears override",
     CHECK(info.brand.empty());
     CHECK(info.spool_name.empty());
     CHECK(info.spoolman_id == 0);
-    CHECK(info.color_rgb == 0x0055FFu);  // new firmware color flows through
-    CHECK(info.material == "PETG");      // new firmware material
+    CHECK(info.color_rgb == 0x0055FFu); // new firmware color flows through
+    CHECK(info.material == "PETG");     // new firmware material
 }
 
 TEST_CASE("ACE slot transition loaded -> empty does NOT clear override",
@@ -860,14 +864,12 @@ TEST_CASE("ACE slot transition loaded -> empty does NOT clear override",
     // First parse: slot LOADED. First observation is a BASELINE and never
     // fires a clear (caller skips the helper when prev_slot_status_ has no
     // entry). Override survives intact.
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("loaded", 0xFF5500, "PLA"));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("loaded", 0xFF5500, "PLA"));
     REQUIRE(AceTestAccess::get_override(backend, 0).has_value());
 
     // Second parse: LOADED -> EMPTY (user unloaded). Must NOT clear — user
     // may still reinsert the same spool.
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("empty", 0x000000, ""));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("empty", 0x000000, ""));
     CHECK(AceTestAccess::get_override(backend, 0).has_value());
 
     // Third parse: EMPTY -> LOADED (user reinserts SAME spool). This IS a
@@ -876,8 +878,7 @@ TEST_CASE("ACE slot transition loaded -> empty does NOT clear override",
     // spool." Documented limitation: ACE users who unload and reload the
     // same spool will lose their override. Acceptable tradeoff — far less
     // common than the new-spool path the heuristic is built for.
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("loaded", 0xFF5500, "PLA"));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("loaded", 0xFF5500, "PLA"));
     CHECK_FALSE(AceTestAccess::get_override(backend, 0).has_value());
 }
 
@@ -896,8 +897,7 @@ TEST_CASE("ACE partial override only replaces specified fields",
     ovr.brand = "Polymaker";
     AceTestAccess::seed_override(backend, 0, ovr);
 
-    AceTestAccess::parse_ace(backend,
-        make_ace_slot_payload("available", 0xFF5500, "PLA"));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0xFF5500, "PLA"));
 
     auto info = backend.get_slot_info(0);
     CHECK(info.brand == "Polymaker");        // override wins
@@ -927,11 +927,9 @@ TEST_CASE("ACE clear_slot_override erases in-memory override and MR DB entry",
 
     // Seed both halves of the override so the clear has something to remove
     // at each layer (in-memory + Moonraker lane_data).
-    api.mock_set_db_value("lane_data", "lane1",
-                          json{{"vendor", "Polymaker"},
-                               {"spool_id", 42},
-                               {"material", "PLA"},
-                               {"color", "#FF5500"}});
+    api.mock_set_db_value(
+        "lane_data", "lane1",
+        json{{"vendor", "Polymaker"}, {"spool_id", 42}, {"material", "PLA"}, {"color", "#FF5500"}});
 
     helix::ams::FilamentSlotOverride ovr;
     ovr.brand = "Polymaker";
@@ -1043,8 +1041,7 @@ TEST_CASE("ACE parses native filament_hub schema (slots, dryer, current_filament
     CHECK(info.filament_loaded == true);
 }
 
-TEST_CASE("ACE status-update path prefers filament_hub over ace key",
-          "[ams][ace][native][parse]") {
+TEST_CASE("ACE status-update path prefers filament_hub over ace key", "[ams][ace][native][parse]") {
     AmsBackendAceTestHelper helper;
 
     // Notification envelope: {"params": [ {status...}, timestamp ]}. The status
@@ -1074,11 +1071,11 @@ TEST_CASE("ACE status-update path falls back to ace key when filament_hub absent
     json ace_obj = json{
         {"model", "ACE Pro"},
         {"status", "ready"},
-        {"slots", json::array({
-            json{{"status", "available"}, {"type", "PETG"},
-                 {"color", json::array({0, 85, 255})}},
-            json{{"status", "empty"}},
-        })},
+        {"slots",
+         json::array({
+             json{{"status", "available"}, {"type", "PETG"}, {"color", json::array({0, 85, 255})}},
+             json{{"status", "empty"}},
+         })},
     };
 
     json status = json::object();

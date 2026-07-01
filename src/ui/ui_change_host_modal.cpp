@@ -200,12 +200,10 @@ void ChangeHostModal::handle_test_connection() {
     int result = client->connect(
         ws_url.c_str(),
         [this, token]() {
-            token.defer("ChangeHostModal::dispatch_test_success",
-                        [this]() { on_test_success(); });
+            token.defer("ChangeHostModal::dispatch_test_success", [this]() { on_test_success(); });
         },
         [this, token]() {
-            token.defer("ChangeHostModal::dispatch_test_failure",
-                        [this]() { on_test_failure(); });
+            token.defer("ChangeHostModal::dispatch_test_failure", [this]() { on_test_failure(); });
         });
 
     client->setReconnect(nullptr);

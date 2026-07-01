@@ -118,15 +118,11 @@ TouchCalibrationOverlay::TouchCalibrationOverlay() {
     panel_->set_timeout_callback([this]() {
         spdlog::info("[{}] Calibration timeout - reverting to previous", get_name());
 
-        // Restore backup calibration and disable affine for next capture attempt
-        DisplayManager* dm = DisplayManager::instance();
-        if (dm) {
-            if (has_backup_) {
-                dm->apply_touch_calibration(backup_calibration_);
-            }
-            dm->disable_affine_calibration();
+        // Revert to the pre-session calibration and disable affine for the next
+        // capture attempt.
+        if (DisplayManager* dm = DisplayManager::instance()) {
+            session_.revert_for_retry(*dm);
         }
-        has_backup_ = false;
 
         // Reset accept button text
         snprintf(accept_text_buffer_, sizeof(accept_text_buffer_), "Accept");
@@ -166,7 +162,8 @@ TouchCalibrationOverlay::TouchCalibrationOverlay() {
                          "(new cal NOT applied until accept)",
                          get_name());
         }
-        has_backup_ = false;
+        // Keep the session backup armed: the user can still Retry or back out of
+        // VERIFY, and either way must revert to the pre-session calibration.
         update_state_subject();
         update_instruction_text();
         update_crosshair_position();
@@ -176,15 +173,10 @@ TouchCalibrationOverlay::TouchCalibrationOverlay() {
     panel_->set_fast_revert_callback([this]() {
         spdlog::warn("[{}] Fast-revert: broken matrix detected, reverting", get_name());
 
-        // Restore backup calibration and disable affine for retry
-        DisplayManager* dm = DisplayManager::instance();
-        if (dm) {
-            if (has_backup_) {
-                dm->apply_touch_calibration(backup_calibration_);
-            }
-            dm->disable_affine_calibration();
+        // Revert to the pre-session calibration and disable affine for retry.
+        if (DisplayManager* dm = DisplayManager::instance()) {
+            session_.revert_for_retry(*dm);
         }
-        has_backup_ = false;
 
         panel_->retry();
 
@@ -340,10 +332,12 @@ void TouchCalibrationOverlay::show(CompletionCallback callback) {
         panel_->reset();
     }
 
-    // Disable affine calibration so we capture raw coordinates
+    // Snapshot the active calibration and disable affine so we capture raw
+    // coordinates. session_.restore() (in on_deactivate/cleanup) re-enables it
+    // however this session ends.
     DisplayManager* dm = DisplayManager::instance();
     if (dm) {
-        dm->disable_affine_calibration();
+        session_.begin_capture(*dm);
         // Suppress the global debug-touches ripple while this overlay is up —
         // it draws its own ripple, and the global one would render raw coords
         // during capture (#943).
@@ -422,8 +416,14 @@ void TouchCalibrationOverlay::on_deactivate() {
         panel_->cancel();
     }
 
-    // Re-allow the global debug-touches ripple now that the overlay is gone.
+    // Restore the pre-session calibration and re-enable the affine transform.
+    // The navigation stack calls on_deactivate() — NOT cleanup() — on a plain
+    // dismiss, so this is the path that must re-arm touch. Without it, aborting
+    // recalibration before accepting left the affine disabled until the next
+    // reboot, so touch reverted to raw/unscaled coordinates (#943).
     if (DisplayManager* dm = DisplayManager::instance()) {
+        session_.restore(*dm);
+        // Re-allow the global debug-touches ripple now that the overlay is gone.
         dm->set_touch_calibration_active(false);
     }
 
@@ -470,15 +470,12 @@ void TouchCalibrationOverlay::cleanup() {
     completion_callback_ = nullptr;
     callback_invoked_ = false;
 
-    // Restore backup calibration and re-enable affine transform
-    DisplayManager* dm = DisplayManager::instance();
-    if (dm) {
-        if (has_backup_) {
-            dm->apply_touch_calibration(backup_calibration_);
-        }
-        dm->enable_affine_calibration();
+    // Restore the pre-session calibration and re-enable the affine transform.
+    // (on_deactivate() already does this on a normal dismiss; this covers
+    // teardown/destruction paths that bypass it.)
+    if (DisplayManager* dm = DisplayManager::instance()) {
+        session_.restore(*dm);
     }
-    has_backup_ = false;
 
     spdlog::debug("[{}] Cleanup complete", get_name());
 }
@@ -531,8 +528,8 @@ void TouchCalibrationOverlay::handle_accept_clicked() {
                       get_name());
     }
 
-    // Calibration accepted - no need to restore backup
-    has_backup_ = false;
+    // Calibration accepted — keep it; teardown must not revert it.
+    session_.commit();
 
     // Reset accept button text for next calibration
     snprintf(accept_text_buffer_, sizeof(accept_text_buffer_), "Accept");
@@ -558,16 +555,10 @@ void TouchCalibrationOverlay::handle_retry_clicked() {
         return;
     }
 
-    // Restore previous calibration and disable affine for raw capture
-    DisplayManager* dm = DisplayManager::instance();
-    if (dm) {
-        if (has_backup_) {
-            dm->apply_touch_calibration(backup_calibration_);
-            spdlog::info("[{}] Restored previous calibration for retry", get_name());
-        }
-        dm->disable_affine_calibration();
+    // Revert to the pre-session calibration and disable affine for raw capture.
+    if (DisplayManager* dm = DisplayManager::instance()) {
+        session_.revert_for_retry(*dm);
     }
-    has_backup_ = false;
 
     panel_->retry();
 

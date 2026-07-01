@@ -1,0 +1,93 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Favorite-macro widget config: Macro | Appearance | Options tabs. -->
+<!-- NOTE: Backdrop created programmatically by Modal system. -->
+<component>
+  <styles>
+    <style name="tab_active" bg_opa="30" bg_color="#primary" text_color="#primary"/>
+  </styles>
+  <!-- Constant height across tabs (no per-tab jump) and full room for the Macro
+       list. Height is %-based so it fits small screens, but capped by an
+       absolute max so it doesn't grow sparse on large/hi-res panels (the list
+       scrolls, so it never needs more). The active section flex_grows to fill;
+       the macro list scrolls within it. -->
+  <view name="favorite_macro_config_modal"
+        extends="ui_dialog" width="90%" height="85%" style_max_width="600"
+        style_max_height="520" align="center" flex_flow="column"
+        style_flex_main_place="start" style_pad_gap="0">
+
+    <!-- Header: title + close. Responsive padding handled by modal_header. -->
+    <modal_header title="Customize Macro Button" title_tag="Customize Macro Button"
+                  hide_icon="true" hide_close="false" close_callback="fav_macro_config_close_cb"/>
+    <divider_horizontal/>
+
+    <!-- Tab bar -->
+    <lv_obj width="100%" height="content" style_pad_left="#space_md" style_pad_right="#space_md"
+            style_pad_top="#space_sm" style_pad_bottom="0" flex_flow="row" style_pad_gap="#space_sm"
+            scrollable="false">
+      <ui_button name="tab_macro" height="#button_height_sm" text="Macro" translation_tag="Macro"
+                 flex_grow="1" variant="ghost" focusable="false" click_focusable="false">
+        <style name="tab_active" selector="checked"/>
+        <bind_state_if_eq subject="fav_macro_config_tab" state="checked" ref_value="0"/>
+        <event_cb trigger="clicked" callback="fav_macro_config_tab_macro_cb"/>
+      </ui_button>
+      <ui_button name="tab_appearance" height="#button_height_sm" text="Appearance"
+                 translation_tag="Appearance" flex_grow="1" variant="ghost" focusable="false"
+                 click_focusable="false">
+        <style name="tab_active" selector="checked"/>
+        <bind_state_if_eq subject="fav_macro_config_tab" state="checked" ref_value="1"/>
+        <event_cb trigger="clicked" callback="fav_macro_config_tab_appearance_cb"/>
+      </ui_button>
+      <ui_button name="tab_options" height="#button_height_sm" text="Options"
+                 translation_tag="Options" flex_grow="1" variant="ghost" focusable="false"
+                 click_focusable="false">
+        <style name="tab_active" selector="checked"/>
+        <bind_state_if_eq subject="fav_macro_config_tab" state="checked" ref_value="2"/>
+        <event_cb trigger="clicked" callback="fav_macro_config_tab_options_cb"/>
+      </ui_button>
+    </lv_obj>
+
+    <!-- Section: Macro (tab 0). flex_grow fills the card's vertical space; the
+         inner list scrolls. Hidden sections are excluded from flex layout, so
+         the visible section always fills. -->
+    <lv_obj name="section_macro" width="100%" flex_grow="1"
+            style_pad_all="#space_md" flex_flow="column" style_pad_gap="#space_xs" scrollable="false"
+            hidden="true">
+      <bind_flag_if_not_eq subject="fav_macro_config_tab" flag="hidden" ref_value="0"/>
+      <lv_obj name="macro_list" width="100%" flex_grow="1" flex_flow="column"
+              style_pad_all="#space_xs" style_pad_gap="0" scrollable="true"/>
+    </lv_obj>
+
+    <!-- Section: Appearance (tab 1) — Icon and Color side-by-side so the color
+         options are visible without scrolling, especially at Micro/Tiny where a
+         stacked layout pushed Color below the fold. -->
+    <lv_obj name="section_appearance" width="100%" flex_grow="1" style_pad_all="#space_md"
+            flex_flow="row" style_pad_gap="#space_md" scrollable="true" hidden="true">
+      <bind_flag_if_not_eq subject="fav_macro_config_tab" flag="hidden" ref_value="1"/>
+      <!-- Icon column (wider — 25 icons) -->
+      <lv_obj width="1" flex_grow="3" height="content" flex_flow="column"
+              style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <text_small text="Icon" translation_tag="Icon"/>
+        <lv_obj name="icon_grid" width="100%" height="content" flex_flow="row_wrap"
+                style_pad_all="#space_xs" style_pad_gap="#space_xs" scrollable="false"/>
+      </lv_obj>
+      <!-- Color column -->
+      <lv_obj width="1" flex_grow="2" height="content" flex_flow="column"
+              style_pad_all="0" style_pad_gap="#space_xs" scrollable="false">
+        <text_small text="Color" translation_tag="Color"/>
+        <lv_obj name="color_grid" width="100%" height="content" flex_flow="row_wrap"
+                style_pad_all="#space_xs" style_pad_gap="#space_xs" scrollable="false"/>
+      </lv_obj>
+    </lv_obj>
+
+    <!-- Section: Options (tab 2) -->
+    <lv_obj name="section_options" width="100%" flex_grow="1" style_pad_all="#space_md"
+            flex_flow="column" style_pad_gap="#space_sm" scrollable="true" hidden="true">
+      <bind_flag_if_not_eq subject="fav_macro_config_tab" flag="hidden" ref_value="2"/>
+      <setting_toggle_row label="Run without parameter prompt"
+                          label_tag="Run without parameter prompt"
+                          subject="fav_macro_skip_params"
+                          callback="fav_macro_config_skip_cb"/>
+    </lv_obj>
+  </view>
+</component>

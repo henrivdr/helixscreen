@@ -23,8 +23,8 @@ void MaterialSettingsManager::init() {
     spdlog::info("[MaterialSettingsManager] Initialized with {} override(s)", overrides_.size());
 }
 
-const filament::MaterialOverride* MaterialSettingsManager::get_override(
-    const std::string& name) const {
+const filament::MaterialOverride*
+MaterialSettingsManager::get_override(const std::string& name) const {
     auto it = overrides_.find(name);
     if (it != overrides_.end()) {
         return &it->second;
@@ -76,7 +76,8 @@ void MaterialSettingsManager::load_from_config() {
             if (values.contains("preheat_macro") && values["preheat_macro"].is_string()) {
                 ovr.preheat_macro = values["preheat_macro"].get<std::string>();
             }
-            if (values.contains("macro_handles_heating") && values["macro_handles_heating"].is_boolean()) {
+            if (values.contains("macro_handles_heating") &&
+                values["macro_handles_heating"].is_boolean()) {
                 ovr.macro_handles_heating = values["macro_handles_heating"].get<bool>();
             }
             overrides_[name] = ovr;
@@ -96,11 +97,16 @@ void MaterialSettingsManager::save_to_config() {
     nlohmann::json overrides_json = nlohmann::json::object();
     for (const auto& [name, ovr] : overrides_) {
         nlohmann::json entry = nlohmann::json::object();
-        if (ovr.nozzle_min) entry["nozzle_min"] = *ovr.nozzle_min;
-        if (ovr.nozzle_max) entry["nozzle_max"] = *ovr.nozzle_max;
-        if (ovr.bed_temp) entry["bed_temp"] = *ovr.bed_temp;
-        if (ovr.preheat_macro) entry["preheat_macro"] = *ovr.preheat_macro;
-        if (ovr.macro_handles_heating) entry["macro_handles_heating"] = *ovr.macro_handles_heating;
+        if (ovr.nozzle_min)
+            entry["nozzle_min"] = *ovr.nozzle_min;
+        if (ovr.nozzle_max)
+            entry["nozzle_max"] = *ovr.nozzle_max;
+        if (ovr.bed_temp)
+            entry["bed_temp"] = *ovr.bed_temp;
+        if (ovr.preheat_macro)
+            entry["preheat_macro"] = *ovr.preheat_macro;
+        if (ovr.macro_handles_heating)
+            entry["macro_handles_heating"] = *ovr.macro_handles_heating;
         overrides_json[name] = entry;
     }
 

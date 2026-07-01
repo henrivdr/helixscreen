@@ -225,7 +225,7 @@ class PrintTuneOverlay : public OverlayBase {
     //
 
     static constexpr double Z_STEP_AMOUNTS[] = {0.05, 0.025, 0.01, 0.005};
-    static constexpr int Z_STEP_DEFAULT = 2; ///< Default step: 0.01mm
+    static constexpr int Z_STEP_DEFAULT = 2;     ///< Default step: 0.01mm
     static constexpr double Z_OFFSET_MIN = -2.0; ///< Clamp: max 2mm closer
     static constexpr double Z_OFFSET_MAX = 2.0;  ///< Clamp: max 2mm farther
 

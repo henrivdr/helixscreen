@@ -3,12 +3,13 @@
 
 #include "ui_confetti.h"
 
+#include "ui_utils.h"
+
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_parser.h"
 #include "helix-xml/src/xml/lv_xml_widget.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
 #include "lvgl/lvgl.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
