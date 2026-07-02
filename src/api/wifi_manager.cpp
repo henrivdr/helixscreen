@@ -156,8 +156,11 @@ WiFiManager::~WiFiManager() {
 
     // Clear callbacks BEFORE stopping backend
     // Pending lv_async_call operations check for null callbacks before invoking
-    scan_callback_ = nullptr;
-    connect_callback_ = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        scan_callback_ = nullptr;
+        connect_callback_ = nullptr;
+    }
 
     // Stop backend (this stops backend threads)
     if (backend_) {
@@ -209,7 +212,10 @@ void WiFiManager::start_scan(
     // Stop existing timer if running (also clears old callback)
     stop_scan();
 
-    scan_callback_ = on_networks_updated;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        scan_callback_ = on_networks_updated;
+    }
     spdlog::debug("[WiFiManager] Scan callback registered");
 
     spdlog::info("[WiFiManager] Starting periodic network scan (every 7 seconds)");
@@ -220,10 +226,16 @@ void WiFiManager::start_scan(
 
     // Trigger immediate scan
     spdlog::debug("[WiFiManager] About to trigger initial scan");
-    scan_pending_ = true; // Mark scan as pending - cleared after first SCAN_COMPLETE processed
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        scan_pending_ = true; // Mark scan as pending - cleared after first SCAN_COMPLETE processed
+    }
     WiFiError scan_result = backend_->trigger_scan();
     if (!scan_result.success()) {
-        scan_pending_ = false;
+        {
+            std::lock_guard<std::mutex> lock(callback_mutex_);
+            scan_pending_ = false;
+        }
         // If the OS reports the wireless link is actually up, the managed
         // backend simply can't reach its control socket (the link is system-
         // managed and live). Nagging the user with a failure toast is wrong —
@@ -247,17 +259,26 @@ void WiFiManager::stop_scan() {
     }
     // Clear callback to prevent stale callbacks firing after the caller
     // deactivates/destroys (the callback captures a raw overlay pointer).
-    scan_callback_ = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        scan_callback_ = nullptr;
+    }
 }
 
 void WiFiManager::scan_timer_callback(lv_timer_t* timer) {
     WiFiManager* manager = static_cast<WiFiManager*>(lv_timer_get_user_data(timer));
     if (manager && manager->backend_) {
         // Trigger scan - results will arrive via SCAN_COMPLETE event
-        manager->scan_pending_ = true; // Mark scan as pending
+        {
+            std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+            manager->scan_pending_ = true; // Mark scan as pending
+        }
         WiFiError result = manager->backend_->trigger_scan();
         if (!result.success()) {
-            manager->scan_pending_ = false;
+            {
+                std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+                manager->scan_pending_ = false;
+            }
             LOG_WARN_INTERNAL("Periodic scan failed: {}", result.technical_msg);
             // Self-heal: a NOT_INITIALIZED scan means the backend never came up
             // (typically a fresh-boot race where wpa_supplicant's control socket
@@ -292,19 +313,28 @@ void WiFiManager::connect(const std::string& ssid, const std::string& password,
     // failure against this new connect (helixscreen#1050).
     cancel_auth_fail_grace();
 
-    connect_callback_ = on_complete;
-    connecting_in_progress_ = true; // Ignore DISCONNECTED events during connection attempt
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        connect_callback_ = on_complete;
+        connecting_in_progress_ = true; // Ignore DISCONNECTED events during connection attempt
+    }
     spdlog::debug("[WiFiManager] Connect callback registered for '{}'", ssid);
 
     // Use backend's connect method
     WiFiError result = backend_->connect_network(ssid, password);
     if (!result.success()) {
-        connecting_in_progress_ = false; // Clear on sync failure
         NOTIFY_ERROR("Failed to connect to WiFi network '{}'", ssid);
-        if (connect_callback_) {
-            connect_callback_(false,
-                              result.user_msg.empty() ? result.technical_msg : result.user_msg);
+        // Clear in-progress + take the callback under the lock, then invoke the
+        // local copy OUTSIDE the lock (the callback may re-enter WiFiManager).
+        std::function<void(bool, const std::string&)> cb;
+        {
+            std::lock_guard<std::mutex> lock(callback_mutex_);
+            connecting_in_progress_ = false; // Clear on sync failure
+            cb = std::move(connect_callback_);
             connect_callback_ = nullptr;
+        }
+        if (cb) {
+            cb(false, result.user_msg.empty() ? result.technical_msg : result.user_msg);
         }
     }
     // Success/failure will be reported via CONNECTED/AUTH_FAILED events
@@ -450,16 +480,21 @@ void WiFiManager::handle_scan_complete(const std::string& event_data) {
     spdlog::debug("[WiFiManager] handle_scan_complete ENTRY (backend thread)");
 
     // Debounce: wpa_supplicant can emit duplicate SCAN_RESULTS events
-    // Only process the first one per scan cycle
-    if (!scan_pending_) {
-        spdlog::trace("[WiFiManager] Ignoring duplicate SCAN_COMPLETE (already processed)");
-        return;
-    }
-    scan_pending_ = false; // Clear flag - subsequent events for this scan will be ignored
+    // Only process the first one per scan cycle. This runs on the backend thread,
+    // so the flag/callback reads are serialized against the main thread via
+    // callback_mutex_.
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        if (!scan_pending_) {
+            spdlog::trace("[WiFiManager] Ignoring duplicate SCAN_COMPLETE (already processed)");
+            return;
+        }
+        scan_pending_ = false; // Clear flag - subsequent events for this scan will be ignored
 
-    if (!scan_callback_) {
-        LOG_WARN_INTERNAL("Scan complete but no callback registered");
-        return;
+        if (!scan_callback_) {
+            LOG_WARN_INTERNAL("Scan complete but no callback registered");
+            return;
+        }
     }
 
     // CRITICAL: This is called from backend thread - must dispatch to LVGL thread!
@@ -480,8 +515,13 @@ void WiFiManager::handle_scan_complete(const std::string& event_data) {
 
                 // Safely check if manager still exists
                 if (auto manager = data->manager.lock()) {
-                    if (manager->scan_callback_) {
-                        manager->scan_callback_(data->networks);
+                    std::function<void(const std::vector<WiFiNetwork>&)> cb;
+                    {
+                        std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+                        cb = manager->scan_callback_;
+                    }
+                    if (cb) {
+                        cb(data->networks);
                         spdlog::debug("[WiFiManager] scan_callback_ completed successfully");
                     } else {
                         spdlog::warn(
@@ -502,8 +542,13 @@ void WiFiManager::handle_scan_complete(const std::string& event_data) {
             [](ScanCallbackData* data) {
                 LOG_WARN_INTERNAL("async_call: calling callback with empty results");
                 if (auto manager = data->manager.lock()) {
-                    if (manager->scan_callback_) {
-                        manager->scan_callback_({});
+                    std::function<void(const std::vector<WiFiNetwork>&)> cb;
+                    {
+                        std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+                        cb = manager->scan_callback_;
+                    }
+                    if (cb) {
+                        cb({});
                     }
                 } else {
                     spdlog::debug(
@@ -528,14 +573,22 @@ void WiFiManager::handle_connected(const std::string& event_data) {
 
     spdlog::debug("[WiFiManager] Connected event received (backend thread)");
 
-    connecting_in_progress_ = false; // Connection complete
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        connecting_in_progress_ = false; // Connection complete
+    }
 
     // Fan out to passive UI observers regardless of whether there's an active
     // connect() callback — the home-panel network widget depends on this to
     // learn the initial post-boot connection state.
     notify_state_observers();
 
-    if (!connect_callback_) {
+    bool has_callback;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        has_callback = static_cast<bool>(connect_callback_);
+    }
+    if (!has_callback) {
         spdlog::debug(
             "[WiFiManager] Connected event but no callback registered (normal on startup)");
         return;
@@ -550,9 +603,14 @@ void WiFiManager::handle_connected(const std::string& event_data) {
                 // CONNECTED is the real outcome, so cancel it before delivering success
                 // (helixscreen#1050).
                 manager->cancel_auth_fail_grace();
-                if (manager->connect_callback_) {
-                    manager->connect_callback_(d->success, d->error);
+                std::function<void(bool, const std::string&)> cb;
+                {
+                    std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+                    cb = std::move(manager->connect_callback_);
                     manager->connect_callback_ = nullptr;
+                }
+                if (cb) {
+                    cb(d->success, d->error);
                 }
             } else {
                 spdlog::debug(
@@ -569,7 +627,12 @@ void WiFiManager::handle_disconnected(const std::string& event_data) {
     // During a connection attempt, wpa_supplicant fires DISCONNECTED before CONNECTED
     // when switching networks. Ignore DISCONNECTED during connection - only AUTH_FAILED
     // or subsequent CONNECTED should determine success/failure.
-    if (connecting_in_progress_) {
+    bool in_progress;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        in_progress = connecting_in_progress_;
+    }
+    if (in_progress) {
         spdlog::debug("[WiFiManager] Ignoring DISCONNECTED during connection attempt");
         return;
     }
@@ -577,7 +640,12 @@ void WiFiManager::handle_disconnected(const std::string& event_data) {
     // Genuine disconnect — wake passive observers so they can refresh UI state.
     notify_state_observers();
 
-    if (!connect_callback_) {
+    bool has_callback;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        has_callback = static_cast<bool>(connect_callback_);
+    }
+    if (!has_callback) {
         spdlog::debug("[WiFiManager] Disconnected event but no callback registered (normal)");
         return;
     }
@@ -587,9 +655,14 @@ void WiFiManager::handle_disconnected(const std::string& event_data) {
         std::make_unique<ConnectCallbackData>(ConnectCallbackData{self_, false, "Disconnected"}),
         [](ConnectCallbackData* d) {
             if (auto manager = d->manager.lock()) {
-                if (manager->connect_callback_) {
-                    manager->connect_callback_(d->success, d->error);
+                std::function<void(bool, const std::string&)> cb;
+                {
+                    std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+                    cb = std::move(manager->connect_callback_);
                     manager->connect_callback_ = nullptr;
+                }
+                if (cb) {
+                    cb(d->success, d->error);
                 }
             } else {
                 spdlog::debug(
@@ -606,7 +679,12 @@ void WiFiManager::handle_auth_failed(const std::string& event_data) {
     // on some adapters even when the connect ultimately succeeds — a CONNECTED follows ~1-3s
     // later (helixscreen#1050). Staying "in progress" keeps any interleaved DISCONNECTED
     // ignored, and the failure is armed on a grace timer that a CONNECTED can preempt.
-    if (!connect_callback_) {
+    bool has_callback;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        has_callback = static_cast<bool>(connect_callback_);
+    }
+    if (!has_callback) {
         LOG_WARN_INTERNAL("Auth failed event but no callback registered");
         return;
     }
@@ -622,7 +700,12 @@ void WiFiManager::handle_auth_failed(const std::string& event_data) {
             if (auto manager = d->manager.lock()) {
                 // Only arm the grace window if a connect is still pending; a CONNECTED that
                 // already resolved it nulls connect_callback_.
-                if (manager->connect_callback_) {
+                bool still_pending;
+                {
+                    std::lock_guard<std::mutex> lock(manager->callback_mutex_);
+                    still_pending = static_cast<bool>(manager->connect_callback_);
+                }
+                if (still_pending) {
                     manager->start_auth_fail_grace(d->error);
                 }
             } else {
@@ -667,11 +750,19 @@ void WiFiManager::cancel_auth_fail_grace() {
 
 void WiFiManager::deliver_auth_failure() {
     // Grace window elapsed with no CONNECTED — the authentication failure is real.
-    connecting_in_progress_ = false;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        connecting_in_progress_ = false;
+    }
     notify_state_observers();
-    if (connect_callback_) {
-        connect_callback_(false, pending_auth_error_);
+    std::function<void(bool, const std::string&)> cb;
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        cb = std::move(connect_callback_);
         connect_callback_ = nullptr;
+    }
+    if (cb) {
+        cb(false, pending_auth_error_);
     }
     pending_auth_error_.clear();
 }

@@ -228,15 +228,25 @@ class WiFiManager {
     // Weak pointers in async callbacks can safely check if manager still exists
     std::shared_ptr<WiFiManager> self_;
 
+    // Guards the callback/flag state below, which is read on the libhv backend
+    // thread (handle_scan_complete / handle_connected / handle_disconnected /
+    // handle_auth_failed) and written on the main/LVGL thread (start_scan /
+    // stop_scan / connect / scan_timer_callback / deliver_auth_failure). Reading
+    // or reassigning a std::function concurrently is a data race (UB). Callbacks
+    // are copied under the lock and invoked OUTSIDE it to avoid re-entrant
+    // deadlock and holding the lock across arbitrary UI code.
+    mutable std::mutex callback_mutex_;
+
     // Scanning state
     lv_timer_t* scan_timer_;
-    std::function<void(const std::vector<WiFiNetwork>&)> scan_callback_;
-    bool scan_pending_; // True when scan triggered, cleared after first SCAN_COMPLETE processed
+    std::function<void(const std::vector<WiFiNetwork>&)> scan_callback_; // guarded by callback_mutex_
+    bool scan_pending_; // guarded by callback_mutex_; true when scan triggered, cleared after first
+                        // SCAN_COMPLETE processed
 
     // Connection state
-    std::function<void(bool, const std::string&)> connect_callback_;
-    bool connecting_in_progress_ =
-        false; // True during connect attempt, prevents false failure on DISCONNECTED
+    std::function<void(bool, const std::string&)> connect_callback_; // guarded by callback_mutex_
+    bool connecting_in_progress_ = false; // guarded by callback_mutex_; true during connect attempt,
+                                          // prevents false failure on DISCONNECTED
 
     // Auth-failure debounce (helixscreen#1050). Some adapters' wpa_supplicant emit a
     // transient CTRL-EVENT-SSID-TEMP-DISABLED/WRONG_KEY mid-handshake on a connect that
