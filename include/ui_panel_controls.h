@@ -25,6 +25,9 @@
 class TemperatureService;
 namespace helix {
 class TemperatureController;
+namespace ui {
+struct ControlsPanelTestAccess; // test-only friend (tests/test_helpers/)
+} // namespace ui
 } // namespace helix
 
 /**
@@ -120,6 +123,9 @@ class ControlsPanel : public PanelBase {
     void on_deactivate() override;
 
   private:
+    // Test-only access to private secondary-fan lifetime/observer internals.
+    friend struct helix::ui::ControlsPanelTestAccess;
+
     //
     // === Panel Active State (observer suspension) ===
     //
@@ -284,6 +290,11 @@ class ControlsPanel : public PanelBase {
     };
     std::vector<SecondaryFanRow> secondary_fan_rows_;    ///< Tracked for reactive updates
     std::vector<ObserverGuard> secondary_fan_observers_; ///< Per-fan speed observers
+    /// Lifetime tokens for the dynamic per-fan speed subjects observed above. Per-fan
+    /// subjects are destroyed/recreated on fan rediscovery; each token must outlive its
+    /// paired ObserverGuard so the guard's weak_ptr expires before the subject is freed.
+    /// Kept aligned with secondary_fan_observers_ and cleared FIRST during teardown.
+    std::vector<SubjectLifetime> secondary_fan_lifetimes_;
     uint32_t fan_populate_gen_ = 0; ///< Incremented on each populate; stale callbacks skip
 
     lv_obj_t* secondary_temps_list_ = nullptr; // Container for dynamic temp sensor rows

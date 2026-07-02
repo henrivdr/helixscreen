@@ -845,7 +845,11 @@ void ControlsPanel::populate_secondary_fans() {
     // use-after-free when observe_int_sync callbacks fire after widget deletion.
     ++fan_populate_gen_;
 
-    // Cleanup order: observers, tracking, hide, delete widgets
+    // Cleanup order: lifetimes → observers → tracking → hide → delete widgets.
+    // Reset the dynamic-subject lifetime tokens BEFORE the observers so each guard's
+    // weak_ptr is already expired when reset() runs — otherwise reset() calls
+    // lv_observer_remove() on a subject that may have been freed by fan rediscovery.
+    secondary_fan_lifetimes_.clear();
     for (auto& obs : secondary_fan_observers_) {
         obs.reset();
     }
@@ -1796,10 +1800,16 @@ PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, save_z_offset)
 void ControlsPanel::subscribe_to_secondary_fan_speeds() {
     using helix::ui::observe_int_sync;
     secondary_fan_observers_.reserve(secondary_fan_rows_.size());
+    secondary_fan_lifetimes_.reserve(secondary_fan_rows_.size());
 
     const uint32_t gen = fan_populate_gen_;
     for (const auto& row : secondary_fan_rows_) {
-        SubjectLifetime lifetime;
+        // Per-fan speed subjects are dynamic (freed + recreated on fan rediscovery).
+        // The lifetime token MUST outlive the paired observer, so it lives in a member
+        // vector alongside secondary_fan_observers_ — never a stack local (that would
+        // expire the guard's weak_ptr immediately, leaving a dangling observer that
+        // corrupts the subject's observer list when reset() later removes it).
+        SubjectLifetime& lifetime = secondary_fan_lifetimes_.emplace_back();
         if (auto* subject = printer_state_.get_fan_speed_subject(row.object_name, lifetime)) {
             secondary_fan_observers_.push_back(observe_int_sync<ControlsPanel>(
                 subject, this,
@@ -1813,6 +1823,10 @@ void ControlsPanel::subscribe_to_secondary_fan_speeds() {
                 lifetime));
             spdlog::trace("[{}] Subscribed to speed subject for secondary fan '{}'", get_name(),
                           row.object_name);
+        } else {
+            // No subject for this fan — drop the just-added lifetime to keep the
+            // lifetimes/observers vectors aligned.
+            secondary_fan_lifetimes_.pop_back();
         }
     }
 
