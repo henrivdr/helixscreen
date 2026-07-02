@@ -5,6 +5,15 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.86] - 2026-07-01
+
+### Fixed
+
+- **Spoolman spool picker** (prestonbrown/helixscreen#1071) — "Select Spool" now opens the Spoolman spool picker directly, with spools ordered by most-recently-used and then creation date.
+- **Chamber sensor auto-detection** — air-quality sensors are demoted so a real temperature sensor is preferred as the chamber source during auto-detection.
+- **WiFi connection stability** — cross-thread WiFi callback and flag state is now mutex-guarded to prevent races during connect and scan.
+- **Teardown crash fixes** — keyboard reset and long-press overlay deletion are deferred out of the input/update batch, modal entrance animations cancel cleanly when a modal closes mid-animation, and secondary-fan control tokens are held for the control's lifetime — closing several crash windows.
+
 ## [0.99.85] - 2026-06-30
 
 ### Added
@@ -4177,6 +4186,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.86]: https://github.com/prestonbrown/helixscreen/compare/v0.99.85...v0.99.86
 [0.99.85]: https://github.com/prestonbrown/helixscreen/compare/v0.99.84...v0.99.85
 [0.99.84]: https://github.com/prestonbrown/helixscreen/compare/v0.99.82...v0.99.84
 [0.99.82]: https://github.com/prestonbrown/helixscreen/compare/v0.99.81...v0.99.82
