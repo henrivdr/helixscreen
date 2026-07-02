@@ -1118,20 +1118,25 @@ void KeyboardManager::set_mode(lv_keyboard_mode_t mode) {
 void KeyboardManager::reset() {
     spdlog::debug("[KeyboardManager] Resetting state for soft restart");
 
-    // Delete keyboard widget (child of m_screen, survives app_layout teardown)
+    // Delete keyboard widget (child of m_screen, survives app_layout teardown).
+    // reset() runs from tear_down_printer_state(), which one caller
+    // (cancel_add_printer_wizard) wraps in queue_update — so a synchronous
+    // lv_obj_del here would be one of multiple sync deletes in a single
+    // UpdateQueue batch (with overlay_ + m_app_layout), the #776/[L081] event-list
+    // corruption pattern. Cancel anims first, then defer the delete out of the
+    // batch. safe_delete_deferred() nulls keyboard_ synchronously so init() can
+    // rebuild immediately, and reparents + async-deletes on the next drain.
     if (keyboard_) {
         lv_anim_delete(keyboard_, nullptr); // Cancel pending slide animations
-        lv_obj_del(keyboard_);
+        helix::ui::safe_delete_deferred(keyboard_);
     }
     keyboard_ = nullptr;
 
     context_textarea_ = nullptr; // Child of app_layout — deleted by lv_obj_del(m_app_layout)
 
-    // Delete overlay (also child of m_screen)
-    if (overlay_) {
-        lv_obj_del(overlay_);
-    }
-    overlay_ = nullptr;
+    // Long-press overlay (also child of m_screen) — deferred delete for the same
+    // reason (#776); safe_delete_deferred() nulls overlay_ and no-ops if already null.
+    helix::ui::safe_delete_deferred(overlay_);
 
     // Reset all state so init() can be called again
     longpress_state_ = LP_IDLE;
