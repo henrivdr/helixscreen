@@ -1267,6 +1267,58 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
 }
 
 // ============================================================================
+// Air-quality disambiguation: a sensor whose name merely CONTAINS "chamber"
+// but is really an air-quality sensor (chamber_tvoc, chamber_co2, ...) must
+// not out-rank the real chamber temperature sensor. The compound (-1) and
+// air-quality (-40) modifiers push these below a clean "chamber"/"enclosure".
+// ============================================================================
+
+TEST_CASE("PrinterDiscovery chamber scoring demotes air-quality sensors",
+          "[printer_discovery][chamber]") {
+    PrinterDiscovery hw;
+
+    SECTION("clean 'chamber' beats 'chamber_tvoc' listed first (tvoc is air-quality)") {
+        // chamber_tvoc appears BEFORE chamber: substring scoring would lock in
+        // the tvoc sensor (both 100, first-wins). With the air-quality penalty
+        // chamber_tvoc scores 59, so the real chamber (100) wins regardless.
+        json objects = {"temperature_sensor chamber_tvoc", "temperature_sensor chamber"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber");
+    }
+
+    SECTION("'enclosure' beats 'chamber_tvoc' (air-quality demoted below enclosure)") {
+        // chamber_tvoc = 100 - 1 - 40 = 59; enclosure = 90 wins.
+        json objects = {"temperature_sensor chamber_tvoc", "temperature_sensor enclosure"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor enclosure");
+    }
+
+    SECTION("'chamber_tvoc' alone is still detected (floored, not dropped)") {
+        // Only chamber-ish sensor present — must still register (score 59 > 0),
+        // not fall through to undetected.
+        json objects = {"temperature_sensor chamber_tvoc"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber_tvoc");
+    }
+
+    SECTION("clean compound 'chamber_temp' alone is still detected (regression guard)") {
+        // A plain compound temperature sensor (no air-quality token) scores 99
+        // and must remain a valid chamber sensor.
+        json objects = {"temperature_sensor chamber_temp"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber_temp");
+    }
+}
+
+// ============================================================================
 // Chamber-heater TYPE tiebreak: a settable `heater_generic` must always beat a
 // same-keyword `temperature_fan` (a cooling fan), regardless of iteration order.
 // Regression for the Creality K2 Plus, which exposes BOTH
