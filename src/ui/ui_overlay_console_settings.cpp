@@ -3,10 +3,11 @@
 
 #include "ui_overlay_console_settings.h"
 
+#include "ui_nav_manager.h"
+
 #include "helix-xml/src/xml/lv_xml.h"
 #include "settings_manager.h"
 #include "static_panel_registry.h"
-#include "ui_nav_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -59,8 +60,7 @@ ConsoleSettingsOverlay::ConsoleSettingsOverlay() {
 }
 
 void ConsoleSettingsOverlay::init_subjects() {
-    lv_xml_register_event_cb(nullptr, "on_console_filter_temps_changed",
-                             on_filter_temps_changed);
+    lv_xml_register_event_cb(nullptr, "on_console_filter_temps_changed", on_filter_temps_changed);
     lv_xml_register_event_cb(nullptr, "on_console_filter_firmware_noise_changed",
                              on_filter_firmware_noise_changed);
     spdlog::debug("[{}] init_subjects() — XML callbacks registered", get_name());

@@ -12,16 +12,16 @@
  * - Integration: wizard skip flow with single sensor auto-configuration
  */
 
+#include "ui_update_queue.h"
 #include "ui_wizard_filament_sensor_select.h"
 
-#include "../ui_test_utils.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "../ui_test_utils.h"
 #include "app_globals.h"
 #include "filament_sensor_manager.h"
 #include "filament_sensor_types.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 

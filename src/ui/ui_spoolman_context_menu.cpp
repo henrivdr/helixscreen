@@ -5,6 +5,7 @@
 
 #include "ui_callback_helpers.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 namespace helix::ui {
@@ -100,7 +101,7 @@ void SpoolmanContextMenu::on_created(lv_obj_t* menu_obj) {
             name += pending_spool_.material;
         }
         if (name.empty()) {
-            name = "Spool #" + std::to_string(pending_spool_.id);
+            name = fmt::format(lv_tr("Spool #{}"), pending_spool_.id);
         }
         lv_label_set_text(header, name.c_str());
     }

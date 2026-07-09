@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <cctype>
+#include <cstddef>
+#include <string>
+
 namespace helix {
 namespace gcode {
 
@@ -31,6 +35,49 @@ constexpr unsigned int kGLInvalidOperation = 0x0502;
 /// @return true if the error is fatal enough to abandon GPU rendering
 inline bool gl_draw_error_is_fatal(unsigned int gl_error) {
     return gl_error == kGLOutOfMemory || gl_error == kGLInvalidOperation;
+}
+
+/// Decide, BEFORE the first GPU draw, whether a GPU is known to hard-fault in
+/// the 3D gcode preview and must be excluded from the GLES path entirely.
+///
+/// The reactive glGetError() guard above cannot help here: on constrained
+/// Mali/Panfrost SBCs (BTT CB1 Mali-G31, CB2/RK3566 Mali-G52) the driver
+/// SIGSEGVs *inside* glDrawArrays (issues #966 / #1084 / #1085) — control never
+/// returns, so glGetError() never runs. The only safe reaction is to never
+/// issue the draw. We key off the GL_RENDERER string the driver reports at
+/// context creation and skip the GPU path proactively when it matches a
+/// known-bad substring.
+///
+/// The seed list is a single entry, "panfrost" (the open Mesa driver common to
+/// the crashing boards). It is deliberately easy to extend from field
+/// GL_RENDERER logs — the renderer logs the exact string at startup so new
+/// bad GPUs can be added here. GPUs the denylist misses are still covered by
+/// the crash-loop breaker (a persistent guard file promoted to a block after
+/// one real hard-fault), so this list does not need to be exhaustive.
+///
+/// Pure function (no GL state, no side effects) so the decision is unit-testable
+/// without a live GL context.
+///
+/// @param renderer  the value returned by glGetString(GL_RENDERER) (may be null)
+/// @return true if the renderer matches a known-bad substring (case-insensitive)
+inline bool gl_renderer_is_denylisted(const char* renderer) {
+    if (renderer == nullptr || renderer[0] == '\0') {
+        return false;
+    }
+
+    static const char* const kDenylist[] = {"panfrost"};
+
+    std::string lowered(renderer);
+    for (char& c : lowered) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    for (const char* needle : kDenylist) {
+        if (lowered.find(needle) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace gcode

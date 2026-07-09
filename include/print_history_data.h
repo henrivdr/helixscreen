@@ -48,10 +48,10 @@ struct PrintHistoryJob {
     double layer_height = 0.0;
     double nozzle_temp = 0.0;
     double bed_temp = 0.0;
-    std::string thumbnail_path;                ///< Largest thumbnail relative path (for simple consumers)
-    std::vector<ThumbnailInfo> thumbnails;     ///< All available thumbnails with dimensions
-    std::string uuid;           ///< Slicer-generated UUID (from metadata.uuid)
-    size_t size_bytes = 0;      ///< File size in bytes (from metadata.size)
+    std::string thumbnail_path; ///< Largest thumbnail relative path (for simple consumers)
+    std::vector<ThumbnailInfo> thumbnails; ///< All available thumbnails with dimensions
+    std::string uuid;                      ///< Slicer-generated UUID (from metadata.uuid)
+    size_t size_bytes = 0;                 ///< File size in bytes (from metadata.size)
 
     // Pre-formatted strings for display (set during parsing)
     std::string duration_str; ///< "2h 15m"

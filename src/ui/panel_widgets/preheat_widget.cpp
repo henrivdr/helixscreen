@@ -10,7 +10,6 @@
 
 #include "app_globals.h"
 #include "config.h"
-#include "temperature_controller.h"
 #include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "macro_executor.h"
@@ -19,6 +18,7 @@
 #include "observer_factory.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
+#include "temperature_controller.h"
 #include "tool_state.h"
 
 #include <spdlog/spdlog.h>
@@ -370,12 +370,14 @@ void PreheatWidget::set_temperatures_multi(int nozzle, int bed) {
         c->set_target(
             heater, static_cast<double>(nozzle),
             {.toast = false,
-             .on_success = [heater, nozzle]() {
-                 spdlog::info("[PreheatWidget] {} target set to {}°C", heater, nozzle);
-             },
-             .on_error = [heater](const MoonrakerError& error) {
-                 NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), heater, error.user_message());
-             }});
+             .on_success =
+                 [heater, nozzle]() {
+                     spdlog::info("[PreheatWidget] {} target set to {}°C", heater, nozzle);
+                 },
+             .on_error =
+                 [heater](const MoonrakerError& error) {
+                     NOTIFY_ERROR(lv_tr("Failed to set {} temp: {}"), heater, error.user_message());
+                 }});
     }
 
     c->set_target(helix::HeaterType::Bed, static_cast<double>(bed),

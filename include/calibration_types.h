@@ -207,6 +207,12 @@ struct InputShaperResult {
     /// Path to CSV calibration data file (e.g., /tmp/calibration_data_x_*.csv)
     std::string csv_path;
 
+    /// True when Klipper reported a CSV path but its frequency-response data
+    /// could not be read (missing/unreadable file — e.g. systemd PrivateTmp
+    /// isolation hiding Klipper's /tmp output — or a malformed CSV). The
+    /// recommendation is still valid; only the chart is unavailable.
+    bool chart_data_unavailable = false;
+
     /// Frequency response data for graphing (frequency Hz, amplitude)
     std::vector<std::pair<float, float>> freq_response;
 

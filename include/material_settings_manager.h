@@ -5,10 +5,18 @@
 
 #include "filament_database.h"
 
+#include <array>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
+namespace helix::printer {
+struct EffectiveFilament;
+}
+
 namespace helix {
+
+inline constexpr std::array<const char*, 4> DEFAULT_PRESET_MATERIALS{"PLA", "PETG", "ABS", "TPU"};
 
 /**
  * @brief Manages user overrides for material temperature settings
@@ -47,6 +55,38 @@ class MaterialSettingsManager {
         return overrides_;
     }
 
+    /** @brief Get the 4 preset materials assigned to the quick-material buttons */
+    std::array<std::string, 4> get_preset_materials() const {
+        return preset_materials_;
+    }
+
+    /** @brief Assign a material name to a preset slot (0-3); saves to config */
+    void set_preset_material(int index, const std::string& material);
+
+    /** @brief Restore all preset slots to DEFAULT_PRESET_MATERIALS; saves to config */
+    void reset_preset_materials();
+
+    /** @brief Branded filament info attached to a quick-material preset slot */
+    struct PresetFilament {
+        std::string filament_id;
+        std::string brand;
+        std::string name;
+        int nozzle = 0;
+        int bed = 0;
+        bool is_branded() const {
+            return !filament_id.empty();
+        }
+    };
+
+    /** @brief Get the branded filament attached to a preset slot (nullopt if generic) */
+    std::optional<PresetFilament> get_preset_filament(int index) const;
+
+    /** @brief Attach a branded filament to a preset slot (0-3); saves to config */
+    void set_preset_filament(int index, const helix::printer::EffectiveFilament& ef);
+
+    /** @brief Clear the branded filament from a preset slot (0-3); saves to config */
+    void clear_preset_filament(int index);
+
   private:
     friend class TestAccess;
     MaterialSettingsManager() = default;
@@ -54,8 +94,14 @@ class MaterialSettingsManager {
 
     void load_from_config();
     void save_to_config();
+    void load_presets_from_config();
+    void save_presets_to_config();
+    /** @brief Reset all 4 preset slots (in memory only) to DEFAULT_PRESET_MATERIALS */
+    void assign_defaults();
 
     std::unordered_map<std::string, filament::MaterialOverride> overrides_;
+    std::array<std::string, 4> preset_materials_ = {"PLA", "PETG", "ABS", "TPU"};
+    std::array<std::optional<PresetFilament>, 4> preset_filaments_{};
     bool initialized_ = false;
 };
 

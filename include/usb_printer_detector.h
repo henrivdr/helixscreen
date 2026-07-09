@@ -73,8 +73,7 @@ class UsbPrinterDetector {
     static void poll_timer_cb(_lv_timer_t* timer);
 
     /// Compare two result sets by VID+PID+bus+address
-    static bool results_equal(std::vector<UsbPrinterInfo> a,
-                              std::vector<UsbPrinterInfo> b);
+    static bool results_equal(std::vector<UsbPrinterInfo> a, std::vector<UsbPrinterInfo> b);
 
     _lv_timer_t* poll_timer_ = nullptr;
     DetectionCallback callback_;

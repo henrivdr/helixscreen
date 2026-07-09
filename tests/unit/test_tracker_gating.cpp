@@ -21,18 +21,19 @@
  *     re-registered (the production path when backend slot config churns).
  */
 
+#include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "ams_types.h"
 #include "app_globals.h"
 #include "consumption_sink.h"
 #include "filament_consumption_tracker.h"
+#include "filament_consumption_tracker_test_access.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
-#include "filament_consumption_tracker_test_access.h"
 
 using helix::AmsSlotSink;
 using helix::FilamentConsumptionTracker;
@@ -89,14 +90,12 @@ struct TrackerGatingFixture : LVGLTestFixture {
         helix::ui::UpdateQueue::instance().drain();
 
         FilamentConsumptionTracker::instance().start();
-        FilamentConsumptionTrackerTestAccess::force_print_state(
-            PrintJobState::PRINTING);
+        FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::PRINTING);
         helix::ui::UpdateQueue::instance().drain();
     }
 
     ~TrackerGatingFixture() override {
-        FilamentConsumptionTrackerTestAccess::force_print_state(
-            PrintJobState::COMPLETE);
+        FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::COMPLETE);
         FilamentConsumptionTracker::instance().stop();
         auto& ams = AmsState::instance();
         ams.clear_backends();
@@ -106,8 +105,7 @@ struct TrackerGatingFixture : LVGLTestFixture {
 
 } // namespace
 
-TEST_CASE_METHOD(TrackerGatingFixture,
-                 "Gating: slot with spoolman_id != 0 not tracked",
+TEST_CASE_METHOD(TrackerGatingFixture, "Gating: slot with spoolman_id != 0 not tracked",
                  "[tracker][gating]") {
     // Link slot 0 to Spoolman BEFORE any delta arrives so the tracker's
     // per-tick re-gate (apply_delta top-of-loop) sees it and disables the
@@ -130,17 +128,14 @@ TEST_CASE_METHOD(TrackerGatingFixture,
     CHECK(mock->get_slot_info(1).remaining_weight_g == 1000.0f);
 }
 
-TEST_CASE_METHOD(TrackerGatingFixture,
-                 "Gating: native tracking backend not decremented",
+TEST_CASE_METHOD(TrackerGatingFixture, "Gating: native tracking backend not decremented",
                  "[tracker][gating]") {
     // Flip the backend into "tracks natively" mode and re-snapshot by
     // cycling through a fresh PRINTING edge. snapshot() checks
     // tracks_consumption_natively() and marks every sink inactive.
     mock->set_tracks_consumption_natively_for_testing(true);
-    FilamentConsumptionTrackerTestAccess::force_print_state(
-        PrintJobState::COMPLETE);
-    FilamentConsumptionTrackerTestAccess::force_print_state(
-        PrintJobState::PRINTING);
+    FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::COMPLETE);
+    FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::PRINTING);
     helix::ui::UpdateQueue::instance().drain();
 
     auto& state = get_printer_state();
@@ -158,9 +153,7 @@ TEST_CASE_METHOD(TrackerGatingFixture,
     CHECK(mock->get_slot_info(1).remaining_weight_g == before1);
 }
 
-TEST_CASE_METHOD(TrackerGatingFixture,
-                 "Mid-print edit rebaselines sink",
-                 "[tracker][gating]") {
+TEST_CASE_METHOD(TrackerGatingFixture, "Mid-print edit rebaselines sink", "[tracker][gating]") {
     auto& state = get_printer_state();
     SubjectLifetime lt;
     auto* e0 = state.get_extruder_filament_used_subject(0, lt);
@@ -202,10 +195,8 @@ TEST_CASE_METHOD(TrackerGatingFixture,
     SlotInfo info = mock->get_slot_info(0);
     info.remaining_weight_g = -1.0f;
     mock->set_slot_info(0, info, /*persist=*/false);
-    FilamentConsumptionTrackerTestAccess::force_print_state(
-        PrintJobState::COMPLETE);
-    FilamentConsumptionTrackerTestAccess::force_print_state(
-        PrintJobState::PRINTING);
+    FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::COMPLETE);
+    FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::PRINTING);
     helix::ui::UpdateQueue::instance().drain();
 
     auto& state = get_printer_state();
@@ -232,10 +223,8 @@ TEST_CASE_METHOD(TrackerGatingFixture,
     CHECK(mock->get_slot_info(0).remaining_weight_g == 800.0f);
 
     // Cycle print state → sink re-snapshots with the now-valid weight.
-    FilamentConsumptionTrackerTestAccess::force_print_state(
-        PrintJobState::COMPLETE);
-    FilamentConsumptionTrackerTestAccess::force_print_state(
-        PrintJobState::PRINTING);
+    FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::COMPLETE);
+    FilamentConsumptionTrackerTestAccess::force_print_state(PrintJobState::PRINTING);
     helix::ui::UpdateQueue::instance().drain();
 
     // Re-zero the extruder subject so the next push is a clean delta from

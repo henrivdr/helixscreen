@@ -323,7 +323,8 @@ TEST_CASE("PrinterState: Update print state and filename", "[state][progress]") 
     REQUIRE(std::string(filename) == "benchy.gcode");
 }
 
-TEST_CASE("PrinterState: parses print_stats.exception structured object", "[state][progress][pause]") {
+TEST_CASE("PrinterState: parses print_stats.exception structured object",
+          "[state][progress][pause]") {
     lv_init_safe();
     PrinterState& state = get_printer_state();
     PrinterStateTestAccess::reset(state);
@@ -348,9 +349,9 @@ TEST_CASE("PrinterState: parses print_stats.exception structured object", "[stat
 
     SECTION("Empty exception object resets fields to cleared state") {
         // First populate, then clear with an empty object (user pause / cleared).
-        json populate = {{"print_stats",
-                          {{"exception",
-                            {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
+        json populate = {
+            {"print_stats",
+             {{"exception", {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
         state.update_from_status(populate);
         REQUIRE(state.get_print_exception_id() == 532);
 
@@ -363,9 +364,9 @@ TEST_CASE("PrinterState: parses print_stats.exception structured object", "[stat
     }
 
     SECTION("Absent exception key leaves fields unchanged") {
-        json populate = {{"print_stats",
-                          {{"exception",
-                            {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
+        json populate = {
+            {"print_stats",
+             {{"exception", {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
         state.update_from_status(populate);
 
         // A subsequent update with no exception key must not disturb the values.
@@ -378,9 +379,9 @@ TEST_CASE("PrinterState: parses print_stats.exception structured object", "[stat
     }
 
     SECTION("Null exception (subscription null) leaves fields unchanged") {
-        json populate = {{"print_stats",
-                          {{"exception",
-                            {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
+        json populate = {
+            {"print_stats",
+             {{"exception", {{"id", 532}, {"code", 1}, {"message", "detected dirty bed"}}}}}};
         state.update_from_status(populate);
 
         json null_exc = {{"print_stats", {{"exception", nullptr}}}};
@@ -1608,23 +1609,25 @@ TEST_CASE("PrinterPrintState: update_from_status handles null print_stats fields
     // Klipper object lacks the field. Pre-fix: get<std::string>() on null
     // threw type_error.302. Post-fix: skip silently.
     nlohmann::json status = {
-        {"print_stats", {
-            {"state", nullptr},
-            {"filename", nullptr},
-            {"print_duration", nullptr},
-            {"total_duration", nullptr},
-            {"filament_used", nullptr},
-        }},
+        {"print_stats",
+         {
+             {"state", nullptr},
+             {"filename", nullptr},
+             {"print_duration", nullptr},
+             {"total_duration", nullptr},
+             {"filament_used", nullptr},
+         }},
     };
     REQUIRE_NOTHROW(state.update_from_status(status));
 
     // Wrong types should also be tolerated (Moonraker may send unexpected
     // types during firmware restart races).
     nlohmann::json wrong_types = {
-        {"print_stats", {
-            {"state", 42},
-            {"filename", true},
-        }},
+        {"print_stats",
+         {
+             {"state", 42},
+             {"filename", true},
+         }},
     };
     REQUIRE_NOTHROW(state.update_from_status(wrong_types));
 }

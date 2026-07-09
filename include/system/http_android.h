@@ -17,11 +17,9 @@ namespace helix::android {
 /// Returns {status_code, body_or_error}. status_code == 0 means the
 /// request never reached the server (network, DNS, JNI, or TLS failure)
 /// and the second element carries a short error message instead of a body.
-std::pair<int, std::string> https_get(const std::string& url,
-                                      const std::string& user_agent,
-                                      const std::string& accept,
-                                      int timeout_sec);
+std::pair<int, std::string> https_get(const std::string& url, const std::string& user_agent,
+                                      const std::string& accept, int timeout_sec);
 
-}  // namespace helix::android
+} // namespace helix::android
 
-#endif  // __ANDROID__
+#endif // __ANDROID__

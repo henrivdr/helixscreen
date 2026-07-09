@@ -3,17 +3,18 @@
 
 #include "ui_printer_list_overlay.h"
 
-#include "app_globals.h"
-#include "config.h"
-#include "printer_state.h"
-#include "settings_manager.h"
-#include "static_panel_registry.h"
 #include "ui_callback_helpers.h"
 #include "ui_event_safety.h"
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
+
+#include "app_globals.h"
+#include "config.h"
+#include "printer_state.h"
+#include "settings_manager.h"
+#include "static_panel_registry.h"
 
 #include <spdlog/spdlog.h>
 
@@ -155,8 +156,7 @@ void PrinterListOverlay::populate_printer_list() {
         std::string name = cfg->get<std::string>("/printers/" + id + "/printer_name", id);
 
         // Create row from XML component
-        auto* row = static_cast<lv_obj_t*>(
-            lv_xml_create(container, "printer_list_item", nullptr));
+        auto* row = static_cast<lv_obj_t*>(lv_xml_create(container, "printer_list_item", nullptr));
         if (!row) {
             spdlog::warn("[{}] Failed to create printer_list_item for '{}'", get_name(), id);
             continue;
@@ -333,7 +333,7 @@ void PrinterListOverlay::on_delete_confirm_cb(lv_event_t* e) {
             if (!remaining.empty()) {
                 std::string next_id = remaining.front();
                 helix::ui::queue_update([next_id]() {
-                    NavigationManager::instance().go_back();  // dismiss overlay
+                    NavigationManager::instance().go_back(); // dismiss overlay
                     NavigationManager::instance().trigger_printer_switch(next_id);
                 });
             }
@@ -377,4 +377,4 @@ void PrinterListOverlay::on_printer_switcher_changed(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-}  // namespace helix::ui
+} // namespace helix::ui

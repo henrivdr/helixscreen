@@ -3,6 +3,7 @@
 
 #include "ui_temp_display.h"
 
+#include "ui_breakpoint.h"
 #include "ui_fonts.h"
 #include "ui_temperature_utils.h"
 
@@ -14,7 +15,6 @@
 #include "lvgl/lvgl.h"
 #include "printer_temperature_state.h" // helix::ChamberMode
 #include "theme_manager.h"
-#include "ui_breakpoint.h"
 
 #include <spdlog/spdlog.h>
 
@@ -44,7 +44,7 @@ static constexpr uint32_t TEMP_DISPLAY_MAGIC = 0x544D5031;
 struct TempDisplayData {
     uint32_t magic = TEMP_DISPLAY_MAGIC;
     int current_deci = 0; // Decidegrees for precision formatting
-    int current_temp = 0;  // Whole degrees (for heating color logic)
+    int current_temp = 0; // Whole degrees (for heating color logic)
     int target_temp = 0;
     bool show_target = false;                 // Default: hide target (opt-in via prop)
     bool has_target_binding = false;          // True if bind_target was set (heater mode)
@@ -268,8 +268,7 @@ static void current_temp_observer_cb(lv_observer_t* observer, lv_subject_t* subj
     lv_obj_t* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
     if (!label) {
         spdlog::debug("[temp_display] current cb: null label (subject={}, value={})",
-                      static_cast<void*>(subject),
-                      subject ? lv_subject_get_int(subject) : -1);
+                      static_cast<void*>(subject), subject ? lv_subject_get_int(subject) : -1);
         return;
     }
 
@@ -301,8 +300,7 @@ static void target_temp_observer_cb(lv_observer_t* observer, lv_subject_t* subje
     lv_obj_t* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
     if (!label) {
         spdlog::debug("[temp_display] target cb: null label (subject={}, value={})",
-                      static_cast<void*>(subject),
-                      subject ? lv_subject_get_int(subject) : -1);
+                      static_cast<void*>(subject), subject ? lv_subject_get_int(subject) : -1);
         return;
     }
 
@@ -333,8 +331,7 @@ static void mode_observer_cb(lv_observer_t* observer, lv_subject_t* subject) {
     lv_obj_t* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
     if (!label) {
         spdlog::debug("[temp_display] mode cb: null label (subject={}, value={})",
-                      static_cast<void*>(subject),
-                      subject ? lv_subject_get_int(subject) : -1);
+                      static_cast<void*>(subject), subject ? lv_subject_get_int(subject) : -1);
         return;
     }
 
@@ -522,7 +519,8 @@ static void ui_temp_display_apply_cb(lv_xml_parser_state_t* state, const char** 
             lv_subject_t* subject = lv_xml_get_subject(nullptr, value);
             if (subject && data && data->current_label) {
                 data->has_mode_binding = true;
-                lv_subject_add_observer_obj(subject, mode_observer_cb, data->current_label, nullptr);
+                lv_subject_add_observer_obj(subject, mode_observer_cb, data->current_label,
+                                            nullptr);
                 // Set initial value and recolor
                 data->current_mode = lv_subject_get_int(subject);
                 update_heating_color(data);

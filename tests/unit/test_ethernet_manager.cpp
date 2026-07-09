@@ -154,8 +154,7 @@ TEST_CASE("Ethernet Manager: Interface and info consistency", "[network][integra
 //     queued dispatch — either way, it must not be invoked synchronously
 //     inside get_info_async() (that would defeat the whole purpose).
 
-TEST_CASE("EthernetManager: async get_info returns without blocking",
-          "[network][async][slow]") {
+TEST_CASE("EthernetManager: async get_info returns without blocking", "[network][async][slow]") {
     EthernetManager manager;
 
     std::mutex m;
@@ -187,9 +186,9 @@ TEST_CASE("EthernetManager: async get_info returns without blocking",
         cv.notify_all();
     });
 
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - t0)
-                          .count();
+    auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0)
+            .count();
 
     // The call must return quickly — the blocking probe must be off-thread.
     // 10 ms is generous; a synchronous libhv ifconfig() + sysfs read typically
@@ -203,8 +202,7 @@ TEST_CASE("EthernetManager: async get_info returns without blocking",
     // The callback must fire eventually with a populated info struct.
     {
         std::unique_lock<std::mutex> lock(m);
-        bool ok = cv.wait_for(lock, std::chrono::seconds(5),
-                              [&]() { return fired.load(); });
+        bool ok = cv.wait_for(lock, std::chrono::seconds(5), [&]() { return fired.load(); });
         REQUIRE(ok);
     }
     REQUIRE_FALSE(received.status.empty());

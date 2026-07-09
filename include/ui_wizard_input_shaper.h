@@ -2,11 +2,10 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "async_lifetime_guard.h"
 #include "input_shaper_calibrator.h"
 #include "lvgl/lvgl.h"
+#include "wizard_step.h"
 
 #include <atomic>
 #include <memory>
@@ -51,9 +50,15 @@ class InputShaperCalibrator;
 class WizardInputShaperStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::InputShaper; }
-    const char* component_name() const override { return "wizard_input_shaper"; }
-    const char* log_name() const override { return "Wizard Input Shaper"; }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::InputShaper;
+    }
+    const char* component_name() const override {
+        return "wizard_input_shaper";
+    }
+    const char* log_name() const override {
+        return "Wizard Input Shaper";
+    }
     bool should_skip(const helix::wizard::StepContext& ctx) const override;
 
     WizardInputShaperStep();
@@ -212,6 +217,16 @@ class WizardInputShaperStep : public helix::wizard::Step {
     lv_obj_t* get_screen_root() const {
         return screen_root_;
     }
+
+    /**
+     * @brief Low-RAM warning modal shown before calibration (see memory_utils.h).
+     *
+     * Public because the file-static LVGL trampolines in ui_wizard_input_shaper.cpp
+     * store and dismiss it directly — it's a plain UI handle with no invariant, so
+     * getter/setter ceremony bought nothing. Cleared on cleanup() so a lingering
+     * modal never outlives the step.
+     */
+    lv_obj_t* low_ram_warn_dialog_ = nullptr;
 
   private:
     // Screen instance

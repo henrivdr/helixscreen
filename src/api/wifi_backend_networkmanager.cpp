@@ -74,6 +74,13 @@ WiFiError WifiBackendNetworkManager::start() {
     spdlog::info("[WifiBackend] NetworkManager WiFi interface: {}", wifi_interface_);
     running_ = true;
 
+    // Reset transition tracking so the first poll after (re)start re-detects the
+    // current connection state and re-notifies observers. Critical after a WiFi
+    // off/on toggle, which reuses this object (WiFiManager::set_enabled): without
+    // the reset a stale prev_connected_=true suppresses the CONNECTED event on
+    // NetworkManager auto-reconnect, leaving the icon stale (#1059).
+    prev_connected_.store(false);
+
     // Start background status polling thread. Wrap — EAGAIN throws ([L083]).
     status_running_ = true;
     try {
@@ -218,6 +225,19 @@ void WifiBackendNetworkManager::register_event_callback(
 }
 
 void WifiBackendNetworkManager::fire_event(const std::string& event_name, const std::string& data) {
+    // Single source of truth for the connection-transition tracker: every
+    // explicit CONNECTED/DISCONNECTED we emit — from the connect/disconnect
+    // paths as well as the status poll — updates prev_connected_ here. This
+    // keeps the poll loop from re-firing a duplicate event for a state another
+    // path already reported (prestonbrown/helixscreen#1059). Update regardless
+    // of whether a UI callback is registered — this is backend state, not UI
+    // state — so it must run before the early return below.
+    if (event_name == "CONNECTED") {
+        prev_connected_.store(true);
+    } else if (event_name == "DISCONNECTED") {
+        prev_connected_.store(false);
+    }
+
     // Copy the callback out under the mutex, then release BEFORE invoking it.
     // Holding callbacks_mutex_ across the callback invites deadlock if a
     // handler acquires another backend lock (or re-enters the backend).
@@ -355,8 +375,8 @@ WiFiError WifiBackendNetworkManager::check_system_prerequisites() {
     // connected:full:enabled:enabled
     // Check that it's not "error" or empty
     if (result.stdout_output.find("error") != std::string::npos) {
-        return WiFiErrorHelper::service_not_running("NetworkManager (reported error: " +
-                                                    result.stdout_output + ")");
+        return WiFiErrorHelper::service_not_running(
+            "NetworkManager (reported error: " + result.stdout_output + ")");
     }
 
     spdlog::debug("[WifiBackend] NM: Prerequisites check passed");
@@ -695,8 +715,7 @@ WiFiError WifiBackendNetworkManager::connect_network(const std::string& ssid,
 }
 
 WifiBackendNetworkManager::ConnectAttempt
-WifiBackendNetworkManager::try_nmcli_connect(const std::string& ssid,
-                                             const std::string& password) {
+WifiBackendNetworkManager::try_nmcli_connect(const std::string& ssid, const std::string& password) {
     ConnectAttempt result;
 
     // SECURITY: fork/exec (no shell) so SSID/password can't be interpreted by sh.
@@ -919,7 +938,7 @@ WifiBackend::ConnectionStatus WifiBackendNetworkManager::get_status() {
     return cached_status_;
 }
 
-WifiBackend::ConnectionStatus WifiBackendNetworkManager::poll_status_now() {
+std::optional<WifiBackend::ConnectionStatus> WifiBackendNetworkManager::poll_status_now() {
     ConnectionStatus status = {};
     status.connected = false;
     status.signal_strength = 0;
@@ -929,7 +948,11 @@ WifiBackend::ConnectionStatus WifiBackendNetworkManager::poll_status_now() {
     // entire query to fail. The actual SSID must come from "device wifi list".
     std::string dev_info = exec_nmcli("-t -f GENERAL device show " + wifi_interface_);
     if (dev_info.empty()) {
-        return status;
+        // Empty output means the nmcli/popen call itself failed (an existing but
+        // disconnected interface still reports GENERAL.STATE). Signal an
+        // indeterminate poll so the caller keeps the last-known status rather
+        // than treating a transient failure as a disconnect (#1059).
+        return std::nullopt;
     }
 
     // Parse key:value pairs from device show output
@@ -1033,21 +1056,44 @@ void WifiBackendNetworkManager::status_thread_func() {
     constexpr auto POLL_INTERVAL = std::chrono::seconds(5);
 
     while (status_running_) {
-        // Poll nmcli for current status
-        ConnectionStatus fresh_status = {};
+        // Poll nmcli for current status. nullopt = the poll itself failed
+        // (transient nmcli/popen error); keep the last-known status and skip
+        // event firing so a hiccup doesn't flip the UI to Disconnected (#1059).
+        std::optional<ConnectionStatus> polled;
         if (running_) {
-            fresh_status = poll_status_now();
+            polled = poll_status_now();
         }
 
-        // Update cache
-        {
-            std::lock_guard<std::mutex> lock(status_mutex_);
-            cached_status_ = fresh_status;
-        }
+        if (polled) {
+            const ConnectionStatus& fresh_status = *polled;
 
-        spdlog::trace(
-            "[WifiBackend] NM: Status cache updated (connected={}, ssid='{}', signal={}%)",
-            fresh_status.connected, fresh_status.ssid, fresh_status.signal_strength);
+            // Update cache and fire events on connection state transitions.
+            {
+                std::lock_guard<std::mutex> lock(status_mutex_);
+                cached_status_ = fresh_status;
+            }
+
+            // prev_connected_ is maintained inside fire_event() (single source of
+            // truth across the connect/disconnect/poll paths), so compare against
+            // a plain load rather than exchanging here.
+            bool now_connected = fresh_status.connected;
+            bool was_connected = prev_connected_.load();
+
+            if (now_connected && !was_connected) {
+                spdlog::info("[WifiBackend] NM: Connection detected via status poll");
+                fire_event("CONNECTED");
+            } else if (!now_connected && was_connected) {
+                spdlog::info("[WifiBackend] NM: Disconnection detected via status poll");
+                fire_event("DISCONNECTED");
+            }
+
+            spdlog::trace(
+                "[WifiBackend] NM: Status cache updated (connected={}, ssid='{}', signal={}%)",
+                fresh_status.connected, fresh_status.ssid, fresh_status.signal_strength);
+        } else if (running_) {
+            spdlog::debug(
+                "[WifiBackend] NM: Status poll failed/indeterminate — keeping last-known state");
+        }
 
         // Sleep until next poll or wakeup signal.
         // Uses dedicated status_cv_mutex_ (not status_mutex_) so get_status() callers

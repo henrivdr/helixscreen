@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "panel_widget.h"
 
 #include <memory>
@@ -28,7 +28,9 @@ class FanWidget : public PanelWidget {
     const char* id() const override {
         return instance_id_.c_str();
     }
-    bool has_edit_configure() const override { return true; }
+    bool has_edit_configure() const override {
+        return true;
+    }
     bool on_edit_configure() override;
 
     /// Called from static event callback
@@ -50,9 +52,9 @@ class FanWidget : public PanelWidget {
     lv_obj_t* fan_icon_ = nullptr;
 
     nlohmann::json config_;
-    std::string selected_fan_;   // object_name (e.g., "heater_fan hotend_fan")
+    std::string selected_fan_; // object_name (e.g., "heater_fan hotend_fan")
     std::string display_name_;
-    SubjectLifetime speed_lifetime_;  // Before observer: destroyed after observer in ~dtor
+    SubjectLifetime speed_lifetime_; // Before observer: destroyed after observer in ~dtor
     ObserverGuard speed_observer_;
     ObserverGuard version_observer_;
     helix::AsyncLifetimeGuard lifetime_;

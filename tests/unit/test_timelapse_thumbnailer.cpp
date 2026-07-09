@@ -1,9 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "timelapse_thumbnailer.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix::timelapse;
 
@@ -37,9 +37,8 @@ TEST_CASE("Thumbnailer: companion filename", "[timelapse][thumbnailer]") {
 }
 
 TEST_CASE("Thumbnailer: ffmpeg argument list construction", "[timelapse][thumbnailer]") {
-    auto args = ffmpeg_extract_args(
-        "/home/pi/printer_data/timelapse/benchy.mp4",
-        "/home/pi/printer_data/timelapse/benchy.thumb.jpg");
+    auto args = ffmpeg_extract_args("/home/pi/printer_data/timelapse/benchy.mp4",
+                                    "/home/pi/printer_data/timelapse/benchy.thumb.jpg");
 
     REQUIRE(args.size() == 9);
     REQUIRE(args[0] == "ffmpeg");
@@ -54,9 +53,7 @@ TEST_CASE("Thumbnailer: ffmpeg argument list construction", "[timelapse][thumbna
 }
 
 TEST_CASE("Thumbnailer: ffmpeg args are safe from shell injection", "[timelapse][thumbnailer]") {
-    auto args = ffmpeg_extract_args(
-        "/tmp/$(rm -rf /).mp4",
-        "/tmp/out.jpg");
+    auto args = ffmpeg_extract_args("/tmp/$(rm -rf /).mp4", "/tmp/out.jpg");
 
     // The malicious filename is passed as a single argument element, not shell-interpreted
     REQUIRE(args[3] == "/tmp/$(rm -rf /).mp4");

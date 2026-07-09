@@ -15,11 +15,11 @@
  * regress back to sync safe_delete.
  */
 
-#include "../lvgl_test_fixture.h"
-#include "overlay_base.h"
-
-#include "misc/lv_timer_private.h"
 #include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
+#include "misc/lv_timer_private.h"
+#include "overlay_base.h"
 
 #include "../catch_amalgamated.hpp"
 

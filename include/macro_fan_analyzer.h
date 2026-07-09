@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "hv/json.hpp"
-
 #include <string>
 #include <unordered_map>
+
+#include "hv/json.hpp"
 
 namespace helix {
 

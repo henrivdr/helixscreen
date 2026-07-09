@@ -55,7 +55,7 @@ struct MacroConfig {
  * ```
  */
 /// Current config schema version — bump when adding new migrations
-static constexpr int CURRENT_CONFIG_VERSION = 18;
+static constexpr int CURRENT_CONFIG_VERSION = 19;
 
 class Config {
   private:
@@ -67,16 +67,8 @@ class Config {
   protected:
     json data;
 
-    /// Allow test fixtures to access protected members
-    friend class ConfigTestFixture;
-    friend class ChangeHostConfigFixture;
-    friend class HardwareValidatorConfigFixture;
-    friend class MmuDetectionFixture;
-    friend class PanelWidgetConfigFixture;
-    friend class ThermistorConfigFixture;
-    friend class MultiInstanceMigrationFixture;
-    friend class PresetConfigFixture;
-    friend class VariantPresetFixture;
+    /// Allow test-only accessor to reach protected/private members
+    friend class ConfigTestAccess;
 
   public:
     /**

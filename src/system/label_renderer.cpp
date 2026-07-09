@@ -4,6 +4,7 @@
 #if HELIX_HAS_LABEL_PRINTER
 
 #include "label_renderer.h"
+
 #include "spoolman_types.h"
 
 #include <spdlog/spdlog.h>
@@ -235,16 +236,14 @@ static void draw_char(LabelBitmap& bmp, char c, int x, int y, int scale) {
                 // Draw a scale×scale block
                 for (int sy = 0; sy < scale; sy++)
                     for (int sx = 0; sx < scale; sx++)
-                        bmp.set_pixel(x + col * scale + sx,
-                                      y + row * scale + sy, true);
+                        bmp.set_pixel(x + col * scale + sx, y + row * scale + sy, true);
             }
         }
     }
 }
 
 /// Draw a string at (x, y) with given scale (char pitch = 6*scale)
-static void draw_text(LabelBitmap& bmp, const std::string& text, int x, int y,
-                       int scale) {
+static void draw_text(LabelBitmap& bmp, const std::string& text, int x, int y, int scale) {
     int cursor_x = x;
     int char_pitch = (FONT_W + 1) * scale; // 1px gap between chars
     for (char c : text) {
@@ -254,8 +253,7 @@ static void draw_text(LabelBitmap& bmp, const std::string& text, int x, int y,
 }
 
 /// Truncate text to fit within max_width pixels at given scale
-static std::string truncate_to_fit(const std::string& text, int max_width,
-                                    int scale) {
+static std::string truncate_to_fit(const std::string& text, int max_width, int scale) {
     int char_pitch = (FONT_W + 1) * scale;
     int max_chars = max_width / char_pitch;
     if (max_chars <= 0)
@@ -276,7 +274,7 @@ static std::string to_upper(const std::string& s) {
 }
 
 LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
-                                   const LabelSize& size) {
+                                  const LabelSize& size) {
     int margin = 20;
     int label_width = size.width_px;
 
@@ -299,23 +297,18 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
         int qr_target = qr_max;
         auto qr = generate_qr_bitmap(qr_data, qr_target);
         if (qr.empty()) {
-            spdlog::warn("label_renderer: QR generation failed for spool {}",
-                         spool.id);
+            spdlog::warn("label_renderer: QR generation failed for spool {}", spool.id);
             return LabelBitmap::create(label_width, qr_margin * 2);
         }
-        int height =
-            size.height_px > 0 ? size.height_px : qr.height() + 2 * qr_margin;
+        int height = size.height_px > 0 ? size.height_px : qr.height() + 2 * qr_margin;
         auto label = LabelBitmap::create(label_width, height);
-        label.blit(qr, (label_width - qr.width()) / 2,
-                   (height - qr.height()) / 2);
+        label.blit(qr, (label_width - qr.width()) / 2, (height - qr.height()) / 2);
         return label;
     }
 
     // Build text content
-    std::string vendor =
-        to_upper(spool.vendor.empty() ? "UNKNOWN" : spool.vendor);
-    std::string material =
-        to_upper(spool.material.empty() ? "FILAMENT" : spool.material);
+    std::string vendor = to_upper(spool.vendor.empty() ? "UNKNOWN" : spool.vendor);
+    std::string material = to_upper(spool.material.empty() ? "FILAMENT" : spool.material);
     std::string color = to_upper(spool.color_name);
 
     // --- NARROW labels (< 150px wide): render landscape, rotate 90° CW ---
@@ -324,19 +317,18 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
     // (height_px wide × width_px tall) with QR left + text right, then rotate
     // 90° CW so the final bitmap is width_px × height_px for the printer.
     if (label_width < 150) {
-        int m = 6;  // margin
+        int m = 6; // margin
         int gap = 8;
 
         // Landscape dimensions: long edge is width, short edge is height
-        int lw = size.height_px > 0 ? size.height_px : 307;  // landscape width
-        int lh = label_width;  // landscape height (96px for D110)
+        int lw = size.height_px > 0 ? size.height_px : 307; // landscape width
+        int lh = label_width;                               // landscape height (96px for D110)
 
         // QR: fit to landscape height minus margins
         int qr_target = lh - 2 * m;
         auto qr = generate_qr_bitmap(qr_data, qr_target);
         if (qr.empty()) {
-            spdlog::warn("label_renderer: QR generation failed for spool {}",
-                         spool.id);
+            spdlog::warn("label_renderer: QR generation failed for spool {}", spool.id);
             return LabelBitmap::create(label_width, lw);
         }
 
@@ -357,32 +349,27 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
         int text_y = m + 4;
 
         // Line 1: Vendor (large)
-        draw_text(label, truncate_to_fit(vendor, text_area_width, scale),
-                  text_x, text_y, scale);
+        draw_text(label, truncate_to_fit(vendor, text_area_width, scale), text_x, text_y, scale);
         text_y += line_h;
 
         // Line 2: Material + Color
         std::string line2 = color.empty() ? material : material + " " + color;
-        draw_text(label, truncate_to_fit(line2, text_area_width, scale),
-                  text_x, text_y, scale);
+        draw_text(label, truncate_to_fit(line2, text_area_width, scale), text_x, text_y, scale);
         text_y += line_h;
 
         // Line 3: Weight + Spool ID
-        std::string weight_str =
-            std::to_string(static_cast<int>(spool.remaining_weight_g)) + "G";
-        std::string line3 = weight_str + (spool.id < 0 ? std::string{" TEST"} : " #" + std::to_string(spool.id));
-        draw_text(label, truncate_to_fit(line3, text_area_width, scale),
-                  text_x, text_y, scale);
+        std::string weight_str = std::to_string(static_cast<int>(spool.remaining_weight_g)) + "G";
+        std::string line3 =
+            weight_str + (spool.id < 0 ? std::string{" TEST"} : " #" + std::to_string(spool.id));
+        draw_text(label, truncate_to_fit(line3, text_area_width, scale), text_x, text_y, scale);
         text_y += line_h;
 
         // Line 4: Temps (if fits)
-        if (spool.nozzle_temp_recommended > 0 &&
-            text_y + line_h <= lh - m) {
+        if (spool.nozzle_temp_recommended > 0 && text_y + line_h <= lh - m) {
             std::string temps = std::to_string(spool.nozzle_temp_recommended) + "C";
             if (spool.bed_temp_recommended > 0)
                 temps += "/" + std::to_string(spool.bed_temp_recommended) + "C";
-            draw_text(label, truncate_to_fit(temps, text_area_width, scale),
-                      text_x, text_y, scale);
+            draw_text(label, truncate_to_fit(temps, text_area_width, scale), text_x, text_y, scale);
         }
 
         // Rotate 90° CW: landscape (lw × lh) → portrait (lh × lw) for printer
@@ -401,14 +388,13 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
     int qr_pct = (preset == LabelPreset::STANDARD) ? 40 : 30;
     int qr_max = (preset == LabelPreset::STANDARD) ? 250 : 200;
     if (narrow) {
-        qr_pct -= 8;  // shrink QR on narrow labels (die-cut or continuous)
+        qr_pct -= 8; // shrink QR on narrow labels (die-cut or continuous)
         qr_max = std::min(qr_max, 180);
     }
     int qr_target = std::min(label_width * qr_pct / 100, qr_max);
     auto qr = generate_qr_bitmap(qr_data, qr_target);
     if (qr.empty()) {
-        spdlog::warn("label_renderer: QR generation failed for spool {}",
-                     spool.id);
+        spdlog::warn("label_renderer: QR generation failed for spool {}", spool.id);
         return LabelBitmap::create(label_width, margin * 2);
     }
 
@@ -442,7 +428,8 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
     // typically 7-9 chars — anything less truncates them to garble on narrow
     // tape. Was 4, which left 29mm continuous showing only "PRUS".
     int max_scale_by_width = text_area_width / ((FONT_W + 1) * 8); // fit ≥8 chars
-    if (max_scale_by_width < 2) max_scale_by_width = 2;
+    if (max_scale_by_width < 2)
+        max_scale_by_width = 2;
     scale_lg = std::min(scale_lg, max_scale_by_width);
     scale_md = std::min(scale_md, max_scale_by_width);
     scale_sm = std::min(scale_sm, max_scale_by_width);
@@ -468,8 +455,7 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
     }
 
     int content_height = std::max(qr.height(), text_height);
-    int height =
-        size.height_px > 0 ? size.height_px : content_height + 2 * margin;
+    int height = size.height_px > 0 ? size.height_px : content_height + 2 * margin;
 
     auto label = LabelBitmap::create(label_width, height);
 
@@ -481,81 +467,70 @@ LabelBitmap LabelRenderer::render(const SpoolInfo& spool, LabelPreset preset,
 
     if (preset == LabelPreset::STANDARD) {
         // Line 1: Vendor (large)
-        draw_text(label, truncate_to_fit(vendor, text_area_width, scale_lg),
-                  text_x, text_y, scale_lg);
+        draw_text(label, truncate_to_fit(vendor, text_area_width, scale_lg), text_x, text_y,
+                  scale_lg);
         text_y += line_h_lg;
 
         // Line 2: Material + Color (medium)
-        std::string line2 =
-            color.empty() ? material : material + " " + color;
-        draw_text(label, truncate_to_fit(line2, text_area_width, scale_md),
-                  text_x, text_y, scale_md);
+        std::string line2 = color.empty() ? material : material + " " + color;
+        draw_text(label, truncate_to_fit(line2, text_area_width, scale_md), text_x, text_y,
+                  scale_md);
         text_y += line_h_md;
 
         // Line 3: Weight + Length + Spool ID (small)
-        std::string weight_str =
-            std::to_string(static_cast<int>(spool.remaining_weight_g)) + "G";
+        std::string weight_str = std::to_string(static_cast<int>(spool.remaining_weight_g)) + "G";
         if (spool.remaining_length_m > 0) {
             weight_str += " / " + std::to_string(static_cast<int>(spool.remaining_length_m)) + "M";
         }
-        std::string line3 = weight_str + (spool.id < 0 ? std::string{"  TEST"} : "  #" + std::to_string(spool.id));
-        draw_text(label, truncate_to_fit(line3, text_area_width, scale_sm),
-                  text_x, text_y, scale_sm);
+        std::string line3 =
+            weight_str + (spool.id < 0 ? std::string{"  TEST"} : "  #" + std::to_string(spool.id));
+        draw_text(label, truncate_to_fit(line3, text_area_width, scale_sm), text_x, text_y,
+                  scale_sm);
         text_y += line_h_sm;
 
         // Line 4: Temps (small) — if present and space permits
-        if (spool.nozzle_temp_recommended > 0 &&
-            text_y + line_h_sm <= height - margin) {
+        if (spool.nozzle_temp_recommended > 0 && text_y + line_h_sm <= height - margin) {
             std::string temps = std::to_string(spool.nozzle_temp_recommended) + "C";
             if (spool.bed_temp_recommended > 0) {
                 temps += " / " + std::to_string(spool.bed_temp_recommended) + "C BED";
             }
-            draw_text(label, truncate_to_fit(temps, text_area_width, scale_sm),
-                      text_x, text_y, scale_sm);
+            draw_text(label, truncate_to_fit(temps, text_area_width, scale_sm), text_x, text_y,
+                      scale_sm);
             text_y += line_h_sm;
         }
 
         // Line 5: Lot number (small) — if present and space permits
-        if (!spool.lot_nr.empty() &&
-            text_y + line_h_sm <= height - margin) {
-            draw_text(label,
-                      truncate_to_fit(to_upper(spool.lot_nr), text_area_width, scale_sm),
+        if (!spool.lot_nr.empty() && text_y + line_h_sm <= height - margin) {
+            draw_text(label, truncate_to_fit(to_upper(spool.lot_nr), text_area_width, scale_sm),
                       text_x, text_y, scale_sm);
             text_y += line_h_sm;
         }
 
         // Line 6: Comment/notes (small) — if present and space permits
-        if (!spool.comment.empty() &&
-            text_y + line_h_sm <= height - margin) {
-            draw_text(label,
-                      truncate_to_fit(to_upper(spool.comment), text_area_width, scale_sm),
+        if (!spool.comment.empty() && text_y + line_h_sm <= height - margin) {
+            draw_text(label, truncate_to_fit(to_upper(spool.comment), text_area_width, scale_sm),
                       text_x, text_y, scale_sm);
         }
     } else {
         // COMPACT: Line 1 = Vendor (large)
-        draw_text(label,
-                  truncate_to_fit(vendor, text_area_width, scale_lg),
-                  text_x, text_y, scale_lg);
+        draw_text(label, truncate_to_fit(vendor, text_area_width, scale_lg), text_x, text_y,
+                  scale_lg);
         text_y += line_h_lg;
 
         // Line 2: Material + Color (medium)
-        std::string line2 =
-            color.empty() ? material : material + " " + color;
-        draw_text(label,
-                  truncate_to_fit(line2, text_area_width, scale_md),
-                  text_x, text_y, scale_md);
+        std::string line2 = color.empty() ? material : material + " " + color;
+        draw_text(label, truncate_to_fit(line2, text_area_width, scale_md), text_x, text_y,
+                  scale_md);
         text_y += line_h_md;
 
         // Line 3: Spool ID (small)
         std::string line3 = "#" + std::to_string(spool.id);
-        draw_text(label,
-                  truncate_to_fit(line3, text_area_width, scale_sm),
-                  text_x, text_y, scale_sm);
+        draw_text(label, truncate_to_fit(line3, text_area_width, scale_sm), text_x, text_y,
+                  scale_sm);
     }
 
-    spdlog::debug("label_renderer: rendered {}x{} label for spool {} ({})",
-                  label.width(), label.height(), spool.id,
-                  label_preset_name(preset));
+    spdlog::debug("label_renderer: rendered {}x{} label for spool {} ({})", label.width(),
+                  label.height(), spool.id, label_preset_name(preset));
     return label;
 }
 

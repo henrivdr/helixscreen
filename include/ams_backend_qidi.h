@@ -111,11 +111,14 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     [[nodiscard]] std::optional<helix::ErrorEvent> current_error() const override;
 
-    // Per-lane eject for non-loaded lanes via FORCE_MOVE on the box_stepper
-    // (#1041). Gated on [force_move] enable_force_move being set in the config.
+    // Per-lane eject for non-loaded lanes. Q2/Plus 4: FORCE_MOVE on the box_stepper
+    // (#1041), gated on [force_move] enable_force_move. Max 4: MULTI_COLOR_BOX_UNLOAD
+    // via the multi_color_controller dialect, no [force_move] needed (#1083).
     AmsError eject_lane(int slot_index) override;
     [[nodiscard]] bool supports_lane_eject() const override {
-        return fw_force_move_enabled_;
+        // Max 4 (multi_color_controller) ejects via MULTI_COLOR_BOX_UNLOAD, which
+        // needs no [force_move]; the Q2/Plus 4 box_stepper FORCE_MOVE path does. #1083
+        return box_uses_multi_color_ || fw_force_move_enabled_;
     }
 
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
@@ -127,8 +130,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     // --- Dryer / box-heater control (issue #1019) ---
     [[nodiscard]] DryerInfo get_dryer_info() const override;
-    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
-                          int unit = 0) override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
 
   protected:
@@ -184,9 +186,13 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     // Firmware-capability flags (see detect_firmware_capabilities()). Optimistic
     // defaults match verified Q2 1.1.1 stock firmware so tests and a discovery
     // race never downgrade off the known-good path.
-    bool fw_has_m603_ = true;         ///< M603 stock unload macro present
-    bool fw_has_clear_nozzle_ = true; ///< CLEAR_NOZZLE post-load wipe macro present
+    bool fw_has_m603_ = true;            ///< M603 stock unload macro present
+    bool fw_has_clear_nozzle_ = true;    ///< CLEAR_NOZZLE post-load wipe macro present
     bool fw_force_move_enabled_ = false; ///< [force_move] enable_force_move -> lane eject
+    /// [multi_color_controller] config section present -> Max 4 box dialect: eject/
+    /// unload go through MULTI_COLOR_* commands, not the box_stepper FORCE_MOVE that
+    /// the Max 4 rejects with "Invalid pin value". Set in apply_config_settings. #1083
+    bool box_uses_multi_color_ = false;
 
     /// Raw RFID indices read from save_variables. Per-slot side-table so we
     /// don't pollute SlotInfo with backend-specific fields. Resolution to
@@ -201,7 +207,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     // Dryer state for the box PTC heater (issue #1019).
     DryerInfo dryer_info_;
-    std::time_t dry_end_epoch_ = 0;      ///< Absolute drying end time (epoch s), 0 = none
+    std::time_t dry_end_epoch_ = 0;       ///< Absolute drying end time (epoch s), 0 = none
     bool drying_timer_supported_ = false; ///< box_extras drying timer seen -> use ENABLE_BOX_DRY
     std::function<std::time_t()> now_fn_ = [] { return std::time(nullptr); };
 
@@ -245,8 +251,7 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
 
     /// Nearest palette entry to `rgb` by squared RGB distance. Returns 0 when
     /// the palette is empty.
-    static int resolve_color_id(const std::map<int, std::uint32_t>& palette,
-                                std::uint32_t rgb);
+    static int resolve_color_id(const std::map<int, std::uint32_t>& palette, std::uint32_t rgb);
 
     /// Vendor id from a case-insensitive name match against `vendors`. Falls
     /// back to the id whose name is "Generic" (case-insensitive) if present,

@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "print_control_buttons.h"
 
+#include "ui_error_reporting.h" // NOTIFY_WARNING / NOTIFY_ERROR
+#include "ui_event_safety.h"    // LVGL_SAFE_EVENT_CB_BEGIN / END
+#include "ui_resume_dispatch.h"
+
 #include "abort_manager.h"
-#include "app_globals.h" // get_printer_state()
+#include "app_globals.h"                                // get_printer_state()
+#include "lvgl/src/others/translation/lv_translation.h" // lv_tr
 #include "moonraker_api.h"
 #include "moonraker_error.h"
 #include "observer_factory.h"
 #include "printer_state.h"
 #include "standard_macros.h"
 #include "static_subject_registry.h"
-#include "ui_error_reporting.h" // NOTIFY_WARNING / NOTIFY_ERROR
-#include "ui_event_safety.h"    // LVGL_SAFE_EVENT_CB_BEGIN / END
-#include "ui_resume_dispatch.h"
-
-#include "lvgl/src/others/translation/lv_translation.h" // lv_tr
 
 #include <spdlog/spdlog.h>
 
@@ -43,16 +43,17 @@ void PrintControlButtons::init_subjects() {
     lv_xml_register_event_cb(nullptr, "on_print_control_stop", on_stop_clicked);
 
     // print_state_enum is a static global subject — no SubjectLifetime needed.
-    print_state_observer_ = observe_int_sync<PrintControlButtons>(
-        get_printer_state().get_print_state_enum_subject(), this,
-        [](PrintControlButtons* self, int) {
-            // A real state change clears any optimistic pending action; the new
-            // state is authoritative. Otherwise just recompute the buttons.
-            if (self->pending_action_ != PendingAction::None)
-                self->clear_pending_action();
-            else
-                self->recompute();
-        });
+    print_state_observer_ =
+        observe_int_sync<PrintControlButtons>(get_printer_state().get_print_state_enum_subject(),
+                                              this, [](PrintControlButtons* self, int) {
+                                                  // A real state change clears any optimistic
+                                                  // pending action; the new state is authoritative.
+                                                  // Otherwise just recompute the buttons.
+                                                  if (self->pending_action_ != PendingAction::None)
+                                                      self->clear_pending_action();
+                                                  else
+                                                      self->recompute();
+                                              });
 
     // Self-register cleanup so subjects/observer are torn down before lv_deinit().
     StaticSubjectRegistry::instance().register_deinit("PrintControlButtons", []() {
@@ -118,8 +119,7 @@ void PrintControlButtons::handle_primary_button() {
         // toast; the generic RPC_ERROR auto-toast + Klipper's `!!` broadcast
         // for the same root cause would be redundant noise.
         macros.execute(
-            StandardMacroSlot::Pause, api_,
-            []() { spdlog::info("[PrintControl] Pause sent"); },
+            StandardMacroSlot::Pause, api_, []() { spdlog::info("[PrintControl] Pause sent"); },
             [](const MoonrakerError& err) {
                 spdlog::error("[PrintControl] Pause failed: {}", err.message);
                 NOTIFY_ERROR(lv_tr("Failed to pause print: {}"), err.user_message());
@@ -148,8 +148,7 @@ void PrintControlButtons::request_resume() {
     // failure (success waits on the PrinterState observer confirmation, which
     // clears the pending action when state transitions to Printing).
     helix::ui::dispatch_prepared_resume(
-        api_, "[PrintControl]",
-        []() { PrintControlButtons::instance().clear_pending_action(); });
+        api_, "[PrintControl]", []() { PrintControlButtons::instance().clear_pending_action(); });
 }
 
 void PrintControlButtons::handle_stop_button() {

@@ -403,7 +403,9 @@ class WizardConnectionLifetimeFixture : public LVGLTestFixture {
         step = get_wizard_connection_step();
         step->init_subjects();
     }
-    ~WizardConnectionLifetimeFixture() { step->cleanup(); }
+    ~WizardConnectionLifetimeFixture() {
+        step->cleanup();
+    }
     WizardConnectionStep* step = nullptr;
 };
 

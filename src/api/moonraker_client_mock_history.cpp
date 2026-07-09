@@ -70,7 +70,8 @@ namespace mock_internal {
 void register_history_handlers(std::unordered_map<std::string, MethodHandler>& registry) {
     // server.history.list - Get print history
     registry["server.history.list"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         (void)error_cb;
@@ -174,7 +175,8 @@ void register_history_handlers(std::unordered_map<std::string, MethodHandler>& r
     // server.history.totals - Get aggregate statistics
     // Computed from the same mock job data so totals match the job list
     registry["server.history.totals"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         (void)params;
@@ -214,7 +216,8 @@ void register_history_handlers(std::unordered_map<std::string, MethodHandler>& r
 
     // server.history.delete_job - Delete a job from history
     registry["server.history.delete_job"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         (void)error_cb;

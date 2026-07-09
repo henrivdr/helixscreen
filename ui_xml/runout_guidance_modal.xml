@@ -42,7 +42,7 @@
       <!-- Warning icon (always shown - runout is a warning condition) -->
       <icon name="icon_warning" src="alert" size="md" variant="warning"/>
       <!-- Title -->
-      <text_heading name="dialog_title" text="$title" style_text_align="left" flex_grow="1"/>
+      <text_heading name="dialog_title" text="$title" translation_tag="$title" style_text_align="left" flex_grow="1"/>
     </lv_obj>
     <!-- Message content area -->
     <lv_obj name="content_container"
@@ -51,7 +51,7 @@
             style_pad_gap="0">
       <!-- Default message (prop-driven), shown only on basic-sensor backends.
            Hidden when autofeed-capable (runout_autofeed_capable == 1). -->
-      <text_body name="dialog_message" width="100%" text="$message" style_text_align="left" long_mode="wrap">
+      <text_body name="dialog_message" width="100%" text="$message" translation_tag="$message" style_text_align="left" long_mode="wrap">
         <bind_flag_if_eq subject="runout_autofeed_capable" flag="hidden" ref_value="1"/>
       </text_body>
       <!-- Autofeed message: Resume alone reloads, so just refill the spool.

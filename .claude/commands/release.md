@@ -200,13 +200,39 @@ git commit -m "chore(release): v{NEW_VERSION}"
 ```
 
 ### Create annotated tag
-The tag annotation becomes the GitHub release body (CI extracts it). Use the changelog entry as the tag message:
+The tag annotation becomes the GitHub release body (CI extracts it). Use the changelog entry as the tag message.
+
+**CRITICAL — preserve the `###` markdown headers.** `git tag`'s default cleanup mode is `strip`, which deletes every line beginning with `#` — that silently removes the `### Added` / `### Fixed` / `### Changed` section headers from the release body (passing `-m "..."` does NOT avoid this; `strip` applies to `-m` and `-F` alike). You MUST write the message to a file and pass `--cleanup=verbatim`:
 
 ```bash
-git tag -a "v{NEW_VERSION}" -m "{tag_message}"
+# Write the changelog entry (with its ### section headers) to a temp file:
+cat > /tmp/helix-tag-msg-v{NEW_VERSION}.txt <<'TAGMSG'
+v{NEW_VERSION}
+
+### Added
+- ...
+
+### Fixed
+- ...
+
+### Changed
+- ...
+TAGMSG
+
+git tag -a "v{NEW_VERSION}" -F /tmp/helix-tag-msg-v{NEW_VERSION}.txt --cleanup=verbatim
 ```
 
+(If the shell mangles the heredoc, use the Write tool to create the temp file instead — same `--cleanup=verbatim` flag.)
+
 The tag message should be the changelog entry content (the Added/Fixed/Changed sections, optionally with the prose summary). Format it cleanly — this is what users see on the GitHub release page.
+
+**Verify before continuing** that the headers survived:
+
+```bash
+git cat-file tag "v{NEW_VERSION}" | grep -E '^### (Added|Fixed|Changed)'
+```
+
+If that prints nothing, the headers were stripped — delete the tag (`git tag -d v{NEW_VERSION}`, safe while unpushed) and recreate it with `--cleanup=verbatim`.
 
 ---
 

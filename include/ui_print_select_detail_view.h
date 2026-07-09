@@ -7,10 +7,9 @@
 #include "ui_pre_print_options_renderer.h"
 #include "ui_print_preparation_manager.h"
 
-#include "preflight_validator.h"
-
 #include "moonraker_types.h"
 #include "overlay_base.h"
+#include "preflight_validator.h"
 #include "print_file_data.h" // For FileHistoryStatus
 #include "subject_managed_panel.h"
 
@@ -543,10 +542,10 @@ class PrintSelectDetailView : public OverlayBase {
     // Pre-print option toggle state lives in `option_rows_renderer_` (one
     // heap-allocated subject per option) — the legacy fixed six subjects
     // (preprint_bed_mesh_, preprint_qgl_, etc.) were retired in Phase 3.5.
-    lv_subject_t filament_mismatch_{};          // 1 = material mismatch warning visible
-    lv_subject_t filament_mapping_visible_{};   // 1 = filament mapping card visible (AMS+tools)
-    lv_subject_t color_swatches_visible_{};     // 1 = legacy color swatches card visible
-    lv_subject_t empty_tools_warning_{};        // 1 = at least one used tool's slot is empty
+    lv_subject_t filament_mismatch_{};        // 1 = material mismatch warning visible
+    lv_subject_t filament_mapping_visible_{}; // 1 = filament mapping card visible (AMS+tools)
+    lv_subject_t color_swatches_visible_{};   // 1 = legacy color swatches card visible
+    lv_subject_t empty_tools_warning_{};      // 1 = at least one used tool's slot is empty
     // Cached backend-agnostic pre-flight validation result for the current file.
     // Computed in try_extract_gcode_colors() once the gcode is parsed; the single
     // source of truth driving filament_mismatch_ + empty_tools_warning_ (works

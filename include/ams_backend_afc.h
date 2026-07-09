@@ -146,8 +146,8 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     /// ErrorEvent with context-aware recovery actions. Falls back to a catch-all
     /// for any pausing !! while error_state_ is set. Returns nullopt otherwise so
     /// the generic classifier handles the line.
-    [[nodiscard]] std::optional<helix::ErrorEvent> classify_error(
-        const std::string& raw_line, const helix::ClassifyContext& ctx) const override;
+    [[nodiscard]] std::optional<helix::ErrorEvent>
+    classify_error(const std::string& raw_line, const helix::ClassifyContext& ctx) const override;
 
     /// L2 (S1/S2): ordered toolchange phase templates and narration→phase-id
     /// matcher for AFC. AFC emits `//` narration lines for feed/purge/brush/

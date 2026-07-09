@@ -2,14 +2,16 @@
 
 #include "ui_lock_screen.h"
 
-#include "lock_manager.h"
 #include "ui_callback_helpers.h"
 #include "ui_event_safety.h"
 #include "ui_pin_utils.h"
 #include "ui_utils.h"
 
-#include <lvgl.h>
+#include "lock_manager.h"
+
 #include <spdlog/spdlog.h>
+
+#include <lvgl.h>
 
 namespace helix::ui {
 
@@ -124,8 +126,7 @@ void LockScreenOverlay::on_digit(int digit) {
     // Auto-submit when max digits reached — defer to avoid UB if on_confirm()
     // destroys the overlay while we're still in on_digit()
     if (static_cast<int>(digit_buffer_.size()) == kMaxDigits) {
-        lv_async_call(
-            [](void*) { LockScreenOverlay::instance().on_confirm(); }, nullptr);
+        lv_async_call([](void*) { LockScreenOverlay::instance().on_confirm(); }, nullptr);
     }
 }
 
@@ -147,8 +148,8 @@ void LockScreenOverlay::on_confirm() {
     }
 
     if (static_cast<int>(digit_buffer_.size()) < kMinDigits) {
-        spdlog::debug("[LockScreen] PIN too short ({} digits, need {})",
-                      digit_buffer_.size(), kMinDigits);
+        spdlog::debug("[LockScreen] PIN too short ({} digits, need {})", digit_buffer_.size(),
+                      kMinDigits);
         clear_digits();
         show_error("PIN must be at least 4 digits");
         return;
@@ -173,8 +174,7 @@ void LockScreenOverlay::on_confirm() {
 // ============================================================================
 
 void LockScreenOverlay::update_dots() {
-    update_pin_dots(overlay_, "lock_dot_", kMaxDigits,
-                    static_cast<int>(digit_buffer_.size()));
+    update_pin_dots(overlay_, "lock_dot_", kMaxDigits, static_cast<int>(digit_buffer_.size()));
 }
 
 void LockScreenOverlay::clear_digits() {
@@ -209,8 +209,7 @@ void LockScreenOverlay::shake_dots() {
     if (!dots) {
         spdlog::warn("[LockScreen] lock_dots_container not found for shake animation");
         // Still clear digits after a delay
-        lv_async_call(
-            [](void*) { LockScreenOverlay::instance().clear_digits(); }, nullptr);
+        lv_async_call([](void*) { LockScreenOverlay::instance().clear_digits(); }, nullptr);
         return;
     }
 
@@ -228,8 +227,7 @@ void LockScreenOverlay::shake_dots() {
         // Reset translate after shake
         lv_obj_set_style_translate_x(static_cast<lv_obj_t*>(anim->var), 0, LV_PART_MAIN);
         // Clear digit buffer after animation — deferred so it runs on main thread
-        lv_async_call(
-            [](void*) { LockScreenOverlay::instance().clear_digits(); }, nullptr);
+        lv_async_call([](void*) { LockScreenOverlay::instance().clear_digits(); }, nullptr);
     });
     lv_anim_start(&a);
 
@@ -300,9 +298,9 @@ static void lock_confirm_clicked(lv_event_t* e) {
 
 void register_lock_screen_callbacks() {
     register_xml_callbacks({
-        {"lock_digit_clicked",    lock_digit_clicked},
+        {"lock_digit_clicked", lock_digit_clicked},
         {"lock_backspace_clicked", lock_backspace_clicked},
-        {"lock_confirm_clicked",  lock_confirm_clicked},
+        {"lock_confirm_clicked", lock_confirm_clicked},
     });
 }
 

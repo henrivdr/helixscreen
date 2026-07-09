@@ -15,7 +15,9 @@ namespace helix::ipp {
 // Byte-order helpers (big-endian / network byte order)
 // ---------------------------------------------------------------------------
 
-static void put_u8(std::vector<uint8_t>& buf, uint8_t v) { buf.push_back(v); }
+static void put_u8(std::vector<uint8_t>& buf, uint8_t v) {
+    buf.push_back(v);
+}
 
 static void put_u16(std::vector<uint8_t>& buf, uint16_t v) {
     buf.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
@@ -80,13 +82,16 @@ bool IppValue::as_boolean() const {
 
 const IppValue* IppResponse::find_attribute(const std::string& name) const {
     for (const auto& attr : operation_attributes) {
-        if (attr.name == name) return &attr;
+        if (attr.name == name)
+            return &attr;
     }
     for (const auto& attr : job_attributes) {
-        if (attr.name == name) return &attr;
+        if (attr.name == name)
+            return &attr;
     }
     for (const auto& attr : printer_attributes) {
-        if (attr.name == name) return &attr;
+        if (attr.name == name)
+            return &attr;
     }
     return nullptr;
 }
@@ -95,7 +100,8 @@ std::vector<const IppValue*> IppResponse::find_all(const std::string& name) cons
     std::vector<const IppValue*> results;
     auto search = [&](const std::vector<IppValue>& attrs) {
         for (const auto& attr : attrs) {
-            if (attr.name == name) results.push_back(&attr);
+            if (attr.name == name)
+                results.push_back(&attr);
         }
     };
     search(operation_attributes);
@@ -106,27 +112,44 @@ std::vector<const IppValue*> IppResponse::find_all(const std::string& name) cons
 
 std::string IppResponse::status_message() const {
     switch (status) {
-        case StatusCode::OK: return "successful-ok";
-        case StatusCode::OK_IGNORED_ATTRIBUTES: return "successful-ok-ignored-or-substituted-attributes";
-        case StatusCode::OK_CONFLICTING: return "successful-ok-conflicting-attributes";
-        case StatusCode::CLIENT_BAD_REQUEST: return "client-error-bad-request";
-        case StatusCode::CLIENT_FORBIDDEN: return "client-error-forbidden";
-        case StatusCode::CLIENT_NOT_AUTHENTICATED: return "client-error-not-authenticated";
-        case StatusCode::CLIENT_NOT_AUTHORIZED: return "client-error-not-authorized";
-        case StatusCode::CLIENT_NOT_POSSIBLE: return "client-error-not-possible";
-        case StatusCode::CLIENT_TIMEOUT: return "client-error-timeout";
-        case StatusCode::CLIENT_NOT_FOUND: return "client-error-not-found";
-        case StatusCode::CLIENT_GONE: return "client-error-gone";
-        case StatusCode::CLIENT_DOCUMENT_FORMAT: return "client-error-document-format-not-supported";
-        case StatusCode::SERVER_INTERNAL_ERROR: return "server-error-internal-error";
-        case StatusCode::SERVER_NOT_ACCEPTING: return "server-error-not-accepting-jobs";
-        case StatusCode::SERVER_BUSY: return "server-error-busy";
-        default: {
-            uint16_t code = static_cast<uint16_t>(status);
-            if (code < 0x0400) return "successful-ok (0x" + fmt::format("{:04x}", code) + ")";
-            if (code < 0x0500) return "client-error (0x" + fmt::format("{:04x}", code) + ")";
-            return "server-error (0x" + fmt::format("{:04x}", code) + ")";
-        }
+    case StatusCode::OK:
+        return "successful-ok";
+    case StatusCode::OK_IGNORED_ATTRIBUTES:
+        return "successful-ok-ignored-or-substituted-attributes";
+    case StatusCode::OK_CONFLICTING:
+        return "successful-ok-conflicting-attributes";
+    case StatusCode::CLIENT_BAD_REQUEST:
+        return "client-error-bad-request";
+    case StatusCode::CLIENT_FORBIDDEN:
+        return "client-error-forbidden";
+    case StatusCode::CLIENT_NOT_AUTHENTICATED:
+        return "client-error-not-authenticated";
+    case StatusCode::CLIENT_NOT_AUTHORIZED:
+        return "client-error-not-authorized";
+    case StatusCode::CLIENT_NOT_POSSIBLE:
+        return "client-error-not-possible";
+    case StatusCode::CLIENT_TIMEOUT:
+        return "client-error-timeout";
+    case StatusCode::CLIENT_NOT_FOUND:
+        return "client-error-not-found";
+    case StatusCode::CLIENT_GONE:
+        return "client-error-gone";
+    case StatusCode::CLIENT_DOCUMENT_FORMAT:
+        return "client-error-document-format-not-supported";
+    case StatusCode::SERVER_INTERNAL_ERROR:
+        return "server-error-internal-error";
+    case StatusCode::SERVER_NOT_ACCEPTING:
+        return "server-error-not-accepting-jobs";
+    case StatusCode::SERVER_BUSY:
+        return "server-error-busy";
+    default: {
+        uint16_t code = static_cast<uint16_t>(status);
+        if (code < 0x0400)
+            return "successful-ok (0x" + fmt::format("{:04x}", code) + ")";
+        if (code < 0x0500)
+            return "client-error (0x" + fmt::format("{:04x}", code) + ")";
+        return "server-error (0x" + fmt::format("{:04x}", code) + ")";
+    }
     }
 }
 
@@ -194,12 +217,14 @@ void IppRequest::add_enum(const std::string& name, int32_t value) {
     add_raw_attribute(ValueTag::ENUM, name, buf, 4);
 }
 
-void IppRequest::begin_job_attributes() { in_job_group_ = true; }
+void IppRequest::begin_job_attributes() {
+    in_job_group_ = true;
+}
 
 void IppRequest::add_raw_attribute(ValueTag tag, const std::string& name, const void* data,
                                    size_t len) {
     Attribute attr;
-    attr.tag  = tag;
+    attr.tag = tag;
     attr.name = name;
     attr.data.resize(len);
     if (len > 0) {
@@ -288,12 +313,11 @@ IppResponse parse_response(const uint8_t* data, size_t len) {
 
     resp.version_major = data[0];
     resp.version_minor = data[1];
-    resp.status        = static_cast<StatusCode>(read_u16(data + 2));
-    resp.request_id    = read_u32(data + 4);
+    resp.status = static_cast<StatusCode>(read_u16(data + 2));
+    resp.request_id = read_u32(data + 4);
 
-    spdlog::debug("ipp: response v{}.{} status=0x{:04x} request_id={}",
-                  resp.version_major, resp.version_minor,
-                  static_cast<uint16_t>(resp.status), resp.request_id);
+    spdlog::debug("ipp: response v{}.{} status=0x{:04x} request_id={}", resp.version_major,
+                  resp.version_minor, static_cast<uint16_t>(resp.status), resp.request_id);
 
     size_t pos = 8;
 
@@ -316,7 +340,8 @@ IppResponse parse_response(const uint8_t* data, size_t len) {
             } else if (tag == static_cast<uint8_t>(ValueTag::PRINTER_ATTRIBUTES)) {
                 current_group = &resp.printer_attributes;
             } else {
-                spdlog::debug("ipp: unknown delimiter tag 0x{:02x}, treating as generic group", tag);
+                spdlog::debug("ipp: unknown delimiter tag 0x{:02x}, treating as generic group",
+                              tag);
                 // Unknown group -- put into printer_attributes as fallback
                 current_group = &resp.printer_attributes;
             }
@@ -358,7 +383,7 @@ IppResponse parse_response(const uint8_t* data, size_t len) {
         }
 
         IppValue val;
-        val.tag  = static_cast<ValueTag>(tag);
+        val.tag = static_cast<ValueTag>(tag);
         val.name = attr_name;
         if (value_len > 0) {
             val.data.assign(data + value_start, data + value_start + value_len);
@@ -446,6 +471,6 @@ std::string make_printer_uri(const std::string& host, uint16_t port,
     return uri;
 }
 
-}  // namespace helix::ipp
+} // namespace helix::ipp
 
 #endif // HELIX_HAS_LABEL_PRINTER

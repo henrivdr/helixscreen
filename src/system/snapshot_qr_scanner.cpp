@@ -18,10 +18,8 @@ SnapshotQrScanner::~SnapshotQrScanner() {
     stop();
 }
 
-void SnapshotQrScanner::start(const std::string& snapshot_url,
-                               FrameCallback on_frame,
-                               QrResultCallback on_qr_result,
-                               ErrorCallback on_error) {
+void SnapshotQrScanner::start(const std::string& snapshot_url, FrameCallback on_frame,
+                              QrResultCallback on_qr_result, ErrorCallback on_error) {
     if (running_.load()) {
         spdlog::warn("[SnapshotQR] Already running");
         return;
@@ -104,7 +102,8 @@ void SnapshotQrScanner::poll_loop() {
 }
 
 bool SnapshotQrScanner::fetch_and_decode() {
-    if (snapshot_url_.empty()) return false;
+    if (snapshot_url_.empty())
+        return false;
 
     spdlog::info("[SnapshotQR] Fetching snapshot from {}", snapshot_url_);
 
@@ -116,12 +115,14 @@ bool SnapshotQrScanner::fetch_and_decode() {
 
     auto resp = requests::request(req);
 
-    if (!running_.load()) return false;
+    if (!running_.load())
+        return false;
 
     if (!resp || resp->status_code < 200 || resp->status_code >= 300) {
         spdlog::debug("[SnapshotQR] Snapshot fetch failed (status={})",
                       resp ? static_cast<int>(resp->status_code) : -1);
-        if (on_error_) on_error_("Snapshot fetch failed");
+        if (on_error_)
+            on_error_("Snapshot fetch failed");
         return false;
     }
 
@@ -132,10 +133,9 @@ bool SnapshotQrScanner::fetch_and_decode() {
 
     // Decode JPEG with stb_image
     int width = 0, height = 0, channels = 0;
-    uint8_t* pixels = stbi_load_from_memory(
-        reinterpret_cast<const uint8_t*>(resp->body.data()),
-        static_cast<int>(resp->body.size()),
-        &width, &height, &channels, 3);
+    uint8_t* pixels =
+        stbi_load_from_memory(reinterpret_cast<const uint8_t*>(resp->body.data()),
+                              static_cast<int>(resp->body.size()), &width, &height, &channels, 3);
 
     if (!pixels) {
         spdlog::debug("[SnapshotQR] JPEG decode failed: {}", stbi_failure_reason());
@@ -151,10 +151,8 @@ bool SnapshotQrScanner::fetch_and_decode() {
     // Ensure double buffers are allocated at correct size
     if (!decode_buf_ || frame_width_ != width || frame_height_ != height) {
         free_frame_bufs();
-        decode_buf_ = create_draw_buf(static_cast<uint32_t>(width),
-                                       static_cast<uint32_t>(height));
-        display_buf_ = create_draw_buf(static_cast<uint32_t>(width),
-                                        static_cast<uint32_t>(height));
+        decode_buf_ = create_draw_buf(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+        display_buf_ = create_draw_buf(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
         if (!decode_buf_ || !display_buf_) {
             spdlog::error("[SnapshotQR] Failed to allocate frame buffers {}x{}", width, height);
             stbi_image_free(pixels);
@@ -238,7 +236,8 @@ void SnapshotQrScanner::free_frame_bufs() {
 
 lv_draw_buf_t* SnapshotQrScanner::create_draw_buf(uint32_t w, uint32_t h) {
     auto* buf = static_cast<lv_draw_buf_t*>(calloc(1, sizeof(lv_draw_buf_t)));
-    if (!buf) return nullptr;
+    if (!buf)
+        return nullptr;
 
     uint32_t stride = lv_draw_buf_width_to_stride(w, LV_COLOR_FORMAT_RGB888);
     uint32_t data_size = stride * h;

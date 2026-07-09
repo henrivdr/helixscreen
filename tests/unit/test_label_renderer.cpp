@@ -1,9 +1,10 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "label_renderer.h"
 #include "spoolman_types.h"
+
+#include "../catch_amalgamated.hpp"
 
 static SpoolInfo make_test_spool() {
     SpoolInfo spool;
@@ -42,8 +43,8 @@ static bool has_black_pixels(const helix::LabelBitmap& bmp) {
 
 TEST_CASE("LabelRenderer STANDARD preset produces valid bitmap", "[label]") {
     auto spool = make_test_spool();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::STANDARD, continuous_62mm());
+    auto label =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::STANDARD, continuous_62mm());
 
     REQUIRE_FALSE(label.empty());
     REQUIRE(label.width() == 696);
@@ -53,8 +54,8 @@ TEST_CASE("LabelRenderer STANDARD preset produces valid bitmap", "[label]") {
 
 TEST_CASE("LabelRenderer MINIMAL preset is QR only", "[label]") {
     auto spool = make_test_spool();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::MINIMAL, continuous_62mm());
+    auto label =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::MINIMAL, continuous_62mm());
 
     REQUIRE_FALSE(label.empty());
     REQUIRE(label.width() == 696);
@@ -64,8 +65,8 @@ TEST_CASE("LabelRenderer MINIMAL preset is QR only", "[label]") {
 
 TEST_CASE("LabelRenderer COMPACT preset", "[label]") {
     auto spool = make_test_spool();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::COMPACT, continuous_62mm());
+    auto label =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::COMPACT, continuous_62mm());
 
     REQUIRE_FALSE(label.empty());
     REQUIRE(label.width() == 696);
@@ -75,8 +76,8 @@ TEST_CASE("LabelRenderer COMPACT preset", "[label]") {
 
 TEST_CASE("LabelRenderer 29mm label", "[label]") {
     auto spool = make_test_spool();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::STANDARD, continuous_29mm());
+    auto label =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::STANDARD, continuous_29mm());
 
     REQUIRE_FALSE(label.empty());
     REQUIRE(label.width() == 306);
@@ -86,8 +87,7 @@ TEST_CASE("LabelRenderer 29mm label", "[label]") {
 TEST_CASE("LabelRenderer die-cut label fits dimensions", "[label]") {
     auto spool = make_test_spool();
     auto size = diecut_62x29();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::STANDARD, size);
+    auto label = helix::LabelRenderer::render(spool, helix::LabelPreset::STANDARD, size);
 
     REQUIRE(label.width() == 696);
     REQUIRE(label.height() == 271);
@@ -100,18 +100,18 @@ TEST_CASE("LabelRenderer handles empty vendor and color", "[label]") {
     spool.material = "PETG";
     // vendor and color_name empty
 
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::STANDARD, continuous_62mm());
+    auto label =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::STANDARD, continuous_62mm());
     REQUIRE_FALSE(label.empty());
     REQUIRE(has_black_pixels(label));
 }
 
 TEST_CASE("LabelRenderer continuous height adapts to content", "[label]") {
     auto spool = make_test_spool();
-    auto minimal = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::MINIMAL, continuous_62mm());
-    auto standard = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::STANDARD, continuous_62mm());
+    auto minimal =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::MINIMAL, continuous_62mm());
+    auto standard =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::STANDARD, continuous_62mm());
 
     REQUIRE(minimal.height() > 0);
     REQUIRE(standard.height() > 0);
@@ -121,8 +121,7 @@ TEST_CASE("LabelRenderer continuous height adapts to content", "[label]") {
 TEST_CASE("LabelRenderer MINIMAL die-cut centers QR", "[label]") {
     auto spool = make_test_spool();
     auto size = diecut_62x29();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::MINIMAL, size);
+    auto label = helix::LabelRenderer::render(spool, helix::LabelPreset::MINIMAL, size);
 
     REQUIRE(label.width() == 696);
     REQUIRE(label.height() == 271);
@@ -137,10 +136,10 @@ TEST_CASE("LabelRenderer MINIMAL die-cut centers QR", "[label]") {
 
 TEST_CASE("LabelRenderer COMPACT wider label produces larger content", "[label]") {
     auto spool = make_test_spool();
-    auto compact_62 = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::COMPACT, continuous_62mm());
-    auto compact_29 = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::COMPACT, continuous_29mm());
+    auto compact_62 =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::COMPACT, continuous_62mm());
+    auto compact_29 =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::COMPACT, continuous_29mm());
 
     REQUIRE_FALSE(compact_62.empty());
     REQUIRE_FALSE(compact_29.empty());
@@ -150,8 +149,8 @@ TEST_CASE("LabelRenderer COMPACT wider label produces larger content", "[label]"
 
 TEST_CASE("LabelRenderer MINIMAL QR code capped size", "[label]") {
     auto spool = make_test_spool();
-    auto label = helix::LabelRenderer::render(
-        spool, helix::LabelPreset::MINIMAL, continuous_62mm());
+    auto label =
+        helix::LabelRenderer::render(spool, helix::LabelPreset::MINIMAL, continuous_62mm());
 
     REQUIRE_FALSE(label.empty());
     // Find the bounding box of black pixels to check QR size
@@ -163,7 +162,7 @@ TEST_CASE("LabelRenderer MINIMAL QR code capped size", "[label]") {
 
     // QR code height should be reasonable (capped, not filling entire label width)
     REQUIRE(max_y < label.width()); // QR shouldn't be as tall as the label is wide
-    REQUIRE(max_y <= 300); // QR should be capped around 250px + margin
+    REQUIRE(max_y <= 300);          // QR should be capped around 250px + margin
 }
 
 TEST_CASE("LabelRenderer STANDARD richer spool produces more content", "[label]") {
@@ -175,10 +174,10 @@ TEST_CASE("LabelRenderer STANDARD richer spool produces more content", "[label]"
     // Rich spool (all fields)
     auto rich_spool = make_test_spool();
 
-    auto minimal_label = helix::LabelRenderer::render(
-        minimal_spool, helix::LabelPreset::STANDARD, continuous_62mm());
-    auto rich_label = helix::LabelRenderer::render(
-        rich_spool, helix::LabelPreset::STANDARD, continuous_62mm());
+    auto minimal_label = helix::LabelRenderer::render(minimal_spool, helix::LabelPreset::STANDARD,
+                                                      continuous_62mm());
+    auto rich_label =
+        helix::LabelRenderer::render(rich_spool, helix::LabelPreset::STANDARD, continuous_62mm());
 
     REQUIRE_FALSE(minimal_label.empty());
     REQUIRE_FALSE(rich_label.empty());

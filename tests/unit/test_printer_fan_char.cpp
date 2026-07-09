@@ -1122,8 +1122,8 @@ TEST_CASE("Fan characterization: output_pin fan type classification",
     PrinterStateTestAccess::reset(state);
     state.init_subjects(false);
 
-    state.init_fans({"output_pin fan0", "output_pin fan1", "output_pin fan2",
-                     "heater_fan hotend_fan"});
+    state.init_fans(
+        {"output_pin fan0", "output_pin fan1", "output_pin fan2", "heater_fan hotend_fan"});
 
     const auto& fans = state.get_fans();
 
@@ -1230,9 +1230,8 @@ TEST_CASE("Fan characterization: fan_feedback RPM updates",
     state.init_fans({"output_pin fan0", "output_pin fan1", "output_pin fan2"});
 
     SECTION("fan_feedback maps fanN_speed to output_pin fanN rpm") {
-        json status = {{"fan_feedback", {{"fan0_speed", 16000},
-                                         {"fan1_speed", 3692},
-                                         {"fan2_speed", 0}}}};
+        json status = {
+            {"fan_feedback", {{"fan0_speed", 16000}, {"fan1_speed", 3692}, {"fan2_speed", 0}}}};
         state.update_from_status(status);
 
         const auto& fans = state.get_fans();
@@ -1310,13 +1309,14 @@ TEST_CASE("Fan characterization: single chamber fan still reads sensibly",
 
     SECTION("a user-set custom name still wins over role disambiguation") {
         auto* config = Config::get_instance();
-        config->set(config->df() + "fans/names/heater_fan chamber_fan",
-                    std::string("My Fan"));
+        const std::string name_key = config->df() + "fans/names/heater_fan chamber_fan";
+        const std::string name_orig = config->get<std::string>(name_key, "");
+        config->set(name_key, std::string("My Fan"));
 
         state.init_fans({"heater_fan chamber_fan"});
         REQUIRE(state.get_fans()[0].display_name == "My Fan");
 
-        config->set(config->df() + "fans/names/heater_fan chamber_fan", std::string(""));
+        config->set(name_key, name_orig); // restore
     }
 }
 
@@ -1330,8 +1330,12 @@ TEST_CASE("Fan characterization: custom display names from config",
 
     // Simulate saved custom names in config
     auto* config = Config::get_instance();
-    config->set(config->df() + "fans/names/output_pin fan0", std::string("Part Fan"));
-    config->set(config->df() + "fans/names/output_pin fan1", std::string("Electronics Fan"));
+    const std::string key0 = config->df() + "fans/names/output_pin fan0";
+    const std::string key1 = config->df() + "fans/names/output_pin fan1";
+    const std::string orig0 = config->get<std::string>(key0, "");
+    const std::string orig1 = config->get<std::string>(key1, "");
+    config->set(key0, std::string("Part Fan"));
+    config->set(key1, std::string("Electronics Fan"));
 
     state.init_fans({"output_pin fan0", "output_pin fan1", "output_pin fan2"});
 
@@ -1347,7 +1351,73 @@ TEST_CASE("Fan characterization: custom display names from config",
         REQUIRE_FALSE(fans[2].display_name.empty());
     }
 
-    // Cleanup to avoid polluting other tests
-    config->set(config->df() + "fans/names/output_pin fan0", std::string(""));
-    config->set(config->df() + "fans/names/output_pin fan1", std::string(""));
+    // Restore original values
+    config->set(key0, orig0);
+    config->set(key1, orig1);
+}
+
+// ============================================================================
+// Task 4: FanRoleConfig::from_config with live fan list (auto-heal stale roles)
+// ============================================================================
+
+TEST_CASE("FanRoleConfig::from_config auto-heals stale part fan to live fan",
+          "[characterization][fan][role][hwrole]") {
+    lv_init_safe();
+    Config* cfg = Config::get_instance();
+    REQUIRE(cfg != nullptr);
+    const std::string key = cfg->df() + "fans/part";
+    const std::string orig = cfg->get<std::string>(key, "");
+    cfg->set<std::string>(key, std::string("output_pin fan0"));
+
+    FanRoleConfig roles = FanRoleConfig::from_config(
+        cfg, {"fan", "heater_fan hotend_fan", "fan_generic Aux_Cooling_Fan"});
+
+    REQUIRE(roles.part_fan == "fan");
+
+    // Restore
+    cfg->set<std::string>(key, orig);
+}
+
+TEST_CASE("init_fans: healed roles correctly register 'fan' subject when stale role is restored",
+          "[characterization][fan][role][hwrole]") {
+    // Exercises the real path: Config has a stale role, from_config heals it, and the
+    // healed roles are passed to init_fans so the subject for the correct fan is created.
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    Config* cfg = Config::get_instance();
+    const std::string key = cfg->df() + "fans/part";
+    const std::string orig = cfg->get<std::string>(key, "");
+    cfg->set<std::string>(key, std::string("output_pin fan0")); // stale role
+
+    FanRoleConfig roles = FanRoleConfig::from_config(cfg, {"fan", "heater_fan hotend_fan"});
+    // from_config must have healed the stale role to the canonical "fan"
+    REQUIRE(roles.part_fan == "fan");
+
+    state.init_fans({"fan", "heater_fan hotend_fan"}, roles);
+
+    // The healed part fan subject must exist
+    REQUIRE(state.get_fan_speed_subject("fan") != nullptr);
+
+    // Restore
+    cfg->set<std::string>(key, orig);
+}
+
+TEST_CASE("init_fans keeps [fan] when part role points to an absent object",
+          "[characterization][fan][role][hwrole]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    // Defense in depth: a role that resolution did NOT touch (set directly), naming
+    // an object absent from the discovered list, must NOT cause [fan] to be skipped.
+    FanRoleConfig roles;
+    roles.part_fan = "output_pin fan0"; // absent from fan_objects below
+
+    state.init_fans({"fan", "heater_fan hotend_fan"}, roles);
+
+    REQUIRE(state.get_fan_speed_subject("fan") != nullptr); // not skipped
 }

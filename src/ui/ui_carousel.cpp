@@ -2,15 +2,15 @@
 
 #include "ui_carousel.h"
 
+#include "ui_utils.h"
+
 #include "helix-xml/src/xml/lv_xml.h"
-#include "theme_manager.h"
 #include "helix-xml/src/xml/lv_xml_parser.h"
 #include "helix-xml/src/xml/lv_xml_utils.h"
 #include "helix-xml/src/xml/lv_xml_widget.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
 #include "lvgl/lvgl.h"
 #include "theme_manager.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -299,14 +299,12 @@ static lv_obj_t* carousel_create_core(lv_obj_t* parent) {
     lv_obj_t* indicator_row = lv_obj_create(container);
     lv_obj_set_size(indicator_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_add_flag(indicator_row, LV_OBJ_FLAG_FLOATING);
-    lv_obj_align(indicator_row, LV_ALIGN_BOTTOM_MID, 0,
-                 -theme_manager_get_spacing("space_xxs"));
+    lv_obj_align(indicator_row, LV_ALIGN_BOTTOM_MID, 0, -theme_manager_get_spacing("space_xxs"));
     lv_obj_set_flex_flow(indicator_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(indicator_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(indicator_row, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_column(indicator_row, theme_manager_get_spacing("space_sm"),
-                                LV_PART_MAIN);
+    lv_obj_set_style_pad_column(indicator_row, theme_manager_get_spacing("space_sm"), LV_PART_MAIN);
     lv_obj_remove_flag(indicator_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_border_width(indicator_row, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(indicator_row, LV_OPA_TRANSP, LV_PART_MAIN);

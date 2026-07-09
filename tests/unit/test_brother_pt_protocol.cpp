@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "brother_pt_protocol.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix::label;
 using helix::LabelBitmap;
@@ -149,13 +150,14 @@ TEST_CASE("Brother PT PackBits - all zeros", "[label][brother-pt]") {
     std::vector<uint8_t> row(16, 0x00);
     auto compressed = brother_pt_packbits_compress(row.data(), row.size());
     REQUIRE(compressed.size() == 2);
-    REQUIRE(compressed[0] == 0xF1);  // -(16-1) = -15 = 0xF1
+    REQUIRE(compressed[0] == 0xF1); // -(16-1) = -15 = 0xF1
     REQUIRE(compressed[1] == 0x00);
 }
 
 TEST_CASE("Brother PT PackBits - all unique bytes", "[label][brother-pt]") {
     std::vector<uint8_t> row;
-    for (int i = 0; i < 16; i++) row.push_back(static_cast<uint8_t>(i));
+    for (int i = 0; i < 16; i++)
+        row.push_back(static_cast<uint8_t>(i));
     auto compressed = brother_pt_packbits_compress(row.data(), row.size());
     REQUIRE(compressed.size() == 17);
     REQUIRE(compressed[0] == 15);
@@ -197,9 +199,9 @@ TEST_CASE("Brother PT raster - media info for 12mm", "[label][brother-pt]") {
     REQUIRE(data[106] == 0x1B);
     REQUIRE(data[107] == 0x69);
     REQUIRE(data[108] == 0x7A);
-    REQUIRE(data[110] == 0x01);  // laminated TZe
-    REQUIRE(data[111] == 12);    // width mm
-    REQUIRE(data[112] == 0);     // continuous
+    REQUIRE(data[110] == 0x01); // laminated TZe
+    REQUIRE(data[111] == 12);   // width mm
+    REQUIRE(data[112] == 0);    // continuous
 }
 
 TEST_CASE("Brother PT raster - compression enabled", "[label][brother-pt]") {

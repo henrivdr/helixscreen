@@ -51,7 +51,14 @@ class AmsSubscriptionBackend : public AmsBackend {
 
     // --- Shared utilities (public for AmsState and tests) ---
     void emit_event(const std::string& event, const std::string& data = "");
-    AmsError check_preconditions() const;
+    /// Common gating before an AMS action runs.
+    /// @param requires_toolhead_motion When true, additionally refuse the
+    ///        operation if a print is active (PRINTING or PAUSED). Filament ops
+    ///        that move the toolhead (load/unload/tool-change) can self-home
+    ///        inside firmware macros (AD5X `_IFS_REMOVE_CURRENT_PRUTOK` runs a
+    ///        buried G28); running them mid-print collides with the part. Pass
+    ///        false for no-motion ops (eject_lane, select, unlock/recovery).
+    AmsError check_preconditions(bool requires_toolhead_motion = false) const;
     virtual AmsError execute_gcode(const std::string& gcode);
     /// Same as execute_gcode(gcode), but invokes @p on_complete when the gcode
     /// command finishes (Klipper acks the script — i.e. a long macro has fully
@@ -89,6 +96,14 @@ class AmsSubscriptionBackend : public AmsBackend {
 
     /// Return log tag like "[AMS AFC]" for log messages.
     virtual const char* backend_log_tag() const = 0;
+
+    /// Refuse a toolhead-motion filament op while a print is active.
+    /// Returns AmsErrorHelper::print_active() (with a spdlog::warn) when the
+    /// print-job state is PRINTING or PAUSED; otherwise success. Success when
+    /// api_ is null (unit tests / cold-boot: print state is unknown, don't block).
+    /// Exposed to derived backends that gate motion ops WITHOUT the running_/busy
+    /// checks in check_preconditions() (e.g. QIDI Box).
+    AmsError refuse_if_printing() const;
 
     // --- Protected state for derived classes ---
     MoonrakerAPI* api_;

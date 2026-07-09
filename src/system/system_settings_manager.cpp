@@ -219,7 +219,7 @@ void SystemSettingsManager::set_update_channel(int channel) {
 }
 
 const char* SystemSettingsManager::get_update_channel_options() {
-    return "Stable\nBeta\nDev";
+    return lv_tr("Stable\nBeta\nDev");
 }
 
 // =============================================================================
@@ -271,5 +271,5 @@ void SystemSettingsManager::set_log_level_by_index(int index) {
 }
 
 const char* SystemSettingsManager::get_log_level_options() {
-    return LOG_LEVEL_OPTIONS_TEXT;
+    return lv_tr(LOG_LEVEL_OPTIONS_TEXT);
 }

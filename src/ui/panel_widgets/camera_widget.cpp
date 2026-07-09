@@ -227,9 +227,7 @@ void CameraWidget::on_activate() {
     if (!edit_mode_observer_) {
         lv_subject_t* edit_subj = &get_home_edit_mode_subject();
         edit_mode_observer_ = helix::ui::observe_int_sync<CameraWidget>(
-            edit_subj, this, [](CameraWidget* self, int /*val*/) {
-                self->update_stream_fps();
-            });
+            edit_subj, this, [](CameraWidget* self, int /*val*/) { self->update_stream_fps(); });
     }
 
     if (!compact_) {
@@ -319,7 +317,8 @@ void CameraWidget::start_stream() {
 
     // Read target_fps from printer state and apply initial fps gate
     target_fps_ = get_printer_state().get_webcam_target_fps();
-    if (target_fps_ <= 0) target_fps_ = 15;
+    if (target_fps_ <= 0)
+        target_fps_ = 15;
     update_stream_fps();
 
     set_status_text(lv_tr("Connecting Camera..."));
@@ -474,11 +473,12 @@ void CameraWidget::apply_transform() {
 }
 
 void CameraWidget::update_stream_fps() {
-    if (!stream_) return;
+    if (!stream_)
+        return;
 
     // Check if overlays are covering us (but NOT our own fullscreen overlay)
     if (!fullscreen_overlay_ && NavigationManager::instance().has_open_overlays()) {
-        stream_->set_max_fps(0);  // Paused — overlay covering us
+        stream_->set_max_fps(0); // Paused — overlay covering us
         // Schedule periodic re-check so we resume when overlay closes.
         // When paused, no frames deliver → no callback → no re-evaluation.
         if (!fps_recheck_timer_) {
@@ -500,11 +500,11 @@ void CameraWidget::update_stream_fps() {
     // Check edit mode
     lv_subject_t* edit_subj = &get_home_edit_mode_subject();
     if (lv_subject_get_int(edit_subj) != 0) {
-        stream_->set_max_fps(2);  // Reduced — edit mode
+        stream_->set_max_fps(2); // Reduced — edit mode
         return;
     }
 
-    stream_->set_max_fps(target_fps_);  // Normal — capped at configured fps
+    stream_->set_max_fps(target_fps_); // Normal — capped at configured fps
 }
 
 void CameraWidget::set_status_text(const char* text) {
@@ -628,7 +628,8 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
 
     // Single fullscreen at a time across all entry points
     if (s_fullscreen_owner || s_standalone) {
-        spdlog::debug("[CameraWidget] Standalone fullscreen open requested, but one is already open");
+        spdlog::debug(
+            "[CameraWidget] Standalone fullscreen open requested, but one is already open");
         return;
     }
 
@@ -666,7 +667,8 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
     }
 
     int target_fps = ps.get_webcam_target_fps();
-    if (target_fps <= 0) target_fps = 15;
+    if (target_fps <= 0)
+        target_fps = 15;
     state->stream->set_max_fps(target_fps);
 
     lv_obj_t* screen = lv_display_get_screen_active(nullptr);
@@ -694,9 +696,11 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
     s_standalone->stream->start(
         stream_url, snapshot_url,
         [token](lv_draw_buf_t* frame) {
-            if (token.expired()) return;
+            if (token.expired())
+                return;
             token.defer("StandaloneCameraFullscreen::frame", [frame]() {
-                if (!s_standalone || !s_standalone->image) return;
+                if (!s_standalone || !s_standalone->image)
+                    return;
                 lv_image_set_src(s_standalone->image, frame);
                 // First frame: hide the "Connecting…" spinner
                 if (s_standalone->spinner &&
@@ -706,7 +710,8 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
             });
         },
         [token](const char* msg) {
-            if (token.expired()) return;
+            if (token.expired())
+                return;
             std::string status(msg);
             token.defer("StandaloneCameraFullscreen::status", [status]() {
                 spdlog::debug("[CameraWidget] Standalone stream status: {}", status);
@@ -715,7 +720,8 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
 
     NavigationManager::instance().register_overlay_instance(overlay, nullptr);
     NavigationManager::instance().register_overlay_close_callback(overlay, []() {
-        if (!s_standalone) return;
+        if (!s_standalone)
+            return;
 
         // Invalidate lifetime BEFORE clearing image src — queued frame deferrals
         // become no-ops and won't reference freed draw buffers.
@@ -735,15 +741,16 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
         // thread freezes UI input (the close button looked unresponsive #957-ish).
         std::unique_ptr<CameraStream> stream = std::move(s_standalone->stream);
         if (stream) {
-            helix::http::HttpExecutor::fast().submit(
-                [stream = std::shared_ptr<CameraStream>(std::move(stream))]() mutable {
-                    stream->stop();
-                    if (stream->was_detached()) {
-                        spdlog::warn("[CameraWidget] Standalone stream thread detached, leaking to avoid UAF");
-                        // Intentionally leak: thread still holds raw pointers
-                        (void)new std::shared_ptr<CameraStream>(stream);
-                    }
-                });
+            helix::http::HttpExecutor::fast().submit([stream = std::shared_ptr<CameraStream>(
+                                                          std::move(stream))]() mutable {
+                stream->stop();
+                if (stream->was_detached()) {
+                    spdlog::warn(
+                        "[CameraWidget] Standalone stream thread detached, leaking to avoid UAF");
+                    // Intentionally leak: thread still holds raw pointers
+                    (void)new std::shared_ptr<CameraStream>(stream);
+                }
+            });
         }
 
         helix::ui::safe_delete_obj(s_standalone->overlay);
@@ -754,8 +761,8 @@ void open_standalone_camera_fullscreen(lv_obj_t* parent_screen) {
     });
 
     NavigationManager::instance().push_overlay(overlay);
-    spdlog::info("[CameraWidget] Standalone fullscreen opened (stream={}, snapshot={})",
-                 stream_url, snapshot_url);
+    spdlog::info("[CameraWidget] Standalone fullscreen opened (stream={}, snapshot={})", stream_url,
+                 snapshot_url);
 }
 
 void CameraWidget::destroy_fullscreen() {

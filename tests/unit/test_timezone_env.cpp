@@ -33,9 +33,8 @@ void stage_zone(const fs::path& dest_root, const std::string& zone) {
 
 // Build a temp zoneinfo dir containing exactly UTC + America/New_York.
 fs::path make_temp_zoneinfo() {
-    fs::path root = fs::temp_directory_path() /
-                    ("helix_tz_test_" + std::to_string(::getpid()) + "_" +
-                     std::to_string(std::rand()));
+    fs::path root = fs::temp_directory_path() / ("helix_tz_test_" + std::to_string(::getpid()) +
+                                                 "_" + std::to_string(std::rand()));
     fs::create_directories(root);
     stage_zone(root, "UTC");
     stage_zone(root, "America/New_York");
@@ -151,8 +150,7 @@ TEST_CASE("timezone_env: apply() with bundled TZDIR yields correct localtime off
     fs::remove_all(fake_root);
 }
 
-TEST_CASE("timezone_env: leaves TZDIR untouched when system zoneinfo present",
-          "[timezone_env]") {
+TEST_CASE("timezone_env: leaves TZDIR untouched when system zoneinfo present", "[timezone_env]") {
     EnvGuard guard;
     helix::timezone_env::reset_probe_state();
     ::unsetenv("TZDIR");

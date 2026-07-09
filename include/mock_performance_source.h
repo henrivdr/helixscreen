@@ -21,7 +21,9 @@ class MockPerformanceSource : public IPerformanceSource {
 
     void start() override;
     void stop() override;
-    void set_callback(SampleCallback cb) override { cb_ = std::move(cb); }
+    void set_callback(SampleCallback cb) override {
+        cb_ = std::move(cb);
+    }
 
   private:
     void tick(); ///< called on the main thread, ~1 Hz via lv_timer
@@ -30,21 +32,21 @@ class MockPerformanceSource : public IPerformanceSource {
     void synth_mcus(PerfSample& out);
     void apply_throttle_env(PerfSample& out);
 
-    SampleCallback         cb_;
-    AsyncLifetimeGuard     lifetime_;
-    std::atomic<bool>      running_{false};
-    lv_timer_t*            timer_ = nullptr;
+    SampleCallback cb_;
+    AsyncLifetimeGuard lifetime_;
+    std::atomic<bool> running_{false};
+    lv_timer_t* timer_ = nullptr;
 
     // /proc/stat delta state
-    uint64_t prev_idle_  = 0;
+    uint64_t prev_idle_ = 0;
     uint64_t prev_total_ = 0;
-    bool     have_prev_  = false;
+    bool have_prev_ = false;
 
     // Synthetic MCU walk state
     std::mt19937 rng_{0xC0FFEE};
-    float mcu_load_     = 0.10f;
-    float mcu_sb_load_  = 0.20f;
-    int   tick_count_   = 0;
+    float mcu_load_ = 0.10f;
+    float mcu_sb_load_ = 0.20f;
+    int tick_count_ = 0;
 };
 
 } // namespace perf

@@ -6,8 +6,7 @@
 
 #include <spdlog/spdlog.h>
 
-AfcConfigManager::AfcConfigManager(MoonrakerAPI* api)
-    : api_(api) {}
+AfcConfigManager::AfcConfigManager(MoonrakerAPI* api) : api_(api) {}
 
 AfcConfigManager::AfcConfigManager(MoonrakerAPI* api, helix::LifetimeToken token)
     : api_(api), token_(std::move(token)) {}
@@ -45,7 +44,8 @@ void AfcConfigManager::load(const std::string& filename, Callback on_done) {
         // Download error — also bg thread; marshal the user callback to main.
         [token, filename, on_done](const MoonrakerError& err) {
             spdlog::error("[AfcConfigManager] Failed to download '{}': {}", filename, err.message);
-            if (!on_done) return;
+            if (!on_done)
+                return;
             auto msg = err.message;
             auto deliver = [on_done, msg]() { on_done(false, msg); };
             if (token) {
@@ -92,7 +92,8 @@ void AfcConfigManager::save(const std::string& filename, Callback on_done) {
         // Upload error — also bg thread; marshal the user callback to main.
         [token, filename, on_done](const MoonrakerError& err) {
             spdlog::error("[AfcConfigManager] Failed to save '{}': {}", filename, err.message);
-            if (!on_done) return;
+            if (!on_done)
+                return;
             auto msg = err.message;
             auto deliver = [on_done, msg]() { on_done(false, msg); };
             if (token) {

@@ -3,16 +3,16 @@
 
 #include "recovery_modal_presenter.h"
 
-#include "action_prompt_manager.h"
-#include "error_event.h"
-#include "moonraker_api.h"
-#include "moonraker_error.h"
-#include "moonraker_types.h"
 #include "ui_modal.h"
 #include "ui_notification.h"
 #include "ui_toast_manager.h"
 
+#include "action_prompt_manager.h"
+#include "error_event.h"
 #include "lvgl.h"
+#include "moonraker_api.h"
+#include "moonraker_error.h"
+#include "moonraker_types.h"
 
 #include <spdlog/spdlog.h>
 
@@ -21,8 +21,10 @@ namespace {
 /// Maps RecoveryAction.style to PromptButton.color.
 /// "primary" -> "primary", "danger" -> "error", anything else -> "" (neutral).
 std::string color_for_style(const std::string& style) {
-    if (style == "primary") return "primary";
-    if (style == "danger") return "error";
+    if (style == "primary")
+        return "primary";
+    if (style == "danger")
+        return "error";
     return "";
 }
 
@@ -32,11 +34,12 @@ std::string color_for_style(const std::string& style) {
 /// NOTE: twin of modal_title_for() in gcode_error_router.cpp (the plain
 /// PresentAs::MODAL arm) — keep the CFS title rule in sync across both.
 const char* modal_title_for(const helix::ErrorEvent& e) {
-    if (e.source == helix::ErrorSource::CFS) return lv_tr("Filament System Error");
+    if (e.source == helix::ErrorSource::CFS)
+        return lv_tr("Filament System Error");
     return e.title.empty() ? lv_tr("Printer Error") : e.title.c_str();
 }
 
-}  // namespace
+} // namespace
 
 namespace helix::ui {
 
@@ -57,8 +60,7 @@ void RecoveryModalPresenter::present(const helix::ErrorEvent& e) {
     // Dedup: if the same detail is still on screen, do not re-show.
     // A dismissed-but-ongoing fault clears shown_detail_ so it can re-show.
     if (modal_ && modal_->is_visible() && e.detail == shown_detail_) {
-        spdlog::debug("[RecoveryModalPresenter] Skipping duplicate (still visible): {}",
-                      e.detail);
+        spdlog::debug("[RecoveryModalPresenter] Skipping duplicate (still visible): {}", e.detail);
         return;
     }
 
@@ -73,7 +75,7 @@ void RecoveryModalPresenter::present(const helix::ErrorEvent& e) {
                     break;
                 }
             }
-            shown_detail_.clear();  // user acted; allow re-show on a new fault
+            shown_detail_.clear(); // user acted; allow re-show on a new fault
             spdlog::info("[RecoveryModal] User tapped recovery: {} ({})", tag, gcode);
 
             if (!api_) {
@@ -85,8 +87,8 @@ void RecoveryModalPresenter::present(const helix::ErrorEvent& e) {
                 [tag](const MoonrakerError& err) {
                     spdlog::error("[Recovery] {} failed: {}", tag, err.message);
                     ToastManager::instance().show(
-                        ToastSeverity::ERROR,
-                        ("Recovery failed: " + err.user_message()).c_str(), 6000);
+                        ToastSeverity::ERROR, ("Recovery failed: " + err.user_message()).c_str(),
+                        6000);
                 },
                 MoonrakerAPI::AMS_OPERATION_TIMEOUT_MS);
         });
@@ -100,7 +102,8 @@ void RecoveryModalPresenter::present(const helix::ErrorEvent& e) {
     // leaves empty for CFS events.
     helix::PromptData prompt;
     prompt.title = modal_title_for(e);
-    if (!e.detail.empty()) prompt.text_lines.push_back(e.detail);
+    if (!e.detail.empty())
+        prompt.text_lines.push_back(e.detail);
     for (const auto& a : e.recovery_actions) {
         helix::PromptButton b;
         b.label = a.label;
@@ -119,4 +122,4 @@ void RecoveryModalPresenter::present(const helix::ErrorEvent& e) {
     }
 }
 
-}  // namespace helix::ui
+} // namespace helix::ui

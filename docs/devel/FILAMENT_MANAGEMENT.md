@@ -289,6 +289,148 @@ forked OrcaSlicer that could add the read path.
 
 ---
 
+## Filament Catalog (`filaments.json`)
+
+**Design spec:** [`specs/2026-07-02-filament-catalog-merge-design.md`](specs/2026-07-02-filament-catalog-merge-design.md)
+
+HelixScreen ships a single generated catalog of **branded** filament products —
+`assets/filaments.json` — that unifies what used to be two disconnected data
+sources: the generic material-**type** table in `include/filament_database.h`
+(PLA, ABS, PETG, … — untouched, still `constexpr`, still the source of
+physical truth) and the old CFS-only `assets/cfs_materials.json` (renamed and
+superseded). The catalog is generic infrastructure — not CFS-specific — even
+though the CFS backend is currently its only consumer.
+
+### Schema
+
+Each entry in the `filaments` array is one branded product:
+
+```json
+{
+  "id": "creality-cr-abs",     // stable slug; user overrides target this
+  "brand": "Creality",
+  "name": "CR-ABS",            // display = "{brand} {name}"
+  "type": "ABS",               // resolves to a filament_database.h type
+  "nozzle": 260,                // recommended nozzle temp (°C)
+  "bed": 60,                    // recommended bed temp (°C)
+  "nozzle_min": 240,            // OPTIONAL — only emitted when it differs from the type's range
+  "nozzle_max": 280,            // OPTIONAL
+  "density": 1.24,              // OPTIONAL — else inherit type
+  "codes": { "cfs": "07001" },  // OPTIONAL, open scheme-keyed map (see below)
+  "orca_id": "OGF...",          // provenance: OrcaSlicer filament_id (NOT a CFS code)
+  "source": "orca"              // provenance: orca | cfs-seed | user
+}
+```
+
+Most Orca-derived entries are **thin** — just `id, brand, name, type, nozzle,
+bed, source`. Everything else (nozzle range, bed if unset, chamber temp, dry
+temp/time, `compat_group`, density) **inherits from the base `type`**, the
+same way a product does at runtime (see `EffectiveFilament` below). A field is
+only written to the file when it *differs* from what the type would already
+supply — keeps the catalog small and keeps regen diffs meaningful.
+
+### Type inheritance
+
+Products don't duplicate physical data — they carry deltas over their base
+material type:
+
+```
+EffectiveFilament = filament::find_material(product.type)   // type defaults
+                     ◀ product's own JSON fields              // product overrides
+                     ◀ user overlay entry (same id), if any    // user overrides
+```
+
+`nozzle_min` / `nozzle_max` / `bed` / `density` / `chamber_temp_c` /
+`dry_temp_c` / `dry_time_min` / `compat_group` all come from the type unless
+the product JSON explicitly sets them. A product whose `type` string doesn't
+resolve in `filament_database.h` (an Orca material HelixScreen doesn't map
+yet) is only valid if it's self-sufficient — i.e. the importer emitted
+explicit `nozzle_min`/`nozzle_max` for it directly; see the data-integrity
+lint in `tests/unit/test_filaments_data.cpp`.
+
+### The `codes` map (scheme-keyed, open-ended)
+
+Hardware/RFID codes live in a scheme-keyed map so multiple, possibly-colliding
+namespaces coexist and a new decoder drops in with **no schema change**:
+
+| scheme | meaning | status |
+|--------|---------|--------|
+| `cfs` | Creality Filament System numeric hardware code | **live** — decodes CFS box-reported material codes |
+| `rfid` | future vendor-neutral / generic RFID standard | reserved (not populated) |
+| `snapmaker` | Snapmaker U1 `filament_sku` | reserved — U1 exposes a real per-material SKU (`print_task_config.filament_sku`), but no seed table exists yet |
+| `bambu` | Bambu `filament_id`/RFID (`GFA00`…) | reserved — could auto-derive from `orca_id` later |
+
+Each scheme is indexed independently (`by_code[scheme][code] -> product`), so
+a `cfs` code can never collide with an `rfid` or `snapmaker` code that happens
+to share the same digits.
+
+### `FilamentCatalog` — transient, on-demand access layer
+
+`include/filament_catalog.h` / `src/printer/filament_catalog.cpp`. **No
+`::instance()` singleton** — unlike the rest of the printer-state layer, this
+is a scoped value type: construct it, query it, let it fall out of scope. Idle
+RAM footprint is zero; nothing is parsed until something asks for it.
+
+```cpp
+// Small slice: only products carrying a code in one scheme. Used by CFS decode —
+// built once at the top of a box-state enrichment pass, destroyed at the end.
+auto cat = FilamentCatalog::load_codes("cfs");
+const EffectiveFilament* mat = cat.resolve_code("cfs", mat_id);
+
+// Whole catalog + user overlay merged in. For a future offline picker (Phase 2);
+// transient for the lifetime of a picker session, not resident otherwise.
+auto full = FilamentCatalog::load_full();
+```
+
+Other query methods: `resolve_id(id)`, `products_for_type(type)`,
+`products_for_brand(brand)`, `all_brands()`, `all_products()`. The tradeoff
+(accepted): CFS re-parses its small coded slice on every poll rather than
+caching — worth it for zero idle RAM on memory-constrained devices (AD5M,
+K1). A debounce cache is a future escape hatch only if profiling ever shows
+the re-parse cost matters.
+
+**Today's only consumer** is `AmsBackendCfs` (`src/printer/ams_backend_cfs.cpp`),
+which replaced the old `CfsMaterialDb` JSON table with
+`FilamentCatalog::load_codes("cfs").resolve_code("cfs", mat_id)`. Behavior is
+unchanged for CFS users — same slot fields get filled — the catalog is just
+richer and no longer CFS-gated. A user-editable overlay
+(`config/user_filaments.json`, read-write, merged by `load_with_overlay()`)
+exists at the load-path level today; the UI to author it is Phase 3 (out of
+scope here).
+
+### Regenerating the catalog
+
+```bash
+make regen-filaments ORCA_TAG=v2.4.1     # ORCA_TAG defaults to a pinned tag in mk/filaments.mk
+```
+
+This shallow-clones OrcaSlicer's `resources/profiles` at the pinned tag into
+`build/orca-profiles` (sparse checkout, blob-filtered), runs
+`scripts/import_orca_filaments.py` to resolve `inherits` chains, extract
+facts, and union them with the preserved CFS-code seed
+(`scripts/fixtures/cfs_seed.json`), writes `assets/filaments.json`, mirrors it
+to `android/app/src/main/assets/assets/filaments.json`, and discards the
+cloned Orca checkout. Nothing from the Orca clone is committed — only the
+derived output. Bump `ORCA_TAG` to refresh against newer Orca data.
+
+`assets/filaments.json` is **generated but committed** (same pattern as fonts
+and translations) — cross-compiled targets need the file present without
+running Python/git-clone during the build.
+
+### Licensing and attribution
+
+OrcaSlicer is AGPL-3.0; HelixScreen is GPL-3.0-or-later. HelixScreen never
+ships OrcaSlicer's profile files — the importer clones them into scratch,
+derives **facts** (nozzle/bed temps, density — not copyrightable expression),
+and discards the clone. `filaments.json` carries a top-level `_attribution`
+field naming OrcaSlicer, its repo URL, the pinned tag, and its license, e.g.:
+
+```json
+"_attribution": "Factual filament data derived from OrcaSlicer (github.com/SoftFever/OrcaSlicer, tag v2.4.1, AGPL-3.0). No OrcaSlicer profile files are shipped."
+```
+
+---
+
 ## UI Panels
 
 ### AMS Panel (`ui_panel_ams`)
@@ -706,14 +848,37 @@ The backend detects the installed version by querying the `afc-install` database
 
 ## ACE (Anycubic ACE Pro)
 
-The ACE backend supports the Anycubic ACE Pro multi-material hub. There are **two distinct deployments** of this hardware, and they expose completely different Klipper interfaces:
+The ACE backend supports the Anycubic ACE Pro multi-material hub. The same hardware
+shows up behind **several different software stacks**, and they expose *different*
+Klipper/Moonraker interfaces. "ACE support" is therefore not one integration — it is
+whichever of these the printer is running:
 
-| Deployment | Klipper object | Transport | Audience |
-|------------|----------------|-----------|----------|
-| **Native Anycubic GoKlipper (via Rinkhals)** | `filament_hub` (config section `[ace]`) | WebSocket query/subscribe | **Primary real user base** — stock Kobra 3 / 3 V2 / 3 Max / S1 / S1 Max (Combo) flashed with [Rinkhals](https://github.com/jbatonnet/Rinkhals) |
-| **Community ValgACE / BunnyACE / DuckACE** | `ace` | `/server/ace/*` REST bridge | ACE Pro hardware bolted onto a **non-Anycubic DIY printer** (niche) |
+| # | Stack | Klipper / Moonraker surface | Transport | Audience | Backend status |
+|---|-------|-----------------------------|-----------|----------|----------------|
+| 1 | **Native Anycubic GoKlipper (via Rinkhals)** | `filament_hub` printer object (config `[ace]`) | WebSocket query/subscribe | **Primary real user base** — stock Kobra 3 / 3 V2 / 3 Max / S1 / S1 Max (Combo) flashed with [Rinkhals](https://github.com/jbatonnet/Rinkhals) | ✅ Handled (parses `filament_hub`) |
+| 2 | **Community ValgACE / BunnyACE / DuckACE** | `ace` printer object + `ace_status.py` | `/server/ace/*` REST bridge | ACE Pro bolted onto a **non-Anycubic DIY printer** (niche; DuckACE abandoned) | ✅ Handled (REST fallback) |
+| 3 | **Mainline-Python Kobra-S1 fork** (`github.com/Kobra-S1/klipper-kobra-s1`) | custom `[ace]` extra + `[ace_status]` Moonraker component | **unconfirmed** (`ace_status.py` JSON/REST) | KS1 users replacing KobraOS with mainline Klipper (often on an external Pi) | ❓ **Unverified** — status surface not yet inspected |
 
-The native path is what almost every actual ACE user runs: it ships inside Anycubic's own GoKlipper firmware and is surfaced when the printer is reflashed with Rinkhals. The community drivers (ValgACE for ACE Pro on a DIY rig, plus the BunnyACE/DuckACE forks — DuckACE is abandoned) are a separate, niche world that integrates through Moonraker macros/endpoints rather than a native Klipper object.
+**How to think about the three:**
+
+- **Path 1 (native)** is what almost every actual ACE user runs — it ships inside
+  Anycubic's own GoKlipper firmware and is surfaced when the printer is reflashed with
+  Rinkhals. This is the path the backend is built around.
+- **Path 2 (community)** is ACE-on-a-DIY-rig: ValgACE (active), plus the BunnyACE/DuckACE
+  forks (DuckACE abandoned). Integrates through Moonraker macros/endpoints rather than a
+  native Klipper object.
+- **Path 3 (KS1 fork)** is newly observed in real logs (2026-06-24) and **not yet
+  validated against our backend.** It is a *full Klipper firmware fork* for the Kobra S1
+  — related to the Path 2 driver concept (it too ships an `ace_status.py`) but wrapped in
+  KS1-specific cutter/purge/toolchange macros. Whether its `[ace_status]` surface matches
+  Path 1's `filament_hub`, Path 2's `ace`/REST, or neither is an **open question**.
+  Control gcode (`ACE_CHANGE_TOOL`, `ACE_ENABLE/DISABLE_FEED_ASSIST`) does match what the
+  backend already sends. Full teardown:
+  [`printer-research/ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md`](printer-research/ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md).
+
+> The sections below (`filament_hub` schema, REST endpoints, etc.) document Paths 1 and 2,
+> which the backend handles today. Path 3's status schema is still TBD — see the linked
+> log-analysis doc for the open items needed to confirm or extend coverage.
 
 ### History
 

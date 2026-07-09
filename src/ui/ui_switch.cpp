@@ -197,6 +197,9 @@ extern "C" lv_obj_t* ui_switch_create_themed(lv_obj_t* parent, const char* size_
         return nullptr;
     }
 
+    // Prevent accidental click when scrolling (parity with ui_switch_xml_create).
+    lv_obj_remove_flag(obj, LV_OBJ_FLAG_PRESS_LOCK);
+
     lv_obj_add_event_cb(obj, switch_value_changed_sound_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     apply_themed_styling(obj);
 

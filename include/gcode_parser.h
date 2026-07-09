@@ -74,10 +74,14 @@ struct AABB {
     /// 8 corners of the box. Order: bits 0/1/2 of the index select max for x/y/z.
     std::array<glm::vec3, 8> corners() const {
         return {{
-            {min.x, min.y, min.z}, {max.x, min.y, min.z},
-            {min.x, max.y, min.z}, {max.x, max.y, min.z},
-            {min.x, min.y, max.z}, {max.x, min.y, max.z},
-            {min.x, max.y, max.z}, {max.x, max.y, max.z},
+            {min.x, min.y, min.z},
+            {max.x, min.y, min.z},
+            {min.x, max.y, min.z},
+            {max.x, max.y, min.z},
+            {min.x, min.y, max.z},
+            {max.x, min.y, max.z},
+            {min.x, max.y, max.z},
+            {max.x, max.y, max.z},
         }};
     }
 
@@ -86,8 +90,7 @@ struct AABB {
     /// `GCodeLayerRenderer::render_selection_brackets` and the 3D
     /// `GCodeGLESRenderer::render_brackets_3d` share this geometry — the
     /// renderers differ only in how they emit the resulting line segments.
-    template <typename F>
-    void for_each_bracket_arm(float arm_length, F&& fn) const {
+    template <typename F> void for_each_bracket_arm(float arm_length, F&& fn) const {
         const auto cs = corners();
         for (int c = 0; c < 8; ++c) {
             const glm::vec3& origin = cs[c];
@@ -119,21 +122,21 @@ struct AABB {
  * Stored as int8_t in ToolpathSegment to fill existing padding.
  */
 enum class FeatureType : int8_t {
-    Unknown = -1,       ///< No ;TYPE: seen, or unrecognized value
-    Custom = 0,         ///< Start/end gcode, priming, manual purge (EXCLUDED FROM BOUNDS)
-    Skirt,              ///< Skirt loop (physical, included in bounds)
-    Brim,               ///< Brim (physical, included in bounds)
-    OuterWall,          ///< Outer perimeter
-    InnerWall,          ///< Inner perimeter
-    OverhangWall,       ///< Overhanging perimeter
-    SparseInfill,       ///< Sparse (low-density) infill
-    SolidInfill,        ///< Solid infill, top/bottom skin
-    TopSurface,         ///< Top surface
-    BottomSurface,      ///< Bottom surface
-    Bridge,             ///< Bridging extrusion
-    GapInfill,          ///< Gap fill between features
-    Support,            ///< Support material (included — it's physical)
-    WipeTower,          ///< Multi-color purge tower (EXCLUDED FROM BOUNDS)
+    Unknown = -1,  ///< No ;TYPE: seen, or unrecognized value
+    Custom = 0,    ///< Start/end gcode, priming, manual purge (EXCLUDED FROM BOUNDS)
+    Skirt,         ///< Skirt loop (physical, included in bounds)
+    Brim,          ///< Brim (physical, included in bounds)
+    OuterWall,     ///< Outer perimeter
+    InnerWall,     ///< Inner perimeter
+    OverhangWall,  ///< Overhanging perimeter
+    SparseInfill,  ///< Sparse (low-density) infill
+    SolidInfill,   ///< Solid infill, top/bottom skin
+    TopSurface,    ///< Top surface
+    BottomSurface, ///< Bottom surface
+    Bridge,        ///< Bridging extrusion
+    GapInfill,     ///< Gap fill between features
+    Support,       ///< Support material (included — it's physical)
+    WipeTower,     ///< Multi-color purge tower (EXCLUDED FROM BOUNDS)
 };
 
 /**
@@ -149,16 +152,16 @@ constexpr bool is_excluded_from_bounds(FeatureType t) {
 }
 
 struct ToolpathSegment {
-    glm::vec3 start{0.0f, 0.0f, 0.0f};   ///< Start point (X, Y, Z) — 12 bytes
-    glm::vec3 end{0.0f, 0.0f, 0.0f};     ///< End point (X, Y, Z) — 12 bytes
-    float extrusion_amount{0.0f};          ///< E-axis delta (mm of filament) — 4 bytes
-    float width{0.0f};                     ///< Calculated extrusion width (mm), 0=default — 4 bytes
-    int16_t object_name_index{-1};         ///< Index into string table (-1 = no object) — 2 bytes
-    uint16_t layer_index{0};               ///< Source layer index (set during geometry collection) — 2 bytes
-    int8_t tool_index{0};                  ///< Which tool/extruder printed this (0-15) — 1 byte
-    bool is_extrusion{false};              ///< true if extruding, false if travel move — 1 byte
+    glm::vec3 start{0.0f, 0.0f, 0.0f}; ///< Start point (X, Y, Z) — 12 bytes
+    glm::vec3 end{0.0f, 0.0f, 0.0f};   ///< End point (X, Y, Z) — 12 bytes
+    float extrusion_amount{0.0f};      ///< E-axis delta (mm of filament) — 4 bytes
+    float width{0.0f};                 ///< Calculated extrusion width (mm), 0=default — 4 bytes
+    int16_t object_name_index{-1};     ///< Index into string table (-1 = no object) — 2 bytes
+    uint16_t layer_index{0};  ///< Source layer index (set during geometry collection) — 2 bytes
+    int8_t tool_index{0};     ///< Which tool/extruder printed this (0-15) — 1 byte
+    bool is_extrusion{false}; ///< true if extruding, false if travel move — 1 byte
     FeatureType feature_type{FeatureType::Unknown}; ///< Slicer-annotated section type — 1 byte
-    int8_t _pad{0};                        ///< Reserved (was padding) — 1 byte
+    int8_t _pad{0};                                 ///< Reserved (was padding) — 1 byte
     // total 40 bytes
 };
 static_assert(sizeof(ToolpathSegment) == 40, "ToolpathSegment should be 40 bytes after interning");
@@ -582,10 +585,10 @@ class GCodeParser {
     // Parser state
     glm::vec3 current_position_{0.0f, 0.0f, 0.0f}; ///< Current XYZ position
     float current_e_{0.0f};                        ///< Current E (extruder) position
-    std::string current_object_;         ///< Current object name (from EXCLUDE_OBJECT_START)
-    int16_t current_object_index_{-1};   ///< Current object name index for segments
+    std::string current_object_;       ///< Current object name (from EXCLUDE_OBJECT_START)
+    int16_t current_object_index_{-1}; ///< Current object name index for segments
     std::unordered_map<std::string, int16_t> object_name_lookup_; ///< O(1) name → index
-    std::vector<std::string> object_name_table_; ///< Accumulated string table
+    std::vector<std::string> object_name_table_;                  ///< Accumulated string table
     bool is_absolute_positioning_{true}; ///< G90 (absolute) vs G91 (relative)
     bool is_absolute_extrusion_{true};   ///< M82 (absolute E) vs M83 (relative E)
 

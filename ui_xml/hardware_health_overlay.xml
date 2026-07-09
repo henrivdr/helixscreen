@@ -8,13 +8,15 @@
         extends="overlay_panel" width="#overlay_panel_width_full" title="Hardware Health" title_tag="Hardware Health" bg_color="#screen_bg">
     <!-- Content Area -->
     <lv_obj name="overlay_content"
-            width="100%" flex_grow="1" style_pad_all="#space_lg" scrollable="true" flex_flow="column"
+            width="100%" flex_grow="1" style_pad_top="#space_lg" style_pad_bottom="#space_lg"
+            style_pad_left="0" style_pad_right="0" scrollable="true" flex_flow="column"
             style_pad_gap="#space_md">
       <!-- ================================================================== -->
       <!-- STATUS CARD - Shows overall health status -->
       <!-- ================================================================== -->
       <ui_card name="status_card"
                width="100%" height="content" style_border_width="0" style_pad_all="#space_lg" scrollable="false"
+               style_margin_left="#space_sm" style_margin_right="#space_sm"
                flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_md">
         <!-- Status icon - changes based on severity -->
         <lv_obj name="status_icon_container"
@@ -49,59 +51,51 @@
       <!-- ================================================================== -->
       <!-- CRITICAL ISSUES SECTION (red) - Missing required hardware -->
       <!-- ================================================================== -->
-      <lv_obj name="critical_section"
-              width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
-              style_pad_gap="#space_sm">
+      <setting_group name="critical_section">
         <bind_flag_if_eq subject="hardware_critical_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="CRITICAL" title_tag="CRITICAL" icon="alert_octagon"/>
+        <setting_group_header title="CRITICAL" title_tag="CRITICAL" icon="alert_octagon" hide_icon="false"/>
         <lv_obj name="critical_issues_list"
                 width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_xs">
           <!-- hardware_issue_row components added dynamically by C++ -->
         </lv_obj>
-      </lv_obj>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- WARNING ISSUES SECTION (orange) - Missing configured hardware -->
       <!-- ================================================================== -->
-      <lv_obj name="warning_section"
-              width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
-              style_pad_gap="#space_sm">
+      <setting_group name="warning_section">
         <bind_flag_if_eq subject="hardware_warning_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="MISSING CONFIGURED" title_tag="MISSING CONFIGURED" icon="alert"/>
+        <setting_group_header title="MISSING CONFIGURED" title_tag="MISSING CONFIGURED" icon="alert" hide_icon="false"/>
         <lv_obj name="warning_issues_list"
                 width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_xs">
           <!-- hardware_issue_row components added dynamically by C++ -->
         </lv_obj>
-      </lv_obj>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- INFO ISSUES SECTION (blue) - Newly discovered hardware -->
       <!-- ================================================================== -->
-      <lv_obj name="info_section"
-              width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
-              style_pad_gap="#space_sm">
+      <setting_group name="info_section">
         <bind_flag_if_eq subject="hardware_info_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="NEWLY DISCOVERED" title_tag="NEWLY DISCOVERED" icon="info"/>
+        <setting_group_header title="NEWLY DISCOVERED" title_tag="NEWLY DISCOVERED" icon="info" hide_icon="false"/>
         <lv_obj name="info_issues_list"
                 width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_xs">
           <!-- hardware_issue_row components added dynamically by C++ -->
         </lv_obj>
-      </lv_obj>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- SESSION CHANGES SECTION - Hardware changed since last session -->
       <!-- ================================================================== -->
-      <lv_obj name="session_section"
-              width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
-              style_pad_gap="#space_sm">
+      <setting_group name="session_section">
         <bind_flag_if_eq subject="hardware_session_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="CHANGED FROM LAST SESSION" title_tag="CHANGED FROM LAST SESSION" icon="refresh"/>
+        <setting_group_header title="CHANGED FROM LAST SESSION" title_tag="CHANGED FROM LAST SESSION" icon="refresh" hide_icon="false"/>
         <lv_obj name="session_issues_list"
                 width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_xs">
           <!-- hardware_issue_row components added dynamically by C++ -->
         </lv_obj>
-      </lv_obj>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- INFO NOTE -->
       <!-- ================================================================== -->

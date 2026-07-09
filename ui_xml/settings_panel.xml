@@ -12,8 +12,10 @@
   <view name="settings_panel"
         extends="lv_obj" width="100%" height="100%" style_bg_opa="0" style_border_width="0" style_pad_all="0"
         style_pad_gap="0" flex_flow="column" scrollable="true" style_bg_color="#screen_bg">
-    <!-- Panel Title -->
+    <!-- Panel Title (plain heading, not carded — this is the top-level menu) -->
     <setting_section_header title="SETTINGS" title_tag="SETTINGS" icon="settings"/>
+    <!-- Category navigation rows grouped in one card -->
+    <setting_group>
     <!-- ================================================================== -->
     <!-- DISPLAY & SOUND -->
     <!-- ================================================================== -->
@@ -62,6 +64,7 @@
                         description="Support, documentation, and version info"
                         description_tag="Support, documentation, and version info"
                         callback="on_help_clicked"/>
+    </setting_group>
     <!-- Bottom padding for scroll -->
     <lv_obj width="100%" scrollable="false">
       <bind_style_if_eq name="spacer_micro" subject="ui_breakpoint" ref_value="0"/>

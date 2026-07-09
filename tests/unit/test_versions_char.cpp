@@ -28,6 +28,7 @@
 #include "../catch_amalgamated.hpp"
 
 using namespace helix;
+using namespace helix::ui;
 // ============================================================================
 // Initialization Tests - Document default initialization behavior
 // ============================================================================
@@ -219,6 +220,68 @@ TEST_CASE("Versions characterization: subjects are functional after reset cycle"
 
     REQUIRE(std::string(lv_subject_get_string(klipper)) == "v0.12.0");
     REQUIRE(std::string(lv_subject_get_string(moonraker)) == "v0.8.0");
+}
+
+// ============================================================================
+// Placeholder Normalization Tests
+//
+// Some Moonraker forks (QIDI's on the Q2 / Max 4) report a literal "?" instead
+// of a real version, and the discovery parse layer substitutes "unknown" for a
+// missing key. Neither is meaningful to display, so the public setters collapse
+// them (and empty/whitespace) to a translated "Unknown". A real version passes
+// through untouched. Regression coverage for prestonbrown/helixscreen#1068.
+// ============================================================================
+
+TEST_CASE("Versions: placeholder version strings normalize to Unknown",
+          "[versions][setter][normalization]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    auto klipper = [&] { return std::string(lv_subject_get_string(state.get_klipper_version_subject())); };
+    auto moonraker = [&] {
+        return std::string(lv_subject_get_string(state.get_moonraker_version_subject()));
+    };
+
+    SECTION("QIDI '?' sentinel becomes Unknown") {
+        state.set_klipper_version("?");
+        state.set_moonraker_version("?");
+        UpdateQueueTestAccess::drain(UpdateQueue::instance());
+        REQUIRE(klipper() == "Unknown");
+        REQUIRE(moonraker() == "Unknown");
+    }
+
+    SECTION("parse-layer 'unknown' fallback becomes Unknown (case-insensitive)") {
+        state.set_klipper_version("unknown");
+        state.set_moonraker_version("UNKNOWN");
+        UpdateQueueTestAccess::drain(UpdateQueue::instance());
+        REQUIRE(klipper() == "Unknown");
+        REQUIRE(moonraker() == "Unknown");
+    }
+
+    SECTION("empty and whitespace-only become Unknown") {
+        state.set_klipper_version("");
+        state.set_moonraker_version("   ");
+        UpdateQueueTestAccess::drain(UpdateQueue::instance());
+        REQUIRE(klipper() == "Unknown");
+        REQUIRE(moonraker() == "Unknown");
+    }
+
+    SECTION("a real version passes through untouched") {
+        state.set_klipper_version("v0.12.0-108-g2c7a9d58");
+        state.set_moonraker_version("v0.8.0");
+        UpdateQueueTestAccess::drain(UpdateQueue::instance());
+        REQUIRE(klipper() == "v0.12.0-108-g2c7a9d58");
+        REQUIRE(moonraker() == "v0.8.0");
+    }
+
+    SECTION("surrounding whitespace is trimmed from a real version") {
+        state.set_klipper_version("  v0.12.0  ");
+        UpdateQueueTestAccess::drain(UpdateQueue::instance());
+        REQUIRE(klipper() == "v0.12.0");
+    }
 }
 
 // ============================================================================

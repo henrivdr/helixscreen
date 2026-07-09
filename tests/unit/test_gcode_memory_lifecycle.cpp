@@ -111,8 +111,7 @@ TEST_CASE("Clearing prepared_buffers frees memory while preserving geometry",
     REQUIRE(geom->max_layer_index == max_layer_before);
 }
 
-TEST_CASE("memory_usage() reflects prepared_buffers state",
-          "[gcode][geometry][memory]") {
+TEST_CASE("memory_usage() reflects prepared_buffers state", "[gcode][geometry][memory]") {
     auto geom = build_test_geometry(3, 5);
     geom->prepare_interleaved_buffers();
 
@@ -132,8 +131,7 @@ TEST_CASE("memory_usage() reflects prepared_buffers state",
     REQUIRE(geom->strips.size() > 0);
 }
 
-TEST_CASE("RibbonGeometry::clear() releases all data",
-          "[gcode][geometry][memory]") {
+TEST_CASE("RibbonGeometry::clear() releases all data", "[gcode][geometry][memory]") {
     auto geom = build_test_geometry(3, 5);
 
     REQUIRE(geom->vertices.size() > 0);
@@ -236,7 +234,6 @@ static bool should_release_on_deactivate(PrintState state) {
 
 TEST_CASE("Deactivation releases resources when print is not active",
           "[gcode][memory][lifecycle]") {
-
     SECTION("Idle state releases resources") {
         REQUIRE(should_release_on_deactivate(PrintState::Idle));
     }
@@ -254,9 +251,7 @@ TEST_CASE("Deactivation releases resources when print is not active",
     }
 }
 
-TEST_CASE("Deactivation preserves resources during active print",
-          "[gcode][memory][lifecycle]") {
-
+TEST_CASE("Deactivation preserves resources during active print", "[gcode][memory][lifecycle]") {
     SECTION("Printing state keeps resources") {
         REQUIRE_FALSE(should_release_on_deactivate(PrintState::Printing));
     }

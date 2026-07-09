@@ -1,22 +1,23 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
 #include "ams_state.h"
-#include "app_globals.h"
-#include "filament_consumption_tracker.h"
 #include "app_constants.h"
+#include "app_globals.h"
 #include "config.h"
+#include "filament_consumption_tracker.h"
+#include "filament_consumption_tracker_test_access.h"
 #include "filament_database.h"
 #include "printer_state.h"
 #include "settings_manager.h"
-#include "ui_update_queue.h"
 
 #include <cstdlib>
 #include <filesystem>
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
-#include "filament_consumption_tracker_test_access.h"
 
 using Catch::Approx;
 using Catch::Matchers::WithinAbs;
@@ -44,11 +45,10 @@ TEST_CASE("length_to_weight_g: zero density returns zero", "[filament][conversio
     REQUIRE(filament::length_to_weight_g(100.0f, 0.0f, 1.75f) == 0.0f);
 }
 
-TEST_CASE("set_external_spool_info_in_memory does not write settings",
-          "[filament][ams_state]") {
+TEST_CASE("set_external_spool_info_in_memory does not write settings", "[filament][ams_state]") {
     // Set up an isolated config directory so settings writes don't leak.
-    std::string temp_dir = std::filesystem::temp_directory_path().string() +
-                           "/helix_fct_test_" + std::to_string(rand());
+    std::string temp_dir = std::filesystem::temp_directory_path().string() + "/helix_fct_test_" +
+                           std::to_string(rand());
     std::filesystem::create_directories(temp_dir);
     std::filesystem::remove(AppConstants::Update::config_backup_fallback());
     std::filesystem::remove(AppConstants::Update::legacy_config_backup_fallback());
@@ -132,8 +132,7 @@ TEST_CASE("tracker snapshots on transition to PRINTING with a valid PLA spool",
     ams.clear_external_spool_info();
 }
 
-TEST_CASE("tracker stays inactive with no external spool",
-          "[filament][tracker]") {
+TEST_CASE("tracker stays inactive with no external spool", "[filament][tracker]") {
     LVGLTestFixture fx;
     auto& ams = AmsState::instance();
     auto& printer = get_printer_state();
@@ -153,8 +152,7 @@ TEST_CASE("tracker stays inactive with no external spool",
     tracker.stop();
 }
 
-TEST_CASE("tracker stays inactive when material cannot be resolved",
-          "[filament][tracker]") {
+TEST_CASE("tracker stays inactive when material cannot be resolved", "[filament][tracker]") {
     LVGLTestFixture fx;
     auto& ams = AmsState::instance();
     auto& printer = get_printer_state();
@@ -179,8 +177,7 @@ TEST_CASE("tracker stays inactive when material cannot be resolved",
     ams.clear_external_spool_info();
 }
 
-TEST_CASE("tracker decrements remaining weight as filament_used grows",
-          "[filament][tracker]") {
+TEST_CASE("tracker decrements remaining weight as filament_used grows", "[filament][tracker]") {
     LVGLTestFixture fx;
     auto& ams = AmsState::instance();
     auto& printer = get_printer_state();
@@ -225,7 +222,7 @@ TEST_CASE("tracker clamps remaining weight at zero", "[filament][tracker]") {
 
     SlotInfo info;
     info.material = "PLA";
-    info.remaining_weight_g = 5.0f;  // only 5g available
+    info.remaining_weight_g = 5.0f; // only 5g available
     info.total_weight_g = 1000.0f;
     ams.set_external_spool_info_in_memory(info);
 
@@ -247,8 +244,7 @@ TEST_CASE("tracker clamps remaining weight at zero", "[filament][tracker]") {
     ams.clear_external_spool_info();
 }
 
-TEST_CASE("tracker persists final weight on print completion",
-          "[filament][tracker]") {
+TEST_CASE("tracker persists final weight on print completion", "[filament][tracker]") {
     LVGLTestFixture fx;
     auto& ams = AmsState::instance();
     auto& printer = get_printer_state();
@@ -288,8 +284,7 @@ TEST_CASE("tracker persists final weight on print completion",
     ams.clear_external_spool_info();
 }
 
-TEST_CASE("external weight edit during print triggers re-snapshot",
-          "[filament][tracker]") {
+TEST_CASE("external weight edit during print triggers re-snapshot", "[filament][tracker]") {
     LVGLTestFixture fx;
     auto& ams = AmsState::instance();
     auto& printer = get_printer_state();

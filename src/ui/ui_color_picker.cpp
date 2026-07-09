@@ -366,8 +366,7 @@ void ColorPicker::highlight_swatch(lv_obj_t* swatch) {
     if (swatch) {
         // Outline sits outside the swatch and does not affect layout, so it
         // works regardless of whether the swatch already has an XML border.
-        lv_obj_set_style_outline_color(swatch, theme_manager_get_color("primary"),
-                                       LV_PART_MAIN);
+        lv_obj_set_style_outline_color(swatch, theme_manager_get_color("primary"), LV_PART_MAIN);
         lv_obj_set_style_outline_width(swatch, 3, LV_PART_MAIN);
         lv_obj_set_style_outline_opa(swatch, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_outline_pad(swatch, 1, LV_PART_MAIN);

@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+
 #include "hv/json.hpp"
 
 // Forward declaration — full SlotInfo lives in ams_types.h. Forward-decl keeps
@@ -109,4 +110,4 @@ void populate_temps_from_slot_info(FilamentSlotOverride& ovr, const SlotInfo& in
 nlohmann::json to_json(const FilamentSlotOverride& o);
 FilamentSlotOverride from_json(const nlohmann::json& j);
 
-}  // namespace helix::ams
+} // namespace helix::ams

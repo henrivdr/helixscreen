@@ -3,6 +3,8 @@
 
 #include "job_queue_widget.h"
 
+#include "ui_utils.h"
+
 #include "app_globals.h"
 #include "job_queue_state.h"
 #include "observer_factory.h"
@@ -10,7 +12,6 @@
 #include "static_subject_registry.h"
 #include "subject_debug_registry.h"
 #include "theme_manager.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 

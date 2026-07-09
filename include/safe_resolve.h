@@ -9,16 +9,15 @@
 #pragma once
 
 #include <arpa/inet.h>
+#include <cstring>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
-
-#include <cstring>
 #include <string>
+#include <sys/socket.h>
 
 #if defined(__GLIBC__) && (defined(__arm__) || defined(__mips__))
 extern "C" {
-#include "base/dns_resolv.h"  // libhv's direct UDP DNS resolver
+#include "base/dns_resolv.h" // libhv's direct UDP DNS resolver
 }
 #endif
 
@@ -52,7 +51,8 @@ inline int safe_resolve(const std::string& host, int port, struct sockaddr_in& a
     }
 #else
     // Standard resolution (safe on desktop/Pi)
-    struct addrinfo hints{}, *result = nullptr;
+    struct addrinfo hints {
+    }, *result = nullptr;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     int err = getaddrinfo(host.c_str(), nullptr, &hints, &result);

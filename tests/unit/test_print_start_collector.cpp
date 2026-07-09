@@ -2096,18 +2096,12 @@ TEST_CASE_METHOD(VoronCollectorFixture,
     // Real Voron QGL output: 4 corner pads × 3 samples = 12 probe lines.
     // Each pad position repeated 3x; 4 unique (x,y).
     const char* qgl_probe_lines[] = {
-        "// probe at 30.000,30.000 is z=-0.580000",
-        "// probe at 30.000,30.000 is z=-0.582500",
-        "// probe at 30.000,30.000 is z=-0.580000",
-        "// probe at 270.000,30.000 is z=-0.532500",
-        "// probe at 270.000,30.000 is z=-0.532500",
-        "// probe at 270.000,30.000 is z=-0.532500",
-        "// probe at 270.000,270.000 is z=-0.495000",
-        "// probe at 270.000,270.000 is z=-0.490000",
-        "// probe at 270.000,270.000 is z=-0.490000",
-        "// probe at 30.000,270.000 is z=-0.557500",
-        "// probe at 30.000,270.000 is z=-0.555000",
-        "// probe at 30.000,270.000 is z=-0.555000",
+        "// probe at 30.000,30.000 is z=-0.580000",   "// probe at 30.000,30.000 is z=-0.582500",
+        "// probe at 30.000,30.000 is z=-0.580000",   "// probe at 270.000,30.000 is z=-0.532500",
+        "// probe at 270.000,30.000 is z=-0.532500",  "// probe at 270.000,30.000 is z=-0.532500",
+        "// probe at 270.000,270.000 is z=-0.495000", "// probe at 270.000,270.000 is z=-0.490000",
+        "// probe at 270.000,270.000 is z=-0.490000", "// probe at 30.000,270.000 is z=-0.557500",
+        "// probe at 30.000,270.000 is z=-0.555000",  "// probe at 30.000,270.000 is z=-0.555000",
     };
     for (const char* line : qgl_probe_lines) {
         feed_gcode(line);
@@ -2117,8 +2111,7 @@ TEST_CASE_METHOD(VoronCollectorFixture,
     REQUIRE(get_current_phase() == PrintStartPhase::QGL);
 }
 
-TEST_CASE_METHOD(VoronCollectorFixture,
-                 "BED_MESH_CALIBRATE after QGL enters BED_MESH cleanly",
+TEST_CASE_METHOD(VoronCollectorFixture, "BED_MESH_CALIBRATE after QGL enters BED_MESH cleanly",
                  "[print][collector][voron][bed_mesh]") {
     collector().start();
     drain_async_updates();

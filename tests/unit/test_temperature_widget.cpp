@@ -1,13 +1,12 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "temperature_service.h"
-
 #include "../lvgl_test_fixture.h"
 #include "lvgl/lvgl.h"
 #include "panel_widget_manager.h"
 #include "printer_state.h"
 #include "src/ui/panel_widgets/heater_temp_widget.h"
+#include "temperature_service.h"
 
 #include "../catch_amalgamated.hpp"
 

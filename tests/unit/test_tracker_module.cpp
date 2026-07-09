@@ -32,8 +32,8 @@ static std::vector<uint8_t> build_minimal_mod() {
     // Instrument 1 (offset 20): volume=64, finetune=0
     // Each instrument: 30 bytes: 22-byte name, 2-byte length, 1-byte finetune, 1-byte volume, ...
     size_t inst1_offset = 20;
-    buf[inst1_offset + 24] = 0x00;  // finetune = 0
-    buf[inst1_offset + 25] = 64;    // volume = 64 (max)
+    buf[inst1_offset + 24] = 0x00; // finetune = 0
+    buf[inst1_offset + 25] = 64;   // volume = 64 (max)
 
     // Song length = 1 pattern
     buf[950] = 0x01;
@@ -60,11 +60,11 @@ static std::vector<uint8_t> build_minimal_mod() {
     //   b1 = 0x6B (period lo = 107)
     //   b2 = 0x10 (instrument lo = 1, effect = 0)
     //   b3 = 0x00 (effect data = 0)
-    size_t cell_offset = kHeaderSize;  // pattern 0, row 0, channel 0
-    buf[cell_offset + 0] = 0x00;       // period hi = 0, instrument hi = 0
-    buf[cell_offset + 1] = 0x6B;       // period lo = 107 → period = 107
-    buf[cell_offset + 2] = 0x10;       // instrument lo = 1, effect = 0
-    buf[cell_offset + 3] = 0x00;       // effect data = 0
+    size_t cell_offset = kHeaderSize; // pattern 0, row 0, channel 0
+    buf[cell_offset + 0] = 0x00;      // period hi = 0, instrument hi = 0
+    buf[cell_offset + 1] = 0x6B;      // period lo = 107 → period = 107
+    buf[cell_offset + 2] = 0x10;      // instrument lo = 1, effect = 0
+    buf[cell_offset + 3] = 0x00;      // effect data = 0
 
     return buf;
 }
@@ -110,7 +110,7 @@ TEST_CASE("TrackerModule: parse minimal MOD", "[tracker]") {
 
     SECTION("song order") {
         REQUIRE(mod.num_orders == 1);
-        REQUIRE(mod.order[0] == 0);  // order[0] = pattern 0
+        REQUIRE(mod.order[0] == 0); // order[0] = pattern 0
     }
 
     SECTION("patterns") {
@@ -129,8 +129,8 @@ TEST_CASE("TrackerModule: parse minimal MOD", "[tracker]") {
         const TrackerNote& note = mod.patterns[0][0 * 4 + 0];
         // Amiga period 107 → index 48 in our table → note 49 (C-4 scientific, 261.63 Hz)
         // (A-4 = note 58; C-4 is 9 semitones below = note 49)
-        REQUIRE(note.note == 49);        // C-4 scientific
-        REQUIRE(note.instrument == 1);   // instrument 1
+        REQUIRE(note.note == 49);      // C-4 scientific
+        REQUIRE(note.instrument == 1); // instrument 1
         REQUIRE(note.effect == 0);
         REQUIRE(note.effect_data == 0);
     }
@@ -241,7 +241,8 @@ TEST_CASE("TrackerModule: MED — load crocketts_theme.med", "[tracker]") {
                     break;
                 }
             }
-            if (found_note) break;
+            if (found_note)
+                break;
         }
         REQUIRE(found_note);
     }
@@ -256,4 +257,4 @@ TEST_CASE("TrackerModule: MED — load crocketts_theme.med", "[tracker]") {
     }
 }
 
-#endif  // HELIX_HAS_TRACKER
+#endif // HELIX_HAS_TRACKER

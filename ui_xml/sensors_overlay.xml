@@ -10,18 +10,17 @@
         bg_color="#screen_bg">
     <!-- Content Area -->
     <lv_obj name="overlay_content"
-            width="100%" flex_grow="1" style_pad_all="#space_md" style_pad_top="0" scrollable="true"
+            width="100%" flex_grow="1" style_pad_top="0" style_pad_left="0" style_pad_right="0"
+            style_pad_bottom="#space_md" scrollable="true"
             scroll_elastic="false" flex_flow="column" style_pad_gap="#space_sm">
 
       <!-- ================================================================== -->
       <!-- SWITCH SENSORS SECTION (filament runout/motion sensors) -->
       <!-- ================================================================== -->
-      <lv_obj name="switch_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="switch_sensors_section">
         <bind_flag_if_eq subject="filament_sensor_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="SWITCH SENSORS" title_tag="Switch Sensors" icon="electric_switch"
-                                badge_name="switch_sensor_count" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="SWITCH SENSORS" title_tag="Switch Sensors" icon="electric_switch"
+                              badge_name="switch_sensor_count" badge_text="0" hide_badge="false" hide_icon="false"/>
         <!-- Section content with inner padding -->
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
@@ -45,17 +44,15 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- PROBE SENSORS SECTION -->
       <!-- ================================================================== -->
-      <lv_obj name="probe_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="probe_sensors_section">
         <bind_flag_if_eq subject="probe_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="PROBE SENSORS" title_tag="Probe Sensors" icon="arrow_down_bold"
-                                badge_name="probe_sensor_count_label" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="PROBE SENSORS" title_tag="Probe Sensors" icon="arrow_down_bold"
+                              badge_name="probe_sensor_count_label" badge_text="0" hide_badge="false" hide_icon="false"/>
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_sm">
@@ -66,17 +63,15 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- WIDTH SENSORS SECTION -->
       <!-- ================================================================== -->
-      <lv_obj name="width_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="width_sensors_section">
         <bind_flag_if_eq subject="width_sensor_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="WIDTH SENSORS" title_tag="Width Sensors" icon="ruler"
-                                badge_name="width_sensor_count_label" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="WIDTH SENSORS" title_tag="Width Sensors" icon="ruler"
+                              badge_name="width_sensor_count_label" badge_text="0" hide_badge="false" hide_icon="false"/>
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_sm">
@@ -87,17 +82,15 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- HUMIDITY SENSORS SECTION -->
       <!-- ================================================================== -->
-      <lv_obj name="humidity_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="humidity_sensors_section">
         <bind_flag_if_eq subject="humidity_sensor_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="HUMIDITY SENSORS" title_tag="Humidity Sensors" icon="water"
-                                badge_name="humidity_sensor_count_label" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="HUMIDITY SENSORS" title_tag="Humidity Sensors" icon="water"
+                              badge_name="humidity_sensor_count_label" badge_text="0" hide_badge="false" hide_icon="false"/>
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_sm">
@@ -108,17 +101,15 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- ACCELEROMETER SENSORS SECTION -->
       <!-- ================================================================== -->
-      <lv_obj name="accel_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="accel_sensors_section">
         <bind_flag_if_eq subject="accel_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="ACCELEROMETERS" title_tag="Accelerometers" icon="waveform"
-                                badge_name="accel_sensor_count_label" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="ACCELEROMETERS" title_tag="Accelerometers" icon="waveform"
+                              badge_name="accel_sensor_count_label" badge_text="0" hide_badge="false" hide_icon="false"/>
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_sm">
@@ -129,17 +120,15 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- COLOR SENSORS SECTION -->
       <!-- ================================================================== -->
-      <lv_obj name="color_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="color_sensors_section">
         <bind_flag_if_eq subject="color_sensor_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="COLOR SENSORS" title_tag="Color Sensors" icon="palette"
-                                badge_name="color_sensor_count_label" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="COLOR SENSORS" title_tag="Color Sensors" icon="palette"
+                              badge_name="color_sensor_count_label" badge_text="0" hide_badge="false" hide_icon="false"/>
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_sm">
@@ -150,17 +139,15 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- TEMPERATURE SENSORS SECTION -->
       <!-- ================================================================== -->
-      <lv_obj name="temp_sensors_section"
-              width="100%" height="content" style_bg_color="#screen_bg" style_bg_opa="255" style_radius="#border_radius"
-              style_pad_all="0" scrollable="false" flex_flow="column" style_pad_gap="0">
+      <setting_group name="temp_sensors_section">
         <bind_flag_if_eq subject="temp_sensor_count" flag="hidden" ref_value="0"/>
-        <setting_section_header title="TEMPERATURE SENSORS" title_tag="Temperature Sensors" icon="thermometer"
-                                badge_name="temp_sensor_count_label" badge_text="0" hide_badge="false"/>
+        <setting_group_header title="TEMPERATURE SENSORS" title_tag="Temperature Sensors" icon="thermometer"
+                              badge_name="temp_sensor_count_label" badge_text="0" hide_badge="false" hide_icon="false"/>
         <lv_obj width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg"
                 style_pad_top="#space_sm" style_pad_bottom="#space_md" scrollable="false" flex_flow="column"
                 style_pad_gap="#space_sm">
@@ -208,7 +195,7 @@
                   width="100%" height="content" style_pad_all="0" scrollable="false" flex_flow="column"
                   style_pad_gap="#space_xs"/>
         </lv_obj>
-      </lv_obj>
+      </setting_group>
 
       <!-- ================================================================== -->
       <!-- NO SENSORS PLACEHOLDER -->

@@ -3,11 +3,12 @@
 
 #include "ui_sound_preview_overlay.h"
 
+#include "ui_event_safety.h"
 #include "ui_nav_manager.h"
+#include "ui_utils.h"
+
 #include "sound_manager.h"
 #include "static_panel_registry.h"
-#include "ui_event_safety.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -25,8 +26,8 @@ static std::unique_ptr<SoundPreviewOverlay> g_sound_preview_overlay;
 SoundPreviewOverlay& get_sound_preview_overlay() {
     if (!g_sound_preview_overlay) {
         g_sound_preview_overlay = std::make_unique<SoundPreviewOverlay>();
-        StaticPanelRegistry::instance().register_destroy(
-            "SoundPreviewOverlay", []() { g_sound_preview_overlay.reset(); });
+        StaticPanelRegistry::instance().register_destroy("SoundPreviewOverlay",
+                                                         []() { g_sound_preview_overlay.reset(); });
     }
     return *g_sound_preview_overlay;
 }
@@ -40,9 +41,8 @@ SoundPreviewOverlay::SoundPreviewOverlay() {
 }
 
 void SoundPreviewOverlay::init_subjects() {
-    init_subjects_guarded([this]() {
-        spdlog::debug("[{}] Subjects initialized (none needed)", get_name());
-    });
+    init_subjects_guarded(
+        [this]() { spdlog::debug("[{}] Subjects initialized (none needed)", get_name()); });
 }
 
 void SoundPreviewOverlay::register_callbacks() {
@@ -55,8 +55,7 @@ lv_obj_t* SoundPreviewOverlay::create(lv_obj_t* parent) {
         return overlay_root_;
     }
 
-    overlay_root_ =
-        static_cast<lv_obj_t*>(lv_xml_create(parent, "sound_preview_overlay", nullptr));
+    overlay_root_ = static_cast<lv_obj_t*>(lv_xml_create(parent, "sound_preview_overlay", nullptr));
     if (!overlay_root_) {
         spdlog::error("[{}] Failed to create overlay from XML", get_name());
         return nullptr;
@@ -122,7 +121,8 @@ std::string SoundPreviewOverlay::display_name(const std::string& sound_name) {
     };
 
     auto it = names.find(sound_name);
-    if (it != names.end()) return it->second;
+    if (it != names.end())
+        return it->second;
 
     // Auto-title-case unknown names from custom themes
     std::string result;

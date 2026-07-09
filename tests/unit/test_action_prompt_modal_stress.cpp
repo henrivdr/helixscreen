@@ -50,14 +50,14 @@
 // Tagged [.ui_integration] (hidden by default) — needs the XML component
 // tree on disk. Mirrors test_wizard_step_stress.cpp's tagging pattern.
 
-#include "action_prompt_manager.h"
-#include "action_prompt_modal.h"
-#include "display_settings_manager.h"
 #include "ui_modal.h"
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../ui_test_utils.h"
+#include "action_prompt_manager.h"
+#include "action_prompt_modal.h"
+#include "display_settings_manager.h"
 
 #include <spdlog/spdlog.h>
 
@@ -76,7 +76,8 @@ int env_iterations(int default_count) {
     if (const char* v = std::getenv("ACTION_PROMPT_STRESS_ITERATIONS")) {
         try {
             int n = std::stoi(v);
-            if (n > 0) return n;
+            if (n > 0)
+                return n;
         } catch (...) {
         }
     }
@@ -164,8 +165,7 @@ TEST_CASE_METHOD(ActionPromptStressFixture, "ActionPromptModal stress: burst pat
     SUCCEED("Completed " << bursts << " bursts without crash");
 }
 
-TEST_CASE_METHOD(ActionPromptStressFixture,
-                 "ActionPromptModal stress: alternating prompt shapes",
+TEST_CASE_METHOD(ActionPromptStressFixture, "ActionPromptModal stress: alternating prompt shapes",
                  "[action_prompt][stress][.ui_integration]") {
     const int iterations = env_iterations(120);
     spdlog::info("[action_prompt-stress] alternating shapes × {}", iterations);
@@ -246,11 +246,14 @@ TEST_CASE_METHOD(ActionPromptStressFixture,
     // ActionPromptModal::create_button are lv_button_t instances added to a
     // dynamic content container — they're nameless, so we find them by type.
     std::function<lv_obj_t*(lv_obj_t*)> find_button = [&](lv_obj_t* node) -> lv_obj_t* {
-        if (!node) return nullptr;
-        if (lv_obj_check_type(node, &lv_button_class)) return node;
+        if (!node)
+            return nullptr;
+        if (lv_obj_check_type(node, &lv_button_class))
+            return node;
         int n = lv_obj_get_child_count(node);
         for (int j = 0; j < n; ++j) {
-            if (auto* hit = find_button(lv_obj_get_child(node, j))) return hit;
+            if (auto* hit = find_button(lv_obj_get_child(node, j)))
+                return hit;
         }
         return nullptr;
     };
@@ -272,7 +275,8 @@ TEST_CASE_METHOD(ActionPromptStressFixture,
             // The click handler closes the modal, but be defensive: if the
             // handler somehow didn't, hide() explicitly to keep iteration
             // counts consistent.
-            if (modal_.is_visible()) modal_.hide();
+            if (modal_.is_visible())
+                modal_.hide();
         } else {
             modal_.hide();
         }
@@ -309,8 +313,8 @@ TEST_CASE_METHOD(ActionPromptStressFixture,
 
     for (int b = 0; b < bursts; ++b) {
         for (int p = 0; p < pairs_per_burst; ++p) {
-            auto data = make_prompt("ST" + std::to_string(b) + "_" + std::to_string(p),
-                                    1 + (p % 4));
+            auto data =
+                make_prompt("ST" + std::to_string(b) + "_" + std::to_string(p), 1 + (p % 4));
             REQUIRE(modal_.show_prompt(test_screen(), data));
             modal_.hide();
         }

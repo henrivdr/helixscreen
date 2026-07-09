@@ -121,7 +121,7 @@ struct TouchCalibration {
     bool valid = false;
     float a = 1.0f, b = 0.0f, c = 0.0f; // screen_x = a*x + b*y + c
     float d = 0.0f, e = 1.0f, f = 0.0f; // screen_y = d*x + e*y + f
-    bool axes_swapped = false;            // true if axis swap was auto-corrected
+    bool axes_swapped = false;          // true if axis swap was auto-corrected
 };
 
 /**
@@ -425,7 +425,7 @@ inline bool has_abs_display_mismatch(int abs_max_x, int abs_max_y, int display_w
  * Resistive panels legitimately need their affine and are never reset.
  */
 inline bool should_invalidate_legacy_calibration(bool recheck_pending, bool is_resistive,
-                                                  bool abs_display_mismatch) {
+                                                 bool abs_display_mismatch) {
     return recheck_pending && !is_resistive && abs_display_mismatch;
 }
 

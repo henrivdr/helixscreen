@@ -66,19 +66,17 @@ void ConsoleFilterEngine::remove(std::string_view spec) {
     if (!parse(spec, type, text)) {
         return;
     }
-    patterns_.erase(std::remove_if(patterns_.begin(), patterns_.end(),
-                                   [&](const Pattern& p) {
-                                       return p.type == type && p.text == text;
-                                   }),
-                    patterns_.end());
+    patterns_.erase(
+        std::remove_if(patterns_.begin(), patterns_.end(),
+                       [&](const Pattern& p) { return p.type == type && p.text == text; }),
+        patterns_.end());
 }
 
 bool ConsoleFilterEngine::should_filter(std::string_view line) const {
     for (const auto& p : patterns_) {
         switch (p.type) {
         case Type::Prefix:
-            if (line.size() >= p.text.size() &&
-                line.compare(0, p.text.size(), p.text) == 0) {
+            if (line.size() >= p.text.size() && line.compare(0, p.text.size(), p.text) == 0) {
                 return true;
             }
             break;

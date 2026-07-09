@@ -9,12 +9,12 @@
  * option-set sorting, lookup, and rendering helpers.
  */
 
-#include "hv/json.hpp"
 #include "pre_print_option.h"
 
 #include <string>
 
 #include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using nlohmann::json;
 
@@ -112,18 +112,14 @@ TEST_CASE("parse_pre_print_option parses RuntimeCommand strategy", "[pre_print_o
 // parse_pre_print_option — error paths
 // ============================================================================
 
-TEST_CASE("parse_pre_print_option rejects unknown strategy string",
-          "[pre_print_option][parse]") {
-    json j = {{"id", "weird"},
-              {"strategy", "telepathy"},
-              {"param_name", "X"}};
+TEST_CASE("parse_pre_print_option rejects unknown strategy string", "[pre_print_option][parse]") {
+    json j = {{"id", "weird"}, {"strategy", "telepathy"}, {"param_name", "X"}};
 
     auto parsed = parse_pre_print_option(j);
     CHECK_FALSE(parsed.has_value());
 }
 
-TEST_CASE("parse_pre_print_option rejects missing required fields",
-          "[pre_print_option][parse]") {
+TEST_CASE("parse_pre_print_option rejects missing required fields", "[pre_print_option][parse]") {
     SECTION("missing id") {
         json j = {{"strategy", "macro_param"}, {"param_name", "X"}};
         CHECK_FALSE(parse_pre_print_option(j).has_value());
@@ -142,10 +138,8 @@ TEST_CASE("parse_pre_print_option rejects missing required fields",
     SECTION("MacroParam missing enable_value") {
         // Empty enable_value would render as "PARAM=" (no value) — silent
         // garbage that the macro will misparse. Reject at parse time.
-        json j = {{"id", "x"},
-                  {"strategy", "macro_param"},
-                  {"param_name", "PARAM"},
-                  {"skip_value", "0"}};
+        json j = {
+            {"id", "x"}, {"strategy", "macro_param"}, {"param_name", "PARAM"}, {"skip_value", "0"}};
         CHECK_FALSE(parse_pre_print_option(j).has_value());
     }
 
@@ -192,40 +186,37 @@ TEST_CASE("parse_pre_print_option_set yields empty set for empty options array",
     }
 }
 
-TEST_CASE("parse_pre_print_option_set sorts by (category, order)",
-          "[pre_print_option][set]") {
+TEST_CASE("parse_pre_print_option_set sorts by (category, order)", "[pre_print_option][set]") {
     // Intentionally out-of-order input: monitoring first, then mixed orders.
-    json j = {
-        {"macro_name", "START_PRINT"},
-        {"options",
-         json::array({
-             {{"id", "ai_detect"},
-              {"category", "monitoring"},
-              {"order", 10},
-              {"strategy", "pre_start_gcode"},
-              {"gcode_template", "LOAD_AI_RUN SWITCH={value}"}},
-             {{"id", "qgl"},
-              {"category", "mechanical"},
-              {"order", 20},
-              {"strategy", "macro_param"},
-              {"param_name", "QGL"},
-              {"enable_value", "1"},
-              {"skip_value", "0"}},
-             {{"id", "nozzle_clean"},
-              {"category", "quality"},
-              {"order", 10},
-              {"strategy", "macro_param"},
-              {"param_name", "NOZZLE_CLEAN"},
-              {"enable_value", "1"},
-              {"skip_value", "0"}},
-             {{"id", "bed_mesh"},
-              {"category", "mechanical"},
-              {"order", 10},
-              {"strategy", "macro_param"},
-              {"param_name", "BED_MESH"},
-              {"enable_value", "1"},
-              {"skip_value", "0"}},
-         })}};
+    json j = {{"macro_name", "START_PRINT"},
+              {"options", json::array({
+                              {{"id", "ai_detect"},
+                               {"category", "monitoring"},
+                               {"order", 10},
+                               {"strategy", "pre_start_gcode"},
+                               {"gcode_template", "LOAD_AI_RUN SWITCH={value}"}},
+                              {{"id", "qgl"},
+                               {"category", "mechanical"},
+                               {"order", 20},
+                               {"strategy", "macro_param"},
+                               {"param_name", "QGL"},
+                               {"enable_value", "1"},
+                               {"skip_value", "0"}},
+                              {{"id", "nozzle_clean"},
+                               {"category", "quality"},
+                               {"order", 10},
+                               {"strategy", "macro_param"},
+                               {"param_name", "NOZZLE_CLEAN"},
+                               {"enable_value", "1"},
+                               {"skip_value", "0"}},
+                              {{"id", "bed_mesh"},
+                               {"category", "mechanical"},
+                               {"order", 10},
+                               {"strategy", "macro_param"},
+                               {"param_name", "BED_MESH"},
+                               {"enable_value", "1"},
+                               {"skip_value", "0"}},
+                          })}};
 
     auto set = parse_pre_print_option_set(j);
     REQUIRE(set.options.size() == 4);
@@ -240,13 +231,12 @@ TEST_CASE("parse_pre_print_option_set sorts by (category, order)",
 
 TEST_CASE("PrePrintOptionSet::find locates options by id", "[pre_print_option][set]") {
     json j = {{"macro_name", "START_PRINT"},
-              {"options",
-               json::array({{{"id", "bed_mesh"},
-                             {"category", "mechanical"},
-                             {"strategy", "macro_param"},
-                             {"param_name", "BED_MESH"},
-                             {"enable_value", "1"},
-                             {"skip_value", "0"}}})}};
+              {"options", json::array({{{"id", "bed_mesh"},
+                                        {"category", "mechanical"},
+                                        {"strategy", "macro_param"},
+                                        {"param_name", "BED_MESH"},
+                                        {"enable_value", "1"},
+                                        {"skip_value", "0"}}})}};
 
     auto set = parse_pre_print_option_set(j);
 
@@ -260,8 +250,7 @@ TEST_CASE("PrePrintOptionSet::find locates options by id", "[pre_print_option][s
 // Rendering helpers
 // ============================================================================
 
-TEST_CASE("render_macro_param emits KEY=value for both states",
-          "[pre_print_option][render]") {
+TEST_CASE("render_macro_param emits KEY=value for both states", "[pre_print_option][render]") {
     json j = {{"id", "bed_mesh"},
               {"strategy", "macro_param"},
               {"param_name", "BED_MESH"},

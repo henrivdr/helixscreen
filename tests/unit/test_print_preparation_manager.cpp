@@ -3,9 +3,8 @@
 
 #include "ui_print_preparation_manager.h"
 
-#include "macro_param_cache.h"
-
 #include "../test_helpers/printer_state_test_access.h"
+#include "macro_param_cache.h"
 
 class PrintPreparationManagerTestAccess {
   public:
@@ -21,11 +20,11 @@ class PrintPreparationManagerTestAccess {
     get_ops_to_disable(const helix::ui::PrintPreparationManager& m) {
         return m.collect_ops_to_disable();
     }
-    static std::string
-    build_pre_start_gcode_block(const std::string& setup_gcode,
-                                const std::vector<std::string>& lines, bool emit_setup) {
-        return helix::ui::PrintPreparationManager::build_pre_start_gcode_block(
-            setup_gcode, lines, emit_setup);
+    static std::string build_pre_start_gcode_block(const std::string& setup_gcode,
+                                                   const std::vector<std::string>& lines,
+                                                   bool emit_setup) {
+        return helix::ui::PrintPreparationManager::build_pre_start_gcode_block(setup_gcode, lines,
+                                                                               emit_setup);
     }
 };
 
@@ -798,8 +797,7 @@ TEST_CASE("PrintPreparationManager: option id keys are consistent",
     REQUIRE(std::string(category_to_string(PrintStartOpCategory::BED_MESH)) == "bed_mesh");
     REQUIRE(std::string(category_to_string(PrintStartOpCategory::QGL)) == "qgl");
     REQUIRE(std::string(category_to_string(PrintStartOpCategory::Z_TILT)) == "z_tilt");
-    REQUIRE(std::string(category_to_string(PrintStartOpCategory::NOZZLE_CLEAN)) ==
-            "nozzle_clean");
+    REQUIRE(std::string(category_to_string(PrintStartOpCategory::NOZZLE_CLEAN)) == "nozzle_clean");
 
     auto caps = PrinterDetector::get_pre_print_option_set("FlashForge Adventurer 5M Pro");
     if (!caps.empty()) {
@@ -895,8 +893,7 @@ TEST_CASE("PrintPreparationManager: build_pre_start_gcode_block (join contract)"
 
     SECTION("emit_setup=false suppresses setup_gcode (per-option lines only)") {
         REQUIRE(PrintPreparationManagerTestAccess::build_pre_start_gcode_block(
-                    "PRINT_PREPARED", {"LOAD_AI_RUN SWITCH=0"}, false) ==
-                "LOAD_AI_RUN SWITCH=0");
+                    "PRINT_PREPARED", {"LOAD_AI_RUN SWITCH=0"}, false) == "LOAD_AI_RUN SWITCH=0");
     }
 
     SECTION("emit_setup=true but setup_gcode empty: per-option lines only") {
@@ -916,9 +913,11 @@ TEST_CASE("PrintPreparationManager: build_pre_start_gcode_block (join contract)"
     }
 
     SECTION("Nothing to emit returns empty string") {
-        REQUIRE(PrintPreparationManagerTestAccess::build_pre_start_gcode_block("PRINT_PREPARED", {}, false)
+        REQUIRE(PrintPreparationManagerTestAccess::build_pre_start_gcode_block("PRINT_PREPARED", {},
+                                                                               false)
                     .empty());
-        REQUIRE(PrintPreparationManagerTestAccess::build_pre_start_gcode_block("", {}, true).empty());
+        REQUIRE(
+            PrintPreparationManagerTestAccess::build_pre_start_gcode_block("", {}, true).empty());
     }
 }
 
@@ -1543,8 +1542,7 @@ TEST_CASE("PrintPreparationManager: get_option_state tri-state via provider",
 
     SECTION("Unknown id -> NOT_APPLICABLE") {
         // Provider returns -1 for unset ids; no DB fallback either.
-        REQUIRE(manager.get_option_state("nonexistent_op") ==
-                PrePrintOptionState::NOT_APPLICABLE);
+        REQUIRE(manager.get_option_state("nonexistent_op") == PrePrintOptionState::NOT_APPLICABLE);
     }
 }
 
@@ -2021,14 +2019,14 @@ TEST_CASE("PrintPreparationManager: collect_macro_skip_params drives off provide
         REQUIRE(params[0].second == "1");
     }
 
-    SECTION("Provider returning -1 falls back to option default (default_enabled=true -> no skip)") {
+    SECTION(
+        "Provider returning -1 falls back to option default (default_enabled=true -> no skip)") {
         manager.set_option_state_provider([](const std::string&) { return -1; });
         auto params = PrintPreparationManagerTestAccess::get_skip_params(manager);
         // bed_mesh in AD5M Pro DB has default_enabled=true -> ENABLED -> no skip param.
         REQUIRE(params.empty());
     }
 }
-
 
 // ============================================================================
 // Tests: Extension Safety and Documentation (Phase 5)
@@ -2759,9 +2757,8 @@ TEST_CASE("PrintPreparationManager: collect_pre_start_gcode_lines empty for prin
     REQUIRE(lines.empty());
 }
 
-TEST_CASE(
-    "PrintPreparationManager: collect_pre_start_gcode_lines empty when no printer state set",
-    "[print_preparation][ai_detect][p4]") {
+TEST_CASE("PrintPreparationManager: collect_pre_start_gcode_lines empty when no printer state set",
+          "[print_preparation][ai_detect][p4]") {
     lv_init_safe();
     PrintPreparationManager manager;
     // No printer_state -> get_cached_options() returns the empty static set.

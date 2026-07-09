@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "app_constants.h"
 #include "config.h"
 #include "config_testing.h"
@@ -17,7 +18,7 @@
 using namespace helix;
 
 // Test fixture for Config class testing
-// Must be in namespace helix to match friend declaration in Config
+// Accesses Config internals via ConfigTestAccess
 namespace helix {
 class ConfigTestFixture {
   protected:
@@ -25,89 +26,95 @@ class ConfigTestFixture {
 
     // Helper methods to access protected members
     void set_data_null(const std::string& json_ptr) {
-        config.data[json::json_pointer(json_ptr)] = nullptr;
+        ConfigTestAccess::data(config)[json::json_pointer(json_ptr)] = nullptr;
     }
 
     void set_data_empty() {
-        config.data = {};
+        ConfigTestAccess::data(config) = {};
     }
 
     // Helper for plural naming refactor tests
     void set_data_for_plural_test(const json& data) {
-        config.data = data;
+        ConfigTestAccess::data(config) = data;
     }
 
     // Helper to get mutable reference to config data for migration testing
     json& get_data() {
-        return config.data;
+        return ConfigTestAccess::data(config);
     }
 
     // Helper to check if config data contains a key
     bool data_contains(const std::string& key) {
-        return config.data.contains(key);
+        return ConfigTestAccess::data(config).contains(key);
     }
 
     // Helper to set config file path for save tests
     void set_path(const std::string& p) {
-        config.path = p;
+        ConfigTestAccess::path(config) = p;
     }
 
     // Helper to apply migration to config data
     void apply_migration() {
         // Re-implement the migration logic for testing
         // This mirrors migrate_display_config() in config.cpp
-        if (!config.data.contains("display_rotate")) {
+        if (!ConfigTestAccess::data(config).contains("display_rotate")) {
             return; // Already migrated
         }
 
-        if (!config.data.contains("display")) {
-            config.data["display"] = json::object();
+        if (!ConfigTestAccess::data(config).contains("display")) {
+            ConfigTestAccess::data(config)["display"] = json::object();
         }
 
         // Migrate only if target key doesn't already exist
-        if (config.data.contains("display_rotate")) {
-            if (!config.data["display"].contains("rotate")) {
-                config.data["display"]["rotate"] = config.data["display_rotate"];
+        if (ConfigTestAccess::data(config).contains("display_rotate")) {
+            if (!ConfigTestAccess::data(config)["display"].contains("rotate")) {
+                ConfigTestAccess::data(config)["display"]["rotate"] =
+                    ConfigTestAccess::data(config)["display_rotate"];
             }
-            config.data.erase("display_rotate");
+            ConfigTestAccess::data(config).erase("display_rotate");
         }
-        if (config.data.contains("display_sleep_sec")) {
-            if (!config.data["display"].contains("sleep_sec")) {
-                config.data["display"]["sleep_sec"] = config.data["display_sleep_sec"];
+        if (ConfigTestAccess::data(config).contains("display_sleep_sec")) {
+            if (!ConfigTestAccess::data(config)["display"].contains("sleep_sec")) {
+                ConfigTestAccess::data(config)["display"]["sleep_sec"] =
+                    ConfigTestAccess::data(config)["display_sleep_sec"];
             }
-            config.data.erase("display_sleep_sec");
+            ConfigTestAccess::data(config).erase("display_sleep_sec");
         }
-        if (config.data.contains("display_dim_sec")) {
-            if (!config.data["display"].contains("dim_sec")) {
-                config.data["display"]["dim_sec"] = config.data["display_dim_sec"];
+        if (ConfigTestAccess::data(config).contains("display_dim_sec")) {
+            if (!ConfigTestAccess::data(config)["display"].contains("dim_sec")) {
+                ConfigTestAccess::data(config)["display"]["dim_sec"] =
+                    ConfigTestAccess::data(config)["display_dim_sec"];
             }
-            config.data.erase("display_dim_sec");
+            ConfigTestAccess::data(config).erase("display_dim_sec");
         }
-        if (config.data.contains("display_dim_brightness")) {
-            if (!config.data["display"].contains("dim_brightness")) {
-                config.data["display"]["dim_brightness"] = config.data["display_dim_brightness"];
+        if (ConfigTestAccess::data(config).contains("display_dim_brightness")) {
+            if (!ConfigTestAccess::data(config)["display"].contains("dim_brightness")) {
+                ConfigTestAccess::data(config)["display"]["dim_brightness"] =
+                    ConfigTestAccess::data(config)["display_dim_brightness"];
             }
-            config.data.erase("display_dim_brightness");
+            ConfigTestAccess::data(config).erase("display_dim_brightness");
         }
-        if (config.data.contains("touch_calibrated") || config.data.contains("touch_calibration")) {
-            if (!config.data["display"].contains("calibration")) {
-                config.data["display"]["calibration"] = json::object();
+        if (ConfigTestAccess::data(config).contains("touch_calibrated") ||
+            ConfigTestAccess::data(config).contains("touch_calibration")) {
+            if (!ConfigTestAccess::data(config)["display"].contains("calibration")) {
+                ConfigTestAccess::data(config)["display"]["calibration"] = json::object();
             }
-            if (config.data.contains("touch_calibrated")) {
-                if (!config.data["display"]["calibration"].contains("valid")) {
-                    config.data["display"]["calibration"]["valid"] =
-                        config.data["touch_calibrated"];
+            if (ConfigTestAccess::data(config).contains("touch_calibrated")) {
+                if (!ConfigTestAccess::data(config)["display"]["calibration"].contains("valid")) {
+                    ConfigTestAccess::data(config)["display"]["calibration"]["valid"] =
+                        ConfigTestAccess::data(config)["touch_calibrated"];
                 }
-                config.data.erase("touch_calibrated");
+                ConfigTestAccess::data(config).erase("touch_calibrated");
             }
-            if (config.data.contains("touch_calibration")) {
-                const auto& cal = config.data["touch_calibration"];
+            if (ConfigTestAccess::data(config).contains("touch_calibration")) {
+                const auto& cal = ConfigTestAccess::data(config)["touch_calibration"];
                 for (const auto& key : {"a", "b", "c", "d", "e", "f"}) {
-                    if (cal.contains(key) && !config.data["display"]["calibration"].contains(key)) {
-                        config.data["display"]["calibration"][key] = cal[key];
+                    if (cal.contains(key) &&
+                        !ConfigTestAccess::data(config)["display"]["calibration"].contains(key)) {
+                        ConfigTestAccess::data(config)["display"]["calibration"][key] = cal[key];
                     }
                 }
-                config.data.erase("touch_calibration");
+                ConfigTestAccess::data(config).erase("touch_calibration");
             }
         }
 
@@ -118,46 +125,54 @@ class ConfigTestFixture {
     // Helper to migrate touch settings from /display/ to /input/ (second migration step)
     void migrate_to_input() {
         // Ensure input section exists
-        if (!config.data.contains("input")) {
-            config.data["input"] = json::object();
+        if (!ConfigTestAccess::data(config).contains("input")) {
+            ConfigTestAccess::data(config)["input"] = json::object();
         }
 
         // Migrate /display/calibration -> /input/calibration
-        if (config.data.contains("display") && config.data["display"].contains("calibration")) {
-            if (!config.data["input"].contains("calibration")) {
-                config.data["input"]["calibration"] = config.data["display"]["calibration"];
+        if (ConfigTestAccess::data(config).contains("display") &&
+            ConfigTestAccess::data(config)["display"].contains("calibration")) {
+            if (!ConfigTestAccess::data(config)["input"].contains("calibration")) {
+                ConfigTestAccess::data(config)["input"]["calibration"] =
+                    ConfigTestAccess::data(config)["display"]["calibration"];
             }
-            config.data["display"].erase("calibration");
+            ConfigTestAccess::data(config)["display"].erase("calibration");
         }
 
         // Migrate /display/touch_device -> /input/touch_device
-        if (config.data.contains("display") && config.data["display"].contains("touch_device")) {
-            if (!config.data["input"].contains("touch_device")) {
-                config.data["input"]["touch_device"] = config.data["display"]["touch_device"];
+        if (ConfigTestAccess::data(config).contains("display") &&
+            ConfigTestAccess::data(config)["display"].contains("touch_device")) {
+            if (!ConfigTestAccess::data(config)["input"].contains("touch_device")) {
+                ConfigTestAccess::data(config)["input"]["touch_device"] =
+                    ConfigTestAccess::data(config)["display"]["touch_device"];
             }
-            config.data["display"].erase("touch_device");
+            ConfigTestAccess::data(config)["display"].erase("touch_device");
         }
     }
 
     // Helper to check display subsection contains a key
     bool display_contains(const std::string& key) {
-        return config.data.contains("display") && config.data["display"].contains(key);
+        return ConfigTestAccess::data(config).contains("display") &&
+               ConfigTestAccess::data(config)["display"].contains(key);
     }
 
     // Helper to check calibration subsection contains a key (now under /input/)
     bool calibration_contains(const std::string& key) {
-        return config.data.contains("input") && config.data["input"].contains("calibration") &&
-               config.data["input"]["calibration"].contains(key);
+        return ConfigTestAccess::data(config).contains("input") &&
+               ConfigTestAccess::data(config)["input"].contains("calibration") &&
+               ConfigTestAccess::data(config)["input"]["calibration"].contains(key);
     }
 
     // Helper to get display section size
     size_t display_size() {
-        return config.data.contains("display") ? config.data["display"].size() : 0;
+        return ConfigTestAccess::data(config).contains("display")
+                   ? ConfigTestAccess::data(config)["display"].size()
+                   : 0;
     }
 
     void setup_default_config() {
-        // Manually populate config.data with realistic test JSON (v3 format)
-        config.data = {
+        // Manually populate ConfigTestAccess::data(config) with realistic test JSON (v3 format)
+        ConfigTestAccess::data(config) = {
             {"config_version", 3},
             {"active_printer_id", "default"},
             {"printers",
@@ -169,27 +184,27 @@ class ConfigTestFixture {
                 {"temp_sensors", {{"bed", "temperature_sensor bed"}, {"hotend", "extruder"}}},
                 {"fans", {{"hotend", "heater_fan hotend_fan"}, {"part", "fan"}}},
                 {"hardware_map", {{"heated_bed", "heater_bed"}, {"hotend", "extruder"}}}}}}}};
-        config.active_printer_id_ = "default";
+        ConfigTestAccess::active_printer_id(config) = "default";
     }
 
     void setup_minimal_config() {
         // Minimal config for wizard testing (default host, v3 format)
-        config.data = {
+        ConfigTestAccess::data(config) = {
             {"config_version", 3},
             {"active_printer_id", "default"},
             {"printers",
              {{"default", {{"moonraker_host", "127.0.0.1"}, {"moonraker_port", 7125}}}}}};
-        config.active_printer_id_ = "default";
+        ConfigTestAccess::active_printer_id(config) = "default";
     }
 
     void setup_incomplete_config() {
         // Config missing hardware_map (should trigger wizard, v3 format)
-        config.data = {
+        ConfigTestAccess::data(config) = {
             {"config_version", 3},
             {"active_printer_id", "default"},
             {"printers",
              {{"default", {{"moonraker_host", "192.168.1.50"}, {"moonraker_port", 7125}}}}}};
-        config.active_printer_id_ = "default";
+        ConfigTestAccess::active_printer_id(config) = "default";
     }
 };
 } // namespace helix
@@ -1602,7 +1617,7 @@ TEST_CASE_METHOD(ConfigTestFixture,
                  "[core][config][migration][versioning]") {
     // System-level backup at /var/lib/helixscreen/ takes priority over HOME-based
     // fallback and would be restored instead of creating a truly fresh config.
-    struct stat st{};
+    struct stat st {};
     if (stat("/var/lib/helixscreen/settings.json.backup", &st) == 0)
         SKIP(
             "System backup exists at /var/lib/helixscreen/ — would override fresh config defaults");
@@ -1889,10 +1904,9 @@ TEST_CASE("Config: v13→v14 imports legacy telemetry_config.json when settings 
     std::string settings_path = temp_dir + "/test_config.json";
     std::string legacy_path = temp_dir + "/telemetry_config.json";
 
-    json v13_config = {
-        {"config_version", 13},
-        {"active_printer_id", "default"},
-        {"printers", {{"default", {{"moonraker_host", "127.0.0.1"}}}}}};
+    json v13_config = {{"config_version", 13},
+                       {"active_printer_id", "default"},
+                       {"printers", {{"default", {{"moonraker_host", "127.0.0.1"}}}}}};
     {
         std::ofstream o(settings_path);
         o << v13_config.dump(2);
@@ -1914,8 +1928,7 @@ TEST_CASE("Config: v13→v14 imports legacy telemetry_config.json when settings 
     std::filesystem::remove_all(temp_dir);
 }
 
-TEST_CASE("Config: v13→v14 preserves disabled legacy state",
-          "[core][config][migration][v14]") {
+TEST_CASE("Config: v13→v14 preserves disabled legacy state", "[core][config][migration][v14]") {
     std::string temp_dir = "/tmp/helix_test_v13_to_v14_disabled";
     std::filesystem::remove_all(temp_dir);
     std::filesystem::create_directories(temp_dir);
@@ -2499,7 +2512,7 @@ TEST_CASE("Config::init() recovers from corrupt config by restoring backup",
           "[core][config][corruption]") {
     // System-level backup at /var/lib/helixscreen/ takes priority over the
     // HOME-based fallback this test sets up, causing wrong data to be restored.
-    struct stat st{};
+    struct stat st {};
     if (stat("/var/lib/helixscreen/settings.json.backup", &st) == 0)
         SKIP("System backup exists at /var/lib/helixscreen/ — would override test backup");
 
@@ -2660,7 +2673,7 @@ struct TarballTestEnv {
         : dir("/tmp/helix_test_" + name + "_" + std::to_string(getpid())),
           config_path((dir / "settings.json").string()),
           backup_dir((dir / ".helixscreen").string()), home(dir.string()) {
-        struct stat st{};
+        struct stat st {};
         if (stat("/var/lib/helixscreen/settings.json.backup", &st) == 0)
             SKIP("System backup exists at /var/lib/helixscreen/ — would override test");
         std::filesystem::remove_all(dir);
@@ -2917,9 +2930,7 @@ TEST_CASE("Config: v11→v12 migration consolidates chamber keys for all printer
            {{"printer",
              {{"chamber_sensor", "temperature_sensor chamber_temp"},
               {"chamber_heater", "temperature_fan chamber_fan"}}}}},
-          {"voron",
-           {{"printer",
-             {{"chamber_sensor", "temperature_sensor chamber"}}}}},
+          {"voron", {{"printer", {{"chamber_sensor", "temperature_sensor chamber"}}}}},
           {"bare", {{"heaters", {{"bed", "heater_bed"}}}}}}}};
 
     {
@@ -2963,12 +2974,11 @@ TEST_CASE("Config: v11→v12 migration does not overwrite canonical keys already
     std::filesystem::create_directories(temp_dir);
     std::string temp_path = temp_dir + "/test_config.json";
 
-    json v11_config = {
-        {"config_version", 11},
-        {"printers",
-         {{"k1c",
-           {{"temp_sensors", {{"chamber", "temperature_sensor new_chamber"}}},
-            {"printer", {{"chamber_sensor", "temperature_sensor old_chamber"}}}}}}}};
+    json v11_config = {{"config_version", 11},
+                       {"printers",
+                        {{"k1c",
+                          {{"temp_sensors", {{"chamber", "temperature_sensor new_chamber"}}},
+                           {"printer", {{"chamber_sensor", "temperature_sensor old_chamber"}}}}}}}};
 
     {
         std::ofstream o(temp_path);
@@ -3182,16 +3192,15 @@ TEST_CASE("Config: v16→v17 migration renames retired Voron printer_image IDs",
         std::filesystem::create_directories(temp_dir);
         std::string temp_path = temp_dir + "/test_config.json";
 
-        json v16_config = {
-            {"config_version", 16},
-            {"active_printer_id", "voron24"},
-            {"printers",
-             {{"voron24", {{"printer_image", "shipped:voron-24r2"}}},
-              {"voron0", {{"printer_image", "shipped:voron-0-2"}}},
-              {"sw", {{"printer_image", "shipped:voron-switchwire"}}},
-              {"custom", {{"printer_image", "custom:my-printer"}}},
-              {"auto", {{"printer_image", ""}}},
-              {"none", {{"heaters", {{"bed", "heater_bed"}}}}}}}};
+        json v16_config = {{"config_version", 16},
+                           {"active_printer_id", "voron24"},
+                           {"printers",
+                            {{"voron24", {{"printer_image", "shipped:voron-24r2"}}},
+                             {"voron0", {{"printer_image", "shipped:voron-0-2"}}},
+                             {"sw", {{"printer_image", "shipped:voron-switchwire"}}},
+                             {"custom", {{"printer_image", "custom:my-printer"}}},
+                             {"auto", {{"printer_image", ""}}},
+                             {"none", {{"heaters", {{"bed", "heater_bed"}}}}}}}};
 
         {
             std::ofstream o(temp_path);

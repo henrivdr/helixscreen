@@ -194,8 +194,7 @@ void PrinterMotionState::update_from_status(const nlohmann::json& status) {
     if (status.contains("motion_report")) {
         const auto& mr = status["motion_report"];
         if (mr.contains("live_extruder_velocity") && mr["live_extruder_velocity"].is_number()) {
-            int vel_centimm =
-                static_cast<int>(mr["live_extruder_velocity"].get<double>() * 100.0);
+            int vel_centimm = static_cast<int>(mr["live_extruder_velocity"].get<double>() * 100.0);
             if (lv_subject_get_int(&live_extruder_velocity_) != vel_centimm) {
                 lv_subject_set_int(&live_extruder_velocity_, vel_centimm);
             }

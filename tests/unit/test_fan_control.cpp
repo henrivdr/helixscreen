@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "fan_gcode.h"
+
+#include "../catch_amalgamated.hpp"
 
 TEST_CASE("Fan gcode generation", "[fan][gcode]") {
     SECTION("bare fan uses M106 S<value>") {

@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include "lvgl.h"
+
+#include <cstdint>
 
 namespace helix::ui {
 
@@ -40,8 +40,7 @@ struct BypassSpoolWidgets {
 /// Clicks dispatch to the caller-supplied `on_click` LVGL event handler with
 /// `user_data` carried via `lv_event_get_user_data()` — keeps the helper out
 /// of the user-data slot of the spool widget itself.
-BypassSpoolWidgets bypass_spool_create(lv_obj_t* parent, lv_event_cb_t on_click,
-                                       void* user_data);
+BypassSpoolWidgets bypass_spool_create(lv_obj_t* parent, lv_event_cb_t on_click, void* user_data);
 
 /// Destroy all owned widgets and zero the struct. Main-thread synchronous —
 /// callers from within queued/observer callbacks must marshal first.

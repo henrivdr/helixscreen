@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_shutdown_modal.h"
 
+#include "async_lifetime_guard.h"
 #include "panel_widget.h"
 
 class MoonrakerAPI;
@@ -50,9 +50,7 @@ void register_shutdown_widget();
 /// Caller owns @p modal and @p lifetime; both must outlive the modal. The
 /// lifetime guard is required for the "shutdown both" / "reboot both" flows
 /// that defer the local SystemPower call until the printer-side ack.
-void show_shutdown_dialog(MoonrakerAPI* api,
-                          ShutdownModal& modal,
-                          AsyncLifetimeGuard& lifetime,
+void show_shutdown_dialog(MoonrakerAPI* api, ShutdownModal& modal, AsyncLifetimeGuard& lifetime,
                           lv_obj_t* parent_screen);
 
 } // namespace helix

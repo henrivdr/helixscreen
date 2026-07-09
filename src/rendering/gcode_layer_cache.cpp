@@ -415,8 +415,7 @@ void GCodeLayerCache::respond_to_pressure(float emergency_factor) {
         // Detail is bytes freed; layer count goes in the subject.
         char layers[24];
         std::snprintf(layers, sizeof(layers), "%luL", static_cast<unsigned long>(evicted_count));
-        crash_handler::breadcrumb::note("layercache_evict", layers,
-                                        static_cast<long>(freed_total));
+        crash_handler::breadcrumb::note("layercache_evict", layers, static_cast<long>(freed_total));
     }
 }
 

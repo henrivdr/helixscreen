@@ -39,6 +39,47 @@ class TestableNMBackend : public WifiBackendNetworkManager {
     using WifiBackendNetworkManager::parse_scan_output;
     using WifiBackendNetworkManager::split_nmcli_fields;
     using WifiBackendNetworkManager::validate_input;
+
+    // Friend access allows TestableNMBackend to reach private members.
+
+    /// Reset the connection-transition latch, mirroring what start() does on a
+    /// reused backend (wifi_backend_networkmanager.cpp) so the next poll re-fires
+    /// CONNECTED even if the system was already connected (#1059). Exposed as a
+    /// public hook because free TEST_CASE bodies aren't covered by friendship.
+    void reset_prev_connected() { prev_connected_.store(false); }
+
+    /// Simulate one status-poll cycle: update the cached status, then detect
+    /// and fire the CONNECTED / DISCONNECTED event if the connection state
+    /// transitioned — exactly what status_thread_func() does on each tick.
+    /// Returns the raw event string that was fired, or empty if no event.
+    std::string simulate_status_poll(bool connected) {
+        ConnectionStatus st;
+        st.connected = connected;
+        st.ssid = connected ? "TestSSID" : "";
+        st.signal_strength = connected ? 75 : 0;
+        st.ip_address = connected ? "192.168.1.100" : "";
+        st.mac_address = "de:ad:be:ef:ca:fe";
+
+        {
+            std::lock_guard<std::mutex> lock(status_mutex_);
+            cached_status_ = st;
+        }
+
+        // prev_connected_ is maintained inside fire_event() (single source of
+        // truth), so compare against a plain load and let fire_event() do the
+        // store — mirroring production status_thread_func().
+        bool now = st.connected;
+        bool was = prev_connected_.load();
+        std::string event;
+        if (now && !was) {
+            event = "CONNECTED";
+            fire_event(event);
+        } else if (!now && was) {
+            event = "DISCONNECTED";
+            fire_event(event);
+        }
+        return event;
+    }
 };
 
 // ============================================================================
@@ -491,8 +532,7 @@ TEST_CASE("NM backend: is_polkit_permission_error", "[network][nm][polkit]") {
     }
 
     SECTION("Detects polkit keyword") {
-        CHECK(TestableNMBackend::is_polkit_permission_error(
-            "polkit: authorization check failed"));
+        CHECK(TestableNMBackend::is_polkit_permission_error("polkit: authorization check failed"));
     }
 
     SECTION("Detects NetworkManager D-Bus denial") {
@@ -512,6 +552,131 @@ TEST_CASE("NM backend: is_polkit_permission_error", "[network][nm][polkit]") {
     SECTION("Returns false for timeout error") {
         CHECK_FALSE(
             TestableNMBackend::is_polkit_permission_error("Error: Timeout 90 sec expired."));
+    }
+}
+
+// ============================================================================
+// Status Poll Transition Event Tests (#1059 regression)
+// ============================================================================
+
+TEST_CASE("NM backend: status poll fires CONNECTED/DISCONNECTED on transitions",
+          "[network][nm][status][events]") {
+    TestableNMBackend backend;
+
+    int connect_count = 0;
+    int disconnect_count = 0;
+    std::string last_event_data;
+
+    backend.register_event_callback("CONNECTED",
+                                    [&](const std::string& d) { connect_count++; last_event_data = d; });
+    backend.register_event_callback("DISCONNECTED",
+                                    [&](const std::string& d) { disconnect_count++; last_event_data = d; });
+
+    SECTION("First poll with connected=false fires nothing") {
+        std::string ev = backend.simulate_status_poll(false);
+        CHECK(ev.empty());
+        CHECK(connect_count == 0);
+        CHECK(disconnect_count == 0);
+    }
+
+    SECTION("First poll with connected=true fires CONNECTED") {
+        std::string ev = backend.simulate_status_poll(true);
+        CHECK(ev == "CONNECTED");
+        CHECK(connect_count == 1);
+        CHECK(disconnect_count == 0);
+    }
+
+    SECTION("No duplicate event for same connected state") {
+        backend.simulate_status_poll(false);
+        std::string ev = backend.simulate_status_poll(false);
+        CHECK(ev.empty());
+        CHECK(connect_count == 0);
+        CHECK(disconnect_count == 0);
+    }
+
+    SECTION("Transition false->true fires CONNECTED") {
+        backend.simulate_status_poll(false);
+        std::string ev = backend.simulate_status_poll(true);
+        CHECK(ev == "CONNECTED");
+        CHECK(connect_count == 1);
+        CHECK(disconnect_count == 0);
+    }
+
+    SECTION("Transition true->false fires DISCONNECTED") {
+        backend.simulate_status_poll(true);
+        std::string ev = backend.simulate_status_poll(false);
+        CHECK(ev == "DISCONNECTED");
+        CHECK(connect_count == 1);   // first poll true → CONNECTED
+        CHECK(disconnect_count == 1);
+    }
+
+    SECTION("Full cycle fires correct sequence") {
+        // Initial: prev=false (default)
+        backend.simulate_status_poll(false);   // no change
+        CHECK(connect_count == 0);
+        CHECK(disconnect_count == 0);
+
+        backend.simulate_status_poll(true);    // false→true: CONNECTED
+        CHECK(connect_count == 1);
+        CHECK(disconnect_count == 0);
+
+        backend.simulate_status_poll(true);    // same: no event
+        CHECK(connect_count == 1);
+        CHECK(disconnect_count == 0);
+
+        backend.simulate_status_poll(false);   // true→false: DISCONNECTED
+        CHECK(connect_count == 1);
+        CHECK(disconnect_count == 1);
+
+        backend.simulate_status_poll(false);   // same: no event
+        CHECK(connect_count == 1);
+        CHECK(disconnect_count == 1);
+
+        backend.simulate_status_poll(true);    // false→true: CONNECTED
+        CHECK(connect_count == 2);
+        CHECK(disconnect_count == 1);
+    }
+
+    SECTION("Events reach the WiFiManager callback chain") {
+        // Verify that events fired through fire_event() actually invoke
+        // the registered callbacks (not just our local counters).
+        TestableNMBackend inner;
+        std::string captured_event;
+        inner.register_event_callback("CONNECTED",
+                                      [&](const std::string& d) { captured_event = "CB:" + d; });
+        inner.simulate_status_poll(true);
+        CHECK(captured_event == "CB:");
+    }
+}
+
+// ============================================================================
+// Status poll transition detection — prev_connected_ reset on stop
+// ============================================================================
+
+TEST_CASE("NM backend: start() resets prev_connected_ so next poll re-detects",
+          "[network][nm][status][events]") {
+    // The backend object is REUSED across a WiFi off/on toggle
+    // (WiFiManager::set_enabled calls backend_->stop() then backend_->start()
+    // on the same instance) — the member is NOT recreated. start() therefore
+    // explicitly resets prev_connected_ to false, so the first poll after a
+    // restart re-fires CONNECTED if the system is still connected and re-notifies
+    // observers (fixes the stale-icon-after-toggle bug, #1059). Here we drive
+    // that reset directly since start() needs a live NetworkManager.
+    TestableNMBackend backend;
+
+    int connect_count = 0;
+    backend.register_event_callback("CONNECTED",
+                                    [&](const std::string&) { connect_count++; });
+
+    SECTION("reset + simulate_poll fires CONNECTED on next disconnected->connected") {
+        backend.simulate_status_poll(true);  // CONNECTED fires, prev_=true
+        connect_count = 0;
+
+        // Reproduce what start() does on the reused object after a stop/start.
+        backend.reset_prev_connected();
+
+        backend.simulate_status_poll(true);  // false→true: CONNECTED fires again
+        CHECK(connect_count == 1);
     }
 }
 

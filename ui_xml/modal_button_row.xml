@@ -11,12 +11,29 @@
     <prop name="secondary_icon" type="string" default=""/>
     <prop name="primary_variant" type="string" default="primary"/>
     <prop name="show_secondary" type="string" default="true"/>
+    <!-- Optional leading (tertiary) action, e.g. "Reset to defaults". Hidden by default
+         so the many existing two-button callers are unaffected (a hidden flex child drops
+         out of layout entirely). Pass hide_tertiary="false" to reveal it; it renders to the
+         left of the secondary button. Extend this same pattern for a 4th action if needed. -->
+    <prop name="tertiary_text" type="string" default=""/>
+    <prop name="tertiary_tag" type="string" default=""/>
+    <prop name="tertiary_callback" type="string" default=""/>
+    <prop name="tertiary_icon" type="string" default=""/>
+    <prop name="tertiary_variant" type="string" default="secondary"/>
+    <prop name="hide_tertiary" type="string" default="true"/>
   </api>
   <view extends="lv_obj" width="100%" height="content" style_pad_all="0" style_pad_gap="0" flex_flow="column">
     <!-- Horizontal divider -->
     <divider_horizontal/>
     <!-- Button row -->
     <lv_obj width="100%" height="#button_height" style_pad_all="0" style_pad_gap="0" flex_flow="row">
+      <!-- Optional leading tertiary button + trailing divider. Both carry hide_tertiary so,
+           when hidden, they drop out of the flex row and the layout is identical to the
+           original two-button row. Same border_width="0" divider treatment as below. -->
+      <ui_button name="btn_tertiary" hidden="$hide_tertiary" variant="$tertiary_variant" height="100%" flex_grow="1" style_radius="0" style_border_width="0" focusable="false" icon="$tertiary_icon" text="$tertiary_text" translation_tag="$tertiary_tag">
+        <event_cb trigger="clicked" callback="$tertiary_callback"/>
+      </ui_button>
+      <divider_vertical name="div_tertiary" hidden="$hide_tertiary"/>
       <!-- Secondary button. style_border_width="0" so the theme's 1px button
            border doesn't stack against divider_vertical (previously looked
            like a triple-thick edge between Cancel and Save). -->

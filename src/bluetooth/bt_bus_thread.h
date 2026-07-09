@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include <systemd/sd-bus.h>
-
 #include <atomic>
 #include <deque>
 #include <functional>
 #include <future>
 #include <mutex>
+#include <systemd/sd-bus.h>
 #include <thread>
 
 namespace helix::bluetooth {
@@ -26,7 +25,7 @@ using BusWork = std::function<void(sd_bus*)>;
 ///   bt.submit([&](sd_bus* b){ result = sd_bus_call_method(b, ...); }).wait();
 ///   bt.stop();
 class BusThread {
-public:
+  public:
     /// Construct with a bus pointer. The BusThread does NOT take ownership —
     /// the caller must keep the bus alive until after stop() returns.
     ///
@@ -68,7 +67,7 @@ public:
     /// True if called from the bus thread itself.
     bool on_thread() const noexcept;
 
-private:
+  private:
     void loop();
 
     /// Pop every queued work item and break its promise with `reason`. Caller

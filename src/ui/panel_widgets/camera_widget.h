@@ -23,15 +23,21 @@ class CameraWidget : public PanelWidget {
 
     void attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) override;
     void detach() override;
-    const char* id() const override { return "camera"; }
+    const char* id() const override {
+        return "camera";
+    }
     void set_config(const nlohmann::json& config) override;
-    bool has_edit_configure() const override { return true; }
+    bool has_edit_configure() const override {
+        return true;
+    }
     bool on_edit_configure() override;
 
     void on_activate() override;
     void on_deactivate() override;
     void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override;
-    bool has_overlay_open() const override { return fullscreen_overlay_ != nullptr; }
+    bool has_overlay_open() const override {
+        return fullscreen_overlay_ != nullptr;
+    }
 
     /// Open/close fullscreen camera overlay
     void open_fullscreen();
@@ -43,16 +49,16 @@ class CameraWidget : public PanelWidget {
   private:
     void start_stream();
     void stop_stream();
-    void apply_transform();       // Push rotation/flip config to stream
-    void update_stream_fps();     // Re-evaluate and set max_fps based on current state
+    void apply_transform();   // Push rotation/flip config to stream
+    void update_stream_fps(); // Re-evaluate and set max_fps based on current state
     void set_status_text(const char* text);
-    void destroy_fullscreen();    // Synchronous cleanup of fullscreen overlay
+    void destroy_fullscreen(); // Synchronous cleanup of fullscreen overlay
 
     lv_obj_t* widget_obj_ = nullptr;
     lv_obj_t* parent_screen_ = nullptr;
     lv_obj_t* camera_image_ = nullptr;
-    lv_obj_t* camera_overlay_ = nullptr;  // Spinner overlay, hidden on first frame
-    lv_obj_t* camera_status_ = nullptr;   // Status text label inside overlay
+    lv_obj_t* camera_overlay_ = nullptr; // Spinner overlay, hidden on first frame
+    lv_obj_t* camera_status_ = nullptr;  // Status text label inside overlay
 
     // Fullscreen overlay state
     lv_obj_t* fullscreen_overlay_ = nullptr;
@@ -68,7 +74,7 @@ class CameraWidget : public PanelWidget {
     // Observer for home edit mode — throttles camera fps during editing
     ObserverGuard edit_mode_observer_;
 
-    int target_fps_ = 15;              // From Moonraker webcam config
+    int target_fps_ = 15;                     // From Moonraker webcam config
     lv_timer_t* fps_recheck_timer_ = nullptr; // Periodic re-eval when paused
 
     // Lifetime guard — prevents use-after-free in queued callbacks.

@@ -5,6 +5,7 @@
 #include "ui_utils.h" // helix::ui::safe_clean_children
 
 #include "observer_factory.h"
+#include "performance_state.h" // helix::perf::PerformanceState::subjects_lifetime()
 
 #include <spdlog/spdlog.h>
 
@@ -35,9 +36,18 @@ lv_obj_t* UiOverlayPerformance::create(lv_obj_t* parent) {
 
     lv_subject_t* names_subj = lv_xml_get_subject(nullptr, "perf_mcu_names");
     if (names_subj) {
+        // perf_mcu_names is NOT a never-freed singleton: PerformanceState destroys
+        // and recreates its subjects on reconnect / printer switch (and between
+        // tests) via deinit_subjects()/init_subjects(). This observer lives on the
+        // singleton, so it can outlive the subject. Pass PerformanceState's subject
+        // lifetime so the ObserverGuard releases safely when the subject is torn
+        // down — otherwise reset() would call lv_observer_remove() on a freed
+        // subject → UAF at lv_observer.c:584 ([L077], mirrors 056bb40e9 for
+        // HelixSparkline on perf_history_tick).
         mcu_names_observer_ = helix::ui::observe_string<UiOverlayPerformance>(
             names_subj, this,
-            [](UiOverlayPerformance* self, const char* /*v*/) { self->rebuild_mcu_rows(); });
+            [](UiOverlayPerformance* self, const char* /*v*/) { self->rebuild_mcu_rows(); },
+            helix::perf::PerformanceState::instance().subjects_lifetime());
     } else {
         spdlog::warn("[UiOverlayPerformance] perf_mcu_names subject not found");
     }

@@ -13,7 +13,7 @@
 namespace helix {
 class MoonrakerClient;
 class TemperatureController;
-}
+} // namespace helix
 class MoonrakerAPI;
 class MoonrakerManager;
 namespace helix {

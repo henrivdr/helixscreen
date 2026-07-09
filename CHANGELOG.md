@@ -5,6 +5,94 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.88] - 2026-07-08
+
+### Added
+
+- **Offline branded filament catalog picker** — long-pressing a filament preset opens a vendor → product picker backed by an offline OrcaSlicer-derived catalog, applying that product's branded print temperatures. Branded choices persist across restarts.
+- **Grouped settings cards** — settings overlays (Display & Sound, fans, sensors, and the rest of the settings tree) are reorganized into titled group cards, some with a count badge, for a cleaner, more scannable layout.
+- **On-screen scroll buttons** — a new "Scroll Buttons" toggle in Display settings adds chevron controls in a reserved gutter for paging long screens without a swipe, animated when Animations are enabled.
+- **Multi-color filament swatches** — filament-mapper surfaces and the spool picker show multi-color spools as diagonal split swatches.
+- **Resonance-calibration memory warning** — on hosts with under ~200 MB free, HelixScreen warns before starting input-shaper resonance calibration.
+
+### Fixed
+
+- **AD5X IFS seated-lane tracking** (prestonbrown/helixscreen#1065) — the seated lane is derived from the native channel sensor rather than dialog state, ejected lanes clear so the context menu refreshes, the loaded lane resolves via the current slot on single-tool systems, and the operation step tracker highlights the right phase.
+- **AD5X material type refresh** (prestonbrown/helixscreen#981) — a non-locked override material is refreshed when the firmware reports a filament type change.
+- **CC1 resonance calibration no longer thrashes memory** — the COSMOS gui-switcher can quiesce HelixScreen for resonance calibration on low-memory CC1 hosts.
+- **Safer during printing** — app-initiated homing and filament load/unload operations are blocked while a print is active.
+- **3D preview on faulting GPUs** (prestonbrown/helixscreen#966) — the 3D model preview is disabled on GPUs that fault inside their driver, avoiding a crash.
+- **Qidi Max 4 detection and version display** (prestonbrown/helixscreen#1068) — the build-volume window is centered on the 390×390 bed, and a Moonraker "?" version reports as "Unknown".
+- **Single-extruder printing not blocked** — the pre-print check no longer blocks a print on single-extruder printers with no AMS.
+- **Wizard Moonraker host prefill** — the setup wizard pre-fills 127.0.0.1 when the stored Moonraker host is empty.
+- **Spoolman spool parsing** (prestonbrown/helixscreen#1087) — null numeric fields in a spool record are tolerated instead of failing the parse.
+- **Software-rotated panel animations** (prestonbrown/helixscreen#986) — animations default off on software-rotated displays to keep them responsive.
+
+## [0.99.87] - 2026-07-03
+
+### Added
+
+- **Reassign a preset's filament type by long-press** — long-pressing a filament preset button opens an anchored material picker to change its assigned type, and the choice persists per button.
+- **Unified filament catalog** — material data (types, temperatures, densities) now comes from a single OrcaSlicer-derived catalog, with PET-CF and PET-GF added and material families sorted sensibly. A user overlay lets edited or custom materials override and extend the catalog.
+- **Qidi Max 4 support** — auto-detection and a matching preset for the Qidi Max 4, including its `MULTI_COLOR_BOX_UNLOAD` box-eject dialect.
+- **Touch-calibration press marker** (prestonbrown/helixscreen#1082) — the alignment phase shows a persistent dot where you last pressed, so it's clear each point registered.
+- **On-demand RFID refresh** (prestonbrown/helixscreen#1077) — the CFS "Refresh RFID" action re-probes tags via `BOX_INFO_REFRESH`.
+
+### Fixed
+
+- **A Qidi Max 4 is no longer confused with a large Creality printer** — printer auto-detection now treats kinematics as a hard rule (every Qidi is corexy), so a cartesian machine such as an Ender 5 Max is never matched to a Qidi Max 4, and an Ender 5 Max is recognized from an `ender5-max` hostname. Detection had been overweighting build volume.
+- **CFS slot presence reflects the physical spool** (prestonbrown/helixscreen#1077) — a slot shows as loaded based on the vendor and remaining-length signals rather than a latched RFID color, so a removed spool no longer lingers as present.
+- **WiFi connection state stays in sync** (prestonbrown/helixscreen#1059) — CONNECTED/DISCONNECTED events fire on status-poll transitions, with the transition handling hardened, so the WiFi status and icon no longer go stale.
+- **Taps during a scroll no longer fire a button** (prestonbrown/helixscreen#1074) — press-lock is released while scrolling, on both themed and XML switches.
+- **Soft-restart teardown crash fixed** (prestonbrown/helixscreen#1073) — the app layout is detached safely during a soft restart.
+- **Performance graph no longer risks a use-after-free** — the per-MCU name observer holds a lifetime token.
+
+## [0.99.86] - 2026-07-01
+
+### Fixed
+
+- **Spoolman spool picker** (prestonbrown/helixscreen#1071) — "Select Spool" now opens the Spoolman spool picker directly, with spools ordered by most-recently-used and then creation date.
+- **Chamber sensor auto-detection** — air-quality sensors are demoted so a real temperature sensor is preferred as the chamber source during auto-detection.
+- **WiFi connection stability** — cross-thread WiFi callback and flag state is now mutex-guarded to prevent races during connect and scan.
+- **Teardown crash fixes** — keyboard reset and long-press overlay deletion are deferred out of the input/update batch, modal entrance animations cancel cleanly when a modal closes mid-animation, and secondary-fan control tokens are held for the control's lifetime — closing several crash windows.
+
+## [0.99.85] - 2026-06-30
+
+### Added
+
+- **Automatic hardware role healing** (prestonbrown/helixscreen#1062) — fan and heater roles are validated against live hardware and re-resolved when the config changes; stale or unresolved roles route to a targeted wizard reconfiguration that reapplies without resetting your completed setup. Reconfiguration is idle-gated and no longer nags about unconfigured roles.
+- **Editable Happy Hare endless spool and per-unit drying** — endless-spool groups are now editable, each MMU/EMU unit reports its own drying environment, and heater-less units still surface environment readings.
+- **Input-shaper chart guidance for remote users** — when the frequency-response chart can't be shown because calibration ran on the printer, HelixScreen explains that the chart needs an on-printer install instead of showing a blank chart.
+
+### Fixed
+
+- **AD5X loaded-lane accuracy on native Z-Mod** (prestonbrown/helixscreen#1065) — head-loaded state is derived from the native Z-Mod sensors and cleared on a commanded unload even when filament parks in the lane; Load is gated on toolhead state; the seated lane persists across a power cycle; and a dedicated purging timeout with motion reset avoids stuck states.
+- **AD5X + Spoolman spool integrity** (prestonbrown/helixscreen#1071) — HelixScreen no longer auto-writes the Spoolman active spool, keeps the spool link when a lane goes empty (matching AFC/Happy Hare), only creates a spool when you actually edit filament fields, and confirms before overwriting a materially different linked spool. An emptied lane's fill bar now reads empty instead of 75%.
+- **AMS material label refresh** (prestonbrown/helixscreen#981) — a slot's material label is re-read when the panel reactivates, and the dryer environment overlay live-refreshes instead of freezing when opened.
+- **Input-shaper calibration chart** — an unreadable calibration CSV surfaces a clear message instead of a blank chart, and the service keeps `PrivateTmp` off so Klipper's `/tmp` output stays readable.
+- **Stray taps no longer dismiss a panel** (prestonbrown/helixscreen#1066) — in-bounds taps on an overlay root are absorbed instead of closing the panel.
+- **Touch calibration restore** (prestonbrown/helixscreen#943) — dismissing the recalibrate control in Settings restores the previous affine calibration.
+- **French fan status text** (prestonbrown/helixscreen#1073) — corrects a French fan format string, with a new format-specifier parity guard to catch similar mismatches.
+- **Home tile layout** — a tile layout computed while Klipper is not yet READY is no longer persisted.
+
+## [0.99.84] - 2026-06-24
+
+### Added
+
+- **Full UI translation across 9 languages** — translations completed to 100% coverage, now covering dropdown options, property-default modals, text-input placeholders, wizard screens, and backend error/status messages.
+- **Customizable macro buttons** — a tabbed "Customize Macro Button" modal configures a favorite macro's appearance and options, including a "run without parameter prompt" toggle to fire a macro immediately. It opens from the favorite widget and replaces the old picker.
+
+### Fixed
+
+- **AD5X loaded-lane reporting** — the active slot is derived from the seated channel on native ZMOD firmware, so the loaded lane is reported correctly.
+- **3D render refreshes on a new print** — the print-status view tracks thumbnail and gcode markers separately so the preview reloads for each new print.
+- **Quieter AD5X color polling** — background zcolor poll timeouts no longer raise a toast.
+- **Screen stays asleep on power-off** (prestonbrown/helixscreen#1049) — LVGL flushes are suppressed during DPMS power-off so the panel doesn't wake back up.
+
+### Changed
+
+- **Consistent modal headers** — six modals adopt a shared header with a uniform close button and responsive padding.
+
 ## [0.99.82] - 2026-06-22
 
 ### Fixed
@@ -4140,6 +4228,11 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[0.99.88]: https://github.com/prestonbrown/helixscreen/compare/v0.99.87...v0.99.88
+[0.99.87]: https://github.com/prestonbrown/helixscreen/compare/v0.99.86...v0.99.87
+[0.99.86]: https://github.com/prestonbrown/helixscreen/compare/v0.99.85...v0.99.86
+[0.99.85]: https://github.com/prestonbrown/helixscreen/compare/v0.99.84...v0.99.85
+[0.99.84]: https://github.com/prestonbrown/helixscreen/compare/v0.99.82...v0.99.84
 [0.99.82]: https://github.com/prestonbrown/helixscreen/compare/v0.99.81...v0.99.82
 [0.99.81]: https://github.com/prestonbrown/helixscreen/compare/v0.99.80...v0.99.81
 [0.99.80]: https://github.com/prestonbrown/helixscreen/compare/v0.99.79...v0.99.80

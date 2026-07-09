@@ -16,9 +16,9 @@
 #include "../lvgl_test_fixture.h"
 #include "static_panel_registry.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <memory>
+
+#include "../catch_amalgamated.hpp"
 
 // ============================================================================
 // Mock Panel Pattern (mirrors the real AMS/timelapse/retraction pattern)

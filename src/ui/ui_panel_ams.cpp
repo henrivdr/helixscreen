@@ -21,6 +21,7 @@
 #include "ui_overlay_qr_scanner.h"
 #include "ui_panel_common.h"
 #include "ui_spool_canvas.h"
+#include "ui_swatch.h"
 #include "ui_utils.h"
 
 #include "ams_backend.h"
@@ -395,6 +396,13 @@ void AmsPanel::on_activate() {
             lv_obj_remove_flag(path_container, LV_OBJ_FLAG_HIDDEN);
         // bypass_row visibility managed by bind_flag_if_eq on ams_supports_bypass subject
     }
+
+    // Re-read non-subject slot fields on reactivation. The MATERIAL label has no
+    // backing subject (unlike color, which self-refreshes via sync_from_backend()
+    // above), so it is only re-read by refresh_slots(). Without this call the
+    // material label stays stale until the next slots_version bump (#981).
+    // refresh_slots() guards panel_ && subjects_initialized_ internally.
+    refresh_slots();
 
     update_endless_arrows_from_backend();
 
@@ -1020,12 +1028,14 @@ void AmsPanel::update_slot_colors() {
         lv_subject_t* color_subject = AmsState::instance().get_slot_color_subject(backend_idx, i);
         if (color_subject) {
             uint32_t rgb = static_cast<uint32_t>(lv_subject_get_int(color_subject));
-            lv_color_t color = lv_color_hex(rgb);
 
-            // Find color swatch within slot
+            // Find color swatch within slot. Multi-color spools render as
+            // diagonal chunks; single-color falls back to a solid fill.
             lv_obj_t* swatch = lv_obj_find_by_name(slot_widgets_[i], "color_swatch");
             if (swatch) {
-                lv_obj_set_style_bg_color(swatch, color, 0);
+                std::string multi =
+                    backend ? backend->get_slot_info(i).multi_color_hexes : std::string();
+                helix::ui::apply_swatch_color(swatch, rgb, multi);
             }
         }
 
@@ -1049,19 +1059,14 @@ void AmsPanel::update_slot_colors() {
                 }
             }
 
-            // Set fill level from weight data. BOTH fields must be valid:
-            // some backends (Snapmaker RFID) report total_weight_g from the
-            // tag but never populate remaining_weight_g — firmware doesn't
-            // track consumption. Dividing -1/total yields a negative fill
-            // that clamps to 0, rendering every slot as "empty" even though
-            // spools have real filament. Treat remaining_weight_g < 0 the
-            // same as total <= 0: unknown → fall back to 75%.
-            if (slot_info.total_weight_g > 0.0f && slot_info.remaining_weight_g >= 0.0f) {
-                float fill_level = slot_info.remaining_weight_g / slot_info.total_weight_g;
-                ui_ams_slot_set_fill_level(slot_widgets_[i], fill_level);
-            } else if (slot_info.has_filament_info()) {
-                // Weight data unknown — show 75% rather than defaulting to full
-                ui_ams_slot_set_fill_level(slot_widgets_[i], 0.75f);
+            // Set fill level from the slot's display policy (see
+            // SlotInfo::display_fill_level): real ratio when both weights are
+            // known, 75% fallback when only metadata is present, and an empty
+            // bar for a not-present/ghost lane — which a retained Spoolman link
+            // across an eject would otherwise render as ~75% full (#1071 BUG-1).
+            // nullopt means leave the bar untouched.
+            if (auto fill = slot_info.display_fill_level()) {
+                ui_ams_slot_set_fill_level(slot_widgets_[i], *fill);
             }
 
             // Refresh slot to update tool badge and other dynamic state
@@ -1153,8 +1158,9 @@ void AmsPanel::on_bypass_spool_clicked(void* user_data) {
 }
 
 void AmsPanel::handle_bypass_spool_click() {
-    helix::ui::show_external_spool_menu(parent_screen_, path_canvas_, context_menu_,
-                                        [this]() { show_edit_modal(-2); });
+    helix::ui::show_external_spool_menu(
+        parent_screen_, path_canvas_, context_menu_,
+        [this](bool open_on_picker) { show_edit_modal(-2, open_on_picker); });
 }
 
 void AmsPanel::on_buffer_clicked(void* user_data) {
@@ -1459,8 +1465,11 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
             break;
 
         case helix::ui::AmsContextMenu::MenuAction::EDIT:
-        case helix::ui::AmsContextMenu::MenuAction::SPOOLMAN:
             show_edit_modal(slot);
+            break;
+
+        case helix::ui::AmsContextMenu::MenuAction::SPOOLMAN:
+            show_edit_modal(slot, /*open_on_picker=*/true);
             break;
 
         case helix::ui::AmsContextMenu::MenuAction::SCAN_QR: {
@@ -1534,7 +1543,7 @@ void AmsPanel::show_context_menu(int slot_index, lv_obj_t* near_widget, lv_point
 // Edit Modal (delegated to helix::ui::AmsEditModal)
 // ============================================================================
 
-void AmsPanel::show_edit_modal(int slot_index) {
+void AmsPanel::show_edit_modal(int slot_index, bool open_on_picker) {
     if (!parent_screen_) {
         spdlog::warn("[{}] Cannot show edit modal - no parent screen", get_name());
         return;
@@ -1559,7 +1568,7 @@ void AmsPanel::show_edit_modal(int slot_index) {
                 NOTIFY_INFO(lv_tr("External spool updated"));
             }
         });
-        edit_modal_->show_for_slot(parent_screen_, -2, initial_info, api_);
+        edit_modal_->show_for_slot(parent_screen_, -2, initial_info, api_, open_on_picker);
         return;
     }
 
@@ -1606,7 +1615,7 @@ void AmsPanel::show_edit_modal(int slot_index) {
     });
 
     // Show the modal
-    edit_modal_->show_for_slot(parent_screen_, slot_index, initial_info, api_);
+    edit_modal_->show_for_slot(parent_screen_, slot_index, initial_info, api_, open_on_picker);
 }
 
 void AmsPanel::show_loading_error_modal() {
@@ -1629,7 +1638,7 @@ void AmsPanel::show_loading_error_modal() {
     AmsSystemInfo info = backend->get_system_info();
     std::string error_message = info.operation_detail;
     if (error_message.empty()) {
-        error_message = "An error occurred during filament loading.";
+        error_message = lv_tr("An error occurred during filament loading.");
     }
 
     // Store slot for retry

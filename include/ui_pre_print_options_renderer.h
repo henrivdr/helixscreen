@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "pre_print_option.h"
 #include "ui_observer_guard.h"
+
+#include "pre_print_option.h"
 
 #include <functional>
 #include <lvgl.h>

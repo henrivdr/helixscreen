@@ -84,7 +84,8 @@ void SDLSoundBackend::set_waveform(Waveform w) {
 // Legacy voice interface: writes individual fields and bumps generation so the
 // audio callback picks up the change atomically on the next generation check.
 void SDLSoundBackend::set_voice(int slot, float freq_hz, float amplitude, float duty_cycle) {
-    if (slot < 0 || slot >= MAX_VOICES) return;
+    if (slot < 0 || slot >= MAX_VOICES)
+        return;
     auto& s = voice_slots_[slot];
     s.event.freq_hz = freq_hz;
     s.event.velocity = amplitude;
@@ -93,13 +94,15 @@ void SDLSoundBackend::set_voice(int slot, float freq_hz, float amplitude, float 
 }
 
 void SDLSoundBackend::set_voice_waveform(int slot, Waveform w) {
-    if (slot < 0 || slot >= MAX_VOICES) return;
+    if (slot < 0 || slot >= MAX_VOICES)
+        return;
     // No generation bump — waveform alone doesn't restart the note.
     voice_slots_[slot].event.wave = w;
 }
 
 void SDLSoundBackend::silence_voice(int slot) {
-    if (slot < 0 || slot >= MAX_VOICES) return;
+    if (slot < 0 || slot >= MAX_VOICES)
+        return;
     voice_slots_[slot].event.velocity = 0;
     voice_slots_[slot].generation.fetch_add(1, std::memory_order_release);
 }
@@ -124,7 +127,8 @@ void SDLSoundBackend::set_filter(const std::string& type, float cutoff) {
 // The audio callback snapshots event → active on the next callback, ensuring all
 // parameters (freq, envelope, sweep, LFO, filter) are seen as a unit.
 void SDLSoundBackend::publish_note(int slot, const NoteEvent& event) {
-    if (slot < 0 || slot >= MAX_VOICES) return;
+    if (slot < 0 || slot >= MAX_VOICES)
+        return;
     voice_slots_[slot].event = event;
     voice_slots_[slot].generation.fetch_add(1, std::memory_order_release);
 }
@@ -180,9 +184,8 @@ void SDLSoundBackend::audio_callback(void* userdata, uint8_t* stream, int len) {
             // fix up with the real sample rate if a filter is active.
             if (slot.active.filter_type != 0) {
                 auto ft = (slot.active.filter_type == 1) ? helix::audio::FilterType::LOWPASS
-                                                          : helix::audio::FilterType::HIGHPASS;
-                helix::audio::compute_biquad_coeffs(slot.filter, ft,
-                                                     slot.active.filter_cutoff, sr);
+                                                         : helix::audio::FilterType::HIGHPASS;
+                helix::audio::compute_biquad_coeffs(slot.filter, ft, slot.active.filter_cutoff, sr);
             }
         }
 

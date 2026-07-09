@@ -348,9 +348,7 @@ TEST_CASE("MoonrakerClient::dispatch_status_update absorbs throwing callbacks",
         throw nlohmann::json::type_error::create(302, "type must be number, but is null", nullptr);
     });
     // Second callback is well-behaved — must still fire after the first throws
-    client.register_notify_update([&good_calls](const json& /*notif*/) {
-        ++good_calls;
-    });
+    client.register_notify_update([&good_calls](const json& /*notif*/) { ++good_calls; });
 
     // dispatch_status_update wraps a status payload as notify_status_update
     // and walks the notify_callbacks_ map. Pre-fix: the throw escaped this

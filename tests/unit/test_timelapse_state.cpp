@@ -186,7 +186,8 @@ TEST_CASE("TimelapseState: render success stores last rendered filename", "[time
 
     REQUIRE(state.get_last_rendered_filename().empty());
 
-    json success = {{"action", "render"}, {"status", "success"}, {"filename", "benchy_20260312.mp4"}};
+    json success = {
+        {"action", "render"}, {"status", "success"}, {"filename", "benchy_20260312.mp4"}};
     state.handle_timelapse_event(success);
     flush_queue();
 
@@ -195,8 +196,7 @@ TEST_CASE("TimelapseState: render success stores last rendered filename", "[time
     state.deinit_subjects();
 }
 
-TEST_CASE("TimelapseState: render success fires on_render_complete callback",
-          "[timelapse_state]") {
+TEST_CASE("TimelapseState: render success fires on_render_complete callback", "[timelapse_state]") {
     lv_init_safe();
     auto& state = TimelapseState::instance();
     state.deinit_subjects();

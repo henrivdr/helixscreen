@@ -235,24 +235,21 @@ TEST_CASE_METHOD(DataRootFixture, "resolve: deep nested deploy path works",
 // get_user_config_dir() — HELIX_CONFIG_DIR override
 // ============================================================================
 
-TEST_CASE("get_user_config_dir: returns HELIX_CONFIG_DIR when set",
-          "[data_root][config_dir]") {
+TEST_CASE("get_user_config_dir: returns HELIX_CONFIG_DIR when set", "[data_root][config_dir]") {
     EnvGuard g("HELIX_CONFIG_DIR");
     setenv("HELIX_CONFIG_DIR", "/etc/klipper/config/helixscreen", 1);
 
     REQUIRE(helix::get_user_config_dir() == "/etc/klipper/config/helixscreen");
 }
 
-TEST_CASE("get_user_config_dir: returns 'config' when env not set",
-          "[data_root][config_dir]") {
+TEST_CASE("get_user_config_dir: returns 'config' when env not set", "[data_root][config_dir]") {
     EnvGuard g("HELIX_CONFIG_DIR");
     // Guard already unset it.
 
     REQUIRE(helix::get_user_config_dir() == "config");
 }
 
-TEST_CASE("get_user_config_dir: returns 'config' when env is empty",
-          "[data_root][config_dir]") {
+TEST_CASE("get_user_config_dir: returns 'config' when env is empty", "[data_root][config_dir]") {
     EnvGuard g("HELIX_CONFIG_DIR");
     setenv("HELIX_CONFIG_DIR", "", 1);
 
@@ -287,8 +284,7 @@ TEST_CASE("get_data_dir: returns '.' when env is empty", "[data_root][data_dir]"
 // writable_path(relpath) — always config_dir/relpath
 // ============================================================================
 
-TEST_CASE("writable_path: joins HELIX_CONFIG_DIR with relpath",
-          "[data_root][writable_path]") {
+TEST_CASE("writable_path: joins HELIX_CONFIG_DIR with relpath", "[data_root][writable_path]") {
     EnvGuard g("HELIX_CONFIG_DIR");
     setenv("HELIX_CONFIG_DIR", "/etc/klipper/config/helixscreen", 1);
 
@@ -303,8 +299,7 @@ TEST_CASE("writable_path: defaults to 'config/relpath' when env not set",
     REQUIRE(helix::writable_path("settings.json") == "config/settings.json");
 }
 
-TEST_CASE("writable_path: handles nested relpaths",
-          "[data_root][writable_path]") {
+TEST_CASE("writable_path: handles nested relpaths", "[data_root][writable_path]") {
     EnvGuard g("HELIX_CONFIG_DIR");
     setenv("HELIX_CONFIG_DIR", "/var/lib/helixscreen", 1);
 
@@ -312,8 +307,7 @@ TEST_CASE("writable_path: handles nested relpaths",
             "/var/lib/helixscreen/custom_images/foo.png");
 }
 
-TEST_CASE("writable_path: strips trailing slash from env",
-          "[data_root][writable_path]") {
+TEST_CASE("writable_path: strips trailing slash from env", "[data_root][writable_path]") {
     EnvGuard g("HELIX_CONFIG_DIR");
     setenv("HELIX_CONFIG_DIR", "/etc/klipper/config/helixscreen/", 1);
 
@@ -326,8 +320,7 @@ TEST_CASE("writable_path: strips trailing slash from env",
 //                          data_dir/assets/config/relpath
 // ============================================================================
 
-TEST_CASE_METHOD(DataRootFixture,
-                 "find_readable: returns config_dir path when file exists there",
+TEST_CASE_METHOD(DataRootFixture, "find_readable: returns config_dir path when file exists there",
                  "[data_root][find_readable]") {
     EnvGuard cg("HELIX_CONFIG_DIR");
     EnvGuard dg("HELIX_DATA_DIR");
@@ -386,8 +379,7 @@ TEST_CASE_METHOD(DataRootFixture,
     REQUIRE(p == (config_dir / "missing.json").string());
 }
 
-TEST_CASE_METHOD(DataRootFixture,
-                 "find_readable: works with nested relpaths",
+TEST_CASE_METHOD(DataRootFixture, "find_readable: works with nested relpaths",
                  "[data_root][find_readable]") {
     EnvGuard cg("HELIX_CONFIG_DIR");
     EnvGuard dg("HELIX_DATA_DIR");

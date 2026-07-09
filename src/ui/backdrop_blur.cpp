@@ -138,7 +138,8 @@ void downscale_2x_argb8888(const uint8_t* src, uint8_t* dst, int src_width, int 
     }
 }
 
-void darken_argb8888_inplace(uint8_t* data, int width, int height, int stride, lv_opa_t dim_opacity) {
+void darken_argb8888_inplace(uint8_t* data, int width, int height, int stride,
+                             lv_opa_t dim_opacity) {
     if (!data || width < 1 || height < 1) {
         return;
     }
@@ -795,8 +796,8 @@ lv_obj_t* create_darkened_backdrop(lv_obj_t* parent, lv_opa_t dim_opacity) {
     // Free draw buffer when image is deleted
     lv_obj_add_event_cb(img, on_backdrop_image_deleted, LV_EVENT_DELETE, result_buf);
 
-    spdlog::debug("[Backdrop Darken] Created darkened backdrop ({}x{}, dim_opacity={})",
-                  snap_w, snap_h, dim_opacity);
+    spdlog::debug("[Backdrop Darken] Created darkened backdrop ({}x{}, dim_opacity={})", snap_w,
+                  snap_h, dim_opacity);
     return img;
 }
 

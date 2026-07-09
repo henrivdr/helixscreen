@@ -3,10 +3,11 @@
 
 #include "macro_executor.h"
 
-#include "device_display_name.h"
-#include "moonraker_api.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
+
+#include "device_display_name.h"
+#include "moonraker_api.h"
 
 #include <spdlog/spdlog.h>
 
@@ -19,15 +20,12 @@ namespace helix {
 namespace {
 
 const std::unordered_set<std::string> DANGEROUS_MACROS = {
-    "SAVE_CONFIG",    "FIRMWARE_RESTART", "RESTART", "SHUTDOWN",
-    "M112",
-    "EMERGENCY_STOP",
+    "SAVE_CONFIG", "FIRMWARE_RESTART", "RESTART", "SHUTDOWN", "M112", "EMERGENCY_STOP",
 };
 
 } // namespace
 
-std::string build_macro_gcode(const std::string& macro_name,
-                              const MacroParamResult& result) {
+std::string build_macro_gcode(const std::string& macro_name, const MacroParamResult& result) {
     std::string gcode;
     for (const auto& [key, value] : result.variables) {
         std::string var_lower = key;

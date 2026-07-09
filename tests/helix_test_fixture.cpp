@@ -3,15 +3,17 @@
 
 #include "helix_test_fixture.h"
 
-#include "async_lifetime_guard.h"
-#include "config.h"
-#include "src/ui/panel_widgets/print_status_widget.h"
-#include "system_settings_manager.h"
-#include "test_helpers/print_control_buttons_test_access.h"
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_test_utils.h"
 #include "ui_update_queue.h"
+
+#include "async_lifetime_guard.h"
+#include "config.h"
+#include "helix-xml/src/xml/lv_xml.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
+#include "system_settings_manager.h"
+#include "test_helpers/print_control_buttons_test_access.h"
 
 #include <cstdlib>
 
@@ -104,6 +106,20 @@ void HelixTestFixture::reset_all() {
     // here — while print_state_enum is still alive — closes the window. No-op
     // when the controller was never initialized.
     helix::ui::PrintControlButtonsTestAccess::reset();
+
+    // AmsState is a process singleton whose `ams_slot_count` gate subject is
+    // registered in the global XML scope and driven >0 when an AMS test runs
+    // slot discovery (AmsState::init_subjects(true) + an update). It never falls
+    // back to 0 on its own, so it leaks a stale "AMS present" signal into later
+    // tests — notably PanelWidgetConfig::build_default_grid(), whose "no AMS"
+    // path assumes the subject is 0/absent (test_default_layout bed_temperature
+    // failed only in the full single-process suite). The subject pointer is the
+    // singleton's own member (stable for the process lifetime), so resetting the
+    // value to 0 here is safe and restores the clean-slate default. No-op when
+    // no AMS test has registered the subject yet.
+    if (lv_subject_t* ams = lv_xml_get_subject(nullptr, "ams_slot_count")) {
+        lv_subject_set_int(ams, 0);
+    }
 
     // NOTE: NavigationManager has no public reset API (clear_overlay_stack is
     // private; shutdown() is a one-way teardown for app exit). Add a reset

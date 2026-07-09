@@ -39,10 +39,14 @@ namespace helix::ui {
  * temp_observers_.setup_sync(
  *     this,
  *     printer_state_,
- *     [](MyPanel* p, int v) { p->nozzle_current_ = helix::ui::temperature::deci_to_degrees(v); p->update_display(); },
- *     [](MyPanel* p, int v) { p->nozzle_target_ = helix::ui::temperature::deci_to_degrees(v); p->update_display(); },
- *     [](MyPanel* p, int v) { p->bed_current_ = helix::ui::temperature::deci_to_degrees(v); p->update_display(); },
- *     [](MyPanel* p, int v) { p->bed_target_ = helix::ui::temperature::deci_to_degrees(v); p->update_display(); }
+ *     [](MyPanel* p, int v) { p->nozzle_current_ = helix::ui::temperature::deci_to_degrees(v);
+ * p->update_display(); },
+ *     [](MyPanel* p, int v) { p->nozzle_target_ = helix::ui::temperature::deci_to_degrees(v);
+ * p->update_display(); },
+ *     [](MyPanel* p, int v) { p->bed_current_ = helix::ui::temperature::deci_to_degrees(v);
+ * p->update_display(); },
+ *     [](MyPanel* p, int v) { p->bed_target_ = helix::ui::temperature::deci_to_degrees(v);
+ * p->update_display(); }
  * );
  *
  * // Pattern 2: Async with caching + unified update (thread-safe)

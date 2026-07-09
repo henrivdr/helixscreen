@@ -3,6 +3,7 @@
 
 #include "print_start_collector.h"
 
+#include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
 
 #include "config.h"
@@ -11,7 +12,6 @@
 #include "memory_monitor.h"
 #include "printer_detector.h"
 #include "thermal_rate_model.h"
-#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -138,8 +138,8 @@ void PrintStartCollector::start() {
     helix::MemoryMonitor::log_now("print_start_collector_start", spdlog::level::debug);
 
     // Capture start temperatures for heating fraction calculation
-    start_ext_temp_ =
-        helix::ui::temperature::deci_to_degrees(lv_subject_get_int(state_.get_active_extruder_temp_subject()));
+    start_ext_temp_ = helix::ui::temperature::deci_to_degrees(
+        lv_subject_get_int(state_.get_active_extruder_temp_subject()));
     start_bed_temp_ =
         helix::ui::temperature::deci_to_degrees(lv_subject_get_int(state_.get_bed_temp_subject()));
     cached_ext_temp_.store(start_ext_temp_, std::memory_order_relaxed);
@@ -147,9 +147,9 @@ void PrintStartCollector::start() {
     cached_ext_target_.store(helix::ui::temperature::deci_to_degrees(
                                  lv_subject_get_int(state_.get_active_extruder_target_subject())),
                              std::memory_order_relaxed);
-    cached_bed_target_.store(
-        helix::ui::temperature::deci_to_degrees(lv_subject_get_int(state_.get_bed_target_subject())),
-        std::memory_order_relaxed);
+    cached_bed_target_.store(helix::ui::temperature::deci_to_degrees(
+                                 lv_subject_get_int(state_.get_bed_target_subject())),
+                             std::memory_order_relaxed);
     last_remaining_ = 0;
     fallback_completion_ = false;
 
@@ -464,9 +464,9 @@ void PrintStartCollector::check_fallback_completion() {
     // fires "Heating Bed"/"Heating
     // Nozzle" on nearly every tick and stomps the real, ordered phases. Once the
     // firmware is talking it is authoritative; proactive must stay silent.
-    bool is_temp_detected_phase =
-        !real_signal_seen_.load(std::memory_order_relaxed) &&
-        current != PrintStartPhase::COMPLETE && current != PrintStartPhase::PURGING;
+    bool is_temp_detected_phase = !real_signal_seen_.load(std::memory_order_relaxed) &&
+                                  current != PrintStartPhase::COMPLETE &&
+                                  current != PrintStartPhase::PURGING;
     if (is_temp_detected_phase) {
         // If the toolhead is actively mid-home (G28 underway — some but not all
         // axes homed), show "Homing" rather than mislabeling the concurrent bed
@@ -485,8 +485,7 @@ void PrintStartCollector::check_fallback_completion() {
         // bed-first-heat printers — they sit in INITIALIZING with homed_axes ""
         // and never ENTER homing from an empty string alone (the partial-axes
         // entry condition gates that).
-        bool homing_active = homed != nullptr && !fully_homed &&
-                             (bed_heating || nozzle_heating) &&
+        bool homing_active = homed != nullptr && !fully_homed && (bed_heating || nozzle_heating) &&
                              (homed[0] != '\0' || current == PrintStartPhase::HOMING);
         if (homing_active) {
             if (current != PrintStartPhase::HOMING) {
@@ -552,8 +551,9 @@ void PrintStartCollector::check_fallback_completion() {
                     cur = current_phase_;
                 }
                 if (static_cast<int>(cur) >= static_cast<int>(entry.phase)) {
-                    spdlog::debug("[PrintStartCollector] Silent progression skip {} (already at {})",
-                                  static_cast<int>(entry.phase), static_cast<int>(cur));
+                    spdlog::debug(
+                        "[PrintStartCollector] Silent progression skip {} (already at {})",
+                        static_cast<int>(entry.phase), static_cast<int>(cur));
                     continue;
                 }
                 spdlog::info("[PrintStartCollector] Silent progression: +{}s → '{}' (phase={})",
@@ -754,9 +754,9 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
                            current_phase_ == PrintStartPhase::Z_TILT);
         }
 
-        bool is_probe_line = !in_mesh && !in_leveling &&
-                             (helix::parse_probe_progress(line) ||
-                              helix::is_probe_result_line(line));
+        bool is_probe_line =
+            !in_mesh && !in_leveling &&
+            (helix::parse_probe_progress(line) || helix::is_probe_result_line(line));
 
         // If we see a probe line but aren't in BED_MESH yet, buffer probes
         // before entering the phase. Some printers (e.g. AD5M Klipper mod)
@@ -1091,11 +1091,12 @@ bool PrintStartCollector::check_k2_cfs_signal(const std::string& line) {
     // Real K2 firmware emits: "// num: 0, velocity: 575.000000, percent 1.000000"
     //   - "percent" with no colon, value is a 0..1 fraction (not 0..100)
     // Earlier/integer form may appear as "percent: 50" with 0..100. Tolerate both.
-    if (auto p = line.find("percent"); p != std::string::npos &&
-                                       (line.find("num:") != std::string::npos ||
-                                        line.find("velocity:") != std::string::npos)) {
+    if (auto p = line.find("percent");
+        p != std::string::npos &&
+        (line.find("num:") != std::string::npos || line.find("velocity:") != std::string::npos)) {
         const char* cursor = line.c_str() + p + 7; // past "percent"
-        while (*cursor == ':' || *cursor == ' ') cursor++;
+        while (*cursor == ':' || *cursor == ' ')
+            cursor++;
 
         float frac = -1.0f;
         if (std::sscanf(cursor, "%f", &frac) == 1 && frac >= 0.0f) {
@@ -1542,8 +1543,9 @@ void PrintStartCollector::update_eta_display() {
     if (last_remaining_ > 0 && remaining < last_remaining_) {
         int max_drop = std::max(15, last_remaining_ / 6);
         if (last_remaining_ - remaining > max_drop) {
-            spdlog::debug("[PrintStartCollector] Easing remaining {}s→{}s (cap {}s/tick, target {}s)",
-                          last_remaining_, last_remaining_ - max_drop, max_drop, remaining);
+            spdlog::debug(
+                "[PrintStartCollector] Easing remaining {}s→{}s (cap {}s/tick, target {}s)",
+                last_remaining_, last_remaining_ - max_drop, max_drop, remaining);
             remaining = last_remaining_ - max_drop;
         }
     }
@@ -1621,8 +1623,8 @@ void PrintStartCollector::feed_thermal_sample() {
         // Temps are in decidegrees (value * 10)
         int ext_temp = lv_subject_get_int(state_.get_active_extruder_temp_subject());
         int bed_temp = lv_subject_get_int(state_.get_bed_temp_subject());
-        mgr.get_model("extruder").record_sample(helix::ui::temperature::deci_to_degrees_f(ext_temp),
-                                                now_ms);
+        mgr.get_model("extruder")
+            .record_sample(helix::ui::temperature::deci_to_degrees_f(ext_temp), now_ms);
         mgr.get_model("heater_bed")
             .record_sample(helix::ui::temperature::deci_to_degrees_f(bed_temp), now_ms);
     }
@@ -1633,8 +1635,8 @@ void PrintStartCollector::compute_predicted_weights() {
 
     int ext_target = helix::ui::temperature::deci_to_degrees(
         lv_subject_get_int(state_.get_active_extruder_target_subject()));
-    int bed_target =
-        helix::ui::temperature::deci_to_degrees(lv_subject_get_int(state_.get_bed_target_subject()));
+    int bed_target = helix::ui::temperature::deci_to_degrees(
+        lv_subject_get_int(state_.get_bed_target_subject()));
 
     std::map<int, float> durations;
 
@@ -1705,9 +1707,8 @@ void PrintStartCollector::compute_predicted_weights() {
         // above; only the absolute total comes from history. No history → fall
         // back to the theoretical sum.
         int wall_clock_estimate = predictor_.predicted_total();
-        predicted_total_seconds_ = predictor_.has_predictions()
-                                       ? static_cast<float>(wall_clock_estimate)
-                                       : durations_sum;
+        predicted_total_seconds_ =
+            predictor_.has_predictions() ? static_cast<float>(wall_clock_estimate) : durations_sum;
     }
 
     // Track targets used so we can detect changes and recompute
@@ -1752,9 +1753,8 @@ void PrintStartCollector::query_mesh_probe_count() {
     // Query both bed_mesh (for probed_matrix from last run — authoritative point count,
     // handles adaptive meshing where probe_count config overstates actual probes)
     // and configfile settings (fallback when no prior mesh exists).
-    json params = {
-        {"objects",
-         json::object({{"bed_mesh", nullptr}, {"configfile", json::array({"settings"})}})}};
+    json params = {{"objects", json::object({{"bed_mesh", nullptr},
+                                             {"configfile", json::array({"settings"})}})}};
 
     client_.send_jsonrpc(
         "printer.objects.query", params,

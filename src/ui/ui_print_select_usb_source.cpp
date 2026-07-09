@@ -26,9 +26,8 @@ void PrintSelectUsbSource::init_subjects() {
         return;
     lv_subject_init_int(&s_print_source_is_usb, 0);
     lv_xml_register_subject(nullptr, "print_source_is_usb", &s_print_source_is_usb);
-    SubjectDebugRegistry::instance().register_subject(&s_print_source_is_usb,
-                                                       "print_source_is_usb", LV_SUBJECT_TYPE_INT,
-                                                       __FILE__, __LINE__);
+    SubjectDebugRegistry::instance().register_subject(&s_print_source_is_usb, "print_source_is_usb",
+                                                      LV_SUBJECT_TYPE_INT, __FILE__, __LINE__);
     s_source_subject_initialized = true;
     spdlog::debug("[UsbSource] Subject print_source_is_usb initialized");
 }
@@ -123,9 +122,8 @@ void PrintSelectUsbSource::on_drive_inserted() {
 
     // If Moonraker has symlink access to USB files, don't show the source selector
     if (moonraker_has_usb_access_) {
-        spdlog::debug(
-            "[UsbSource] USB drive inserted - but Moonraker has symlink access, keeping "
-            "source selector hidden");
+        spdlog::debug("[UsbSource] USB drive inserted - but Moonraker has symlink access, keeping "
+                      "source selector hidden");
         return;
     }
 
@@ -138,7 +136,8 @@ void PrintSelectUsbSource::set_moonraker_has_usb_access(bool has_access) {
 
     if (has_access && source_selector_) {
         // Hide source selector permanently - files are accessible via Printer source
-        spdlog::debug("[UsbSource] Moonraker has USB symlink access - hiding source selector permanently");
+        spdlog::debug(
+            "[UsbSource] Moonraker has USB symlink access - hiding source selector permanently");
         lv_obj_add_flag(source_selector_, LV_OBJ_FLAG_HIDDEN);
 
         // If currently viewing USB source, switch to Printer
@@ -221,8 +220,7 @@ void PrintSelectUsbSource::refresh_files() {
 void PrintSelectUsbSource::update_button_states() {
     // Update subject — XML bind_flag_if_not_eq handles button visibility/appearance
     if (s_source_subject_initialized) {
-        lv_subject_set_int(&s_print_source_is_usb,
-                           current_source_ == FileSource::USB ? 1 : 0);
+        lv_subject_set_int(&s_print_source_is_usb, current_source_ == FileSource::USB ? 1 : 0);
     }
 }
 
@@ -237,8 +235,7 @@ std::vector<PrintFileData> PrintSelectUsbSource::convert_to_print_file_data() co
         auto best = helix::gcode::get_best_thumbnail(usb_file.path);
         if (!best.png_data.empty()) {
             auto& cache = get_thumbnail_cache();
-            std::string cache_path =
-                cache.save_raw_png("usb:" + usb_file.filename, best.png_data);
+            std::string cache_path = cache.save_raw_png("usb:" + usb_file.filename, best.png_data);
             if (!cache_path.empty()) {
                 file_data.thumbnail_path = cache_path;
             }

@@ -9,7 +9,7 @@
  * The main binary only sees the opaque helix_bt_context typedef from bluetooth_plugin.h.
  */
 
-#include <systemd/sd-bus.h>
+#include "bt_bus_thread.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -19,9 +19,8 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <systemd/sd-bus.h>
 #include <vector>
-
-#include "bt_bus_thread.h"
 
 /// Convert MAC address "AA:BB:CC:DD:EE:FF" to BlueZ D-Bus object path
 /// "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"

@@ -3,11 +3,11 @@
 
 #include "config_backup.h"
 
+#include "spdlog/spdlog.h"
+
 #include <cstdio>
 #include <filesystem>
 #include <sys/stat.h>
-
-#include "spdlog/spdlog.h"
 
 namespace fs = std::filesystem;
 

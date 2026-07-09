@@ -22,13 +22,18 @@ class LabelBitmap {
     LabelBitmap() = default;
 
     LabelBitmap(int width, int height)
-        : width_(width), height_(height),
-          row_bytes_((width + 7) / 8),
+        : width_(width), height_(height), row_bytes_((width + 7) / 8),
           data_(static_cast<size_t>(row_bytes_) * height, 0x00) {}
 
-    int width() const { return width_; }
-    int height() const { return height_; }
-    int row_byte_width() const { return row_bytes_; }
+    int width() const {
+        return width_;
+    }
+    int height() const {
+        return height_;
+    }
+    int row_byte_width() const {
+        return row_bytes_;
+    }
 
     const uint8_t* row_data(int y) const {
         return data_.data() + static_cast<size_t>(y) * row_bytes_;
@@ -38,8 +43,12 @@ class LabelBitmap {
         return data_.data() + static_cast<size_t>(y) * row_bytes_;
     }
 
-    const uint8_t* data() const { return data_.data(); }
-    size_t data_size() const { return data_.size(); }
+    const uint8_t* data() const {
+        return data_.data();
+    }
+    size_t data_size() const {
+        return data_.size();
+    }
 
     /// Set a single pixel (1 = black, 0 = white)
     void set_pixel(int x, int y, bool black) {
@@ -66,7 +75,9 @@ class LabelBitmap {
         std::memset(data_.data(), black ? 0xFF : 0x00, data_.size());
     }
 
-    bool empty() const { return data_.empty(); }
+    bool empty() const {
+        return data_.empty();
+    }
 
     /// Composite src bitmap onto this bitmap at (dst_x, dst_y), clipping at boundaries
     void blit(const LabelBitmap& src, int dst_x, int dst_y);

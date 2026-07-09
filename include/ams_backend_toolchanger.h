@@ -94,8 +94,7 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     /// directly — identity mapping — which activates per-extruder consumption
     /// tracking in FilamentConsumptionTracker.
     [[nodiscard]] std::optional<int> slot_for_extruder(int extruder_idx) const override {
-        if (extruder_idx < 0 ||
-            extruder_idx >= static_cast<int>(get_system_info().total_slots)) {
+        if (extruder_idx < 0 || extruder_idx >= static_cast<int>(get_system_info().total_slots)) {
             return std::nullopt;
         }
         return extruder_idx;

@@ -30,8 +30,12 @@ class UiClogMeter {
     UiClogMeter(const UiClogMeter&) = delete;
     UiClogMeter& operator=(const UiClogMeter&) = delete;
 
-    [[nodiscard]] lv_obj_t* get_root() const { return root_; }
-    [[nodiscard]] bool is_valid() const { return root_ != nullptr; }
+    [[nodiscard]] lv_obj_t* get_root() const {
+        return root_;
+    }
+    [[nodiscard]] bool is_valid() const {
+        return root_ != nullptr;
+    }
 
     void set_fill_mode(bool fill);
     void resize_arc();
@@ -67,7 +71,7 @@ class UiClogMeter {
     lv_obj_t* label_left_ = nullptr;
     lv_obj_t* label_right_ = nullptr;
     lv_obj_t* center_label_ = nullptr;
-    lv_obj_t* safe_icon_ = nullptr; // check_circle icon for safe state
+    lv_obj_t* safe_icon_ = nullptr;  // check_circle icon for safe state
     lv_obj_t* value_text_ = nullptr; // XML-bound clog_value_text (hidden in fill mode)
 
     ObserverGuard mode_obs_;

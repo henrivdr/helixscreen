@@ -29,8 +29,12 @@ class ClogDetectionConfigModal : public Modal {
     ClogDetectionConfigModal(const std::string& widget_id, const std::string& panel_id);
     ~ClogDetectionConfigModal() override;
 
-    const char* get_name() const override { return "Clog Detection Config"; }
-    const char* component_name() const override { return "clog_detection_config_modal"; }
+    const char* get_name() const override {
+        return "Clog Detection Config";
+    }
+    const char* component_name() const override {
+        return "clog_detection_config_modal";
+    }
 
   protected:
     void on_show() override;
@@ -68,10 +72,10 @@ class ClogDetectionConfigModal : public Modal {
 
     // C++-owned subjects for XML bindings (lifetime = modal lifetime)
     bool subjects_initialized_ = false;
-    lv_subject_t mode_subject_;                // int: detection mode (1=manual, 2=auto)
-    lv_subject_t threshold_text_subject_;      // string: "Default" or "75%"
+    lv_subject_t mode_subject_;           // int: detection mode (1=manual, 2=auto)
+    lv_subject_t threshold_text_subject_; // string: "Default" or "75%"
     char threshold_text_buf_[16]{};
-    lv_subject_t det_length_text_subject_;     // string: "10mm"
+    lv_subject_t det_length_text_subject_; // string: "10mm"
     char det_length_text_buf_[16]{};
 
     // Per-button boolean subjects for bind_style (selected/unselected)

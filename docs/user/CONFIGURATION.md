@@ -287,6 +287,7 @@ Located in the `display` section:
     "gcode_3d_enabled": true,
     "bed_mesh_render_mode": 0,
     "bed_mesh_show_zero_plane": true,
+    "page_scroll_buttons": false,
     "printer_image": ""
   }
 }
@@ -375,6 +376,11 @@ Can also be overridden via `HELIX_GCODE_MODE` env var (`3D` or `2D`).
 **Default:** `true`
 **Description:** Show translucent reference plane at Z=0 in bed mesh 3D view. Helps visualize where the nozzle touches the bed.
 
+### `page_scroll_buttons`
+**Type:** boolean
+**Default:** `false`
+**Description:** Show up/down scroll buttons on long lists throughout the app. Useful on small screens or displays where drag-to-scroll feels unresponsive. See [Display & Sound Settings](guide/settings/display-sound.md#scroll-buttons) for details.
+
 ### `printer_image`
 **Type:** string
 **Default:** `""` (auto-detect)
@@ -390,7 +396,7 @@ This setting can also be changed via the Printer Manager overlay (tap the printe
 ### `calibration`
 **Type:** object
 **Default:** `{"valid": false}`
-**Description:** Touch calibration coefficients. Set by the calibration wizard or manually. Contains calibration matrix values (`a` through `f`) when valid. If the wizard auto-detects that the touchscreen's X/Y axes are swapped relative to the display, it also saves `"swap_axes": true` — this is applied automatically on startup.
+**Description:** Touch calibration coefficients. Set by the calibration wizard or manually. Contains calibration matrix values (`a` through `f`) when valid. If the wizard detects that the touchscreen's X/Y axes are swapped relative to the display, it bakes that correction directly into the `a`–`f` coefficients — there is no separate setting to configure.
 
 ---
 
@@ -1480,6 +1486,7 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
     "gcode_3d_enabled": true,
     "bed_mesh_render_mode": 0,
     "bed_mesh_show_zero_plane": true,
+    "page_scroll_buttons": false,
     "printer_image": ""
   },
 

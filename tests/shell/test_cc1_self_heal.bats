@@ -134,6 +134,18 @@ EOF
     [[ "$output" == *"helixscreen start"* ]]
 }
 
+@test "cc1 hook: platform_pre_start exports HELIX_GUI_PIDFILE for gui-switcher stop" {
+    # The stock COSMOS resonance macro stops the GUI with
+    #   GUI_STOP -> gui-switcher stop -> start-stop-daemon -K -p /var/run/gui.pid
+    # before SHAPER_CALIBRATE, to free RAM/CPU on this 128 MB box. helix-watchdog
+    # only writes its PID to that file when HELIX_GUI_PIDFILE is set, so the CC1
+    # hook must export it — otherwise GUI_STOP is a silent no-op and klippy throws
+    # "Timer Too Close" during the accelerometer FFT.
+    unset HELIX_GUI_PIDFILE
+    platform_pre_start
+    [ "$HELIX_GUI_PIDFILE" = "/var/run/gui.pid" ]
+}
+
 @test "self-heal: repairs only the clobbered sibling, leaves others alone" {
     # grumpyscreen clobbered (stock + backup) → repaired.
     _make_stock_sibling grumpyscreen

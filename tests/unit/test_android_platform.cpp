@@ -11,9 +11,9 @@
 #include "wizard_step.h"
 #include "wizard_step_logic.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <vector>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 using helix::wizard::StepId;
@@ -24,7 +24,9 @@ using helix::wizard::StepId;
 // what the registry produces. `id()` is shorthand for StepId(int) so the
 // step-index comments below still read clearly.
 // ----------------------------------------------------------------------------
-static StepId id(int i) { return static_cast<StepId>(i); }
+static StepId id(int i) {
+    return static_cast<StepId>(i);
+}
 
 static std::vector<StepSkip> all_steps() {
     std::vector<StepSkip> v;

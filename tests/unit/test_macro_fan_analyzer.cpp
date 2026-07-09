@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
 #include "macro_fan_analyzer.h"
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 using json = nlohmann::json;
@@ -62,8 +63,7 @@ SET_TEMPERATURE_FAN_TARGET TEMPERATURE_FAN=chamber_fan TARGET=35
 {% endif %}
 )";
 
-TEST_CASE("MacroFanAnalyzer: extracts fan indices from M106 macro",
-          "[macro_fan_analyzer]") {
+TEST_CASE("MacroFanAnalyzer: extracts fan indices from M106 macro", "[macro_fan_analyzer]") {
     json config;
     config["gcode_macro m106"]["gcode"] = K1C_M106_MACRO;
     config["gcode_macro m107"]["gcode"] = K1C_M107_MACRO;
@@ -82,8 +82,7 @@ TEST_CASE("MacroFanAnalyzer: extracts fan indices from M106 macro",
     }
 }
 
-TEST_CASE("MacroFanAnalyzer: extracts role hints from M141 macro",
-          "[macro_fan_analyzer]") {
+TEST_CASE("MacroFanAnalyzer: extracts role hints from M141 macro", "[macro_fan_analyzer]") {
     json config;
     config["gcode_macro m141"]["gcode"] = K1C_M141_MACRO;
 
@@ -96,8 +95,7 @@ TEST_CASE("MacroFanAnalyzer: extracts role hints from M141 macro",
     }
 }
 
-TEST_CASE("MacroFanAnalyzer: handles missing macros gracefully",
-          "[macro_fan_analyzer]") {
+TEST_CASE("MacroFanAnalyzer: handles missing macros gracefully", "[macro_fan_analyzer]") {
     json config; // empty
 
     MacroFanAnalyzer analyzer;
@@ -112,8 +110,7 @@ TEST_CASE("MacroFanAnalyzer: handles missing macros gracefully",
     }
 }
 
-TEST_CASE("MacroFanAnalyzer: handles malformed gcode gracefully",
-          "[macro_fan_analyzer]") {
+TEST_CASE("MacroFanAnalyzer: handles malformed gcode gracefully", "[macro_fan_analyzer]") {
     json config;
     config["gcode_macro m106"]["gcode"] = "this is not real gcode";
 

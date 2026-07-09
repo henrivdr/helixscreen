@@ -591,8 +591,7 @@ void GCodeStreamingController::respond_to_memory_pressure() {
     spdlog::warn("[StreamingController] Responded to memory pressure, cache now at {:.1f}MB",
                  static_cast<double>(after) / (1024 * 1024));
     if (before > after) {
-        crash_handler::breadcrumb::note("stream_evict", "press",
-                                        static_cast<long>(before - after));
+        crash_handler::breadcrumb::note("stream_evict", "press", static_cast<long>(before - after));
     }
 }
 

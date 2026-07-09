@@ -833,14 +833,14 @@ TEST_CASE("statvfs result wider than 32-bit doesn't truncate", "[update_checker]
     // Correct: widen BEFORE multiplying. ~46 GB.
     const uint64_t bytes = static_cast<uint64_t>(blocks) * static_cast<uint64_t>(frsize);
     REQUIRE(bytes == 47'433'969'664ULL);
-    REQUIRE(bytes / (1024ULL * 1024ULL) > 45'000ULL);  // > 45 GiB
+    REQUIRE(bytes / (1024ULL * 1024ULL) > 45'000ULL); // > 45 GiB
 
     // What the bug looked like: 32-bit truncated product reproduces the
     // ~181 MiB the user saw in the bundle. This branch is documentary —
     // if anyone ever reintroduces a narrow cast, the helper above is the
     // contract that must hold.
-    const uint32_t truncated = static_cast<uint32_t>(static_cast<uint32_t>(blocks) *
-                                                     static_cast<uint32_t>(frsize));
+    const uint32_t truncated =
+        static_cast<uint32_t>(static_cast<uint32_t>(blocks) * static_cast<uint32_t>(frsize));
     REQUIRE(truncated < 200U * 1024U * 1024U);
 }
 
@@ -1387,8 +1387,8 @@ TEST_CASE("get_platform_key returns a known platform", "[update_checker][platfor
     // here — AND a matching #elif in get_platform_key — silently bricks
     // in-app updates for that platform (falls through to "pi", so the device
     // downloads the Pi tarball and ends up with missing shared libs).
-    std::vector<std::string> known_platforms = {
-        "pi", "pi32", "x86", "ad5m", "k1", "k2", "ad5x", "cc1", "snapmaker-u1"};
+    std::vector<std::string> known_platforms = {"pi", "pi32", "x86", "ad5m",        "k1",
+                                                "k2", "ad5x", "cc1", "snapmaker-u1"};
     bool found = false;
     for (const auto& p : known_platforms) {
         if (platform == p) {
@@ -1440,8 +1440,8 @@ TEST_CASE("get_platform_display_name returns non-empty string for all known plat
     // Every key that get_platform_key() can return MUST have a display name.
     // Keep in sync with platform_canonical_model in debug_bundle_collector.cpp
     // (and UpdateChecker::get_platform_display_name once centralised).
-    std::vector<std::string> known_platforms = {
-        "pi", "pi32", "x86", "ad5m", "k1", "k2", "ad5x", "cc1", "snapmaker-u1"};
+    std::vector<std::string> known_platforms = {"pi", "pi32", "x86", "ad5m",        "k1",
+                                                "k2", "ad5x", "cc1", "snapmaker-u1"};
 
     for (const auto& key : known_platforms) {
         INFO("platform key: " << key);

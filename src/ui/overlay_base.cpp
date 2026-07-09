@@ -3,11 +3,12 @@
 
 #include "overlay_base.h"
 
-#include "system/crash_handler.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_common.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
+
+#include "system/crash_handler.h"
 
 #include <spdlog/spdlog.h>
 

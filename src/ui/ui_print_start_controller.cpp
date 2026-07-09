@@ -162,14 +162,12 @@ void PrintStartController::initiate() {
                 auto mat = filament::find_material(spool->material);
                 if (mat.has_value() && mat->density_g_cm3 > 0.0f) {
                     needed_g = filament::length_to_weight_g(
-                        static_cast<float>(metadata->filament_total),
-                        mat->density_g_cm3, 1.75f);
+                        static_cast<float>(metadata->filament_total), mat->density_g_cm3, 1.75f);
                 }
             }
             if (needed_g > 0.0f && needed_g > spool->remaining_weight_g) {
-                spdlog::info(
-                    "[PrintStartController] Pre-print warning: needs {} g, spool has {} g",
-                    needed_g, spool->remaining_weight_g);
+                spdlog::info("[PrintStartController] Pre-print warning: needs {} g, spool has {} g",
+                             needed_g, spool->remaining_weight_g);
                 show_insufficient_filament_warning(needed_g, spool->remaining_weight_g);
                 return;
             }
@@ -339,8 +337,7 @@ void PrintStartController::execute_print_start() {
         backend && backend->requires_preprint_send()) {
         send_snapmaker_preprint_then(
             detail_view_ ? detail_view_->get_tools_used() : std::set<int>{},
-            detail_view_ ? detail_view_->get_effective_remap() : std::map<int, int>{},
-            start_now,
+            detail_view_ ? detail_view_->get_effective_remap() : std::map<int, int>{}, start_now,
             [this]() {
                 if (update_print_button_) {
                     update_print_button_();
@@ -408,8 +405,7 @@ void PrintStartController::send_snapmaker_preprint_then(const std::set<int>& too
             tok.defer("PrintStartController::preprint.err", [msg, on_abort]() {
                 LOG_ERROR_INTERNAL("[PrintStartController] U1 pre-print config rejected: {}", msg);
                 NOTIFY_ERROR_MODAL(
-                    lv_tr("Print setup failed"),
-                    "{}",
+                    lv_tr("Print setup failed"), "{}",
                     lv_tr("The printer rejected the filament configuration. The print was not "
                           "started."));
                 // Notify caller to re-enable UI state — do NOT start.
@@ -441,12 +437,11 @@ void PrintStartController::initiate_reprint(const std::string& filename, const s
         api_->job().start_print(
             filename,
             [tok, on_started]() mutable {
-                tok.defer("PrintStartController::reprint.ok",
-                          [on_started]() {
-                              if (on_started) {
-                                  on_started();
-                              }
-                          });
+                tok.defer("PrintStartController::reprint.ok", [on_started]() {
+                    if (on_started) {
+                        on_started();
+                    }
+                });
             },
             [tok, on_error](const MoonrakerError& err) mutable {
                 std::string msg = err.user_message();
@@ -497,8 +492,8 @@ std::string PrintStartController::build_empty_lane_message(
         message = lv_tr("These tools have no filament loaded:");
         message += "\n\n";
         for (const auto& [tool, slot] : empty) {
-            message += fmt::format("  {} {} {} → {} {}\n", LV_SYMBOL_BULLET, lv_tr("Tool"),
-                                   tool, lv_tr("Lane"), slot + 1);
+            message += fmt::format("  {} {} {} → {} {}\n", LV_SYMBOL_BULLET, lv_tr("Tool"), tool,
+                                   lv_tr("Lane"), slot + 1);
         }
     }
     message += "\n\n";
@@ -570,10 +565,9 @@ void PrintStartController::show_filament_warning(const std::string& message) {
     // modal_show_confirmation copies the message string into the dialog's label
     // (via the XML attribute path), so pass it directly — no static buffer, no
     // truncation of long multi-tool / translated messages.
-    const char* body = message.empty()
-                           ? lv_tr("The runout sensor indicates no filament is loaded. "
-                                   "Start print anyway?")
-                           : message.c_str();
+    const char* body = message.empty() ? lv_tr("The runout sensor indicates no filament is loaded. "
+                                               "Start print anyway?")
+                                       : message.c_str();
 
     filament_warning_modal_ = helix::ui::modal_show_confirmation(
         lv_tr("No Filament Detected"), body, ModalSeverity::Warning, lv_tr("Start Print"),
@@ -857,8 +851,7 @@ PrintStartController::find_material_mismatches() {
         if (filament_weights.empty()) {
             return true; // No data → check everything (old behavior).
         }
-        if (tool_index < 0 ||
-            tool_index >= static_cast<int>(filament_weights.size())) {
+        if (tool_index < 0 || tool_index >= static_cast<int>(filament_weights.size())) {
             return true; // Out-of-range → can't prove unused, be safe.
         }
         return filament_weights[tool_index] > 0.0;
@@ -1022,10 +1015,9 @@ void PrintStartController::show_material_mismatch_warning(
             // "needs X (range): You have Y (range)" \u2014 clearer than the old
             // "X -> Y" form, which read as a transformation rather than a
             // comparison. Two short clauses joined by a colon scan well.
-            message += fmt::format("  {} T{}: {} {}{}: {} {}{}\n", LV_SYMBOL_BULLET,
-                                   m.tool_index, lv_tr("needs"), m.expected_material,
-                                   expected_temps, lv_tr("you have"), m.loaded_material,
-                                   loaded_temps);
+            message += fmt::format("  {} T{}: {} {}{}: {} {}{}\n", LV_SYMBOL_BULLET, m.tool_index,
+                                   lv_tr("needs"), m.expected_material, expected_temps,
+                                   lv_tr("you have"), m.loaded_material, loaded_temps);
         }
     }
 
@@ -1385,8 +1377,8 @@ void PrintStartController::recover_pending_remap() {
         // fire on the current PRINTING/PAUSED value is a no-op there.
         auto current_state = static_cast<PrintJobState>(
             lv_subject_get_int(printer_state_.get_print_state_enum_subject()));
-        bool print_active = (current_state == PrintJobState::PRINTING ||
-                             current_state == PrintJobState::PAUSED);
+        bool print_active =
+            (current_state == PrintJobState::PRINTING || current_state == PrintJobState::PAUSED);
 
         if (print_active) {
             spdlog::info("[PrintStartController] Crash recovery: found pending remap "

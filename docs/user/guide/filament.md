@@ -16,6 +16,8 @@ The spool preset button only appears when the loaded material differs from the s
 
 > **Tip:** The spool preset updates automatically when you change the external spool configuration — no need to close and reopen panels.
 
+> **Tip:** You can change which filament type a preset button controls — long-press it to pick a different material. See [Reassigning a Preset's Filament Type](temperature.md#reassigning-a-presets-filament-type).
+
 ---
 
 ## Extrusion Panel

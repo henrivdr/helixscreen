@@ -146,32 +146,28 @@ void MacroManager::install(SuccessCallback on_success, ErrorCallback on_error) {
         [this, token, on_success, on_error]() {
             // L081 Mechanism C: defer chained this-> work to main thread
             // (upload cb fires on HTTP bg thread).
-            token.defer("MacroManager::install_step2",
-                        [this, token, on_success, on_error]() {
-                            spdlog::info(
-                                "[HelixMacroManager] Macro file uploaded, adding include...");
+            token.defer("MacroManager::install_step2", [this, token, on_success, on_error]() {
+                spdlog::info("[HelixMacroManager] Macro file uploaded, adding include...");
 
-                            // Step 2: Add include to printer.cfg
-                            add_include_to_config(
-                                [this, token, on_success, on_error]() {
-                                    token.defer(
-                                        "MacroManager::install_step3",
-                                        [this, on_success, on_error]() {
-                                            spdlog::info("[HelixMacroManager] Include added, "
-                                                         "restarting Klipper...");
+                // Step 2: Add include to printer.cfg
+                add_include_to_config(
+                    [this, token, on_success, on_error]() {
+                        token.defer("MacroManager::install_step3", [this, on_success, on_error]() {
+                            spdlog::info("[HelixMacroManager] Include added, "
+                                         "restarting Klipper...");
 
-                                            // Step 3: Restart Klipper
-                                            restart_klipper(
-                                                [on_success]() {
-                                                    spdlog::info("[HelixMacroManager] "
-                                                                 "Installation complete!");
-                                                    on_success();
-                                                },
-                                                on_error);
-                                        });
+                            // Step 3: Restart Klipper
+                            restart_klipper(
+                                [on_success]() {
+                                    spdlog::info("[HelixMacroManager] "
+                                                 "Installation complete!");
+                                    on_success();
                                 },
                                 on_error);
                         });
+                    },
+                    on_error);
+            });
         },
         on_error);
 }
@@ -202,19 +198,18 @@ void MacroManager::uninstall(SuccessCallback on_success, ErrorCallback on_error)
         [this, token, on_success, on_error]() {
             // L081 Mechanism C: defer chained this-> work to main thread
             // (remove_include cb fires on HTTP bg thread).
-            token.defer("MacroManager::uninstall_step2",
-                        [this, token, on_success, on_error]() {
-                            // Step 2: Delete macro file
-                            delete_macro_file(
-                                [this, token, on_success, on_error]() {
-                                    token.defer("MacroManager::uninstall_step3",
-                                                [this, on_success, on_error]() {
-                                                    // Step 3: Restart Klipper
-                                                    restart_klipper(on_success, on_error);
-                                                });
-                                },
-                                on_error);
-                        });
+            token.defer("MacroManager::uninstall_step2", [this, token, on_success, on_error]() {
+                // Step 2: Delete macro file
+                delete_macro_file(
+                    [this, token, on_success, on_error]() {
+                        token.defer("MacroManager::uninstall_step3",
+                                    [this, on_success, on_error]() {
+                                        // Step 3: Restart Klipper
+                                        restart_klipper(on_success, on_error);
+                                    });
+                    },
+                    on_error);
+            });
         },
         on_error);
 }

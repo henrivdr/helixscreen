@@ -91,8 +91,7 @@ TEST_CASE("build_active_material: unknown material without temps uses default",
     CHECK(result.material_info.nozzle_max == 220);
 }
 
-TEST_CASE("build_active_material: empty material uses default temp",
-          "[active_material][build]") {
+TEST_CASE("build_active_material: empty material uses default temp", "[active_material][build]") {
     SlotInfo slot;
     slot.color_rgb = 0x808080;
 
@@ -120,8 +119,7 @@ TEST_CASE("build_active_material: display_name is material only when no brand",
     CHECK(result.display_name == "PLA");
 }
 
-TEST_CASE("build_active_material: spoolman IDs are carried through",
-          "[active_material][build]") {
+TEST_CASE("build_active_material: spoolman IDs are carried through", "[active_material][build]") {
     SlotInfo slot;
     slot.material = "PLA";
     slot.spoolman_id = 42;
@@ -134,8 +132,7 @@ TEST_CASE("build_active_material: spoolman IDs are carried through",
     CHECK(result.spoolman_vendor_id == 3);
 }
 
-TEST_CASE("build_active_material: material alias resolved",
-          "[active_material][build]") {
+TEST_CASE("build_active_material: material alias resolved", "[active_material][build]") {
     SlotInfo slot;
     slot.material = "Nylon"; // Alias for PA
 
@@ -155,8 +152,7 @@ TEST_CASE("build_active_material: material alias resolved",
 // setting. Resolution is per-field — overriding only nozzle_min should
 // still let vendor preset win on nozzle_max.
 
-TEST_CASE_METHOD(OverrideFixture,
-                 "build_active_material: user override beats vendor slot preset",
+TEST_CASE_METHOD(OverrideFixture, "build_active_material: user override beats vendor slot preset",
                  "[active_material][build][precedence]") {
     // Stage a user override of PETG nozzle_min only.
     filament::MaterialOverride ovr;
@@ -233,7 +229,7 @@ TEST_CASE_METHOD(OverrideFixture,
     slot.material = "PETG";
     slot.nozzle_temp_min = 235; // vendor
     slot.nozzle_temp_max = 250; // vendor (will lose to override)
-    slot.bed_temp = 78;          // vendor (no override, no slot conflict)
+    slot.bed_temp = 78;         // vendor (no override, no slot conflict)
 
     auto result = build_active_material(slot);
 
@@ -288,8 +284,7 @@ TEST_CASE("build_active_material: synthetic material has correct bed_temp defaul
     CHECK(result.material_info.bed_temp == 60); // Sensible default
 }
 
-TEST_CASE("build_active_material: case-insensitive material lookup",
-          "[active_material][preset]") {
+TEST_CASE("build_active_material: case-insensitive material lookup", "[active_material][preset]") {
     SlotInfo slot;
     slot.material = "petg"; // lowercase
 

@@ -3,8 +3,10 @@
 
 #include "active_spool_widget.h"
 
+#include "ui_ams_edit_modal.h"
 #include "ui_event_safety.h"
 #include "ui_spool_canvas.h"
+#include "ui_toast_manager.h"
 #include "ui_utils.h"
 
 #include "active_material_provider.h"
@@ -15,8 +17,6 @@
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
 #include "theme_manager.h"
-#include "ui_ams_edit_modal.h"
-#include "ui_toast_manager.h"
 
 #include <spdlog/spdlog.h>
 

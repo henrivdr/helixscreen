@@ -88,8 +88,7 @@ void apply_and_save(MoonrakerAPI* api, ZOffsetCalibrationStrategy strategy,
             spdlog::info("[ZOffsetUtils] {} success, executing SAVE_CONFIG", apply_cmd);
 
             // Suppress disconnect modal — SAVE_CONFIG triggers a Klipper restart
-            EmergencyStopOverlay::instance().suppress_recovery_dialog(
-                RecoverySuppression::LONG);
+            EmergencyStopOverlay::instance().suppress_recovery_dialog(RecoverySuppression::LONG);
 
             api->execute_gcode(
                 "SAVE_CONFIG",

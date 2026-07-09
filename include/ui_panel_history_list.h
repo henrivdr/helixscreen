@@ -234,9 +234,9 @@ class HistoryListPanel : public OverlayBase {
 
     // Pagination state for infinite scroll
     static constexpr int PAGE_SIZE = 50; ///< Jobs per API request
-    uint64_t total_job_count_ = 0;        ///< Total jobs on server (from API)
-    bool is_loading_more_ = false;        ///< True while fetching next page
-    bool has_more_data_ = true;           ///< False when all jobs loaded
+    uint64_t total_job_count_ = 0;       ///< Total jobs on server (from API)
+    bool is_loading_more_ = false;       ///< True while fetching next page
+    bool has_more_data_ = true;          ///< False when all jobs loaded
 
     // Filter/sort state
     std::string search_query_;                                         ///< Current search text

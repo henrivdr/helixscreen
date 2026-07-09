@@ -6,6 +6,9 @@
 #include "subject_managed_panel.h"
 #include "wizard_step.h" // helix::wizard::StepId
 
+#include <functional>
+#include <vector>
+
 // Forward declaration: SubjectManager for wizard subjects (defined in ui_wizard.cpp)
 // Wizard is function-based rather than class-based, so we use a static manager
 
@@ -131,3 +134,42 @@ void ui_wizard_refresh_header_translations();
  * NOTE: Config should already be saved by wizard screens before calling this.
  */
 void ui_wizard_complete();
+
+/**
+ * Create a targeted (subset) wizard session
+ *
+ * Launches the wizard running ONLY the requested step(s), in the given order,
+ * for hardware reconfiguration WITHOUT re-running the full first-run wizard.
+ * Reuses the standard container/subject setup (ui_wizard_create) and then
+ * navigates to the first step in @p steps. While a targeted session is active,
+ * the Next/Back navigation advances/retreats only within @p steps; finishing
+ * the last step calls ui_wizard_complete_targeted() (which does NOT set the
+ * wizard_completed flag) and fires @p on_complete.
+ *
+ * @param parent      Parent object (typically screen root)
+ * @param steps       Ordered subset of wizard steps to run (non-empty)
+ * @param on_complete Callback invoked after the subset finishes and the
+ *                    container is torn down (typically returns to prior panel)
+ * @return The wizard root object, or NULL on failure
+ */
+lv_obj_t* ui_wizard_create_targeted(lv_obj_t* parent, std::vector<helix::wizard::StepId> steps,
+                                    std::function<void()> on_complete);
+
+/**
+ * Query the active targeted step subset
+ *
+ * Returns the ordered subset passed to ui_wizard_create_targeted(). Empty when
+ * not running a targeted session (i.e. the normal first-run wizard, or no
+ * wizard running).
+ */
+const std::vector<helix::wizard::StepId>& ui_wizard_active_step_subset();
+
+/**
+ * Complete a targeted (subset) wizard session
+ *
+ * Finishes targeted mode WITHOUT writing the wizard_completed flag and without
+ * the expected-hardware population done by ui_wizard_complete(). Tears down the
+ * wizard container (shared with ui_wizard_complete()), clears the active subset,
+ * and fires the on_complete callback registered by ui_wizard_create_targeted().
+ */
+void ui_wizard_complete_targeted();

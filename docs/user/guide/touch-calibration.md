@@ -196,8 +196,7 @@ Set automatically during calibration. You rarely need to edit this manually.
 | Field | Description |
 |-------|-------------|
 | `valid` | Whether calibration is active (`true` or `false`). HelixScreen falls back to raw touch coordinates when this is `false`. |
-| `a` through `f` | Affine transform coefficients that map raw touch positions to screen positions. Set automatically during calibration. Don't edit these by hand. |
-| `swap_axes` | Written as `false` by the wizard. The actual X/Y swap (if needed) is baked into the `a`–`f` coefficients — this field is informational only and not read at runtime. |
+| `a` through `f` | Affine transform coefficients that map raw touch positions to screen positions. Set automatically during calibration. Don't edit these by hand. Any needed X/Y axis swap is baked into these coefficients. |
 
 ### Touch Device Override (`input.touch_device`)
 

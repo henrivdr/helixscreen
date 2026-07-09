@@ -727,6 +727,7 @@ def generate_all(
     c_output_dir: Path,
     base_locale: str = "en",
     languages: list[str] | None = None,
+    emit_lv_i18n: bool = False,
 ) -> GenerateResult:
     """
     Run the full translation generation pipeline.
@@ -734,11 +735,16 @@ def generate_all(
     Args:
         yaml_dir: Directory containing YAML translation files
         xml_output_dir: Directory to write XML output
-        c_output_dir: Directory to write C output
+        c_output_dir: Directory to write C output (only used if emit_lv_i18n)
         base_locale: Base locale for comparison (default: "en")
         languages: Optional whitelist of locale codes. If None, all YAMLs are
                    included. Constrained-device builds pass a short list (e.g.
                    ["en"]) to shrink the compiled translation table.
+        emit_lv_i18n: When True, also write the legacy lv_i18n C/H translation
+                   table. Default False — that table is NOT compiled or linked
+                   (runtime uses the XML packs via LVGL's lv_translation_* API),
+                   so emitting it only produces a large churn diff. Opt in only
+                   if the lv_i18n subsystem is ever re-enabled.
 
     Returns:
         GenerateResult with success status and any warnings/errors
@@ -796,8 +802,10 @@ def generate_all(
     # at runtime. See write_per_locale_xml() for the rationale.
     write_per_locale_xml(singulars, xml_output_dir)
 
-    # Generate C code
-    write_lv_i18n_files(singulars, plurals, c_output_dir)
+    # Legacy lv_i18n C/H table: not compiled or linked (see emit_lv_i18n note).
+    # Skipped by default to avoid a large churn diff on every regeneration.
+    if emit_lv_i18n:
+        write_lv_i18n_files(singulars, plurals, c_output_dir)
 
     return result
 
@@ -828,7 +836,15 @@ def main():
         "--c-dir",
         type=Path,
         default=Path("src/generated"),
-        help="Output directory for C files",
+        help="Output directory for the legacy lv_i18n C files (only used with "
+             "--emit-lv-i18n)",
+    )
+    parser.add_argument(
+        "--emit-lv-i18n",
+        action="store_true",
+        help="Also emit the legacy lv_i18n C/H translation table. Off by "
+             "default — it is not compiled or linked (runtime uses the XML "
+             "packs), so emitting it just produces churn.",
     )
     parser.add_argument(
         "--base-locale",
@@ -856,6 +872,7 @@ def main():
         c_output_dir=args.c_dir,
         base_locale=args.base_locale,
         languages=lang_whitelist,
+        emit_lv_i18n=args.emit_lv_i18n,
     )
 
     for warning in result.warnings:

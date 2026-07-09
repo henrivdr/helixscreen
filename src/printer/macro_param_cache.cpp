@@ -23,9 +23,7 @@ MacroParamCache& MacroParamCache::instance() {
 }
 
 void MacroParamCache::populate_from_configfile(
-    const nlohmann::json& config,
-    const std::unordered_set<std::string>& known_macros) {
-
+    const nlohmann::json& config, const std::unordered_set<std::string>& known_macros) {
     std::lock_guard<std::mutex> lock(mutex_);
     cache_.clear();
 

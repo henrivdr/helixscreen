@@ -9,6 +9,7 @@ This guide walks you through installing HelixScreen on your 3D printer's touchsc
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Remote Screen Setup (Run on a Separate Device)](#remote-screen-setup-run-on-a-separate-device)
 - [Prerequisites](#prerequisites)
 - [MainsailOS Installation](#mainsailos-installation)
 - [Flashforge Adventurer 5M Installation](#flashforge-adventurer-5m-installation)
@@ -65,6 +66,32 @@ See [Snapmaker U1](#snapmaker-u1) for details.
 After installation, the setup wizard will guide you through initial configuration.
 
 > **Upgrading from an older version?** If HelixScreen keeps showing the setup wizard after an update, see [UPGRADING.md](UPGRADING.md) for how to fix configuration issues.
+
+---
+
+## Remote Screen Setup (Run on a Separate Device)
+
+HelixScreen does **not** have to run on your printer. You can install it on any supported Linux device and have it drive a display while it talks to your printer's Moonraker over the network. This is ideal when the printer sits on the floor and you want the screen at your desk, or when your printer's stock panel can't be replaced (some QIDI models).
+
+Common setups:
+- A spare Raspberry Pi (3/4/5, Zero 2 W, CM4) with a touchscreen, sitting at your desk
+- A mini PC or x86 box with an HDMI touchscreen
+- Your desktop, running the app in a window (macOS or Linux) for monitoring
+
+**How it works:** HelixScreen is a Moonraker client. It only needs network access to your printer's Moonraker instance (port `7125` by default) — it does **not** need to run on the same machine as Klipper.
+
+**Steps:**
+
+1. Install HelixScreen on the device that will drive the display, using the [Quick Start](#quick-start) one-liner or the platform section that matches that device (e.g. a Raspberry Pi uses the [MainsailOS](#raspberry-pi--mainsailos-installation) steps). Install it on the *screen* device, not the printer.
+2. Make sure the device is on the same network as your printer and can reach it — from the device, `ping <printer-ip>` should succeed.
+3. On first boot, the setup wizard reaches [Step 4: Moonraker Connection](#step-4-moonraker-connection). Enter your **printer's IP address** (not `localhost`), for example `192.168.1.50`. Leave the port at the default `7125` unless you've changed it.
+4. The wizard tests the connection, then discovers your printer's capabilities as usual.
+
+> **Point it at Moonraker, not Mainsail/Fluidd.** HelixScreen connects to Moonraker's API (port `7125`), not the Mainsail/Fluidd web interface. You do not need Mainsail or Fluidd installed on the screen device at all.
+
+To change the host later, go to **Settings > System > Host**, or edit `moonraker_host` in `settings.json`.
+
+> **Note:** A remote screen controls the printer the same as an on-printer screen would. Features that require running *on the printer* (for example, HelixScreen taking over the printer's own physical panel, or on-device WiFi configuration in the wizard) don't apply to a remote install — but all printing, monitoring, and control features work normally.
 
 ---
 

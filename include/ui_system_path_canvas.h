@@ -126,8 +126,7 @@ void ui_system_path_canvas_set_bypass_has_spool(lv_obj_t* obj, bool has_spool);
 /// such that the spool sits a short visible tube segment above this point.
 /// Returns false when bypass isn't supported or the canvas hasn't been laid
 /// out yet.
-bool ui_system_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out,
-                                                int32_t* cy_out);
+bool ui_system_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out);
 
 /**
  * @brief Set per-unit hub sensor state

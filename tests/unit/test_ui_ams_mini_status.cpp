@@ -6,15 +6,15 @@
  */
 
 #include "ui_ams_mini_status.h"
+#include "ui_update_queue.h"
+
+#include "../lvgl_ui_test_fixture.h"
+#include "../ui_test_utils.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "config.h"
 #include "panel_widget_registry.h"
 #include "theme_manager.h"
-#include "ui_update_queue.h"
-
-#include "../lvgl_ui_test_fixture.h"
-#include "../ui_test_utils.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -142,7 +142,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: sync_from_ams_state fe
 
     ui_ams_mini_status_init();
     lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
-    ui_ams_mini_status_set_width(w, 260, 2); // spool mode
+    ui_ams_mini_status_set_width(w, 260, 2);    // spool mode
     helix::ui::UpdateQueue::instance().drain(); // flush create-time auto-sync
 
     // Canonical path: bump slots_version -> widget observer -> sync_from_ams_state.
@@ -255,8 +255,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini spool mode: unchanged sync skips c
     lv_obj_delete(w);
 }
 
-TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: 2x->1x restores bar view",
-                 "[ui][ams_mini][mode]") {
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: 2x->1x restores bar view", "[ui][ams_mini][mode]") {
     ui_ams_mini_status_init();
     lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
     helix::ui::UpdateQueue::instance().drain();

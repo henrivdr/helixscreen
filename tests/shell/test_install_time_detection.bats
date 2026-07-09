@@ -33,6 +33,14 @@ SH
     python3 -c "import json;d=json.load(open('$SETTINGS_FILE'));assert d.get('preset')=='qidi_q2',d;p=d['printers']['default'];assert p['fans']['part']=='fan_generic cooling_fan',p;assert p['wizard_completed'] is False"
 }
 
+@test "tier2 B: Max 4 verdict seeds Max 4 preset" {
+    rm -f "$SETTINGS_FILE"
+    export FAKE_VERDICT='{"model":"Qidi Max 4","preset":"qidi_max4","confidence":96,"runner_up_preset":"qidi_q2","runner_up_confidence":78}'
+    run seed_from_moonraker_detection
+    [ "$status" -eq 0 ]
+    python3 -c "import json;d=json.load(open('$SETTINGS_FILE'));assert d.get('preset')=='qidi_max4',d;p=d['printers']['default'];assert p['fans']['exhaust']=='fan_generic chamber_circulation_fan',p;assert p['heaters']['chamber']=='heater_generic chamber',p"
+}
+
 @test "tier2 C: ambiguous near-tie pre-fills host only, no preset marker" {
     rm -f "$SETTINGS_FILE"
     export FAKE_VERDICT='{"model":"Qidi Q2","preset":"qidi_q2","confidence":86,"runner_up_preset":"qidi_q1_pro","runner_up_confidence":84}'

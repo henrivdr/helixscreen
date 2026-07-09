@@ -23,8 +23,12 @@ class JobQueueModal : public Modal {
     JobQueueModal();
     ~JobQueueModal() override;
 
-    const char* get_name() const override { return "Job Queue"; }
-    const char* component_name() const override { return "job_queue_modal"; }
+    const char* get_name() const override {
+        return "Job Queue";
+    }
+    const char* component_name() const override {
+        return "job_queue_modal";
+    }
 
     /// Show the modal, refreshing job list from current state
     bool show(lv_obj_t* parent);
@@ -48,7 +52,6 @@ class JobQueueModal : public Modal {
     // Observer for auto-refresh when queue data changes
     ObserverGuard count_observer_;
     bool list_rebuild_pending_ = false; ///< Coalesces rapid count observer notifications
-
 };
 
 } // namespace helix

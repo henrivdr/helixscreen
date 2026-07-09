@@ -164,8 +164,9 @@ std::string prettify_name(const std::string& snake_case_name) {
         if (it != SPECIAL_WORDS.end()) {
             current_word = it->second;
         } else if (current_word.size() >= 2 &&
-                   std::all_of(current_word.begin(), current_word.end(),
-                               [](unsigned char c) { return std::isupper(c) || std::isdigit(c); })) {
+                   std::all_of(current_word.begin(), current_word.end(), [](unsigned char c) {
+                       return std::isupper(c) || std::isdigit(c);
+                   })) {
             // Preserve all-uppercase words as acronyms (EBB, NTC, BTT, SB2240, etc.)
         } else {
             // Capitalize first letter, lowercase rest

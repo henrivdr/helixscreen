@@ -14,36 +14,45 @@ enum class DetectionKind { Spaghetti, DirtyBed, Residue, DirtyNozzle, Unknown };
 /// 4=dirty-nozzle. 0 / -1 / anything else = not a visual defect we surface.
 inline DetectionKind kind_from_u1_code(int code) {
     switch (code) {
-        case 1: return DetectionKind::DirtyBed;
-        case 2: return DetectionKind::Spaghetti;
-        case 3: return DetectionKind::Residue;
-        case 4: return DetectionKind::DirtyNozzle;
-        default: return DetectionKind::Unknown;
+    case 1:
+        return DetectionKind::DirtyBed;
+    case 2:
+        return DetectionKind::Spaghetti;
+    case 3:
+        return DetectionKind::Residue;
+    case 4:
+        return DetectionKind::DirtyNozzle;
+    default:
+        return DetectionKind::Unknown;
     }
 }
 
 /// Normalized "a detector reported a defect" event.
 struct DetectionEvent {
-    std::string          source_id;
-    DetectionKind        kind = DetectionKind::Unknown;
-    bool                 attributable = false;
+    std::string source_id;
+    DetectionKind kind = DetectionKind::Unknown;
+    bool attributable = false;
     std::optional<float> confidence;
-    bool                 already_paused = false;
-    std::string          message;
+    bool already_paused = false;
+    std::string message;
 };
 
 /// A backend that can report print-failure detections.
 class DetectionSource {
-public:
+  public:
     using Callback = std::function<void(const DetectionEvent&)>;
 
     virtual ~DetectionSource() = default;
     virtual std::string id() const = 0;
-    virtual bool        available() const = 0;
-    virtual bool        can_tune() const { return false; }
-    virtual bool        self_pauses() const { return true; }
+    virtual bool available() const = 0;
+    virtual bool can_tune() const {
+        return false;
+    }
+    virtual bool self_pauses() const {
+        return true;
+    }
     /// Callback fires on the MAIN thread (already marshaled).
-    virtual void        set_callback(Callback cb) = 0;
+    virtual void set_callback(Callback cb) = 0;
 };
 
-}  // namespace helix::detection
+} // namespace helix::detection

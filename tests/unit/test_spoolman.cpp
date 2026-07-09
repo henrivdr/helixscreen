@@ -6,6 +6,7 @@
 #include "json_utils.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
+#include "moonraker_spoolman_api.h" // For spoolman_detail::parse_spool_info
 #include "printer_state.h"
 #include "spoolman_types.h" // For SpoolInfo, VendorInfo, FilamentInfo
 
@@ -350,8 +351,7 @@ TEST_CASE("MoonrakerAPIMock - get_spoolman_spools", "[filament][mock]") {
             [&](const std::vector<SpoolInfo>& spools) {
                 REQUIRE(spools.size() > 0);
                 const int active_count = std::count_if(
-                    spools.begin(), spools.end(),
-                    [](const SpoolInfo& s) { return s.is_active; });
+                    spools.begin(), spools.end(), [](const SpoolInfo& s) { return s.is_active; });
                 REQUIRE(active_count == 1);
             },
             [](const MoonrakerError&) {});
@@ -743,6 +743,75 @@ TEST_CASE("Spoolman status - spool_id null handling", "[filament][parsing]") {
 }
 
 // ============================================================================
+// parse_spool_info — null numeric field tolerance (#1087)
+//
+// Spoolman serializes optional filament fields (settings_extruder_temp,
+// settings_bed_temp) as present-but-null. A raw json::value("k", def) calls
+// get<int>() on the null and throws type_error.302, which aborted the whole
+// spool-list parse and left the "Choose Spool" picker stuck loading forever.
+// These exercise the REAL parser so a regression to .value() fails the build.
+// ============================================================================
+
+TEST_CASE("parse_spool_info - null recommended temps do not throw (#1087)",
+          "[filament][parsing][spoolman]") {
+    using helix::spoolman_detail::parse_spool_info;
+
+    SECTION("both settings temps null falls back to 0") {
+        auto j = nlohmann::json::parse(R"({
+            "id": 7,
+            "remaining_weight": 800.0,
+            "filament": {
+                "id": 3,
+                "material": "PLA",
+                "name": "Jet Black",
+                "settings_extruder_temp": null,
+                "settings_bed_temp": null
+            }
+        })");
+
+        SpoolInfo info;
+        REQUIRE_NOTHROW(info = parse_spool_info(j));
+        REQUIRE(info.id == 7);
+        REQUIRE(info.material == "PLA");
+        REQUIRE(info.nozzle_temp_recommended == 0);
+        REQUIRE(info.bed_temp_recommended == 0);
+    }
+
+    SECTION("null top-level id and nested filament/vendor ids do not throw") {
+        auto j = nlohmann::json::parse(R"({
+            "id": null,
+            "remaining_weight": 500.0,
+            "filament": {
+                "id": null,
+                "material": "PETG",
+                "vendor": {"id": null, "name": "eSUN"}
+            }
+        })");
+
+        SpoolInfo info;
+        REQUIRE_NOTHROW(info = parse_spool_info(j));
+        REQUIRE(info.id == 0);
+        REQUIRE(info.filament_id == 0);
+        REQUIRE(info.vendor_id == 0);
+        REQUIRE(info.vendor == "eSUN");
+    }
+
+    SECTION("present integer temps still parse correctly") {
+        auto j = nlohmann::json::parse(R"({
+            "id": 12,
+            "filament": {
+                "settings_extruder_temp": 215,
+                "settings_bed_temp": 60
+            }
+        })");
+
+        auto info = parse_spool_info(j);
+        REQUIRE(info.nozzle_temp_recommended == 215);
+        REQUIRE(info.bed_temp_recommended == 60);
+    }
+}
+
+// ============================================================================
 // filter_spools Tests
 // ============================================================================
 
@@ -917,7 +986,8 @@ TEST_CASE("filter_spools - fuzzy does not match wildly different terms", "[filam
     REQUIRE(result.empty());
 }
 
-TEST_CASE("filter_spools - fuzzy AND still works with mixed exact and fuzzy", "[filament][filter]") {
+TEST_CASE("filter_spools - fuzzy AND still works with mixed exact and fuzzy",
+          "[filament][filter]") {
     auto spools = make_filter_test_spools();
     // "polmaker" fuzzy-matches "polymaker", "pla" exact-matches
     auto result = filter_spools(spools, "polmaker pla");
@@ -963,10 +1033,7 @@ TEST_CASE("SpoolInfo - location field parsed from JSON", "[filament][parsing]") 
     std::string created_location;
 
     api.spoolman().create_spoolman_spool(
-        body,
-        [&](const SpoolInfo& spool) {
-            created_location = spool.location;
-        },
+        body, [&](const SpoolInfo& spool) { created_location = spool.location; },
         [](const MoonrakerError&) { FAIL("create failed"); });
 
     REQUIRE(created_location == "Shelf B");
@@ -983,10 +1050,7 @@ TEST_CASE("SpoolInfo - location defaults to empty when null in JSON", "[filament
     std::string created_location = "should-be-cleared";
 
     api.spoolman().create_spoolman_spool(
-        body,
-        [&](const SpoolInfo& spool) {
-            created_location = spool.location;
-        },
+        body, [&](const SpoolInfo& spool) { created_location = spool.location; },
         [](const MoonrakerError&) { FAIL("create failed"); });
 
     REQUIRE(created_location.empty());
@@ -1346,4 +1410,73 @@ TEST_CASE("SpoolInfo vendor_id defaults to 0 when not set", "[filament][spoolman
 TEST_CASE("SlotInfo spoolman_vendor_id defaults to 0", "[ams][spoolman]") {
     SlotInfo slot;
     REQUIRE(slot.spoolman_vendor_id == 0);
+}
+
+// ============================================================================
+// sort_spools_by_recency — picker ordering (#1071): most-recently-used first,
+// then (for never-used spools) most-recently-created first.
+// ============================================================================
+
+TEST_CASE("sort_spools_by_recency orders used-newest then created-newest (#1071)",
+          "[filament][spoolman][sort]") {
+    std::vector<SpoolInfo> spools;
+
+    // Used spools (have last_used) — should sort ahead of never-used, newest first.
+    SpoolInfo used_old;
+    used_old.id = 10;
+    used_old.last_used = "2026-01-01T00:00:00";
+    spools.push_back(used_old);
+
+    SpoolInfo used_new;
+    used_new.id = 11;
+    used_new.last_used = "2026-06-01T00:00:00";
+    spools.push_back(used_new);
+
+    // Never-used spools (empty last_used) — order by registered (creation), newest first.
+    SpoolInfo fresh_old;
+    fresh_old.id = 20;
+    fresh_old.registered = "2025-01-01T00:00:00";
+    spools.push_back(fresh_old);
+
+    SpoolInfo fresh_new;
+    fresh_new.id = 21;
+    fresh_new.registered = "2025-12-31T00:00:00";
+    spools.push_back(fresh_new);
+
+    // Never-used with NO registered timestamp — falls to id tie-break, sorts last.
+    SpoolInfo fresh_undated;
+    fresh_undated.id = 5;
+    spools.push_back(fresh_undated);
+
+    sort_spools_by_recency(spools);
+
+    // Used spools first (newest use), then never-used by creation (newest),
+    // then the undated one (no registered) last via id tie-break.
+    REQUIRE(spools.size() == 5);
+    CHECK(spools[0].id == 11); // used, 2026-06
+    CHECK(spools[1].id == 10); // used, 2026-01
+    CHECK(spools[2].id == 21); // never-used, created 2025-12
+    CHECK(spools[3].id == 20); // never-used, created 2025-01
+    CHECK(spools[4].id == 5);  // never-used, no registered -> last
+}
+
+TEST_CASE("sort_spools_by_recency tie-breaks equal registered by id (#1071)",
+          "[filament][spoolman][sort]") {
+    std::vector<SpoolInfo> spools;
+
+    SpoolInfo a;
+    a.id = 1;
+    a.registered = "2025-05-05T00:00:00";
+    spools.push_back(a);
+
+    SpoolInfo b;
+    b.id = 2;
+    b.registered = "2025-05-05T00:00:00"; // same creation timestamp
+    spools.push_back(b);
+
+    sort_spools_by_recency(spools);
+
+    // Equal registered -> higher id first (stable tie-break).
+    CHECK(spools[0].id == 2);
+    CHECK(spools[1].id == 1);
 }

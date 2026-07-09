@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 
 #include <filesystem>
@@ -29,7 +30,9 @@ class PresetConfigFixture {
     // (a leak there breaks find_readable() for every later test in the process —
     // 127 printer_detector failures, macro/grid/theme cascades). Idempotent via
     // did_setup_/torn_down_ so an explicit TearDown() + the dtor don't double-run.
-    ~PresetConfigFixture() { TearDown(); }
+    ~PresetConfigFixture() {
+        TearDown();
+    }
 
     void SetUp() {
         did_setup_ = true;
@@ -67,13 +70,13 @@ class PresetConfigFixture {
         }
 
         // Set config path so apply_preset_file can find presets/ relative to it
-        config.path = temp_dir + "/settings.json";
+        ConfigTestAccess::path(config) = temp_dir + "/settings.json";
 
         // Set active printer ID so df() returns the correct prefix
-        config.active_printer_id_ = "default";
+        ConfigTestAccess::active_printer_id(config) = "default";
 
         // Initialize with a v4 multi-printer structure
-        config.data = {
+        ConfigTestAccess::data(config) = {
             {"preset", "ad5m"},
             {"language", "de"},
             {"active_printer_id", "default"},
@@ -124,11 +127,11 @@ class PresetConfigFixture {
     }
 
     json& printer_data() {
-        return config.data["printers"]["default"];
+        return ConfigTestAccess::data(config)["printers"]["default"];
     }
 
     json& data() {
-        return config.data;
+        return ConfigTestAccess::data(config);
     }
 };
 } // namespace helix
@@ -334,8 +337,7 @@ TEST_CASE_METHOD(PresetConfigFixture,
                        {"c", 0.0},
                        {"d", 0.0},
                        {"e", 1.76},
-                       {"f", 0.0},
-                       {"swap_axes", false}}}}}};
+                       {"f", 0.0}}}}}};
     write_preset("input_preset", preset);
 
     REQUIRE(config.apply_preset_file("input_preset") == true);
@@ -343,7 +345,6 @@ TEST_CASE_METHOD(PresetConfigFixture,
     REQUIRE(config.get<bool>("/input/calibration/valid", false) == true);
     REQUIRE(config.get<double>("/input/calibration/a", 0.0) == Catch::Approx(1.66));
     REQUIRE(config.get<double>("/input/calibration/e", 0.0) == Catch::Approx(1.76));
-    REQUIRE(config.get<bool>("/input/calibration/swap_axes", true) == false);
 
     TearDown();
 }

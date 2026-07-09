@@ -3,10 +3,9 @@
 
 #pragma once
 
-#include "wizard_step.h"
-
 #include "filament_sensor_types.h"
 #include "lvgl/lvgl.h"
+#include "wizard_step.h"
 
 #include <memory>
 #include <string>
@@ -40,10 +39,18 @@
 class WizardFilamentSensorSelectStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::FilamentSensor; }
-    const char* component_name() const override { return "wizard_filament_sensor_select"; }
-    const char* log_name() const override { return "Wizard Filament Sensor"; }
-    bool should_skip(const helix::wizard::StepContext& ctx) const override { return ctx.preset.skip_hardware || should_skip(); }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::FilamentSensor;
+    }
+    const char* component_name() const override {
+        return "wizard_filament_sensor_select";
+    }
+    const char* log_name() const override {
+        return "Wizard Filament Sensor";
+    }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override {
+        return ctx.preset.skip_hardware || should_skip();
+    }
 
     WizardFilamentSensorSelectStep();
     ~WizardFilamentSensorSelectStep();

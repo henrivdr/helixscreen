@@ -25,7 +25,6 @@ bool is_video_file(const std::string& filename);
 bool is_local_host(const std::string& host);
 
 /// Build an argument list for video playback (safe from shell injection)
-std::vector<std::string> build_player_args(const std::string& player,
-                                           const std::string& file_path);
+std::vector<std::string> build_player_args(const std::string& player, const std::string& file_path);
 
-}  // namespace helix::timelapse
+} // namespace helix::timelapse

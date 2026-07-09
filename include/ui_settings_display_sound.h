@@ -90,6 +90,7 @@ class DisplaySoundSettingsOverlay : public OverlayBase {
     void handle_theme_settings_clicked();
     void handle_brightness_changed(int value);
     void handle_widget_labels_changed(bool enabled);
+    void handle_page_scroll_buttons_changed(bool enabled);
     void handle_bed_mesh_mode_changed(int mode);
     void handle_dim_changed(int index);
     void handle_sleep_changed(int index);
@@ -198,6 +199,7 @@ class DisplaySoundSettingsOverlay : public OverlayBase {
     static void on_dark_mode_changed(lv_event_t* e);
     static void on_brightness_changed(lv_event_t* e);
     static void on_widget_labels_changed(lv_event_t* e);
+    static void on_page_scroll_buttons_changed(lv_event_t* e);
     static void on_bed_mesh_mode_changed(lv_event_t* e);
     static void on_dim_changed(lv_event_t* e);
     static void on_sleep_changed(lv_event_t* e);

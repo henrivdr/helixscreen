@@ -14,6 +14,20 @@ using namespace helix;
 // DisplaySettingsManager Tests
 // ============================================================================
 
+// Pure policy: software-rotated displays (fbdev + rotation) repaint through a
+// per-frame CPU rotate that makes transition animations jerky, so the DEFAULT
+// for animations_enabled is forced off there regardless of platform tier
+// (#986). Not-rotated displays follow the platform capability. This is only a
+// default — an explicit user setting is applied ahead of it in init_subjects().
+TEST_CASE("DisplaySettingsManager::animations_default policy", "[display_settings]") {
+    // Software rotation forces the default off, even on a capable platform.
+    REQUIRE(DisplaySettingsManager::animations_default(true, true) == false);
+    REQUIRE(DisplaySettingsManager::animations_default(false, true) == false);
+    // No software rotation: follow the platform capability verbatim.
+    REQUIRE(DisplaySettingsManager::animations_default(true, false) == true);
+    REQUIRE(DisplaySettingsManager::animations_default(false, false) == false);
+}
+
 TEST_CASE_METHOD(LVGLTestFixture, "DisplaySettingsManager default values after init",
                  "[display_settings]") {
     // Reset config to defaults so prior tests' set_*() calls don't pollute

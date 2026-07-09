@@ -463,4 +463,15 @@ lv_obj_t* modal_show_alert(const char* title, const char* message,
                            ModalSeverity severity = ModalSeverity::Info, const char* ok_text = "OK",
                            lv_event_cb_t on_ok = nullptr, void* user_data = nullptr);
 
+/**
+ * @brief Show the "low RAM before resonance calibration" warning modal.
+ *
+ * Centralizes the (translated) copy and severity so the two calibration entry
+ * points (input-shaper panel + wizard) can't diverge. Caller has already
+ * decided RAM is below helix::RESONANCE_LOW_RAM_WARN_MB. Returns the dialog
+ * handle (store it to dismiss on teardown) or nullptr on failure.
+ */
+lv_obj_t* show_low_ram_resonance_warning(size_t total_mb, lv_event_cb_t on_confirm,
+                                         lv_event_cb_t on_cancel, void* user_data);
+
 } // namespace helix::ui

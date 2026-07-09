@@ -4,8 +4,9 @@
 // Compile-only drift protection: if EthernetBackend adds a pure-virtual
 // method and EthernetBackendMock doesn't implement it, this fails to build.
 
-#include "../catch_amalgamated.hpp"
 #include "ethernet_backend.h"
+
+#include "../catch_amalgamated.hpp"
 
 #ifdef HELIX_ENABLE_MOCKS
 #include "ethernet_backend_mock.h"

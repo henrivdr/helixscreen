@@ -43,8 +43,8 @@ struct MaterialOverride {
     std::optional<int> nozzle_min;
     std::optional<int> nozzle_max;
     std::optional<int> bed_temp;
-    std::optional<std::string> preheat_macro;        ///< Klipper macro name (uppercase canonical form)
-    std::optional<bool> macro_handles_heating;       ///< true = macro replaces SET_HEATER_TEMPERATURE
+    std::optional<std::string> preheat_macro;  ///< Klipper macro name (uppercase canonical form)
+    std::optional<bool> macro_handles_heating; ///< true = macro replaces SET_HEATER_TEMPERATURE
 };
 
 /**
@@ -117,14 +117,16 @@ inline constexpr MaterialInfo MATERIALS[] = {
     {"PETG-CF",     240, 270, 80,  "Standard",      55, 360,  1.27f,  0,  "PETG"},      // Carbon fiber PETG
     {"PETG-GF",     240, 270, 80,  "Standard",      55, 360,  1.27f,  0,  "PETG"},      // Glass fiber PETG
     {"PCTG",        240, 270, 80,  "Standard",      55, 360,  1.23f,  0,  "PETG"},      // PETG variant, clearer
+    {"PET-CF",      270, 300, 80,  "Standard",      65, 480,  1.30f,  0,  "PETG"},      // Carbon fiber PET (Polymaker Fiberon)
+    {"PET-GF",      270, 300, 80,  "Standard",      65, 480,  1.40f,  0,  "PETG"},      // Glass fiber PET (Polymaker Fiberon)
 
     // === Engineering Materials (Enclosure recommended) ===
     {"ABS",         240, 270, 100, "Engineering",   60, 240,  1.04f,  50, "ABS_ASA"},
     {"ABS+",        240, 270, 100, "Engineering",   60, 240,  1.04f,  50, "ABS_ASA"},
-    {"ASA",         240, 270, 100, "Engineering",   60, 240,  1.07f,  50, "ABS_ASA"},   // UV-resistant ABS alternative
-    {"ASA+",        240, 270, 100, "Engineering",   60, 240,  1.07f,  50, "ABS_ASA"},   // Enhanced ASA
     {"ABS-CF",      240, 270, 100, "Engineering",   60, 240,  1.10f,  50, "ABS_ASA"},   // Carbon fiber ABS
     {"ABS-GF",      240, 270, 100, "Engineering",   60, 240,  1.15f,  50, "ABS_ASA"},   // Glass fiber ABS
+    {"ASA",         240, 270, 100, "Engineering",   60, 240,  1.07f,  50, "ABS_ASA"},   // UV-resistant ABS alternative
+    {"ASA+",        240, 270, 100, "Engineering",   60, 240,  1.07f,  50, "ABS_ASA"},   // Enhanced ASA
     {"ASA-CF",      250, 280, 100, "Engineering",   60, 240,  1.12f,  50, "ABS_ASA"},   // Carbon fiber ASA
     {"ASA-GF",      250, 280, 100, "Engineering",   60, 240,  1.18f,  50, "ABS_ASA"},   // Glass fiber ASA
     {"PC",          260, 300, 110, "Engineering",   80, 480,  1.20f,  55, "PC"},        // Polycarbonate
@@ -136,9 +138,9 @@ inline constexpr MaterialInfo MATERIALS[] = {
     {"PA",          250, 280, 80,  "Engineering",   70, 480,  1.14f,  50, "PA"},        // Generic nylon
     {"PA6",         250, 280, 80,  "Engineering",   70, 480,  1.14f,  50, "PA"},
     {"PA12",        250, 280, 80,  "Engineering",   70, 480,  1.14f,  50, "PA"},
+    {"PA66",        260, 290, 90,  "Engineering",   80, 480,  1.14f,  55, "PA"},        // Nylon 66
     {"PA-CF",       260, 290, 80,  "Engineering",   70, 480,  1.14f,  50, "PA"},        // Carbon fiber nylon
     {"PA-GF",       260, 290, 80,  "Engineering",   70, 480,  1.14f,  50, "PA"},        // Glass fiber nylon
-    {"PA66",        260, 290, 90,  "Engineering",   80, 480,  1.14f,  55, "PA"},        // Nylon 66
     {"PPA",         280, 320, 100, "Engineering",   80, 480,  1.18f,  60, "PA"},        // Polyphthalamide
 
     // === Flexible Materials ===
@@ -242,9 +244,12 @@ inline std::optional<MaterialInfo> find_material(std::string_view name) {
             MaterialInfo result = mat;
             const auto* ovr = get_material_override(mat.name);
             if (ovr) {
-                if (ovr->nozzle_min) result.nozzle_min = *ovr->nozzle_min;
-                if (ovr->nozzle_max) result.nozzle_max = *ovr->nozzle_max;
-                if (ovr->bed_temp) result.bed_temp = *ovr->bed_temp;
+                if (ovr->nozzle_min)
+                    result.nozzle_min = *ovr->nozzle_min;
+                if (ovr->nozzle_max)
+                    result.nozzle_max = *ovr->nozzle_max;
+                if (ovr->bed_temp)
+                    result.bed_temp = *ovr->bed_temp;
             }
             return result;
         }
@@ -436,19 +441,15 @@ struct MaterialComfortRange {
 inline const MaterialComfortRange* get_comfort_range(const std::string& material) {
     //                                material  good   warn  dry°C  hours
     static const MaterialComfortRange ranges[] = {
-        {"PLA",   50.0f, 65.0f, 55,  4},
-        {"PETG",  40.0f, 55.0f, 65,  6},
-        {"ABS",   35.0f, 50.0f, 80,  4},
-        {"ASA",   35.0f, 50.0f, 80,  4},
-        {"PA",    20.0f, 35.0f, 70,  8},
-        {"Nylon", 20.0f, 35.0f, 70,  8},
-        {"TPU",   40.0f, 55.0f, 55,  4},
-        {"PC",    30.0f, 45.0f, 80,  8},
-        {"PVA",   15.0f, 30.0f, 45,  4},
-        {"HIPS",  40.0f, 55.0f, 70,  4},
+        {"PLA", 50.0f, 65.0f, 55, 4}, {"PETG", 40.0f, 55.0f, 65, 6},
+        {"ABS", 35.0f, 50.0f, 80, 4}, {"ASA", 35.0f, 50.0f, 80, 4},
+        {"PA", 20.0f, 35.0f, 70, 8},  {"Nylon", 20.0f, 35.0f, 70, 8},
+        {"TPU", 40.0f, 55.0f, 55, 4}, {"PC", 30.0f, 45.0f, 80, 8},
+        {"PVA", 15.0f, 30.0f, 45, 4}, {"HIPS", 40.0f, 55.0f, 70, 4},
     };
     for (const auto& r : ranges) {
-        if (material == r.material) return &r;
+        if (material == r.material)
+            return &r;
     }
     return nullptr;
 }

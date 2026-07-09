@@ -16,8 +16,8 @@
 // worth knowing for future derived fixtures.
 class HelixTestFixture {
   public:
-    HelixTestFixture();           // calls reset_all() on entry — idempotent
-    virtual ~HelixTestFixture();  // calls reset_all() on exit — leaves clean slate
+    HelixTestFixture();          // calls reset_all() on entry — idempotent
+    virtual ~HelixTestFixture(); // calls reset_all() on exit — leaves clean slate
 
     HelixTestFixture(const HelixTestFixture&) = delete;
     HelixTestFixture& operator=(const HelixTestFixture&) = delete;

@@ -553,7 +553,9 @@ void WizardWifiStep::handle_wifi_toggle_changed(lv_event_t* e) {
                 // thread could otherwise rewrite cached_networks_ while the UI
                 // thread is mid-sort (#769).
                 token.defer([this, weak_mgr, scanned = networks]() mutable {
-                    if (weak_mgr.expired()) { // L081_OK: main-thread defer body; weak_mgr is a separate WiFiManager weak_ptr, not the bg lifetime token
+                    if (weak_mgr
+                            .expired()) { // L081_OK: main-thread defer body; weak_mgr is a separate
+                                          // WiFiManager weak_ptr, not the bg lifetime token
                         spdlog::trace("[{}] WiFiManager destroyed, ignoring callback", get_name());
                         return;
                     }

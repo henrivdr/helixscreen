@@ -3,6 +3,8 @@
 #include "ui_wizard_input_shaper.h"
 
 #include "ui_emergency_stop.h"
+#include "ui_event_safety.h"
+#include "ui_modal.h"
 #include "ui_update_queue.h"
 #include "ui_wizard_helpers.h"
 
@@ -12,6 +14,7 @@
 #include "input_shaper_calibrator.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "memory_utils.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
@@ -57,7 +60,6 @@ WizardInputShaperStep::WizardInputShaperStep()
 }
 
 WizardInputShaperStep::~WizardInputShaperStep() {
-
     // Deinitialize subjects to disconnect observers before destruction
     // NOTE: lv_subject_deinit() is safe to call even during shutdown
     if (subjects_initialized_) {
@@ -112,8 +114,7 @@ void WizardInputShaperStep::init_subjects() {
 
 // Helper to safely update subjects from async callbacks
 // Captures alive flag and queues update to UI thread
-static void safe_update_status(helix::LifetimeToken token,
-                               const std::string& msg) {
+static void safe_update_status(helix::LifetimeToken token, const std::string& msg) {
     helix::ui::queue_update([token, msg]() {
         if (token.expired()) {
             return; // Step was cleaned up
@@ -173,15 +174,10 @@ static void safe_handle_error(helix::LifetimeToken token) {
     });
 }
 
-// Static trampolines for LVGL callbacks
-static void on_start_calibration_clicked(lv_event_t* e) {
-    (void)e;
-    spdlog::debug("[Wizard Input Shaper] Start calibration clicked");
-    WizardInputShaperStep* step = get_wizard_input_shaper_step();
-    if (!step) {
-        return;
-    }
-
+// Runs the accelerometer noise check + X/Y calibration chain. Split out from
+// on_start_calibration_clicked so the low-RAM warning can gate entry (flipping
+// the wizard into its "calibrating" visual state) without duplicating the flow.
+static void begin_is_calibration_flow(WizardInputShaperStep* step) {
     // Hide Start button and skip hint via subject binding
     lv_subject_set_int(step->get_started_subject(), 1);
     // Mark calibration in-flight — surfaces the Cancel button
@@ -222,10 +218,7 @@ static void on_start_calibration_clicked(lv_event_t* e) {
                 InputShaperCalibrator* cal = step->get_calibrator();
                 if (cal) {
                     cal->run_calibration(
-                        'X',
-                        [token](int percent) {
-                            safe_update_progress(token, percent / 2);
-                        },
+                        'X', [token](int percent) { safe_update_progress(token, percent / 2); },
                         [token](const InputShaperResult& result) {
                             (void)result;
                             if (token.expired()) {
@@ -277,6 +270,59 @@ static void on_start_calibration_clicked(lv_event_t* e) {
                 safe_handle_error(token);
             });
     }
+}
+
+// Static trampolines for LVGL callbacks
+static void on_start_calibration_clicked(lv_event_t* e) {
+    (void)e;
+    spdlog::debug("[Wizard Input Shaper] Start calibration clicked");
+    WizardInputShaperStep* step = get_wizard_input_shaper_step();
+    if (!step) {
+        return;
+    }
+
+    // On memory-constrained hosts, warn before entering the calibrating state so
+    // the wizard doesn't flip its visuals if the user cancels.
+    auto mem = helix::get_system_memory_info();
+    if (mem.total_mb() < helix::RESONANCE_LOW_RAM_WARN_MB) {
+        // Re-entry guard: a second entry while the warning modal is open is a no-op.
+        if (step->low_ram_warn_dialog_)
+            return;
+        step->low_ram_warn_dialog_ = helix::ui::show_low_ram_resonance_warning(
+            mem.total_mb(),
+            [](lv_event_t* ev) {
+                LVGL_SAFE_EVENT_CB_BEGIN("[Wizard Input Shaper] low_ram_confirm");
+                auto* self = static_cast<WizardInputShaperStep*>(lv_event_get_user_data(ev));
+                if (!self)
+                    return;
+                if (self->low_ram_warn_dialog_) {
+                    helix::ui::modal_hide(self->low_ram_warn_dialog_);
+                    self->low_ram_warn_dialog_ = nullptr;
+                }
+                begin_is_calibration_flow(self);
+                LVGL_SAFE_EVENT_CB_END();
+            },
+            [](lv_event_t* ev) {
+                LVGL_SAFE_EVENT_CB_BEGIN("[Wizard Input Shaper] low_ram_cancel");
+                auto* self = static_cast<WizardInputShaperStep*>(lv_event_get_user_data(ev));
+                if (!self)
+                    return;
+                if (self->low_ram_warn_dialog_) {
+                    helix::ui::modal_hide(self->low_ram_warn_dialog_);
+                    self->low_ram_warn_dialog_ = nullptr;
+                }
+                // User backed out — leave the wizard step as-is (Start still visible).
+                LVGL_SAFE_EVENT_CB_END();
+            },
+            step);
+        if (!step->low_ram_warn_dialog_) {
+            // Modal failed to build — don't silently block calibration.
+            begin_is_calibration_flow(step);
+        }
+        return;
+    }
+
+    begin_is_calibration_flow(step);
 }
 
 // Cancel button visible during in-progress calibration. Routes through
@@ -335,6 +381,13 @@ lv_obj_t* WizardInputShaperStep::create(lv_obj_t* parent) {
 
 void WizardInputShaperStep::cleanup() {
     spdlog::debug("[{}] Cleaning up resources", get_name());
+
+    // Dismiss the low-RAM warning modal if still open — its callbacks capture
+    // this step and would otherwise re-enter calibration on a torn-down wizard.
+    if (low_ram_warn_dialog_) {
+        helix::ui::modal_hide(low_ram_warn_dialog_);
+        low_ram_warn_dialog_ = nullptr;
+    }
 
     // If calibration is mid-flight on the printer, send M112 + firmware_restart
     // so Klipper actually stops. cancel() alone only resets local state — the

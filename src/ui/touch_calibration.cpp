@@ -55,10 +55,10 @@ bool compute_calibration(const Point screen_points[3], const Point touch_points[
         if (is_touch_debug_enabled()) {
             spdlog::warn("[TouchDebug] compute_calibration FAILED — degenerate points");
             spdlog::warn("[TouchDebug]   touch[0]=({},{}) touch[1]=({},{}) touch[2]=({},{})",
-                         touch_points[0].x, touch_points[0].y,
-                         touch_points[1].x, touch_points[1].y,
+                         touch_points[0].x, touch_points[0].y, touch_points[1].x, touch_points[1].y,
                          touch_points[2].x, touch_points[2].y);
-            spdlog::warn("[TouchDebug]   determinant={:.6f} epsilon={:.6f} (too small)", div, epsilon);
+            spdlog::warn("[TouchDebug]   determinant={:.6f} epsilon={:.6f} (too small)", div,
+                         epsilon);
         }
         return false;
     }
@@ -79,20 +79,21 @@ bool compute_calibration(const Point screen_points[3], const Point touch_points[
     if (is_touch_debug_enabled()) {
         spdlog::warn("[TouchDebug] compute_calibration inputs:");
         spdlog::warn("[TouchDebug]   screen[0]=({},{}) screen[1]=({},{}) screen[2]=({},{})",
-                     screen_points[0].x, screen_points[0].y,
-                     screen_points[1].x, screen_points[1].y,
+                     screen_points[0].x, screen_points[0].y, screen_points[1].x, screen_points[1].y,
                      screen_points[2].x, screen_points[2].y);
         spdlog::warn("[TouchDebug]   touch[0]=({},{}) touch[1]=({},{}) touch[2]=({},{})",
-                     touch_points[0].x, touch_points[0].y,
-                     touch_points[1].x, touch_points[1].y,
+                     touch_points[0].x, touch_points[0].y, touch_points[1].x, touch_points[1].y,
                      touch_points[2].x, touch_points[2].y);
         spdlog::warn("[TouchDebug]   determinant={:.6f} epsilon={:.6f}", div, epsilon);
-        spdlog::warn("[TouchDebug]   coefficients: a={:.6f} b={:.6f} c={:.6f} d={:.6f} e={:.6f} f={:.6f}",
-                     out.a, out.b, out.c, out.d, out.e, out.f);
-        spdlog::warn("[TouchDebug]   transform: screen_x = {:.6f}*touch_x + {:.6f}*touch_y + {:.6f}",
-                     out.a, out.b, out.c);
-        spdlog::warn("[TouchDebug]   transform: screen_y = {:.6f}*touch_x + {:.6f}*touch_y + {:.6f}",
-                     out.d, out.e, out.f);
+        spdlog::warn(
+            "[TouchDebug]   coefficients: a={:.6f} b={:.6f} c={:.6f} d={:.6f} e={:.6f} f={:.6f}",
+            out.a, out.b, out.c, out.d, out.e, out.f);
+        spdlog::warn(
+            "[TouchDebug]   transform: screen_x = {:.6f}*touch_x + {:.6f}*touch_y + {:.6f}", out.a,
+            out.b, out.c);
+        spdlog::warn(
+            "[TouchDebug]   transform: screen_y = {:.6f}*touch_x + {:.6f}*touch_y + {:.6f}", out.d,
+            out.e, out.f);
     }
 
     return true;
@@ -125,9 +126,11 @@ Point transform_point(const TouchCalibration& cal, Point raw, int max_x, int max
 }
 
 bool invert_transform_point(const TouchCalibration& cal, Point screen, Point& out_raw) {
-    if (!cal.valid) return false;
+    if (!cal.valid)
+        return false;
     float det = cal.a * cal.e - cal.b * cal.d;
-    if (std::abs(det) < 1e-6f) return false;
+    if (std::abs(det) < 1e-6f)
+        return false;
     float sx = static_cast<float>(screen.x) - cal.c;
     float sy = static_cast<float>(screen.y) - cal.f;
     float rx = (cal.e * sx - cal.b * sy) / det;
@@ -171,7 +174,8 @@ bool detect_and_correct_axis_swap(TouchCalibration& cal, const Point screen_poin
     float cross_coupling_ratio = off_diagonal / diagonal;
 
     if (is_touch_debug_enabled()) {
-        spdlog::warn("[TouchDebug] axis_swap check: diagonal={:.4f} off_diagonal={:.4f} ratio={:.4f} (threshold=0.3)",
+        spdlog::warn("[TouchDebug] axis_swap check: diagonal={:.4f} off_diagonal={:.4f} "
+                     "ratio={:.4f} (threshold=0.3)",
                      diagonal, off_diagonal, cross_coupling_ratio);
     }
 
@@ -205,7 +209,8 @@ bool detect_and_correct_axis_swap(TouchCalibration& cal, const Point screen_poin
     float swapped_ratio = swapped_off_diagonal / swapped_diagonal;
 
     if (is_touch_debug_enabled()) {
-        spdlog::warn("[TouchDebug] axis_swap test: swapped_diagonal={:.4f} swapped_off_diagonal={:.4f} swapped_ratio={:.4f}",
+        spdlog::warn("[TouchDebug] axis_swap test: swapped_diagonal={:.4f} "
+                     "swapped_off_diagonal={:.4f} swapped_ratio={:.4f}",
                      swapped_diagonal, swapped_off_diagonal, swapped_ratio);
     }
 
@@ -239,9 +244,11 @@ bool validate_calibration_result(const TouchCalibration& cal, const Point screen
 
     if (is_touch_debug_enabled()) {
         spdlog::warn("[TouchDebug] validate_calibration_result:");
-        spdlog::warn("[TouchDebug]   coefficients: a={:.6f} b={:.6f} c={:.6f} d={:.6f} e={:.6f} f={:.6f}",
-                     cal.a, cal.b, cal.c, cal.d, cal.e, cal.f);
-        spdlog::warn("[TouchDebug]   screen {}x{}, max_residual={:.1f}px", screen_width, screen_height, max_residual);
+        spdlog::warn(
+            "[TouchDebug]   coefficients: a={:.6f} b={:.6f} c={:.6f} d={:.6f} e={:.6f} f={:.6f}",
+            cal.a, cal.b, cal.c, cal.d, cal.e, cal.f);
+        spdlog::warn("[TouchDebug]   screen {}x{}, max_residual={:.1f}px", screen_width,
+                     screen_height, max_residual);
     }
 
     // Coefficient magnitudes are intentionally not bounded. Both scales
@@ -263,8 +270,7 @@ bool validate_calibration_result(const TouchCalibration& cal, const Point screen
     int tx_max = std::max({touch_points[0].x, touch_points[1].x, touch_points[2].x});
     int ty_min = std::min({touch_points[0].y, touch_points[1].y, touch_points[2].y});
     int ty_max = std::max({touch_points[0].y, touch_points[1].y, touch_points[2].y});
-    if ((tx_max - tx_min) < MIN_TOUCH_AXIS_SPAN ||
-        (ty_max - ty_min) < MIN_TOUCH_AXIS_SPAN) {
+    if ((tx_max - tx_min) < MIN_TOUCH_AXIS_SPAN || (ty_max - ty_min) < MIN_TOUCH_AXIS_SPAN) {
         spdlog::warn("[TouchCalibration] Touch points too clustered "
                      "(x_span={}, y_span={}, min={})",
                      tx_max - tx_min, ty_max - ty_min, MIN_TOUCH_AXIS_SPAN);
@@ -282,11 +288,11 @@ bool validate_calibration_result(const TouchCalibration& cal, const Point screen
         float residual = std::sqrt(dx * dx + dy * dy);
 
         if (is_touch_debug_enabled()) {
-            spdlog::warn("[TouchDebug]   back-transform[{}]: touch({},{}) -> ({},{}) expected({},{}) residual={:.2f}px {}",
-                         i, touch_points[i].x, touch_points[i].y,
-                         transformed.x, transformed.y,
-                         screen_points[i].x, screen_points[i].y,
-                         residual, residual > max_residual ? "FAIL" : "OK");
+            spdlog::warn("[TouchDebug]   back-transform[{}]: touch({},{}) -> ({},{}) "
+                         "expected({},{}) residual={:.2f}px {}",
+                         i, touch_points[i].x, touch_points[i].y, transformed.x, transformed.y,
+                         screen_points[i].x, screen_points[i].y, residual,
+                         residual > max_residual ? "FAIL" : "OK");
         }
 
         if (residual > max_residual) {
@@ -304,10 +310,10 @@ bool validate_calibration_result(const TouchCalibration& cal, const Point screen
     Point center_transformed = transform_point(cal, {center_x, center_y});
 
     if (is_touch_debug_enabled()) {
-        spdlog::warn("[TouchDebug]   center: touch_avg({},{}) -> screen({},{}) bounds=[{},{}]-[{},{}]",
-                     center_x, center_y, center_transformed.x, center_transformed.y,
-                     -screen_width / 2, -screen_height / 2,
-                     screen_width + screen_width / 2, screen_height + screen_height / 2);
+        spdlog::warn(
+            "[TouchDebug]   center: touch_avg({},{}) -> screen({},{}) bounds=[{},{}]-[{},{}]",
+            center_x, center_y, center_transformed.x, center_transformed.y, -screen_width / 2,
+            -screen_height / 2, screen_width + screen_width / 2, screen_height + screen_height / 2);
     }
 
     int margin_x = screen_width / 2;

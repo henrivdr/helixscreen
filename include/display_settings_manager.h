@@ -125,7 +125,7 @@ class DisplaySettingsManager {
      */
     bool should_couple_sleep_to_dim() const;
 
-/** @brief Get sleep while printing state */
+    /** @brief Get sleep while printing state */
     bool get_sleep_while_printing() const;
 
     /** @brief Set sleep while printing state (updates subject + persists) */
@@ -146,6 +146,12 @@ class DisplaySettingsManager {
 
     /** @brief Set system keyboard preference (updates subject + persists) */
     void set_use_system_keyboard(bool enabled);
+
+    /** @brief Page-scroll buttons enabled (auto-injected gutter chevrons) */
+    bool get_page_scroll_buttons() const;
+
+    /** @brief Set page-scroll buttons preference (updates subject + persists) */
+    void set_page_scroll_buttons(bool enabled);
 
     /** @brief Keep Android navigation bar onscreen (issue #908, Android only) */
     bool get_keep_navbar_visible() const;
@@ -283,7 +289,7 @@ class DisplaySettingsManager {
         return &brightness_subject_;
     }
 
-/** @brief Has backlight control subject (integer: 0=no, 1=yes) */
+    /** @brief Has backlight control subject (integer: 0=no, 1=yes) */
     lv_subject_t* subject_has_backlight() {
         return &has_backlight_subject_;
     }
@@ -303,9 +309,30 @@ class DisplaySettingsManager {
         return &animations_enabled_subject_;
     }
 
+    /**
+     * @brief Resolve the default for the animations_enabled setting.
+     *
+     * Software-rotated displays (fbdev + non-zero rotation) repaint through a
+     * per-frame CPU rotate that makes transition animations jerky, so the
+     * default is forced off there regardless of platform tier (#986). Only a
+     * default — an explicit user setting always wins (see init_subjects()).
+     *
+     * @param platform_supports_animations PlatformCapabilities tier result
+     * @param software_rotated             DisplayManager::is_software_rotated()
+     * @return the default value for animations_enabled
+     */
+    static bool animations_default(bool platform_supports_animations, bool software_rotated) {
+        return software_rotated ? false : platform_supports_animations;
+    }
+
     /** @brief System keyboard subject (integer: 0=built-in, 1=system) */
     lv_subject_t* subject_use_system_keyboard() {
         return &use_system_keyboard_subject_;
+    }
+
+    /** @brief Page-scroll buttons subject (integer: 0=off, 1=on) */
+    lv_subject_t* subject_page_scroll_buttons() {
+        return &page_scroll_buttons_subject_;
     }
 
     /** @brief Keep navbar visible subject (integer: 0=immersive, 1=always show) */
@@ -362,6 +389,7 @@ class DisplaySettingsManager {
     lv_subject_t sleep_while_printing_subject_;
     lv_subject_t animations_enabled_subject_;
     lv_subject_t use_system_keyboard_subject_;
+    lv_subject_t page_scroll_buttons_subject_;
     lv_subject_t keep_navbar_visible_subject_;
     lv_subject_t is_android_subject_;
     lv_subject_t bed_mesh_render_mode_subject_;

@@ -3,11 +3,12 @@
 
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "console_filter_engine.h"
 #include "lvgl.h"
 #include "overlay_base.h"
 #include "subject_managed_panel.h"
-#include "ui_observer_guard.h"
 
 #include <deque>
 #include <memory>
@@ -138,7 +139,7 @@ class ConsolePanel : public OverlayBase {
     std::string gcode_handler_name_; ///< Unique handler name for callback registration
     bool is_subscribed_ = false;     ///< True if subscribed to notify_gcode_response
     bool fetch_in_flight_ = false;   ///< True while a gcode_store fetch is pending
-    bool user_scrolled_up_ = false; ///< True if user manually scrolled up
+    bool user_scrolled_up_ = false;  ///< True if user manually scrolled up
 
     // Filtering — engine + observers driven by SettingsManager subjects.
     // The engine is rebuilt on every on_activate() so user pattern edits take
@@ -156,12 +157,11 @@ class ConsolePanel : public OverlayBase {
     SubjectManager subjects_;
     char status_buf_[128] = {};
     lv_subject_t status_subject_{};
-    lv_subject_t status_visible_subject_{};  ///< 1 = status text visible, 0 = hidden
-    lv_subject_t has_entries_subject_{};     ///< 1 = has console entries, 0 = empty
+    lv_subject_t status_visible_subject_{}; ///< 1 = status text visible, 0 = hidden
+    lv_subject_t has_entries_subject_{};    ///< 1 = has console entries, 0 = empty
 
     // Callback registration tracking
     bool callbacks_registered_ = false;
-
 };
 
 /**

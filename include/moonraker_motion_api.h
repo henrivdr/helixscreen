@@ -22,6 +22,7 @@
 // Forward declarations
 namespace helix {
 class MoonrakerClient;
+class PrinterState;
 } // namespace helix
 
 /**
@@ -52,9 +53,12 @@ class MoonrakerMotionAPI {
      * @brief Constructor
      *
      * @param client MoonrakerClient instance (must remain valid during API lifetime)
+     * @param state PrinterState instance (must remain valid during API lifetime);
+     *              consulted by the homing guard to refuse G28 while printing
      * @param safety_limits Reference to safety limits (must remain valid during API lifetime)
      */
-    MoonrakerMotionAPI(helix::MoonrakerClient& client, const SafetyLimits& safety_limits);
+    MoonrakerMotionAPI(helix::MoonrakerClient& client, helix::PrinterState& state,
+                       const SafetyLimits& safety_limits);
     virtual ~MoonrakerMotionAPI() = default;
 
     // ========================================================================
@@ -96,6 +100,7 @@ class MoonrakerMotionAPI {
 
   protected:
     helix::MoonrakerClient& client_;
+    helix::PrinterState& state_;
     const SafetyLimits& safety_limits_;
 
     /**

@@ -17,9 +17,11 @@
 #include "system/crash_handler.h"
 #include "theme_manager.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <string>
 
 using namespace helix;
 
@@ -137,7 +139,8 @@ lv_obj_t* ModalStack::top_dialog() const {
 std::string ModalStack::top_component_name() const {
     // Walk from top, skipping exiting entries (matches top_dialog semantics).
     for (auto it = stack_.rbegin(); it != stack_.rend(); ++it) {
-        if (!it->exiting) return it->component_name;
+        if (!it->exiting)
+            return it->component_name;
     }
     return "";
 }
@@ -246,10 +249,12 @@ void ModalStack::animate_entrance(lv_obj_t* dialog) {
     lv_anim_set_duration(&backdrop_anim, MODAL_ENTRANCE_DURATION_MS);
     lv_anim_set_path_cb(&backdrop_anim, lv_anim_path_ease_out);
     lv_anim_set_exec_cb(&backdrop_anim, [](void* obj, int32_t value) {
-        auto* o = static_cast<lv_obj_t*>(obj);
-        if (!lv_obj_is_valid(o))
-            return;
-        lv_obj_set_style_opa(o, static_cast<lv_opa_t>(value), LV_PART_MAIN);
+        // No lv_obj_is_valid() guard: LVGL's lv_obj_destructor cancels an object's
+        // animations when it is freed (lv_obj.c), so this exec cb can never fire on
+        // a freed/recycled object. lv_obj_is_valid() here would be an O(n) recursive
+        // tree walk every frame and returns TRUE on recycled memory ([L076]).
+        lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value),
+                             LV_PART_MAIN);
     });
     lv_anim_start(&backdrop_anim);
 
@@ -261,10 +266,9 @@ void ModalStack::animate_entrance(lv_obj_t* dialog) {
     lv_anim_set_duration(&scale_anim, MODAL_ENTRANCE_DURATION_MS);
     lv_anim_set_path_cb(&scale_anim, lv_anim_path_overshoot);
     lv_anim_set_exec_cb(&scale_anim, [](void* obj, int32_t value) {
-        auto* o = static_cast<lv_obj_t*>(obj);
-        if (!lv_obj_is_valid(o))
-            return;
-        lv_obj_set_style_transform_scale(o, static_cast<int16_t>(value), LV_PART_MAIN);
+        // No lv_obj_is_valid() guard — see the opacity cbs above ([L076]).
+        lv_obj_set_style_transform_scale(static_cast<lv_obj_t*>(obj), static_cast<int16_t>(value),
+                                         LV_PART_MAIN);
     });
     lv_anim_start(&scale_anim);
 
@@ -276,10 +280,12 @@ void ModalStack::animate_entrance(lv_obj_t* dialog) {
     lv_anim_set_duration(&fade_anim, MODAL_ENTRANCE_DURATION_MS);
     lv_anim_set_path_cb(&fade_anim, lv_anim_path_ease_out);
     lv_anim_set_exec_cb(&fade_anim, [](void* obj, int32_t value) {
-        auto* o = static_cast<lv_obj_t*>(obj);
-        if (!lv_obj_is_valid(o))
-            return;
-        lv_obj_set_style_opa(o, static_cast<lv_opa_t>(value), LV_PART_MAIN);
+        // No lv_obj_is_valid() guard: LVGL's lv_obj_destructor cancels an object's
+        // animations when it is freed (lv_obj.c), so this exec cb can never fire on
+        // a freed/recycled object. lv_obj_is_valid() here would be an O(n) recursive
+        // tree walk every frame and returns TRUE on recycled memory ([L076]).
+        lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value),
+                             LV_PART_MAIN);
     });
     lv_anim_start(&fade_anim);
 
@@ -342,6 +348,16 @@ void ModalStack::animate_exit(lv_obj_t* backdrop, lv_obj_t* dialog) {
         return;
     }
 
+    // Deterministically cancel any in-flight ENTRANCE animations before starting the
+    // exit. Entrance and exit use distinct exec_cb lambdas, so LVGL's
+    // remove_concurrent_anims (matches var + exec_cb) does NOT replace them — a fast
+    // dismiss otherwise leaves entrance anims fighting the exit over opa/scale. The
+    // wildcard (nullptr) form deletes every anim whose var is this object. Combined
+    // with the wildcard cancel in exit_animation_done and lv_obj_destructor's own
+    // lv_anim_delete(obj, NULL), no exec cb can fire on a freed object.
+    lv_anim_delete(backdrop, nullptr);
+    lv_anim_delete(dialog, nullptr);
+
     // Skip animation if disabled
     if (!DisplaySettingsManager::instance().get_animations_enabled()) {
         lv_obj_set_style_transform_scale(dialog, MODAL_SCALE_END, LV_PART_MAIN);
@@ -366,10 +382,12 @@ void ModalStack::animate_exit(lv_obj_t* backdrop, lv_obj_t* dialog) {
     lv_anim_set_duration(&backdrop_anim, MODAL_EXIT_DURATION_MS);
     lv_anim_set_path_cb(&backdrop_anim, lv_anim_path_ease_in);
     lv_anim_set_exec_cb(&backdrop_anim, [](void* obj, int32_t value) {
-        auto* o = static_cast<lv_obj_t*>(obj);
-        if (!lv_obj_is_valid(o))
-            return;
-        lv_obj_set_style_opa(o, static_cast<lv_opa_t>(value), LV_PART_MAIN);
+        // No lv_obj_is_valid() guard: LVGL's lv_obj_destructor cancels an object's
+        // animations when it is freed (lv_obj.c), so this exec cb can never fire on
+        // a freed/recycled object. lv_obj_is_valid() here would be an O(n) recursive
+        // tree walk every frame and returns TRUE on recycled memory ([L076]).
+        lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value),
+                             LV_PART_MAIN);
     });
     lv_anim_set_completed_cb(&backdrop_anim, exit_animation_done);
     lv_anim_start(&backdrop_anim);
@@ -382,10 +400,9 @@ void ModalStack::animate_exit(lv_obj_t* backdrop, lv_obj_t* dialog) {
     lv_anim_set_duration(&scale_anim, MODAL_EXIT_DURATION_MS);
     lv_anim_set_path_cb(&scale_anim, lv_anim_path_ease_in);
     lv_anim_set_exec_cb(&scale_anim, [](void* obj, int32_t value) {
-        auto* o = static_cast<lv_obj_t*>(obj);
-        if (!lv_obj_is_valid(o))
-            return;
-        lv_obj_set_style_transform_scale(o, static_cast<int16_t>(value), LV_PART_MAIN);
+        // No lv_obj_is_valid() guard — see the opacity cbs above ([L076]).
+        lv_obj_set_style_transform_scale(static_cast<lv_obj_t*>(obj), static_cast<int16_t>(value),
+                                         LV_PART_MAIN);
     });
     lv_anim_start(&scale_anim);
 
@@ -397,10 +414,12 @@ void ModalStack::animate_exit(lv_obj_t* backdrop, lv_obj_t* dialog) {
     lv_anim_set_duration(&fade_anim, MODAL_EXIT_DURATION_MS);
     lv_anim_set_path_cb(&fade_anim, lv_anim_path_ease_in);
     lv_anim_set_exec_cb(&fade_anim, [](void* obj, int32_t value) {
-        auto* o = static_cast<lv_obj_t*>(obj);
-        if (!lv_obj_is_valid(o))
-            return;
-        lv_obj_set_style_opa(o, static_cast<lv_opa_t>(value), LV_PART_MAIN);
+        // No lv_obj_is_valid() guard: LVGL's lv_obj_destructor cancels an object's
+        // animations when it is freed (lv_obj.c), so this exec cb can never fire on
+        // a freed/recycled object. lv_obj_is_valid() here would be an O(n) recursive
+        // tree walk every frame and returns TRUE on recycled memory ([L076]).
+        lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value),
+                             LV_PART_MAIN);
     });
     lv_anim_start(&fade_anim);
 
@@ -643,7 +662,8 @@ bool Modal::any_visible() {
 bool Modal::rebuild_top() {
     auto& stack = ModalStack::instance();
     lv_obj_t* dialog = stack.top_dialog();
-    if (!dialog) return false;
+    if (!dialog)
+        return false;
 
     std::string name = stack.top_component_name();
     if (name.empty()) {
@@ -1141,4 +1161,24 @@ lv_obj_t* helix::ui::modal_show_alert(const char* title, const char* message,
 
     spdlog::debug("[Modal] Alert dialog shown: '{}'", title);
     return dialog;
+}
+
+lv_obj_t* helix::ui::show_low_ram_resonance_warning(size_t total_mb, lv_event_cb_t on_confirm,
+                                                    lv_event_cb_t on_cancel, void* user_data) {
+    std::string msg;
+    try {
+        msg = fmt::format(
+            lv_tr("This device has only {} MB of RAM. Resonance calibration is "
+                  "memory-intensive and can make the printer firmware report a "
+                  "\"Timer Too Close\" error or restart mid-test. Continue anyway?"),
+            total_mb);
+    } catch (const std::exception& e) {
+        // A mistranslated {} must never abort through the LVGL C dispatch frame.
+        spdlog::warn("[Modal] low-RAM warning format failed: {}", e.what());
+        msg = lv_tr("This device has very little RAM. Resonance calibration is "
+                    "memory-intensive and may cause a \"Timer Too Close\" error. "
+                    "Continue anyway?");
+    }
+    return modal_show_confirmation(lv_tr("Low Memory"), msg.c_str(), ModalSeverity::Warning,
+                                   lv_tr("Continue"), on_confirm, on_cancel, user_data);
 }

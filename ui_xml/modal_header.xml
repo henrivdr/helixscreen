@@ -1,19 +1,41 @@
 <?xml version="1.0"?>
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Reusable modal header component (icon + title) -->
-<!-- Usage: <modal_header icon_src="alert" icon_variant="danger" title="Factory Reset" title_tag="Factory Reset"/> -->
+<!-- Reusable modal header: optional leading icon + title + optional trailing close (X). -->
+<!-- Padding is responsive: compact at Micro, standard above. The flex_grow title -->
+<!-- right-aligns the close button, so no space_between is needed. -->
+<!-- Usage A (icon + title, no X):  <modal_header icon_src="alert" icon_variant="danger" title="Factory Reset" title_tag="Factory Reset"/> -->
+<!-- Usage B (title + X):           <modal_header title="Edit" title_tag="Edit" hide_icon="true" hide_close="false" close_callback="my_close_cb"/> -->
+<!-- Usage C (bound title + X):     <modal_header title_subject="my_title_subj" hide_icon="true" hide_close="false" close_callback="my_close_cb"/> -->
 <component>
   <api>
     <prop name="icon_src" type="string" default=""/>
     <prop name="icon_variant" type="string" default="accent"/>
+    <!-- Icon shown by default (existing icon+title consumers). Title-only modals pass hide_icon="true". -->
+    <prop name="hide_icon" type="string" default="false"/>
     <prop name="title" type="string" default=""/>
     <prop name="title_tag" type="string" default=""/>
+    <!-- No default: when omitted the bind_text attribute is dropped (no empty-subject warning). -->
+    <prop name="title_subject" type="string"/>
+    <prop name="hide_close" type="string" default="true"/>
+    <!-- Empty default resolves to the registered no-op callback (xml_registration.cpp) — no warning. -->
+    <prop name="close_callback" type="string" default=""/>
   </api>
+  <styles>
+    <style name="mh_pad_std" pad_left="#space_lg" pad_right="#space_md" pad_top="#space_lg" pad_bottom="#space_sm"/>
+    <style name="mh_pad_micro" pad_left="#space_md" pad_right="#space_sm" pad_top="#space_xs" pad_bottom="#space_xs"/>
+  </styles>
   <view extends="lv_obj"
-        width="100%" height="content" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="#space_lg"
-        style_pad_bottom="#space_sm" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_sm">
-    <icon name="header_icon" src="$icon_src" size="md" variant="$icon_variant"/>
-    <text_heading name="header_title" text="$title" translation_tag="$title_tag" style_text_align="left" flex_grow="1"/>
+        width="100%" height="content" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_sm"
+        scrollable="false">
+    <bind_style_if_eq name="mh_pad_micro" subject="ui_breakpoint" ref_value="0"/>
+    <bind_style_if_ge name="mh_pad_std" subject="ui_breakpoint" ref_value="1"/>
+    <icon name="header_icon" src="$icon_src" size="md" variant="$icon_variant" hidden="$hide_icon"/>
+    <text_heading name="header_title" text="$title" translation_tag="$title_tag" bind_text="$title_subject"
+                  style_text_align="left" flex_grow="1"/>
+    <ui_button name="btn_close" hidden="$hide_close"
+               width="#button_height_sm" height="#button_height_sm" icon="close" variant="ghost" focusable="false">
+      <event_cb trigger="clicked" callback="$close_callback"/>
+    </ui_button>
   </view>
 </component>

@@ -348,12 +348,10 @@ TEST_CASE("compute_defaults multi-tool no conflicts", "[filament_mapper][compute
 TEST_CASE("compute_defaults multi-tool with same color both map to best slot",
           "[filament_mapper][compute][multi]") {
     std::vector<GcodeToolInfo> tools = {
-        {0, 0xFF0000, "PLA"},
-        {1, 0xFF0000, "PLA"}, // same color
+        {0, 0xFF0000, "PLA"}, {1, 0xFF0000, "PLA"}, // same color
     };
     std::vector<AvailableSlot> slots = {
-        {0, 0, 0xFF0000, "PLA", false, -1},
-        {1, 0, 0xF00000, "PLA", false, -1}, // slightly off red
+        {0, 0, 0xFF0000, "PLA", false, -1}, {1, 0, 0xF00000, "PLA", false, -1}, // slightly off red
     };
 
     auto result = FilamentMapper::compute_defaults(tools, slots);
@@ -371,8 +369,7 @@ TEST_CASE("compute_defaults multi-tool same color with no close alternative",
         {1, 0xFF0000, "PLA"},
     };
     std::vector<AvailableSlot> slots = {
-        {0, 0, 0xFF0000, "PLA", false, -1},
-        {1, 0, 0x00FF00, "PLA", false, -1}, // green, too far
+        {0, 0, 0xFF0000, "PLA", false, -1}, {1, 0, 0x00FF00, "PLA", false, -1}, // green, too far
     };
 
     auto result = FilamentMapper::compute_defaults(tools, slots);
@@ -534,8 +531,7 @@ TEST_CASE("FilamentMapper use_current_assignments", "[filament_mapper][current_a
             {1, 0x00FF00, "PETG"},
         };
         std::vector<AvailableSlot> slots = {
-            {0, 0, 0xFF0000, "PLA", false, 0},
-            {1, 0, 0x000000, "", true, -1}, // empty slot
+            {0, 0, 0xFF0000, "PLA", false, 0}, {1, 0, 0x000000, "", true, -1}, // empty slot
         };
 
         auto mappings = FilamentMapper::use_current_assignments(tools, slots);

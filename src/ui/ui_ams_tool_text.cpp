@@ -41,8 +41,8 @@ void init_ams_tool_text_observers() {
     auto& ams = AmsState::instance();
 
     // Observer on raw ams_current_tool_ (int) → format "T%d" or "---"
-    s_tool_text_observer = observe_int_sync<AmsState>(
-        ams.get_current_tool_subject(), &ams, [](AmsState* a, int tool) {
+    s_tool_text_observer =
+        observe_int_sync<AmsState>(ams.get_current_tool_subject(), &ams, [](AmsState* a, int tool) {
             if (tool >= 0) {
                 char buf[16];
                 snprintf(buf, sizeof(buf), "T%d", tool);
@@ -53,13 +53,13 @@ void init_ams_tool_text_observers() {
         });
 
     // Two observers for toolchange text: one on total, one on current index
-    s_toolchange_total_observer = observe_int_sync<AmsState>(
-        ams.get_ams_number_of_toolchanges_subject(), &ams,
-        [](AmsState* a, int /*total*/) { update_toolchange_text(a); });
+    s_toolchange_total_observer =
+        observe_int_sync<AmsState>(ams.get_ams_number_of_toolchanges_subject(), &ams,
+                                   [](AmsState* a, int /*total*/) { update_toolchange_text(a); });
 
-    s_toolchange_current_observer = observe_int_sync<AmsState>(
-        ams.get_ams_current_toolchange_subject(), &ams,
-        [](AmsState* a, int /*current*/) { update_toolchange_text(a); });
+    s_toolchange_current_observer =
+        observe_int_sync<AmsState>(ams.get_ams_current_toolchange_subject(), &ams,
+                                   [](AmsState* a, int /*current*/) { update_toolchange_text(a); });
 
     // Observer on tools_version_ → update tool badge text and visibility
     auto& tools = ToolState::instance();

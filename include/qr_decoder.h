@@ -10,11 +10,11 @@ namespace helix {
 struct QrDecodeResult {
     bool success = false;
     std::string text;
-    int spool_id = -1;  // Parsed Spoolman spool ID, or -1
+    int spool_id = -1; // Parsed Spoolman spool ID, or -1
 };
 
 class QrDecoder {
-public:
+  public:
     QrDecoder();
     ~QrDecoder();
 
@@ -31,7 +31,7 @@ public:
     // Returns -1 if not a recognized Spoolman format.
     static int parse_spoolman_id(const std::string& text);
 
-private:
+  private:
     ::quirc* qr_ = nullptr;
 };
 

@@ -3,11 +3,12 @@
 
 #include "system_power.h"
 
+#include <spdlog/spdlog.h>
+
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <sys/wait.h>
-#include <spdlog/spdlog.h>
 
 #ifdef HELIX_HAS_SYSTEMD
 #include <systemd/sd-bus.h>
@@ -27,24 +28,17 @@ bool logind_call(const char* method) {
 
     sd_bus_error err = SD_BUS_ERROR_NULL;
     sd_bus_message* reply = nullptr;
-    const int r = sd_bus_call_method(bus,
-                                     "org.freedesktop.login1",
-                                     "/org/freedesktop/login1",
-                                     "org.freedesktop.login1.Manager",
-                                     method,
-                                     &err,
-                                     &reply,
-                                     "b",
+    const int r = sd_bus_call_method(bus, "org.freedesktop.login1", "/org/freedesktop/login1",
+                                     "org.freedesktop.login1.Manager", method, &err, &reply, "b",
                                      0 /* interactive=false */);
     const bool ok = r >= 0;
     if (!ok) {
-        spdlog::warn("[SystemPower] logind {} failed: {} ({})",
-                     method,
-                     err.message ? err.message : "no message",
-                     err.name ? err.name : "");
+        spdlog::warn("[SystemPower] logind {} failed: {} ({})", method,
+                     err.message ? err.message : "no message", err.name ? err.name : "");
     }
     sd_bus_error_free(&err);
-    if (reply) sd_bus_message_unref(reply);
+    if (reply)
+        sd_bus_message_unref(reply);
     sd_bus_unref(bus);
     return ok;
 }
@@ -72,18 +66,22 @@ bool busybox_fallback(const char* path) {
 bool SystemPower::reboot_local() {
     spdlog::info("[SystemPower] reboot_local");
 #ifdef HELIX_HAS_SYSTEMD
-    if (logind_call("Reboot")) return true;
+    if (logind_call("Reboot"))
+        return true;
 #endif
-    if (exec_fallback("systemctl reboot", "systemctl reboot")) return true;
+    if (exec_fallback("systemctl reboot", "systemctl reboot"))
+        return true;
     return busybox_fallback("/sbin/reboot");
 }
 
 bool SystemPower::shutdown_local() {
     spdlog::info("[SystemPower] shutdown_local");
 #ifdef HELIX_HAS_SYSTEMD
-    if (logind_call("PowerOff")) return true;
+    if (logind_call("PowerOff"))
+        return true;
 #endif
-    if (exec_fallback("systemctl poweroff", "systemctl poweroff")) return true;
+    if (exec_fallback("systemctl poweroff", "systemctl poweroff"))
+        return true;
     return busybox_fallback("/sbin/poweroff");
 }
 

@@ -16,8 +16,7 @@ namespace helix::ui {
 namespace {
 
 constexpr const char* kComponentScopeName = "helix_progress_arc";
-constexpr const char* kTierStyleNames[] = {"arc_w_4", "arc_w_6", "arc_w_8", "arc_w_10",
-                                           "arc_w_12"};
+constexpr const char* kTierStyleNames[] = {"arc_w_4", "arc_w_6", "arc_w_8", "arc_w_10", "arc_w_12"};
 constexpr int kTierCount = 5;
 
 struct AttachContext {

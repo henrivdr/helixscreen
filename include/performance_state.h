@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "async_lifetime_guard.h"
 #include "lvgl/lvgl.h"
 #include "performance_source.h"
 #include "subject_managed_panel.h"
-#include "ui_observer_guard.h"
 
 #include <array>
 #include <memory>
@@ -48,7 +49,9 @@ class PerformanceState {
     /// never-freed singleton: deinit_subjects()/init_subjects() destroy and
     /// recreate them on reconnect, printer switch, and between tests. Null until
     /// init_subjects() has run.
-    const SubjectLifetime& subjects_lifetime() const { return subjects_lifetime_; }
+    const SubjectLifetime& subjects_lifetime() const {
+        return subjects_lifetime_;
+    }
 
   private:
     friend class PerformanceStateTestAccess;

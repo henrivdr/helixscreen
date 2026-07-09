@@ -246,22 +246,25 @@
                   style_pad_gap="#space_md">
             <ui_button name="preset_pla" height="content" flex_grow="1" layout="column"
                        state_trickle="true" style_pad_ver="#space_sm" style_pad_gap="#temp_preset_btn_spacing">
-              <event_cb trigger="clicked" callback="on_filament_preset_pla"/>
-              <text_body text="PLA" style_text_color:checked="#text"/>
+              <event_cb trigger="short_clicked" callback="on_filament_preset_pla"/>
+              <event_cb trigger="long_pressed" callback="on_filament_preset_pla_hold"/>
+              <text_body bind_text="filament_preset_pla_name" style_text_color:checked="#text"/>
               <text_small bind_text="filament_preset_pla_temps" style_text_align="center"
                           style_text_color="#text_muted" style_text_color:checked="#text"/>
             </ui_button>
             <ui_button name="preset_petg" height="content" flex_grow="1" layout="column"
                        state_trickle="true" style_pad_ver="#space_sm" style_pad_gap="#temp_preset_btn_spacing">
-              <event_cb trigger="clicked" callback="on_filament_preset_petg"/>
-              <text_body text="PETG" style_text_color:checked="#text"/>
+              <event_cb trigger="short_clicked" callback="on_filament_preset_petg"/>
+              <event_cb trigger="long_pressed" callback="on_filament_preset_petg_hold"/>
+              <text_body bind_text="filament_preset_petg_name" style_text_color:checked="#text"/>
               <text_small bind_text="filament_preset_petg_temps" style_text_align="center"
                           style_text_color="#text_muted" style_text_color:checked="#text"/>
             </ui_button>
             <ui_button name="preset_abs" height="content" flex_grow="1" layout="column"
                        state_trickle="true" style_pad_ver="#space_sm" style_pad_gap="#temp_preset_btn_spacing">
-              <event_cb trigger="clicked" callback="on_filament_preset_abs"/>
-              <text_body text="ABS" style_text_color:checked="#text"/>
+              <event_cb trigger="short_clicked" callback="on_filament_preset_abs"/>
+              <event_cb trigger="long_pressed" callback="on_filament_preset_abs_hold"/>
+              <text_body bind_text="filament_preset_abs_name" style_text_color:checked="#text"/>
               <text_small bind_text="filament_preset_abs_temps" style_text_align="center"
                           style_text_color="#text_muted" style_text_color:checked="#text"/>
             </ui_button>
@@ -273,8 +276,9 @@
                   style_pad_gap="#space_md">
             <ui_button name="preset_tpu" height="content" flex_grow="1" layout="column"
                        state_trickle="true" style_pad_ver="#space_sm" style_pad_gap="#temp_preset_btn_spacing">
-              <event_cb trigger="clicked" callback="on_filament_preset_tpu"/>
-              <text_body text="TPU" style_text_color:checked="#text"/>
+              <event_cb trigger="short_clicked" callback="on_filament_preset_tpu"/>
+              <event_cb trigger="long_pressed" callback="on_filament_preset_tpu_hold"/>
+              <text_body bind_text="filament_preset_tpu_name" style_text_color:checked="#text"/>
               <text_small bind_text="filament_preset_tpu_temps" style_text_align="center"
                           style_text_color="#text_muted" style_text_color:checked="#text"/>
             </ui_button>

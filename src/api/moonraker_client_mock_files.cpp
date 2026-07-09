@@ -76,38 +76,31 @@ void mock_set_usb_symlink_active(bool active) {
                   active ? "active" : "inactive");
 }
 
-static json build_mock_file_list_response(const std::string& root,
-                                              const std::string& path = "") {
+static json build_mock_file_list_response(const std::string& root, const std::string& path = "") {
     json result_array = json::array();
 
     // Mock timelapse video files
     if (root == "timelapse" || path == "timelapse") {
         // Simulate a set of timelapse recordings with varied sizes and dates
-        result_array.push_back(
-            {{"path", "benchy_timelapse_20260310.mp4"},
-             {"size", 52428800},    // 50 MB
-             {"modified", 1773158400.0}}); // 2026-03-10
-        result_array.push_back(
-            {{"path", "vase_spiral_20260308.mp4"},
-             {"size", 128849018},   // ~123 MB
-             {"modified", 1772985600.0}}); // 2026-03-08
-        result_array.push_back(
-            {{"path", "calibration_cube_20260305.mp4"},
-             {"size", 15728640},    // 15 MB
-             {"modified", 1772730000.0}}); // 2026-03-05
-        result_array.push_back(
-            {{"path", "articulated_dragon_20260301.mp4"},
-             {"size", 314572800},   // 300 MB
-             {"modified", 1772384400.0}}); // 2026-03-01
-        result_array.push_back(
-            {{"path", "flexi_rex_20260225.mkv"},
-             {"size", 89128960},    // 85 MB
-             {"modified", 1772038800.0}}); // 2026-02-25
+        result_array.push_back({{"path", "benchy_timelapse_20260310.mp4"},
+                                {"size", 52428800},           // 50 MB
+                                {"modified", 1773158400.0}}); // 2026-03-10
+        result_array.push_back({{"path", "vase_spiral_20260308.mp4"},
+                                {"size", 128849018},          // ~123 MB
+                                {"modified", 1772985600.0}}); // 2026-03-08
+        result_array.push_back({{"path", "calibration_cube_20260305.mp4"},
+                                {"size", 15728640},           // 15 MB
+                                {"modified", 1772730000.0}}); // 2026-03-05
+        result_array.push_back({{"path", "articulated_dragon_20260301.mp4"},
+                                {"size", 314572800},          // 300 MB
+                                {"modified", 1772384400.0}}); // 2026-03-01
+        result_array.push_back({{"path", "flexi_rex_20260225.mkv"},
+                                {"size", 89128960},           // 85 MB
+                                {"modified", 1772038800.0}}); // 2026-02-25
         // Companion thumbnail (should be filtered out by is_video_file)
-        result_array.push_back(
-            {{"path", "benchy_timelapse_20260310.thumb.jpg"},
-             {"size", 24576},
-             {"modified", 1773158400.0}});
+        result_array.push_back({{"path", "benchy_timelapse_20260310.thumb.jpg"},
+                                {"size", 24576},
+                                {"modified", 1773158400.0}});
 
         json response = {{"result", result_array}};
         spdlog::debug("[MoonrakerClientMock] Returning {} mock timelapse files",
@@ -128,22 +121,18 @@ static json build_mock_file_list_response(const std::string& root,
 
     // Mock accelerometer CSV data files for belt tension / input shaper calibration
     if (root == "config" && path == "data_store") {
-        result_array.push_back(
-            {{"path", "raw_data_belt_path_a-20260310_120000.csv"},
-             {"size", 2048},
-             {"modified", 1773158400.0}});
-        result_array.push_back(
-            {{"path", "raw_data_belt_path_b-20260310_120001.csv"},
-             {"size", 2048},
-             {"modified", 1773158401.0}});
-        result_array.push_back(
-            {{"path", "raw_data_x-20260310_115000.csv"},
-             {"size", 4096},
-             {"modified", 1773154800.0}});
-        result_array.push_back(
-            {{"path", "raw_data_y-20260310_115001.csv"},
-             {"size", 4096},
-             {"modified", 1773154801.0}});
+        result_array.push_back({{"path", "raw_data_belt_path_a-20260310_120000.csv"},
+                                {"size", 2048},
+                                {"modified", 1773158400.0}});
+        result_array.push_back({{"path", "raw_data_belt_path_b-20260310_120001.csv"},
+                                {"size", 2048},
+                                {"modified", 1773158401.0}});
+        result_array.push_back({{"path", "raw_data_x-20260310_115000.csv"},
+                                {"size", 4096},
+                                {"modified", 1773154800.0}});
+        result_array.push_back({{"path", "raw_data_y-20260310_115001.csv"},
+                                {"size", 4096},
+                                {"modified", 1773154801.0}});
 
         json response = {{"result", result_array}};
         spdlog::debug("[MoonrakerClientMock] Returning {} mock data_store files",
@@ -275,7 +264,8 @@ namespace mock_internal {
 void register_file_handlers(std::unordered_map<std::string, MethodHandler>& registry) {
     // server.files.list - List files in a directory
     registry["server.files.list"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         (void)error_cb;
@@ -300,7 +290,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.get_directory - Get directory contents (same format as list)
     registry["server.files.get_directory"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         (void)error_cb;
@@ -317,15 +308,17 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
             path = params["path"].get<std::string>();
         }
         json response = build_mock_file_list_response(root, path);
-        spdlog::debug("[MoonrakerClientMock] Returning mock directory listing for root='{}' path='{}'",
-                      root, path.empty() ? "/" : path);
+        spdlog::debug(
+            "[MoonrakerClientMock] Returning mock directory listing for root='{}' path='{}'", root,
+            path.empty() ? "/" : path);
         success_cb(response);
         return true;
     };
 
     // server.files.metadata - Get file metadata
     registry["server.files.metadata"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string filename;
@@ -351,7 +344,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
     // server.files.metascan - Force metadata scan for a file
     // Same as metadata but forces re-parse (in mock, behaves identically)
     registry["server.files.metascan"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string filename;
@@ -376,7 +370,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.get_file - Download file content (used for accelerometer CSV data)
     registry["server.files.get_file"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         if (!success_cb) {
@@ -403,18 +398,17 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
         std::string csv_content;
         if (filename.find("raw_data_") != std::string::npos &&
             filename.find(".csv") != std::string::npos) {
-            csv_content =
-                "#time,accel_x,accel_y,accel_z\n"
-                "0.000000,0.1,0.2,9.8\n"
-                "0.001000,0.3,0.5,9.7\n"
-                "0.002000,-0.1,0.4,9.8\n"
-                "0.003000,0.2,-0.3,9.9\n"
-                "0.004000,0.5,0.1,9.7\n"
-                "0.005000,-0.2,0.6,9.8\n"
-                "0.006000,0.4,0.3,9.7\n"
-                "0.007000,0.1,-0.2,9.9\n"
-                "0.008000,-0.3,0.4,9.8\n"
-                "0.009000,0.2,0.5,9.7\n";
+            csv_content = "#time,accel_x,accel_y,accel_z\n"
+                          "0.000000,0.1,0.2,9.8\n"
+                          "0.001000,0.3,0.5,9.7\n"
+                          "0.002000,-0.1,0.4,9.8\n"
+                          "0.003000,0.2,-0.3,9.9\n"
+                          "0.004000,0.5,0.1,9.7\n"
+                          "0.005000,-0.2,0.6,9.8\n"
+                          "0.006000,0.4,0.3,9.7\n"
+                          "0.007000,0.1,-0.2,9.9\n"
+                          "0.008000,-0.3,0.4,9.8\n"
+                          "0.009000,0.2,0.5,9.7\n";
         } else {
             csv_content = "mock file content for: " + filename;
         }
@@ -427,7 +421,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.delete - Delete a file
     registry["server.files.delete"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string path;
@@ -452,7 +447,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.move - Move/rename a file
     registry["server.files.move"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string source, dest;
@@ -480,7 +476,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.copy - Copy a file
     registry["server.files.copy"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string source, dest;
@@ -508,7 +505,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.post_directory - Create a directory
     registry["server.files.post_directory"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string path;
@@ -533,7 +531,8 @@ void register_file_handlers(std::unordered_map<std::string, MethodHandler>& regi
 
     // server.files.delete_directory - Delete a directory
     registry["server.files.delete_directory"] =
-        [](MoonrakerClientMock* self, const json& params, std::function<void(const json&)> success_cb,
+        [](MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
            std::function<void(const MoonrakerError&)> error_cb) -> bool {
         (void)self;
         std::string path;

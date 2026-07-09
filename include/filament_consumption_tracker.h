@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "consumption_sink.h"
 #include "ui_observer_guard.h"
+
+#include "consumption_sink.h"
 
 #include <array>
 #include <cstddef>

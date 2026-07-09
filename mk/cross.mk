@@ -1131,7 +1131,7 @@ cc1-docker: ensure-docker
 	fi
 	@# Generate translations on the host FIRST (docker image lacks python/yaml).
 	@# Pass PLATFORM_TARGET=cc1 so cross.mk sets HELIX_LANG for the generator.
-	@$(MAKE) --no-print-directory PLATFORM_TARGET=cc1 src/generated/lv_i18n_translations.c
+	@$(MAKE) --no-print-directory PLATFORM_TARGET=cc1 $(TRANS_XML)
 	$(call ensure-ccache-dir,cc1)
 	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -v "$(PWD)":/src $(DOCKER_WORKTREE_MOUNT) -w /src $(call docker-ccache-args,cc1) helixscreen/toolchain-cc1 \
 		make PLATFORM_TARGET=cc1 SKIP_OPTIONAL_DEPS=1 -j$(NPROC_DOCKER_RUN)
@@ -1140,12 +1140,12 @@ cc1-docker: ensure-docker
 	@docker run --rm helixscreen/toolchain-cc1 cat /etc/ssl/certs/ca-certificates.crt > build/cc1/certs/ca-certificates.crt 2>/dev/null \
 		&& echo "$(GREEN)✓ CA certificates extracted$(RESET)" \
 		|| echo "$(YELLOW)⚠ Could not extract CA certificates (HTTPS may rely on device certs)$(RESET)"
-	@# Restore the full-language translation table so the committed file in
-	@# src/generated/ doesn't drift from git HEAD after a CC1 build. The stamp
-	@# file detects that HELIX_LANG is now empty and regenerates with all locales.
-	@$(MAKE) --no-print-directory src/generated/lv_i18n_translations.c >/dev/null 2>&1 \
-		&& echo "$(DIM)✓ Restored full translation table (repo clean)$(RESET)" \
-		|| echo "$(YELLOW)⚠ Could not restore full translation table — run 'make translations'$(RESET)"
+	@# Restore the full-language translation packs so the committed XML in
+	@# ui_xml/translations/ doesn't drift from git HEAD after a CC1 build. The
+	@# stamp file detects that HELIX_LANG is now empty and regenerates all locales.
+	@$(MAKE) --no-print-directory $(TRANS_XML) >/dev/null 2>&1 \
+		&& echo "$(DIM)✓ Restored full translation packs (repo clean)$(RESET)" \
+		|| echo "$(YELLOW)⚠ Could not restore full translation packs — run 'make translations'$(RESET)"
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
 mips-docker: ensure-docker
@@ -2436,6 +2436,14 @@ RELEASE_ASSETS_ALL := $(shell scripts/gen-packaging-manifest.sh 2>/dev/null | gr
 RELEASE_ASSETS_EXCLUDE := assets/test_gcodes assets/test_timelapse
 RELEASE_ASSETS := $(filter-out $(RELEASE_ASSETS_EXCLUDE),$(RELEASE_ASSETS_ALL))
 
+# Root-level asset FILES (directly under assets/, not in a subdirectory). The
+# RELEASE_ASSETS dir loop only copies directories, so any loose file must be
+# listed here explicitly. filaments.json is the unified filament catalog,
+# loaded on demand by FilamentCatalog (src/printer/filament_catalog.cpp).
+# (mdi-icon-metadata.json.gz is intentionally NOT shipped — dev-only
+# icon-search tooling, see release-clean-assets below.)
+RELEASE_ASSET_FILES := assets/filaments.json
+
 # Clean up release assets: remove files that are compiled into the binary or dev-only
 # .c font files are compiled into the binary at build time
 # .ttf/.otf source fonts are only used by font regen scripts, not at runtime (~35 MB savings)
@@ -2504,6 +2512,9 @@ release-pi: | build/pi/bin/helix-screen build/pi/bin/helix-splash build/pi-fbdev
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \
 		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/prerendered; \
@@ -2544,6 +2555,9 @@ release-pi32: | build/pi32/bin/helix-screen build/pi32/bin/helix-splash build/pi
 	@mkdir -p $(RELEASE_DIR)/helixscreen/assets
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \
@@ -2586,6 +2600,9 @@ release-ad5m: | build/ad5m/bin/helix-screen build/ad5m/bin/helix-splash
 	@mkdir -p $(RELEASE_DIR)/helixscreen/assets
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \
@@ -2634,6 +2651,9 @@ release-ad5x: | build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \
 		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/prerendered; \
@@ -2680,6 +2700,9 @@ release-cc1: | build/cc1/bin/helix-screen build/cc1/bin/helix-splash
 	@mkdir -p $(RELEASE_DIR)/helixscreen/assets
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \
@@ -2728,6 +2751,9 @@ release-k1: | build/mips/bin/helix-screen build/mips/bin/helix-splash
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \
 		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/prerendered; \
@@ -2772,6 +2798,9 @@ release-k1-dynamic: | build/k1-dynamic/bin/helix-screen build/k1-dynamic/bin/hel
 	@mkdir -p $(RELEASE_DIR)/helixscreen/assets
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
 	@if [ -d "build/assets/images/prerendered" ]; then \
 		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/prerendered; \
@@ -2822,6 +2851,9 @@ release-k2: | build/k2/bin/helix-screen build/k2/bin/helix-splash
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
 	@if [ -d "build/assets/images/prerendered" ]; then \
 		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/prerendered; \
 		cp -r build/assets/images/prerendered/* $(RELEASE_DIR)/helixscreen/assets/images/prerendered/; \
@@ -2863,6 +2895,9 @@ release-snapmaker-u1: | build/snapmaker-u1/bin/helix-screen
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
 	@if [ -f "build/snapmaker-u1/certs/ca-certificates.crt" ]; then \
 		mkdir -p $(RELEASE_DIR)/helixscreen/certs; \
 		cp build/snapmaker-u1/certs/ca-certificates.crt $(RELEASE_DIR)/helixscreen/certs/; \
@@ -2899,6 +2934,9 @@ release-x86: | build/x86/bin/helix-screen build/x86/bin/helix-splash build/x86-f
 	@mkdir -p $(RELEASE_DIR)/helixscreen/assets
 	@for asset in $(RELEASE_ASSETS); do \
 		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
+	done
+	@for f in $(RELEASE_ASSET_FILES); do \
+		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
 	done
 	@# Copy pre-rendered images from build directory (splash + printer images)
 	@if [ -d "build/assets/images/prerendered" ]; then \

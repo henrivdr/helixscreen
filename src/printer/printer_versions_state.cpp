@@ -15,7 +15,38 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cctype>
+
 namespace helix {
+
+namespace {
+
+// Some Moonraker forks (notably QIDI's on the Q2 / Max 4) report a literal "?"
+// placeholder for versions instead of omitting the field, and the discovery
+// parse layer substitutes "unknown" when a key is missing. Neither is meaningful
+// to show, so collapse them (and empty strings) to a translated "Unknown" label.
+std::string display_version(const std::string& version) {
+    std::string trimmed = version;
+    trimmed.erase(trimmed.begin(),
+                  std::find_if(trimmed.begin(), trimmed.end(),
+                               [](unsigned char c) { return !std::isspace(c); }));
+    trimmed.erase(std::find_if(trimmed.rbegin(), trimmed.rend(),
+                               [](unsigned char c) { return !std::isspace(c); })
+                      .base(),
+                  trimmed.end());
+
+    std::string lowered = trimmed;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    if (trimmed.empty() || trimmed == "?" || lowered == "unknown") {
+        return lv_tr("Unknown");
+    }
+    return trimmed;
+}
+
+} // namespace
 
 void PrinterVersionsState::init_subjects(bool register_xml) {
     if (subjects_initialized_) {
@@ -45,17 +76,17 @@ void PrinterVersionsState::deinit_subjects() {
 }
 
 void PrinterVersionsState::set_klipper_version_internal(const std::string& version) {
-    lv_subject_copy_string(&klipper_version_, version.c_str());
+    lv_subject_copy_string(&klipper_version_, display_version(version).c_str());
     spdlog::debug("[PrinterVersionsState] Klipper version set: {}", version);
 }
 
 void PrinterVersionsState::set_moonraker_version_internal(const std::string& version) {
-    lv_subject_copy_string(&moonraker_version_, version.c_str());
+    lv_subject_copy_string(&moonraker_version_, display_version(version).c_str());
     spdlog::debug("[PrinterVersionsState] Moonraker version set: {}", version);
 }
 
 void PrinterVersionsState::set_os_version_internal(const std::string& version) {
-    lv_subject_copy_string(&os_version_, version.c_str());
+    lv_subject_copy_string(&os_version_, display_version(version).c_str());
     spdlog::debug("[PrinterVersionsState] OS version set: {}", version);
 }
 

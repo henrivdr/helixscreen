@@ -8,6 +8,7 @@
 #include "ui_jog_pad.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_common.h"
+#include "ui_panel_controls.h"
 #include "ui_panel_singleton_macros.h"
 #include "ui_subject_registry.h"
 #include "ui_utils.h"
@@ -15,23 +16,21 @@
 #include "app_globals.h"
 #include "config.h"
 #include "format_utils.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "observer_factory.h"
 #include "printer_state.h"
-#include "ui_panel_controls.h"
 #include "subject_managed_panel.h"
 #include "theme_manager.h"
 #include "unit_conversions.h"
 
-#include "lvgl/src/others/translation/lv_translation.h"
-
 #include <spdlog/spdlog.h>
-
-#include "hv/json.hpp"
 
 #include <cmath>
 #include <cstring>
 #include <memory>
+
+#include "hv/json.hpp"
 
 using namespace helix;
 
@@ -422,13 +421,13 @@ void MotionPanel::register_position_observers() {
     // Watch for kinematics changes to update Z-axis label ("Bed" vs "Print Head")
     // Use observe_int_immediate — label/icon updates are safe to do immediately,
     // and observe_int_sync's deferred callback can be lost during panel recreation (#610)
-    bed_moves_observer_ =
-        helix::ui::observe_int_immediate<MotionPanel>(get_printer_state().get_printer_bed_moves_subject(), this,
-                                           [](MotionPanel* self, int bed_moves) {
-                                               if (!self->subjects_initialized_)
-                                                   return;
-                                               self->update_z_axis_label(bed_moves != 0);
-                                           });
+    bed_moves_observer_ = helix::ui::observe_int_immediate<MotionPanel>(
+        get_printer_state().get_printer_bed_moves_subject(), this,
+        [](MotionPanel* self, int bed_moves) {
+            if (!self->subjects_initialized_)
+                return;
+            self->update_z_axis_label(bed_moves != 0);
+        });
 
     // Observe homed_axes from PrinterState to update homing indicator subjects
     // Same pattern as ControlsPanel - parse "xyz" string into individual integer subjects

@@ -22,9 +22,9 @@
          Larger breakpoints keep the normal space_lg/sm generosity. -->
     <px name="ams_edit_header_pad_top_micro" value="4"/>
     <px name="ams_edit_header_pad_top_tiny" value="4"/>
-    <px name="ams_edit_header_pad_top_small" value="12"/>
-    <px name="ams_edit_header_pad_top_medium" value="16"/>
-    <px name="ams_edit_header_pad_top_large" value="20"/>
+    <px name="ams_edit_header_pad_top_small" value="8"/>
+    <px name="ams_edit_header_pad_top_medium" value="8"/>
+    <px name="ams_edit_header_pad_top_large" value="12"/>
     <px name="ams_edit_header_pad_bot_micro" value="2"/>
     <px name="ams_edit_header_pad_bot_tiny" value="2"/>
     <px name="ams_edit_header_pad_bot_small" value="6"/>
@@ -38,6 +38,16 @@
     <px name="ams_edit_close_btn_size_small" value="40"/>
     <px name="ams_edit_close_btn_size_medium" value="40"/>
     <px name="ams_edit_close_btn_size_large" value="40"/>
+    <!-- Spool-picker list max height: caps the scroll viewport so the modal
+         stays short enough to keep the Cancel/Save row on screen. Tuned to show
+         ~5 rows at each breakpoint. -->
+    <px name="spool_list_max_height_micro" value="130"/>
+    <px name="spool_list_max_height_tiny" value="150"/>
+    <px name="spool_list_max_height_small" value="180"/>
+    <px name="spool_list_max_height_medium" value="250"/>
+    <px name="spool_list_max_height_large" value="330"/>
+    <px name="spool_list_max_height_xlarge" value="420"/>
+    <px name="spool_list_max_height_xxlarge" value="520"/>
   </consts>
   <!-- Dialog card - wider for horizontal layout, capped at 80% screen height -->
   <view name="ams_edit_modal"
@@ -45,11 +55,11 @@
         style_flex_main_place="start" style_pad_gap="0">
     <!-- Header with title and close button -->
     <lv_obj width="100%"
-            height="content" style_pad_left="#space_lg" style_pad_right="#space_md" style_pad_top="#ams_edit_header_pad_top"
+            height="content" style_pad_left="#space_md" style_pad_right="#space_md" style_pad_top="#ams_edit_header_pad_top"
             style_pad_bottom="#ams_edit_header_pad_bot" flex_flow="row" style_flex_main_place="space_between"
             style_flex_cross_place="center" scrollable="false">
       <lv_obj name="btn_picker_back" height="100%"
-              style_pad_all="0" style_pad_left="#space_sm" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs"
+              style_pad_all="0" flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_xs"
               scrollable="false" clickable="false">
         <!-- Back region: icon + title act as one large touch target in picker view -->
         <bind_flag_if_eq subject="edit_modal_view" flag="clickable" ref_value="1"/>
@@ -231,7 +241,7 @@
         <ui_split_button name="btn_spool_actions"
                          height="#button_height" variant="secondary"
                          icon="qrcode_scan" text="Scan QR Code"
-                         options="Scan QR Code&#10;Spool Details&#10;Unlink" show_selection="false"
+                         options="Scan QR Code&#10;Spool Details&#10;Unlink" options_tag="Scan QR Code&#10;Spool Details&#10;Unlink" show_selection="false"
                          hidden="true">
           <event_cb trigger="clicked" callback="ams_edit_spool_actions_clicked_cb"/>
           <event_cb trigger="value_changed" callback="ams_edit_spool_actions_changed_cb"/>
@@ -243,7 +253,7 @@
     <!-- PICKER VIEW: Spoolman spool selection (edit_modal_view=1)    -->
     <!-- ============================================================ -->
     <lv_obj name="picker_view"
-            width="100%" height="70%" flex_flow="column" style_pad_all="#space_md" style_pad_gap="#space_sm"
+            width="100%" height="content" flex_flow="column" style_pad_all="#space_md" style_pad_gap="#space_sm"
             scrollable="false" hidden="true">
       <bind_flag_if_not_eq subject="edit_modal_view" flag="hidden" ref_value="1"/>
 
@@ -272,9 +282,12 @@
                      clickable="false" event_bubble="true"/>
       </lv_obj>
 
-      <!-- Spool list (populated dynamically by C++) -->
+      <!-- Spool list (populated dynamically by C++). Content-sized with a
+           responsive max-height cap so the modal stays short enough to keep the
+           Cancel/Save row on screen; the list scrolls past the cap. -->
       <lv_obj name="picker_spool_list"
-              width="100%" flex_grow="1" style_pad_all="#space_xxs" style_radius="#border_radius"
+              width="100%" height="content" style_max_height="#spool_list_max_height"
+              style_pad_all="#space_xxs" style_radius="#border_radius"
               style_pad_gap="#space_xxs" flex_flow="column" style_flex_main_place="start" style_flex_cross_place="start"
               style_bg_color="#card_bg" style_bg_opa="255" scrollable="true" hidden="true">
         <bind_flag_if_not_eq subject="edit_picker_state" flag="hidden" ref_value="2"/>

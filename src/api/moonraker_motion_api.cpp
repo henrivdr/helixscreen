@@ -6,8 +6,10 @@
 #include "ui_error_reporting.h"
 #include "ui_notification.h"
 
+#include "gcode_homing.h"
 #include "moonraker_client.h"
 #include "moonraker_types.h"
+#include "printer_state.h"
 #include "spdlog/spdlog.h"
 
 #include <algorithm>
@@ -92,9 +94,9 @@ std::string annotate_gcode(const std::string& gcode) {
 // MoonrakerMotionAPI Implementation
 // ============================================================================
 
-MoonrakerMotionAPI::MoonrakerMotionAPI(helix::MoonrakerClient& client,
+MoonrakerMotionAPI::MoonrakerMotionAPI(helix::MoonrakerClient& client, helix::PrinterState& state,
                                        const SafetyLimits& safety_limits)
-    : client_(client), safety_limits_(safety_limits) {}
+    : client_(client), state_(state), safety_limits_(safety_limits) {}
 
 // ============================================================================
 // Motion Control Operations
@@ -303,6 +305,33 @@ std::string MoonrakerMotionAPI::generate_absolute_move_gcode(char axis, double p
 
 void MoonrakerMotionAPI::execute_gcode(const std::string& gcode, SuccessCallback on_success,
                                        ErrorCallback on_error, uint32_t timeout_ms) {
+    // silent=true when caller provides on_error: caller handles error display,
+    // so suppress the global RPC_ERROR toast from request tracker.
+    bool silent = (on_error != nullptr);
+
+    // Refuse app-initiated homing while a print is active. The Home buttons and
+    // calibration/mesh auto-homes route through here; a mid-print G28 drives the
+    // nozzle into the part on loadcell-Z printers (see MoonrakerAPI::execute_gcode
+    // for the full collision rationale). "Active" = PRINTING or PAUSED.
+    if (helix::is_homing_gcode(gcode)) {
+        const helix::PrintJobState pstate = state_.get_print_job_state();
+        if (pstate == helix::PrintJobState::PRINTING || pstate == helix::PrintJobState::PAUSED) {
+            if (!silent) {
+                spdlog::warn("[Motion API] Refusing homing G-code during active print "
+                             "(state={}): '{}'",
+                             static_cast<int>(pstate), gcode.substr(0, 60));
+            }
+            if (on_error) {
+                MoonrakerError err;
+                err.type = MoonrakerErrorType::NOT_READY;
+                err.method = "printer.gcode.script";
+                err.message = "Homing is disabled while a print is in progress";
+                on_error(err);
+            }
+            return;
+        }
+    }
+
     std::string annotated = annotate_gcode(gcode);
     json params = {{"script", annotated}};
 
@@ -313,9 +342,6 @@ void MoonrakerMotionAPI::execute_gcode(const std::string& gcode, SuccessCallback
     if (on_success) {
         success_wrapper = [on_success](json) { on_success(); };
     }
-    // silent=true when caller provides on_error: caller handles error display,
-    // so suppress the global RPC_ERROR toast from request tracker
-    bool silent = (on_error != nullptr);
     client_.send_jsonrpc("printer.gcode.script", params, std::move(success_wrapper), on_error,
                          timeout_ms, silent);
 }

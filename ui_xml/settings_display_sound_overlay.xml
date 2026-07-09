@@ -6,9 +6,10 @@
 <!-- Uses setting_* components for consistency with main settings panel -->
 <component>
   <styles>
-    <style name="content_standard" pad_top="0" pad_left="#space_lg" pad_right="#space_lg"
+    <!-- Cards own the horizontal inset (setting_group side margins); content has none. -->
+    <style name="content_standard" pad_top="0" pad_left="0" pad_right="0"
            pad_bottom="#space_lg"/>
-    <style name="content_micro" pad_top="0" pad_left="#space_md" pad_right="#space_md"
+    <style name="content_micro" pad_top="0" pad_left="0" pad_right="0"
            pad_bottom="#space_sm"/>
     <style name="brightness_standard" pad_left="#space_lg" pad_right="#space_lg"
            pad_top="#space_md" pad_bottom="#space_md" pad_gap="#space_xs"/>
@@ -27,7 +28,8 @@
       <!-- ================================================================== -->
       <!-- APPEARANCE SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="APPEARANCE" title_tag="APPEARANCE" icon="light"/>
+      <setting_group>
+        <setting_group_header title="APPEARANCE" title_tag="APPEARANCE" icon="light" hide_icon="false"/>
       <!-- Language Dropdown -->
       <setting_dropdown_row name="row_language"
                             label="Language" label_tag="Language" icon="translate" description="Choose display language"
@@ -75,16 +77,25 @@
                           description_tag="Show text labels on icon-only home screen widgets"
                           subject="show_widget_labels"
                           callback="on_widget_labels_changed"/>
+      <!-- Page-scroll buttons: reserved-gutter chevrons for touch-drag-poor screens -->
+      <setting_toggle_row name="row_page_scroll_buttons"
+                          label="Scroll Buttons" label_tag="Scroll Buttons" icon="swap_vertical"
+                          description="Show up/down buttons on long lists"
+                          description_tag="Show up/down buttons on long lists"
+                          subject="settings_page_scroll_buttons"
+                          callback="on_page_scroll_buttons_changed"/>
       <!-- Bed Mesh Render Mode -->
       <setting_dropdown_row name="row_bed_mesh_mode"
                             label="Bed Mesh Render" label_tag="Bed Mesh Render" icon="grid_large"
                             description="Choose rendering mode for bed mesh visualization"
                             description_tag="Choose rendering mode for bed mesh visualization"
                             options="Auto&#10;3D View&#10;2D Heatmap" options_tag="Auto&#10;3D View&#10;2D Heatmap" callback="on_bed_mesh_mode_changed"/>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- DISPLAY SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="DISPLAY" title_tag="DISPLAY" icon="light"/>
+      <setting_group>
+        <setting_group_header title="DISPLAY" title_tag="DISPLAY" icon="light" hide_icon="false"/>
       <!-- Dark Mode Toggle -->
       <setting_toggle_row name="row_dark_mode"
                           label="Dark Mode" label_tag="Dark Mode" icon="light_off"
@@ -177,10 +188,13 @@
       <info_note icon="info"
                  text="Touch screen to wake from sleep" translation_tag="Touch screen to wake from sleep"
                  style_pad_left="#space_lg" style_pad_right="#space_lg"/>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- SOUND SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="SOUND" title_tag="SOUND" icon="notifications"/>
+      <setting_group>
+        <bind_flag_if_eq subject="printer_has_speaker" flag="hidden" ref_value="0"/>
+        <setting_group_header title="SOUND" title_tag="SOUND" icon="notifications" hide_icon="false"/>
       <!-- Master Sounds Toggle -->
       <lv_obj name="container_sounds" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="printer_has_speaker" flag="hidden" ref_value="0"/>
@@ -236,6 +250,7 @@
                             label="Test Tracker" label_tag="Test Tracker" icon="tune" description="Play / stop Crockett's Theme"
                             description_tag="Play / stop Crockett's Theme" callback="on_test_tracker"/>
       </lv_obj>
+      </setting_group>
       <!-- Bottom padding for scroll -->
       <lv_obj width="100%" scrollable="false">
         <bind_style_if_eq name="spacer_micro" subject="ui_breakpoint" ref_value="0"/>

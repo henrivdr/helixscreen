@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../lvgl_test_fixture.h"
-#include "src/ui/panel_widgets/print_status_widget.h"
-
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -70,9 +69,11 @@ class PrintStatusIdleThumbFixture : public LVGLTestFixture {
     /// Get the image source string from the idle thumbnail widget
     std::string get_idle_thumb_src(lv_obj_t* container) {
         auto* thumb = lv_obj_find_by_name(container, "print_card_thumb");
-        if (!thumb) return "";
+        if (!thumb)
+            return "";
         auto* src = lv_image_get_src(thumb);
-        if (!src) return "";
+        if (!src)
+            return "";
         return reinterpret_cast<const char*>(src);
     }
 

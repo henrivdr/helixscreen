@@ -19,7 +19,7 @@ namespace {
 
 constexpr const char* kNotifyHandlerName = "gcode_narration_router";
 
-}  // namespace
+} // namespace
 
 GcodeNarrationRouter::GcodeNarrationRouter(MoonrakerAPI* api, MoonrakerClient* client)
     : api_(api), client_(client) {
@@ -54,21 +54,26 @@ void GcodeNarrationRouter::process_line(const std::string& line) {
     // Trim leading whitespace, then require the `//` narration prefix. Errors
     // (`!!` / `Error:`), `ok`, and status lines are ignored outright.
     size_t start = line.find_first_not_of(" \t");
-    if (start == std::string::npos) return;
-    if (line.compare(start, 2, "//") != 0) return;
+    if (start == std::string::npos)
+        return;
+    if (line.compare(start, 2, "//") != 0)
+        return;
 
     // Strip the `//` prefix and any following whitespace.
     size_t body_start = line.find_first_not_of(" \t", start + 2);
-    if (body_start == std::string::npos) return;
+    if (body_start == std::string::npos)
+        return;
     std::string body = line.substr(body_start);
 
     // Runs on the main thread (the ctor's lifetime_.bg_cb wrapper defers the
     // notify body to main), so these synchronous AmsState accesses are safe.
     auto* backend = AmsState::instance().get_backend();
-    if (!backend) return;
+    if (!backend)
+        return;
 
     auto id = backend->match_narration_phase(body);
-    if (!id) return;
+    if (!id)
+        return;
 
     const auto op = AmsState::instance().get_active_step_operation();
     const auto tmpl = backend->toolchange_phase_template(op);
@@ -104,4 +109,4 @@ void GcodeNarrationRouter::on_notify_gcode_response(const nlohmann::json& msg) {
     }
 }
 
-}  // namespace helix
+} // namespace helix

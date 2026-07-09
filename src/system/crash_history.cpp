@@ -90,10 +90,9 @@ bool CrashHistory::has_fingerprint(const std::string& fingerprint) const {
         return false;
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    return std::any_of(entries_.begin(), entries_.end(),
-                       [&fingerprint](const CrashHistoryEntry& e) {
-                           return e.fingerprint == fingerprint;
-                       });
+    return std::any_of(
+        entries_.begin(), entries_.end(),
+        [&fingerprint](const CrashHistoryEntry& e) { return e.fingerprint == fingerprint; });
 }
 
 json CrashHistory::to_json() const {

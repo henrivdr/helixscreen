@@ -165,8 +165,7 @@ void SpoolmanListView::create_spacers() {
 // Row Configuration
 // ============================================================================
 
-void SpoolmanListView::configure_row(RowWidgets& rw, const SpoolInfo& spool,
-                                     int active_spool_id) {
+void SpoolmanListView::configure_row(RowWidgets& rw, const SpoolInfo& spool, int active_spool_id) {
     if (!rw.root) {
         return;
     }
@@ -199,7 +198,7 @@ void SpoolmanListView::configure_row(RowWidgets& rw, const SpoolInfo& spool,
 
     // Update vendor (with location if available)
     if (rw.vendor_label) {
-        std::string vendor_text = spool.vendor.empty() ? "Unknown" : spool.vendor;
+        std::string vendor_text = spool.vendor.empty() ? lv_tr("Unknown") : spool.vendor;
         if (!spool.location.empty()) {
             vendor_text += " \xC2\xB7 " + spool.location; // middle dot: U+00B7
         }
@@ -247,8 +246,8 @@ void SpoolmanListView::populate(const std::vector<SpoolInfo>& spools, int active
         return;
     }
 
-    spdlog::debug("[SpoolmanListView] Populating with {} spools (preserve_scroll={})", spools.size(),
-                  preserve_scroll);
+    spdlog::debug("[SpoolmanListView] Populating with {} spools (preserve_scroll={})",
+                  spools.size(), preserve_scroll);
 
     // Initialize pool on first call
     if (pool_.empty()) {

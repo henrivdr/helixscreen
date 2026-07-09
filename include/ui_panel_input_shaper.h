@@ -186,6 +186,7 @@ class InputShaperPanel : public OverlayBase {
 
     // Pre-flight noise check + calibration chain
     void start_with_preflight(char axis);
+    void proceed_with_preflight(char axis);
     void calibrate_all();
     void on_preflight_complete(float noise_level);
     void on_preflight_error(const std::string& message);
@@ -295,6 +296,10 @@ class InputShaperPanel : public OverlayBase {
     char is_result_y_max_accel_buf_[32] = {};
     lv_subject_t is_result_y_max_accel_{};
     lv_subject_t is_result_y_quality_{};
+
+    // Low-RAM warning modal before resonance calibration (see memory_utils.h)
+    lv_obj_t* low_ram_warn_dialog_ = nullptr;
+    char pending_calib_axis_ = 'X';
 
     // Calibrate All flow tracking
     bool calibrate_all_mode_ = false; ///< True when doing X+Y sequential calibration

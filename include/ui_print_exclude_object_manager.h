@@ -19,9 +19,10 @@
  * @see docs/devel/EXCLUDE_OBJECTS.md for feature design
  */
 
-#include "async_lifetime_guard.h"
 #include "ui_exclude_object_modal.h"
 #include "ui_observer_guard.h"
+
+#include "async_lifetime_guard.h"
 
 #include <lvgl.h>
 #include <string>

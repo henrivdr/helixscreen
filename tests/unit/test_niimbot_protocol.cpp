@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "niimbot_protocol.h"
 
 #include <cstring>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 using namespace helix::label;
@@ -20,9 +20,9 @@ TEST_CASE("niimbot_build_packet - basic structure", "[niimbot][protocol]") {
     REQUIRE(pkt.size() == 8);
     REQUIRE(pkt[0] == 0x55);
     REQUIRE(pkt[1] == 0x55);
-    REQUIRE(pkt[2] == 0xDC);  // Heartbeat
-    REQUIRE(pkt[3] == 0x01);  // length
-    REQUIRE(pkt[4] == 0x01);  // data
+    REQUIRE(pkt[2] == 0xDC); // Heartbeat
+    REQUIRE(pkt[3] == 0x01); // length
+    REQUIRE(pkt[4] == 0x01); // data
     // checksum = 0xDC ^ 0x01 ^ 0x01 = 0xDC
     REQUIRE(pkt[5] == 0xDC);
     REQUIRE(pkt[6] == 0xAA);
@@ -31,7 +31,7 @@ TEST_CASE("niimbot_build_packet - basic structure", "[niimbot][protocol]") {
 
 TEST_CASE("niimbot_build_packet - tail is two bytes", "[niimbot][protocol]") {
     auto pkt = niimbot_build_packet(NiimbotCmd::PrintEnd, uint8_t(0x01));
-    REQUIRE(pkt.size() == 8);  // 2 header + 1 cmd + 1 len + 1 data + 1 checksum + 2 tail
+    REQUIRE(pkt.size() == 8); // 2 header + 1 cmd + 1 len + 1 data + 1 checksum + 2 tail
     REQUIRE(pkt[pkt.size() - 2] == 0xAA);
     REQUIRE(pkt[pkt.size() - 1] == 0xAA);
 }
@@ -40,26 +40,26 @@ TEST_CASE("niimbot_build_packet - checksum is XOR of cmd, len, data", "[niimbot]
     // SetDensity(3): cmd=0x21, len=0x01, data=0x03
     // checksum = 0x21 ^ 0x01 ^ 0x03 = 0x23
     auto pkt = niimbot_build_packet(NiimbotCmd::SetDensity, uint8_t(0x03));
-    REQUIRE(pkt[2] == 0x21);  // cmd
-    REQUIRE(pkt[3] == 0x01);  // len
-    REQUIRE(pkt[4] == 0x03);  // data
-    REQUIRE(pkt[5] == 0x23);  // checksum
+    REQUIRE(pkt[2] == 0x21); // cmd
+    REQUIRE(pkt[3] == 0x01); // len
+    REQUIRE(pkt[4] == 0x03); // data
+    REQUIRE(pkt[5] == 0x23); // checksum
 }
 
 TEST_CASE("niimbot_build_packet - empty data", "[niimbot][protocol]") {
     auto pkt = niimbot_build_packet(NiimbotCmd::PageStart, nullptr, 0);
-    REQUIRE(pkt.size() == 7);  // header(2) + cmd(1) + len(1) + checksum(1) + tail(2)
+    REQUIRE(pkt.size() == 7); // header(2) + cmd(1) + len(1) + checksum(1) + tail(2)
     REQUIRE(pkt[3] == 0x00);  // length = 0
     // checksum = cmd ^ 0 = cmd
     REQUIRE(pkt[4] == static_cast<uint8_t>(NiimbotCmd::PageStart));
 }
 
 TEST_CASE("niimbot_build_packet - multi-byte data", "[niimbot][protocol]") {
-    uint8_t data[] = {0x00, 0x64, 0x01, 0x80};  // page size: height=100, width=384
+    uint8_t data[] = {0x00, 0x64, 0x01, 0x80}; // page size: height=100, width=384
     auto pkt = niimbot_build_packet(NiimbotCmd::SetPageSize, data, 4);
-    REQUIRE(pkt.size() == 11);  // 2+1+1+4+1+2
-    REQUIRE(pkt[2] == 0x13);  // SetPageSize
-    REQUIRE(pkt[3] == 0x04);  // length
+    REQUIRE(pkt.size() == 11); // 2+1+1+4+1+2
+    REQUIRE(pkt[2] == 0x13);   // SetPageSize
+    REQUIRE(pkt[3] == 0x04);   // length
 }
 
 // ============================================================================
@@ -125,10 +125,10 @@ TEST_CASE("niimbot_build_print_job - blank rows use PrintEmptyRow", "[niimbot][p
         if (pkt[2] == static_cast<uint8_t>(NiimbotCmd::PrintEmptyRow)) {
             found_empty = true;
             // Payload: 3 bytes [row_hi=0x00, row_lo=0x00, count=10]
-            REQUIRE(pkt[3] == 0x03);  // length = 3
-            REQUIRE(pkt[4] == 0x00);  // row high byte
-            REQUIRE(pkt[5] == 0x00);  // row low byte (starting at row 0)
-            REQUIRE(pkt[6] == 0x0A);  // repeat count = 10
+            REQUIRE(pkt[3] == 0x03); // length = 3
+            REQUIRE(pkt[4] == 0x00); // row high byte
+            REQUIRE(pkt[5] == 0x00); // row low byte (starting at row 0)
+            REQUIRE(pkt[6] == 0x0A); // repeat count = 10
         }
     }
     REQUIRE(found_empty);
@@ -153,6 +153,6 @@ TEST_CASE("niimbot_d11_sizes - returns valid sizes", "[niimbot][protocol]") {
     REQUIRE(!sizes.empty());
     for (const auto& s : sizes) {
         REQUIRE(s.dpi == 203);
-        REQUIRE(s.width_px == 96);  // D11 printhead
+        REQUIRE(s.width_px == 96); // D11 printhead
     }
 }

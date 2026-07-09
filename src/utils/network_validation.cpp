@@ -190,3 +190,10 @@ bool is_valid_port(const std::string& port_str_raw) {
         return false;
     }
 }
+
+std::string resolve_moonraker_host_default(const std::string& stored_host, bool is_android) {
+    if (!trim(stored_host).empty()) {
+        return stored_host;
+    }
+    return is_android ? std::string() : std::string("127.0.0.1");
+}

@@ -3,16 +3,16 @@
 
 #include "upgrade_banner.h"
 
-#include "app_globals.h"
-#include "observer_factory.h"
-#include "printer_state.h"
-#include "system/update_checker.h"
 #include "ui_nav_manager.h"
-#include "upgrade_nudge.h"
 
+#include "app_globals.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "observer_factory.h"
+#include "printer_state.h"
+#include "system/update_checker.h"
+#include "upgrade_nudge.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -51,13 +51,13 @@ void UpgradeBanner::init() {
 
     // Register XML event callbacks exactly once. lv_xml_register_event_cb
     // tolerates double-registration but we guard for clarity.
-    lv_xml_register_event_cb(nullptr, "on_upgrade_banner_update", &UpgradeBanner::on_update_clicked);
+    lv_xml_register_event_cb(nullptr, "on_upgrade_banner_update",
+                             &UpgradeBanner::on_update_clicked);
     lv_xml_register_event_cb(nullptr, "on_upgrade_banner_dismiss",
                              &UpgradeBanner::on_dismiss_clicked);
 
     // Create the banner as a child of lv_layer_top so it floats above panels.
-    banner_ = static_cast<lv_obj_t*>(
-        lv_xml_create(lv_layer_top(), "upgrade_banner", nullptr));
+    banner_ = static_cast<lv_obj_t*>(lv_xml_create(lv_layer_top(), "upgrade_banner", nullptr));
     if (!banner_) {
         spdlog::error("[UpgradeBanner] Failed to instantiate upgrade_banner XML component");
         return;
@@ -72,23 +72,23 @@ void UpgradeBanner::init() {
     // a new version is detected. lifetime token keeps deferred callbacks
     // safe if init() is somehow called late (shouldn't happen, but defensive).
     auto tok = lifetime_.token();
-    status_observer_ = helix::ui::observe_int_sync<UpgradeBanner>(
-        UpdateChecker::instance().status_subject(), this,
-        [tok](UpgradeBanner* self, int /*status*/) {
-            if (tok.expired())
-                return;
-            self->refresh();
-        });
+    status_observer_ =
+        helix::ui::observe_int_sync<UpgradeBanner>(UpdateChecker::instance().status_subject(), this,
+                                                   [tok](UpgradeBanner* self, int /*status*/) {
+                                                       if (tok.expired())
+                                                           return;
+                                                       self->refresh();
+                                                   });
 
     // Also re-render when the available version string changes — the text
     // shown in the banner comes from UpdateChecker::get_cached_update().
-    version_observer_ = helix::ui::observe_string(
-        UpdateChecker::instance().new_version_subject(), this,
-        [tok](UpgradeBanner* self, const char* /*version*/) {
-            if (tok.expired())
-                return;
-            self->refresh();
-        });
+    version_observer_ =
+        helix::ui::observe_string(UpdateChecker::instance().new_version_subject(), this,
+                                  [tok](UpgradeBanner* self, const char* /*version*/) {
+                                      if (tok.expired())
+                                          return;
+                                      self->refresh();
+                                  });
 
     refresh();
     spdlog::info("[UpgradeBanner] Initialized (hidden)");

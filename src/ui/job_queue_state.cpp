@@ -112,8 +112,7 @@ void JobQueueState::on_queue_fetched(const JobQueueStatus& status) {
     queue_state_ = status.queue_state;
     is_loaded_ = true;
     update_subjects();
-    spdlog::debug("[JobQueueState] Updated: state={}, jobs={}", queue_state_,
-                  cached_jobs_.size());
+    spdlog::debug("[JobQueueState] Updated: state={}, jobs={}", queue_state_, cached_jobs_.size());
 }
 
 void JobQueueState::update_subjects() {
@@ -149,8 +148,7 @@ void JobQueueState::subscribe_to_notifications() {
 
     auto token = lifetime_.token();
     client_->register_method_callback(
-        "notify_job_queue_changed", "JobQueueState",
-        [this, token](const nlohmann::json& /*data*/) {
+        "notify_job_queue_changed", "JobQueueState", [this, token](const nlohmann::json& /*data*/) {
             token.defer("JobQueueState::notify_changed", [this]() { fetch(); });
         });
 

@@ -842,7 +842,8 @@ TEST_CASE("Mock print thermal phase behavior", "[print][thermal][slow]") {
 // Status Notification Tests [print][notifications]
 // ============================================================================
 
-TEST_CASE("Mock print status notifications match Moonraker format", "[print][notifications][slow]") {
+TEST_CASE("Mock print status notifications match Moonraker format",
+          "[print][notifications][slow]") {
     MockPrintTestFixture fixture;
 
     SECTION("notifications include print_stats object") {

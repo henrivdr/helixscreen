@@ -1,0 +1,4 @@
+{
+  "type": "filament", "name": "Polymaker ABS Pro @System", "instantiation": "true",
+  "inherits": "Polymaker ABS Pro @base"
+}

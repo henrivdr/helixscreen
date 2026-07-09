@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "async_lifetime_guard.h"
 #include "panel_widget.h"
-#include "ui_observer_guard.h"
+
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -19,9 +21,13 @@ class ToolSwitcherWidget : public PanelWidget {
 
     void attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) override;
     void detach() override;
-    const char* id() const override { return "tool_switcher"; }
+    const char* id() const override {
+        return "tool_switcher";
+    }
     void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override;
-    bool has_overlay_open() const override { return picker_backdrop_ != nullptr; }
+    bool has_overlay_open() const override {
+        return picker_backdrop_ != nullptr;
+    }
 
     // Static instance tracker for callbacks from static event handlers
     static ToolSwitcherWidget* s_active_instance;

@@ -18,6 +18,7 @@
 #include "system/telemetry_manager.h"
 #include "theme_manager.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <memory>
@@ -61,11 +62,11 @@ TelemetryDataOverlay::~TelemetryDataOverlay() {
 void TelemetryDataOverlay::init_subjects() {
     init_subjects_guarded([this]() {
         // Status text subject: "Telemetry Enabled" / "Telemetry Disabled"
-        UI_MANAGED_SUBJECT_STRING(status_subject_, status_buf_, "Telemetry",
+        UI_MANAGED_SUBJECT_STRING(status_subject_, status_buf_, lv_tr("Telemetry"),
                                   "telemetry_data_status", subjects_);
 
         // Detail text subject: "N events queued"
-        UI_MANAGED_SUBJECT_STRING(detail_subject_, detail_buf_, "0 events queued",
+        UI_MANAGED_SUBJECT_STRING(detail_subject_, detail_buf_, lv_tr("0 events queued"),
                                   "telemetry_data_detail", subjects_);
 
         // Count subject for show/hide empty state vs event list
@@ -162,7 +163,7 @@ void TelemetryDataOverlay::update_status() {
     size_t count = telemetry.queue_size();
 
     // Update status text
-    const char* status_text = enabled ? "Telemetry Enabled" : "Telemetry Disabled";
+    const char* status_text = enabled ? lv_tr("Telemetry Enabled") : lv_tr("Telemetry Disabled");
     lv_subject_copy_string(&status_subject_, status_text);
 
     // Update detail text with event count
@@ -171,7 +172,7 @@ void TelemetryDataOverlay::update_status() {
     } else if (count == 1) {
         lv_subject_copy_string(&detail_subject_, lv_tr("1 event queued"));
     } else {
-        snprintf(detail_buf_, sizeof(detail_buf_), "%zu events queued", count);
+        snprintf(detail_buf_, sizeof(detail_buf_), lv_tr("%zu events queued"), count);
         lv_subject_copy_string(&detail_subject_, detail_buf_);
     }
 
@@ -235,33 +236,33 @@ void TelemetryDataOverlay::populate_events() {
         };
 
         // Event type (heading) — JSON key is "event", not "type"
-        std::string event_type = "Unknown Event";
+        std::string event_type = lv_tr("Unknown Event");
         if (event.contains("event") && event["event"].is_string()) {
             event_type = event["event"].get<std::string>();
             if (event_type == "session") {
-                event_type = "Session Start";
+                event_type = lv_tr("Session Start");
             } else if (event_type == "print_outcome") {
-                event_type = "Print Outcome";
+                event_type = lv_tr("Print Outcome");
             } else if (event_type == "crash") {
-                event_type = "Crash Report";
+                event_type = lv_tr("Crash Report");
             } else if (event_type == "memory_snapshot") {
-                event_type = "Memory Snapshot";
+                event_type = lv_tr("Memory Snapshot");
             } else if (event_type == "hardware_profile") {
-                event_type = "Hardware Profile";
+                event_type = lv_tr("Hardware Profile");
             } else if (event_type == "settings_snapshot") {
-                event_type = "Settings Snapshot";
+                event_type = lv_tr("Settings Snapshot");
             } else if (event_type == "panel_usage") {
-                event_type = "Panel Usage";
+                event_type = lv_tr("Panel Usage");
             } else if (event_type == "connection_stability") {
-                event_type = "Connection Stability";
+                event_type = lv_tr("Connection Stability");
             } else if (event_type == "print_start_context") {
-                event_type = "Print Start";
+                event_type = lv_tr("Print Start");
             } else if (event_type == "error_encountered") {
-                event_type = "Error";
+                event_type = lv_tr("Error");
             } else if (event_type == "update_failed") {
-                event_type = "Update Failed";
+                event_type = lv_tr("Update Failed");
             } else if (event_type == "update_success") {
-                event_type = "Update Success";
+                event_type = lv_tr("Update Success");
             }
         }
 
@@ -311,17 +312,19 @@ void TelemetryDataOverlay::populate_events() {
             };
 
             // App info - combine platform and display on one line
-            add_app_field("version", "Version");
+            add_app_field("version", lv_tr("Version"));
             if (event.contains("app")) {
                 const auto& app = event["app"];
                 std::string platform_display;
                 if (app.contains("platform") && app["platform"].is_string()) {
-                    platform_display = "Platform: " + app["platform"].get<std::string>();
+                    platform_display =
+                        std::string(lv_tr("Platform: ")) + app["platform"].get<std::string>();
                 }
                 if (app.contains("display") && app["display"].is_string()) {
                     if (!platform_display.empty())
                         platform_display += " | ";
-                    platform_display += "Display: " + app["display"].get<std::string>();
+                    platform_display +=
+                        std::string(lv_tr("Display: ")) + app["display"].get<std::string>();
                     if (app.contains("display_backend") && app["display_backend"].is_string()) {
                         platform_display += " (" + app["display_backend"].get<std::string>() + ")";
                     }
@@ -333,17 +336,19 @@ void TelemetryDataOverlay::populate_events() {
                 // Theme, locale, and input type
                 std::string settings_line;
                 if (app.contains("theme") && app["theme"].is_string()) {
-                    settings_line = "Theme: " + app["theme"].get<std::string>();
+                    settings_line = std::string(lv_tr("Theme: ")) + app["theme"].get<std::string>();
                 }
                 if (app.contains("locale") && app["locale"].is_string()) {
                     if (!settings_line.empty())
                         settings_line += " | ";
-                    settings_line += "Locale: " + app["locale"].get<std::string>();
+                    settings_line +=
+                        std::string(lv_tr("Locale: ")) + app["locale"].get<std::string>();
                 }
                 if (app.contains("input_type") && app["input_type"].is_string()) {
                     if (!settings_line.empty())
                         settings_line += " | ";
-                    settings_line += "Input: " + app["input_type"].get<std::string>();
+                    settings_line +=
+                        std::string(lv_tr("Input: ")) + app["input_type"].get<std::string>();
                 }
                 if (!settings_line.empty()) {
                     make_label(card, settings_line, "text_subtle");
@@ -355,21 +360,22 @@ void TelemetryDataOverlay::populate_events() {
                 const auto& p = event["printer"];
 
                 // "Printer: corexy, 350x350x300"
-                std::string printer_line = "Printer:";
+                std::string printer_prefix = lv_tr("Printer:");
+                std::string printer_line = printer_prefix;
                 if (p.contains("kinematics") && p["kinematics"].is_string()) {
                     printer_line += " " + p["kinematics"].get<std::string>();
                 }
                 if (p.contains("build_volume") && p["build_volume"].is_string()) {
                     printer_line += ", " + p["build_volume"].get<std::string>();
                 }
-                if (printer_line != "Printer:") {
+                if (printer_line != printer_prefix) {
                     make_label(card, printer_line, "text_subtle");
                 }
 
                 // "MCU: stm32f446 (x2) | 1 extruder"
                 std::string mcu_line;
                 if (p.contains("mcu") && p["mcu"].is_string()) {
-                    mcu_line = "MCU: " + p["mcu"].get<std::string>();
+                    mcu_line = std::string(lv_tr("MCU: ")) + p["mcu"].get<std::string>();
                     if (p.contains("mcu_count") && p["mcu_count"].is_number_integer() &&
                         p["mcu_count"].get<int>() > 1) {
                         mcu_line += " (x" + std::to_string(p["mcu_count"].get<int>()) + ")";
@@ -379,7 +385,8 @@ void TelemetryDataOverlay::populate_events() {
                     int ext = p["extruder_count"].get<int>();
                     if (!mcu_line.empty())
                         mcu_line += " | ";
-                    mcu_line += std::to_string(ext) + " extruder" + (ext != 1 ? "s" : "");
+                    mcu_line += std::to_string(ext) + " " +
+                                (ext != 1 ? lv_tr("extruders") : lv_tr("extruder"));
                 }
                 if (!mcu_line.empty()) {
                     make_label(card, mcu_line, "text_subtle");
@@ -387,11 +394,15 @@ void TelemetryDataOverlay::populate_events() {
 
                 // Klipper and Moonraker versions
                 if (p.contains("klipper_version") && p["klipper_version"].is_string()) {
-                    make_label(card, "Klipper: " + p["klipper_version"].get<std::string>(),
+                    make_label(card,
+                               std::string(lv_tr("Klipper: ")) +
+                                   p["klipper_version"].get<std::string>(),
                                "text_subtle");
                 }
                 if (p.contains("moonraker_version") && p["moonraker_version"].is_string()) {
-                    make_label(card, "Moonraker: " + p["moonraker_version"].get<std::string>(),
+                    make_label(card,
+                               std::string(lv_tr("Moonraker: ")) +
+                                   p["moonraker_version"].get<std::string>(),
                                "text_subtle");
                 }
             }
@@ -399,7 +410,7 @@ void TelemetryDataOverlay::populate_events() {
             // Features array
             if (event.contains("features") && event["features"].is_array() &&
                 !event["features"].empty()) {
-                std::string features_str = "Features: ";
+                std::string features_str = lv_tr("Features: ");
                 bool first = true;
                 for (const auto& f : event["features"]) {
                     if (f.is_string()) {
@@ -424,54 +435,58 @@ void TelemetryDataOverlay::populate_events() {
                 if (h.contains("cpu_cores") && h["cpu_cores"].is_number_integer()) {
                     if (!host_line.empty())
                         host_line += ", ";
-                    host_line += std::to_string(h["cpu_cores"].get<int>()) + " cores";
+                    host_line += std::to_string(h["cpu_cores"].get<int>()) + " " + lv_tr("cores");
                 }
                 if (h.contains("ram_total_mb") && h["ram_total_mb"].is_number_integer()) {
                     if (!host_line.empty())
                         host_line += ", ";
-                    host_line += std::to_string(h["ram_total_mb"].get<int>()) + " MB RAM";
+                    host_line +=
+                        std::to_string(h["ram_total_mb"].get<int>()) + " " + lv_tr("MB RAM");
                 }
                 if (!host_line.empty()) {
-                    make_label(card, "Host: " + host_line, "text_subtle");
+                    make_label(card, std::string(lv_tr("Host: ")) + host_line, "text_subtle");
                 }
 
                 if (h.contains("cpu_model") && h["cpu_model"].is_string()) {
-                    make_label(card, "CPU: " + h["cpu_model"].get<std::string>(), "text_subtle");
+                    make_label(card,
+                               std::string(lv_tr("CPU: ")) + h["cpu_model"].get<std::string>(),
+                               "text_subtle");
                 }
 
                 if (h.contains("os") && h["os"].is_string()) {
-                    make_label(card, "OS: " + h["os"].get<std::string>(), "text_subtle");
+                    make_label(card, std::string(lv_tr("OS: ")) + h["os"].get<std::string>(),
+                               "text_subtle");
                 }
             }
         } else if (type_str == "print_outcome") {
-            add_field_str("outcome", "Outcome");
-            add_field_num("duration_sec", "Duration", "s");
-            add_field_str("filament_type", "Filament");
-            add_field_num("nozzle_temp", "Nozzle",
+            add_field_str("outcome", lv_tr("Outcome"));
+            add_field_num("duration_sec", lv_tr("Duration"), "s");
+            add_field_str("filament_type", lv_tr("Filament"));
+            add_field_num("nozzle_temp", lv_tr("Nozzle"),
                           "\xC2\xB0"
                           "C");
-            add_field_num("bed_temp", "Bed",
+            add_field_num("bed_temp", lv_tr("Bed"),
                           "\xC2\xB0"
                           "C");
 
         } else if (type_str == "crash") {
-            add_field_str("signal_name", "Signal");
-            add_field_num("signal", "Signal #", "");
-            add_field_str("app_version", "Version");
-            add_field_num("uptime_sec", "Uptime", "s");
+            add_field_str("signal_name", lv_tr("Signal"));
+            add_field_num("signal", lv_tr("Signal #"), "");
+            add_field_str("app_version", lv_tr("Version"));
+            add_field_num("uptime_sec", lv_tr("Uptime"), "s");
             if (event.contains("backtrace") && event["backtrace"].is_array()) {
                 make_label(card,
-                           "Backtrace: " + std::to_string(event["backtrace"].size()) + " frames",
+                           fmt::format(lv_tr("Backtrace: {} frames"), event["backtrace"].size()),
                            "text_subtle");
             }
 
         } else if (type_str == "memory_snapshot") {
-            add_field_str("trigger", "Trigger");
-            add_field_num("uptime_sec", "Uptime", "s");
-            add_field_num("rss_kb", "RSS", " KB");
-            add_field_num("vm_size_kb", "VM Size", " KB");
-            add_field_num("vm_peak_kb", "VM Peak", " KB");
-            add_field_num("vm_hwm_kb", "High Water Mark", " KB");
+            add_field_str("trigger", lv_tr("Trigger"));
+            add_field_num("uptime_sec", lv_tr("Uptime"), "s");
+            add_field_num("rss_kb", lv_tr("RSS"), " KB");
+            add_field_num("vm_size_kb", lv_tr("VM Size"), " KB");
+            add_field_num("vm_peak_kb", lv_tr("VM Peak"), " KB");
+            add_field_num("vm_hwm_kb", lv_tr("High Water Mark"), " KB");
 
         } else if (type_str == "hardware_profile") {
             // Show key sections from nested JSON
@@ -487,14 +502,14 @@ void TelemetryDataOverlay::populate_events() {
                     line += p["kinematics"].get<std::string>();
                 }
                 if (!line.empty()) {
-                    make_label(card, "Printer: " + line, "text_subtle");
+                    make_label(card, std::string(lv_tr("Printer: ")) + line, "text_subtle");
                 }
             }
             if (event.contains("mcus") && event["mcus"].is_object()) {
                 const auto& m = event["mcus"];
                 std::string line;
                 if (m.contains("primary") && m["primary"].is_string()) {
-                    line = "MCU: " + m["primary"].get<std::string>();
+                    line = std::string(lv_tr("MCU: ")) + m["primary"].get<std::string>();
                 }
                 if (m.contains("count") && m["count"].is_number_integer()) {
                     int cnt = m["count"].get<int>();
@@ -514,20 +529,21 @@ void TelemetryDataOverlay::populate_events() {
                     if (bv.contains("z_mm") && bv["z_mm"].is_number()) {
                         vol += "x" + std::to_string(bv["z_mm"].get<int>());
                     }
-                    make_label(card, "Build Volume: " + vol + " mm", "text_subtle");
+                    make_label(card, std::string(lv_tr("Build Volume: ")) + vol + " mm",
+                               "text_subtle");
                 }
             }
             if (event.contains("extruders") && event["extruders"].is_object()) {
                 const auto& e = event["extruders"];
                 std::string line;
                 if (e.contains("count") && e["count"].is_number_integer()) {
-                    line = std::to_string(e["count"].get<int>()) + " extruder(s)";
+                    line = std::to_string(e["count"].get<int>()) + " " + lv_tr("extruder(s)");
                 }
                 if (e.contains("has_heater_bed") && e["has_heater_bed"].get<bool>()) {
-                    line += ", heated bed";
+                    line += ", " + std::string(lv_tr("heated bed"));
                 }
                 if (e.contains("has_chamber_heater") && e["has_chamber_heater"].get<bool>()) {
-                    line += ", chamber heater";
+                    line += ", " + std::string(lv_tr("chamber heater"));
                 }
                 if (!line.empty()) {
                     make_label(card, line, "text_subtle");
@@ -537,17 +553,20 @@ void TelemetryDataOverlay::populate_events() {
             {
                 std::string hw_line;
                 if (event.contains("fans") && event["fans"].contains("total")) {
-                    hw_line += std::to_string(event["fans"]["total"].get<int>()) + " fans";
+                    hw_line +=
+                        std::to_string(event["fans"]["total"].get<int>()) + " " + lv_tr("fans");
                 }
                 if (event.contains("steppers") && event["steppers"].contains("count")) {
                     if (!hw_line.empty())
                         hw_line += ", ";
-                    hw_line += std::to_string(event["steppers"]["count"].get<int>()) + " steppers";
+                    hw_line += std::to_string(event["steppers"]["count"].get<int>()) + " " +
+                               lv_tr("steppers");
                 }
                 if (event.contains("leds") && event["leds"].contains("count")) {
                     if (!hw_line.empty())
                         hw_line += ", ";
-                    hw_line += std::to_string(event["leds"]["count"].get<int>()) + " LEDs";
+                    hw_line +=
+                        std::to_string(event["leds"]["count"].get<int>()) + " " + lv_tr("LEDs");
                 }
                 if (!hw_line.empty()) {
                     make_label(card, hw_line, "text_subtle");
@@ -570,7 +589,7 @@ void TelemetryDataOverlay::populate_events() {
                     }
                 }
                 if (!caps.empty()) {
-                    make_label(card, "Capabilities: " + caps, "text_subtle");
+                    make_label(card, std::string(lv_tr("Capabilities: ")) + caps, "text_subtle");
                 }
             }
             // AMS
@@ -581,7 +600,8 @@ void TelemetryDataOverlay::populate_events() {
                     line += " " + a["type"].get<std::string>();
                 }
                 if (a.contains("total_slots") && a["total_slots"].is_number_integer()) {
-                    line += " (" + std::to_string(a["total_slots"].get<int>()) + " slots)";
+                    line +=
+                        " (" + std::to_string(a["total_slots"].get<int>()) + " " + lv_tr("slots)");
                 }
                 make_label(card, line, "text_subtle");
             }
@@ -589,25 +609,26 @@ void TelemetryDataOverlay::populate_events() {
             if (event.contains("tools") && event["tools"].is_object()) {
                 const auto& t = event["tools"];
                 if (t.contains("count") && t["count"].is_number_integer()) {
-                    std::string line = std::to_string(t["count"].get<int>()) + " tool(s)";
+                    std::string line =
+                        std::to_string(t["count"].get<int>()) + " " + lv_tr("tool(s)");
                     if (t.contains("is_multi_tool") && t["is_multi_tool"].get<bool>()) {
-                        line += " (multi-tool)";
+                        line += " " + std::string(lv_tr("(multi-tool)"));
                     }
-                    make_label(card, "Tools: " + line, "text_subtle");
+                    make_label(card, std::string(lv_tr("Tools: ")) + line, "text_subtle");
                 }
             }
 
         } else if (type_str == "settings_snapshot") {
-            add_field_str("theme", "Theme");
-            add_field_num("brightness_pct", "Brightness", "%");
-            add_field_str("locale", "Locale");
-            add_field_num("screensaver_timeout_sec", "Screensaver", "s");
-            add_field_num("screen_blank_timeout_sec", "Screen Blank", "s");
-            add_field_num("auto_update_channel", "Update Channel", "");
+            add_field_str("theme", lv_tr("Theme"));
+            add_field_num("brightness_pct", lv_tr("Brightness"), "%");
+            add_field_str("locale", lv_tr("Locale"));
+            add_field_num("screensaver_timeout_sec", lv_tr("Screensaver"), "s");
+            add_field_num("screen_blank_timeout_sec", lv_tr("Screen Blank"), "s");
+            add_field_num("auto_update_channel", lv_tr("Update Channel"), "");
 
         } else if (type_str == "panel_usage") {
-            add_field_num("session_duration_sec", "Session Duration", "s");
-            add_field_num("overlay_open_count", "Overlays Opened", "");
+            add_field_num("session_duration_sec", lv_tr("Session Duration"), "s");
+            add_field_num("overlay_open_count", lv_tr("Overlays Opened"), "");
             // Show panel times
             if (event.contains("panel_time_sec") && event["panel_time_sec"].is_object()) {
                 std::string panels;
@@ -618,7 +639,7 @@ void TelemetryDataOverlay::populate_events() {
                     panels += it.key() + ": " + std::to_string(it.value().get<int>()) + "s";
                 }
                 if (!panels.empty()) {
-                    make_label(card, "Time: " + panels, "text_subtle");
+                    make_label(card, std::string(lv_tr("Time: ")) + panels, "text_subtle");
                 }
             }
             if (event.contains("overlay_visits") && event["overlay_visits"].is_object()) {
@@ -630,7 +651,8 @@ void TelemetryDataOverlay::populate_events() {
                     overlays += it.key() + ": " + std::to_string(it.value().get<int>());
                 }
                 if (!overlays.empty()) {
-                    make_label(card, "Overlay Visits: " + overlays, "text_subtle");
+                    make_label(card, std::string(lv_tr("Overlay Visits: ")) + overlays,
+                               "text_subtle");
                 }
             }
             if (event.contains("panel_visits") && event["panel_visits"].is_object()) {
@@ -642,62 +664,63 @@ void TelemetryDataOverlay::populate_events() {
                     visits += it.key() + ": " + std::to_string(it.value().get<int>());
                 }
                 if (!visits.empty()) {
-                    make_label(card, "Visits: " + visits, "text_subtle");
+                    make_label(card, std::string(lv_tr("Visits: ")) + visits, "text_subtle");
                 }
             }
 
         } else if (type_str == "connection_stability") {
-            add_field_num("session_duration_sec", "Session Duration", "s");
-            add_field_num("connect_count", "Connects", "");
-            add_field_num("disconnect_count", "Disconnects", "");
-            add_field_num("total_connected_sec", "Connected Time", "s");
-            add_field_num("total_disconnected_sec", "Disconnected Time", "s");
-            add_field_num("longest_disconnect_sec", "Longest Disconnect", "s");
-            add_field_num("klippy_error_count", "Klippy Errors", "");
-            add_field_num("klippy_shutdown_count", "Klippy Shutdowns", "");
+            add_field_num("session_duration_sec", lv_tr("Session Duration"), "s");
+            add_field_num("connect_count", lv_tr("Connects"), "");
+            add_field_num("disconnect_count", lv_tr("Disconnects"), "");
+            add_field_num("total_connected_sec", lv_tr("Connected Time"), "s");
+            add_field_num("total_disconnected_sec", lv_tr("Disconnected Time"), "s");
+            add_field_num("longest_disconnect_sec", lv_tr("Longest Disconnect"), "s");
+            add_field_num("klippy_error_count", lv_tr("Klippy Errors"), "");
+            add_field_num("klippy_shutdown_count", lv_tr("Klippy Shutdowns"), "");
 
         } else if (type_str == "print_start_context") {
-            add_field_str("source", "Source");
+            add_field_str("source", lv_tr("Source"));
             if (event.contains("has_thumbnail")) {
                 make_label(card,
-                           std::string("Thumbnail: ") +
-                               (event["has_thumbnail"].get<bool>() ? "Yes" : "No"),
+                           std::string(lv_tr("Thumbnail: ")) +
+                               (event["has_thumbnail"].get<bool>() ? lv_tr("Yes") : lv_tr("No")),
                            "text_subtle");
             }
-            add_field_str("file_size_bucket", "File Size");
-            add_field_str("estimated_duration_bucket", "Est. Duration");
-            add_field_str("slicer", "Slicer");
-            add_field_num("tool_count_used", "Tools Used", "");
+            add_field_str("file_size_bucket", lv_tr("File Size"));
+            add_field_str("estimated_duration_bucket", lv_tr("Est. Duration"));
+            add_field_str("slicer", lv_tr("Slicer"));
+            add_field_num("tool_count_used", lv_tr("Tools Used"), "");
             if (event.contains("ams_active")) {
                 make_label(card,
-                           std::string("AMS Active: ") +
-                               (event["ams_active"].get<bool>() ? "Yes" : "No"),
+                           std::string(lv_tr("AMS Active: ")) +
+                               (event["ams_active"].get<bool>() ? lv_tr("Yes") : lv_tr("No")),
                            "text_subtle");
             }
 
         } else if (type_str == "error_encountered") {
-            add_field_str("category", "Category");
-            add_field_str("code", "Code");
-            add_field_str("context", "Context");
-            add_field_num("uptime_sec", "Uptime", "s");
+            add_field_str("category", lv_tr("Category"));
+            add_field_str("code", lv_tr("Code"));
+            add_field_str("context", lv_tr("Context"));
+            add_field_num("uptime_sec", lv_tr("Uptime"), "s");
 
         } else if (type_str == "update_failed") {
-            add_field_str("reason", "Reason");
-            add_field_str("version", "Target Version");
-            add_field_str("from_version", "From Version");
-            add_field_str("platform", "Platform");
-            add_field_num("http_code", "HTTP Code", "");
-            add_field_num("exit_code", "Exit Code", "");
+            add_field_str("reason", lv_tr("Reason"));
+            add_field_str("version", lv_tr("Target Version"));
+            add_field_str("from_version", lv_tr("From Version"));
+            add_field_str("platform", lv_tr("Platform"));
+            add_field_num("http_code", lv_tr("HTTP Code"), "");
+            add_field_num("exit_code", lv_tr("Exit Code"), "");
 
         } else if (type_str == "update_success") {
-            add_field_str("version", "Version");
-            add_field_str("from_version", "From Version");
-            add_field_str("platform", "Platform");
+            add_field_str("version", lv_tr("Version"));
+            add_field_str("from_version", lv_tr("From Version"));
+            add_field_str("platform", lv_tr("Platform"));
         }
 
         // Show the full hashed device ID (no truncation)
         if (event.contains("device_id") && event["device_id"].is_string()) {
-            std::string text = "Device: " + event["device_id"].get<std::string>();
+            std::string text =
+                std::string(lv_tr("Device: ")) + event["device_id"].get<std::string>();
             make_label(card, text, "text_subtle");
         }
     }

@@ -3,6 +3,8 @@
 
 #include "alsa_device_enum.h"
 
+#include "lvgl/src/others/translation/lv_translation.h"
+
 #include <algorithm>
 #include <cstdlib>
 
@@ -29,7 +31,7 @@ std::string make_label(const std::string& card_id, const std::string& card_name)
 
 std::vector<AudioOutputDevice> assemble(const std::vector<RawCard>& cards) {
     std::vector<AudioOutputDevice> out;
-    out.push_back({"", "System default", "default"});
+    out.push_back({"", lv_tr("System default"), "default"});
     for (const auto& c : cards) {
         if (!c.has_playback || c.id.empty()) {
             continue;

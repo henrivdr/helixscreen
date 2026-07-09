@@ -19,24 +19,11 @@ class CfsTestAccess;
 
 namespace helix::printer {
 
-/// Material info from CFS RFID database
-struct CfsMaterialInfo {
-    std::string id;
-    std::string brand;
-    std::string name;
-    std::string material_type;
-    int min_temp = 0;
-    int max_temp = 0;
-};
-
-/// Static material database + CFS utility functions
+/// Static CFS utility functions (code stripping, color parsing, TNN
+/// addressing). The material table this class used to own was retired in
+/// favor of FilamentCatalog::load_codes("cfs") — see AmsBackendCfs::parse_box_status.
 class CfsMaterialDb {
   public:
-    static const CfsMaterialDb& instance();
-
-    /// Lookup material by 5-digit ID (e.g., "01001")
-    const CfsMaterialInfo* lookup(const std::string& id) const;
-
     /// Strip CFS material_type code prefix: "101001" -> "01001", "-1" -> ""
     static std::string strip_code(const std::string& code);
 
@@ -51,11 +38,6 @@ class CfsMaterialDb {
 
     /// Default color for unknown/sentinel slots
     static constexpr uint32_t DEFAULT_COLOR = 0x808080;
-
-  private:
-    CfsMaterialDb();
-    void load_database();
-    std::unordered_map<std::string, CfsMaterialInfo> materials_;
 };
 
 /// Decode CFS key8xx error codes into human-readable AmsAlerts
@@ -345,7 +327,7 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
         bool reached_target_once = false; // current_temp ever within 5°C of target this op
         bool pending_purge_target = false; // target rose >10°C above baseline (waits for rise)
         bool seen_purge_signal = false;    // pending_purge_target gated by seen_filament_rise
-        int baseline_target_deci = 0;     // extruder target when heating first completed
+        int baseline_target_deci = 0;      // extruder target when heating first completed
     };
     PhaseTracker phase_tracker_;
     int last_extruder_target_deci_ = 0;

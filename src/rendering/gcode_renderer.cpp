@@ -348,13 +348,15 @@ lv_draw_line_dsc_t GCodeRenderer::get_line_style(const ToolpathSegment& segment,
     // Resolve object name from interned index
     const std::string& seg_obj_name =
         current_gcode_ ? current_gcode_->get_object_name(segment.object_name_index)
-                        : *([]() -> const std::string* { static const std::string e; return &e; })();
-    bool is_highlighted = !seg_obj_name.empty() &&
-                          (options_.highlighted_objects.count(seg_obj_name) > 0 ||
-                           (!options_.highlighted_object.empty() &&
-                            seg_obj_name == options_.highlighted_object));
-    bool is_excluded =
-        !seg_obj_name.empty() && options_.excluded_objects.count(seg_obj_name) > 0;
+                       : *([]() -> const std::string* {
+                             static const std::string e;
+                             return &e;
+                         })();
+    bool is_highlighted =
+        !seg_obj_name.empty() &&
+        (options_.highlighted_objects.count(seg_obj_name) > 0 ||
+         (!options_.highlighted_object.empty() && seg_obj_name == options_.highlighted_object));
+    bool is_excluded = !seg_obj_name.empty() && options_.excluded_objects.count(seg_obj_name) > 0;
 
     lv_opa_t base_opa;
     int line_width;

@@ -363,8 +363,9 @@ bool PrintStartProfile::parse_json(const json& j, const std::string& source_path
     if (j.contains("silent_progression") && j["silent_progression"].is_array()) {
         for (const auto& entry_json : j["silent_progression"]) {
             if (!entry_json.is_object()) {
-                spdlog::warn("[PrintStartProfile] Skipping non-object silent_progression entry in {}",
-                             source_path);
+                spdlog::warn(
+                    "[PrintStartProfile] Skipping non-object silent_progression entry in {}",
+                    source_path);
                 continue;
             }
             if (!entry_json.contains("phase") || !entry_json["phase"].is_string()) {
@@ -376,8 +377,7 @@ bool PrintStartProfile::parse_json(const json& j, const std::string& source_path
             e.phase = parse_phase_name(entry_json["phase"].get<std::string>());
             if (entry_json.contains("after_temps_ready_seconds") &&
                 entry_json["after_temps_ready_seconds"].is_number()) {
-                e.after_temps_ready_seconds =
-                    entry_json["after_temps_ready_seconds"].get<int>();
+                e.after_temps_ready_seconds = entry_json["after_temps_ready_seconds"].get<int>();
             }
             if (entry_json.contains("message") && entry_json["message"].is_string()) {
                 e.message = entry_json["message"].get<std::string>();

@@ -3,9 +3,9 @@
 #include "../helix_test_fixture.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
-#include "src/ui/panel_widgets/print_status_widget.h"
 #include "app_globals.h"
 #include "printer_state.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
 #include "tool_state.h"
 
 #include "../catch_amalgamated.hpp"
@@ -23,7 +23,9 @@ struct FormatterScope {
         PrintStatusWidget::destroy_formatter_for_test();
         PrintStatusWidget::ensure_formatter_for_test();
     }
-    ~FormatterScope() { PrintStatusWidget::release_formatter_for_test(); }
+    ~FormatterScope() {
+        PrintStatusWidget::release_formatter_for_test();
+    }
 };
 
 TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter writes progress, layer, time",
@@ -42,15 +44,18 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter writes progress, layer, ti
     lv_subject_set_int(ps.get_print_progress_subject(), 47);
     lv_subject_set_int(ps.get_print_layer_current_subject(), 42);
     lv_subject_set_int(ps.get_print_layer_total_subject(), 213);
-    lv_subject_set_int(ps.get_print_elapsed_subject(), 42 * 60);               // 0h 42m
+    lv_subject_set_int(ps.get_print_elapsed_subject(), 42 * 60);              // 0h 42m
     lv_subject_set_int(ps.get_print_time_left_subject(), 2 * 3600 + 14 * 60); // 2h 14m
 
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_progress_pct"))) == "47%");
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_layer_text"))) == "Layer 42 / 213");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_progress_pct"))) == "47%");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_layer_text"))) == "Layer 42 / 213");
     // elapsed=42m, total=42m+2h14m=2h56m
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_time_text"))) == "0h 42m / 2h 56m");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_time_text"))) == "0h 42m / 2h 56m");
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter seeds initial values on construction",
@@ -69,8 +74,10 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter seeds initial values on co
     FormatterScope fs;
 
     // No drain needed — seed calls are synchronous in the constructor
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_progress_pct"))) == "75%");
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_layer_text"))) == "Layer 100 / 200");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_progress_pct"))) == "75%");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_layer_text"))) == "Layer 100 / 200");
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter layer text omits total when zero",
@@ -88,7 +95,8 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter layer text omits total whe
 
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_layer_text"))) == "Layer 7");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_layer_text"))) == "Layer 7");
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter filament text empty when zero",
@@ -104,7 +112,8 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter filament text empty when z
     lv_subject_set_int(ps.get_print_filament_used_subject(), 0);
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_filament_text"))) == "");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_filament_text"))) == "");
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter filament text formatted in meters",
@@ -120,7 +129,8 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter filament text formatted in
     lv_subject_set_int(ps.get_print_filament_used_subject(), 2500); // 2.5m
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_filament_text"))) == "Filament: 2.5m");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_filament_text"))) == "Filament: 2.5m");
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter nozzle text (decidegree rounding)",
@@ -134,11 +144,12 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter nozzle text (decidegree ro
     FormatterScope fs;
     // Temp subjects store decidegrees (1 unit = 0.1°C; see L021 +
     // helix::units::to_decidegrees which multiplies by 10, not 100).
-    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 2157);    // 215.7°C → 216
-    lv_subject_set_int(ps.get_active_extruder_target_subject(), 2200);  // 220°C
+    lv_subject_set_int(ps.get_active_extruder_temp_subject(), 2157);   // 215.7°C → 216
+    lv_subject_set_int(ps.get_active_extruder_target_subject(), 2200); // 220°C
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
 
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_nozzle_text"))) == "216 / 220°C");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_nozzle_text"))) == "216 / 220°C");
     // bed_text / chamber_text are no longer formatted by the widget — the
     // XML's temp_display widgets bind directly to bed_temp / chamber_temp.
 }
@@ -158,17 +169,20 @@ TEST_CASE_METHOD(HelixTestFixture, "DetailedFormatter multi-tool label and gate"
     lv_subject_set_int(ts.get_tool_count_subject(), 1);
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "print_status_multi_tool")) == 0);
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_nozzle_tool_label"))) == "");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_nozzle_tool_label"))) == "");
 
     // Two tools — gate=1, label tracks active (default index = 0)
     lv_subject_set_int(ts.get_tool_count_subject(), 2);
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "print_status_multi_tool")) == 1);
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_nozzle_tool_label"))) == "T0");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_nozzle_tool_label"))) == "T0");
 
     // Back to single — gate=0, label cleared
     lv_subject_set_int(ts.get_tool_count_subject(), 1);
     UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
     REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "print_status_multi_tool")) == 0);
-    REQUIRE(std::string(lv_subject_get_string(lv_xml_get_subject(nullptr, "print_status_nozzle_tool_label"))) == "");
+    REQUIRE(std::string(lv_subject_get_string(
+                lv_xml_get_subject(nullptr, "print_status_nozzle_tool_label"))) == "");
 }

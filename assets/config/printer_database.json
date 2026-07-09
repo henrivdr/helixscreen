@@ -3,7 +3,9 @@
   "description": "Printer auto-detection database with Klipper hardware fingerprints",
   "heuristic_types": {
     "hostname_match": "Match against Moonraker hostname (from /printer/info)",
+    "hostname_exclude": "Exclude this printer if the hostname matches this pattern",
     "kinematics_match": "Match against printer kinematics type (corexy, cartesian, delta, etc.)",
+    "kinematics_exclude": "Exclude this printer if kinematics matches (e.g. cartesian excludes corexy-only brands)",
     "object_exists": "Check if a Klipper object exists in /printer/objects/list",
     "stepper_count": "Count of Z steppers (z_count_1, z_count_2, z_count_3, z_count_4)",
     "sensor_match": "Match against temperature_sensor names",
@@ -2150,6 +2152,13 @@
           "pattern": "ender-5-max",
           "confidence": 90,
           "reason": "Hostname contains 'ender-5-max'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "ender5-max",
+          "confidence": 90,
+          "reason": "Hostname contains 'ender5-max'"
         }
       ]
     },
@@ -3158,6 +3167,118 @@
           "pattern": "rp2040",
           "confidence": 45,
           "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+        }
+      ]
+    },
+    {
+      "id": "qidi_max_4",
+      "name": "Qidi Max 4",
+      "manufacturer": "Qidi",
+      "image": "qidi-max-4.png",
+      "preset": "qidi_max4",
+      "print_start_profile": "qidi",
+      "ams_type": "qidi_box",
+      "notes": "Linux framebuffer display. Detection + preset are community-tested on-device; the QIDI Box is detected/read via the qidi_box backend, but Max 4 box CONTROL diverges from the Q2/Plus 4 -- eject/unload uses the multi_color_controller dialect (MULTI_COLOR_BOX_UNLOAD SLOT=slotN), not the shared box_stepper FORCE_MOVE primitive (rejected as 'Invalid pin value'). Per-model box dispatch tracked in prestonbrown/helixscreen#1083.",
+      "heuristics": [
+        {
+          "type": "kinematics_exclude",
+          "field": "kinematics",
+          "pattern": "cartesian",
+          "reason": "Qidi Max 4 is corexy; a cartesian printer is never a Qidi (telemetry: 100% of Qidi report corexy)"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "max4",
+          "confidence": 95,
+          "reason": "Hostname contains 'max4'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "max-4",
+          "confidence": 95,
+          "reason": "Hostname contains 'max-4'"
+        },
+        {
+          "type": "build_volume_range",
+          "field": "bed_mesh",
+          "min_x": 370,
+          "max_x": 410,
+          "min_y": 370,
+          "max_y": 410,
+          "confidence": 70,
+          "reason": "Build volume ~390x390mm (Max 4 size)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "probe_air",
+          "confidence": 85,
+          "reason": "probe_air object (QIDI Max 4 stock probe)"
+        },
+        {
+          "type": "fan_match",
+          "field": "fans",
+          "pattern": "auxiliary_cooling_fan2",
+          "confidence": 80,
+          "reason": "Second auxiliary cooling fan (Max 4 dual-aux fan layout)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "multi_color_controller",
+          "confidence": 70,
+          "reason": "QIDI multi-color controller object"
+        },
+        {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "M4029",
+          "confidence": 65,
+          "reason": "M4029 calibration macro (QIDI Max 4 stock firmware)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "heater_generic chamber",
+          "confidence": 55,
+          "reason": "Active chamber heater (QIDI enclosed printer)"
+        },
+        {
+          "type": "sensor_match",
+          "field": "sensors",
+          "pattern": "Chamber_Thermal_Protection",
+          "confidence": 50,
+          "reason": "Chamber thermal protection sensor (QIDI Max 4 stock config)"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "qidi",
+          "confidence": 50,
+          "reason": "Hostname contains 'qidi'"
+        },
+        {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "CLEAR_NOZZLE",
+          "confidence": 45,
+          "reason": "CLEAR_NOZZLE macro (common on QIDI printers)"
+        },
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "corexy",
+          "confidence": 40,
+          "reason": "CoreXY kinematics"
+        },
+        {
+          "type": "mcu_match",
+          "field": "mcu",
+          "pattern": "STM32F407",
+          "confidence": 35,
+          "reason": "STM32F407 main MCU (QIDI new-generation board)"
         }
       ]
     },
@@ -5150,6 +5271,13 @@
       "print_start_profile": "artillery_m1",
       "z_offset_calibration_strategy": "firmware_managed",
       "heuristics": [
+        {
+          "type": "macro_exclude",
+          "field": "macros",
+          "pattern": "M4029",
+          "confidence": 0,
+          "reason": "Exclude QIDI Max 4/Plus 4 firmware (M4029 calibration macro)"
+        },
         {
           "type": "kinematics_match",
           "field": "kinematics",

@@ -243,8 +243,8 @@ void android_extract_assets_if_needed() {
                                   "default_layout.json", "helix_macros.cfg"}) {
             fs::remove(cfg + "/" + stale, ec);
         }
-        for (const char* stale_dir : {"presets", "print_start_profiles", "platform",
-                                      "sounds", "themes/defaults"}) {
+        for (const char* stale_dir :
+             {"presets", "print_start_profiles", "platform", "sounds", "themes/defaults"}) {
             fs::remove_all(cfg + "/" + stale_dir, ec);
         }
     }

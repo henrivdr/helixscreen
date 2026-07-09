@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "print_control_view.h"
-#include "subject_managed_panel.h"
 #include "ui_observer_guard.h"
 #include "ui_print_cancel_modal.h"
+
+#include "print_control_view.h"
+#include "subject_managed_panel.h"
+
 #include <lvgl.h>
 
 class MoonrakerAPI;

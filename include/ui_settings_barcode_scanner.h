@@ -2,10 +2,9 @@
 
 #pragma once
 
-#include "overlay_base.h"
-
 #include "async_lifetime_guard.h"
 #include "input_device_scanner.h"
+#include "overlay_base.h"
 
 #include <atomic>
 #include <memory>
@@ -58,7 +57,7 @@ class BarcodeScannerSettingsOverlay : public OverlayBase {
     void update_bt_action_buttons();
     void pair_bt_device(const std::string& mac, const std::string& name);
     void handle_bt_forget(const std::string& mac);
-    int  selected_bt_index() const;
+    int selected_bt_index() const;
 
     // XML event handlers
     static void on_bs_scan_bluetooth(lv_event_t* e);

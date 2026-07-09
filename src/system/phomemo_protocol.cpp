@@ -6,8 +6,7 @@
 
 namespace helix::label {
 
-std::vector<uint8_t> phomemo_build_raster(const LabelBitmap& bitmap,
-                                           const LabelSize& size) {
+std::vector<uint8_t> phomemo_build_raster(const LabelBitmap& bitmap, const LabelSize& size) {
     int bytes_per_line = (bitmap.width() + 7) / 8;
     int num_lines = bitmap.height();
 
@@ -72,6 +71,6 @@ std::vector<uint8_t> phomemo_build_raster(const LabelBitmap& bitmap,
     return cmd;
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

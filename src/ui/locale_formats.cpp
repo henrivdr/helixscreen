@@ -3,8 +3,9 @@
 
 #include "locale_formats.h"
 
-#include "format_utils.h"
 #include "ui_format_utils.h"
+
+#include "format_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -52,24 +53,31 @@ static const std::unordered_map<std::string, std::array<const char*, 7>> k_day_a
 
 // Month abbreviations indexed by tm_mon (0 = January)
 static const std::unordered_map<std::string, std::array<const char*, 12>> k_month_abbr = {
-    {"en", {{"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}}},
-    {"de", {{"Jan.", "Feb.", u8"Mär.", "Apr.", "Mai", "Jun.",
-             "Jul.", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."}}},
-    {"fr", {{"janv.", u8"févr.", "mars", "avr.", "mai", "juin",
-             "juil.", u8"août", "sept.", "oct.", "nov.", u8"déc."}}},
-    {"es", {{"ene.", "feb.", "mar.", "abr.", "may.", "jun.",
-             "jul.", "ago.", "sept.", "oct.", "nov.", "dic."}}},
-    {"ru", {{u8"янв.", u8"февр.", u8"мар.", u8"апр.", u8"мая", u8"июн.",
-             u8"июл.", u8"авг.", u8"сент.", u8"окт.", u8"нояб.", u8"дек."}}},
-    {"pt", {{"jan.", "fev.", "mar.", "abr.", "mai.", "jun.",
-             "jul.", "ago.", "set.", "out.", "nov.", "dez."}}},
-    {"it", {{"gen.", "feb.", "mar.", "apr.", "mag.", "giu.",
-             "lug.", "ago.", "set.", "ott.", "nov.", "dic."}}},
-    {"zh", {{u8"1月", u8"2月", u8"3月", u8"4月", u8"5月", u8"6月",
-             u8"7月", u8"8月", u8"9月", u8"10月", u8"11月", u8"12月"}}},
-    {"ja", {{u8"1月", u8"2月", u8"3月", u8"4月", u8"5月", u8"6月",
-             u8"7月", u8"8月", u8"9月", u8"10月", u8"11月", u8"12月"}}},
+    {"en", {{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}}},
+    {"de",
+     {{"Jan.", "Feb.", u8"Mär.", "Apr.", "Mai", "Jun.", "Jul.", "Aug.", "Sep.", "Okt.", "Nov.",
+       "Dez."}}},
+    {"fr",
+     {{"janv.", u8"févr.", "mars", "avr.", "mai", "juin", "juil.", u8"août", "sept.", "oct.",
+       "nov.", u8"déc."}}},
+    {"es",
+     {{"ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sept.", "oct.", "nov.",
+       "dic."}}},
+    {"ru",
+     {{u8"янв.", u8"февр.", u8"мар.", u8"апр.", u8"мая", u8"июн.", u8"июл.", u8"авг.", u8"сент.",
+       u8"окт.", u8"нояб.", u8"дек."}}},
+    {"pt",
+     {{"jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.",
+       "dez."}}},
+    {"it",
+     {{"gen.", "feb.", "mar.", "apr.", "mag.", "giu.", "lug.", "ago.", "set.", "ott.", "nov.",
+       "dic."}}},
+    {"zh",
+     {{u8"1月", u8"2月", u8"3月", u8"4月", u8"5月", u8"6月", u8"7月", u8"8月", u8"9月", u8"10月",
+       u8"11月", u8"12月"}}},
+    {"ja",
+     {{u8"1月", u8"2月", u8"3月", u8"4月", u8"5月", u8"6月", u8"7月", u8"8月", u8"9月", u8"10月",
+       u8"11月", u8"12月"}}},
 };
 
 // ---------------------------------------------------------------------------
@@ -77,22 +85,24 @@ static const std::unordered_map<std::string, std::array<const char*, 12>> k_mont
 // ---------------------------------------------------------------------------
 
 enum class DatePatternGroup {
-    EN,           // "{day}, {mon} {dd}"
-    DE,           // "{day}, {dd}. {mon}"
-    ROMANCE_RU,   // "{day}, {dd} {mon}"  (fr, es, pt, it, ru)
-    CJK,          // "{mm}/{dd} ({day})"  (zh, ja)
+    EN,         // "{day}, {mon} {dd}"
+    DE,         // "{day}, {dd}. {mon}"
+    ROMANCE_RU, // "{day}, {dd} {mon}"  (fr, es, pt, it, ru)
+    CJK,        // "{mm}/{dd} ({day})"  (zh, ja)
 };
 
 enum class ModifiedDatePatternGroup {
-    EN,           // "{mon} {dd} {time}"
-    DE,           // "{dd}. {mon} {time}"
-    ROMANCE_RU,   // "{dd} {mon} {time}"
-    CJK,          // "{mm}/{dd} {time}"
+    EN,         // "{mon} {dd} {time}"
+    DE,         // "{dd}. {mon} {time}"
+    ROMANCE_RU, // "{dd} {mon} {time}"
+    CJK,        // "{mm}/{dd} {time}"
 };
 
 static DatePatternGroup get_date_pattern(const std::string& lang) {
-    if (lang == "de") return DatePatternGroup::DE;
-    if (lang == "zh" || lang == "ja") return DatePatternGroup::CJK;
+    if (lang == "de")
+        return DatePatternGroup::DE;
+    if (lang == "zh" || lang == "ja")
+        return DatePatternGroup::CJK;
     if (lang == "fr" || lang == "es" || lang == "pt" || lang == "it" || lang == "ru")
         return DatePatternGroup::ROMANCE_RU;
     // en and unknown languages
@@ -100,8 +110,10 @@ static DatePatternGroup get_date_pattern(const std::string& lang) {
 }
 
 static ModifiedDatePatternGroup get_modified_date_pattern(const std::string& lang) {
-    if (lang == "de") return ModifiedDatePatternGroup::DE;
-    if (lang == "zh" || lang == "ja") return ModifiedDatePatternGroup::CJK;
+    if (lang == "de")
+        return ModifiedDatePatternGroup::DE;
+    if (lang == "zh" || lang == "ja")
+        return ModifiedDatePatternGroup::CJK;
     if (lang == "fr" || lang == "es" || lang == "pt" || lang == "it" || lang == "ru")
         return ModifiedDatePatternGroup::ROMANCE_RU;
     // en and unknown languages
@@ -124,7 +136,8 @@ static std::string get_day_name(const struct tm* tm_info) {
         it = k_day_abbr.find("en");
     }
     int wday = tm_info->tm_wday;
-    if (wday < 0 || wday > 6) wday = 0;
+    if (wday < 0 || wday > 6)
+        wday = 0;
     return it->second[static_cast<size_t>(wday)];
 }
 
@@ -140,7 +153,8 @@ static std::string get_month_name(const struct tm* tm_info) {
         it = k_month_abbr.find("en");
     }
     int mon = tm_info->tm_mon;
-    if (mon < 0 || mon > 11) mon = 0;
+    if (mon < 0 || mon > 11)
+        mon = 0;
     return it->second[static_cast<size_t>(mon)];
 }
 
@@ -166,16 +180,15 @@ void locale_set_language(const std::string& lang_code) {
 
     const char* result = std::setlocale(LC_TIME, it->second);
     if (!result) {
-        spdlog::info("locale: setlocale(LC_TIME, '{}') failed, using fallback tables",
-                      it->second);
+        spdlog::info("locale: setlocale(LC_TIME, '{}') failed, using fallback tables", it->second);
         return;
     }
 
     // Probe: format a known Monday to see if locale is working
     struct tm probe = {};
-    probe.tm_wday = 1;  // Monday
-    probe.tm_mon = 0;   // January
-    probe.tm_mday = 6;  // Jan 6 2025 was a Monday
+    probe.tm_wday = 1;   // Monday
+    probe.tm_mon = 0;    // January
+    probe.tm_mday = 6;   // Jan 6 2025 was a Monday
     probe.tm_year = 125; // 2025
 
     char buf[32];
@@ -184,13 +197,14 @@ void locale_set_language(const std::string& lang_code) {
     // If result is still "Mon", the locale didn't take effect
     if (std::strcmp(buf, "Mon") == 0) {
         spdlog::info("locale: setlocale succeeded but strftime still returns English "
-                      "for lang='{}', using fallback tables", lang_code);
+                     "for lang='{}', using fallback tables",
+                     lang_code);
         return;
     }
 
     s_use_system_locale = true;
     spdlog::info("locale: system locale active for lang='{}' (locale='{}', probe='{}' for Monday)",
-                  lang_code, it->second, buf);
+                 lang_code, it->second, buf);
 }
 
 std::string format_localized_date(const struct tm* tm_info) {
@@ -206,22 +220,22 @@ std::string format_localized_date(const struct tm* tm_info) {
     char buf[64];
 
     switch (get_date_pattern(s_current_lang)) {
-        case DatePatternGroup::EN:
-            // "Fri, Feb 28"
-            snprintf(buf, sizeof(buf), "%s, %s %d", day.c_str(), mon.c_str(), dd);
-            break;
-        case DatePatternGroup::DE:
-            // "Fr., 28. Feb."
-            snprintf(buf, sizeof(buf), "%s, %d. %s", day.c_str(), dd, mon.c_str());
-            break;
-        case DatePatternGroup::ROMANCE_RU:
-            // "ven., 28 févr."
-            snprintf(buf, sizeof(buf), "%s, %d %s", day.c_str(), dd, mon.c_str());
-            break;
-        case DatePatternGroup::CJK:
-            // "2/28 (金)"
-            snprintf(buf, sizeof(buf), "%d/%d (%s)", mm, dd, day.c_str());
-            break;
+    case DatePatternGroup::EN:
+        // "Fri, Feb 28"
+        snprintf(buf, sizeof(buf), "%s, %s %d", day.c_str(), mon.c_str(), dd);
+        break;
+    case DatePatternGroup::DE:
+        // "Fr., 28. Feb."
+        snprintf(buf, sizeof(buf), "%s, %d. %s", day.c_str(), dd, mon.c_str());
+        break;
+    case DatePatternGroup::ROMANCE_RU:
+        // "ven., 28 févr."
+        snprintf(buf, sizeof(buf), "%s, %d %s", day.c_str(), dd, mon.c_str());
+        break;
+    case DatePatternGroup::CJK:
+        // "2/28 (金)"
+        snprintf(buf, sizeof(buf), "%d/%d (%s)", mm, dd, day.c_str());
+        break;
     }
 
     return buf;
@@ -240,22 +254,22 @@ std::string format_localized_modified_date(const struct tm* tm_info) {
     char buf[64];
 
     switch (get_modified_date_pattern(s_current_lang)) {
-        case ModifiedDatePatternGroup::EN:
-            // "Feb 28 2:30 PM"
-            snprintf(buf, sizeof(buf), "%s %d %s", mon.c_str(), dd, time_str.c_str());
-            break;
-        case ModifiedDatePatternGroup::DE:
-            // "28. Feb. 14:30"
-            snprintf(buf, sizeof(buf), "%d. %s %s", dd, mon.c_str(), time_str.c_str());
-            break;
-        case ModifiedDatePatternGroup::ROMANCE_RU:
-            // "28 févr. 14:30"
-            snprintf(buf, sizeof(buf), "%d %s %s", dd, mon.c_str(), time_str.c_str());
-            break;
-        case ModifiedDatePatternGroup::CJK:
-            // "2/28 14:30"
-            snprintf(buf, sizeof(buf), "%d/%d %s", mm, dd, time_str.c_str());
-            break;
+    case ModifiedDatePatternGroup::EN:
+        // "Feb 28 2:30 PM"
+        snprintf(buf, sizeof(buf), "%s %d %s", mon.c_str(), dd, time_str.c_str());
+        break;
+    case ModifiedDatePatternGroup::DE:
+        // "28. Feb. 14:30"
+        snprintf(buf, sizeof(buf), "%d. %s %s", dd, mon.c_str(), time_str.c_str());
+        break;
+    case ModifiedDatePatternGroup::ROMANCE_RU:
+        // "28 févr. 14:30"
+        snprintf(buf, sizeof(buf), "%d %s %s", dd, mon.c_str(), time_str.c_str());
+        break;
+    case ModifiedDatePatternGroup::CJK:
+        // "2/28 14:30"
+        snprintf(buf, sizeof(buf), "%d/%d %s", mm, dd, time_str.c_str());
+        break;
     }
 
     return buf;
@@ -280,34 +294,34 @@ std::string format_localized_short_date(const struct tm* tm_info) {
     char buf[32];
 
     switch (get_modified_date_pattern(s_current_lang)) {
-        case ModifiedDatePatternGroup::EN:
-            // "Mar 09" or "Mar 09 '25"
-            if (show_year)
-                snprintf(buf, sizeof(buf), "%s %02d '%02d", mon.c_str(), dd, yy % 100);
-            else
-                snprintf(buf, sizeof(buf), "%s %02d", mon.c_str(), dd);
-            break;
-        case ModifiedDatePatternGroup::DE:
-            // "09. Mär." or "09. Mär. '25"
-            if (show_year)
-                snprintf(buf, sizeof(buf), "%02d. %s '%02d", dd, mon.c_str(), yy % 100);
-            else
-                snprintf(buf, sizeof(buf), "%02d. %s", dd, mon.c_str());
-            break;
-        case ModifiedDatePatternGroup::ROMANCE_RU:
-            // "09 mars" or "09 mars '25"
-            if (show_year)
-                snprintf(buf, sizeof(buf), "%02d %s '%02d", dd, mon.c_str(), yy % 100);
-            else
-                snprintf(buf, sizeof(buf), "%02d %s", dd, mon.c_str());
-            break;
-        case ModifiedDatePatternGroup::CJK:
-            // "3/9" or "3/9/25"
-            if (show_year)
-                snprintf(buf, sizeof(buf), "%d/%d/%02d", mm, dd, yy % 100);
-            else
-                snprintf(buf, sizeof(buf), "%d/%d", mm, dd);
-            break;
+    case ModifiedDatePatternGroup::EN:
+        // "Mar 09" or "Mar 09 '25"
+        if (show_year)
+            snprintf(buf, sizeof(buf), "%s %02d '%02d", mon.c_str(), dd, yy % 100);
+        else
+            snprintf(buf, sizeof(buf), "%s %02d", mon.c_str(), dd);
+        break;
+    case ModifiedDatePatternGroup::DE:
+        // "09. Mär." or "09. Mär. '25"
+        if (show_year)
+            snprintf(buf, sizeof(buf), "%02d. %s '%02d", dd, mon.c_str(), yy % 100);
+        else
+            snprintf(buf, sizeof(buf), "%02d. %s", dd, mon.c_str());
+        break;
+    case ModifiedDatePatternGroup::ROMANCE_RU:
+        // "09 mars" or "09 mars '25"
+        if (show_year)
+            snprintf(buf, sizeof(buf), "%02d %s '%02d", dd, mon.c_str(), yy % 100);
+        else
+            snprintf(buf, sizeof(buf), "%02d %s", dd, mon.c_str());
+        break;
+    case ModifiedDatePatternGroup::CJK:
+        // "3/9" or "3/9/25"
+        if (show_year)
+            snprintf(buf, sizeof(buf), "%d/%d/%02d", mm, dd, yy % 100);
+        else
+            snprintf(buf, sizeof(buf), "%d/%d", mm, dd);
+        break;
     }
 
     return buf;

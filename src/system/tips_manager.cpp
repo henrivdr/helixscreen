@@ -5,6 +5,8 @@
 
 #include "ui_error_reporting.h"
 
+#include "lvgl/src/others/translation/lv_translation.h"
+
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -37,7 +39,7 @@ bool TipsManager::init(const std::string& tips_path) {
     struct stat buffer;
 
     if (stat(tips_path.c_str(), &buffer) != 0) {
-        NOTIFY_WARNING("Tips database not found");
+        NOTIFY_WARNING(lv_tr("Tips database not found"));
         LOG_ERROR_INTERNAL("[TipsManager] Tips file not found: {}", tips_path);
         return false;
     }
@@ -49,7 +51,7 @@ bool TipsManager::init(const std::string& tips_path) {
 
         // Validate required fields
         if (!data.contains("categories") || !data["categories"].is_object()) {
-            NOTIFY_WARNING("Tips database format error");
+            NOTIFY_WARNING(lv_tr("Tips database format error"));
             LOG_ERROR_INTERNAL(
                 "[TipsManager] Invalid tips file: missing or invalid 'categories' field");
             return false;
@@ -64,11 +66,11 @@ bool TipsManager::init(const std::string& tips_path) {
 
         return true;
     } catch (const json::parse_error& e) {
-        NOTIFY_WARNING("Could not parse tips database");
+        NOTIFY_WARNING(lv_tr("Could not parse tips database"));
         LOG_ERROR_INTERNAL("[TipsManager] JSON parse error: {}", e.what());
         return false;
     } catch (const std::exception& e) {
-        NOTIFY_WARNING("Error loading printing tips");
+        NOTIFY_WARNING(lv_tr("Error loading printing tips"));
         LOG_ERROR_INTERNAL("[TipsManager] Error loading tips: {}", e.what());
         return false;
     }

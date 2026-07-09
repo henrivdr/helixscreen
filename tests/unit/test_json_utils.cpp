@@ -3,9 +3,9 @@
 
 #include "json_utils.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <limits>
+
+#include "../catch_amalgamated.hpp"
 
 using nlohmann::json;
 

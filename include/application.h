@@ -25,11 +25,11 @@ class ActionPromptManager;
 class AmsErrorBridge;
 class GcodeErrorRouter;
 class GcodeNarrationRouter;
-}
+} // namespace helix
 namespace helix::ui {
 class ActionPromptModal;
 class RecoveryModalPresenter;
-}
+} // namespace helix::ui
 class DisplayManager;
 class SubjectInitializer;
 class MoonrakerManager;
@@ -120,6 +120,10 @@ class Application {
     void show_screensaver_migration_notice_if_pending();
 #endif
     void setup_discovery_callbacks();
+    // Re-resolve + persist fan AND heater roles and re-init fan state so the UI
+    // rebinds after a targeted hardware-reconfig wizard page finishes. Marshals to
+    // the main thread internally; safe to call from a main-thread on_complete.
+    void reapply_hardware_roles();
     lv_obj_t* create_overlay_panel(lv_obj_t* screen, const char* component_name,
                                    const char* display_name);
     void init_action_prompt();
@@ -208,6 +212,9 @@ class Application {
     // State
     bool m_running = false;
     bool m_wizard_active = false;
+    // Guards the discovery-triggered targeted hardware-reconfig wizard so it launches
+    // at most once per connection. Reset when a new hardware discovery begins.
+    bool m_targeted_reconfig_shown = false;
     bool m_shutdown_complete = false;
     bool m_soft_restart_in_progress = false;
 

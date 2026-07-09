@@ -15,7 +15,8 @@ std::string cache_key(const std::string& video_filename) {
 
 std::string companion_filename(const std::string& video_filename) {
     auto dot = video_filename.rfind('.');
-    if (dot == std::string::npos) return video_filename + ".thumb.jpg";
+    if (dot == std::string::npos)
+        return video_filename + ".thumb.jpg";
     return video_filename.substr(0, dot) + ".thumb.jpg";
 }
 
@@ -25,11 +26,14 @@ std::vector<std::string> ffmpeg_extract_args(const std::string& input_path,
 }
 
 bool is_video_file(const std::string& filename) {
-    if (filename.size() < 5) return false;
-    if (filename.find(".thumb.") != std::string::npos) return false;
+    if (filename.size() < 5)
+        return false;
+    if (filename.find(".thumb.") != std::string::npos)
+        return false;
 
     auto dot = filename.rfind('.');
-    if (dot == std::string::npos) return false;
+    if (dot == std::string::npos)
+        return false;
     auto ext = filename.substr(dot);
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
     return ext == ".mp4" || ext == ".mkv" || ext == ".avi";
@@ -47,4 +51,4 @@ std::vector<std::string> build_player_args(const std::string& player,
     return {"ffplay", "-autoexit", "-exitonmousedown", "-fs", file_path};
 }
 
-}  // namespace helix::timelapse
+} // namespace helix::timelapse

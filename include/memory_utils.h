@@ -67,9 +67,12 @@ struct MemoryInfo {
     // (AD5X reports ~470MB) would mis-classify as "normal" and inherit the tight
     // 3MB/5min growth threshold meant for 256-512MB boards, spuriously warning
     // on the one-time 3D viewer load at print start.
-    static constexpr size_t TIER_CONSTRAINED_KB = 256 * 1024;          ///< < 256MB usable = constrained (AD5M, K1C)
-    static constexpr size_t TIER_NORMAL_KB = 448 * 1024;               ///< 256-448MB usable = normal; >=448MB (512MB-class, e.g. AD5X) = good
-    static constexpr size_t TIER_FORCE_STREAMING_KB = 2ULL * 1024 * 1024; ///< <= 2GB = force streaming
+    static constexpr size_t TIER_CONSTRAINED_KB =
+        256 * 1024; ///< < 256MB usable = constrained (AD5M, K1C)
+    static constexpr size_t TIER_NORMAL_KB =
+        448 * 1024; ///< 256-448MB usable = normal; >=448MB (512MB-class, e.g. AD5X) = good
+    static constexpr size_t TIER_FORCE_STREAMING_KB =
+        2ULL * 1024 * 1024; ///< <= 2GB = force streaming
 
     /// Check if available memory is low (< 64MB available right now)
     bool is_low_memory() const {
@@ -116,6 +119,12 @@ struct MemoryInfo {
  * @return MemoryInfo struct with current memory status
  */
 MemoryInfo get_system_memory_info();
+
+// Below this total RAM, warn before resonance/input-shaper calibration: klippy
+// buffers accelerometer samples and runs an FFT that overcommits tiny hosts
+// (e.g. the 128 MB Elegoo CC1) into swap thrash, surfacing as klippy
+// "Timer Too Close" errors. Threshold chosen by the maintainer (200 MB).
+inline constexpr size_t RESONANCE_LOW_RAM_WARN_MB = 200;
 
 /**
  * @brief Memory thresholds for G-code 3D rendering decisions

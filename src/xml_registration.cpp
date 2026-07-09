@@ -9,6 +9,7 @@
 #include "ui_button.h"
 #include "ui_carousel.h"
 #include "ui_confetti.h"
+#include "ui_event_safety.h"
 #include "ui_fan_dial.h"
 #include "ui_fonts.h"
 #include "ui_gcode_viewer.h"
@@ -32,9 +33,9 @@
 #include "ui_z_offset_indicator.h"
 
 #include "layout_manager.h"
+#include "page_scroll_auto_inject.h"
 #include "static_subject_registry.h"
 #include "theme_manager.h"
-#include "ui_event_safety.h"
 
 #include <spdlog/spdlog.h>
 
@@ -192,16 +193,19 @@ static void on_toggle_password_visibility(lv_event_t* e) {
 static void on_setting_info_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[Settings] on_setting_info_clicked");
     auto* info_btn = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
-    if (!info_btn) return;
+    if (!info_btn)
+        return;
     // Walk up parent chain to find a level that contains "description" child
     auto* parent = lv_obj_get_parent(info_btn);
     lv_obj_t* desc = nullptr;
     while (parent) {
         desc = lv_obj_find_by_name(parent, "description");
-        if (desc) break;
+        if (desc)
+            break;
         parent = lv_obj_get_parent(parent);
     }
-    if (!desc) return;
+    if (!desc)
+        return;
     if (lv_obj_has_flag(desc, LV_OBJ_FLAG_HIDDEN)) {
         lv_obj_remove_flag(desc, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -236,6 +240,8 @@ void register_xml_components() {
     ui_carousel_init();           // <ui_carousel> horizontal scroll-snap carousel
     register_xml("carousel.xml"); // <carousel> XML component wrapping ui_carousel
     ui_confetti_init();           // <ui_confetti> celebration animation canvas
+    register_xml(
+        "components/page_scroll_gutter.xml"); // <page_scroll_gutter> page scroll chevron column
 
     // Register no-op callback and subject for optional handlers in XML components
     // This silences warnings when components use callback/subject props with default=""
@@ -244,8 +250,7 @@ void register_xml_components() {
     // Global utility callbacks used by multiple components
     lv_xml_register_event_cb(nullptr, "on_toggle_password_visibility",
                              on_toggle_password_visibility);
-    lv_xml_register_event_cb(nullptr, "on_setting_info_clicked",
-                             on_setting_info_clicked);
+    lv_xml_register_event_cb(nullptr, "on_setting_info_clicked", on_setting_info_clicked);
     lv_xml_register_event_cb(nullptr, "on_edit_done_clicked",
                              [](lv_event_t*) { get_global_home_panel().exit_grid_edit_mode(); });
     lv_xml_register_event_cb(nullptr, "on_edit_add_widget_clicked",
@@ -276,6 +281,7 @@ void register_xml_components() {
     register_xml("spoolman_context_menu.xml");
     register_xml("spoolman_edit_modal.xml");
     register_xml("spoolman_panel.xml");
+    register_xml("components/filament_catalog_picker.xml");
 
     // Spool wizard components
     register_xml("wizard_vendor_row.xml");
@@ -436,7 +442,7 @@ void register_xml_components() {
     register_xml("thermistor_configure_picker.xml");
     register_xml("print_status_configure_picker.xml");
     register_xml("print_status_nozzle_tool_picker.xml");
-    register_xml("favorite_macro_picker.xml");
+    register_xml("favorite_macro_config_modal.xml");
     helix::ui::PrinterSwitchMenu::register_callbacks();
     register_xml("printer_switch_menu.xml");
     register_xml("macro_param_modal.xml");
@@ -508,6 +514,7 @@ void register_xml_components() {
     register_xml("history_dashboard_panel.xml");
 
     // Settings components (must be registered before settings_panel)
+    register_xml("setting_group_header.xml");
     register_xml("setting_section_header.xml");
     register_xml("setting_toggle_row.xml");
     register_xml("setting_dropdown_row.xml");
@@ -587,7 +594,6 @@ void register_xml_components() {
     register_xml("printer_image_overlay.xml");
     register_xml("hidden_network_modal.xml");
     register_xml("network_test_modal.xml");
-    register_xml("filament_preset_edit_modal.xml");
     register_xml("wifi_network_item.xml");
     register_xml("telemetry_data_overlay.xml");
     register_xml("about_settings_overlay.xml");
@@ -637,6 +643,12 @@ void register_xml_components() {
     // attaches an instance to lv_layer_top during Application::init and
     // toggles visibility based on UpgradeNudge state).
     register_xml("components/upgrade_banner.xml");
+
+    // Page-scroll-buttons policy: injects chevron gutters into overflowing
+    // scrollable containers. Driven by the NavigationManager on_root_shown() hooks
+    // and the Display-settings toggle callback — NOT a subject observer (see
+    // PageScrollAutoInject::init). This call is the lifecycle setup hook.
+    helix::ui::PageScrollAutoInject::instance().init();
 
     spdlog::trace("[XML Registration] XML component registration complete");
 }

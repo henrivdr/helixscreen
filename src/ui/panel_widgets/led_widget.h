@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "panel_widget.h"
 
 #include <memory>

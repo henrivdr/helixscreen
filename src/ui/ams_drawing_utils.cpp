@@ -2,13 +2,14 @@
 
 #include "ui/ams_drawing_utils.h"
 
+#include "ui_fonts.h"
+#include "ui_icon_codepoints.h"
+#include "ui_spool_canvas.h"
+
 #include "ams_backend.h"
 #include "ams_state.h"
 #include "config.h"
 #include "theme_manager.h"
-#include "ui_fonts.h"
-#include "ui_icon_codepoints.h"
-#include "ui_spool_canvas.h"
 
 #include <spdlog/spdlog.h>
 
@@ -391,7 +392,7 @@ SystemToolLayout compute_system_tool_layout(const AmsSystemInfo& info, const Ams
             // Count = number of direct lanes + 1 per hub group.
             int direct_count = 0;
             bool has_hub_group = false;
-            int hub_tool = -1; // lowest mapped_tool among hub lanes (for label)
+            int hub_tool = -1;             // lowest mapped_tool among hub lanes (for label)
             std::vector<int> direct_tools; // mapped_tools for direct lanes
 
             for (int s = 0; s < unit.slot_count; s++) {
@@ -683,7 +684,8 @@ SpoolVisual create_spool_visual(lv_obj_t* container, int32_t spool_size) {
         lv_obj_set_size(filament_ring, filament_ring_size, filament_ring_size);
         lv_obj_align(filament_ring, LV_ALIGN_CENTER, 0, 0);
         lv_obj_set_style_radius(filament_ring, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(filament_ring, lv_color_hex(AMS_DEFAULT_SLOT_COLOR), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(filament_ring, lv_color_hex(AMS_DEFAULT_SLOT_COLOR),
+                                  LV_PART_MAIN);
         lv_obj_set_style_bg_opa(filament_ring, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(filament_ring, 0, LV_PART_MAIN);
         lv_obj_remove_flag(filament_ring, LV_OBJ_FLAG_SCROLLABLE);
@@ -817,8 +819,8 @@ lv_obj_t* create_lane_badge(lv_obj_t* parent, int lane_number, int32_t size, boo
     lv_obj_t* badge = lv_obj_create(parent);
     lv_obj_set_size(badge, size, size);
     lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_color_t bg = active ? theme_manager_get_color("success")
-                           : theme_manager_get_color("ams_badge_bg");
+    lv_color_t bg =
+        active ? theme_manager_get_color("success") : theme_manager_get_color("ams_badge_bg");
     lv_obj_set_style_bg_color(badge, bg, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(badge, 1, LV_PART_MAIN);

@@ -53,11 +53,15 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     // Type
     // ========================================================================
 
-    [[nodiscard]] AmsType get_type() const override { return AmsType::ACE; }
+    [[nodiscard]] AmsType get_type() const override {
+        return AmsType::ACE;
+    }
 
     // ACE marker for expected-hardware recording during wizard setup. ACE is
     // REST-based, not a real Klipper object, but the validator keys on this name.
-    [[nodiscard]] const char* get_klipper_object_name() const override { return "ace"; }
+    [[nodiscard]] const char* get_klipper_object_name() const override {
+        return "ace";
+    }
 
     // ACE uses ACE_CHANGE_TOOL TOOL=n, not the U1 Tn/SM_PRINT_* families
     // GcodeToolRemapper handles. Remap disabled until that command family is
@@ -133,10 +137,11 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     // Environment Sensors & Dryer Control (ACE Pro has built-in dryer + temp)
     // ========================================================================
 
-    [[nodiscard]] bool has_environment_sensors() const override { return true; }
+    [[nodiscard]] bool has_environment_sensors() const override {
+        return true;
+    }
     [[nodiscard]] DryerInfo get_dryer_info() const override;
-    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1,
-                           int unit = 0) override;
+    AmsError start_drying(float temp_c, int duration_min, int fan_pct = -1, int unit = 0) override;
     AmsError stop_drying(int unit = 0) override;
     AmsError update_drying(float temp_c = -1, int duration_min = -1, int fan_pct = -1) override;
     [[nodiscard]] std::vector<DryingPreset> get_drying_presets() const override;
@@ -156,7 +161,9 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     // ========================================================================
 
     void handle_status_update(const nlohmann::json& notification) override;
-    const char* backend_log_tag() const override { return "[ACE]"; }
+    const char* backend_log_tag() const override {
+        return "[ACE]";
+    }
     void on_started() override;
     void on_stopping() override;
 
@@ -272,8 +279,8 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     // and reinserted the same spool) looks identical to a swap under this
     // status-based heuristic and clears the override. Documented tradeoff —
     // ACE's single signal is too coarse to distinguish the two cases.
-    void check_hardware_event_clear(SlotInfo& slot, int slot_index,
-                                    SlotStatus previous_status, SlotStatus current_status);
+    void check_hardware_event_clear(SlotInfo& slot, int slot_index, SlotStatus previous_status,
+                                    SlotStatus current_status);
 
     // Shared helper used by every override-clear path (hardware event and
     // explicit user request). Caller must hold mutex_. Erases

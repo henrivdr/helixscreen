@@ -68,12 +68,12 @@ struct ModePalette {
  * @brief Non-color theme properties
  */
 struct ThemeProperties {
-    int border_radius_size = 3;       // Size index (0-7) into BorderRadiusSizes table
-    int border_width = 1;            // Default border width
-    int border_opacity = 40;         // Border opacity (0-255)
-    int shadow_intensity = 0;        // Shadow blur radius in px (0 = disabled)
-    int shadow_opa = 0;              // Shadow opacity (0-255, default 0 = no shadow)
-    int shadow_offset_y = 2;         // Shadow vertical offset in px
+    int border_radius_size = 3;           // Size index (0-7) into BorderRadiusSizes table
+    int border_width = 1;                 // Default border width
+    int border_opacity = 40;              // Border opacity (0-255)
+    int shadow_intensity = 0;             // Shadow blur radius in px (0 = disabled)
+    int shadow_opa = 0;                   // Shadow opacity (0-255, default 0 = no shadow)
+    int shadow_offset_y = 2;              // Shadow vertical offset in px
     std::string handle_style = "round";   // Slider/arc knob shape: "round" or "bar"
     std::string handle_color = "primary"; // Slider/arc knob color token: "primary", "text", etc.
 };

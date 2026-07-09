@@ -2,11 +2,11 @@
 
 #pragma once
 
-#include "moonraker_job_api.h"
 #include "ui_observer_guard.h"
 #include "ui_timer_guard.h"
 
 #include "lvgl/lvgl.h"
+#include "moonraker_job_api.h"
 #include "printer_state.h"
 #include "subject_managed_panel.h"
 
@@ -218,10 +218,10 @@ class AbortManager {
     // Timeout Constants (public for testing)
     // ========================================================================
 
-    static constexpr uint32_t HEATER_INTERRUPT_TIMEOUT_MS = 1000;                      ///< 1 second
+    static constexpr uint32_t HEATER_INTERRUPT_TIMEOUT_MS = 1000;                     ///< 1 second
     static constexpr uint32_t PROBE_TIMEOUT_MS = 2000;                                ///< 2 seconds
     static constexpr uint32_t CANCEL_TIMEOUT_MS = MoonrakerJobAPI::CANCEL_TIMEOUT_MS; ///< 5 minutes
-    static constexpr uint32_t CANCEL_NUDGE_MS = 15000;                                ///< 15 seconds
+    static constexpr uint32_t CANCEL_NUDGE_MS = 15000; ///< 15 seconds
     /// Wait window for klippy_state to reach READY after the recovery service
     /// returns. The recovery service can take 30s+ on K2 (klipper_mcu bounce),
     /// but that's handled async — this timer only covers the gap between

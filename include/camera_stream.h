@@ -98,8 +98,12 @@ class CameraStream {
      * 0 = paused (no frames delivered), -1 = unlimited.
      * Thread-safe — takes effect on next frame boundary.
      */
-    void set_max_fps(int fps) { max_fps_.store(fps, std::memory_order_relaxed); }
-    int get_max_fps() const { return max_fps_.load(std::memory_order_relaxed); }
+    void set_max_fps(int fps) {
+        max_fps_.store(fps, std::memory_order_relaxed);
+    }
+    int get_max_fps() const {
+        return max_fps_.load(std::memory_order_relaxed);
+    }
 
     /**
      * @brief Configure stream URLs from printer state.
@@ -156,12 +160,17 @@ class CameraStream {
     /// Callers must NOT destroy the CameraStream in this case — the detached
     /// thread still holds `this`.  Use unique_ptr::release() to intentionally
     /// leak and prevent use-after-free.
-    bool was_detached() const { return thread_detached_; }
+    bool was_detached() const {
+        return thread_detached_;
+    }
 
     /// Compute scaled decode dimensions for a given source size and target.
     /// Returns the source dimensions unchanged if no scaling is beneficial.
     /// Public for unit testing.
-    struct ScaledSize { int w; int h; };
+    struct ScaledSize {
+        int w;
+        int h;
+    };
     ScaledSize compute_scaled_size(int src_w, int src_h) const;
 
   private:
@@ -192,9 +201,8 @@ class CameraStream {
     TransformParams resolve_transform(int src_w, int src_h) const;
 
     // Apply transpose and/or flip from decoded pixels (src) into back_buf_
-    void apply_pixel_transform(const uint8_t* src, int src_w, int src_h,
-                               int src_stride, bool swap_rb,
-                               const TransformParams& params);
+    void apply_pixel_transform(const uint8_t* src, int src_w, int src_h, int src_stride,
+                               bool swap_rb, const TransformParams& params);
 
     std::string stream_url_;
     std::string snapshot_url_;
@@ -219,7 +227,7 @@ class CameraStream {
     int frame_width_ = 0;
     int frame_height_ = 0;
     std::mutex buf_mutex_;
-    std::mutex cb_mutex_;  // Protects on_frame_ / on_error_ against TOCTOU races
+    std::mutex cb_mutex_; // Protects on_frame_ / on_error_ against TOCTOU races
 
     // Old front buffers awaiting safe cleanup — LVGL may still reference
     // them via lv_image_set_src until the widget clears the source
@@ -228,7 +236,7 @@ class CameraStream {
     // Scratch buffers reused across frames to avoid per-frame heap allocation
     std::unique_ptr<uint8_t[]> transpose_buf_;
     size_t transpose_buf_size_ = 0;
-    std::unique_ptr<uint8_t[]> decode_temp_;   // temp for decode+transform path
+    std::unique_ptr<uint8_t[]> decode_temp_; // temp for decode+transform path
     size_t decode_temp_size_ = 0;
 
     // MJPEG parser state
@@ -252,21 +260,24 @@ class CameraStream {
 
     static constexpr int kMaxStreamFailures = 3;
     static constexpr int kSnapshotIntervalMs = 2000;
-    static constexpr int kStreamConnectTimeoutSec = 5;   // Initial connection attempt
-    static constexpr int kStreamTimeoutSec = 300;       // Active stream — reconnects on timeout
+    static constexpr int kStreamConnectTimeoutSec = 5; // Initial connection attempt
+    static constexpr int kStreamTimeoutSec = 300;      // Active stream — reconnects on timeout
 
     // libturbojpeg runtime loading (dlopen) — nullptr if unavailable
-    void* tj_lib_ = nullptr;   // dlopen handle
-    void* tj_ = nullptr;       // tjhandle (decompressor instance)
+    void* tj_lib_ = nullptr; // dlopen handle
+    void* tj_ = nullptr;     // tjhandle (decompressor instance)
     // Function pointers loaded via dlsym
     using TjInitDecompress_t = void* (*)();
-    using TjDecompressHeader3_t = int (*)(void*, const unsigned char*, unsigned long,
-                                          int*, int*, int*, int*);
-    using TjDecompress2_t = int (*)(void*, const unsigned char*, unsigned long,
-                                    unsigned char*, int, int, int, int, int);
+    using TjDecompressHeader3_t = int (*)(void*, const unsigned char*, unsigned long, int*, int*,
+                                          int*, int*);
+    using TjDecompress2_t = int (*)(void*, const unsigned char*, unsigned long, unsigned char*, int,
+                                    int, int, int, int);
     using TjDestroy_t = int (*)(void*);
     using TjGetErrorStr2_t = char* (*)(void*);
-    struct TjScalingFactor { int num; int denom; };
+    struct TjScalingFactor {
+        int num;
+        int denom;
+    };
     using TjGetScalingFactors_t = TjScalingFactor* (*)(int*);
     TjDecompressHeader3_t fn_decompress_header_ = nullptr;
     TjDecompress2_t fn_decompress_ = nullptr;

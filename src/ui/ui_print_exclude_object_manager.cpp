@@ -14,6 +14,7 @@
 #include "observer_factory.h"
 #include "printer_state.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 namespace helix::ui {
@@ -180,9 +181,9 @@ void PrintExcludeObjectManager::handle_object_long_press(const char* object_name
         handle_exclude_cancelled();
     });
 
-    std::string message = "Stop printing \"" + std::string(object_name) +
-                          "\"?\n\nThis cannot be undone after 5 seconds.";
-    const char* attrs[] = {"title", "Exclude Object?", "message", message.c_str(), nullptr};
+    std::string message = fmt::format(
+        lv_tr("Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds."), object_name);
+    const char* attrs[] = {"title", lv_tr("Exclude Object?"), "message", message.c_str(), nullptr};
 
     if (!exclude_modal_.show(lv_screen_active(), attrs)) {
         spdlog::error("[PrintExcludeObjectManager] Failed to show exclude confirmation modal");
@@ -332,10 +333,9 @@ void PrintExcludeObjectManager::exclude_undo_timer_cb(lv_timer_t* timer) {
                 // diverges from what it told us via gcode.script return.
             },
             [self, token, object_name](const MoonrakerError& err) {
-                token.defer("PrintExcludeObjectManager::dispatch_rpc_error",
-                            [self, object_name, err]() {
-                                self->on_exclude_rpc_error(object_name, err);
-                            });
+                token.defer(
+                    "PrintExcludeObjectManager::dispatch_rpc_error",
+                    [self, object_name, err]() { self->on_exclude_rpc_error(object_name, err); });
             });
     } else {
         spdlog::warn("[PrintExcludeObjectManager] No API available - simulating exclusion");
@@ -445,19 +445,17 @@ void PrintExcludeObjectManager::on_exclude_rpc_error(const std::string& object_n
     // we were called on — lifetime_.defer is safe from the main thread and tok.defer
     // would have handled the background case via the dispatch path.
     auto defer_tok = lifetime_.token();
-    defer_tok.defer("PrintExcludeObjectManager::exclude_error",
-                    [this, object_name, user_msg = err.user_message()]() {
-                        awaiting_confirmation_.erase(object_name);
-                        NOTIFY_ERROR(lv_tr("Failed to exclude '{}': {}"), object_name, user_msg);
+    defer_tok.defer("PrintExcludeObjectManager::exclude_error", [this, object_name,
+                                                                 user_msg = err.user_message()]() {
+        awaiting_confirmation_.erase(object_name);
+        NOTIFY_ERROR(lv_tr("Failed to exclude '{}': {}"), object_name, user_msg);
 
-                        if (gcode_viewer_) {
-                            ui_gcode_viewer_set_excluded_objects(gcode_viewer_,
-                                                                 excluded_objects_);
-                            spdlog::debug(
-                                "[PrintExcludeObjectManager] Reverted visual exclusion for '{}'",
-                                object_name);
-                        }
-                    });
+        if (gcode_viewer_) {
+            ui_gcode_viewer_set_excluded_objects(gcode_viewer_, excluded_objects_);
+            spdlog::debug("[PrintExcludeObjectManager] Reverted visual exclusion for '{}'",
+                          object_name);
+        }
+    });
 }
 
 } // namespace helix::ui

@@ -1,10 +1,10 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../catch_amalgamated.hpp"
-
 #include "label_bitmap.h"
 #include "pwg_raster.h"
+
+#include "../catch_amalgamated.hpp"
 
 using helix::LabelBitmap;
 using namespace helix::pwg;
@@ -45,7 +45,7 @@ TEST_CASE("PackBits encoding - run of identical bytes", "[label][pwg]") {
     // Run encoding: (count-1) followed by the byte
     // count=10 -> 10-1=9
     REQUIRE(out.size() == 2);
-    REQUIRE(out[0] == 9);  // 10 - 1
+    REQUIRE(out[0] == 9); // 10 - 1
     REQUIRE(out[1] == 0xAA);
 }
 

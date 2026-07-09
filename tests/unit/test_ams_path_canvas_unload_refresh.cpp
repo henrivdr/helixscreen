@@ -20,17 +20,17 @@
  * is cleared. With the fix line commented out, step 6 fails (tube stays PREP).
  */
 
-#include "../test_fixtures.h"
-
-#include "ams_backend_mock.h"
-#include "ams_state.h"
-#include "ams_types.h"
 #include "ui_ams_sidebar.h"
 #include "ui_ams_slot.h"
 #include "ui_endless_spool_arrows.h"
 #include "ui_filament_path_canvas.h"
 #include "ui_panel_ams.h"
 #include "ui_spool_canvas.h"
+
+#include "../test_fixtures.h"
+#include "ams_backend_mock.h"
+#include "ams_state.h"
+#include "ams_types.h"
 
 #include <memory>
 

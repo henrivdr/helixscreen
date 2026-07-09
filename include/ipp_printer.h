@@ -32,8 +32,7 @@ class IppPrinter : public ILabelPrinter {
     // === ILabelPrinter interface ===
 
     [[nodiscard]] std::string name() const override;
-    void print(const LabelBitmap& bitmap, const LabelSize& size,
-               PrintCallback callback) override;
+    void print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) override;
     [[nodiscard]] std::vector<LabelSize> supported_sizes() const override;
 
     // === IPP-specific API ===

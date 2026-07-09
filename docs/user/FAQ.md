@@ -45,6 +45,12 @@ HelixScreen works with any Klipper-based printer running Moonraker. Tested and s
 
 > **Note:** "Tested" means the HelixScreen team has verified the platform on real hardware. "Community" means a community user has confirmed it working but we haven't tested it ourselves. "Preliminary" means support exists from the printer's published config but has not been verified on hardware. See the [Installation Guide](INSTALL.md) for platform-specific instructions.
 
+### Can I run HelixScreen on a separate device instead of on my printer?
+
+Yes. HelixScreen is a Moonraker client — it only needs network access to your printer's Moonraker instance, so it doesn't have to run on the printer itself. Install it on any supported Linux device (a spare Raspberry Pi with a touchscreen, a mini PC with an HDMI touchscreen, even your desktop) and enter your **printer's IP address** in the wizard's Moonraker step instead of `localhost`. This is ideal when the printer is on the floor and you want the screen at your desk.
+
+Point it at Moonraker (port `7125`), not the Mainsail/Fluidd web interface — you don't need Mainsail or Fluidd on the screen device at all. See [Remote Screen Setup](INSTALL.md#remote-screen-setup-run-on-a-separate-device) for step-by-step instructions.
+
 ### Which displays are supported?
 
 **Tested and confirmed working:**

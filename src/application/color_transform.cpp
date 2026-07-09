@@ -32,8 +32,8 @@ void ColorTransform::set(float gamma, int warmth, int tint) {
     warmth = std::clamp(warmth, -50, 50);
     tint = std::clamp(tint, -50, 50);
 
-    const bool gain_is_identity = panel_r_gain_ >= 0.999f && panel_g_gain_ >= 0.999f &&
-                                  panel_b_gain_ >= 0.999f;
+    const bool gain_is_identity =
+        panel_r_gain_ >= 0.999f && panel_g_gain_ >= 0.999f && panel_b_gain_ >= 0.999f;
 
     if (std::fabs(gamma - 1.0f) < 0.01f && warmth == 0 && tint == 0 && gain_is_identity) {
         reset();
@@ -92,8 +92,8 @@ void ColorTransform::apply_area(uint8_t* buf, int buf_stride_bytes, int x, int y
                 const int r_out = r_lut_[r8];
                 const int g_out = g_lut_[g8];
                 const int b_out = b_lut_[b8];
-                line[col] = static_cast<uint16_t>(((r_out & 0xF8) << 8) |
-                                                  ((g_out & 0xFC) << 3) | (b_out >> 3));
+                line[col] = static_cast<uint16_t>(((r_out & 0xF8) << 8) | ((g_out & 0xFC) << 3) |
+                                                  (b_out >> 3));
             }
         }
         return;

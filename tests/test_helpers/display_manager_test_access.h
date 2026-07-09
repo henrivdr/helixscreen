@@ -30,6 +30,19 @@ class DisplayManagerTestAccess {
         dm.m_backlight = std::move(backlight);
     }
 
+    // Inject an lv_display_t so the flush-suppression path (#1049) has a real
+    // display to act on. FakePowerOffBackend::create_display() returns nullptr, so
+    // without this m_display stays null and suppress_flush_for_sleep() no-ops.
+    static void set_display(DisplayManager& dm, lv_display_t* disp) {
+        dm.m_display = disp;
+    }
+
+    // True while the power-off flush suppression is engaged (#1049 regression
+    // guard: must be set after a real power-off enter_sleep, cleared on restore).
+    static bool is_flush_suppressed(DisplayManager& dm) {
+        return dm.m_flush_suppressed_for_sleep;
+    }
+
     // Run the SAME power-off gate that DisplayManager::init() applies, against the
     // manager's currently-injected backend/backlight/hardware-blank state. Lets a
     // test prove the gate's outcome (#1049 U1 regression guard) without a full

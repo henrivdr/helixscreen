@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Offline branded-filament picker: Vendor -> Type -> product list -->
+<!-- NOTE: Backdrop created programmatically by Modal system -->
+<component>
+  <view name="filament_catalog_picker"
+        extends="ui_dialog" width="70%" height="content" style_min_width="380"
+        style_max_height="85%"
+        align="center" flex_flow="column" style_flex_main_place="start" style_pad_gap="0">
+    <modal_header title="Choose Filament" title_tag="Choose Filament"
+                  hide_icon="true" hide_close="false" close_callback="catalog_picker_close_cb"/>
+    <divider_horizontal/>
+    <!-- Scrollable content region: caps at #dialog_content_max (a responsive budget
+         tuned to leave header + button-row + top/bottom margin on short screens) and
+         scrolls when vendor/type + the product list can't all fit at once. Header and
+         button row stay pinned outside this region. -->
+    <lv_obj width="100%" height="content" style_max_height="#dialog_content_max"
+            style_pad_all="#space_md" flex_flow="column"
+            style_pad_gap="#space_md" scrollbar_mode="auto">
+      <!-- Vendor row -->
+      <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row"
+              style_flex_cross_place="center" style_pad_gap="#space_md" scrollable="false">
+        <text_small text="Vendor" translation_tag="Vendor" width="60"/>
+        <lv_dropdown name="vendor_dropdown" flex_grow="1" height="content"
+                     style_radius="#border_radius">
+          <event_cb trigger="value_changed" callback="catalog_picker_vendor_changed_cb"/>
+        </lv_dropdown>
+      </lv_obj>
+      <!-- Type row -->
+      <lv_obj width="100%" height="content" style_pad_all="0" flex_flow="row"
+              style_flex_cross_place="center" style_pad_gap="#space_md" scrollable="false">
+        <text_small text="Type" translation_tag="Type" width="60"/>
+        <lv_dropdown name="type_dropdown" flex_grow="1" height="content"
+                     style_radius="#border_radius">
+          <event_cb trigger="value_changed" callback="catalog_picker_type_changed_cb"/>
+        </lv_dropdown>
+      </lv_obj>
+      <!-- Product list (rows built in C++). A distinct card surface visually bounds the
+           "pick area" against the dialog background; height=content so short lists shrink
+           (letting dialog margin appear) while long lists scroll via the parent region. -->
+      <lv_obj name="product_list" width="100%" height="content"
+              style_bg_color="#card_bg" style_bg_opa="255" style_border_width="0"
+              style_radius="#border_radius" style_pad_all="#space_xs"
+              flex_flow="column" style_pad_gap="#space_xxs"/>
+    </lv_obj>
+    <!-- Reset-to-defaults is the leading (tertiary) action in the button row. It is only
+         meaningful in the preset-editing context (a reset callback set before show()), so
+         on_show() hides btn_tertiary/div_tertiary for other pickers (e.g. AMS slot
+         assignment). hide_tertiary="false" reveals it here by default; the C++ gate narrows
+         it to the preset case. -->
+    <modal_button_row primary_text="Select" primary_tag="Select"
+                      primary_callback="catalog_picker_select_cb"
+                      secondary_text="Cancel" secondary_tag="Cancel"
+                      secondary_callback="catalog_picker_close_cb"
+                      tertiary_text="Reset to defaults" tertiary_tag="Reset to defaults"
+                      tertiary_callback="catalog_picker_reset_cb"
+                      tertiary_variant="secondary" hide_tertiary="false"/>
+  </view>
+</component>

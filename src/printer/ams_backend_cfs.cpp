@@ -3,64 +3,22 @@
 
 #include "ams_backend_cfs.h"
 
+#include "ui_temperature_utils.h"
+
+#include "filament_catalog.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 #include "moonraker_error.h"
 #include "post_op_cooldown_manager.h"
 #include "printer_detector.h"
-#include "ui_temperature_utils.h"
 
 #include <spdlog/spdlog.h>
-
-#include <fstream>
 
 #include "hv/json.hpp"
 
 namespace helix::printer {
 
 using json = nlohmann::json;
-
-const CfsMaterialDb& CfsMaterialDb::instance() {
-    static CfsMaterialDb db;
-    return db;
-}
-
-CfsMaterialDb::CfsMaterialDb() {
-    load_database();
-}
-
-void CfsMaterialDb::load_database() {
-    for (const auto& path : {"assets/cfs_materials.json", "../assets/cfs_materials.json",
-                             "/opt/helixscreen/assets/cfs_materials.json"}) {
-        std::ifstream f(path);
-        if (!f.is_open())
-            continue;
-
-        try {
-            auto j = nlohmann::json::parse(f);
-            for (auto& [id, entry] : j.items()) {
-                CfsMaterialInfo info;
-                info.id = id;
-                info.brand = entry.value("brand", "");
-                info.name = entry.value("name", "");
-                info.material_type = entry.value("type", "");
-                info.min_temp = entry.value("min_temp", 0);
-                info.max_temp = entry.value("max_temp", 0);
-                materials_[id] = std::move(info);
-            }
-            spdlog::info("[AMS CFS] Loaded {} materials from {}", materials_.size(), path);
-            return;
-        } catch (const std::exception& e) {
-            spdlog::warn("[AMS CFS] Failed to parse {}: {}", path, e.what());
-        }
-    }
-    spdlog::warn("[AMS CFS] Material database not found");
-}
-
-const CfsMaterialInfo* CfsMaterialDb::lookup(const std::string& id) const {
-    auto it = materials_.find(id);
-    return it != materials_.end() ? &it->second : nullptr;
-}
 
 std::string CfsMaterialDb::strip_code(const std::string& code) {
     if (code == "-1" || code == "None" || code.empty())
@@ -144,6 +102,15 @@ std::string format_unit_only(const nlohmann::json& values) {
     if (unit < 1)
         return "";
     return " on unit " + std::to_string(unit);
+}
+
+/// True when a per-slot `vender` string carries no occupancy signal. The box
+/// reports one of these for an empty bay; `"none"` (lowercase) is also the
+/// synthetic default when the array is short. A REAL vendor name or the
+/// present-but-unresolved `"unknown"` marker are NOT sentinels — both mean a
+/// spool is seated. Kept in one place so every comparison site stays in sync.
+bool is_vender_sentinel(const std::string& v) {
+    return v.empty() || v == "none" || v == "None" || v == "-1";
 }
 
 } // namespace
@@ -537,7 +504,8 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
         }
     }
 
-    const auto& db = CfsMaterialDb::instance();
+    // Transient: materialize ONLY the cfs-coded slice for this parse pass.
+    const auto cfs_catalog = FilamentCatalog::load_codes("cfs");
 
     // Loop over T1-T4 units
     for (int n = 1; n <= 4; ++n) {
@@ -619,12 +587,12 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
             }
             std::string mat_id = CfsMaterialDb::strip_code(mat_code_raw);
             if (!mat_id.empty()) {
-                auto* mat_info = db.lookup(mat_id);
+                const auto* mat_info = cfs_catalog.resolve_code("cfs", mat_id);
                 if (mat_info) {
-                    slot.material = mat_info->material_type;
+                    slot.material = mat_info->type;
                     slot.brand = mat_info->brand;
-                    slot.nozzle_temp_min = mat_info->min_temp;
-                    slot.nozzle_temp_max = mat_info->max_temp;
+                    slot.nozzle_temp_min = mat_info->nozzle_min;
+                    slot.nozzle_temp_max = mat_info->nozzle_max;
                 } else {
                     // Fallback: check same_material for a human-readable name
                     auto it = same_material_names.find(mat_code_raw);
@@ -634,18 +602,28 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
                 }
             }
 
-            // Brand fallback: the CFS material-DB lookup above populates
-            // slot.brand for known Creality material codes. For RFID spools
-            // whose code isn't in our DB, fall back to the box's own per-slot
-            // "vender" string when it carries a real value (hardware reports
-            // the sentinel "unknown"/"-1" when no RFID vendor data is present).
-            if (slot.brand.empty() && i < static_cast<int>(vender_arr.size()) &&
-                vender_arr[i].is_string()) {
-                std::string vender = vender_arr[i].get<std::string>();
-                if (!vender.empty() && vender != "unknown" && vender != "-1" &&
-                    vender != "None") {
-                    slot.brand = vender;
-                }
+            // Per-slot vendor string. Unlike color_value/material_type — which
+            // are LATCHED RFID data that stay pinned to the last spool after
+            // removal and thus fake "ghost" slots — `vender` reads a real vendor
+            // name or the present-but-unresolved "unknown" when a spool is
+            // seated, and a sentinel ("none"/"None"/"-1") when the bay is empty
+            // (verified against K2 Plus hardware; prestonbrown/helixscreen#1077).
+            std::string vender_str = "none";
+            if (i < static_cast<int>(vender_arr.size()) && vender_arr[i].is_string()) {
+                vender_str = vender_arr[i].get<std::string>();
+            }
+            const bool vender_occupied = !is_vender_sentinel(vender_str);
+
+            // Brand fallback for RFID spools whose material code isn't in our
+            // DB (the DB lookup above already sets slot.brand for known codes).
+            // Priority for a vendor-occupied bay:
+            //   1. a real vendor name reported by the box, else
+            //   2. "Creality" when the tag is present but the vendor is
+            //      "unknown" — CFS RFID tags are Creality's proprietary
+            //      ecosystem, so a present-but-unresolved tag is a Creality
+            //      spool. A user override still wins over this.
+            if (slot.brand.empty() && vender_occupied) {
+                slot.brand = (vender_str == "unknown") ? "Creality" : vender_str;
             }
 
             // Remaining length
@@ -661,18 +639,29 @@ AmsSystemInfo AmsBackendCfs::parse_box_status(const nlohmann::json& box_json) {
                 }
             }
 
-            // Derive status. color_value is latched RFID data: it reads the
-            // sentinel "-1"/"None"/"unknown" for a removed spool or a
-            // physically-present untagged (3rd-party) spool. Treat all three as
-            // "no RFID presence" so a stale/untagged color doesn't fake an
-            // AVAILABLE bay. A user override later promotes assigned bays back
-            // to AVAILABLE (see apply_overrides).
-            if (color_str == "-1" || color_str == "None" || color_str == "unknown") {
-                slot.status = SlotStatus::EMPTY;
-            } else if (slot.remaining_length_m <= 0.0f && remain_str != "-1") {
-                slot.status = SlotStatus::EMPTY;
-            } else {
+            // Presence uses a COMBINED signal, not `vender` alone: an untagged
+            // 3rd-party spool has no RFID vendor (sentinel `vender`) yet reports
+            // a real `remain_len` from the measuring wheel — keying purely on
+            // `vender` would wrongly parse it EMPTY (the mirror of the ghost-slot
+            // bug). A bay is present when EITHER the vendor signal OR a positive
+            // remaining length says so; only when they BOTH read empty do we
+            // treat it as EMPTY. color_value/material_type are deliberately NOT
+            // consulted (they latch). A user override can still promote a
+            // firmware-EMPTY bay (see apply_overrides).
+            const bool remain_present = slot.remaining_length_m > 0.0f;
+            if (vender_occupied || remain_present) {
                 slot.status = SlotStatus::AVAILABLE;
+            } else {
+                slot.status = SlotStatus::EMPTY;
+                // Scrub the latched display fields parse populated so a removed
+                // spool's stale color/material doesn't render on the empty bay.
+                // This resets only PARSED firmware fields — not the persistent
+                // user override, which apply_overrides/clear_override_locked own.
+                slot.brand.clear();
+                slot.material.clear();
+                slot.color_name.clear();
+                slot.color_rgb = CfsMaterialDb::parse_color("-1");
+                slot.remaining_length_m = 0.0f;
             }
 
             // CFS slots map 1:1 to tools (slot 0 = tool 0, etc.)
@@ -1007,7 +996,7 @@ PathSegment AmsBackendCfs::infer_error_segment() const {
 // --- Operations ---
 
 AmsError AmsBackendCfs::load_filament(int slot_index) {
-    auto err = check_preconditions();
+    auto err = check_preconditions(true);
     if (err.result != AmsResult::SUCCESS)
         return err;
     auto gcode = load_gcode(slot_index, macro_variant_);
@@ -1025,7 +1014,7 @@ AmsError AmsBackendCfs::load_filament(int slot_index) {
 }
 
 AmsError AmsBackendCfs::unload_filament(int) {
-    auto err = check_preconditions();
+    auto err = check_preconditions(true);
     if (err.result != AmsResult::SUCCESS)
         return err;
     {
@@ -1042,7 +1031,7 @@ AmsError AmsBackendCfs::select_slot(int) {
 }
 
 AmsError AmsBackendCfs::change_tool(int tool) {
-    auto err = check_preconditions();
+    auto err = check_preconditions(true);
     if (err.result != AmsResult::SUCCESS)
         return err;
 
@@ -1818,8 +1807,29 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
 AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
                                               const std::any& /*value*/) {
     if (action_id == "refresh_rfid") {
-        // Re-query box state from Moonraker (the box module polls CFS automatically)
-        on_started(); // Triggers printer.objects.query for box state
+        // Probe every connected CFS unit's RFID tags. Inserting a spool does NOT
+        // auto-read its tag: the box reports vender/color/material as sentinels
+        // until BOX_INFO_REFRESH scans them (spool then shows as "unknown"/empty
+        // in the UI until refreshed). ADDR is the 1-based unit index; NUM is a
+        // per-slot bitflag (A=1, B=2, C=4, D=8), so NUM=15 (0b1111) refreshes all
+        // four slots of the unit. Sent verbatim on both K2 and K1 macro variants,
+        // like the other BOX_* control commands. (prestonbrown/helixscreen#1077,
+        // workflow reported by cubewhy.)
+        std::vector<int> unit_addrs;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (const auto& unit : system_info_.units) {
+                if (unit.connected) {
+                    unit_addrs.push_back(unit.unit_index + 1);
+                }
+            }
+        }
+        for (int addr : unit_addrs) {
+            execute_gcode("BOX_INFO_REFRESH ADDR=" + std::to_string(addr) + " NUM=15");
+        }
+        // Re-query box state so the freshly-probed RFID/length values land in the
+        // UI. The box module publishes the updated `box` object after the scan.
+        on_started();
         return AmsErrorHelper::success();
     }
 
@@ -1878,8 +1888,8 @@ void AmsBackendCfs::apply_overrides(SlotInfo& slot, int slot_index) {
     // always read RFID -1, so firmware reports the bay EMPTY even though a
     // spool is physically present. If the override carries a real assignment,
     // the user has told us a spool is in this bay — promote it to AVAILABLE.
-    const bool real_assignment = o.spoolman_id > 0 || !o.material.empty() ||
-                                 !o.brand.empty() || !o.spool_name.empty() || o.color_set;
+    const bool real_assignment = o.spoolman_id > 0 || !o.material.empty() || !o.brand.empty() ||
+                                 !o.spool_name.empty() || o.color_set;
     if (real_assignment && slot.status == SlotStatus::EMPTY) {
         slot.status = SlotStatus::AVAILABLE;
     }
@@ -1939,8 +1949,9 @@ void AmsBackendCfs::clear_override_locked(int slot_index, SlotInfo& slot) {
     // no-op for this slot afterwards).
     //
     // CFS field policy: brand / color_name / total_weight_g come from the
-    // RFID material database (CfsMaterialInfo lookup in parse_box_status) —
-    // the parse has already written firmware truth for the current spool, so
+    // RFID material database (FilamentCatalog::resolve_code lookup in
+    // parse_box_status) — the parse has already written firmware truth for
+    // the current spool, so
     // we must NOT re-zero those fields. The override's copies disappear with
     // the erase; firmware's copies stay. Matches Snapmaker policy.
     overrides_.erase(slot_index);

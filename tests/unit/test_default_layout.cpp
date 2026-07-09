@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../helix_test_fixture.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_component.h"
 #include "panel_widget_config.h"
@@ -766,4 +767,38 @@ TEST_CASE("default_layout: bed_temperature enabled at medium breakpoint without 
     REQUIRE(bed);
     CHECK(bed->enabled);
     CHECK(entries.back().id == "bed_temperature");
+}
+
+// Regression for a cross-test isolation leak: `ams_slot_count` is a member
+// subject of the AmsState *process singleton*, registered into the global XML
+// scope. AMS tests (LVGLUITestFixture + AmsState::init_subjects(true)) drive
+// slot discovery, setting it >0, and it never returns to 0 on its own — so it
+// leaks into later tests. The "without AMS" tests above read this global subject
+// via build_default_grid() and assume it is 0/absent; a leaked value silently
+// flips bed_temperature off, failing only in the full single-process suite
+// (passes in isolation / sharded runs).
+//
+// HelixTestFixture::reset_all() — run on every fixture test's ctor + dtor — must
+// clear it so leakers clean up after themselves. FAILS before the reset_all fix
+// (value stays >0), PASSES after.
+// TEST_CASE_METHOD(HelixTestFixture) both initializes LVGL (ctor → lv_init_safe)
+// and grants access to the protected static reset_all().
+TEST_CASE_METHOD(HelixTestFixture, "default_layout: reset_all clears leaked ams_slot_count subject",
+                 "[default_layout][regression]") {
+    // Mimic an AMS test leaving the singleton's gate subject >0. If AmsState
+    // already registered the real subject this finds it; otherwise stand one in.
+    lv_subject_t* ams = lv_xml_get_subject(nullptr, "ams_slot_count");
+    static lv_subject_t stand_in;
+    if (!ams) {
+        lv_subject_init_int(&stand_in, 0);
+        lv_xml_register_subject(nullptr, "ams_slot_count", &stand_in);
+        ams = lv_xml_get_subject(nullptr, "ams_slot_count");
+    }
+    REQUIRE(ams != nullptr);
+    lv_subject_set_int(ams, 4); // 4 slots "discovered"
+    REQUIRE(lv_subject_get_int(ams) == 4);
+
+    reset_all();
+
+    REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "ams_slot_count")) == 0);
 }

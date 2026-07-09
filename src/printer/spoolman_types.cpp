@@ -151,9 +151,13 @@ void sort_spools_by_recency(std::vector<SpoolInfo>& spools) {
         const bool a_null = a.last_used.empty();
         const bool b_null = b.last_used.empty();
         if (a_null != b_null)
-            return !a_null;
+            return !a_null; // used spools before never-used
         if (!a_null && a.last_used != b.last_used)
-            return a.last_used > b.last_used;
-        return a.id > b.id;
+            return a.last_used > b.last_used; // newer use first
+        // Never-used spools: order by creation timestamp, newest first (#1071).
+        // Timestamps are ISO 8601, so string '>' is chronological.
+        if (a_null && a.registered != b.registered)
+            return a.registered > b.registered;
+        return a.id > b.id; // tie-break when timestamps absent/equal
     });
 }

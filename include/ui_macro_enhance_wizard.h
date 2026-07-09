@@ -207,7 +207,6 @@ class MacroEnhanceWizard : public Modal {
     // === Callbacks ===
     WizardCompleteCallback on_complete_;
 
-
     // === Internal Methods ===
 
     void init_subjects();

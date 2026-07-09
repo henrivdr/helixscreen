@@ -20,7 +20,9 @@ class PrinterListOverlay : public OverlayBase {
     void on_activate() override;
     void on_deactivate() override;
 
-    const char* get_name() const override { return "Printer List"; }
+    const char* get_name() const override {
+        return "Printer List";
+    }
 
     void show(lv_obj_t* parent_screen);
 
@@ -32,7 +34,7 @@ class PrinterListOverlay : public OverlayBase {
     void populate_printer_list();
 
     static bool s_callbacks_registered_;
-    static std::string s_pending_delete_id_;  // Printer ID pending delete confirmation
+    static std::string s_pending_delete_id_; // Printer ID pending delete confirmation
 
     static void on_add_printer_cb(lv_event_t* e);
     static void on_printer_row_cb(lv_event_t* e);
@@ -44,4 +46,4 @@ class PrinterListOverlay : public OverlayBase {
 
 PrinterListOverlay& get_printer_list_overlay();
 
-}  // namespace helix::ui
+} // namespace helix::ui

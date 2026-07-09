@@ -6,10 +6,10 @@
 #include "ams_backend_afc.h"
 #include "error_event.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <optional>
 #include <string>
+
+#include "../catch_amalgamated.hpp"
 
 // Reuse the existing AfcCharHelper pattern from test_ams_backend_base_char.cpp.
 // AfcCharHelper : public AmsBackendAfc — constructed with (nullptr, nullptr) — does
@@ -24,15 +24,15 @@ class FakeJamBackend : public AmsBackendAfc {
   public:
     FakeJamBackend() : AmsBackendAfc(nullptr, nullptr) {}
 
-    std::optional<helix::ErrorEvent> classify_error(
-        const std::string& raw_line,
-        const helix::ClassifyContext& /*ctx*/) const override {
+    std::optional<helix::ErrorEvent>
+    classify_error(const std::string& raw_line,
+                   const helix::ClassifyContext& /*ctx*/) const override {
         if (raw_line.find("FAKE-JAM") != std::string::npos) {
             helix::ErrorEvent ev;
-            ev.source   = helix::ErrorSource::AFC;
+            ev.source = helix::ErrorSource::AFC;
             ev.severity = helix::ErrorSeverity::CRITICAL;
-            ev.title    = "AFC Jam";
-            ev.detail   = raw_line;
+            ev.title = "AFC Jam";
+            ev.detail = raw_line;
             return ev;
         }
         return std::nullopt;

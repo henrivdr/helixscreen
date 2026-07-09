@@ -13,13 +13,13 @@
 #include "app_constants.h"
 #include "application_test_fixture.h"
 #include "config.h"
+#include "data_root_resolver.h"
 #include "display_manager.h"
 
 #include <filesystem>
 #include <fstream>
 
 #include "../../catch_amalgamated.hpp"
-#include "data_root_resolver.h"
 #include "hv/json.hpp"
 
 // ============================================================================

@@ -5,9 +5,8 @@
 
 #include "tour_steps.h"
 
-#include <lvgl.h>
-
 #include <functional>
+#include <lvgl.h>
 #include <vector>
 
 namespace helix::tour {
@@ -28,7 +27,9 @@ class TourOverlay {
     /// Show step at `index`. 0-based. Triggers target resolution + tooltip placement.
     void show_step(size_t index);
 
-    lv_obj_t* root() const { return root_; }
+    lv_obj_t* root() const {
+        return root_;
+    }
 
   private:
     void build_tree();
@@ -45,10 +46,10 @@ class TourOverlay {
     AdvanceCb on_next_cb_;
     SkipCb on_skip_cb_;
 
-    lv_obj_t* root_ = nullptr;    // on lv_layer_top()
+    lv_obj_t* root_ = nullptr; // on lv_layer_top()
     lv_obj_t* dim_ = nullptr;
     lv_obj_t* highlight_ = nullptr;
     lv_obj_t* tooltip_ = nullptr; // instantiated from tour_overlay.xml
 };
 
-}  // namespace helix::tour
+} // namespace helix::tour

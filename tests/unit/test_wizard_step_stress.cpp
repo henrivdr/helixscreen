@@ -37,7 +37,8 @@ int env_iterations(int default_count) {
     if (const char* v = std::getenv("WIZARD_STRESS_ITERATIONS")) {
         try {
             int n = std::stoi(v);
-            if (n > 0) return n;
+            if (n > 0)
+                return n;
         } catch (...) {
         }
     }
@@ -62,7 +63,8 @@ class WizardStressFixture : public LVGLUITestFixture {
     }
 
     void require_ready() {
-        if (!ready_) SKIP("Wizard XML components not available");
+        if (!ready_)
+            SKIP("Wizard XML components not available");
     }
 
     lv_obj_t* wizard_ = nullptr;
@@ -114,7 +116,8 @@ TEST_CASE_METHOD(WizardStressFixture, "Wizard stress: full sweep 1..N",
     for (int s = 1; s <= max_probe; ++s) {
         ui_wizard_navigate_to_step(static_cast<helix::wizard::StepId>(s));
         process_lvgl(40);
-        if (lv_obj_find_by_name(wizard_, "wizard_content") == nullptr) break;
+        if (lv_obj_find_by_name(wizard_, "wizard_content") == nullptr)
+            break;
         last_valid = s;
     }
     spdlog::info("[wizard-stress] sweep range: 1..{}", last_valid);

@@ -48,8 +48,8 @@ inline std::string fan_gcode(const std::string& fan, double speed_percent) {
 
         // Non-numeric output_pin fan or non-fan output_pin: SET_PIN
         std::ostringstream ss;
-        ss << std::fixed << std::setprecision(2)
-           << "SET_PIN PIN=" << short_name << " VALUE=" << (speed_percent / 100.0);
+        ss << std::fixed << std::setprecision(2) << "SET_PIN PIN=" << short_name
+           << " VALUE=" << (speed_percent / 100.0);
         return ss.str();
     }
 
@@ -60,8 +60,8 @@ inline std::string fan_gcode(const std::string& fan, double speed_percent) {
         fan_name = fan_name.substr(space_pos + 1);
     }
     std::ostringstream ss;
-    ss << std::fixed << std::setprecision(2)
-       << "SET_FAN_SPEED FAN=" << fan_name << " SPEED=" << (speed_percent / 100.0);
+    ss << std::fixed << std::setprecision(2) << "SET_FAN_SPEED FAN=" << fan_name
+       << " SPEED=" << (speed_percent / 100.0);
     return ss.str();
 }
 

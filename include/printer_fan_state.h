@@ -43,8 +43,11 @@ struct FanRoleConfig {
     std::string chamber_fan; ///< Configured chamber fan object name
     std::string exhaust_fan; ///< Configured exhaust fan object name
 
-    /// Build from wizard config. Returns empty roles if config is null.
-    static FanRoleConfig from_config(Config* config);
+    /// Resolve roles from config against the live discovered fan list, auto-healing
+    /// (and persisting) stale roles that name objects no longer present. Pass the
+    /// same fan vector handed to init_fans().
+    static FanRoleConfig from_config(Config* config,
+                                     const std::vector<std::string>& discovered_fans);
 };
 
 /**

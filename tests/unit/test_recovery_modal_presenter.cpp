@@ -1,9 +1,8 @@
 // Copyright (C) 2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "recovery_modal_presenter.h"
-
 #include "../lvgl_ui_test_fixture.h"
+#include "recovery_modal_presenter.h"
 
 #include "../catch_amalgamated.hpp"
 

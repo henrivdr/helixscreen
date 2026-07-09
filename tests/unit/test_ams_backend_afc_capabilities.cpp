@@ -29,8 +29,7 @@ class AfcCapabilityProbe : public AmsBackendAfc {
 
 } // namespace
 
-TEST_CASE("AFC backend advertises tool_mapping support",
-          "[ams][afc][tool-state][capabilities]") {
+TEST_CASE("AFC backend advertises tool_mapping support", "[ams][afc][tool-state][capabilities]") {
     AfcCapabilityProbe afc;
 
     auto caps = afc.get_tool_mapping_capabilities();
@@ -60,6 +59,6 @@ TEST_CASE("AFC backend get_tool_mapping returns the SlotRegistry tool_to_slot ve
     auto mapping = afc.get_tool_mapping();
     static_assert(std::is_same_v<decltype(mapping), std::vector<int>>,
                   "AmsState relies on std::vector<int> from get_tool_mapping()");
-    SUCCEED("get_tool_mapping() returned a std::vector<int> (size="
-            + std::to_string(mapping.size()) + ")");
+    SUCCEED("get_tool_mapping() returned a std::vector<int> (size=" +
+            std::to_string(mapping.size()) + ")");
 }

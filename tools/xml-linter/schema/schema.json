@@ -419,6 +419,9 @@
         "placeholder_text": {
           "type": "string"
         },
+        "placeholder_tag": {
+          "type": "string"
+        },
         "one_line": {
           "type": "bool"
         },
@@ -1588,10 +1591,6 @@
     },
     "notification_badge": {
       "attributes": {
-        "variant": {
-          "type": "enum",
-          "enum": "ui_variant"
-        },
         "text": {
           "type": "string"
         },
@@ -1638,6 +1637,9 @@
           "type": "string"
         },
         "bind_target": {
+          "type": "string"
+        },
+        "bind_mode": {
           "type": "string"
         },
         "event_cb": {
@@ -1761,6 +1763,9 @@
         "options": {
           "type": "string"
         },
+        "options_tag": {
+          "type": "string"
+        },
         "text_format": {
           "type": "string"
         },
@@ -1783,6 +1788,10 @@
           "type": "string"
         }
       },
+      "inherits": "lv_obj"
+    },
+    "setting_group": {
+      "attributes": {},
       "inherits": "lv_obj"
     }
   },
@@ -2750,7 +2759,8 @@
     "endless_spool_arrows",
     "ui_split_button",
     "z_offset_indicator",
-    "helix_sparkline"
+    "helix_sparkline",
+    "setting_group"
   ],
   "runtime_constants": [
     "accent_bar_gap",
@@ -3193,8 +3203,6 @@
     "preset_swatch_size",
     "preview_offset_y",
     "primary",
-    "print_column_width",
-    "printer_column_width",
     "row_height",
     "screen_bg",
     "screw_indicator_height",
@@ -3317,6 +3325,30 @@
     "spool_body_shade",
     "spool_hub_bottom",
     "spool_hub_top",
+    "spool_list_max_height",
+    "spool_list_max_height_large",
+    "spool_list_max_height_medium",
+    "spool_list_max_height_micro",
+    "spool_list_max_height_small",
+    "spool_list_max_height_tiny",
+    "spool_list_max_height_xlarge",
+    "spool_list_max_height_xxlarge",
+    "spool_row_min_height",
+    "spool_row_min_height_large",
+    "spool_row_min_height_medium",
+    "spool_row_min_height_micro",
+    "spool_row_min_height_small",
+    "spool_row_min_height_tiny",
+    "spool_row_min_height_xlarge",
+    "spool_row_min_height_xxlarge",
+    "spool_swatch_size",
+    "spool_swatch_size_large",
+    "spool_swatch_size_medium",
+    "spool_swatch_size_micro",
+    "spool_swatch_size_small",
+    "spool_swatch_size_tiny",
+    "spool_swatch_size_xlarge",
+    "spool_swatch_size_xxlarge",
     "stats_section_width",
     "status_line_gap",
     "status_line_height",

@@ -3,13 +3,12 @@
 
 #pragma once
 
+#include "async_lifetime_guard.h"
 #include "lvgl.h"
 #include "moonraker_api.h"
 #include "moonraker_types.h"
 #include "overlay_base.h"
 #include "thumbnail_cache.h"
-
-#include "async_lifetime_guard.h"
 
 #include <set>
 #include <string>
@@ -35,7 +34,9 @@ class TimelapseVideosOverlay : public OverlayBase {
     void on_deactivate() override;
     void cleanup() override;
 
-    void set_api(MoonrakerAPI* api) { api_ = api; }
+    void set_api(MoonrakerAPI* api) {
+        api_ = api;
+    }
 
   private:
     struct VideoEntry {

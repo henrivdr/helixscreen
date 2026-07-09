@@ -94,8 +94,8 @@ std::string format_time(const struct tm* tm_info) {
     std::string result(buf);
     // Strip leading zero only for 12H format (%I produces "01"-"12")
     // 24H "08:30" should keep the zero
-    if (DisplaySettingsManager::instance().get_time_format() == TimeFormat::HOUR_12
-        && !result.empty() && result[0] == '0') {
+    if (DisplaySettingsManager::instance().get_time_format() == TimeFormat::HOUR_12 &&
+        !result.empty() && result[0] == '0') {
         result.erase(0, 1);
     }
     return result;

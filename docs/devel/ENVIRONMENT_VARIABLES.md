@@ -398,7 +398,7 @@ Simple axis range mapping via LVGL's built-in calibration. Use for devices with 
 - All four min/max variables must be set together for calibration to apply
 - To invert an axis, swap the min/max values (e.g., `MIN_Y=3200 MAX_Y=900` inverts Y)
 - These values override the kernel-reported axis ranges from `EVIOCGABS`
-- `HELIX_TOUCH_SWAP_AXES` is now primarily a manual override — the calibration wizard auto-detects swapped axes and saves the flag to config (`/input/calibration/swap_axes`). The env var takes priority over auto-detection if both are set
+- `HELIX_TOUCH_SWAP_AXES` is a manual override for the fbdev backend, applied at the evdev layer (raw X/Y are swapped before the calibration matrix). Separately, the calibration wizard auto-detects swapped axes and bakes the correction directly into the `a`–`f` matrix coefficients — there is no `swap_axes` config flag (it is not read at runtime)
 
 **Example:**
 ```bash

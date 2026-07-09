@@ -41,7 +41,8 @@ void PowerDeviceState::set_devices(const std::vector<PowerDevice>& devices) {
         lifetime_.invalidate();
         // Signal death then expire lifetime tokens (#816)
         for (auto& [name, info] : devices_) {
-            if (info.lifetime) *info.lifetime = false;
+            if (info.lifetime)
+                *info.lifetime = false;
             info.lifetime.reset();
         }
         for (auto& [name, info] : devices_) {
@@ -86,9 +87,7 @@ void PowerDeviceState::set_devices(const std::vector<PowerDevice>& devices) {
             if (print_subj) {
                 print_state_observer_ = ui::observe_int_sync<PowerDeviceState>(
                     print_subj, this,
-                    [](PowerDeviceState* self, int /*state*/) {
-                        self->reevaluate_lock_states();
-                    });
+                    [](PowerDeviceState* self, int /*state*/) { self->reevaluate_lock_states(); });
             }
         }
     }
@@ -191,8 +190,7 @@ void PowerDeviceState::on_power_changed(const nlohmann::json& msg) {
         // Must set BEFORE queue_update() — notify_klippy_disconnected arrives on the same
         // WebSocket thread and checks suppression synchronously.
         if (new_raw == 0) {
-            EmergencyStopOverlay::instance().suppress_recovery_dialog(
-                RecoverySuppression::NORMAL);
+            EmergencyStopOverlay::instance().suppress_recovery_dialog(RecoverySuppression::NORMAL);
         }
 
         tok.defer("PowerDeviceState::on_power_changed", [this, device_name, new_raw]() {
@@ -273,7 +271,8 @@ void PowerDeviceState::deinit_subjects() {
 
     // Signal death then expire lifetime tokens (#816)
     for (auto& [name, info] : devices_) {
-        if (info.lifetime) *info.lifetime = false;
+        if (info.lifetime)
+            *info.lifetime = false;
         info.lifetime.reset();
     }
 

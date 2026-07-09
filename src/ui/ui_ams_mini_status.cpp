@@ -64,13 +64,13 @@ struct SpoolCellData {
     int remaining_pct = -1;  // actual % remaining; -1 = unknown (blank label)
     std::string material;    // "" => render "--"
     bool present = false;
-    int lane_number = 1;  // 1-based, for the badge
-    bool active = false;  // currently-loaded lane (success-colored badge)
+    int lane_number = 1; // 1-based, for the badge
+    bool active = false; // currently-loaded lane (success-colored badge)
 
     bool operator==(const SpoolCellData& o) const {
         return color_rgb == o.color_rgb && fill_level == o.fill_level &&
-               remaining_pct == o.remaining_pct && material == o.material &&
-               present == o.present && lane_number == o.lane_number && active == o.active;
+               remaining_pct == o.remaining_pct && material == o.material && present == o.present &&
+               lane_number == o.lane_number && active == o.active;
     }
 };
 
@@ -603,12 +603,10 @@ static void rebuild_spools(AmsMiniStatusData* data) {
     // and the cells already exist on screen, skip the costly clean+recreate (and
     // its transient 2x canvas-memory peak). The container was un-hidden above, so
     // a bar->spool switch with identical data still shows the existing cells.
-    bool unchanged = (data->rendered_width_px == data->width_px) &&
-                     (data->rendered_colspan == data->colspan) &&
-                     (data->rendered_3d == cur_3d) &&
-                     (data->rendered_height == avail_h) &&
-                     (data->rendered_cells == data->spool_cells) &&
-                     (lv_obj_get_child_count(sc) > 0);
+    bool unchanged =
+        (data->rendered_width_px == data->width_px) && (data->rendered_colspan == data->colspan) &&
+        (data->rendered_3d == cur_3d) && (data->rendered_height == avail_h) &&
+        (data->rendered_cells == data->spool_cells) && (lv_obj_get_child_count(sc) > 0);
     if (unchanged)
         return; // identical render already on screen — skip churn
 
@@ -636,7 +634,8 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_obj_set_name(cell, nm);
         lv_obj_set_size(cell, cell_px, lv_pct(100));
         lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_all(cell, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_column(cell, theme_manager_get_spacing("space_xxs"), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(cell, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -657,8 +656,8 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         ams_draw::spool_visual_set_color(sv, lv_color_hex(cd.color_rgb));
         ams_draw::spool_visual_set_fill(sv, cd.fill_level);
         ams_draw::spool_visual_set_empty(sv, !cd.present);
-        lv_obj_t* badge = ams_draw::create_lane_badge(wrap, cd.lane_number, spool_size * 2 / 5,
-                                                      cd.active);
+        lv_obj_t* badge =
+            ams_draw::create_lane_badge(wrap, cd.lane_number, spool_size * 2 / 5, cd.active);
         if (badge) {
             snprintf(nm, sizeof(nm), "spool_badge_%d", i);
             lv_obj_set_name(badge, nm);
@@ -683,7 +682,8 @@ static void rebuild_spools(AmsMiniStatusData* data) {
         lv_label_set_long_mode(mat, LV_LABEL_LONG_WRAP);
         lv_obj_set_style_text_align(mat, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
         lv_obj_add_flag(mat, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_label_set_text(mat, cd.material.empty() ? "--" : cd.material.c_str()); // material: no i18n
+        lv_label_set_text(mat,
+                          cd.material.empty() ? "--" : cd.material.c_str()); // material: no i18n
         const lv_font_t* fs = theme_manager_get_font("font_small");
         if (fs)
             lv_obj_set_style_text_font(mat, fs, LV_PART_MAIN);

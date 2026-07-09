@@ -14,7 +14,6 @@
 
 #include "ui_text_input.h"
 
-#include "theme_manager.h"
 #include "ui_fonts.h"
 #include "ui_icon_codepoints.h"
 #include "ui_keyboard_manager.h"
@@ -26,6 +25,7 @@
 #include "helix-xml/src/xml/parsers/lv_xml_textarea_parser.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/core/lv_observer_private.h" // For lv_observer_t internals
+#include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
 

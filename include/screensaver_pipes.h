@@ -6,9 +6,8 @@
 
 #include "screensaver.h"
 
-#include <lvgl.h>
-
 #include <cstdint>
+#include <lvgl.h>
 
 /**
  * @brief Windows-style 3D Pipes screensaver
@@ -25,8 +24,12 @@ class PipesScreensaver : public Screensaver {
 
     void start() override;
     void stop() override;
-    bool is_active() const override { return active_; }
-    ScreensaverType type() const override { return ScreensaverType::PIPES_3D; }
+    bool is_active() const override {
+        return active_;
+    }
+    ScreensaverType type() const override {
+        return ScreensaverType::PIPES_3D;
+    }
 
   private:
     // Grid: 21x21x21 centered at origin (-10..+10), matching reference
@@ -57,7 +60,8 @@ class PipesScreensaver : public Screensaver {
     void start_new_pipe(ActivePipe& pipe);
     bool grow_pipe(ActivePipe& pipe, lv_layer_t* layer);
     bool project(float wx, float wy, float wz, int& sx, int& sy, float& depth) const;
-    void draw_segment(lv_layer_t* layer, int sx1, int sy1, int sx2, int sy2, float depth, const ActivePipe& pipe);
+    void draw_segment(lv_layer_t* layer, int sx1, int sy1, int sx2, int sy2, float depth,
+                      const ActivePipe& pipe);
     void draw_joint(lv_layer_t* layer, int sx, int sy, float depth, const ActivePipe& pipe);
     GridPos next_pos(GridPos pos, Direction dir) const;
     bool in_bounds(GridPos pos) const;

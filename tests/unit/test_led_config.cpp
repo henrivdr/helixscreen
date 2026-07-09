@@ -12,7 +12,8 @@ using namespace helix;
 /// Tests run in random order and the Config singleton persists between tests.
 static void clear_led_config_paths() {
     auto* cfg = Config::get_instance();
-    if (!cfg) return;
+    if (!cfg)
+        return;
     cfg->set(cfg->df() + "leds/selected_strips", nlohmann::json::array());
     cfg->set(cfg->df() + "leds/selected", nlohmann::json());
     cfg->set(cfg->df() + "leds/strip", nlohmann::json());
@@ -372,7 +373,8 @@ TEST_CASE("LedController config: wizard saves both strip and selected_strips", "
     ctrl.deinit();
 }
 
-TEST_CASE("LedController config: selected_strips takes priority over legacy strip", "[led][config]") {
+TEST_CASE("LedController config: selected_strips takes priority over legacy strip",
+          "[led][config]") {
     auto* cfg = Config::get_instance();
     REQUIRE(cfg != nullptr);
 

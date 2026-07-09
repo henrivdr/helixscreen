@@ -1040,7 +1040,7 @@ TEST_CASE_METHOD(TempGraphTestFixture, "ui_temp_graph: target buffer shifts left
     m->target_temp = 50.0f;
     ui_temp_graph_update_series(g, id, 5.0f);
 
-    REQUIRE(m->target_head == 4);           // capped
+    REQUIRE(m->target_head == 4);          // capped
     REQUIRE(m->target_deci_buf[0] == 200); // was 100, shifted off
     REQUIRE(m->target_deci_buf[1] == 300);
     REQUIRE(m->target_deci_buf[2] == 400);

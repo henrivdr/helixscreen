@@ -75,7 +75,7 @@ class PrinterDiscovery {
         int best_chamber_sensor_conf = 0;
         int best_chamber_cooling_fan_conf = 0;
 
-        constexpr int kChamberHeaterGenericWeight = 2; // settable heater — preferred
+        constexpr int kChamberHeaterGenericWeight = 2;  // settable heater — preferred
         constexpr int kChamberTemperatureFanWeight = 1; // fan — only wins if no heater_generic
 
         // Promote the current object to the best chamber heater if its keyword
@@ -168,7 +168,7 @@ class PrinterDiscovery {
             // temperature, unlike a passive temperature_sensor.
             else if (name.rfind("temperature_fan ", 0) == 0) {
                 sensors_.push_back(name);
-                fans_.push_back(name); // Also add to fans for control
+                fans_.push_back(name);                  // Also add to fans for control
                 std::string fan_name = name.substr(16); // Remove "temperature_fan " prefix
                 try_set_chamber_heater(name, fan_name, kChamberTemperatureFanWeight);
                 try_set_chamber_cooling_fan(name, fan_name);
@@ -289,9 +289,8 @@ class PrinterDiscovery {
                 has_mmu_ = true;
                 mmu_type_ = AmsType::CFS;
                 if (PrinterDetector::is_creality_k1()) {
-                    spdlog::info(
-                        "[PrinterDiscovery] 'box' object on K1-series printer — "
-                        "enabling CFS backend with K1 macro dialect (BOX_*).");
+                    spdlog::info("[PrinterDiscovery] 'box' object on K1-series printer — "
+                                 "enabling CFS backend with K1 macro dialect (BOX_*).");
                 }
             }
             // ACE detection (Anycubic ACE Pro). Native Anycubic GoKlipper
@@ -1216,19 +1215,58 @@ class PrinterDiscovery {
     // so AMS-style names like "box1_heater" / "Box1_STM32" (QIDI Box filament
     // dryer) are not mistaken for the printer chamber. The COSMOS case
     // ("temperature_sensor box") and compound forms ("box_fan") still match.
+    //
+    // Two modifiers refine the base tier so a real chamber TEMPERATURE sensor
+    // outranks an air-quality sensor whose name merely contains a chamber
+    // keyword:
+    //   - Compound penalty (-1): if the keyword is not the entire name (e.g.
+    //     "chamber_temp"), subtract 1. Exact "chamber" (100) then beats
+    //     "chamber_temp" (99) on a tie, while both still crush weaker keywords.
+    //   - Air-quality penalty (-40): if the name carries an air-quality token
+    //     (TVOC/VOC/CO2/GAS/HUMIDITY/IAQ/AQI/PM25/PM10/PARTICULATE/PRESSURE),
+    //     subtract 40 so "chamber_tvoc" (59) loses to a clean "chamber" (100)
+    //     or even "enclosure" (90).
+    // A matched score is floored at 1 so an only-candidate air-quality chamber
+    // sensor is still detected rather than dropped; no keyword still returns 0.
     static int chamber_keyword_confidence(const std::string& object_name) {
         std::string upper = to_upper(object_name);
 
-        if (upper.find("CHAMBER") != std::string::npos)
-            return 100;
-        if (upper.find("ENCLOSURE") != std::string::npos)
-            return 90;
-        if (upper.find("CAVITY") != std::string::npos)
-            return 85;
-        if (has_standalone_token(upper, "BOX"))
-            return 60;
+        int score = 0;
+        const char* keyword = nullptr;
+        if (upper.find("CHAMBER") != std::string::npos) {
+            score = 100;
+            keyword = "CHAMBER";
+        } else if (upper.find("ENCLOSURE") != std::string::npos) {
+            score = 90;
+            keyword = "ENCLOSURE";
+        } else if (upper.find("CAVITY") != std::string::npos) {
+            score = 85;
+            keyword = "CAVITY";
+        } else if (has_standalone_token(upper, "BOX")) {
+            score = 60;
+            keyword = "BOX";
+        } else {
+            return 0;
+        }
 
-        return 0;
+        // Compound penalty: prefer a name that is exactly the keyword.
+        if (upper != keyword)
+            score -= 1;
+
+        // Air-quality penalty: names carrying a gas/particulate/humidity token
+        // describe air quality, not chamber temperature.
+        static const char* const kAirQualityTokens[] = {
+            "TVOC", "VOC", "CO2", "GAS",  "HUMIDITY",    "IAQ",
+            "AQI",  "PM25", "PM10", "PARTICULATE", "PRESSURE"};
+        for (const char* tok : kAirQualityTokens) {
+            if (has_standalone_token(upper, tok)) {
+                score -= 40;
+                break;
+            }
+        }
+
+        // A matched keyword always stays detectable.
+        return score < 1 ? 1 : score;
     }
 
     // Returns true iff `token` appears in `haystack` as a complete token,
@@ -1332,7 +1370,7 @@ class PrinterDiscovery {
                                              ///< independent of the heater pick: in COOLING mode
                                              ///< the K2 M141 macro parks the setpoint on this fan's
                                              ///< target, not the heater's.
-    int chamber_fan_resting_deci_ = 0;      ///< Cooling fan's configured resting/off target
+    int chamber_fan_resting_deci_ = 0;       ///< Cooling fan's configured resting/off target
                                              ///< (decidegrees), from configfile.settings
                                              ///< target_temp. 0 = unknown. M141 S0 returns here.
     bool has_led_ = false;

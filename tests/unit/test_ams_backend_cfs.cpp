@@ -3,6 +3,7 @@
 #include "ams_backend_cfs.h"
 #include "ams_types.h"
 #include "config.h"
+#include "filament_catalog.h"
 #include "filament_database.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
@@ -87,6 +88,21 @@ class CfsTestAccess {
     }
     static void set_macro_variant_k1(AmsBackendCfs& b) {
         b.macro_variant_ = helix::printer::CfsMacroVariant::K1;
+    }
+    // Seed N connected CFS units (unit_index 0..N-1) so device-action code that
+    // iterates system_info_.units (e.g. refresh_rfid → BOX_INFO_REFRESH) has
+    // addressable units without a live Moonraker parse.
+    static void set_connected_units(AmsBackendCfs& b, int count) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.system_info_.units.clear();
+        for (int u = 0; u < count; ++u) {
+            AmsUnit unit;
+            unit.unit_index = u;
+            unit.connected = true;
+            unit.slot_count = 4;
+            unit.first_slot_global_index = u * 4;
+            b.system_info_.units.push_back(std::move(unit));
+        }
     }
 };
 
@@ -226,20 +242,23 @@ TEST_CASE("CFS data model extensions", "[ams][cfs]") {
 using helix::printer::CfsMaterialDb;
 
 TEST_CASE("CFS material database", "[ams][cfs]") {
-    const auto& db = CfsMaterialDb::instance();
+    // Material resolution now goes through FilamentCatalog's transient
+    // "cfs"-coded slice (Task 5, filament-catalog merge) rather than the
+    // retired CfsMaterialDb::instance()/lookup() material table.
+    const auto catalog = FilamentCatalog::load_codes("cfs");
 
     SECTION("known material lookup") {
-        auto info = db.lookup("01001");
+        const auto* info = catalog.resolve_code("cfs", "01001");
         REQUIRE(info != nullptr);
         REQUIRE(info->brand == "Creality");
         REQUIRE(info->name == "Hyper PLA");
-        REQUIRE(info->material_type == "PLA");
-        REQUIRE(info->min_temp == 190);
-        REQUIRE(info->max_temp == 240);
+        REQUIRE(info->type == "PLA");
+        REQUIRE(info->nozzle_min == 190);
+        REQUIRE(info->nozzle_max == 240);
     }
 
     SECTION("unknown material returns nullptr") {
-        auto info = db.lookup("99999");
+        const auto* info = catalog.resolve_code("cfs", "99999");
         REQUIRE(info == nullptr);
     }
 
@@ -413,7 +432,7 @@ static nlohmann::json make_cfs_status_json() {
                 "version": "1.1.3",
                 "sn": "10000882925L125DBZC",
                 "mode": "0",
-                "vender": ["-1", "-1", "-1", "-1"],
+                "vender": ["unknown", "unknown", "unknown", "unknown"],
                 "remain_len": ["35", "57", "52", "52"],
                 "color_value": ["0000000", "0FFFFFF", "00A2989", "0C12E1F"],
                 "material_type": ["101001", "101001", "101001", "101001"],
@@ -467,13 +486,33 @@ static json make_single_unit_box(const std::vector<std::string>& material_types,
             "dry_and_humidity": "48",
             "version": "1.1.3",
             "sn": "SERIAL",
-            "vender": ["-1", "-1", "-1", "-1"],
-            "remain_len": ["35", "57", "52", "52"],
             "change_color_num": ["-1", "-1", "-1", "-1"]
         }
     })");
     box["T1"]["material_type"] = material_types;
     box["T1"]["color_value"] = color_values;
+
+    // Presence on real hardware comes from `vender` OR a positive `remain_len`,
+    // NOT from color/material (which stay latched after a spool is removed).
+    // Synthesize realistic per-slot vender AND remain_len that match the
+    // occupancy each test expresses through its material/color arrays: a spool
+    // with any non-sentinel material OR color reports vender "unknown" (present,
+    // RFID vendor unresolved) and a real length; an all-sentinel slot reports
+    // vender "none" and remain_len "-1" (empty bay).
+    auto is_sentinel = [](const std::string& v) {
+        return v.empty() || v == "-1" || v == "None" || v == "unknown";
+    };
+    json vender = json::array();
+    json remain_len = json::array();
+    for (size_t i = 0; i < 4; ++i) {
+        const bool mat_present = i < material_types.size() && !is_sentinel(material_types[i]);
+        const bool col_present = i < color_values.size() && !is_sentinel(color_values[i]);
+        const bool present = mat_present || col_present;
+        vender.push_back(present ? "unknown" : "none");
+        remain_len.push_back(present ? "52" : "-1");
+    }
+    box["T1"]["vender"] = vender;
+    box["T1"]["remain_len"] = remain_len;
     return box;
 }
 
@@ -514,8 +553,16 @@ TEST_CASE("CFS backend status parsing", "[ams][cfs]") {
     }
 
     SECTION("slot materials resolved from database") {
+        // material_type[0] == "101001" -> strip_code -> "01001", which
+        // resolves in assets/filaments.json to Creality "Hyper PLA"
+        // (type=PLA, nozzle_min=190, nozzle_max=240). Parity test for the
+        // CfsMaterialDb -> FilamentCatalog decode-path migration (Task 5).
         REQUIRE(info.units[0].slots[0].material == "PLA");
         REQUIRE(info.units[0].slots[0].brand == "Creality");
+        REQUIRE(info.units[0].slots[0].nozzle_temp_min > 0);
+        REQUIRE(info.units[0].slots[0].nozzle_temp_max >= info.units[0].slots[0].nozzle_temp_min);
+        REQUIRE(info.units[0].slots[0].nozzle_temp_min == 190);
+        REQUIRE(info.units[0].slots[0].nozzle_temp_max == 240);
     }
 
     SECTION("slot remaining length") {
@@ -529,6 +576,66 @@ TEST_CASE("CFS backend status parsing", "[ams][cfs]") {
 
     SECTION("topology is HUB") {
         REQUIRE(info.units[0].topology == PathTopology::HUB);
+    }
+}
+
+// Presence regression (prestonbrown/helixscreen#1077). Covers the three cases
+// CFS presence has to get right, all in one fixture:
+//   A = tagged spool present  (vender set, RFID vendor unresolved → "unknown")
+//   B = UNTAGGED spool present (vender sentinel, but a real remain_len)
+//   C = genuinely empty bay    (vender sentinel, no length, but color/material
+//                               still LATCHED from the last spool)
+//   D = empty bay, zero length (remain_len "0" must not count as present)
+// color_value/material_type latch after removal, so they must NOT drive
+// presence (that faked the ghost slots); vender OR a positive remain_len does.
+TEST_CASE("CFS presence: vender + remain_len combined signal (#1077)", "[ams][cfs]") {
+    json box = json::parse(R"({
+        "state": "connect", "filament": 1, "auto_refill": 1, "enable": 1, "filament_useup": 0,
+        "map": {"T1A": "T1A", "T1B": "T1B", "T1C": "T1C", "T1D": "T1D"},
+        "T1": {
+            "state": "connect", "filament": "None", "temperature": "27", "dry_and_humidity": "40",
+            "version": "1.1.3", "sn": "SERIAL", "mode": "0",
+            "vender": ["unknown", "none", "none", "none"],
+            "remain_len": ["-1", "42", "-1", "0"],
+            "color_value": ["0FFFFFF", "0FF0000", "0C12E1F", "00A2989"],
+            "material_type": ["unknown", "-1", "101001", "101001"],
+            "change_color_num": ["-1", "-1", "-1", "-1"]
+        }
+    })");
+    auto info = AmsBackendCfs::parse_box_status(box);
+    REQUIRE(info.units.size() == 1);
+    const auto& slots = info.units[0].slots;
+
+    SECTION("tagged spool present (A)") {
+        REQUIRE(slots[0].status == SlotStatus::AVAILABLE);
+    }
+
+    SECTION("untagged spool with remaining length is present, not empty (B)") {
+        // The key case: vender is a sentinel ("none") but remain_len is real, so
+        // an untagged 3rd-party spool must NOT parse EMPTY.
+        REQUIRE(slots[1].status == SlotStatus::AVAILABLE);
+        REQUIRE(slots[1].remaining_length_m == 42.0f);
+    }
+
+    SECTION("genuinely empty bay is EMPTY despite latched color/material (C, D)") {
+        REQUIRE(slots[2].status == SlotStatus::EMPTY); // vender none, remain -1
+        REQUIRE(slots[3].status == SlotStatus::EMPTY); // vender none, remain "0"
+    }
+
+    SECTION("empty bay scrubs latched color/material so no ghost renders (C)") {
+        // Slot 2 carries a fully-latched color (0xC12E1F) and a resolvable
+        // Creality material code (101001) — both cleared once the bay reads
+        // empty (scrubbed color resolves to the 0x808080 sentinel).
+        REQUIRE(slots[2].color_rgb == CfsMaterialDb::parse_color("-1"));
+        REQUIRE(slots[2].material.empty());
+        REQUIRE(slots[2].brand.empty());
+    }
+
+    SECTION("present bay with unresolved RFID vendor defaults brand to Creality (A)") {
+        // Slot 0: vender "unknown" (tag present, vendor unresolved) + unmapped
+        // material code. CFS RFID tags are Creality-only → brand resolves to
+        // Creality rather than staying blank.
+        REQUIRE(slots[0].brand == "Creality");
     }
 }
 
@@ -1064,6 +1171,45 @@ TEST_CASE("CFS set_tool_mapping emits BOX_MODIFY_TN with TNN keys/values", "[ams
 }
 
 // =============================================================================
+// CFS refresh_rfid → BOX_INFO_REFRESH RFID probe (prestonbrown/helixscreen#1077)
+// =============================================================================
+//
+// Inserting a spool does not auto-read its RFID tag; the box reports sentinel
+// vender/color/material until BOX_INFO_REFRESH scans it. The "Refresh RFID"
+// device action probes every connected unit: ADDR = 1-based unit index, NUM=15
+// (0b1111) = all four slots. Verified on K2 Plus.
+TEST_CASE("CFS refresh_rfid probes each connected unit via BOX_INFO_REFRESH",
+          "[ams][cfs][refresh]") {
+    // Neutralize on_started() — its printer.objects.query needs a live client.
+    struct Helper : CfsRemapHelper {
+        void on_started() override {}
+    };
+    Helper h;
+
+    SECTION("single connected unit → ADDR=1 NUM=15") {
+        CfsTestAccess::set_connected_units(h, 1);
+        auto err = h.execute_device_action("refresh_rfid", std::any{});
+        REQUIRE(err.result == AmsResult::SUCCESS);
+        REQUIRE(h.captured == std::vector<std::string>{"BOX_INFO_REFRESH ADDR=1 NUM=15"});
+    }
+
+    SECTION("two connected units → one probe each, ADDR follows unit index") {
+        CfsTestAccess::set_connected_units(h, 2);
+        auto err = h.execute_device_action("refresh_rfid", std::any{});
+        REQUIRE(err.result == AmsResult::SUCCESS);
+        REQUIRE(h.captured == std::vector<std::string>{"BOX_INFO_REFRESH ADDR=1 NUM=15",
+                                                       "BOX_INFO_REFRESH ADDR=2 NUM=15"});
+    }
+
+    SECTION("no connected units → no gcode emitted") {
+        CfsTestAccess::set_connected_units(h, 0);
+        auto err = h.execute_device_action("refresh_rfid", std::any{});
+        REQUIRE(err.result == AmsResult::SUCCESS);
+        REQUIRE(h.captured.empty());
+    }
+}
+
+// =============================================================================
 // CFS BOX_MODIFY_TN_DATA color firmware-writeback (push_slot_color_to_firmware)
 // =============================================================================
 //
@@ -1188,8 +1334,11 @@ TEST_CASE("CFS segment returns HUB for available slots", "[ams][cfs]") {
     }
 
     SECTION("empty slots have EMPTY status") {
-        // Modify a slot to have no color
-        status["box"]["T1"]["color_value"][0] = "-1";
+        // Presence tracks `vender` + `remain_len`, not color: clear both signals
+        // for the bay. The latched color_value stays populated, proving it is
+        // not consulted.
+        status["box"]["T1"]["vender"][0] = "none";
+        status["box"]["T1"]["remain_len"][0] = "-1";
         auto info2 = AmsBackendCfs::parse_box_status(status["box"]);
         REQUIRE(info2.units[0].slots[0].status == SlotStatus::EMPTY);
     }
@@ -1653,8 +1802,8 @@ TEST_CASE("CFS override preserved across unchanged parses",
 TEST_CASE("CFS parse: color_value 'unknown' is EMPTY, real hex is AVAILABLE", "[ams][cfs]") {
     // Slot 0: untagged spool — RFID reports sentinel "unknown" / "-1" with no
     // remaining length. Slot 1: a genuine hex color with remaining length.
-    json box = make_single_unit_box({"-1", "101001", "-1", "-1"},
-                                    {"unknown", "0FFFFFF", "-1", "-1"});
+    json box =
+        make_single_unit_box({"-1", "101001", "-1", "-1"}, {"unknown", "0FFFFFF", "-1", "-1"});
     box["T1"]["remain_len"] = json::array({"-1", "57", "-1", "-1"});
 
     auto info = AmsBackendCfs::parse_box_status(box);
@@ -1729,8 +1878,7 @@ TEST_CASE("CFS: partial box.filament update does not clear active slot", "[ams][
 // Fix 1 regression guard: the toolhead sensor is the SOLE writer of
 // filament_loaded. A sensor update sets it true; a SUBSEQUENT box-only update
 // (carrying box.filament but no sensor param) must NOT clobber it back to false.
-TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded",
-          "[ams][cfs]") {
+TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded", "[ams][cfs]") {
     CfsTmpCacheDir tmp("presence_sensor_authority");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -1742,11 +1890,10 @@ TEST_CASE("CFS: box-only update does not clobber sensor-derived filament_loaded"
     CfsTestAccess::inject_override_store(backend, std::move(store));
 
     // 1) Toolhead sensor trips: filament present at the nozzle.
-    json sensor_update = json{
-        {"params",
-         json::array({json{{"filament_switch_sensor filament_sensor",
-                            {{"filament_detected", true}}}},
-                      0})}};
+    json sensor_update =
+        json{{"params", json::array({json{{"filament_switch_sensor filament_sensor",
+                                           {{"filament_detected", true}}}},
+                                     0})}};
     CfsTestAccess::handle_status(backend, sensor_update);
     REQUIRE(backend.get_system_info().filament_loaded == true);
 
@@ -1782,8 +1929,7 @@ TEST_CASE("CFS: user override promotes an RFID-empty bay to AVAILABLE", "[ams][c
     CfsTestAccess::seed_override(backend, 0, ovr);
 
     // Firmware reports slot 0 EMPTY (RFID -1 / no length), slots 1-3 EMPTY too.
-    json box = make_single_unit_box({"-1", "-1", "-1", "-1"},
-                                    {"-1", "-1", "-1", "-1"});
+    json box = make_single_unit_box({"-1", "-1", "-1", "-1"}, {"-1", "-1", "-1", "-1"});
     box["T1"]["remain_len"] = json::array({"-1", "-1", "-1", "-1"});
     CfsTestAccess::handle_status(backend, make_cfs_notification(box));
 

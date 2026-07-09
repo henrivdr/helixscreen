@@ -91,13 +91,12 @@ void EthernetManager::get_info_async(std::function<void(const EthernetInfo&)> ca
     // worker is inside backend->get_info() frees the backend and causes a
     // use-after-free segfault on the worker thread.
     std::shared_ptr<EthernetBackend> backend = backend_;
-    helix::http::HttpExecutor::fast().submit(
-        [backend, cb = std::move(callback)]() {
-            spdlog::trace("[EthernetManager] Async probe starting on HTTP fast worker");
-            EthernetInfo info = backend->get_info();
-            spdlog::trace("[EthernetManager] Async probe done; invoking callback");
-            cb(info);
-        });
+    helix::http::HttpExecutor::fast().submit([backend, cb = std::move(callback)]() {
+        spdlog::trace("[EthernetManager] Async probe starting on HTTP fast worker");
+        EthernetInfo info = backend->get_info();
+        spdlog::trace("[EthernetManager] Async probe done; invoking callback");
+        cb(info);
+    });
 }
 
 std::string EthernetManager::get_ip_address() {

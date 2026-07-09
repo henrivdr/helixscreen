@@ -20,7 +20,7 @@ These docs are **end-user facing**. They must be written for people who are NOT 
 | `guide/getting-started.md` | Navigation, touch gestures, setup wizard, keyboard |
 | `guide/home-panel.md` | Home dashboard, printer manager, custom images |
 | `guide/printing.md` | File selection, printing, tune overlay, Z-offset |
-| `guide/temperature.md` | Nozzle/bed temperature panels, presets, graphs |
+| `guide/temperature.md` | Nozzle/bed temperature panels, presets, reassigning preset filament types, graphs |
 | `guide/motion.md` | Jog pad, homing, distance increments, E-stop |
 | `guide/filament.md` | Extrusion, AMS, CFS, Spoolman, dryer control |
 | `guide/bluetooth-setup.md` | Enabling Bluetooth on Raspberry Pi and BTT Pi, UART conflicts, USB dongle setup |

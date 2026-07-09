@@ -99,6 +99,7 @@ All developer documentation lives here. When working on features, look up the re
 | `plans/2026-06-13-slow-boot-splash-ux.md` | Slow-boot splash UX: 30s splash cap + blank-screen gap on slow devices (K2, AD5M Forge-X), handoff timing |
 | `printer-research/` | Printer-specific research notes |
 | `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md` | AD5X IFS protocol reverse engineering |
+| `printer-research/ANYCUBIC_ACE_KOBRA_S1_LOG_ANALYSIS.md` | Kobra S1 + ACE Pro real-log analysis: mainline-Python Klipper fork path (`[ace_status]`), command surface, inventory model |
 | `KLIPPERSCREEN_RESEARCH.md` | KlipperScreen competitive analysis |
 | `MAINSAIL_RESEARCH.md` | Mainsail competitive analysis |
 

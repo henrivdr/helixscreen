@@ -3,6 +3,7 @@
 
 #include "temperature_service.h"
 
+#include "ui_breakpoint.h"
 #include "ui_callback_helpers.h"
 #include "ui_component_keypad.h"
 #include "ui_error_reporting.h"
@@ -24,7 +25,6 @@
 #include "temperature_controller.h"
 #include "temperature_history_manager.h"
 #include "theme_manager.h"
-#include "ui_breakpoint.h"
 #include "tool_state.h"
 
 #include <spdlog/spdlog.h>
@@ -91,7 +91,7 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
                      .presets = {0, nozzle_pla, nozzle_petg, nozzle_abs},
                      .keypad_range = {0.0f, 350.0f}};
     nozzle.cooling_threshold_deci = 400; // 40°C
-    nozzle.klipper_name = "extruder";     // Updated dynamically for multi-extruder
+    nozzle.klipper_name = "extruder";    // Updated dynamically for multi-extruder
     nozzle.min_temp = AppConstants::Temperature::DEFAULT_MIN_TEMP;
     nozzle.max_temp = AppConstants::Temperature::DEFAULT_NOZZLE_MAX;
 
@@ -120,7 +120,7 @@ TemperatureService::TemperatureService(PrinterState& printer_state, MoonrakerAPI
                       .y_axis_increment = 20,
                       .presets = {0, 40, 50, 60}, // Off, 40°C, 50°C, 60°C
                       .keypad_range = {0.0f, 80.0f}};
-    chamber.cooling_threshold_deci = 300;           // 30°C
+    chamber.cooling_threshold_deci = 300;            // 30°C
     chamber.klipper_name = "heater_generic chamber"; // Updated from discovery
     chamber.read_only = true; // Default sensor-only; updated at runtime from capability subject
     chamber.min_temp = 0;
@@ -277,8 +277,9 @@ void TemperatureService::recompute_chamber_target() {
     // Off (effective 0) rather than a deliberate "Maintaining" set at the resting
     // temperature. The graph target line then matches the displayed value.
     chamber.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
-    chamber.chamber_mode = helix::ui::temperature::chamber_mode_word(
-        static_cast<helix::ChamberMode>(lv_subject_get_int(printer_state_.get_chamber_mode_subject())));
+    chamber.chamber_mode =
+        helix::ui::temperature::chamber_mode_word(static_cast<helix::ChamberMode>(
+            lv_subject_get_int(printer_state_.get_chamber_mode_subject())));
 
     update_display(HeaterType::Chamber);
     update_status(HeaterType::Chamber);
@@ -347,9 +348,8 @@ void TemperatureService::update_status(HeaterType type) {
         // Delegate to the shared helper so the controls panel and the temp-graph
         // overlay always produce identical output (single source of truth).
         auto mode_int = lv_subject_get_int(printer_state_.get_chamber_mode_subject());
-        auto status =
-            helix::ui::temperature::chamber_status_text(h.current, h.target,
-                                                        static_cast<helix::ChamberMode>(mode_int));
+        auto status = helix::ui::temperature::chamber_status_text(
+            h.current, h.target, static_cast<helix::ChamberMode>(mode_int));
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", status.c_str());
     } else {
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", result.status.c_str());
@@ -623,8 +623,8 @@ void TemperatureService::setup_panel(HeaterType type, lv_obj_t* panel, lv_obj_t*
         // the cooling-fan resting target (M141 S0 → fan at resting → Off). Seed both
         // h.target and the mode word so the initial display matches live updates.
         h.target = lv_subject_get_int(printer_state_.get_chamber_effective_target_subject());
-        h.chamber_mode = helix::ui::temperature::chamber_mode_word(
-            static_cast<helix::ChamberMode>(lv_subject_get_int(printer_state_.get_chamber_mode_subject())));
+        h.chamber_mode = helix::ui::temperature::chamber_mode_word(static_cast<helix::ChamberMode>(
+            lv_subject_get_int(printer_state_.get_chamber_mode_subject())));
 
         // Update read_only from capability subject
         auto* cap_subj = printer_state_.get_printer_has_chamber_heater_subject();
@@ -943,17 +943,16 @@ void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
         max_value = self->controller_->keypad_range(type).max;
     }
 
-    ui_keypad_config_t keypad_config = {.initial_value =
-                                            static_cast<float>(
-                                                helix::ui::temperature::deci_to_degrees(h.target)),
-                                        .min_value = h.config.keypad_range.min,
-                                        .max_value = max_value,
-                                        .title_label = h.config.title,
-                                        .unit_label = "°C",
-                                        .allow_decimal = false,
-                                        .allow_negative = false,
-                                        .callback = keypad_value_cb,
-                                        .user_data = &s_keypad_data[idx(type)]};
+    ui_keypad_config_t keypad_config = {
+        .initial_value = static_cast<float>(helix::ui::temperature::deci_to_degrees(h.target)),
+        .min_value = h.config.keypad_range.min,
+        .max_value = max_value,
+        .title_label = h.config.title,
+        .unit_label = "°C",
+        .allow_decimal = false,
+        .allow_negative = false,
+        .callback = keypad_value_cb,
+        .user_data = &s_keypad_data[idx(type)]};
 
     ui_keypad_show(&keypad_config);
 }
@@ -1094,17 +1093,16 @@ void TemperatureService::on_nozzle_custom_clicked(lv_event_t* e) {
     auto& h = self->heaters_[idx(HeaterType::Nozzle)];
     s_keypad_data[idx(HeaterType::Nozzle)] = {self, HeaterType::Nozzle};
 
-    ui_keypad_config_t keypad_config = {.initial_value =
-                                            static_cast<float>(
-                                                helix::ui::temperature::deci_to_degrees(h.target)),
-                                        .min_value = h.config.keypad_range.min,
-                                        .max_value = h.config.keypad_range.max,
-                                        .title_label = "Nozzle Temp",
-                                        .unit_label = "°C",
-                                        .allow_decimal = false,
-                                        .allow_negative = false,
-                                        .callback = keypad_value_cb,
-                                        .user_data = &s_keypad_data[idx(HeaterType::Nozzle)]};
+    ui_keypad_config_t keypad_config = {
+        .initial_value = static_cast<float>(helix::ui::temperature::deci_to_degrees(h.target)),
+        .min_value = h.config.keypad_range.min,
+        .max_value = h.config.keypad_range.max,
+        .title_label = "Nozzle Temp",
+        .unit_label = "°C",
+        .allow_decimal = false,
+        .allow_negative = false,
+        .callback = keypad_value_cb,
+        .user_data = &s_keypad_data[idx(HeaterType::Nozzle)]};
 
     ui_keypad_show(&keypad_config);
 }
@@ -1117,17 +1115,16 @@ void TemperatureService::on_bed_custom_clicked(lv_event_t* e) {
     auto& h = self->heaters_[idx(HeaterType::Bed)];
     s_keypad_data[idx(HeaterType::Bed)] = {self, HeaterType::Bed};
 
-    ui_keypad_config_t keypad_config = {.initial_value =
-                                            static_cast<float>(
-                                                helix::ui::temperature::deci_to_degrees(h.target)),
-                                        .min_value = h.config.keypad_range.min,
-                                        .max_value = h.config.keypad_range.max,
-                                        .title_label = "Heat Bed Temp",
-                                        .unit_label = "°C",
-                                        .allow_decimal = false,
-                                        .allow_negative = false,
-                                        .callback = keypad_value_cb,
-                                        .user_data = &s_keypad_data[idx(HeaterType::Bed)]};
+    ui_keypad_config_t keypad_config = {
+        .initial_value = static_cast<float>(helix::ui::temperature::deci_to_degrees(h.target)),
+        .min_value = h.config.keypad_range.min,
+        .max_value = h.config.keypad_range.max,
+        .title_label = "Heat Bed Temp",
+        .unit_label = "°C",
+        .allow_decimal = false,
+        .allow_negative = false,
+        .callback = keypad_value_cb,
+        .user_data = &s_keypad_data[idx(HeaterType::Bed)]};
 
     ui_keypad_show(&keypad_config);
 }
@@ -1193,8 +1190,7 @@ void TemperatureService::select_extruder(const std::string& name) {
     // was active at setup_mini_combined_graph() time — typically T0, since
     // the setup runs at panel construction — and the chart shows T0's cold
     // baseline while the user is actively heating T1.
-    if (mini_graph_controller_ && mini_graph_container_ &&
-        lv_obj_is_valid(mini_graph_container_)) {
+    if (mini_graph_controller_ && mini_graph_container_ && lv_obj_is_valid(mini_graph_container_)) {
         mini_graph_controller_.reset();
         setup_mini_combined_graph(mini_graph_container_);
     }

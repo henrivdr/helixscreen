@@ -405,8 +405,12 @@ void * lv_xml_create(lv_obj_t * parent, const char * name, const char ** attrs)
         return item;
     }
 
-    /* If it isn't a component either then it is unknown */
-    LV_LOG_WARN("'%s' is not a known widget, element, or component", name);
+    /* If it isn't a component either then it is unknown — see the note in
+     * view_start_element_handler. Usually a stale binary missing a
+     * C++-registered widget; the XML was updated without a rebuild. */
+    LV_LOG_ERROR("XML tag '%s' is not a known widget/element/component — "
+                 "likely an unregistered widget in a STALE BINARY (rebuild required)",
+                 name);
     return NULL;
 }
 
@@ -1067,9 +1071,19 @@ static void view_start_element_handler(void * user_data, const char * name, cons
         }
     }
 
-    /* If it isn't a slot either then it is unknown */
+    /* If it isn't a slot either then it is unknown. This is almost always a
+     * STALE BINARY: a C++-registered widget (lv_xml_register_widget) exists in
+     * the XML but not in the running binary, so the XML was updated without a
+     * rebuild. Beyond the missing element, the unknown tag corrupts the parent
+     * stack — its closing tag still pops a real parent below (see
+     * view_end_element_handler), so every following sibling mis-parents (often
+     * onto the screen root at 0,0, bleeding across panels). Log loudly at ERROR
+     * so it is not lost in the noise. */
     if(state->item == NULL) {
-        LV_LOG_WARN("'%s' is not a known widget, element, component, or slot", name);
+        LV_LOG_ERROR("XML tag '%s' is not a known widget/element/component/slot — "
+                     "likely an unregistered widget in a STALE BINARY (rebuild required). "
+                     "This corrupts the parent stack and mis-parents following elements.",
+                     name);
         return;
     }
 

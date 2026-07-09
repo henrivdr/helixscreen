@@ -287,6 +287,19 @@ private:
 - Dependency injection: receives `PrinterState&` and `MoonrakerAPI*`
 - Self-registration: `init_subjects()` MUST register cleanup with `StaticSubjectRegistry`
 
+> **`on_deactivate()` vs `cleanup()` — put dismiss-time teardown in `on_deactivate()`.**
+> `NavigationManager::go_back()` calls **`on_deactivate()`** when an overlay is dismissed —
+> it does **not** call `cleanup()`. For a persistent/singleton overlay (one created once and
+> re-shown, registered via `StaticPanelRegistry`), `cleanup()` runs only at app shutdown.
+> So any side effect a `show()` turns on and must turn back off when the user leaves
+> (re-enabling a temporarily disabled input transform, restoring global state, releasing a
+> resource) belongs in `on_deactivate()`. Putting it only in `cleanup()` means it never runs
+> on a normal dismiss and the state stays wrong for the rest of the session. This was the root
+> cause of #943: the touch-calibration overlay disabled the affine transform in `show()` but
+> re-enabled it only in `cleanup()`, so an aborted recalibration left touch uncalibrated until
+> the next reboot. Make `on_deactivate()` the authoritative teardown and keep `cleanup()`
+> idempotent so it's safe if both run.
+
 ### ❌ AVOID: Function-Based Patterns
 
 The old C-style wrapper APIs (`ui_panel_*_init()`, `ui_panel_*_show()`) have been **removed**. All panels and overlays use class-based patterns:

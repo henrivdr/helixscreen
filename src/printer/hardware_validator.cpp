@@ -8,8 +8,11 @@
 #include "ui_toast_manager.h"
 
 #include "config.h"
+#include "hardware_role_registry.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "printer_discovery.h"
 #include "printer_hardware.h"
+#include "spdlog/fmt/fmt.h"
 #include "spdlog/spdlog.h"
 #include "wizard_config_paths.h"
 
@@ -168,15 +171,18 @@ void HardwareValidator::notify_user(const HardwareValidationResult& result) {
 
     if (result.has_critical()) {
         if (result.critical_missing.size() == 1) {
-            message = "Critical hardware missing: " + result.critical_missing[0].hardware_name;
+            message = fmt::format(lv_tr("Critical hardware missing: {}"),
+                                  result.critical_missing[0].hardware_name);
         } else {
-            message = std::to_string(result.critical_missing.size()) + " critical hardware issues";
+            message =
+                fmt::format(lv_tr("{} critical hardware issues"), result.critical_missing.size());
         }
         severity = ToastSeverity::ERROR;
     } else if (!result.expected_missing.empty() || !result.changed_from_last_session.empty()) {
         size_t count = result.expected_missing.size() + result.changed_from_last_session.size();
-        message =
-            std::to_string(count) + " configured " + (count == 1 ? "item" : "items") + " not found";
+        message = fmt::format(count == 1 ? lv_tr("{} configured item not found")
+                                         : lv_tr("{} configured items not found"),
+                              count);
         severity = ToastSeverity::WARNING;
     } else {
         // Build intelligent message based on hardware types
@@ -192,20 +198,21 @@ void HardwareValidator::notify_user(const HardwareValidationResult& result) {
         }
 
         if (led_count > 0 && sensor_count == 0 && other_count == 0) {
-            message = led_count == 1 ? "LED strip available for lighting control"
-                                     : std::to_string(led_count) + " LED strips available";
+            message = led_count == 1 ? lv_tr("LED strip available for lighting control")
+                                     : fmt::format(lv_tr("{} LED strips available"), led_count);
         } else if (sensor_count > 0 && led_count == 0 && other_count == 0) {
             message = sensor_count == 1
-                          ? "Filament sensor available for runout detection"
-                          : std::to_string(sensor_count) + " filament sensors available";
+                          ? lv_tr("Filament sensor available for runout detection")
+                          : fmt::format(lv_tr("{} filament sensors available"), sensor_count);
         } else {
-            message = std::to_string(result.newly_discovered.size()) + " new hardware available";
+            message =
+                fmt::format(lv_tr("{} new hardware available"), result.newly_discovered.size());
         }
         severity = ToastSeverity::INFO;
     }
 
     // Show toast with action button to navigate to Hardware Health section
-    ToastManager::instance().show_with_action(severity, message.c_str(), "View",
+    ToastManager::instance().show_with_action(severity, message.c_str(), lv_tr("View"),
                                               on_hardware_toast_view_clicked, nullptr, 8000);
     spdlog::debug("[HardwareValidator] Notified user ({}): {}",
                   severity == ToastSeverity::ERROR     ? "error"
@@ -367,6 +374,25 @@ void HardwareValidator::add_expected_hardware(Config* config, const std::string&
 }
 
 // =============================================================================
+// Private Validation Helpers
+// =============================================================================
+
+static HardwareType hardware_type_for(helix::HardwareCategory cat) {
+    switch (cat) {
+    case helix::HardwareCategory::Fan:
+        return HardwareType::FAN;
+    case helix::HardwareCategory::Heater:
+        return HardwareType::HEATER;
+    case helix::HardwareCategory::Led:
+        return HardwareType::LED;
+    case helix::HardwareCategory::FilamentSensor:
+        return HardwareType::FILAMENT_SENSOR;
+    default:
+        return HardwareType::OTHER;
+    }
+}
+
+// =============================================================================
 // Private Validation Methods
 // =============================================================================
 
@@ -403,88 +429,60 @@ void HardwareValidator::validate_configured_hardware(Config* config,
         return;
     }
 
-    const auto& heaters = hardware.heaters();
     const auto& fans = hardware.fans();
     const auto& leds = hardware.leds();
     const auto& filament_sensors = hardware.filament_sensor_names();
 
-    // Check configured heater (bed)
-    try {
-        std::string bed_name = config->get<std::string>(config->df() + "heaters/bed", "heater_bed");
-        if (!bed_name.empty() && !contains_name(heaters, bed_name) &&
-            !is_hardware_optional(config, bed_name)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                bed_name, HardwareType::HEATER, "Configured bed heater not found"));
+    // Role-bearing heater/fan validation via registry.
+    // Bypasses is_hardware_optional for role targets: a configured role pointing at
+    // an optional object is a stale role, not a silent drop.
+    for (const auto& desc : helix::hardware_role_registry()) {
+        try {
+            const std::vector<std::string>* discovered = nullptr;
+            if (desc.category == helix::HardwareCategory::Fan)
+                discovered = &hardware.fans();
+            else if (desc.category == helix::HardwareCategory::Heater)
+                discovered = &hardware.heaters();
+            if (!discovered)
+                continue;
+
+            const std::string key = config->df() + desc.config_key;
+            // Read with an EMPTY default (NOT the canonical default): an absent key
+            // means this role is not configured for THIS printer (a bed-less printer
+            // has no heaters/bed key). Absent is legitimate, not a problem to flag.
+            std::string saved = config->get<std::string>(key, "");
+            if (saved.empty())
+                continue; // unconfigured role
+
+            auto res = helix::resolve_role(desc, saved, *discovered);
+            // Confident heals are resolved+persisted upstream (FanRoleConfig::from_config and the
+            // heater heal block in the discovery sequence) BEFORE validate() runs, so an AutoHealed
+            // role is already Resolved here. We surface ONLY Unresolved NON-GUIDED roles as a
+            // warning. Guided roles (every current registry role) are routed to the targeted
+            // reconfig wizard via helix::unresolved_guided_steps()/the collector — toasting them
+            // here too would double-notify (spec §3.4: guided → reconfig only; non-guided →
+            // warning). After this change the validator surfaces none of the current registry
+            // roles by design; the collector + wizard are the authority. Do not re-add an
+            // AutoHealed branch here without moving the upstream pre-heal, or you reintroduce an
+            // every-boot toast.
+            if (res.status == helix::RoleResolutionStatus::Unresolved && !desc.guided) {
+                result.expected_missing.push_back(HardwareIssue::warning(
+                    saved, hardware_type_for(desc.category),
+                    "Configured hardware no longer present", /*optional=*/false));
+            }
+        } catch (...) {
         }
-    } catch (...) {
-        // Config key doesn't exist, that's fine
     }
 
-    // Check configured heater (hotend)
-    try {
-        std::string hotend_name =
-            config->get<std::string>(config->df() + "heaters/hotend", "extruder");
-        if (!hotend_name.empty() && !contains_name(heaters, hotend_name) &&
-            !is_hardware_optional(config, hotend_name)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                hotend_name, HardwareType::HEATER, "Configured hotend heater not found"));
-        }
-    } catch (...) {
-    }
-
-    // Check configured fan (part cooling)
-    try {
-        std::string part_fan = config->get<std::string>(config->df() + "fans/part", "fan");
-        if (!part_fan.empty() && !contains_name(fans, part_fan) &&
-            !is_hardware_optional(config, part_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                part_fan, HardwareType::FAN, "Configured part cooling fan not found"));
-        }
-    } catch (...) {
-    }
-
-    // Check configured fan (hotend)
-    try {
-        std::string hotend_fan = config->get<std::string>(config->df() + "fans/hotend", "");
-        if (!hotend_fan.empty() && !contains_name(fans, hotend_fan) &&
-            !is_hardware_optional(config, hotend_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                hotend_fan, HardwareType::FAN, "Configured hotend fan not found"));
-        }
-    } catch (...) {
-    }
-
-    // Check configured fan (chamber)
-    try {
-        std::string chamber_fan = config->get<std::string>(config->df() + "fans/chamber", "");
-        if (!chamber_fan.empty() && !contains_name(fans, chamber_fan) &&
-            !is_hardware_optional(config, chamber_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                chamber_fan, HardwareType::FAN, "Configured chamber fan not found"));
-        }
-    } catch (...) {
-    }
-
-    // Check configured fan (exhaust)
-    try {
-        std::string exhaust_fan = config->get<std::string>(config->df() + "fans/exhaust", "");
-        if (!exhaust_fan.empty() && !contains_name(fans, exhaust_fan) &&
-            !is_hardware_optional(config, exhaust_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                exhaust_fan, HardwareType::FAN, "Configured exhaust fan not found"));
-        }
-    } catch (...) {
-    }
-
-    // Check configured fan (aux) — symmetric with the aux slot in validate_new_hardware.
+    // Check configured fan (aux) — not in the registry; kept as a bespoke check.
     // Some presets (e.g. AD5M Pro ForgeX) map a fifth fan role; without this check a
     // missing aux fan would silently disappear rather than surface as a hardware issue.
     try {
         std::string aux_fan = config->get<std::string>(config->df() + "fans/aux", "");
         if (!aux_fan.empty() && !contains_name(fans, aux_fan) &&
             !is_hardware_optional(config, aux_fan)) {
-            result.expected_missing.push_back(HardwareIssue::warning(
-                aux_fan, HardwareType::FAN, "Configured aux fan not found"));
+            result.expected_missing.push_back(
+                HardwareIssue::warning(aux_fan, HardwareType::FAN, "Configured aux fan not found"));
         }
     } catch (...) {
     }
@@ -835,8 +833,8 @@ void HardwareValidator::log_ignored_hardware(Config* config) {
             }
             joined << names[i];
         }
-        spdlog::info("[HardwareValidator] {} hardware item(s) silenced (ignored): {}",
-                     names.size(), joined.str());
+        spdlog::info("[HardwareValidator] {} hardware item(s) silenced (ignored): {}", names.size(),
+                     joined.str());
     } catch (const std::exception& e) {
         spdlog::trace("[HardwareValidator] Error reading optional list: {}", e.what());
     }

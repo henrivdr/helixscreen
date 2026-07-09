@@ -618,14 +618,13 @@ lv_indev_t* DisplayBackendDRM::create_input_pointer() {
             // above. The v17→v18 migration set recheck_pending; decide here, where
             // the device's resistive nature and live ABS range are known.
             if (helix::Config* cfg = helix::Config::get_instance()) {
-                bool recheck_pending =
-                    cfg->get<bool>("/input/calibration/recheck_pending", false);
+                bool recheck_pending = cfg->get<bool>("/input/calibration/recheck_pending", false);
                 bool changed = false;
                 if (recheck_pending) {
                     bool is_resistive = helix::is_resistive_touchscreen_name(dev_name);
                     bool abs_mismatch =
-                        got_range && helix::has_abs_display_mismatch(
-                                         abs_x.maximum, abs_y.maximum, screen_width_, screen_height_);
+                        got_range && helix::has_abs_display_mismatch(abs_x.maximum, abs_y.maximum,
+                                                                     screen_width_, screen_height_);
                     if (helix::should_invalidate_legacy_calibration(recheck_pending, is_resistive,
                                                                     abs_mismatch)) {
                         spdlog::info("[DRM Backend] Invalidating legacy pre-#943 affine "
@@ -1016,8 +1015,8 @@ bool DisplayBackendDRM::set_connector_dpms(bool on) {
 
             if (dpms_prop_id != 0) {
                 uint64_t value = on ? DRM_MODE_DPMS_ON : DRM_MODE_DPMS_OFF;
-                int rc = drmModeConnectorSetProperty(fd, connector->connector_id, dpms_prop_id,
-                                                     value);
+                int rc =
+                    drmModeConnectorSetProperty(fd, connector->connector_id, dpms_prop_id, value);
                 if (rc == 0) {
                     applied = true;
                     spdlog::info("[DRM Backend] Connector {} DPMS set to {}",

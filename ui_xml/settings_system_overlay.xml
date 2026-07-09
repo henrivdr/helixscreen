@@ -8,7 +8,10 @@
         extends="overlay_panel" width="#overlay_panel_width_full" title="System" title_tag="System"
         bg_color="#screen_bg">
     <!-- Content Area - no padding, rows handle their own -->
-    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_top="0" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_bottom="#space_lg" scrollable="true" flex_flow="column">
+    <lv_obj name="overlay_content" width="100%" flex_grow="1" style_pad_top="0" style_pad_left="0" style_pad_right="0" style_pad_bottom="#space_lg" scrollable="true" flex_flow="column">
+      <!-- All system settings live in a single grouped-list card (no section
+           headers in this overlay); the card owns the horizontal inset. -->
+      <setting_group>
       <!-- ================================================================== -->
       <!-- SECURITY -->
       <!-- ================================================================== -->
@@ -97,6 +100,7 @@
                           label="Factory Reset" label_tag="Factory Reset" icon="refresh"
                           description="Reset all settings and restart wizard"
                           description_tag="Reset all settings and restart wizard" callback="on_factory_reset_clicked"/>
+      </setting_group>
     </lv_obj>
   </view>
 </component>

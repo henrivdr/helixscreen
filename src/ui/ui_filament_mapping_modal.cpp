@@ -3,6 +3,7 @@
 #include "ui_filament_mapping_modal.h"
 
 #include "ui_fonts.h"
+#include "ui_swatch.h"
 #include "ui_utils.h"
 
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -119,8 +120,8 @@ lv_obj_t* FilamentMappingModal::create_tool_row(int tool_index) {
     // without rebuilding. C++ only sets colors, label text, and show/hide
     // on the conditional children (Tx label, material label, chosen swatch,
     // warning, chevron).
-    auto* row = static_cast<lv_obj_t*>(
-        lv_xml_create(tool_list_, "filament_mapping_tool_row", nullptr));
+    auto* row =
+        static_cast<lv_obj_t*>(lv_xml_create(tool_list_, "filament_mapping_tool_row", nullptr));
     if (!row) {
         return nullptr;
     }
@@ -135,8 +136,8 @@ lv_obj_t* FilamentMappingModal::create_tool_row(int tool_index) {
             char tool_buf[8];
             snprintf(tool_buf, sizeof(tool_buf), "T%d", tool.tool_index);
             lv_label_set_text(tool_label, tool_buf);
-            lv_obj_set_style_text_color(
-                tool_label, theme_manager_get_contrast_color(gcode_color), 0);
+            lv_obj_set_style_text_color(tool_label, theme_manager_get_contrast_color(gcode_color),
+                                        0);
             lv_obj_remove_flag(tool_label, LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -154,13 +155,13 @@ lv_obj_t* FilamentMappingModal::create_tool_row(int tool_index) {
 
     if (auto* chosen_swatch = lv_obj_find_by_name(row, "chosen_swatch")) {
         if (mapped && !mapped->is_empty) {
-            lv_obj_set_style_bg_color(chosen_swatch, lv_color_hex(mapped->color_rgb), 0);
+            helix::ui::apply_swatch_color(chosen_swatch, mapped->color_rgb,
+                                          mapped->multi_color_hexes);
             lv_obj_remove_flag(chosen_swatch, LV_OBJ_FLAG_HIDDEN);
         } else if (mapped && mapped->is_empty) {
             lv_obj_set_style_bg_opa(chosen_swatch, LV_OPA_TRANSP, 0);
             lv_obj_set_style_border_width(chosen_swatch, 2, 0);
-            lv_obj_set_style_border_color(
-                chosen_swatch, theme_manager_get_color("warning"), 0);
+            lv_obj_set_style_border_color(chosen_swatch, theme_manager_get_color("warning"), 0);
             lv_obj_set_style_border_opa(chosen_swatch, LV_OPA_COVER, 0);
             lv_obj_remove_flag(chosen_swatch, LV_OBJ_FLAG_HIDDEN);
         }

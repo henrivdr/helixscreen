@@ -131,7 +131,8 @@ class WiFiBackendTestFixture {
 // Backend Lifecycle Tests
 // ============================================================================
 
-TEST_CASE_METHOD(WiFiBackendTestFixture, "Backend lifecycle", "[network][backend][lifecycle][slow]") {
+TEST_CASE_METHOD(WiFiBackendTestFixture, "Backend lifecycle",
+                 "[network][backend][lifecycle][slow]") {
     SECTION("Backend created but not running by default") {
         // CRITICAL: This catches the auto-start bug
         REQUIRE_FALSE(backend->is_running());
@@ -637,9 +638,9 @@ TEST_CASE("WifiBackend::create() does not block the caller",
     // return immediately — the subprocess probing belongs on a worker.
     auto t0 = std::chrono::steady_clock::now();
     auto backend = WifiBackend::create(/*silent=*/true);
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - t0)
-                          .count();
+    auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0)
+            .count();
 
     REQUIRE(backend != nullptr);
     // Generous bound; a cold nmcli probe chain is typically 10-100ms+ and
@@ -674,8 +675,7 @@ TEST_CASE("WifiBackend: READY event fires once backend finishes async init",
     backend->start_async();
 
     std::unique_lock<std::mutex> lock(m);
-    bool ok = cv.wait_for(lock, std::chrono::seconds(10),
-                          [&]() { return ready.load(); });
+    bool ok = cv.wait_for(lock, std::chrono::seconds(10), [&]() { return ready.load(); });
     REQUIRE(ok);
     REQUIRE(backend->is_running());
 }

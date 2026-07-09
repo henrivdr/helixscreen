@@ -2,8 +2,8 @@
 #include "../helix_test_fixture.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "app_globals.h"
-#include "src/ui/panel_widgets/print_status_widget.h"
 #include "printer_state.h"
+#include "src/ui/panel_widgets/print_status_widget.h"
 
 #include "../catch_amalgamated.hpp"
 

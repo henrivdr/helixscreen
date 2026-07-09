@@ -364,7 +364,7 @@ static std::string sanitize_error_message(const std::string& raw) {
 void ScrewsTiltPanel::start_probing() {
     if (!api_) {
         spdlog::error("[ScrewsTilt] No API - cannot probe");
-        on_screws_tilt_error("Internal error: API not available");
+        on_screws_tilt_error(lv_tr("Internal error: API not available"));
         return;
     }
 
@@ -402,8 +402,8 @@ void ScrewsTiltPanel::start_probing() {
                 if (token.expired())
                     return;
                 std::string msg = (err.type == MoonrakerErrorType::TIMEOUT)
-                                      ? "Homing timed out — printer may still be homing"
-                                      : "Homing failed: " + err.message;
+                                      ? lv_tr("Homing timed out — printer may still be homing")
+                                      : std::string(lv_tr("Homing failed: ")) + err.message;
                 token.defer("ScrewsTilt::g28_error", [this, msg]() {
                     if (cleanup_called())
                         return;
@@ -465,7 +465,7 @@ void ScrewsTiltPanel::on_screws_tilt_results(const std::vector<ScrewTiltResult>&
 
     if (all_level) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "Completed in %d probe%s", probe_count_,
+        snprintf(buf, sizeof(buf), lv_tr("Completed in %d probe%s"), probe_count_,
                  probe_count_ == 1 ? "" : "s");
         lv_subject_copy_string(&probe_count_subject_, buf);
     }

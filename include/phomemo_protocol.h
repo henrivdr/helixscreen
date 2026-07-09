@@ -16,7 +16,6 @@ static constexpr uint8_t PHOMEMO_DEFAULT_DENSITY = 0x0A;
 
 /// Build Phomemo ESC/POS raster protocol bytes from a bitmap.
 /// Pure function — no I/O. Output can be sent over USB, BLE GATT, or any transport.
-std::vector<uint8_t> phomemo_build_raster(const LabelBitmap& bitmap,
-                                           const LabelSize& size);
+std::vector<uint8_t> phomemo_build_raster(const LabelBitmap& bitmap, const LabelSize& size);
 
-}  // namespace helix::label
+} // namespace helix::label

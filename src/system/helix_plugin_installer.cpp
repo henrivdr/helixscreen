@@ -4,6 +4,7 @@
 #include "helix_plugin_installer.h"
 
 #include "config.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 
 #include <spdlog/spdlog.h>
@@ -195,13 +196,13 @@ HelixPluginInstaller::install_local_sync(bool enable_phase_tracking) {
 
     if (!is_local_moonraker()) {
         spdlog::warn("[PluginInstaller] Cannot auto-install on remote Moonraker");
-        return {false, "Auto-install only works on local Moonraker"};
+        return {false, lv_tr("Auto-install only works on local Moonraker")};
     }
 
     std::string script_path = get_install_script_path();
     if (script_path.empty()) {
         spdlog::warn("[PluginInstaller] Install script not found");
-        return {false, "Install script not found. Use the remote install command instead."};
+        return {false, lv_tr("Install script not found. Use the remote install command instead.")};
     }
 
     state_.store(PluginInstallState::INSTALLING);
@@ -214,7 +215,7 @@ HelixPluginInstaller::install_local_sync(bool enable_phase_tracking) {
         state_.store(PluginInstallState::FAILED);
         std::string err_msg = strerror(errno);
         spdlog::error("[PluginInstaller] Fork failed: {}", err_msg);
-        return {false, "Failed to start installer: " + err_msg};
+        return {false, lv_tr("Failed to start installer: ") + err_msg};
     }
 
     if (pid == 0) {
@@ -232,23 +233,23 @@ HelixPluginInstaller::install_local_sync(bool enable_phase_tracking) {
 
     if (result.timed_out) {
         state_.store(PluginInstallState::FAILED);
-        return {false, "Installation timed out. The script may be stuck."};
+        return {false, lv_tr("Installation timed out. The script may be stuck.")};
     }
 
     if (result.error) {
         state_.store(PluginInstallState::FAILED);
-        return {false, "Installation failed: " + result.error_message};
+        return {false, lv_tr("Installation failed: ") + result.error_message};
     }
 
     if (result.exit_code == 0) {
         state_.store(PluginInstallState::SUCCESS);
         spdlog::info("[PluginInstaller] Installation completed successfully");
-        return {true, "Plugin installed successfully. Moonraker is restarting..."};
+        return {true, lv_tr("Plugin installed successfully. Moonraker is restarting...")};
     }
 
     state_.store(PluginInstallState::FAILED);
     spdlog::error("[PluginInstaller] Installation failed (exit code {})", result.exit_code);
-    return {false, "Installation failed. Check logs for details."};
+    return {false, lv_tr("Installation failed. Check logs for details.")};
 }
 
 void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_phase_tracking) {
@@ -258,7 +259,7 @@ void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_p
     if (!is_local_moonraker()) {
         spdlog::warn("[PluginInstaller] Cannot auto-install on remote Moonraker");
         if (callback) {
-            callback(false, "Auto-install only works on local Moonraker");
+            callback(false, lv_tr("Auto-install only works on local Moonraker"));
         }
         return;
     }
@@ -267,7 +268,8 @@ void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_p
     if (script_path.empty()) {
         spdlog::warn("[PluginInstaller] Install script not found");
         if (callback) {
-            callback(false, "Install script not found. Use the remote install command instead.");
+            callback(false,
+                     lv_tr("Install script not found. Use the remote install command instead."));
         }
         return;
     }
@@ -288,7 +290,7 @@ void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_p
         std::string err_msg = strerror(errno);
         spdlog::error("[PluginInstaller] Fork failed: {}", err_msg);
         if (callback) {
-            callback(false, "Failed to start installer: " + err_msg);
+            callback(false, lv_tr("Failed to start installer: ") + err_msg);
         }
         return;
     }
@@ -314,7 +316,7 @@ void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_p
     if (result.timed_out) {
         state_.store(PluginInstallState::FAILED);
         if (callback) {
-            callback(false, "Installation timed out. The script may be stuck.");
+            callback(false, lv_tr("Installation timed out. The script may be stuck."));
         }
         return;
     }
@@ -322,7 +324,7 @@ void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_p
     if (result.error) {
         state_.store(PluginInstallState::FAILED);
         if (callback) {
-            callback(false, "Installation failed: " + result.error_message);
+            callback(false, lv_tr("Installation failed: ") + result.error_message);
         }
         return;
     }
@@ -331,13 +333,13 @@ void HelixPluginInstaller::install_local(InstallCallback callback, bool enable_p
         state_.store(PluginInstallState::SUCCESS);
         spdlog::info("[PluginInstaller] Installation completed successfully");
         if (callback) {
-            callback(true, "Plugin installed successfully. Moonraker is restarting...");
+            callback(true, lv_tr("Plugin installed successfully. Moonraker is restarting..."));
         }
     } else {
         state_.store(PluginInstallState::FAILED);
         spdlog::error("[PluginInstaller] Installation failed (exit code {})", result.exit_code);
         if (callback) {
-            callback(false, "Installation failed. Check logs for details.");
+            callback(false, lv_tr("Installation failed. Check logs for details."));
         }
     }
 }
@@ -346,7 +348,7 @@ void HelixPluginInstaller::uninstall_local(InstallCallback callback) {
     if (!is_local_moonraker()) {
         spdlog::warn("[PluginInstaller] Cannot auto-uninstall on remote Moonraker");
         if (callback) {
-            callback(false, "Auto-uninstall only works on local Moonraker");
+            callback(false, lv_tr("Auto-uninstall only works on local Moonraker"));
         }
         return;
     }
@@ -355,7 +357,7 @@ void HelixPluginInstaller::uninstall_local(InstallCallback callback) {
     if (script_path.empty()) {
         spdlog::warn("[PluginInstaller] Install script not found for uninstall");
         if (callback) {
-            callback(false, "Uninstall script not found.");
+            callback(false, lv_tr("Uninstall script not found."));
         }
         return;
     }
@@ -371,7 +373,7 @@ void HelixPluginInstaller::uninstall_local(InstallCallback callback) {
         std::string err_msg = strerror(errno);
         spdlog::error("[PluginInstaller] Fork failed: {}", err_msg);
         if (callback) {
-            callback(false, "Failed to start uninstaller: " + err_msg);
+            callback(false, lv_tr("Failed to start uninstaller: ") + err_msg);
         }
         return;
     }
@@ -389,7 +391,7 @@ void HelixPluginInstaller::uninstall_local(InstallCallback callback) {
     if (result.timed_out) {
         state_.store(PluginInstallState::FAILED);
         if (callback) {
-            callback(false, "Uninstallation timed out. The script may be stuck.");
+            callback(false, lv_tr("Uninstallation timed out. The script may be stuck."));
         }
         return;
     }
@@ -397,7 +399,7 @@ void HelixPluginInstaller::uninstall_local(InstallCallback callback) {
     if (result.error) {
         state_.store(PluginInstallState::FAILED);
         if (callback) {
-            callback(false, "Uninstallation failed: " + result.error_message);
+            callback(false, lv_tr("Uninstallation failed: ") + result.error_message);
         }
         return;
     }
@@ -406,13 +408,13 @@ void HelixPluginInstaller::uninstall_local(InstallCallback callback) {
         state_.store(PluginInstallState::SUCCESS);
         spdlog::info("[PluginInstaller] Uninstallation completed successfully");
         if (callback) {
-            callback(true, "Plugin uninstalled successfully.");
+            callback(true, lv_tr("Plugin uninstalled successfully."));
         }
     } else {
         state_.store(PluginInstallState::FAILED);
         spdlog::error("[PluginInstaller] Uninstallation failed (exit code {})", result.exit_code);
         if (callback) {
-            callback(false, "Uninstallation failed. Check logs for details.");
+            callback(false, lv_tr("Uninstallation failed. Check logs for details."));
         }
     }
 }

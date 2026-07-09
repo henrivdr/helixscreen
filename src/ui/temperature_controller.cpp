@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "temperature_controller.h"
 
-#include "filament_database.h"
-#include "moonraker_api.h"
-#include "printer_state.h"
 #include "ui_error_reporting.h"
 
-#include "hv/json.hpp"
+#include "filament_database.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "moonraker_api.h"
+#include "printer_state.h"
 
 #include <algorithm>
 #include <cctype>
+
+#include "hv/json.hpp"
 
 namespace helix {
 
@@ -135,8 +136,8 @@ void TemperatureController::set_target(HeaterType type, double celsius, SendOpti
         if (opts.toast) {
             MoonrakerError err;
             err.type = MoonrakerErrorType::VALIDATION_ERROR;
-            err.message = (type == HeaterType::Chamber) ? "Chamber heater not found"
-                                                        : "Heater not found";
+            err.message =
+                (type == HeaterType::Chamber) ? "Chamber heater not found" : "Heater not found";
             if (opts.on_error) {
                 opts.on_error(err);
             }

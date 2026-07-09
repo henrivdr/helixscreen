@@ -36,6 +36,14 @@ When on, the Android navigation bar (back / home / recents) stays onscreen at al
 
 Toggle labels on home panel widgets. Disable for a cleaner look on small screens.
 
+### Scroll Buttons
+
+Show up/down buttons on long lists — off by default. Turn this on if you'd rather tap through a list than drag it, especially on small screens or displays where touch-drag can feel unresponsive.
+
+When enabled, any screen with a list longer than fits on screen gets a slim column of up/down arrow buttons along the right edge. The list content shifts left slightly to make room, so the buttons never cover anything. Each tap scrolls about one screenful, with a little overlap so you don't lose your place. The up button dims when you're already at the top of the list, and the down button dims at the bottom. Lists that already fit on screen don't get buttons — there's nothing to scroll.
+
+Finger-drag scrolling keeps working normally either way; the buttons are just an additional way to get around. If [Animations](#animations) is also on, pressing a button glides the list smoothly; with Animations off, it jumps straight to the new position.
+
 ### Bed Mesh Render
 
 Choose how bed mesh data is visualized: Auto, 3D View, or 2D Heatmap.

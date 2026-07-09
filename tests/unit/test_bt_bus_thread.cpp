@@ -23,11 +23,10 @@
 
 #if defined(__has_include) && __has_include(<systemd/sd-bus.h>)
 
-#include <systemd/sd-bus.h>
-
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <systemd/sd-bus.h>
 #include <thread>
 #include <vector>
 
@@ -104,8 +103,7 @@ TEST_CASE("BusThread serializes interleaved work", "[bt][slow]") {
                 auto fut = bt.submit([&](sd_bus*) {
                     int now = in_flight.fetch_add(1) + 1;
                     int prev_max = max_concurrent.load();
-                    while (now > prev_max &&
-                           !max_concurrent.compare_exchange_weak(prev_max, now)) {
+                    while (now > prev_max && !max_concurrent.compare_exchange_weak(prev_max, now)) {
                         // retry
                     }
                     // Small amount of work to widen the window for any racing work items.
@@ -119,7 +117,8 @@ TEST_CASE("BusThread serializes interleaved work", "[bt][slow]") {
         });
     }
 
-    for (auto& t : submitters) t.join();
+    for (auto& t : submitters)
+        t.join();
 
     // Drain: run_sync returns only after all previously-queued items run
     // (FIFO order, single worker).
@@ -144,7 +143,7 @@ TEST_CASE("BusThread stop breaks pending futures", "[bt][slow]") {
     auto pending = t.submit([](sd_bus*) {});
     // stop() runs while the worker is still inside the slow item; pending stays queued
     // and gets its promise broken in stop()'s post-join drain.
-    std::this_thread::sleep_for(10ms);  // ensure worker has picked up slow
+    std::this_thread::sleep_for(10ms); // ensure worker has picked up slow
     t.stop();
 
     REQUIRE_NOTHROW(slow.get());
@@ -154,13 +153,14 @@ TEST_CASE("BusThread stop breaks pending futures", "[bt][slow]") {
 TEST_CASE("BusThread start is idempotent", "[bt][slow]") {
     BusThread t(nullptr);
     t.start();
-    t.start();  // must be a no-op, no second thread spawned
+    t.start(); // must be a no-op, no second thread spawned
     t.start();
     t.stop();
-    SUCCEED();  // didn't crash or deadlock
+    SUCCEED(); // didn't crash or deadlock
 }
 
-TEST_CASE("BusThread concurrent start+submit: on_thread never races thread_id_", "[bt][bus_thread][slow]") {
+TEST_CASE("BusThread concurrent start+submit: on_thread never races thread_id_",
+          "[bt][bus_thread][slow]") {
     // Regression: thread_id_ used to be written by the parent after std::thread
     // construction, so the worker's first on_thread() check could race with a
     // submit() from another thread calling on_thread() via run_sync(). Here we
@@ -178,10 +178,12 @@ TEST_CASE("BusThread concurrent start+submit: on_thread never races thread_id_",
         std::vector<std::future<void>> futs;
         for (int i = 0; i < kSubmitters; ++i) {
             threads.emplace_back([&] {
-                while (!go.load()) { /* spin */ }
+                while (!go.load()) { /* spin */
+                }
                 auto f = bt.submit([&](sd_bus*) {
                     on_thread_total.fetch_add(1);
-                    if (bt.on_thread()) on_thread_true.fetch_add(1);
+                    if (bt.on_thread())
+                        on_thread_true.fetch_add(1);
                 });
                 std::lock_guard<std::mutex> lk(fm);
                 futs.push_back(std::move(f));
@@ -189,8 +191,10 @@ TEST_CASE("BusThread concurrent start+submit: on_thread never races thread_id_",
         }
         bt.start();
         go.store(true);
-        for (auto& t : threads) t.join();
-        for (auto& f : futs) REQUIRE_NOTHROW(f.get());
+        for (auto& t : threads)
+            t.join();
+        for (auto& f : futs)
+            REQUIRE_NOTHROW(f.get());
         bt.stop();
         REQUIRE(on_thread_total.load() == kSubmitters);
         REQUIRE(on_thread_true.load() == kSubmitters);
@@ -213,7 +217,8 @@ TEST_CASE("BusThread submit racing with stop: no orphan tasks", "[bt][bus_thread
         std::vector<std::thread> threads;
         for (int i = 0; i < kSubmitters; ++i) {
             threads.emplace_back([&] {
-                while (!go.load()) { /* spin */ }
+                while (!go.load()) { /* spin */
+                }
                 for (int j = 0; j < 50; ++j) {
                     try {
                         auto f = bt.submit([](sd_bus*) {});
@@ -229,11 +234,15 @@ TEST_CASE("BusThread submit racing with stop: no orphan tasks", "[bt][bus_thread
         // Let a few submits land before stopping.
         std::this_thread::sleep_for(1ms);
         bt.stop();
-        for (auto& t : threads) t.join();
+        for (auto& t : threads)
+            t.join();
         // Every future must be ready (either fulfilled or exceptional) — no orphans.
         for (auto& f : futs) {
             REQUIRE(f.wait_for(1s) == std::future_status::ready);
-            try { f.get(); } catch (const std::runtime_error&) { /* expected post-stop */ }
+            try {
+                f.get();
+            } catch (const std::runtime_error&) { /* expected post-stop */
+            }
         }
     }
 }
@@ -257,7 +266,7 @@ TEST_CASE("BusThread post-loop drain breaks promises before destructor", "[bt][b
 
     // Block the worker on a slow item so the next submits sit in the queue.
     auto slow = bt->submit([](sd_bus*) { std::this_thread::sleep_for(50ms); });
-    std::this_thread::sleep_for(5ms);  // ensure worker picked up `slow`
+    std::this_thread::sleep_for(5ms); // ensure worker picked up `slow`
 
     std::vector<std::future<void>> pending;
     for (int i = 0; i < 5; ++i) {
@@ -275,10 +284,11 @@ TEST_CASE("BusThread post-loop drain breaks promises before destructor", "[bt][b
         REQUIRE(f.wait_for(100ms) == std::future_status::ready);
         REQUIRE_THROWS_AS(f.get(), std::runtime_error);
     }
-    bt.reset();  // destructor runs last, finds nothing to clean up
+    bt.reset(); // destructor runs last, finds nothing to clean up
 }
 
-TEST_CASE("BusThread submit().get() inside a work item runs inline (no deadlock)", "[bt][bus_thread][slow]") {
+TEST_CASE("BusThread submit().get() inside a work item runs inline (no deadlock)",
+          "[bt][bus_thread][slow]") {
     // Regression: sd_bus dispatch callbacks (match handlers, timeouts) run on
     // the bus thread. If any such callback does bt.submit(...).get() — or its
     // moral equivalent .wait() — the work would be enqueued behind the

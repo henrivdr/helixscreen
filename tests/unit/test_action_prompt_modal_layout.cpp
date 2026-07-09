@@ -16,12 +16,12 @@
 // Tagged [ui_integration] (NOT hidden) — it shows real widgets and forces a
 // real LVGL layout pass, which is the only way the wrap actually manifests.
 
-#include "action_prompt_manager.h"
-#include "action_prompt_modal.h"
-#include "display_settings_manager.h"
 #include "ui_modal.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "action_prompt_manager.h"
+#include "action_prompt_modal.h"
+#include "display_settings_manager.h"
 
 #include <vector>
 

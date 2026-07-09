@@ -329,7 +329,8 @@ TEST_CASE_METHOD(MoonrakerAPIMockTestFixture,
                  "MoonrakerAPIMock download_file_to_path file content matches source",
                  "[mock][api][download][streaming]") {
     std::atomic<bool> success_called{false};
-    std::string dest_path = "/tmp/helix_test_download_content_" + std::to_string(getpid()) + ".gcode";
+    std::string dest_path =
+        "/tmp/helix_test_download_content_" + std::to_string(getpid()) + ".gcode";
 
     // Clean up
     std::remove(dest_path.c_str());
@@ -368,7 +369,8 @@ TEST_CASE_METHOD(MoonrakerAPIMockTestFixture,
     std::atomic<bool> success_called{false};
     std::atomic<bool> error_called{false};
     MoonrakerError captured_error;
-    std::string dest_path = "/tmp/helix_test_download_missing_" + std::to_string(getpid()) + ".gcode";
+    std::string dest_path =
+        "/tmp/helix_test_download_missing_" + std::to_string(getpid()) + ".gcode";
 
     api_->transfers().download_file_to_path(
         "gcodes", "nonexistent_file_xyz123.gcode", dest_path,
@@ -391,7 +393,8 @@ TEST_CASE_METHOD(MoonrakerAPIMockTestFixture,
                  "MoonrakerAPIMock download_file_to_path strips directory from path",
                  "[mock][api][download][streaming]") {
     std::atomic<bool> success_called{false};
-    std::string dest_path = "/tmp/helix_test_download_nested_" + std::to_string(getpid()) + ".gcode";
+    std::string dest_path =
+        "/tmp/helix_test_download_nested_" + std::to_string(getpid()) + ".gcode";
 
     // Clean up
     std::remove(dest_path.c_str());

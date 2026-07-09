@@ -9,6 +9,7 @@
 
 #include "ams_state.h"
 #include "app_constants.h"
+#include "config.h"
 #include "gcode_camera.h"
 #include "gcode_layer_renderer.h"
 #include "gcode_parser.h"
@@ -101,6 +102,17 @@ class GCodeViewerState {
             // Default: Auto (uses 3D if GLES available, 2D otherwise)
             render_mode_ = GcodeViewerRenderMode::Auto;
             spdlog::debug("[GCode Viewer] Default render mode: Auto");
+        }
+
+        // Layer 2 backstop: a prior session that hard-faulted inside the GPU
+        // driver leaves /display/gpu_3d_blocked set (promoted from the surviving
+        // crash-loop guard at startup). Honor it here so the viewer never
+        // re-enters the crashing GPU path — an explicit user render-mode pick
+        // clears the flag (display_settings_manager) to allow a retry.
+        gpu_3d_blocked_ = Config::get_instance()->get<bool>("/display/gpu_3d_blocked", false);
+        if (gpu_3d_blocked_) {
+            spdlog::warn("[GCode Viewer] GPU 3D path blocked by /display/gpu_3d_blocked (prior "
+                         "driver crash) — using 2D renderer");
         }
 
         // Enhanced shading is ON by default. Set HELIX_SSAO=0 to disable.
@@ -327,6 +339,11 @@ class GCodeViewerState {
     /// Budget system forced 2D for current file (reset on each new load)
     bool budget_forced_2d_{false};
 
+    /// GPU 3D path persistently blocked after a driver crash-loop (issues
+    /// #966 / #1084 / #1085). Read once at construction from
+    /// /display/gpu_3d_blocked; when set, is_using_2d_mode() always returns 2D.
+    bool gpu_3d_blocked_{false};
+
     /// Disable streaming mode (detail panel uses full-load + budget instead)
     bool streaming_disabled_{false};
 
@@ -340,7 +357,8 @@ class GCodeViewerState {
             return true;
         }
         // With GPU-accelerated GLES: Auto defaults to 3D, only Layer2D forces 2D
-        return render_mode_ == GcodeViewerRenderMode::Layer2D || budget_forced_2d_;
+        return render_mode_ == GcodeViewerRenderMode::Layer2D || budget_forced_2d_ ||
+               gpu_3d_blocked_;
 #else
         // Without 3D renderer: only explicit Render3D would use 3D (but it's not available)
         return render_mode_ != GcodeViewerRenderMode::Render3D;

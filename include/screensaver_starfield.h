@@ -7,7 +7,6 @@
 #include "screensaver.h"
 
 #include <lvgl.h>
-
 #include <vector>
 
 /**
@@ -28,16 +27,20 @@ class StarfieldScreensaver : public Screensaver {
 
     void start() override;
     void stop() override;
-    bool is_active() const override { return active_; }
-    ScreensaverType type() const override { return ScreensaverType::STARFIELD; }
+    bool is_active() const override {
+        return active_;
+    }
+    ScreensaverType type() const override {
+        return ScreensaverType::STARFIELD;
+    }
 
   private:
     struct Star {
-        float x;         // normalized position (-1..1)
-        float y;         // normalized position (-1..1)
-        float z;         // depth (0..1, 1=far, approaches 0)
-        float speed;     // z decrement per frame
-        uint8_t tint_r;  // color tint (assigned at birth, visible when close)
+        float x;        // normalized position (-1..1)
+        float y;        // normalized position (-1..1)
+        float z;        // depth (0..1, 1=far, approaches 0)
+        float speed;    // z decrement per frame
+        uint8_t tint_r; // color tint (assigned at birth, visible when close)
         uint8_t tint_g;
         uint8_t tint_b;
         // Previous frame screen position for incremental erase
@@ -65,9 +68,9 @@ class StarfieldScreensaver : public Screensaver {
     // Cached screen dimensions and projection constants
     int screen_w_ = 0;
     int screen_h_ = 0;
-    float cx_ = 0;     // screen center X
-    float cy_ = 0;     // screen center Y
-    float focal_ = 0;  // projection focal length
+    float cx_ = 0;    // screen center X
+    float cy_ = 0;    // screen center Y
+    float focal_ = 0; // projection focal length
 };
 
 #endif // HELIX_ENABLE_SCREENSAVER

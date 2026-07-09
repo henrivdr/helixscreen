@@ -113,8 +113,8 @@ void markdown_text_observer_cb(lv_observer_t* observer, lv_subject_t* subject) {
     constexpr size_t kMarkdownMaxBytes = 256 * 1024;
     size_t len = strlen(text);
     if (len > kMarkdownMaxBytes) {
-        spdlog::warn("[ui_markdown] Truncating oversized markdown ({} bytes > {} cap)",
-                     len, kMarkdownMaxBytes);
+        spdlog::warn("[ui_markdown] Truncating oversized markdown ({} bytes > {} cap)", len,
+                     kMarkdownMaxBytes);
         std::string truncated(text, kMarkdownMaxBytes);
         lv_markdown_set_text(md_widget, truncated.c_str());
         return;

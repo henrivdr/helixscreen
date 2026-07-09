@@ -15,6 +15,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -70,7 +71,7 @@ class WifiBackendNetworkManager : public WifiBackend {
     // ========================================================================
 
     std::atomic<bool> running_{false};
-    std::mutex start_mutex_; // Serializes start() against concurrent start_async()
+    std::mutex start_mutex_;     // Serializes start() against concurrent start_async()
     std::string wifi_interface_; ///< Detected WiFi interface (e.g., "wlan0")
 
     // Event system (thread-safe)
@@ -99,6 +100,7 @@ class WifiBackendNetworkManager : public WifiBackend {
     std::atomic<bool> status_running_{false};
     std::atomic<bool> status_refresh_requested_{false};
     ConnectionStatus cached_status_{}; // Protected by status_mutex_
+    std::atomic<bool> prev_connected_{false}; // Track transitions for event firing
 
     // 5GHz support — computed once at start(), never changes
     std::atomic<bool> supports_5ghz_cached_{false};
@@ -206,8 +208,8 @@ class WifiBackendNetworkManager : public WifiBackend {
 
     // Result of one nmcli connect attempt (fork/exec, captures stderr).
     struct ConnectAttempt {
-        int exit_code = -1;      // -1 = internal failure (fork/pipe/timeout)
-        bool timed_out = false;  // true => killed after CONNECT_TIMEOUT_SECONDS
+        int exit_code = -1;     // -1 = internal failure (fork/pipe/timeout)
+        bool timed_out = false; // true => killed after CONNECT_TIMEOUT_SECONDS
         std::string stderr_out;
     };
 
@@ -221,7 +223,12 @@ class WifiBackendNetworkManager : public WifiBackend {
 
     // Status polling
     void status_thread_func();
-    ConnectionStatus poll_status_now(); // Actual nmcli calls (background thread only)
+    // Actual nmcli calls (background thread only). Returns nullopt when the
+    // underlying `device show` query fails/returns nothing — a transient nmcli
+    // or popen error, distinct from a genuine disconnected state — so callers
+    // can keep the last-known status instead of reporting a false disconnect
+    // (prestonbrown/helixscreen#1059).
+    std::optional<ConnectionStatus> poll_status_now();
     void request_status_refresh();      // Wake status thread for immediate poll
 };
 

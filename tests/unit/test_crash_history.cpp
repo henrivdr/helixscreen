@@ -361,8 +361,7 @@ TEST_CASE_METHOD(CrashHistoryTestFixture,
     REQUIRE_FALSE(ch.has_fingerprint(""));
 }
 
-TEST_CASE_METHOD(CrashHistoryTestFixture,
-                 "CrashHistory: fingerprint persists across re-init",
+TEST_CASE_METHOD(CrashHistoryTestFixture, "CrashHistory: fingerprint persists across re-init",
                  "[crash_history]") {
     auto& ch = helix::CrashHistory::instance();
     auto entry = make_entry();
@@ -376,8 +375,7 @@ TEST_CASE_METHOD(CrashHistoryTestFixture,
 }
 
 TEST_CASE_METHOD(CrashHistoryTestFixture,
-                 "CrashHistory: same crash on new version is not duplicate",
-                 "[crash_history]") {
+                 "CrashHistory: same crash on new version is not duplicate", "[crash_history]") {
     auto& ch = helix::CrashHistory::instance();
     auto entry = make_entry();
     entry.fingerprint = "SIGSEGV/0.10.12/0x400abc";

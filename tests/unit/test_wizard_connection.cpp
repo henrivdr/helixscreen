@@ -152,6 +152,39 @@ TEST_CASE("Wizard Connection: Port validation", "[wizard][connection][validation
 }
 
 // ============================================================================
+// Default Host Resolution Tests
+// ============================================================================
+// Regression guard for "127.0.0.1 not pre-filled sometimes in the setup wizard":
+// factory reset and --wizard re-runs persist an empty moonraker_host, which
+// Config::get returns verbatim. resolve_moonraker_host_default() must treat an
+// empty/blank stored host as "not configured" and fall back to the localhost
+// default (non-Android), while preserving any real stored host.
+
+TEST_CASE("Wizard Connection: Default host resolution", "[wizard][connection][prefill]") {
+    SECTION("Empty stored host falls back to localhost (non-Android)") {
+        REQUIRE(resolve_moonraker_host_default("", false) == "127.0.0.1");
+    }
+
+    SECTION("Whitespace-only stored host falls back to localhost (non-Android)") {
+        REQUIRE(resolve_moonraker_host_default("   ", false) == "127.0.0.1");
+    }
+
+    SECTION("Empty stored host stays empty on Android") {
+        // Moonraker is always remote on Android — no localhost default.
+        REQUIRE(resolve_moonraker_host_default("", true).empty());
+    }
+
+    SECTION("A real stored host is preserved verbatim (non-Android)") {
+        REQUIRE(resolve_moonraker_host_default("192.168.1.50", false) == "192.168.1.50");
+        REQUIRE(resolve_moonraker_host_default("printer.local", false) == "printer.local");
+    }
+
+    SECTION("A real stored host is preserved on Android too") {
+        REQUIRE(resolve_moonraker_host_default("192.168.1.50", true) == "192.168.1.50");
+    }
+}
+
+// ============================================================================
 // URL Construction Tests
 // ============================================================================
 

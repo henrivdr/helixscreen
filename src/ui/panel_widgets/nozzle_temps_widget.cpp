@@ -2,21 +2,21 @@
 
 #include "nozzle_temps_widget.h"
 
-#include "nozzle_layout.h"
+#include "ui_icon.h"
 #include "ui_overlay_temp_graph.h"
 #include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
+#include "ui_utils.h"
 
 #include "app_globals.h"
 #include "lvgl/src/misc/lv_text_private.h" // lv_text_get_width, lv_text_attributes_t
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "nozzle_layout.h"
 #include "observer_factory.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
 #include "theme_manager.h"
 #include "tool_state.h"
-#include "ui_icon.h"
-#include "ui_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -283,8 +283,7 @@ int measure_text_px(const char* txt, const lv_font_t* font) {
 
 } // namespace
 
-void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int width_px,
-                                        int /*height_px*/) {
+void NozzleTempsWidget::on_size_changed(int colspan, int rowspan, int width_px, int /*height_px*/) {
     if (!widget_obj_)
         return;
 
@@ -421,10 +420,9 @@ void NozzleTempsWidget::create_extruder_row(lv_obj_t* container, ExtruderRow& ro
     // is already meaningful — keep it.
     std::string long_name = short_name;
     bool is_default_tn = short_name.size() >= 2 && short_name[0] == 'T' &&
-                         std::all_of(short_name.begin() + 1, short_name.end(),
-                                     [](char c) {
-                                         return std::isdigit(static_cast<unsigned char>(c));
-                                     });
+                         std::all_of(short_name.begin() + 1, short_name.end(), [](char c) {
+                             return std::isdigit(static_cast<unsigned char>(c));
+                         });
     if (is_default_tn) {
         const auto& exts = printer_state_.temperature_state().extruders();
         auto it = exts.find(row.name);
@@ -435,8 +433,7 @@ void NozzleTempsWidget::create_extruder_row(lv_obj_t* container, ExtruderRow& ro
     row.short_name = std::move(short_name);
     row.long_name = std::move(long_name);
 
-    const std::string& initial_label =
-        (current_colspan_ >= 2) ? row.long_name : row.short_name;
+    const std::string& initial_label = (current_colspan_ >= 2) ? row.long_name : row.short_name;
 
     // Create row from XML template — layout, fonts, colors are all declarative
     const char* attrs[] = {"tool_name", initial_label.c_str(), nullptr};

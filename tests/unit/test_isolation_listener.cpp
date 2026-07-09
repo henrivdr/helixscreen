@@ -18,7 +18,6 @@
 // can also serve as a passive regression tripwire); grep stderr for
 // "[ISOLATION-LEAK]".
 
-#include "../catch_amalgamated.hpp"
 #include "ui_observer_guard.h"
 
 #include <array>
@@ -27,6 +26,8 @@
 #include <fstream>
 #include <string>
 #include <unistd.h>
+
+#include "../catch_amalgamated.hpp"
 
 namespace {
 

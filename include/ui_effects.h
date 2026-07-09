@@ -29,6 +29,26 @@ void create_ripple(lv_obj_t* parent, lv_coord_t x, lv_coord_t y, int start_size 
                    int end_size = 120, int32_t duration_ms = 400);
 
 /**
+ * @brief Draw a touch marker: an expanding ripple plus a lingering center dot
+ *
+ * Same visual feedback as create_ripple(), but additionally leaves a solid dot
+ * at the touch point that holds fully visible for a beat, then fades out and
+ * self-deletes. The dot outlives the ripple so a press stays readable long
+ * enough to judge where it landed — the self-diagnosis aid for touch
+ * calibration accuracy (prestonbrown/helixscreen#1082).
+ *
+ * Both the ripple and the dot are centered on the SAME (x, y) from this single
+ * call, so they can never drift into separate codepaths or positions. Like
+ * create_ripple(), everything is self-cleaning — no caller bookkeeping.
+ *
+ * @param parent Parent container (touch position is relative to this; use
+ *               lv_layer_top() for screen-absolute coordinates)
+ * @param x X coordinate relative to parent (touch point)
+ * @param y Y coordinate relative to parent (touch point)
+ */
+void create_touch_marker(lv_obj_t* parent, lv_coord_t x, lv_coord_t y);
+
+/**
  * @brief Create a fullscreen backdrop for modals and overlays
  *
  * Creates a fullscreen object that covers the parent with a semi-transparent

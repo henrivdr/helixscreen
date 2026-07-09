@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "display_manager.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
 #include "spdlog/spdlog.h"
@@ -216,9 +217,18 @@ void DisplaySettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(sleep_while_printing_subject_, sleep_while_printing ? 1 : 0,
                            "settings_sleep_while_printing", subjects_);
 
-    // Animations enabled (default: based on platform capability)
-    bool anim_default = PlatformCapabilities::detect().supports_animations;
-    bool animations = config->get<bool>("/display/animations_enabled", anim_default);
+    // Animations enabled. Default from platform tier, but software-rotated
+    // displays (fbdev + rotation) can't animate smoothly, so the default is
+    // forced off there (#986). An explicit user setting always wins.
+    bool software_rotated = false;
+    if (auto* dm = DisplayManager::instance()) {
+        software_rotated = dm->is_software_rotated();
+    }
+    bool anim_default =
+        animations_default(PlatformCapabilities::detect().supports_animations, software_rotated);
+    bool animations = config->exists("/display/animations_enabled")
+                          ? config->get<bool>("/display/animations_enabled", anim_default)
+                          : anim_default;
     UI_MANAGED_SUBJECT_INT(animations_enabled_subject_, animations ? 1 : 0,
                            "settings_animations_enabled", subjects_);
 
@@ -226,6 +236,11 @@ void DisplaySettingsManager::init_subjects() {
     bool sys_kb = config->get<bool>("/display/use_system_keyboard", false);
     UI_MANAGED_SUBJECT_INT(use_system_keyboard_subject_, sys_kb ? 1 : 0,
                            "settings_use_system_keyboard", subjects_);
+
+    // Page-scroll buttons (default: off — opt-in)
+    bool page_scroll = config->get<bool>("/display/page_scroll_buttons", false);
+    UI_MANAGED_SUBJECT_INT(page_scroll_buttons_subject_, page_scroll ? 1 : 0,
+                           "settings_page_scroll_buttons", subjects_);
 
     // Keep navbar onscreen preference (Android only, issue #908, default: off)
     bool keep_navbar = config->get<bool>("/display/keep_navbar_visible", false);
@@ -639,6 +654,20 @@ void DisplaySettingsManager::set_use_system_keyboard(bool enabled) {
     config->save();
 }
 
+bool DisplaySettingsManager::get_page_scroll_buttons() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&page_scroll_buttons_subject_)) != 0;
+}
+
+void DisplaySettingsManager::set_page_scroll_buttons(bool enabled) {
+    spdlog::info("[DisplaySettingsManager] set_page_scroll_buttons({})", enabled);
+
+    lv_subject_set_int(&page_scroll_buttons_subject_, enabled ? 1 : 0);
+
+    Config* config = Config::get_instance();
+    config->set<bool>("/display/page_scroll_buttons", enabled);
+    config->save();
+}
+
 bool DisplaySettingsManager::get_keep_navbar_visible() const {
     return lv_subject_get_int(const_cast<lv_subject_t*>(&keep_navbar_visible_subject_)) != 0;
 }
@@ -677,7 +706,7 @@ void DisplaySettingsManager::set_bed_mesh_render_mode(int mode) {
 }
 
 const char* DisplaySettingsManager::get_bed_mesh_render_mode_options() {
-    return BED_MESH_RENDER_MODE_OPTIONS_TEXT;
+    return lv_tr(BED_MESH_RENDER_MODE_OPTIONS_TEXT);
 }
 
 int DisplaySettingsManager::get_gcode_render_mode() const {
@@ -693,6 +722,10 @@ void DisplaySettingsManager::set_gcode_render_mode(int mode) {
 
     Config* config = Config::get_instance();
     config->set<int>("/display/gcode_render_mode", clamped);
+    // An explicit user render-mode pick re-enables the GPU path: clear the
+    // persistent crash-loop block (issues #966 / #1084 / #1085) so the user can
+    // retry 3D even after a prior driver crash promoted /display/gpu_3d_blocked.
+    config->set<bool>("/display/gpu_3d_blocked", false);
     config->save();
 
     static const char* MODE_NAMES[] = {"Auto", "3D", "2D", "Thumbnail Only"};
@@ -701,7 +734,7 @@ void DisplaySettingsManager::set_gcode_render_mode(int mode) {
 }
 
 const char* DisplaySettingsManager::get_gcode_render_mode_options() {
-    return GCODE_RENDER_MODE_OPTIONS_TEXT;
+    return lv_tr(GCODE_RENDER_MODE_OPTIONS_TEXT);
 }
 
 TimeFormat DisplaySettingsManager::get_time_format() const {
@@ -721,7 +754,7 @@ void DisplaySettingsManager::set_time_format(TimeFormat format) {
 }
 
 const char* DisplaySettingsManager::get_time_format_options() {
-    return TIME_FORMAT_OPTIONS_TEXT;
+    return lv_tr(TIME_FORMAT_OPTIONS_TEXT);
 }
 
 // =============================================================================
@@ -803,7 +836,7 @@ void DisplaySettingsManager::set_screensaver_type(int type) {
 }
 
 const char* DisplaySettingsManager::get_screensaver_type_options() {
-    return "Off\nFlying Toasters\nStarfield\n3D Pipes";
+    return lv_tr("Off\nFlying Toasters\nStarfield\n3D Pipes");
 }
 #endif
 
@@ -838,7 +871,7 @@ bool DisplaySettingsManager::get_bed_mesh_show_zero_plane() const {
 // =============================================================================
 
 const char* DisplaySettingsManager::get_display_dim_options() {
-    return DIM_OPTIONS_TEXT;
+    return lv_tr(DIM_OPTIONS_TEXT);
 }
 
 int DisplaySettingsManager::dim_seconds_to_index(int seconds) {
@@ -863,7 +896,7 @@ int DisplaySettingsManager::index_to_dim_seconds(int index) {
 // =============================================================================
 
 const char* DisplaySettingsManager::get_display_sleep_options() {
-    return SLEEP_OPTIONS_TEXT;
+    return lv_tr(SLEEP_OPTIONS_TEXT);
 }
 
 int DisplaySettingsManager::sleep_seconds_to_index(int seconds) {

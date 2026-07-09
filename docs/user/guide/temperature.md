@@ -36,6 +36,21 @@ Built-in presets:
 
 Tap a preset to set the target temperature immediately. If your printer has a chamber heater, presets that include a chamber temperature will set it automatically — materials that don't need an enclosed chamber (PLA, PETG) leave the chamber heater off.
 
+### Reassigning a Preset's Filament Type
+
+The four preset buttons (PLA, PETG, ABS, TPU) aren't fixed — you can point any of
+them at a different filament type from the built-in materials database.
+
+![Choosing a filament type for a preset button](../../images/user/filament-preset-picker.png)
+
+1. **Long-press** a preset button until the material picker appears.
+2. Scroll the list and tap the filament type you want. The button's label and its
+   temperatures update immediately, and the choice is remembered across restarts.
+3. To undo all changes, long-press any preset button and tap **Reset all to
+   defaults** at the top of the list — this restores PLA / PETG / ABS / TPU.
+
+> **Tip:** A short tap still just applies the button's temperatures. Only a long-press opens the picker.
+
 ### Spool Preset
 
 When you have a filament loaded — either via an [external spool configuration](filament.md#external-spool-configuration) or an active AMS slot — and the material doesn't match one of the standard presets (PLA, PETG, ABS, TPU), an additional **spool preset** button appears below the standard presets.

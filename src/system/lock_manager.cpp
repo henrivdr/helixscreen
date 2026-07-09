@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lock_manager.h"
+
 #include "config.h"
 #include "picosha2.h"
 #include "static_subject_registry.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <lvgl.h>
-#include <spdlog/spdlog.h>
 
 // Module-level subject storage — kept out of the header so lock_manager.h
 // compiles cleanly in test contexts where LVGL is not fully available.
@@ -56,7 +58,8 @@ void LockManager::remove_pin() {
 }
 
 bool LockManager::verify_pin(const std::string& pin) const {
-    if (pin_hash_.empty() || pin.empty()) return false;
+    if (pin_hash_.empty() || pin.empty())
+        return false;
     return hash_pin(pin) == pin_hash_;
 }
 
@@ -65,7 +68,8 @@ bool LockManager::is_locked() const {
 }
 
 void LockManager::lock() {
-    if (!has_pin()) return;
+    if (!has_pin())
+        return;
     locked_ = true;
     spdlog::info("[LockManager] Screen locked");
 }
@@ -95,21 +99,24 @@ std::string LockManager::hash_pin(const std::string& pin) const {
 
 void LockManager::load_from_config() {
     auto* config = Config::get_instance();
-    if (!config) return;
+    if (!config)
+        return;
     pin_hash_ = config->get<std::string>("/security/pin_hash", "");
     auto_lock_ = config->get<bool>("/security/auto_lock", false);
 }
 
 void LockManager::save_to_config() {
     auto* config = Config::get_instance();
-    if (!config) return;
+    if (!config)
+        return;
     config->set<std::string>("/security/pin_hash", pin_hash_);
     config->set<bool>("/security/auto_lock", auto_lock_);
     config->save();
 }
 
 void LockManager::init_subjects() {
-    if (s_subjects_initialized) return;
+    if (s_subjects_initialized)
+        return;
 
     lv_subject_init_int(&s_pin_set_subject, has_pin() ? 1 : 0);
     lv_xml_register_subject(nullptr, "lock_pin_set", &s_pin_set_subject);

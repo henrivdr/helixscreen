@@ -658,8 +658,7 @@ TEST_CASE("CHAR: Purge blocked if macro empty", "[runout_guidance][char]") {
 // CHARACTERIZATION: Load Filament Button
 // ============================================================================
 
-TEST_CASE("CHAR: Load Filament loads in place and keeps modal open",
-          "[runout_guidance][char]") {
+TEST_CASE("CHAR: Load Filament loads in place and keeps modal open", "[runout_guidance][char]") {
     RunoutGuidanceStateMachine state;
     state.external_state().has_any_runout = true;
 

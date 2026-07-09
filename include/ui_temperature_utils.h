@@ -338,8 +338,8 @@ const char* build_heater_gcode(const std::string& heater_full_name, int target_d
  * M141 macro instead of a raw SET_HEATER_TEMPERATURE: the target heater is the
  * discovered chamber heater AND the printer defines an M141 macro.
  */
-bool chamber_uses_m141(const std::string& heater_full_name,
-                       const std::string& chamber_heater_name, bool m141_available);
+bool chamber_uses_m141(const std::string& heater_full_name, const std::string& chamber_heater_name,
+                       bool m141_available);
 
 /**
  * @brief Effective chamber setpoint and control mode from the two M141 targets.

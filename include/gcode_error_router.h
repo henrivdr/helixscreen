@@ -3,15 +3,16 @@
 
 #pragma once
 
-#include "action_prompt_manager.h"  // PromptData / PromptButton
+#include "action_prompt_manager.h" // PromptData / PromptButton
 #include "async_lifetime_guard.h"
 #include "error_event.h"
-#include "hv/json.hpp"
 
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include "hv/json.hpp"
 
 class MoonrakerAPI;
 
@@ -24,7 +25,7 @@ class MoonrakerClient;
 
 namespace ui {
 class RecoveryModalPresenter;
-}  // namespace ui
+} // namespace ui
 
 /// How a classified error should be surfaced to the user. Decided purely
 /// from an ErrorEvent severity + whether it carries a recovery action,
@@ -161,4 +162,4 @@ class GcodeErrorRouter {
     AsyncLifetimeGuard lifetime_;
 };
 
-}  // namespace helix
+} // namespace helix

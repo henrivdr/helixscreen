@@ -1,18 +1,19 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
 #include "ams_backend_happy_hare.h"
 #include "ams_state.h"
 #include "ams_types.h"
 #include "hh_defaults.h"
 #include "moonraker_api.h"
-#include "ui_update_queue.h"
 
 #include <algorithm>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
 #include "hv/json.hpp"
 
 /**
@@ -93,6 +94,37 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
             units.push_back({"MMU" + std::to_string(u), std::move(names)});
         }
         slots_.initialize_units(units);
+    }
+
+    /**
+     * @brief Populate system_info_.units AND the slot registry for multiple units.
+     * Unlike initialize_test_units (registry only), this fills system_info_.units so
+     * per-unit logic (e.g. gates_suffix_for_unit) sees the multi-unit topology.
+     * @param gates_per_unit Gate count for each unit; total gates = sum.
+     */
+    void initialize_test_gates_multi(const std::vector<int>& gates_per_unit) {
+        system_info_.units.clear();
+        int total = 0;
+        int global = 0;
+        for (size_t u = 0; u < gates_per_unit.size(); ++u) {
+            AmsUnit unit;
+            unit.unit_index = static_cast<int>(u);
+            unit.name = "MMU" + std::to_string(u);
+            unit.slot_count = gates_per_unit[u];
+            unit.first_slot_global_index = global;
+            for (int i = 0; i < gates_per_unit[u]; ++i) {
+                SlotInfo slot;
+                slot.slot_index = i;
+                slot.global_index = global + i;
+                slot.status = SlotStatus::AVAILABLE;
+                unit.slots.push_back(slot);
+            }
+            global += gates_per_unit[u];
+            total += gates_per_unit[u];
+            system_info_.units.push_back(unit);
+        }
+        system_info_.total_slots = total;
+        initialize_test_units(gates_per_unit);
     }
 
     /**
@@ -594,17 +626,71 @@ TEST_CASE("Happy Hare reset_tool_mappings with zero tools is no-op",
 // reset_endless_spool() Tests
 // ============================================================================
 
-TEST_CASE("Happy Hare reset_endless_spool returns not_supported",
+TEST_CASE("Happy Hare reset_endless_spool sends MMU_ENDLESS_SPOOL RESET",
           "[ams][happy_hare][endless_spool][reset]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
     auto result = helper.reset_endless_spool();
 
+    CHECK(result.success());
+    // ENABLE=1 is required so HH does not skip RESET when endless spool is disabled.
+    REQUIRE(helper.has_gcode("MMU_ENDLESS_SPOOL ENABLE=1 RESET=1 QUIET=1"));
+}
+
+TEST_CASE("Happy Hare endless spool is editable on single-unit",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    auto caps = helper.get_endless_spool_capabilities();
+    CHECK(caps.supported);
+    CHECK(caps.editable);
+}
+
+TEST_CASE("Happy Hare set_endless_spool_backup sends MMU_ENDLESS_SPOOL GROUPS",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    auto result = helper.set_endless_spool_backup(0, 2);
+
+    CHECK(result.success());
+    // All gates start ungrouped -> assigned standalone ids 0,1,2,3; joining gate 0
+    // to gate 2's group yields 2,1,2,3. ENABLE=1 is required for HH to apply GROUPS.
+    REQUIRE(helper.has_gcode("MMU_ENDLESS_SPOOL ENABLE=1 QUIET=1 GROUPS=2,1,2,3"));
+}
+
+TEST_CASE("Happy Hare set_endless_spool_backup removal makes gate standalone",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    // Two backup pairs: gates 0&1 share group 0, gates 2&3 share group 1.
+    helper.get_mutable_slot(0)->endless_spool_group = 0;
+    helper.get_mutable_slot(1)->endless_spool_group = 0;
+    helper.get_mutable_slot(2)->endless_spool_group = 1;
+    helper.get_mutable_slot(3)->endless_spool_group = 1;
+
+    auto result = helper.set_endless_spool_backup(0, -1);
+
+    CHECK(result.success());
+    // Gate 0 moves to a fresh standalone group (max+1 = 2): 2,0,1,1.
+    REQUIRE(helper.has_gcode("MMU_ENDLESS_SPOOL ENABLE=1 QUIET=1 GROUPS=2,0,1,1"));
+}
+
+TEST_CASE("Happy Hare endless spool is read-only on multi-unit",
+          "[ams][happy_hare][endless_spool]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates_multi({4, 4});
+
+    auto caps = helper.get_endless_spool_capabilities();
+    CHECK(caps.supported);
+    CHECK_FALSE(caps.editable);
+
+    // MMU_ENDLESS_SPOOL has no UNIT= param, so editing is refused on multi-unit.
+    auto result = helper.set_endless_spool_backup(0, 1);
     CHECK_FALSE(result.success());
     CHECK(result.result == AmsResult::NOT_SUPPORTED);
-    // Should NOT send any G-code commands
-    REQUIRE(helper.captured_gcodes.empty());
 }
 
 // ============================================================================
@@ -1094,20 +1180,76 @@ TEST_CASE("Happy Hare dryer start/stop send MMU_HEATER commands", "[ams][happy_h
     REQUIRE(helper.has_gcode("MMU_HEATER STOP=1"));
 }
 
+TEST_CASE("Happy Hare drying targets a unit's gates on multi-unit", "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    // Enable dryer support first, then install a two-unit (4+4) topology so the
+    // per-unit GATES path is exercised.
+    helper.test_parse_mmu_state({{"drying_state", {{"active", false}}}});
+    helper.initialize_test_gates_multi({4, 4});
+
+    auto start = helper.start_drying(50.0f, 120, -1, 1);
+    REQUIRE(start.success());
+    // Unit 1 owns global gates 4..7.
+    REQUIRE(helper.has_gcode("MMU_HEATER DRY=1 TEMP=50 TIMER=120 GATES=4,5,6,7"));
+
+    helper.clear_captured_gcodes();
+    auto stop = helper.stop_drying(1);
+    REQUIRE(stop.success());
+    REQUIRE(helper.has_gcode("MMU_HEATER STOP=1 GATES=4,5,6,7"));
+}
+
 TEST_CASE("Happy Hare reads filament_heater + heater_max_temp from config",
           "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;
-    nlohmann::json settings = {
-        {"mmu_machine", {{"filament_heater", "heater_generic box1_heater"}}},
-        {"mmu", {{"heater_max_temp", 65.0}}}};
+    nlohmann::json settings = {{"mmu_machine", {{"filament_heater", "heater_generic box1_heater"}}},
+                               {"mmu", {{"heater_max_temp", 65.0}}}};
     helper.test_apply_heater_config(settings);
     auto d = helper.get_dryer_info();
     REQUIRE(d.supported);
     REQUIRE(d.max_temp_c == Catch::Approx(65.0f));
 }
 
-TEST_CASE("Happy Hare surfaces box heater temp as unit environment",
+TEST_CASE("Happy Hare surfaces env sensor temp+humidity without a heater",
           "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    // Heater-less enclosure: only an environment sensor is configured. The dryer is
+    // "supported" because HH publishes a per-gate drying_state array whenever the
+    // environment manager is loaded — but no heater temperature will ever arrive.
+    helper.test_apply_heater_config({{"mmu_machine", {{"environment_sensor", "bme280 mmu_box"}}}});
+    helper.test_parse_mmu_state({{"drying_state", nlohmann::json::array({"", "", "", ""})}});
+    helper.test_apply_environment_sensor_status(
+        {{"bme280 mmu_box", {{"temperature", 24.5}, {"humidity", 38.0}}}});
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    // Both the sensor's ambient temperature and humidity must surface even though
+    // there is no heater reading (the readout previously gated on heater temp > 0).
+    REQUIRE(info.units[0].environment.has_value());
+    CHECK(info.units[0].environment->temperature_c == Catch::Approx(24.5f));
+    CHECK(info.units[0].environment->has_humidity);
+    CHECK(info.units[0].environment->humidity_pct == Catch::Approx(38.0f));
+}
+
+TEST_CASE("Happy Hare resolves a non-heater_generic filament heater verbatim",
+          "[ams][happy_hare][v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+
+    // HH stores the full Klipper object name; a heater whose section is not
+    // "heater_generic" must still resolve (no forced prefix).
+    helper.test_apply_heater_config({{"mmu_machine", {{"filament_heater", "my_heater chamber"}}}});
+    helper.test_parse_mmu_state({{"drying_state", nlohmann::json::array({"", "", "", ""})}});
+    helper.test_apply_filament_heater_status({{"my_heater chamber", {{"temperature", 50.0}}}});
+
+    auto info = helper.get_system_info();
+    REQUIRE_FALSE(info.units.empty());
+    REQUIRE(info.units[0].environment.has_value());
+    CHECK(info.units[0].environment->temperature_c == Catch::Approx(50.0f));
+}
+
+TEST_CASE("Happy Hare surfaces box heater temp as unit environment", "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
@@ -1128,17 +1270,15 @@ TEST_CASE("Happy Hare surfaces box heater temp as unit environment",
     REQUIRE_FALSE(info.units[0].environment->has_humidity);
 }
 
-TEST_CASE("Happy Hare reads box humidity from environment sensor chip",
-          "[ams][happy_hare][v4]") {
+TEST_CASE("Happy Hare reads box humidity from environment sensor chip", "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
     // Configure the dryer + the environment_sensor name (mirrors [mmu_machine]).
-    nlohmann::json settings = {
-        {"mmu_machine",
-         {{"filament_heater", "heater_generic box1_heater"},
-          {"environment_sensor", "temperature_sensor box"}}},
-        {"mmu", {{"heater_max_temp", 65.0}}}};
+    nlohmann::json settings = {{"mmu_machine",
+                                {{"filament_heater", "heater_generic box1_heater"},
+                                 {"environment_sensor", "temperature_sensor box"}}},
+                               {"mmu", {{"heater_max_temp", 65.0}}}};
     helper.test_apply_heater_config(settings);
 
     // Establish a current temp so environment is surfaced.
@@ -1171,11 +1311,10 @@ TEST_CASE("Happy Hare resolves box humidity from aht20_f chip (QIDI Box)",
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
 
-    nlohmann::json settings = {
-        {"mmu_machine",
-         {{"filament_heater", "heater_generic box1_heater"},
-          {"environment_sensor", "temperature_sensor box"}}},
-        {"mmu", {{"heater_max_temp", 65.0}}}};
+    nlohmann::json settings = {{"mmu_machine",
+                                {{"filament_heater", "heater_generic box1_heater"},
+                                 {"environment_sensor", "temperature_sensor box"}}},
+                               {"mmu", {{"heater_max_temp", 65.0}}}};
     helper.test_apply_heater_config(settings);
 
     helper.test_parse_mmu_state(
@@ -1204,20 +1343,18 @@ TEST_CASE("Happy Hare per-gate sensors map to the right unit (multi-MMU)",
         {"mmu_machine",
          {{"filament_heaters", "heater_generic h0, heater_generic h1, "
                                "heater_generic h2, heater_generic h3"},
-          {"environment_sensors", nlohmann::json::array({"temperature_sensor s0",
-                                                         "temperature_sensor s1",
-                                                         "temperature_sensor s2",
-                                                         "temperature_sensor s3"})}}},
+          {"environment_sensors",
+           nlohmann::json::array({"temperature_sensor s0", "temperature_sensor s1",
+                                  "temperature_sensor s2", "temperature_sensor s3"})}}},
         {"mmu", {{"heater_max_temp", 65.0}}}};
     helper.test_apply_heater_config(settings);
 
     // Live readings: unit 0's first gate (gate 0) heater h0 + sensor s0;
     // unit 1's first gate (gate 2) heater h2 + sensor s2. Distinct values.
-    nlohmann::json status = {
-        {"heater_generic h0", {{"temperature", 40.0}}},
-        {"heater_generic h2", {{"temperature", 55.0}}},
-        {"htu21d s0", {{"humidity", 20.0}}},
-        {"htu21d s2", {{"humidity", 80.0}}}};
+    nlohmann::json status = {{"heater_generic h0", {{"temperature", 40.0}}},
+                             {"heater_generic h2", {{"temperature", 55.0}}},
+                             {"htu21d s0", {{"humidity", 20.0}}},
+                             {"htu21d s2", {{"humidity", 80.0}}}};
     REQUIRE(helper.test_apply_filament_heater_status(status));
     REQUIRE(helper.test_apply_environment_sensor_status(status));
 
@@ -1831,9 +1968,9 @@ TEST_CASE("Happy Hare manages_active_spool=true when spoolman enabled",
 TEST_CASE("Happy Hare parses live filament_heater temp/target", "[ams][happy_hare][v4]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
-    helper.test_apply_heater_config(nlohmann::json{
-        {"mmu_machine", {{"filament_heater", "heater_generic box1_heater"}}},
-        {"mmu", {{"heater_max_temp", 65.0}}}});
+    helper.test_apply_heater_config(
+        nlohmann::json{{"mmu_machine", {{"filament_heater", "heater_generic box1_heater"}}},
+                       {"mmu", {{"heater_max_temp", 65.0}}}});
     nlohmann::json params = {
         {"heater_generic box1_heater", {{"temperature", 48.5}, {"target", 55.0}}}};
     helper.test_apply_filament_heater_status(params);
@@ -1842,8 +1979,7 @@ TEST_CASE("Happy Hare parses live filament_heater temp/target", "[ams][happy_har
     REQUIRE(d.target_temp_c == Catch::Approx(55.0f).epsilon(0.01));
 }
 
-TEST_CASE("Happy Hare array drying_state: complete is not active",
-          "[ams][happy_hare][emu]") {
+TEST_CASE("Happy Hare array drying_state: complete is not active", "[ams][happy_hare][emu]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(4);
     helper.test_parse_mmu_state(nlohmann::json{{"drying_state", {"complete", "", "", ""}}});
@@ -3260,7 +3396,7 @@ TEST_CASE("Happy Hare classify_error: runout pause is CRITICAL with recovery",
     // Firmware reports a runout pause via reason_for_pause + action ERROR.
     nlohmann::json mmu;
     mmu["action"] = "Error";
-    mmu["filament_pos"] = 8;  // loaded at toolhead
+    mmu["filament_pos"] = 8; // loaded at toolhead
     mmu["reason_for_pause"] =
         "Runout detected on gate 0  EndlessSpool mode is off - manual intervention is required";
     hh.test_parse_mmu_state(mmu);
@@ -3286,16 +3422,18 @@ TEST_CASE("Happy Hare classify_error: recover gcode reflects loaded state",
     nlohmann::json mmu;
     mmu["action"] = "Error";
     mmu["filament_pos"] = 8;
-    mmu["filament"] = "Loaded";  // pos=8 means at toolhead; make loaded flag match
+    mmu["filament"] = "Loaded"; // pos=8 means at toolhead; make loaded flag match
     mmu["reason_for_pause"] = "Clog detected";
     hh.test_parse_mmu_state(mmu);
 
-    helix::ClassifyContext ctx; ctx.is_paused = true;
+    helix::ClassifyContext ctx;
+    ctx.is_paused = true;
     auto ev = hh.classify_error("!! Clog detected", ctx);
     REQUIRE(ev.has_value());
     bool has_recover_loaded = false;
     for (const auto& a : ev->recovery_actions)
-        if (a.gcode == "MMU_RECOVER LOADED=1") has_recover_loaded = true;
+        if (a.gcode == "MMU_RECOVER LOADED=1")
+            has_recover_loaded = true;
     CHECK(has_recover_loaded);
 }
 
@@ -3303,10 +3441,10 @@ TEST_CASE("Happy Hare classify_error: non-!! line and non-paused defer to generi
           "[ams][happy_hare][error-center]") {
     AmsBackendHappyHareTestHelper hh;
     hh.initialize_test_gates(4);
-    helix::ClassifyContext ctx;  // not paused
+    helix::ClassifyContext ctx; // not paused
     CHECK_FALSE(hh.classify_error("Error: generic klipper error", ctx).has_value());
     CHECK_FALSE(hh.classify_error("ok", ctx).has_value());
-    ctx.is_paused = true;  // paused but backend not in error state
+    ctx.is_paused = true; // paused but backend not in error state
     CHECK_FALSE(hh.classify_error("!! something unrelated", ctx).has_value());
 }
 
@@ -3324,7 +3462,7 @@ TEST_CASE("Happy Hare classify_error: stale reason_for_pause does not fire when 
     mmu["reason_for_pause"] = "Clog detected on gate 0";
     hh.test_parse_mmu_state(mmu);
 
-    helix::ClassifyContext ctx;  // is_paused defaults to false
+    helix::ClassifyContext ctx; // is_paused defaults to false
     // Even with a recognized keyword in the line AND a non-empty reason_for_pause_,
     // a non-paused context must defer to the generic classifier.
     CHECK_FALSE(hh.classify_error("!! Clog detected", ctx).has_value());
@@ -3345,7 +3483,9 @@ TEST_CASE("Happy Hare toolchange_phase_template: ops declare ordered phases",
     auto fresh = hh.toolchange_phase_template(StepOperationType::LOAD_FRESH);
     REQUIRE_FALSE(fresh.empty());
     bool fresh_has_unload = false;
-    for (const auto& p : fresh) if (p.id == "unload") fresh_has_unload = true;
+    for (const auto& p : fresh)
+        if (p.id == "unload")
+            fresh_has_unload = true;
     CHECK_FALSE(fresh_has_unload);
     // Unload op ends at "unload".
     auto unload = hh.toolchange_phase_template(StepOperationType::UNLOAD);
@@ -3364,24 +3504,24 @@ TEST_CASE_METHOD(LVGLTestFixture,
     auto hh = std::make_unique<AmsBackendHappyHareTestHelper>();
     hh->initialize_test_gates(4);
     auto* hh_raw = hh.get();
-    ams.set_backend(std::move(hh));  // backend now reachable for the index subject
+    ams.set_backend(std::move(hh)); // backend now reachable for the index subject
 
     auto feed_action = [&](const char* action) {
         nlohmann::json mmu;
         mmu["action"] = action;
         hh_raw->test_parse_mmu_state(mmu);
-        helix::ui::UpdateQueue::instance().drain();  // flush the deferred set
+        helix::ui::UpdateQueue::instance().drain(); // flush the deferred set
     };
 
     feed_action("Heating");
-    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 0);  // "heat" = index 0
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 0); // "heat" = index 0
 
     feed_action("Loading");
     // "feed" is index 5 in the LOAD_SWAP template.
     CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 5);
 
     feed_action("Purging");
-    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 6);  // "purge" = index 6
+    CHECK(lv_subject_get_int(ams.get_toolchange_step_subject()) == 6); // "purge" = index 6
 
     ams.set_backend(nullptr);
 }

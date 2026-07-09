@@ -208,6 +208,21 @@ The slicer-level change sequence (`slicer_configs/change_filament.gcode`) confir
 
 **Eject:** no discrete "eject one slot back to the box" command is present in this config — `EXTRUDER_UNLOAD SLOT=` is the only unload primitive. This matches HelixScreen leaving `supports_lane_eject()` at its `false` default. Confirm against the user's macro list before implementing an eject affordance.
 
+### Max 4 dialect divergence (`multi_color_controller`) — prestonbrown/helixscreen#1083
+
+The Max 4 box is **not** command-compatible with the Q2/Plus 4 despite sharing the `box_stepper` / `box_extras` / `box_rfid` stack. It adds a closed-source `multi_color_controller.so` state machine that owns the filament ops, and HelixScreen's Q2 eject primitive `FORCE_MOVE STEPPER="box_stepper slotN"` is **rejected on the Max 4 with `Invalid pin value`** (reported on #1068). Reverse-engineered command surface (community RE — the module is binary-only, so these are from symbol dumps + a Moonraker call graph, **not** a device trace):
+
+```gcode
+MULTI_COLOR_LOAD       SLOT=slotN   ; load box slot -> extruder
+MULTI_COLOR_UNLOAD     SLOT=slotN   ; retract from hotend
+MULTI_COLOR_BOX_UNLOAD SLOT=slotN   ; eject material back into the box (Q2 FORCE_MOVE equivalent;
+                                    ;   internally drives SLOT_UNLOAD, a box_stepper -3000 move)
+```
+
+`slotN` is the same zero-indexed `slot0…` token HelixScreen already uses. Prefer the public `MULTI_COLOR_BOX_UNLOAD` over the internal `SLOT_UNLOAD` (the latter isn't in the public Moonraker `help` surface).
+
+**Dialect discriminator for capability-based dispatch:** presence of the Moonraker **`multi_color_controller`** object. It is Max 4-only — the Q2/Plus 4 expose `box_extras`/`box_stepper`/`box_rfid` but not `multi_color_controller` (confirmed against our presets: `presets/qidi_q2.json` lacks it, `presets/qidi_max4.json` lists it). Dispatch rule: `multi_color_controller` present → Max 4 (`MULTI_COLOR_BOX_UNLOAD SLOT=slotN`); otherwise → Q2/Plus 4 (`FORCE_MOVE STEPPER="box_stepper slotN"`). Sources: `thelegendtubaguy/Qidi-Max-4-Optimized/docs/qidi_box/`, `Wazzup77/Bunny-Box/Max4/`. Not yet verified end-to-end on Max 4 hardware.
+
 ---
 
 ## Filas List Format (`officiall_filas_list.cfg`, #1030)
@@ -296,7 +311,7 @@ The write-path is always enabled. (The former `HELIX_QIDI_BOX_WRITE` field-testi
 
 | Source | URL | Notes |
 |--------|-----|-------|
-| Official QIDI Klipper fork | https://github.com/QIDITECH/klipper | `box_extras.py`, `aht20_f.py`, `multi_color_controller` module |
+| Official QIDI Klipper fork | https://github.com/QIDITECH/klipper | Box modules (`box_stepper`, `box_extras`, `box_rfid`, `multi_color_controller`) ship as **compiled/obfuscated `.so`**, not `.py` in `klippy/extras` — see the Plus4-Wiki row for open-source reimplementations |
 | Community RE + macros | https://github.com/thelegendtubaguy/Qidi-Max-4-Optimized | `config/box.cfg`, `config/drying.conf`, `docs/qidi_box/` — primary protocol reference |
 | Community firmware replacement | https://github.com/qidi-community/Plus4-Wiki/tree/main/content/customisable_qidibox_firmware | Open-source replacements for six obfuscated `.so` modules |
 

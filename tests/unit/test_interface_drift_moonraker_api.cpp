@@ -5,8 +5,9 @@
 // and neither MoonrakerAPI (the real implementation) nor MoonrakerAPIMock
 // provides it, MoonrakerAPIMock becomes abstract and this fails to build.
 
-#include "../catch_amalgamated.hpp"
 #include "i_moonraker_api.h"
+
+#include "../catch_amalgamated.hpp"
 
 #ifdef HELIX_ENABLE_MOCKS
 #include "moonraker_api_mock.h"

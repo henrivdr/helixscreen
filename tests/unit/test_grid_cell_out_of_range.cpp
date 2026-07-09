@@ -81,8 +81,8 @@ class GridCellOutOfRangeFixture {
         lv_obj_set_layout(grid, LV_LAYOUT_GRID);
 
         lv_obj_t* child = lv_obj_create(grid);
-        lv_obj_set_grid_cell(child, LV_GRID_ALIGN_STRETCH, col, col_span, LV_GRID_ALIGN_STRETCH, row,
-                             row_span);
+        lv_obj_set_grid_cell(child, LV_GRID_ALIGN_STRETCH, col, col_span, LV_GRID_ALIGN_STRETCH,
+                             row, row_span);
         return grid;
     }
 };

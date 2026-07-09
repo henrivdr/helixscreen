@@ -210,8 +210,6 @@ class HardwareHealthOverlay : public OverlayBase {
     /// Save confirmation dialog
     lv_obj_t* hardware_save_dialog_{nullptr};
 
-
-
     //
     // === Static Callbacks ===
     //

@@ -67,12 +67,12 @@ bool try_bare_toolchange(const std::string& line, const std::map<int, int>& rema
     std::string tail = line.substr(pos);
     for (char c : tail) {
         if (!std::isspace(static_cast<unsigned char>(c))) {
-            return false;  // e.g. "T1X" or "TOOL" -- not a bare toolchange
+            return false; // e.g. "T1X" or "TOOL" -- not a bare toolchange
         }
     }
     int m = mapped(idx, remap);
     if (m == idx) {
-        return false;  // unmapped: leave untouched (preserves exact bytes)
+        return false; // unmapped: leave untouched (preserves exact bytes)
     }
     out = "T" + std::to_string(m) + tail;
     return true;
@@ -92,7 +92,7 @@ bool try_prestart(const std::string& line, const std::map<int, int>& remap, std:
         size_t prefix_len = std::string(prefix).size();
         if (prefix_len >= line.size() ||
             !std::isdigit(static_cast<unsigned char>(line[prefix_len]))) {
-            return false;  // "EXTRUDER=" not followed by a number
+            return false; // "EXTRUDER=" not followed by a number
         }
         size_t pos = prefix_len;
         int idx = parse_uint(line, pos);
@@ -134,7 +134,7 @@ bool try_temp(const std::string& line, const std::map<int, int>& remap, std::str
         int idx = parse_uint(line, pos);
         int m = mapped(idx, remap);
         if (m == idx) {
-            return false;  // first tool token is unmapped -> nothing to do
+            return false; // first tool token is unmapped -> nothing to do
         }
         out = line.substr(0, i + 1) + std::to_string(m) + line.substr(pos);
         return true;
@@ -158,7 +158,7 @@ std::string transform_line(const std::string& line, const std::map<int, int>& re
     return line;
 }
 
-}  // namespace
+} // namespace
 
 std::string GcodeToolRemapper::apply_to_string(const std::string& gcode,
                                                const std::map<int, int>& remap) {
@@ -181,8 +181,9 @@ std::string GcodeToolRemapper::apply_to_string(const std::string& gcode,
     return result;
 }
 
-std::vector<GcodeLineReplacement> GcodeToolRemapper::build_line_replacements(
-    const std::string& gcode, const std::map<int, int>& remap) {
+std::vector<GcodeLineReplacement>
+GcodeToolRemapper::build_line_replacements(const std::string& gcode,
+                                           const std::map<int, int>& remap) {
     std::vector<GcodeLineReplacement> out;
 
     size_t start = 0;
@@ -205,4 +206,4 @@ std::vector<GcodeLineReplacement> GcodeToolRemapper::build_line_replacements(
     return out;
 }
 
-}  // namespace helix
+} // namespace helix

@@ -29,12 +29,12 @@
       <!-- Title -->
       <text_heading name="modal_title" width="100%" text="Add Hidden Network" translation_tag="Add Hidden Network" style_text_align="center"/>
       <!-- SSID Input -->
-      <form_field label="Network Name (SSID)" label_tag="Network Name (SSID)" input_name="ssid_input" placeholder="Enter network name"/>
+      <form_field label="Network Name (SSID)" label_tag="Network Name (SSID)" input_name="ssid_input" placeholder="Enter network name" placeholder_tag="Enter network name"/>
       <!-- Security Dropdown -->
       <lv_obj width="100%" style_pad_all="0" flex_flow="column" style_pad_gap="#space_xs">
         <text_body width="100%" text="Security" translation_tag="Security" style_text_align="left"/>
         <lv_dropdown name="security_dropdown"
-                     width="100%" height="#input_height" options="None&#10;WPA/WPA2&#10;WPA3"
+                     width="100%" height="#input_height" options="None&#10;WPA/WPA2&#10;WPA3" options_tag="None&#10;WPA/WPA2&#10;WPA3"
                      style_radius="#border_radius" style_pad_all="#space_md"
                      style_text_font="#font_body">
           <event_cb trigger="value_changed" callback="on_security_changed"/>

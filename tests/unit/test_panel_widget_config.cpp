@@ -1,6 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/config_test_access.h"
 #include "config.h"
 #include "panel_widget_config.h"
 #include "panel_widget_registry.h"
@@ -19,7 +20,7 @@ static size_t default_grid_widget_count() {
 }
 
 // ============================================================================
-// Test fixture — access Config internals via friend declaration
+// Test fixture — access Config internals via ConfigTestAccess
 // ============================================================================
 
 namespace helix {
@@ -28,21 +29,22 @@ class PanelWidgetConfigFixture {
     Config config;
 
     void setup_empty_config() {
-        config.data = json::object();
+        ConfigTestAccess::data(config) = json::object();
     }
 
     /// Set up per-panel config under /printers/default/panel_widgets/<panel_id>
     /// Accepts either a flat JSON array (legacy format) or a pages object (new format)
     void setup_with_widgets(const json& widgets_json, const std::string& panel_id = "home") {
-        config.data = json::object();
-        config.data["printers"]["default"]["panel_widgets"][panel_id] = widgets_json;
+        ConfigTestAccess::data(config) = json::object();
+        ConfigTestAccess::data(config)["printers"]["default"]["panel_widgets"][panel_id] =
+            widgets_json;
     }
 
     /// Set up multi-page config in new format
     void setup_with_pages(const std::vector<std::pair<std::string, json>>& pages,
                           size_t main_page_index = 0, int next_page_id = -1,
                           const std::string& panel_id = "home") {
-        config.data = json::object();
+        ConfigTestAccess::data(config) = json::object();
         json root;
         json pages_arr = json::array();
         for (const auto& [id, widgets] : pages) {
@@ -54,22 +56,22 @@ class PanelWidgetConfigFixture {
         root["pages"] = std::move(pages_arr);
         root["main_page_index"] = main_page_index;
         root["next_page_id"] = next_page_id >= 0 ? next_page_id : static_cast<int>(pages.size());
-        config.data["printers"]["default"]["panel_widgets"][panel_id] = root;
+        ConfigTestAccess::data(config)["printers"]["default"]["panel_widgets"][panel_id] = root;
     }
 
     /// Set up legacy flat home_widgets key (for migration testing)
     void setup_with_legacy_widgets(const json& widgets_json) {
-        config.data = json::object();
-        config.data["home_widgets"] = widgets_json;
+        ConfigTestAccess::data(config) = json::object();
+        ConfigTestAccess::data(config)["home_widgets"] = widgets_json;
     }
 
     json& get_data() {
-        return config.data;
+        return ConfigTestAccess::data(config);
     }
 
     /// Get the per-printer data where PanelWidgetConfig reads/writes
     json& get_printer_data() {
-        return config.data["printers"]["default"];
+        return ConfigTestAccess::data(config)["printers"]["default"];
     }
 
     /// Get the saved data after save(), as a JSON object with pages format
@@ -1708,8 +1710,8 @@ namespace {
 
 /// Find an entry by id within a vector. Returns nullptr if missing.
 const PanelWidgetEntry* find_entry(const std::vector<PanelWidgetEntry>& v, const char* id) {
-    auto it = std::find_if(v.begin(), v.end(),
-                           [id](const PanelWidgetEntry& e) { return e.id == id; });
+    auto it =
+        std::find_if(v.begin(), v.end(), [id](const PanelWidgetEntry& e) { return e.id == id; });
     return it == v.end() ? nullptr : &*it;
 }
 

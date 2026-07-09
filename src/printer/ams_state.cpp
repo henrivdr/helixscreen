@@ -745,6 +745,7 @@ std::vector<helix::AvailableSlot> AmsState::collect_available_slots() const {
                 as.local_slot_index = slot_info.slot_index;
                 as.backend_index = static_cast<int>(bi);
                 as.color_rgb = slot_info.color_rgb;
+                as.multi_color_hexes = slot_info.multi_color_hexes;
                 as.material = slot_info.material;
                 as.is_empty = (slot_info.status == SlotStatus::EMPTY ||
                                slot_info.status == SlotStatus::UNKNOWN);

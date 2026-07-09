@@ -4,6 +4,8 @@
 #include "shutdown_widget.h"
 
 #include "ui_event_safety.h"
+#include "ui_shutdown_modal.h"
+#include "ui_split_button.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
@@ -14,8 +16,6 @@
 #include "panel_widget_registry.h"
 #include "runtime_config.h"
 #include "system_power.h"
-#include "ui_shutdown_modal.h"
-#include "ui_split_button.h"
 
 #include <spdlog/spdlog.h>
 
@@ -28,9 +28,9 @@ namespace {
 
 // Split-button dropdown indices (must match XML option order:
 // "Both\nPrinter\nScreen" in shutdown_modal.xml).
-constexpr uint32_t kScopeBoth    = 0;
+constexpr uint32_t kScopeBoth = 0;
 constexpr uint32_t kScopePrinter = 1;
-constexpr uint32_t kScopeScreen  = 2;
+constexpr uint32_t kScopeScreen = 2;
 
 // After a successful machine.shutdown/reboot, Moonraker replies OK but the
 // OS-level shutdown can silently no-op on some firmwares (observed on SonicPad
@@ -55,9 +55,8 @@ void verify_host_down_timer_cb(lv_timer_t* timer) {
     spdlog::warn("[ShutdownDialog] Host still reachable {}s after {} — {} silently failed",
                  kVerificationWindowMs / 1000, action, action);
 
-    const char* msg = ctx->is_reboot
-                          ? lv_tr("Reboot failed — host is still reachable")
-                          : lv_tr("Shutdown failed — host is still reachable");
+    const char* msg = ctx->is_reboot ? lv_tr("Reboot failed — host is still reachable")
+                                     : lv_tr("Shutdown failed — host is still reachable");
     ToastManager::instance().show(ToastSeverity::ERROR, msg, 6000);
 }
 
@@ -67,12 +66,10 @@ void schedule_host_down_verification(MoonrakerAPI* api, bool is_reboot) {
     if (!api) {
         return;
     }
-    helix::ui::queue_update("ShutdownDialog::verify",
-                            [api, is_reboot]() {
-                                auto* ctx = new VerifyCtx{api, is_reboot};
-                                lv_timer_create(verify_host_down_timer_cb,
-                                                kVerificationWindowMs, ctx);
-                            });
+    helix::ui::queue_update("ShutdownDialog::verify", [api, is_reboot]() {
+        auto* ctx = new VerifyCtx{api, is_reboot};
+        lv_timer_create(verify_host_down_timer_cb, kVerificationWindowMs, ctx);
+    });
 }
 
 // Walk up from the clicked button to the view root stamped in
@@ -90,8 +87,8 @@ ShutdownModal* find_shutdown_modal(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_current_target_obj(e);
     while (obj) {
         const char* name = lv_obj_get_name(obj);
-        if (name && std::strncmp(name, kViewName, kViewNameLen) == 0
-            && (name[kViewNameLen] == '\0' || name[kViewNameLen] == '_')) {
+        if (name && std::strncmp(name, kViewName, kViewNameLen) == 0 &&
+            (name[kViewNameLen] == '\0' || name[kViewNameLen] == '_')) {
             return static_cast<ShutdownModal*>(lv_obj_get_user_data(obj));
         }
         obj = lv_obj_get_parent(obj);
@@ -107,7 +104,8 @@ ShutdownModal* find_shutdown_modal(lv_event_t* e) {
 // where the local SystemPower call is deferred until the printer-side ack.
 
 void execute_printer_shutdown(MoonrakerAPI* api) {
-    if (!api) return;
+    if (!api)
+        return;
     spdlog::info("[ShutdownDialog] Executing machine shutdown");
     api->machine_shutdown(
         [api]() {
@@ -116,13 +114,13 @@ void execute_printer_shutdown(MoonrakerAPI* api) {
         },
         [](const MoonrakerError& err) {
             spdlog::error("[ShutdownDialog] Machine shutdown failed: {}", err.message);
-            ToastManager::instance().show(ToastSeverity::ERROR,
-                                          lv_tr("Shutdown failed"), 6000);
+            ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Shutdown failed"), 6000);
         });
 }
 
 void execute_printer_reboot(MoonrakerAPI* api) {
-    if (!api) return;
+    if (!api)
+        return;
     spdlog::info("[ShutdownDialog] Executing machine reboot");
     api->machine_reboot(
         [api]() {
@@ -131,8 +129,7 @@ void execute_printer_reboot(MoonrakerAPI* api) {
         },
         [](const MoonrakerError& err) {
             spdlog::error("[ShutdownDialog] Machine reboot failed: {}", err.message);
-            ToastManager::instance().show(ToastSeverity::ERROR,
-                                          lv_tr("Reboot failed"), 6000);
+            ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Reboot failed"), 6000);
         });
 }
 
@@ -141,13 +138,11 @@ void execute_screen_shutdown() {
     if (auto* rc = get_runtime_config(); rc && rc->test_mode) {
         spdlog::warn("[ShutdownDialog] TEST MODE: skipping SystemPower::shutdown_local() — "
                      "would have powered off the dev host");
-        ToastManager::instance().show(ToastSeverity::INFO,
-                                      "TEST: would shut down screen", 4000);
+        ToastManager::instance().show(ToastSeverity::INFO, "TEST: would shut down screen", 4000);
         return;
     }
     if (!helix::SystemPower::shutdown_local()) {
-        ToastManager::instance().show(ToastSeverity::ERROR,
-                                      lv_tr("Screen shutdown failed"), 6000);
+        ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Screen shutdown failed"), 6000);
     }
 }
 
@@ -156,13 +151,11 @@ void execute_screen_reboot() {
     if (auto* rc = get_runtime_config(); rc && rc->test_mode) {
         spdlog::warn("[ShutdownDialog] TEST MODE: skipping SystemPower::reboot_local() — "
                      "would have rebooted the dev host");
-        ToastManager::instance().show(ToastSeverity::INFO,
-                                      "TEST: would reboot screen", 4000);
+        ToastManager::instance().show(ToastSeverity::INFO, "TEST: would reboot screen", 4000);
         return;
     }
     if (!helix::SystemPower::reboot_local()) {
-        ToastManager::instance().show(ToastSeverity::ERROR,
-                                      lv_tr("Screen reboot failed"), 6000);
+        ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Screen reboot failed"), 6000);
     }
 }
 
@@ -172,43 +165,49 @@ void execute_screen_reboot() {
 // the user said "Both", so we power down the screen even if the printer side
 // reported a failure.
 void execute_both_shutdown(MoonrakerAPI* api, AsyncLifetimeGuard& lifetime) {
-    if (!api) return;
+    if (!api)
+        return;
     spdlog::info("[ShutdownDialog] Executing both shutdown — printer first, screen on ack");
     auto tok = lifetime.token();
     api->machine_shutdown(
         [tok, api]() {
             spdlog::info("[ShutdownDialog] Printer shutdown ack'd — now shutting down screen");
             schedule_host_down_verification(api, /*is_reboot=*/false);
-            if (tok.expired()) return;
+            if (tok.expired())
+                return;
             tok.defer([]() { execute_screen_shutdown(); });
         },
         [tok](const MoonrakerError& err) {
-            spdlog::error("[ShutdownDialog] Printer shutdown failed: {} — proceeding with screen anyway",
-                          err.message);
-            ToastManager::instance().show(ToastSeverity::ERROR,
-                                          lv_tr("Shutdown failed"), 6000);
-            if (tok.expired()) return;
+            spdlog::error(
+                "[ShutdownDialog] Printer shutdown failed: {} — proceeding with screen anyway",
+                err.message);
+            ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Shutdown failed"), 6000);
+            if (tok.expired())
+                return;
             tok.defer([]() { execute_screen_shutdown(); });
         });
 }
 
 void execute_both_reboot(MoonrakerAPI* api, AsyncLifetimeGuard& lifetime) {
-    if (!api) return;
+    if (!api)
+        return;
     spdlog::info("[ShutdownDialog] Executing both reboot — printer first, screen on ack");
     auto tok = lifetime.token();
     api->machine_reboot(
         [tok, api]() {
             spdlog::info("[ShutdownDialog] Printer reboot ack'd — now rebooting screen");
             schedule_host_down_verification(api, /*is_reboot=*/true);
-            if (tok.expired()) return;
+            if (tok.expired())
+                return;
             tok.defer([]() { execute_screen_reboot(); });
         },
         [tok](const MoonrakerError& err) {
-            spdlog::error("[ShutdownDialog] Printer reboot failed: {} — proceeding with screen anyway",
-                          err.message);
-            ToastManager::instance().show(ToastSeverity::ERROR,
-                                          lv_tr("Reboot failed"), 6000);
-            if (tok.expired()) return;
+            spdlog::error(
+                "[ShutdownDialog] Printer reboot failed: {} — proceeding with screen anyway",
+                err.message);
+            ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Reboot failed"), 6000);
+            if (tok.expired())
+                return;
             tok.defer([]() { execute_screen_reboot(); });
         });
 }
@@ -218,12 +217,14 @@ void execute_both_reboot(MoonrakerAPI* api, AsyncLifetimeGuard& lifetime) {
 // callbacks below.
 void on_shutdown_printer_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[ShutdownModal] shutdown_printer");
-    if (auto* m = find_shutdown_modal(e)) m->fire_printer_shutdown();
+    if (auto* m = find_shutdown_modal(e))
+        m->fire_printer_shutdown();
     LVGL_SAFE_EVENT_CB_END();
 }
 void on_reboot_printer_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[ShutdownModal] reboot_printer");
-    if (auto* m = find_shutdown_modal(e)) m->fire_printer_reboot();
+    if (auto* m = find_shutdown_modal(e))
+        m->fire_printer_reboot();
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -233,11 +234,18 @@ void on_restart_split_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[ShutdownModal] restart_split");
     auto* m = find_shutdown_modal(e);
     lv_obj_t* sb = lv_event_get_current_target_obj(e);
-    if (!m || !sb) return;
+    if (!m || !sb)
+        return;
     switch (ui_split_button_get_selected(sb)) {
-        case kScopeBoth:    m->fire_both_reboot();    break;
-        case kScopePrinter: m->fire_printer_reboot(); break;
-        case kScopeScreen:  m->fire_screen_reboot();  break;
+    case kScopeBoth:
+        m->fire_both_reboot();
+        break;
+    case kScopePrinter:
+        m->fire_printer_reboot();
+        break;
+    case kScopeScreen:
+        m->fire_screen_reboot();
+        break;
     }
     LVGL_SAFE_EVENT_CB_END();
 }
@@ -245,11 +253,18 @@ void on_shutdown_split_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[ShutdownModal] shutdown_split");
     auto* m = find_shutdown_modal(e);
     lv_obj_t* sb = lv_event_get_current_target_obj(e);
-    if (!m || !sb) return;
+    if (!m || !sb)
+        return;
     switch (ui_split_button_get_selected(sb)) {
-        case kScopeBoth:    m->fire_both_shutdown();    break;
-        case kScopePrinter: m->fire_printer_shutdown(); break;
-        case kScopeScreen:  m->fire_screen_shutdown();  break;
+    case kScopeBoth:
+        m->fire_both_shutdown();
+        break;
+    case kScopePrinter:
+        m->fire_printer_shutdown();
+        break;
+    case kScopeScreen:
+        m->fire_screen_shutdown();
+        break;
     }
     LVGL_SAFE_EVENT_CB_END();
 }
@@ -265,9 +280,9 @@ void register_shutdown_widget() {
     // Register XML event callback at startup (before any XML is parsed)
     lv_xml_register_event_cb(nullptr, "shutdown_clicked_cb", ShutdownWidget::shutdown_clicked_cb);
     lv_xml_register_event_cb(nullptr, "on_shutdown_printer_clicked", on_shutdown_printer_clicked);
-    lv_xml_register_event_cb(nullptr, "on_reboot_printer_clicked",   on_reboot_printer_clicked);
-    lv_xml_register_event_cb(nullptr, "on_restart_split_clicked",    on_restart_split_clicked);
-    lv_xml_register_event_cb(nullptr, "on_shutdown_split_clicked",   on_shutdown_split_clicked);
+    lv_xml_register_event_cb(nullptr, "on_reboot_printer_clicked", on_reboot_printer_clicked);
+    lv_xml_register_event_cb(nullptr, "on_restart_split_clicked", on_restart_split_clicked);
+    lv_xml_register_event_cb(nullptr, "on_shutdown_split_clicked", on_shutdown_split_clicked);
 }
 
 ShutdownWidget::ShutdownWidget(MoonrakerAPI* api) : api_(api) {}
@@ -311,9 +326,7 @@ void ShutdownWidget::handle_click() {
     show_shutdown_dialog(api_, shutdown_modal_, lifetime_, lv_screen_active());
 }
 
-void show_shutdown_dialog(MoonrakerAPI* api,
-                          ShutdownModal& modal,
-                          AsyncLifetimeGuard& lifetime,
+void show_shutdown_dialog(MoonrakerAPI* api, ShutdownModal& modal, AsyncLifetimeGuard& lifetime,
                           lv_obj_t* parent_screen) {
     if (!api) {
         spdlog::warn("[ShutdownDialog] No API available");
@@ -332,23 +345,20 @@ void show_shutdown_dialog(MoonrakerAPI* api,
         // local Moonraker disabled), fall back to SystemPower so the user
         // isn't forced to use the hardware switch.
         if (api->is_connected()) {
-            modal.set_single_callbacks(
-                [api]() { execute_printer_shutdown(api); },
-                [api]() { execute_printer_reboot(api); });
+            modal.set_single_callbacks([api]() { execute_printer_shutdown(api); },
+                                       [api]() { execute_printer_reboot(api); });
         } else {
-            spdlog::info("[ShutdownDialog] Moonraker not connected — using local SystemPower fallback");
-            modal.set_single_callbacks(
-                []() { execute_screen_shutdown(); },
-                []() { execute_screen_reboot(); });
+            spdlog::info(
+                "[ShutdownDialog] Moonraker not connected — using local SystemPower fallback");
+            modal.set_single_callbacks([]() { execute_screen_shutdown(); },
+                                       []() { execute_screen_reboot(); });
         }
     } else {
         modal.set_dual_callbacks(
             [api, &lifetime]() { execute_both_shutdown(api, lifetime); },
             [api, &lifetime]() { execute_both_reboot(api, lifetime); },
-            [api]() { execute_printer_shutdown(api); },
-            [api]() { execute_printer_reboot(api); },
-            []() { execute_screen_shutdown(); },
-            []() { execute_screen_reboot(); });
+            [api]() { execute_printer_shutdown(api); }, [api]() { execute_printer_reboot(api); },
+            []() { execute_screen_shutdown(); }, []() { execute_screen_reboot(); });
     }
 
     modal.show(parent_screen);

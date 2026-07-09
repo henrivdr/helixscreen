@@ -121,8 +121,7 @@ class PrintStartController {
      * @param on_error   Called on failure (main thread).
      */
     void initiate_reprint(const std::string& filename, const std::string& path,
-                          const std::set<int>& tools_used,
-                          std::function<void()> on_started,
+                          const std::set<int>& tools_used, std::function<void()> on_started,
                           std::function<void()> on_error);
 
     /**

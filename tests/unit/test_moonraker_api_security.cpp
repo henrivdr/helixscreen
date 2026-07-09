@@ -1003,7 +1003,8 @@ TEST_CASE_METHOD(MoonrakerAPITestFixture, "No G-code sent when validation fails"
 // Lifecycle Safety Tests - Issue #4: Callback Cleanup on Destruction
 // ============================================================================
 
-TEST_CASE("MoonrakerClient destructor clears callbacks", "[eventloop][api][security][lifecycle][slow]") {
+TEST_CASE("MoonrakerClient destructor clears callbacks",
+          "[eventloop][api][security][lifecycle][slow]") {
     SECTION("Destroy client before connection completes") {
         // Create event loop
         auto loop = std::make_shared<hv::EventLoop>();

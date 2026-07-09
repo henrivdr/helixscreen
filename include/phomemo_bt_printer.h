@@ -18,8 +18,7 @@ class PhomemoBluetoothPrinter : public ILabelPrinter {
     void set_device(const std::string& mac, const std::string& transport = "ble");
 
     [[nodiscard]] std::string name() const override;
-    void print(const LabelBitmap& bitmap, const LabelSize& size,
-               PrintCallback callback) override;
+    void print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) override;
     [[nodiscard]] std::vector<LabelSize> supported_sizes() const override;
 
   private:
@@ -28,4 +27,4 @@ class PhomemoBluetoothPrinter : public ILabelPrinter {
     static constexpr const char* PHOMEMO_WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb";
 };
 
-}  // namespace helix::label
+} // namespace helix::label

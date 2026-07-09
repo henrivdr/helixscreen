@@ -3,9 +3,10 @@
 
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "async_lifetime_guard.h"
 #include "panel_widget.h"
-#include "ui_observer_guard.h"
 
 #include <memory>
 
@@ -25,7 +26,9 @@ class ActiveSpoolWidget : public PanelWidget {
     void attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) override;
     void detach() override;
     void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override;
-    const char* id() const override { return "active_spool"; }
+    const char* id() const override {
+        return "active_spool";
+    }
 
     static void clicked_cb(lv_event_t* e);
 

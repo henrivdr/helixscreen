@@ -1,17 +1,16 @@
 // tests/unit/test_print_control_buttons.cpp
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "print_control_buttons.h"
+#include "ui_update_queue.h"
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/print_control_buttons_test_access.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "app_globals.h"
+#include "print_control_buttons.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include <lvgl.h>
-
 #include <string>
 
 #include "../catch_amalgamated.hpp"
@@ -92,7 +91,8 @@ TEST_CASE_METHOD(ControlButtonsFixture, "pending action publishes hourglass stat
                  "[print_control][slow]") {
     set_print_state(helix::PrintJobState::PRINTING);
     helix::ui::PrintControlButtonsTestAccess::set_pending(helix::ui::PendingAction::Pausing);
-    REQUIRE(read_int("print_pending_action") == static_cast<int>(helix::ui::PendingAction::Pausing));
+    REQUIRE(read_int("print_pending_action") ==
+            static_cast<int>(helix::ui::PendingAction::Pausing));
     REQUIRE(read_str("print_control_primary_label") == "Pausing...");
 
     // A real state change is authoritative and clears the optimistic pending.

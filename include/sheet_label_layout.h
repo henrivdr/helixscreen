@@ -40,7 +40,9 @@ struct SheetTemplate {
     float gap_y_mm; // vertical gap between rows
 
     // Computed helpers
-    int labels_per_sheet() const { return columns * rows; }
+    int labels_per_sheet() const {
+        return columns * rows;
+    }
 };
 
 /// Paper size dimensions at a given DPI
@@ -75,8 +77,7 @@ LabelSize sheet_template_to_label_size(const SheetTemplate& tmpl, int dpi = 300)
 /// count: number of labels to place (1 to labels_per_sheet, fills left-to-right, top-to-bottom)
 /// start: first slot to fill (0-based, skip already-used labels on a partial sheet)
 /// dpi: output resolution (typically 300 or 600)
-LabelBitmap tile_labels_on_page(const LabelBitmap& label_bitmap,
-                                const SheetTemplate& tmpl,
+LabelBitmap tile_labels_on_page(const LabelBitmap& label_bitmap, const SheetTemplate& tmpl,
                                 int count = 0, // 0 = fill entire sheet
                                 int start = 0, // first slot index
                                 int dpi = 300);

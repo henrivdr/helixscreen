@@ -37,7 +37,7 @@ void create_ripple(lv_obj_t* parent, lv_coord_t x, lv_coord_t y, int start_size,
     // Position centered on touch point
     lv_obj_set_pos(ripple, x - start_size / 2, y - start_size / 2);
 
-    // Animation 1: Scale (grow)
+    // Animation 1: Scale (grow) — native resize keeps the circle edge crisp.
     lv_anim_t scale_anim;
     lv_anim_init(&scale_anim);
     lv_anim_set_var(&scale_anim, ripple);
@@ -46,13 +46,18 @@ void create_ripple(lv_obj_t* parent, lv_coord_t x, lv_coord_t y, int start_size,
     lv_anim_set_path_cb(&scale_anim, lv_anim_path_ease_out);
     lv_anim_set_exec_cb(&scale_anim, [](void* var, int32_t size) {
         auto* obj = static_cast<lv_obj_t*>(var);
-        lv_coord_t old_size = lv_obj_get_width(obj);
-        lv_coord_t delta = (size - old_size) / 2;
+        // Read the size/pos we last set (style values are immediate; laid-out
+        // coords lag a frame).
+        int32_t old_size = lv_obj_get_style_width(obj, LV_PART_MAIN);
+        int32_t cur_x = lv_obj_get_style_x(obj, LV_PART_MAIN);
+        int32_t cur_y = lv_obj_get_style_y(obj, LV_PART_MAIN);
         lv_obj_set_size(obj, size, size);
-        // Use style values (not coords) - coords aren't updated until layout refresh
-        int32_t current_x = lv_obj_get_style_x(obj, LV_PART_MAIN);
-        int32_t current_y = lv_obj_get_style_y(obj, LV_PART_MAIN);
-        lv_obj_set_pos(obj, current_x - delta, current_y - delta);
+        // Keep the CENTER fixed. Computing the new top-left as
+        // cur + old_size/2 - size/2 telescopes across frames (the old_size/2 term
+        // cancels the previous frame's -size/2), so integer rounding does NOT
+        // accumulate — unlike subtracting an incremental delta, which slid the
+        // ripple off the touch point over the grow (#1082).
+        lv_obj_set_pos(obj, cur_x + old_size / 2 - size / 2, cur_y + old_size / 2 - size / 2);
     });
     lv_anim_start(&scale_anim);
 
@@ -77,6 +82,61 @@ void create_ripple(lv_obj_t* parent, lv_coord_t x, lv_coord_t y, int start_size,
         }
     });
     lv_anim_start(&fade_anim);
+}
+
+void create_touch_marker(lv_obj_t* parent, lv_coord_t x, lv_coord_t y) {
+    if (!parent) {
+        return;
+    }
+
+    // Marker geometry + timing. The dot holds fully visible for HOLD_MS, then
+    // fades over FADE_MS — long enough to read (unlike the quick ripple), short
+    // enough that successive presses each get their own clear dot (#1082).
+    constexpr int DOT_SIZE = 18;
+    constexpr int32_t HOLD_MS = 1500;
+    constexpr int32_t FADE_MS = 600;
+
+    // Expanding ripple — identical feedback to a normal touch, centered on (x, y).
+    create_ripple(parent, x, y);
+
+    // Lingering center dot at the exact same point.
+    lv_obj_t* dot = lv_obj_create(parent);
+    lv_obj_remove_style_all(dot);
+    lv_obj_set_size(dot, DOT_SIZE, DOT_SIZE);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(dot, theme_manager_get_color("danger"), 0);
+    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    // White ring keeps the dot legible over any background or crosshair color.
+    lv_obj_set_style_border_width(dot, 2, 0);
+    lv_obj_set_style_border_color(dot, lv_color_white(), 0);
+    lv_obj_add_flag(dot, LV_OBJ_FLAG_FLOATING);
+    lv_obj_remove_flag(dot, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_pos(dot, x - DOT_SIZE / 2, y - DOT_SIZE / 2);
+
+    // Hold (anim delay), then fade out and self-delete.
+    lv_anim_t fade;
+    lv_anim_init(&fade);
+    lv_anim_set_var(&fade, dot);
+    lv_anim_set_values(&fade, LV_OPA_COVER, LV_OPA_TRANSP);
+    lv_anim_set_delay(&fade, HOLD_MS);
+    lv_anim_set_duration(&fade, FADE_MS);
+    lv_anim_set_path_cb(&fade, lv_anim_path_ease_in);
+    lv_anim_set_exec_cb(&fade, [](void* var, int32_t opa) {
+        // Fade the fill AND the white ring together so the whole dot disappears.
+        auto* o = static_cast<lv_obj_t*>(var);
+        lv_obj_set_style_bg_opa(o, static_cast<lv_opa_t>(opa), 0);
+        lv_obj_set_style_border_opa(o, static_cast<lv_opa_t>(opa), 0);
+    });
+    lv_anim_set_completed_cb(&fade, [](lv_anim_t* a) {
+        // Validate first — teardown may have already freed this widget. Defer the
+        // delete: this fires inside lv_timer_handler and a sync delete corrupts
+        // LVGL's event linked list.
+        lv_obj_t* w = static_cast<lv_obj_t*>(a->var);
+        if (w && lv_obj_is_valid(w)) {
+            lv_obj_delete_async(w);
+        }
+    });
+    lv_anim_start(&fade);
 }
 
 void flash_object(lv_obj_t* obj, int32_t duration_ms, bool force) {

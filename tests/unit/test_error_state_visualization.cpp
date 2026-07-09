@@ -343,8 +343,7 @@ TEST_CASE("AFC lane error: cleared when status leaves Error", "[ams][afc][error_
     REQUIRE_FALSE(slot->error.has_value());
 }
 
-TEST_CASE("AFC lane error: empty errored lane is EMPTY, not present",
-          "[ams][afc][error_state]") {
+TEST_CASE("AFC lane error: empty errored lane is EMPTY, not present", "[ams][afc][error_state]") {
     // A print that requests an empty lane (e.g. slicer assigned the model to a
     // tool whose AFC lane has no spool) leaves the live lane in status "Error"
     // with prep=false, load=false, spool_id=null. The AMS panel must show the
@@ -732,7 +731,7 @@ TEST_CASE("AFC clog meter: negative distance maps to safe (value=0)", "[ams][afc
 TEST_CASE("AFC clog meter: distance at fault_sensitivity maps to safe (value=0)",
           "[ams][afc][clog_meter]") {
     BufferHealth h;
-    h.error_sensitivity = 7.0f; // threshold = 40mm
+    h.error_sensitivity = 7.0f;  // threshold = 40mm
     h.distance_to_fault = 40.0f; // at threshold = just reset
     REQUIRE(h.danger_value() == 0);
 }
@@ -748,7 +747,7 @@ TEST_CASE("AFC clog meter: distance near zero maps to danger (value~100)",
 
 TEST_CASE("AFC clog meter: distance mid-range maps proportionally", "[ams][afc][clog_meter]") {
     BufferHealth h;
-    h.error_sensitivity = 7.0f; // threshold = 40mm
+    h.error_sensitivity = 7.0f;  // threshold = 40mm
     h.distance_to_fault = 20.0f; // 20/40 = 50% safe → 50% danger
     REQUIRE(h.danger_value() == 50);
     REQUIRE(h.is_warning() == false);
@@ -756,7 +755,7 @@ TEST_CASE("AFC clog meter: distance mid-range maps proportionally", "[ams][afc][
 
 TEST_CASE("AFC clog meter: distance exceeding max maps to safe", "[ams][afc][clog_meter]") {
     BufferHealth h;
-    h.error_sensitivity = 7.0f; // threshold = 40mm
+    h.error_sensitivity = 7.0f;  // threshold = 40mm
     h.distance_to_fault = 50.0f; // above threshold
     REQUIRE(h.danger_value() == 0);
 }

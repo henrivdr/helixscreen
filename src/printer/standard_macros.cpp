@@ -4,10 +4,10 @@
 #include "standard_macros.h"
 
 #include "config.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "printer_discovery.h"
 
-#include "lvgl/src/others/translation/lv_translation.h"
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -255,7 +255,7 @@ bool StandardMacros::execute(StandardMacroSlot slot, MoonrakerAPI* api,
 
     spdlog::info("[StandardMacros] Executing {} via {}", info.slot_name, macro_name);
     api->advanced().execute_macro(macro_name, params, std::move(on_success), std::move(on_error),
-                                   timeout_ms, suppress_auto_toast);
+                                  timeout_ms, suppress_auto_toast);
     return true;
 }
 

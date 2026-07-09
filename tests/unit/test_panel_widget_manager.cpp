@@ -9,10 +9,12 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_component.h"
 #include "misc/lv_timer_private.h"
+#include "moonraker_client.h"
 #include "panel_widget.h"
 #include "panel_widget_config.h"
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
+#include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -459,10 +461,9 @@ TEST_CASE_METHOD(XMLTestFixture,
     const auto* clock_def = helix::find_widget_def("clock");
     REQUIRE(clock_def != nullptr);
     WidgetFactory original_clock_factory = clock_def->factory;
-    helix::register_widget_factory(
-        "clock", [](const std::string&) -> std::unique_ptr<PanelWidget> {
-            return std::make_unique<GridRebuildSpyWidget>();
-        });
+    helix::register_widget_factory("clock", [](const std::string&) -> std::unique_ptr<PanelWidget> {
+        return std::make_unique<GridRebuildSpyWidget>();
+    });
 
     const std::string panel_id = "test_grid_rebuild_race";
 
@@ -553,8 +554,7 @@ TEST_CASE_METHOD(HelixTestFixture,
 
     cfg->add_printer("printer-A", nlohmann::json::object());
     cfg->add_printer("printer-B", nlohmann::json::object());
-    cfg->set<nlohmann::json>("/printers/printer-A/panel_widgets/home",
-                             make_home_layout("network"));
+    cfg->set<nlohmann::json>("/printers/printer-A/panel_widgets/home", make_home_layout("network"));
     cfg->set<nlohmann::json>("/printers/printer-B/panel_widgets/home",
                              make_home_layout("shutdown"));
 
@@ -581,4 +581,310 @@ TEST_CASE_METHOD(HelixTestFixture,
     // Clean up so the cached "home" config doesn't leak the temp printers into
     // later tests sharing the process-wide cache.
     mgr.clear_all_panel_configs();
+}
+
+// ============================================================================
+// Klipper-not-READY layout clobber (raza616 report): the home/tile layout
+// reverts to a previous arrangement after ANY reset — power cycle, Klipper
+// restart, or FIRMWARE_RESTART.
+// ============================================================================
+//
+// Root cause: while Klipper is not READY (but connected), populate_widgets()
+// injects a *temporary* `firmware_restart` widget that occupies a grid cell
+// (panel_widget_manager.cpp ~line 186), then runs its auto-placement pass and
+// PERSISTS the computed positions to disk (~line 444:
+// `if (any_written) widget_config.save()`). The placement computed while the
+// temporary widget is consuming grid space is NOT the user's intended layout,
+// yet it gets frozen to disk. On the next READY populate (or next boot) the
+// user sees a different, "previous" layout — exactly the reported symptom, and
+// it recurs on every reset because the gate observer rebuilds on each
+// klippy_state transition.
+//
+// Invariant: a populate that runs while klippy_state != READY must NOT mutate
+// the persisted panel_widgets layout on disk. Persistence of auto-placed
+// positions must wait until Klipper is READY (no firmware_restart injected).
+// FAILS pre-fix (auto-placed position saved during the injection), PASSES after.
+TEST_CASE_METHOD(XMLTestFixture,
+                 "PanelWidgetManager does not persist layout while Klipper is not READY",
+                 "[panel_widget][manager][regression]") {
+    helix::init_widget_registrations();
+
+    // Dependency-free component for the spy widgets, plus a trivial stand-in for
+    // the injected firmware_restart widget so the build path stays quiet.
+    lv_xml_register_component_from_data(
+        "test_grid_spy_widget",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+    lv_xml_register_component_from_data(
+        "panel_widget_firmware_restart",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+
+    // Route the two widgets we use through the dependency-free spy factory.
+    auto override_factory = [](const char* id) -> WidgetFactory {
+        const auto* def = helix::find_widget_def(id);
+        REQUIRE(def != nullptr);
+        WidgetFactory original = def->factory;
+        helix::register_widget_factory(id, [](const std::string&) -> std::unique_ptr<PanelWidget> {
+            return std::make_unique<GridSpyWidget>();
+        });
+        return original;
+    };
+    WidgetFactory orig_clock = override_factory("clock");
+    WidgetFactory orig_shutdown = override_factory("shutdown");
+
+    // Connected but Klipper NOT ready -> populate_widgets injects firmware_restart.
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "printer_connection_state"),
+                       static_cast<int>(ConnectionState::CONNECTED));
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "klippy_state"),
+                       static_cast<int>(KlippyState::SHUTDOWN));
+
+    const std::string panel_id = "test_klippy_clobber";
+
+    // Page 1 (a secondary page: no registry-default append) holds one positioned
+    // widget (clock @0,0) and one auto-placed widget (shutdown @-1,-1). The
+    // auto-placed widget is what makes the buggy write-back call save().
+    auto* cfg = Config::get_instance();
+    nlohmann::json widget_cfg = {{"main_page_index", 0},
+                                 {"next_page_id", 2},
+                                 {"pages",
+                                  {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
+                                   {{"id", "spy"},
+                                    {"widgets",
+                                     {{{"id", "clock"},
+                                       {"enabled", true},
+                                       {"col", 0},
+                                       {"row", 0},
+                                       {"colspan", 1},
+                                       {"rowspan", 1}},
+                                      {{"id", "shutdown"},
+                                       {"enabled", true},
+                                       {"col", -1},
+                                       {"row", -1},
+                                       {"colspan", 1},
+                                       {"rowspan", 1}}}}}}}};
+    const std::string panel_path = cfg->df() + "panel_widgets/" + panel_id;
+    cfg->set<nlohmann::json>(panel_path, widget_cfg);
+
+    auto& mgr = PanelWidgetManager::instance();
+    mgr.get_widget_config(panel_id).mark_dirty();
+    mgr.clear_panel_config(panel_id);
+
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 400, 300);
+    process_lvgl(10);
+
+    // Snapshot the persisted layout, populate while Klipper is not READY, snapshot
+    // again. The not-READY populate must leave the on-disk layout untouched.
+    nlohmann::json before = cfg->get<nlohmann::json>(panel_path, nlohmann::json());
+    auto widgets = mgr.populate_widgets(panel_id, container, /*page_index=*/1);
+    nlohmann::json after = cfg->get<nlohmann::json>(panel_path, nlohmann::json());
+
+    INFO("before: " << before.dump());
+    INFO("after:  " << after.dump());
+    REQUIRE(after == before);
+
+    helix::register_widget_factory("clock", orig_clock);
+    helix::register_widget_factory("shutdown", orig_shutdown);
+    mgr.clear_panel_config(panel_id);
+}
+
+// Transient in-memory lock-in: a not-READY populate must also not mutate the
+// in-memory entry positions of auto-placed widgets. The gate observer rebuilds
+// on each klippy_state transition WITHOUT reloading the cached config, so if a
+// not-READY populate writes a transient slot into the in-memory entry, the
+// subsequent READY populate sees an "explicit" position, never re-derives it,
+// and (because nothing changed) never persists it — the widget is frozen at a
+// slot computed while the temporary firmware_restart widget occupied the grid,
+// and disk never records the real position.
+//
+// Invariant: after a not-READY populate followed by a READY populate on the
+// SAME cached config (no reload — the live gate-observer rebuild path), the
+// auto-placed widget is persisted at the SAME position a clean READY-only
+// populate would produce. FAILS with the save-only guard (disk stays col=-1),
+// PASSES once the whole write-back is skipped while not READY.
+TEST_CASE_METHOD(XMLTestFixture,
+                 "PanelWidgetManager re-derives auto-placement cleanly after a not-READY rebuild",
+                 "[panel_widget][manager][regression]") {
+    helix::init_widget_registrations();
+
+    lv_xml_register_component_from_data(
+        "test_grid_spy_widget",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+    lv_xml_register_component_from_data(
+        "panel_widget_firmware_restart",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+
+    auto override_factory = [](const char* id) -> WidgetFactory {
+        const auto* def = helix::find_widget_def(id);
+        REQUIRE(def != nullptr);
+        WidgetFactory original = def->factory;
+        helix::register_widget_factory(id, [](const std::string&) -> std::unique_ptr<PanelWidget> {
+            return std::make_unique<GridSpyWidget>();
+        });
+        return original;
+    };
+    WidgetFactory orig_clock = override_factory("clock");
+    WidgetFactory orig_shutdown = override_factory("shutdown");
+
+    auto* cfg = Config::get_instance();
+    auto& mgr = PanelWidgetManager::instance();
+    auto* conn = lv_xml_get_subject(nullptr, "printer_connection_state");
+    auto* klippy = lv_xml_get_subject(nullptr, "klippy_state");
+    lv_subject_set_int(conn, static_cast<int>(ConnectionState::CONNECTED));
+
+    auto make_cfg = []() {
+        return nlohmann::json{{"main_page_index", 0},
+                              {"next_page_id", 2},
+                              {"pages",
+                               {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
+                                {{"id", "spy"},
+                                 {"widgets",
+                                  {{{"id", "clock"},
+                                    {"enabled", true},
+                                    {"col", 0},
+                                    {"row", 0},
+                                    {"colspan", 1},
+                                    {"rowspan", 1}},
+                                   {{"id", "shutdown"},
+                                    {"enabled", true},
+                                    {"col", -1},
+                                    {"row", -1},
+                                    {"colspan", 1},
+                                    {"rowspan", 1}}}}}}}};
+    };
+
+    // Returns the persisted {col,row} of `shutdown` after running the given
+    // populate sequence on a freshly-seeded panel.
+    auto persisted_shutdown = [&](const std::string& panel_id,
+                                  const std::vector<KlippyState>& states) -> std::pair<int, int> {
+        const std::string panel_path = cfg->df() + "panel_widgets/" + panel_id;
+        cfg->set<nlohmann::json>(panel_path, make_cfg());
+        mgr.get_widget_config(panel_id).mark_dirty();
+        mgr.clear_panel_config(panel_id);
+
+        lv_obj_t* container = lv_obj_create(test_screen());
+        lv_obj_set_size(container, 400, 300);
+        process_lvgl(10);
+
+        // Run each populate on the SAME cached config (no mark_dirty between) —
+        // this is the live gate-observer rebuild path.
+        for (KlippyState s : states) {
+            lv_subject_set_int(klippy, static_cast<int>(s));
+            // Clear only the render caches (active_configs_/grid_descriptors_) so
+            // populate rebuilds — but keep the loaded PanelWidgetConfig, exactly
+            // like the gate-observer rebuild that does NOT reload from disk.
+            mgr.clear_panel_config(panel_id);
+            mgr.populate_widgets(panel_id, container, /*page_index=*/1);
+        }
+
+        nlohmann::json after = cfg->get<nlohmann::json>(panel_path, nlohmann::json());
+        std::pair<int, int> pos{-1, -1};
+        if (after.contains("pages") && after["pages"].size() > 1) {
+            for (const auto& w : after["pages"][1]["widgets"]) {
+                if (w.value("id", "") == "shutdown") {
+                    pos = {w.value("col", -1), w.value("row", -1)};
+                }
+            }
+        }
+        return pos;
+    };
+
+    // Clean READY-only placement.
+    auto clean = persisted_shutdown("test_ready_only", {KlippyState::READY});
+    // not-READY rebuild, then READY rebuild on the same cached config.
+    auto recovered =
+        persisted_shutdown("test_transient_recover", {KlippyState::SHUTDOWN, KlippyState::READY});
+
+    INFO("clean=(" << clean.first << "," << clean.second << ") recovered=(" << recovered.first
+                   << "," << recovered.second << ")");
+    REQUIRE(clean.first >= 0);
+    REQUIRE(clean.second >= 0);
+    REQUIRE(recovered == clean);
+
+    helix::register_widget_factory("clock", orig_clock);
+    helix::register_widget_factory("shutdown", orig_shutdown);
+    mgr.clear_panel_config("test_ready_only");
+    mgr.clear_panel_config("test_transient_recover");
+}
+
+// Companion to the not-READY test above: the not-READY guard must NOT suppress
+// the legitimate persistence path. When Klipper IS READY (no firmware_restart
+// injected), populate_widgets() must still write back and persist auto-placed
+// positions so a newly added/auto-placed widget keeps its slot across reloads.
+TEST_CASE_METHOD(XMLTestFixture,
+                 "PanelWidgetManager persists auto-placed positions while Klipper is READY",
+                 "[panel_widget][manager][regression]") {
+    helix::init_widget_registrations();
+
+    lv_xml_register_component_from_data(
+        "test_grid_spy_widget",
+        "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+
+    auto override_factory = [](const char* id) -> WidgetFactory {
+        const auto* def = helix::find_widget_def(id);
+        REQUIRE(def != nullptr);
+        WidgetFactory original = def->factory;
+        helix::register_widget_factory(id, [](const std::string&) -> std::unique_ptr<PanelWidget> {
+            return std::make_unique<GridSpyWidget>();
+        });
+        return original;
+    };
+    WidgetFactory orig_clock = override_factory("clock");
+    WidgetFactory orig_shutdown = override_factory("shutdown");
+
+    // Connected AND Klipper READY -> no firmware_restart injection.
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "printer_connection_state"),
+                       static_cast<int>(ConnectionState::CONNECTED));
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "klippy_state"),
+                       static_cast<int>(KlippyState::READY));
+
+    const std::string panel_id = "test_klippy_ready_persist";
+
+    auto* cfg = Config::get_instance();
+    nlohmann::json widget_cfg = {{"main_page_index", 0},
+                                 {"next_page_id", 2},
+                                 {"pages",
+                                  {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
+                                   {{"id", "spy"},
+                                    {"widgets",
+                                     {{{"id", "clock"},
+                                       {"enabled", true},
+                                       {"col", 0},
+                                       {"row", 0},
+                                       {"colspan", 1},
+                                       {"rowspan", 1}},
+                                      {{"id", "shutdown"},
+                                       {"enabled", true},
+                                       {"col", -1},
+                                       {"row", -1},
+                                       {"colspan", 1},
+                                       {"rowspan", 1}}}}}}}};
+    const std::string panel_path = cfg->df() + "panel_widgets/" + panel_id;
+    cfg->set<nlohmann::json>(panel_path, widget_cfg);
+
+    auto& mgr = PanelWidgetManager::instance();
+    mgr.get_widget_config(panel_id).mark_dirty();
+    mgr.clear_panel_config(panel_id);
+
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 400, 300);
+    process_lvgl(10);
+
+    auto widgets = mgr.populate_widgets(panel_id, container, /*page_index=*/1);
+
+    // The READY populate auto-places `shutdown` and persists its position.
+    nlohmann::json after = cfg->get<nlohmann::json>(panel_path, nlohmann::json());
+    INFO("after: " << after.dump());
+    REQUIRE(after.contains("pages"));
+    const auto& spy_widgets = after["pages"][1]["widgets"];
+    bool shutdown_persisted = false;
+    for (const auto& w : spy_widgets) {
+        if (w.value("id", "") == "shutdown") {
+            shutdown_persisted = w.value("col", -1) >= 0 && w.value("row", -1) >= 0;
+        }
+    }
+    REQUIRE(shutdown_persisted);
+
+    helix::register_widget_factory("clock", orig_clock);
+    helix::register_widget_factory("shutdown", orig_shutdown);
+    mgr.clear_panel_config(panel_id);
 }

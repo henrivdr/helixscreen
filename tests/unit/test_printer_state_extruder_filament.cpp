@@ -11,11 +11,12 @@
  * and status-update propagation from Klipper's extruder<n>.filament_used field.
  */
 
+#include "ui_update_queue.h"
+
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -79,8 +80,7 @@ TEST_CASE("PrinterState: extruder idx 0 maps to Klipper 'extruder' key",
     REQUIRE(lv_subject_get_int(subj0) == 42);
 }
 
-TEST_CASE("PrinterState: per-extruder subjects are independent",
-          "[printer_state][filament_used]") {
+TEST_CASE("PrinterState: per-extruder subjects are independent", "[printer_state][filament_used]") {
     lv_init_safe();
 
     PrinterState& state = get_printer_state();

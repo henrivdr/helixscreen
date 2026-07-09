@@ -32,24 +32,22 @@ class BrotherQLPrinter : public ILabelPrinter {
     // === ILabelPrinter interface ===
 
     [[nodiscard]] std::string name() const override;
-    void print(const LabelBitmap& bitmap, const LabelSize& size,
-               PrintCallback callback) override;
+    void print(const LabelBitmap& bitmap, const LabelSize& size, PrintCallback callback) override;
     [[nodiscard]] std::vector<LabelSize> supported_sizes() const override;
 
     // === Brother QL-specific API ===
 
     /// Print a label bitmap to a specific host:port. Connects, sends, disconnects.
     /// Callback fires on UI thread via async_call().
-    void print_label(const std::string& host, int port,
-                     const LabelBitmap& bitmap, const LabelSize& size,
-                     PrintCallback callback);
+    void print_label(const std::string& host, int port, const LabelBitmap& bitmap,
+                     const LabelSize& size, PrintCallback callback);
 
     /// Get supported label sizes for Brother QL printers (static access)
     static std::vector<LabelSize> supported_sizes_static();
 
     /// Build the raw raster command buffer (public for testing)
     static std::vector<uint8_t> build_raster_commands(const LabelBitmap& bitmap,
-                                                       const LabelSize& size);
+                                                      const LabelSize& size);
 
   private:
     struct Impl;

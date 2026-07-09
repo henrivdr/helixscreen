@@ -758,9 +758,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "TemperatureService pattern: double deinit_sub
     panel.deinit();
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "TemperatureService pattern: update_display guard prevents access to freed subjects",
-                 "[observer_cleanup][crash_hardening][temp_panel]") {
+TEST_CASE_METHOD(
+    LVGLTestFixture,
+    "TemperatureService pattern: update_display guard prevents access to freed subjects",
+    "[observer_cleanup][crash_hardening][temp_panel]") {
     // Simulates TemperatureService::update_display() which checks
     // subjects_initialized_ before accessing subject buffers
     MockTemperatureService panel;
@@ -959,9 +960,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         int count = 0;
     } panel;
     ObserverGuard guard_a = observe_int_sync<DummyPanel>(
-        &subject, &panel,
-        [](DummyPanel* self, int) { self->count++; },
-        service_a_lifetime);
+        &subject, &panel, [](DummyPanel* self, int) { self->count++; }, service_a_lifetime);
     drain();
 
     // Verify observer works
@@ -983,8 +982,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     guard_a.reset(); // Must NOT crash — observer struct was freed by deinit
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "SubjectLifetime: guard still removes when subject is alive",
+TEST_CASE_METHOD(LVGLTestFixture, "SubjectLifetime: guard still removes when subject is alive",
                  "[observer_cleanup][crash_hardening][subject_lifetime]") {
     // When the subject IS alive (bool = true), guard must call lv_observer_remove
     lv_subject_t subject;
@@ -997,9 +995,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         int count = 0;
     } panel;
     ObserverGuard guard = observe_int_sync<DummyPanel>(
-        &subject, &panel,
-        [](DummyPanel* self, int) { self->count++; },
-        observer_lifetime);
+        &subject, &panel, [](DummyPanel* self, int) { self->count++; }, observer_lifetime);
     drain();
 
     // Subject is alive — guard should properly remove the observer

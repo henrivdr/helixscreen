@@ -1,17 +1,18 @@
 #pragma once
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <lvgl.h>
-#include <glm/vec2.hpp>
+#include "ui_observer_guard.h"
+
+#include "gcode_parser.h"
+
 #include <cmath>
 #include <functional>
+#include <glm/vec2.hpp>
+#include <lvgl.h>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "gcode_parser.h"
-#include "ui_observer_guard.h"
 
 // Forward declarations
 namespace helix {
@@ -26,7 +27,9 @@ class ExcludeObjectMapView {
   public:
     static constexpr float MIN_TOUCH_TARGET_PX = 28.0f;
 
-    struct PixelRect { float x, y, w, h; };
+    struct PixelRect {
+        float x, y, w, h;
+    };
 
     class CoordMapper {
       public:
@@ -35,7 +38,9 @@ class ExcludeObjectMapView {
                     float origin_x = 0.0f, float origin_y = 0.0f);
         std::pair<float, float> mm_to_px(float x_mm, float y_mm) const;
         PixelRect bbox_to_rect(glm::vec2 bbox_min, glm::vec2 bbox_max) const;
-        float scale() const { return scale_; }
+        float scale() const {
+            return scale_;
+        }
 
       private:
         float scale_{1.0f};
@@ -56,25 +61,28 @@ class ExcludeObjectMapView {
     ExcludeObjectMapView(const ExcludeObjectMapView&) = delete;
     ExcludeObjectMapView& operator=(const ExcludeObjectMapView&) = delete;
 
-    void create(lv_obj_t* parent,
-                helix::PrinterExcludedObjectsState* state,
-                float bed_w_mm, float bed_h_mm,
-                PrintExcludeObjectManager* exclude_manager,
+    void create(lv_obj_t* parent, helix::PrinterExcludedObjectsState* state, float bed_w_mm,
+                float bed_h_mm, PrintExcludeObjectManager* exclude_manager,
                 std::shared_ptr<helix::gcode::ParsedGCodeFile> parsed_file = nullptr);
     void destroy();
 
-    [[nodiscard]] lv_obj_t* root() const { return root_; }
-    [[nodiscard]] bool is_active() const { return root_ != nullptr; }
+    [[nodiscard]] lv_obj_t* root() const {
+        return root_;
+    }
+    [[nodiscard]] bool is_active() const {
+        return root_ != nullptr;
+    }
 
-    void set_close_callback(std::function<void()> cb) { close_cb_ = std::move(cb); }
+    void set_close_callback(std::function<void()> cb) {
+        close_cb_ = std::move(cb);
+    }
 
   private:
     void build_object_rects();
     void update_visual_states();
     void build_key_bar();
     void draw_first_layer_outlines();
-    lv_obj_t* create_object_rect(lv_obj_t* parent, int index,
-                                 const std::string& name,
+    lv_obj_t* create_object_rect(lv_obj_t* parent, int index, const std::string& name,
                                  const PixelRect& rect);
     lv_color_t get_object_color(int index) const;
 
@@ -108,4 +116,4 @@ class ExcludeObjectMapView {
     std::vector<ObjectRect> object_rects_;
 };
 
-}  // namespace helix::ui
+} // namespace helix::ui

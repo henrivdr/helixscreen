@@ -10,20 +10,23 @@
         bg_color="#screen_bg">
     <!-- Content Area -->
     <lv_obj name="overlay_content"
-            width="100%" flex_grow="1" style_pad_top="0" style_pad_left="#space_lg" style_pad_right="#space_lg"
+            width="100%" flex_grow="1" style_pad_top="0" style_pad_left="0" style_pad_right="0"
             style_pad_bottom="#space_lg" scrollable="true" flex_flow="column">
       <!-- ================================================================== -->
       <!-- LED SELECTION SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="LED SELECTION" title_tag="LED SELECTION" icon="light"/>
+      <setting_group>
+        <setting_group_header title="LED SELECTION" title_tag="LED SELECTION" icon="light" hide_icon="false"/>
       <setting_led_chip_row name="row_led_select"
                             label="LEDs" label_tag="LEDs" icon="lightbulb_outline"
                             description="LEDs controlled by the light button"
                             description_tag="LEDs controlled by the light button"/>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- STARTUP SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="STARTUP" title_tag="STARTUP" icon="power"/>
+      <setting_group>
+        <setting_group_header title="STARTUP" title_tag="STARTUP" icon="power" hide_icon="false"/>
       <setting_toggle_row name="row_led_on_at_start"
                           label="LED on at Start" label_tag="LED on at Start" icon="light"
                           description="Turn on LEDs when printer starts"
@@ -37,10 +40,12 @@
                           callback="on_startup_brightness_changed">
         <bind_flag_if_eq subject="led_on_at_start_enabled" flag="hidden" ref_value="0"/>
       </setting_slider_row>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- AUTO STATE SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="AUTO STATE" title_tag="AUTO STATE" icon="tune"/>
+      <setting_group>
+        <setting_group_header title="AUTO STATE" title_tag="AUTO STATE" icon="tune" hide_icon="false"/>
       <setting_toggle_row name="row_auto_state_enabled"
                           label="Automatic LED Control" label_tag="Automatic LED Control" icon="tune_variant"
                           description="Change LED color based on printer state"
@@ -51,8 +56,9 @@
               style_pad_left="0" style_pad_right="0" style_pad_top="#space_sm" style_pad_bottom="0" scrollable="false">
         <bind_flag_if_eq subject="led_auto_state_enabled" flag="hidden" ref_value="0"/>
       </lv_obj>
+      </setting_group>
       <!-- ================================================================== -->
-      <!-- MACRO DEVICES SECTION -->
+      <!-- MACRO DEVICES SECTION (kept on setting_section_header: uses Add action button) -->
       <!-- ================================================================== -->
       <setting_section_header title="MACRO DEVICES"
                               title_tag="MACRO DEVICES" icon="code_braces" action_button_text="Add"

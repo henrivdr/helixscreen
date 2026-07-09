@@ -13,9 +13,9 @@
  * - ACE/ToolChanger stub implementations
  */
 
+#include "ams_backend_ace.h"
 #include "ams_backend_mock.h"
 #include "ams_backend_toolchanger.h"
-#include "ams_backend_ace.h"
 #include "ams_types.h"
 
 #include <any>
@@ -668,8 +668,9 @@ TEST_CASE("ACE device actions - sections and actions", "[ams][device_actions][ac
 
     SECTION("ace_feed_assist_toggle is a TOGGLE in maintenance section") {
         auto actions = backend.get_device_actions();
-        auto it = std::find_if(actions.begin(), actions.end(),
-                               [](const DeviceAction& a) { return a.id == "ace_feed_assist_toggle"; });
+        auto it = std::find_if(actions.begin(), actions.end(), [](const DeviceAction& a) {
+            return a.id == "ace_feed_assist_toggle";
+        });
         REQUIRE(it != actions.end());
         CHECK(it->type == ActionType::TOGGLE);
         CHECK(it->section == "maintenance");
@@ -695,7 +696,8 @@ TEST_CASE("ACE device actions - execute unknown returns not_supported",
 
 TEST_CASE("ACE device actions - execute valid actions", "[ams][device_actions][ace]") {
     // Note: ACE backend requires api_ for execute_gcode, so these tests verify
-    // that execute_device_action recognizes the action IDs (returns NOT_CONNECTED, not NOT_SUPPORTED)
+    // that execute_device_action recognizes the action IDs (returns NOT_CONNECTED, not
+    // NOT_SUPPORTED)
     AmsBackendAce backend(nullptr, nullptr);
 
     SECTION("ace_manual_feed with null API returns not_connected") {

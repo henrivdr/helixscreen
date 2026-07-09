@@ -337,8 +337,7 @@ TEST_CASE("LED characterization: empty subscription response then explicit query
 
         // Step 2: explicit printer.objects.query returns actual state
         // (warm white: R=1.0, G=0.98, B=0.59, W=0.0)
-        json query_status = {
-            {"neopixel case_lights", {{"color_data", {{1.0, 0.98, 0.59, 0.0}}}}}};
+        json query_status = {{"neopixel case_lights", {{"color_data", {{1.0, 0.98, 0.59, 0.0}}}}}};
         state.update_from_status(query_status);
 
         REQUIRE(lv_subject_get_int(state.get_led_state_subject()) == 1);
@@ -350,8 +349,7 @@ TEST_CASE("LED characterization: empty subscription response then explicit query
 
     SECTION("subscription with color_data works normally") {
         // When LEDs are set after subscription, color_data is included
-        json status = {
-            {"neopixel case_lights", {{"color_data", {{0.5, 0.5, 0.5, 0.0}}}}}};
+        json status = {{"neopixel case_lights", {{"color_data", {{0.5, 0.5, 0.5, 0.0}}}}}};
         state.update_from_status(status);
 
         REQUIRE(lv_subject_get_int(state.get_led_state_subject()) == 1);

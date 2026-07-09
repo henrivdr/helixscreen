@@ -96,8 +96,9 @@ struct QuantizationParams {
  */
 struct PackedVertex {
     float position[3];
-    uint8_t color[4];     ///< RGBA8 — alpha unused (filled with 255) but pads the color attribute to a sane 4-byte unit.
-    int8_t normal[2];     ///< Octahedral-encoded unit normal; decode in vertex shader.
+    uint8_t color[4]; ///< RGBA8 — alpha unused (filled with 255) but pads the color attribute to a
+                      ///< sane 4-byte unit.
+    int8_t normal[2]; ///< Octahedral-encoded unit normal; decode in vertex shader.
 
     static constexpr size_t stride() {
         return sizeof(PackedVertex);
@@ -247,10 +248,11 @@ struct RibbonGeometry {
                layer_bboxes.size() * sizeof(AABB);
     }
 
-    /// Pre-computed interleaved vertex buffers for GPU upload (packed 20-byte layout — see PackedVertex).
-    /// Prepared on background thread to avoid blocking UI during VBO upload.
+    /// Pre-computed interleaved vertex buffers for GPU upload (packed 20-byte layout — see
+    /// PackedVertex). Prepared on background thread to avoid blocking UI during VBO upload.
     struct PreparedLayerBuffer {
-        std::vector<uint8_t> data;   ///< Raw vertex bytes; `vertex_count * PackedVertex::stride()` bytes long.
+        std::vector<uint8_t>
+            data; ///< Raw vertex bytes; `vertex_count * PackedVertex::stride()` bytes long.
         size_t vertex_count{0};
     };
     std::vector<PreparedLayerBuffer> prepared_buffers;
@@ -535,14 +537,14 @@ class GeometryBuilder {
     uint32_t compute_segment_color(const ToolpathSegment& segment, float z_min, float z_max) const;
 
     // Configuration
-    float extrusion_width_mm_ = 0.42f; ///< Default for 0.4mm nozzle
-    float travel_width_mm_ = 0.1f;     ///< Thin for travels
-    float layer_height_mm_ = 0.2f;     ///< Layer height for tube vertical dimension
-    bool use_height_gradient_ = true;  ///< Rainbow Z-gradient
-    bool use_smooth_shading_ = false;  ///< Smooth (Gouraud) vs flat shading
-    uint8_t filament_r_ = 0x26;        ///< Filament color red component
-    uint8_t filament_g_ = 0xA6;        ///< Filament color green component
-    uint8_t filament_b_ = 0x9A;        ///< Filament color blue component
+    float extrusion_width_mm_ = 0.42f;              ///< Default for 0.4mm nozzle
+    float travel_width_mm_ = 0.1f;                  ///< Thin for travels
+    float layer_height_mm_ = 0.2f;                  ///< Layer height for tube vertical dimension
+    bool use_height_gradient_ = true;               ///< Rainbow Z-gradient
+    bool use_smooth_shading_ = false;               ///< Smooth (Gouraud) vs flat shading
+    uint8_t filament_r_ = 0x26;                     ///< Filament color red component
+    uint8_t filament_g_ = 0xA6;                     ///< Filament color green component
+    uint8_t filament_b_ = 0x9A;                     ///< Filament color blue component
     const ParsedGCodeFile* current_gcode_{nullptr}; ///< Set during build() for name resolution
     std::unordered_set<std::string>
         highlighted_objects_;                     ///< Object names to highlight (empty = none)

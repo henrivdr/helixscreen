@@ -4,6 +4,7 @@
 #include "material_settings_manager.h"
 
 #include "config.h"
+#include "filament_catalog.h"
 
 #include <spdlog/spdlog.h>
 
@@ -19,12 +20,13 @@ void MaterialSettingsManager::init() {
         return;
     }
     load_from_config();
+    load_presets_from_config();
     initialized_ = true;
     spdlog::info("[MaterialSettingsManager] Initialized with {} override(s)", overrides_.size());
 }
 
-const filament::MaterialOverride* MaterialSettingsManager::get_override(
-    const std::string& name) const {
+const filament::MaterialOverride*
+MaterialSettingsManager::get_override(const std::string& name) const {
     auto it = overrides_.find(name);
     if (it != overrides_.end()) {
         return &it->second;
@@ -76,7 +78,8 @@ void MaterialSettingsManager::load_from_config() {
             if (values.contains("preheat_macro") && values["preheat_macro"].is_string()) {
                 ovr.preheat_macro = values["preheat_macro"].get<std::string>();
             }
-            if (values.contains("macro_handles_heating") && values["macro_handles_heating"].is_boolean()) {
+            if (values.contains("macro_handles_heating") &&
+                values["macro_handles_heating"].is_boolean()) {
                 ovr.macro_handles_heating = values["macro_handles_heating"].get<bool>();
             }
             overrides_[name] = ovr;
@@ -96,16 +99,168 @@ void MaterialSettingsManager::save_to_config() {
     nlohmann::json overrides_json = nlohmann::json::object();
     for (const auto& [name, ovr] : overrides_) {
         nlohmann::json entry = nlohmann::json::object();
-        if (ovr.nozzle_min) entry["nozzle_min"] = *ovr.nozzle_min;
-        if (ovr.nozzle_max) entry["nozzle_max"] = *ovr.nozzle_max;
-        if (ovr.bed_temp) entry["bed_temp"] = *ovr.bed_temp;
-        if (ovr.preheat_macro) entry["preheat_macro"] = *ovr.preheat_macro;
-        if (ovr.macro_handles_heating) entry["macro_handles_heating"] = *ovr.macro_handles_heating;
+        if (ovr.nozzle_min)
+            entry["nozzle_min"] = *ovr.nozzle_min;
+        if (ovr.nozzle_max)
+            entry["nozzle_max"] = *ovr.nozzle_max;
+        if (ovr.bed_temp)
+            entry["bed_temp"] = *ovr.bed_temp;
+        if (ovr.preheat_macro)
+            entry["preheat_macro"] = *ovr.preheat_macro;
+        if (ovr.macro_handles_heating)
+            entry["macro_handles_heating"] = *ovr.macro_handles_heating;
         overrides_json[name] = entry;
     }
 
     config->get_json("/material_overrides") = overrides_json;
     config->save();
+}
+
+void MaterialSettingsManager::assign_defaults() {
+    for (int i = 0; i < 4; ++i) {
+        preset_materials_[i] = DEFAULT_PRESET_MATERIALS[i];
+    }
+}
+
+void MaterialSettingsManager::load_presets_from_config() {
+    // Start from defaults; only override slots the stored config validly provides.
+    assign_defaults();
+    for (auto& pf : preset_filaments_) {
+        pf.reset();
+    }
+
+    Config* config = Config::get_instance();
+    if (!config || !config->exists("/preset_materials")) {
+        return;
+    }
+    try {
+        auto& arr = config->get_json("/preset_materials");
+        if (!arr.is_array() || arr.size() != 4) {
+            return; // malformed → keep defaults
+        }
+        for (int i = 0; i < 4; ++i) {
+            const auto& v = arr[i];
+            if (v.is_string()) {
+                // Legacy / defensive: pre-migration or hand-edited bare-string entry.
+                std::string s = v.get<std::string>();
+                if (!s.empty()) {
+                    preset_materials_[i] = s;
+                }
+                continue;
+            }
+            if (!v.is_object()) {
+                continue;
+            }
+            if (v.contains("type") && v["type"].is_string()) {
+                std::string t = v["type"].get<std::string>();
+                if (!t.empty()) {
+                    preset_materials_[i] = t;
+                }
+            }
+            if (v.contains("filament_id") && v["filament_id"].is_string() &&
+                !v["filament_id"].get<std::string>().empty()) {
+                PresetFilament pf;
+                pf.filament_id = v["filament_id"].get<std::string>();
+                if (v.contains("brand") && v["brand"].is_string()) {
+                    pf.brand = v["brand"].get<std::string>();
+                }
+                if (v.contains("name") && v["name"].is_string()) {
+                    pf.name = v["name"].get<std::string>();
+                }
+                if (v.contains("nozzle") && v["nozzle"].is_number_integer()) {
+                    pf.nozzle = v["nozzle"].get<int>();
+                }
+                if (v.contains("bed") && v["bed"].is_number_integer()) {
+                    pf.bed = v["bed"].get<int>();
+                }
+                preset_filaments_[i] = pf;
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("[MaterialSettingsManager] Failed to load presets: {}", e.what());
+        assign_defaults();
+        for (auto& pf : preset_filaments_) {
+            pf.reset();
+        }
+    }
+}
+
+void MaterialSettingsManager::save_presets_to_config() {
+    Config* config = Config::get_instance();
+    if (!config) {
+        return;
+    }
+    nlohmann::json arr = nlohmann::json::array();
+    for (int i = 0; i < 4; ++i) {
+        nlohmann::json entry = nlohmann::json::object();
+        entry["type"] = preset_materials_[i];
+        if (preset_filaments_[i] && preset_filaments_[i]->is_branded()) {
+            const auto& pf = *preset_filaments_[i];
+            entry["filament_id"] = pf.filament_id;
+            entry["brand"] = pf.brand;
+            entry["name"] = pf.name;
+            entry["nozzle"] = pf.nozzle;
+            entry["bed"] = pf.bed;
+        }
+        arr.push_back(entry);
+    }
+    config->get_json("/preset_materials") = arr;
+    config->save();
+}
+
+void MaterialSettingsManager::set_preset_material(int index, const std::string& material) {
+    if (index < 0 || index >= 4 || material.empty()) {
+        return;
+    }
+    preset_materials_[index] = material;
+    preset_filaments_[index].reset(); // plain type-swap reverts to generic
+    save_presets_to_config();
+    spdlog::info("[MaterialSettingsManager] Preset slot {} set to {}", index, material);
+}
+
+void MaterialSettingsManager::reset_preset_materials() {
+    assign_defaults();
+    for (auto& pf : preset_filaments_) {
+        pf.reset();
+    }
+    save_presets_to_config();
+    spdlog::info("[MaterialSettingsManager] Presets reset to defaults");
+}
+
+std::optional<MaterialSettingsManager::PresetFilament>
+MaterialSettingsManager::get_preset_filament(int index) const {
+    if (index < 0 || index >= 4) {
+        return std::nullopt;
+    }
+    return preset_filaments_[index];
+}
+
+void MaterialSettingsManager::set_preset_filament(int index,
+                                                  const helix::printer::EffectiveFilament& ef) {
+    if (index < 0 || index >= 4) {
+        return;
+    }
+    PresetFilament pf;
+    pf.filament_id = ef.id;
+    pf.brand = ef.brand;
+    pf.name = ef.name;
+    pf.nozzle = ef.nozzle_recommended;
+    pf.bed = ef.bed_temp;
+    preset_filaments_[index] = pf;
+    if (!ef.type.empty()) {
+        preset_materials_[index] = ef.type; // type kept in lockstep
+    }
+    save_presets_to_config();
+    spdlog::info("[MaterialSettingsManager] Preset slot {} set to branded filament '{}'", index,
+                 ef.id);
+}
+
+void MaterialSettingsManager::clear_preset_filament(int index) {
+    if (index < 0 || index >= 4) {
+        return;
+    }
+    preset_filaments_[index].reset();
+    save_presets_to_config();
 }
 
 } // namespace helix

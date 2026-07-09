@@ -65,9 +65,9 @@ const char* belt_status_to_string(BeltStatus status);
 struct BeltTensionHardware {
     KinematicsType kinematics = KinematicsType::UNKNOWN;
     bool has_adxl = false;
-    bool has_belted_z = false;   ///< quad_gantry_level present
+    bool has_belted_z = false; ///< quad_gantry_level present
     bool has_pwm_led = false;
-    std::string pwm_led_pin;    ///< Pin name for strobe LED
+    std::string pwm_led_pin;     ///< Pin name for strobe LED
     std::string kinematics_name; ///< Raw string from Klipper
 };
 
@@ -78,12 +78,14 @@ struct BeltTensionHardware {
 /// Result for a single belt path measurement
 struct BeltMeasurement {
     BeltPath path = BeltPath::PATH_A;
-    float peak_frequency = 0.0f;                          ///< Detected resonant frequency (Hz)
-    float peak_amplitude = 0.0f;                          ///< PSD amplitude at peak
+    float peak_frequency = 0.0f; ///< Detected resonant frequency (Hz)
+    float peak_amplitude = 0.0f; ///< PSD amplitude at peak
     BeltStatus status = BeltStatus::GOOD;
-    std::vector<std::pair<float, float>> freq_response;   ///< (freq_hz, psd)
+    std::vector<std::pair<float, float>> freq_response; ///< (freq_hz, psd)
 
-    [[nodiscard]] bool is_valid() const { return peak_frequency > 0.0f; }
+    [[nodiscard]] bool is_valid() const {
+        return peak_frequency > 0.0f;
+    }
 };
 
 /// Z belt measurement for one corner
@@ -92,25 +94,35 @@ struct ZBeltMeasurement {
     float peak_frequency = 0.0f;
     BeltStatus status = BeltStatus::GOOD;
 
-    [[nodiscard]] bool is_valid() const { return peak_frequency > 0.0f; }
+    [[nodiscard]] bool is_valid() const {
+        return peak_frequency > 0.0f;
+    }
 };
 
 /// Complete belt tension results
 struct BeltTensionResult {
     BeltMeasurement path_a;
     BeltMeasurement path_b;
-    float similarity_percent = 0.0f;  ///< Pearson correlation * 100
-    float frequency_delta = 0.0f;     ///< |A - B| in Hz
-    float target_frequency = 110.0f;  ///< Target Hz
-    float tolerance = 10.0f;          ///< +/-Hz tolerance
+    float similarity_percent = 0.0f; ///< Pearson correlation * 100
+    float frequency_delta = 0.0f;    ///< |A - B| in Hz
+    float target_frequency = 110.0f; ///< Target Hz
+    float tolerance = 10.0f;         ///< +/-Hz tolerance
 
     /// Z belt results (if applicable)
     std::vector<ZBeltMeasurement> z_belts;
 
-    [[nodiscard]] bool has_path_a() const { return path_a.is_valid(); }
-    [[nodiscard]] bool has_path_b() const { return path_b.is_valid(); }
-    [[nodiscard]] bool is_complete() const { return has_path_a() && has_path_b(); }
-    [[nodiscard]] bool has_z_results() const { return !z_belts.empty(); }
+    [[nodiscard]] bool has_path_a() const {
+        return path_a.is_valid();
+    }
+    [[nodiscard]] bool has_path_b() const {
+        return path_b.is_valid();
+    }
+    [[nodiscard]] bool is_complete() const {
+        return has_path_a() && has_path_b();
+    }
+    [[nodiscard]] bool has_z_results() const {
+        return !z_belts.empty();
+    }
 
     /// Evaluate overall status based on thresholds
     [[nodiscard]] BeltStatus overall_status() const;
@@ -147,7 +159,7 @@ std::vector<AccelSample> parse_accel_csv(const std::string& csv_data);
 /// Compute PSD via DFT from accelerometer samples
 /// Returns vector of (frequency_hz, power) pairs
 std::vector<std::pair<float, float>> compute_psd(const std::vector<AccelSample>& samples,
-                                                  float sample_rate = 3200.0f);
+                                                 float sample_rate = 3200.0f);
 
 /// Peak frequency search result
 struct PeakResult {
@@ -170,4 +182,4 @@ using BeltMeasurementCallback = std::function<void(const BeltMeasurement&)>;
 using BeltResultCallback = std::function<void(const BeltTensionResult&)>;
 using BeltErrorCallback = std::function<void(const std::string& message)>;
 
-}  // namespace helix::calibration
+} // namespace helix::calibration

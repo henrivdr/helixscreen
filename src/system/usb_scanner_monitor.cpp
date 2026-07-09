@@ -333,8 +333,7 @@ void UsbScannerMonitor::monitor_thread_func() {
         for (const auto& src : sources) {
             int fd = open(src.path.c_str(), O_RDONLY | O_NONBLOCK);
             if (fd < 0) {
-                spdlog::warn("UsbScannerMonitor: failed to open {}: {}", src.path,
-                             strerror(errno));
+                spdlog::warn("UsbScannerMonitor: failed to open {}: {}", src.path, strerror(errno));
                 continue;
             }
             // EVIOCGRAB only on BT HID scanners. USB scanners may rely on the
@@ -406,7 +405,7 @@ void UsbScannerMonitor::monitor_thread_func() {
 
             // Drain all available events — scanners send rapid bursts
             while (true) {
-                struct input_event ev{};
+                struct input_event ev {};
                 ssize_t n = read(pfds[i].fd, &ev, sizeof(ev));
                 if (n < static_cast<ssize_t>(sizeof(ev))) {
                     if (n < 0 && errno != EAGAIN) {
@@ -439,10 +438,9 @@ void UsbScannerMonitor::monitor_thread_func() {
                 if (ev.code == KEY_ENTER || ev.code == KEY_KPENTER) {
                     if (!accumulator.empty()) {
                         auto layout = layout_.load(std::memory_order_relaxed);
-                        const char* layout_name =
-                            layout == ScannerKeymap::Qwertz  ? "qwertz"
-                            : layout == ScannerKeymap::Azerty ? "azerty"
-                                                              : "qwerty";
+                        const char* layout_name = layout == ScannerKeymap::Qwertz   ? "qwertz"
+                                                  : layout == ScannerKeymap::Azerty ? "azerty"
+                                                                                    : "qwerty";
                         spdlog::info("UsbScannerMonitor: scan complete: "
                                      "text='{}' keycodes=[{}] layout={}",
                                      accumulator, keycode_trace, layout_name);
@@ -474,9 +472,8 @@ void UsbScannerMonitor::monitor_thread_func() {
                 keycode_trace += std::to_string(code);
                 if (effective_shift)
                     keycode_trace += 'S';
-                spdlog::debug("UsbScannerMonitor: keycode={} shift={} caps={} -> '{}'",
-                              code, effective_shift, capslock_on,
-                              ch ? std::string(1, ch) : "(none)");
+                spdlog::debug("UsbScannerMonitor: keycode={} shift={} caps={} -> '{}'", code,
+                              effective_shift, capslock_on, ch ? std::string(1, ch) : "(none)");
                 if (ch != 0) {
                     accumulator += ch;
                 }

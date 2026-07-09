@@ -722,9 +722,9 @@ TEST_CASE("ToolState: request_tool_change delegates to AMS backend when it manag
     ts.init_subjects(false);
 
     helix::PrinterDiscovery hw;
-    nlohmann::json objects = nlohmann::json::array(
-        {"toolchanger", "tool T0", "tool T1", "tool T2", "extruder", "extruder1", "extruder2",
-         "heater_bed", "gcode_move"});
+    nlohmann::json objects =
+        nlohmann::json::array({"toolchanger", "tool T0", "tool T1", "tool T2", "extruder",
+                               "extruder1", "extruder2", "heater_bed", "gcode_move"});
     hw.parse_objects(objects);
     ts.init_tools(hw);
     REQUIRE(ts.tool_count() == 3);
@@ -747,8 +747,9 @@ TEST_CASE("ToolState: request_tool_change delegates to AMS backend when it manag
         bool success_called = false;
         // Pass nullptr for API — backend handles tool change without needing MoonrakerAPI.
         // If it fell through to gcode path, we'd get "No API connection" error.
-        ts.request_tool_change(1, nullptr, [&]() { success_called = true; },
-                               [](const std::string& err) { FAIL("Unexpected error: " << err); });
+        ts.request_tool_change(
+            1, nullptr, [&]() { success_called = true; },
+            [](const std::string& err) { FAIL("Unexpected error: " << err); });
 
         CHECK(success_called);
 
@@ -760,8 +761,9 @@ TEST_CASE("ToolState: request_tool_change delegates to AMS backend when it manag
 
     SECTION("tool change to T2 via backend works") {
         bool success_called = false;
-        ts.request_tool_change(2, nullptr, [&]() { success_called = true; },
-                               [](const std::string& err) { FAIL("Unexpected error: " << err); });
+        ts.request_tool_change(
+            2, nullptr, [&]() { success_called = true; },
+            [](const std::string& err) { FAIL("Unexpected error: " << err); });
 
         CHECK(success_called);
     }

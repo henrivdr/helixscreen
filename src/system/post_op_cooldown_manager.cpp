@@ -3,11 +3,12 @@
 
 #include "post_op_cooldown_manager.h"
 
+#include "ui_update_queue.h"
+
 #include "app_globals.h"
 #include "config.h"
 #include "printer_state.h"
 #include "temperature_controller.h"
-#include "ui_update_queue.h"
 
 #include <spdlog/spdlog.h>
 
@@ -74,7 +75,8 @@ void PostOpCooldownManager::schedule() {
 }
 
 void PostOpCooldownManager::cancel() {
-    if (!initialized_) return;
+    if (!initialized_)
+        return;
 
     spdlog::debug("[PostOpCooldown] Cancelling pending cooldown");
 
@@ -87,7 +89,8 @@ void PostOpCooldownManager::cancel() {
 }
 
 void PostOpCooldownManager::shutdown() {
-    if (!initialized_) return;
+    if (!initialized_)
+        return;
 
     spdlog::info("[PostOpCooldown] Shutting down");
 

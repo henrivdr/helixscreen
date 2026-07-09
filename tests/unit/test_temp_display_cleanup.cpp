@@ -18,9 +18,8 @@
 
 #include "ui_temp_display.h"
 
-#include "lvgl_test_fixture.h"
-
 #include "helix-xml/src/xml/lv_xml.h"
+#include "lvgl_test_fixture.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -39,8 +38,7 @@ static int count_subject_observers(lv_subject_t* subject) {
     return count;
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "external subject has no observers after temp_display deletion",
+TEST_CASE_METHOD(LVGLTestFixture, "external subject has no observers after temp_display deletion",
                  "[temp_display]") {
     // Register the temp_display custom widget
     ui_temp_display_init();
@@ -73,8 +71,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     lv_subject_deinit(&current_temp_subject);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "external subject safe after temp_display deletion",
+TEST_CASE_METHOD(LVGLTestFixture, "external subject safe after temp_display deletion",
                  "[temp_display]") {
     // Register the temp_display custom widget
     ui_temp_display_init();

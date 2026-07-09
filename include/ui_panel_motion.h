@@ -39,14 +39,16 @@ inline const JogModeDistances& get_jog_mode_distances(JogMode mode) {
     static_assert(sizeof(modes) / sizeof(modes[0]) == kJogModeCount,
                   "modes[] size must match kJogModeCount");
     int idx = static_cast<int>(mode);
-    if (idx < 0 || idx >= kJogModeCount) idx = 1; // default Coarse
+    if (idx < 0 || idx >= kJogModeCount)
+        idx = 1; // default Coarse
     return modes[idx];
 }
 
 inline const char* jog_mode_name(JogMode mode) {
     static const char* names[] = {"Fine", "Coarse", "Turbo"};
     int idx = static_cast<int>(mode);
-    if (idx < 0 || idx >= kJogModeCount) return "Unknown";
+    if (idx < 0 || idx >= kJogModeCount)
+        return "Unknown";
     return names[idx];
 }
 
@@ -100,17 +102,17 @@ class MotionPanel : public OverlayBase {
 
     lv_subject_t pos_x_subject_;
     lv_subject_t pos_y_subject_;
-    lv_subject_t pos_z_subject_;         // Commanded Z position
-    lv_subject_t pos_z_actual_subject_;  // Actual Z position (with mesh compensation)
+    lv_subject_t pos_z_subject_;           // Commanded Z position
+    lv_subject_t pos_z_actual_subject_;    // Actual Z position (with mesh compensation)
     lv_subject_t motion_z_actual_visible_; // 1 when actual differs from commanded
-    lv_subject_t z_axis_label_subject_; // "Bed" or "Print Head"
-    lv_subject_t z_up_icon_subject_;    // "arrow_expand_up" or "arrow_up"
-    lv_subject_t z_down_icon_subject_;  // "arrow_expand_down" or "arrow_down"
-    lv_subject_t z_large_label_subject_;  // "10mm" or "1mm" (large Z button label)
-    lv_subject_t z_small_label_subject_;  // "1mm" or "0.1mm" (small Z button label)
-    lv_subject_t jog_mode_fine_active_;   // 1 when Fine mode active
-    lv_subject_t jog_mode_coarse_active_; // 1 when Coarse mode active
-    lv_subject_t jog_mode_turbo_active_;  // 1 when Turbo mode active
+    lv_subject_t z_axis_label_subject_;    // "Bed" or "Print Head"
+    lv_subject_t z_up_icon_subject_;       // "arrow_expand_up" or "arrow_up"
+    lv_subject_t z_down_icon_subject_;     // "arrow_expand_down" or "arrow_down"
+    lv_subject_t z_large_label_subject_;   // "10mm" or "1mm" (large Z button label)
+    lv_subject_t z_small_label_subject_;   // "1mm" or "0.1mm" (small Z button label)
+    lv_subject_t jog_mode_fine_active_;    // 1 when Fine mode active
+    lv_subject_t jog_mode_coarse_active_;  // 1 when Coarse mode active
+    lv_subject_t jog_mode_turbo_active_;   // 1 when Turbo mode active
     char pos_x_buf_[32];
     char pos_y_buf_[32];
     char pos_z_buf_[32];
@@ -155,7 +157,7 @@ class MotionPanel : public OverlayBase {
     // Position observers use lambda-based observer factory (no static callbacks needed)
 
     void update_z_axis_label(bool bed_moves);
-    void update_z_display(); // Updates Z label with actual in brackets when different
+    void update_z_display();       // Updates Z label with actual in brackets when different
     void update_z_button_labels(); // Update Z button text for current mode
 };
 

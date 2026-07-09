@@ -5,6 +5,7 @@
 
 #include "ui_callback_helpers.h"
 #include "ui_fonts.h"
+#include "ui_format_utils.h"
 #include "ui_nav_manager.h"
 #include "ui_notification.h"
 #include "ui_panel_common.h"
@@ -15,7 +16,6 @@
 #include "app_globals.h"
 #include "display_settings_manager.h"
 #include "format_utils.h"
-#include "ui_format_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
@@ -596,9 +596,8 @@ void HistoryListPanel::populate_list() {
 
     if (!list_view_) {
         list_view_ = std::make_unique<helix::ui::HistoryListView>();
-        list_view_->setup(list_rows_, list_content_, [this](size_t index) {
-            handle_row_click(index);
-        });
+        list_view_->setup(list_rows_, list_content_,
+                          [this](size_t index) { handle_row_click(index); });
     }
 
     list_view_->populate(filtered_jobs_);

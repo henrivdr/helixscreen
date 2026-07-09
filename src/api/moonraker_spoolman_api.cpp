@@ -20,11 +20,16 @@ using helix::json_util::safe_float;
 using helix::json_util::safe_int;
 using helix::json_util::safe_string;
 
-// Helper to parse a Spoolman spool JSON object into SpoolInfo
-static SpoolInfo parse_spool_info(const nlohmann::json& spool_json) {
+// Bring the header-declared parser into this translation unit's unqualified
+// scope so the in-file call sites below stay unchanged.
+using helix::spoolman_detail::parse_spool_info;
+
+// Helper to parse a Spoolman spool JSON object into SpoolInfo.
+// Non-static + declared in the header so tests can exercise the real parser (#1087).
+SpoolInfo helix::spoolman_detail::parse_spool_info(const nlohmann::json& spool_json) {
     SpoolInfo info;
 
-    info.id = spool_json.value("id", 0);
+    info.id = safe_int(spool_json, "id", 0);
     info.remaining_weight_g = safe_double(spool_json, "remaining_weight");
     info.initial_weight_g = safe_double(spool_json, "initial_weight");
     info.spool_weight_g = safe_double(spool_json, "spool_weight");
@@ -33,6 +38,7 @@ static SpoolInfo parse_spool_info(const nlohmann::json& spool_json) {
     info.comment = safe_string(spool_json, "comment");
     info.location = safe_string(spool_json, "location");
     info.last_used = safe_string(spool_json, "last_used");
+    info.registered = safe_string(spool_json, "registered");
 
     // used_weight for fallback initial weight calculation
     double used_weight_g = safe_double(spool_json, "used_weight");
@@ -45,15 +51,17 @@ static SpoolInfo parse_spool_info(const nlohmann::json& spool_json) {
     if (spool_json.contains("filament") && spool_json["filament"].is_object()) {
         const auto& filament = spool_json["filament"];
 
-        info.filament_id = filament.value("id", 0);
+        info.filament_id = safe_int(filament, "id", 0);
         info.material = safe_string(filament, "material");
         info.color_name = safe_string(filament, "name");
         info.color_hex = safe_string(filament, "color_hex");
         info.multi_color_hexes = safe_string(filament, "multi_color_hexes");
 
-        // Temperature settings
-        info.nozzle_temp_recommended = filament.value("settings_extruder_temp", 0);
-        info.bed_temp_recommended = filament.value("settings_bed_temp", 0);
+        // Temperature settings. Spoolman serializes these optional fields as
+        // present-but-null, so a raw .value() would throw type_error.302 on the
+        // whole list; safe_int null-guards each read.
+        info.nozzle_temp_recommended = safe_int(filament, "settings_extruder_temp", 0);
+        info.bed_temp_recommended = safe_int(filament, "settings_bed_temp", 0);
 
         // Fallback: use filament definition weight when spool initial_weight is null/0.
         // Spoolman's initial_weight is optional; filament.weight is the canonical
@@ -65,7 +73,7 @@ static SpoolInfo parse_spool_info(const nlohmann::json& spool_json) {
         // Nested vendor
         if (filament.contains("vendor") && filament["vendor"].is_object()) {
             info.vendor = safe_string(filament["vendor"], "name");
-            info.vendor_id = filament["vendor"].value("id", 0);
+            info.vendor_id = safe_int(filament["vendor"], "id", 0);
         }
     }
 
@@ -79,7 +87,7 @@ static SpoolInfo parse_spool_info(const nlohmann::json& spool_json) {
 
 static VendorInfo parse_vendor_info(const nlohmann::json& vendor_json) {
     VendorInfo info;
-    info.id = vendor_json.value("id", 0);
+    info.id = safe_int(vendor_json, "id", 0);
     info.name = safe_string(vendor_json, "name");
     info.url = safe_string(vendor_json, "url");
     return info;
@@ -105,7 +113,7 @@ static FilamentInfo parse_filament_info(const nlohmann::json& filament_json) {
 
     // Nested vendor object (may override vendor_id, adds vendor_name)
     if (filament_json.contains("vendor") && filament_json["vendor"].is_object()) {
-        info.vendor_id = filament_json["vendor"].value("id", info.vendor_id);
+        info.vendor_id = safe_int(filament_json["vendor"], "id", info.vendor_id);
         info.vendor_name = safe_string(filament_json["vendor"], "name");
     }
 
@@ -163,7 +171,14 @@ void MoonrakerSpoolmanAPI::get_spoolman_spools(SpoolListCallback on_success,
             // The proxy returns the Spoolman response in "result"
             if (response.contains("result") && response["result"].is_array()) {
                 for (const auto& spool_json : response["result"]) {
-                    spools.push_back(parse_spool_info(spool_json));
+                    // Parse each spool independently: a single malformed entry
+                    // must not abort the whole list (a null numeric field once
+                    // threw type_error and left the picker stuck loading, #1087).
+                    try {
+                        spools.push_back(parse_spool_info(spool_json));
+                    } catch (const std::exception& e) {
+                        spdlog::warn("[SpoolmanAPI] Skipping unparseable spool: {}", e.what());
+                    }
                 }
             }
 

@@ -13,7 +13,8 @@ namespace helix::label {
 
 std::vector<uint8_t> niimbot_build_packet(NiimbotCmd cmd, const uint8_t* data, size_t len) {
     // Niimbot protocol length field is a single byte
-    if (len > 255) return {};
+    if (len > 255)
+        return {};
 
     // Packet: [0x55 0x55 CMD LEN DATA... CHECKSUM 0xAA 0xAA]
     std::vector<uint8_t> pkt;
@@ -54,9 +55,8 @@ static int count_black_pixels(const uint8_t* data, size_t len) {
 
 /// Build a PrintBitmapRow (0x85) packet for one image row.
 /// Format: [ROW_H ROW_L COUNT1 COUNT2 COUNT3 REPEAT PIXEL_DATA...]
-static std::vector<uint8_t> build_bitmap_row(int row_num, const uint8_t* pixels,
-                                              int bytes_per_row, int printhead_pixels,
-                                              int repeat_count = 1) {
+static std::vector<uint8_t> build_bitmap_row(int row_num, const uint8_t* pixels, int bytes_per_row,
+                                             int printhead_pixels, int repeat_count = 1) {
     int chunk_size = printhead_pixels / 8 / 3;
     bool use_split = (bytes_per_row <= chunk_size * 3);
 
@@ -96,7 +96,7 @@ static std::vector<uint8_t> build_bitmap_row(int row_num, const uint8_t* pixels,
 }
 
 NiimbotPrintJob niimbot_build_print_job(const LabelBitmap& bitmap, const LabelSize& size,
-                                         uint8_t density, NiimbotLabelType label_type) {
+                                        uint8_t density, NiimbotLabelType label_type) {
     NiimbotPrintJob job;
     density = std::clamp(density, uint8_t(1), uint8_t(5));
 
@@ -117,8 +117,8 @@ NiimbotPrintJob niimbot_build_print_job(const LabelBitmap& bitmap, const LabelSi
     job.packets.push_back(niimbot_build_packet(NiimbotCmd::SetDensity, density));
 
     // 2. SetLabelType
-    job.packets.push_back(niimbot_build_packet(NiimbotCmd::SetLabelType,
-                                                static_cast<uint8_t>(label_type)));
+    job.packets.push_back(
+        niimbot_build_packet(NiimbotCmd::SetLabelType, static_cast<uint8_t>(label_type)));
 
     // 3. PrintStart
     job.packets.push_back(niimbot_build_packet(NiimbotCmd::PrintStart, uint8_t(0x01)));
@@ -182,18 +182,20 @@ NiimbotPrintJob niimbot_build_print_job(const LabelBitmap& bitmap, const LabelSi
                 const uint8_t* next = get_row(row + blank_count);
                 bool next_blank = true;
                 for (int i = 0; i < bytes_per_row; i++) {
-                    if (next[i] != 0) { next_blank = false; break; }
+                    if (next[i] != 0) {
+                        next_blank = false;
+                        break;
+                    }
                 }
-                if (!next_blank) break;
+                if (!next_blank)
+                    break;
                 blank_count++;
             }
 
             // PrintEmptyRow: [row_hi, row_lo, repeat]
-            uint8_t empty_data[3] = {
-                static_cast<uint8_t>((row >> 8) & 0xFF),
-                static_cast<uint8_t>(row & 0xFF),
-                static_cast<uint8_t>(blank_count)
-            };
+            uint8_t empty_data[3] = {static_cast<uint8_t>((row >> 8) & 0xFF),
+                                     static_cast<uint8_t>(row & 0xFF),
+                                     static_cast<uint8_t>(blank_count)};
             job.packets.push_back(niimbot_build_packet(NiimbotCmd::PrintEmptyRow, empty_data, 3));
             row += blank_count;
         } else {
@@ -204,12 +206,13 @@ NiimbotPrintJob niimbot_build_print_job(const LabelBitmap& bitmap, const LabelSi
             int repeat = 1;
             while (row + repeat < height_px && repeat < 255) {
                 const uint8_t* next = get_row(row + repeat);
-                if (memcmp(current_row.data(), next, bytes_per_row) != 0) break;
+                if (memcmp(current_row.data(), next, bytes_per_row) != 0)
+                    break;
                 repeat++;
             }
 
-            auto payload = build_bitmap_row(row, current_row.data(), bytes_per_row,
-                                             printhead_pixels, repeat);
+            auto payload =
+                build_bitmap_row(row, current_row.data(), bytes_per_row, printhead_pixels, repeat);
             job.packets.push_back(niimbot_build_packet(NiimbotCmd::PrintBitmapRow, payload));
             row += repeat;
         }
@@ -231,16 +234,11 @@ std::vector<LabelSize> niimbot_b21_sizes() {
     // B21/B1/B3S/B18: shared 384px (48mm) wide printhead, 203 DPI.
     // ~7.68 dots/mm convention matches existing 50x30 → 384x231 entry.
     return {
-        {"50x30mm", 384, 231, 203, 0x01, 50, 30},
-        {"40x30mm", 307, 231, 203, 0x01, 40, 30},
-        {"30x20mm", 231, 154, 203, 0x01, 30, 20},
-        {"30x40mm", 231, 307, 203, 0x01, 30, 40},
-        {"40x40mm", 307, 307, 203, 0x01, 40, 40},
-        {"50x50mm", 384, 384, 203, 0x01, 50, 50},
-        {"40x20mm", 307, 154, 203, 0x01, 40, 20},
-        {"25x30mm", 192, 231, 203, 0x01, 25, 30},
-        {"14x40mm", 108, 307, 203, 0x01, 14, 40},
-        {"14x60mm", 108, 461, 203, 0x01, 14, 60},
+        {"50x30mm", 384, 231, 203, 0x01, 50, 30}, {"40x30mm", 307, 231, 203, 0x01, 40, 30},
+        {"30x20mm", 231, 154, 203, 0x01, 30, 20}, {"30x40mm", 231, 307, 203, 0x01, 30, 40},
+        {"40x40mm", 307, 307, 203, 0x01, 40, 40}, {"50x50mm", 384, 384, 203, 0x01, 50, 50},
+        {"40x20mm", 307, 154, 203, 0x01, 40, 20}, {"25x30mm", 192, 231, 203, 0x01, 25, 30},
+        {"14x40mm", 108, 307, 203, 0x01, 14, 40}, {"14x60mm", 108, 461, 203, 0x01, 14, 60},
         {"50x80mm", 384, 615, 203, 0x01, 50, 80},
     };
 }
@@ -250,12 +248,9 @@ std::vector<LabelSize> niimbot_d11_sizes() {
     // All labels are 12mm wide; common lengths vary by label stock
     // 12x40mm is the default stock that ships with the printer
     return {
-        {"12x40mm", 96, 307, 203, 0x01, 12, 40},
-        {"12x22mm", 96, 169, 203, 0x01, 12, 22},
-        {"12x30mm", 96, 231, 203, 0x01, 12, 30},
-        {"12x50mm", 96, 384, 203, 0x01, 12, 50},
-        {"12x60mm", 96, 461, 203, 0x01, 12, 60},
-        {"12x70mm", 96, 538, 203, 0x01, 12, 70},
+        {"12x40mm", 96, 307, 203, 0x01, 12, 40}, {"12x22mm", 96, 169, 203, 0x01, 12, 22},
+        {"12x30mm", 96, 231, 203, 0x01, 12, 30}, {"12x50mm", 96, 384, 203, 0x01, 12, 50},
+        {"12x60mm", 96, 461, 203, 0x01, 12, 60}, {"12x70mm", 96, 538, 203, 0x01, 12, 70},
     };
 }
 
@@ -268,6 +263,6 @@ std::vector<LabelSize> niimbot_sizes_for_model(const std::string& device_name) {
     return niimbot_b21_sizes();
 }
 
-}  // namespace helix::label
+} // namespace helix::label
 
 #endif // HELIX_HAS_LABEL_PRINTER

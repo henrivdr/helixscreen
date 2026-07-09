@@ -5,14 +5,18 @@
 
 #include "ui_callback_helpers.h"
 #include "ui_emergency_stop.h"
+#include "ui_event_safety.h"
 #include "ui_frequency_response_chart.h"
 #include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
+#include "config.h"
 #include "format_utils.h"
+#include "host_identity.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "memory_utils.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "platform_capabilities.h"
@@ -478,6 +482,14 @@ void InputShaperPanel::on_deactivate() {
         set_state(State::IDLE);
     }
 
+    // Dismiss the low-RAM warning modal if still open. The panel is a persistent
+    // singleton, so hiding it while the modal is open would otherwise leak an
+    // orphaned warning modal whose callbacks capture this panel.
+    if (low_ram_warn_dialog_) {
+        helix::ui::modal_hide(low_ram_warn_dialog_);
+        low_ram_warn_dialog_ = nullptr;
+    }
+
     // Call base class
     OverlayBase::on_deactivate();
 }
@@ -552,6 +564,49 @@ void InputShaperPanel::start_with_preflight(char axis) {
         return;
     }
 
+    auto mem = helix::get_system_memory_info();
+    if (mem.total_mb() < helix::RESONANCE_LOW_RAM_WARN_MB) {
+        // Re-entry guard: a second entry while the warning modal is open is a no-op.
+        if (low_ram_warn_dialog_)
+            return;
+        pending_calib_axis_ = axis;
+        low_ram_warn_dialog_ = helix::ui::show_low_ram_resonance_warning(
+            mem.total_mb(),
+            [](lv_event_t* e) {
+                LVGL_SAFE_EVENT_CB_BEGIN("[InputShaper] low_ram_confirm");
+                auto* self = static_cast<InputShaperPanel*>(lv_event_get_user_data(e));
+                if (!self)
+                    return;
+                if (self->low_ram_warn_dialog_) {
+                    helix::ui::modal_hide(self->low_ram_warn_dialog_);
+                    self->low_ram_warn_dialog_ = nullptr;
+                }
+                self->proceed_with_preflight(self->pending_calib_axis_);
+                LVGL_SAFE_EVENT_CB_END();
+            },
+            [](lv_event_t* e) {
+                LVGL_SAFE_EVENT_CB_BEGIN("[InputShaper] low_ram_cancel");
+                auto* self = static_cast<InputShaperPanel*>(lv_event_get_user_data(e));
+                if (!self)
+                    return;
+                if (self->low_ram_warn_dialog_) {
+                    helix::ui::modal_hide(self->low_ram_warn_dialog_);
+                    self->low_ram_warn_dialog_ = nullptr;
+                }
+                self->calibrate_all_mode_ = false; // user backed out before anything started
+                LVGL_SAFE_EVENT_CB_END();
+            },
+            this);
+        if (!low_ram_warn_dialog_) {
+            // Modal failed to build — don't silently block calibration.
+            proceed_with_preflight(axis);
+        }
+        return;
+    }
+    proceed_with_preflight(axis);
+}
+
+void InputShaperPanel::proceed_with_preflight(char axis) {
     current_axis_ = axis;
     last_calibrated_axis_ = axis;
     recommended_type_.clear();
@@ -806,8 +861,7 @@ void InputShaperPanel::apply_recommendation() {
                         apply_y_after_x();
                     } else {
                         ToastManager::instance().show(
-                            ToastSeverity::SUCCESS,
-                            lv_tr("Input shaper settings applied!"), 2500);
+                            ToastSeverity::SUCCESS, lv_tr("Input shaper settings applied!"), 2500);
                     }
                 });
             },
@@ -939,6 +993,30 @@ void InputShaperPanel::on_calibration_result(const InputShaperResult& result) {
 
     spdlog::info("[InputShaper] Calibration complete: {} @ {:.1f} Hz (vib: {:.1f}%)",
                  result.shaper_type, result.shaper_freq, result.vibrations);
+
+    // Surface a non-blocking warning when the recommendation succeeded but the
+    // frequency-response chart data couldn't be read (e.g. Klipper's /tmp CSV
+    // unreadable). Without this the chart just silently disappears.
+    if (result.chart_data_unavailable) {
+        // The chart needs Klipper's /tmp CSV, which is only readable when
+        // HelixScreen runs on the printer host. If Moonraker is remote, say so;
+        // otherwise it's a transient/local read issue.
+        std::string host;
+        if (Config* cfg = Config::get_instance()) {
+            host = cfg->get<std::string>(cfg->df() + "moonraker_host", "localhost");
+        }
+        const bool same_host = helix::is_moonraker_on_same_host(host);
+        spdlog::warn("[InputShaper] {} axis: calibration CSV unreadable, chart unavailable "
+                     "(same_host={})",
+                     result.axis, same_host);
+        ToastManager::instance().show(
+            ToastSeverity::WARNING,
+            same_host
+                ? lv_tr("Calibration succeeded, but the frequency chart data couldn't be read.")
+                : lv_tr("Calibration succeeded. The frequency chart is only available when "
+                        "HelixScreen runs on the printer."),
+            5000);
+    }
 
     // If Calibrate All and this was X, store result and continue to Y
     if (calibrate_all_mode_ && result.axis == 'X') {

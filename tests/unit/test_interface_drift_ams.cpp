@@ -3,8 +3,9 @@
 //
 // Compile-only drift protection for AmsBackend.
 
-#include "../catch_amalgamated.hpp"
 #include "ams_backend.h"
+
+#include "../catch_amalgamated.hpp"
 
 #ifdef HELIX_ENABLE_MOCKS
 #include "ams_backend_mock.h"

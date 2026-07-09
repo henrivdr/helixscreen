@@ -104,6 +104,16 @@ platform_wait_for_services() {
 platform_pre_start() {
     export HELIX_CACHE_DIR="/opt/helixscreen/cache"
 
+    # Let the COSMOS gui-switcher actually stop HelixScreen. The stock resonance
+    # macro (_CALIBRATE_ALL_STEP_2) runs GUI_STOP -> `gui-switcher stop` before
+    # SHAPER_CALIBRATE to free RAM/CPU on this 128 MB box — without it, klippy
+    # swap-thrashes during the accelerometer FFT and throws "Timer Too Close".
+    # gui-switcher stops the GUI via `start-stop-daemon -K -p /var/run/gui.pid`,
+    # so helix-watchdog advertises its own PID there (it is the process that
+    # supervises the whole launcher->watchdog->helix-screen tree and can reap it
+    # on SIGTERM). Opt-in via this env var so only CC1/COSMOS is affected.
+    export HELIX_GUI_PIDFILE="/var/run/gui.pid"
+
     # Repair any sibling gui-switcher wrapper a COSMOS upgrade clobbered in the
     # /etc overlay, so the next boot still hands the framebuffer to HelixScreen.
     # Runs before the UI launches; idempotent and CC1-guarded internally.

@@ -34,18 +34,18 @@ class BeltTensionCalibrator {
   public:
     /// State machine states
     enum class State {
-        IDLE,                ///< Ready to start, no measurement in progress
-        DETECTING_HARDWARE,  ///< Querying printer for capabilities
-        CHECKING_ADXL,       ///< Verifying accelerometer connectivity
-        HOMING,              ///< Homing printer axes
-        TESTING_PATH_A,      ///< Running resonance sweep on path A
-        TESTING_PATH_B,      ///< Running resonance sweep on path B
-        RESULTS_READY,       ///< Both paths measured, results available
-        STROBE_MODE,         ///< PWM LED strobing at belt frequency
-        Z_BELT_GUIDE,        ///< Showing Z belt measurement instructions
-        Z_LISTENING,         ///< Listening for Z belt pluck
-        Z_RESULTS_READY,     ///< Z belt measurements complete
-        ERROR,               ///< An error occurred
+        IDLE,               ///< Ready to start, no measurement in progress
+        DETECTING_HARDWARE, ///< Querying printer for capabilities
+        CHECKING_ADXL,      ///< Verifying accelerometer connectivity
+        HOMING,             ///< Homing printer axes
+        TESTING_PATH_A,     ///< Running resonance sweep on path A
+        TESTING_PATH_B,     ///< Running resonance sweep on path B
+        RESULTS_READY,      ///< Both paths measured, results available
+        STROBE_MODE,        ///< PWM LED strobing at belt frequency
+        Z_BELT_GUIDE,       ///< Showing Z belt measurement instructions
+        Z_LISTENING,        ///< Listening for Z belt pluck
+        Z_RESULTS_READY,    ///< Z belt measurements complete
+        ERROR,              ///< An error occurred
     };
 
     /**
@@ -74,9 +74,15 @@ class BeltTensionCalibrator {
     // State Queries
     // ========================================================================
 
-    [[nodiscard]] State get_state() const { return state_.load(); }
-    [[nodiscard]] const BeltTensionResult& get_results() const { return results_; }
-    [[nodiscard]] const BeltTensionHardware& get_hardware() const { return hardware_; }
+    [[nodiscard]] State get_state() const {
+        return state_.load();
+    }
+    [[nodiscard]] const BeltTensionResult& get_results() const {
+        return results_;
+    }
+    [[nodiscard]] const BeltTensionHardware& get_hardware() const {
+        return hardware_;
+    }
 
     // ========================================================================
     // Hardware Detection
@@ -117,8 +123,8 @@ class BeltTensionCalibrator {
      * @param on_complete Called with measurement result
      * @param on_error Called with error message on failure
      */
-    void test_path(BeltPath path, BeltProgressCallback on_progress, BeltMeasurementCallback on_complete,
-                   BeltErrorCallback on_error);
+    void test_path(BeltPath path, BeltProgressCallback on_progress,
+                   BeltMeasurementCallback on_complete, BeltErrorCallback on_error);
 
     // ========================================================================
     // Strobe Mode
@@ -164,8 +170,12 @@ class BeltTensionCalibrator {
     // Configuration
     // ========================================================================
 
-    void set_target_frequency(float hz) { results_.target_frequency = hz; }
-    void set_tolerance(float hz) { results_.tolerance = hz; }
+    void set_target_frequency(float hz) {
+        results_.target_frequency = hz;
+    }
+    void set_tolerance(float hz) {
+        results_.tolerance = hz;
+    }
 
   private:
     /// Must be called from main thread (reads lv_subject)
@@ -187,4 +197,4 @@ class BeltTensionCalibrator {
     helix::AsyncLifetimeGuard lifetime_;
 };
 
-}  // namespace helix::calibration
+} // namespace helix::calibration

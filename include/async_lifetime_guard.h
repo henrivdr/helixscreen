@@ -284,16 +284,14 @@ class AsyncLifetimeGuard {
      * @param tag  String literal identifying the caller (crash diagnostics)
      * @param fn   The callback body — runs on main thread inside the defer
      */
-    template <typename F>
-    auto bg_cb(const char* tag, F&& fn) {
+    template <typename F> auto bg_cb(const char* tag, F&& fn) {
         auto gen = gen_;
         auto snapshot = gen_->load(std::memory_order_acquire);
-        return [gen, snapshot, tag,
-                fn = std::forward<F>(fn)](auto&&... args) mutable {
+        return [gen, snapshot, tag, fn = std::forward<F>(fn)](auto&&... args) mutable {
             // Decay args into a value-tuple so the deferred body can't observe
             // references that died with the bg-thread stack frame.
-            auto args_tuple =
-                std::make_tuple(std::decay_t<decltype(args)>(std::forward<decltype(args)>(args))...);
+            auto args_tuple = std::make_tuple(
+                std::decay_t<decltype(args)>(std::forward<decltype(args)>(args))...);
             helix::ui::queue_update(
                 tag, [gen, snapshot, tag, fn, t = std::move(args_tuple)]() mutable {
                     if (gen->load(std::memory_order_acquire) != snapshot) {
@@ -301,11 +299,8 @@ class AsyncLifetimeGuard {
                                       tag ? tag : "unknown");
                         return;
                     }
-                    std::apply(
-                        [&fn](auto&&... a) {
-                            fn(std::forward<decltype(a)>(a)...);
-                        },
-                        std::move(t));
+                    std::apply([&fn](auto&&... a) { fn(std::forward<decltype(a)>(a)...); },
+                               std::move(t));
                 });
         };
     }

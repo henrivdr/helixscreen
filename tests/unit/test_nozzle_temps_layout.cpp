@@ -77,8 +77,7 @@ TEST_CASE("Single column too narrow for long label uses short label", "[nozzle][
     REQUIRE(d.use_long_label == false);
 }
 
-TEST_CASE("Degenerate zero width returns safe single-column long default",
-          "[nozzle][layout]") {
+TEST_CASE("Degenerate zero width returns safe single-column long default", "[nozzle][layout]") {
     NozzleLayoutDecision d = decide_nozzle_layout(/*avail_px=*/0, /*gap_px=*/12,
                                                   /*long_row_px=*/150, /*short_row_px=*/90,
                                                   /*row_count=*/4);

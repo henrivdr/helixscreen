@@ -41,10 +41,10 @@ std::string read_trimmed_line(const std::string& path) {
     }
     std::string line;
     std::getline(file, line);
-    line.erase(std::find_if(line.rbegin(), line.rend(),
-                            [](unsigned char ch) { return !std::isspace(ch); })
-                   .base(),
-               line.end());
+    line.erase(
+        std::find_if(line.rbegin(), line.rend(), [](unsigned char ch) { return !std::isspace(ch); })
+            .base(),
+        line.end());
     return line;
 }
 

@@ -90,11 +90,11 @@ Most commonly needed:
 
 | Category | ❌ WRONG | ✅ CORRECT |
 |----------|----------|-----------|
-| **Colors** | `lv_color_hex(0xE0E0E0)` | `ui_theme_get_color("card_bg")` |
+| **Colors** | `lv_color_hex(0xE0E0E0)` | `theme_manager_get_color("card_bg")` |
 | **Spacing** | `style_pad_all="12"` | `style_pad_all="#space_md"` |
 | **Typography** | `<lv_label style_text_font="...">` | `<text_heading>`, `<text_body>`, `<text_small>` |
 
-Note: `ui_theme_get_color()` for tokens, `ui_theme_parse_color()` for hex strings only (NOT tokens).
+Note: `theme_manager_get_color()` for tokens, `theme_manager_parse_hex_color()` for hex strings only (NOT tokens).
 
 ---
 

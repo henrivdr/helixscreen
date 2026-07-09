@@ -278,6 +278,14 @@ class GCodeGLESRenderer {
     void blit_to_lvgl(lv_layer_t* layer, const lv_area_t* widget_coords);
     void draw_cached_to_lvgl(lv_layer_t* layer, const lv_area_t* widget_coords);
 
+    /// Crash-loop breaker (Layer 2). arm_gpu_guard() writes a persistent guard
+    /// file immediately before the first real GPU draw; clear_gpu_guard()
+    /// removes it after the first successful frame. If the process dies inside
+    /// the driver mid-draw the file survives, and the next startup promotes it
+    /// to a persistent /display/gpu_3d_blocked. Each is a one-shot per session.
+    void arm_gpu_guard();
+    void clear_gpu_guard();
+
     /// Build the model-view-projection matrix the GLES geometry pass applies:
     /// -90° model rotation about Z plus the optional vertical content offset.
     /// Shared by render_to_fbo, render_brackets_3d, and pick_object so they
@@ -302,7 +310,7 @@ class GCodeGLESRenderer {
         int layer_start = -2;
         int layer_end = -2;
         size_t highlight_count = 0;
-        size_t highlight_set_hash = 0;  // distinguishes different single-object selections
+        size_t highlight_set_hash = 0; // distinguishes different single-object selections
         size_t exclude_count = 0;
         glm::vec4 filament_color{-1.0f};
         uint8_t ghost_opacity = 0;
@@ -329,6 +337,11 @@ class GCodeGLESRenderer {
     bool gl_initialized_ = false;
     bool gl_init_failed_ = false;   // Prevents repeated init attempts
     bool gl_render_failed_ = false; // Set on a fatal GL draw error; sticky for the session
+
+    // ====== GPU crash fallback (issues #966 / #1084 / #1085) ======
+    bool gpu_checked_ = false;       // GL_RENDERER denylist evaluated once per session
+    bool gpu_guard_armed_ = false;   // Crash-loop guard file written before first GPU draw
+    bool gpu_guard_cleared_ = false; // Guard file removed after first successful frame
 
     // ====== Shader State ======
 
@@ -403,7 +416,7 @@ class GCodeGLESRenderer {
     int layer_end_ = -1;
     std::string highlighted_object_;
     std::unordered_set<std::string> highlighted_objects_;
-    size_t highlighted_objects_hash_ = 0;  // recomputed in set_highlighted_objects
+    size_t highlighted_objects_hash_ = 0; // recomputed in set_highlighted_objects
     std::unordered_set<std::string> excluded_objects_;
     lv_opa_t global_opacity_ = LV_OPA_COVER;
 

@@ -1,0 +1,1 @@
+{"type":"filament","name":"fdm_filament_pc","instantiation":"false","filament_type":["PC"],"filament_vendor":["Generic"],"nozzle_temperature":["280"],"nozzle_temperature_range_low":["260"],"nozzle_temperature_range_high":["290"],"hot_plate_temp":["100"]}

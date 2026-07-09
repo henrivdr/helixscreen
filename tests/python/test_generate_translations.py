@@ -627,6 +627,7 @@ class TestIntegration:
             yaml_dir=yaml_dir,
             xml_output_dir=xml_dir,
             c_output_dir=c_dir,
+            emit_lv_i18n=True,  # opt in: asserts the legacy lv_i18n C/H artifacts
         )
 
         # Verify
@@ -794,6 +795,7 @@ class TestLanguageWhitelist:
             xml_output_dir=tmp_path / "xml",
             c_output_dir=c_dir,
             languages=["en", "de"],
+            emit_lv_i18n=True,  # whitelist asserted via the lv_i18n C table
         )
 
         assert result.success
@@ -830,6 +832,7 @@ class TestLanguageWhitelist:
             xml_output_dir=tmp_path / "xml",
             c_output_dir=c_dir,
             languages=["de"],  # omits base_locale="en"
+            emit_lv_i18n=True,  # whitelist asserted via the lv_i18n C table
         )
 
         assert result.success
@@ -856,6 +859,7 @@ class TestLanguageWhitelist:
             yaml_dir=yaml_dir,
             xml_output_dir=tmp_path / "xml",
             c_output_dir=c_dir,
+            emit_lv_i18n=True,  # whitelist asserted via the lv_i18n C table
         )
 
         assert result.success

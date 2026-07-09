@@ -1,0 +1,8 @@
+{
+  "type": "filament", "name": "Polymaker ABS Pro @base", "instantiation": "false",
+  "inherits": "fdm_filament_abs", "filament_id": "OGFPMABSPRO",
+  "filament_vendor": ["Polymaker"], "filament_density": ["1.06"],
+  "nozzle_temperature": ["280"], "nozzle_temperature_range_low": ["270"],
+  "nozzle_temperature_range_high": ["290"],
+  "hot_plate_temp": ["105"], "textured_plate_temp": ["105"]
+}

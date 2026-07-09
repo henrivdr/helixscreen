@@ -12,11 +12,11 @@
 #include "ui_nav_manager.h"
 #include "ui_toast_manager.h"
 
+#include "border_radius_sizes.h"
 #include "display_settings_manager.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "settings_manager.h"
-#include "border_radius_sizes.h"
 #include "theme_loader.h"
 #include "theme_manager.h"
 
@@ -269,9 +269,11 @@ void ThemeEditorOverlay::update_property_sliders() {
     lv_obj_t* radius_row = lv_obj_find_by_name(overlay_root_, "row_border_radius");
     lv_obj_t* radius_slider = radius_row ? lv_obj_find_by_name(radius_row, "slider") : nullptr;
     if (radius_slider) {
-        lv_slider_set_value(radius_slider, editing_theme_.properties.border_radius_size, LV_ANIM_OFF);
-        update_slider_value_label("row_border_radius",
-                                  lv_tr(helix::BorderRadiusSizes::name(editing_theme_.properties.border_radius_size)));
+        lv_slider_set_value(radius_slider, editing_theme_.properties.border_radius_size,
+                            LV_ANIM_OFF);
+        update_slider_value_label(
+            "row_border_radius",
+            lv_tr(helix::BorderRadiusSizes::name(editing_theme_.properties.border_radius_size)));
     }
 
     // Update border width slider
@@ -318,7 +320,8 @@ void ThemeEditorOverlay::update_slider_value_label(const char* row_name, int val
 }
 
 void ThemeEditorOverlay::update_slider_value_label(const char* row_name, const char* text) {
-    if (!overlay_root_) return;
+    if (!overlay_root_)
+        return;
     lv_obj_t* row = lv_obj_find_by_name(overlay_root_, row_name);
     lv_obj_t* label = row ? lv_obj_find_by_name(row, "value_label") : nullptr;
     if (label) {
@@ -532,8 +535,7 @@ void ThemeEditorOverlay::handle_border_radius_changed(int value) {
     editing_theme_.properties.border_radius_size = clamped;
     mark_dirty();
     theme_manager_preview(editing_theme_);
-    update_slider_value_label("row_border_radius",
-                              lv_tr(helix::BorderRadiusSizes::name(clamped)));
+    update_slider_value_label("row_border_radius", lv_tr(helix::BorderRadiusSizes::name(clamped)));
     spdlog::debug("[{}] Border radius size changed to {} ({})", get_name(), clamped,
                   helix::BorderRadiusSizes::name(clamped));
 }
@@ -997,7 +999,7 @@ std::string ThemeEditorOverlay::sanitize_filename(const std::string& name) {
 
 std::string ThemeEditorOverlay::generate_unique_filename(const std::string& base_name,
                                                          const std::string& themes_dir) {
-    struct stat st{};
+    struct stat st {};
 
     // Check if base name is available
     std::string candidate = base_name;

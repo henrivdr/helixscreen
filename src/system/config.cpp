@@ -87,8 +87,9 @@ json get_default_printer_config(const std::string& moonraker_host) {
 /// Default display configuration section
 /// Used for both new configs and ensuring display section exists with defaults
 json get_default_display_config() {
-    return {{"sleep_sec", 1200}, {"dim_sec", 600},         {"dim_brightness", 30},
-            {"drm_device", ""},  {"gcode_render_mode", 0}, {"bed_mesh_render_mode", 0}};
+    return {{"sleep_sec", 1200},      {"dim_sec", 600},         {"dim_brightness", 30},
+            {"drm_device", ""},       {"gcode_render_mode", 0}, {"bed_mesh_render_mode", 0},
+            {"gpu_3d_blocked", false}};
 }
 
 /// Migrate legacy display settings from root level to /display/ section
@@ -796,6 +797,29 @@ static void migrate_v17_to_v18(json& config) {
                  "(recheck_pending=true)");
 }
 
+/// Phase 2 offline filament picker (Task 6): /preset_materials grows from a 4-string
+/// array to a 4-object array so branded filament info (id/brand/name/temps) can be
+/// attached to each quick-material preset slot. Idempotent: elements already objects
+/// are left untouched, so re-running against an already-migrated config never clobbers
+/// branding.
+static void migrate_v18_to_v19(json& config) {
+    if (!config.contains("preset_materials") || !config["preset_materials"].is_array()) {
+        return;
+    }
+    json& arr = config["preset_materials"];
+    int converted = 0;
+    for (auto& el : arr) {
+        if (el.is_string()) {
+            json obj = json::object();
+            obj["type"] = el.get<std::string>();
+            el = obj;
+            ++converted;
+        }
+    }
+    spdlog::info("[Config] Migration v19: preset_materials strings -> objects ({} converted)",
+                 converted);
+}
+
 /// Run all versioned migrations in sequence from current version to CURRENT_CONFIG_VERSION
 static void run_versioned_migrations(json& config, const std::string& config_path = "") {
     int version = 0;
@@ -839,6 +863,8 @@ static void run_versioned_migrations(json& config, const std::string& config_pat
         migrate_v16_to_v17(config);
     if (version < 18)
         migrate_v17_to_v18(config);
+    if (version < 19)
+        migrate_v18_to_v19(config);
 
     config["config_version"] = CURRENT_CONFIG_VERSION;
 }

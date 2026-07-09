@@ -55,22 +55,21 @@ void GCodeObjectThumbnailRenderer::render_async(const ParsedGCodeFile* gcode, in
     // Using std::move would leave callback empty if the std::thread ctor
     // throws after the lambda is constructed but before the worker runs.
     try {
-        thread_ = std::thread(
-            [this, gcode, thumb_width, thumb_height, color, cb = callback]() {
-                auto result = render_impl(gcode, thumb_width, thumb_height, color);
+        thread_ = std::thread([this, gcode, thumb_width, thumb_height, color, cb = callback]() {
+            auto result = render_impl(gcode, thumb_width, thumb_height, color);
 
-                rendering_.store(false, std::memory_order_relaxed);
+            rendering_.store(false, std::memory_order_relaxed);
 
-                if (!cancel_.load(std::memory_order_relaxed) && cb) {
-                    // Marshal result to UI thread. Use shared_ptr for lambda capture so the
-                    // ObjectThumbnailSet is freed even if the UI queue is drained on shutdown
-                    // before this lambda runs (std::function requires copyable lambdas).
-                    auto shared = std::shared_ptr<ObjectThumbnailSet>(result.release());
-                    helix::ui::queue_update([cb, shared]() {
-                        cb(std::make_unique<ObjectThumbnailSet>(std::move(*shared)));
-                    });
-                }
-            });
+            if (!cancel_.load(std::memory_order_relaxed) && cb) {
+                // Marshal result to UI thread. Use shared_ptr for lambda capture so the
+                // ObjectThumbnailSet is freed even if the UI queue is drained on shutdown
+                // before this lambda runs (std::function requires copyable lambdas).
+                auto shared = std::shared_ptr<ObjectThumbnailSet>(result.release());
+                helix::ui::queue_update([cb, shared]() {
+                    cb(std::make_unique<ObjectThumbnailSet>(std::move(*shared)));
+                });
+            }
+        });
     } catch (const std::system_error& e) {
         spdlog::error("[ObjectThumbnail] Failed to spawn render thread: {}", e.what());
         rendering_.store(false, std::memory_order_relaxed);

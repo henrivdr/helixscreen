@@ -4,6 +4,7 @@
 #include "ui_preflight_check_modal.h"
 
 #include "ui_icon.h"
+#include "ui_swatch.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -73,8 +74,7 @@ void PreflightCheckModal::on_show() {
     // None-strategy backends (single-extruder / no AMS) hide the button.
     bool remap_supported = false;
     if (auto* backend = AmsState::instance().get_backend()) {
-        remap_supported =
-            backend->get_remap_strategy() != AmsBackend::RemapStrategy::None;
+        remap_supported = backend->get_remap_strategy() != AmsBackend::RemapStrategy::None;
     }
     if (auto* remap_btn = find_widget("btn_tertiary")) {
         if (remap_supported) {
@@ -160,7 +160,8 @@ lv_obj_t* PreflightCheckModal::create_tool_row(lv_obj_t* list, const helix::Tool
 
     if (check.slot_present && seated && !seated->is_empty) {
         if (seated_swatch) {
-            lv_obj_set_style_bg_color(seated_swatch, lv_color_hex(seated->color_rgb), 0);
+            helix::ui::apply_swatch_color(seated_swatch, seated->color_rgb,
+                                          seated->multi_color_hexes);
             lv_obj_remove_flag(seated_swatch, LV_OBJ_FLAG_HIDDEN);
         }
     } else {
@@ -186,8 +187,7 @@ void PreflightCheckModal::on_hide() {
     // on every show. Deferred via async_call so we never delete `this`
     // mid-event. Mirrors SpaghettiDetectionModal::on_hide().
     auto* self = this;
-    helix::ui::async_call([](void* data) { delete static_cast<PreflightCheckModal*>(data); },
-                          self);
+    helix::ui::async_call([](void* data) { delete static_cast<PreflightCheckModal*>(data); }, self);
 }
 
 } // namespace helix::ui

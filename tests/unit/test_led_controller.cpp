@@ -97,8 +97,8 @@ TEST_CASE("LedController: generic [led] discovery defaults to white-only (fail-c
     // NOT advertise color before the configfile parse proves RGB pins. This closes the
     // window where a white-only chamber light shows a meaningless color picker.
     helix::PrinterDiscovery discovery;
-    nlohmann::json objects = nlohmann::json::array(
-        {"led chamber_light", "neopixel ring", "dotstar bar", "extruder"});
+    nlohmann::json objects =
+        nlohmann::json::array({"led chamber_light", "neopixel ring", "dotstar bar", "extruder"});
     discovery.parse_objects(objects);
 
     auto& ctrl = helix::led::LedController::instance();

@@ -27,6 +27,7 @@
 
 #include "backlight_backend.h"
 #include "config.h"
+#include "display/lv_display_private.h" // flush_cb access for the #1049 swap assertion
 #include "display_backend.h"
 #include "display_manager.h"
 #include "display_settings_manager.h"
@@ -119,6 +120,13 @@ class FakeBacklight : public BacklightBackend {
   private:
     bool m_available;
 };
+
+// Sentinel flush callback. The headless LVGLTestFixture display has a null
+// flush_cb, so to observe the #1049 flush swap (real → no-op → real) we install
+// this stable, identifiable callback first and compare against it.
+void test_sentinel_flush_cb(lv_display_t* disp, const lv_area_t* /*area*/, uint8_t* /*px*/) {
+    lv_display_flush_ready(disp);
+}
 
 } // namespace
 
@@ -326,8 +334,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
     // same path as the fbdev case. (The actual drmModeConnectorSetProperty DPMS
     // call lives in DisplayBackendDRM and can't run in CI without a DRM master.)
     DisplayManager mgr;
-    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true,
-                                                         DisplayBackendType::DRM);
+    auto backend =
+        std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true, DisplayBackendType::DRM);
     FakePowerOffBackend* raw = backend.get();
     DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
     DisplayManagerTestAccess::set_use_hardware_blank(mgr, false); // no backlight blank (CB1)
@@ -376,8 +384,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
     // VOP2 CRTC. With it, m_use_power_off MUST be false and enter_sleep MUST NOT
     // call power_off() — it turns the backlight off and uses the software overlay.
     DisplayManager mgr;
-    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true,
-                                                         DisplayBackendType::DRM);
+    auto backend =
+        std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true, DisplayBackendType::DRM);
     FakePowerOffBackend* raw_backend = backend.get();
     DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
     DisplayManagerTestAccess::set_backlight(mgr,
@@ -401,8 +409,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
     // Backlight-None device with a DPMS-capable backend: power-off is the only way
     // to cut the panel, so the gate must KEEP it enabled.
     DisplayManager mgr;
-    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true,
-                                                         DisplayBackendType::DRM);
+    auto backend =
+        std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true, DisplayBackendType::DRM);
     FakePowerOffBackend* raw_backend = backend.get();
     DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
     // Backlight present but NOT available (Backlight-None in production).
@@ -417,4 +425,112 @@ TEST_CASE_METHOD(LVGLTestFixture,
 
     REQUIRE(mgr.is_display_sleeping());
     REQUIRE(raw_backend->power_off_calls == 1); // power-off still used on no-backlight devices
+}
+
+// ============================================================================
+// #1049 regression — power-off must neutralize the flush so the next page-flip
+// can't re-assert DPMS-on and relight the panel ("HDMI5 doesn't sleep anymore;
+// comes back on at the home screen"). DRM DPMS-off is undone by the very next
+// LVGL commit; pausing the refresh timer is insufficient because any
+// invalidation resumes it. The fix swaps the flush callback for a no-op and
+// disables invalidation while powered off, restoring both on wake.
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "power-off sleep suppresses LVGL flush so no page-flip relights the panel",
+                 "[application][display][sleep][poweroff][drm][1049]") {
+    DisplayManager mgr;
+    auto backend =
+        std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true, DisplayBackendType::DRM);
+    FakePowerOffBackend* raw = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false);
+    DisplayManagerTestAccess::set_use_power_off(mgr, raw->supports_power_off());
+
+    // Give the manager a real display so the suppression acts on something. The
+    // LVGLTestFixture owns the default SDL display.
+    lv_display_t* disp = lv_display_get_default();
+    REQUIRE(disp != nullptr);
+    DisplayManagerTestAccess::set_display(mgr, disp);
+    lv_display_set_flush_cb(disp, test_sentinel_flush_cb); // stand in for the real page-flip
+    lv_display_flush_cb_t real_cb = disp->flush_cb;
+    REQUIRE(real_cb == test_sentinel_flush_cb);
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+
+    // Panel powered off AND rendering neutralized: the flush callback is swapped
+    // away from the real (page-flipping) one so no commit can relight the panel.
+    REQUIRE(mgr.is_display_sleeping());
+    REQUIRE(raw->power_off_calls == 1);
+    REQUIRE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    REQUIRE(disp->flush_cb != real_cb);
+
+    // Wake-side restore must re-enable rendering BEFORE power-on (so the post-wake
+    // lv_refr_now reaches the panel) and put the real flush callback back.
+    DisplayManagerTestAccess::restore_display_output(mgr);
+    REQUIRE_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    REQUIRE(disp->flush_cb == real_cb);
+    REQUIRE(raw->power_on_calls == 1);
+
+    // Clear the injected display so the manager dtor doesn't reason about a
+    // fixture-owned display (it only nulls the pointer, but keep state tidy).
+    DisplayManagerTestAccess::set_display(mgr, nullptr);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "software-overlay fallback keeps the flush live (overlay must render)",
+                 "[application][display][sleep][poweroff][1049]") {
+    // When the backend can't actually power off, enter_sleep paints a black
+    // software overlay instead — that overlay MUST still render, so the flush must
+    // NOT be suppressed. Suppressing it here would freeze a stale frame and the
+    // "sleep" would never visually take effect.
+    DisplayManager mgr;
+    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/false);
+    FakePowerOffBackend* raw = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false);
+    DisplayManagerTestAccess::set_use_power_off(mgr, raw->supports_power_off());
+
+    lv_display_t* disp = lv_display_get_default();
+    REQUIRE(disp != nullptr);
+    DisplayManagerTestAccess::set_display(mgr, disp);
+    lv_display_set_flush_cb(disp, test_sentinel_flush_cb);
+    lv_display_flush_cb_t real_cb = disp->flush_cb;
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+
+    REQUIRE(mgr.is_display_sleeping());
+    REQUIRE(raw->power_off_calls == 0); // capability gate: overlay path
+    REQUIRE_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr)); // overlay needs the flush
+    REQUIRE(disp->flush_cb == real_cb);                                // flush untouched
+
+    DisplayManagerTestAccess::restore_display_output(mgr);
+    REQUIRE(disp->flush_cb == real_cb);
+    DisplayManagerTestAccess::set_display(mgr, nullptr);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "hardware-blank path keeps the flush live (AD5M/Allwinner)",
+                 "[application][display][sleep][poweroff][1049]") {
+    // Hardware-blank devices blank the panel at the controller; LVGL keeps
+    // rendering normally. The flush must not be suppressed there.
+    DisplayManager mgr;
+    auto backend = std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true);
+    FakePowerOffBackend* raw = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, true);
+
+    lv_display_t* disp = lv_display_get_default();
+    DisplayManagerTestAccess::set_display(mgr, disp);
+    lv_display_set_flush_cb(disp, test_sentinel_flush_cb);
+    lv_display_flush_cb_t real_cb = disp->flush_cb;
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+
+    REQUIRE(raw->blank_calls == 1);
+    REQUIRE(raw->power_off_calls == 0);
+    REQUIRE_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    REQUIRE(disp->flush_cb == real_cb);
+
+    DisplayManagerTestAccess::restore_display_output(mgr);
+    DisplayManagerTestAccess::set_display(mgr, nullptr);
 }

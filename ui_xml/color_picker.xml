@@ -15,17 +15,9 @@
   <view name="color_picker"
         extends="ui_dialog" width="470" height="content" align="center" flex_flow="column" style_flex_main_place="start"
         style_pad_gap="0">
-    <!-- Header with title and close button -->
-    <lv_obj width="100%"
-            height="content" style_pad_left="#space_lg" style_pad_right="#space_md" style_pad_top="#space_lg"
-            style_pad_bottom="#space_sm" flex_flow="row" style_flex_main_place="space_between"
-            style_flex_cross_place="center" scrollable="false">
-      <text_heading text="Pick Color" translation_tag="Pick Color"/>
-      <!-- Close button -->
-      <ui_button name="btn_close" width="40" height="40" icon="close" variant="ghost" focusable="false">
-        <event_cb trigger="clicked" callback="color_picker_close_cb"/>
-      </ui_button>
-    </lv_obj>
+    <!-- Header: title + close. -->
+    <modal_header title="Pick Color" title_tag="Pick Color"
+                  hide_icon="true" hide_close="false" close_callback="color_picker_close_cb"/>
     <!-- Horizontal divider -->
     <divider_horizontal/>
 

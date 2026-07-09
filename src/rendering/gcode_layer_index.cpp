@@ -217,7 +217,8 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
     // would silently desync but isn't used in slicer output.
     float current_x = 0.0f;
     float current_y = 0.0f;
-    float current_seen_z = 0.0f; // Z position seen so far (vs current_z which only updates on layer transition)
+    float current_seen_z =
+        0.0f; // Z position seen so far (vs current_z which only updates on layer transition)
     // Running ;TYPE: section. Snapshotted into each new layer entry so the
     // streaming parser can be seeded — without it, segments in the prologue
     // (purge) get tagged Unknown and the bbox filter can't exclude them.
@@ -268,12 +269,11 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
             while (i < line_len && line[i] >= '0' && line[i] <= '9') {
                 ++i;
             }
-            if (i > 1 && (i == line_len || line[i] == ' ' || line[i] == '\t' ||
-                          line[i] == '\r' || line[i] == ';')) {
+            if (i > 1 && (i == line_len || line[i] == ' ' || line[i] == '\t' || line[i] == '\r' ||
+                          line[i] == ';')) {
                 try {
                     stats_.initial_tool_index = std::stoi(line.substr(1, i - 1));
-                    spdlog::debug("[LayerIndex] Initial tool: T{}",
-                                  stats_.initial_tool_index);
+                    spdlog::debug("[LayerIndex] Initial tool: T{}", stats_.initial_tool_index);
                 } catch (...) {
                     // Malformed T-line — leave as -1 and keep scanning
                 }
@@ -382,8 +382,9 @@ bool GCodeLayerIndex::build_from_file(const std::string& filepath) {
             if (extract_filament_color(line.c_str(), line.length(), color, palette)) {
                 stats_.filament_color = color;
                 stats_.filament_palette = std::move(palette);
-                spdlog::debug("[LayerIndex] Found filament palette in footer ({} entries, first={})",
-                              stats_.filament_palette.size(), color);
+                spdlog::debug(
+                    "[LayerIndex] Found filament palette in footer ({} entries, first={})",
+                    stats_.filament_palette.size(), color);
                 break;
             }
         }

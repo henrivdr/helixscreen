@@ -37,3 +37,19 @@ bool is_valid_port(const std::string& port_str);
  */
 std::string sanitize_port(const char* str);
 std::string sanitize_port(const std::string& str);
+
+/**
+ * @brief Resolve the Moonraker host to pre-fill in the setup wizard
+ *
+ * Config::get returns a stored value verbatim when the key exists, so a persisted
+ * empty host — written by a factory reset or a --wizard re-run — comes back as ""
+ * rather than falling through to a default. Treat an empty (or whitespace-only)
+ * stored host as "not configured" and fall back to the localhost default, so the
+ * wizard pre-fills 127.0.0.1 (the common same-host setup) instead of a blank field.
+ * On Android, Moonraker is always remote, so the default is empty.
+ *
+ * @param stored_host The host string read from config (may be empty)
+ * @param is_android  Whether running on the Android platform
+ * @return stored_host if it is non-blank, else "127.0.0.1" (non-Android) or "" (Android)
+ */
+std::string resolve_moonraker_host_default(const std::string& stored_host, bool is_android);

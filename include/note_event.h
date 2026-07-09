@@ -4,9 +4,9 @@
 #include "sound_synthesis.h"
 #include "sound_theme.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <algorithm>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -16,9 +16,9 @@
 /// The audio callback snapshots this on generation change.
 struct NoteEvent {
     float freq_hz = 0;
-    float sweep_end_freq = 0;    // 0 = no sweep
-    float velocity = 0;          // peak amplitude (pre-scaled by master volume)
-    float duration_ms = 0;       // total step duration
+    float sweep_end_freq = 0; // 0 = no sweep
+    float velocity = 0;       // peak amplitude (pre-scaled by master volume)
+    float duration_ms = 0;    // total step duration
     float duty_cycle = 0.5f;
     Waveform wave = Waveform::SQUARE;
 
@@ -31,12 +31,12 @@ struct NoteEvent {
     // LFO (0 rate = disabled)
     float lfo_rate = 0;
     float lfo_depth = 0;
-    uint8_t lfo_target = 0;      // 0=none, 1=freq, 2=amplitude, 3=duty
+    uint8_t lfo_target = 0; // 0=none, 1=freq, 2=amplitude, 3=duty
 
     // Filter (0 cutoff = no filter)
     float filter_cutoff = 0;
     float filter_sweep_to = 0;
-    uint8_t filter_type = 0;     // 0=none, 1=lowpass, 2=highpass
+    uint8_t filter_type = 0; // 0=none, 1=lowpass, 2=highpass
 };
 
 /// Per-voice state in a PCM backend.
@@ -66,9 +66,9 @@ struct VoiceSlot {
         // Reset filter state for new note
         if (active.filter_type != 0) {
             auto ft = (active.filter_type == 1) ? helix::audio::FilterType::LOWPASS
-                                                 : helix::audio::FilterType::HIGHPASS;
+                                                : helix::audio::FilterType::HIGHPASS;
             helix::audio::compute_biquad_coeffs(filter, ft, active.filter_cutoff,
-                                                 0); // sample_rate filled by caller
+                                                0); // sample_rate filled by caller
             filter.z1 = 0;
             filter.z2 = 0;
         } else {
@@ -85,8 +85,8 @@ struct VoiceSlot {
         }
 
         float elapsed_ms = elapsed_samples * 1000.0f / sample_rate;
-        float total_ms = std::max(active.duration_ms,
-                                   active.attack_ms + active.decay_ms + active.release_ms);
+        float total_ms =
+            std::max(active.duration_ms, active.attack_ms + active.decay_ms + active.release_ms);
 
         // Past end of note
         if (elapsed_ms >= total_ms) {
@@ -104,7 +104,8 @@ struct VoiceSlot {
             freq = active.freq_hz + (active.sweep_end_freq - active.freq_hz) * progress;
         }
         if (active.lfo_rate > 0 && active.lfo_target == 1) {
-            float lfo = std::sin(2.0f * static_cast<float>(M_PI) * active.lfo_rate * elapsed_ms / 1000.0f);
+            float lfo =
+                std::sin(2.0f * static_cast<float>(M_PI) * active.lfo_rate * elapsed_ms / 1000.0f);
             freq += lfo * active.lfo_depth;
         }
         freq = std::clamp(freq, 20.0f, 20000.0f);
@@ -112,7 +113,8 @@ struct VoiceSlot {
         // --- Duty cycle (with LFO) ---
         float duty = active.duty_cycle;
         if (active.lfo_rate > 0 && active.lfo_target == 3) {
-            float lfo = std::sin(2.0f * static_cast<float>(M_PI) * active.lfo_rate * elapsed_ms / 1000.0f);
+            float lfo =
+                std::sin(2.0f * static_cast<float>(M_PI) * active.lfo_rate * elapsed_ms / 1000.0f);
             duty = std::clamp(duty + lfo * active.lfo_depth, 0.0f, 1.0f);
         }
 
@@ -122,7 +124,8 @@ struct VoiceSlot {
         // --- Amplitude LFO ---
         float amp = env_amp * active.velocity;
         if (active.lfo_rate > 0 && active.lfo_target == 2) {
-            float lfo = std::sin(2.0f * static_cast<float>(M_PI) * active.lfo_rate * elapsed_ms / 1000.0f);
+            float lfo =
+                std::sin(2.0f * static_cast<float>(M_PI) * active.lfo_rate * elapsed_ms / 1000.0f);
             amp = std::clamp(amp + lfo * active.lfo_depth, 0.0f, 1.0f);
         }
 

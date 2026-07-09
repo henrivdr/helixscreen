@@ -472,9 +472,8 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             // Toolchanger + per-tool objects — emit when discovered so
             // ToolState parsers can populate AmsState.
             if (objects.contains("toolchanger")) {
-                status_obj["toolchanger"] = {{"status", "ready"},
-                                             {"tool_number", 0},
-                                             {"tool_numbers", json::array({0})}};
+                status_obj["toolchanger"] = {
+                    {"status", "ready"}, {"tool_number", 0}, {"tool_numbers", json::array({0})}};
             }
             for (auto it = objects.begin(); it != objects.end(); ++it) {
                 if (it.key().rfind("tool ", 0) == 0) {

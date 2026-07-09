@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "wizard_step.h"
-
 #include "lvgl/lvgl.h"
+#include "wizard_step.h"
 
 /**
  * @class WizardTelemetryStep
@@ -16,17 +15,29 @@
 class WizardTelemetryStep : public helix::wizard::Step {
   public:
     // helix::wizard::Step interface
-    helix::wizard::StepId id() const override { return helix::wizard::StepId::Telemetry; }
-    const char* component_name() const override { return "wizard_telemetry"; }
-    const char* log_name() const override { return "WizardTelemetry"; }
-    bool should_skip(const helix::wizard::StepContext& ctx) const override { return !ctx.preset.first_run; }
+    helix::wizard::StepId id() const override {
+        return helix::wizard::StepId::Telemetry;
+    }
+    const char* component_name() const override {
+        return "wizard_telemetry";
+    }
+    const char* log_name() const override {
+        return "WizardTelemetry";
+    }
+    bool should_skip(const helix::wizard::StepContext& ctx) const override {
+        return !ctx.preset.first_run;
+    }
 
     void init_subjects() override;
     void register_callbacks() override;
     lv_obj_t* create(lv_obj_t* parent) override;
     void cleanup() override;
-    bool is_validated() const override { return true; }
-    const char* get_name() const { return "WizardTelemetry"; }
+    bool is_validated() const override {
+        return true;
+    }
+    const char* get_name() const {
+        return "WizardTelemetry";
+    }
     bool should_skip() const;
 
   private:

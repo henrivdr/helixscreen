@@ -20,6 +20,8 @@ Your printer can do way more than your current touchscreen lets you. Bed mesh vi
 
 Fast, beautiful, and frugal enough to run on hardware you already own — your printer's onboard SoC, a Raspberry Pi from a drawer, or anything newer.
 
+Run it right on your printer, or on a separate device — a spare Pi, a mini PC, even your desktop — as a remote screen pointed at your printer's Moonraker over the network. Great for a floor-standing printer with a screen up on your desk.
+
 ---
 
 **Quick Links:** [Website](https://helixscreen.org) · [Features](#features) · [Screenshots](#screenshots) · [Installation](#installation) · [User Guide](docs/user/USER_GUIDE.md) · [FAQ](#faq) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Discord](https://discord.gg/RZCT2StKhr)
@@ -140,8 +142,9 @@ See [docs/devel/GALLERY.md](docs/devel/GALLERY.md) for the full gallery.
 
 ## Installation
 
-> **Run these commands on your printer's host computer, not your local machine.**
-> SSH into your Raspberry Pi, BTT board, or similar host. For all-in-one printers (Creality K1/K2, Flashforge AD5M/Pro), SSH directly into the printer.
+> **Run these commands on whatever machine will drive the display.**
+> For an on-printer screen, that's your printer's host — SSH into your Raspberry Pi, BTT board, or (for all-in-one printers like Creality K1/K2, Flashforge AD5M/Pro) directly into the printer.
+> For a **remote screen** on a separate device (a spare Pi, mini PC, etc.), run them there instead, then point it at your printer's Moonraker (IP + port `7125`) in the setup wizard. See [Remote screen setup](docs/user/INSTALL.md#remote-screen-setup-run-on-a-separate-device).
 
 **One-line install:**
 ```bash
@@ -155,10 +158,10 @@ curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/script
 
 To install or roll back to a specific release (e.g. a last-known-good version), pass `--version` with the tag:
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --version v0.99.81
+curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --version v0.99.84
 ```
 
-Add `--clean` to wipe HelixScreen's settings and start fresh (it asks for confirmation first; your Klipper/Moonraker config and G-code are untouched). Combine the two to reinstall a specific version with default settings: `--clean --version v0.99.81`.
+Add `--clean` to wipe HelixScreen's settings and start fresh (it asks for confirmation first; your Klipper/Moonraker config and G-code are untouched). Combine the two to reinstall a specific version with default settings: `--clean --version v0.99.84`.
 
 Also available through [KIAUH](https://github.com/dw-0/kiauh) as an extension.
 
@@ -198,6 +201,9 @@ See [docs/devel/DEVELOPMENT.md](docs/devel/DEVELOPMENT.md) for detailed setup, c
 
 **How is this different from GuppyScreen/KlipperScreen?**
 More features, far lower RAM use (~15MB on embedded targets vs ~50MB for KlipperScreen), and actively developed. The lighter footprint means the printer you have or a Pi you've owned for years is plenty — no need to chase new SBC hardware. See the [comparison table](#why-helixscreen).
+
+**Can I run HelixScreen on a separate device instead of on my printer?**
+Yes. Install it on any supported Linux device — a spare Pi, a mini PC, even your desktop — and enter your printer's IP in the wizard's Moonraker step. This is ideal when the printer is on the floor and you want the screen at your desk. Point it at Moonraker (port `7125`), not Mainsail/Fluidd. See [Remote screen setup](docs/user/INSTALL.md#remote-screen-setup-run-on-a-separate-device).
 
 **Which printers are supported?**
 Any Klipper + Moonraker printer. 80+ models in the auto-detection database spanning Voron, Creality, QIDI, Anycubic, Flashforge, Sovol, RatRig, FLSUN, Elegoo, Prusa, Snapmaker, and more. The wizard auto-discovers your printer's capabilities even if it's not in the database.

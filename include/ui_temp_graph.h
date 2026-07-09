@@ -51,7 +51,7 @@
 #define UI_TEMP_GRAPH_DEFAULT_MAX_TEMP 100.0f // Default Y-axis maximum
 
 // Gradient opacity defaults (stock chart style: visible at line, fades to transparent)
-#define UI_TEMP_GRAPH_GRADIENT_TOP_OPA 110         // At the line (~43%) — saturated near the curve
+#define UI_TEMP_GRAPH_GRADIENT_TOP_OPA 110 // At the line (~43%) — saturated near the curve
 #define UI_TEMP_GRAPH_GRADIENT_BOTTOM_OPA LV_OPA_0 // At chart bottom (fully transparent)
 
 /**

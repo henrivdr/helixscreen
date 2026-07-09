@@ -16,18 +16,19 @@
  *     pool; the tracker's own SubjectLifetime is independent of the test's.
  */
 
+#include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "ams_types.h"
 #include "app_globals.h"
 #include "consumption_sink.h"
 #include "filament_consumption_tracker.h"
+#include "filament_consumption_tracker_test_access.h"
 #include "printer_state.h"
-#include "ui_update_queue.h"
 
 #include "../catch_amalgamated.hpp"
-#include "../lvgl_test_fixture.h"
-#include "filament_consumption_tracker_test_access.h"
 
 using helix::AmsSlotSink;
 using helix::FilamentConsumptionTracker;
@@ -103,8 +104,7 @@ struct TrackerRoutingFixture : LVGLTestFixture {
 
 } // namespace
 
-TEST_CASE_METHOD(TrackerRoutingFixture,
-                 "Per-extruder delta routes only to the mapped slot",
+TEST_CASE_METHOD(TrackerRoutingFixture, "Per-extruder delta routes only to the mapped slot",
                  "[tracker][routing]") {
     auto& state = get_printer_state();
     SubjectLifetime lifetime;
@@ -142,8 +142,7 @@ TEST_CASE_METHOD(TrackerRoutingFixture,
     CHECK(mock->get_slot_info(1).remaining_weight_g == before1);
 }
 
-TEST_CASE_METHOD(TrackerRoutingFixture,
-                 "Per-extruder dispatch ignores unmapped extruder indices",
+TEST_CASE_METHOD(TrackerRoutingFixture, "Per-extruder dispatch ignores unmapped extruder indices",
                  "[tracker][routing]") {
     auto& state = get_printer_state();
     SubjectLifetime lifetime;

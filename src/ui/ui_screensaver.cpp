@@ -4,8 +4,9 @@
 
 #include "ui_screensaver.h"
 
-#include "platform_capabilities.h"
 #include "ui_utils.h"
+
+#include "platform_capabilities.h"
 
 #include <spdlog/spdlog.h>
 

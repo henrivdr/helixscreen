@@ -54,10 +54,9 @@ TEST_CASE("parse_filament_color_palette - palette extraction", "[gcode][color_me
     std::vector<std::string> palette;
 
     SECTION("Multi-color semicolon-separated palette") {
-        REQUIRE(parse_filament_color_palette(
-            "; extruder_colour = #ED1C24;#00C1AE;#F4E2C1;#000000", palette));
-        REQUIRE(palette ==
-                std::vector<std::string>{"#ED1C24", "#00C1AE", "#F4E2C1", "#000000"});
+        REQUIRE(parse_filament_color_palette("; extruder_colour = #ED1C24;#00C1AE;#F4E2C1;#000000",
+                                             palette));
+        REQUIRE(palette == std::vector<std::string>{"#ED1C24", "#00C1AE", "#F4E2C1", "#000000"});
     }
 
     SECTION("Slot alignment preserved with empty entries (#A;;#B)") {
@@ -79,8 +78,8 @@ TEST_CASE("parse_filament_color_palette - palette extraction", "[gcode][color_me
         // Slicers don't typically emit trailing comments, but if a downstream
         // tool inserts one, the second '#' token is invalid hex (size != 6/8)
         // and becomes an empty placeholder rather than a parse failure.
-        REQUIRE(parse_filament_color_palette(
-            "; extruder_colour = #FF0000 ; # not a color", palette));
+        REQUIRE(
+            parse_filament_color_palette("; extruder_colour = #FF0000 ; # not a color", palette));
         REQUIRE(palette.size() == 2);
         REQUIRE(palette[0] == "#FF0000");
         REQUIRE(palette[1].empty());
@@ -92,8 +91,8 @@ TEST_CASE("parse_filament_color_palette - palette extraction", "[gcode][color_me
     }
 
     SECTION("Whitespace around tokens trimmed") {
-        REQUIRE(parse_filament_color_palette(
-            ";extruder_colour=#AA0000 ; #00BB00 ;#0000CC", palette));
+        REQUIRE(
+            parse_filament_color_palette(";extruder_colour=#AA0000 ; #00BB00 ;#0000CC", palette));
         REQUIRE(palette == std::vector<std::string>{"#AA0000", "#00BB00", "#0000CC"});
     }
 
@@ -104,8 +103,7 @@ TEST_CASE("parse_filament_color_palette - palette extraction", "[gcode][color_me
 
     SECTION("Invalid hex length yields empty placeholder") {
         // "#XYZ" is invalid; treat as occupied-but-unknown so slot indices stay aligned
-        REQUIRE(parse_filament_color_palette(
-            "; extruder_colour = #FF0000;#XYZ;#00FF00", palette));
+        REQUIRE(parse_filament_color_palette("; extruder_colour = #FF0000;#XYZ;#00FF00", palette));
         REQUIRE(palette == std::vector<std::string>{"#FF0000", "", "#00FF00"});
     }
 
@@ -125,8 +123,7 @@ TEST_CASE("parse_filament_color_palette - real-world OrcaSlicer output",
     std::vector<std::string> palette;
 
     SECTION("K2 Plus dual-filament (single-color print using filament 1)") {
-        REQUIRE(parse_filament_color_palette(
-            "; extruder_colour = #000000;#F3FDFD", palette));
+        REQUIRE(parse_filament_color_palette("; extruder_colour = #000000;#F3FDFD", palette));
         REQUIRE(palette.size() == 2);
         REQUIRE(palette[0] == "#000000");
         REQUIRE(palette[1] == "#F3FDFD");

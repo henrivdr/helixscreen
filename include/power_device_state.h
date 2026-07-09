@@ -2,9 +2,9 @@
 
 #pragma once
 
-#include "async_lifetime_guard.h"
 #include "ui_observer_guard.h"
 
+#include "async_lifetime_guard.h"
 #include "moonraker_types.h"
 
 #include <lvgl/lvgl.h>

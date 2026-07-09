@@ -72,8 +72,8 @@ class HomePanel : public PanelBase {
   private:
     SubjectManager subjects_;
     bool populating_widgets_ = false; // Reentrancy guard for populate_widgets()
-    bool panel_active_ = false;        // Whether on_activate() has been called
-    bool finalized_ = false;           // Whether finalize_setup() has run
+    bool panel_active_ = false;       // Whether on_activate() has been called
+    bool finalized_ = false;          // Whether finalize_setup() has run
 
     // Cached image path for skipping redundant refresh_printer_image() calls
     std::string last_printer_image_path_;

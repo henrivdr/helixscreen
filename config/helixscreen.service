@@ -134,7 +134,9 @@ StateDirectory=helixscreen
 StateDirectoryMode=0700
 RuntimeDirectory=helixscreen
 RuntimeDirectoryMode=0700
-PrivateTmp=true
+# PrivateTmp stays off: HelixScreen reads Klipper's shared-/tmp output, e.g.
+# input-shaper CSVs (/tmp/calibration_data_*.csv). Isolated /tmp hides them.
+PrivateTmp=false
 NoNewPrivileges=true
 
 # Allow framebuffer/DRM access plus audio (UI sounds via ALSA).

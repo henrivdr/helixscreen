@@ -149,7 +149,7 @@ lv_display_t* DisplayBackendFbdev::create_display(int width, int height) {
     if (size_was_explicit_ && width > 0 && height > 0) {
         int fb_fd = open(fb_device_.c_str(), O_RDWR | O_CLOEXEC);
         if (fb_fd >= 0) {
-            struct fb_var_screeninfo vinfo{};
+            struct fb_var_screeninfo vinfo {};
             if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) == 0) {
                 helix::FbSize actual = helix::fb_size_from_var_screeninfo(vinfo);
                 if (actual.valid && (actual.width != static_cast<uint32_t>(width) ||

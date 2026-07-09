@@ -28,8 +28,12 @@ class LayoutManager {
     std::string resolve_xml_path(const std::string& filename) const;
     bool has_override(const std::string& filename) const;
     bool is_standard() const;
-    int width() const { return width_; }
-    int height() const { return height_; }
+    int width() const {
+        return width_;
+    }
+    int height() const {
+        return height_;
+    }
 
   private:
     friend class ::LayoutManagerTestAccess;

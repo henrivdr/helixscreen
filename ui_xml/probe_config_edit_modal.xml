@@ -6,17 +6,9 @@
         extends="ui_dialog" width="70%" height="content" style_min_width="320" style_max_width="420" align="center"
         flex_flow="column" style_flex_main_place="start" style_pad_gap="0">
 
-    <!-- Header -->
-    <lv_obj width="100%"
-            height="content" style_pad_left="#space_lg" style_pad_right="#space_md" style_pad_top="#space_lg"
-            style_pad_bottom="#space_sm" flex_flow="row" style_flex_main_place="space_between"
-            style_flex_cross_place="center" scrollable="false">
-      <text_heading name="edit_title" bind_text="probe_config_edit_title"/>
-      <ui_button name="btn_close"
-                 width="#button_height_sm" height="#button_height_sm" icon="close" variant="ghost" focusable="false">
-        <event_cb trigger="clicked" callback="on_probe_config_cancel"/>
-      </ui_button>
-    </lv_obj>
+    <!-- Header (bound title). -->
+    <modal_header title_subject="probe_config_edit_title"
+                  hide_icon="true" hide_close="false" close_callback="on_probe_config_cancel"/>
 
     <divider_horizontal/>
 

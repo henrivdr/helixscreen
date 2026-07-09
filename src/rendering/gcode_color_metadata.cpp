@@ -20,11 +20,17 @@ bool contains_ci(std::string_view haystack, std::string_view needle) {
         for (size_t j = 0; j < needle.size(); ++j) {
             char hc = haystack[i + j];
             char nc = needle[j];
-            if (hc >= 'A' && hc <= 'Z') hc = static_cast<char>(hc + 32);
-            if (nc >= 'A' && nc <= 'Z') nc = static_cast<char>(nc + 32);
-            if (hc != nc) { match = false; break; }
+            if (hc >= 'A' && hc <= 'Z')
+                hc = static_cast<char>(hc + 32);
+            if (nc >= 'A' && nc <= 'Z')
+                nc = static_cast<char>(nc + 32);
+            if (hc != nc) {
+                match = false;
+                break;
+            }
         }
-        if (match) return true;
+        if (match)
+            return true;
     }
     return false;
 }
@@ -36,11 +42,11 @@ bool is_hex_digit(char c) {
 // Trim leading/trailing whitespace from a string_view.
 std::string_view trim(std::string_view sv) {
     while (!sv.empty() && (sv.front() == ' ' || sv.front() == '\t' || sv.front() == '\r' ||
-                            sv.front() == '\n' || sv.front() == '"' || sv.front() == '\'')) {
+                           sv.front() == '\n' || sv.front() == '"' || sv.front() == '\'')) {
         sv.remove_prefix(1);
     }
     while (!sv.empty() && (sv.back() == ' ' || sv.back() == '\t' || sv.back() == '\r' ||
-                            sv.back() == '\n' || sv.back() == '"' || sv.back() == '\'')) {
+                           sv.back() == '\n' || sv.back() == '"' || sv.back() == '\'')) {
         sv.remove_suffix(1);
     }
     return sv;
@@ -48,8 +54,7 @@ std::string_view trim(std::string_view sv) {
 
 } // namespace
 
-bool parse_filament_color_palette(std::string_view line,
-                                  std::vector<std::string>& out_palette) {
+bool parse_filament_color_palette(std::string_view line, std::vector<std::string>& out_palette) {
     out_palette.clear();
 
     // Limit keyword search to the part of the line before '=' to avoid matching
@@ -59,10 +64,9 @@ bool parse_filament_color_palette(std::string_view line,
         return false;
     }
     std::string_view key_part = line.substr(0, eq);
-    bool keyword_match = contains_ci(key_part, "extruder_colour") ||
-                         contains_ci(key_part, "extruder_color") ||
-                         contains_ci(key_part, "filament_colour") ||
-                         contains_ci(key_part, "filament_color");
+    bool keyword_match =
+        contains_ci(key_part, "extruder_colour") || contains_ci(key_part, "extruder_color") ||
+        contains_ci(key_part, "filament_colour") || contains_ci(key_part, "filament_color");
     if (!keyword_match) {
         return false;
     }
@@ -82,7 +86,10 @@ bool parse_filament_color_palette(std::string_view line,
             bool valid = (body.size() == 6 || body.size() == 8);
             if (valid) {
                 for (char c : body) {
-                    if (!is_hex_digit(c)) { valid = false; break; }
+                    if (!is_hex_digit(c)) {
+                        valid = false;
+                        break;
+                    }
                 }
             }
             out_palette.emplace_back(valid ? std::string(tok) : std::string());
@@ -95,7 +102,8 @@ bool parse_filament_color_palette(std::string_view line,
             out_palette.emplace_back();
         }
 
-        if (semi == std::string_view::npos) break;
+        if (semi == std::string_view::npos)
+            break;
         rest.remove_prefix(semi + 1);
     }
 

@@ -261,3 +261,60 @@ TEST_CASE_METHOD(PerfOverlayFixture, "PerformanceOverlay resolves row layout syn
         REQUIRE(h > 0);
     }
 }
+
+// ============================================================================
+// L077 regression: the overlay's observer on perf_mcu_names must carry
+// PerformanceState's subject lifetime token.
+//
+// perf_mcu_names is NOT a never-freed singleton. PerformanceState::deinit_subjects()
+// frees it (subjects_.deinit_all()) and init_subjects() recreates it on reconnect,
+// printer switch, and between tests. mcu_names_observer_ lives on the overlay
+// SINGLETON (not the widget), so it can outlive the subject. If it was created
+// without subjects_lifetime(), tearing it down after the subject is freed calls
+// lv_observer_remove() on freed memory → UAF/SEGV (lv_observer.c:584) — the same
+// class of bug that 056bb40e9 fixed for HelixSparkline on perf_history_tick.
+//
+// This test frees the perf subjects out from under a live observer, then tears
+// the observer down. Without the lifetime token the reset() below SEGVs; with it,
+// ObserverGuard::reset() detects the dead subject and releases instead of removing.
+// ============================================================================
+TEST_CASE_METHOD(PerfOverlayFixture,
+                 "PerformanceOverlay perf_mcu_names observer survives subject teardown",
+                 "[performance][uaf][L077]") {
+    // Seed the perf subjects so perf_mcu_names is live and non-empty.
+    {
+        PerfSample s;
+        s.host_cpu_pct = 30.0f;
+        McuStat a;
+        a.name = "mcu";
+        a.load = 0.10f;
+        s.mcus = {a};
+        PerformanceStateTestAccess::apply_sample(PerformanceState::instance(), s);
+    }
+    UpdateQueueTestAccess::drain(UpdateQueue::instance());
+
+    // create() registers mcu_names_observer_ on perf_mcu_names. The observer is a
+    // member of the singleton, NOT tied to the widget lifetime.
+    auto* root = UiOverlayPerformance::instance().create(lv_screen_active());
+    REQUIRE(root != nullptr);
+    UpdateQueueTestAccess::drain(UpdateQueue::instance());
+
+    // Delete the widget tree while the perf subjects are still alive so the
+    // per-MCU XML binding observers unbind cleanly. mcu_names_observer_ survives
+    // this (it lives on the singleton, not the widget).
+    lv_obj_delete(root);
+
+    // Free the perf subjects — the reconnect / printer-switch path. This calls
+    // lv_subject_deinit(&s_mcu_names_); mcu_names_observer_ now references freed
+    // memory.
+    PerformanceState::instance().deinit_subjects();
+
+    // Tear the observer down. This is the UAF site: ObserverGuard::reset() runs on
+    // an observer whose subject was just freed. With subjects_lifetime() passed to
+    // observe_string, reset() sees the dead token and skips lv_observer_remove();
+    // without it, this line SEGVs.
+    UiOverlayPerformanceTestAccess::reset(UiOverlayPerformance::instance());
+
+    // Reaching here without a crash is the regression assertion.
+    REQUIRE(UiOverlayPerformance::instance().root() == nullptr);
+}

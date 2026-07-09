@@ -493,7 +493,7 @@ TEST_CASE("Network characterization: subjects survive reset_for_testing cycle",
     REQUIRE(std::string(lv_subject_get_string(state.get_printer_connection_message_subject())) ==
             "Disconnected");
     REQUIRE(lv_subject_get_int(state.get_network_status_subject()) == 2); // Mock mode default
-    REQUIRE(lv_subject_get_int(state.get_klippy_state_subject()) == 2); // SHUTDOWN default
+    REQUIRE(lv_subject_get_int(state.get_klippy_state_subject()) == 2);   // SHUTDOWN default
     REQUIRE(lv_subject_get_int(state.get_nav_buttons_enabled_subject()) == 0);
     // was_ever_connected_ stays true - it tracks session lifetime, not subject state
     REQUIRE(state.was_ever_connected() == true);

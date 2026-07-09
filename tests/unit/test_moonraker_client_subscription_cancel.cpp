@@ -491,7 +491,8 @@ TEST_CASE_METHOD(MoonrakerClientLifecycleFixture,
 // ============================================================================
 
 TEST_CASE_METHOD(MoonrakerClientLifecycleFixture,
-                 "MoonrakerClient force_reconnect when not connected", "[connection][eventloop][slow]") {
+                 "MoonrakerClient force_reconnect when not connected",
+                 "[connection][eventloop][slow]") {
     auto loop = std::make_shared<hv::EventLoop>();
     MoonrakerClient client(loop);
 
@@ -550,7 +551,8 @@ TEST_CASE_METHOD(MoonrakerClientLifecycleFixture, "MoonrakerClientMock force_rec
 }
 
 TEST_CASE_METHOD(MoonrakerClientLifecycleFixture,
-                 "MoonrakerClient force_reconnect state transitions", "[connection][eventloop][slow]") {
+                 "MoonrakerClient force_reconnect state transitions",
+                 "[connection][eventloop][slow]") {
     auto loop = std::make_shared<hv::EventLoop>();
     auto loop_thread = std::make_shared<hv::EventLoopThread>();
     loop_thread->start();

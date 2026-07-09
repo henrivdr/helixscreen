@@ -139,7 +139,8 @@ void MoonrakerFileTransferAPI::download_file_to_path(
 
     // Run HTTP request in a tracked thread to ensure clean shutdown
     // Use requests::downloadFile which streams directly to disk
-    helix::http::HttpExecutor::slow().submit([url, path, dest_path, on_success, on_error, on_progress]() {
+    helix::http::HttpExecutor::slow().submit([url, path, dest_path, on_success, on_error,
+                                              on_progress]() {
         // libhv's downloadFile progress callback signature matches our ProgressCallback
         size_t bytes_written = requests::downloadFile(url.c_str(), dest_path.c_str(), on_progress);
 
@@ -187,33 +188,34 @@ void MoonrakerFileTransferAPI::download_thumbnail(const std::string& thumbnail_p
     // Thumbnails are small (tens of KB) and fetched in bursts when the file
     // browser scrolls. Run them on the fast lane so uploads/downloads on the
     // slow lane don't block the UI.
-    helix::http::HttpExecutor::fast().submit([url, thumbnail_path, cache_path, on_success, on_error]() {
-        auto resp = requests::get(url.c_str());
+    helix::http::HttpExecutor::fast().submit(
+        [url, thumbnail_path, cache_path, on_success, on_error]() {
+            auto resp = requests::get(url.c_str());
 
-        if (!handle_http_response(resp, "download_thumbnail", on_error)) {
-            return;
-        }
+            if (!handle_http_response(resp, "download_thumbnail", on_error)) {
+                return;
+            }
 
-        // Write to cache file
-        std::ofstream file(cache_path, std::ios::binary);
-        if (!file) {
-            spdlog::error("[Moonraker API] Failed to create cache file: {}", cache_path);
-            report_error(on_error, MoonrakerErrorType::UNKNOWN, "download_thumbnail",
-                         "Failed to create cache file: " + cache_path);
-            return;
-        }
+            // Write to cache file
+            std::ofstream file(cache_path, std::ios::binary);
+            if (!file) {
+                spdlog::error("[Moonraker API] Failed to create cache file: {}", cache_path);
+                report_error(on_error, MoonrakerErrorType::UNKNOWN, "download_thumbnail",
+                             "Failed to create cache file: " + cache_path);
+                return;
+            }
 
-        file.write(resp->body.data(), static_cast<std::streamsize>(resp->body.size()));
-        file.close();
+            file.write(resp->body.data(), static_cast<std::streamsize>(resp->body.size()));
+            file.close();
 
-        spdlog::trace("[Moonraker API] Cached thumbnail {} bytes -> {}", resp->body.size(),
-                      cache_path);
-        helix::MemoryMonitor::log_now("moonraker_thumb_downloaded");
+            spdlog::trace("[Moonraker API] Cached thumbnail {} bytes -> {}", resp->body.size(),
+                          cache_path);
+            helix::MemoryMonitor::log_now("moonraker_thumb_downloaded");
 
-        if (on_success) {
-            on_success(cache_path);
-        }
-    });
+            if (on_success) {
+                on_success(cache_path);
+            }
+        });
 }
 
 void MoonrakerFileTransferAPI::upload_file(const std::string& root, const std::string& path,
@@ -245,7 +247,8 @@ void MoonrakerFileTransferAPI::upload_file_with_name(
     // macro files). Fast lane so they don't queue behind large gcode
     // uploads on the slow lane. Use upload_file_from_path for large
     // streaming uploads.
-    helix::http::HttpExecutor::fast().submit([url, root, path, filename, content, on_success, on_error]() {
+    helix::http::HttpExecutor::fast().submit([url, root, path, filename, content, on_success,
+                                              on_error]() {
         // Create multipart form request
         auto req = std::make_shared<HttpRequest>();
         req->method = HTTP_POST;

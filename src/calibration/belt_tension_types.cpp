@@ -167,8 +167,7 @@ float calculate_similarity(const std::vector<std::pair<float, float>>& curve_a,
     }
 
     // Linear interpolation helper
-    auto interpolate = [](const std::vector<std::pair<float, float>>& curve,
-                          float freq) -> float {
+    auto interpolate = [](const std::vector<std::pair<float, float>>& curve, float freq) -> float {
         // Find bracketing points
         for (size_t i = 1; i < curve.size(); ++i) {
             if (curve[i].first >= freq) {
@@ -197,10 +196,10 @@ float calculate_similarity(const std::vector<std::pair<float, float>>& curve_a,
     }
 
     // Pearson correlation coefficient
-    float mean_a = std::accumulate(vals_a.begin(), vals_a.end(), 0.0f) /
-                   static_cast<float>(num_bins);
-    float mean_b = std::accumulate(vals_b.begin(), vals_b.end(), 0.0f) /
-                   static_cast<float>(num_bins);
+    float mean_a =
+        std::accumulate(vals_a.begin(), vals_a.end(), 0.0f) / static_cast<float>(num_bins);
+    float mean_b =
+        std::accumulate(vals_b.begin(), vals_b.end(), 0.0f) / static_cast<float>(num_bins);
 
     float sum_ab = 0.0f;
     float sum_a2 = 0.0f;
@@ -261,7 +260,7 @@ std::vector<AccelSample> parse_accel_csv(const std::string& csv_data) {
 // ============================================================================
 
 std::vector<std::pair<float, float>> compute_psd(const std::vector<AccelSample>& samples,
-                                                  float sample_rate) {
+                                                 float sample_rate) {
     std::vector<std::pair<float, float>> psd;
 
     if (samples.size() < 4) {
@@ -276,8 +275,8 @@ std::vector<std::pair<float, float>> compute_psd(const std::vector<AccelSample>&
     // This matches Klipper/Shake&Tune's approach.
 
     // DFT parameters
-    size_t max_bin = std::min(n / 2, static_cast<size_t>(250.0f * static_cast<float>(n) /
-                                                         sample_rate));
+    size_t max_bin =
+        std::min(n / 2, static_cast<size_t>(250.0f * static_cast<float>(n) / sample_rate));
     float freq_resolution = sample_rate / static_cast<float>(n);
 
     spdlog::debug("[BeltTension] Computing PSD: {} samples, {:.1f} Hz sample rate, {:.2f} Hz "
@@ -301,9 +300,9 @@ std::vector<std::pair<float, float>> compute_psd(const std::vector<AccelSample>&
 
         // Apply Hanning window
         for (size_t i = 0; i < n; ++i) {
-            float window = 0.5f * (1.0f - std::cos(2.0f * static_cast<float>(M_PI) *
-                                                    static_cast<float>(i) /
-                                                    static_cast<float>(n - 1)));
+            float window =
+                0.5f * (1.0f - std::cos(2.0f * static_cast<float>(M_PI) * static_cast<float>(i) /
+                                        static_cast<float>(n - 1)));
             signal[i] *= window;
         }
 
@@ -311,8 +310,8 @@ std::vector<std::pair<float, float>> compute_psd(const std::vector<AccelSample>&
         for (size_t k = 1; k <= max_bin; ++k) {
             float real = 0.0f;
             float imag = 0.0f;
-            float omega = 2.0f * static_cast<float>(M_PI) * static_cast<float>(k) /
-                          static_cast<float>(n);
+            float omega =
+                2.0f * static_cast<float>(M_PI) * static_cast<float>(k) / static_cast<float>(n);
 
             for (size_t i = 0; i < n; ++i) {
                 float angle = omega * static_cast<float>(i);
@@ -363,8 +362,8 @@ PeakResult find_peak_frequency(const std::vector<std::pair<float, float>>& psd, 
     }
 
     if (result.found) {
-        spdlog::debug("[BeltTension] Peak found at {:.1f} Hz (amplitude: {:.4f})",
-                      result.frequency, result.amplitude);
+        spdlog::debug("[BeltTension] Peak found at {:.1f} Hz (amplitude: {:.4f})", result.frequency,
+                      result.amplitude);
     } else {
         spdlog::warn("[BeltTension] No peak found in range [{:.0f}, {:.0f}] Hz", min_freq,
                      max_freq);
@@ -373,4 +372,4 @@ PeakResult find_peak_frequency(const std::vector<std::pair<float, float>>& psd, 
     return result;
 }
 
-}  // namespace helix::calibration
+} // namespace helix::calibration

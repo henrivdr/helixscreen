@@ -118,30 +118,30 @@ void ControlsPanel::init_subjects() {
     // Using UI_MANAGED_SUBJECT_* macros for automatic RAII cleanup via SubjectManager
 
     // Nozzle label (dynamic for multi-tool)
-    UI_MANAGED_SUBJECT_STRING(nozzle_label_subject_, nozzle_label_buf_, "Nozzle",
+    UI_MANAGED_SUBJECT_STRING(nozzle_label_subject_, nozzle_label_buf_, lv_tr("Nozzle"),
                               "controls_nozzle_label", subjects_);
 
     // Nozzle temperature display
     UI_MANAGED_SUBJECT_STRING(nozzle_temp_subject_, nozzle_temp_buf_, "—°C", "controls_nozzle_temp",
                               subjects_);
     UI_MANAGED_SUBJECT_INT(nozzle_pct_subject_, 0, "controls_nozzle_pct", subjects_);
-    UI_MANAGED_SUBJECT_STRING(nozzle_status_subject_, nozzle_status_buf_, "Off",
+    UI_MANAGED_SUBJECT_STRING(nozzle_status_subject_, nozzle_status_buf_, lv_tr("Off"),
                               "controls_nozzle_status", subjects_);
 
     // Bed temperature display
     UI_MANAGED_SUBJECT_STRING(bed_temp_subject_, bed_temp_buf_, "—°C", "controls_bed_temp",
                               subjects_);
     UI_MANAGED_SUBJECT_INT(bed_pct_subject_, 0, "controls_bed_pct", subjects_);
-    UI_MANAGED_SUBJECT_STRING(bed_status_subject_, bed_status_buf_, "Off", "controls_bed_status",
-                              subjects_);
+    UI_MANAGED_SUBJECT_STRING(bed_status_subject_, bed_status_buf_, lv_tr("Off"),
+                              "controls_bed_status", subjects_);
 
     // Chamber temperature display
-    UI_MANAGED_SUBJECT_STRING(chamber_status_subject_, chamber_status_buf_, "Off",
+    UI_MANAGED_SUBJECT_STRING(chamber_status_subject_, chamber_status_buf_, lv_tr("Off"),
                               "controls_chamber_status", subjects_);
 
     // Fan speed display
-    UI_MANAGED_SUBJECT_STRING(fan_speed_subject_, fan_speed_buf_, "Off", "controls_fan_speed",
-                              subjects_);
+    UI_MANAGED_SUBJECT_STRING(fan_speed_subject_, fan_speed_buf_, lv_tr("Off"),
+                              "controls_fan_speed", subjects_);
     UI_MANAGED_SUBJECT_INT(fan_pct_subject_, 0, "controls_fan_pct", subjects_);
 
     // Macro button visibility and names (for declarative binding)
@@ -845,7 +845,11 @@ void ControlsPanel::populate_secondary_fans() {
     // use-after-free when observe_int_sync callbacks fire after widget deletion.
     ++fan_populate_gen_;
 
-    // Cleanup order: observers, tracking, hide, delete widgets
+    // Cleanup order: lifetimes → observers → tracking → hide → delete widgets.
+    // Reset the dynamic-subject lifetime tokens BEFORE the observers so each guard's
+    // weak_ptr is already expired when reset() runs — otherwise reset() calls
+    // lv_observer_remove() on a subject that may have been freed by fan rediscovery.
+    secondary_fan_lifetimes_.clear();
     for (auto& obs : secondary_fan_observers_) {
         obs.reset();
     }
@@ -944,7 +948,7 @@ void ControlsPanel::populate_secondary_fans() {
 
         // "N additional fans" label
         char more_buf[32];
-        std::snprintf(more_buf, sizeof(more_buf), "%d additional fan%s", additional,
+        std::snprintf(more_buf, sizeof(more_buf), lv_tr("%d additional fan%s"), additional,
                       additional == 1 ? "" : "s");
         lv_obj_t* more_label = lv_label_create(more_row);
         lv_label_set_text(more_label, more_buf);
@@ -1246,19 +1250,15 @@ void ControlsPanel::handle_home_all() {
         // bg_cb defers the whole callback body to the main thread atomically —
         // no bare bg-thread expired() check (L081 Mechanism C, hit on v0.99.60/ad5x).
         api_->motion().home_axes(
-            "",
-            lifetime_.bg_cb("ControlsPanel::home_all_ok",
-                            [this]() { operation_guard_.end(); }),
-            lifetime_.bg_cb("ControlsPanel::home_all_err",
-                            [this](const MoonrakerError& err) {
-                                operation_guard_.end();
-                                if (err.type == MoonrakerErrorType::TIMEOUT) {
-                                    NOTIFY_WARNING(lv_tr(
-                                        "Homing may still be running — response timed out"));
-                                } else {
-                                    NOTIFY_ERROR(lv_tr("Homing failed: {}"), err.user_message());
-                                }
-                            }));
+            "", lifetime_.bg_cb("ControlsPanel::home_all_ok", [this]() { operation_guard_.end(); }),
+            lifetime_.bg_cb("ControlsPanel::home_all_err", [this](const MoonrakerError& err) {
+                operation_guard_.end();
+                if (err.type == MoonrakerErrorType::TIMEOUT) {
+                    NOTIFY_WARNING(lv_tr("Homing may still be running — response timed out"));
+                } else {
+                    NOTIFY_ERROR(lv_tr("Homing failed: {}"), err.user_message());
+                }
+            }));
     }
 }
 
@@ -1800,10 +1800,16 @@ PANEL_TRAMPOLINE(ControlsPanel, get_global_controls_panel, save_z_offset)
 void ControlsPanel::subscribe_to_secondary_fan_speeds() {
     using helix::ui::observe_int_sync;
     secondary_fan_observers_.reserve(secondary_fan_rows_.size());
+    secondary_fan_lifetimes_.reserve(secondary_fan_rows_.size());
 
     const uint32_t gen = fan_populate_gen_;
     for (const auto& row : secondary_fan_rows_) {
-        SubjectLifetime lifetime;
+        // Per-fan speed subjects are dynamic (freed + recreated on fan rediscovery).
+        // The lifetime token MUST outlive the paired observer, so it lives in a member
+        // vector alongside secondary_fan_observers_ — never a stack local (that would
+        // expire the guard's weak_ptr immediately, leaving a dangling observer that
+        // corrupts the subject's observer list when reset() later removes it).
+        SubjectLifetime& lifetime = secondary_fan_lifetimes_.emplace_back();
         if (auto* subject = printer_state_.get_fan_speed_subject(row.object_name, lifetime)) {
             secondary_fan_observers_.push_back(observe_int_sync<ControlsPanel>(
                 subject, this,
@@ -1817,6 +1823,10 @@ void ControlsPanel::subscribe_to_secondary_fan_speeds() {
                 lifetime));
             spdlog::trace("[{}] Subscribed to speed subject for secondary fan '{}'", get_name(),
                           row.object_name);
+        } else {
+            // No subject for this fan — drop the just-added lifetime to keep the
+            // lifetimes/observers vectors aligned.
+            secondary_fan_lifetimes_.pop_back();
         }
     }
 

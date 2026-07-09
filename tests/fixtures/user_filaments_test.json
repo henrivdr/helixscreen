@@ -1,0 +1,5 @@
+[
+  {"id": "polymaker-abs-pro", "nozzle_min": 265, "nozzle_max": 285, "source": "user"},
+  {"id": "acme-custom-petg", "brand": "Acme", "name": "Custom PETG",
+   "type": "PETG", "nozzle": 240, "source": "user"}
+]

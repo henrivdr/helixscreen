@@ -18,9 +18,10 @@
  * threaded mock backend.
  */
 
+#include "ui_update_queue.h"
+
 #include "../ui_test_utils.h"
 #include "runtime_config.h"
-#include "ui_update_queue.h"
 #include "wifi_manager.h"
 
 #include <spdlog/spdlog.h>
@@ -38,8 +39,7 @@ namespace helix {
 // grace-timer state without going through the threaded mock backend.
 class WiFiManagerTestAccess {
   public:
-    static void begin_connect(WiFiManager& wm,
-                              std::function<void(bool, const std::string&)> cb) {
+    static void begin_connect(WiFiManager& wm, std::function<void(bool, const std::string&)> cb) {
         // Simulate an in-flight connect() without invoking the backend.
         wm.connect_callback_ = std::move(cb);
         wm.connecting_in_progress_ = true;
@@ -71,8 +71,8 @@ struct WifiDebounceFixture {
     WifiDebounceFixture()
         : rc(get_runtime_config()), prev_test_mode(rc->test_mode),
           prev_use_real_wifi(rc->use_real_wifi) {
-        rc->test_mode = true;       // should_mock_wifi() → true
-        rc->use_real_wifi = false;  // pick the idle mock backend
+        rc->test_mode = true;      // should_mock_wifi() → true
+        rc->use_real_wifi = false; // pick the idle mock backend
         lv_init_safe();
         ensure_display();
         helix::ui::UpdateQueue::instance().init();
@@ -112,8 +112,10 @@ TEST_CASE("WiFiManager: transient AUTH_FAILED preempted by CONNECTED delivers su
 
     int calls = 0;
     bool last_success = false;
-    WiFiManagerTestAccess::begin_connect(
-        *wm, [&](bool ok, const std::string&) { calls++; last_success = ok; });
+    WiFiManagerTestAccess::begin_connect(*wm, [&](bool ok, const std::string&) {
+        calls++;
+        last_success = ok;
+    });
 
     // Transient wpa_supplicant auth failure mid-handshake.
     WiFiManagerTestAccess::fire_auth_failed(*wm, "WRONG_KEY");

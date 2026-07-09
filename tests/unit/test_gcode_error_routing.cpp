@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "catch_amalgamated.hpp"
-#include "gcode_error_router.h"
+#include "action_prompt_manager.h" // helix::PromptData / helix::PromptButton
 #include "error_event.h"
-#include "action_prompt_manager.h"  // helix::PromptData / helix::PromptButton
+#include "gcode_error_router.h"
+
+#include "catch_amalgamated.hpp"
 
 using helix::ErrorEvent;
 using helix::ErrorSeverity;
@@ -54,8 +55,8 @@ TEST_CASE("build_recovery_prompt maps actions to buttons", "[error-center][routi
     REQUIRE(p.buttons[0].gcode == "RESUME");
     REQUIRE(p.buttons[0].color == "primary");
     REQUIRE(p.buttons[1].label == "Unload");
-    REQUIRE(p.buttons[1].color.empty());            // neutral
-    REQUIRE(p.buttons[2].color == "error");          // "danger" -> "error"
+    REQUIRE(p.buttons[1].color.empty());    // neutral
+    REQUIRE(p.buttons[2].color == "error"); // "danger" -> "error"
 }
 
 TEST_CASE("build_recovery_prompt falls back to default title", "[error-center][routing]") {
@@ -64,6 +65,6 @@ TEST_CASE("build_recovery_prompt falls back to default title", "[error-center][r
     e.detail = "x";
     e.recovery_actions.push_back({"Reset CFS", "BOX_ERROR_CLEAR", "t", ""});
     helix::PromptData p = helix::build_recovery_prompt(e);
-    REQUIRE_FALSE(p.title.empty());                  // non-empty default title
+    REQUIRE_FALSE(p.title.empty()); // non-empty default title
     REQUIRE(p.buttons.size() == 1);
 }

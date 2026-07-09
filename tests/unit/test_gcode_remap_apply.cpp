@@ -10,8 +10,6 @@
 // faithful: REPLACE-by-line modifications built from build_line_replacements
 // reproduce apply_to_string (the oracle) exactly, line for line.
 
-#include "../catch_amalgamated.hpp"
-
 #include "gcode_file_modifier.h"
 #include "gcode_tool_remapper.h"
 
@@ -20,6 +18,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "../catch_amalgamated.hpp"
 
 static std::string slurp_remap_fixture(const std::string& p) {
     std::ifstream f(p);
@@ -46,8 +46,7 @@ static std::vector<std::string> to_lines(const std::string& s) {
 }
 
 // Mirror the prep-manager conversion: build_line_replacements -> REPLACE mods.
-static std::string apply_via_modifier(const std::string& content,
-                                      const std::map<int, int>& remap) {
+static std::string apply_via_modifier(const std::string& content, const std::map<int, int>& remap) {
     auto replacements = helix::GcodeToolRemapper::build_line_replacements(content, remap);
     helix::gcode::GCodeFileModifier modifier;
     for (const auto& r : replacements) {

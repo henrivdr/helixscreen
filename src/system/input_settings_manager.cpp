@@ -44,20 +44,20 @@ void InputSettingsManager::init_subjects() {
     // Jitter threshold (default: 5, range 0-30; 0 disables)
     int jitter_threshold = config->get<int>("/input/jitter_threshold", 5);
     jitter_threshold = std::max(0, std::min(30, jitter_threshold));
-    UI_MANAGED_SUBJECT_INT(jitter_threshold_subject_, jitter_threshold,
-                           "settings_jitter_threshold", subjects_);
+    UI_MANAGED_SUBJECT_INT(jitter_threshold_subject_, jitter_threshold, "settings_jitter_threshold",
+                           subjects_);
 
     // Scroll guard (default: false; AD5M/AD5X presets enable it via hardware preset)
     bool scroll_guard = config->get<bool>("/input/scroll_guard", false);
-    UI_MANAGED_SUBJECT_INT(scroll_guard_subject_, scroll_guard ? 1 : 0,
-                           "settings_scroll_guard", subjects_);
+    UI_MANAGED_SUBJECT_INT(scroll_guard_subject_, scroll_guard ? 1 : 0, "settings_scroll_guard",
+                           subjects_);
 
     // Debug touch visualization (default: false). Apply live at init so the
     // persisted setting matches RuntimeConfig before the ripple timer first fires.
     bool debug_touches = config->get<bool>("/input/debug_touches", false);
     RuntimeConfig::set_debug_touches(debug_touches);
-    UI_MANAGED_SUBJECT_INT(debug_touches_subject_, debug_touches ? 1 : 0,
-                           "settings_debug_touches", subjects_);
+    UI_MANAGED_SUBJECT_INT(debug_touches_subject_, debug_touches ? 1 : 0, "settings_debug_touches",
+                           subjects_);
 
     subjects_initialized_ = true;
 

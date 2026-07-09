@@ -13,13 +13,13 @@ namespace helix {
 
 /// Label media size definition
 struct LabelSize {
-    std::string name;    // Human-readable: "29mm", "62mm", "29x90mm"
-    int width_px;        // Print width in pixels at native DPI
-    int height_px;       // 0 = continuous (auto-size based on content)
+    std::string name; // Human-readable: "29mm", "62mm", "29x90mm"
+    int width_px;     // Print width in pixels at native DPI
+    int height_px;    // 0 = continuous (auto-size based on content)
     int dpi = 300;
-    uint8_t media_type;  // Protocol-specific media type byte
-    uint8_t width_mm;    // Physical width in mm
-    uint8_t length_mm;   // Physical length in mm (0 for continuous)
+    uint8_t media_type; // Protocol-specific media type byte
+    uint8_t width_mm;   // Physical width in mm
+    uint8_t length_mm;  // Physical length in mm (0 for continuous)
 };
 
 /// Label layout preset

@@ -8,7 +8,7 @@ namespace helix::system {
 
 struct LogPathProbeResult {
     bool ok;
-    std::string error;  // populated when ok == false
+    std::string error; // populated when ok == false
 };
 
 /**
@@ -29,4 +29,4 @@ struct LogPathProbeResult {
  */
 LogPathProbeResult probe_log_path_writable(const std::string& path, std::uint64_t min_free_bytes);
 
-}  // namespace helix::system
+} // namespace helix::system

@@ -17,10 +17,10 @@ namespace helix {
  */
 struct ActiveMaterial {
     filament::MaterialInfo material_info; ///< Full material data with user overrides applied
-    uint32_t color_rgb = 0;              ///< Spool color for UI (0xRRGGBB)
-    std::string brand;                   ///< Brand name (Spoolman or manual entry)
-    std::string display_name;            ///< Human-readable: "PA-CF" or "Polymaker PA-CF"
-    std::string material_name;           ///< Raw material name for DB lookups
+    uint32_t color_rgb = 0;               ///< Spool color for UI (0xRRGGBB)
+    std::string brand;                    ///< Brand name (Spoolman or manual entry)
+    std::string display_name;             ///< Human-readable: "PA-CF" or "Polymaker PA-CF"
+    std::string material_name;            ///< Raw material name for DB lookups
 
     // Spoolman integration (0 = not tracked)
     int spoolman_id = 0;

@@ -251,15 +251,17 @@ echo ""
 # NOTE: clang-format versions differ between local (macOS Homebrew) and CI (Ubuntu)
 # which can cause false positives. Use pre-commit hook for local enforcement.
 echo "🎨 Checking code formatting (clang-format)..."
-# Resolve clang-format to the version CI enforces (clang-format 18 — see
-# .github/workflows/quality.yml; "Version must match .clang-format expectations").
-# Preference order: $CLANG_FORMAT override, clang-format-18 on PATH, the project
-# .venv (pip clang-format==18.x, shared into worktrees), then bare clang-format.
-# Auto-fix only runs when the resolved binary is v18, so a mismatched local
-# clang-format (e.g. Homebrew's newer release) can never reflow whole files.
+# Resolve clang-format to the EXACT pinned wheel (clang-format==18.1.8 in
+# requirements.txt, installed into .venv by `make deps`). Preference order:
+# $CLANG_FORMAT override, then the project .venv (the single source of truth —
+# byte-identical on every OS + CI), then a system clang-format-18, then bare
+# clang-format. The .venv wins over the system binary so a machine's Homebrew
+# (newer) or distro (older 18.1.x patch) clang-format never affects formatting.
+# Auto-fix only runs when the resolved binary is v18, so a non-18 fallback can
+# never reflow whole files.
 CF_BIN=""
 CF_VER=""
-for cf_cand in "${CLANG_FORMAT:-}" clang-format-18 "$REPO_ROOT/.venv/bin/clang-format" clang-format; do
+for cf_cand in "${CLANG_FORMAT:-}" "$REPO_ROOT/.venv/bin/clang-format" clang-format-18 clang-format; do
   [ -n "$cf_cand" ] || continue
   command -v "$cf_cand" >/dev/null 2>&1 || [ -x "$cf_cand" ] || continue
   cf_v="$("$cf_cand" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
@@ -616,6 +618,40 @@ else
   section_time $SECTION_START
   echo ""
   echo "⚠️  check_l081_anti_pattern.py not found — skipping"
+fi
+
+echo ""
+
+# ====================================================================
+# Translation format-specifier parity (crash #1073)
+# ====================================================================
+# Background: format strings passed to snprintf/fmt::format via lv_tr() are
+# runtime-translated. If a translation adds an extra %s/%d (or {} field), the
+# format call reads an argument that was never passed → SIGSEGV (snprintf) or
+# fmt::format_error (fmt). #1073 was the French '%d additional fan%s' translated
+# with two %s, crashing the Controls panel for French users.
+SECTION_START=$(date +%s)
+echo -n "🌐 Checking translation format specifiers..."
+
+TRANS_FMT_PY="${VENV_PYTHON:-python3}"
+[ -x "$TRANS_FMT_PY" ] || TRANS_FMT_PY=python3
+if [ -f "scripts/check_translation_format_specifiers.py" ]; then
+  if "$TRANS_FMT_PY" scripts/check_translation_format_specifiers.py >/tmp/trans_fmt.out 2>&1; then
+    section_time $SECTION_START
+    echo ""
+    echo "✅ All translated format strings preserve their source placeholders"
+  else
+    section_time $SECTION_START
+    echo ""
+    cat /tmp/trans_fmt.out
+    echo "   Run: $TRANS_FMT_PY scripts/check_translation_format_specifiers.py"
+    echo "   Fix the offending translation in translations/<locale>.yml, then run: make translations"
+    EXIT_CODE=1
+  fi
+else
+  section_time $SECTION_START
+  echo ""
+  echo "⚠️  check_translation_format_specifiers.py not found — skipping"
 fi
 
 echo ""

@@ -71,8 +71,7 @@ TEST_CASE("resolve_webcam_url strips Moonraker default port 7125", "[api][webcam
             "http://192.168.1.112/webcam/?action=stream");
 }
 
-TEST_CASE("resolve_webcam_url keeps a non-default reverse-proxy port (K2 :4408)",
-          "[api][webcam]") {
+TEST_CASE("resolve_webcam_url keeps a non-default reverse-proxy port (K2 :4408)", "[api][webcam]") {
     // Connected via a reverse proxy on :4408 — the frontend serving the webcam is
     // on that same port, so it must be preserved.
     REQUIRE(resolve_with_base("http://192.168.1.74:4408", "/snapshot.html") ==
@@ -81,8 +80,7 @@ TEST_CASE("resolve_webcam_url keeps a non-default reverse-proxy port (K2 :4408)"
             "http://192.168.1.74:4408/webcam/?action=snapshot");
 }
 
-TEST_CASE("resolve_webcam_url resolves against base when base has no port",
-          "[api][webcam]") {
+TEST_CASE("resolve_webcam_url resolves against base when base has no port", "[api][webcam]") {
     REQUIRE(resolve_with_base("http://camera.local", "/webcam/?action=stream") ==
             "http://camera.local/webcam/?action=stream");
 }

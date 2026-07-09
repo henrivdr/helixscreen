@@ -16,22 +16,21 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
 
-    - name: Install clang-format 18
+    - name: Install pinned tooling (clang-format) into .venv
       uses: nick-fields/retry@v4
       with:
         timeout_minutes: 3
         max_attempts: 3
         command: |
-          # Install clang-format 18 from LLVM apt repository for consistent formatting
-          # Version must match .clang-format file expectations
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm-18.list
-          sudo apt-get update
-          sudo apt-get install -y clang-format-18
-          # Remove old clang-format and make clang-format-18 the default
-          sudo rm -f /usr/bin/clang-format
-          sudo ln -s /usr/bin/clang-format-18 /usr/bin/clang-format
-          clang-format --version
+          # Install the EXACT pinned clang-format (and other tools) from
+          # requirements.txt into .venv — the same single source of truth the
+          # pre-commit hook uses (scripts/quality-checks.sh prefers
+          # .venv/bin/clang-format). This guarantees CI formats byte-identically
+          # to every dev machine, independent of the runner's system clang-format.
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/clang-format --version
 
     - name: Run quality checks
       timeout-minutes: 5

@@ -173,7 +173,8 @@ void MoonrakerAPIMock::mock_set_db_value(const std::string& namespace_name, cons
 nlohmann::json MoonrakerAPIMock::mock_get_db_value(const std::string& namespace_name,
                                                    const std::string& key) const {
     auto it = mock_db_.find(namespace_name + ":" + key);
-    if (it == mock_db_.end()) return nlohmann::json();
+    if (it == mock_db_.end())
+        return nlohmann::json();
     return it->second;
 }
 
@@ -218,19 +219,23 @@ void MoonrakerAPIMock::fire_deferred_db_post_success() {
     // No-op if nothing was captured. This is important for the
     // destruction-before-fire lifetime tests: a test can safely call this in
     // cleanup without caring whether a previous test consumed it.
-    if (!deferred_db_post_.has_value()) return;
+    if (!deferred_db_post_.has_value())
+        return;
     auto captured = std::move(*deferred_db_post_);
     deferred_db_post_.reset();
     // Apply the deferred DB write now that the "server" has acknowledged.
     mock_db_[captured.namespace_name + ":" + captured.key] = captured.value;
-    if (captured.on_success) captured.on_success();
+    if (captured.on_success)
+        captured.on_success();
 }
 
 void MoonrakerAPIMock::fire_deferred_db_post_error(MoonrakerError err) {
-    if (!deferred_db_post_.has_value()) return;
+    if (!deferred_db_post_.has_value())
+        return;
     auto captured = std::move(*deferred_db_post_);
     deferred_db_post_.reset();
-    if (captured.on_error) captured.on_error(err);
+    if (captured.on_error)
+        captured.on_error(err);
 }
 
 void MoonrakerAPIMock::mock_defer_next_db_delete() {
@@ -238,19 +243,23 @@ void MoonrakerAPIMock::mock_defer_next_db_delete() {
 }
 
 void MoonrakerAPIMock::fire_deferred_db_delete_success() {
-    if (!deferred_db_delete_.has_value()) return;
+    if (!deferred_db_delete_.has_value())
+        return;
     auto captured = std::move(*deferred_db_delete_);
     deferred_db_delete_.reset();
     // Apply the deferred DB erase now that the "server" has acknowledged.
     mock_db_.erase(captured.namespace_name + ":" + captured.key);
-    if (captured.on_success) captured.on_success();
+    if (captured.on_success)
+        captured.on_success();
 }
 
 void MoonrakerAPIMock::fire_deferred_db_delete_error(MoonrakerError err) {
-    if (!deferred_db_delete_.has_value()) return;
+    if (!deferred_db_delete_.has_value())
+        return;
     auto captured = std::move(*deferred_db_delete_);
     deferred_db_delete_.reset();
-    if (captured.on_error) captured.on_error(err);
+    if (captured.on_error)
+        captured.on_error(err);
 }
 
 void MoonrakerAPIMock::mock_defer_next_db_get() {
@@ -258,17 +267,21 @@ void MoonrakerAPIMock::mock_defer_next_db_get() {
 }
 
 void MoonrakerAPIMock::fire_deferred_db_get_success(const nlohmann::json& value) {
-    if (!deferred_db_get_.has_value()) return;
+    if (!deferred_db_get_.has_value())
+        return;
     auto captured = std::move(*deferred_db_get_);
     deferred_db_get_.reset();
-    if (captured.on_success) captured.on_success(value);
+    if (captured.on_success)
+        captured.on_success(value);
 }
 
 void MoonrakerAPIMock::fire_deferred_db_get_error(MoonrakerError err) {
-    if (!deferred_db_get_.has_value()) return;
+    if (!deferred_db_get_.has_value())
+        return;
     auto captured = std::move(*deferred_db_get_);
     deferred_db_get_.reset();
-    if (captured.on_error) captured.on_error(err);
+    if (captured.on_error)
+        captured.on_error(err);
 }
 
 void MoonrakerAPIMock::set_database_empty(const std::string& namespace_name,

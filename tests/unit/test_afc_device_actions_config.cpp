@@ -404,8 +404,7 @@ TEST_CASE("Execute macro var slider modifies config", "[ams][afc][device_actions
 
         auto* cfg = AmsBackendAfcConfigHelper::get_afc_config(backend);
         REQUIRE(cfg != nullptr);
-        CHECK(cfg->parser().get_float("AFC_poop", "purge_length", 0.0f) ==
-              Catch::Approx(150.0f));
+        CHECK(cfg->parser().get_float("AFC_poop", "purge_length", 0.0f) == Catch::Approx(150.0f));
     }
 
     SECTION("purge_enabled sends G-code (always succeeds without config)") {

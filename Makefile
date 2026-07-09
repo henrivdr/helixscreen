@@ -850,7 +850,7 @@ MOCK_OBJS := $(patsubst $(TEST_MOCK_DIR)/%.cpp,$(OBJ_DIR)/tests/mocks/%.o,$(MOCK
 # Default target
 .DEFAULT_GOAL := all
 
-.PHONY: all build clean run test tests test-integration test-cards test-print-select test-size-content demo compile_commands compile_commands_full libhv-build apply-patches generate-fonts validate-fonts regen-fonts update-mdi-cache verify-mdi-codepoints help check-deps install-deps venv-setup icon format format-staged screenshots tools moonraker-inspector strict quality setup translations symbols strip dev install
+.PHONY: all build clean run test tests test-integration test-cards test-print-select test-size-content demo compile_commands compile_commands_full libhv-build apply-patches generate-fonts validate-fonts regen-fonts update-mdi-cache verify-mdi-codepoints help check-deps install-deps venv-setup icon format format-staged screenshots tools moonraker-inspector strict quality setup translations symbols strip dev install regen-filaments
 
 # Fast development build: -O0 skips optimization passes (~2x faster compilation)
 # Library code still builds at -O2 (via SUBMODULE_CFLAGS) since it rarely changes
@@ -1003,6 +1003,7 @@ include mk/tools.mk
 include mk/display-lib.mk
 include mk/bluetooth.mk
 include mk/splash.mk
+include mk/filaments.mk
 include mk/watchdog.mk
 ifdef PI_DUAL_LINK
 include mk/pi-dual-link.mk
@@ -1074,12 +1075,14 @@ install:
 		\( -name '*.c' -o -name '*.h' -o -name 'CMakeLists.txt' -o -name '*.cmake' \) \
 		-type f -delete
 	@echo "  → ui_xml/"
-	@# assets: fonts, images, sounds, config
+	@# assets: fonts, images, sounds, config, plus root-level runtime files
 	@install -d "$(DESTDIR)/opt/helixscreen/assets"
 	@if [ -d assets/fonts ]; then cp -a assets/fonts "$(DESTDIR)/opt/helixscreen/assets/"; fi
 	@if [ -d assets/images ]; then cp -a assets/images "$(DESTDIR)/opt/helixscreen/assets/"; fi
 	@if [ -d assets/sounds ]; then cp -a assets/sounds "$(DESTDIR)/opt/helixscreen/assets/"; fi
 	@if [ -d assets/config ]; then cp -a assets/config "$(DESTDIR)/opt/helixscreen/assets/"; fi
+	@# filaments.json: unified filament catalog, loaded on demand by FilamentCatalog
+	@if [ -f assets/filaments.json ]; then cp -a assets/filaments.json "$(DESTDIR)/opt/helixscreen/assets/"; fi
 	@echo "  → assets/"
 	@# certs (optional — only present after `make ad5m-docker` fetched them)
 	@if [ -f "$(BUILD_DIR)/certs/ca-certificates.crt" ]; then \

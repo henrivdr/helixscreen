@@ -24,6 +24,7 @@
 #include "display_settings_manager.h"
 #include "format_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "page_scroll_auto_inject.h"
 #include "settings_manager.h"
 #include "sound_manager.h"
 #include "static_panel_registry.h"
@@ -112,6 +113,7 @@ void DisplaySoundSettingsOverlay::register_callbacks() {
         {"on_dark_mode_changed", on_dark_mode_changed},
         {"on_brightness_changed", on_brightness_changed},
         {"on_widget_labels_changed", on_widget_labels_changed},
+        {"on_page_scroll_buttons_changed", on_page_scroll_buttons_changed},
         {"on_bed_mesh_mode_changed", on_bed_mesh_mode_changed},
         {"on_dim_changed", on_dim_changed},
         {"on_sleep_changed", on_sleep_changed},
@@ -651,6 +653,14 @@ void DisplaySoundSettingsOverlay::handle_widget_labels_changed(bool enabled) {
     SettingsManager::instance().set_show_widget_labels(enabled);
 }
 
+void DisplaySoundSettingsOverlay::handle_page_scroll_buttons_changed(bool enabled) {
+    spdlog::info("[{}] Page scroll buttons toggled: {}", get_name(), enabled ? "ON" : "OFF");
+    DisplaySettingsManager::instance().set_page_scroll_buttons(enabled);
+    // Apply immediately to the current screen — this callback is the authoritative
+    // user-toggle signal (a subject observer can't be used; see PageScrollAutoInject::init).
+    helix::ui::PageScrollAutoInject::instance().on_setting_toggled(enabled);
+}
+
 void DisplaySoundSettingsOverlay::handle_bed_mesh_mode_changed(int mode) {
     spdlog::info("[{}] Bed mesh render mode changed: {} ({})", get_name(), mode,
                  mode == 0 ? "Auto" : (mode == 1 ? "3D" : "2D"));
@@ -1100,6 +1110,14 @@ void DisplaySoundSettingsOverlay::on_widget_labels_changed(lv_event_t* e) {
     auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
     bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
     get_display_sound_settings_overlay().handle_widget_labels_changed(enabled);
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void DisplaySoundSettingsOverlay::on_page_scroll_buttons_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[DisplaySoundSettingsOverlay] on_page_scroll_buttons_changed");
+    auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+    get_display_sound_settings_overlay().handle_page_scroll_buttons_changed(enabled);
     LVGL_SAFE_EVENT_CB_END();
 }
 

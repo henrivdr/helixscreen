@@ -9,13 +9,13 @@
 
 #include <algorithm>
 #include <cctype>
-#include <system_error>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string_view>
 #include <sys/stat.h>
+#include <system_error>
 
 namespace {
 
@@ -330,8 +330,7 @@ void GCodeParser::parse_arc_command(const std::string& line, bool clockwise) {
         full_turns = static_cast<int>(value);
     if (full_turns > 0) {
         float dir = clockwise ? -1.0f : 1.0f;
-        sweep = dir * full_turns * 2.0f * static_cast<float>(M_PI) +
-                (end_angle - start_angle);
+        sweep = dir * full_turns * 2.0f * static_cast<float>(M_PI) + (end_angle - start_angle);
         if (clockwise && sweep > 0)
             sweep -= 2.0f * static_cast<float>(M_PI);
         else if (!clockwise && sweep < 0)
@@ -387,8 +386,11 @@ bool GCodeParser::parse_exclude_object_command(const std::string& line) {
         if (extract_string_param(line, "CENTER", center_str)) {
             size_t comma = center_str.find(',');
             if (comma != std::string::npos) {
-                auto [px, ecx] = parse_float_range(center_str.data(), center_str.data() + comma, obj.center.x);
-                auto [py, ecy] = parse_float_range(center_str.data() + comma + 1, center_str.data() + center_str.size(), obj.center.y);
+                auto [px, ecx] =
+                    parse_float_range(center_str.data(), center_str.data() + comma, obj.center.x);
+                auto [py, ecy] =
+                    parse_float_range(center_str.data() + comma + 1,
+                                      center_str.data() + center_str.size(), obj.center.y);
                 if (ecx != std::errc{} || ecy != std::errc{}) {
                     spdlog::debug("[GCode Parser] Failed to parse CENTER for object: {}", name);
                 }
@@ -418,14 +420,18 @@ bool GCodeParser::parse_exclude_object_command(const std::string& line) {
                     size_t comma = polygon_str.find(',', pos);
                     if (comma != std::string::npos) {
                         float x = 0, y = 0;
-                        auto [px, ecx] = parse_float_range(polygon_str.data() + pos, polygon_str.data() + comma, x);
-                        if (ecx != std::errc{}) break;
+                        auto [px, ecx] = parse_float_range(polygon_str.data() + pos,
+                                                           polygon_str.data() + comma, x);
+                        if (ecx != std::errc{})
+                            break;
                         pos = comma + 1;
 
                         size_t close = polygon_str.find(']', pos);
                         if (close != std::string::npos) {
-                            auto [py, ecy] = parse_float_range(polygon_str.data() + pos, polygon_str.data() + close, y);
-                            if (ecy != std::errc{}) break;
+                            auto [py, ecy] = parse_float_range(polygon_str.data() + pos,
+                                                               polygon_str.data() + close, y);
+                            if (ecy != std::errc{})
+                                break;
                             obj.polygon.push_back(glm::vec2(x, y));
                             pos = close + 1;
                             spdlog::trace("[GCode Parser] Parsed polygon point: ({}, {})", x, y);
@@ -508,7 +514,8 @@ void GCodeParser::parse_metadata_comment(const std::string& line) {
     // LAYER_CHANGE starts with 'L'/'l', LAYER: also starts with 'L'/'l'
     if (!trimmed_content.empty() && (trimmed_content[0] == 'L' || trimmed_content[0] == 'l')) {
         std::string content_upper(trimmed_content);
-        std::transform(content_upper.begin(), content_upper.end(), content_upper.begin(), ::toupper);
+        std::transform(content_upper.begin(), content_upper.end(), content_upper.begin(),
+                       ::toupper);
 
         // Detect layer change markers (but not LAYER_COUNT which is metadata)
         if (content_upper.find("LAYER_CHANGE") == 0 || content_upper.find("LAYER:") == 0) {

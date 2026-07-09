@@ -108,8 +108,13 @@ void WizardConnectionStep::init_subjects() {
         std::string default_port = "7125"; // Default Moonraker port
 
         try {
-            default_ip =
+            // A factory reset or --wizard re-run persists an empty host string;
+            // Config::get returns it verbatim, so resolve an empty stored host back
+            // to the localhost default rather than leaving the field blank (users
+            // report 127.0.0.1 not pre-filled).
+            std::string stored_ip =
                 config->get<std::string>(config->df() + helix::wizard::MOONRAKER_HOST, default_ip);
+            default_ip = resolve_moonraker_host_default(stored_ip, helix::is_android_platform());
             int port_num = config->get<int>(config->df() + helix::wizard::MOONRAKER_PORT, 7125);
             default_port = std::to_string(port_num);
 
@@ -122,8 +127,7 @@ void WizardConnectionStep::init_subjects() {
         strncpy(connection_ip_buffer_, default_ip.c_str(), sizeof(connection_ip_buffer_) - 1);
         connection_ip_buffer_[sizeof(connection_ip_buffer_) - 1] = '\0';
 
-        strncpy(connection_port_buffer_, default_port.c_str(),
-                sizeof(connection_port_buffer_) - 1);
+        strncpy(connection_port_buffer_, default_port.c_str(), sizeof(connection_port_buffer_) - 1);
         connection_port_buffer_[sizeof(connection_port_buffer_) - 1] = '\0';
     } else {
         spdlog::debug("[{}] Re-init: preserving buffer (IP='{}', Port='{}')", get_name(),
@@ -380,8 +384,7 @@ void WizardConnectionStep::on_connection_success(const helix::LifetimeToken& tok
     } else {
         // No client available - still show success but warn
         lv_subject_set_int(&connection_discovering_, 0);
-        set_status("icon_check_circle", StatusVariant::Success,
-                   lv_tr("Connected (no discovery)"));
+        set_status("icon_check_circle", StatusVariant::Success, lv_tr("Connected (no discovery)"));
         connection_validated_ = true;
         lv_subject_set_int(&connection_test_passed, 1);
     }
@@ -630,8 +633,7 @@ void WizardConnectionStep::on_auto_probe_success(const helix::LifetimeToken& tok
     } else {
         // No client - still show success
         lv_subject_set_int(&connection_discovering_, 0);
-        set_status("icon_check_circle", StatusVariant::Success,
-                   lv_tr("Connection successful!"));
+        set_status("icon_check_circle", StatusVariant::Success, lv_tr("Connection successful!"));
         connection_validated_ = true;
         lv_subject_set_int(&connection_test_passed, 1);
     }
@@ -815,7 +817,8 @@ lv_obj_t* WizardConnectionStep::create(lv_obj_t* parent) {
     auto mdns_tok = lifetime_.token();
     mdns_discovery_->start_discovery(
         [this, mdns_tok](const std::vector<DiscoveredPrinter>& printers) {
-            if (mdns_tok.expired()) return;
+            if (mdns_tok.expired())
+                return;
             on_printers_discovered(printers);
         });
 

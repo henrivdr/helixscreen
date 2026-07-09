@@ -1,8 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "format_utils.h"
 #include "ui_format_utils.h"
+
+#include "format_utils.h"
 
 #include <cstring>
 #include <ctime>
@@ -288,7 +289,7 @@ TEST_CASE("format_short_date current year omits year", "[format_utils][date]") {
 
     struct tm target_tm {};
     target_tm.tm_year = now_tm.tm_year; // current year
-    target_tm.tm_mon = 2;  // March (0-based)
+    target_tm.tm_mon = 2;               // March (0-based)
     target_tm.tm_mday = 10;
     target_tm.tm_hour = 12;
     time_t ts = mktime(&target_tm);
@@ -308,7 +309,7 @@ TEST_CASE("format_short_date previous year includes year", "[format_utils][date]
 
     struct tm target_tm {};
     target_tm.tm_year = now_tm.tm_year - 1; // previous year
-    target_tm.tm_mon = 5;  // June (0-based)
+    target_tm.tm_mon = 5;                   // June (0-based)
     target_tm.tm_mday = 15;
     target_tm.tm_hour = 12;
     time_t ts = mktime(&target_tm);

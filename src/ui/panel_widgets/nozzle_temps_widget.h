@@ -21,8 +21,7 @@ struct ToolInfo;
 /// toolchanger maps each tool to its own extruder. The nozzle-temps widget shows
 /// one row per physical nozzle, so it iterates this rather than tools() directly.
 /// Tools with no extruder_name are dropped.
-[[nodiscard]] std::vector<std::string>
-distinct_extruder_names(const std::vector<ToolInfo>& tools);
+[[nodiscard]] std::vector<std::string> distinct_extruder_names(const std::vector<ToolInfo>& tools);
 
 /// Panel widget showing per-extruder temperature rows with progress bars.
 /// Gated on show_tool_badge (multi-tool printers only). Displays each
@@ -86,7 +85,8 @@ class NozzleTempsWidget : public PanelWidget {
     int rebuild_gen_ = 0;     // Generation counter to break infinite rebuild cycles (L074)
     bool rebuilding_ = false; // Re-entrancy guard: drain() inside clear_rows() can fire
                               // version_observer_ which calls rebuild_rows() again (#723)
-    int current_colspan_ = 1; // Last colspan from on_size_changed; rows pick short/long label off this
+    int current_colspan_ =
+        1; // Last colspan from on_size_changed; rows pick short/long label off this
 
     // MUST stay declared LAST: reverse-declaration destruction makes this the
     // first member torn down, invalidating every captured token before any

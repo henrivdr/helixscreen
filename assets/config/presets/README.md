@@ -21,6 +21,7 @@ The preset sets `wizard_completed: false` so the abbreviated wizard runs on firs
 | `artillery-m1-pro.json` | Artillery M1 Pro | Touch calibration, hardware mappings, sound disabled (CPU overload) |
 | `voron-v2-afc.json` | Voron V2 with AFC | Reference config, not auto-baked |
 | `qidi_q2.json` | Qidi Q2 + QIDI Box (Happy Hare) | Network-detected (applied by the wizard, not baked); hardware mappings + Happy Hare filament-sensor roles |
+| `qidi_max4.json` | Qidi Max 4 | Network-detected. Stock hardware mappings from the default/optimized Max 4 config repos; QIDI Box handled by the QIDI Box backend |
 | `anycubic_kobra_2_pro.json` | Anycubic Kobra 2 Pro (Rinkhals) | Network-detected. Conservative: heaters/sensors only — fan/LED/filament-sensor object names unverified (no on-device build yet) |
 | `anycubic_kobra_3.json` | Anycubic Kobra 3 / Kobra 3 V2 (Rinkhals) | Network-detected. Shared by both (identical hardware). ACE handled by AMS backend, not this preset |
 | `anycubic_kobra_3_max.json` | Anycubic Kobra 3 Max (Rinkhals) | Network-detected. Conservative mappings; dual-Y + ACE printer |

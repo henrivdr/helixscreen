@@ -27,6 +27,17 @@ class MoonrakerClient;
 // Forward declare json
 #include "json_fwd.h"
 
+namespace helix::spoolman_detail {
+/**
+ * @brief Parse a single Spoolman spool JSON object into SpoolInfo.
+ *
+ * Exposed for testing. Must tolerate present-but-null numeric fields
+ * (Spoolman serializes optional temps etc. as null) without throwing — a
+ * throw here aborts the whole spool-list parse (#1087).
+ */
+SpoolInfo parse_spool_info(const nlohmann::json& spool_json);
+} // namespace helix::spoolman_detail
+
 /**
  * @brief Spoolman API operations via Moonraker's server.spoolman.proxy
  *

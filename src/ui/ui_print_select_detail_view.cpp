@@ -3,8 +3,6 @@
 
 #include "ui_print_select_detail_view.h"
 
-#include "ams_state.h"
-#include "tool_state.h"
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
 #include "ui_filename_utils.h"
@@ -16,6 +14,7 @@
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
+#include "ams_state.h"
 #include "app_globals.h"
 #include "color_utils.h"
 #include "config.h"
@@ -26,6 +25,7 @@
 #include "moonraker_api.h"
 #include "runtime_config.h"
 #include "theme_manager.h"
+#include "tool_state.h"
 
 #include <spdlog/spdlog.h>
 
@@ -254,7 +254,8 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
     nozzle_clean_checkbox_ = nullptr;
     purge_line_checkbox_ = nullptr;
     timelapse_checkbox_ = nullptr;
-    pre_print_options_container_ = lv_obj_find_by_name(overlay_root_, "pre_print_options_container");
+    pre_print_options_container_ =
+        lv_obj_find_by_name(overlay_root_, "pre_print_options_container");
 
     // Look up the color swatches row container (parent card visibility is
     // driven by the color_swatches_visible subject — no flag manipulation here).
@@ -712,8 +713,8 @@ void PrintSelectDetailView::on_cancel_delete_static(lv_event_t* e) {
     }
 }
 
-void PrintSelectDetailView::update_color_swatches(
-    const std::set<int>& tool_indices, const std::vector<std::string>& palette_colors) {
+void PrintSelectDetailView::update_color_swatches(const std::set<int>& tool_indices,
+                                                  const std::vector<std::string>& palette_colors) {
     // TWO-TONE chip: the TOP band shows the GCODE FILE intended color (slicer
     // palette) + the gcode tool number ("T0", "T2"); the BOTTOM band shows the
     // ACTUAL present color of the EFFECTIVE mapped slot + that slot's lane
@@ -788,8 +789,8 @@ void PrintSelectDetailView::update_color_swatches(
         // No resolved lane (auto/unmapped or no backend): bottom band stays
         // blank (no number, default fill) — chip reads as just the gcode top.
 
-        auto* swatch = static_cast<lv_obj_t*>(
-            lv_xml_create(color_swatches_row_, "filament_swatch", nullptr));
+        auto* swatch =
+            static_cast<lv_obj_t*>(lv_xml_create(color_swatches_row_, "filament_swatch", nullptr));
         if (!swatch) {
             continue;
         }
@@ -807,15 +808,14 @@ void PrintSelectDetailView::update_color_swatches(
             lv_obj_set_style_bg_color(top_band, gcode_color, 0);
             if (auto* tool_label = lv_obj_find_by_name(top_band, "tool_label")) {
                 lv_label_set_text_fmt(tool_label, "T%d", tool);
-                lv_obj_set_style_text_color(
-                    tool_label, theme_manager_get_contrast_color(gcode_color), 0);
+                lv_obj_set_style_text_color(tool_label,
+                                            theme_manager_get_contrast_color(gcode_color), 0);
             }
         }
 
         // Bottom band fill (or empty variant) + lane number.
-        lv_color_t bottom_text_color = slot_is_empty
-                                            ? theme_manager_get_color("warning")
-                                            : theme_manager_get_contrast_color(slot_color);
+        lv_color_t bottom_text_color = slot_is_empty ? theme_manager_get_color("warning")
+                                                     : theme_manager_get_contrast_color(slot_color);
         if (auto* bottom_band = lv_obj_find_by_name(swatch, "bottom_band")) {
             if (slot_is_empty) {
                 lv_obj_add_state(bottom_band, LV_STATE_USER_1);
@@ -968,8 +968,9 @@ void PrintSelectDetailView::try_extract_gcode_colors(lv_obj_t* viewer) {
     // Backfill filament_colors when slicer metadata didn't provide them
     // (Snapmaker and a few other Moonraker variants).
     if (current_filament_colors_.empty() && !parsed->tool_color_palette.empty()) {
-        spdlog::info("[DetailView] Metadata lacked filament colors — extracted {} from parsed gcode",
-                     parsed->tool_color_palette.size());
+        spdlog::info(
+            "[DetailView] Metadata lacked filament colors — extracted {} from parsed gcode",
+            parsed->tool_color_palette.size());
         current_filament_colors_ = parsed->tool_color_palette;
 
         // Rebuild the mapping card's internal tool/slot/mapping state with the
@@ -1230,64 +1231,61 @@ void PrintSelectDetailView::kick_off_headless_tools_scan() {
         return;
     }
     const std::string scan_path =
-        cache_dir + "/tools_scan_" +
-        std::to_string(std::hash<std::string>{}(file_path)) + ".gcode";
+        cache_dir + "/tools_scan_" + std::to_string(std::hash<std::string>{}(file_path)) + ".gcode";
 
     auto tok = lifetime_.token();
 
     // Marshals the final state back to the main thread (LVGL + member writes).
     auto finish = [this, tok](std::set<int> tools) {
-        tok.defer("DetailView::headless_scan_finish",
-                  [this, tools = std::move(tools)]() mutable {
-                      headless_tools_used_ = std::move(tools);
-                      headless_scan_done_ = true;
-                      spdlog::debug("[DetailView] Headless tools_used scan complete: {} tools",
-                                    headless_tools_used_->size());
+        tok.defer("DetailView::headless_scan_finish", [this, tools = std::move(tools)]() mutable {
+            headless_tools_used_ = std::move(tools);
+            headless_scan_done_ = true;
+            spdlog::debug("[DetailView] Headless tools_used scan complete: {} tools",
+                          headless_tools_used_->size());
 
-                      // Render the per-tool color swatches from the REAL used-tool
-                      // set recovered by the headless scan. On 2D-only platforms
-                      // (Snapmaker U1, AD5M) the gcode viewer never parses, so
-                      // try_extract_gcode_colors() — the viewer-parse owner of this
-                      // render — never fires and the detail panel would otherwise
-                      // show no color info at all (regression 22d37fd47). Mirror its
-                      // visibility decision and renderer here, sourcing the tool set
-                      // from tools_used_effective() so the swatches reflect the
-                      // precise used tools (e.g. {0,2}), not an over-counted palette.
-                      //
-                      // Guard on !is_gcode_loaded(): when the viewer DID parse (full
-                      // platforms) it already owns the render — don't double-fire.
-                      if (!is_gcode_loaded()) {
-                          const bool mapping_visible = filament_mapping_card_.should_show();
-                          const auto tools_used = tools_used_effective();
-                          const bool swatches_visible =
-                              !mapping_visible && swatches_card_visible_for(tools_used.size());
-                          lv_subject_set_int(&color_swatches_visible_,
-                                             swatches_visible ? 1 : 0);
-                          if (swatches_visible) {
-                              update_color_swatches(tools_used, current_filament_colors_);
-                          }
-                          // Refresh the mapping card's DISPLAY from the headless
-                          // colors. Still required for editable-card backends that
-                          // use the headless path (e.g. CFS on a 2D-only platform):
-                          // the card widget renders its own swatches/rows from
-                          // tool_info_, so it must be fed here just as the
-                          // viewer-parse path does (try_extract_gcode_colors).
-                          //
-                          // NOTE: this is now redundant for preflight/remap LOGIC —
-                          // recompute_preflight() and open_remap_modal() source
-                          // per-tool info from current_filament_colors_/materials
-                          // directly (get_used_tool_info()), not the card instance —
-                          // but it remains correct and necessary for card display.
-                          filament_mapping_card_.update(current_filament_colors_,
-                                                        current_filament_materials_);
-                      }
+            // Render the per-tool color swatches from the REAL used-tool
+            // set recovered by the headless scan. On 2D-only platforms
+            // (Snapmaker U1, AD5M) the gcode viewer never parses, so
+            // try_extract_gcode_colors() — the viewer-parse owner of this
+            // render — never fires and the detail panel would otherwise
+            // show no color info at all (regression 22d37fd47). Mirror its
+            // visibility decision and renderer here, sourcing the tool set
+            // from tools_used_effective() so the swatches reflect the
+            // precise used tools (e.g. {0,2}), not an over-counted palette.
+            //
+            // Guard on !is_gcode_loaded(): when the viewer DID parse (full
+            // platforms) it already owns the render — don't double-fire.
+            if (!is_gcode_loaded()) {
+                const bool mapping_visible = filament_mapping_card_.should_show();
+                const auto tools_used = tools_used_effective();
+                const bool swatches_visible =
+                    !mapping_visible && swatches_card_visible_for(tools_used.size());
+                lv_subject_set_int(&color_swatches_visible_, swatches_visible ? 1 : 0);
+                if (swatches_visible) {
+                    update_color_swatches(tools_used, current_filament_colors_);
+                }
+                // Refresh the mapping card's DISPLAY from the headless
+                // colors. Still required for editable-card backends that
+                // use the headless path (e.g. CFS on a 2D-only platform):
+                // the card widget renders its own swatches/rows from
+                // tool_info_, so it must be fed here just as the
+                // viewer-parse path does (try_extract_gcode_colors).
+                //
+                // NOTE: this is now redundant for preflight/remap LOGIC —
+                // recompute_preflight() and open_remap_modal() source
+                // per-tool info from current_filament_colors_/materials
+                // directly (get_used_tool_info()), not the card instance —
+                // but it remains correct and necessary for card display.
+                filament_mapping_card_.update(current_filament_colors_,
+                                              current_filament_materials_);
+            }
 
-                      // Refresh pre-flight using the headless set (no-op on full
-                      // platforms where the viewer parse already populated it).
-                      recompute_preflight();
-                      // Release any deferred print attempt waiting on readiness.
-                      fire_on_preflight_ready();
-                  });
+            // Refresh pre-flight using the headless set (no-op on full
+            // platforms where the viewer parse already populated it).
+            recompute_preflight();
+            // Release any deferred print attempt waiting on readiness.
+            fire_on_preflight_ready();
+        });
     };
 
     // Stream the whole file to disk (memory-safe), then scan it line-by-line off
@@ -1447,8 +1445,7 @@ void PrintSelectDetailView::load_gcode_for_preview() {
         [this, tok, temp_path, file_path](const FileMetadata& metadata) {
             // L081 Mechanism C: marshal member writes + LVGL/show_gcode_viewer
             // to main thread before touching `this`.
-            tok.defer("DetailView::metadata_apply", [this, tok, metadata, temp_path,
-                                                     file_path]() {
+            tok.defer("DetailView::metadata_apply", [this, tok, metadata, temp_path, file_path]() {
                 // Cache for PrintStartController's pre-print checks (e.g., filament weight)
                 cached_file_metadata_ = metadata;
 
@@ -1474,66 +1471,70 @@ void PrintSelectDetailView::load_gcode_for_preview() {
                 // Stream download to disk
                 api_->transfers().download_file_to_path(
                     "gcodes", file_path, temp_path,
-                [this, tok, temp_path](const std::string& path) {
-                    // Runs on HTTP thread — no bg-thread tok.expired() check (L081 Mechanism C).
-                    // The inner main-thread guard below is what gates this (queue_update is not
-                    // lifetime-aware).
-                    helix::ui::queue_update([this, tok, path]() {
-                        if (tok.expired()) {
-                            return;
-                        }
-                        temp_gcode_path_ = path;
+                    [this, tok, temp_path](const std::string& path) {
+                        // Runs on HTTP thread — no bg-thread tok.expired() check (L081 Mechanism
+                        // C). The inner main-thread guard below is what gates this (queue_update is
+                        // not lifetime-aware).
+                        helix::ui::queue_update([this, tok, path]() {
+                            if (tok.expired()) {
+                                return;
+                            }
+                            temp_gcode_path_ = path;
 
-                        spdlog::debug("[DetailView] G-code downloaded, loading into viewer: {}",
-                                      path);
+                            spdlog::debug("[DetailView] G-code downloaded, loading into viewer: {}",
+                                          path);
 
-                        // Set up load callback
-                        ui_gcode_viewer_set_load_callback(
-                            gcode_viewer_,
-                            [](lv_obj_t* viewer, void* user_data, bool success) {
-                                auto* self = static_cast<PrintSelectDetailView*>(user_data);
-                                if (!success) {
-                                    spdlog::warn("[DetailView] G-code load failed after download");
-                                    self->show_gcode_viewer(false);
-                                    return;
-                                }
-                                self->gcode_loaded_ = true;
+                            // Set up load callback
+                            ui_gcode_viewer_set_load_callback(
+                                gcode_viewer_,
+                                [](lv_obj_t* viewer, void* user_data, bool success) {
+                                    auto* self = static_cast<PrintSelectDetailView*>(user_data);
+                                    if (!success) {
+                                        spdlog::warn(
+                                            "[DetailView] G-code load failed after download");
+                                        self->show_gcode_viewer(false);
+                                        return;
+                                    }
+                                    self->gcode_loaded_ = true;
 
-                                // Show all layers, no ghost (preview = full model)
-                                ui_gcode_viewer_set_print_progress(viewer, -1);
+                                    // Show all layers, no ghost (preview = full model)
+                                    ui_gcode_viewer_set_print_progress(viewer, -1);
 
-                                // Apply AMS or slicer tool colors, then override with mapped colors
-                                self->apply_tool_colors();
-                                self->apply_mapped_tool_colors();
+                                    // Apply AMS or slicer tool colors, then override with mapped
+                                    // colors
+                                    self->apply_tool_colors();
+                                    self->apply_mapped_tool_colors();
 
-                                // Extract colors from parsed gcode when metadata lacked them.
-                                // Also computes preflight_result_ — MUST run before
-                                // fire_on_loaded() so a deferred print sees fresh checks.
-                                self->try_extract_gcode_colors(viewer);
+                                    // Extract colors from parsed gcode when metadata lacked them.
+                                    // Also computes preflight_result_ — MUST run before
+                                    // fire_on_loaded() so a deferred print sees fresh checks.
+                                    self->try_extract_gcode_colors(viewer);
 
-                                // Parse + pre-flight complete: release any deferred
-                                // run_when_loaded() callback (e.g. a pre-parse print tap).
-                                self->fire_on_loaded();
-                                // Viewer parse also satisfies pre-flight readiness
-                                // on full platforms.
-                                self->fire_on_preflight_ready();
+                                    // Parse + pre-flight complete: release any deferred
+                                    // run_when_loaded() callback (e.g. a pre-parse print tap).
+                                    self->fire_on_loaded();
+                                    // Viewer parse also satisfies pre-flight readiness
+                                    // on full platforms.
+                                    self->fire_on_preflight_ready();
 
-                                // Unpause, show, then reset camera (must be visible for layout)
-                                ui_gcode_viewer_set_paused(viewer, false);
-                                self->show_gcode_viewer(true);
-                                lv_obj_update_layout(viewer);
-                                ui_gcode_viewer_reset_camera(viewer);
+                                    // Unpause, show, then reset camera (must be visible for layout)
+                                    ui_gcode_viewer_set_paused(viewer, false);
+                                    self->show_gcode_viewer(true);
+                                    lv_obj_update_layout(viewer);
+                                    ui_gcode_viewer_reset_camera(viewer);
 
-                                spdlog::debug("[DetailView] G-code preview loaded successfully");
-                            },
-                            this);
+                                    spdlog::debug(
+                                        "[DetailView] G-code preview loaded successfully");
+                                },
+                                this);
 
-                        // Load into viewer
-                        ui_gcode_viewer_load_file(gcode_viewer_, path.c_str());
-                    });
-                },
+                            // Load into viewer
+                            ui_gcode_viewer_load_file(gcode_viewer_, path.c_str());
+                        });
+                    },
                     [this, tok](const MoonrakerError& err) {
-                        // Runs on HTTP thread — no bg-thread tok.expired() check (L081 Mechanism C).
+                        // Runs on HTTP thread — no bg-thread tok.expired() check (L081 Mechanism
+                        // C).
                         spdlog::warn("[DetailView] Failed to download G-code: {}", err.message);
                         helix::ui::queue_update([this, tok]() {
                             if (tok.expired())
@@ -1635,8 +1636,7 @@ void PrintSelectDetailView::populate_option_rows() {
     // them. Repopulating mid-session is therefore not the race that this
     // early-return originally guarded against.
     const std::string& current_type = printer_state_->get_printer_type();
-    if (option_rows_renderer_.row_count() > 0 &&
-        current_type == last_rendered_printer_type_) {
+    if (option_rows_renderer_.row_count() > 0 && current_type == last_rendered_printer_type_) {
         spdlog::trace("[DetailView] Skipping option-row rebuild (already populated for '{}')",
                       current_type);
         return;
@@ -1652,7 +1652,7 @@ void PrintSelectDetailView::populate_option_rows() {
     // no plugin is needed. If a future option DOES require the plugin, add a
     // requires_plugin field to the option JSON and gate at parse/render.
     auto visibility_lookup = [](const std::string& /*id*/) -> lv_subject_t* {
-        return nullptr;  // Always visible for declared options
+        return nullptr; // Always visible for declared options
     };
 
     option_rows_renderer_.populate(pre_print_options_container_, option_set, visibility_lookup,

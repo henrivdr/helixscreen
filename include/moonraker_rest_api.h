@@ -67,7 +67,8 @@ class MoonrakerRestAPI {
      * @brief Call a Moonraker extension REST endpoint with GET
      *
      * Makes an HTTP GET request to a Moonraker extension endpoint.
-     * Used for plugins like ACE (via ValgACE's Moonraker bridge) that expose REST APIs at /server/xxx/.
+     * Used for plugins like ACE (via ValgACE's Moonraker bridge) that expose REST APIs at
+     * /server/xxx/.
      *
      * Example: call_rest_get("/server/ace/status", callback)
      *

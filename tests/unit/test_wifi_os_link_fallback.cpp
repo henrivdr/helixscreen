@@ -14,9 +14,10 @@
  *      fails, the scan-failed path must NOT emit a user-facing warning.
  */
 
+#include "ui_update_queue.h"
+
 #include "../ui_test_utils.h"
 #include "runtime_config.h"
-#include "ui_update_queue.h"
 #include "wifi_manager.h"
 #include "wifi_ui_utils.h"
 
@@ -73,8 +74,12 @@ struct SysfsFixture {
         fs::remove_all(root, ec);
     }
 
-    fs::path sys() const { return root / "sys"; }
-    fs::path proc() const { return root / "proc"; }
+    fs::path sys() const {
+        return root / "sys";
+    }
+    fs::path proc() const {
+        return root / "proc";
+    }
 
     fs::path iface_dir(const std::string& iface) const {
         return sys() / "class" / "net" / iface;
@@ -173,8 +178,9 @@ TEST_CASE("probe_os_wifi_link: phy80211 subdir marks an iface wireless", "[wifi]
     REQUIRE(link.iface == "wlp2s0");
 }
 
-TEST_CASE("probe_os_wifi_link: /proc/net/wireless name marks iface wireless when sysfs lacks subdir",
-          "[wifi][unit][1059]") {
+TEST_CASE(
+    "probe_os_wifi_link: /proc/net/wireless name marks iface wireless when sysfs lacks subdir",
+    "[wifi][unit][1059]") {
     SysfsFixture fx;
     // sysfs node without wireless/ or phy80211 — but listed in /proc/net/wireless.
     fx.write_file(fx.iface_dir("wlan0") / "operstate", "up");

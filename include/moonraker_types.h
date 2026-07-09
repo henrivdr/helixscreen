@@ -283,8 +283,8 @@ struct ModifiedPrintResult {
  * @brief Response from a generic REST API call
  *
  * Used for communicating with Moonraker extension plugins that expose
- * REST endpoints (e.g., ACE backend via ValgACE's Moonraker bridge at /server/ace/). Encapsulates both
- * success and error cases in a single structure.
+ * REST endpoints (e.g., ACE backend via ValgACE's Moonraker bridge at /server/ace/). Encapsulates
+ * both success and error cases in a single structure.
  */
 struct RestResponse {
     bool success = false; ///< true if HTTP 2xx response

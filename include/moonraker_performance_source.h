@@ -32,7 +32,9 @@ class MoonrakerPerformanceSource : public IPerformanceSource {
 
     void start() override;
     void stop() override;
-    void set_callback(SampleCallback cb) override { cb_ = std::move(cb); }
+    void set_callback(SampleCallback cb) override {
+        cb_ = std::move(cb);
+    }
 
   private:
     /// Called on main thread with the body from a proc_stats notification or
@@ -49,23 +51,22 @@ class MoonrakerPerformanceSource : public IPerformanceSource {
     void on_mcu_status_update(const std::string& object_name, const json& payload);
 
     /// Returns a human-readable throttle string or "" if bits == 0.
-    static std::string format_throttle_text(uint32_t bits,
-                                            const std::vector<std::string>& flags);
+    static std::string format_throttle_text(uint32_t bits, const std::vector<std::string>& flags);
 
-    MoonrakerAPI*      api_;
-    SampleCallback     cb_;
+    MoonrakerAPI* api_;
+    SampleCallback cb_;
     AsyncLifetimeGuard lifetime_;
-    bool               running_ = false;
+    bool running_ = false;
 
     /// Accumulated sample — updated by both proc_stat and MCU callbacks.
     PerfSample latest_;
 
     /// Per-MCU awake-time tracking for load computation.
     struct McuRunningState {
-        double                                   last_awake   = 0.0;
-        std::chrono::steady_clock::time_point    last_t;
-        uint64_t                                 retrans      = 0;
-        bool                                     initialized  = false;
+        double last_awake = 0.0;
+        std::chrono::steady_clock::time_point last_t;
+        uint64_t retrans = 0;
+        bool initialized = false;
     };
     std::unordered_map<std::string, McuRunningState> mcu_state_;
 

@@ -11,9 +11,9 @@
 #include "panel_widget_registry.h"
 #include "tool_state.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <cstring>
+
+#include "../catch_amalgamated.hpp"
 
 using namespace helix;
 
@@ -48,8 +48,7 @@ TEST_CASE("ToolSwitcherWidget: no hardware gate (visible to all printers)",
     REQUIRE(def->hardware_gate_subject == nullptr);
 }
 
-TEST_CASE("ToolSwitcherWidget: supports scaling from 1x1 to 2x2",
-          "[tool_switcher][panel_widget]") {
+TEST_CASE("ToolSwitcherWidget: supports scaling from 1x1 to 2x2", "[tool_switcher][panel_widget]") {
     const auto* def = find_widget_def("tool_switcher");
     REQUIRE(def != nullptr);
 

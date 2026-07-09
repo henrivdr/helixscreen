@@ -18,14 +18,14 @@ using namespace helix;
 
 // Internal widget data stored in user_data
 typedef struct {
-    char** label_buffers;      // String storage for labels
-    StepState* states;         // Current state for each step
-    lv_obj_t** connectors;     // Connector line objects (step_count - 1)
-    lv_obj_t** step_items;     // Step item objects (step_count)
+    char** label_buffers;  // String storage for labels
+    StepState* states;     // Current state for each step
+    lv_obj_t** connectors; // Connector line objects (step_count - 1)
+    lv_obj_t** step_items; // Step item objects (step_count)
     int step_count;
     bool horizontal;
-    int32_t circle_size;       // Responsive circle diameter
-    int32_t connector_width;   // Responsive connector line thickness
+    int32_t circle_size;     // Responsive circle diameter
+    int32_t connector_width; // Responsive connector line thickness
 } step_progress_data_t;
 
 // Theme-aware color variables (loaded from component scope or defaults)
@@ -43,7 +43,8 @@ static lv_color_t get_step_color(lv_xml_component_scope_t* scope, bool dark,
                                  const char* token_fallback) {
     if (scope) {
         const char* val = lv_xml_get_const(scope, dark ? scope_dark : scope_light);
-        if (val) return theme_manager_parse_hex_color(val);
+        if (val)
+            return theme_manager_parse_hex_color(val);
     }
     return theme_manager_get_color(token_fallback);
 }
@@ -53,18 +54,17 @@ static void init_step_progress_colors(const char* scope_name) {
     lv_xml_component_scope_t* scope = scope_name ? lv_xml_component_get_scope(scope_name) : nullptr;
     bool dark = theme_manager_is_dark_mode();
 
-    color_pending = get_step_color(scope, dark, "step_pending_light", "step_pending_dark",
-                                   "text_subtle");
-    color_active = get_step_color(scope, dark, "step_active_light", "step_active_dark",
-                                  "primary");
-    color_completed = get_step_color(scope, dark, "step_completed_light", "step_completed_dark",
-                                     "success");
+    color_pending =
+        get_step_color(scope, dark, "step_pending_light", "step_pending_dark", "text_subtle");
+    color_active = get_step_color(scope, dark, "step_active_light", "step_active_dark", "primary");
+    color_completed =
+        get_step_color(scope, dark, "step_completed_light", "step_completed_dark", "success");
     color_number_pending = get_step_color(scope, dark, "step_number_pending_light",
                                           "step_number_pending_dark", "card_bg");
     color_number_active = get_step_color(scope, dark, "step_number_active_light",
                                          "step_number_active_dark", "card_bg");
-    color_label_active = get_step_color(scope, dark, "step_label_active_light",
-                                        "step_label_active_dark", "text");
+    color_label_active =
+        get_step_color(scope, dark, "step_label_active_light", "step_label_active_dark", "text");
     color_label_inactive = get_step_color(scope, dark, "step_label_inactive_light",
                                           "step_label_inactive_dark", "text_subtle");
 
@@ -241,8 +241,8 @@ lv_obj_t* ui_step_progress_create(lv_obj_t* parent, const ui_step_t* steps, int 
     // Allocate arrays using RAII
     auto label_buffers_ptr = lvgl_make_unique_array<char*>(static_cast<size_t>(step_count));
     auto states_ptr = lvgl_make_unique_array<StepState>(static_cast<size_t>(step_count));
-    auto connectors_ptr = lvgl_make_unique_array<lv_obj_t*>(
-        static_cast<size_t>(step_count > 1 ? step_count - 1 : 0));
+    auto connectors_ptr =
+        lvgl_make_unique_array<lv_obj_t*>(static_cast<size_t>(step_count > 1 ? step_count - 1 : 0));
     auto step_items_ptr = lvgl_make_unique_array<lv_obj_t*>(static_cast<size_t>(step_count));
 
     if (!label_buffers_ptr || !states_ptr || !connectors_ptr || !step_items_ptr) {
@@ -392,11 +392,13 @@ lv_obj_t* ui_step_progress_create(lv_obj_t* parent, const ui_step_t* steps, int 
 
         lv_obj_t* current_indicator = lv_obj_get_child(current_step, 0);
         lv_obj_t* next_indicator = lv_obj_get_child(next_step, 0);
-        if (!current_indicator || !next_indicator) continue;
+        if (!current_indicator || !next_indicator)
+            continue;
 
         lv_obj_t* current_circle = lv_obj_get_child(current_indicator, 0);
         lv_obj_t* next_circle = lv_obj_get_child(next_indicator, 0);
-        if (!current_circle || !next_circle) continue;
+        if (!current_circle || !next_circle)
+            continue;
 
         // Compute absolute circle positions within container (step + indicator + circle offsets)
         auto abs_x = [](lv_obj_t* step, lv_obj_t* ind, lv_obj_t* circ) {
@@ -417,7 +419,8 @@ lv_obj_t* ui_step_progress_create(lv_obj_t* parent, const ui_step_t* steps, int 
             conn_h = connector_thickness;
             conn_y = abs_y(current_step, current_indicator, current_circle) + circle_radius -
                      (connector_thickness / 2);
-            if (conn_w <= 0) continue;
+            if (conn_w <= 0)
+                continue;
         } else {
             // Vertical: spans bottom edge of current circle to top edge of next
             lv_coord_t cur_cy = abs_y(current_step, current_indicator, current_circle);
@@ -427,7 +430,8 @@ lv_obj_t* ui_step_progress_create(lv_obj_t* parent, const ui_step_t* steps, int 
             conn_w = connector_thickness;
             conn_x = abs_x(current_step, current_indicator, current_circle) + circle_radius -
                      (connector_thickness / 2);
-            if (conn_h <= 0) continue;
+            if (conn_h <= 0)
+                continue;
         }
 
         lv_obj_t* connector = lv_obj_create(container);
@@ -487,9 +491,8 @@ void ui_step_progress_set_current(lv_obj_t* widget, int step_index) {
     // Update connector colors — connector i connects FROM step i, colored by step i's state
     for (int i = 0; i < data->step_count - 1; i++) {
         if (data->connectors[i]) {
-            lv_color_t connector_color = (data->states[i] == StepState::Completed)
-                                             ? color_completed
-                                             : color_pending;
+            lv_color_t connector_color =
+                (data->states[i] == StepState::Completed) ? color_completed : color_pending;
             lv_obj_set_style_bg_color(data->connectors[i], connector_color, 0);
         }
     }

@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "panel_widget.h"
 #include "ui_observer_guard.h"
+
+#include "panel_widget.h"
 
 class MoonrakerAPI;
 
@@ -19,7 +20,9 @@ class LedControlsWidget : public PanelWidget {
 
     void attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) override;
     void detach() override;
-    const char* id() const override { return "led_controls"; }
+    const char* id() const override {
+        return "led_controls";
+    }
 
     static void on_led_controls_clicked(lv_event_t* e);
 

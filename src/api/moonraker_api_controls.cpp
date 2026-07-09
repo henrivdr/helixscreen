@@ -7,6 +7,7 @@
 
 #include "app_globals.h"
 #include "fan_gcode.h"
+#include "gcode_homing.h"
 #include "http_executor.h"
 #include "hv/requests.h"
 #include "macro_param_cache.h"
@@ -442,6 +443,30 @@ void MoonrakerAPI::execute_gcode(const std::string& gcode, SuccessCallback on_su
         }
     }
 
+    // Refuse app-initiated homing while a print is active. On loadcell-Z printers
+    // (AD5X: G28 probes the nozzle DOWN into the bed) a mid-print home drives the
+    // nozzle into the part -> collision -> ZMOD ZCONTROL_AUTO trip -> Klipper down.
+    // "Active" = PRINTING or PAUSED (the head is parked over the print in both).
+    // Only literal homing is blocked; all other gcode (including recovery) passes.
+    if (helix::is_homing_gcode(gcode)) {
+        const helix::PrintJobState pstate = state_.get_print_job_state();
+        if (pstate == helix::PrintJobState::PRINTING || pstate == helix::PrintJobState::PAUSED) {
+            if (!silent) {
+                spdlog::warn("[Moonraker API] Refusing homing G-code during active print "
+                             "(state={}): '{}'",
+                             static_cast<int>(pstate), gcode.substr(0, 60));
+            }
+            if (on_error) {
+                MoonrakerError err;
+                err.type = MoonrakerErrorType::NOT_READY;
+                err.method = "printer.gcode.script";
+                err.message = "Homing is disabled while a print is in progress";
+                on_error(err);
+            }
+            return;
+        }
+    }
+
     std::string annotated = annotate_gcode(gcode);
     json params = {{"script", annotated}};
 
@@ -539,8 +564,8 @@ void MoonrakerAPI::restart_klipper(SuccessCallback on_success, ErrorCallback on_
         on_error);
 }
 
-void MoonrakerAPI::restart_service(const std::string& service_name,
-                                    SuccessCallback on_success, ErrorCallback on_error) {
+void MoonrakerAPI::restart_service(const std::string& service_name, SuccessCallback on_success,
+                                   ErrorCallback on_error) {
     spdlog::info("[Moonraker API] Restarting service '{}' via machine.services.restart",
                  service_name);
 

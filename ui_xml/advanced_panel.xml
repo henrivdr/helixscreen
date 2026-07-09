@@ -20,7 +20,8 @@
       <!-- ================================================================== -->
       <!-- TOOLS SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="TOOLS" title_tag="TOOLS" icon="toolbox_outline"/>
+      <setting_group>
+        <setting_group_header title="TOOLS" title_tag="TOOLS" icon="toolbox_outline" hide_icon="false"/>
       <!-- Macro Browser -->
       <setting_action_row name="row_macros"
                           label="Macro Browser" label_tag="Macro Browser" icon="script_text"
@@ -58,10 +59,12 @@
                           label="Spoolman" label_tag="Spoolman" icon="inventory" value="Not configured"
                           value_tag="Not configured"/>
       </lv_obj>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- AUTOMATION SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="AUTOMATION" title_tag="AUTOMATION" icon="code_tags"/>
+      <setting_group>
+        <setting_group_header title="AUTOMATION" title_tag="AUTOMATION" icon="code_tags" hide_icon="false"/>
       <!-- Timelapse Videos -->
       <setting_action_row name="row_timelapse_videos"
                           label="Timelapse Videos" label_tag="Timelapse Videos" icon="video"
@@ -142,10 +145,12 @@
           <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="1"/>
         </setting_toggle_row>
       </beta_feature>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- CALIBRATION SECTION -->
       <!-- ================================================================== -->
-      <setting_section_header title="CALIBRATION" title_tag="CALIBRATION" icon="tune"/>
+      <setting_group>
+        <setting_group_header title="CALIBRATION" title_tag="CALIBRATION" icon="tune" hide_icon="false"/>
       <!-- Bed Leveling (hidden if screws_tilt_adjust not configured) -->
       <lv_obj name="container_bed_leveling" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="printer_has_screws_tilt" flag="hidden" ref_value="0"/>
@@ -197,12 +202,14 @@
                           description_tag="Adjusts individual characteristics of your heaters for optimal control">
         <event_cb trigger="clicked" callback="on_pid_tuning_clicked"/>
       </setting_action_row>
+      </setting_group>
       <!-- ================================================================== -->
       <!-- POWER SECTION -->
       <!-- ================================================================== -->
       <!-- Both rows open the same dialog the home-panel power widget uses,
            which handles single-/dual-host scope and confirms the action. -->
-      <setting_section_header title="POWER" title_tag="POWER" icon="power"/>
+      <setting_group>
+        <setting_group_header title="POWER" title_tag="POWER" icon="power" hide_icon="false"/>
       <!-- Shutdown / Reboot — both rows open the same dialog (which presents
            both actions plus, on dual-host, the printer/screen/both scope). -->
       <setting_action_row name="row_shutdown"
@@ -217,6 +224,7 @@
                           description_tag="Restart the printer or screen">
         <event_cb trigger="clicked" callback="on_advanced_power_clicked"/>
       </setting_action_row>
+      </setting_group>
       <!-- Bottom padding for scroll -->
       <lv_obj width="100%" height="#space_xl" scrollable="false"/>
     </lv_obj>

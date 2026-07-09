@@ -398,8 +398,7 @@ TEST_CASE("LedAutoState apply_action 'brightness' sets light_is_on based on valu
 // init() must load the persisted per-printer config (enabled flag + mappings).
 // This is the core value the production wiring relies on: when printer_discovery
 // calls init(printer_state), saved auto-state config becomes live.
-TEST_CASE("LedAutoState init loads persisted config from per-printer path",
-          "[led][autostate]") {
+TEST_CASE("LedAutoState init loads persisted config from per-printer path", "[led][autostate]") {
     auto& state = LedAutoState::instance();
     state.deinit();
 
@@ -426,8 +425,7 @@ TEST_CASE("LedAutoState init loads persisted config from per-printer path",
 // deinit()->init() soft-restart cycle (mirrors switch_printer: teardown then
 // re-init on the new printer). Must not crash and must end in a consistent,
 // re-subscribed state reflecting the (re)loaded config.
-TEST_CASE("LedAutoState deinit/init soft-restart cycle stays consistent",
-          "[led][autostate]") {
+TEST_CASE("LedAutoState deinit/init soft-restart cycle stays consistent", "[led][autostate]") {
     auto& state = LedAutoState::instance();
     state.deinit();
 
@@ -468,8 +466,7 @@ TEST_CASE("LedAutoState deinit/init soft-restart cycle stays consistent",
 // After init() subscribes observers, a change to an observed PrinterState
 // subject must drive LedController via apply_action (the end-to-end auto-state
 // path that production now activates).
-TEST_CASE("LedAutoState observer fires after init and applies action",
-          "[led][autostate]") {
+TEST_CASE("LedAutoState observer fires after init and applies action", "[led][autostate]") {
     lv_init_safe();
     setup_auto_state_with_strip();
     auto& ctrl = LedController::instance();

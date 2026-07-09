@@ -1166,8 +1166,8 @@ TEST_CASE("PrinterDiscovery detects chamber heater and sensor", "[printer_discov
     }
 
     SECTION("Case-insensitive keyword match") {
-        json objects = {"temperature_sensor Box",          "temperature_sensor ENCLOSURE_top",
-                        "heater_generic Chamber_primary",  "temperature_fan Cavity"};
+        json objects = {"temperature_sensor Box", "temperature_sensor ENCLOSURE_top",
+                        "heater_generic Chamber_primary", "temperature_fan Cavity"};
         PrinterDiscovery hw2;
         hw2.parse_objects(objects);
 
@@ -1189,12 +1189,15 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
         // Order matches the Q2's klippy stats: box1_* appears before chamber.
         // Without confidence scoring (last-wins), chamber would win here by
         // luck — this section just nails down that ordering.
-        json objects = {"heater_generic box1_heater",        "temperature_sensor box1_env",
+        json objects = {"heater_generic box1_heater",
+                        "temperature_sensor box1_env",
                         "temperature_sensor box1_heater_temp_a",
                         "temperature_sensor box1_heater_temp_b",
-                        "temperature_sensor Box1_STM32",     "heater_bed",
+                        "temperature_sensor Box1_STM32",
+                        "heater_bed",
                         "heater_generic chamber",
-                        "temperature_sensor Chamber_Thermal_Protection_Sensor", "extruder"};
+                        "temperature_sensor Chamber_Thermal_Protection_Sensor",
+                        "extruder"};
         hw.parse_objects(objects);
 
         REQUIRE(hw.chamber_heater_name() == "heater_generic chamber");
@@ -1208,7 +1211,8 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
         // would mis-resolve to a box1_* object. Scoring must prevent that.
         json objects = {"heater_generic chamber",
                         "temperature_sensor Chamber_Thermal_Protection_Sensor",
-                        "heater_generic box1_heater",        "temperature_sensor box1_env",
+                        "heater_generic box1_heater",
+                        "temperature_sensor box1_env",
                         "temperature_sensor box1_heater_temp_a",
                         "temperature_sensor box1_heater_temp_b",
                         "temperature_sensor Box1_STM32"};
@@ -1221,7 +1225,7 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
 
     SECTION("box1_* alone (no chamber) does NOT register as chamber") {
         // Digit-suffixed AMS names must not be treated as the printer chamber.
-        json objects = {"heater_generic box1_heater",         "temperature_sensor box1_env",
+        json objects = {"heater_generic box1_heater", "temperature_sensor box1_env",
                         "temperature_sensor box1_heater_temp_a", "temperature_sensor Box1_STM32"};
         hw.parse_objects(objects);
 
@@ -1263,6 +1267,58 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
 }
 
 // ============================================================================
+// Air-quality disambiguation: a sensor whose name merely CONTAINS "chamber"
+// but is really an air-quality sensor (chamber_tvoc, chamber_co2, ...) must
+// not out-rank the real chamber temperature sensor. The compound (-1) and
+// air-quality (-40) modifiers push these below a clean "chamber"/"enclosure".
+// ============================================================================
+
+TEST_CASE("PrinterDiscovery chamber scoring demotes air-quality sensors",
+          "[printer_discovery][chamber]") {
+    PrinterDiscovery hw;
+
+    SECTION("clean 'chamber' beats 'chamber_tvoc' listed first (tvoc is air-quality)") {
+        // chamber_tvoc appears BEFORE chamber: substring scoring would lock in
+        // the tvoc sensor (both 100, first-wins). With the air-quality penalty
+        // chamber_tvoc scores 59, so the real chamber (100) wins regardless.
+        json objects = {"temperature_sensor chamber_tvoc", "temperature_sensor chamber"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber");
+    }
+
+    SECTION("'enclosure' beats 'chamber_tvoc' (air-quality demoted below enclosure)") {
+        // chamber_tvoc = 100 - 1 - 40 = 59; enclosure = 90 wins.
+        json objects = {"temperature_sensor chamber_tvoc", "temperature_sensor enclosure"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor enclosure");
+    }
+
+    SECTION("'chamber_tvoc' alone is still detected (floored, not dropped)") {
+        // Only chamber-ish sensor present — must still register (score 59 > 0),
+        // not fall through to undetected.
+        json objects = {"temperature_sensor chamber_tvoc"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber_tvoc");
+    }
+
+    SECTION("clean compound 'chamber_temp' alone is still detected (regression guard)") {
+        // A plain compound temperature sensor (no air-quality token) scores 99
+        // and must remain a valid chamber sensor.
+        json objects = {"temperature_sensor chamber_temp"};
+        hw.parse_objects(objects);
+
+        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber_temp");
+    }
+}
+
+// ============================================================================
 // Chamber-heater TYPE tiebreak: a settable `heater_generic` must always beat a
 // same-keyword `temperature_fan` (a cooling fan), regardless of iteration order.
 // Regression for the Creality K2 Plus, which exposes BOTH
@@ -1277,9 +1333,12 @@ TEST_CASE("PrinterDiscovery chamber heater prefers heater_generic over temperatu
           "[printer_discovery][chamber][k2]") {
     SECTION("K2 Plus: heater_generic wins when the temperature_fan is listed FIRST") {
         // The failure case: cooling fan iterated before the heater.
-        json objects = {"temperature_fan chamber_fan",      "heater_fan chamber_fan",
-                        "temperature_sensor chamber_temp",  "heater_generic chamber_heater",
-                        "heater_bed",                       "extruder"};
+        json objects = {"temperature_fan chamber_fan",
+                        "heater_fan chamber_fan",
+                        "temperature_sensor chamber_temp",
+                        "heater_generic chamber_heater",
+                        "heater_bed",
+                        "extruder"};
         PrinterDiscovery hw;
         hw.parse_objects(objects);
 
@@ -1500,8 +1559,8 @@ TEST_CASE("PrinterDiscovery detects native ZMOD IFS via motion sensor",
     // Both sensors must appear in filament_sensor_names (not just head_switch_sensor)
     auto& sensors = discovery.filament_sensor_names();
     REQUIRE(sensors.size() == 2);
-    REQUIRE(std::find(sensors.begin(), sensors.end(),
-                      "filament_motion_sensor ifs_motion_sensor") != sensors.end());
+    REQUIRE(std::find(sensors.begin(), sensors.end(), "filament_motion_sensor ifs_motion_sensor") !=
+            sensors.end());
     REQUIRE(std::find(sensors.begin(), sensors.end(),
                       "filament_switch_sensor head_switch_sensor") != sensors.end());
 }

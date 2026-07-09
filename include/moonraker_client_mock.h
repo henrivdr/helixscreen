@@ -532,6 +532,20 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     }
 
     /**
+     * @brief Control whether SHAPER_CALIBRATE writes its CSV file for testing
+     *
+     * When false, the mock still dispatches the "calibration data written to
+     * <path>" G-code line but does NOT create the file — simulating the case
+     * where Klipper's /tmp output is unreadable (e.g. systemd PrivateTmp
+     * isolation). Used to verify the chart-data-unavailable failure path.
+     *
+     * @param writable True to write the CSV (default: true)
+     */
+    void set_shaper_csv_writable(bool writable) {
+        shaper_csv_writable_ = writable;
+    }
+
+    /**
      * @brief Check if mock accelerometer is enabled
      * @return true if accelerometer should be reported as available
      */
@@ -864,6 +878,15 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     void dispatch_manual_probe_update();
 
     /**
+     * @brief Read all three position axes as a consistent snapshot
+     *
+     * Acquires pos_mutex_ so the returned (x, y, z) triple is never torn across
+     * a concurrent multi-axis move. Releases the lock before returning, keeping
+     * pos_mutex_ a leaf lock.
+     */
+    void read_position_snapshot(double& x, double& y, double& z) const;
+
+    /**
      * @brief Dispatch SHAPER_CALIBRATE response sequence
      *
      * Simulates the G-code response output from Klipper's SHAPER_CALIBRATE
@@ -1014,7 +1037,15 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     std::atomic<double> mcu_temp_{42.0};       // MCU temp (40-55°C, stable with small variation)
     std::atomic<double> host_temp_{52.0};      // Host/RPi temp (45-65°C, correlates with load)
 
-    // Position simulation state
+    // Position simulation state.
+    // The three axes are individually atomic, but a multi-axis move and the
+    // background simulation loop's status broadcast run on different threads.
+    // pos_mutex_ makes a multi-axis write and a snapshot read atomic *as a
+    // group*, so a broadcast can never observe a torn cross-axis snapshot (e.g.
+    // X/Y updated but Z still stale) mid-move. It is a leaf lock: never acquire
+    // another lock while holding it. Use read_position_snapshot() to read all
+    // three together; wrap multi-axis stores in a lock_guard(pos_mutex_).
+    mutable std::mutex pos_mutex_;
     std::atomic<double> pos_x_{0.0};
     std::atomic<double> pos_y_{0.0};
     std::atomic<double> pos_z_{0.0};
@@ -1188,6 +1219,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     bool mock_spoolman_enabled_{true};   ///< Controlled by HELIX_MOCK_SPOOLMAN env var
     bool accelerometer_available_{true}; ///< Accelerometer available for input shaper tests
     bool input_shaper_configured_{true}; ///< Input shaper configured for config query tests
+    bool shaper_csv_writable_{true};     ///< When false, SHAPER_CALIBRATE skips writing the CSV
     bool mmu_enabled_{true};             ///< MMU available (default true for existing tests)
 
     // Additional objects for testing (e.g., "mmu", "AFC", "toolchanger")

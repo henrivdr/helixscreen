@@ -62,10 +62,10 @@ class TrackerPlayer {
   private:
     struct ChannelState {
         float freq = 0;
-        float base_freq = 0;    // frequency before effects
-        float target_freq = 0;  // tone portamento target
+        float base_freq = 0;   // frequency before effects
+        float target_freq = 0; // tone portamento target
         float volume = 1.0f;
-        float base_volume = 1.0f;  // volume center for tremolo / Cxx
+        float base_volume = 1.0f; // volume center for tremolo / Cxx
         float duty = 0.5f;
         float vibrato_phase = 0;
         float tremolo_phase = 0;
@@ -81,16 +81,16 @@ class TrackerPlayer {
         uint8_t porta_speed = 0;
         Waveform waveform = Waveform::SQUARE;
         bool active = false;
-        int loop_start_row = -1;  // -1 = no loop point set
+        int loop_start_row = -1; // -1 = no loop point set
         int loop_count = 0;
 
-        uint16_t period = 0;          // current Amiga period (for sample pitch)
-        uint16_t base_period = 0;     // period before effects
-        uint16_t target_period = 0;   // tone portamento target period
+        uint16_t period = 0;        // current Amiga period (for sample pitch)
+        uint16_t base_period = 0;   // period before effects
+        uint16_t target_period = 0; // tone portamento target period
 
         // PCM sample playback state (render thread only)
-        double sample_pos = 0;       // current position in sample (fractional)
-        double sample_speed = 0;     // playback rate: amiga_clock / (period*2) / output_sr
+        double sample_pos = 0;   // current position in sample (fractional)
+        double sample_speed = 0; // playback rate: amiga_clock / (period*2) / output_sr
         const TrackerInstrument* current_instrument = nullptr;
     };
 
@@ -117,10 +117,10 @@ class TrackerPlayer {
     float tick_accum_ = 0;
     int next_order_ = -1;
     int next_row_ = -1;
-    int volume_override_ = -1;  // -1 = use AudioSettingsManager
+    int volume_override_ = -1; // -1 = use AudioSettingsManager
     std::atomic<bool> playing_{false};
 };
 
-}  // namespace helix::audio
+} // namespace helix::audio
 
-#endif  // HELIX_HAS_TRACKER
+#endif // HELIX_HAS_TRACKER

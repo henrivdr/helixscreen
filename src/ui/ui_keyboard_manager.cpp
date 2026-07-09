@@ -150,7 +150,16 @@ bool KeyboardManager::point_in_area(const lv_area_t* area, const lv_point_t* poi
 }
 
 void KeyboardManager::overlay_cleanup() {
-    helix::ui::safe_delete(overlay_);
+    // Every caller runs inside input-event dispatch: longpress_reset() fires from
+    // the keyboard's LV_EVENT_RELEASED handler, and hide() (which calls it) runs
+    // from keyboard READY/CANCEL and textarea DEFOCUSED handlers. A synchronous
+    // safe_delete() here deletes a widget while LVGL is mid-dispatch, which can
+    // corrupt the global event linked list and detonate later at an unrelated
+    // malloc (#776/#983 signature). Defer the delete so it lands via
+    // lv_obj_delete_async(), outside the current dispatch. safe_delete_deferred()
+    // hides immediately and nulls overlay_ synchronously, so show_overlay() can
+    // safely assign a fresh overlay right after.
+    helix::ui::safe_delete_deferred(overlay_);
 }
 
 void KeyboardManager::longpress_reset() {
@@ -1109,20 +1118,25 @@ void KeyboardManager::set_mode(lv_keyboard_mode_t mode) {
 void KeyboardManager::reset() {
     spdlog::debug("[KeyboardManager] Resetting state for soft restart");
 
-    // Delete keyboard widget (child of m_screen, survives app_layout teardown)
+    // Delete keyboard widget (child of m_screen, survives app_layout teardown).
+    // reset() runs from tear_down_printer_state(), which one caller
+    // (cancel_add_printer_wizard) wraps in queue_update — so a synchronous
+    // lv_obj_del here would be one of multiple sync deletes in a single
+    // UpdateQueue batch (with overlay_ + m_app_layout), the #776/[L081] event-list
+    // corruption pattern. Cancel anims first, then defer the delete out of the
+    // batch. safe_delete_deferred() nulls keyboard_ synchronously so init() can
+    // rebuild immediately, and reparents + async-deletes on the next drain.
     if (keyboard_) {
         lv_anim_delete(keyboard_, nullptr); // Cancel pending slide animations
-        lv_obj_del(keyboard_);
+        helix::ui::safe_delete_deferred(keyboard_);
     }
     keyboard_ = nullptr;
 
     context_textarea_ = nullptr; // Child of app_layout — deleted by lv_obj_del(m_app_layout)
 
-    // Delete overlay (also child of m_screen)
-    if (overlay_) {
-        lv_obj_del(overlay_);
-    }
-    overlay_ = nullptr;
+    // Long-press overlay (also child of m_screen) — deferred delete for the same
+    // reason (#776); safe_delete_deferred() nulls overlay_ and no-ops if already null.
+    helix::ui::safe_delete_deferred(overlay_);
 
     // Reset all state so init() can be called again
     longpress_state_ = LP_IDLE;

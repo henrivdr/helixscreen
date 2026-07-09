@@ -21,9 +21,10 @@
  * @see docs/FILAMENT_RUNOUT.md for feature design
  */
 
-#include "async_lifetime_guard.h"
 #include "ui_observer_guard.h"
 #include "ui_runout_guidance_modal.h"
+
+#include "async_lifetime_guard.h"
 
 // Forward declarations
 class MoonrakerAPI;

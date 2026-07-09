@@ -14,9 +14,9 @@
 
 #include "../lvgl_test_fixture.h"
 
-#include "../catch_amalgamated.hpp"
-
 #include <cmath>
+
+#include "../catch_amalgamated.hpp"
 
 // =============================================================================
 // Y-axis auto-scaling helper
@@ -149,8 +149,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 // Destructor / Cleanup
 // =============================================================================
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "TempGraphOverlay: destructor cleans up initialized subjects",
+TEST_CASE_METHOD(LVGLTestFixture, "TempGraphOverlay: destructor cleans up initialized subjects",
                  "[temp_graph_overlay]") {
     {
         TempGraphOverlay overlay;
@@ -181,8 +180,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "TempGraphOverlay: cleanup on fresh instance d
     REQUIRE(overlay.cleanup_called());
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "TempGraphOverlay: cleanup after init_subjects does not crash",
+TEST_CASE_METHOD(LVGLTestFixture, "TempGraphOverlay: cleanup after init_subjects does not crash",
                  "[temp_graph_overlay]") {
     TempGraphOverlay overlay;
     overlay.init_subjects();
@@ -233,8 +231,7 @@ TEST_CASE("TempGraphOverlay: Y-axis stays at floor when temp is zero",
     REQUIRE(result == 100.0f);
 }
 
-TEST_CASE("TempGraphOverlay: Y-axis expands at 85% threshold",
-          "[temp_graph_overlay][scaling]") {
+TEST_CASE("TempGraphOverlay: Y-axis expands at 85% threshold", "[temp_graph_overlay][scaling]") {
     // current_max=100, 85% threshold = 85. Temp of 86 should trigger expand.
     // 86/50 = 1.72, floor = 1, +1 = 2, *50 = 100... that equals current.
     // Need a higher temp. Try 90: floor(90/50)+1 = 2, *50 = 100. Still 100.
@@ -256,16 +253,14 @@ TEST_CASE("TempGraphOverlay: Y-axis expands at 85% threshold",
     REQUIRE(result == 150.0f);
 }
 
-TEST_CASE("TempGraphOverlay: Y-axis expands for high temps",
-          "[temp_graph_overlay][scaling]") {
+TEST_CASE("TempGraphOverlay: Y-axis expands for high temps", "[temp_graph_overlay][scaling]") {
     // 220 with current_max=100: 220 > 85 => expand
     // floor(220/50)+1 = 5, *50 = 250
     float result = compute_y_axis_max(100.0f, 220.0f);
     REQUIRE(result == 250.0f);
 }
 
-TEST_CASE("TempGraphOverlay: Y-axis shrinks at 55% threshold",
-          "[temp_graph_overlay][scaling]") {
+TEST_CASE("TempGraphOverlay: Y-axis shrinks at 55% threshold", "[temp_graph_overlay][scaling]") {
     // current_max=200, 55% = 110. Temp of 50 < 110 => shrink
     // floor(50/50)+1 = 2, *50 = 100. Max of floor(100), so 100.
     float result = compute_y_axis_max(200.0f, 50.0f);
@@ -285,8 +280,7 @@ TEST_CASE("TempGraphOverlay: Y-axis shrink never goes below floor",
     REQUIRE(result == 100.0f);
 }
 
-TEST_CASE("TempGraphOverlay: Y-axis never exceeds ceiling",
-          "[temp_graph_overlay][scaling]") {
+TEST_CASE("TempGraphOverlay: Y-axis never exceeds ceiling", "[temp_graph_overlay][scaling]") {
     // current_max=350, temp=380 > 85% of 350 (=297.5) => expand
     // floor(380/50)+1 = 8, *50 = 400
     float result = compute_y_axis_max(350.0f, 380.0f);

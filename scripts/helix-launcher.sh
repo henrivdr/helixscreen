@@ -354,6 +354,10 @@ cleanup() {
     log "Shutting down..."
     # Kill watchdog/helix-screen if we started them
     killall helix-watchdog helix-screen helix-screen-fbdev helix-splash 2>/dev/null || true
+    # Remove the GUI pidfile we advertised (CC1 gui-switcher) so a stale PID
+    # can't be signalled after we exit. HELIX_GUI_PIDFILE is exported by the
+    # platform hook; unset elsewhere this is a harmless no-op.
+    [ -n "${HELIX_GUI_PIDFILE:-}" ] && rm -f "${HELIX_GUI_PIDFILE}" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM

@@ -1,6 +1,10 @@
 {
   "preset": "sovol_sv06_ace",
   "_rotation_note": "display.rotate intentionally unset: rotation is unit-dependent on this panel, so it stays a user setting (/display/rotate).",
+  "display": {
+    "_comment": "Slow SBC + software rotation on this panel makes transition animations jerky (#986). Default them off; the user can re-enable in Settings > Display.",
+    "animations_enabled": false
+  },
   "input": {
     "calibration": {
       "_comment": "Known-good matrix from #123; seeded into settings.json at install so the first-run wizard is skipped (wizard math is bad on this panel).",
@@ -10,8 +14,7 @@
       "c": 0.0,
       "d": 0.0,
       "e": 1.76,
-      "f": 0.0,
-      "swap_axes": false
+      "f": 0.0
     }
   },
   "printer": {
